@@ -1,0 +1,21 @@
+{
+  "name": "opencode-meta-harness",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Ports meta-harness optimisations into opencode: env bootstrapping, marker-based bash polling, and Anthropic prompt caching awareness.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.17.14"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "^22.0.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}
