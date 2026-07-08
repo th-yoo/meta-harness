@@ -70,8 +70,15 @@ const sessionTurns = new Map<string, number>()
 const sessionSummary = new Map<string, string>()
 const sessionToolUsage = new Map<string, ToolUsage>()
 
-/** Best-effort error detection from tool output text. */
-const ERROR_PATTERN = /error|failed|exception|no such file|exit code [1-9]|traceback|command not found/i
+/**
+ * Tools whose output is execution results (not file content).
+ * Only these get error-heuristic analysis — applying it to read/grep/glob
+ * would false-positive on source code that contains error-handling words.
+ */
+const EXECUTION_TOOLS = new Set(["bash", "task"])
+
+/** Best-effort error detection from execution tool output. */
+const ERROR_PATTERN = /\berror\b|\bfailed\b|\bexception\b|no such file|exit code [1-9]|traceback|command not found/i
 
 function cleanupSession(sessionID: string): void {
   bootstrappedSessions.delete(sessionID)
@@ -207,9 +214,14 @@ const metaHarness: Plugin = async (input) => {
       const entry = usage[tool] ?? { calls: 0, errors: 0 }
       entry.calls++
 
-      // Best-effort error detection from output text
-      const outText = typeof toolOutput.output === "string" ? toolOutput.output : ""
-      if (ERROR_PATTERN.test(outText)) entry.errors++
+      // Error detection only for execution tools (bash, task).
+      // File-content tools (read, grep, glob, write, edit) are skipped —
+      // their output is file content which naturally contains error-handling
+      // words and would produce false positives.
+      if (EXECUTION_TOOLS.has(tool)) {
+        const outText = typeof toolOutput.output === "string" ? toolOutput.output : ""
+        if (ERROR_PATTERN.test(outText)) entry.errors++
+      }
 
       usage[tool] = entry
       sessionToolUsage.set(sessionID, usage)
