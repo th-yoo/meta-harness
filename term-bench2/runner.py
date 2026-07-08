@@ -50,6 +50,9 @@ TASKS_DIR = SCRIPT_DIR / "tasks"
 PATCHES_DIR = SCRIPT_DIR / "patches"
 APT_PACKAGES_TXT = SCRIPT_DIR / "apt-packages.txt"
 
+# Tracks which packages were newly installed by prep --apply (for --uninstall)
+PREP_INSTALLED_TXT = SCRIPT_DIR / ".prep-installed.txt"
+
 # ── Task list ──────────────────────────────────────────────────────────────
 
 
@@ -137,11 +140,49 @@ def clean_dir(d: Path) -> None:
 # ── prep command ───────────────────────────────────────────────────────────
 
 
-def cmd_prep(args: argparse.Namespace) -> None:
-    """Print (or execute) one-time host setup commands."""
-    apt_pkgs = sorted(APT_PACKAGES_TXT.read_text().splitlines()) if APT_PACKAGES_TXT.exists() else []
-    apt_line = "sudo apt-get install -y \\\n  " + " \\\n  ".join(apt_pkgs) if apt_pkgs else "# (no apt packages)"
+def _installed_packages() -> set[str]:
+    """Return the set of currently-installed dpkg packages."""
+    result = subprocess.run(
+        ["dpkg-query", "-W", "-f", "${Package}\n"],
+        capture_output=True, text=True,
+    )
+    return set(result.stdout.splitlines())
 
+
+def cmd_prep(args: argparse.Namespace) -> None:
+    """Print (or execute) one-time host setup / uninstall commands."""
+    apt_pkgs = sorted(set(APT_PACKAGES_TXT.read_text().splitlines())) if APT_PACKAGES_TXT.exists() else []
+
+    # ── uninstall mode ────────────────────────────────────────────────────
+    if args.uninstall:
+        if not PREP_INSTALLED_TXT.exists():
+            die(
+                f"{PREP_INSTALLED_TXT} not found.\n"
+                "prep --apply was either never run or run before tracking was added.\n"
+                "Run 'prep --apply' once to record what was newly installed, then --uninstall."
+            )
+        to_remove = sorted(set(PREP_INSTALLED_TXT.read_text().splitlines()))
+        if not to_remove:
+            print("Nothing to uninstall (prep installed no new packages).")
+            return
+        cmd = ["sudo", "apt-get", "remove", "--purge", "-y"] + to_remove
+        if args.apply:
+            log(f"Removing {len(to_remove)} package(s) installed by prep...")
+            subprocess.run(cmd, check=True, env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"})
+            subprocess.run(["sudo", "apt-get", "autoremove", "-y"], check=True,
+                           env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"})
+            PREP_INSTALLED_TXT.unlink(missing_ok=True)
+            log("Uninstall complete.")
+        else:
+            print("# Packages that would be removed (installed by prep --apply):")
+            print()
+            print(" ".join(to_remove))
+            print()
+            print(f"# Run: python3 runner.py prep --uninstall --apply")
+        return
+
+    # ── install mode ──────────────────────────────────────────────────────
+    apt_line = "sudo apt-get install -y \\\n  " + " \\\n  ".join(apt_pkgs) if apt_pkgs else "# (no apt packages)"
     user = os.environ.get("USER", os.environ.get("LOGNAME", "$(whoami)"))
     commands = [
         f"sudo mkdir -p {HOST_APP} {HOST_TESTS} {HOST_LOGS}",
@@ -151,6 +192,12 @@ def cmd_prep(args: argparse.Namespace) -> None:
 
     if args.apply:
         log("Running host setup (requires sudo)...")
+
+        # Snapshot which of our packages are NOT yet installed → these are newly added
+        already_installed = _installed_packages()
+        to_install = [p for p in apt_pkgs if p not in already_installed]
+        log(f"  {len(to_install)} new / {len(apt_pkgs) - len(to_install)} already present")
+
         # dirs + chown
         subprocess.run(
             ["sudo", "mkdir", "-p", str(HOST_APP), str(HOST_TESTS), str(HOST_LOGS)],
@@ -160,6 +207,7 @@ def cmd_prep(args: argparse.Namespace) -> None:
             ["sudo", "chown", "-R", f"{user}", str(HOST_APP), str(HOST_TESTS), "/logs"],
             check=True,
         )
+
         # apt — noninteractive to avoid debconf prompts (postfix, mailman3, etc.)
         if apt_pkgs:
             subprocess.run(
@@ -167,15 +215,31 @@ def cmd_prep(args: argparse.Namespace) -> None:
                 check=True,
                 env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"},
             )
+
+        # Record only the newly-installed packages for later --uninstall
+        PREP_INSTALLED_TXT.write_text("\n".join(sorted(to_install)) + ("\n" if to_install else ""))
+        if to_install:
+            log(f"  Recorded {len(to_install)} newly-installed package(s) → {PREP_INSTALLED_TXT.name}")
+        else:
+            log("  All packages were already installed — nothing new recorded.")
+
         log("Host setup complete.")
     else:
+        # Dry-run: show what would be installed vs what's already present
+        already_installed = _installed_packages()
+        new_pkgs = [p for p in apt_pkgs if p not in already_installed]
+        existing = [p for p in apt_pkgs if p in already_installed]
+
         print("# One-time host setup — run with --apply to execute:")
         print()
         for c in commands:
             print(c)
         print()
+        print(f"# Of {len(apt_pkgs)} packages: {len(new_pkgs)} new, {len(existing)} already installed.")
+        if new_pkgs:
+            print(f"# New packages: {' '.join(new_pkgs)}")
         print("# Note: --apply sets DEBIAN_FRONTEND=noninteractive to avoid debconf prompts.")
-        print("# Then re-run: python3 runner.py prep --apply")
+        print("# To undo: python3 runner.py prep --uninstall [--apply]")
 
 
 # ── harness assembly ───────────────────────────────────────────────────────
@@ -751,10 +815,18 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     # prep
-    p_prep = sub.add_parser("prep", help="One-time host setup (mkdir + apt)")
+    p_prep = sub.add_parser(
+        "prep",
+        help="One-time host setup (mkdir + apt) or uninstall of newly-added packages",
+    )
     p_prep.add_argument(
         "--apply", action="store_true",
-        help="Actually run the setup commands (requires sudo). Default: dry-run.",
+        help="Actually run the commands (requires sudo). Default: dry-run.",
+    )
+    p_prep.add_argument(
+        "--uninstall", action="store_true",
+        help="Remove only the packages that prep --apply newly installed "
+             "(uses .prep-installed.txt). Dry-run unless --apply is also given.",
     )
 
     # run
