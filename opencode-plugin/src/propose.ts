@@ -1,19 +1,18 @@
 /**
  * propose.ts
  *
- * Meta-Harness proposer loop — triggered after SESSIONS_BEFORE_PROPOSE
- * scored sessions accumulate on the current candidate.
+ * Store-aware proposer loop for the 4-layer meta-harness system.
  *
- * What it does:
- *   1. Builds the proposer context: all candidates with scores + trace excerpts
- *   2. Creates a child OpenCode session
- *   3. Sends the proposer prompt — the agent reads the filesystem via bash
- *      and writes a new system.md to .meta-harness/candidates/<nextVersion>/
- *   4. Waits for the file to appear, then activates it
+ * Each layer has its own proposer, guided to fill only the gaps above it:
+ *   account-global  — general rules for all coding, all projects
+ *   project-global  — general rules for this project (all roles)
+ *   account-role    — rules for <role> across all projects
+ *   project-role    — rules for <role> in this project (most specific)
  *
- * The proposer prompt deliberately tells the agent to write files via bash
- * (cat > file << 'EOF') so we don't need any custom tool — the existing
- * bash tool is sufficient.
+ * The proposer writes a new system.md to an in-project staging file via bash,
+ * then the plugin relocates it into the target storeRoot via Node fs.
+ * This avoids external-directory permission prompts when writing to the
+ * account-level stores under ~/.config/opencode/.meta-harness/.
  */
 
 import type { PluginInput } from "@opencode-ai/plugin"
@@ -24,47 +23,61 @@ import {
   createCandidate,
   nextVersion,
   writeActive,
-  candidatePath,
+  readActiveSystem,
+  type StoreLayer,
 } from "./harness-store.ts"
 import { proposerSessions } from "./session-state.ts"
 
 type Client = PluginInput["client"]
 
-/** How many scored sessions before triggering a proposal. */
-export const SESSIONS_BEFORE_PROPOSE = 5
+/** How many scored project-role sessions before auto-propose. */
+export const PROJECT_ROLE_THRESHOLD = 5
+
+/** How many scored project-global sessions before auto-propose. */
+export const PROJECT_GLOBAL_THRESHOLD = 10
+
+// ── Public API ─────────────────────────────────────────────────────────────
 
 /**
- * Trigger a proposer session and activate the result if successful.
- * Resolves when the new candidate is activated (or skipped on failure).
+ * Trigger a proposer session for one store layer.
+ * `layer.higherRoots` supplies the gap-filling "already covered" context.
+ * The proposer writes to a staging file inside the worktree; the plugin
+ * then relocates it into `layer.root` after the session completes.
  */
 export async function triggerPropose(
   client: Client,
   worktree: string,
+  layer: StoreLayer,
 ): Promise<void> {
-  const version = nextVersion(worktree)
-  const context = buildProposerContext(worktree)
-  const prompt = buildProposerPrompt(worktree, version, context)
+  const version = nextVersion(layer.root)
+  const stagingPath = path.join(
+    worktree,
+    ".meta-harness",
+    "staging",
+    `${layer.scope}-${version}.md`,
+  )
+  const context = buildProposerContext(layer.root, layer.higherRoots)
+  const prompt = buildProposerPrompt(layer, version, context, stagingPath, worktree)
 
   await client.app.log({
     body: {
       service: "meta-harness",
       level: "info",
-      message: `Starting proposer session for ${version}`,
+      message: `Starting proposer for ${layer.scope} → ${version}`,
     },
   })
 
   await client.tui.showToast({
     body: {
       title: "Meta-Harness",
-      message: `Proposing harness ${version}…`,
+      message: `Proposing ${layer.scope} ${version}…`,
       variant: "info",
       duration: 5_000,
     },
   })
 
-  // Create a child session for the proposer
   const sessionRes = await client.session.create({
-    body: { title: `[meta-harness] propose ${version}` },
+    body: { title: `[meta-harness] ${layer.scope} ${version}` },
   })
 
   const sessionID = sessionRes.data?.id
@@ -75,128 +88,149 @@ export async function triggerPropose(
     return
   }
 
-  // Register before sending the prompt so the chat.message + event hooks
-  // can exclude it from scoring and injection immediately.
   proposerSessions.add(sessionID)
 
-  // Send the prompt — proposer will use bash to write files
   await client.session.prompt({
     path: { id: sessionID },
     body: { parts: [{ type: "text", text: prompt }] },
   })
 
-  // Poll for the new system.md (proposer writes it via bash)
-  const targetFile = candidatePath(worktree, version, "system.md")
-  const activated = await waitForFile(targetFile, 10 * 60 * 1000)
+  // Poll for the staging file the proposer writes
+  const found = await waitForFile(stagingPath, 10 * 60 * 1000)
 
   proposerSessions.delete(sessionID)
 
-  if (activated) {
-    // Read the file the proposer wrote and register it properly
-    const system = fs.readFileSync(targetFile, "utf-8").trim()
-    createCandidate(worktree, version, system)   // ensures score.json exists
-    writeActive(worktree, version, system)
-
+  if (!found) {
     await client.tui.showToast({
       body: {
         title: "Meta-Harness",
-        message: `Activated harness ${version}`,
-        variant: "success",
-        duration: 8_000,
-      },
-    })
-
-    await client.app.log({
-      body: {
-        service: "meta-harness",
-        level: "info",
-        message: `Activated harness ${version}`,
-      },
-    })
-  } else {
-    await client.tui.showToast({
-      body: {
-        title: "Meta-Harness",
-        message: `Proposer timed out — staying on current harness`,
+        message: `Proposer timed out for ${layer.scope} — keeping current`,
         variant: "warning",
         duration: 5_000,
       },
     })
+    return
   }
+
+  // Relocate staging file into the target store (works for account stores too)
+  const system = fs.readFileSync(stagingPath, "utf-8").trim()
+  fs.rmSync(stagingPath, { force: true })
+
+  createCandidate(layer.root, version, system)
+  writeActive(layer.root, version, system)
+
+  await client.tui.showToast({
+    body: {
+      title: "Meta-Harness",
+      message: `Activated ${layer.scope} ${version}`,
+      variant: "success",
+      duration: 8_000,
+    },
+  })
+
+  await client.app.log({
+    body: {
+      service: "meta-harness",
+      level: "info",
+      message: `Activated ${layer.scope} ${version}`,
+    },
+  })
 }
 
 // ── Proposer prompt ────────────────────────────────────────────────────────
 
+const SCOPE_GUIDANCE: Record<StoreLayer["scope"], string> = {
+  "account-global": `\
+You are writing the ACCOUNT-GLOBAL layer — rules true for ALL coding work across ALL projects.
+Only include behaviors so universal that every AI coding session should follow them, regardless
+of project, role, or toolchain. Think: "would this rule help any developer on any project?"
+If the answer is "only sometimes" or "only for this kind of task", it does NOT belong here.`,
+
+  "project-global": `\
+You are writing the PROJECT-GLOBAL layer — rules for ALL roles within THIS project.
+These rules capture project-specific conventions: stack, toolchain, test commands, file layout,
+coding style. They apply to every mh-* agent in this project but NOT to other projects.
+Do not repeat universal coding principles already in the account-global layer.`,
+
+  "account-role": `\
+You are writing the ACCOUNT-ROLE (role-global) layer — rules for this ROLE across ALL projects.
+These rules encode what makes this role effective in general, regardless of the current project.
+Think: "what does a skilled person in this role always do?" — expertise, discipline, checklists
+specific to the role. Do not repeat universal principles or project-specific conventions.`,
+
+  "project-role": `\
+You are writing the PROJECT-ROLE layer — the most specific layer: this ROLE in THIS project.
+These rules address failure patterns specific to using this role on this codebase. They tune
+the role's general behavior for this project's particular constraints, quirks, or patterns.
+Do not repeat anything from the higher layers.`,
+}
+
 function buildProposerPrompt(
-  worktree: string,
+  layer: StoreLayer,
   version: string,
   context: string,
+  stagingPath: string,
+  worktree: string,
 ): string {
-  const targetDir = path.join(worktree, ".meta-harness", "candidates", version)
+  const guidance = SCOPE_GUIDANCE[layer.scope]
+  const currentSystem = readActiveSystem(layer.root)
 
-  return `\
-# Meta-Harness Proposer
+  // Read "already covered" text for display in prompt
+  const coveredTexts = layer.higherRoots
+    .map((r) => readActiveSystem(r))
+    .filter(Boolean)
 
-You are optimizing the **system prompt** for an AI coding assistant.
+  const coveredSection = coveredTexts.length > 0
+    ? `## Already covered by more-general layers — DO NOT REPEAT\n\n${coveredTexts.join("\n\n---\n\n")}\n\n`
+    : ""
 
-A system prompt is a SHORT set of behavioral instructions (under 20 lines) injected before every conversation. It tells the assistant HOW to behave — not what the project is.
+  const currentSection = currentSystem
+    ? `## Current ${layer.scope} prompt (refine this — do not discard good rules)\n\n\`\`\`\n${currentSystem}\n\`\`\`\n\n`
+    : `## Current ${layer.scope} prompt\n\n(empty — write a new one from scratch)\n\n`
 
-## CRITICAL: What you must write
+  // Use relative path for staging so bash command works in worktree
+  const relStaging = path.relative(worktree, stagingPath)
 
-You must write a SHORT BEHAVIORAL SYSTEM PROMPT — like this example:
+  return `# Meta-Harness Proposer — ${layer.scope}
 
-\`\`\`
-You are an AI coding assistant.
-- Read existing code before writing new code.
-- Run tests after making changes.
-- Prefer editing existing files over creating new ones.
-- Do not leave placeholder comments or TODOs in output.
-\`\`\`
+${guidance}
 
-Do NOT write project documentation. Do NOT copy AGENTS.md or README content.
-Do NOT describe what the project does. ONLY write behavioral instructions.
+${coveredSection}${currentSection}## Prior session scores and traces for this layer
 
-## Prior session scores and traces
-
-${context}
+${context || "(no sessions scored yet — write a sensible baseline for this scope)"}
 
 ## Your task
 
-1. Look at sessions rated **bad** — what went wrong?
-2. Look at sessions rated **good** — what worked?
-3. Write ONE new behavioral rule that addresses the most common failure.
-4. If all sessions passed (no bad ratings), keep the current prompt and add one small improvement.
+1. Analyze the traces above. What patterns appear in FAIL sessions? What in PASS sessions?
+2. Identify the ONE most impactful gap: a rule that would fix the most failures and is NOT
+   already covered by the more-general layers above.
+3. If all sessions passed (no failures), make one small improvement to the current prompt.
+4. Write the improved system prompt — SHORT behavioral rules only, under 20 lines.
+   Do NOT write project documentation, AGENTS.md content, or task-specific knowledge.
+   Only write behavioral instructions (what the agent should DO and HOW).
 
-## Write the file NOW
+## Write the result
 
-Run this exact bash command to write the new system prompt:
+Run this bash command to write the improved prompt to the staging file:
 
 \`\`\`bash
-mkdir -p "${targetDir}"
-cat > "${targetDir}/system.md" << 'ENDOFPROMPT'
-You are an AI coding assistant.
-- Read existing code before writing new code.
-- Run tests after making changes.
-- Prefer editing existing files over creating new ones.
-- Do not leave placeholder comments or TODOs in output.
+mkdir -p "${path.dirname(relStaging)}"
+cat > "${relStaging}" << 'ENDOFPROMPT'
+<your improved ${layer.scope} system prompt here — short behavioral rules only>
 ENDOFPROMPT
 \`\`\`
 
-Replace the lines between ENDOFPROMPT markers with your improved behavioral instructions.
-Keep it under 20 lines. Write ONLY behavioral rules, nothing else.`
+After writing the file, briefly explain what you changed and why, citing specific traces.`
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-/** Poll for a file to appear, with timeout. Returns true if found. */
 async function waitForFile(filePath: string, timeoutMs: number): Promise<boolean> {
   const interval = 5_000
   const deadline = Date.now() + timeoutMs
-
   while (Date.now() < deadline) {
     if (fs.existsSync(filePath)) return true
     await new Promise((r) => setTimeout(r, interval))
   }
-
   return false
 }

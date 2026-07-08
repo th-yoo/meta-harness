@@ -1,3 +1,3 @@
 ---
-description: "Manually trigger a meta-harness propose cycle now (without waiting for N sessions)"
+description: "Trigger a meta-harness proposer. Scope: (none)=project-role, project=project-global, role-global=account-role, account=account-global"
 ---

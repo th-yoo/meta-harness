@@ -1,54 +1,90 @@
 /**
  * harness-store.ts
  *
- * Filesystem layout for the meta-harness evolution store.
+ * Multi-layer filesystem store for the meta-harness evolution system.
  *
- * <project>/
- *   .meta-harness/
+ * Four stores form a 2×2 lattice (scope × location):
+ *
+ *   account-global  ~/.config/opencode/.meta-harness/global/
+ *   account-role    ~/.config/opencode/.meta-harness/roles/<agent>/
+ *   project-global  <project>/.meta-harness/global/
+ *   project-role    <project>/.meta-harness/roles/<agent>/
+ *
+ * Each store has the same internal layout:
+ *   <storeRoot>/
  *     active/
- *       system.md          ← current best system prompt (injected every turn)
- *       .version           ← "v0", "v1", …
+ *       system.md     ← current best prompt for this layer
+ *       .version      ← "v0", "v1", …
  *     candidates/
  *       v0/
- *         system.md        ← snapshot of system.md at time of creation
- *         score.json       ← { version, nPass, nFail, sessions: SessionRecord[] }
+ *         system.md
+ *         score.json  ← { version, nPass, nFail, sessions: SessionRecord[] }
  *         traces/
- *           <sessionID>.json  ← { sessionID, passed, note, turnCount, timestamp, summary }
+ *           <sessionID>.json
  *       v1/ …
+ *
+ * Injection order (Option Y — role beats global, project beats account):
+ *   account-global → project-global → account-role → project-role → env-snapshot
+ *
+ * Proposer gap-filling: each proposer sees the active text of all more-general
+ * layers as "already covered" read-only context and proposes ONLY new rules
+ * appropriate to its own scope.
  */
 
 import * as fs from "fs"
+import * as os from "os"
 import * as path from "path"
 
-// ── Paths ──────────────────────────────────────────────────────────────────
+// ── Root resolvers ─────────────────────────────────────────────────────────
 
-export const STORE_DIR = ".meta-harness"
-export const ACTIVE_DIR = `${STORE_DIR}/active`
-export const CANDIDATES_DIR = `${STORE_DIR}/candidates`
+const OPENCODE_CONFIG_DIR =
+  process.env["XDG_CONFIG_HOME"]
+    ? path.join(process.env["XDG_CONFIG_HOME"], "opencode")
+    : path.join(os.homedir(), ".config", "opencode")
 
-export function activePath(worktree: string, file: string): string {
-  return path.join(worktree, ACTIVE_DIR, file)
+const ACCOUNT_MH_DIR = path.join(OPENCODE_CONFIG_DIR, ".meta-harness")
+
+export function accountGlobalRoot(): string {
+  return path.join(ACCOUNT_MH_DIR, "global")
 }
 
-export function candidatePath(worktree: string, version: string, ...parts: string[]): string {
-  return path.join(worktree, CANDIDATES_DIR, version, ...parts)
+export function accountRoleRoot(agent: string): string {
+  return path.join(ACCOUNT_MH_DIR, "roles", agent)
+}
+
+export function projectGlobalRoot(worktree: string): string {
+  return path.join(worktree, ".meta-harness", "global")
+}
+
+export function projectRoleRoot(worktree: string, agent: string): string {
+  return path.join(worktree, ".meta-harness", "roles", agent)
+}
+
+/** Legacy flat store used before the 4-layer refactor. */
+function legacyRoot(worktree: string): string {
+  return path.join(worktree, ".meta-harness")
+}
+
+// ── Paths inside a store ───────────────────────────────────────────────────
+
+export function activePath(storeRoot: string, file: string): string {
+  return path.join(storeRoot, "active", file)
+}
+
+export function candidatePath(storeRoot: string, version: string, ...parts: string[]): string {
+  return path.join(storeRoot, "candidates", version, ...parts)
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface SessionRecord {
   sessionID: string
-  /** true = human rated good, false = human rated bad */
   passed: boolean
-  /** optional free-text note from the human rater */
   note: string
   turnCount: number
   timestamp: string
-  /** first ~500 chars of last assistant message, for proposer diagnosis */
   summary: string
-  /** LLM model used, e.g. "anthropic/claude-sonnet-4-6" */
   model: string
-  /** Thinking/reasoning variant, e.g. "low", "medium", "high", "xhigh", "max", or "" for none */
   variant: string
 }
 
@@ -57,6 +93,14 @@ export interface CandidateScore {
   nPass: number
   nFail: number
   sessions: SessionRecord[]
+}
+
+/** Describes one layer in the injection stack. */
+export interface StoreLayer {
+  root: string
+  scope: "account-global" | "project-global" | "account-role" | "project-role"
+  /** Roots of more-general layers, in order — used to build gap-filling context. */
+  higherRoots: string[]
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -81,14 +125,12 @@ function writeJson(p: string, data: unknown): void {
 
 // ── Store API ──────────────────────────────────────────────────────────────
 
-/** Return current active version tag, e.g. "v0". */
-export function activeVersion(worktree: string): string {
-  return readText(activePath(worktree, ".version")) || "v0"
+export function activeVersion(storeRoot: string): string {
+  return readText(activePath(storeRoot, ".version")) || "v0"
 }
 
-/** Return list of candidate version tags sorted ascending. */
-export function listVersions(worktree: string): string[] {
-  const dir = path.join(worktree, CANDIDATES_DIR)
+export function listVersions(storeRoot: string): string[] {
+  const dir = path.join(storeRoot, "candidates")
   try {
     return fs
       .readdirSync(dir, { withFileTypes: true })
@@ -98,93 +140,127 @@ export function listVersions(worktree: string): string[] {
   } catch { return [] }
 }
 
-/** Next version tag after the highest existing one. */
-export function nextVersion(worktree: string): string {
-  const versions = listVersions(worktree)
+export function nextVersion(storeRoot: string): string {
+  const versions = listVersions(storeRoot)
   if (versions.length === 0) return "v1"
   const max = Math.max(...versions.map((v) => parseInt(v.slice(1))))
   return `v${max + 1}`
 }
 
-/** Read the active system prompt (empty string if not yet bootstrapped). */
-export function readActiveSystem(worktree: string): string {
-  return readText(activePath(worktree, "system.md"))
+export function readActiveSystem(storeRoot: string): string {
+  return readText(activePath(storeRoot, "system.md"))
 }
 
-/** Write system.md to the active directory and mark the version. */
-export function writeActive(worktree: string, version: string, system: string): void {
-  writeText(activePath(worktree, "system.md"), system)
-  writeText(activePath(worktree, ".version"), version)
+export function writeActive(storeRoot: string, version: string, system: string): void {
+  writeText(activePath(storeRoot, "system.md"), system)
+  writeText(activePath(storeRoot, ".version"), version)
 }
 
-/** Read score.json for a candidate. */
-export function readScore(worktree: string, version: string): CandidateScore {
+export function readScore(storeRoot: string, version: string): CandidateScore {
   return readJson<CandidateScore>(
-    candidatePath(worktree, version, "score.json"),
+    candidatePath(storeRoot, version, "score.json"),
     { version, nPass: 0, nFail: 0, sessions: [] },
   )
 }
 
-/** Append a session record to the candidate's score.json and traces/. */
 export function recordSession(
-  worktree: string,
+  storeRoot: string,
   version: string,
   record: SessionRecord,
 ): CandidateScore {
-  // Write individual trace file
   writeJson(
-    candidatePath(worktree, version, "traces", `${record.sessionID}.json`),
+    candidatePath(storeRoot, version, "traces", `${record.sessionID}.json`),
     record,
   )
-
-  // Update aggregated score
-  const score = readScore(worktree, version)
+  const score = readScore(storeRoot, version)
   score.sessions.push(record)
   score.nPass = score.sessions.filter((s) => s.passed).length
   score.nFail = score.sessions.filter((s) => !s.passed).length
-  writeJson(candidatePath(worktree, version, "score.json"), score)
-
+  writeJson(candidatePath(storeRoot, version, "score.json"), score)
   return score
 }
 
-/** Create a new candidate version directory with a system.md. */
-export function createCandidate(
-  worktree: string,
-  version: string,
-  system: string,
-): void {
-  writeText(candidatePath(worktree, version, "system.md"), system)
-  writeJson(candidatePath(worktree, version, "score.json"), {
+export function createCandidate(storeRoot: string, version: string, system: string): void {
+  writeText(candidatePath(storeRoot, version, "system.md"), system)
+  writeJson(candidatePath(storeRoot, version, "score.json"), {
     version, nPass: 0, nFail: 0, sessions: [],
   })
 }
 
 /**
- * Bootstrap the store from the project's AGENTS.md (or a default prompt).
- * No-op if active/system.md already exists.
+ * Bootstrap a store. No-op if active/system.md already exists.
+ * baseline = "" means start empty (account-global, account-role, project-role).
+ * baseline = DEFAULT_SYSTEM_PROMPT for project-global.
  */
-export function bootstrapIfNeeded(worktree: string): void {
-  if (readText(activePath(worktree, "system.md"))) return
-
-  // Always use the default behavioral system prompt as v0 baseline.
-  // AGENTS.md is project documentation, not a behavioral system prompt.
-  const system = DEFAULT_SYSTEM_PROMPT
-
-  createCandidate(worktree, "v0", system)
-  writeActive(worktree, "v0", system)
+export function bootstrapStore(storeRoot: string, baseline: string): void {
+  if (readText(activePath(storeRoot, "system.md")) !== "") return
+  if (!baseline) {
+    // Empty store — no v0 candidate yet; first proposer will create v1.
+    fs.mkdirSync(path.join(storeRoot, "active"), { recursive: true })
+    fs.mkdirSync(path.join(storeRoot, "candidates"), { recursive: true })
+    return
+  }
+  createCandidate(storeRoot, "v0", baseline)
+  writeActive(storeRoot, "v0", baseline)
 }
 
 /**
- * Build the full proposer context: all candidates with scores + trace
- * excerpts. Designed to be read by the proposer agent.
+ * One-time migration: if the old flat .meta-harness/{active,candidates} exists
+ * at worktree root and project-global hasn't been set up yet, move it there.
+ * This preserves any evolved improvements (e.g. the v2 "do more, not less" rule).
  */
-export function buildProposerContext(worktree: string): string {
-  const versions = listVersions(worktree)
+export function migrateFlatToProjectGlobal(worktree: string): void {
+  const flat = legacyRoot(worktree)
+  const flatActive = path.join(flat, "active", "system.md")
+  const target = projectGlobalRoot(worktree)
+  const targetActive = path.join(target, "active", "system.md")
+
+  // Only migrate if the old flat layout exists and the new one doesn't
+  if (!fs.existsSync(flatActive)) return
+  if (fs.existsSync(targetActive)) return
+
+  // Move flat/active → global/active and flat/candidates → global/candidates
+  const flatActiveDir = path.join(flat, "active")
+  const flatCandidatesDir = path.join(flat, "candidates")
+  const targetActiveDir = path.join(target, "active")
+  const targetCandidatesDir = path.join(target, "candidates")
+
+  if (fs.existsSync(flatActiveDir)) {
+    fs.mkdirSync(path.dirname(targetActiveDir), { recursive: true })
+    fs.renameSync(flatActiveDir, targetActiveDir)
+  }
+  if (fs.existsSync(flatCandidatesDir)) {
+    fs.mkdirSync(path.dirname(targetCandidatesDir), { recursive: true })
+    fs.renameSync(flatCandidatesDir, targetCandidatesDir)
+  }
+}
+
+/**
+ * Build the proposer context for one store: all candidates with scores and
+ * trace excerpts. Includes the gap-filling "already covered" section from
+ * higher-layer active prompts.
+ */
+export function buildProposerContext(
+  storeRoot: string,
+  higherRoots: string[],
+): string {
+  // Build "already covered" section from more-general layers
+  const covered = higherRoots
+    .map((r) => readActiveSystem(r))
+    .filter(Boolean)
+    .join("\n\n")
+
+  const coveredSection = covered
+    ? `## Already covered by more-general layers — DO NOT REPEAT\n\n${covered}\n\n---\n\n`
+    : ""
+
+  // Build per-candidate sections
+  const versions = listVersions(storeRoot)
   const sections: string[] = []
 
   for (const version of versions) {
-    const score = readScore(worktree, version)
-    const system = readText(candidatePath(worktree, version, "system.md"))
+    const score = readScore(storeRoot, version)
+    const system = readText(candidatePath(storeRoot, version, "system.md"))
     const rate = score.sessions.length > 0
       ? `${score.nPass}/${score.sessions.length} passed (${(score.nPass / score.sessions.length * 100).toFixed(0)}%)`
       : "no sessions yet"
@@ -195,16 +271,37 @@ export function buildProposerContext(worktree: string): string {
     }).join("\n")
 
     sections.push(
-      `## Candidate ${version} — ${rate}\n\n### system.md\n\`\`\`\n${system}\n\`\`\`\n\n### Session traces\n${traceLines || "  (none)"}`,
+      `## Candidate ${version} — ${rate}\n\n### system.md\n\`\`\`\n${system || "(empty)"}\n\`\`\`\n\n### Session traces\n${traceLines || "  (none)"}`,
     )
   }
 
-  return sections.join("\n\n---\n\n")
+  return coveredSection + sections.join("\n\n---\n\n")
 }
 
-// ── Default system prompt (used when no AGENTS.md exists) ─────────────────
+// ── Layer stack builder ────────────────────────────────────────────────────
 
-const DEFAULT_SYSTEM_PROMPT = `\
+/**
+ * Build the ordered 4-layer stack for a given role.
+ * Injection order: account-global → project-global → account-role → project-role.
+ * Each layer's higherRoots = all layers before it (for gap-filling context).
+ */
+export function layersFor(worktree: string, agent: string): StoreLayer[] {
+  const ag = accountGlobalRoot()
+  const pg = projectGlobalRoot(worktree)
+  const ar = accountRoleRoot(agent)
+  const pr = projectRoleRoot(worktree, agent)
+
+  return [
+    { root: ag, scope: "account-global",  higherRoots: [] },
+    { root: pg, scope: "project-global",  higherRoots: [ag] },
+    { root: ar, scope: "account-role",    higherRoots: [ag, pg] },
+    { root: pr, scope: "project-role",    higherRoots: [ag, pg, ar] },
+  ]
+}
+
+// ── Default system prompt ──────────────────────────────────────────────────
+
+export const DEFAULT_SYSTEM_PROMPT = `\
 You are an AI coding assistant. Before starting any task, orient yourself:
 - Read the task requirements carefully
 - Check relevant existing files before writing new ones

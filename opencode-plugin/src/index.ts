@@ -1,93 +1,71 @@
 /**
  * opencode-meta-harness plugin
  *
- * Ports three optimisations from meta-harness (Python) into opencode,
- * and adds a human-scoring + harness-evolution loop.
+ * 4-layer harness evolution system for mh-* agents.
  *
- * Features:
+ * Layers (injection order, general → specific):
+ *   account-global  ~/.config/opencode/.meta-harness/global/
+ *   project-global  <project>/.meta-harness/global/
+ *   account-role    ~/.config/opencode/.meta-harness/roles/<agent>/
+ *   project-role    <project>/.meta-harness/roles/<agent>/
+ *   env-snapshot    (pushed last as context)
  *
- * 1. Environment bootstrapping (B) — gathers a compact env snapshot on the
- *    first message of each session and injects it into the system prompt via
- *    experimental.chat.system.transform so the LLM never needs to run ls/which.
+ * A session uses the harness iff it runs under a primary agent whose name
+ * starts with "mh-" (e.g. mh-build, mh-review, mh-debug).
  *
- * 2. Fast-command timeout — lowers bash tool timeout for known-fast commands.
- *    Loose port of marker-based polling; opencode already exits as soon as
- *    the process ends.
- *
- * 3. Anthropic prompt caching — built into opencode's transform.ts. No hook.
- *
- * 4. System prompt injection (A) — injects the current best harness system.md
- *    into every LLM call via experimental.chat.system.transform.
- *
- * 5. Human scoring — after session.idle, prompts the human via
- *    /mh-score good|bad [note]. Score + trace saved to filesystem.
- *
- * 6. Proposer loop — after SESSIONS_BEFORE_PROPOSE scored sessions, spawns a
- *    child session that reads all prior traces and proposes an improved system.md.
- *
- * 7. Proposer session exclusion (C) — proposer's own sessions are not scored
- *    and do not receive the harness-under-test system prompt.
- *
- * 8. Model tagging (H2) — each session trace records the LLM model used so the
- *    proposer can diagnose model-specific vs. general failures.
+ * Scoring feeds all 4 layers. Auto-propose: project-role@5, project-global@10.
+ * Account layers are manual-only (/mh-propose role-global | account).
  *
  * Slash commands:
- *   /mh-score good [note]   — rate last session as good
- *   /mh-score bad  [note]   — rate last session as bad
- *   /mh-propose             — manually trigger a propose cycle now
+ *   /mh-score good|bad [note]          — rate last session
+ *   /mh-propose [scope]                — trigger proposer
+ *     scope: (none)=project-role, project=project-global,
+ *            role-global=account-role, account=account-global
  */
 
 import type { Plugin, PluginInput, PluginModule } from "@opencode-ai/plugin"
 import { gatherEnvSnapshot } from "./env-snapshot.ts"
 import { adjustedTimeout } from "./bash-timeout.ts"
 import {
-  bootstrapIfNeeded,
-  readActiveSystem,
+  accountGlobalRoot,
+  accountRoleRoot,
+  projectGlobalRoot,
+  projectRoleRoot,
+  layersFor,
+  bootstrapStore,
+  migrateFlatToProjectGlobal,
   activeVersion,
+  readActiveSystem,
   recordSession,
+  DEFAULT_SYSTEM_PROMPT,
+  type StoreLayer,
 } from "./harness-store.ts"
 import { promptHumanScore, handleScoreCommand } from "./score.ts"
-import { triggerPropose, SESSIONS_BEFORE_PROPOSE } from "./propose.ts"
+import {
+  triggerPropose,
+  PROJECT_ROLE_THRESHOLD,
+  PROJECT_GLOBAL_THRESHOLD,
+} from "./propose.ts"
 import { proposerSessions } from "./session-state.ts"
+
+// ── Role detection ─────────────────────────────────────────────────────────
+
+/** Any primary agent named "mh-*" opts into the harness system. */
+function isMhRole(agent: string): boolean {
+  return agent.startsWith("mh-")
+}
 
 // ── Per-session state ──────────────────────────────────────────────────────
 
-/** Sessions that have received their first chat.message (used as "active" marker). */
 const bootstrappedSessions = new Set<string>()
-
-/** Sessions awaiting a human score — blocks re-entry on second idle event. */
 const pendingScore = new Set<string>()
-
-/** Cached env snapshot per session (gathered on first message). */
 const snapshotCache = new Map<string, string>()
-
-/** Whether the snapshot has been injected into the system prompt yet. */
 const snapshotInjected = new Set<string>()
-
-/** LLM model observed per session (captured from build agent in chat.message). */
 const sessionModel = new Map<string, string>()
-
-/** Thinking/reasoning variant per session, e.g. "high", "xhigh", "" for none. */
 const sessionVariant = new Map<string, string>()
-
-/** The primary agent name for each session — used to gate harness injection. */
 const sessionAgent = new Map<string, string>()
-
-/** Agent name that triggers harness injection. Switch to this agent to use the evolved prompt. */
-const MH_AGENT = "mh-build"
-
-/** Turn counter per session (incremented in experimental.text.complete). */
 const sessionTurns = new Map<string, number>()
-
-/** Last assistant text per session (captured in experimental.text.complete). */
 const sessionSummary = new Map<string, string>()
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-type Client = PluginInput["client"]
-
-const log = (client: Client, level: "debug" | "info" | "warn" | "error", message: string) =>
-  client.app.log({ body: { service: "meta-harness", level, message } })
 
 function cleanupSession(sessionID: string): void {
   bootstrappedSessions.delete(sessionID)
@@ -101,90 +79,105 @@ function cleanupSession(sessionID: string): void {
   sessionSummary.delete(sessionID)
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+type Client = PluginInput["client"]
+
+const log = (client: Client, level: "debug" | "info" | "warn" | "error", message: string) =>
+  client.app.log({ body: { service: "meta-harness", level, message } })
+
 // ── Plugin ─────────────────────────────────────────────────────────────────
 
 const metaHarness: Plugin = async (input) => {
   const { worktree, client } = input
 
-  bootstrapIfNeeded(worktree)
+  // One-time migration of legacy flat store into project-global
+  migrateFlatToProjectGlobal(worktree)
+
+  // Bootstrap project-global with DEFAULT_SYSTEM_PROMPT (account layers start empty)
+  bootstrapStore(projectGlobalRoot(worktree), DEFAULT_SYSTEM_PROMPT)
+  bootstrapStore(accountGlobalRoot(), "")
+
   await log(client, "info", `[hook:init] plugin loaded — worktree=${worktree}`)
 
   return {
 
-    // ── B: gather env snapshot on first message + H2: capture main model ──
+    // ── chat.message: capture model/variant/agent, gather env snapshot ────
     "chat.message": async (msgInput, output) => {
       const { sessionID } = output.message
-
-      // Skip proposer's own sessions
       if (proposerSessions.has(sessionID)) return
 
-      // H2: capture model + variant + agent from primary agents (not title/compaction)
       const agent = msgInput.agent ?? ""
-      const isMainAgent = agent === "build" || agent === "plan" || agent === MH_AGENT || agent === ""
-      if (isMainAgent && msgInput.model && !sessionModel.has(sessionID)) {
+
+      // Capture model + variant from primary mh-* or build/plan agents
+      const isPrimary = isMhRole(agent) || agent === "build" || agent === "plan" || agent === ""
+      if (isPrimary && msgInput.model && !sessionModel.has(sessionID)) {
         const model = `${msgInput.model.providerID}/${msgInput.model.modelID}`
         const variant = msgInput.variant ?? ""
         sessionModel.set(sessionID, model)
         sessionVariant.set(sessionID, variant)
         sessionAgent.set(sessionID, agent)
-        await log(client, "debug", `[hook:chat.message] captured model=${model} variant=${variant || "none"} agent=${agent} sessionID=${sessionID}`)
+        await log(client, "debug", `[hook:chat.message] captured model=${model} variant=${variant || "none"} agent=${agent}`)
       }
 
       if (bootstrappedSessions.has(sessionID)) return
       bootstrappedSessions.add(sessionID)
       sessionTurns.set(sessionID, 0)
 
-      await log(client, "debug", `[hook:chat.message] first message — sessionID=${sessionID}`)
-
-      // Gather env snapshot now (async OK — fires before the LLM call)
-      const snapshot = await gatherEnvSnapshot(input.$)
-      await log(client, "debug", `[hook:chat.message] env snapshot length=${snapshot.length}`)
-      if (snapshot) snapshotCache.set(sessionID, snapshot)
-    },
-
-    // ── A + B: inject system prompt + env snapshot — mh-build agent only ──
-    "experimental.chat.system.transform": async (sysInput, output) => {
-      const sessionID = sysInput.sessionID ?? ""
-
-      // Skip proposer's own sessions
-      if (proposerSessions.has(sessionID)) return
-
-      // Only inject when the session is using the mh-build agent.
-      // This isolates the harness to an explicit opt-in role — normal build/plan
-      // sessions are unaffected.
-      if (sessionAgent.get(sessionID) !== MH_AGENT) return
-
-      // A: inject active harness system prompt
-      const system = readActiveSystem(worktree)
-      if (system) {
-        output.system.unshift(system)
-        await log(client, "debug", `[hook:system.transform] injected system prompt — ${system.length} chars`)
+      // Bootstrap all 4 stores for this role on first message
+      if (isMhRole(agent)) {
+        bootstrapStore(accountRoleRoot(agent), "")
+        bootstrapStore(projectRoleRoot(worktree, agent), "")
+        await log(client, "debug", `[hook:chat.message] bootstrapped stores for agent=${agent}`)
       }
 
-      // B: inject cached env snapshot once per session
+      // Gather env snapshot (async OK — fires before the LLM call)
+      const snapshot = await gatherEnvSnapshot(input.$)
+      if (snapshot) snapshotCache.set(sessionID, snapshot)
+      await log(client, "debug", `[hook:chat.message] env snapshot length=${snapshot.length}`)
+    },
+
+    // ── system.transform: inject all 4 layers + env snapshot ─────────────
+    "experimental.chat.system.transform": async (sysInput, output) => {
+      const sessionID = sysInput.sessionID ?? ""
+      if (proposerSessions.has(sessionID)) return
+
+      const agent = sessionAgent.get(sessionID) ?? ""
+      if (!isMhRole(agent)) return
+
+      // Inject each layer's active prompt in order (general → specific)
+      const layers = layersFor(worktree, agent)
+      for (const layer of layers) {
+        const system = readActiveSystem(layer.root)
+        if (system) {
+          output.system.push(system)
+          await log(client, "debug", `[hook:system.transform] injected ${layer.scope} — ${system.length} chars`)
+        }
+      }
+
+      // Inject env snapshot once per session (pushed last)
       if (sessionID && !snapshotInjected.has(sessionID)) {
         const snapshot = snapshotCache.get(sessionID)
         if (snapshot) {
           snapshotInjected.add(sessionID)
           output.system.push(snapshot)
-          await log(client, "debug", `[hook:system.transform] injected env snapshot — ${snapshot.length} chars`)
+          await log(client, "debug", `[hook:system.transform] injected env snapshot`)
         }
       }
     },
 
-    // ── 2: fast-command timeout ───────────────────────────────────────────
+    // ── fast-command timeout ──────────────────────────────────────────────
     "tool.execute.before": async (toolInput, output) => {
       if (toolInput.tool !== "bash") return
       const args = output.args as { command?: string; timeout?: number; workdir?: string }
       if (typeof args.command !== "string") return
       const adjusted = adjustedTimeout(args.command, args.timeout)
       if (adjusted !== undefined) {
-        await log(client, "debug", `[hook:tool.execute.before] bash timeout ${args.timeout ?? "∞"} → ${adjusted}ms`)
         output.args = { ...args, timeout: adjusted }
       }
     },
 
-    // ── E: count turns + capture last assistant text ──────────────────────
+    // ── turn counting + summary capture ───────────────────────────────────
     "experimental.text.complete": async (textInput, output) => {
       const { sessionID } = textInput
       if (proposerSessions.has(sessionID)) return
@@ -192,23 +185,20 @@ const metaHarness: Plugin = async (input) => {
       sessionSummary.set(sessionID, output.text.slice(0, 500))
     },
 
-    // ── 5 + 6: human scoring + proposer on session idle ──────────────────
+    // ── session.idle: scoring + auto-propose ──────────────────────────────
     event: async ({ event }) => {
       if (event.type !== "session.idle") return
 
       const sessionID = event.properties.sessionID
       if (!sessionID) return
-
-      // C: skip proposer's own sessions entirely
       if (proposerSessions.has(sessionID)) return
 
-      await log(client, "info", `[hook:event] session.idle — sessionID=${sessionID} bootstrapped=${bootstrappedSessions.has(sessionID)} pendingScore=${pendingScore.has(sessionID)}`)
+      const agent = sessionAgent.get(sessionID) ?? ""
+      await log(client, "info", `[hook:event] session.idle — sessionID=${sessionID} agent=${agent} bootstrapped=${bootstrappedSessions.has(sessionID)}`)
 
       if (!bootstrappedSessions.has(sessionID)) return
+      if (!isMhRole(agent)) return
       if (pendingScore.has(sessionID)) return
-
-      // Only score mh-build sessions — leave normal build/plan sessions alone
-      if (sessionAgent.get(sessionID) !== MH_AGENT) return
 
       bootstrappedSessions.delete(sessionID)
       pendingScore.add(sessionID)
@@ -220,7 +210,6 @@ const metaHarness: Plugin = async (input) => {
         return
       }
 
-      const version = activeVersion(worktree)
       const record = {
         sessionID,
         passed: result.passed,
@@ -232,13 +221,21 @@ const metaHarness: Plugin = async (input) => {
         variant: sessionVariant.get(sessionID) ?? "",
       }
 
-      const score = recordSession(worktree, version, record)
+      // Record into all 4 stores
+      const layers = layersFor(worktree, agent)
+      const scores = layers.map((layer) => {
+        const version = activeVersion(layer.root)
+        return { layer, score: recordSession(layer.root, version, record) }
+      })
 
-      await log(client, "info", `[hook:event] scored ${result.passed ? "PASS" : "FAIL"} model=${record.model} — ${version} cumulative ${score.nPass}/${score.sessions.length}`)
+      const projectRoleScore = scores.find((s) => s.layer.scope === "project-role")?.score
+      const projectGlobalScore = scores.find((s) => s.layer.scope === "project-global")?.score
+
+      await log(client, "info", `[hook:event] scored ${result.passed ? "PASS" : "FAIL"} model=${record.model} agent=${agent} — project-role ${projectRoleScore?.nPass}/${projectRoleScore?.sessions.length}`)
 
       await client.tui.showToast({
         body: {
-          message: `Score recorded: ${result.passed ? "✓ good" : "✗ bad"} (${version}: ${score.nPass}/${score.sessions.length})`,
+          message: `Score recorded: ${result.passed ? "✓ good" : "✗ bad"} (${agent} project-role: ${projectRoleScore?.nPass}/${projectRoleScore?.sessions.length})`,
           variant: result.passed ? "success" : "warning",
           duration: 4_000,
         },
@@ -246,13 +243,20 @@ const metaHarness: Plugin = async (input) => {
 
       cleanupSession(sessionID)
 
-      if (score.sessions.length > 0 && score.sessions.length % SESSIONS_BEFORE_PROPOSE === 0) {
-        await log(client, "info", `[hook:event] triggering proposer — ${version} → next`)
-        void triggerPropose(client, worktree)
+      // Auto-propose: project-role@PROJECT_ROLE_THRESHOLD, project-global@PROJECT_GLOBAL_THRESHOLD
+      const prLayer = layers.find((l) => l.scope === "project-role")!
+      const pgLayer = layers.find((l) => l.scope === "project-global")!
+
+      if (projectRoleScore && projectRoleScore.sessions.length % PROJECT_ROLE_THRESHOLD === 0) {
+        await log(client, "info", `[hook:event] auto-propose project-role for ${agent}`)
+        void triggerPropose(client, worktree, prLayer)
+      } else if (projectGlobalScore && projectGlobalScore.sessions.length % PROJECT_GLOBAL_THRESHOLD === 0) {
+        await log(client, "info", `[hook:event] auto-propose project-global`)
+        void triggerPropose(client, worktree, pgLayer)
       }
     },
 
-    // ── 5 + G: intercept /mh-score and /mh-propose commands ──────────────
+    // ── /mh-score + /mh-propose commands ─────────────────────────────────
     "command.execute.before": async (cmdInput, _output) => {
       await log(client, "debug", `[hook:command.execute.before] command=${cmdInput.command} args="${cmdInput.arguments}"`)
 
@@ -263,17 +267,34 @@ const metaHarness: Plugin = async (input) => {
         cmdInput.sessionID,
       )
       if (scoreConsumed) {
-        await log(client, "info", `[hook:command.execute.before] /mh-score consumed — aborting LLM call`)
-        // D: throw to abort the LLM call. session.command has no noReply flag
-        // (confirmed by inspecting SDK types), so this is the only reliable abort.
-        // OpenCode shows this as an error flash — expected behaviour, not a bug.
+        await log(client, "info", `[hook:command.execute.before] /mh-score consumed`)
         throw new Error("Meta-Harness: score recorded ✓ (this notice is expected)")
       }
 
-      // G: /mh-propose — manual proposer trigger
+      // /mh-propose [scope]
       if (cmdInput.command === "mh-propose") {
-        await log(client, "info", `[hook:command.execute.before] /mh-propose — triggering proposer manually`)
-        void triggerPropose(client, worktree)
+        const scope = cmdInput.arguments.trim().toLowerCase()
+        const agent = sessionAgent.get(cmdInput.sessionID) ?? "mh-build"
+        const layers = layersFor(worktree, agent)
+
+        let layer: StoreLayer | undefined
+        if (!scope || scope === "role" || scope === "project-role") {
+          layer = layers.find((l) => l.scope === "project-role")
+        } else if (scope === "project" || scope === "project-global") {
+          layer = layers.find((l) => l.scope === "project-global")
+        } else if (scope === "role-global" || scope === "account-role") {
+          layer = layers.find((l) => l.scope === "account-role")
+        } else if (scope === "account" || scope === "account-global") {
+          layer = layers.find((l) => l.scope === "account-global")
+        }
+
+        if (layer) {
+          await log(client, "info", `[hook:command.execute.before] /mh-propose scope=${layer.scope} agent=${agent}`)
+          void triggerPropose(client, worktree, layer)
+        } else {
+          await log(client, "warn", `[hook:command.execute.before] /mh-propose unknown scope="${scope}"`)
+        }
+
         throw new Error("Meta-Harness: propose cycle started ✓ (this notice is expected)")
       }
     },
