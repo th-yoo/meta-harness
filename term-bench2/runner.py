@@ -708,10 +708,13 @@ def cmd_run(args: argparse.Namespace) -> None:
     # Task selection
     if args.all:
         tasks = all_task_names()
+    elif args.task_file:
+        tasks = [ln.strip() for ln in Path(args.task_file).read_text().splitlines()
+                 if ln.strip() and not ln.startswith("#")]
     elif args.tasks:
         tasks = args.tasks
     else:
-        die("Specify --tasks TASK [TASK...] or --all")
+        die("Specify --tasks TASK [TASK...], --task-file PATH, or --all")
 
     manifest = load_manifest()
     for t in tasks:
@@ -1036,6 +1039,8 @@ def build_parser() -> argparse.ArgumentParser:
     # run
     p_run = sub.add_parser("run", help="Run tasks through OpenCode")
     p_run.add_argument("--tasks", nargs="+", metavar="TASK", help="Task name(s)")
+    p_run.add_argument("--task-file", metavar="PATH",
+                       help="File with one task name per line (e.g. baseline-tasks.txt)")
     p_run.add_argument("--all", action="store_true", help="Run all 59 target tasks")
     p_run.add_argument("--model", default="claude-sonnet-4-6", help="Model ID")
     p_run.add_argument("--variant", default="", help="Model variant (e.g. high, low)")
