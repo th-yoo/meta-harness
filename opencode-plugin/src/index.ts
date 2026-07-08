@@ -70,6 +70,12 @@ const sessionModel = new Map<string, string>()
 /** Thinking/reasoning variant per session, e.g. "high", "xhigh", "" for none. */
 const sessionVariant = new Map<string, string>()
 
+/** The primary agent name for each session — used to gate harness injection. */
+const sessionAgent = new Map<string, string>()
+
+/** Agent name that triggers harness injection. Switch to this agent to use the evolved prompt. */
+const MH_AGENT = "mh-build"
+
 /** Turn counter per session (incremented in experimental.text.complete). */
 const sessionTurns = new Map<string, number>()
 
@@ -90,6 +96,7 @@ function cleanupSession(sessionID: string): void {
   snapshotInjected.delete(sessionID)
   sessionModel.delete(sessionID)
   sessionVariant.delete(sessionID)
+  sessionAgent.delete(sessionID)
   sessionTurns.delete(sessionID)
   sessionSummary.delete(sessionID)
 }
@@ -111,15 +118,15 @@ const metaHarness: Plugin = async (input) => {
       // Skip proposer's own sessions
       if (proposerSessions.has(sessionID)) return
 
-      // H2: capture model + variant from the build agent (not title/compaction)
-      // chat.message has agent, model, and variant (thinking mode).
+      // H2: capture model + variant + agent from primary agents (not title/compaction)
       const agent = msgInput.agent ?? ""
-      const isMainAgent = agent === "build" || agent === "plan" || agent === ""
+      const isMainAgent = agent === "build" || agent === "plan" || agent === MH_AGENT || agent === ""
       if (isMainAgent && msgInput.model && !sessionModel.has(sessionID)) {
         const model = `${msgInput.model.providerID}/${msgInput.model.modelID}`
         const variant = msgInput.variant ?? ""
         sessionModel.set(sessionID, model)
         sessionVariant.set(sessionID, variant)
+        sessionAgent.set(sessionID, agent)
         await log(client, "debug", `[hook:chat.message] captured model=${model} variant=${variant || "none"} agent=${agent} sessionID=${sessionID}`)
       }
 
@@ -135,12 +142,17 @@ const metaHarness: Plugin = async (input) => {
       if (snapshot) snapshotCache.set(sessionID, snapshot)
     },
 
-    // ── A + B: inject system prompt + env snapshot into every LLM call ────
+    // ── A + B: inject system prompt + env snapshot — mh-build agent only ──
     "experimental.chat.system.transform": async (sysInput, output) => {
       const sessionID = sysInput.sessionID ?? ""
 
-      // Skip proposer's own sessions (don't inject the harness under test)
+      // Skip proposer's own sessions
       if (proposerSessions.has(sessionID)) return
+
+      // Only inject when the session is using the mh-build agent.
+      // This isolates the harness to an explicit opt-in role — normal build/plan
+      // sessions are unaffected.
+      if (sessionAgent.get(sessionID) !== MH_AGENT) return
 
       // A: inject active harness system prompt
       const system = readActiveSystem(worktree)
@@ -194,6 +206,9 @@ const metaHarness: Plugin = async (input) => {
 
       if (!bootstrappedSessions.has(sessionID)) return
       if (pendingScore.has(sessionID)) return
+
+      // Only score mh-build sessions — leave normal build/plan sessions alone
+      if (sessionAgent.get(sessionID) !== MH_AGENT) return
 
       bootstrappedSessions.delete(sessionID)
       pendingScore.add(sessionID)
