@@ -40,9 +40,19 @@ META_ROOT = SCRIPT_DIR.parent
 TB_ROOT_DEFAULT = META_ROOT.parent / "terminal-bench-2"
 
 # TB2 task scripts hardcode /app, /tests, /logs/verifier.
-HOST_APP = Path("/app")
+# We never touch the real filesystem root. Instead every subprocess runs inside
+# a private mount namespace (unshare --user --mount --map-root-user) where
+# ~/bench/{app,tests,logs} are bind-mounted onto /app, /tests, /logs.
+# The host filesystem sees none of these paths.
+BENCH_PREFIX = Path.home() / "bench"
+REAL_APP   = BENCH_PREFIX / "app"
+REAL_TESTS = BENCH_PREFIX / "tests"
+REAL_LOGS  = BENCH_PREFIX / "logs" / "verifier"
+
+# These are the paths as seen *inside* the namespace (what scripts expect)
+HOST_APP  = Path("/app")
 HOST_TESTS = Path("/tests")
-HOST_LOGS = Path("/logs/verifier")
+HOST_LOGS  = Path("/logs/verifier")
 
 # Manifest of all 59 target tasks
 MANIFEST_PATH = SCRIPT_DIR / "manifest.json"
@@ -88,10 +98,14 @@ def run_cmd(
     timeout: Optional[float] = None,
     capture: bool = False,
     check: bool = True,
+    ns: bool = False,
+    extra_mounts: Optional[dict[str, Path]] = None,
 ) -> subprocess.CompletedProcess:
+    """Run a command, optionally inside the mount namespace."""
     merged_env = {**os.environ, **(env or {})}
+    actual_cmd = ns_wrap(cmd, extra_mounts) if ns else cmd
     return subprocess.run(
-        cmd,
+        actual_cmd,
         cwd=str(cwd) if cwd else None,
         env=merged_env,
         timeout=timeout,
@@ -122,27 +136,63 @@ def read_toml_value(toml_path: Path, section: str, key: str) -> Optional[float]:
 
 
 def read_reward() -> int:
-    """Read /logs/verifier/reward.txt → 0 or 1."""
+    """Read ~/bench/logs/verifier/reward.txt → 0 or 1."""
     try:
-        txt = HOST_LOGS.joinpath("reward.txt").read_text().strip()
+        txt = REAL_LOGS.joinpath("reward.txt").read_text().strip()
         return int(txt) if txt in ("0", "1") else 0
     except Exception:
         return 0
 
 
-def clean_dir(d: Path) -> None:
-    """Clear a directory's contents without removing the directory itself.
+def _real(ns_path: Path) -> Path:
+    """Translate a namespace path (/app, /tests, /logs/…) to its real ~/bench/… counterpart."""
+    s = str(ns_path)
+    if s == "/app" or s.startswith("/app/"):
+        return BENCH_PREFIX / "app" / s[len("/app/"):]
+    if s == "/tests" or s.startswith("/tests/"):
+        return BENCH_PREFIX / "tests" / s[len("/tests/"):]
+    if s == "/logs" or s.startswith("/logs/"):
+        return BENCH_PREFIX / "logs" / s[len("/logs/"):]
+    return ns_path  # not a namespace path — pass through
 
-    We never remove /app, /tests, /logs themselves because they sit directly
-    under / (root-owned parent). Instead we wipe their contents and recreate
-    any needed subdirs.
-    """
-    d.mkdir(parents=True, exist_ok=True)
-    for child in d.iterdir():
+
+def clean_dir(ns_path: Path) -> None:
+    """Wipe and recreate a bench directory (operates on ~/bench/… not /app/…)."""
+    real = _real(ns_path)
+    real.mkdir(parents=True, exist_ok=True)
+    for child in real.iterdir():
         if child.is_dir() and not child.is_symlink():
             shutil.rmtree(child)
         else:
             child.unlink(missing_ok=True)
+
+
+def ns_wrap(cmd: list[str], extra_mounts: Optional[dict[str, Path]] = None) -> list[str]:
+    """
+    Wrap a command in a private mount namespace.
+
+    ~/bench/app, ~/bench/tests, ~/bench/logs are bind-mounted onto
+    /app, /tests, /logs inside the namespace.  The host filesystem is
+    untouched.  Uses only user namespaces — no root required.
+
+    extra_mounts: {'/namespace/path': real_host_path} for task-specific
+    paths like /protected, /workspace, /data etc.
+    """
+    mounts = [
+        f"mkdir -p /app /tests /logs/verifier",
+        f"mount --bind {REAL_APP} /app",
+        f"mount --bind {REAL_TESTS} /tests",
+        f"mount --bind {BENCH_PREFIX / 'logs'} /logs",
+    ]
+    for ns_path, real_path in (extra_mounts or {}).items():
+        mounts.append(f"mkdir -p {ns_path}")
+        mounts.append(f"mount --bind {real_path} {ns_path}")
+
+    inner = " && ".join(mounts) + " && " + " ".join(shlex.quote(c) for c in cmd)
+    return [
+        "unshare", "--user", "--mount", "--map-root-user",
+        "bash", "-c", inner,
+    ]
 
 
 # ── prep command ───────────────────────────────────────────────────────────
@@ -193,28 +243,23 @@ def cmd_prep(args: argparse.Namespace) -> None:
     apt_line = "sudo apt-get install -y \\\n  " + " \\\n  ".join(apt_pkgs) if apt_pkgs else "# (no apt packages)"
     user = os.environ.get("USER", os.environ.get("LOGNAME", "$(whoami)"))
     commands = [
-        f"sudo mkdir -p {HOST_APP} {HOST_TESTS} {HOST_LOGS}",
-        f"sudo chown -R {user} {HOST_APP} {HOST_TESTS} /logs",
+        f"mkdir -p {REAL_APP} {REAL_TESTS} {REAL_LOGS}",
         apt_line,
     ]
 
     if args.apply:
-        log("Running host setup (requires sudo)...")
+        log("Running host setup...")
 
         # Snapshot which of our packages are NOT yet installed → these are newly added
         already_installed = _installed_packages()
         to_install = [p for p in apt_pkgs if p not in already_installed]
         log(f"  {len(to_install)} new / {len(apt_pkgs) - len(to_install)} already present")
 
-        # Create dirs and ensure user owns them (so clean_dir never needs sudo)
-        subprocess.run(
-            ["sudo", "mkdir", "-p", str(HOST_APP), str(HOST_TESTS), str(HOST_LOGS)],
-            check=True,
-        )
-        subprocess.run(
-            ["sudo", "chown", "-R", user, str(HOST_APP), str(HOST_TESTS), "/logs"],
-            check=True,
-        )
+        # Create user-owned bench dirs — no sudo needed, no root dir pollution
+        REAL_APP.mkdir(parents=True, exist_ok=True)
+        REAL_TESTS.mkdir(parents=True, exist_ok=True)
+        REAL_LOGS.mkdir(parents=True, exist_ok=True)
+        log(f"  Created {REAL_APP}, {REAL_TESTS}, {REAL_LOGS}")
 
         # apt — noninteractive to avoid debconf prompts (postfix, mailman3, etc.)
         if apt_pkgs:
@@ -239,6 +284,7 @@ def cmd_prep(args: argparse.Namespace) -> None:
         existing = [p for p in apt_pkgs if p in already_installed]
 
         print("# One-time host setup — run with --apply to execute:")
+        print("# (no root/sudo needed for dirs; sudo only for apt packages)")
         print()
         for c in commands:
             print(c)
@@ -247,7 +293,7 @@ def cmd_prep(args: argparse.Namespace) -> None:
         if new_pkgs:
             print(f"# New packages: {' '.join(new_pkgs)}")
         print("# Note: --apply sets DEBIAN_FRONTEND=noninteractive to avoid debconf prompts.")
-        print("# To undo: python3 runner.py prep --uninstall [--apply]")
+        print("# To undo apt packages: python3 runner.py prep --uninstall [--apply]")
 
 
 # ── harness assembly ───────────────────────────────────────────────────────
@@ -297,92 +343,47 @@ def _manifest() -> dict:
 
 
 def cleanup_task_extras(task: str) -> None:
-    """
-    Remove paths outside /app /tests /logs that setup_deps.sh wrote for this
-    task (recorded as extra_cleanup_paths in manifest.json).
+    """Wipe ~/bench/extras/<task>/ — the user-owned backing store for this
+    task's out-of-/app namespace mounts (/protected, /workspace, /data, etc.)."""
+    extras_root = BENCH_PREFIX / "extras" / task
+    if extras_root.exists():
+        shutil.rmtree(extras_root)
+        log(f"  cleanup: wiped {extras_root}")
 
-    We delete the specific leaf paths written — NOT their parent system dirs
-    (e.g. /tmp/original_documents not /tmp; /etc/nginx/sites-available/default
-    not /etc).  For tasks that write a full top-level dir (/protected,
-    /workspace, /data) we remove the whole dir.
+
+def task_extra_mounts(task: str) -> dict[str, Path]:
+    """
+    Build {ns_path: real_path} for paths that setup_deps.sh writes outside
+    /app /tests /logs (e.g. /protected, /workspace, /data).
+    These are hosted under ~/bench/extras/<task>/ and bind-mounted into
+    the namespace so the host filesystem is never touched.
     """
     meta = _manifest().get(task, {})
-    extra_top: list[str] = meta.get("extra_cleanup_paths", [])
-    if not extra_top:
-        return
-
-    # Build the precise list of leaf paths to delete.
-    #
-    # COPY src dst in Docker has two cases:
-    #   1. dst ends with /  OR  src ends with /  → directory target: files land inside dst
-    #   2. otherwise → dst is the exact file/dir written
-    #
-    # We also check against known system directories: if dst is one of them,
-    # the file lands at dst/basename(src) (e.g. COPY foo.py /root → /root/foo.py).
-    # But if src is itself a directory (no trailing / but conceptually a dir,
-    # e.g. COPY data /data), Docker copies the *contents* into dst, so dst itself
-    # is what we delete. We can't know src's type without tb_root, so we use
-    # extra_top from the manifest as the authoritative top-level deletion target
-    # and only compute precise paths for file-copy cases.
-    KNOWN_SYSTEM_DIRS = {"/root", "/bin", "/usr", "/etc", "/var", "/tmp",
-                         "/opt", "/srv", "/home"}
-    precise: list[str] = []
-    for src, dst in meta.get("copies", []):
-        if dst in ("./", ".") or dst.startswith("/app") or dst.startswith("/tests") or dst.startswith("/logs"):
-            continue
-        dst_path = Path(dst)
-        src_name = Path(src.rstrip("/")).name
-        if src.endswith("/") or dst.endswith("/"):
-            # src ends with /  → Docker copies contents into dst; delete dst
-            # dst ends with /  → explicit dir target; delete dst/src_name
-            if dst.endswith("/") and not src.endswith("/"):
-                precise.append(str(dst_path / src_name))
-            else:
-                precise.append(dst.rstrip("/"))
-        elif dst in KNOWN_SYSTEM_DIRS:
-            # System dir: file lands at dst/filename
-            precise.append(str(dst_path / src_name))
-        else:
-            # Explicit file path or whole non-system directory
-            precise.append(dst)
-
-    # Fall back to top-level dirs if no precise paths found
-    targets = precise if precise else extra_top
-
-    for target in targets:
-        p = Path(target)
-        if not (p.exists() or p.is_symlink()):
-            continue
-        try:
-            if p.is_dir() and not p.is_symlink():
-                shutil.rmtree(p)
-            else:
-                p.unlink()
-            log(f"  cleanup: removed {target}")
-        except PermissionError:
-            # Path is owned by root — use sudo rm
-            try:
-                flag = "-rf" if (p.is_dir() and not p.is_symlink()) else "-f"
-                subprocess.run(["sudo", "rm", flag, str(p)], check=True)
-                log(f"  cleanup: sudo removed {target}")
-            except Exception as e2:
-                log(f"  cleanup WARNING: could not remove {target}: {e2}")
-        except Exception as e:
-            log(f"  cleanup WARNING: could not remove {target}: {e}")
+    top_paths: list[str] = meta.get("extra_cleanup_paths", [])
+    extras: dict[str, Path] = {}
+    for ns_path in top_paths:
+        real = BENCH_PREFIX / "extras" / task / ns_path.lstrip("/")
+        extras[ns_path] = real
+    return extras
 
 
 def setup_task(task: str, tb_root: Path) -> None:
-    """Run setup_deps.sh with SKIP_APT=1 and WORKDIR=/app."""
+    """Run setup_deps.sh with SKIP_APT=1 and WORKDIR=/app (inside namespace)."""
     setup_script = TASKS_DIR / task / "setup_deps.sh"
     if not setup_script.exists():
         die(f"No setup_deps.sh for task {task!r} — did you run gen_setup_deps.py?")
     env = {
         "TB_ROOT": str(tb_root),
-        "WORKDIR": str(HOST_APP),
+        "WORKDIR": str(HOST_APP),   # /app as seen inside namespace
         "SKIP_APT": "1",
     }
+    # Create real dirs for any extra namespace mounts this task needs
+    for ns_path, real_path in task_extra_mounts(task).items():
+        real_path.mkdir(parents=True, exist_ok=True)
+
     log(f"  setup_deps.sh ({task})...")
-    run_cmd(["bash", str(setup_script)], env=env)
+    run_cmd(["bash", str(setup_script)], env=env, ns=True,
+            extra_mounts=task_extra_mounts(task))
 
 
 # ── OpenCode invocation ────────────────────────────────────────────────────
@@ -404,9 +405,9 @@ def run_opencode(
         die(f"instruction.md not found: {instruction_path}")
     instruction = instruction_path.read_text()
 
-    # Write harness into workspace
+    # Write harness into workspace (real path, before namespace launch)
     if harness_md:
-        HOST_APP.joinpath("AGENTS.md").write_text(harness_md)
+        REAL_APP.joinpath("AGENTS.md").write_text(harness_md)
 
     # Build opencode command
     # --format json  → one JSON event per line (NDJSON)
@@ -431,10 +432,12 @@ def run_opencode(
     try:
         result = run_cmd(
             cmd,
-            cwd=HOST_APP,
+            cwd=REAL_APP,   # real path; opencode sees /app via --dir inside ns
             timeout=agent_timeout,
             capture=True,
             check=False,
+            ns=True,
+            extra_mounts=task_extra_mounts(task),
         )
     except subprocess.TimeoutExpired:
         log(f"  opencode timed out after {agent_timeout:.0f}s")
@@ -491,35 +494,38 @@ def run_opencode(
 
 
 def copy_tests(task: str, tb_root: Path) -> None:
-    """Copy test files into /tests, preferring patches/ overrides."""
-    clean_dir(HOST_TESTS)
+    """Copy test files into ~/bench/tests (visible as /tests inside namespace)."""
+    clean_dir(HOST_TESTS)  # clears REAL_TESTS via _real()
+    real_tests = REAL_TESTS
     # Base: tb_root/<task>/tests/
     src = tb_root / task / "tests"
     if src.is_dir():
         for f in src.iterdir():
-            shutil.copy2(f, HOST_TESTS / f.name)
+            shutil.copy2(f, real_tests / f.name)
     # Overlay: patches/<task>/
     patch_src = PATCHES_DIR / task
     if patch_src.is_dir():
         for f in patch_src.iterdir():
-            shutil.copy2(f, HOST_TESTS / f.name)
+            shutil.copy2(f, real_tests / f.name)
             log(f"  patch applied: {f.name}")
 
 
-def run_verifier(verifier_timeout: float) -> int:
-    """Run /tests/test.sh and return reward (0 or 1)."""
-    clean_dir(HOST_LOGS)
-    test_sh = HOST_TESTS / "test.sh"
+def run_verifier(verifier_timeout: float, task: str = "") -> int:
+    """Run test.sh inside the mount namespace, return reward (0 or 1)."""
+    clean_dir(HOST_LOGS)   # clears REAL_LOGS via _real()
+    test_sh = REAL_TESTS / "test.sh"
     if not test_sh.exists():
         log("  WARNING: no test.sh found")
         return 0
     log(f"  verifier (timeout={verifier_timeout:.0f}s)...")
     try:
         run_cmd(
-            ["bash", str(test_sh)],
-            cwd=HOST_TESTS,
+            ["bash", "/tests/test.sh"],   # namespace path
+            cwd=REAL_TESTS,
             timeout=verifier_timeout,
             check=False,
+            ns=True,
+            extra_mounts=task_extra_mounts(task) if task else None,
         )
     except subprocess.TimeoutExpired:
         log(f"  verifier timed out after {verifier_timeout:.0f}s")
@@ -695,7 +701,7 @@ def cmd_run(args: argparse.Namespace) -> None:
             copy_tests(task, tb_root)
 
             # 5. Run verifier
-            reward = run_verifier(verifier_timeout)
+            reward = run_verifier(verifier_timeout, task)
 
             elapsed = time.monotonic() - task_start
             passed = reward == 1
@@ -824,9 +830,11 @@ def cmd_oracle(args: argparse.Namespace) -> None:
             try:
                 run_cmd(
                     ["bash", str(solve_sh)],
-                    cwd=HOST_APP,
+                    cwd=REAL_APP,
                     timeout=agent_timeout,
                     check=False,
+                    ns=True,
+                    extra_mounts=task_extra_mounts(task),
                 )
             except subprocess.TimeoutExpired:
                 log(f"  solve.sh timed out")
@@ -835,7 +843,7 @@ def cmd_oracle(args: argparse.Namespace) -> None:
         copy_tests(task, tb_root)
 
         # Verify
-        reward = run_verifier(verifier_timeout)
+        reward = run_verifier(verifier_timeout, task)
         elapsed = time.monotonic() - task_start
         status = "PASS" if reward == 1 else "FAIL"
         log(f"  [{status}] reward={reward}  elapsed={elapsed:.1f}s")
