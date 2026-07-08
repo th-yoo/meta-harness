@@ -39,7 +39,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 META_ROOT = SCRIPT_DIR.parent
 TB_ROOT_DEFAULT = META_ROOT.parent / "terminal-bench-2"
 
-# Real host dirs used as bind-mounts (matching TB2 container layout)
+# TB2 task scripts hardcode /app, /tests, /logs/verifier.
 HOST_APP = Path("/app")
 HOST_TESTS = Path("/tests")
 HOST_LOGS = Path("/logs/verifier")
@@ -131,19 +131,18 @@ def read_reward() -> int:
 
 
 def clean_dir(d: Path) -> None:
-    """Remove and recreate a directory, using sudo if needed."""
-    if d.exists():
-        try:
-            shutil.rmtree(d)
-        except PermissionError:
-            subprocess.run(["sudo", "rm", "-rf", str(d)], check=True)
-    try:
-        d.mkdir(parents=True, exist_ok=True)
-    except PermissionError:
-        user = os.environ.get("USER", os.environ.get("LOGNAME", ""))
-        subprocess.run(["sudo", "mkdir", "-p", str(d)], check=True)
-        if user:
-            subprocess.run(["sudo", "chown", user, str(d)], check=True)
+    """Clear a directory's contents without removing the directory itself.
+
+    We never remove /app, /tests, /logs themselves because they sit directly
+    under / (root-owned parent). Instead we wipe their contents and recreate
+    any needed subdirs.
+    """
+    d.mkdir(parents=True, exist_ok=True)
+    for child in d.iterdir():
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child)
+        else:
+            child.unlink(missing_ok=True)
 
 
 # ── prep command ───────────────────────────────────────────────────────────
@@ -207,13 +206,13 @@ def cmd_prep(args: argparse.Namespace) -> None:
         to_install = [p for p in apt_pkgs if p not in already_installed]
         log(f"  {len(to_install)} new / {len(apt_pkgs) - len(to_install)} already present")
 
-        # dirs + chown
+        # Create dirs and ensure user owns them (so clean_dir never needs sudo)
         subprocess.run(
             ["sudo", "mkdir", "-p", str(HOST_APP), str(HOST_TESTS), str(HOST_LOGS)],
             check=True,
         )
         subprocess.run(
-            ["sudo", "chown", "-R", f"{user}", str(HOST_APP), str(HOST_TESTS), "/logs"],
+            ["sudo", "chown", "-R", user, str(HOST_APP), str(HOST_TESTS), "/logs"],
             check=True,
         )
 
