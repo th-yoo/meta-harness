@@ -160,11 +160,12 @@ def cmd_prep(args: argparse.Namespace) -> None:
             ["sudo", "chown", "-R", f"{user}", str(HOST_APP), str(HOST_TESTS), "/logs"],
             check=True,
         )
-        # apt
+        # apt — noninteractive to avoid debconf prompts (postfix, mailman3, etc.)
         if apt_pkgs:
             subprocess.run(
                 ["sudo", "apt-get", "install", "-y"] + apt_pkgs,
                 check=True,
+                env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"},
             )
         log("Host setup complete.")
     else:
@@ -173,6 +174,7 @@ def cmd_prep(args: argparse.Namespace) -> None:
         for c in commands:
             print(c)
         print()
+        print("# Note: --apply sets DEBIAN_FRONTEND=noninteractive to avoid debconf prompts.")
         print("# Then re-run: python3 runner.py prep --apply")
 
 
@@ -251,16 +253,21 @@ def run_opencode(
         HOST_APP.joinpath("AGENTS.md").write_text(harness_md)
 
     # Build opencode command
+    # --format json  → one JSON event per line (NDJSON)
+    # --pure         → skip all plugins (avoid meta-harness plugin overhead)
+    # --auto         → approve all tool permissions
     cmd = [
         "opencode", "run",
         "--dir", str(HOST_APP),
         "--auto",
+        "--pure",
+        "--format", "json",
         "--model", model,
     ]
     if variant:
         cmd += ["--variant", variant]
 
-    # Pass instruction via stdin or as arg (opencode run accepts a prompt string)
+    # Pass instruction as positional arg (opencode run [message..])
     cmd.append(instruction)
 
     log(f"  opencode run (timeout={agent_timeout:.0f}s)...")
@@ -278,7 +285,16 @@ def run_opencode(
         return 0, {}
     elapsed = time.monotonic() - start
 
-    # Parse output for turn count and tool usage (best-effort JSON events)
+    # Parse NDJSON output for turn count and tool usage.
+    # Real event schema (from opencode run --format json):
+    #   {"type":"tool_use",  "part":{"tool":"bash","state":{"status":"completed"|"error",
+    #                                 "metadata":{"exit":N}}, ...}}
+    #   {"type":"step_finish","part":{"reason":"stop"|"tool-calls", ...}}
+    # turn_count = number of step_finish events with reason=="stop"
+    # tool errors = tool_use events where state.status=="error" OR metadata.exit != 0
+    # Only count execution tools (bash, task) for errors to avoid false positives.
+    EXECUTION_TOOLS = {"bash", "task"}
+
     turn_count = 0
     tool_usage: dict[str, dict] = {}
 
@@ -292,17 +308,24 @@ def run_opencode(
         except json.JSONDecodeError:
             continue
         evt_type = event.get("type", "")
+
         if evt_type == "tool_use":
-            tool = event.get("name", "unknown")
+            part = event.get("part", {})
+            tool = part.get("tool", "unknown")
+            state = part.get("state", {})
             tool_usage.setdefault(tool, {"calls": 0, "errors": 0})
             tool_usage[tool]["calls"] += 1
-        elif evt_type == "tool_result":
-            if event.get("is_error"):
-                tool = event.get("tool_name", "unknown")
-                tool_usage.setdefault(tool, {"calls": 0, "errors": 0})
-                tool_usage[tool]["errors"] += 1
-        elif evt_type == "message_stop":
-            turn_count += 1
+            # Error: explicit error status or non-zero exit (execution tools only)
+            if tool in EXECUTION_TOOLS:
+                status = state.get("status", "")
+                exit_code = (state.get("metadata") or {}).get("exit", 0)
+                if status == "error" or (exit_code and exit_code != 0):
+                    tool_usage[tool]["errors"] += 1
+
+        elif evt_type == "step_finish":
+            part = event.get("part", {})
+            if part.get("reason") == "stop":
+                turn_count += 1
 
     log(f"  opencode done in {elapsed:.1f}s, turns={turn_count}")
     return turn_count, tool_usage
@@ -399,6 +422,24 @@ def record_to_stores(
 # ── run command ────────────────────────────────────────────────────────────
 
 
+def _harness_meta(layers: str, meta_root: Path) -> dict:
+    """Snapshot which store versions are active, for results file provenance."""
+    from bench_store import account_global_root, active_version, project_global_root
+    ag = account_global_root()
+    pg = project_global_root(meta_root)
+    return {
+        "layers": layers,
+        "account_active": active_version(ag) if ag.exists() else "none",
+        "project_active": active_version(pg) if pg.exists() else "none",
+    }
+
+
+def _write_results(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2))
+    log(f"Results written → {path}")
+
+
 def cmd_run(args: argparse.Namespace) -> None:
     tb_root = Path(args.tb_root).expanduser().resolve()
     if not tb_root.exists():
@@ -424,26 +465,44 @@ def cmd_run(args: argparse.Namespace) -> None:
     k = args.k
     layers = args.layers
 
+    # --results-file implies --no-store (keep candidate store clean)
+    results_file: Optional[Path] = Path(args.results_file) if args.results_file else None
+    label: str = args.label or (results_file.stem if results_file else "run")
+    no_store = args.no_store or (results_file is not None)
+
     log(f"Running {len(tasks)} task(s) × k={k}, model={model}" + (f"+{variant}" if variant else ""))
     log(f"TB_ROOT={tb_root}  META_ROOT={meta_root}")
+    if results_file:
+        log(f"Results file: {results_file}  (store writes disabled)")
 
     # Pre-assemble harness (same for all tasks in this run)
-    if args.no_harness:
+    if args.no_harness or layers == "none":
         harness_md = ""
+        harness_label = "none"
     else:
         harness_md = assemble_agents_md(layers, meta_root)
+        harness_label = layers
         if harness_md:
             log(f"Harness assembled ({len(harness_md)} chars)")
         else:
             log("No active harness content found — running without AGENTS.md")
 
+    # Snapshot harness provenance before any runs
+    harness_meta = _harness_meta(layers, meta_root) if layers != "none" else {"layers": "none"}
+
     results: list[dict] = []
+    # Per-task aggregated results for results file: {task: {rewards:[], elapsed:[], turns:[]}}
+    task_agg: dict[str, dict] = {}
+
+    run_start_ts = datetime.now(timezone.utc).isoformat()
 
     for task in tasks:
         log(f"\n=== Task: {task} ===")
         task_toml = tb_root / task / "task.toml"
         agent_timeout = read_toml_value(task_toml, "agent", "timeout_sec") or 900.0
         verifier_timeout = read_toml_value(task_toml, "verifier", "timeout_sec") or 300.0
+
+        task_agg[task] = {"rewards": [], "elapsed": [], "turns": [], "errors": []}
 
         for ki in range(k):
             if k > 1:
@@ -462,7 +521,12 @@ def cmd_run(args: argparse.Namespace) -> None:
                 setup_task(task, tb_root)
             except subprocess.CalledProcessError as e:
                 log(f"  setup_deps.sh failed (exit {e.returncode}), skipping task")
-                results.append({"task": task, "reward": 0, "elapsed": 0.0, "error": "setup_failed"})
+                err_result = {"task": task, "k": ki + 1, "reward": 0, "elapsed": 0.0, "error": "setup_failed"}
+                results.append(err_result)
+                task_agg[task]["rewards"].append(0)
+                task_agg[task]["elapsed"].append(0.0)
+                task_agg[task]["turns"].append(0)
+                task_agg[task]["errors"].append("setup_failed")
                 continue
 
             # 3. Run OpenCode
@@ -480,10 +544,10 @@ def cmd_run(args: argparse.Namespace) -> None:
             passed = reward == 1
             log(f"  reward={reward}  elapsed={elapsed:.1f}s")
 
-            # 6. Record to store
+            # 6. Record to candidate store (skipped when results_file is set)
             record_to_stores(
                 task, session_id, passed, turn_count, tool_usage,
-                model, variant, layers, meta_root, args.no_store,
+                model, variant, layers, meta_root, no_store,
             )
 
             results.append({
@@ -493,8 +557,28 @@ def cmd_run(args: argparse.Namespace) -> None:
                 "elapsed": elapsed,
                 "session_id": session_id,
             })
+            task_agg[task]["rewards"].append(reward)
+            task_agg[task]["elapsed"].append(round(elapsed, 1))
+            task_agg[task]["turns"].append(turn_count)
 
-    # Summary table
+            # Persist incremental results after each task (resumability)
+            if results_file:
+                total_so_far = sum(r["reward"] for r in results)
+                _write_results(results_file, {
+                    "label": label,
+                    "model": model,
+                    "variant": variant,
+                    "harness": harness_meta,
+                    "k": k,
+                    "timestamp": run_start_ts,
+                    "n_pass": total_so_far,
+                    "n_total": len(results),
+                    "pass_rate": round(total_so_far / len(results), 4) if results else 0.0,
+                    "tasks": task_agg,
+                    "status": "in_progress",
+                })
+
+    # Final summary table
     print("\n" + "=" * 60)
     print(f"{'Task':<40} {'K':>2}  {'Reward':>6}  {'Elapsed':>8}")
     print("-" * 60)
@@ -513,6 +597,22 @@ def cmd_run(args: argparse.Namespace) -> None:
         pct = 100.0 * total_pass / total_runs
         print(f"pass@{k}: {total_pass}/{total_runs}  ({pct:.1f}%)")
 
+    # Write final results file
+    if results_file:
+        _write_results(results_file, {
+            "label": label,
+            "model": model,
+            "variant": variant,
+            "harness": harness_meta,
+            "k": k,
+            "timestamp": run_start_ts,
+            "n_pass": total_pass,
+            "n_total": total_runs,
+            "pass_rate": round(total_pass / total_runs, 4) if total_runs else 0.0,
+            "tasks": task_agg,
+            "status": "complete",
+        })
+
 
 # ── oracle command ─────────────────────────────────────────────────────────
 
@@ -527,9 +627,14 @@ def cmd_oracle(args: argparse.Namespace) -> None:
         die(f"TB_ROOT not found: {tb_root}")
 
     tasks = args.tasks if args.tasks else all_task_names()
+    results_file: Optional[Path] = Path(args.results_file) if args.results_file else None
 
     log(f"Oracle validation: {len(tasks)} task(s)")
+    if results_file:
+        log(f"Results file: {results_file}")
+
     results: list[dict] = []
+    run_start_ts = datetime.now(timezone.utc).isoformat()
 
     for task in tasks:
         log(f"\n=== Oracle: {task} ===")
@@ -576,7 +681,22 @@ def cmd_oracle(args: argparse.Namespace) -> None:
         elapsed = time.monotonic() - task_start
         status = "PASS" if reward == 1 else "FAIL"
         log(f"  [{status}] reward={reward}  elapsed={elapsed:.1f}s")
-        results.append({"task": task, "reward": reward, "elapsed": elapsed})
+        results.append({"task": task, "reward": reward, "elapsed": round(elapsed, 1)})
+
+        # Incremental write
+        if results_file:
+            n_pass_so_far = sum(r["reward"] for r in results)
+            _write_results(results_file, {
+                "label": "oracle",
+                "timestamp": run_start_ts,
+                "n_pass": n_pass_so_far,
+                "n_total": len(results),
+                "pass_rate": round(n_pass_so_far / len(results), 4),
+                "tasks": {r["task"]: {"reward": r["reward"], "elapsed": r.get("elapsed", 0.0),
+                                      "error": r.get("error", "")}
+                          for r in results},
+                "status": "in_progress",
+            })
 
     # Summary
     print("\n" + "=" * 60)
@@ -596,7 +716,22 @@ def cmd_oracle(args: argparse.Namespace) -> None:
         pct = 100.0 * total_pass / n
         print(f"Oracle pass rate: {total_pass}/{n}  ({pct:.1f}%)")
         if total_pass < n:
-            print("WARNING: some tasks failed oracle — check setup_deps.sh, patches, or test.sh")
+            failing = [r["task"] for r in results if r["reward"] == 0]
+            print(f"Failing tasks ({len(failing)}): {', '.join(failing)}")
+
+    # Final results file
+    if results_file:
+        _write_results(results_file, {
+            "label": "oracle",
+            "timestamp": run_start_ts,
+            "n_pass": total_pass,
+            "n_total": n,
+            "pass_rate": round(total_pass / n, 4) if n else 0.0,
+            "tasks": {r["task"]: {"reward": r["reward"], "elapsed": r.get("elapsed", 0.0),
+                                  "error": r.get("error", "")}
+                      for r in results},
+            "status": "complete",
+        })
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────
@@ -637,10 +772,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_run.add_argument("--no-store", action="store_true", help="Do not write to harness store")
     p_run.add_argument("--no-harness", action="store_true", help="Do not write AGENTS.md")
+    p_run.add_argument(
+        "--results-file", metavar="PATH",
+        help="Write per-task results to this JSON file (implies --no-store). "
+             "Updated after each task for resumability. "
+             "Example: results/baseline-v3.json",
+    )
+    p_run.add_argument(
+        "--label", metavar="NAME",
+        help="Label for this run in the results file (default: stem of --results-file or 'run')",
+    )
 
     # oracle
     p_oracle = sub.add_parser("oracle", help="Validate pipeline with solution/solve.sh")
     p_oracle.add_argument("--tasks", nargs="+", metavar="TASK", help="Task(s) to validate (default: all)")
+    p_oracle.add_argument(
+        "--results-file", metavar="PATH",
+        help="Write oracle results to this JSON file (updated after each task).",
+    )
 
     return parser
 
