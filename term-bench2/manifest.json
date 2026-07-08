@@ -1,0 +1,1030 @@
+{
+  "adaptive-rejection-sampler": {
+    "base_image": "ubuntu:24.04",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "protected.tar.gz.enc",
+        "/protected/protected.tar.gz.enc"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "build-cython-ext": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [
+      "build-essential",
+      "git",
+      "libgl1-mesa-glx"
+    ],
+    "pip": [
+      "numpy==2.3.0"
+    ],
+    "copies": [],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "build-pmars": {
+    "base_image": "debian:13.0-slim",
+    "apt": [
+      "asciinema",
+      "tmux"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "warriors/flashpaper.red",
+        "/app/"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "cancel-async-tasks": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [],
+    "copies": [],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "circuit-fibsqrt": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [
+      "gcc"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "tests/sim.c",
+        "/app"
+      ],
+      [
+        "gates.txt",
+        "/app"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 1,
+    "needs_network": true
+  },
+  "code-from-image": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "code.png",
+        "/app"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "compile-compcert": {
+    "base_image": "ubuntu:24.04",
+    "apt": [],
+    "pip": [],
+    "copies": [],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "configure-git-webserver": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "curl"
+    ],
+    "pip": [],
+    "copies": [],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "constraints-scheduling": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "python3",
+      "python3-pip"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "inputs/",
+        "/app/"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "count-dataset-tokens": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [],
+    "copies": [],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "db-wal-recovery": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "python3",
+      "python3-pip",
+      "sqlite3",
+      "xxd"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "main.db",
+        "/app/main.db"
+      ],
+      [
+        "main.db-wal.encrypted",
+        "/app/main.db-wal"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "distribution-search": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [
+      "numpy==2.1.2",
+      "scipy==1.15.3"
+    ],
+    "copies": [],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 1,
+    "needs_network": true
+  },
+  "dna-assembly": {
+    "base_image": "ubuntu:24.04",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "sequences.fasta",
+        "."
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "dna-insert": {
+    "base_image": "ubuntu:24.04",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "sequences.fasta",
+        "."
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "extract-elf": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "gcc",
+      "nodejs",
+      "npm"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "task-deps/hi.c",
+        "/app/"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 1,
+    "needs_network": true
+  },
+  "extract-moves-from-video": {
+    "base_image": "ubuntu:24.04",
+    "apt": [],
+    "pip": [],
+    "copies": [],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "feal-differential-cryptanalysis": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [
+      "setuptools==80.9.0"
+    ],
+    "copies": [
+      [
+        "feal.py",
+        "./"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "feal-linear-cryptanalysis": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [
+      "gcc"
+    ],
+    "pip": [
+      "setuptools==80.9.0"
+    ],
+    "copies": [
+      [
+        "task-deps/",
+        "/app/"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 3,
+    "needs_network": true
+  },
+  "filter-js-from-html": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [],
+    "copies": [],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "financial-document-processor": {
+    "base_image": "ubuntu:24.04",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "randomize_filenames.py",
+        "/root"
+      ],
+      [
+        "documents/",
+        "/tmp/original_documents/"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": true,
+    "raw_run_count": 1,
+    "needs_network": false
+  },
+  "fix-git": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [
+      "git"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "setup.sh",
+        "./"
+      ],
+      [
+        "resources",
+        "/app/resources"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 1,
+    "needs_network": true
+  },
+  "gcode-to-text": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "text.gcode.gz",
+        "/app"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 1,
+    "needs_network": false
+  },
+  "git-leak-recovery": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "git"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "challenge-setup.sh",
+        "/app/challenge-setup.sh"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 2,
+    "needs_network": true
+  },
+  "git-multibranch": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "ca-certificates",
+      "curl",
+      "git",
+      "net-tools",
+      "nginx",
+      "openssh-server",
+      "openssl",
+      "python3",
+      "python3-pip"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "default.conf",
+        "/etc/nginx/sites-available/default"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 2,
+    "needs_network": true
+  },
+  "headless-terminal": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [
+      "expect",
+      "screen",
+      "tmux"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "base_terminal.py",
+        "/app/base_terminal.py"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "kv-store-grpc": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [],
+    "copies": [],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "large-scale-text-editing": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [
+      "vim"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "gen_large_csv.py",
+        "/app/"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 1,
+    "needs_network": true
+  },
+  "largest-eigenval": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [
+      "numpy==2.3.0"
+    ],
+    "copies": [
+      [
+        "src/eigen.py",
+        "/app/eigen.py"
+      ],
+      [
+        "src/eval.py",
+        "/app/eval.py"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "llm-inference-batching-scheduler": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "./task_file",
+        "/app/task_file"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "log-summary-date-ranges": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "log_generator_deterministic.py",
+        "/app/"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 1,
+    "needs_network": false
+  },
+  "mailman": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "less",
+      "mailman3",
+      "mailutils",
+      "nano",
+      "net-tools",
+      "postfix"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "src/eval.py",
+        "/app/eval.py"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "mcmc-sampling-stan": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "build-essential",
+      "curl",
+      "python3",
+      "python3-pip",
+      "r-base"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "task-deps/data.csv",
+        "./"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "merge-diff-arc-agi-task": {
+    "base_image": "ubuntu:24.04",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "task-deps/.",
+        "."
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "model-extraction-relu-logits": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [
+      "numpy==2.2.5"
+    ],
+    "copies": [
+      [
+        "forward.py",
+        "/app"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "multi-source-data-merger": {
+    "base_image": "python:3.11-slim",
+    "apt": [
+      "asciinema",
+      "tmux"
+    ],
+    "pip": [
+      "pandas==2.2.3",
+      "pyarrow==17.0.0"
+    ],
+    "copies": [
+      [
+        "data",
+        "/data"
+      ]
+    ],
+    "envs": [
+      [
+        "PYTHONPATH",
+        "/app:$PYTHONPATH"
+      ]
+    ],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "nginx-request-logging": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [
+      "curl"
+    ],
+    "pip": [
+      "requests==2.32.4"
+    ],
+    "copies": [],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "openssl-selfsigned-cert": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [
+      "openssl"
+    ],
+    "pip": [],
+    "copies": [],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "overfull-hbox": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "texlive-latex-base"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "tests/main.tex",
+        "."
+      ],
+      [
+        "tests/input.tex",
+        "."
+      ],
+      [
+        "tests/synonyms.txt",
+        "."
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "password-recovery": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "binutils",
+      "e2fsprogs",
+      "extundelete",
+      "foremost",
+      "sleuthkit",
+      "unzip",
+      "zip"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "setup.sh",
+        "/app/"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 1,
+    "needs_network": true
+  },
+  "path-tracing": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "curl",
+      "ffmpeg",
+      "gcc"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "orig.c",
+        "/app"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 2,
+    "needs_network": true
+  },
+  "path-tracing-reverse": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "curl",
+      "g++",
+      "gcc",
+      "libjpeg-dev",
+      "zlib1g-dev"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "orig.c",
+        "/app"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 1,
+    "needs_network": true
+  },
+  "polyglot-c-py": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "gcc"
+    ],
+    "pip": [],
+    "copies": [],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "polyglot-rust-c": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "g++",
+      "rustc"
+    ],
+    "pip": [],
+    "copies": [],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "portfolio-optimization": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [
+      "build-essential",
+      "g++",
+      "gcc"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "benchmark.py",
+        "/app/benchmark.py"
+      ],
+      [
+        "portfolio_baseline.py",
+        "/app/portfolio_baseline.py"
+      ],
+      [
+        "portfolio_optimized.c",
+        "/app/portfolio_optimized.c"
+      ],
+      [
+        "portfolio_optimized.py",
+        "/app/portfolio_optimized.py"
+      ],
+      [
+        "setup.py",
+        "/app/setup.py"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "protein-assembly": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "antibody.fasta",
+        "."
+      ],
+      [
+        "plasmid.gb",
+        "."
+      ],
+      [
+        "pdb_ids.txt",
+        "."
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "prove-plus-comm": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "coq"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "partial_proof.v",
+        "/workspace/plus_comm.v"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "pypi-server": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [
+      "curl",
+      "vim"
+    ],
+    "pip": [],
+    "copies": [],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "raman-fitting": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "task-deps/",
+        "./"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "regex-chess": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [
+      "chess"
+    ],
+    "copies": [
+      [
+        "check.py",
+        "/app/"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "regex-log": {
+    "base_image": "ubuntu:24.04",
+    "apt": [],
+    "pip": [],
+    "copies": [],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "reshard-c4-data": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "setup.py",
+        "./"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": true,
+    "raw_run_count": 1,
+    "needs_network": false
+  },
+  "rstan-to-pystan": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "python3",
+      "python3-pip"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "task-deps/train_X.csv",
+        "./"
+      ],
+      [
+        "task-deps/train_y.csv",
+        "./"
+      ],
+      [
+        "task-deps/test_X.csv",
+        "./"
+      ],
+      [
+        "task-deps/meta_public.json",
+        "./"
+      ],
+      [
+        "task-deps/gp_rstan.R",
+        "./"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "sanitize-git-repo": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [
+      "git"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "setup.sh",
+        "./"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 1,
+    "needs_network": true
+  },
+  "sparql-university": {
+    "base_image": "ubuntu:24.04",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "university_graph.ttl",
+        "/app/"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "sqlite-db-truncate": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "trunc.db",
+        "/app"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "sqlite-with-gcov": {
+    "base_image": "ubuntu:24.04",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "vendor",
+        "/app/vendor"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "tune-mjcf": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [],
+    "pip": [],
+    "copies": [
+      [
+        "src/eval.py",
+        "/app/eval.py"
+      ],
+      [
+        "src/model_ref.xml",
+        "/app/model_ref.xml"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": false
+  },
+  "video-processing": {
+    "base_image": "python:3.13-slim-bookworm",
+    "apt": [
+      "libgl1-mesa-glx",
+      "libglib2.0-0",
+      "libgomp1",
+      "libsm6",
+      "libxext6",
+      "libxrender-dev"
+    ],
+    "pip": [
+      "opencv-contrib-python>=4.11.0.86"
+    ],
+    "copies": [
+      [
+        "example_video.mp4",
+        "/app/example_video.mp4"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 0,
+    "needs_network": true
+  },
+  "write-compressor": {
+    "base_image": "ubuntu:24.04",
+    "apt": [
+      "bc",
+      "gcc",
+      "rustc"
+    ],
+    "pip": [],
+    "copies": [
+      [
+        "decomp.c",
+        "/app"
+      ],
+      [
+        "data.txt",
+        "/app"
+      ]
+    ],
+    "envs": [],
+    "has_uv_copy": false,
+    "raw_run_count": 1,
+    "needs_network": true
+  }
+}
