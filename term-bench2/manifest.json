@@ -2,6 +2,9 @@
   "adaptive-rejection-sampler": {
     "base_image": "ubuntu:24.04",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -21,6 +24,7 @@
       "git",
       "libgl1-mesa-glx"
     ],
+    "test_apt": [],
     "pip": [
       "numpy==2.3.0"
     ],
@@ -35,6 +39,9 @@
     "apt": [
       "asciinema",
       "tmux"
+    ],
+    "test_apt": [
+      "curl"
     ],
     "pip": [],
     "copies": [
@@ -51,6 +58,9 @@
   "cancel-async-tasks": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [],
     "envs": [],
@@ -62,6 +72,9 @@
     "base_image": "python:3.13-slim-bookworm",
     "apt": [
       "gcc"
+    ],
+    "test_apt": [
+      "curl"
     ],
     "pip": [],
     "copies": [
@@ -82,6 +95,9 @@
   "code-from-image": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -97,6 +113,10 @@
   "compile-compcert": {
     "base_image": "ubuntu:24.04",
     "apt": [],
+    "test_apt": [
+      "binutils",
+      "curl"
+    ],
     "pip": [],
     "copies": [],
     "envs": [],
@@ -109,6 +129,7 @@
     "apt": [
       "curl"
     ],
+    "test_apt": [],
     "pip": [],
     "copies": [],
     "envs": [],
@@ -121,6 +142,9 @@
     "apt": [
       "python3",
       "python3-pip"
+    ],
+    "test_apt": [
+      "curl"
     ],
     "pip": [],
     "copies": [
@@ -137,6 +161,9 @@
   "count-dataset-tokens": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [],
     "envs": [],
@@ -151,6 +178,9 @@
       "python3-pip",
       "sqlite3",
       "xxd"
+    ],
+    "test_apt": [
+      "curl"
     ],
     "pip": [],
     "copies": [
@@ -171,6 +201,9 @@
   "distribution-search": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [
       "numpy==2.1.2",
       "scipy==1.15.3"
@@ -184,6 +217,10 @@
   "dna-assembly": {
     "base_image": "ubuntu:24.04",
     "apt": [],
+    "test_apt": [
+      "curl",
+      "primer3"
+    ],
     "pip": [],
     "copies": [
       [
@@ -199,6 +236,10 @@
   "dna-insert": {
     "base_image": "ubuntu:24.04",
     "apt": [],
+    "test_apt": [
+      "curl",
+      "primer3"
+    ],
     "pip": [],
     "copies": [
       [
@@ -218,6 +259,10 @@
       "nodejs",
       "npm"
     ],
+    "test_apt": [
+      "curl",
+      "gcc"
+    ],
     "pip": [],
     "copies": [
       [
@@ -233,6 +278,9 @@
   "extract-moves-from-video": {
     "base_image": "ubuntu:24.04",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [],
     "envs": [],
@@ -243,6 +291,10 @@
   "feal-differential-cryptanalysis": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [
+      "curl",
+      "gcc"
+    ],
     "pip": [
       "setuptools==80.9.0"
     ],
@@ -262,6 +314,9 @@
     "apt": [
       "gcc"
     ],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [
       "setuptools==80.9.0"
     ],
@@ -279,6 +334,9 @@
   "filter-js-from-html": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [],
     "envs": [],
@@ -289,6 +347,9 @@
   "financial-document-processor": {
     "base_image": "ubuntu:24.04",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -310,6 +371,9 @@
     "apt": [
       "git"
     ],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -329,6 +393,9 @@
   "gcode-to-text": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -345,6 +412,9 @@
     "base_image": "ubuntu:24.04",
     "apt": [
       "git"
+    ],
+    "test_apt": [
+      "curl"
     ],
     "pip": [],
     "copies": [
@@ -371,6 +441,10 @@
       "python3",
       "python3-pip"
     ],
+    "test_apt": [
+      "curl",
+      "expect"
+    ],
     "pip": [],
     "copies": [
       [
@@ -390,6 +464,9 @@
       "screen",
       "tmux"
     ],
+    "test_apt": [
+      "vim"
+    ],
     "pip": [],
     "copies": [
       [
@@ -405,6 +482,7 @@
   "kv-store-grpc": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [],
     "pip": [],
     "copies": [],
     "envs": [],
@@ -416,6 +494,9 @@
     "base_image": "python:3.13-slim-bookworm",
     "apt": [
       "vim"
+    ],
+    "test_apt": [
+      "curl"
     ],
     "pip": [],
     "copies": [
@@ -432,6 +513,7 @@
   "largest-eigenval": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [],
     "pip": [
       "numpy==2.3.0"
     ],
@@ -453,6 +535,9 @@
   "llm-inference-batching-scheduler": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -468,6 +553,9 @@
   "log-summary-date-ranges": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -490,6 +578,9 @@
       "net-tools",
       "postfix"
     ],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -511,6 +602,9 @@
       "python3-pip",
       "r-base"
     ],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -526,6 +620,10 @@
   "merge-diff-arc-agi-task": {
     "base_image": "ubuntu:24.04",
     "apt": [],
+    "test_apt": [
+      "curl",
+      "git"
+    ],
     "pip": [],
     "copies": [
       [
@@ -541,6 +639,9 @@
   "model-extraction-relu-logits": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [
       "numpy==2.2.5"
     ],
@@ -560,6 +661,9 @@
     "apt": [
       "asciinema",
       "tmux"
+    ],
+    "test_apt": [
+      "curl"
     ],
     "pip": [
       "pandas==2.2.3",
@@ -586,6 +690,9 @@
     "apt": [
       "curl"
     ],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [
       "requests==2.32.4"
     ],
@@ -600,6 +707,9 @@
     "apt": [
       "openssl"
     ],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [],
     "envs": [],
@@ -611,6 +721,9 @@
     "base_image": "ubuntu:24.04",
     "apt": [
       "texlive-latex-base"
+    ],
+    "test_apt": [
+      "curl"
     ],
     "pip": [],
     "copies": [
@@ -643,6 +756,9 @@
       "unzip",
       "zip"
     ],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -661,6 +777,9 @@
       "curl",
       "ffmpeg",
       "gcc"
+    ],
+    "test_apt": [
+      "curl"
     ],
     "pip": [],
     "copies": [
@@ -683,6 +802,9 @@
       "libjpeg-dev",
       "zlib1g-dev"
     ],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -700,6 +822,9 @@
     "apt": [
       "gcc"
     ],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [],
     "envs": [],
@@ -712,6 +837,9 @@
     "apt": [
       "g++",
       "rustc"
+    ],
+    "test_apt": [
+      "curl"
     ],
     "pip": [],
     "copies": [],
@@ -726,6 +854,9 @@
       "build-essential",
       "g++",
       "gcc"
+    ],
+    "test_apt": [
+      "curl"
     ],
     "pip": [],
     "copies": [
@@ -758,6 +889,9 @@
   "protein-assembly": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -783,6 +917,9 @@
     "apt": [
       "coq"
     ],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -801,6 +938,9 @@
       "curl",
       "vim"
     ],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [],
     "envs": [],
@@ -811,6 +951,9 @@
   "raman-fitting": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -826,6 +969,9 @@
   "regex-chess": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [
       "chess"
     ],
@@ -843,6 +989,9 @@
   "regex-log": {
     "base_image": "ubuntu:24.04",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [],
     "envs": [],
@@ -853,6 +1002,7 @@
   "reshard-c4-data": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [],
     "pip": [],
     "copies": [
       [
@@ -870,6 +1020,9 @@
     "apt": [
       "python3",
       "python3-pip"
+    ],
+    "test_apt": [
+      "curl"
     ],
     "pip": [],
     "copies": [
@@ -904,6 +1057,9 @@
     "apt": [
       "git"
     ],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -919,6 +1075,9 @@
   "sparql-university": {
     "base_image": "ubuntu:24.04",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -934,6 +1093,9 @@
   "sqlite-db-truncate": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -949,6 +1111,9 @@
   "sqlite-with-gcov": {
     "base_image": "ubuntu:24.04",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -964,6 +1129,9 @@
   "tune-mjcf": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [],
     "copies": [
       [
@@ -990,6 +1158,9 @@
       "libxext6",
       "libxrender-dev"
     ],
+    "test_apt": [
+      "curl"
+    ],
     "pip": [
       "opencv-contrib-python>=4.11.0.86"
     ],
@@ -1010,6 +1181,9 @@
       "bc",
       "gcc",
       "rustc"
+    ],
+    "test_apt": [
+      "curl"
     ],
     "pip": [],
     "copies": [

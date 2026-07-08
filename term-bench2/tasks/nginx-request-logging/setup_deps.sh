@@ -27,10 +27,13 @@ mkdir -p "$WORKDIR"
 
 # (no ENV directives)
 # ── system packages ─────────────────────────────────────────────────────────
-sudo apt-get update -qq
-sudo apt-get install -y --no-install-recommends \
-  curl
-sudo rm -rf /var/lib/apt/lists/*
+# Set SKIP_APT=1 when packages are pre-installed on the host (runner sets this)
+if [[ -z "${SKIP_APT:-}" ]]; then
+  sudo apt-get update -qq
+  sudo apt-get install -y --no-install-recommends \
+    curl
+  sudo rm -rf /var/lib/apt/lists/*
+fi
 # (no COPY directives)
 # ── per-task Python packages (isolated venv via uv) ─────────────────────────
 command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh

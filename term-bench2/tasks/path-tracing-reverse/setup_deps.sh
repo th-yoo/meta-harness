@@ -27,10 +27,13 @@ mkdir -p "$WORKDIR"
 
 # (no ENV directives)
 # ── system packages ─────────────────────────────────────────────────────────
-sudo apt-get update -qq
-sudo apt-get install -y --no-install-recommends \
-  curl g++ gcc libjpeg-dev zlib1g-dev
-sudo rm -rf /var/lib/apt/lists/*
+# Set SKIP_APT=1 when packages are pre-installed on the host (runner sets this)
+if [[ -z "${SKIP_APT:-}" ]]; then
+  sudo apt-get update -qq
+  sudo apt-get install -y --no-install-recommends \
+    curl g++ gcc libjpeg-dev zlib1g-dev
+  sudo rm -rf /var/lib/apt/lists/*
+fi
 # ── copy task assets ───────────────────────────────────────────────────────
 mkdir -p "$WORKDIR"
 cp -r "$TASK_ENV/orig.c" "$WORKDIR"

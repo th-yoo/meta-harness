@@ -28,10 +28,13 @@ mkdir -p "$WORKDIR"
 # ── environment variables ──────────────────────────────────────────────────
 export PYTHONPATH="/app:$PYTHONPATH"
 # ── system packages ─────────────────────────────────────────────────────────
-sudo apt-get update -qq
-sudo apt-get install -y --no-install-recommends \
-  asciinema tmux
-sudo rm -rf /var/lib/apt/lists/*
+# Set SKIP_APT=1 when packages are pre-installed on the host (runner sets this)
+if [[ -z "${SKIP_APT:-}" ]]; then
+  sudo apt-get update -qq
+  sudo apt-get install -y --no-install-recommends \
+    asciinema tmux
+  sudo rm -rf /var/lib/apt/lists/*
+fi
 # ── copy task assets ───────────────────────────────────────────────────────
 mkdir -p "/data"
 cp -r "$TASK_ENV/data" "/data"

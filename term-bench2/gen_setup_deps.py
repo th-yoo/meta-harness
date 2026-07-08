@@ -267,6 +267,22 @@ def parse_dockerfile(df_path: Path, task: str) -> dict:
     return result
 
 
+def extract_test_sh_apt_packages(test_sh_path: Path) -> list[str]:
+    """Scan tests/test.sh for apt-get install lines and return package names."""
+    if not test_sh_path.exists():
+        return []
+    try:
+        content = test_sh_path.read_text(errors="replace")
+    except Exception:
+        return []
+    packages: list[str] = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        if "apt-get install" in stripped or "apt install" in stripped:
+            packages.extend(extract_apt_packages(stripped))
+    return packages
+
+
 # ── Script generator ─────────────────────────────────────────────────────────
 
 SETUP_DEPS_TEMPLATE = """\
@@ -321,10 +337,13 @@ def make_apt_section(packages: list[str]) -> str:
     pkgs = " ".join(sorted(set(packages)))
     return dedent(f"""\
         # ── system packages ─────────────────────────────────────────────────────────
-        sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends \\
-          {pkgs}
-        sudo rm -rf /var/lib/apt/lists/*""")
+        # Set SKIP_APT=1 when packages are pre-installed on the host (runner sets this)
+        if [[ -z "${{SKIP_APT:-}}" ]]; then
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \\
+            {pkgs}
+          sudo rm -rf /var/lib/apt/lists/*
+        fi""")
 
 
 def make_copy_section(copies: list[tuple[str, str]], task: str) -> str:
@@ -524,6 +543,17 @@ def main() -> None:
         df_path = tb_root / task / "environment" / "Dockerfile"
         parsed = parse_dockerfile(df_path, task)
 
+        # Also pick up apt packages installed by tests/test.sh at test time
+        test_sh_path = tb_root / task / "tests" / "test.sh"
+        test_apt = extract_test_sh_apt_packages(test_sh_path)
+        # Merge test.sh apt deps into the task's apt list (for union) but NOT
+        # into the per-task setup_deps.sh (test.sh runs separately as verifier)
+        all_apt.update(test_apt)
+        if test_apt:
+            manifest_test_apt = sorted(set(test_apt))
+        else:
+            manifest_test_apt = []
+
         # Accumulate union apt
         all_apt.update(parsed["apt_packages"])
 
@@ -531,6 +561,7 @@ def main() -> None:
         manifest[task] = {
             "base_image": parsed["base_image"],
             "apt": sorted(set(parsed["apt_packages"])),
+            "test_apt": manifest_test_apt,
             "pip": sorted(set(parsed["pip_packages"])),
             "copies": parsed["copies"],
             "envs": parsed["envs"],

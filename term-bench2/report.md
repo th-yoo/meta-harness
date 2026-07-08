@@ -73,6 +73,7 @@ Generated for 22 unhandled RUN lines across 59 tasks.
   npm
   openssh-server
   postfix
+  primer3
   r-base
   rustc
   screen
@@ -126,6 +127,7 @@ sudo apt-get install -y \
   npm  \
   openssh-server  \
   postfix  \
+  primer3  \
   r-base  \
   rustc  \
   screen  \
