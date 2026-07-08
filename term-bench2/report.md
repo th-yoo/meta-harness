@@ -59,32 +59,21 @@ Generated for 22 unhandled RUN lines across 59 tasks.
     gcc -O3 decomp.c -o /app/decomp
 
 ## APT packages: to install (not currently on system)
-  asciinema
-  coq
-  expect
-  extundelete
-  ffmpeg
-  foremost
-  mailman3
-  mailutils
-  nginx
-  npm
-  openssh-server
-  postfix
-  primer3
-  r-base
-  rustc
-  screen
-  sleuthkit
-  texlive-latex-base
+*(all already installed)*
 
 ## APT packages: already installed
+  asciinema
   bc
   binutils
   build-essential
   ca-certificates
+  coq
   curl
   e2fsprogs
+  expect
+  extundelete
+  ffmpeg
+  foremost
   g++
   gcc
   git
@@ -96,13 +85,25 @@ Generated for 22 unhandled RUN lines across 59 tasks.
   libsm6
   libxext6
   libxrender-dev
+  mailman3
+  mailutils
   nano
   net-tools
+  nginx
   nodejs
+  npm
+  openssh-server
   openssl
+  postfix
+  primer3
   python3
   python3-pip
+  r-base
+  rustc
+  screen
+  sleuthkit
   sqlite3
+  texlive-latex-base
   tmux
   unzip
   vim
@@ -110,25 +111,4 @@ Generated for 22 unhandled RUN lines across 59 tasks.
   zip
   zlib1g-dev
 
-## One-time install command
-```bash
-sudo apt-get install -y \
-  asciinema  \
-  coq  \
-  expect  \
-  extundelete  \
-  ffmpeg  \
-  foremost  \
-  mailman3  \
-  mailutils  \
-  nginx  \
-  npm  \
-  openssh-server  \
-  postfix  \
-  primer3  \
-  r-base  \
-  rustc  \
-  screen  \
-  sleuthkit  \
-  texlive-latex-base
-```
+*(nothing to install)*

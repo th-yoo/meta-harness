@@ -276,7 +276,91 @@ def assemble_agents_md(layers: str, meta_root: Path) -> str:
     return "\n\n---\n\n".join(parts)
 
 
-# ── per-task setup ─────────────────────────────────────────────────────────
+# ── per-task setup + cleanup ────────────────────────────────────────────────
+
+_manifest_cache: dict = {}
+
+
+def _manifest() -> dict:
+    global _manifest_cache
+    if not _manifest_cache:
+        _manifest_cache = load_manifest()
+    return _manifest_cache
+
+
+def cleanup_task_extras(task: str) -> None:
+    """
+    Remove paths outside /app /tests /logs that setup_deps.sh wrote for this
+    task (recorded as extra_cleanup_paths in manifest.json).
+
+    We delete the specific leaf paths written — NOT their parent system dirs
+    (e.g. /tmp/original_documents not /tmp; /etc/nginx/sites-available/default
+    not /etc).  For tasks that write a full top-level dir (/protected,
+    /workspace, /data) we remove the whole dir.
+    """
+    meta = _manifest().get(task, {})
+    extra_top: list[str] = meta.get("extra_cleanup_paths", [])
+    if not extra_top:
+        return
+
+    # Build the precise list of leaf paths to delete.
+    #
+    # COPY src dst in Docker has two cases:
+    #   1. dst ends with /  OR  src ends with /  → directory target: files land inside dst
+    #   2. otherwise → dst is the exact file/dir written
+    #
+    # We also check against known system directories: if dst is one of them,
+    # the file lands at dst/basename(src) (e.g. COPY foo.py /root → /root/foo.py).
+    # But if src is itself a directory (no trailing / but conceptually a dir,
+    # e.g. COPY data /data), Docker copies the *contents* into dst, so dst itself
+    # is what we delete. We can't know src's type without tb_root, so we use
+    # extra_top from the manifest as the authoritative top-level deletion target
+    # and only compute precise paths for file-copy cases.
+    KNOWN_SYSTEM_DIRS = {"/root", "/bin", "/usr", "/etc", "/var", "/tmp",
+                         "/opt", "/srv", "/home"}
+    precise: list[str] = []
+    for src, dst in meta.get("copies", []):
+        if dst in ("./", ".") or dst.startswith("/app") or dst.startswith("/tests") or dst.startswith("/logs"):
+            continue
+        dst_path = Path(dst)
+        src_name = Path(src.rstrip("/")).name
+        if src.endswith("/") or dst.endswith("/"):
+            # src ends with /  → Docker copies contents into dst; delete dst
+            # dst ends with /  → explicit dir target; delete dst/src_name
+            if dst.endswith("/") and not src.endswith("/"):
+                precise.append(str(dst_path / src_name))
+            else:
+                precise.append(dst.rstrip("/"))
+        elif dst in KNOWN_SYSTEM_DIRS:
+            # System dir: file lands at dst/filename
+            precise.append(str(dst_path / src_name))
+        else:
+            # Explicit file path or whole non-system directory
+            precise.append(dst)
+
+    # Fall back to top-level dirs if no precise paths found
+    targets = precise if precise else extra_top
+
+    for target in targets:
+        p = Path(target)
+        if not (p.exists() or p.is_symlink()):
+            continue
+        try:
+            if p.is_dir() and not p.is_symlink():
+                shutil.rmtree(p)
+            else:
+                p.unlink()
+            log(f"  cleanup: removed {target}")
+        except PermissionError:
+            # Path is owned by root — use sudo rm
+            try:
+                flag = "-rf" if (p.is_dir() and not p.is_symlink()) else "-f"
+                subprocess.run(["sudo", "rm", flag, str(p)], check=True)
+                log(f"  cleanup: sudo removed {target}")
+            except Exception as e2:
+                log(f"  cleanup WARNING: could not remove {target}: {e2}")
+        except Exception as e:
+            log(f"  cleanup WARNING: could not remove {target}: {e}")
 
 
 def setup_task(task: str, tb_root: Path) -> None:
@@ -575,10 +659,11 @@ def cmd_run(args: argparse.Namespace) -> None:
             session_id = f"bench-{task}-{int(time.time())}-{uuid.uuid4().hex[:6]}"
             task_start = time.monotonic()
 
-            # 1. Clean workspace
+            # 1. Clean workspace (standard dirs + task-specific extras)
             clean_dir(HOST_APP)
             clean_dir(HOST_TESTS)
             clean_dir(HOST_LOGS)
+            cleanup_task_extras(task)
 
             # 2. Setup task environment
             try:
@@ -707,10 +792,11 @@ def cmd_oracle(args: argparse.Namespace) -> None:
 
         task_start = time.monotonic()
 
-        # Clean
+        # Clean (standard dirs + task-specific extras)
         clean_dir(HOST_APP)
         clean_dir(HOST_TESTS)
         clean_dir(HOST_LOGS)
+        cleanup_task_extras(task)
 
         # Setup
         try:

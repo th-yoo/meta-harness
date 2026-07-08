@@ -15,7 +15,10 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": [
+      "/protected"
+    ]
   },
   "build-cython-ext": {
     "base_image": "python:3.13-slim-bookworm",
@@ -32,7 +35,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "build-pmars": {
     "base_image": "debian:13.0-slim",
@@ -53,7 +57,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "cancel-async-tasks": {
     "base_image": "python:3.13-slim-bookworm",
@@ -66,7 +71,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "circuit-fibsqrt": {
     "base_image": "python:3.13-slim-bookworm",
@@ -90,7 +96,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 1,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "code-from-image": {
     "base_image": "python:3.13-slim-bookworm",
@@ -108,7 +115,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "compile-compcert": {
     "base_image": "ubuntu:24.04",
@@ -122,7 +130,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "configure-git-webserver": {
     "base_image": "ubuntu:24.04",
@@ -135,7 +144,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "constraints-scheduling": {
     "base_image": "ubuntu:24.04",
@@ -156,7 +166,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "count-dataset-tokens": {
     "base_image": "python:3.13-slim-bookworm",
@@ -169,7 +180,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "db-wal-recovery": {
     "base_image": "ubuntu:24.04",
@@ -196,7 +208,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "distribution-search": {
     "base_image": "python:3.13-slim-bookworm",
@@ -212,7 +225,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 1,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "dna-assembly": {
     "base_image": "ubuntu:24.04",
@@ -231,7 +245,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "dna-insert": {
     "base_image": "ubuntu:24.04",
@@ -250,7 +265,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "extract-elf": {
     "base_image": "ubuntu:24.04",
@@ -273,7 +289,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 1,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "extract-moves-from-video": {
     "base_image": "ubuntu:24.04",
@@ -286,7 +303,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "feal-differential-cryptanalysis": {
     "base_image": "python:3.13-slim-bookworm",
@@ -307,7 +325,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "feal-linear-cryptanalysis": {
     "base_image": "python:3.13-slim-bookworm",
@@ -329,7 +348,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 3,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "filter-js-from-html": {
     "base_image": "python:3.13-slim-bookworm",
@@ -342,7 +362,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "financial-document-processor": {
     "base_image": "ubuntu:24.04",
@@ -364,7 +385,11 @@
     "envs": [],
     "has_uv_copy": true,
     "raw_run_count": 1,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": [
+      "/root",
+      "/tmp"
+    ]
   },
   "fix-git": {
     "base_image": "python:3.13-slim-bookworm",
@@ -388,7 +413,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 1,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "gcode-to-text": {
     "base_image": "python:3.13-slim-bookworm",
@@ -406,7 +432,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 1,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "git-leak-recovery": {
     "base_image": "ubuntu:24.04",
@@ -426,7 +453,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 2,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "git-multibranch": {
     "base_image": "ubuntu:24.04",
@@ -455,7 +483,10 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 2,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": [
+      "/etc"
+    ]
   },
   "headless-terminal": {
     "base_image": "python:3.13-slim-bookworm",
@@ -477,7 +508,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "kv-store-grpc": {
     "base_image": "python:3.13-slim-bookworm",
@@ -488,7 +520,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "large-scale-text-editing": {
     "base_image": "python:3.13-slim-bookworm",
@@ -508,7 +541,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 1,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "largest-eigenval": {
     "base_image": "python:3.13-slim-bookworm",
@@ -530,7 +564,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "llm-inference-batching-scheduler": {
     "base_image": "python:3.13-slim-bookworm",
@@ -548,7 +583,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "log-summary-date-ranges": {
     "base_image": "python:3.13-slim-bookworm",
@@ -566,7 +602,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 1,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "mailman": {
     "base_image": "ubuntu:24.04",
@@ -591,7 +628,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "mcmc-sampling-stan": {
     "base_image": "ubuntu:24.04",
@@ -615,7 +653,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "merge-diff-arc-agi-task": {
     "base_image": "ubuntu:24.04",
@@ -634,7 +673,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "model-extraction-relu-logits": {
     "base_image": "python:3.13-slim-bookworm",
@@ -654,7 +694,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "multi-source-data-merger": {
     "base_image": "python:3.11-slim",
@@ -683,7 +724,10 @@
     ],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": [
+      "/data"
+    ]
   },
   "nginx-request-logging": {
     "base_image": "python:3.13-slim-bookworm",
@@ -700,7 +744,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "openssl-selfsigned-cert": {
     "base_image": "python:3.13-slim-bookworm",
@@ -715,7 +760,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "overfull-hbox": {
     "base_image": "ubuntu:24.04",
@@ -743,7 +789,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "password-recovery": {
     "base_image": "ubuntu:24.04",
@@ -769,7 +816,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 1,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "path-tracing": {
     "base_image": "ubuntu:24.04",
@@ -791,7 +839,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 2,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "path-tracing-reverse": {
     "base_image": "ubuntu:24.04",
@@ -815,7 +864,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 1,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "polyglot-c-py": {
     "base_image": "ubuntu:24.04",
@@ -830,7 +880,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "polyglot-rust-c": {
     "base_image": "ubuntu:24.04",
@@ -846,7 +897,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "portfolio-optimization": {
     "base_image": "python:3.13-slim-bookworm",
@@ -884,7 +936,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "protein-assembly": {
     "base_image": "python:3.13-slim-bookworm",
@@ -910,7 +963,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "prove-plus-comm": {
     "base_image": "ubuntu:24.04",
@@ -930,7 +984,10 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": [
+      "/workspace"
+    ]
   },
   "pypi-server": {
     "base_image": "python:3.13-slim-bookworm",
@@ -946,7 +1003,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "raman-fitting": {
     "base_image": "python:3.13-slim-bookworm",
@@ -964,7 +1022,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "regex-chess": {
     "base_image": "python:3.13-slim-bookworm",
@@ -984,7 +1043,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "regex-log": {
     "base_image": "ubuntu:24.04",
@@ -997,7 +1057,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "reshard-c4-data": {
     "base_image": "python:3.13-slim-bookworm",
@@ -1013,7 +1074,8 @@
     "envs": [],
     "has_uv_copy": true,
     "raw_run_count": 1,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "rstan-to-pystan": {
     "base_image": "ubuntu:24.04",
@@ -1050,7 +1112,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "sanitize-git-repo": {
     "base_image": "python:3.13-slim-bookworm",
@@ -1070,7 +1133,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 1,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "sparql-university": {
     "base_image": "ubuntu:24.04",
@@ -1088,7 +1152,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "sqlite-db-truncate": {
     "base_image": "python:3.13-slim-bookworm",
@@ -1106,7 +1171,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "sqlite-with-gcov": {
     "base_image": "ubuntu:24.04",
@@ -1124,7 +1190,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "tune-mjcf": {
     "base_image": "python:3.13-slim-bookworm",
@@ -1146,7 +1213,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": false
+    "needs_network": false,
+    "extra_cleanup_paths": []
   },
   "video-processing": {
     "base_image": "python:3.13-slim-bookworm",
@@ -1173,7 +1241,8 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 0,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   },
   "write-compressor": {
     "base_image": "ubuntu:24.04",
@@ -1199,6 +1268,7 @@
     "envs": [],
     "has_uv_copy": false,
     "raw_run_count": 1,
-    "needs_network": true
+    "needs_network": true,
+    "extra_cleanup_paths": []
   }
 }

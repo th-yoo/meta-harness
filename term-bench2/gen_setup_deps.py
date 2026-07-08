@@ -374,6 +374,30 @@ def make_copy_section(copies: list[tuple[str, str]], task: str) -> str:
     return "\n".join(lines)
 
 
+# Paths that are always managed by the runner and need no explicit cleanup
+_RUNNER_MANAGED = {"/app", "/tests", "/logs", "/logs/verifier"}
+
+
+def extra_cleanup_paths(copies: list[tuple[str, str]]) -> list[str]:
+    """
+    Return top-level host paths written by COPY directives that are NOT
+    inside /app, /tests, or /logs.  These persist across tasks and must be
+    explicitly cleaned up by the runner between runs.
+    """
+    paths: set[str] = set()
+    for _src, dst in copies:
+        if dst in ("./", "."):
+            continue
+        # Normalise /app/… → skip
+        if dst.startswith("/app") or dst.startswith("/tests") or dst.startswith("/logs"):
+            continue
+        # Capture the top-level directory (e.g. /protected/foo → /protected)
+        top = "/" + dst.lstrip("/").split("/")[0]
+        if top not in _RUNNER_MANAGED:
+            paths.add(top)
+    return sorted(paths)
+
+
 def make_pip_section(packages: list[str], task: str, has_uv_copy: bool) -> str:
     if not packages:
         return "# (no pip packages)"
@@ -579,6 +603,9 @@ def main() -> None:
                 kw in "\n".join(parsed["raw_runs"]).lower()
                 for kw in ["wget", "curl", "git clone", "pip install", "apt-get install"]
             ) or bool(parsed["pip_packages"]) or bool(parsed["apt_packages"]),
+            # Paths outside /app /tests /logs that setup_deps.sh writes to;
+            # runner must wipe these between tasks to avoid cross-task pollution.
+            "extra_cleanup_paths": extra_cleanup_paths(parsed["copies"]),
         }
 
         unhandled[task] = parsed["raw_runs"]
