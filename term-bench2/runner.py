@@ -63,6 +63,14 @@ APT_PACKAGES_TXT = SCRIPT_DIR / "apt-packages.txt"
 # Tracks which packages were newly installed by prep --apply (for --uninstall)
 PREP_INSTALLED_TXT = SCRIPT_DIR / ".prep-installed.txt"
 
+# Empty host-side dirs used as bwrap bind-mount points.
+# Nothing is ever written to them directly — bwrap overlays ~/bench/* on top.
+# Created by prep --apply, removed by prep --clean-mountpoints --apply.
+BWRAP_MOUNT_POINTS = [
+    "/app", "/tests", "/logs/verifier",   # always needed
+    "/data", "/protected", "/workspace",   # task-specific extras
+]
+
 # ── Task list ──────────────────────────────────────────────────────────────
 
 
@@ -224,6 +232,24 @@ def cmd_prep(args: argparse.Namespace) -> None:
     """Print (or execute) one-time host setup / uninstall commands."""
     apt_pkgs = sorted(set(APT_PACKAGES_TXT.read_text().splitlines())) if APT_PACKAGES_TXT.exists() else []
 
+    # ── clean-mountpoints mode ────────────────────────────────────────────
+    if getattr(args, "clean_mountpoints", False):
+        existing = [p for p in BWRAP_MOUNT_POINTS if Path(p).exists()]
+        if not existing:
+            print("No bwrap mount-point placeholders found — nothing to remove.")
+            return
+        if args.apply:
+            log(f"Removing {len(existing)} mount-point placeholder(s)...")
+            subprocess.run(["sudo", "rm", "-rf"] + existing, check=True)
+            log("Done: " + " ".join(existing))
+        else:
+            print("# Bwrap mount-point placeholders that would be removed:")
+            print()
+            print("sudo rm -rf " + " ".join(existing))
+            print()
+            print("# Run: python3 runner.py prep --clean-mountpoints --apply")
+        return
+
     # ── uninstall mode ────────────────────────────────────────────────────
     if args.uninstall:
         if not PREP_INSTALLED_TXT.exists():
@@ -279,20 +305,11 @@ def cmd_prep(args: argparse.Namespace) -> None:
         log(f"  Created {REAL_APP}, {REAL_TESTS}, {REAL_LOGS}")
 
         # Create empty placeholder dirs for bwrap mount points (sudo once, stay empty)
-        # bwrap binds ~/bench/* over these — nothing is ever written to them directly.
-        # Includes task-specific extra paths: /data, /protected, /workspace.
-        BWRAP_MOUNT_POINTS = [
-            "/app", "/tests", "/logs/verifier",
-            "/data", "/protected", "/workspace",
-        ]
-        subprocess.run(
-            ["sudo", "mkdir", "-p"] + BWRAP_MOUNT_POINTS, check=True
-        )
-        subprocess.run(
-            ["sudo", "chown", user, "/app", "/tests", "/logs",
-             "/data", "/protected", "/workspace"],
-            check=True,
-        )
+        # bwrap binds ~/bench/* over these — nothing is ever written here directly.
+        subprocess.run(["sudo", "mkdir", "-p"] + BWRAP_MOUNT_POINTS, check=True)
+        # chown top-level dirs (not /logs/verifier which is under /logs)
+        top_dirs = sorted({p.split("/")[1] for p in BWRAP_MOUNT_POINTS if p != "/"})
+        subprocess.run(["sudo", "chown", user] + ["/" + d for d in top_dirs], check=True)
         log("  Created bwrap mount-point placeholders: " + " ".join(BWRAP_MOUNT_POINTS))
 
         # apt — noninteractive to avoid debconf prompts (postfix, mailman3, etc.)
@@ -973,6 +990,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--uninstall", action="store_true",
         help="Remove only the packages that prep --apply newly installed "
              "(uses .prep-installed.txt). Dry-run unless --apply is also given.",
+    )
+    p_prep.add_argument(
+        "--clean-mountpoints", action="store_true",
+        help="Remove the empty bwrap mount-point placeholder dirs "
+             "(/app /tests /logs /data /protected /workspace). "
+             "Dry-run unless --apply is also given.",
     )
 
     # run
