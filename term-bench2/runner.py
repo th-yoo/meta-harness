@@ -169,30 +169,31 @@ def clean_dir(ns_path: Path) -> None:
 
 def ns_wrap(cmd: list[str], extra_mounts: Optional[dict[str, Path]] = None) -> list[str]:
     """
-    Wrap a command in a private mount namespace.
+    Wrap a command using bwrap (bubblewrap) so that ~/bench/{app,tests,logs}
+    are bind-mounted onto /app, /tests, /logs inside the sandbox.
 
-    ~/bench/app, ~/bench/tests, ~/bench/logs are bind-mounted onto
-    /app, /tests, /logs inside the namespace.  The host filesystem is
-    untouched.  Uses only user namespaces — no root required.
+    The host filesystem is never written to at those paths — all writes go to
+    ~/bench/.  /app, /tests, /logs must exist as empty placeholder dirs on the
+    host (created once by prep --apply with sudo; they stay permanently empty).
 
-    extra_mounts: {'/namespace/path': real_host_path} for task-specific
-    paths like /protected, /workspace, /data etc.
+    extra_mounts: {'/sandbox/path': real_host_path} for task-specific paths
+    like /protected, /workspace, /data.
     """
-    mounts = [
-        f"mkdir -p /app /tests /logs/verifier",
-        f"mount --bind {REAL_APP} /app",
-        f"mount --bind {REAL_TESTS} /tests",
-        f"mount --bind {BENCH_PREFIX / 'logs'} /logs",
+    bwrap_args = [
+        "bwrap",
+        "--bind", "/", "/",           # bind real root (read-write for user-owned paths)
+        "--bind", str(REAL_APP),   "/app",
+        "--bind", str(REAL_TESTS), "/tests",
+        "--bind", str(BENCH_PREFIX / "logs"), "/logs",
+        "--proc", "/proc",
+        "--dev",  "/dev",
     ]
     for ns_path, real_path in (extra_mounts or {}).items():
-        mounts.append(f"mkdir -p {ns_path}")
-        mounts.append(f"mount --bind {real_path} {ns_path}")
+        real_path.mkdir(parents=True, exist_ok=True)
+        bwrap_args += ["--bind", str(real_path), ns_path]
 
-    inner = " && ".join(mounts) + " && " + " ".join(shlex.quote(c) for c in cmd)
-    return [
-        "unshare", "--user", "--mount", "--map-root-user",
-        "bash", "-c", inner,
-    ]
+    bwrap_args += ["--"] + cmd
+    return bwrap_args
 
 
 # ── prep command ───────────────────────────────────────────────────────────
@@ -243,7 +244,11 @@ def cmd_prep(args: argparse.Namespace) -> None:
     apt_line = "sudo apt-get install -y \\\n  " + " \\\n  ".join(apt_pkgs) if apt_pkgs else "# (no apt packages)"
     user = os.environ.get("USER", os.environ.get("LOGNAME", "$(whoami)"))
     commands = [
+        f"# User-owned backing dirs (all actual data lives here):",
         f"mkdir -p {REAL_APP} {REAL_TESTS} {REAL_LOGS}",
+        f"# Empty bwrap mount-point placeholders (sudo once; stay permanently empty):",
+        f"sudo mkdir -p /app /tests /logs/verifier",
+        f"sudo chown {user} /app /tests /logs",
         apt_line,
     ]
 
@@ -255,11 +260,21 @@ def cmd_prep(args: argparse.Namespace) -> None:
         to_install = [p for p in apt_pkgs if p not in already_installed]
         log(f"  {len(to_install)} new / {len(apt_pkgs) - len(to_install)} already present")
 
-        # Create user-owned bench dirs — no sudo needed, no root dir pollution
+        # Create user-owned bench dirs (all actual data lives here)
         REAL_APP.mkdir(parents=True, exist_ok=True)
         REAL_TESTS.mkdir(parents=True, exist_ok=True)
         REAL_LOGS.mkdir(parents=True, exist_ok=True)
         log(f"  Created {REAL_APP}, {REAL_TESTS}, {REAL_LOGS}")
+
+        # Create empty placeholder dirs for bwrap mount points (sudo once, stay empty)
+        # bwrap binds ~/bench/* over these — nothing is ever written to them directly.
+        subprocess.run(
+            ["sudo", "mkdir", "-p", "/app", "/tests", "/logs/verifier"], check=True
+        )
+        subprocess.run(
+            ["sudo", "chown", user, "/app", "/tests", "/logs"], check=True
+        )
+        log("  Created empty bwrap mount-point placeholders: /app /tests /logs")
 
         # apt — noninteractive to avoid debconf prompts (postfix, mailman3, etc.)
         if apt_pkgs:
