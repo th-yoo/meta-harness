@@ -24,6 +24,7 @@ import {
   nextVersion,
   writeActive,
   readActiveSystem,
+  readActiveTools,
   type StoreLayer,
 } from "./harness-store.ts"
 import { proposerSessions } from "./session-state.ts"
@@ -50,14 +51,12 @@ export async function triggerPropose(
   layer: StoreLayer,
 ): Promise<void> {
   const version = nextVersion(layer.root)
-  const stagingPath = path.join(
-    worktree,
-    ".meta-harness",
-    "staging",
-    `${layer.scope}-${version}.md`,
-  )
+  const stagingBase = path.join(worktree, ".meta-harness", "staging")
+  const stagingSystem = path.join(stagingBase, `${layer.scope}-${version}-system.md`)
+  const stagingTools  = path.join(stagingBase, `${layer.scope}-${version}-tools.md`)
+
   const context = buildProposerContext(layer.root, layer.higherRoots)
-  const prompt = buildProposerPrompt(layer, version, context, stagingPath, worktree)
+  const prompt = buildProposerPrompt(layer, version, context, stagingSystem, stagingTools, worktree)
 
   await client.app.log({
     body: {
@@ -95,8 +94,8 @@ export async function triggerPropose(
     body: { parts: [{ type: "text", text: prompt }] },
   })
 
-  // Poll for the staging file the proposer writes
-  const found = await waitForFile(stagingPath, 10 * 60 * 1000)
+  // Poll for the required system.md staging file (tools.md is optional)
+  const found = await waitForFile(stagingSystem, 10 * 60 * 1000)
 
   proposerSessions.delete(sessionID)
 
@@ -112,17 +111,23 @@ export async function triggerPropose(
     return
   }
 
-  // Relocate staging file into the target store (works for account stores too)
-  const system = fs.readFileSync(stagingPath, "utf-8").trim()
-  fs.rmSync(stagingPath, { force: true })
+  // Relocate staging files into the target store (works for account stores too)
+  const system = fs.readFileSync(stagingSystem, "utf-8").trim()
+  fs.rmSync(stagingSystem, { force: true })
 
-  createCandidate(layer.root, version, system)
-  writeActive(layer.root, version, system)
+  const tools = fs.existsSync(stagingTools)
+    ? fs.readFileSync(stagingTools, "utf-8").trim()
+    : ""
+  if (tools) fs.rmSync(stagingTools, { force: true })
 
+  createCandidate(layer.root, version, system, tools)
+  writeActive(layer.root, version, system, tools)
+
+  const toolsNote = tools ? " + tools.md" : ""
   await client.tui.showToast({
     body: {
       title: "Meta-Harness",
-      message: `Activated ${layer.scope} ${version}`,
+      message: `Activated ${layer.scope} ${version}${toolsNote}`,
       variant: "success",
       duration: 8_000,
     },
@@ -132,7 +137,7 @@ export async function triggerPropose(
     body: {
       service: "meta-harness",
       level: "info",
-      message: `Activated ${layer.scope} ${version}`,
+      message: `Activated ${layer.scope} ${version}${toolsNote}`,
     },
   })
 }
@@ -169,58 +174,94 @@ function buildProposerPrompt(
   layer: StoreLayer,
   version: string,
   context: string,
-  stagingPath: string,
+  stagingSystem: string,
+  stagingTools: string,
   worktree: string,
 ): string {
   const guidance = SCOPE_GUIDANCE[layer.scope]
   const currentSystem = readActiveSystem(layer.root)
+  const currentTools = readActiveTools(layer.root)
 
-  // Read "already covered" text for display in prompt
-  const coveredTexts = layer.higherRoots
-    .map((r) => readActiveSystem(r))
-    .filter(Boolean)
+  // Read "already covered" text (system + tools) from higher layers
+  const coveredParts: string[] = []
+  for (const r of layer.higherRoots) {
+    const sys = readActiveSystem(r)
+    const tools = readActiveTools(r)
+    if (sys) coveredParts.push(`### system.md\n${sys}`)
+    if (tools) coveredParts.push(`### tools.md\n${tools}`)
+  }
 
-  const coveredSection = coveredTexts.length > 0
-    ? `## Already covered by more-general layers — DO NOT REPEAT\n\n${coveredTexts.join("\n\n---\n\n")}\n\n`
+  const coveredSection = coveredParts.length > 0
+    ? `## Already covered by more-general layers — DO NOT REPEAT\n\n${coveredParts.join("\n\n")}\n\n`
     : ""
 
-  const currentSection = currentSystem
-    ? `## Current ${layer.scope} prompt (refine this — do not discard good rules)\n\n\`\`\`\n${currentSystem}\n\`\`\`\n\n`
-    : `## Current ${layer.scope} prompt\n\n(empty — write a new one from scratch)\n\n`
+  const currentSystemSection = currentSystem
+    ? `## Current ${layer.scope} system.md (refine — do not discard good rules)\n\n\`\`\`\n${currentSystem}\n\`\`\``
+    : `## Current ${layer.scope} system.md\n\n(empty — write from scratch)`
 
-  // Use relative path for staging so bash command works in worktree
-  const relStaging = path.relative(worktree, stagingPath)
+  const currentToolsSection = currentTools
+    ? `## Current ${layer.scope} tools.md (refine — do not discard good rules)\n\n\`\`\`\n${currentTools}\n\`\`\``
+    : `## Current ${layer.scope} tools.md\n\n(empty — write from scratch if tool patterns warrant it)`
+
+  // Relative staging paths so bash commands work in worktree
+  const relSystem = path.relative(worktree, stagingSystem)
+  const relTools  = path.relative(worktree, stagingTools)
+  const stagingDir = path.relative(worktree, path.dirname(stagingSystem))
 
   return `# Meta-Harness Proposer — ${layer.scope}
 
 ${guidance}
 
-${coveredSection}${currentSection}## Prior session scores and traces for this layer
+${coveredSection}${currentSystemSection}
+
+${currentToolsSection}
+
+## Prior session scores and traces for this layer
 
 ${context || "(no sessions scored yet — write a sensible baseline for this scope)"}
 
 ## Your task
 
-1. Analyze the traces above. What patterns appear in FAIL sessions? What in PASS sessions?
-2. Identify the ONE most impactful gap: a rule that would fix the most failures and is NOT
-   already covered by the more-general layers above.
-3. If all sessions passed (no failures), make one small improvement to the current prompt.
-4. Write the improved system prompt — SHORT behavioral rules only, under 20 lines.
+Analyze the traces above. Pay attention to:
+- PASS vs FAIL patterns in the session outcomes
+- Tool usage summaries (e.g. "bash×5(1err) read×3") — which tools were overused, misused, or produced errors?
+- Notes from the human rater (these are expert engineering judgments)
+
+Then:
+1. Identify the ONE most impactful gap in **system.md** — a behavioral rule not already covered above.
+2. Identify any **tool-usage patterns** worth capturing in **tools.md** — keyed by tool name.
+   tools.md format:
+   \`\`\`
+   ## bash
+   <guidance specific to bash usage at this scope>
+   ## read
+   <guidance specific to read tool usage>
+   ## edit
+   <guidance specific to edit tool usage>
+   \`\`\`
+   Only include a tool section if the traces reveal a meaningful pattern for it.
+   If no tool patterns are apparent, skip tools.md entirely.
+3. Both artifacts: SHORT and behavioral only. system.md under 20 lines. tools.md under 15 lines total.
    Do NOT write project documentation, AGENTS.md content, or task-specific knowledge.
-   Only write behavioral instructions (what the agent should DO and HOW).
 
-## Write the result
+## Write the results
 
-Run this bash command to write the improved prompt to the staging file:
-
+**Required** — write the improved system.md:
 \`\`\`bash
-mkdir -p "${path.dirname(relStaging)}"
-cat > "${relStaging}" << 'ENDOFPROMPT'
-<your improved ${layer.scope} system prompt here — short behavioral rules only>
-ENDOFPROMPT
+mkdir -p "${stagingDir}"
+cat > "${relSystem}" << 'ENDOFSYSTEM'
+<your improved ${layer.scope} system prompt — short behavioral rules only>
+ENDOFSYSTEM
 \`\`\`
 
-After writing the file, briefly explain what you changed and why, citing specific traces.`
+**Optional** — write tools.md only if tool patterns were identified:
+\`\`\`bash
+cat > "${relTools}" << 'ENDOFTOOLS'
+<per-tool guidance keyed by tool name — only include tools with clear patterns>
+ENDOFTOOLS
+\`\`\`
+
+After writing the file(s), briefly explain what you changed and why, citing specific traces.`
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────

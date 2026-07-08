@@ -36,9 +36,11 @@ import {
   migrateFlatToProjectGlobal,
   activeVersion,
   readActiveSystem,
+  readActiveTools,
   recordSession,
   DEFAULT_SYSTEM_PROMPT,
   type StoreLayer,
+  type ToolUsage,
 } from "./harness-store.ts"
 import { promptHumanScore, handleScoreCommand } from "./score.ts"
 import {
@@ -66,6 +68,10 @@ const sessionVariant = new Map<string, string>()
 const sessionAgent = new Map<string, string>()
 const sessionTurns = new Map<string, number>()
 const sessionSummary = new Map<string, string>()
+const sessionToolUsage = new Map<string, ToolUsage>()
+
+/** Best-effort error detection from tool output text. */
+const ERROR_PATTERN = /error|failed|exception|no such file|exit code [1-9]|traceback|command not found/i
 
 function cleanupSession(sessionID: string): void {
   bootstrappedSessions.delete(sessionID)
@@ -77,6 +83,7 @@ function cleanupSession(sessionID: string): void {
   sessionAgent.delete(sessionID)
   sessionTurns.delete(sessionID)
   sessionSummary.delete(sessionID)
+  sessionToolUsage.delete(sessionID)
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -145,14 +152,26 @@ const metaHarness: Plugin = async (input) => {
       const agent = sessionAgent.get(sessionID) ?? ""
       if (!isMhRole(agent)) return
 
-      // Inject each layer's active prompt in order (general → specific)
       const layers = layersFor(worktree, agent)
+
+      // Inject each layer's system.md in order (general → specific)
       for (const layer of layers) {
         const system = readActiveSystem(layer.root)
         if (system) {
           output.system.push(system)
-          await log(client, "debug", `[hook:system.transform] injected ${layer.scope} — ${system.length} chars`)
+          await log(client, "debug", `[hook:system.transform] injected ${layer.scope} system — ${system.length} chars`)
         }
+      }
+
+      // Assemble tool-usage guidance from all 4 layers into one section
+      const toolParts: string[] = []
+      for (const layer of layers) {
+        const tools = readActiveTools(layer.root)
+        if (tools) toolParts.push(tools)
+      }
+      if (toolParts.length > 0) {
+        output.system.push(`## Tool usage guidance\n\n${toolParts.join("\n\n")}`)
+        await log(client, "debug", `[hook:system.transform] injected tool guidance from ${toolParts.length} layer(s)`)
       }
 
       // Inject env snapshot once per session (pushed last)
@@ -175,6 +194,25 @@ const metaHarness: Plugin = async (input) => {
       if (adjusted !== undefined) {
         output.args = { ...args, timeout: adjusted }
       }
+    },
+
+    // ── tool-usage capture (mh-* sessions only) ───────────────────────────
+    "tool.execute.after": async (toolInput, toolOutput) => {
+      const { tool, sessionID } = toolInput
+      const agent = sessionAgent.get(sessionID) ?? ""
+      if (!isMhRole(agent)) return
+      if (proposerSessions.has(sessionID)) return
+
+      const usage = sessionToolUsage.get(sessionID) ?? {}
+      const entry = usage[tool] ?? { calls: 0, errors: 0 }
+      entry.calls++
+
+      // Best-effort error detection from output text
+      const outText = typeof toolOutput.output === "string" ? toolOutput.output : ""
+      if (ERROR_PATTERN.test(outText)) entry.errors++
+
+      usage[tool] = entry
+      sessionToolUsage.set(sessionID, usage)
     },
 
     // ── turn counting + summary capture ───────────────────────────────────
@@ -219,6 +257,7 @@ const metaHarness: Plugin = async (input) => {
         summary: sessionSummary.get(sessionID) ?? "",
         model: sessionModel.get(sessionID) ?? "unknown",
         variant: sessionVariant.get(sessionID) ?? "",
+        toolUsage: sessionToolUsage.get(sessionID) ?? {},
       }
 
       // Record into all 4 stores

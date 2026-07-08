@@ -13,11 +13,13 @@
  * Each store has the same internal layout:
  *   <storeRoot>/
  *     active/
- *       system.md     ← current best prompt for this layer
+ *       system.md     ← current best behavioral system prompt for this layer
+ *       tools.md      ← current best tool-usage guidance for this layer (keyed by tool)
  *       .version      ← "v0", "v1", …
  *     candidates/
  *       v0/
  *         system.md
+ *         tools.md
  *         score.json  ← { version, nPass, nFail, sessions: SessionRecord[] }
  *         traces/
  *           <sessionID>.json
@@ -77,6 +79,9 @@ export function candidatePath(storeRoot: string, version: string, ...parts: stri
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+/** Per-tool usage counts collected during a session. */
+export type ToolUsage = Record<string, { calls: number; errors: number }>
+
 export interface SessionRecord {
   sessionID: string
   passed: boolean
@@ -86,6 +91,8 @@ export interface SessionRecord {
   summary: string
   model: string
   variant: string
+  /** Tool call counts + best-effort error counts for this session. */
+  toolUsage: ToolUsage
 }
 
 export interface CandidateScore {
@@ -151,9 +158,19 @@ export function readActiveSystem(storeRoot: string): string {
   return readText(activePath(storeRoot, "system.md"))
 }
 
-export function writeActive(storeRoot: string, version: string, system: string): void {
+export function readActiveTools(storeRoot: string): string {
+  return readText(activePath(storeRoot, "tools.md"))
+}
+
+export function writeActive(
+  storeRoot: string,
+  version: string,
+  system: string,
+  tools = "",
+): void {
   writeText(activePath(storeRoot, "system.md"), system)
   writeText(activePath(storeRoot, ".version"), version)
+  if (tools) writeText(activePath(storeRoot, "tools.md"), tools)
 }
 
 export function readScore(storeRoot: string, version: string): CandidateScore {
@@ -180,8 +197,14 @@ export function recordSession(
   return score
 }
 
-export function createCandidate(storeRoot: string, version: string, system: string): void {
+export function createCandidate(
+  storeRoot: string,
+  version: string,
+  system: string,
+  tools = "",
+): void {
   writeText(candidatePath(storeRoot, version, "system.md"), system)
+  if (tools) writeText(candidatePath(storeRoot, version, "tools.md"), tools)
   writeJson(candidatePath(storeRoot, version, "score.json"), {
     version, nPass: 0, nFail: 0, sessions: [],
   })
@@ -240,18 +263,31 @@ export function migrateFlatToProjectGlobal(worktree: string): void {
  * trace excerpts. Includes the gap-filling "already covered" section from
  * higher-layer active prompts.
  */
+/** Format tool-usage map as a compact summary string, e.g. "bash×5(1err) read×3 edit×2" */
+export function formatToolUsage(toolUsage: ToolUsage): string {
+  return Object.entries(toolUsage)
+    .sort((a, b) => b[1].calls - a[1].calls)
+    .map(([tool, { calls, errors }]) =>
+      errors > 0 ? `${tool}×${calls}(${errors}err)` : `${tool}×${calls}`,
+    )
+    .join(" ")
+}
+
 export function buildProposerContext(
   storeRoot: string,
   higherRoots: string[],
 ): string {
-  // Build "already covered" section from more-general layers
-  const covered = higherRoots
-    .map((r) => readActiveSystem(r))
-    .filter(Boolean)
-    .join("\n\n")
+  // Build "already covered" section from more-general layers (system + tools)
+  const coveredParts: string[] = []
+  for (const r of higherRoots) {
+    const sys = readActiveSystem(r)
+    const tools = readActiveTools(r)
+    if (sys) coveredParts.push(`### system.md\n${sys}`)
+    if (tools) coveredParts.push(`### tools.md\n${tools}`)
+  }
 
-  const coveredSection = covered
-    ? `## Already covered by more-general layers — DO NOT REPEAT\n\n${covered}\n\n---\n\n`
+  const coveredSection = coveredParts.length > 0
+    ? `## Already covered by more-general layers — DO NOT REPEAT\n\n${coveredParts.join("\n\n")}\n\n---\n\n`
     : ""
 
   // Build per-candidate sections
@@ -261,17 +297,25 @@ export function buildProposerContext(
   for (const version of versions) {
     const score = readScore(storeRoot, version)
     const system = readText(candidatePath(storeRoot, version, "system.md"))
+    const tools = readText(candidatePath(storeRoot, version, "tools.md"))
     const rate = score.sessions.length > 0
       ? `${score.nPass}/${score.sessions.length} passed (${(score.nPass / score.sessions.length * 100).toFixed(0)}%)`
       : "no sessions yet"
 
     const traceLines = score.sessions.map((s) => {
       const modelStr = s.variant ? `${s.model || "unknown"}+${s.variant}` : (s.model || "unknown")
-      return `  - ${s.sessionID} | ${s.passed ? "PASS" : "FAIL"} | model=${modelStr} | turns=${s.turnCount}${s.note ? ` | note="${s.note}"` : ""}\n    summary: ${s.summary.slice(0, 200)}`
+      const toolSummary = s.toolUsage ? formatToolUsage(s.toolUsage) : ""
+      return [
+        `  - ${s.sessionID} | ${s.passed ? "PASS" : "FAIL"} | model=${modelStr} | turns=${s.turnCount}${s.note ? ` | note="${s.note}"` : ""}`,
+        toolSummary ? `    tools: ${toolSummary}` : null,
+        `    summary: ${s.summary.slice(0, 200)}`,
+      ].filter(Boolean).join("\n")
     }).join("\n")
 
+    const toolsSection = tools ? `\n\n### tools.md\n\`\`\`\n${tools}\n\`\`\`` : ""
+
     sections.push(
-      `## Candidate ${version} — ${rate}\n\n### system.md\n\`\`\`\n${system || "(empty)"}\n\`\`\`\n\n### Session traces\n${traceLines || "  (none)"}`,
+      `## Candidate ${version} — ${rate}\n\n### system.md\n\`\`\`\n${system || "(empty)"}\`\`\`${toolsSection}\n\n### Session traces\n${traceLines || "  (none)"}`,
     )
   }
 
