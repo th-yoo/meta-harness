@@ -100,12 +100,23 @@ const metaHarness: Plugin = async (input) => {
 
   return {
 
-    // ── B: gather env snapshot on first message ───────────────────────────
-    "chat.message": async (_msgInput, output) => {
+    // ── B: gather env snapshot on first message + H2: capture main model ──
+    "chat.message": async (msgInput, output) => {
       const { sessionID } = output.message
 
       // Skip proposer's own sessions
       if (proposerSessions.has(sessionID)) return
+
+      // H2: capture model from the build agent (primary agent, not title/compaction)
+      // chat.message has agent + model; prefer this over system.transform which
+      // fires for all agents (including title agent which uses a small model).
+      const agent = msgInput.agent ?? ""
+      const isMainAgent = agent === "build" || agent === "plan" || agent === ""
+      if (isMainAgent && msgInput.model && !sessionModel.has(sessionID)) {
+        const model = `${msgInput.model.providerID}/${msgInput.model.modelID}`
+        sessionModel.set(sessionID, model)
+        await log(client, "debug", `[hook:chat.message] captured model=${model} agent=${agent} sessionID=${sessionID}`)
+      }
 
       if (bootstrappedSessions.has(sessionID)) return
       bootstrappedSessions.add(sessionID)
@@ -122,16 +133,9 @@ const metaHarness: Plugin = async (input) => {
     // ── A + B: inject system prompt + env snapshot into every LLM call ────
     "experimental.chat.system.transform": async (sysInput, output) => {
       const sessionID = sysInput.sessionID ?? ""
-      const modelID = `${sysInput.model.providerID}/${sysInput.model.id}`
 
       // Skip proposer's own sessions (don't inject the harness under test)
       if (proposerSessions.has(sessionID)) return
-
-      // H2: capture model on first transform for this session
-      if (sessionID && !sessionModel.has(sessionID)) {
-        sessionModel.set(sessionID, modelID)
-        await log(client, "debug", `[hook:system.transform] captured model=${modelID} sessionID=${sessionID}`)
-      }
 
       // A: inject active harness system prompt
       const system = readActiveSystem(worktree)
