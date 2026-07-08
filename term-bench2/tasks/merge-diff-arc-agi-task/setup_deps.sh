@@ -5,15 +5,18 @@
 #
 # Sets up the task workspace at $WORKDIR (default: /app).
 # TB_ROOT points at the terminal-bench-2 checkout.
+# EXTRAS_ROOT: redirect out-of-/app copy destinations (e.g. /protected →
+#   $EXTRAS_ROOT/protected). Set by runner to ~/bench/extras/<task>.
 #
 # Usage:
-#   [TB_ROOT=~/z2/terminal-bench-2] [WORKDIR=/app] bash setup_deps.sh
+#   [TB_ROOT=~/z2/terminal-bench-2] [WORKDIR=/app] [EXTRAS_ROOT=] bash setup_deps.sh
 
 set -euo pipefail
 
 TB_ROOT="${TB_ROOT:-$HOME/z2/terminal-bench-2}"
 TASK_ENV="$TB_ROOT/merge-diff-arc-agi-task/environment"
 WORKDIR="${WORKDIR:-/app}"
+EXTRAS_ROOT="${EXTRAS_ROOT:-}"
 
 # ── source common base tooling ──────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

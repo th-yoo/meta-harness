@@ -5,15 +5,18 @@
 #
 # Sets up the task workspace at $WORKDIR (default: /app).
 # TB_ROOT points at the terminal-bench-2 checkout.
+# EXTRAS_ROOT: redirect out-of-/app copy destinations (e.g. /protected →
+#   $EXTRAS_ROOT/protected). Set by runner to ~/bench/extras/<task>.
 #
 # Usage:
-#   [TB_ROOT=~/z2/terminal-bench-2] [WORKDIR=/app] bash setup_deps.sh
+#   [TB_ROOT=~/z2/terminal-bench-2] [WORKDIR=/app] [EXTRAS_ROOT=] bash setup_deps.sh
 
 set -euo pipefail
 
 TB_ROOT="${TB_ROOT:-$HOME/z2/terminal-bench-2}"
 TASK_ENV="$TB_ROOT/git-multibranch/environment"
 WORKDIR="${WORKDIR:-/app}"
+EXTRAS_ROOT="${EXTRAS_ROOT:-}"
 
 # ── source common base tooling ──────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,8 +38,8 @@ if [[ -z "${SKIP_APT:-}" ]]; then
   sudo rm -rf /var/lib/apt/lists/*
 fi
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "/etc/nginx/sites-available/default"
-cp -r "$TASK_ENV/default.conf" "/etc/nginx/sites-available/default"
+mkdir -p "${EXTRAS_ROOT:-}/etc/nginx/sites-available/default"
+cp -r "$TASK_ENV/default.conf" "${EXTRAS_ROOT:-}/etc/nginx/sites-available/default"
 # (no pip packages)
 # ── unclassified RUN directives (emitted verbatim) ─────────────────────────
 # RAW: mkdir -p /etc/ssl/certs && mkdir -p /etc/ssl/private && openssl req -x509 -nodes -days 365 -subj "/CN=localhost" -newkey rsa:2048 -keyout /etc/ssl/private/nginx-selfsigned.key -out /etc/ssl/certs/nginx-selfsigned.crt

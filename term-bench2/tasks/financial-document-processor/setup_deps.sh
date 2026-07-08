@@ -5,15 +5,18 @@
 #
 # Sets up the task workspace at $WORKDIR (default: /app).
 # TB_ROOT points at the terminal-bench-2 checkout.
+# EXTRAS_ROOT: redirect out-of-/app copy destinations (e.g. /protected →
+#   $EXTRAS_ROOT/protected). Set by runner to ~/bench/extras/<task>.
 #
 # Usage:
-#   [TB_ROOT=~/z2/terminal-bench-2] [WORKDIR=/app] bash setup_deps.sh
+#   [TB_ROOT=~/z2/terminal-bench-2] [WORKDIR=/app] [EXTRAS_ROOT=] bash setup_deps.sh
 
 set -euo pipefail
 
 TB_ROOT="${TB_ROOT:-$HOME/z2/terminal-bench-2}"
 TASK_ENV="$TB_ROOT/financial-document-processor/environment"
 WORKDIR="${WORKDIR:-/app}"
+EXTRAS_ROOT="${EXTRAS_ROOT:-}"
 
 # ── source common base tooling ──────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,10 +31,10 @@ mkdir -p "$WORKDIR"
 # (no ENV directives)
 # (no additional apt packages)
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "/root"
-cp -r "$TASK_ENV/randomize_filenames.py" "/root"
-mkdir -p "/tmp/original_documents/"
-cp -r "$TASK_ENV/documents/" "/tmp/original_documents/"
+mkdir -p "${EXTRAS_ROOT:-}/root"
+cp -r "$TASK_ENV/randomize_filenames.py" "${EXTRAS_ROOT:-}/root"
+mkdir -p "${EXTRAS_ROOT:-}/tmp/original_documents/"
+cp -r "$TASK_ENV/documents/" "${EXTRAS_ROOT:-}/tmp/original_documents/"
 # (no pip packages)
 # ── unclassified RUN directives (emitted verbatim) ─────────────────────────
 # RAW: uv run /root/randomize_filenames.py

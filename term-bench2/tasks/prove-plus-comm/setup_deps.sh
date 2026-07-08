@@ -5,15 +5,18 @@
 #
 # Sets up the task workspace at $WORKDIR (default: /app).
 # TB_ROOT points at the terminal-bench-2 checkout.
+# EXTRAS_ROOT: redirect out-of-/app copy destinations (e.g. /protected →
+#   $EXTRAS_ROOT/protected). Set by runner to ~/bench/extras/<task>.
 #
 # Usage:
-#   [TB_ROOT=~/z2/terminal-bench-2] [WORKDIR=/app] bash setup_deps.sh
+#   [TB_ROOT=~/z2/terminal-bench-2] [WORKDIR=/app] [EXTRAS_ROOT=] bash setup_deps.sh
 
 set -euo pipefail
 
 TB_ROOT="${TB_ROOT:-$HOME/z2/terminal-bench-2}"
 TASK_ENV="$TB_ROOT/prove-plus-comm/environment"
 WORKDIR="${WORKDIR:-/app}"
+EXTRAS_ROOT="${EXTRAS_ROOT:-}"
 
 # ── source common base tooling ──────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,8 +38,8 @@ if [[ -z "${SKIP_APT:-}" ]]; then
   sudo rm -rf /var/lib/apt/lists/*
 fi
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "/workspace/plus_comm.v"
-cp -r "$TASK_ENV/partial_proof.v" "/workspace/plus_comm.v"
+mkdir -p "${EXTRAS_ROOT:-}/workspace/plus_comm.v"
+cp -r "$TASK_ENV/partial_proof.v" "${EXTRAS_ROOT:-}/workspace/plus_comm.v"
 # (no pip packages)
 # (no unclassified RUN directives)
 echo "[setup_deps] prove-plus-comm ready — workspace: $WORKDIR"

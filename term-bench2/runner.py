@@ -383,22 +383,32 @@ def task_extra_mounts(task: str) -> dict[str, Path]:
 
 
 def setup_task(task: str, tb_root: Path) -> None:
-    """Run setup_deps.sh with SKIP_APT=1 and WORKDIR=/app (inside namespace)."""
+    """Run setup_deps.sh directly (no bwrap) with WORKDIR=~/bench/app.
+
+    setup_deps.sh uses $WORKDIR throughout, so pointing it at REAL_APP means
+    all files land in ~/bench/app without needing /app to exist.
+    bwrap's no_new_privileges would block sudo inside the sandbox anyway,
+    and SKIP_APT=1 skips all apt calls so sudo is not needed here.
+    Extra task paths (e.g. /protected) are written to ~/bench/extras/<task>/
+    by translating the hardcoded destination paths via the COPY section.
+    """
     setup_script = TASKS_DIR / task / "setup_deps.sh"
     if not setup_script.exists():
         die(f"No setup_deps.sh for task {task!r} — did you run gen_setup_deps.py?")
-    env = {
-        "TB_ROOT": str(tb_root),
-        "WORKDIR": str(HOST_APP),   # /app as seen inside namespace
-        "SKIP_APT": "1",
-    }
-    # Create real dirs for any extra namespace mounts this task needs
+
+    # Pre-create real backing dirs for extra mount paths
     for ns_path, real_path in task_extra_mounts(task).items():
         real_path.mkdir(parents=True, exist_ok=True)
 
+    extras_root = BENCH_PREFIX / "extras" / task
+    env = {
+        "TB_ROOT": str(tb_root),
+        "WORKDIR": str(REAL_APP),        # direct real path — no namespace needed
+        "EXTRAS_ROOT": str(extras_root), # redirect /protected etc → ~/bench/extras/<task>
+        "SKIP_APT": "1",
+    }
     log(f"  setup_deps.sh ({task})...")
-    run_cmd(["bash", str(setup_script)], env=env, ns=True,
-            extra_mounts=task_extra_mounts(task))
+    run_cmd(["bash", str(setup_script)], env=env, ns=False)
 
 
 # ── OpenCode invocation ────────────────────────────────────────────────────

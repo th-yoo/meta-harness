@@ -301,15 +301,18 @@ SETUP_DEPS_TEMPLATE = """\
 #
 # Sets up the task workspace at $WORKDIR (default: /app).
 # TB_ROOT points at the terminal-bench-2 checkout.
+# EXTRAS_ROOT: redirect out-of-/app copy destinations (e.g. /protected →
+#   $EXTRAS_ROOT/protected). Set by runner to ~/bench/extras/<task>.
 #
 # Usage:
-#   [TB_ROOT=~/z2/terminal-bench-2] [WORKDIR=/app] bash setup_deps.sh
+#   [TB_ROOT=~/z2/terminal-bench-2] [WORKDIR=/app] [EXTRAS_ROOT=] bash setup_deps.sh
 
 set -euo pipefail
 
 TB_ROOT="${{TB_ROOT:-$HOME/z2/terminal-bench-2}}"
 TASK_ENV="$TB_ROOT/{task}/environment"
 WORKDIR="${{WORKDIR:-/app}}"
+EXTRAS_ROOT="${{EXTRAS_ROOT:-}}"
 
 # ── source common base tooling ──────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
@@ -360,15 +363,16 @@ def make_copy_section(copies: list[tuple[str, str]], task: str) -> str:
     lines = ["# ── copy task assets ───────────────────────────────────────────────────────"]
     for src, dst in copies:
         # Normalize destination:
-        # ./  or  .  → $WORKDIR
-        # /app/… → $WORKDIR/…
-        # /other/… → keep as-is
+        # ./  or  .      → $WORKDIR/
+        # /app/…         → $WORKDIR/…
+        # /other/…       → $EXTRAS_ROOT/other/… if EXTRAS_ROOT set, else /other/…
         if dst in ("./", "."):
             dst_sh = "$WORKDIR/"
         elif dst.startswith("/app"):
             dst_sh = dst.replace("/app", "$WORKDIR", 1)
         else:
-            dst_sh = dst
+            # Out-of-/app path: redirect via EXTRAS_ROOT when set
+            dst_sh = f'${{EXTRAS_ROOT:-}}{dst}' if dst.startswith("/") else dst
         lines.append(f'mkdir -p "{dst_sh}"')
         lines.append(f'cp -r "$TASK_ENV/{src}" "{dst_sh}"')
     return "\n".join(lines)
@@ -458,9 +462,13 @@ BASE_PACKAGES=(
 )
 
 echo "[setup_base] Checking / installing common tooling..."
-sudo apt-get update -qq
-sudo apt-get install -y --no-install-recommends "${BASE_PACKAGES[@]}"
-sudo rm -rf /var/lib/apt/lists/*
+if [[ -z "${SKIP_APT:-}" ]]; then
+  sudo apt-get update -qq
+  sudo apt-get install -y --no-install-recommends "${BASE_PACKAGES[@]}"
+  sudo rm -rf /var/lib/apt/lists/*
+else
+  echo "[setup_base] SKIP_APT=1 — skipping apt (packages assumed pre-installed)"
+fi
 
 # Ensure uv is available
 if ! command -v uv >/dev/null 2>&1; then

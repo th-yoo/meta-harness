@@ -20,9 +20,13 @@ BASE_PACKAGES=(
 )
 
 echo "[setup_base] Checking / installing common tooling..."
-sudo apt-get update -qq
-sudo apt-get install -y --no-install-recommends "${BASE_PACKAGES[@]}"
-sudo rm -rf /var/lib/apt/lists/*
+if [[ -z "${SKIP_APT:-}" ]]; then
+  sudo apt-get update -qq
+  sudo apt-get install -y --no-install-recommends "${BASE_PACKAGES[@]}"
+  sudo rm -rf /var/lib/apt/lists/*
+else
+  echo "[setup_base] SKIP_APT=1 — skipping apt (packages assumed pre-installed)"
+fi
 
 # Ensure uv is available
 if ! command -v uv >/dev/null 2>&1; then

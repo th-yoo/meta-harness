@@ -5,15 +5,18 @@
 #
 # Sets up the task workspace at $WORKDIR (default: /app).
 # TB_ROOT points at the terminal-bench-2 checkout.
+# EXTRAS_ROOT: redirect out-of-/app copy destinations (e.g. /protected →
+#   $EXTRAS_ROOT/protected). Set by runner to ~/bench/extras/<task>.
 #
 # Usage:
-#   [TB_ROOT=~/z2/terminal-bench-2] [WORKDIR=/app] bash setup_deps.sh
+#   [TB_ROOT=~/z2/terminal-bench-2] [WORKDIR=/app] [EXTRAS_ROOT=] bash setup_deps.sh
 
 set -euo pipefail
 
 TB_ROOT="${TB_ROOT:-$HOME/z2/terminal-bench-2}"
 TASK_ENV="$TB_ROOT/multi-source-data-merger/environment"
 WORKDIR="${WORKDIR:-/app}"
+EXTRAS_ROOT="${EXTRAS_ROOT:-}"
 
 # ── source common base tooling ──────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,8 +39,8 @@ if [[ -z "${SKIP_APT:-}" ]]; then
   sudo rm -rf /var/lib/apt/lists/*
 fi
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "/data"
-cp -r "$TASK_ENV/data" "/data"
+mkdir -p "${EXTRAS_ROOT:-}/data"
+cp -r "$TASK_ENV/data" "${EXTRAS_ROOT:-}/data"
 # ── per-task Python packages (isolated venv via uv) ─────────────────────────
 command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
 uv venv --python python3 "$WORKDIR/.venv" 2>/dev/null || true
