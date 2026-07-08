@@ -46,6 +46,8 @@ export interface SessionRecord {
   timestamp: string
   /** first ~500 chars of last assistant message, for proposer diagnosis */
   summary: string
+  /** LLM model used, e.g. "anthropic/claude-sonnet-4-6" */
+  model: string
 }
 
 export interface CandidateScore {
@@ -186,7 +188,7 @@ export function buildProposerContext(worktree: string): string {
       : "no sessions yet"
 
     const traceLines = score.sessions.map((s) =>
-      `  - ${s.sessionID} | ${s.passed ? "PASS" : "FAIL"} | turns=${s.turnCount}${s.note ? ` | note="${s.note}"` : ""}\n    summary: ${s.summary.slice(0, 200)}`,
+      `  - ${s.sessionID} | ${s.passed ? "PASS" : "FAIL"} | model=${s.model || "unknown"} | turns=${s.turnCount}${s.note ? ` | note="${s.note}"` : ""}\n    summary: ${s.summary.slice(0, 200)}`,
     ).join("\n")
 
     sections.push(

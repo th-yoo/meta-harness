@@ -26,6 +26,7 @@ import {
   writeActive,
   candidatePath,
 } from "./harness-store.ts"
+import { proposerSessions } from "./session-state.ts"
 
 type Client = PluginInput["client"]
 
@@ -74,6 +75,10 @@ export async function triggerPropose(
     return
   }
 
+  // Register before sending the prompt so the chat.message + event hooks
+  // can exclude it from scoring and injection immediately.
+  proposerSessions.add(sessionID)
+
   // Send the prompt — proposer will use bash to write files
   await client.session.prompt({
     path: { id: sessionID },
@@ -83,6 +88,8 @@ export async function triggerPropose(
   // Poll for the new system.md (proposer writes it via bash)
   const targetFile = candidatePath(worktree, version, "system.md")
   const activated = await waitForFile(targetFile, 10 * 60 * 1000)
+
+  proposerSessions.delete(sessionID)
 
   if (activated) {
     // Read the file the proposer wrote and register it properly
