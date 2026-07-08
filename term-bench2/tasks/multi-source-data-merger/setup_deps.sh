@@ -40,7 +40,7 @@ if [[ -z "${SKIP_APT:-}" ]]; then
 fi
 # ── copy task assets ───────────────────────────────────────────────────────
 mkdir -p "${EXTRAS_ROOT:-}/data"
-cp -r "$TASK_ENV/data" "${EXTRAS_ROOT:-}/data"
+cp -r "$TASK_ENV/data/." "${EXTRAS_ROOT:-}/data"
 # ── per-task Python packages (isolated venv via uv) ─────────────────────────
 command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
 uv venv --python python3 "$WORKDIR/.venv" 2>/dev/null || true

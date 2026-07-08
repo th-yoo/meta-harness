@@ -38,11 +38,11 @@ if [[ -z "${SKIP_APT:-}" ]]; then
   sudo rm -rf /var/lib/apt/lists/*
 fi
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "$WORKDIR/"
+mkdir -p "$(dirname "$WORKDIR/")"
 cp -r "$TASK_ENV/tests/main.tex" "$WORKDIR/"
-mkdir -p "$WORKDIR/"
+mkdir -p "$(dirname "$WORKDIR/")"
 cp -r "$TASK_ENV/tests/input.tex" "$WORKDIR/"
-mkdir -p "$WORKDIR/"
+mkdir -p "$(dirname "$WORKDIR/")"
 cp -r "$TASK_ENV/tests/synonyms.txt" "$WORKDIR/"
 # (no pip packages)
 cd "$WORKDIR"

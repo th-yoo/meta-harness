@@ -41,7 +41,7 @@ fi
 mkdir -p "$WORKDIR/"
 cp -r "$TASK_ENV/setup.sh" "$WORKDIR/"
 mkdir -p "$WORKDIR/resources"
-cp -r "$TASK_ENV/resources" "$WORKDIR/resources"
+cp -r "$TASK_ENV/resources/." "$WORKDIR/resources"
 # (no pip packages)
 cd "$WORKDIR"
 # ── unclassified RUN directives ────────────────────────────────────────────

@@ -31,7 +31,7 @@ mkdir -p "$WORKDIR"
 # (no ENV directives)
 # (no additional apt packages)
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "$WORKDIR/"
+mkdir -p "$(dirname "$WORKDIR/")"
 cp -r "$TASK_ENV/sequences.fasta" "$WORKDIR/"
 # (no pip packages)
 cd "$WORKDIR"

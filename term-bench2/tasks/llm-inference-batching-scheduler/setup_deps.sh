@@ -32,7 +32,7 @@ mkdir -p "$WORKDIR"
 # (no additional apt packages)
 # ── copy task assets ───────────────────────────────────────────────────────
 mkdir -p "$WORKDIR/task_file"
-cp -r "$TASK_ENV/./task_file" "$WORKDIR/task_file"
+cp -r "$TASK_ENV/./task_file/." "$WORKDIR/task_file"
 # (no pip packages)
 cd "$WORKDIR"
 # (no unclassified RUN directives)

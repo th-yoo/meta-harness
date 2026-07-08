@@ -48,6 +48,21 @@ BENCH_PREFIX = Path.home() / "bench"
 REAL_APP   = BENCH_PREFIX / "app"
 REAL_TESTS = BENCH_PREFIX / "tests"
 REAL_LOGS  = BENCH_PREFIX / "logs" / "verifier"
+# Shim bin dir prepended to PATH: provides `python` → python3 (TB2 tasks
+# assume `python` exists, but Ubuntu 24.04 only ships python3).
+BENCH_BIN  = BENCH_PREFIX / "bin"
+
+
+def ensure_bench_bin() -> None:
+    """Create ~/bench/bin/python → python3 symlink (idempotent)."""
+    BENCH_BIN.mkdir(parents=True, exist_ok=True)
+    py = BENCH_BIN / "python"
+    if not py.exists():
+        py3 = shutil.which("python3") or "/usr/bin/python3"
+        try:
+            py.symlink_to(py3)
+        except FileExistsError:
+            pass
 
 # These are the paths as seen *inside* the namespace (what scripts expect)
 HOST_APP  = Path("/app")
@@ -115,7 +130,13 @@ def run_cmd(
     When ns=True, chdir sets the working directory *inside* the sandbox
     (default /app). cwd is only used when ns=False.
     """
-    merged_env = {**os.environ, **(env or {})}
+    # PIP_BREAK_SYSTEM_PACKAGES mirrors the TB2 container where pip runs as
+    # root without PEP-668 restrictions. Without it, solve.sh `pip install`
+    # calls fail with 'externally-managed-environment'.
+    merged_env = {"PIP_BREAK_SYSTEM_PACKAGES": "1", **os.environ, **(env or {})}
+    # Prepend the shim bin (python → python3) to PATH.
+    ensure_bench_bin()
+    merged_env["PATH"] = f"{BENCH_BIN}:{merged_env.get('PATH', '')}"
     actual_cmd = ns_wrap(cmd, extra_mounts, chdir=chdir) if ns else cmd
     return subprocess.run(
         actual_cmd,

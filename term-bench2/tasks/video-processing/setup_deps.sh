@@ -38,7 +38,7 @@ if [[ -z "${SKIP_APT:-}" ]]; then
   sudo rm -rf /var/lib/apt/lists/*
 fi
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "$WORKDIR/example_video.mp4"
+mkdir -p "$(dirname "$WORKDIR/example_video.mp4")"
 cp -r "$TASK_ENV/example_video.mp4" "$WORKDIR/example_video.mp4"
 # ── per-task Python packages (isolated venv via uv) ─────────────────────────
 command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh

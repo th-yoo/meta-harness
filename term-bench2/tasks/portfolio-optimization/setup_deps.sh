@@ -38,15 +38,15 @@ if [[ -z "${SKIP_APT:-}" ]]; then
   sudo rm -rf /var/lib/apt/lists/*
 fi
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "$WORKDIR/benchmark.py"
+mkdir -p "$(dirname "$WORKDIR/benchmark.py")"
 cp -r "$TASK_ENV/benchmark.py" "$WORKDIR/benchmark.py"
-mkdir -p "$WORKDIR/portfolio_baseline.py"
+mkdir -p "$(dirname "$WORKDIR/portfolio_baseline.py")"
 cp -r "$TASK_ENV/portfolio_baseline.py" "$WORKDIR/portfolio_baseline.py"
-mkdir -p "$WORKDIR/portfolio_optimized.c"
+mkdir -p "$(dirname "$WORKDIR/portfolio_optimized.c")"
 cp -r "$TASK_ENV/portfolio_optimized.c" "$WORKDIR/portfolio_optimized.c"
-mkdir -p "$WORKDIR/portfolio_optimized.py"
+mkdir -p "$(dirname "$WORKDIR/portfolio_optimized.py")"
 cp -r "$TASK_ENV/portfolio_optimized.py" "$WORKDIR/portfolio_optimized.py"
-mkdir -p "$WORKDIR/setup.py"
+mkdir -p "$(dirname "$WORKDIR/setup.py")"
 cp -r "$TASK_ENV/setup.py" "$WORKDIR/setup.py"
 # (no pip packages)
 cd "$WORKDIR"

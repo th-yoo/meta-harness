@@ -365,26 +365,58 @@ def make_apt_section(packages: list[str]) -> str:
         fi""")
 
 
-def make_copy_section(copies: list[tuple[str, str]], task: str) -> str:
+# Destination paths that are always directories (COPY file <dir> puts file inside).
+_KNOWN_DIR_DESTS = {
+    "/app", "/tests", "/logs", "/root", "/etc", "/tmp", "/var", "/opt",
+    "/srv", "/data", "/protected", "/workspace", "/usr", "/bin", "/home", "/mnt",
+}
+
+
+def make_copy_section(copies: list[tuple[str, str]], task: str, tb_root: Path) -> str:
     if not copies:
         return "# (no COPY directives)"
     lines = ["# ── copy task assets ───────────────────────────────────────────────────────"]
+    env_dir = tb_root / task / "environment"
     for src, dst in copies:
-        # Normalize destination:
-        # ./  or  .      → $WORKDIR/
-        # /app/…         → $WORKDIR/…
-        # /other/…       → $EXTRAS_ROOT/other/… if EXTRAS_ROOT set, else /other/…
-        if dst in ("./", "."):
-            dst_sh = "$WORKDIR/"
-        elif dst.startswith("/app"):
-            dst_sh = dst.replace("/app", "$WORKDIR", 1)
+        # Determine whether the SOURCE is a file or directory (checked on disk).
+        src_path = env_dir / src.rstrip("/")
+        src_is_dir = src_path.is_dir()
+
+        # Translate destination prefix:
+        #   ./ or .   → $WORKDIR/
+        #   /app/…    → $WORKDIR/…
+        #   /other/…  → ${EXTRAS_ROOT:-}/other/…
+        def xlate(d: str) -> str:
+            if d in ("./", "."):
+                return "$WORKDIR/"
+            if d.startswith("/app"):
+                return d.replace("/app", "$WORKDIR", 1)
+            if d.startswith("/"):
+                return f'${{EXTRAS_ROOT:-}}{d}'
+            return d
+
+        dst_sh = xlate(dst)
+
+        # Directory target if: dst ends with /, dst is a known dir path,
+        # or the source is a directory.
+        dir_target = (
+            dst.endswith("/")
+            or dst.rstrip("/") in _KNOWN_DIR_DESTS
+            or src_is_dir
+        )
+
+        if dir_target:
+            lines.append(f'mkdir -p "{dst_sh}"')
+            if src_is_dir:
+                # Copy CONTENTS of the source directory into dst
+                lines.append(f'cp -r "$TASK_ENV/{src.rstrip(chr(47))}/." "{dst_sh}"')
+            else:
+                # Copy the file INTO the destination directory
+                lines.append(f'cp -r "$TASK_ENV/{src}" "{dst_sh}"')
         else:
-            # Out-of-/app path: redirect via EXTRAS_ROOT when set
-            dst_sh = f'${{EXTRAS_ROOT:-}}{dst}' if dst.startswith("/") else dst
-        lines.append(f'mkdir -p "{dst_sh}"')
-        # Docker COPY dir/ dst/ copies contents; cp -r needs trailing /. to match
-        src_arg = f'"$TASK_ENV/{src}."' if src.endswith("/") else f'"$TASK_ENV/{src}"'
-        lines.append(f'cp -r {src_arg} "{dst_sh}"')
+            # file → file: mkdir the parent, copy file to the exact path
+            lines.append(f'mkdir -p "$(dirname "{dst_sh}")"')
+            lines.append(f'cp -r "$TASK_ENV/{src}" "{dst_sh}"')
     return "\n".join(lines)
 
 
@@ -457,13 +489,13 @@ def make_raw_section(raw_runs: list[str]) -> str:
     return "\n".join(lines)
 
 
-def generate_setup_script(task: str, parsed: dict) -> str:
+def generate_setup_script(task: str, parsed: dict, tb_root: Path) -> str:
     return SETUP_DEPS_TEMPLATE.format(
         task=task,
         base_image=parsed["base_image"],
         env_section=make_env_section(parsed["envs"]),
         apt_section=make_apt_section(parsed["apt_packages"]),
-        copy_section=make_copy_section(parsed["copies"], task),
+        copy_section=make_copy_section(parsed["copies"], task, tb_root),
         pip_section=make_pip_section(parsed["pip_packages"], task, parsed["has_uv_copy"]),
         raw_section=make_raw_section(parsed["raw_runs"]),
     )
@@ -653,7 +685,7 @@ def main() -> None:
         # Write per-task setup_deps.sh
         task_out = out_root / "tasks" / task
         task_out.mkdir(parents=True, exist_ok=True)
-        script = generate_setup_script(task, parsed)
+        script = generate_setup_script(task, parsed, tb_root)
         script_path = task_out / "setup_deps.sh"
         script_path.write_text(script)
         script_path.chmod(script_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)

@@ -31,7 +31,7 @@ mkdir -p "$WORKDIR"
 # (no ENV directives)
 # (no additional apt packages)
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "${EXTRAS_ROOT:-}/protected/protected.tar.gz.enc"
+mkdir -p "$(dirname "${EXTRAS_ROOT:-}/protected/protected.tar.gz.enc")"
 cp -r "$TASK_ENV/protected.tar.gz.enc" "${EXTRAS_ROOT:-}/protected/protected.tar.gz.enc"
 # (no pip packages)
 cd "$WORKDIR"

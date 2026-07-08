@@ -38,7 +38,7 @@ if [[ -z "${SKIP_APT:-}" ]]; then
   sudo rm -rf /var/lib/apt/lists/*
 fi
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "$WORKDIR/eval.py"
+mkdir -p "$(dirname "$WORKDIR/eval.py")"
 cp -r "$TASK_ENV/src/eval.py" "$WORKDIR/eval.py"
 # (no pip packages)
 cd "$WORKDIR"

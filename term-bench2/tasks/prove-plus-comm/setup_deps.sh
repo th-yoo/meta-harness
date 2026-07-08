@@ -38,7 +38,7 @@ if [[ -z "${SKIP_APT:-}" ]]; then
   sudo rm -rf /var/lib/apt/lists/*
 fi
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "${EXTRAS_ROOT:-}/workspace/plus_comm.v"
+mkdir -p "$(dirname "${EXTRAS_ROOT:-}/workspace/plus_comm.v")"
 cp -r "$TASK_ENV/partial_proof.v" "${EXTRAS_ROOT:-}/workspace/plus_comm.v"
 # (no pip packages)
 cd "$WORKDIR"

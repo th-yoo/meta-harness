@@ -38,7 +38,7 @@ if [[ -z "${SKIP_APT:-}" ]]; then
   sudo rm -rf /var/lib/apt/lists/*
 fi
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "$WORKDIR/challenge-setup.sh"
+mkdir -p "$(dirname "$WORKDIR/challenge-setup.sh")"
 cp -r "$TASK_ENV/challenge-setup.sh" "$WORKDIR/challenge-setup.sh"
 # (no pip packages)
 cd "$WORKDIR"

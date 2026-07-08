@@ -31,11 +31,11 @@ mkdir -p "$WORKDIR"
 # (no ENV directives)
 # (no additional apt packages)
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "$WORKDIR/"
+mkdir -p "$(dirname "$WORKDIR/")"
 cp -r "$TASK_ENV/antibody.fasta" "$WORKDIR/"
-mkdir -p "$WORKDIR/"
+mkdir -p "$(dirname "$WORKDIR/")"
 cp -r "$TASK_ENV/plasmid.gb" "$WORKDIR/"
-mkdir -p "$WORKDIR/"
+mkdir -p "$(dirname "$WORKDIR/")"
 cp -r "$TASK_ENV/pdb_ids.txt" "$WORKDIR/"
 # (no pip packages)
 cd "$WORKDIR"

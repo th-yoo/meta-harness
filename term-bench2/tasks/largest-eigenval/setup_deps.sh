@@ -31,9 +31,9 @@ mkdir -p "$WORKDIR"
 # (no ENV directives)
 # (no additional apt packages)
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "$WORKDIR/eigen.py"
+mkdir -p "$(dirname "$WORKDIR/eigen.py")"
 cp -r "$TASK_ENV/src/eigen.py" "$WORKDIR/eigen.py"
-mkdir -p "$WORKDIR/eval.py"
+mkdir -p "$(dirname "$WORKDIR/eval.py")"
 cp -r "$TASK_ENV/src/eval.py" "$WORKDIR/eval.py"
 # ── per-task Python packages (isolated venv via uv) ─────────────────────────
 command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh

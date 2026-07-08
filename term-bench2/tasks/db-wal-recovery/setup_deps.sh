@@ -38,9 +38,9 @@ if [[ -z "${SKIP_APT:-}" ]]; then
   sudo rm -rf /var/lib/apt/lists/*
 fi
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "$WORKDIR/main.db"
+mkdir -p "$(dirname "$WORKDIR/main.db")"
 cp -r "$TASK_ENV/main.db" "$WORKDIR/main.db"
-mkdir -p "$WORKDIR/main.db-wal"
+mkdir -p "$(dirname "$WORKDIR/main.db-wal")"
 cp -r "$TASK_ENV/main.db-wal.encrypted" "$WORKDIR/main.db-wal"
 # (no pip packages)
 cd "$WORKDIR"

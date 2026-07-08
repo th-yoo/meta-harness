@@ -31,9 +31,9 @@ mkdir -p "$WORKDIR"
 # (no ENV directives)
 # (no additional apt packages)
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "$WORKDIR/eval.py"
+mkdir -p "$(dirname "$WORKDIR/eval.py")"
 cp -r "$TASK_ENV/src/eval.py" "$WORKDIR/eval.py"
-mkdir -p "$WORKDIR/model_ref.xml"
+mkdir -p "$(dirname "$WORKDIR/model_ref.xml")"
 cp -r "$TASK_ENV/src/model_ref.xml" "$WORKDIR/model_ref.xml"
 # (no pip packages)
 cd "$WORKDIR"

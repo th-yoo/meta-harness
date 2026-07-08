@@ -38,7 +38,7 @@ if [[ -z "${SKIP_APT:-}" ]]; then
   sudo rm -rf /var/lib/apt/lists/*
 fi
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "${EXTRAS_ROOT:-}/etc/nginx/sites-available/default"
+mkdir -p "$(dirname "${EXTRAS_ROOT:-}/etc/nginx/sites-available/default")"
 cp -r "$TASK_ENV/default.conf" "${EXTRAS_ROOT:-}/etc/nginx/sites-available/default"
 # (no pip packages)
 cd "$WORKDIR"

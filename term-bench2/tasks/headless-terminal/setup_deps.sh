@@ -38,7 +38,7 @@ if [[ -z "${SKIP_APT:-}" ]]; then
   sudo rm -rf /var/lib/apt/lists/*
 fi
 # ── copy task assets ───────────────────────────────────────────────────────
-mkdir -p "$WORKDIR/base_terminal.py"
+mkdir -p "$(dirname "$WORKDIR/base_terminal.py")"
 cp -r "$TASK_ENV/base_terminal.py" "$WORKDIR/base_terminal.py"
 # (no pip packages)
 cd "$WORKDIR"
