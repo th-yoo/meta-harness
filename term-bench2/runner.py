@@ -131,10 +131,19 @@ def read_reward() -> int:
 
 
 def clean_dir(d: Path) -> None:
-    """Remove and recreate a directory."""
+    """Remove and recreate a directory, using sudo if needed."""
     if d.exists():
-        shutil.rmtree(d)
-    d.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.rmtree(d)
+        except PermissionError:
+            subprocess.run(["sudo", "rm", "-rf", str(d)], check=True)
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        user = os.environ.get("USER", os.environ.get("LOGNAME", ""))
+        subprocess.run(["sudo", "mkdir", "-p", str(d)], check=True)
+        if user:
+            subprocess.run(["sudo", "chown", user, str(d)], check=True)
 
 
 # ── prep command ───────────────────────────────────────────────────────────
