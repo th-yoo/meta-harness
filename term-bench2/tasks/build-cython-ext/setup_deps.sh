@@ -31,7 +31,7 @@ mkdir -p "$WORKDIR"
 if [[ -z "${SKIP_APT:-}" ]]; then
   sudo apt-get update -qq
   sudo apt-get install -y --no-install-recommends \
-    build-essential git libgl1-mesa-glx
+    build-essential git libgl1
   sudo rm -rf /var/lib/apt/lists/*
 fi
 # (no COPY directives)

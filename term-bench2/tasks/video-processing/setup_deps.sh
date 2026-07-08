@@ -31,7 +31,7 @@ mkdir -p "$WORKDIR"
 if [[ -z "${SKIP_APT:-}" ]]; then
   sudo apt-get update -qq
   sudo apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx libglib2.0-0 libgomp1 libsm6 libxext6 libxrender-dev
+    libgl1 libglib2.0-0t64 libgomp1 libsm6 libxext6 libxrender-dev
   sudo rm -rf /var/lib/apt/lists/*
 fi
 # ── copy task assets ───────────────────────────────────────────────────────

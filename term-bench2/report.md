@@ -65,8 +65,6 @@ Generated for 22 unhandled RUN lines across 59 tasks.
   extundelete
   ffmpeg
   foremost
-  libgl1-mesa-glx
-  libglib2.0-0
   mailman3
   mailutils
   nginx
@@ -91,6 +89,8 @@ Generated for 22 unhandled RUN lines across 59 tasks.
   gcc
   git
   less
+  libgl1
+  libglib2.0-0t64
   libgomp1
   libjpeg-dev
   libsm6
@@ -119,8 +119,6 @@ sudo apt-get install -y \
   extundelete  \
   ffmpeg  \
   foremost  \
-  libgl1-mesa-glx  \
-  libglib2.0-0  \
   mailman3  \
   mailutils  \
   nginx  \

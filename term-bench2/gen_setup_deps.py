@@ -89,6 +89,12 @@ SKIP_APT_PACKAGES = {
     "sudo",               # already available
 }
 
+# Ubuntu 24.04 package renames: map old name → new name
+APT_RENAME = {
+    "libgl1-mesa-glx": "libgl1",       # renamed in 24.04
+    "libglib2.0-0":    "libglib2.0-0t64",  # renamed in 24.04
+}
+
 # ── Dockerfile parser ────────────────────────────────────────────────────────
 
 def read_dockerfile(path: Path) -> list[str]:
@@ -152,12 +158,14 @@ def extract_apt_packages(run_body: str) -> list[str]:
             in_install = False
             continue
         if in_install:
-            # Strip version pin (e.g. asciinema=3:2023.20240207-1)
-            pkg = re.split(r"[=<>]", token)[0]
-            if pkg and pkg not in APT_NOISE and pkg not in SKIP_APT_PACKAGES:
-                # Validate it looks like a package name
-                if re.match(r'^[a-z0-9][a-z0-9.+\-]+$', pkg):
-                    packages.append(pkg)
+                # Strip version pin (e.g. asciinema=3:2023.20240207-1)
+                pkg = re.split(r"[=<>]", token)[0]
+                if pkg and pkg not in APT_NOISE and pkg not in SKIP_APT_PACKAGES:
+                    # Validate it looks like a package name
+                    if re.match(r'^[a-z0-9][a-z0-9.+\-]+$', pkg):
+                        # Apply Ubuntu 24.04 renames
+                        pkg = APT_RENAME.get(pkg, pkg)
+                        packages.append(pkg)
     return packages
 
 

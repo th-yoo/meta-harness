@@ -22,7 +22,7 @@
     "apt": [
       "build-essential",
       "git",
-      "libgl1-mesa-glx"
+      "libgl1"
     ],
     "test_apt": [],
     "pip": [
@@ -1151,8 +1151,8 @@
   "video-processing": {
     "base_image": "python:3.13-slim-bookworm",
     "apt": [
-      "libgl1-mesa-glx",
-      "libglib2.0-0",
+      "libgl1",
+      "libglib2.0-0t64",
       "libgomp1",
       "libsm6",
       "libxext6",
