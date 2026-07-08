@@ -190,6 +190,18 @@ def ns_wrap(cmd: list[str], extra_mounts: Optional[dict[str, Path]] = None) -> l
     ]
     for ns_path, real_path in (extra_mounts or {}).items():
         real_path.mkdir(parents=True, exist_ok=True)
+        # Ensure host-side mount point exists (bwrap --bind / / requires it)
+        host_mp = Path(ns_path)
+        if not host_mp.exists():
+            subprocess.run(
+                ["sudo", "mkdir", "-p", str(host_mp)], check=True
+            )
+            subprocess.run(
+                ["sudo", "chown",
+                 os.environ.get("USER", os.environ.get("LOGNAME", "")),
+                 str(host_mp)],
+                check=True,
+            )
         bwrap_args += ["--bind", str(real_path), ns_path]
 
     bwrap_args += ["--"] + cmd
@@ -268,13 +280,20 @@ def cmd_prep(args: argparse.Namespace) -> None:
 
         # Create empty placeholder dirs for bwrap mount points (sudo once, stay empty)
         # bwrap binds ~/bench/* over these — nothing is ever written to them directly.
+        # Includes task-specific extra paths: /data, /protected, /workspace.
+        BWRAP_MOUNT_POINTS = [
+            "/app", "/tests", "/logs/verifier",
+            "/data", "/protected", "/workspace",
+        ]
         subprocess.run(
-            ["sudo", "mkdir", "-p", "/app", "/tests", "/logs/verifier"], check=True
+            ["sudo", "mkdir", "-p"] + BWRAP_MOUNT_POINTS, check=True
         )
         subprocess.run(
-            ["sudo", "chown", user, "/app", "/tests", "/logs"], check=True
+            ["sudo", "chown", user, "/app", "/tests", "/logs",
+             "/data", "/protected", "/workspace"],
+            check=True,
         )
-        log("  Created empty bwrap mount-point placeholders: /app /tests /logs")
+        log("  Created bwrap mount-point placeholders: " + " ".join(BWRAP_MOUNT_POINTS))
 
         # apt — noninteractive to avoid debconf prompts (postfix, mailman3, etc.)
         if apt_pkgs:
