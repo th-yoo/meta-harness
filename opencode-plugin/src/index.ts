@@ -64,8 +64,11 @@ const snapshotCache = new Map<string, string>()
 /** Whether the snapshot has been injected into the system prompt yet. */
 const snapshotInjected = new Set<string>()
 
-/** LLM model observed per session (captured in system.transform). */
+/** LLM model observed per session (captured from build agent in chat.message). */
 const sessionModel = new Map<string, string>()
+
+/** Thinking/reasoning variant per session, e.g. "high", "xhigh", "" for none. */
+const sessionVariant = new Map<string, string>()
 
 /** Turn counter per session (incremented in experimental.text.complete). */
 const sessionTurns = new Map<string, number>()
@@ -86,6 +89,7 @@ function cleanupSession(sessionID: string): void {
   snapshotCache.delete(sessionID)
   snapshotInjected.delete(sessionID)
   sessionModel.delete(sessionID)
+  sessionVariant.delete(sessionID)
   sessionTurns.delete(sessionID)
   sessionSummary.delete(sessionID)
 }
@@ -107,15 +111,16 @@ const metaHarness: Plugin = async (input) => {
       // Skip proposer's own sessions
       if (proposerSessions.has(sessionID)) return
 
-      // H2: capture model from the build agent (primary agent, not title/compaction)
-      // chat.message has agent + model; prefer this over system.transform which
-      // fires for all agents (including title agent which uses a small model).
+      // H2: capture model + variant from the build agent (not title/compaction)
+      // chat.message has agent, model, and variant (thinking mode).
       const agent = msgInput.agent ?? ""
       const isMainAgent = agent === "build" || agent === "plan" || agent === ""
       if (isMainAgent && msgInput.model && !sessionModel.has(sessionID)) {
         const model = `${msgInput.model.providerID}/${msgInput.model.modelID}`
+        const variant = msgInput.variant ?? ""
         sessionModel.set(sessionID, model)
-        await log(client, "debug", `[hook:chat.message] captured model=${model} agent=${agent} sessionID=${sessionID}`)
+        sessionVariant.set(sessionID, variant)
+        await log(client, "debug", `[hook:chat.message] captured model=${model} variant=${variant || "none"} agent=${agent} sessionID=${sessionID}`)
       }
 
       if (bootstrappedSessions.has(sessionID)) return
@@ -208,7 +213,8 @@ const metaHarness: Plugin = async (input) => {
         turnCount: sessionTurns.get(sessionID) ?? 0,
         timestamp: new Date().toISOString(),
         summary: sessionSummary.get(sessionID) ?? "",
-        model: sessionModel.get(sessionID) ?? "unknown",  // H2
+        model: sessionModel.get(sessionID) ?? "unknown",
+        variant: sessionVariant.get(sessionID) ?? "",
       }
 
       const score = recordSession(worktree, version, record)

@@ -48,6 +48,8 @@ export interface SessionRecord {
   summary: string
   /** LLM model used, e.g. "anthropic/claude-sonnet-4-6" */
   model: string
+  /** Thinking/reasoning variant, e.g. "low", "medium", "high", "xhigh", "max", or "" for none */
+  variant: string
 }
 
 export interface CandidateScore {
@@ -187,9 +189,10 @@ export function buildProposerContext(worktree: string): string {
       ? `${score.nPass}/${score.sessions.length} passed (${(score.nPass / score.sessions.length * 100).toFixed(0)}%)`
       : "no sessions yet"
 
-    const traceLines = score.sessions.map((s) =>
-      `  - ${s.sessionID} | ${s.passed ? "PASS" : "FAIL"} | model=${s.model || "unknown"} | turns=${s.turnCount}${s.note ? ` | note="${s.note}"` : ""}\n    summary: ${s.summary.slice(0, 200)}`,
-    ).join("\n")
+    const traceLines = score.sessions.map((s) => {
+      const modelStr = s.variant ? `${s.model || "unknown"}+${s.variant}` : (s.model || "unknown")
+      return `  - ${s.sessionID} | ${s.passed ? "PASS" : "FAIL"} | model=${modelStr} | turns=${s.turnCount}${s.note ? ` | note="${s.note}"` : ""}\n    summary: ${s.summary.slice(0, 200)}`
+    }).join("\n")
 
     sections.push(
       `## Candidate ${version} — ${rate}\n\n### system.md\n\`\`\`\n${system}\n\`\`\`\n\n### Session traces\n${traceLines || "  (none)"}`,
