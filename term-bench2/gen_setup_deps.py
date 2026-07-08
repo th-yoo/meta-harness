@@ -328,6 +328,7 @@ mkdir -p "$WORKDIR"
 {apt_section}
 {copy_section}
 {pip_section}
+cd "$WORKDIR"
 {raw_section}
 echo "[setup_deps] {task} ready — workspace: $WORKDIR"
 """
@@ -338,6 +339,13 @@ def make_env_section(envs: list[tuple[str, str]]) -> str:
         return "# (no ENV directives)"
     lines = ["# ── environment variables ──────────────────────────────────────────────────"]
     for k, v in envs:
+        # Rewrite /app references to $WORKDIR
+        v = v.replace("/app:", "$WORKDIR:").replace("/app/", "$WORKDIR/")
+        if v == "/app":
+            v = "$WORKDIR"
+        # Use ${VAR:-} to avoid unbound variable errors under set -u
+        import re
+        v = re.sub(r'\$([A-Z_][A-Z0-9_]*)\b', r'${\1:-}', v)
         lines.append(f'export {k}="{v}"')
     return "\n".join(lines)
 
@@ -374,7 +382,9 @@ def make_copy_section(copies: list[tuple[str, str]], task: str) -> str:
             # Out-of-/app path: redirect via EXTRAS_ROOT when set
             dst_sh = f'${{EXTRAS_ROOT:-}}{dst}' if dst.startswith("/") else dst
         lines.append(f'mkdir -p "{dst_sh}"')
-        lines.append(f'cp -r "$TASK_ENV/{src}" "{dst_sh}"')
+        # Docker COPY dir/ dst/ copies contents; cp -r needs trailing /. to match
+        src_arg = f'"$TASK_ENV/{src}."' if src.endswith("/") else f'"$TASK_ENV/{src}"'
+        lines.append(f'cp -r {src_arg} "{dst_sh}"')
     return "\n".join(lines)
 
 
@@ -415,13 +425,35 @@ def make_pip_section(packages: list[str], task: str, has_uv_copy: bool) -> str:
         uv pip install {pkgs}""")
 
 
+def _rewrite_raw(cmd: str) -> str:
+    """
+    Rewrite a raw RUN command so it works when executed with WORKDIR=~/bench/app:
+    - /app/...  → $WORKDIR/...  (workspace files)
+    - /app      → $WORKDIR      (bare /app reference)
+    - out-of-/app extras (e.g. /root/foo.py) → ${EXTRAS_ROOT:-}/root/foo.py
+    Also guard any remaining apt-get/apt calls with SKIP_APT.
+    """
+    import re
+    # Replace /app/ and bare /app (word-boundary)
+    cmd = re.sub(r'/app/', '$WORKDIR/', cmd)
+    cmd = re.sub(r'/app\b', '$WORKDIR', cmd)
+    # Wrap remaining apt-get / apt calls under SKIP_APT guard
+    if re.search(r'\bapt(?:-get)?\b', cmd):
+        cmd = f'if [[ -z "${{SKIP_APT:-}}" ]]; then {cmd}; fi'
+    return cmd
+
+
 def make_raw_section(raw_runs: list[str]) -> str:
     if not raw_runs:
         return "# (no unclassified RUN directives)"
-    lines = ["# ── unclassified RUN directives (emitted verbatim) ─────────────────────────"]
+    lines = ["# ── unclassified RUN directives ────────────────────────────────────────────"]
     for r in raw_runs:
-        lines.append(f"# RAW: {r}")
-        lines.append(r)
+        rewritten = _rewrite_raw(r)
+        if rewritten != r:
+            lines.append(f"# RAW (original): {r}")
+        else:
+            lines.append(f"# RAW: {r}")
+        lines.append(rewritten)
     return "\n".join(lines)
 
 

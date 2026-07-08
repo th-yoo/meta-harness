@@ -34,7 +34,8 @@ mkdir -p "$WORKDIR"
 mkdir -p "$WORKDIR/"
 cp -r "$TASK_ENV/setup.py" "$WORKDIR/"
 # (no pip packages)
-# ── unclassified RUN directives (emitted verbatim) ─────────────────────────
+cd "$WORKDIR"
+# ── unclassified RUN directives ────────────────────────────────────────────
 # RAW: uv run setup.py
 uv run setup.py
 echo "[setup_deps] reshard-c4-data ready — workspace: $WORKDIR"

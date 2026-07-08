@@ -34,7 +34,8 @@ mkdir -p "$WORKDIR"
 mkdir -p "$WORKDIR"
 cp -r "$TASK_ENV/text.gcode.gz" "$WORKDIR"
 # (no pip packages)
-# ── unclassified RUN directives (emitted verbatim) ─────────────────────────
-# RAW: gzip -d /app/text.gcode.gz
-gzip -d /app/text.gcode.gz
+cd "$WORKDIR"
+# ── unclassified RUN directives ────────────────────────────────────────────
+# RAW (original): gzip -d /app/text.gcode.gz
+gzip -d $WORKDIR/text.gcode.gz
 echo "[setup_deps] gcode-to-text ready — workspace: $WORKDIR"

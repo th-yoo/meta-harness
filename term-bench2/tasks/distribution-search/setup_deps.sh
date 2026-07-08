@@ -37,7 +37,8 @@ uv venv --python python3 "$WORKDIR/.venv" 2>/dev/null || true
 # shellcheck source=/dev/null
 source "$WORKDIR/.venv/bin/activate"
 uv pip install "numpy==2.1.2" "scipy==1.15.3"
-# ── unclassified RUN directives (emitted verbatim) ─────────────────────────
-# RAW: apt-get update
-apt-get update
+cd "$WORKDIR"
+# ── unclassified RUN directives ────────────────────────────────────────────
+# RAW (original): apt-get update
+if [[ -z "${SKIP_APT:-}" ]]; then apt-get update; fi
 echo "[setup_deps] distribution-search ready — workspace: $WORKDIR"

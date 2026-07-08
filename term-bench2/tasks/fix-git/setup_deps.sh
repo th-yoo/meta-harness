@@ -43,7 +43,8 @@ cp -r "$TASK_ENV/setup.sh" "$WORKDIR/"
 mkdir -p "$WORKDIR/resources"
 cp -r "$TASK_ENV/resources" "$WORKDIR/resources"
 # (no pip packages)
-# ── unclassified RUN directives (emitted verbatim) ─────────────────────────
-# RAW: bash /app/setup.sh
-bash /app/setup.sh
+cd "$WORKDIR"
+# ── unclassified RUN directives ────────────────────────────────────────────
+# RAW (original): bash /app/setup.sh
+bash $WORKDIR/setup.sh
 echo "[setup_deps] fix-git ready — workspace: $WORKDIR"

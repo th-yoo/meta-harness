@@ -41,5 +41,6 @@ fi
 mkdir -p "$WORKDIR/"
 cp -r "$TASK_ENV/task-deps/data.csv" "$WORKDIR/"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] mcmc-sampling-stan ready — workspace: $WORKDIR"

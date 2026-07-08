@@ -34,5 +34,6 @@ mkdir -p "$WORKDIR"
 mkdir -p "${EXTRAS_ROOT:-}/protected/protected.tar.gz.enc"
 cp -r "$TASK_ENV/protected.tar.gz.enc" "${EXTRAS_ROOT:-}/protected/protected.tar.gz.enc"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] adaptive-rejection-sampler ready — workspace: $WORKDIR"

@@ -34,5 +34,6 @@ mkdir -p "$WORKDIR"
 mkdir -p "$WORKDIR/vendor"
 cp -r "$TASK_ENV/vendor" "$WORKDIR/vendor"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] sqlite-with-gcov ready — workspace: $WORKDIR"

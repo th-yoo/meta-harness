@@ -49,5 +49,6 @@ cp -r "$TASK_ENV/task-deps/meta_public.json" "$WORKDIR/"
 mkdir -p "$WORKDIR/"
 cp -r "$TASK_ENV/task-deps/gp_rstan.R" "$WORKDIR/"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] rstan-to-pystan ready — workspace: $WORKDIR"

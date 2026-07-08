@@ -32,5 +32,6 @@ mkdir -p "$WORKDIR"
 # (no additional apt packages)
 # (no COPY directives)
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] kv-store-grpc ready — workspace: $WORKDIR"

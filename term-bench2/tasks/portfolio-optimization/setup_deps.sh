@@ -49,5 +49,6 @@ cp -r "$TASK_ENV/portfolio_optimized.py" "$WORKDIR/portfolio_optimized.py"
 mkdir -p "$WORKDIR/setup.py"
 cp -r "$TASK_ENV/setup.py" "$WORKDIR/setup.py"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] portfolio-optimization ready — workspace: $WORKDIR"

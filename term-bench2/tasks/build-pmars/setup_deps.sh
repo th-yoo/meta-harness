@@ -41,5 +41,6 @@ fi
 mkdir -p "$WORKDIR/"
 cp -r "$TASK_ENV/warriors/flashpaper.red" "$WORKDIR/"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] build-pmars ready — workspace: $WORKDIR"

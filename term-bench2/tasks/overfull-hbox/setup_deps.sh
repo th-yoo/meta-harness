@@ -45,5 +45,6 @@ cp -r "$TASK_ENV/tests/input.tex" "$WORKDIR/"
 mkdir -p "$WORKDIR/"
 cp -r "$TASK_ENV/tests/synonyms.txt" "$WORKDIR/"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] overfull-hbox ready — workspace: $WORKDIR"

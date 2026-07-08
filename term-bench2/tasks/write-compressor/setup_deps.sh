@@ -43,7 +43,8 @@ cp -r "$TASK_ENV/decomp.c" "$WORKDIR"
 mkdir -p "$WORKDIR"
 cp -r "$TASK_ENV/data.txt" "$WORKDIR"
 # (no pip packages)
-# ── unclassified RUN directives (emitted verbatim) ─────────────────────────
-# RAW: gcc -O3 decomp.c -o /app/decomp
-gcc -O3 decomp.c -o /app/decomp
+cd "$WORKDIR"
+# ── unclassified RUN directives ────────────────────────────────────────────
+# RAW (original): gcc -O3 decomp.c -o /app/decomp
+gcc -O3 decomp.c -o $WORKDIR/decomp
 echo "[setup_deps] write-compressor ready — workspace: $WORKDIR"

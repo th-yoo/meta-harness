@@ -41,7 +41,8 @@ fi
 mkdir -p "$WORKDIR/"
 cp -r "$TASK_ENV/gen_large_csv.py" "$WORKDIR/"
 # (no pip packages)
-# ── unclassified RUN directives (emitted verbatim) ─────────────────────────
-# RAW: python3 /app/gen_large_csv.py both && rm /app/gen_large_csv.py
-python3 /app/gen_large_csv.py both && rm /app/gen_large_csv.py
+cd "$WORKDIR"
+# ── unclassified RUN directives ────────────────────────────────────────────
+# RAW (original): python3 /app/gen_large_csv.py both && rm /app/gen_large_csv.py
+python3 $WORKDIR/gen_large_csv.py both && rm $WORKDIR/gen_large_csv.py
 echo "[setup_deps] large-scale-text-editing ready — workspace: $WORKDIR"

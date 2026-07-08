@@ -34,5 +34,6 @@ mkdir -p "$WORKDIR"
 mkdir -p "$WORKDIR/"
 cp -r "$TASK_ENV/sequences.fasta" "$WORKDIR/"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] dna-assembly ready — workspace: $WORKDIR"

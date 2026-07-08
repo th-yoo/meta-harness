@@ -39,5 +39,6 @@ if [[ -z "${SKIP_APT:-}" ]]; then
 fi
 # (no COPY directives)
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] pypi-server ready — workspace: $WORKDIR"

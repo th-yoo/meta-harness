@@ -39,7 +39,8 @@ if [[ -z "${SKIP_APT:-}" ]]; then
 fi
 # ── copy task assets ───────────────────────────────────────────────────────
 mkdir -p "$WORKDIR/"
-cp -r "$TASK_ENV/inputs/" "$WORKDIR/"
+cp -r "$TASK_ENV/inputs/." "$WORKDIR/"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] constraints-scheduling ready — workspace: $WORKDIR"

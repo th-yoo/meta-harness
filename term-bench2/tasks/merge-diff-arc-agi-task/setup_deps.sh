@@ -34,5 +34,6 @@ mkdir -p "$WORKDIR"
 mkdir -p "$WORKDIR/"
 cp -r "$TASK_ENV/task-deps/." "$WORKDIR/"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] merge-diff-arc-agi-task ready — workspace: $WORKDIR"

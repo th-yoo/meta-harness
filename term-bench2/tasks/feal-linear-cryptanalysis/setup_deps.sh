@@ -39,14 +39,15 @@ if [[ -z "${SKIP_APT:-}" ]]; then
 fi
 # ── copy task assets ───────────────────────────────────────────────────────
 mkdir -p "$WORKDIR/"
-cp -r "$TASK_ENV/task-deps/" "$WORKDIR/"
+cp -r "$TASK_ENV/task-deps/." "$WORKDIR/"
 # ── per-task Python packages (isolated venv via uv) ─────────────────────────
 command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
 uv venv --python python3 "$WORKDIR/.venv" 2>/dev/null || true
 # shellcheck source=/dev/null
 source "$WORKDIR/.venv/bin/activate"
 uv pip install "setuptools==80.9.0"
-# ── unclassified RUN directives (emitted verbatim) ─────────────────────────
+cd "$WORKDIR"
+# ── unclassified RUN directives ────────────────────────────────────────────
 # RAW: gcc -O3 -o feal feal.c
 gcc -O3 -o feal feal.c
 # RAW: gcc -O3 -o decrypt decrypt.c

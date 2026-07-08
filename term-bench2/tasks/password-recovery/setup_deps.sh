@@ -41,7 +41,8 @@ fi
 mkdir -p "$WORKDIR/"
 cp -r "$TASK_ENV/setup.sh" "$WORKDIR/"
 # (no pip packages)
-# ── unclassified RUN directives (emitted verbatim) ─────────────────────────
-# RAW: bash /app/setup.sh && rm /app/setup.sh
-bash /app/setup.sh && rm /app/setup.sh
+cd "$WORKDIR"
+# ── unclassified RUN directives ────────────────────────────────────────────
+# RAW (original): bash /app/setup.sh && rm /app/setup.sh
+bash $WORKDIR/setup.sh && rm $WORKDIR/setup.sh
 echo "[setup_deps] password-recovery ready — workspace: $WORKDIR"

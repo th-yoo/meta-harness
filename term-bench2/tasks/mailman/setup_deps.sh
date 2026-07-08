@@ -41,5 +41,6 @@ fi
 mkdir -p "$WORKDIR/eval.py"
 cp -r "$TASK_ENV/src/eval.py" "$WORKDIR/eval.py"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] mailman ready — workspace: $WORKDIR"

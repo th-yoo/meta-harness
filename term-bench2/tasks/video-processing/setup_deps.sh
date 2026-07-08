@@ -46,5 +46,6 @@ uv venv --python python3 "$WORKDIR/.venv" 2>/dev/null || true
 # shellcheck source=/dev/null
 source "$WORKDIR/.venv/bin/activate"
 uv pip install "opencv-contrib-python>=4.11.0.86"
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] video-processing ready — workspace: $WORKDIR"

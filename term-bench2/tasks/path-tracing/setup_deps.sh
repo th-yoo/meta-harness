@@ -41,9 +41,10 @@ fi
 mkdir -p "$WORKDIR"
 cp -r "$TASK_ENV/orig.c" "$WORKDIR"
 # (no pip packages)
-# ── unclassified RUN directives (emitted verbatim) ─────────────────────────
-# RAW: gcc -o orig /app/orig.c -lm
-gcc -o orig /app/orig.c -lm
+cd "$WORKDIR"
+# ── unclassified RUN directives ────────────────────────────────────────────
+# RAW (original): gcc -o orig /app/orig.c -lm
+gcc -o orig $WORKDIR/orig.c -lm
 # RAW: ./orig
 ./orig
 echo "[setup_deps] path-tracing ready — workspace: $WORKDIR"

@@ -43,5 +43,6 @@ cp -r "$TASK_ENV/main.db" "$WORKDIR/main.db"
 mkdir -p "$WORKDIR/main.db-wal"
 cp -r "$TASK_ENV/main.db-wal.encrypted" "$WORKDIR/main.db-wal"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] db-wal-recovery ready — workspace: $WORKDIR"

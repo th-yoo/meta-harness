@@ -44,5 +44,6 @@ uv venv --python python3 "$WORKDIR/.venv" 2>/dev/null || true
 # shellcheck source=/dev/null
 source "$WORKDIR/.venv/bin/activate"
 uv pip install "requests==2.32.4"
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] nginx-request-logging ready — workspace: $WORKDIR"

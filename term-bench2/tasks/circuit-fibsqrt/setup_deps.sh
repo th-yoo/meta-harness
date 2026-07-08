@@ -43,7 +43,8 @@ cp -r "$TASK_ENV/tests/sim.c" "$WORKDIR"
 mkdir -p "$WORKDIR"
 cp -r "$TASK_ENV/gates.txt" "$WORKDIR"
 # (no pip packages)
-# ── unclassified RUN directives (emitted verbatim) ─────────────────────────
-# RAW: apt-get update
-apt-get update
+cd "$WORKDIR"
+# ── unclassified RUN directives ────────────────────────────────────────────
+# RAW (original): apt-get update
+if [[ -z "${SKIP_APT:-}" ]]; then apt-get update; fi
 echo "[setup_deps] circuit-fibsqrt ready — workspace: $WORKDIR"

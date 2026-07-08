@@ -34,5 +34,6 @@ mkdir -p "$WORKDIR"
 mkdir -p "$WORKDIR/task_file"
 cp -r "$TASK_ENV/./task_file" "$WORKDIR/task_file"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] llm-inference-batching-scheduler ready — workspace: $WORKDIR"

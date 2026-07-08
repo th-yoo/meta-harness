@@ -41,7 +41,8 @@ fi
 mkdir -p "${EXTRAS_ROOT:-}/etc/nginx/sites-available/default"
 cp -r "$TASK_ENV/default.conf" "${EXTRAS_ROOT:-}/etc/nginx/sites-available/default"
 # (no pip packages)
-# ── unclassified RUN directives (emitted verbatim) ─────────────────────────
+cd "$WORKDIR"
+# ── unclassified RUN directives ────────────────────────────────────────────
 # RAW: mkdir -p /etc/ssl/certs && mkdir -p /etc/ssl/private && openssl req -x509 -nodes -days 365 -subj "/CN=localhost" -newkey rsa:2048 -keyout /etc/ssl/private/nginx-selfsigned.key -out /etc/ssl/certs/nginx-selfsigned.crt
 mkdir -p /etc/ssl/certs && mkdir -p /etc/ssl/private && openssl req -x509 -nodes -days 365 -subj "/CN=localhost" -newkey rsa:2048 -keyout /etc/ssl/private/nginx-selfsigned.key -out /etc/ssl/certs/nginx-selfsigned.crt
 # RAW: mkdir -p /var/www/html /var/www/dev

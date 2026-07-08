@@ -34,5 +34,6 @@ mkdir -p "$WORKDIR"
 mkdir -p "$WORKDIR"
 cp -r "$TASK_ENV/trunc.db" "$WORKDIR"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] sqlite-db-truncate ready — workspace: $WORKDIR"

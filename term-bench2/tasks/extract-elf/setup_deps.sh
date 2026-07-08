@@ -41,7 +41,8 @@ fi
 mkdir -p "$WORKDIR/"
 cp -r "$TASK_ENV/task-deps/hi.c" "$WORKDIR/"
 # (no pip packages)
-# ── unclassified RUN directives (emitted verbatim) ─────────────────────────
-# RAW: gcc /app/hi.c -o /app/a.out
-gcc /app/hi.c -o /app/a.out
+cd "$WORKDIR"
+# ── unclassified RUN directives ────────────────────────────────────────────
+# RAW (original): gcc /app/hi.c -o /app/a.out
+gcc $WORKDIR/hi.c -o $WORKDIR/a.out
 echo "[setup_deps] extract-elf ready — workspace: $WORKDIR"

@@ -41,5 +41,6 @@ fi
 mkdir -p "${EXTRAS_ROOT:-}/workspace/plus_comm.v"
 cp -r "$TASK_ENV/partial_proof.v" "${EXTRAS_ROOT:-}/workspace/plus_comm.v"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] prove-plus-comm ready — workspace: $WORKDIR"

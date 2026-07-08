@@ -36,5 +36,6 @@ cp -r "$TASK_ENV/src/eval.py" "$WORKDIR/eval.py"
 mkdir -p "$WORKDIR/model_ref.xml"
 cp -r "$TASK_ENV/src/model_ref.xml" "$WORKDIR/model_ref.xml"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] tune-mjcf ready — workspace: $WORKDIR"

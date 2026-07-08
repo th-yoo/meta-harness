@@ -34,7 +34,8 @@ mkdir -p "$WORKDIR"
 mkdir -p "$WORKDIR/"
 cp -r "$TASK_ENV/log_generator_deterministic.py" "$WORKDIR/"
 # (no pip packages)
-# ── unclassified RUN directives (emitted verbatim) ─────────────────────────
-# RAW: python3 /app/log_generator_deterministic.py
-python3 /app/log_generator_deterministic.py
+cd "$WORKDIR"
+# ── unclassified RUN directives ────────────────────────────────────────────
+# RAW (original): python3 /app/log_generator_deterministic.py
+python3 $WORKDIR/log_generator_deterministic.py
 echo "[setup_deps] log-summary-date-ranges ready — workspace: $WORKDIR"

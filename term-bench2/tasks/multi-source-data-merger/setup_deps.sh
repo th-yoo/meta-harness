@@ -29,7 +29,7 @@ fi
 mkdir -p "$WORKDIR"
 
 # ── environment variables ──────────────────────────────────────────────────
-export PYTHONPATH="/app:$PYTHONPATH"
+export PYTHONPATH="${WORKDIR:-}:${PYTHONPATH:-}"
 # ── system packages ─────────────────────────────────────────────────────────
 # Set SKIP_APT=1 when packages are pre-installed on the host (runner sets this)
 if [[ -z "${SKIP_APT:-}" ]]; then
@@ -47,5 +47,6 @@ uv venv --python python3 "$WORKDIR/.venv" 2>/dev/null || true
 # shellcheck source=/dev/null
 source "$WORKDIR/.venv/bin/activate"
 uv pip install "pandas==2.2.3" "pyarrow==17.0.0"
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] multi-source-data-merger ready — workspace: $WORKDIR"

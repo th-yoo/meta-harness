@@ -32,5 +32,6 @@ mkdir -p "$WORKDIR"
 # (no additional apt packages)
 # (no COPY directives)
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] compile-compcert ready — workspace: $WORKDIR"

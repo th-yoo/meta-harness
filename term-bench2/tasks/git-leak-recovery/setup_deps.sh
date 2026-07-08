@@ -41,9 +41,10 @@ fi
 mkdir -p "$WORKDIR/challenge-setup.sh"
 cp -r "$TASK_ENV/challenge-setup.sh" "$WORKDIR/challenge-setup.sh"
 # (no pip packages)
-# ── unclassified RUN directives (emitted verbatim) ─────────────────────────
-# RAW: mkdir -p /app && chmod 755 /app
-mkdir -p /app && chmod 755 /app
-# RAW: chmod +x /app/challenge-setup.sh && bash /app/challenge-setup.sh && rm /app/challenge-setup.sh
-chmod +x /app/challenge-setup.sh && bash /app/challenge-setup.sh && rm /app/challenge-setup.sh
+cd "$WORKDIR"
+# ── unclassified RUN directives ────────────────────────────────────────────
+# RAW (original): mkdir -p /app && chmod 755 /app
+mkdir -p $WORKDIR && chmod 755 $WORKDIR
+# RAW (original): chmod +x /app/challenge-setup.sh && bash /app/challenge-setup.sh && rm /app/challenge-setup.sh
+chmod +x $WORKDIR/challenge-setup.sh && bash $WORKDIR/challenge-setup.sh && rm $WORKDIR/challenge-setup.sh
 echo "[setup_deps] git-leak-recovery ready — workspace: $WORKDIR"

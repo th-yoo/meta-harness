@@ -32,7 +32,8 @@ mkdir -p "$WORKDIR"
 # (no additional apt packages)
 # ── copy task assets ───────────────────────────────────────────────────────
 mkdir -p "$WORKDIR/"
-cp -r "$TASK_ENV/task-deps/" "$WORKDIR/"
+cp -r "$TASK_ENV/task-deps/." "$WORKDIR/"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] raman-fitting ready — workspace: $WORKDIR"

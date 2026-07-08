@@ -38,5 +38,6 @@ cp -r "$TASK_ENV/plasmid.gb" "$WORKDIR/"
 mkdir -p "$WORKDIR/"
 cp -r "$TASK_ENV/pdb_ids.txt" "$WORKDIR/"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] protein-assembly ready — workspace: $WORKDIR"

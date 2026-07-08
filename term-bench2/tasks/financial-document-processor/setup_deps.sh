@@ -34,9 +34,10 @@ mkdir -p "$WORKDIR"
 mkdir -p "${EXTRAS_ROOT:-}/root"
 cp -r "$TASK_ENV/randomize_filenames.py" "${EXTRAS_ROOT:-}/root"
 mkdir -p "${EXTRAS_ROOT:-}/tmp/original_documents/"
-cp -r "$TASK_ENV/documents/" "${EXTRAS_ROOT:-}/tmp/original_documents/"
+cp -r "$TASK_ENV/documents/." "${EXTRAS_ROOT:-}/tmp/original_documents/"
 # (no pip packages)
-# ── unclassified RUN directives (emitted verbatim) ─────────────────────────
+cd "$WORKDIR"
+# ── unclassified RUN directives ────────────────────────────────────────────
 # RAW: uv run /root/randomize_filenames.py
 uv run /root/randomize_filenames.py
 echo "[setup_deps] financial-document-processor ready — workspace: $WORKDIR"

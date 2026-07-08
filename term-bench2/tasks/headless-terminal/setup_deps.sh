@@ -41,5 +41,6 @@ fi
 mkdir -p "$WORKDIR/base_terminal.py"
 cp -r "$TASK_ENV/base_terminal.py" "$WORKDIR/base_terminal.py"
 # (no pip packages)
+cd "$WORKDIR"
 # (no unclassified RUN directives)
 echo "[setup_deps] headless-terminal ready — workspace: $WORKDIR"
