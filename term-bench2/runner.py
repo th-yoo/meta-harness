@@ -108,13 +108,18 @@ def run_cmd(
     check: bool = True,
     ns: bool = False,
     extra_mounts: Optional[dict[str, Path]] = None,
+    chdir: str = "/app",
 ) -> subprocess.CompletedProcess:
-    """Run a command, optionally inside the mount namespace."""
+    """Run a command, optionally inside the bwrap sandbox.
+
+    When ns=True, chdir sets the working directory *inside* the sandbox
+    (default /app). cwd is only used when ns=False.
+    """
     merged_env = {**os.environ, **(env or {})}
-    actual_cmd = ns_wrap(cmd, extra_mounts) if ns else cmd
+    actual_cmd = ns_wrap(cmd, extra_mounts, chdir=chdir) if ns else cmd
     return subprocess.run(
         actual_cmd,
-        cwd=str(cwd) if cwd else None,
+        cwd=str(cwd) if (cwd and not ns) else None,
         env=merged_env,
         timeout=timeout,
         capture_output=capture,
@@ -175,7 +180,11 @@ def clean_dir(ns_path: Path) -> None:
             child.unlink(missing_ok=True)
 
 
-def ns_wrap(cmd: list[str], extra_mounts: Optional[dict[str, Path]] = None) -> list[str]:
+def ns_wrap(
+    cmd: list[str],
+    extra_mounts: Optional[dict[str, Path]] = None,
+    chdir: str = "/app",
+) -> list[str]:
     """
     Wrap a command using bwrap (bubblewrap) so that ~/bench/{app,tests,logs}
     are bind-mounted onto /app, /tests, /logs inside the sandbox.
@@ -183,6 +192,10 @@ def ns_wrap(cmd: list[str], extra_mounts: Optional[dict[str, Path]] = None) -> l
     The host filesystem is never written to at those paths — all writes go to
     ~/bench/.  /app, /tests, /logs must exist as empty placeholder dirs on the
     host (created once by prep --apply with sudo; they stay permanently empty).
+
+    chdir: working directory inside the sandbox (default /app). TB2 tasks run
+    solve.sh / test.sh with cwd=/app, so relative paths in those scripts
+    resolve against the workspace.
 
     extra_mounts: {'/sandbox/path': real_host_path} for task-specific paths
     like /protected, /workspace, /data.
@@ -195,6 +208,7 @@ def ns_wrap(cmd: list[str], extra_mounts: Optional[dict[str, Path]] = None) -> l
         "--bind", str(BENCH_PREFIX / "logs"), "/logs",
         "--proc", "/proc",
         "--dev",  "/dev",
+        "--chdir", chdir,
     ]
     for ns_path, real_path in (extra_mounts or {}).items():
         real_path.mkdir(parents=True, exist_ok=True)
@@ -582,10 +596,10 @@ def run_verifier(verifier_timeout: float, task: str = "") -> int:
     try:
         run_cmd(
             ["bash", "/tests/test.sh"],   # namespace path
-            cwd=REAL_TESTS,
             timeout=verifier_timeout,
             check=False,
             ns=True,
+            chdir="/app",                # TB2 runs verifier from workspace
             extra_mounts=task_extra_mounts(task) if task else None,
         )
     except subprocess.TimeoutExpired:
