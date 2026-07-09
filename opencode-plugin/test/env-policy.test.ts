@@ -100,6 +100,34 @@ test("env policy rides createCandidate -> activateCandidate -> readEnvPolicy", (
   expect(readEnvPolicy(root)).toEqual(policy)
 })
 
+test("Phase 4 durability fix: a trial that CONFIRMS does not wipe the active env-policy when the cycle staged none", () => {
+  // Same durability bug/fix as agent-config.test.ts's analogous case: without
+  // the carry-forward (`staged ?? readEnvPolicy(root)`), a playbook-only
+  // trial that CONFIRMS would permanently delete an evolved env-policy,
+  // because resolveTrial's CONFIRMED path only clearTrials (never restores).
+  const root = tmpStore()
+  const policy: EnvPolicy = { schemaVersion: 1, maxLsEntries: 60 }
+
+  createCandidate(root, "v0", "baseline system", "", undefined, undefined, policy)
+  activateCandidate(root, "v0")
+  recordSession(root, "v0", session({ sessionID: "base-1", passed: true }))
+
+  // Simulate a playbook-only propose/curate cycle: nothing staged this round.
+  const staged: EnvPolicy | null = null
+  const carried = staged ?? readEnvPolicy(root)
+  expect(carried).toEqual(policy)
+
+  createCandidate(root, "v1", "trial system (playbook edit only)", "", undefined, undefined, carried ?? undefined)
+  startTrial(root, "v1", "trial system (playbook edit only)", "", 1, null, undefined, carried)
+  expect(readEnvPolicy(root)).toEqual(policy)
+
+  recordSession(root, "v1", session({ sessionID: "trial-1", passed: true }))
+  const resolution = resolveTrial(root)
+  expect(resolution.action).toBe("confirmed")
+
+  expect(readEnvPolicy(root)).toEqual(policy)
+})
+
 test("trial revert restores the baseline env policy", () => {
   const root = tmpStore()
   const policy1: EnvPolicy = { schemaVersion: 1, maxLsEntries: 20 }

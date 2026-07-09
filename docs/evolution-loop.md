@@ -287,3 +287,12 @@ counts, and cumulative judge-agreement rate. `/mh-status` shows last decision.
 - `term-bench2/retry_provider.py` re-runs a subcommand through a genuine provider
   *error* outage (backoff capped at 10 min); it treats a timeout as "up," so it
   will not spin on a slow task.
+- **Calibration feedback loop:** once calibrated, prefilled decisions the human
+  rubber-stamps still count toward the calibration window and can mask judge
+  drift; `judge-audit` (replayed against verifier ground truth, not human
+  agreement) is the independent safety net against this.
+- `report-loop`'s default project sink (`default_meta_metrics_sinks`) assumes
+  the worktree is this repo (`META_ROOT`); for other projects pass `--sink
+  <worktree>/.meta-harness/meta-metrics.jsonl` explicitly.
+- `_parse_ts`/`report-loop`'s timestamp parsing needs Python 3.11+ — earlier
+  versions' `datetime.fromisoformat` rejects the `Z` suffix.

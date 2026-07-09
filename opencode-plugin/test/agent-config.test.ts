@@ -89,6 +89,41 @@ test("agent config rides createCandidate -> activateCandidate -> readAgentConfig
   expect(readAgentConfig(root)).toEqual(cfg)
 })
 
+test("Phase 4 durability fix: a trial that CONFIRMS does not wipe the active agent-config when the cycle staged none", () => {
+  // Reproduces the bug from the whole-branch review: propose/curate threaded
+  // agentConfig/envPolicy into createCandidate/startTrial ONLY from a staged
+  // file. When nothing was staged this cycle, that local was `null`, and
+  // startTrial(..., null) -> writeActive treats `null` as REMOVE, deleting
+  // the active knob. Because resolveTrial's CONFIRMED path only clearTrials
+  // (never restores active), a playbook-only trial that CONFIRMS would
+  // delete an evolved knob PERMANENTLY. The fix: carry the active config
+  // forward (`staged ?? readAgentConfig(root)`) before calling createCandidate
+  // and startTrial — this test drives that exact idiom end-to-end.
+  const root = tmpStore()
+  const cfg: AgentConfig = { schemaVersion: 1, fastTimeoutMs: 4000 }
+
+  createCandidate(root, "v0", "baseline system", "", undefined, cfg)
+  activateCandidate(root, "v0")
+  recordSession(root, "v0", session({ sessionID: "base-1", passed: true }))
+
+  // Simulate a playbook-only propose/curate cycle: nothing staged this round.
+  const staged: AgentConfig | null = null
+  const carried = staged ?? readAgentConfig(root)
+  expect(carried).toEqual(cfg) // sanity: carry-forward picked up the active knob
+
+  createCandidate(root, "v1", "trial system (playbook edit only)", "", undefined, carried ?? undefined)
+  startTrial(root, "v1", "trial system (playbook edit only)", "", 1, null, carried)
+  expect(readAgentConfig(root)).toEqual(cfg) // still present immediately after trial start
+
+  // Trial matches baseline's pass rate -> CONFIRMED (not reverted).
+  recordSession(root, "v1", session({ sessionID: "trial-1", passed: true }))
+  const resolution = resolveTrial(root)
+  expect(resolution.action).toBe("confirmed")
+
+  // The whole point of the fix: CONFIRM must not have wiped the knob.
+  expect(readAgentConfig(root)).toEqual(cfg)
+})
+
 test("trial revert restores the baseline agent config", () => {
   const root = tmpStore()
   const cfg1: AgentConfig = { schemaVersion: 1, fastTimeoutMs: 1000 }

@@ -252,7 +252,15 @@ export async function triggerPropose(
       fs.rmSync(stagingEnvPolicy, { force: true })
     }
 
-    createCandidate(layer.root, version, system, tools, newPlaybook, agentConfig ?? undefined, envPolicy ?? undefined)
+    // Carry the active knob forward when this cycle didn't re-emit one — the
+    // staged value (if any) always wins, otherwise durability requires we
+    // re-derive from active (same reasoning as the playbook: never let an
+    // absent stage mean "delete the evolved knob"). Must read BEFORE
+    // startTrial below, which overwrites active via writeActive.
+    const effAgentConfig = agentConfig ?? readAgentConfig(layer.root)
+    const effEnvPolicy = envPolicy ?? readEnvPolicy(layer.root)
+
+    createCandidate(layer.root, version, system, tools, newPlaybook, effAgentConfig ?? undefined, effEnvPolicy ?? undefined)
     appendMetaMetric(layer.root, {
       event: "propose", candidate: version, scope: layer.scope,
       kind: newPlaybook ? "propose-ops" : "propose",
@@ -271,7 +279,7 @@ export async function triggerPropose(
       // Selection gate: go live provisionally as a trial; confirm/revert after
       // TRIAL_MIN_SESSIONS scored sessions (see resolveTrial in the idle hook).
       const baseline = activeVersion(layer.root)
-      startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook ?? null, agentConfig, envPolicy)
+      startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook ?? null, effAgentConfig, effEnvPolicy)
       await client.tui.showToast({
         body: { title: "Meta-Harness",
                 message: `Trial started: ${layer.scope} ${version}${toolsNote} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
@@ -794,7 +802,12 @@ export async function triggerCurate(
     const newPlaybook = applyPlaybookOps(playbook, ops)
     const system = renderPlaybook(newPlaybook)
     const tools = readActiveTools(layer.root)
-    createCandidate(layer.root, version, system, tools, newPlaybook)
+    // Curation only ever edits the playbook — it never stages its own
+    // agent-config/env-policy, so the active knob must be carried forward
+    // unconditionally here (read BEFORE startTrial below overwrites active).
+    const agentConfig = readAgentConfig(layer.root)
+    const envPolicy = readEnvPolicy(layer.root)
+    createCandidate(layer.root, version, system, tools, newPlaybook, agentConfig ?? undefined, envPolicy ?? undefined)
     appendMetaMetric(layer.root, { event: "curate", candidate: version, scope: layer.scope })
     writeCandidateMeta(layer.root, version, {
       proposerModel: cfg.proposerModel, scope: layer.scope, kind: "curate",
@@ -803,7 +816,7 @@ export async function triggerCurate(
 
     if (isProject) {
       const baseline = activeVersion(layer.root)
-      startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook)
+      startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook, agentConfig, envPolicy)
       await client.tui.showToast({ body: { title: "Meta-Harness",
         message: `Curation trial: ${layer.scope} ${version} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
         variant: "info", duration: 8_000 } })

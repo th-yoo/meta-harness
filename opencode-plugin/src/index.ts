@@ -514,6 +514,10 @@ const metaHarness: Plugin = async (input) => {
       // Shadow mode: the judge NEVER alters `record.passed` or `result.passed`;
       // it only records agreement for later calibration.
       const judgeVerdict = await judgePromise
+      // Deferred until AFTER recordSession below persists the human's score —
+      // this log is diagnostic only and must never gate/delay persistence if
+      // client.app.log ever rejects (no outer try/catch on this idle handler).
+      let judgeLogLine: string | undefined
       if (judgeVerdict) {
         const agreed = judgeVerdict.passed === result.passed
         record.judge = {
@@ -538,13 +542,15 @@ const metaHarness: Plugin = async (input) => {
           agreement: cal.agreement,
           n: cal.n,
         })
-        await log(client, "info", `[judge] ${agreed ? "AGREE" : "DISAGREE"} judge=${judgeVerdict.passed} human=${result.passed} — calibration ${cal.n}/${mhCfg.judgeMinSessions} @ ${(cal.agreement * 100).toFixed(0)}%`)
+        judgeLogLine = `[judge] ${agreed ? "AGREE" : "DISAGREE"} judge=${judgeVerdict.passed} human=${result.passed} — calibration ${cal.n}/${mhCfg.judgeMinSessions} @ ${(cal.agreement * 100).toFixed(0)}%`
       }
 
       const scores = layers.map((layer) => {
         const version = activeVersion(layer.root)
         return { layer, score: recordSession(layer.root, version, record) }
       })
+
+      if (judgeLogLine) await log(client, "info", judgeLogLine)
 
       // Persist the trajectory (failures always; passes only with SAVE_ALL_TRAJ)
       // to each layer so its proposer can diagnose the root cause later.
