@@ -62,8 +62,10 @@ import {
   readPlaybook,
   activeBulletCount,
   readLastMetric,
+  composeAgentConfig,
   type ToolUsage,
   type TrajEvent,
+  type AgentConfig,
 } from "./harness-store.ts"
 import { promptHumanScore, handleScoreCommand } from "./score.ts"
 import {
@@ -127,6 +129,10 @@ const sessionTurns = new Map<string, number>()
 const sessionSummary = new Map<string, string>()
 const sessionToolUsage = new Map<string, ToolUsage>()
 const sessionTrajectory = new Map<string, TrajEvent[]>()
+// Composed agent-config (bash-timeout knobs), cached per session so a bash
+// call doesn't re-read all 4 layer files every time. Populated lazily on the
+// session's first bash call; cleared in cleanupSession.
+const sessionAgentConfig = new Map<string, AgentConfig | null>()
 
 /** Persist trajectories for PASSING sessions too. Default false = failures only. */
 const SAVE_ALL_TRAJ = false
@@ -162,6 +168,7 @@ function cleanupSession(sessionID: string): void {
   sessionSummary.delete(sessionID)
   sessionToolUsage.delete(sessionID)
   sessionTrajectory.delete(sessionID)
+  sessionAgentConfig.delete(sessionID)
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -241,6 +248,9 @@ const metaHarness: Plugin = async (input) => {
         sessionToolUsage.delete(sessionID)
         sessionTrajectory.delete(sessionID)
         sessionSummary.delete(sessionID)
+        // The composed agent-config (bash-timeout knobs) is keyed by role
+        // layers, so a stale cache entry from the previous agent must go too.
+        sessionAgentConfig.delete(sessionID)
         bootstrappedSessions.add(sessionID)
         if (isMhRole(agent)) {
           bootstrapStore(accountRoleRoot(agent), "")
@@ -325,7 +335,16 @@ const metaHarness: Plugin = async (input) => {
       if (toolInput.tool !== "bash") return
       const args = output.args as { command?: string; timeout?: number; workdir?: string }
       if (typeof args.command !== "string") return
-      const adjusted = adjustedTimeout(args.command, args.timeout)
+
+      const sessionID = toolInput.sessionID
+      let cfg = sessionAgentConfig.get(sessionID)
+      if (cfg === undefined) {
+        const agent = sessionAgent.get(sessionID) ?? ""
+        cfg = agent ? composeAgentConfig(layersFor(worktree, agent).map((l) => l.root)) : null
+        sessionAgentConfig.set(sessionID, cfg)
+      }
+
+      const adjusted = adjustedTimeout(args.command, args.timeout, cfg)
       if (adjusted !== undefined) {
         output.args = { ...args, timeout: adjusted }
       }

@@ -17,6 +17,8 @@
  * changes to the bash tool.
  */
 
+import type { AgentConfig } from "./harness-store.ts"
+
 /** Commands that almost always return in under a second. */
 const FAST_COMMANDS = new Set([
   "cd", "chdir", "ls", "ll", "la", "echo", "printf", "cat", "head", "tail",
@@ -45,19 +47,31 @@ const FAST_TIMEOUT_MS = 5_000
  * or undefined if no adjustment should be made.
  *
  * Only lowers the timeout — never raises it.
+ *
+ * `cfg` (an evolved AgentConfig, Phase 4B) EXTENDS the built-in fast/slow
+ * sets — it never replaces them. On conflict, `extraSlowCommands` wins over
+ * `extraFastCommands` (safety default: when in doubt, don't shorten the
+ * timeout). With no cfg (undefined/null), behavior is byte-identical to the
+ * pre-Phase-4B heuristic.
  */
-export function adjustedTimeout(command: string, currentTimeoutMs?: number): number | undefined {
+export function adjustedTimeout(
+  command: string,
+  currentTimeoutMs?: number,
+  cfg?: AgentConfig | null,
+): number | undefined {
   const firstToken = command.trimStart().split(/\s+/)[0] ?? ""
 
   // Strip any path prefix (e.g. /usr/bin/ls → ls)
   const cmd = firstToken.split("/").at(-1) ?? firstToken
 
   if (SLOW_COMMANDS.has(cmd)) return undefined
+  if (cfg?.extraSlowCommands?.includes(cmd)) return undefined
 
-  if (FAST_COMMANDS.has(cmd)) {
+  if (FAST_COMMANDS.has(cmd) || cfg?.extraFastCommands?.includes(cmd)) {
     // Only lower — never extend beyond what the LLM/user already set
     const current = currentTimeoutMs ?? Infinity
-    return Math.min(current, FAST_TIMEOUT_MS)
+    const cap = cfg?.fastTimeoutMs ?? FAST_TIMEOUT_MS
+    return Math.min(current, cap)
   }
 
   return undefined
