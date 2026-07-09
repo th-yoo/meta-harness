@@ -13,14 +13,23 @@
  * A session uses the harness iff it runs under a primary agent whose name
  * starts with "mh-" (e.g. mh-build, mh-review, mh-debug).
  *
- * Scoring feeds all 4 layers. Auto-propose: project-role@5, project-global@10.
- * Account layers are manual-only (/mh-propose role-global | account).
+ * Scoring feeds all 4 layers (degenerate/greeting sessions are filtered out).
+ * Auto-propose: project-role@5, project-global@10 (skipped while a trial runs).
+ *
+ * Selection gate — a proposed candidate never auto-activates:
+ *   project layers  → trial mode: live provisionally, kept only if it matches/
+ *                     beats the baseline pass-rate after TRIAL_MIN_SESSIONS.
+ *   account layers  → stay inactive until a TB2 ab-verdict; /mh-activate then
+ *                     refuses unless the candidate won (or --force).
  *
  * Slash commands:
  *   /mh-score good|bad [note]          — rate last session
- *   /mh-propose [scope]                — trigger proposer
+ *   /mh-propose [scope]                — trigger proposer (project→trial, account→candidate)
  *     scope: (none)=project-role, project=project-global,
  *            role-global=account-role, account=account-global
+ *   /mh-activate <scope> <vN> [--force] — activate a candidate (account gated on ab-verdict)
+ *   /mh-promote [global|role]          — promote proven project rules to the account layer
+ *   /mh-status                         — per-layer active version, scores, trials, verdicts
  */
 
 import type { Plugin, PluginInput, PluginModule } from "@opencode-ai/plugin"
@@ -35,9 +44,15 @@ import {
   bootstrapStore,
   migrateFlatToProjectGlobal,
   activeVersion,
+  listVersions,
   readActiveSystem,
   readActiveTools,
   recordSession,
+  readScore,
+  readTrial,
+  resolveTrial,
+  activateCandidate,
+  readAbVerdict,
   DEFAULT_SYSTEM_PROMPT,
   type StoreLayer,
   type ToolUsage,
@@ -45,6 +60,7 @@ import {
 import { promptHumanScore, handleScoreCommand } from "./score.ts"
 import {
   triggerPropose,
+  triggerPromote,
   PROJECT_ROLE_THRESHOLD,
   PROJECT_GLOBAL_THRESHOLD,
 } from "./propose.ts"
@@ -55,6 +71,31 @@ import { proposerSessions } from "./session-state.ts"
 /** Any primary agent named "mh-*" opts into the harness system. */
 function isMhRole(agent: string): boolean {
   return agent.startsWith("mh-")
+}
+
+/**
+ * Conservative degenerate-session filter — false negatives are fine, false
+ * positives are not. A genuine no-tool Q&A session's captured text almost
+ * always exceeds 50 chars; greetings ("Hello! How can I help…") and empty
+ * sessions do not, and turnCount === 0 means the model never completed a turn.
+ * Such sessions must never count toward a candidate's pass/fail signal.
+ */
+function isDegenerateSession(turnCount: number, toolUsage: ToolUsage, summary: string): boolean {
+  if (turnCount === 0) return true
+  const totalCalls = Object.values(toolUsage).reduce((n, t) => n + t.calls, 0)
+  return totalCalls === 0 && summary.trim().length < 50
+}
+
+const fmtRate = (r: number): string => `${(r * 100).toFixed(0)}%`
+
+/** Map a /mh-* scope argument to a StoreLayer (shared by propose/activate). */
+function resolveScopeLayer(scope: string, layers: StoreLayer[]): StoreLayer | undefined {
+  const s = scope.trim().toLowerCase()
+  if (!s || s === "role" || s === "project-role") return layers.find((l) => l.scope === "project-role")
+  if (s === "project" || s === "project-global") return layers.find((l) => l.scope === "project-global")
+  if (s === "role-global" || s === "account-role") return layers.find((l) => l.scope === "account-role")
+  if (s === "account" || s === "account-global") return layers.find((l) => l.scope === "account-global")
+  return undefined
 }
 
 // ── Per-session state ──────────────────────────────────────────────────────
@@ -250,6 +291,20 @@ const metaHarness: Plugin = async (input) => {
       if (!isMhRole(agent)) return
       if (pendingScore.has(sessionID)) return
 
+      // Skip degenerate sessions (greetings / no substantive work) BEFORE
+      // bothering the human — they must never pollute the fitness signal.
+      const turns = sessionTurns.get(sessionID) ?? 0
+      const usage = sessionToolUsage.get(sessionID) ?? {}
+      const summary = sessionSummary.get(sessionID) ?? ""
+      if (isDegenerateSession(turns, usage, summary)) {
+        await log(client, "info", `[hook:event] skipping degenerate session ${sessionID} (turns=${turns}, toolCalls=${Object.values(usage).reduce((n, t) => n + t.calls, 0)})`)
+        await client.tui.showToast({
+          body: { message: "Meta-Harness: session skipped (no substantive work)", variant: "info", duration: 4_000 },
+        })
+        cleanupSession(sessionID)
+        return
+      }
+
       bootstrappedSessions.delete(sessionID)
       pendingScore.add(sessionID)
 
@@ -279,6 +334,8 @@ const metaHarness: Plugin = async (input) => {
         return { layer, score: recordSession(layer.root, version, record) }
       })
 
+      const prLayer = layers.find((l) => l.scope === "project-role")!
+      const pgLayer = layers.find((l) => l.scope === "project-global")!
       const projectRoleScore = scores.find((s) => s.layer.scope === "project-role")?.score
       const projectGlobalScore = scores.find((s) => s.layer.scope === "project-global")?.score
 
@@ -294,14 +351,45 @@ const metaHarness: Plugin = async (input) => {
 
       cleanupSession(sessionID)
 
-      // Auto-propose: project-role@PROJECT_ROLE_THRESHOLD, project-global@PROJECT_GLOBAL_THRESHOLD
-      const prLayer = layers.find((l) => l.scope === "project-role")!
-      const pgLayer = layers.find((l) => l.scope === "project-global")!
+      // Resolve any in-progress project-layer trial now that a new score landed.
+      for (const l of [pgLayer, prLayer]) {
+        const res = resolveTrial(l.root)
+        if (res.action === "confirmed") {
+          await log(client, "info", `[hook:event] trial confirmed ${l.scope} ${res.trial}`)
+          await client.tui.showToast({
+            body: {
+              message: `Trial confirmed: ${l.scope} ${res.trial} kept (${fmtRate(res.trialRate)} vs baseline ${res.baselineRate === null ? "n/a" : fmtRate(res.baselineRate)})`,
+              variant: "success", duration: 6_000,
+            },
+          })
+        } else if (res.action === "reverted") {
+          await log(client, "warn", `[hook:event] trial reverted ${l.scope} → ${res.baseline}`)
+          await client.tui.showToast({
+            body: {
+              message: `Trial reverted: ${l.scope} back to ${res.baseline} (${fmtRate(res.trialRate)} < baseline ${fmtRate(res.baselineRate)})`,
+              variant: "warning", duration: 6_000,
+            },
+          })
+        } else if (res.action === "abandoned") {
+          await log(client, "warn", `[hook:event] trial abandoned ${l.scope}: ${res.reason}`)
+        }
+      }
 
-      if (projectRoleScore && projectRoleScore.sessions.length % PROJECT_ROLE_THRESHOLD === 0) {
+      // Selection-gated auto-propose. `>=` (not `% N`) so a deferred trigger
+      // stays eligible on the next scored session instead of being lost at the
+      // exact multiple; the readTrial guard prevents proposing over an in-flight
+      // trial (proposer's own inFlight guard prevents concurrent proposals).
+      const prDue = !!projectRoleScore
+        && projectRoleScore.sessions.length >= PROJECT_ROLE_THRESHOLD
+        && readTrial(prLayer.root) === null
+      const pgDue = !!projectGlobalScore
+        && projectGlobalScore.sessions.length >= PROJECT_GLOBAL_THRESHOLD
+        && readTrial(pgLayer.root) === null
+
+      if (prDue) {
         await log(client, "info", `[hook:event] auto-propose project-role for ${agent}`)
         void triggerPropose(client, worktree, prLayer)
-      } else if (projectGlobalScore && projectGlobalScore.sessions.length % PROJECT_GLOBAL_THRESHOLD === 0) {
+      } else if (pgDue) {
         await log(client, "info", `[hook:event] auto-propose project-global`)
         void triggerPropose(client, worktree, pgLayer)
       }
@@ -324,29 +412,100 @@ const metaHarness: Plugin = async (input) => {
 
       // /mh-propose [scope]
       if (cmdInput.command === "mh-propose") {
+        const agent = sessionAgent.get(cmdInput.sessionID) ?? "mh-build"
+        const layers = layersFor(worktree, agent)
+        const layer = resolveScopeLayer(cmdInput.arguments, layers)
+        if (layer) {
+          await log(client, "info", `[hook:command] /mh-propose scope=${layer.scope} agent=${agent}`)
+          void triggerPropose(client, worktree, layer)
+          throw new Error("Meta-Harness: propose cycle started ✓ (this notice is expected)")
+        }
+        throw new Error(`Meta-Harness: /mh-propose — unknown scope "${cmdInput.arguments.trim()}" (use role|project|role-global|account)`)
+      }
+
+      // /mh-activate <scope> <vN> [--force]
+      if (cmdInput.command === "mh-activate") {
+        const parts = cmdInput.arguments.trim().split(/\s+/).filter(Boolean)
+        const force = parts.includes("--force")
+        const positional = parts.filter((p) => p !== "--force")
+        const scopeArg = positional[0] ?? ""
+        const version = positional[1] ?? ""
+        const agent = sessionAgent.get(cmdInput.sessionID) ?? "mh-build"
+        const layers = layersFor(worktree, agent)
+        const layer = resolveScopeLayer(scopeArg, layers)
+        if (!layer) {
+          throw new Error(`Meta-Harness: /mh-activate — unknown scope "${scopeArg}" (use account|project|role-global|role)`)
+        }
+        if (!/^v\d+$/.test(version)) {
+          throw new Error(`Meta-Harness: /mh-activate — expected a version like v3, got "${version}"`)
+        }
+        const isAccount = layer.scope === "account-global" || layer.scope === "account-role"
+        if (isAccount && !force) {
+          const verdict = readAbVerdict(layer.root, version)
+          if (!verdict) {
+            throw new Error(`Meta-Harness: no ab-verdict.json for ${layer.scope} ${version} — run "runner.py ab --layer ${layer.scope} --candidate ${version} ..." first, or pass --force`)
+          }
+          if (verdict.winner !== "candidate") {
+            throw new Error(`Meta-Harness: ${version} did not win the ab compare (candidate ${fmtRate(verdict.candidateRate)} vs active ${fmtRate(verdict.activeRate)}, n=${verdict.nTasks}, winner=${verdict.winner}) — refusing; pass --force to override`)
+          }
+        }
+        const ok = activateCandidate(layer.root, version)
+        if (!ok) {
+          throw new Error(`Meta-Harness: candidate ${version} not found (no system.md) for ${layer.scope}`)
+        }
+        await log(client, "info", `[hook:command] /mh-activate ${layer.scope} ${version}${force ? " --force" : ""}`)
+        throw new Error(`Meta-Harness: activated ${layer.scope} ${version} ✓ (this notice is expected)`)
+      }
+
+      // /mh-promote [global|role]
+      if (cmdInput.command === "mh-promote") {
         const scope = cmdInput.arguments.trim().toLowerCase()
         const agent = sessionAgent.get(cmdInput.sessionID) ?? "mh-build"
         const layers = layersFor(worktree, agent)
-
-        let layer: StoreLayer | undefined
-        if (!scope || scope === "role" || scope === "project-role") {
-          layer = layers.find((l) => l.scope === "project-role")
-        } else if (scope === "project" || scope === "project-global") {
-          layer = layers.find((l) => l.scope === "project-global")
-        } else if (scope === "role-global" || scope === "account-role") {
-          layer = layers.find((l) => l.scope === "account-role")
-        } else if (scope === "account" || scope === "account-global") {
-          layer = layers.find((l) => l.scope === "account-global")
+        let source: StoreLayer | undefined
+        let target: StoreLayer | undefined
+        if (!scope || scope === "global") {
+          source = layers.find((l) => l.scope === "project-global")
+          target = layers.find((l) => l.scope === "account-global")
+        } else if (scope === "role") {
+          source = layers.find((l) => l.scope === "project-role")
+          target = layers.find((l) => l.scope === "account-role")
         }
-
-        if (layer) {
-          await log(client, "info", `[hook:command.execute.before] /mh-propose scope=${layer.scope} agent=${agent}`)
-          void triggerPropose(client, worktree, layer)
-        } else {
-          await log(client, "warn", `[hook:command.execute.before] /mh-propose unknown scope="${scope}"`)
+        if (source && target) {
+          await log(client, "info", `[hook:command] /mh-promote ${source.scope}→${target.scope} agent=${agent}`)
+          void triggerPromote(client, worktree, source, target)
+          throw new Error("Meta-Harness: promote cycle started ✓ (this notice is expected)")
         }
+        throw new Error(`Meta-Harness: /mh-promote — unknown scope "${scope}" (use global|role)`)
+      }
 
-        throw new Error("Meta-Harness: propose cycle started ✓ (this notice is expected)")
+      // /mh-status
+      if (cmdInput.command === "mh-status") {
+        const agent = sessionAgent.get(cmdInput.sessionID) ?? "mh-build"
+        const layers = layersFor(worktree, agent)
+        const lines: string[] = [`Meta-Harness status (agent=${agent}):`]
+        for (const layer of layers) {
+          const ver = activeVersion(layer.root)
+          const score = readScore(layer.root, ver)
+          const rate = score.sessions.length > 0 ? `${score.nPass}/${score.sessions.length}` : "no sessions"
+          let line = `  ${layer.scope}: active=${ver} (${rate})`
+          const trial = readTrial(layer.root)
+          if (trial) {
+            const ts = readScore(layer.root, trial.trial)
+            line += ` | TRIAL ${trial.trial} vs ${trial.baseline} (${ts.sessions.length}/${trial.minSessions})`
+          }
+          const versions = listVersions(layer.root)
+          const newest = versions.length ? versions[versions.length - 1] : undefined
+          if (newest && newest !== ver) {
+            const verdict = readAbVerdict(layer.root, newest)
+            const vinfo = verdict
+              ? `verdict=${verdict.winner} (${fmtRate(verdict.candidateRate)} vs ${fmtRate(verdict.activeRate)})`
+              : "no verdict"
+            line += ` | candidate ${newest}: ${vinfo}`
+          }
+          lines.push(line)
+        }
+        throw new Error(lines.join("\n"))
       }
     },
   }

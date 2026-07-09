@@ -20,7 +20,8 @@ Store layout (mirroring the TypeScript):
           <sessionID>.json
 
 Injection order: account-global -> project-global -> account-role -> project-role
-(runner feeds only the two global layers; role layers are ignored here)
+(the two global layers are always available; role layers are composed when the
+runner is given an --agent, via account_role_root/project_role_root below)
 """
 
 from __future__ import annotations
@@ -48,6 +49,16 @@ def account_global_root() -> Path:
 def project_global_root(meta_root: Path) -> Path:
     """<meta_root>/.meta-harness/global/  (meta_root = repo root)"""
     return meta_root / ".meta-harness" / "global"
+
+
+def account_role_root(agent: str) -> Path:
+    """~/.config/opencode/.meta-harness/roles/<agent>/  (mirrors harness-store.ts accountRoleRoot)"""
+    return _opencode_config_dir() / ".meta-harness" / "roles" / agent
+
+
+def project_role_root(meta_root: Path, agent: str) -> Path:
+    """<meta_root>/.meta-harness/roles/<agent>/  (mirrors harness-store.ts projectRoleRoot)"""
+    return meta_root / ".meta-harness" / "roles" / agent
 
 
 # ── Paths inside a store ───────────────────────────────────────────────────
@@ -154,6 +165,18 @@ def read_active_system(store_root: Path) -> str:
 
 def read_active_tools(store_root: Path) -> str:
     return _read_text(active_path(store_root, "tools.md"))
+
+
+def candidate_exists(store_root: Path, version: str) -> bool:
+    return (store_root / "candidates" / version).is_dir()
+
+
+def read_candidate_system(store_root: Path, version: str) -> str:
+    return _read_text(_candidate_file(store_root, version, "system.md"))
+
+
+def read_candidate_tools(store_root: Path, version: str) -> str:
+    return _read_text(_candidate_file(store_root, version, "tools.md"))
 
 
 # ── Harness assembly ───────────────────────────────────────────────────────

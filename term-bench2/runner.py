@@ -5,6 +5,7 @@ runner.py — Terminal-Bench 2 harness runner for meta-harness evolution.
 Commands:
   prep   [--apply]          Print (or run) one-time host setup: mkdir + apt union install.
   run    [options]          Run tasks through OpenCode, score, record in store.
+  ab     [options]          A/B a candidate vs active for one layer; writes ab-verdict.json.
   oracle [--tasks T [T…]]   Validate pipeline using solution/solve.sh (no LLM tokens).
 
 Examples:
@@ -13,6 +14,8 @@ Examples:
   python3 runner.py oracle --tasks openssl-selfsigned-cert
   python3 runner.py run --tasks adaptive-rejection-sampler --model claude-sonnet-4-6
   python3 runner.py run --all --model claude-sonnet-4-6 --variant high --k 1
+  python3 runner.py run --agent mh-build --pin account-global=v4 --tasks dna-insert
+  python3 runner.py ab --layer account-global --candidate v4 --task-file baseline-tasks.txt
 """
 
 from __future__ import annotations
@@ -493,33 +496,104 @@ def cmd_prep(args: argparse.Namespace) -> None:
 # ── harness assembly ───────────────────────────────────────────────────────
 
 
-def assemble_agents_md(layers: str, meta_root: Path) -> str:
-    """
-    Build AGENTS.md content from the active global store layers.
-    layers: 'global' | 'account' | 'project' | 'none'
-    """
-    # Import here to keep startup fast
-    from bench_store import (
-        account_global_root,
-        project_global_root,
-        read_active_system,
-        read_active_tools,
-    )
+LAYER_CHOICES = ("account-global", "project-global", "account-role", "project-role")
 
+# (system_heading, tools_heading) per layer; {agent} is filled for role layers.
+# The two global layers keep their historical headings so default output is
+# byte-identical to the pre-role version.
+_LAYER_LABELS = {
+    "account-global": ("General coding guidance", "General coding tool usage"),
+    "project-global": ("Project guidance", "Project tool usage"),
+    "account-role":   ("Role guidance ({agent})", "Role tool usage ({agent})"),
+    "project-role":   ("Project role guidance ({agent})", "Project role tool usage ({agent})"),
+}
+
+
+def layer_store_roots(layers: str, agent: str, meta_root: Path) -> list[tuple[str, Path]]:
+    """Ordered [(layer_name, store_root)] in Option Y order:
+    account-global -> project-global -> account-role -> project-role.
+    `layers` gates the account/project side; a non-empty `agent` adds role rows."""
+    from bench_store import (
+        account_global_root, project_global_root,
+        account_role_root, project_role_root,
+    )
+    inc_account = layers in ("global", "account")
+    inc_project = layers in ("global", "project")
+    roots: list[tuple[str, Path]] = []
+    if inc_account:
+        roots.append(("account-global", account_global_root()))
+    if inc_project:
+        roots.append(("project-global", project_global_root(meta_root)))
+    if agent:
+        if inc_account:
+            roots.append(("account-role", account_role_root(agent)))
+        if inc_project:
+            roots.append(("project-role", project_role_root(meta_root, agent)))
+    return roots
+
+
+def parse_pins(pin_args: list[str], layers: str, agent: str, meta_root: Path) -> dict[str, str]:
+    """Parse repeated --pin LAYER=vN into {layer_name: version}. die() on any error."""
+    from bench_store import candidate_exists, list_versions
+    if not pin_args:
+        return {}
+    if layers == "none":
+        die("--pin cannot be combined with --layers none")
+    valid = dict(layer_store_roots(layers, agent, meta_root))
+    pins: dict[str, str] = {}
+    for spec in pin_args:
+        if "=" not in spec:
+            die(f"--pin must be LAYER=vN, got {spec!r}")
+        name, _, ver = spec.partition("=")
+        name, ver = name.strip(), ver.strip()
+        if name not in LAYER_CHOICES:
+            die(f"--pin: unknown layer {name!r} (choices: {', '.join(LAYER_CHOICES)})")
+        if not re.fullmatch(r"v\d+", ver):
+            die(f"--pin {name}: version must look like vN, got {ver!r}")
+        if name in pins:
+            die(f"--pin: layer {name!r} pinned twice")
+        if name in ("account-role", "project-role") and not agent:
+            die(f"--pin {name} requires --agent")
+        if name not in valid:
+            die(f"--pin {name}: layer not included by --layers {layers}"
+                + ("" if agent else " (role layers need --agent)"))
+        root = valid[name]
+        if not candidate_exists(root, ver):
+            have = ", ".join(list_versions(root)) or "none"
+            die(f"--pin {name}={ver}: no such candidate under {root} (have: {have})")
+        pins[name] = ver
+    return pins
+
+
+def assemble_agents_md(layers: str, meta_root: Path, agent: str = "",
+                       pins: Optional[dict] = None) -> str:
+    """
+    Build AGENTS.md content from the store layers (Option Y order).
+    layers: 'global' | 'account' | 'project' | 'none'
+    agent : if set, also compose the account-role/project-role layers for it.
+    pins  : {layer_name: vN} — read that candidate instead of the active version.
+    With agent="" and pins empty, output is identical to the two-global-layer form.
+    """
+    from bench_store import (
+        read_active_system, read_active_tools,
+        read_candidate_system, read_candidate_tools,
+    )
+    pins = pins or {}
     parts: list[str] = []
 
-    def maybe_add(root: Path, label: str) -> None:
-        sys_txt = read_active_system(root)
-        tools_txt = read_active_tools(root)
+    for name, root in layer_store_roots(layers, agent, meta_root):
+        ver = pins.get(name)
+        if ver:
+            sys_txt = read_candidate_system(root, ver)
+            tools_txt = read_candidate_tools(root, ver)
+        else:
+            sys_txt = read_active_system(root)
+            tools_txt = read_active_tools(root)
+        sys_head, tools_head = _LAYER_LABELS[name]
         if sys_txt:
-            parts.append(f"## {label} guidance\n\n{sys_txt}")
+            parts.append(f"## {sys_head.format(agent=agent)}\n\n{sys_txt}")
         if tools_txt:
-            parts.append(f"## {label} tool usage\n\n{tools_txt}")
-
-    if layers in ("global", "account"):
-        maybe_add(account_global_root(), "General coding")
-    if layers in ("global", "project"):
-        maybe_add(project_global_root(meta_root), "Project")
+            parts.append(f"## {tools_head.format(agent=agent)}\n\n{tools_txt}")
 
     return "\n\n---\n\n".join(parts)
 
@@ -756,6 +830,26 @@ def run_opencode(
 # ── verifier ───────────────────────────────────────────────────────────────
 
 
+def _copy_test_entry(f: Path, dst_dir: Path) -> None:
+    """Copy one tests/ entry into dst_dir.
+
+    Handles subdirectories (some tasks ship dirs under tests/) and skips
+    pytest bytecode junk (__pycache__, *.pyc) that a prior verifier run may
+    have compiled into the source tree — copying those dirs with copy2 raises
+    IsADirectoryError.
+    """
+    if f.name == "__pycache__" or f.suffix == ".pyc":
+        return
+    dst = dst_dir / f.name
+    if f.is_dir():
+        shutil.copytree(
+            f, dst, dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
+    else:
+        shutil.copy2(f, dst)
+
+
 def copy_tests(task: str, tb_root: Path) -> None:
     """Copy test files into ~/bench/tests (visible as /tests inside namespace)."""
     clean_dir(HOST_TESTS)  # clears REAL_TESTS via _real()
@@ -764,12 +858,12 @@ def copy_tests(task: str, tb_root: Path) -> None:
     src = tb_root / task / "tests"
     if src.is_dir():
         for f in src.iterdir():
-            shutil.copy2(f, real_tests / f.name)
+            _copy_test_entry(f, real_tests)
     # Overlay: patches/<task>/
     patch_src = PATCHES_DIR / task
     if patch_src.is_dir():
         for f in patch_src.iterdir():
-            shutil.copy2(f, real_tests / f.name)
+            _copy_test_entry(f, real_tests)
             log(f"  patch applied: {f.name}")
 
 
@@ -798,6 +892,22 @@ def run_verifier(verifier_timeout: float, task: str = "") -> int:
 # ── store recording ────────────────────────────────────────────────────────
 
 
+def _session_record(task: str, session_id: str, passed: bool, turn_count: int,
+                    tool_usage: dict, model: str, variant: str) -> dict:
+    """Build a SessionRecord (matches harness-store.ts SessionRecord shape)."""
+    return {
+        "sessionID": session_id,
+        "passed": passed,
+        "note": f"bench:{task}",
+        "turnCount": turn_count,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "summary": task,
+        "model": model,
+        "variant": variant or "",
+        "toolUsage": tool_usage,
+    }
+
+
 def record_to_stores(
     task: str,
     session_id: str,
@@ -809,60 +919,69 @@ def record_to_stores(
     layers: str,
     meta_root: Path,
     no_store: bool,
+    agent: str = "",
+    pins: Optional[dict] = None,
 ) -> None:
     if no_store:
         return
+    # Hygiene: a 0-turn run is a timeout / transient opencode failure, not a
+    # verdict on the harness — never let it pollute the candidate score.json.
+    if turn_count == 0:
+        log("  skip store record: 0 agent turns (timeout/transient opencode failure)")
+        return
 
-    from bench_store import (
-        account_global_root,
-        active_version,
-        project_global_root,
-        record_session,
-    )
+    from bench_store import active_version, record_session
 
-    record = {
-        "sessionID": session_id,
-        "passed": passed,
-        "note": "",
-        "turnCount": turn_count,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "summary": task,
-        "model": model,
-        "variant": variant or "",
-        "toolUsage": tool_usage,
-    }
+    pins = pins or {}
+    record = _session_record(task, session_id, passed, turn_count, tool_usage, model, variant)
 
-    roots = []
-    if layers in ("global", "account"):
-        roots.append(account_global_root())
-    if layers in ("global", "project"):
-        roots.append(project_global_root(meta_root))
-
-    for root in roots:
-        ver = active_version(root)
+    for name, root in layer_store_roots(layers, agent, meta_root):
+        ver = pins.get(name) or active_version(root)
         score = record_session(root, ver, record)
-        log(f"  store {root.name} {ver}: nPass={score['nPass']} nFail={score['nFail']}")
+        log(f"  store {name} {ver}: nPass={score['nPass']} nFail={score['nFail']}")
 
 
 # ── run command ────────────────────────────────────────────────────────────
 
 
-def _harness_meta(layers: str, meta_root: Path) -> dict:
-    """Snapshot which store versions are active, for results file provenance."""
-    from bench_store import account_global_root, active_version, project_global_root
+def _harness_meta(layers: str, meta_root: Path, agent: str = "",
+                  pins: Optional[dict] = None) -> dict:
+    """Snapshot which store versions are active/pinned, for results provenance."""
+    from bench_store import (
+        account_global_root, active_version, project_global_root,
+        account_role_root, project_role_root,
+    )
+    pins = pins or {}
     ag = account_global_root()
     pg = project_global_root(meta_root)
-    return {
+    meta = {
         "layers": layers,
         "account_active": active_version(ag) if ag.exists() else "none",
         "project_active": active_version(pg) if pg.exists() else "none",
+        "agent": agent or "",
+        "pins": pins,
     }
+    if agent:
+        ar = account_role_root(agent)
+        pr = project_role_root(meta_root, agent)
+        meta["account_role_active"] = active_version(ar) if ar.exists() else "none"
+        meta["project_role_active"] = active_version(pr) if pr.exists() else "none"
+    return meta
 
 
 def _write_results(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2))
     log(f"Results written → {path}")
+
+
+def _write_json_atomic(path: Path, data: dict) -> None:
+    """Write JSON via temp file + rename so a concurrent reader never sees a
+    torn file (the ab-verdict is read cross-process by the opencode plugin)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.parent / (path.name + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2))
+    tmp.replace(path)
 
 
 def _agg_totals(task_agg: dict) -> tuple[int, int]:
@@ -879,6 +998,76 @@ def _agg_totals(task_agg: dict) -> tuple[int, int]:
     return n_pass, n_total
 
 
+def select_tasks(args: argparse.Namespace) -> list[str]:
+    """Resolve --all / --task-file / --tasks into a manifest-validated task list."""
+    if getattr(args, "all", False):
+        tasks = all_task_names()
+    elif getattr(args, "task_file", None):
+        tasks = [ln.strip() for ln in Path(args.task_file).read_text().splitlines()
+                 if ln.strip() and not ln.startswith("#")]
+    elif getattr(args, "tasks", None):
+        tasks = args.tasks
+    else:
+        die("Specify --tasks TASK [TASK...], --task-file PATH, or --all")
+    manifest = load_manifest()
+    for t in tasks:
+        if t not in manifest:
+            die(f"Unknown task: {t!r}. Check manifest.json.")
+    return tasks
+
+
+def task_timeouts(task: str, tb_root: Path, max_agent_timeout: float) -> tuple[float, float]:
+    """(agent_timeout, verifier_timeout) from task.toml, with optional agent cap."""
+    task_toml = tb_root / task / "task.toml"
+    agent_timeout = read_toml_value(task_toml, "agent", "timeout_sec") or 900.0
+    if max_agent_timeout and agent_timeout > max_agent_timeout:
+        log(f"  capping agent timeout {agent_timeout:.0f}s → {max_agent_timeout:.0f}s")
+        agent_timeout = float(max_agent_timeout)
+    verifier_timeout = read_toml_value(task_toml, "verifier", "timeout_sec") or 300.0
+    return agent_timeout, verifier_timeout
+
+
+def run_task_once(task: str, tb_root: Path, model: str, variant: str,
+                  harness_md: str, agent_timeout: float, verifier_timeout: float) -> dict:
+    """One clean-room execution: clean → setup → opencode → copy_tests → verify.
+    No store/results side effects. Returns:
+      {session_id, reward, elapsed, turns, tool_usage,
+       error: '' | 'setup_failed' | 'agent_no_output'}
+    """
+    session_id = f"bench-{task}-{int(time.time())}-{uuid.uuid4().hex[:6]}"
+    task_start = time.monotonic()
+
+    # 1. Clean workspace (standard dirs + /tmp + task-specific extras)
+    clean_dir(HOST_APP)
+    clean_dir(HOST_TESTS)
+    clean_dir(HOST_LOGS)
+    clean_tmp()
+    cleanup_task_extras(task)
+
+    # 2. Setup task environment
+    try:
+        setup_task(task, tb_root)
+    except subprocess.CalledProcessError as e:
+        log(f"  setup_deps.sh failed (exit {e.returncode}), skipping task")
+        return {"session_id": session_id, "reward": 0,
+                "elapsed": round(time.monotonic() - task_start, 1),
+                "turns": 0, "tool_usage": {}, "error": "setup_failed"}
+
+    # 3. Run OpenCode
+    turn_count, tool_usage = run_opencode(
+        task, tb_root, model, variant or None, agent_timeout, harness_md
+    )
+    # 4. Copy tests (with patches)
+    copy_tests(task, tb_root)
+    # 5. Run verifier
+    reward = run_verifier(verifier_timeout, task)
+    elapsed = time.monotonic() - task_start
+    log(f"  reward={reward}  elapsed={elapsed:.1f}s")
+    return {"session_id": session_id, "reward": reward, "elapsed": elapsed,
+            "turns": turn_count, "tool_usage": tool_usage,
+            "error": "agent_no_output" if turn_count == 0 else ""}
+
+
 def cmd_run(args: argparse.Namespace) -> None:
     tb_root = Path(args.tb_root).expanduser().resolve()
     if not tb_root.exists():
@@ -886,26 +1075,18 @@ def cmd_run(args: argparse.Namespace) -> None:
 
     meta_root = META_ROOT
 
-    # Task selection
-    if args.all:
-        tasks = all_task_names()
-    elif args.task_file:
-        tasks = [ln.strip() for ln in Path(args.task_file).read_text().splitlines()
-                 if ln.strip() and not ln.startswith("#")]
-    elif args.tasks:
-        tasks = args.tasks
-    else:
-        die("Specify --tasks TASK [TASK...], --task-file PATH, or --all")
-
-    manifest = load_manifest()
-    for t in tasks:
-        if t not in manifest:
-            die(f"Unknown task: {t!r}. Check manifest.json.")
+    tasks = select_tasks(args)
 
     model = args.model
     variant = args.variant or ""
     k = args.k
     layers = args.layers
+    agent = args.agent or ""
+
+    # Pins (validated eagerly; die on any error before any task runs)
+    if args.pin and (args.no_harness or layers == "none"):
+        die("--pin cannot be combined with --no-harness / --layers none")
+    pins = parse_pins(args.pin, layers, agent, meta_root)
 
     # --results-file implies --no-store (keep candidate store clean)
     results_file: Optional[Path] = Path(args.results_file) if args.results_file else None
@@ -914,23 +1095,26 @@ def cmd_run(args: argparse.Namespace) -> None:
 
     log(f"Running {len(tasks)} task(s) × k={k}, model={model}" + (f"+{variant}" if variant else ""))
     log(f"TB_ROOT={tb_root}  META_ROOT={meta_root}")
+    if agent:
+        log(f"Agent role layers: {agent}")
+    if pins:
+        log(f"Pinned: {', '.join(f'{n}={v}' for n, v in pins.items())}")
     if results_file:
         log(f"Results file: {results_file}  (store writes disabled)")
 
     # Pre-assemble harness (same for all tasks in this run)
     if args.no_harness or layers == "none":
         harness_md = ""
-        harness_label = "none"
     else:
-        harness_md = assemble_agents_md(layers, meta_root)
-        harness_label = layers
+        harness_md = assemble_agents_md(layers, meta_root, agent, pins)
         if harness_md:
             log(f"Harness assembled ({len(harness_md)} chars)")
         else:
             log("No active harness content found — running without AGENTS.md")
 
     # Snapshot harness provenance before any runs
-    harness_meta = _harness_meta(layers, meta_root) if layers != "none" else {"layers": "none"}
+    harness_meta = (_harness_meta(layers, meta_root, agent, pins)
+                    if layers != "none" else {"layers": "none"})
 
     results: list[dict] = []
     # Per-task aggregated results for results file: {task: {rewards:[], elapsed:[], turns:[]}}
@@ -958,12 +1142,7 @@ def cmd_run(args: argparse.Namespace) -> None:
             log(f"\n=== Task: {task} (skipped — already done) ===")
             continue
         log(f"\n=== Task: {task} ===")
-        task_toml = tb_root / task / "task.toml"
-        agent_timeout = read_toml_value(task_toml, "agent", "timeout_sec") or 900.0
-        if args.max_agent_timeout and agent_timeout > args.max_agent_timeout:
-            log(f"  capping agent timeout {agent_timeout:.0f}s → {args.max_agent_timeout}s")
-            agent_timeout = float(args.max_agent_timeout)
-        verifier_timeout = read_toml_value(task_toml, "verifier", "timeout_sec") or 300.0
+        agent_timeout, verifier_timeout = task_timeouts(task, tb_root, args.max_agent_timeout)
 
         task_agg[task] = {"rewards": [], "elapsed": [], "turns": [], "errors": []}
 
@@ -971,48 +1150,27 @@ def cmd_run(args: argparse.Namespace) -> None:
             if k > 1:
                 log(f"  -- run {ki+1}/{k} --")
 
-            session_id = f"bench-{task}-{int(time.time())}-{uuid.uuid4().hex[:6]}"
-            task_start = time.monotonic()
+            res = run_task_once(task, tb_root, model, variant, harness_md,
+                                agent_timeout, verifier_timeout)
 
-            # 1. Clean workspace (standard dirs + /tmp + task-specific extras)
-            clean_dir(HOST_APP)
-            clean_dir(HOST_TESTS)
-            clean_dir(HOST_LOGS)
-            clean_tmp()
-            cleanup_task_extras(task)
-
-            # 2. Setup task environment
-            try:
-                setup_task(task, tb_root)
-            except subprocess.CalledProcessError as e:
-                log(f"  setup_deps.sh failed (exit {e.returncode}), skipping task")
-                err_result = {"task": task, "k": ki + 1, "reward": 0, "elapsed": 0.0, "error": "setup_failed"}
-                results.append(err_result)
+            if res["error"] == "setup_failed":
+                results.append({"task": task, "k": ki + 1, "reward": 0,
+                                "elapsed": 0.0, "error": "setup_failed"})
                 task_agg[task]["rewards"].append(0)
                 task_agg[task]["elapsed"].append(0.0)
                 task_agg[task]["turns"].append(0)
                 task_agg[task]["errors"].append("setup_failed")
                 continue
 
-            # 3. Run OpenCode
-            turn_count, tool_usage = run_opencode(
-                task, tb_root, model, variant or None, agent_timeout, harness_md
-            )
-
-            # 4. Copy tests (with patches)
-            copy_tests(task, tb_root)
-
-            # 5. Run verifier
-            reward = run_verifier(verifier_timeout, task)
-
-            elapsed = time.monotonic() - task_start
+            reward = res["reward"]
+            elapsed = res["elapsed"]
+            turn_count = res["turns"]
             passed = reward == 1
-            log(f"  reward={reward}  elapsed={elapsed:.1f}s")
 
-            # 6. Record to candidate store (skipped when results_file is set)
+            # Record to candidate store (skipped when results_file / --no-store)
             record_to_stores(
-                task, session_id, passed, turn_count, tool_usage,
-                model, variant, layers, meta_root, no_store,
+                task, res["session_id"], passed, turn_count, res["tool_usage"],
+                model, variant, layers, meta_root, no_store, agent, pins,
             )
 
             results.append({
@@ -1020,7 +1178,7 @@ def cmd_run(args: argparse.Namespace) -> None:
                 "k": ki + 1,
                 "reward": reward,
                 "elapsed": elapsed,
-                "session_id": session_id,
+                "session_id": res["session_id"],
             })
             task_agg[task]["rewards"].append(reward)
             task_agg[task]["elapsed"].append(round(elapsed, 1))
@@ -1205,6 +1363,178 @@ def cmd_oracle(args: argparse.Namespace) -> None:
         })
 
 
+# ── ab command ─────────────────────────────────────────────────────────────
+
+
+def cmd_ab(args: argparse.Namespace) -> None:
+    """A/B compare a candidate vs the active version of ONE layer on a task set.
+
+    Runs each task through both arms (arm A = all-active composition, arm B =
+    same but the target layer pinned to the candidate), interleaved per pair to
+    neutralise environment drift. Writes candidates/<vN>/ab-verdict.json — the
+    cross-language contract read by the opencode plugin's /mh-activate.
+    """
+    from bench_store import (
+        active_version, candidate_exists, candidate_path,
+        list_versions, record_session,
+    )
+    tb_root = Path(args.tb_root).expanduser().resolve()
+    if not tb_root.exists():
+        die(f"TB_ROOT not found: {tb_root}")
+    meta_root = META_ROOT
+
+    layer = args.layer
+    candidate = args.candidate
+    agent = args.agent or ""
+    layers = args.layers
+    model = args.model
+    variant = args.variant or ""
+    k = args.k
+    no_store = args.no_store
+
+    if not re.fullmatch(r"v\d+", candidate):
+        die(f"--candidate must look like vN, got {candidate!r}")
+    if layer in ("account-role", "project-role") and not agent:
+        die(f"--layer {layer} requires --agent")
+
+    # Resolve the layer's store root from the composition
+    roots = dict(layer_store_roots(layers, agent, meta_root))
+    if layer not in roots:
+        die(f"--layer {layer} not included by --layers {layers}"
+            + ("" if agent else " (role layers need --agent)"))
+    layer_root = roots[layer]
+
+    if not candidate_exists(layer_root, candidate):
+        have = ", ".join(list_versions(layer_root)) or "none"
+        die(f"no such candidate {candidate} under {layer_root} (have: {have})")
+
+    baseline = active_version(layer_root)
+    if baseline == candidate:
+        die(f"candidate {candidate} is already the active version — nothing to compare")
+
+    tasks = select_tasks(args)
+
+    # Compose both arms once (they differ in exactly one layer by construction)
+    harness_a = assemble_agents_md(layers, meta_root, agent, pins={})
+    harness_b = assemble_agents_md(layers, meta_root, agent, pins={layer: candidate})
+
+    verdict_path = candidate_path(layer_root, candidate, "ab-verdict.json")
+    partial_path = candidate_path(layer_root, candidate, "ab-verdict.partial.json")
+
+    run_meta = {"layer": layer, "candidate": candidate, "baseline": baseline,
+                "model": model, "k": k}
+
+    log(f"A/B: {layer} {candidate} vs active {baseline} on {len(tasks)} task(s) × k={k}")
+    if agent:
+        log(f"Agent role layers: {agent}")
+
+    # Resume: carry over tasks already fully evaluated (both arms × k, or setup_failed)
+    task_results: dict[str, dict] = {}
+    if args.resume and partial_path.exists():
+        try:
+            prev = json.loads(partial_path.read_text())
+        except Exception:
+            prev = {}
+        for kk in ("layer", "candidate", "baseline", "model", "k"):
+            if prev.get(kk) != run_meta[kk]:
+                die(f"--resume: prior partial {kk}={prev.get(kk)!r} != {run_meta[kk]!r}; "
+                    "delete the partial to restart")
+        for t, tr in prev.get("taskResults", {}).items():
+            if tr.get("error") == "setup_failed":
+                task_results[t] = tr
+            elif len(tr.get("candidate", [])) >= k and len(tr.get("active", [])) >= k:
+                task_results[t] = tr
+        if task_results:
+            log(f"Resuming ab: {len(task_results)} task(s) already complete")
+
+    run_start_ts = datetime.now(timezone.utc).isoformat()
+
+    def _verdict_dict(status: str) -> dict:
+        included = {t: tr for t, tr in task_results.items()
+                    if tr.get("error") != "setup_failed"}
+        n_tasks = len(included)
+        cand_pass = sum(1 for tr in included.values() if max(tr["candidate"]) == 1)
+        act_pass = sum(1 for tr in included.values() if max(tr["active"]) == 1)
+        cand_rate = round(cand_pass / n_tasks, 4) if n_tasks else 0.0
+        act_rate = round(act_pass / n_tasks, 4) if n_tasks else 0.0
+        if cand_pass > act_pass:
+            winner = "candidate"
+        elif cand_pass < act_pass:
+            winner = "active"
+        else:
+            winner = "tie"
+        d = {
+            "layer": layer,
+            "candidate": candidate,
+            "baseline": baseline,
+            "winner": winner,
+            "candidateRate": cand_rate,
+            "activeRate": act_rate,
+            "nTasks": n_tasks,
+            "k": k,
+            "taskResults": task_results,
+            "model": model,
+            "timestamp": run_start_ts,
+        }
+        if status:
+            d["status"] = status
+        return d
+
+    for task in tasks:
+        if task in task_results:
+            log(f"\n=== ab {task} (skipped — already done) ===")
+            continue
+        log(f"\n=== ab {task}: {candidate} vs active {baseline} ===")
+        agent_timeout, verifier_timeout = task_timeouts(task, tb_root, args.max_agent_timeout)
+        tr: dict = {"candidate": [], "active": []}
+        for ki in range(k):
+            if k > 1:
+                log(f"  -- pair {ki+1}/{k} --")
+            log("  [arm A: active]")
+            res_a = run_task_once(task, tb_root, model, variant, harness_a,
+                                  agent_timeout, verifier_timeout)
+            log("  [arm B: candidate]")
+            res_b = run_task_once(task, tb_root, model, variant, harness_b,
+                                  agent_timeout, verifier_timeout)
+            if res_a["error"] == "setup_failed" or res_b["error"] == "setup_failed":
+                tr["error"] = "setup_failed"
+                log("  setup_failed — task excluded from rates")
+                break
+            tr["active"].append(res_a["reward"])
+            tr["candidate"].append(res_b["reward"])
+            # Record ONLY arm B (the candidate) into the candidate's score.json
+            if not no_store and res_b["turns"] > 0:
+                rec = _session_record(task, res_b["session_id"], res_b["reward"] == 1,
+                                      res_b["turns"], res_b["tool_usage"], model, variant)
+                score = record_session(layer_root, candidate, rec)
+                log(f"  store {layer} {candidate}: nPass={score['nPass']} nFail={score['nFail']}")
+        task_results[task] = tr
+        _write_json_atomic(partial_path, _verdict_dict("in_progress"))
+
+    final = _verdict_dict("")   # final file never carries a status key
+    _write_json_atomic(verdict_path, final)
+    partial_path.unlink(missing_ok=True)
+
+    # Summary
+    print("\n" + "=" * 68)
+    print(f"{'Task':<34} {'candidate':>12} {'active':>10}  {'verdict':>8}")
+    print("-" * 68)
+    for t, tr in task_results.items():
+        if tr.get("error") == "setup_failed":
+            print(f"{t[:33]:<34} {'—':>12} {'—':>10}  {'skip':>8}")
+            continue
+        cp = max(tr["candidate"]); ap = max(tr["active"])
+        v = "cand" if cp > ap else ("active" if cp < ap else "tie")
+        print(f"{t[:33]:<34} {str(tr['candidate']):>12} {str(tr['active']):>10}  {v:>8}")
+    print("=" * 68)
+    print(f"WINNER: {final['winner']}  (candidate {final['candidateRate']} "
+          f"vs active {final['activeRate']}, n={final['nTasks']})")
+    log(f"Verdict written → {verdict_path}")
+
+    if args.results_file:
+        _write_json_atomic(Path(args.results_file), final)
+
+
 # ── CLI ────────────────────────────────────────────────────────────────────
 
 
@@ -1279,6 +1609,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip tasks already present (with results) in --results-file, "
              "carrying their prior results forward. For restarting long runs.",
     )
+    p_run.add_argument(
+        "--agent", default="", metavar="NAME",
+        help="Also compose/record the account-role + project-role layers for "
+             "this agent (e.g. mh-build).",
+    )
+    p_run.add_argument(
+        "--pin", action="append", default=[], metavar="LAYER=vN",
+        help="Pin a store layer to a candidate version instead of active "
+             "(repeatable). LAYER: account-global|project-global|account-role|"
+             "project-role. Pinned-layer scores record into that candidate's "
+             "score.json.",
+    )
+
+    # ab
+    p_ab = sub.add_parser("ab", help="A/B a candidate vs active for one layer")
+    p_ab.add_argument("--layer", required=True, choices=list(LAYER_CHOICES),
+                      help="Which layer's candidate to test")
+    p_ab.add_argument("--candidate", required=True, metavar="vN",
+                      help="Candidate version to compare against the active version")
+    p_ab.add_argument("--tasks", nargs="+", metavar="TASK", help="Task name(s)")
+    p_ab.add_argument("--task-file", metavar="PATH",
+                      help="File with one task name per line")
+    p_ab.add_argument("--all", action="store_true", help="Use all target tasks")
+    p_ab.add_argument("--model", default="claude-sonnet-4-6", help="Model ID")
+    p_ab.add_argument("--variant", default="", help="Model variant (e.g. high, low)")
+    p_ab.add_argument("--k", type=int, default=1, help="Pairs (A+B) per task")
+    p_ab.add_argument("--layers", default="global", choices=["global", "account", "project"],
+                      help="Which side layers to compose (ab needs a composition; no 'none')")
+    p_ab.add_argument("--agent", default="", metavar="NAME",
+                      help="Role agent (required for account-role/project-role layers)")
+    p_ab.add_argument("--max-agent-timeout", type=float, metavar="SEC", default=0,
+                      help="Cap each task's agent timeout at SEC seconds")
+    p_ab.add_argument("--resume", action="store_true",
+                      help="Resume from ab-verdict.partial.json (completed tasks skipped)")
+    p_ab.add_argument("--no-store", action="store_true",
+                      help="Do not write arm-B scores into the candidate's score.json "
+                           "(the verdict file is always written)")
+    p_ab.add_argument("--results-file", metavar="PATH",
+                      help="Also write the final verdict JSON here (does NOT disable store)")
 
     # oracle
     p_oracle = sub.add_parser("oracle", help="Validate pipeline with solution/solve.sh")
@@ -1303,6 +1672,8 @@ def main() -> None:
         cmd_prep(args)
     elif args.command == "run":
         cmd_run(args)
+    elif args.command == "ab":
+        cmd_ab(args)
     elif args.command == "oracle":
         cmd_oracle(args)
     else:
