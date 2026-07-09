@@ -1976,6 +1976,11 @@ def cmd_judge_audit(args: argparse.Namespace) -> None:
     cross-check for the TS-side judge (opencode-plugin/src/judge.ts), which is
     calibrated against human scores in the interactive loop — bench trajectories
     give us an independent, objective ground truth to replay against.
+
+    Exit codes:
+      0: clean (judge agreement >= 80% threshold)
+      1: ALARM (divergence: agreement < 80% threshold)
+      2: could-not-assess (all judge calls failed / no scorable sessions)
     """
     from bench_store import (
         append_meta_metric, candidate_exists, list_versions, read_score, read_trajectory,
@@ -2082,7 +2087,9 @@ def cmd_judge_audit(args: argparse.Namespace) -> None:
         log("judge-audit: no scoreable verdicts (every judge call failed/parsed as "
             "garbage) — cannot assess agreement, treating as a non-alarm (fix the "
             "judge invocation and re-run)")
-        return
+        # exit 2 = could not assess (all judge calls failed / no scorable sessions),
+        # distinct from 0=clean and 1=alarm
+        sys.exit(2)
 
     if agreement < JUDGE_AUDIT_ALARM_THRESHOLD:
         print(f"\n*** ALARM: judge-audit agreement {agreement:.1%} is BELOW the "

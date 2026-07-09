@@ -192,7 +192,8 @@ def test_cmd_judge_audit_skips_failed_judge_calls_without_crashing(tmp_path, mon
 def test_cmd_judge_audit_all_judge_calls_fail_is_non_alarming(tmp_path, monkeypatch, capsys):
     """If every judge call fails/parses as garbage, n_scored is 0 — this must
     NOT be treated as a 0% agreement alarm (that would be a false alarm about
-    the judge invocation itself, not about anti-gaming); it exits cleanly."""
+    the judge invocation itself, not about anti-gaming); it exits with code 2
+    (could-not-assess), not code 1 (alarm)."""
     traj = [{"t": "text", "text": "done"}]
     _seed_store(tmp_path, [("s1", True, traj), ("s2", False, traj)])
     monkeypatch.setattr(runner, "META_ROOT", tmp_path)
@@ -201,7 +202,9 @@ def test_cmd_judge_audit_all_judge_calls_fail_is_non_alarming(tmp_path, monkeypa
     monkeypatch.setattr(bench_store, "append_meta_metric",
                         lambda e, sink=None: metrics.append(e))
 
-    runner.cmd_judge_audit(_args())   # must not raise SystemExit
+    with pytest.raises(SystemExit) as exc:
+        runner.cmd_judge_audit(_args())
+    assert exc.value.code == 2
 
     assert metrics[0]["n"] == 0
     assert metrics[0]["agreement"] == 0.0
@@ -226,3 +229,24 @@ def test_cmd_judge_audit_nonexistent_candidate_dies_cleanly(tmp_path, monkeypatc
     with pytest.raises(SystemExit) as exc:
         runner.cmd_judge_audit(_args(candidate="v99"))
     assert exc.value.code == 1
+
+
+def test_cmd_judge_audit_all_failed_exits_2(tmp_path, monkeypatch, capsys):
+    """When every judge call fails/returns None (n_scored==0), exit 2
+    (could-not-assess), distinct from 0=clean and 1=alarm."""
+    traj = [{"t": "text", "text": "done"}]
+    _seed_store(tmp_path, [("s1", True, traj), ("s2", False, traj)])
+    monkeypatch.setattr(runner, "META_ROOT", tmp_path)
+    monkeypatch.setattr(runner, "run_judge_opencode", lambda *a, **k: None)
+    metrics = []
+    monkeypatch.setattr(bench_store, "append_meta_metric",
+                        lambda e, sink=None: metrics.append(e))
+
+    with pytest.raises(SystemExit) as exc:
+        runner.cmd_judge_audit(_args())
+    assert exc.value.code == 2
+
+    out = capsys.readouterr().out
+    assert "2 skipped" in out
+    assert "ALARM" not in out
+    assert metrics[0]["n"] == 0
