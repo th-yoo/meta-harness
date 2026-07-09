@@ -160,7 +160,9 @@ export async function runJudge(
       return null
     }
 
-    return { passed: raw.passed, confidence: raw.confidence, reasoning: raw.reasoning }
+    // Cap reasoning to 500 chars even if the LLM ignores the prompt's <=500
+    // instruction — an overlong reasoning string must not bloat score.json.
+    return { passed: raw.passed, confidence: raw.confidence, reasoning: raw.reasoning.slice(0, 500) }
   } catch {
     return null
   } finally {

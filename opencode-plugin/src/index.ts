@@ -67,8 +67,14 @@ import {
   type ToolUsage,
   type TrajEvent,
   type AgentConfig,
+  readMhConfig,
+  appendJudgeDecision,
+  judgeCalibration,
+  appendMetaMetric,
+  type SessionRecord,
 } from "./harness-store.ts"
 import { promptHumanScore, handleScoreCommand } from "./score.ts"
+import { runJudge, type JudgeVerdict } from "./judge.ts"
 import {
   triggerPropose,
   triggerPromote,
@@ -426,6 +432,20 @@ const metaHarness: Plugin = async (input) => {
       bootstrappedSessions.delete(sessionID)
       pendingScore.add(sessionID)
 
+      // Shadow-mode dense judge (Phase 4 Part D): kicked off CONCURRENTLY with
+      // the human prompt below so it never delays scoring. Disabled by default
+      // (judgeModel === "") — zero behavior change unless explicitly configured.
+      // .catch(() => null) means a broken/slow judge degrades to "no verdict"
+      // rather than ever affecting the human's score.
+      const mhCfg = readMhConfig()
+      const judgePromise: Promise<JudgeVerdict | null> = mhCfg.judgeModel
+        ? runJudge(
+            client, worktree, sessionID,
+            sessionSummary.get(sessionID) ?? "", sessionTurns.get(sessionID) ?? 0,
+            sessionTrajectory.get(sessionID) ?? [],
+          ).catch(() => null)
+        : Promise.resolve(null)
+
       const result = await promptHumanScore(client, sessionID)
       if (result === null) {
         await log(client, "info", `[hook:event] scoring timed out — skipping ${sessionID}`)
@@ -443,6 +463,10 @@ const metaHarness: Plugin = async (input) => {
 
       // Record into all 4 stores
       const layers = layersFor(worktree, agent)
+      // Resolved early (rather than after `scores`) because the shadow-judge
+      // fold-in below needs a layer root for its meta-metric, and it must run
+      // BEFORE `recordSession` so `record.judge` is present when persisted.
+      const prLayer = layers.find((l) => l.scope === "project-role")!
       const model = sessionModel.get(sessionID) ?? "unknown"
       // Confound-control provenance: which harness composed this session.
       const env = {
@@ -451,7 +475,7 @@ const metaHarness: Plugin = async (input) => {
           layers.map((l) => [l.scope, activeVersion(l.root)]),
         ),
       }
-      const record = {
+      const record: SessionRecord = {
         sessionID: recordID,
         passed: result.passed,
         note: result.note,
@@ -462,6 +486,40 @@ const metaHarness: Plugin = async (input) => {
         variant: sessionVariant.get(sessionID) ?? "",
         toolUsage: sessionToolUsage.get(sessionID) ?? {},
         env,
+      }
+
+      // Resolve the shadow judge (already running concurrently, or already
+      // resolved by now) and fold its verdict into `record` BEFORE the
+      // recordSession calls below — recordSession writes `record` to disk
+      // synchronously, so anything set on it after that point would be lost.
+      // Shadow mode: the judge NEVER alters `record.passed` or `result.passed`;
+      // it only records agreement for later calibration.
+      const judgeVerdict = await judgePromise
+      if (judgeVerdict) {
+        const agreed = judgeVerdict.passed === result.passed
+        record.judge = {
+          passed: judgeVerdict.passed,
+          confidence: judgeVerdict.confidence,
+          mode: "shadow",
+          agreed,
+        }
+        appendJudgeDecision({
+          ts: record.timestamp,
+          sessionID: recordID,
+          judge: judgeVerdict.passed,
+          human: result.passed,
+          model: mhCfg.judgeModel,
+        })
+        const cal = judgeCalibration(mhCfg.judgeMinSessions, mhCfg.judgeMinAgreement)
+        appendMetaMetric(prLayer.root, {
+          event: "judge",
+          agreed,
+          judge: judgeVerdict.passed,
+          human: result.passed,
+          agreement: cal.agreement,
+          n: cal.n,
+        })
+        await log(client, "info", `[judge] ${agreed ? "AGREE" : "DISAGREE"} judge=${judgeVerdict.passed} human=${result.passed} — calibration ${cal.n}/${mhCfg.judgeMinSessions} @ ${(cal.agreement * 100).toFixed(0)}%`)
       }
 
       const scores = layers.map((layer) => {
@@ -480,7 +538,6 @@ const metaHarness: Plugin = async (input) => {
         }
       }
 
-      const prLayer = layers.find((l) => l.scope === "project-role")!
       const pgLayer = layers.find((l) => l.scope === "project-global")!
       const projectRoleScore = scores.find((s) => s.layer.scope === "project-role")?.score
       const projectGlobalScore = scores.find((s) => s.layer.scope === "project-global")?.score
