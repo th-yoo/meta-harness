@@ -40,8 +40,9 @@ The harness activates for any **primary agent named `mh-*`** (`mh-build`, `mh-re
 - **Switching agents mid-session is honored:** switch **to** an mh-* agent → toast
   *"Harness active for mh-build from this turn — the session will be scored on work from
   here."* and the session's fitness counters reset (only post-switch work is scored).
-  Switch **away** to a non-mh agent → toast *"harness inactive; this session will no longer
-  be scored."*
+  Switch **away** to a built-in primary agent (`build`/`plan`) → toast *"harness inactive;
+  this session will no longer be scored."* (Switch detection only fires between recognized
+  primary agents — `mh-*`, `build`, `plan` — not arbitrary custom agent names.)
 - Verify the current session's state: `/mh-status` header shows
   `this session: agent=mh-build, scoring ON` (or `— not scored (switch to an mh-* agent…)`).
 
@@ -71,7 +72,7 @@ project-role: active=v2 (4/5) [6 bullets] | TRIAL v3 vs v2 (2/5) | candidate v3:
 ```
 
 - `[N bullets — over budget, /mh-curate]` appears when a playbook exceeds 25 bullets.
-- The `last:` line comes from the project meta-metrics log (last propose/curate/trial/activate/judge event).
+- The `last:` line comes from the project meta-metrics log (last propose/curate/trial/activate/ab event; judge events are logged but not shown here).
 - Ground truth is always in the opencode log:
   `grep -E 'meta-harness|hook:event|Trial|proposer|judge' ~/.local/share/opencode/log/opencode.log | tail -40`
 
@@ -129,8 +130,9 @@ sample — not a failure; add tasks or `--k`, or accept the tie. Then activate:
 
 Account activation **refuses unless the verdict is `accept`** (or pass `--force`). Scope
 keywords: `account`=account-global, `role-global`=account-role, `project`=project-global,
-`role`=project-role. Project candidates skip the ab gate (they use trials) but can still be
-force-activated: `/mh-activate role v3 --force`.
+`role`=project-role. Project candidates skip the ab gate entirely (they're validated by
+trials), so `/mh-activate role v3` activates directly — `--force` is only meaningful for
+account scopes.
 
 ### …enable the dense judge?
 
@@ -186,7 +188,7 @@ python3 term-bench2/runner.py report-loop --json  # machine summary
 
 It merges three `meta-metrics.jsonl` sinks (bench, project, account) and reports ab-decision
 counts, trial confirm/revert counts, held-out delta per split rotation, and judge agreement.
-Notes: needs **Python 3.11+**; the default project sink assumes you're in this repo — for
+Notes: needs **Python 3.12+**; the default project sink assumes you're in this repo — for
 another project pass `--sink <that-worktree>/.meta-harness/meta-metrics.jsonl`.
 
 ### …run the benchmark?
@@ -251,7 +253,7 @@ Models must be `provider/model` — a bare name fails resolution under oauth.
   `--max-agent-timeout`, `--resume`, `--no-store`, `--save-all-traj`, `--results-file`.
 - **`split`** `{make,rotate,show}` `--seed` (42) `--folds` (4) `--source` (`baseline-tasks.txt`) `--split-file`.
 - **`oracle`** `[--tasks T…] [--results-file P]` — token-free pipeline validation via solution scripts.
-- **`report-loop`** `[--json] [--sink PATH …]` — merged loop observability (Python 3.11+).
+- **`report-loop`** `[--json] [--sink PATH …]` — merged loop observability (Python 3.12+).
 - **`judge-audit`** `--layer L --candidate vN [--agent A] [--model M]` (default
   `openrouter/google/gemini-2.5-flash`) `[--limit 10]` — exit **0** clean / **1** alarm / **2** could-not-assess.
 
@@ -260,10 +262,10 @@ Models must be `provider/model` — a bare name fails resolution under oauth.
 Four layer roots (injection order general → specific → env snapshot):
 
 ```
-~/.config/opencode/.meta-harness/global/        (account-global)
-~/.config/opencode/.meta-harness/roles/<agent>/ (account-role)
+~/.config/opencode/.meta-harness/global/        (account-global)   most general
 <worktree>/.meta-harness/global/                (project-global)
-<worktree>/.meta-harness/roles/<agent>/         (project-role)
+~/.config/opencode/.meta-harness/roles/<agent>/ (account-role)
+<worktree>/.meta-harness/roles/<agent>/         (project-role)     most specific (wins)
 ```
 
 ```
