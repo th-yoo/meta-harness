@@ -235,7 +235,46 @@ no causal failure analysis, no held-out split, prompt bloat, sparse human signal
 and the research-backed plan to fix them are documented in
 [enhancement-roadmap.md](enhancement-roadmap.md).
 
-## 11. Status & gotchas
+## 11. Phase 4: Evolvable artifacts and dense judge
+
+**Evolvable knobs (project layers only)** — Beyond behavioral rules (system.md/tools.md),
+the proposer can evolve configuration knobs that affect the agent's runtime environment:
+
+- **agent-config.json** — bash execution timeout and other agent-level settings
+  (`active/agent-config.json` per layer). Schema whitelisted; rides the candidate/trial/ab
+  lifecycle just like system.md rules.
+- **env-policy.json** — environment-snapshot probes (e.g., `lsPath`, `maxLsEntries`,
+  `languageProbes`) that control what context is captured before each session
+  (`active/env-policy.json` per layer). Whitelisted schema; project-layer-only scope
+  (bench `ab` runs the inert build agent, so account-layer env-policy changes can't be
+  measured). Both knobs are optional; absence is valid.
+
+**Dense judge and calibration** — For project layers, manually scoring each session
+(5-session trial gate) is noisy and expensive. A calibrated LLM judge can densify the
+signal:
+
+- **Shadow mode:** Set `judgeModel` in `~/.config/opencode/.meta-harness/config.json`
+  (e.g., `{"judgeModel": "openrouter/google/gemini-2.5-flash"}`) to enable. The judge
+  scores sessions in parallel with `/mh-score` (human ground truth).
+- **Calibration:** Judge and human verdicts are compared. Once the judge agrees with
+  humans on ≥20 sessions at ≥80% accuracy (`judgeCalibration`), it is **calibrated**.
+- **Maker-checker mode:** Pre-fills the score prompt with the judge's suggested verdict
+  for human approval/edit before saving (one-line change in score.ts).
+
+**Anti-gaming audit:** `python3 term-bench2/runner.py judge-audit --layer <layer>
+--candidate vN [--agent NAME] [--model <model>] [--limit N]` replays the judge on
+bench trial sessions against verifier ground truth. Exit codes: `0` = clean (≥80%
+agreement), `1` = alarm (< 80% — judge may be gameable), `2` = could-not-assess
+(all judge calls failed or no scorable sessions). Runs before trusted judge-gated
+decisions.
+
+**Observability:** All loop events (ab, trial, activate, curate, rotate, judge) are
+recorded to `term-bench2/results/meta-metrics.jsonl` and `~/.config/opencode/.meta-harness/meta-metrics.jsonl`
+with `append_meta_metric`/`appendMetaMetric`. Reporter: `python3 term-bench2/runner.py
+report-loop [--json]` summarizes held-out pass-rate trajectory, accept/reject/inconclusive
+counts, and judge-agreement window. `/mh-status` shows last decision and generation.
+
+## 12. Status & gotchas
 
 - Selection gate, promotion, degenerate-session filter, role wiring, version
   pinning, and the `ab` referee are implemented and verified end-to-end.

@@ -230,12 +230,28 @@ Today run_opencode discards the NDJSON stream; proposer sees 200-char summaries.
 
 **Verify:** migrate round-trip (render(migrate(x)) ≡ normalized x); ops invariants; e2e propose→ops→rendered candidate→`--pin` injection unchanged (assemble_agents_md needs zero changes = the test); curate on seeded dupes/harmful → merged/pruned via trial; no-playbook store still works.
 
-### Phase 4 — Widened search space + dense judge (sketch)
+### Phase 4 — Widened search space + dense judge
 
-- Evolvable **env-snapshot policy** (`active/env-policy.json`, whitelisted knob schema only — EVOLVE-BLOCK pattern; rides normal candidate/trial/ab lifecycle).
-- Evolvable **agent-config knobs** (`agent-config.json`: bash timeout default, permission mode) consumed by existing hooks.
-- **Judge-based dense scoring** for project layers: judge scores sessions vs rubric + Phase 2 trajectory; shadow-mode calibration vs human /mh-score until ≥80% agreement over ≥20 sessions; then judge proposes + human approves (maker-checker; score.ts pre-fill = one-line change). Anti-gaming audit: replay judge on bench sessions with verifier ground truth, alarm on divergence. This is the proper fix for the noisy 5-session trial gate.
-- **Explicitly NOT now**: full harness-code self-modification (unreviewable blast radius); DGM parent-sampling/Pareto archives (<100 candidates = pointless); embedding novelty rejection (LLM curator covers it at this scale).
+> **Status: IMPLEMENTED (2026-07-10).** Observability: `term-bench2/results/meta-metrics.jsonl`
+> + `<root>/.meta-harness/meta-metrics.jsonl` (bench + plugin sinks),
+> `append_meta_metric`/`appendMetaMetric` writers on ab/rotate/trial/activate/propose/curate/judge
+> events, `runner.py report-loop [--json]` reporter, `/mh-status` last-decision line.
+> Evolvable knobs (project-layer-only scope): `AgentConfig` (`active/agent-config.json`,
+> bash-timeout knobs) + `EnvPolicy` (`active/env-policy.json`, env-snapshot
+> probes/lsPath/maxLsEntries/languageProbes), both ride candidate/trial/ab lifecycle
+> with whitelisted-schema validation; proposer emits them gated to project scopes.
+> Calibrated dense judge: `judge.ts:runJudge` (cross-vendor via OpenRouter,
+> `judgeModel` config, default `openrouter/google/gemini-2.5-flash` when set), shadow-mode
+> calibration (`judgeCalibration` ≥80% agreement over ≥20 sessions), maker-checker
+> pre-fill once calibrated, `runner.py judge-audit --layer <l> --candidate vN
+> [--agent NAME] [--model <m>] [--limit N]` anti-gaming replay vs verifier ground truth
+> (exit 0=clean, 1=alarm <80%, 2=could-not-assess). **Decisions:** permission-mode knob
+> DROPPED (security — no autonomous permission widening); knobs project-layer-only (bench
+> `ab` runs inert build agent so account-layer knobs can't be measured); judge default
+> OFF (enable via `judgeModel` config). **Explicitly NOT now:** full harness-code
+> self-modification (unreviewable blast radius); DGM parent-sampling/Pareto archives
+> (<100 candidates = pointless); embedding novelty rejection (LLM curator covers it at
+> this scale).
 
 ### Cross-cutting observability — does the loop work?
 

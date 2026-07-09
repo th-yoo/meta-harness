@@ -131,13 +131,47 @@ also exercises the fixed error-toast path.
 
 ---
 
+## Part G — Judge shadow-mode (optional)
+
+This demonstrates the dense judge (Phase 4) in shadow mode: it scores sessions in
+parallel with `/mh-score`, learning when to calibrate for maker-checker mode.
+
+15. Enable the judge in `~/.config/opencode/.meta-harness/config.json`:
+    ```json
+    {"judgeModel": "openrouter/google/gemini-2.5-flash"}
+    ```
+    Restart opencode for the config to reload.
+
+16. Run a few substantive sessions (with tool calls) and score them with `/mh-score good`
+    or `/mh-score bad` as usual. The judge runs silently in the background.
+    - **Look for:** after each session, check the opencode log:
+      `grep 'judge' ~/.local/share/opencode/log/opencode.log | tail -5`
+    - **Expect log lines** like: `[judge] AGREE/DISAGREE with human … calibration 3/20 @ 75%`
+    - **In latest trace:** `session.meta-harness/traces/*.json` contains a `record.judge`
+      field with the verdict.
+
+17. In `/mh-status`, observe:
+    - **Line at bottom:** shows judge calibration state if enabled (e.g.,
+      `judge: 15/20 @ 82% (calibrated)` or `judge: 8/20 @ 65%`).
+    - Once calibrated (≥20 sessions at ≥80%): `/mh-score` pre-fills with the judge's
+      suggestion for you to approve or edit.
+
+18. Check observability:
+    - `python3 term-bench2/runner.py report-loop [--json]` → includes judge agreement
+      window in the summary.
+    - `cat ~/.config/opencode/.meta-harness/meta-metrics.jsonl | grep judge | tail -5`
+      → judge events recorded (one per scored session when judgeModel is set).
+
+---
+
 ## What to report back
 
 For each part, tell me the toast text you saw (or "nothing"). Most useful:
 - Part A: did the status toast render? (confirms the fix)
 - Part C step 8: proposer + "Trial started" toasts?
 - Part D step 11: confirmed or reverted?
+- Part G (if run): judge log lines and calibration state in `/mh-status`?
 - Any part where a toast was expected but nothing appeared.
 
 If a step misbehaves, also grep the log for the ground truth:
-`grep -E 'meta-harness|hook:event|hook:command|Trial|proposer' ~/.local/share/opencode/log/opencode.log | tail -40`
+`grep -E 'meta-harness|hook:event|hook:command|Trial|proposer|judge' ~/.local/share/opencode/log/opencode.log | tail -40`
