@@ -63,6 +63,7 @@ import {
   activeBulletCount,
   readLastMetric,
   composeAgentConfig,
+  composeEnvPolicy,
   type ToolUsage,
   type TrajEvent,
   type AgentConfig,
@@ -283,8 +284,11 @@ const metaHarness: Plugin = async (input) => {
         await log(client, "debug", `[hook:chat.message] bootstrapped stores for agent=${agent}`)
       }
 
-      // Gather env snapshot (async OK — fires before the LLM call)
-      const snapshot = await gatherEnvSnapshot(input.$)
+      // Gather env snapshot (async OK — fires before the LLM call).
+      // envPolicy (Phase 4 Part C) is composed the same way as agent-config:
+      // most-specific layer that has an active env-policy wins outright.
+      const envPolicy = composeEnvPolicy(layersFor(worktree, agent).map((l) => l.root))
+      const snapshot = await gatherEnvSnapshot(input.$, envPolicy)
       if (snapshot) snapshotCache.set(sessionID, snapshot)
       await log(client, "debug", `[hook:chat.message] env snapshot length=${snapshot.length}`)
     },
