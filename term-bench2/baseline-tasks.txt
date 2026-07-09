@@ -17,10 +17,14 @@ kv-store-grpc
 large-scale-text-editing
 largest-eigenval
 llm-inference-batching-scheduler
+log-summary-date-ranges
 merge-diff-arc-agi-task
 model-extraction-relu-logits
 openssl-selfsigned-cert
 overfull-hbox
+password-recovery
+path-tracing
+path-tracing-reverse
 polyglot-c-py
 polyglot-rust-c
 prove-plus-comm
@@ -30,6 +34,7 @@ regex-log
 sanitize-git-repo
 sparql-university
 sqlite-db-truncate
+sqlite-with-gcov
 tune-mjcf
 video-processing
 write-compressor
