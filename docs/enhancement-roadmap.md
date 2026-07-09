@@ -105,7 +105,22 @@ TBD
 - **Verdict schema v2** (backward compat — all old fields keep semantics; `winner` derived from decision): adds `schemaVersion:2, decision, reasons[], split{}, heldIn{nTasks,nPairs,b,c,delta,mcnemarP,bootCI90}, heldOut{...}, earlyStopped`.
 - **TS**: `AbVerdict` gains optional v2 fields + `abAccepted(v)` helper (decision==="accept" ?? winner fallback); `/mh-activate` gate switches to `abAccepted`; `/mh-status` prints decision+CI.
 
-**Verify:** `test_ab_stats.py` unit tests (McNemar hand-values: b=6,c=0→p≈.0156; decide() truth table; futility boundaries); **null-candidate test** (candidate = copy of active → must NOT accept; noise-floor smoke); old-verdict back-compat; split partition/rotation mechanics.
+**Provenance & confound control (added 2026-07-09).** Model/variant tags are already
+recorded per SessionRecord but nothing *uses* them — aggregates mix models, so a
+model switch masquerades as a rule effect, and Self-Harness showed harness gains are
+model-specific. Additions:
+- `resolveTrial` compares **same-model sessions only** (trial sessions filtered to the
+  model mix of the baseline; sessions from other models still recorded, just excluded
+  from the gate). `ab` is already safe (both arms share one pinned model per run).
+- SessionRecord + ab-verdict gain an `env` block:
+  `{opencodeVersion, pluginSha, harnessHash (sha256 of the injected AGENTS.md/system
+  text), maxAgentTimeout, provider}` — the infra-noise study's "config is a
+  first-class experimental variable" applied to our records. `harnessHash` pins the
+  exact rendered bytes (pins alone don't).
+- Phase 3 note: ACE bullet counters should accumulate per-model (or the curator must
+  see the model mix behind each counter) — rules can be model-conditional.
+
+**Verify:** `test_ab_stats.py` unit tests (McNemar hand-values: b=6,c=0→p≈.0156; decide() truth table; futility boundaries); **null-candidate test** (candidate = copy of active → must NOT accept; noise-floor smoke); old-verdict back-compat; split partition/rotation mechanics; trial gate ignores sessions from a different model than the baseline mix.
 
 ### Phase 1b — Pin the proposer model (small, ships with Phase 1 or alone)
 
