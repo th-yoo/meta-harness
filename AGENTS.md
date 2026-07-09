@@ -9,6 +9,11 @@ A Terminal-Bench 2.0 agent harness. The single class `AgentHarness` in `agent.py
 
 Entry point: `agent:AgentHarness` (imported by the `harbor run` CLI).
 
+Beyond the published agent, the repo also hosts a **self-improving evolution
+system** (`term-bench2/` + `opencode-plugin/` + `.meta-harness/`) that evolves the
+agent's layered system prompt and validates candidates against Terminal-Bench 2.
+See [docs/evolution-loop.md](docs/evolution-loop.md) for how that works.
+
 ## Running the harness
 
 ```bash
