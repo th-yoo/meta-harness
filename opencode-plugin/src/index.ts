@@ -446,7 +446,26 @@ const metaHarness: Plugin = async (input) => {
           ).catch(() => null)
         : Promise.resolve(null)
 
-      const result = await promptHumanScore(client, sessionID)
+      // Maker-checker (Phase 4 Part D4): once the judge is calibrated (>=80%
+      // agreement over >=20 sessions), pre-fill the human's score prompt with
+      // the judge's verdict so the human just approves/edits — judge
+      // proposes, human checks. The 60s race only runs when calibrated, so
+      // the common (uncalibrated / judge disabled) path is completely
+      // unaffected: `prefill` stays undefined and promptHumanScore falls
+      // back to its "/mh-score good" default — zero behavior change.
+      const calBefore = mhCfg.judgeModel
+        ? judgeCalibration(mhCfg.judgeMinSessions, mhCfg.judgeMinAgreement)
+        : { n: 0, agreement: 0, calibrated: false }
+      let prefill: string | undefined
+      let usedPrefill = false
+      if (calBefore.calibrated) {
+        const early = await Promise.race([judgePromise, new Promise<null>((r) => setTimeout(() => r(null), 60_000))])
+        if (early) {
+          prefill = `/mh-score ${early.passed ? "good" : "bad"} judge: ${early.reasoning.slice(0, 80)}`
+          usedPrefill = true
+        }
+      }
+      const result = await promptHumanScore(client, sessionID, undefined, prefill)
       if (result === null) {
         await log(client, "info", `[hook:event] scoring timed out — skipping ${sessionID}`)
         pendingScore.delete(sessionID)
@@ -500,7 +519,7 @@ const metaHarness: Plugin = async (input) => {
         record.judge = {
           passed: judgeVerdict.passed,
           confidence: judgeVerdict.confidence,
-          mode: "shadow",
+          mode: usedPrefill ? "prefill" : "shadow",
           agreed,
         }
         appendJudgeDecision({

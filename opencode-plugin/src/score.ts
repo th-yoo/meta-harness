@@ -41,15 +41,23 @@ const pending = new Map<string, (result: ScoreResult) => void>()
  * Times out after `timeoutMs` (default 5 min) and returns null if the human
  * doesn't score the session.
  */
+const DEFAULT_PREFILL = "/mh-score good"
+
 export async function promptHumanScore(
   client: Client,
   sessionID: string,
   timeoutMs = 5 * 60 * 1000,
+  prefill?: string,
 ): Promise<ScoreResult | null> {
+  const text = prefill ?? DEFAULT_PREFILL
+  const isJudgeSuggestion = prefill !== undefined && prefill !== DEFAULT_PREFILL
+
   await client.tui.showToast({
     body: {
       title: "Meta-Harness: rate this session",
-      message: "Type /mh-score good  or  /mh-score bad",
+      message: isJudgeSuggestion
+        ? "Type /mh-score good  or  /mh-score bad (judge suggestion — edit if wrong)"
+        : "Type /mh-score good  or  /mh-score bad",
       variant: "info",
       duration: 30_000,
     },
@@ -58,7 +66,7 @@ export async function promptHumanScore(
   // Clear any existing text then pre-fill the command
   await client.tui.clearPrompt()
   await client.tui.appendPrompt({
-    body: { text: "/mh-score good" },
+    body: { text },
   })
 
   return new Promise<ScoreResult | null>((resolve) => {
