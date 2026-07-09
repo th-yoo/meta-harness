@@ -865,6 +865,20 @@ def _write_results(path: Path, data: dict) -> None:
     log(f"Results written → {path}")
 
 
+def _agg_totals(task_agg: dict) -> tuple[int, int]:
+    """Return (n_pass, n_total) over tasks that have results (pass@k = any reward==1)."""
+    n_total = 0
+    n_pass = 0
+    for agg in task_agg.values():
+        rewards = agg.get("rewards", [])
+        if not rewards:
+            continue
+        n_total += 1
+        if max(rewards) == 1:
+            n_pass += 1
+    return n_pass, n_total
+
+
 def cmd_run(args: argparse.Namespace) -> None:
     tb_root = Path(args.tb_root).expanduser().resolve()
     if not tb_root.exists():
@@ -922,12 +936,33 @@ def cmd_run(args: argparse.Namespace) -> None:
     # Per-task aggregated results for results file: {task: {rewards:[], elapsed:[], turns:[]}}
     task_agg: dict[str, dict] = {}
 
+    # --resume: carry over already-completed tasks from an existing results file
+    # so a restarted baseline doesn't re-run them.
+    done_tasks: set[str] = set()
+    if args.resume and results_file and results_file.exists():
+        try:
+            prev = json.loads(results_file.read_text())
+            for t, agg in prev.get("tasks", {}).items():
+                if agg.get("rewards"):
+                    task_agg[t] = agg
+                    done_tasks.add(t)
+            if done_tasks:
+                log(f"Resuming: {len(done_tasks)} task(s) already done, will skip them")
+        except Exception as e:
+            log(f"  --resume: could not read prior results ({e}); starting fresh")
+
     run_start_ts = datetime.now(timezone.utc).isoformat()
 
     for task in tasks:
+        if task in done_tasks:
+            log(f"\n=== Task: {task} (skipped — already done) ===")
+            continue
         log(f"\n=== Task: {task} ===")
         task_toml = tb_root / task / "task.toml"
         agent_timeout = read_toml_value(task_toml, "agent", "timeout_sec") or 900.0
+        if args.max_agent_timeout and agent_timeout > args.max_agent_timeout:
+            log(f"  capping agent timeout {agent_timeout:.0f}s → {args.max_agent_timeout}s")
+            agent_timeout = float(args.max_agent_timeout)
         verifier_timeout = read_toml_value(task_toml, "verifier", "timeout_sec") or 300.0
 
         task_agg[task] = {"rewards": [], "elapsed": [], "turns": [], "errors": []}
@@ -993,7 +1028,7 @@ def cmd_run(args: argparse.Namespace) -> None:
 
             # Persist incremental results after each task (resumability)
             if results_file:
-                total_so_far = sum(r["reward"] for r in results)
+                np, nt = _agg_totals(task_agg)
                 _write_results(results_file, {
                     "label": label,
                     "model": model,
@@ -1001,9 +1036,9 @@ def cmd_run(args: argparse.Namespace) -> None:
                     "harness": harness_meta,
                     "k": k,
                     "timestamp": run_start_ts,
-                    "n_pass": total_so_far,
-                    "n_total": len(results),
-                    "pass_rate": round(total_so_far / len(results), 4) if results else 0.0,
+                    "n_pass": np,
+                    "n_total": nt,
+                    "pass_rate": round(np / nt, 4) if nt else 0.0,
                     "tasks": task_agg,
                     "status": "in_progress",
                 })
@@ -1027,8 +1062,9 @@ def cmd_run(args: argparse.Namespace) -> None:
         pct = 100.0 * total_pass / total_runs
         print(f"pass@{k}: {total_pass}/{total_runs}  ({pct:.1f}%)")
 
-    # Write final results file
+    # Write final results file (totals from task_agg so resumed tasks count)
     if results_file:
+        np, nt = _agg_totals(task_agg)
         _write_results(results_file, {
             "label": label,
             "model": model,
@@ -1036,12 +1072,13 @@ def cmd_run(args: argparse.Namespace) -> None:
             "harness": harness_meta,
             "k": k,
             "timestamp": run_start_ts,
-            "n_pass": total_pass,
-            "n_total": total_runs,
-            "pass_rate": round(total_pass / total_runs, 4) if total_runs else 0.0,
+            "n_pass": np,
+            "n_total": nt,
+            "pass_rate": round(np / nt, 4) if nt else 0.0,
             "tasks": task_agg,
             "status": "complete",
         })
+        log(f"FINAL: {np}/{nt} passed ({100.0*np/nt:.1f}%)" if nt else "FINAL: no tasks")
 
 
 # ── oracle command ─────────────────────────────────────────────────────────
@@ -1231,6 +1268,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument(
         "--label", metavar="NAME",
         help="Label for this run in the results file (default: stem of --results-file or 'run')",
+    )
+    p_run.add_argument(
+        "--max-agent-timeout", type=float, metavar="SEC", default=0,
+        help="Cap each task's agent timeout at SEC seconds (0 = use task.toml "
+             "value). Bounds total runtime; e.g. 600 caps hour-long tasks to 10 min.",
+    )
+    p_run.add_argument(
+        "--resume", action="store_true",
+        help="Skip tasks already present (with results) in --results-file, "
+             "carrying their prior results forward. For restarting long runs.",
     )
 
     # oracle
