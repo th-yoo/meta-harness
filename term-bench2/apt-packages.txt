@@ -1,3 +1,4 @@
+apache2-utils
 asciinema
 bc
 binutils
@@ -10,6 +11,7 @@ expect
 extundelete
 ffmpeg
 foremost
+fossil
 g++
 gcc
 git
@@ -19,10 +21,12 @@ libglib2.0-0t64
 libgomp1
 libjpeg-dev
 libsm6
+libtesseract-dev
 libxext6
 libxrender-dev
 mailman3
 mailutils
+make
 nano
 net-tools
 nginx
@@ -33,12 +37,16 @@ openssl
 postfix
 primer3
 python3
+python3-opencv
 python3-pip
+python3-venv
 r-base
 rustc
 screen
 sleuthkit
 sqlite3
+tclsh
+tesseract-ocr
 texlive-latex-base
 tmux
 unzip

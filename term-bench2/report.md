@@ -59,7 +59,12 @@ Generated for 22 unhandled RUN lines across 59 tasks.
     gcc -O3 decomp.c -o /app/decomp
 
 ## APT packages: to install (not currently on system)
-*(all already installed)*
+  apache2-utils
+  fossil
+  libtesseract-dev
+  python3-opencv
+  tclsh
+  tesseract-ocr
 
 ## APT packages: already installed
   asciinema
@@ -87,6 +92,7 @@ Generated for 22 unhandled RUN lines across 59 tasks.
   libxrender-dev
   mailman3
   mailutils
+  make
   nano
   net-tools
   nginx
@@ -98,6 +104,7 @@ Generated for 22 unhandled RUN lines across 59 tasks.
   primer3
   python3
   python3-pip
+  python3-venv
   r-base
   rustc
   screen
@@ -111,4 +118,13 @@ Generated for 22 unhandled RUN lines across 59 tasks.
   zip
   zlib1g-dev
 
-*(nothing to install)*
+## One-time install command
+```bash
+sudo apt-get install -y \
+  apache2-utils  \
+  fossil  \
+  libtesseract-dev  \
+  python3-opencv  \
+  tclsh  \
+  tesseract-ocr
+```

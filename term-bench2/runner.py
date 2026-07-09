@@ -51,6 +51,20 @@ REAL_LOGS  = BENCH_PREFIX / "logs" / "verifier"
 # Shim bin dir prepended to PATH: provides `python` → python3 (TB2 tasks
 # assume `python` exists, but Ubuntu 24.04 only ships python3).
 BENCH_BIN  = BENCH_PREFIX / "bin"
+# Writable copy of /usr/local so reference scripts that install there
+# (e.g. sqlite-with-gcov: ln -s … /usr/local/bin/sqlite3) succeed unprivileged.
+BENCH_USRLOCAL = BENCH_PREFIX / "usrlocal"
+
+
+def ensure_usrlocal() -> None:
+    """One-time writable copy of /usr/local → ~/bench/usrlocal (idempotent)."""
+    if BENCH_USRLOCAL.exists():
+        return
+    src = Path("/usr/local")
+    if src.exists():
+        shutil.copytree(src, BENCH_USRLOCAL, symlinks=True, ignore_dangling_symlinks=True)
+    else:
+        BENCH_USRLOCAL.mkdir(parents=True, exist_ok=True)
 
 
 def ensure_bench_bin() -> None:
@@ -168,9 +182,17 @@ def run_cmd(
     # root without PEP-668 restrictions. Without it, solve.sh `pip install`
     # calls fail with 'externally-managed-environment'.
     merged_env = {"PIP_BREAK_SYSTEM_PACKAGES": "1", **os.environ, **(env or {})}
-    # Prepend the shim bin (python → python3) to PATH.
+    if ns:
+        # Per-task Python user-site isolation: `pip install` (which defaults to
+        # --user when unprivileged) writes to /app/.pyuserbase instead of the
+        # shared ~/.local, so tasks can't pollute each other's package versions.
+        # /app is bound + wiped per task, and persists across setup/solve/test.
+        merged_env["PYTHONUSERBASE"] = "/app/.pyuserbase"
+        ensure_usrlocal()
+    # Prepend the shim bin (python → python3) + per-task user-site bin to PATH.
     ensure_bench_bin()
-    merged_env["PATH"] = f"{BENCH_BIN}:{merged_env.get('PATH', '')}"
+    extra_path = f"/app/.pyuserbase/bin:{BENCH_BIN}" if ns else str(BENCH_BIN)
+    merged_env["PATH"] = f"{extra_path}:{merged_env.get('PATH', '')}"
     actual_cmd = ns_wrap(cmd, extra_mounts, chdir=chdir) if ns else cmd
     return subprocess.run(
         actual_cmd,
@@ -261,6 +283,7 @@ def ns_wrap(
         "bwrap",
         "--tmpfs", "/",                       # writable, discarded root
         "--ro-bind", "/usr", "/usr",
+        "--bind", str(BENCH_USRLOCAL), "/usr/local",  # writable /usr/local (copy)
         "--symlink", "usr/bin", "/bin",
         "--symlink", "usr/lib", "/lib",
         "--symlink", "usr/lib64", "/lib64",

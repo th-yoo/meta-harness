@@ -89,6 +89,21 @@ SKIP_APT_PACKAGES = {
     "sudo",               # already available
 }
 
+# Extra packages required by solve.sh / test.sh that the Dockerfile scan misses.
+# The sandbox's apt shim no-ops `apt install`, so anything a reference script
+# installs at solve/test time must be pre-installed on the host instead.
+# Kept light — heavy toolchains (opam, cmdstan) intentionally excluded.
+EXTRA_APT = {
+    "tesseract-ocr",      # gcode-to-text (OCR)
+    "libtesseract-dev",   # gcode-to-text
+    "python3-opencv",     # gcode-to-text (cv2)
+    "tclsh",              # tcl-based tasks
+    "python3-venv",       # venv creation
+    "fossil",             # fossil-scm tasks
+    "apache2-utils",      # htpasswd etc.
+    "make",               # build tasks
+}
+
 # Ubuntu 24.04 package renames: map old name → new name
 APT_RENAME = {
     "libgl1-mesa-glx": "libgl1",       # renamed in 24.04
@@ -691,6 +706,9 @@ def main() -> None:
         script_path.chmod(script_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
     print(f"  wrote {len(tasks)} setup_deps.sh scripts")
+
+    # Fold in extra packages needed by solve.sh / test.sh (apt shim no-ops these)
+    all_apt.update(EXTRA_APT)
 
     write_setup_base(out_root)
     write_apt_packages(out_root, all_apt)
