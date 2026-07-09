@@ -106,6 +106,21 @@ def _write_json(p: Path, data: Any) -> None:
     p.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
+DEFAULT_METRICS_SINK = Path(__file__).parent / "results" / "meta-metrics.jsonl"
+
+
+def append_meta_metric(event: dict, sink: "Path | None" = None) -> None:
+    """Append one loop-observability event as a JSON line (see enhancement-roadmap
+    'Cross-cutting observability'). Append-only; never rewrites the file."""
+    from datetime import datetime, timezone
+    p = sink or DEFAULT_METRICS_SINK
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if "ts" not in event:
+        event = {**event, "ts": datetime.now(timezone.utc).isoformat()}
+    with open(p, "a") as f:
+        f.write(json.dumps(event, separators=(",", ":")) + "\n")
+
+
 # ── Store API ──────────────────────────────────────────────────────────────
 
 

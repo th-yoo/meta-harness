@@ -1486,6 +1486,7 @@ def load_active_split(splits_path: Path) -> tuple[list[str], list[str], dict]:
 
 
 def cmd_split(args: argparse.Namespace) -> None:
+    from bench_store import append_meta_metric
     splits_path = Path(args.split_file) if args.split_file else SPLITS_PATH_DEFAULT
     if args.split_cmd == "make":
         source = SCRIPT_DIR / args.source
@@ -1510,6 +1511,8 @@ def cmd_split(args: argparse.Namespace) -> None:
         data["activeFold"] = (int(data.get("activeFold", 0)) + 1) % n
         data["rotatedAt"] = datetime.now(timezone.utc).isoformat()
         _write_json_atomic(splits_path, data)
+        append_meta_metric({"event": "rotate", "splitFold": data["activeFold"],
+                            "ts": data["rotatedAt"]})
         log(f"split: rotated → activeFold={data['activeFold']} of {n}")
     else:  # show
         if not splits_path.exists():
@@ -1538,7 +1541,7 @@ def cmd_ab(args: argparse.Namespace) -> None:
     guard. Writes candidates/<vN>/ab-verdict.json — the contract /mh-activate reads.
     """
     from bench_store import (
-        active_version, candidate_exists, candidate_path,
+        active_version, append_meta_metric, candidate_exists, candidate_path,
         list_versions, record_session, write_trajectory, prune_trajectories,
     )
     from ab_stats import (
@@ -1735,6 +1738,14 @@ def cmd_ab(args: argparse.Namespace) -> None:
 
     final = _verdict_dict("")   # final file never carries a status key
     _write_json_atomic(verdict_path, final)
+    append_meta_metric({
+        "event": "ab", "layer": layer, "candidate": candidate, "baseline": baseline,
+        "decision": final["decision"], "heldInDelta": final["heldIn"]["delta"],
+        "heldInP": final["heldIn"]["mcnemarP"], "nPairs": final["heldIn"]["nPairs"],
+        "heldOutDelta": (final["heldOut"] or {}).get("delta"),
+        "splitFold": (split_meta or {}).get("activeFold"),
+        "earlyStopped": final["earlyStopped"], "model": model,
+    })
     partial_path.unlink(missing_ok=True)
 
     # Summary
