@@ -192,6 +192,21 @@ Today run_opencode discards the NDJSON stream; proposer sees 200-char summaries.
 
 Append-only `term-bench2/results/meta-metrics.jsonl`: {ts, event: ab|trial|activate|curate|rotate, layer, candidate, decision, heldInDelta, heldOutDelta, mcnemarP, activeBefore/After, splitFold, nPairs}. Writers in bench_store + harness-store. Reporter `runner.py report-loop`: held-out pass-rate trajectory over generations, accept/reject/inconclusive counts. Loop "works" iff held-out trend ↑ across rotations AND null-candidate accept rate stays ≈ α. `/mh-status` gains last-decision/generation summary.
 
+## Storage decision (2026-07-09)
+
+Plain files (md/JSON/JSONL) stay the source of truth — no SQLite. Rationale: scale is
+KBs–MBs with no joins in any hot path; the project store is git-versioned (diff/blame/
+revert of evolved rules for free); human inspectability is load-bearing for the
+audit/maker-checker role; and files are the zero-dependency cross-language contract
+between the TS plugin and the Python runner. The literature endorses the pattern
+(filesystem-as-memory; the Meta-Harness paper stores candidates as files for
+inspection). The one real gap — the concurrent score.json read-modify-write race —
+gets the proportionate fix: atomic writes (already in place for verdicts) plus an
+advisory flock around score.json updates, not a database. If analytics over
+meta-metrics.jsonl/traces ever get annoying, mirror into DuckDB/SQLite as a derived,
+read-only analysis layer — never as source of truth. Revisit triggers: >~50k session
+records, routinely concurrent writers, or measurably slow stratified queries.
+
 ## Sequencing
 
 Phase 1 → ship alone (immediately changes what /mh-activate accepts). Phase 2 before 3 (diagnosis.json is the substrate for bullet assessments; rework the proposer prompt once). Everything additive on disk; only semantic change = the activation gate (the point).
