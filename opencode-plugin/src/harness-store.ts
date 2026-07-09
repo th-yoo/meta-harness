@@ -129,6 +129,8 @@ export interface TrialState {
   baselinePlaybook?: Playbook | null
   /** Snapshot of the baseline agent config so a revert restores it (Phase 4B). */
   baselineAgentConfig?: AgentConfig | null
+  /** Snapshot of the baseline env policy so a revert restores it (Phase 4C). */
+  baselineEnvPolicy?: EnvPolicy | null
 }
 
 export type TrialResolution =
@@ -421,6 +423,7 @@ export function writeActive(
   tools = "",
   playbook?: Playbook | null,
   agentConfig?: AgentConfig | null,
+  envPolicy?: EnvPolicy | null,
 ): void {
   writeText(activePath(storeRoot, "system.md"), system)
   writeText(activePath(storeRoot, ".version"), version)
@@ -441,6 +444,11 @@ export function writeActive(
   if (agentConfig !== undefined) {
     if (agentConfig) writeJson(activePath(storeRoot, AGENT_CONFIG_FILE), agentConfig)
     else fs.rmSync(activePath(storeRoot, AGENT_CONFIG_FILE), { force: true })
+  }
+  // envPolicy: same tri-state contract as playbook/agentConfig above (Phase 4 Part C).
+  if (envPolicy !== undefined) {
+    if (envPolicy) writeJson(activePath(storeRoot, ENV_POLICY_FILE), envPolicy)
+    else fs.rmSync(activePath(storeRoot, ENV_POLICY_FILE), { force: true })
   }
 }
 
@@ -475,11 +483,13 @@ export function createCandidate(
   tools = "",
   playbook?: Playbook,
   agentConfig?: AgentConfig,
+  envPolicy?: EnvPolicy,
 ): void {
   writeText(candidatePath(storeRoot, version, "system.md"), system)
   if (tools) writeText(candidatePath(storeRoot, version, "tools.md"), tools)
   if (playbook) writeJson(candidatePath(storeRoot, version, "playbook.json"), playbook)
   if (agentConfig) writeJson(candidatePath(storeRoot, version, AGENT_CONFIG_FILE), agentConfig)
+  if (envPolicy) writeJson(candidatePath(storeRoot, version, ENV_POLICY_FILE), envPolicy)
   writeJson(candidatePath(storeRoot, version, "score.json"), {
     version, nPass: 0, nFail: 0, sessions: [],
   })
@@ -669,6 +679,93 @@ export function composeAgentConfig(layerRoots: string[]): AgentConfig | null {
   return result
 }
 
+// ── EnvPolicy (Phase 4 Part C — evolvable environment-probe knobs) ─────────
+//
+// Rides the same lifecycle as agentConfig/playbook, one file per store:
+// env-policy.json. No field-level merging across layers — composeEnvPolicy
+// picks the whole artifact from the most-specific layer that has one.
+
+export interface EnvPolicy {
+  schemaVersion: 1
+  /** Which environment probes to run; omitted = enabled (default all true). */
+  probes?: { ls?: boolean; lang?: boolean; pkg?: boolean; mem?: boolean }
+  /** Absolute, shell-safe path to `ls`; default "/app" is applied by the consumer. */
+  lsPath?: string
+  /** Clamp [5, 100]; default 25 is applied by the consumer. */
+  maxLsEntries?: number
+  /** Subset of the fixed language-probe whitelist. */
+  languageProbes?: string[]
+}
+
+const ENV_POLICY_FILE = "env-policy.json"
+const ENV_POLICY_LS_PATH_RE = /^\/[A-Za-z0-9_/.-]{0,120}$/
+const ENV_POLICY_MIN_LS_ENTRIES = 5
+const ENV_POLICY_MAX_LS_ENTRIES = 100
+const ENV_POLICY_LANGUAGE_WHITELIST = new Set([
+  "python3", "gcc", "g++", "node", "java", "rustc", "go",
+])
+
+/** Validate/normalize a raw env-policy.json payload. null if not an object or
+ * schemaVersion !== 1. Drops a shell-unsafe/relative lsPath, clamps
+ * maxLsEntries, filters languageProbes to the fixed whitelist, and drops
+ * unknown fields. */
+export function validateEnvPolicy(raw: unknown): EnvPolicy | null {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null
+  const r = raw as Record<string, unknown>
+  if (r["schemaVersion"] !== 1) return null
+
+  const out: EnvPolicy = { schemaVersion: 1 }
+
+  const probesRaw = r["probes"]
+  if (typeof probesRaw === "object" && probesRaw !== null && !Array.isArray(probesRaw)) {
+    const p = probesRaw as Record<string, unknown>
+    const probes: EnvPolicy["probes"] = {}
+    for (const key of ["ls", "lang", "pkg", "mem"] as const) {
+      if (typeof p[key] === "boolean") probes[key] = p[key] as boolean
+    }
+    if (Object.keys(probes).length > 0) out.probes = probes
+  }
+
+  if (typeof r["lsPath"] === "string" && ENV_POLICY_LS_PATH_RE.test(r["lsPath"])) {
+    out.lsPath = r["lsPath"]
+  }
+
+  if (typeof r["maxLsEntries"] === "number" && !Number.isNaN(r["maxLsEntries"])) {
+    out.maxLsEntries = Math.min(
+      ENV_POLICY_MAX_LS_ENTRIES,
+      Math.max(ENV_POLICY_MIN_LS_ENTRIES, r["maxLsEntries"]),
+    )
+  }
+
+  if (Array.isArray(r["languageProbes"])) {
+    const languageProbes = r["languageProbes"]
+      .filter((c): c is string => typeof c === "string" && ENV_POLICY_LANGUAGE_WHITELIST.has(c))
+    if (languageProbes.length > 0) out.languageProbes = languageProbes
+  }
+
+  return out
+}
+
+/** Dual-read like readAgentConfig: candidate version if given, else the active
+ * layer file. Always validates — corrupt/legacy-shaped JSON reads as null. */
+export function readEnvPolicy(storeRoot: string, version?: string): EnvPolicy | null {
+  const p = version
+    ? candidatePath(storeRoot, version, ENV_POLICY_FILE)
+    : activePath(storeRoot, ENV_POLICY_FILE)
+  return validateEnvPolicy(readJson<unknown>(p, null))
+}
+
+/** Most-specific layer (last in `layerRoots`) that HAS an active env-policy
+ * wins outright — no field-level merging across layers. */
+export function composeEnvPolicy(layerRoots: string[]): EnvPolicy | null {
+  let result: EnvPolicy | null = null
+  for (const root of layerRoots) {
+    const policy = readEnvPolicy(root)
+    if (policy) result = policy
+  }
+  return result
+}
+
 // ── Trial mode + activation gate ───────────────────────────────────────────
 
 const TRIAL_FILE = ".trial"
@@ -697,6 +794,7 @@ export function startTrial(
   minSessions: number,
   playbook: Playbook | null = null,
   agentConfig: AgentConfig | null = null,
+  envPolicy: EnvPolicy | null = null,
 ): void {
   const state: TrialState = {
     trial: trialVersion,
@@ -705,11 +803,12 @@ export function startTrial(
     baselineTools: readActiveTools(storeRoot),
     baselinePlaybook: readPlaybook(storeRoot),
     baselineAgentConfig: readAgentConfig(storeRoot),
+    baselineEnvPolicy: readEnvPolicy(storeRoot),
     startedAt: new Date().toISOString(),
     minSessions,
   }
   writeJson(activePath(storeRoot, TRIAL_FILE), state)
-  writeActive(storeRoot, trialVersion, system, tools, playbook, agentConfig)
+  writeActive(storeRoot, trialVersion, system, tools, playbook, agentConfig, envPolicy)
   appendMetaMetric(storeRoot, { event: "trial", action: "started", trial: trialVersion, baseline: state.baseline })
 }
 
@@ -777,7 +876,7 @@ export function resolveTrial(storeRoot: string): TrialResolution {
   }
 
   writeActive(storeRoot, trial.baseline, trial.baselineSystem, trial.baselineTools,
-    trial.baselinePlaybook ?? null, trial.baselineAgentConfig ?? null)
+    trial.baselinePlaybook ?? null, trial.baselineAgentConfig ?? null, trial.baselineEnvPolicy ?? null)
   clearTrial(storeRoot)
   appendMetaMetric(storeRoot, { event: "trial", action: "reverted", trial: trial.trial, trialRate, baselineRate })
   return { action: "reverted", trial: trial.trial, baseline: trial.baseline, trialRate, baselineRate }
@@ -790,7 +889,8 @@ export function activateCandidate(storeRoot: string, version: string): boolean {
   const tools = readText(candidatePath(storeRoot, version, "tools.md"))
   const playbook = readPlaybook(storeRoot, version)
   const agentConfig = readAgentConfig(storeRoot, version)
-  writeActive(storeRoot, version, system, tools, playbook, agentConfig)
+  const envPolicy = readEnvPolicy(storeRoot, version)
+  writeActive(storeRoot, version, system, tools, playbook, agentConfig, envPolicy)
   appendMetaMetric(storeRoot, { event: "activate", version })
   clearTrial(storeRoot) // manual activation supersedes any in-flight trial
   return true
