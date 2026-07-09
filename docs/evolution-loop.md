@@ -228,7 +228,14 @@ python3 term-bench2/runner.py ab \
 
 ---
 
-## 10. Status & gotchas
+## 10. Where this is headed
+
+The loop's known weaknesses (noisy fitness gates, prompt-only search space,
+no causal failure analysis, no held-out split, prompt bloat, sparse human signal)
+and the research-backed plan to fix them are documented in
+[enhancement-roadmap.md](enhancement-roadmap.md).
+
+## 11. Status & gotchas
 
 - Selection gate, promotion, degenerate-session filter, role wiring, version
   pinning, and the `ab` referee are implemented and verified end-to-end.
