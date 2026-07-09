@@ -30,3 +30,22 @@ def test_append_meta_metric_supplied_ts(tmp_path):
     line = sink.read_text().strip()
     e = json.loads(line)
     assert e["ts"] == custom_ts
+
+
+def test_summarize_loop_counts_and_trend(tmp_path):
+    from runner import summarize_loop
+    events = [
+        {"ts": "2026-07-09T01:00:00Z", "event": "ab", "decision": "inconclusive",
+         "heldOutDelta": 0.5, "splitFold": 0},
+        {"ts": "2026-07-09T02:00:00Z", "event": "ab", "decision": "accept",
+         "heldOutDelta": 0.25, "splitFold": 1},
+        {"ts": "2026-07-09T03:00:00Z", "event": "trial", "action": "confirmed"},
+        {"ts": "2026-07-09T04:00:00Z", "event": "judge", "agreed": True},
+        {"ts": "2026-07-09T05:00:00Z", "event": "judge", "agreed": False},
+    ]
+    s = summarize_loop(events)
+    assert s["abDecisions"] == {"accept": 1, "inconclusive": 1}
+    assert s["trialActions"] == {"confirmed": 1}
+    assert s["heldOutDeltas"] == [("2026-07-09T01:00:00Z", 0, 0.5),
+                                  ("2026-07-09T02:00:00Z", 1, 0.25)]
+    assert s["judgeAgreement"] == {"n": 2, "rate": 0.5}

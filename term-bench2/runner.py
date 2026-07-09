@@ -1779,6 +1779,127 @@ def cmd_ab(args: argparse.Namespace) -> None:
 # ── CLI ────────────────────────────────────────────────────────────────────
 
 
+# ── report-loop command ─────────────────────────────────────────────────────
+
+
+def default_meta_metrics_sinks() -> list[Path]:
+    """The three loop-observability sinks, in write-order precedence:
+    bench (Python appender), project (TS appender, this repo's store), account
+    (TS appender, the user's global opencode config)."""
+    return [
+        SCRIPT_DIR / "results" / "meta-metrics.jsonl",
+        META_ROOT / ".meta-harness" / "meta-metrics.jsonl",
+        Path.home() / ".config" / "opencode" / ".meta-harness" / "meta-metrics.jsonl",
+    ]
+
+
+def load_meta_metrics(paths: list[Path]) -> list[dict]:
+    """Read each JSONL path that exists, skip missing files and unparseable
+    lines, merge, and sort by ts (ISO-8601 strings sort correctly as strings)."""
+    events: list[dict] = []
+    for p in paths:
+        if not p.exists():
+            continue
+        for line in p.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    events.sort(key=lambda e: e.get("ts", ""))
+    return events
+
+
+def summarize_loop(events: list[dict]) -> dict:
+    """Pure summary of loop-observability events — the testable core of
+    report-loop. See test_meta_metrics.py::test_summarize_loop_counts_and_trend
+    for the exact contract."""
+    ab_decisions: dict[str, int] = {}
+    trial_actions: dict[str, int] = {}
+    held_out_deltas: list[tuple] = []
+    judge_n = 0
+    judge_agreed = 0
+
+    for e in events:
+        event = e.get("event")
+        if event == "ab":
+            decision = e.get("decision")
+            if decision is not None:
+                ab_decisions[decision] = ab_decisions.get(decision, 0) + 1
+            delta = e.get("heldOutDelta")
+            if delta is not None:
+                held_out_deltas.append((e.get("ts"), e.get("splitFold"), delta))
+        elif event == "trial":
+            action = e.get("action")
+            if action is not None:
+                trial_actions[action] = trial_actions.get(action, 0) + 1
+        elif event == "judge":
+            judge_n += 1
+            if e.get("agreed"):
+                judge_agreed += 1
+
+    judge_agreement = ({"n": judge_n, "rate": judge_agreed / judge_n}
+                        if judge_n > 0 else None)
+
+    return {
+        "abDecisions": ab_decisions,
+        "trialActions": trial_actions,
+        "heldOutDeltas": held_out_deltas,
+        "judgeAgreement": judge_agreement,
+    }
+
+
+def cmd_report_loop(args: argparse.Namespace) -> None:
+    sinks = default_meta_metrics_sinks() + [Path(s) for s in (args.sink or [])]
+    events = load_meta_metrics(sinks)
+    summary = summarize_loop(events)
+
+    if args.json:
+        print(json.dumps(summary, indent=2))
+        return
+
+    print("report-loop: loop observability")
+    print("=" * 60)
+    print(f"sinks checked ({len(sinks)}):")
+    for p in sinks:
+        print(f"  {'✓' if p.exists() else '·'} {p}")
+    print(f"events merged: {len(events)}")
+    print()
+
+    print("A/B decisions:")
+    if summary["abDecisions"]:
+        for decision, n in sorted(summary["abDecisions"].items()):
+            print(f"  {decision:<14} {n}")
+    else:
+        print("  (none)")
+    print()
+
+    print("Trial actions (confirm/revert):")
+    if summary["trialActions"]:
+        for action, n in sorted(summary["trialActions"].items()):
+            print(f"  {action:<14} {n}")
+    else:
+        print("  (none)")
+    print()
+
+    print("Held-out delta per fold rotation:")
+    if summary["heldOutDeltas"]:
+        for ts, fold, delta in summary["heldOutDeltas"]:
+            print(f"  {ts}  fold={fold}  delta={delta:+.4f}")
+    else:
+        print("  (none)")
+    print()
+
+    print("Judge agreement:")
+    ja = summary["judgeAgreement"]
+    if ja:
+        print(f"  n={ja['n']}  rate={ja['rate']:.2%}")
+    else:
+        print("  (no judge events)")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -1929,6 +2050,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write oracle results to this JSON file (updated after each task).",
     )
 
+    # report-loop
+    p_report = sub.add_parser("report-loop", help="Loop observability: decisions, held-out trend, judge agreement")
+    p_report.add_argument("--json", action="store_true", help="Machine-readable summary")
+    p_report.add_argument("--sink", action="append", metavar="PATH",
+                          help="Extra meta-metrics.jsonl to merge (repeatable)")
+
     return parser
 
 
@@ -1950,6 +2077,8 @@ def main() -> None:
         cmd_split(args)
     elif args.command == "oracle":
         cmd_oracle(args)
+    elif args.command == "report-loop":
+        cmd_report_loop(args)
     else:
         parser.print_help()
         sys.exit(1)
