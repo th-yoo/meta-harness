@@ -164,6 +164,31 @@ type Client = PluginInput["client"]
 const log = (client: Client, level: "debug" | "info" | "warn" | "error", message: string) =>
   client.app.log({ body: { service: "meta-harness", level, message } })
 
+/**
+ * Surface a user-facing command result. opencode 1.17.x does NOT render a thrown
+ * command.execute.before error as a visible TUI notice — it only logs it at ERROR
+ * level (so a throw-only command like /mh-status looked like "nothing happened").
+ * Route the message through a toast, then throw the returned Error so the command
+ * is still swallowed and its (often empty) body never reaches the LLM.
+ * Usage: `throw await toastAndSwallow(client, msg, "info")`.
+ */
+const toastAndSwallow = async (
+  client: Client,
+  message: string,
+  variant: "info" | "success" | "warning" | "error" = "info",
+  duration?: number,
+): Promise<Error> => {
+  await client.tui.showToast({
+    body: {
+      title: "Meta-Harness",
+      message,
+      variant,
+      duration: duration ?? (variant === "error" ? 10_000 : 8_000),
+    },
+  })
+  return new Error(message)
+}
+
 // ── Plugin ─────────────────────────────────────────────────────────────────
 
 const metaHarness: Plugin = async (input) => {
@@ -480,9 +505,9 @@ const metaHarness: Plugin = async (input) => {
         if (layer) {
           await log(client, "info", `[hook:command] /mh-propose scope=${layer.scope} agent=${agent}`)
           void triggerPropose(client, worktree, layer)
-          throw new Error("Meta-Harness: propose cycle started ✓ (this notice is expected)")
+          throw await toastAndSwallow(client, "propose cycle started ✓", "success")
         }
-        throw new Error(`Meta-Harness: /mh-propose — unknown scope "${cmdInput.arguments.trim()}" (use role|project|role-global|account)`)
+        throw await toastAndSwallow(client, `/mh-propose — unknown scope "${cmdInput.arguments.trim()}" (use role|project|role-global|account)`, "error")
       }
 
       // /mh-activate <scope> <vN> [--force]
@@ -496,16 +521,16 @@ const metaHarness: Plugin = async (input) => {
         const layers = layersFor(worktree, agent)
         const layer = resolveScopeLayer(scopeArg, layers)
         if (!layer) {
-          throw new Error(`Meta-Harness: /mh-activate — unknown scope "${scopeArg}" (use account|project|role-global|role)`)
+          throw await toastAndSwallow(client, `/mh-activate — unknown scope "${scopeArg}" (use account|project|role-global|role)`, "error")
         }
         if (!/^v\d+$/.test(version)) {
-          throw new Error(`Meta-Harness: /mh-activate — expected a version like v3, got "${version}"`)
+          throw await toastAndSwallow(client, `/mh-activate — expected a version like v3, got "${version}"`, "error")
         }
         const isAccount = layer.scope === "account-global" || layer.scope === "account-role"
         if (isAccount && !force) {
           const verdict = readAbVerdict(layer.root, version)
           if (!verdict) {
-            throw new Error(`Meta-Harness: no ab-verdict.json for ${layer.scope} ${version} — run "runner.py ab --layer ${layer.scope} --candidate ${version}" first, or pass --force`)
+            throw await toastAndSwallow(client, `no ab-verdict.json for ${layer.scope} ${version} — run "runner.py ab --layer ${layer.scope} --candidate ${version}" first, or pass --force`, "error")
           }
           if (!abAccepted(verdict)) {
             const dec = verdict.decision ?? `winner=${verdict.winner}`
@@ -513,15 +538,15 @@ const metaHarness: Plugin = async (input) => {
             const detail = hi
               ? `held-in delta=${hi.delta >= 0 ? "+" : ""}${hi.delta} p=${hi.mcnemarP} CI90=${JSON.stringify(hi.bootCI90)}`
               : `candidate ${fmtRate(verdict.candidateRate)} vs active ${fmtRate(verdict.activeRate)}, n=${verdict.nTasks}`
-            throw new Error(`Meta-Harness: ${version} was not accepted by the ab gate (${dec}; ${detail}) — refusing; pass --force to override`)
+            throw await toastAndSwallow(client, `${version} was not accepted by the ab gate (${dec}; ${detail}) — refusing; pass --force to override`, "error")
           }
         }
         const ok = activateCandidate(layer.root, version)
         if (!ok) {
-          throw new Error(`Meta-Harness: candidate ${version} not found (no system.md) for ${layer.scope}`)
+          throw await toastAndSwallow(client, `candidate ${version} not found (no system.md) for ${layer.scope}`, "error")
         }
         await log(client, "info", `[hook:command] /mh-activate ${layer.scope} ${version}${force ? " --force" : ""}`)
-        throw new Error(`Meta-Harness: activated ${layer.scope} ${version} ✓ (this notice is expected)`)
+        throw await toastAndSwallow(client, `activated ${layer.scope} ${version} ✓`, "success")
       }
 
       // /mh-promote [global|role]
@@ -541,9 +566,9 @@ const metaHarness: Plugin = async (input) => {
         if (source && target) {
           await log(client, "info", `[hook:command] /mh-promote ${source.scope}→${target.scope} agent=${agent}`)
           void triggerPromote(client, worktree, source, target)
-          throw new Error("Meta-Harness: promote cycle started ✓ (this notice is expected)")
+          throw await toastAndSwallow(client, "promote cycle started ✓", "success")
         }
-        throw new Error(`Meta-Harness: /mh-promote — unknown scope "${scope}" (use global|role)`)
+        throw await toastAndSwallow(client, `/mh-promote — unknown scope "${scope}" (use global|role)`, "error")
       }
 
       // /mh-curate <scope> — consolidate/prune a layer's playbook (through the gate)
@@ -552,11 +577,11 @@ const metaHarness: Plugin = async (input) => {
         const layers = layersFor(worktree, agent)
         const layer = resolveScopeLayer(cmdInput.arguments, layers)
         if (!layer) {
-          throw new Error(`Meta-Harness: /mh-curate — unknown scope "${cmdInput.arguments.trim()}" (use role|project|role-global|account)`)
+          throw await toastAndSwallow(client, `/mh-curate — unknown scope "${cmdInput.arguments.trim()}" (use role|project|role-global|account)`, "error")
         }
         await log(client, "info", `[hook:command] /mh-curate scope=${layer.scope} agent=${agent}`)
         void triggerCurate(client, worktree, layer)
-        throw new Error("Meta-Harness: curate cycle started ✓ (this notice is expected)")
+        throw await toastAndSwallow(client, "curate cycle started ✓", "success")
       }
 
       // /mh-status
@@ -592,7 +617,7 @@ const metaHarness: Plugin = async (input) => {
           }
           lines.push(line)
         }
-        throw new Error(lines.join("\n"))
+        throw await toastAndSwallow(client, lines.join("\n"), "info", 15_000)
       }
     },
   }
