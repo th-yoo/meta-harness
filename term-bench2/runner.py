@@ -48,6 +48,9 @@ BENCH_PREFIX = Path.home() / "bench"
 REAL_APP   = BENCH_PREFIX / "app"
 REAL_TESTS = BENCH_PREFIX / "tests"
 REAL_LOGS  = BENCH_PREFIX / "logs" / "verifier"
+# Backing dir for /tmp — a real dir under $HOME (same mount as /app) rather
+# than a tmpfs, so os.rename() between /app and /tmp is not cross-device.
+REAL_TMP   = BENCH_PREFIX / "tmp"
 # Shim bin dir prepended to PATH: provides `python` → python3 (TB2 tasks
 # assume `python` exists, but Ubuntu 24.04 only ships python3).
 BENCH_BIN  = BENCH_PREFIX / "bin"
@@ -198,16 +201,15 @@ def run_cmd(
     # calls fail with 'externally-managed-environment'.
     merged_env = {"PIP_BREAK_SYSTEM_PACKAGES": "1", **os.environ, **(env or {})}
     if ns:
-        # Per-task Python user-site isolation: `pip install` (which defaults to
-        # --user when unprivileged) writes to /app/.pyuserbase instead of the
-        # shared ~/.local, so tasks can't pollute each other's package versions.
-        # /app is bound + wiped per task, and persists across setup/solve/test.
-        merged_env["PYTHONUSERBASE"] = "/app/.pyuserbase"
         ensure_usrlocal()
-    # Prepend the shim bin (python → python3) + per-task user-site bin to PATH.
+    # NOTE: per-task PYTHONUSERBASE isolation was tried but reverted — it hid the
+    # shared ~/.local packages that some reference solutions rely on (e.g.
+    # largest-eigenval needs numpy>=2.2 which pip can't upgrade over the debian
+    # system numpy). Tasks share ~/.local; cross-task pollution is tolerated
+    # (it did not cause failures across the 37-task oracle baseline).
+    # Prepend the shim bin (python → python3) to PATH.
     ensure_bench_bin()
-    extra_path = f"/app/.pyuserbase/bin:{BENCH_BIN}" if ns else str(BENCH_BIN)
-    merged_env["PATH"] = f"{extra_path}:{merged_env.get('PATH', '')}"
+    merged_env["PATH"] = f"{BENCH_BIN}:{merged_env.get('PATH', '')}"
     actual_cmd = ns_wrap(cmd, extra_mounts, chdir=chdir) if ns else cmd
     return subprocess.run(
         actual_cmd,
@@ -272,6 +274,17 @@ def clean_dir(ns_path: Path) -> None:
             child.unlink(missing_ok=True)
 
 
+def clean_tmp() -> None:
+    """Reset ~/bench/tmp (the backing dir for the sandbox's /tmp symlink)."""
+    if REAL_TMP.exists():
+        shutil.rmtree(REAL_TMP, ignore_errors=True)
+    REAL_TMP.mkdir(parents=True, exist_ok=True)
+    try:
+        REAL_TMP.chmod(0o1777)   # world-writable + sticky, like a real /tmp
+    except OSError:
+        pass
+
+
 def ns_wrap(
     cmd: list[str],
     extra_mounts: Optional[dict[str, Path]] = None,
@@ -317,17 +330,23 @@ def ns_wrap(
         "--ro-bind-try", "/mnt/wsl", "/mnt/wsl",   # WSL: /etc/resolv.conf → /mnt/wsl/… (DNS)
         "--proc", "/proc",
         "--dev", "/dev",
-        "--tmpfs", "/tmp",
-        "--bind", str(REAL_APP),   "/app",
-        "--bind", str(REAL_TESTS), "/tests",
-        "--bind", str(BENCH_PREFIX / "logs"), "/logs",
+        # /app /tests /logs /tmp are SYMLINKS into the single already-bound
+        # $HOME mount (not separate bind mounts). This keeps them all on one
+        # filesystem so cross-path os.rename() works (e.g. path-tracing-reverse
+        # renames /app/mystery → /tmp/mystery, which would be EXDEV across
+        # separate mounts). They still persist via ~/bench/… across the
+        # setup/solve/test bwrap invocations.
+        "--symlink", str(REAL_APP),   "/app",
+        "--symlink", str(REAL_TESTS), "/tests",
+        "--symlink", str(BENCH_PREFIX / "logs"), "/logs",
+        "--symlink", str(REAL_TMP),   "/tmp",
         "--chdir", chdir,
     ]
     for ns_path, real_path in (extra_mounts or {}).items():
         real_path.mkdir(parents=True, exist_ok=True)
-        # No host-side placeholder needed: / is a tmpfs, bwrap creates the
-        # mount point automatically.
-        bwrap_args += ["--bind", str(real_path), ns_path]
+        # Symlink extras into the $HOME mount too (same filesystem as /app),
+        # so renames between /app and e.g. /protected also work.
+        bwrap_args += ["--symlink", str(real_path), ns_path]
 
     bwrap_args += ["--"] + cmd
     return bwrap_args
@@ -868,10 +887,11 @@ def cmd_run(args: argparse.Namespace) -> None:
             session_id = f"bench-{task}-{int(time.time())}-{uuid.uuid4().hex[:6]}"
             task_start = time.monotonic()
 
-            # 1. Clean workspace (standard dirs + task-specific extras)
+            # 1. Clean workspace (standard dirs + /tmp + task-specific extras)
             clean_dir(HOST_APP)
             clean_dir(HOST_TESTS)
             clean_dir(HOST_LOGS)
+            clean_tmp()
             cleanup_task_extras(task)
 
             # 2. Setup task environment
@@ -1001,10 +1021,11 @@ def cmd_oracle(args: argparse.Namespace) -> None:
 
         task_start = time.monotonic()
 
-        # Clean (standard dirs + task-specific extras)
+        # Clean (standard dirs + /tmp + task-specific extras)
         clean_dir(HOST_APP)
         clean_dir(HOST_TESTS)
         clean_dir(HOST_LOGS)
+        clean_tmp()
         cleanup_task_extras(task)
 
         # Setup
