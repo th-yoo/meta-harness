@@ -1578,7 +1578,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--task-file", metavar="PATH",
                        help="File with one task name per line (e.g. baseline-tasks.txt)")
     p_run.add_argument("--all", action="store_true", help="Run all 59 target tasks")
-    p_run.add_argument("--model", default="claude-sonnet-4-6", help="Model ID")
+    p_run.add_argument("--model", default="anthropic/claude-sonnet-4-6",
+                       help="Model ID (provider-prefixed, e.g. anthropic/claude-sonnet-4-6; "
+                            "a bare name may fail provider resolution under oauth)")
     p_run.add_argument("--variant", default="", help="Model variant (e.g. high, low)")
     p_run.add_argument("--k", type=int, default=1, help="Runs per task (for pass@k)")
     p_run.add_argument(
@@ -1632,7 +1634,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_ab.add_argument("--task-file", metavar="PATH",
                       help="File with one task name per line")
     p_ab.add_argument("--all", action="store_true", help="Use all target tasks")
-    p_ab.add_argument("--model", default="claude-sonnet-4-6", help="Model ID")
+    p_ab.add_argument("--model", default="anthropic/claude-sonnet-4-6",
+                      help="Model ID (provider-prefixed; a bare name may fail "
+                           "provider resolution under oauth)")
     p_ab.add_argument("--variant", default="", help="Model variant (e.g. high, low)")
     p_ab.add_argument("--k", type=int, default=1, help="Pairs (A+B) per task")
     p_ab.add_argument("--layers", default="global", choices=["global", "account", "project"],
