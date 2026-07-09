@@ -21,6 +21,7 @@ import * as path from "path"
 import {
   accountGlobalRoot,
   activeVersion,
+  appendMetaMetric,
   buildProposerContext,
   buildPromotionEvidence,
   createCandidate,
@@ -204,6 +205,10 @@ export async function triggerPropose(
     if (fs.existsSync(stagingSystem)) fs.rmSync(stagingSystem, { force: true })
 
     createCandidate(layer.root, version, system, tools, newPlaybook)
+    appendMetaMetric(layer.root, {
+      event: "propose", candidate: version, scope: layer.scope,
+      kind: newPlaybook ? "propose-ops" : "propose",
+    })
     writeCandidateMeta(layer.root, version, {
       proposerModel: cfg.proposerModel,
       proposerVariant: cfg.proposerVariant,
@@ -679,6 +684,7 @@ export async function triggerCurate(
     const system = renderPlaybook(newPlaybook)
     const tools = readActiveTools(layer.root)
     createCandidate(layer.root, version, system, tools, newPlaybook)
+    appendMetaMetric(layer.root, { event: "curate", candidate: version, scope: layer.scope })
     writeCandidateMeta(layer.root, version, {
       proposerModel: cfg.proposerModel, scope: layer.scope, kind: "curate",
       createdAt: new Date().toISOString(),

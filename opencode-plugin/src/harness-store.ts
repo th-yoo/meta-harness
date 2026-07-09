@@ -331,6 +331,35 @@ function writeJson(p: string, data: unknown): void {
   fs.writeFileSync(p, JSON.stringify(data, null, 2), "utf-8")
 }
 
+// ── Loop observability (meta-metrics.jsonl) ────────────────────────────────
+//
+// Mirrors the Python appender (term-bench2/bench_store.py append_meta_metric).
+// Sink lives at the nearest ".meta-harness" ancestor of storeRoot, so project
+// stores land in the repo-local (git-tracked) sink and account stores land in
+// ~/.config/opencode/.meta-harness/meta-metrics.jsonl.
+
+function metricsSinkFor(storeRoot: string): string | null {
+  let dir = path.resolve(storeRoot)
+  for (let i = 0; i < 6; i++) {
+    if (path.basename(dir) === ".meta-harness") return path.join(dir, "meta-metrics.jsonl")
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return null
+}
+
+/** Append one loop-observability event (best-effort — never throws). */
+export function appendMetaMetric(storeRoot: string, event: Record<string, unknown>): void {
+  try {
+    const sink = metricsSinkFor(storeRoot)
+    if (!sink) return
+    fs.mkdirSync(path.dirname(sink), { recursive: true })
+    const stamped = { ts: new Date().toISOString(), ...event }
+    fs.appendFileSync(sink, JSON.stringify(stamped) + "\n", "utf-8")
+  } catch { /* observability must never break the loop */ }
+}
+
 // ── Store API ──────────────────────────────────────────────────────────────
 
 export function activeVersion(storeRoot: string): string {
@@ -583,6 +612,7 @@ export function startTrial(
   }
   writeJson(activePath(storeRoot, TRIAL_FILE), state)
   writeActive(storeRoot, trialVersion, system, tools, playbook)
+  appendMetaMetric(storeRoot, { event: "trial", action: "started", trial: trialVersion, baseline: state.baseline })
 }
 
 function passRate(score: CandidateScore): number {
@@ -628,7 +658,9 @@ export function resolveTrial(storeRoot: string): TrialResolution {
       return { action: "pending", have: trialScore.sessions.length, need: trial.minSessions }
     }
     clearTrial(storeRoot)
-    return { action: "confirmed", trial: trial.trial, trialRate: passRate(trialScore), baselineRate: null }
+    const trialRate = passRate(trialScore)
+    appendMetaMetric(storeRoot, { event: "trial", action: "confirmed", trial: trial.trial, trialRate, baselineRate: null })
+    return { action: "confirmed", trial: trial.trial, trialRate, baselineRate: null }
   }
 
   const baseModels = new Set(baselineScore.sessions.map(sessionModel))
@@ -642,12 +674,14 @@ export function resolveTrial(storeRoot: string): TrialResolution {
 
   if (trialRate >= baselineRate) {
     clearTrial(storeRoot)
+    appendMetaMetric(storeRoot, { event: "trial", action: "confirmed", trial: trial.trial, trialRate, baselineRate })
     return { action: "confirmed", trial: trial.trial, trialRate, baselineRate }
   }
 
   writeActive(storeRoot, trial.baseline, trial.baselineSystem, trial.baselineTools,
     trial.baselinePlaybook ?? null)
   clearTrial(storeRoot)
+  appendMetaMetric(storeRoot, { event: "trial", action: "reverted", trial: trial.trial, trialRate, baselineRate })
   return { action: "reverted", trial: trial.trial, baseline: trial.baseline, trialRate, baselineRate }
 }
 
@@ -658,6 +692,7 @@ export function activateCandidate(storeRoot: string, version: string): boolean {
   const tools = readText(candidatePath(storeRoot, version, "tools.md"))
   const playbook = readPlaybook(storeRoot, version)
   writeActive(storeRoot, version, system, tools, playbook)
+  appendMetaMetric(storeRoot, { event: "activate", version })
   clearTrial(storeRoot) // manual activation supersedes any in-flight trial
   return true
 }
