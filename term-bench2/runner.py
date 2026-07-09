@@ -78,12 +78,12 @@ APT_PACKAGES_TXT = SCRIPT_DIR / "apt-packages.txt"
 # Tracks which packages were newly installed by prep --apply (for --uninstall)
 PREP_INSTALLED_TXT = SCRIPT_DIR / ".prep-installed.txt"
 
-# Empty host-side dirs used as bwrap bind-mount points.
-# Nothing is ever written to them directly — bwrap overlays ~/bench/* on top.
-# Created by prep --apply, removed by prep --clean-mountpoints --apply.
+# Legacy host-side placeholder dirs from the old --bind / / approach.
+# No longer created (the sandbox now uses a tmpfs root), but prep
+# --clean-mountpoints removes them if they linger from an earlier setup.
 BWRAP_MOUNT_POINTS = [
-    "/app", "/tests", "/logs/verifier",   # always needed
-    "/data", "/protected", "/workspace",   # task-specific extras
+    "/app", "/tests", "/logs",
+    "/data", "/protected", "/workspace",
 ]
 
 # ── Task list ──────────────────────────────────────────────────────────────
@@ -207,44 +207,50 @@ def ns_wrap(
     chdir: str = "/app",
 ) -> list[str]:
     """
-    Wrap a command using bwrap (bubblewrap) so that ~/bench/{app,tests,logs}
-    are bind-mounted onto /app, /tests, /logs inside the sandbox.
+    Wrap a command using bwrap (bubblewrap) in a sandbox whose root is a
+    fresh tmpfs. Real system dirs (/usr, /etc, /home, …) are bind-mounted on
+    top; ~/bench/{app,tests,logs} are bound onto /app, /tests, /logs.
 
-    The host filesystem is never written to at those paths — all writes go to
-    ~/bench/.  /app, /tests, /logs must exist as empty placeholder dirs on the
-    host (created once by prep --apply with sudo; they stay permanently empty).
+    Because / is a writable tmpfs, task scripts and tests can freely create
+    arbitrary top-level paths (e.g. /jail, /protected, /workspace) with no
+    host-side placeholder dirs and no sudo. All changes to / are discarded
+    when the sandbox exits — only ~/bench/ (bound) persists.
 
     chdir: working directory inside the sandbox (default /app). TB2 tasks run
-    solve.sh / test.sh with cwd=/app, so relative paths in those scripts
-    resolve against the workspace.
+    solve.sh / test.sh with cwd=/app.
 
     extra_mounts: {'/sandbox/path': real_host_path} for task-specific paths
-    like /protected, /workspace, /data.
+    that must PERSIST to ~/bench/extras/<task> (bound), rather than living in
+    the discarded tmpfs. Used for setup-created assets the verifier reads back.
     """
     bwrap_args = [
         "bwrap",
-        "--bind", "/", "/",           # bind real root (read-write for user-owned paths)
+        "--tmpfs", "/",                       # writable, discarded root
+        "--ro-bind", "/usr", "/usr",
+        "--symlink", "usr/bin", "/bin",
+        "--symlink", "usr/lib", "/lib",
+        "--symlink", "usr/lib64", "/lib64",
+        "--symlink", "usr/sbin", "/sbin",
+        "--ro-bind", "/etc", "/etc",
+        "--bind", str(Path.home()), str(Path.home()),   # $HOME (uv cache, ~/.local/bin)
+        "--bind", "/var", "/var",                  # texlive, dpkg db, many tools read here
+        "--ro-bind-try", "/opt", "/opt",
+        "--ro-bind-try", "/snap", "/snap",
+        "--ro-bind-try", "/sys", "/sys",
+        "--bind-try", "/run", "/run",
+        "--ro-bind-try", "/mnt/wsl", "/mnt/wsl",   # WSL: /etc/resolv.conf → /mnt/wsl/… (DNS)
+        "--proc", "/proc",
+        "--dev", "/dev",
+        "--tmpfs", "/tmp",
         "--bind", str(REAL_APP),   "/app",
         "--bind", str(REAL_TESTS), "/tests",
         "--bind", str(BENCH_PREFIX / "logs"), "/logs",
-        "--proc", "/proc",
-        "--dev",  "/dev",
         "--chdir", chdir,
     ]
     for ns_path, real_path in (extra_mounts or {}).items():
         real_path.mkdir(parents=True, exist_ok=True)
-        # Ensure host-side mount point exists (bwrap --bind / / requires it)
-        host_mp = Path(ns_path)
-        if not host_mp.exists():
-            subprocess.run(
-                ["sudo", "mkdir", "-p", str(host_mp)], check=True
-            )
-            subprocess.run(
-                ["sudo", "chown",
-                 os.environ.get("USER", os.environ.get("LOGNAME", "")),
-                 str(host_mp)],
-                check=True,
-            )
+        # No host-side placeholder needed: / is a tmpfs, bwrap creates the
+        # mount point automatically.
         bwrap_args += ["--bind", str(real_path), ns_path]
 
     bwrap_args += ["--"] + cmd
@@ -317,11 +323,8 @@ def cmd_prep(args: argparse.Namespace) -> None:
     apt_line = "sudo apt-get install -y \\\n  " + " \\\n  ".join(apt_pkgs) if apt_pkgs else "# (no apt packages)"
     user = os.environ.get("USER", os.environ.get("LOGNAME", "$(whoami)"))
     commands = [
-        f"# User-owned backing dirs (all actual data lives here):",
+        f"# User-owned backing dirs (all actual data lives here — no sudo, no root pollution):",
         f"mkdir -p {REAL_APP} {REAL_TESTS} {REAL_LOGS}",
-        f"# Empty bwrap mount-point placeholders (sudo once; stay permanently empty):",
-        f"sudo mkdir -p /app /tests /logs/verifier",
-        f"sudo chown {user} /app /tests /logs",
         apt_line,
     ]
 
@@ -333,19 +336,14 @@ def cmd_prep(args: argparse.Namespace) -> None:
         to_install = [p for p in apt_pkgs if p not in already_installed]
         log(f"  {len(to_install)} new / {len(apt_pkgs) - len(to_install)} already present")
 
-        # Create user-owned bench dirs (all actual data lives here)
+        # Create user-owned bench dirs (all actual data lives here).
+        # The sandbox uses a tmpfs root, so NO /app /tests /logs placeholders
+        # are needed on the host and NO sudo is required for directories.
         REAL_APP.mkdir(parents=True, exist_ok=True)
         REAL_TESTS.mkdir(parents=True, exist_ok=True)
         REAL_LOGS.mkdir(parents=True, exist_ok=True)
-        log(f"  Created {REAL_APP}, {REAL_TESTS}, {REAL_LOGS}")
-
-        # Create empty placeholder dirs for bwrap mount points (sudo once, stay empty)
-        # bwrap binds ~/bench/* over these — nothing is ever written here directly.
-        subprocess.run(["sudo", "mkdir", "-p"] + BWRAP_MOUNT_POINTS, check=True)
-        # chown top-level dirs (not /logs/verifier which is under /logs)
-        top_dirs = sorted({p.split("/")[1] for p in BWRAP_MOUNT_POINTS if p != "/"})
-        subprocess.run(["sudo", "chown", user] + ["/" + d for d in top_dirs], check=True)
-        log("  Created bwrap mount-point placeholders: " + " ".join(BWRAP_MOUNT_POINTS))
+        ensure_bench_bin()
+        log(f"  Created {REAL_APP}, {REAL_TESTS}, {REAL_LOGS}, {BENCH_BIN}")
 
         # apt — noninteractive to avoid debconf prompts (postfix, mailman3, etc.)
         if apt_pkgs:
