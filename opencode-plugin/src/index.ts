@@ -111,6 +111,12 @@ function resolveScopeLayer(scope: string, layers: StoreLayer[]): StoreLayer | un
 
 const bootstrappedSessions = new Set<string>()
 const pendingScore = new Set<string>()
+// How many times each opencode session has already been scored. A single
+// opencode session can be scored more than once (it re-bootstraps after each
+// score cycle); this de-collides the recorded IDs so traces/traj don't
+// overwrite. NOT cleared by cleanupSession — it must persist across cycles;
+// it resets naturally on plugin reload / opencode restart.
+const sessionScoreCount = new Map<string, number>()
 const snapshotCache = new Map<string, string>()
 const snapshotInjected = new Set<string>()
 const sessionModel = new Map<string, string>()
@@ -403,6 +409,14 @@ const metaHarness: Plugin = async (input) => {
         return
       }
 
+      // De-collide the recorded ID when this opencode session is scored more
+      // than once. First score keeps the raw sessionID (back-compat); later
+      // scores get "<sessionID>#N" so score.json entries + traces/ + traj/
+      // stay distinct. In-memory maps below stay keyed by the raw sessionID.
+      const priorScores = sessionScoreCount.get(sessionID) ?? 0
+      sessionScoreCount.set(sessionID, priorScores + 1)
+      const recordID = priorScores === 0 ? sessionID : `${sessionID}#${priorScores + 1}`
+
       // Record into all 4 stores
       const layers = layersFor(worktree, agent)
       const model = sessionModel.get(sessionID) ?? "unknown"
@@ -414,7 +428,7 @@ const metaHarness: Plugin = async (input) => {
         ),
       }
       const record = {
-        sessionID,
+        sessionID: recordID,
         passed: result.passed,
         note: result.note,
         turnCount: sessionTurns.get(sessionID) ?? 0,
@@ -437,7 +451,7 @@ const metaHarness: Plugin = async (input) => {
       if (traj.length && (!record.passed || SAVE_ALL_TRAJ)) {
         for (const { layer } of scores) {
           const version = activeVersion(layer.root)
-          writeTrajectory(layer.root, version, sessionID, traj)
+          writeTrajectory(layer.root, version, recordID, traj)
           pruneTrajectories(layer.root, version)
         }
       }
