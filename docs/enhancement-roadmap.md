@@ -107,6 +107,35 @@ TBD
 
 **Verify:** `test_ab_stats.py` unit tests (McNemar hand-values: b=6,c=0→p≈.0156; decide() truth table; futility boundaries); **null-candidate test** (candidate = copy of active → must NOT accept; noise-floor smoke); old-verdict back-compat; split partition/rotation mechanics.
 
+### Phase 1b — Pin the proposer model (small, ships with Phase 1 or alone)
+
+Today `triggerPropose`/`triggerPromote` create sessions with **no model specified** —
+the proposer inherits whatever model the user happens to be running interactively.
+STOP (arXiv 2310.02304) showed self-improvement loops go **net-negative with a weak
+proposer** (GPT-4 helped, GPT-3.5/Mixtral hurt), so a daily-driver cheap model would
+silently poison the loop. Pinning also removes proposal-quality variance (another
+noise confound alongside Phase 1's fitness noise) and gives rule provenance.
+
+- Config: `~/.config/opencode/.meta-harness/config.json` →
+  `{"proposerModel": "anthropic/claude-opus-4-8", "proposerVariant": "high"}`;
+  constant fallback in `propose.ts`. Read via a `readMhConfig()` helper in
+  harness-store.ts.
+- `triggerPropose` / `triggerPromote` (and later `triggerCurate`, Phase 3) pass the
+  pinned model + thinking variant into `client.session.prompt` (verify the exact
+  model-spec field in the opencode plugin API at impl time; fall back to
+  session-create options if prompt-level model isn't supported).
+- Stamp `proposerModel`/`proposerVariant` into candidate metadata
+  (`candidates/vN/diagnosis.json` once Phase 2 lands; until then a
+  `candidates/vN/meta.json`) — so regressions are attributable to a proposer change.
+- Role/model policy: proposer/promoter/curator = pinned strong + high thinking
+  (calls are rare — cost negligible); task agent under evaluation = the optimization
+  target model (already pinned via `ab --model`); Phase 4 judge = pinned and ideally
+  a *different* model from the proposer (anti-gaming).
+
+**Verify:** /mh-propose with an intentionally cheap interactive session model →
+proposer session logs the pinned model, not the session model; candidate metadata
+carries proposerModel.
+
 ### Phase 2 — Trajectory persistence + causal proposer
 
 Today run_opencode discards the NDJSON stream; proposer sees 200-char summaries.
