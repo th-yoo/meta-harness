@@ -388,7 +388,7 @@ the role's general behavior for this project's particular constraints, quirks, o
 Do not repeat anything from the higher layers.`,
 }
 
-function buildProposerPrompt(
+export function buildProposerPrompt(
   layer: StoreLayer,
   version: string,
   context: string,

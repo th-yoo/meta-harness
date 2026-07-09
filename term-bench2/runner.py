@@ -801,7 +801,7 @@ def run_opencode(
             )
         except subprocess.TimeoutExpired:
             log(f"  opencode timed out after {agent_timeout:.0f}s")
-            return 0, {}
+            return 0, {}, []
         elapsed = time.monotonic() - start
 
         out = result.stdout or ""
