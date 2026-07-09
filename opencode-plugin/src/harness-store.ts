@@ -95,6 +95,15 @@ export interface SessionRecord {
   toolUsage: ToolUsage
   /** Confound-control provenance (harness hash, plugin sha, provider…); optional. */
   env?: Record<string, unknown>
+  /** Dense LLM judge verdict for this session (Phase 4 Part D), when the judge
+   * ran — shadow mode never affects `passed`; prefill mode may pre-populate the
+   * human /mh-score prompt. Optional so pre-D1 records keep parsing. */
+  judge?: {
+    passed: boolean
+    confidence?: number
+    mode: "shadow" | "prefill"
+    agreed?: boolean
+  }
 }
 
 export interface CandidateScore {
@@ -186,16 +195,30 @@ export function abAccepted(v: AbVerdict): boolean {
 export interface MhConfig {
   proposerModel: string
   proposerVariant: string
+  /** Dense LLM judge (Phase 4 Part D) — "" (default) means the judge is DISABLED. */
+  judgeModel: string
+  judgeVariant: string
+  /** Minimum number of shadow decisions before the judge can gate anything. */
+  judgeMinSessions: number
+  /** Minimum judge/human agreement rate (over the last judgeMinSessions decisions)
+   * required before the judge is considered calibrated. */
+  judgeMinAgreement: number
 }
 
 const DEFAULT_PROPOSER_MODEL = "anthropic/claude-opus-4-8"
 const DEFAULT_PROPOSER_VARIANT = "high"
+const DEFAULT_JUDGE_MIN_SESSIONS = 20
+const DEFAULT_JUDGE_MIN_AGREEMENT = 0.8
 
 export function readMhConfig(): MhConfig {
   const raw = readJson<Partial<MhConfig>>(path.join(ACCOUNT_MH_DIR, "config.json"), {})
   return {
     proposerModel: raw.proposerModel || DEFAULT_PROPOSER_MODEL,
     proposerVariant: raw.proposerVariant || DEFAULT_PROPOSER_VARIANT,
+    judgeModel: raw.judgeModel ?? "",
+    judgeVariant: raw.judgeVariant ?? "",
+    judgeMinSessions: raw.judgeMinSessions ?? DEFAULT_JUDGE_MIN_SESSIONS,
+    judgeMinAgreement: raw.judgeMinAgreement ?? DEFAULT_JUDGE_MIN_AGREEMENT,
   }
 }
 
@@ -211,6 +234,62 @@ export function parseModelSpec(model: string): { providerID: string; modelID: st
 /** Stamp candidate provenance (which proposer produced it) for attribution. */
 export function writeCandidateMeta(storeRoot: string, version: string, meta: Record<string, unknown>): void {
   writeJson(candidatePath(storeRoot, version, "meta.json"), meta)
+}
+
+// ── Judge calibration store (Phase 4 Part D — shadow-calibrated dense judge) ─
+//
+// Bookkeeping only: the judge shadow-runs alongside human /mh-score and every
+// (judge verdict, human verdict) pair is appended here. judgeCalibration()
+// looks at the last N decisions to decide whether the judge agrees with humans
+// often enough to be trusted for anything beyond shadow logging.
+
+const JUDGE_CALIBRATION_FILE = "judge-calibration.json"
+
+function judgeCalibrationPath(file?: string): string {
+  return file ?? path.join(ACCOUNT_MH_DIR, JUDGE_CALIBRATION_FILE)
+}
+
+export interface JudgeDecision {
+  ts: string
+  sessionID: string
+  judge: boolean
+  human: boolean
+  model: string
+}
+
+interface JudgeCalibrationStore {
+  schemaVersion: 1
+  decisions: JudgeDecision[]
+}
+
+/** Append one judge/human decision pair. Read-modify-write of a single JSON
+ * object (not JSONL). Best-effort — observability must never break the loop. */
+export function appendJudgeDecision(d: JudgeDecision, file?: string): void {
+  try {
+    const p = judgeCalibrationPath(file)
+    const store = readJson<JudgeCalibrationStore>(p, { schemaVersion: 1, decisions: [] })
+    store.decisions.push(d)
+    writeJson(p, store)
+  } catch { /* observability must never break the loop */ }
+}
+
+/** Agreement rate over the LAST `minSessions` decisions. `n` = min(total,
+ * minSessions); `calibrated` requires both enough decisions (n >= minSessions)
+ * AND high enough agreement among them. Empty/missing file -> all zero/false. */
+export function judgeCalibration(
+  minSessions: number,
+  minAgreement: number,
+  file?: string,
+): { n: number; agreement: number; calibrated: boolean } {
+  const store = readJson<JudgeCalibrationStore>(judgeCalibrationPath(file), { schemaVersion: 1, decisions: [] })
+  const total = store.decisions.length
+  const n = Math.min(total, minSessions)
+  if (n === 0) return { n: 0, agreement: 0, calibrated: false }
+  const window = store.decisions.slice(-minSessions)
+  const agreeing = window.filter((d) => d.judge === d.human).length
+  const agreement = agreeing / window.length
+  const calibrated = total >= minSessions && agreement >= minAgreement
+  return { n, agreement, calibrated }
 }
 
 // ── Trajectories + diagnosis (Phase 2) ──────────────────────────────────────
