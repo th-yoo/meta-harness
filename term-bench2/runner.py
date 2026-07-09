@@ -545,17 +545,30 @@ def cleanup_task_extras(task: str) -> None:
         log(f"  cleanup: wiped {extras_root}")
 
 
+# Top-level sandbox paths already provided by ns_wrap's base mounts/symlinks.
+# Task "extra" paths that collide with these are skipped (the base handles
+# them: e.g. /tmp is symlinked to ~/bench/tmp and persists within a task).
+_BASE_MANAGED_PATHS = {
+    "/app", "/tests", "/logs", "/tmp",
+    "/usr", "/etc", "/var", "/home", "/run", "/opt", "/sys",
+    "/proc", "/dev", "/snap", "/mnt", "/bin", "/lib", "/lib64", "/sbin",
+}
+
+
 def task_extra_mounts(task: str) -> dict[str, Path]:
     """
     Build {ns_path: real_path} for paths that setup_deps.sh writes outside
-    /app /tests /logs (e.g. /protected, /workspace, /data).
-    These are hosted under ~/bench/extras/<task>/ and bind-mounted into
-    the namespace so the host filesystem is never touched.
+    the base-managed dirs (e.g. /protected, /workspace, /data, /root).
+    These are hosted under ~/bench/extras/<task>/ and symlinked into the
+    sandbox so the host filesystem is never touched. Paths already provided
+    by the base sandbox (e.g. /tmp) are skipped to avoid symlink collisions.
     """
     meta = _manifest().get(task, {})
     top_paths: list[str] = meta.get("extra_cleanup_paths", [])
     extras: dict[str, Path] = {}
     for ns_path in top_paths:
+        if ns_path.rstrip("/") in _BASE_MANAGED_PATHS:
+            continue  # handled by base mounts/symlinks
         real = BENCH_PREFIX / "extras" / task / ns_path.lstrip("/")
         extras[ns_path] = real
     return extras
