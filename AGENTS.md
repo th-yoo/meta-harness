@@ -75,6 +75,8 @@ Three tools defined in `TOOLS` (agent.py:142):
 
 `opencode-plugin/` is a TypeScript opencode plugin that ports the three core optimisations into opencode's hook system.
 
+For day-to-day usage of the plugin's `/mh-*` commands, scoring workflow, config, and the bench CLI, see [docs/usage-manual.md](docs/usage-manual.md).
+
 ### File map
 
 | File | Ports |

@@ -3,6 +3,9 @@
 How meta-harness improves an opencode coding agent — the mechanism, the layers,
 the feedback loop, and where it lives in the code.
 
+> **Day-to-day usage** (commands, scoring, config, the bench CLI, troubleshooting):
+> see [usage-manual.md](usage-manual.md). This doc is the architecture.
+
 > **One line:** meta-harness never changes opencode's code or the model. It
 > evolves the **system-prompt text** the agent runs under, and keeps only the
 > rewrites that provably raise pass-rate.
