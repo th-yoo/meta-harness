@@ -169,6 +169,44 @@ export function abAccepted(v: AbVerdict): boolean {
   return v.decision !== undefined ? v.decision === "accept" : v.winner === "candidate"
 }
 
+// ── Meta-harness config (proposer pin) ──────────────────────────────────────
+
+/**
+ * The proposer/promoter/curator run on a PINNED strong model — a weak proposer
+ * makes the self-improvement loop net-negative (STOP, arXiv 2310.02304), and an
+ * unpinned proposer inherits whatever model the user happens to be running.
+ * Config: ~/.config/opencode/.meta-harness/config.json.
+ */
+export interface MhConfig {
+  proposerModel: string
+  proposerVariant: string
+}
+
+const DEFAULT_PROPOSER_MODEL = "anthropic/claude-opus-4-8"
+const DEFAULT_PROPOSER_VARIANT = "high"
+
+export function readMhConfig(): MhConfig {
+  const raw = readJson<Partial<MhConfig>>(path.join(ACCOUNT_MH_DIR, "config.json"), {})
+  return {
+    proposerModel: raw.proposerModel || DEFAULT_PROPOSER_MODEL,
+    proposerVariant: raw.proposerVariant || DEFAULT_PROPOSER_VARIANT,
+  }
+}
+
+/** Split "provider/model" into the {providerID, modelID} shape the session API
+ * wants. Returns undefined for a bare (unprefixed) name — the caller then lets
+ * opencode resolve the default, rather than sending a malformed spec. */
+export function parseModelSpec(model: string): { providerID: string; modelID: string } | undefined {
+  const i = model.indexOf("/")
+  if (i <= 0 || i === model.length - 1) return undefined
+  return { providerID: model.slice(0, i), modelID: model.slice(i + 1) }
+}
+
+/** Stamp candidate provenance (which proposer produced it) for attribution. */
+export function writeCandidateMeta(storeRoot: string, version: string, meta: Record<string, unknown>): void {
+  writeJson(candidatePath(storeRoot, version, "meta.json"), meta)
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function readText(p: string): string {

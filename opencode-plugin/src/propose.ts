@@ -30,6 +30,9 @@ import {
   readScore,
   readTrial,
   startTrial,
+  readMhConfig,
+  parseModelSpec,
+  writeCandidateMeta,
   type StoreLayer,
 } from "./harness-store.ts"
 import { proposerSessions } from "./session-state.ts"
@@ -90,10 +93,12 @@ export async function triggerPropose(
 
     const context = buildProposerContext(layer.root, layer.higherRoots)
     const prompt = buildProposerPrompt(layer, version, context, stagingSystem, stagingTools, worktree)
+    const cfg = readMhConfig()
+    const proposerModel = parseModelSpec(cfg.proposerModel)
 
     await client.app.log({
       body: { service: "meta-harness", level: "info",
-              message: `Starting proposer for ${layer.scope} → ${version}` },
+              message: `Starting proposer for ${layer.scope} → ${version} (model=${cfg.proposerModel})` },
     })
     await client.tui.showToast({
       body: { title: "Meta-Harness", message: `Proposing ${layer.scope} ${version}…`,
@@ -114,7 +119,10 @@ export async function triggerPropose(
     proposerSessions.add(sessionID)
     await client.session.prompt({
       path: { id: sessionID },
-      body: { parts: [{ type: "text", text: prompt }] },
+      body: {
+        parts: [{ type: "text", text: prompt }],
+        ...(proposerModel ? { model: proposerModel } : {}),
+      },
     })
 
     // Poll for the required system.md staging file (tools.md is optional)
@@ -139,6 +147,13 @@ export async function triggerPropose(
     if (tools) fs.rmSync(stagingTools, { force: true })
 
     createCandidate(layer.root, version, system, tools)
+    writeCandidateMeta(layer.root, version, {
+      proposerModel: cfg.proposerModel,
+      proposerVariant: cfg.proposerVariant,
+      scope: layer.scope,
+      kind: "propose",
+      createdAt: new Date().toISOString(),
+    })
 
     const toolsNote = tools ? " + tools.md" : ""
     if (isProject) {
@@ -211,10 +226,12 @@ export async function triggerPromote(
     const stagingTools  = path.join(stagingBase, `promote-${target.scope}-${version}-tools.md`)
 
     const prompt = buildPromotePrompt(source, target, version, stagingSystem, stagingTools, worktree)
+    const cfg = readMhConfig()
+    const proposerModel = parseModelSpec(cfg.proposerModel)
 
     await client.app.log({
       body: { service: "meta-harness", level: "info",
-              message: `Starting promoter ${source.scope} → ${target.scope} ${version}` },
+              message: `Starting promoter ${source.scope} → ${target.scope} ${version} (model=${cfg.proposerModel})` },
     })
     await client.tui.showToast({
       body: { title: "Meta-Harness", message: `Promoting ${source.scope} → ${target.scope} ${version}…`,
@@ -235,7 +252,10 @@ export async function triggerPromote(
     proposerSessions.add(sessionID)
     await client.session.prompt({
       path: { id: sessionID },
-      body: { parts: [{ type: "text", text: prompt }] },
+      body: {
+        parts: [{ type: "text", text: prompt }],
+        ...(proposerModel ? { model: proposerModel } : {}),
+      },
     })
 
     const found = await waitForFile(stagingSystem, 10 * 60 * 1000)
@@ -258,6 +278,14 @@ export async function triggerPromote(
     if (tools) fs.rmSync(stagingTools, { force: true })
 
     createCandidate(target.root, version, system, tools) // inactive — account gate applies
+    writeCandidateMeta(target.root, version, {
+      proposerModel: cfg.proposerModel,
+      proposerVariant: cfg.proposerVariant,
+      scope: target.scope,
+      kind: "promote",
+      source: source.scope,
+      createdAt: new Date().toISOString(),
+    })
 
     const toolsNote = tools ? " + tools.md" : ""
     await client.tui.showToast({

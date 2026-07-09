@@ -134,6 +134,15 @@ model-specific. Additions:
 
 ### Phase 1b — Pin the proposer model (small, ships with Phase 1 or alone)
 
+> **Status: IMPLEMENTED (2026-07-09).** `readMhConfig()` / `parseModelSpec()` /
+> `writeCandidateMeta()` in harness-store.ts; `triggerPropose` + `triggerPromote` read
+> `~/.config/opencode/.meta-harness/config.json` (defaults `anthropic/claude-opus-4-8` /
+> `high`) and pass `model: {providerID, modelID}` into `session.prompt`, and stamp
+> `candidates/<vN>/meta.json` with the proposer model/variant/kind. **API limitation:**
+> the opencode `session.prompt` body exposes `model` but not a thinking `variant`, so
+> `proposerVariant` is provenance-only for now — the proposer runs the pinned model at
+> opencode's default effort. Model pinning (the STOP-critical part) is fully live.
+
 Today `triggerPropose`/`triggerPromote` create sessions with **no model specified** —
 the proposer inherits whatever model the user happens to be running interactively.
 STOP (arXiv 2310.02304) showed self-improvement loops go **net-negative with a weak
