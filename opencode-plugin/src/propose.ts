@@ -44,10 +44,13 @@ import {
   seedPlaybook,
   readAgentConfig,
   validateAgentConfig,
+  readEnvPolicy,
+  validateEnvPolicy,
   type StoreLayer,
   type Playbook,
   type PlaybookOp,
   type AgentConfig,
+  type EnvPolicy,
 } from "./harness-store.ts"
 import { proposerSessions } from "./session-state.ts"
 
@@ -113,13 +116,14 @@ export async function triggerPropose(
     const stagingDiagnosis = path.join(stagingBase, `${layer.scope}-${version}-diagnosis.json`)
     const stagingOps = path.join(stagingBase, `${layer.scope}-${version}-ops.json`)
     const stagingAgentConfig = path.join(stagingBase, `${layer.scope}-${version}-agent-config.json`)
+    const stagingEnvPolicy = path.join(stagingBase, `${layer.scope}-${version}-env-policy.json`)
     // Seed the playbook from the active system.md on first use (non-destructive);
     // ops mode iff the layer ends up with a playbook (empty stores stay legacy).
     const playbook = seedPlaybook(layer.root)
 
     const context = buildProposerContext(layer.root, layer.higherRoots)
     const prompt = buildProposerPrompt(layer, version, context, stagingSystem, stagingTools,
-      stagingDiagnosis, stagingOps, stagingAgentConfig, worktree, playbook)
+      stagingDiagnosis, stagingOps, stagingAgentConfig, stagingEnvPolicy, worktree, playbook)
     const cfg = readMhConfig()
     const proposerModel = parseModelSpec(cfg.proposerModel)
 
@@ -228,7 +232,27 @@ export async function triggerPropose(
       fs.rmSync(stagingAgentConfig, { force: true })
     }
 
-    createCandidate(layer.root, version, system, tools, newPlaybook, agentConfig ?? undefined)
+    // Optional env-policy op — PROJECT layers only (gated), same rationale as
+    // agent-config above: bench `ab` validates account-layer candidates by
+    // running the default `build` agent, where an evolved env-policy can
+    // never be measured — never pick one up for account scopes.
+    let envPolicy: EnvPolicy | null = null
+    if (isProject && fs.existsSync(stagingEnvPolicy)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(stagingEnvPolicy, "utf-8"))
+        envPolicy = validateEnvPolicy(parsed)
+        if (!envPolicy) {
+          await client.app.log({ body: { service: "meta-harness", level: "warn",
+            message: `proposer ${layer.scope} ${version}: env-policy.json invalid — skipped` } })
+        }
+      } catch {
+        await client.app.log({ body: { service: "meta-harness", level: "warn",
+          message: `proposer ${layer.scope} ${version}: env-policy.json malformed — skipped` } })
+      }
+      fs.rmSync(stagingEnvPolicy, { force: true })
+    }
+
+    createCandidate(layer.root, version, system, tools, newPlaybook, agentConfig ?? undefined, envPolicy ?? undefined)
     appendMetaMetric(layer.root, {
       event: "propose", candidate: version, scope: layer.scope,
       kind: newPlaybook ? "propose-ops" : "propose",
@@ -247,7 +271,7 @@ export async function triggerPropose(
       // Selection gate: go live provisionally as a trial; confirm/revert after
       // TRIAL_MIN_SESSIONS scored sessions (see resolveTrial in the idle hook).
       const baseline = activeVersion(layer.root)
-      startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook ?? null, agentConfig)
+      startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook ?? null, agentConfig, envPolicy)
       await client.tui.showToast({
         body: { title: "Meta-Harness",
                 message: `Trial started: ${layer.scope} ${version}${toolsNote} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
@@ -426,6 +450,7 @@ export function buildProposerPrompt(
   stagingDiagnosis: string,
   stagingOps: string,
   stagingAgentConfig: string,
+  stagingEnvPolicy: string,
   worktree: string,
   playbook: Playbook | null,
 ): string {
@@ -473,6 +498,7 @@ export function buildProposerPrompt(
   const relDiag   = path.relative(worktree, stagingDiagnosis)
   const relOps    = path.relative(worktree, stagingOps)
   const relAgentConfig = path.relative(worktree, stagingAgentConfig)
+  const relEnvPolicy = path.relative(worktree, stagingEnvPolicy)
   const stagingDir = path.relative(worktree, path.dirname(stagingSystem))
 
   // Agent-config op — PROJECT layers only. Account-layer candidates are
@@ -499,6 +525,36 @@ Emit this file ONLY if a diagnosed root cause is a timeout / tool-latency proble
 cat > "${relAgentConfig}" << 'ENDOFAGENTCONFIG'
 {"schemaVersion":1,"fastTimeoutMs":8000,"extraFastCommands":["mytool"],"extraSlowCommands":["slowtool"]}
 ENDOFAGENTCONFIG
+\`\`\`
+`
+      })()
+    : ""
+
+  // Env-policy op — PROJECT layers only, same gating rationale as agent-config
+  // above: an evolved env-policy at an account layer can never be measured by
+  // bench `ab` (default `build` agent, plugin inert) — never offer this
+  // section for account scopes.
+  const envPolicySection = layer.scope.startsWith("project")
+    ? (() => {
+        const currentPolicy = readEnvPolicy(layer.root)
+        const currentPolicyText = currentPolicy ? `\`\`\`json\n${JSON.stringify(currentPolicy, null, 2)}\n\`\`\`` : "none"
+        return `
+## Optional: env-policy.json (environment-snapshot probe tuning)
+
+Current effective env-policy for ${layer.scope}: ${currentPolicyText}
+
+Whitelisted schema (unknown fields are dropped; out-of-range/invalid values are clamped/filtered):
+- \`probes\` (object of booleans \`{ls, lang, pkg, mem}\`) — which environment probes to run; omitted keys default to enabled (true).
+- \`lsPath\` (string, absolute, matching \`/^\\/[A-Za-z0-9_\\/.-]{0,120}$/\`) — path the \`ls\` probe lists; a relative or shell-unsafe path is dropped.
+- \`maxLsEntries\` (number, clamped to [5, 100]) — cap on entries the \`ls\` probe reports.
+- \`languageProbes\` (string[], filtered to the fixed whitelist \`["python3","gcc","g++","node","java","rustc","go"]\`) — which language/toolchain probes to run.
+
+Emit this file ONLY if a diagnosed root cause is missing/incorrect ENVIRONMENT CONTEXT (the agent lacked info the env snapshot should have surfaced); otherwise omit it.
+
+\`\`\`bash
+cat > "${relEnvPolicy}" << 'ENDOFENVPOLICY'
+{"schemaVersion":1,"probes":{"ls":true,"lang":true,"pkg":false,"mem":false},"lsPath":"/app","maxLsEntries":25,"languageProbes":["python3","node"]}
+ENDOFENVPOLICY
 \`\`\`
 `
       })()
@@ -567,7 +623,7 @@ cat > "${relTools}" << 'ENDOFTOOLS'
 <per-tool guidance keyed by tool name — only include tools with clear patterns>
 ENDOFTOOLS
 \`\`\`
-${agentConfigSection}
+${agentConfigSection}${envPolicySection}
 After writing the files, briefly explain which diagnosed root cause each edit addresses.`
 }
 
