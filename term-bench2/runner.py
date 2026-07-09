@@ -409,10 +409,11 @@ def cmd_prep(args: argparse.Namespace) -> None:
     if args.apply:
         log("Running host setup...")
 
-        # Snapshot which of our packages are NOT yet installed → these are newly added
-        already_installed = _installed_packages()
-        to_install = [p for p in apt_pkgs if p not in already_installed]
-        log(f"  {len(to_install)} new / {len(apt_pkgs) - len(to_install)} already present")
+        # Snapshot dpkg state BEFORE install so we can capture everything that
+        # gets added (the requested packages AND their pulled-in dependencies).
+        before_install = _installed_packages()
+        wanted_new = [p for p in apt_pkgs if p not in before_install]
+        log(f"  {len(wanted_new)} requested new / {len(apt_pkgs) - len(wanted_new)} already present")
 
         # Create user-owned bench dirs (all actual data lives here).
         # The sandbox uses a tmpfs root, so NO /app /tests /logs placeholders
@@ -431,12 +432,24 @@ def cmd_prep(args: argparse.Namespace) -> None:
                 env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"},
             )
 
-        # Record only the newly-installed packages for later --uninstall
-        PREP_INSTALLED_TXT.write_text("\n".join(sorted(to_install)) + ("\n" if to_install else ""))
-        if to_install:
-            log(f"  Recorded {len(to_install)} newly-installed package(s) → {PREP_INSTALLED_TXT.name}")
+        # Diff dpkg state AFTER install → all newly-added packages (incl. deps).
+        after_install = _installed_packages()
+        newly_installed = after_install - before_install
+
+        # Merge into the tracking file (never overwrite), so packages from an
+        # earlier prep --apply run are preserved for a later --uninstall.
+        previously_tracked: set[str] = set()
+        if PREP_INSTALLED_TXT.exists():
+            previously_tracked = {
+                ln.strip() for ln in PREP_INSTALLED_TXT.read_text().splitlines() if ln.strip()
+            }
+        merged = sorted(previously_tracked | newly_installed)
+        PREP_INSTALLED_TXT.write_text("\n".join(merged) + ("\n" if merged else ""))
+        if newly_installed:
+            log(f"  Recorded {len(newly_installed)} newly-installed package(s) "
+                f"(incl. deps); {len(merged)} total tracked → {PREP_INSTALLED_TXT.name}")
         else:
-            log("  All packages were already installed — nothing new recorded.")
+            log(f"  No new packages this run; {len(merged)} still tracked for --uninstall.")
 
         log("Host setup complete.")
     else:
