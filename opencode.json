@@ -1,5 +1,4 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["./opencode-plugin/src/index.ts"],
-  "default_agent": "mh-build"
+  "plugin": ["./opencode-plugin/src/index.ts"]
 }
