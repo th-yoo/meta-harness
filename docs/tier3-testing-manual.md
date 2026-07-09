@@ -48,10 +48,19 @@ The `/mh-status` toast fix only takes effect after opencode reloads the plugin.
 
 ## Part B — Select the harness agent
 
-4. Switch the primary agent to **mh-build** (the agent picker / Tab in the TUI —
-   whichever you normally use to change agents). The harness only injects context
-   and scores for `mh-*` agents; on the default `build` agent nothing is recorded.
-   - Sanity: `/mh-status` still works from any agent, but scoring needs mh-build.
+4. New sessions start on **mh-build** automatically (`default_agent` in
+   opencode.json). If you switch agents mid-session, the plugin now follows:
+   - switch **to** an mh-* agent → toast `Harness active for mh-build from this
+     turn…`; the session's fitness counters reset, and only work done **after**
+     the switch is scored (pre-switch turns ran without the harness and are
+     discarded from the signal).
+   - switch **away** from an mh-* agent → toast `harness inactive; this session
+     will no longer be scored`.
+   - Verify any time: `/mh-status` shows `this session: agent=mh-build, scoring ON`,
+     or `grep 'session.idle' ~/.local/share/opencode/log/opencode.log | tail -1`
+     → `agent=mh-build`.
+   - Note: after a switch you must still do **substantive work** (a tool call) —
+     switching and going idle immediately is skipped as a degenerate session.
 
 ---
 

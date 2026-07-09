@@ -212,15 +212,47 @@ const metaHarness: Plugin = async (input) => {
 
       const agent = msgInput.agent ?? ""
 
-      // Capture model + variant from primary mh-* or build/plan agents
+      // Track model + variant LIVE (both can change mid-session via the TUI;
+      // the SessionRecord must reflect what actually ran the scored turns).
       const isPrimary = isMhRole(agent) || agent === "build" || agent === "plan" || agent === ""
-      if (isPrimary && msgInput.model && !sessionModel.has(sessionID)) {
+      if (isPrimary && msgInput.model) {
         const model = `${msgInput.model.providerID}/${msgInput.model.modelID}`
-        const variant = msgInput.variant ?? ""
         sessionModel.set(sessionID, model)
-        sessionVariant.set(sessionID, variant)
+        sessionVariant.set(sessionID, msgInput.variant ?? "")
+      }
+
+      // Track the agent LIVE. On a switch, reset the per-session fitness
+      // counters so the eventual score reflects ONLY work done under the new
+      // agent — system.transform injects per message off this map, so every
+      // post-switch turn runs under the new agent's harness composition.
+      // (Capture-once was the old behavior; it silently refused to score
+      // sessions whose agent was switched to mh-* after the first message.)
+      const prev = sessionAgent.get(sessionID)
+      if (isPrimary && agent && prev !== undefined && prev !== agent) {
         sessionAgent.set(sessionID, agent)
-        await log(client, "debug", `[hook:chat.message] captured model=${model} variant=${variant || "none"} agent=${agent}`)
+        sessionTurns.set(sessionID, 0)
+        sessionToolUsage.delete(sessionID)
+        sessionTrajectory.delete(sessionID)
+        sessionSummary.delete(sessionID)
+        bootstrappedSessions.add(sessionID)
+        if (isMhRole(agent)) {
+          bootstrapStore(accountRoleRoot(agent), "")
+          bootstrapStore(projectRoleRoot(worktree, agent), "")
+          await client.tui.showToast({
+            body: { title: "Meta-Harness",
+                    message: `Harness active for ${agent} from this turn — the session will be scored on work from here.`,
+                    variant: "info", duration: 8_000 },
+          })
+        } else if (isMhRole(prev)) {
+          await client.tui.showToast({
+            body: { title: "Meta-Harness",
+                    message: `Switched to ${agent} — harness inactive; this session will no longer be scored.`,
+                    variant: "info", duration: 8_000 },
+          })
+        }
+        await log(client, "info", `[hook:chat.message] agent switch ${prev || "(none)"} → ${agent} — session counters reset`)
+      } else if (isPrimary && agent && prev === undefined) {
+        sessionAgent.set(sessionID, agent)
       }
 
       if (bootstrappedSessions.has(sessionID)) return
@@ -586,9 +618,15 @@ const metaHarness: Plugin = async (input) => {
 
       // /mh-status
       if (cmdInput.command === "mh-status") {
-        const agent = sessionAgent.get(cmdInput.sessionID) ?? "mh-build"
+        const tracked = sessionAgent.get(cmdInput.sessionID)
+        const agent = tracked ?? "mh-build"
         const layers = layersFor(worktree, agent)
-        const lines: string[] = [`Meta-Harness status (agent=${agent}):`]
+        const sessionState = tracked === undefined
+          ? "no message yet — use an mh-* agent to enable scoring"
+          : isMhRole(tracked)
+            ? `agent=${tracked}, scoring ON`
+            : `agent=${tracked} — not scored (switch to an mh-* agent to activate the harness)`
+        const lines: string[] = [`Meta-Harness status (stores for ${agent}; this session: ${sessionState}):`]
         for (const layer of layers) {
           const ver = activeVersion(layer.root)
           const score = readScore(layer.root, ver)
