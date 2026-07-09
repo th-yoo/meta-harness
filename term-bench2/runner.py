@@ -126,6 +126,21 @@ APT_PACKAGES_TXT = SCRIPT_DIR / "apt-packages.txt"
 # Tracks which packages were newly installed by prep --apply (for --uninstall)
 PREP_INSTALLED_TXT = SCRIPT_DIR / ".prep-installed.txt"
 
+# Extra apt packages required by reference solve.sh / test.sh at run time.
+# The sandbox's apt shim no-ops `apt install`, so these must be pre-installed.
+# Merged into the install set by `prep` on top of apt-packages.txt.
+# (Also declared in gen_setup_deps.py so apt-packages.txt stays in sync.)
+EXTRA_APT = [
+    "tesseract-ocr",      # gcode-to-text, financial-document-processor (OCR)
+    "libtesseract-dev",   # gcode-to-text
+    "python3-opencv",     # gcode-to-text (cv2)
+    "tclsh",              # tcl-based tasks
+    "python3-venv",       # venv creation
+    "fossil",             # fossil-scm tasks
+    "apache2-utils",      # htpasswd etc.
+    "make",               # build tasks
+]
+
 # Legacy host-side placeholder dirs from the old --bind / / approach.
 # No longer created (the sandbox now uses a tmpfs root), but prep
 # --clean-mountpoints removes them if they linger from an earlier setup.
@@ -281,6 +296,10 @@ def ns_wrap(
     """
     bwrap_args = [
         "bwrap",
+        # CAP_SYS_CHROOT: some tests chroot into a jail to verify a static
+        # binary has no external deps (e.g. path-tracing). Granted only within
+        # the sandbox's user namespace — no host privilege.
+        "--cap-add", "CAP_SYS_CHROOT",
         "--tmpfs", "/",                       # writable, discarded root
         "--ro-bind", "/usr", "/usr",
         "--bind", str(BENCH_USRLOCAL), "/usr/local",  # writable /usr/local (copy)
@@ -328,7 +347,9 @@ def _installed_packages() -> set[str]:
 
 def cmd_prep(args: argparse.Namespace) -> None:
     """Print (or execute) one-time host setup / uninstall commands."""
-    apt_pkgs = sorted(set(APT_PACKAGES_TXT.read_text().splitlines())) if APT_PACKAGES_TXT.exists() else []
+    _union = set(APT_PACKAGES_TXT.read_text().splitlines()) if APT_PACKAGES_TXT.exists() else set()
+    _union.update(EXTRA_APT)
+    apt_pkgs = sorted(p for p in _union if p.strip())
 
     # ── clean-mountpoints mode ────────────────────────────────────────────
     if getattr(args, "clean_mountpoints", False):
