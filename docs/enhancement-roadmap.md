@@ -208,6 +208,21 @@ Today run_opencode discards the NDJSON stream; proposer sees 200-char summaries.
 
 ### Phase 3 — ACE playbook (anti-bloat)
 
+> **Status: IMPLEMENTED (2026-07-09).** harness-store.ts: `Playbook`/`PlaybookBullet`/
+> `PlaybookOp` + `readPlaybook`/`renderPlaybook`/`migrateSystemToPlaybook`/
+> `applyPlaybookOps`/`applyBulletAssessments`/`activeBulletCount`/`seedPlaybook`;
+> `writeActive`/`createCandidate`/`startTrial`/`resolveTrial`/`activateCandidate` carry
+> `playbook.json` alongside the **rendered** system.md (readers unchanged — the whole
+> back-compat story). propose.ts: ops-mode proposer (emits `ops.json` ≤3 add/update/
+> delete when a playbook exists; whole-system.md legacy/grace fallback) + `triggerCurate`/
+> `buildCuratePrompt` + counter attribution from `diagnosis.bulletAssessments`.
+> index.ts: `/mh-curate`, `/mh-status` bullet count, over-budget auto-suggest toast.
+> **Seeding:** first propose/curate on a non-empty layer seeds the playbook from
+> system.md non-destructively (system.md unchanged until a candidate activates).
+> **Skipped:** progressive-disclosure render knob (default-off — not needed yet);
+> curator "add-not-allowed" is a soft prompt instruction; bulletAssessments depend on
+> proposer compliance (soft, like the diagnosis).
+
 - **Data model**: `playbook.json` = authoritative; **system.md becomes a rendered artifact** (render at write time → every existing reader unchanged = whole back-compat story). `PlaybookBullet {id, text, helpful, harmful, addedBy, status: active|pruned, timestamps}`. Render = active bullets as "- text" lines (ids/counters excluded from injected prompt; proposer sees full JSON).
 - **TS fns**: readPlaybook/renderPlaybook/migrateSystemToPlaybook (counters 0)/applyPlaybookOps (ops: add|update|delete; delete = status pruned, audit-kept)/applyBulletAssessments. createCandidate + writeActive/activateCandidate/startTrial/resolveTrial carry playbook.json alongside (TrialState gains optional baselinePlaybook).
 - **Proposer → editor**: when playbook exists, proposer outputs `ops.json` (≤3 ops) instead of whole system.md (legacy fallback kept). Counter attribution rides Phase 2 diagnosis: `bulletAssessments [{id, verdict: helpful|harmful}]` from failing-trajectory reflection (no uninformative per-session ++).

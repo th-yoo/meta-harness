@@ -29,7 +29,8 @@
  *            role-global=account-role, account=account-global
  *   /mh-activate <scope> <vN> [--force] — activate a candidate (account gated on ab-verdict)
  *   /mh-promote [global|role]          — promote proven project rules to the account layer
- *   /mh-status                         — per-layer active version, scores, trials, verdicts
+ *   /mh-curate [scope]                 — consolidate/prune a layer's playbook (through the gate)
+ *   /mh-status                         — per-layer active version, scores, trials, verdicts, bullet count
  */
 
 import type { Plugin, PluginInput, PluginModule } from "@opencode-ai/plugin"
@@ -58,6 +59,8 @@ import {
   pruneTrajectories,
   DEFAULT_SYSTEM_PROMPT,
   type StoreLayer,
+  readPlaybook,
+  activeBulletCount,
   type ToolUsage,
   type TrajEvent,
 } from "./harness-store.ts"
@@ -65,6 +68,8 @@ import { promptHumanScore, handleScoreCommand } from "./score.ts"
 import {
   triggerPropose,
   triggerPromote,
+  triggerCurate,
+  CURATOR_BUDGET,
   PROJECT_ROLE_THRESHOLD,
   PROJECT_GLOBAL_THRESHOLD,
 } from "./propose.ts"
@@ -439,6 +444,17 @@ const metaHarness: Plugin = async (input) => {
         await log(client, "info", `[hook:event] auto-propose project-global`)
         void triggerPropose(client, worktree, pgLayer)
       }
+
+      // Anti-bloat nudge: suggest curation when a project layer is over budget.
+      for (const l of [prLayer, pgLayer]) {
+        if (activeBulletCount(readPlaybook(l.root)) > CURATOR_BUDGET && readTrial(l.root) === null) {
+          await client.tui.showToast({
+            body: { message: `Meta-Harness: ${l.scope} playbook over ${CURATOR_BUDGET} bullets — run /mh-curate`,
+                    variant: "info", duration: 5_000 },
+          })
+          break
+        }
+      }
     },
 
     // ── /mh-score + /mh-propose commands ─────────────────────────────────
@@ -530,6 +546,19 @@ const metaHarness: Plugin = async (input) => {
         throw new Error(`Meta-Harness: /mh-promote — unknown scope "${scope}" (use global|role)`)
       }
 
+      // /mh-curate <scope> — consolidate/prune a layer's playbook (through the gate)
+      if (cmdInput.command === "mh-curate") {
+        const agent = sessionAgent.get(cmdInput.sessionID) ?? "mh-build"
+        const layers = layersFor(worktree, agent)
+        const layer = resolveScopeLayer(cmdInput.arguments, layers)
+        if (!layer) {
+          throw new Error(`Meta-Harness: /mh-curate — unknown scope "${cmdInput.arguments.trim()}" (use role|project|role-global|account)`)
+        }
+        await log(client, "info", `[hook:command] /mh-curate scope=${layer.scope} agent=${agent}`)
+        void triggerCurate(client, worktree, layer)
+        throw new Error("Meta-Harness: curate cycle started ✓ (this notice is expected)")
+      }
+
       // /mh-status
       if (cmdInput.command === "mh-status") {
         const agent = sessionAgent.get(cmdInput.sessionID) ?? "mh-build"
@@ -539,7 +568,9 @@ const metaHarness: Plugin = async (input) => {
           const ver = activeVersion(layer.root)
           const score = readScore(layer.root, ver)
           const rate = score.sessions.length > 0 ? `${score.nPass}/${score.sessions.length}` : "no sessions"
-          let line = `  ${layer.scope}: active=${ver} (${rate})`
+          const bullets = activeBulletCount(readPlaybook(layer.root))
+          const bulletInfo = bullets > 0 ? ` [${bullets} bullets${bullets > CURATOR_BUDGET ? " — over budget, /mh-curate" : ""}]` : ""
+          let line = `  ${layer.scope}: active=${ver} (${rate})${bulletInfo}`
           const trial = readTrial(layer.root)
           if (trial) {
             const ts = readScore(layer.root, trial.trial)

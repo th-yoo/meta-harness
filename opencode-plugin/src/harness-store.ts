@@ -125,6 +125,8 @@ export interface TrialState {
   baselineTools: string
   startedAt: string
   minSessions: number
+  /** Snapshot of the baseline playbook so a revert restores it (Phase 3). */
+  baselinePlaybook?: Playbook | null
 }
 
 export type TrialResolution =
@@ -366,6 +368,7 @@ export function writeActive(
   version: string,
   system: string,
   tools = "",
+  playbook?: Playbook | null,
 ): void {
   writeText(activePath(storeRoot, "system.md"), system)
   writeText(activePath(storeRoot, ".version"), version)
@@ -375,6 +378,12 @@ export function writeActive(
     writeText(activePath(storeRoot, "tools.md"), tools)
   } else {
     fs.rmSync(activePath(storeRoot, "tools.md"), { force: true })
+  }
+  // playbook: undefined = leave alone (legacy/no-playbook flows); object = write;
+  // null = remove (revert/activate a version that has no playbook).
+  if (playbook !== undefined) {
+    if (playbook) writeJson(activePath(storeRoot, "playbook.json"), playbook)
+    else fs.rmSync(activePath(storeRoot, "playbook.json"), { force: true })
   }
 }
 
@@ -407,12 +416,132 @@ export function createCandidate(
   version: string,
   system: string,
   tools = "",
+  playbook?: Playbook,
 ): void {
   writeText(candidatePath(storeRoot, version, "system.md"), system)
   if (tools) writeText(candidatePath(storeRoot, version, "tools.md"), tools)
+  if (playbook) writeJson(candidatePath(storeRoot, version, "playbook.json"), playbook)
   writeJson(candidatePath(storeRoot, version, "score.json"), {
     version, nPass: 0, nFail: 0, sessions: [],
   })
+}
+
+// ── Playbook (Phase 3 — ACE anti-bloat) ─────────────────────────────────────
+//
+// The playbook is the authoritative artifact; system.md is a RENDERED view of it
+// (active bullets, "- text" per line). Every existing reader keeps reading plain
+// system.md unchanged — that is the whole backward-compat story.
+
+export interface PlaybookBullet {
+  id: string
+  text: string
+  helpful: number
+  harmful: number
+  addedBy: string
+  status: "active" | "pruned"
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Playbook {
+  schemaVersion: 1
+  nextId: number
+  bullets: PlaybookBullet[]
+}
+
+export type PlaybookOp =
+  | { op: "add"; text: string }
+  | { op: "update"; id: string; text: string }
+  | { op: "delete"; id: string }
+
+export function readPlaybook(storeRoot: string, version?: string): Playbook | null {
+  const p = version
+    ? candidatePath(storeRoot, version, "playbook.json")
+    : activePath(storeRoot, "playbook.json")
+  const pb = readJson<Playbook | null>(p, null)
+  if (!pb || !Array.isArray(pb.bullets)) return null
+  return pb
+}
+
+/** Rendered system.md = active bullets, one "- text" per line (ids/counters hidden). */
+export function renderPlaybook(pb: Playbook): string {
+  return pb.bullets.filter((b) => b.status === "active").map((b) => `- ${b.text}`).join("\n")
+}
+
+/** One-time migration of a store's active system.md into a playbook (counters 0).
+ * Each non-empty line becomes a bullet; render(migrate(x)) is the normalized x. */
+export function migrateSystemToPlaybook(storeRoot: string): Playbook {
+  const now = new Date().toISOString()
+  const addedBy = activeVersion(storeRoot)
+  const lines = readActiveSystem(storeRoot)
+    .split("\n")
+    .map((l) => l.replace(/^\s*[-*]\s+/, "").trim())
+    .filter(Boolean)
+  const bullets: PlaybookBullet[] = lines.map((text, i) => ({
+    id: `b${i + 1}`, text, helpful: 0, harmful: 0, addedBy,
+    status: "active", createdAt: now, updatedAt: now,
+  }))
+  return { schemaVersion: 1, nextId: bullets.length + 1, bullets }
+}
+
+/** Apply proposer/curator ops (add | update | delete). Pure — returns a new
+ * Playbook. delete sets status:"pruned" (audit-kept), never removes the row. */
+export function applyPlaybookOps(base: Playbook, ops: PlaybookOp[]): Playbook {
+  const now = new Date().toISOString()
+  const bullets = base.bullets.map((b) => ({ ...b }))
+  let nextId = base.nextId
+  for (const op of ops) {
+    if (op.op === "add") {
+      bullets.push({ id: `b${nextId++}`, text: op.text, helpful: 0, harmful: 0,
+        addedBy: "candidate", status: "active", createdAt: now, updatedAt: now })
+    } else if (op.op === "update") {
+      const b = bullets.find((x) => x.id === op.id)
+      if (b) { b.text = op.text; b.updatedAt = now }
+    } else if (op.op === "delete") {
+      const b = bullets.find((x) => x.id === op.id)
+      if (b) { b.status = "pruned"; b.updatedAt = now }
+    }
+  }
+  return { schemaVersion: 1, nextId, bullets }
+}
+
+/** Reflective counter attribution (ACE): ++helpful/++harmful on the ACTIVE
+ * playbook's bullets, from the proposer's diagnosis of the active version's runs. */
+export function applyBulletAssessments(
+  storeRoot: string,
+  assessments: { id: string; verdict: "helpful" | "harmful" }[],
+): void {
+  const pb = readPlaybook(storeRoot)
+  if (!pb) return
+  const now = new Date().toISOString()
+  for (const a of assessments) {
+    const b = pb.bullets.find((x) => x.id === a.id)
+    if (!b) continue
+    if (a.verdict === "helpful") b.helpful++
+    else b.harmful++
+    b.updatedAt = now
+  }
+  writeJson(activePath(storeRoot, "playbook.json"), pb)
+}
+
+/** Count of active (non-pruned) bullets — used for the curator budget/toast. */
+export function activeBulletCount(pb: Playbook | null): number {
+  return pb ? pb.bullets.filter((b) => b.status === "active").length : 0
+}
+
+/**
+ * Seed a store's playbook from its active system.md on first use, NON-destructively:
+ * writes active/playbook.json only and leaves active/system.md as-is (so the injected
+ * prompt is unchanged until a candidate is activated). Returns null for an empty store
+ * (nothing to migrate — the proposer stays in legacy whole-file mode there).
+ */
+export function seedPlaybook(storeRoot: string): Playbook | null {
+  const existing = readPlaybook(storeRoot)
+  if (existing) return existing
+  if (!readActiveSystem(storeRoot).trim()) return null
+  const pb = migrateSystemToPlaybook(storeRoot)
+  writeJson(activePath(storeRoot, "playbook.json"), pb)
+  return pb
 }
 
 // ── Trial mode + activation gate ───────────────────────────────────────────
@@ -441,17 +570,19 @@ export function startTrial(
   system: string,
   tools: string,
   minSessions: number,
+  playbook: Playbook | null = null,
 ): void {
   const state: TrialState = {
     trial: trialVersion,
     baseline: activeVersion(storeRoot),
     baselineSystem: readActiveSystem(storeRoot),
     baselineTools: readActiveTools(storeRoot),
+    baselinePlaybook: readPlaybook(storeRoot),
     startedAt: new Date().toISOString(),
     minSessions,
   }
   writeJson(activePath(storeRoot, TRIAL_FILE), state)
-  writeActive(storeRoot, trialVersion, system, tools)
+  writeActive(storeRoot, trialVersion, system, tools, playbook)
 }
 
 function passRate(score: CandidateScore): number {
@@ -514,7 +645,8 @@ export function resolveTrial(storeRoot: string): TrialResolution {
     return { action: "confirmed", trial: trial.trial, trialRate, baselineRate }
   }
 
-  writeActive(storeRoot, trial.baseline, trial.baselineSystem, trial.baselineTools)
+  writeActive(storeRoot, trial.baseline, trial.baselineSystem, trial.baselineTools,
+    trial.baselinePlaybook ?? null)
   clearTrial(storeRoot)
   return { action: "reverted", trial: trial.trial, baseline: trial.baseline, trialRate, baselineRate }
 }
@@ -524,7 +656,8 @@ export function activateCandidate(storeRoot: string, version: string): boolean {
   const system = readText(candidatePath(storeRoot, version, "system.md"))
   if (!system) return false
   const tools = readText(candidatePath(storeRoot, version, "tools.md"))
-  writeActive(storeRoot, version, system, tools)
+  const playbook = readPlaybook(storeRoot, version)
+  writeActive(storeRoot, version, system, tools, playbook)
   clearTrial(storeRoot) // manual activation supersedes any in-flight trial
   return true
 }
