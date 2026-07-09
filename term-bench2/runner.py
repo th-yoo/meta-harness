@@ -54,8 +54,21 @@ BENCH_BIN  = BENCH_PREFIX / "bin"
 
 
 def ensure_bench_bin() -> None:
-    """Create ~/bench/bin/python → python3 symlink (idempotent)."""
+    """
+    Populate ~/bench/bin (prepended to sandbox PATH) with compatibility shims:
+
+      python   → python3           (Ubuntu 24.04 ships only python3)
+      sudo     → exec "$@"         (sandbox runs unprivileged; drop sudo)
+      apt-get  → no-op success     (packages are pre-installed on the host;
+      apt        the TB2 container runs these as root — emulate success so
+                 reference solve.sh / test.sh under `set -e` don't abort)
+
+    If a task genuinely needs a missing package, the shim only defers the
+    failure to the point of actual use (honest failure at test time).
+    """
     BENCH_BIN.mkdir(parents=True, exist_ok=True)
+
+    # python → python3 symlink
     py = BENCH_BIN / "python"
     if not py.exists():
         py3 = shutil.which("python3") or "/usr/bin/python3"
@@ -63,6 +76,27 @@ def ensure_bench_bin() -> None:
             py.symlink_to(py3)
         except FileExistsError:
             pass
+
+    # sudo shim: run the command without privilege elevation
+    sudo = BENCH_BIN / "sudo"
+    sudo.write_text(
+        "#!/bin/bash\n"
+        '# meta-harness shim: drop sudo, exec remaining args directly\n'
+        'while [[ "$1" == -* ]]; do shift; done\n'
+        'exec "$@"\n'
+    )
+    sudo.chmod(0o755)
+
+    # apt-get / apt shim: no-op success (assume packages already present)
+    apt_shim = (
+        "#!/bin/bash\n"
+        '# meta-harness shim: emulate apt success (packages pre-installed)\n'
+        'exit 0\n'
+    )
+    for name in ("apt-get", "apt"):
+        p = BENCH_BIN / name
+        p.write_text(apt_shim)
+        p.chmod(0o755)
 
 # These are the paths as seen *inside* the namespace (what scripts expect)
 HOST_APP  = Path("/app")
@@ -452,32 +486,39 @@ def task_extra_mounts(task: str) -> dict[str, Path]:
 
 
 def setup_task(task: str, tb_root: Path) -> None:
-    """Run setup_deps.sh directly (no bwrap) with WORKDIR=~/bench/app.
+    """Run setup_deps.sh INSIDE the bwrap sandbox with WORKDIR=/app.
 
-    setup_deps.sh uses $WORKDIR throughout, so pointing it at REAL_APP means
-    all files land in ~/bench/app without needing /app to exist.
-    bwrap's no_new_privileges would block sudo inside the sandbox anyway,
-    and SKIP_APT=1 skips all apt calls so sudo is not needed here.
-    Extra task paths (e.g. /protected) are written to ~/bench/extras/<task>/
-    by translating the hardcoded destination paths via the COPY section.
+    Running in the sandbox means /app, /protected, /root, etc. all resolve
+    exactly as in the TB2 container, so setup steps that write to absolute
+    paths (e.g. a log generator writing /app/logs) work correctly.
+    - /app, /tests, /logs are bound to ~/bench/… (persist across steps)
+    - extra task paths (/protected, /root, …) are bound to ~/bench/extras/<task>
+    - sudo/apt shims handle the reference scripts' privilege assumptions
+    EXTRAS_ROOT is left empty: destinations are the real sandbox paths, which
+    are bound to persist.
     """
     setup_script = TASKS_DIR / task / "setup_deps.sh"
     if not setup_script.exists():
         die(f"No setup_deps.sh for task {task!r} — did you run gen_setup_deps.py?")
 
-    # Pre-create real backing dirs for extra mount paths
+    # Pre-create real backing dirs for extra mount paths (so binds have a source)
     for ns_path, real_path in task_extra_mounts(task).items():
         real_path.mkdir(parents=True, exist_ok=True)
 
-    extras_root = BENCH_PREFIX / "extras" / task
     env = {
         "TB_ROOT": str(tb_root),
-        "WORKDIR": str(REAL_APP),        # direct real path — no namespace needed
-        "EXTRAS_ROOT": str(extras_root), # redirect /protected etc → ~/bench/extras/<task>
+        "WORKDIR": "/app",       # sandbox path, bound to ~/bench/app
+        "EXTRAS_ROOT": "",       # write to real /protected etc (bound to persist)
         "SKIP_APT": "1",
     }
     log(f"  setup_deps.sh ({task})...")
-    run_cmd(["bash", str(setup_script)], env=env, ns=False)
+    run_cmd(
+        ["bash", str(setup_script)],
+        env=env,
+        ns=True,
+        chdir="/app",
+        extra_mounts=task_extra_mounts(task),
+    )
 
 
 # ── OpenCode invocation ────────────────────────────────────────────────────
