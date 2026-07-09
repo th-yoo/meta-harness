@@ -232,8 +232,9 @@ Today run_opencode discards the NDJSON stream; proposer sees 200-char summaries.
 
 ### Phase 4 — Widened search space + dense judge
 
-> **Status: IMPLEMENTED (2026-07-10).** Observability: `term-bench2/results/meta-metrics.jsonl`
-> + `<root>/.meta-harness/meta-metrics.jsonl` (bench + plugin sinks),
+> **Status: IMPLEMENTED (2026-07-10).** Observability: three sinks —
+> `term-bench2/results/meta-metrics.jsonl` (bench), `<root>/.meta-harness/meta-metrics.jsonl` (project),
+> `~/.config/opencode/.meta-harness/meta-metrics.jsonl` (account),
 > `append_meta_metric`/`appendMetaMetric` writers on ab/rotate/trial/activate/propose/curate/judge
 > events, `runner.py report-loop [--json]` reporter, `/mh-status` last-decision line.
 > Evolvable knobs (project-layer-only scope): `AgentConfig` (`active/agent-config.json`,

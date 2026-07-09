@@ -140,26 +140,23 @@ parallel with `/mh-score`, learning when to calibrate for maker-checker mode.
     ```json
     {"judgeModel": "openrouter/google/gemini-2.5-flash"}
     ```
-    Restart opencode for the config to reload.
+    The config takes effect on your next scored session (no restart needed).
 
 16. Run a few substantive sessions (with tool calls) and score them with `/mh-score good`
     or `/mh-score bad` as usual. The judge runs silently in the background.
     - **Look for:** after each session, check the opencode log:
       `grep 'judge' ~/.local/share/opencode/log/opencode.log | tail -5`
     - **Expect log lines** like: `[judge] AGREE/DISAGREE with human … calibration 3/20 @ 75%`
-    - **In latest trace:** `session.meta-harness/traces/*.json` contains a `record.judge`
+    - **In latest trace:** `.meta-harness/roles/mh-build/candidates/vN/traces/<id>.json` contains a `judge`
       field with the verdict.
 
-17. In `/mh-status`, observe:
-    - **Line at bottom:** shows judge calibration state if enabled (e.g.,
-      `judge: 15/20 @ 82% (calibrated)` or `judge: 8/20 @ 65%`).
-    - Once calibrated (≥20 sessions at ≥80%): `/mh-score` pre-fills with the judge's
-      suggestion for you to approve or edit.
+17. Once calibrated (≥20 sessions at ≥80%): `/mh-score` pre-fills with the judge's
+    suggestion for you to approve or edit.
 
 18. Check observability:
     - `python3 term-bench2/runner.py report-loop [--json]` → includes judge agreement
-      window in the summary.
-    - `cat ~/.config/opencode/.meta-harness/meta-metrics.jsonl | grep judge | tail -5`
+      in the summary.
+    - `cat .meta-harness/meta-metrics.jsonl | grep judge | tail -5`
       → judge events recorded (one per scored session when judgeModel is set).
 
 ---

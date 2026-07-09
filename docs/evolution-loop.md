@@ -259,7 +259,7 @@ signal:
 - **Calibration:** Judge and human verdicts are compared. Once the judge agrees with
   humans on ≥20 sessions at ≥80% accuracy (`judgeCalibration`), it is **calibrated**.
 - **Maker-checker mode:** Pre-fills the score prompt with the judge's suggested verdict
-  for human approval/edit before saving (one-line change in score.ts).
+  for human approval/edit before saving (small change in score.ts).
 
 **Anti-gaming audit:** `python3 term-bench2/runner.py judge-audit --layer <layer>
 --candidate vN [--agent NAME] [--model <model>] [--limit N]` replays the judge on
@@ -269,10 +269,11 @@ agreement), `1` = alarm (< 80% — judge may be gameable), `2` = could-not-asses
 decisions.
 
 **Observability:** All loop events (ab, trial, activate, curate, rotate, judge) are
-recorded to `term-bench2/results/meta-metrics.jsonl` and `~/.config/opencode/.meta-harness/meta-metrics.jsonl`
+recorded to three sinks: `term-bench2/results/meta-metrics.jsonl` (bench),
+`<repo>/.meta-harness/meta-metrics.jsonl` (project), and `~/.config/opencode/.meta-harness/meta-metrics.jsonl` (account)
 with `append_meta_metric`/`appendMetaMetric`. Reporter: `python3 term-bench2/runner.py
 report-loop [--json]` summarizes held-out pass-rate trajectory, accept/reject/inconclusive
-counts, and judge-agreement window. `/mh-status` shows last decision and generation.
+counts, and cumulative judge-agreement rate. `/mh-status` shows last decision.
 
 ## 12. Status & gotchas
 
