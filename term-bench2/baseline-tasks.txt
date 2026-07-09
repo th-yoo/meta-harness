@@ -1,4 +1,5 @@
 adaptive-rejection-sampler
+cancel-async-tasks
 circuit-fibsqrt
 code-from-image
 constraints-scheduling
@@ -12,6 +13,8 @@ extract-moves-from-video
 feal-differential-cryptanalysis
 feal-linear-cryptanalysis
 filter-js-from-html
+financial-document-processor
+gcode-to-text
 git-leak-recovery
 kv-store-grpc
 large-scale-text-editing
