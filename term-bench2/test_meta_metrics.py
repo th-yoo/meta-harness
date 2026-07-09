@@ -49,3 +49,19 @@ def test_summarize_loop_counts_and_trend(tmp_path):
     assert s["heldOutDeltas"] == [("2026-07-09T01:00:00Z", 0, 0.5),
                                   ("2026-07-09T02:00:00Z", 1, 0.25)]
     assert s["judgeAgreement"] == {"n": 2, "rate": 0.5}
+
+
+def test_load_meta_metrics_sorts_across_iso_formats(tmp_path):
+    """Test that load_meta_metrics correctly sorts events with mixed ISO-8601 formats.
+    Two events in the same second, one with Z suffix (TS appender) and one with +00:00
+    (Python appender), given in reverse order, must come back in chronological order."""
+    from runner import load_meta_metrics
+    f = tmp_path / "m.jsonl"
+    # later event listed first (14.900), with the Z/+00:00 format split
+    f.write_text(
+        json.dumps({"event": "b", "ts": "2026-07-09T13:24:14.900000+00:00"}) + "\n" +
+        json.dumps({"event": "a", "ts": "2026-07-09T13:24:14.100Z"}) + "\n"
+    )
+    got = [e["event"] for e in load_meta_metrics([f])]
+    # 14.100 (a) before 14.900 (b) regardless of suffix format
+    assert got == ["a", "b"], f"Expected ['a', 'b'] but got {got}"

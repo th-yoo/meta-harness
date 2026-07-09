@@ -1793,9 +1793,22 @@ def default_meta_metrics_sinks() -> list[Path]:
     ]
 
 
+def _parse_ts(e: dict):
+    """Parse ISO-8601 timestamp from event dict, handling both +00:00 and Z formats.
+    Returns a datetime for comparison; normalizes naive datetimes to UTC-aware.
+    Returns datetime.min (UTC-aware) for missing or invalid timestamps."""
+    ts = e.get("ts", "")
+    try:
+        d = datetime.fromisoformat(ts)
+        # Normalize naive to aware so aware/naive never compare-crash
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+
 def load_meta_metrics(paths: list[Path]) -> list[dict]:
     """Read each JSONL path that exists, skip missing files and unparseable
-    lines, merge, and sort by ts (ISO-8601 strings sort correctly as strings)."""
+    lines, merge, and sort by parsed ISO-8601 timestamp (handles +00:00 and Z suffixes)."""
     events: list[dict] = []
     for p in paths:
         if not p.exists():
@@ -1808,7 +1821,7 @@ def load_meta_metrics(paths: list[Path]) -> list[dict]:
                 events.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
-    events.sort(key=lambda e: e.get("ts", ""))
+    events.sort(key=_parse_ts)
     return events
 
 
