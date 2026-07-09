@@ -42,9 +42,12 @@ import {
   applyPlaybookOps,
   applyBulletAssessments,
   seedPlaybook,
+  readAgentConfig,
+  validateAgentConfig,
   type StoreLayer,
   type Playbook,
   type PlaybookOp,
+  type AgentConfig,
 } from "./harness-store.ts"
 import { proposerSessions } from "./session-state.ts"
 
@@ -109,13 +112,14 @@ export async function triggerPropose(
     const stagingTools  = path.join(stagingBase, `${layer.scope}-${version}-tools.md`)
     const stagingDiagnosis = path.join(stagingBase, `${layer.scope}-${version}-diagnosis.json`)
     const stagingOps = path.join(stagingBase, `${layer.scope}-${version}-ops.json`)
+    const stagingAgentConfig = path.join(stagingBase, `${layer.scope}-${version}-agent-config.json`)
     // Seed the playbook from the active system.md on first use (non-destructive);
     // ops mode iff the layer ends up with a playbook (empty stores stay legacy).
     const playbook = seedPlaybook(layer.root)
 
     const context = buildProposerContext(layer.root, layer.higherRoots)
     const prompt = buildProposerPrompt(layer, version, context, stagingSystem, stagingTools,
-      stagingDiagnosis, stagingOps, worktree, playbook)
+      stagingDiagnosis, stagingOps, stagingAgentConfig, worktree, playbook)
     const cfg = readMhConfig()
     const proposerModel = parseModelSpec(cfg.proposerModel)
 
@@ -204,7 +208,27 @@ export async function triggerPropose(
     }
     if (fs.existsSync(stagingSystem)) fs.rmSync(stagingSystem, { force: true })
 
-    createCandidate(layer.root, version, system, tools, newPlaybook)
+    // Optional agent-config op — PROJECT layers only (gated). Account-layer
+    // candidates are validated by bench `ab`, which runs the default `build`
+    // agent where the plugin is inert, so an evolved agent-config there can't
+    // be measured — never pick one up for account scopes.
+    let agentConfig: AgentConfig | null = null
+    if (isProject && fs.existsSync(stagingAgentConfig)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(stagingAgentConfig, "utf-8"))
+        agentConfig = validateAgentConfig(parsed)
+        if (!agentConfig) {
+          await client.app.log({ body: { service: "meta-harness", level: "warn",
+            message: `proposer ${layer.scope} ${version}: agent-config.json invalid — skipped` } })
+        }
+      } catch {
+        await client.app.log({ body: { service: "meta-harness", level: "warn",
+          message: `proposer ${layer.scope} ${version}: agent-config.json malformed — skipped` } })
+      }
+      fs.rmSync(stagingAgentConfig, { force: true })
+    }
+
+    createCandidate(layer.root, version, system, tools, newPlaybook, agentConfig ?? undefined)
     appendMetaMetric(layer.root, {
       event: "propose", candidate: version, scope: layer.scope,
       kind: newPlaybook ? "propose-ops" : "propose",
@@ -223,7 +247,7 @@ export async function triggerPropose(
       // Selection gate: go live provisionally as a trial; confirm/revert after
       // TRIAL_MIN_SESSIONS scored sessions (see resolveTrial in the idle hook).
       const baseline = activeVersion(layer.root)
-      startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook ?? null)
+      startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook ?? null, agentConfig)
       await client.tui.showToast({
         body: { title: "Meta-Harness",
                 message: `Trial started: ${layer.scope} ${version}${toolsNote} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
@@ -401,6 +425,7 @@ export function buildProposerPrompt(
   stagingTools: string,
   stagingDiagnosis: string,
   stagingOps: string,
+  stagingAgentConfig: string,
   worktree: string,
   playbook: Playbook | null,
 ): string {
@@ -447,7 +472,37 @@ export function buildProposerPrompt(
   const relTools  = path.relative(worktree, stagingTools)
   const relDiag   = path.relative(worktree, stagingDiagnosis)
   const relOps    = path.relative(worktree, stagingOps)
+  const relAgentConfig = path.relative(worktree, stagingAgentConfig)
   const stagingDir = path.relative(worktree, path.dirname(stagingSystem))
+
+  // Agent-config op — PROJECT layers only. Account-layer candidates are
+  // validated by bench `ab`, which runs the default `build` agent (where the
+  // plugin is inert), so an evolved agent-config there can never be measured —
+  // do not offer this section for account scopes.
+  const agentConfigSection = layer.scope.startsWith("project")
+    ? (() => {
+        const currentCfg = readAgentConfig(layer.root)
+        const currentCfgText = currentCfg ? `\`\`\`json\n${JSON.stringify(currentCfg, null, 2)}\n\`\`\`` : "none"
+        return `
+## Optional: agent-config.json (bash-tool timeout tuning)
+
+Current effective agent-config for ${layer.scope}: ${currentCfgText}
+
+Whitelisted schema (unknown fields are dropped; out-of-range values are clamped/filtered):
+- \`fastTimeoutMs\` (number, clamped to [500, 30000]) — overrides the default bash-tool timeout applied to "fast" commands.
+- \`extraFastCommands\` (string[], ≤20 entries, each matching \`/^[a-z0-9._+-]{1,32}$/\`) — additional commands to treat as fast (capped timeout).
+- \`extraSlowCommands\` (string[], ≤20 entries, same pattern) — additional commands to treat as slow (no cap); wins over extraFastCommands on conflict.
+
+Emit this file ONLY if a diagnosed root cause is a timeout / tool-latency problem; otherwise omit it.
+
+\`\`\`bash
+cat > "${relAgentConfig}" << 'ENDOFAGENTCONFIG'
+{"schemaVersion":1,"fastTimeoutMs":8000,"extraFastCommands":["mytool"],"extraSlowCommands":["slowtool"]}
+ENDOFAGENTCONFIG
+\`\`\`
+`
+      })()
+    : ""
 
   const step2 = playbook
     ? `STEP 2 — Edit the playbook. From the diagnosis, choose the SMALLEST set of edits (≤3) that would prevent the diagnosed root cause: \`add\` a new bullet, \`update\` an existing bullet by id, or \`delete\` (prune) a bullet that the trajectories show is unhelpful or harmful. Do not duplicate a rule already covered by a more-general layer. Bullets are SHORT behavioral rules (one sentence).`
@@ -512,7 +567,7 @@ cat > "${relTools}" << 'ENDOFTOOLS'
 <per-tool guidance keyed by tool name — only include tools with clear patterns>
 ENDOFTOOLS
 \`\`\`
-
+${agentConfigSection}
 After writing the files, briefly explain which diagnosed root cause each edit addresses.`
 }
 
