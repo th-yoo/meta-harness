@@ -33,11 +33,20 @@ import {
   readMhConfig,
   parseModelSpec,
   writeCandidateMeta,
+  buildFailureExcerpts,
+  readDiagnosis,
+  writeDiagnosis,
   type StoreLayer,
 } from "./harness-store.ts"
 import { proposerSessions } from "./session-state.ts"
 
 type Client = PluginInput["client"]
+
+/** Failure-taxonomy labels the proposer must pick from when diagnosing. */
+export const FAILURE_TAXONOMY = [
+  "wrong-plan", "spec-misread", "env-misread", "tool-misuse",
+  "premature-termination", "verifier-mismatch", "resource-limit", "flaky-infra",
+] as const
 
 /** How many scored project-role sessions before auto-propose. */
 export const PROJECT_ROLE_THRESHOLD = 5
@@ -90,9 +99,10 @@ export async function triggerPropose(
     const stagingBase = path.join(worktree, ".meta-harness", "staging")
     const stagingSystem = path.join(stagingBase, `${layer.scope}-${version}-system.md`)
     const stagingTools  = path.join(stagingBase, `${layer.scope}-${version}-tools.md`)
+    const stagingDiagnosis = path.join(stagingBase, `${layer.scope}-${version}-diagnosis.json`)
 
     const context = buildProposerContext(layer.root, layer.higherRoots)
-    const prompt = buildProposerPrompt(layer, version, context, stagingSystem, stagingTools, worktree)
+    const prompt = buildProposerPrompt(layer, version, context, stagingSystem, stagingTools, stagingDiagnosis, worktree)
     const cfg = readMhConfig()
     const proposerModel = parseModelSpec(cfg.proposerModel)
 
@@ -154,6 +164,19 @@ export async function triggerPropose(
       kind: "propose",
       createdAt: new Date().toISOString(),
     })
+    // Relocate the diagnosis (soft-required — warn if the proposer skipped it).
+    if (fs.existsSync(stagingDiagnosis)) {
+      try {
+        writeDiagnosis(layer.root, version, JSON.parse(fs.readFileSync(stagingDiagnosis, "utf-8")))
+      } catch {
+        await client.app.log({ body: { service: "meta-harness", level: "warn",
+          message: `proposer ${layer.scope} ${version}: diagnosis.json malformed — skipped` } })
+      }
+      fs.rmSync(stagingDiagnosis, { force: true })
+    } else {
+      await client.app.log({ body: { service: "meta-harness", level: "warn",
+        message: `proposer ${layer.scope} ${version}: no diagnosis.json written (soft-required)` } })
+    }
 
     const toolsNote = tools ? " + tools.md" : ""
     if (isProject) {
@@ -336,11 +359,13 @@ function buildProposerPrompt(
   context: string,
   stagingSystem: string,
   stagingTools: string,
+  stagingDiagnosis: string,
   worktree: string,
 ): string {
   const guidance = SCOPE_GUIDANCE[layer.scope]
   const currentSystem = readActiveSystem(layer.root)
   const currentTools = readActiveTools(layer.root)
+  const activeVer = activeVersion(layer.root)
 
   // Read "already covered" text (system + tools) from higher layers
   const coveredParts: string[] = []
@@ -363,9 +388,19 @@ function buildProposerPrompt(
     ? `## Current ${layer.scope} tools.md (refine — do not discard good rules)\n\n\`\`\`\n${currentTools}\n\`\`\``
     : `## Current ${layer.scope} tools.md\n\n(empty — write from scratch if tool patterns warrant it)`
 
-  // Relative staging paths so bash commands work in worktree
+  // Full failing-trajectory excerpts + root causes already diagnosed for this version.
+  const failing = buildFailureExcerpts(layer.root, activeVer)
+  const failingSection = failing
+    ? `## Failing trajectories (full tool I/O — where the agent actually went wrong)\n\n${failing}`
+    : "## Failing trajectories\n\n(none captured yet — diagnose from the scores/notes above)"
+  const priorDx = readDiagnosis<Record<string, unknown>>(layer.root, activeVer)
+  const priorSection = priorDx
+    ? `## Root causes already diagnosed for ${activeVer} — do NOT re-propose the same fix\n\n\`\`\`json\n${JSON.stringify(priorDx, null, 2).slice(0, 2000)}\n\`\`\`\n`
+    : ""
+
   const relSystem = path.relative(worktree, stagingSystem)
   const relTools  = path.relative(worktree, stagingTools)
+  const relDiag   = path.relative(worktree, stagingDiagnosis)
   const stagingDir = path.relative(worktree, path.dirname(stagingSystem))
 
   return `# Meta-Harness Proposer — ${layer.scope}
@@ -380,35 +415,28 @@ ${currentToolsSection}
 
 ${context || "(no sessions scored yet — write a sensible baseline for this scope)"}
 
-## Your task
+${failingSection}
 
-Analyze the traces above. Pay attention to:
-- PASS vs FAIL patterns in the session outcomes
-- Tool usage summaries (e.g. "bash×5(1err) read×3") — which tools were overused, misused, or produced errors?
-- Notes from the human rater (these are expert engineering judgments)
+${priorSection}## Your task — DIAGNOSE, then propose ONE rule
 
-Then:
-1. Identify the ONE most impactful gap in **system.md** — a behavioral rule not already covered above.
-2. Identify any **tool-usage patterns** worth capturing in **tools.md** — keyed by tool name.
-   tools.md format:
-   \`\`\`
-   ## bash
-   <guidance specific to bash usage at this scope>
-   ## read
-   <guidance specific to read tool usage>
-   ## edit
-   <guidance specific to edit tool usage>
-   \`\`\`
-   Only include a tool section if the traces reveal a meaningful pattern for it.
-   If no tool patterns are apparent, skip tools.md entirely.
-3. Both artifacts: SHORT and behavioral only. system.md under 20 lines. tools.md under 15 lines total.
-   Do NOT write project documentation, AGENTS.md content, or task-specific knowledge.
+STEP 1 — Diagnose the failures. For each failing trajectory above (up to 3), find the FIRST unrecoverable step and the root cause. Classify each with exactly ONE taxonomy label from:
+${FAILURE_TAXONOMY.map((t) => `  - ${t}`).join("\n")}
+
+STEP 2 — Propose. From the diagnosis, identify the SINGLE most impactful behavioral gap in system.md — a rule that would prevent the diagnosed root cause, is not already covered by more-general layers, and is not a root cause already diagnosed for ${activeVer}. Optionally capture tool-usage patterns in tools.md (keyed by tool name).
+Both artifacts SHORT and behavioral: system.md under 20 lines, tools.md under 15. No project docs / task-specific knowledge / AGENTS.md content.
 
 ## Write the results
 
-**Required** — write the improved system.md:
+**Required FIRST** — write your diagnosis (drives the next generation's memory):
 \`\`\`bash
 mkdir -p "${stagingDir}"
+cat > "${relDiag}" << 'ENDOFDIAG'
+{"failures":[{"sessionID":"<id from a trajectory above>","taxonomy":"<one label from the list>","rootCause":"<2-5 sentences>","firstUnrecoverableStep":"<quote the offending event>"}]}
+ENDOFDIAG
+\`\`\`
+
+**Required** — write the improved system.md (each new rule should cite the diagnosis it addresses):
+\`\`\`bash
 cat > "${relSystem}" << 'ENDOFSYSTEM'
 <your improved ${layer.scope} system prompt — short behavioral rules only>
 ENDOFSYSTEM
@@ -421,7 +449,7 @@ cat > "${relTools}" << 'ENDOFTOOLS'
 ENDOFTOOLS
 \`\`\`
 
-After writing the file(s), briefly explain what you changed and why, citing specific traces.`
+After writing the files, briefly explain which diagnosed root cause each new rule addresses.`
 }
 
 function buildPromotePrompt(

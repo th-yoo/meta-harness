@@ -207,6 +207,108 @@ export function writeCandidateMeta(storeRoot: string, version: string, meta: Rec
   writeJson(candidatePath(storeRoot, version, "meta.json"), meta)
 }
 
+// ── Trajectories + diagnosis (Phase 2) ──────────────────────────────────────
+
+/** Compact per-step event (shared shape with runner.normalize_events). */
+export interface TrajEvent {
+  t: "tool" | "text" | "error"
+  tool?: string
+  args?: string
+  output?: string
+  error?: boolean
+  text?: string
+}
+
+export function trajPath(storeRoot: string, version: string, sessionID: string): string {
+  return candidatePath(storeRoot, version, "traj", `${sessionID}.ndjson`)
+}
+
+export function writeTrajectory(storeRoot: string, version: string, sessionID: string, events: TrajEvent[]): void {
+  const p = trajPath(storeRoot, version, sessionID)
+  fs.mkdirSync(path.dirname(p), { recursive: true })
+  fs.writeFileSync(p, events.map((e) => JSON.stringify(e)).join("\n"), "utf-8")
+}
+
+export function readTrajectory(storeRoot: string, version: string, sessionID: string): TrajEvent[] {
+  let raw: string
+  try { raw = fs.readFileSync(trajPath(storeRoot, version, sessionID), "utf-8") } catch { return [] }
+  const out: TrajEvent[] = []
+  for (const ln of raw.split("\n")) {
+    const s = ln.trim()
+    if (!s) continue
+    try { out.push(JSON.parse(s) as TrajEvent) } catch { /* skip bad line */ }
+  }
+  return out
+}
+
+export function pruneTrajectories(storeRoot: string, version: string, keepFailures = 20, keepPasses = 5): number {
+  const dir = candidatePath(storeRoot, version, "traj")
+  let files: string[]
+  try { files = fs.readdirSync(dir).filter((f) => f.endsWith(".ndjson")) } catch { return 0 }
+  const score = readScore(storeRoot, version)
+  const passedById = new Map(score.sessions.map((s) => [s.sessionID, s.passed]))
+  files.sort((a, b) => fs.statSync(path.join(dir, b)).mtimeMs - fs.statSync(path.join(dir, a)).mtimeMs)
+  let keptF = 0, keptP = 0, removed = 0
+  for (const f of files) {
+    const passed = passedById.get(f.replace(/\.ndjson$/, "")) === true
+    const [kept, cap] = passed ? [keptP, keepPasses] : [keptF, keepFailures]
+    if (kept < cap) { if (passed) keptP++; else keptF++ }
+    else { fs.rmSync(path.join(dir, f), { force: true }); removed++ }
+  }
+  return removed
+}
+
+function fmtTrajEvent(e: TrajEvent): string {
+  if (e.t === "tool") return `TOOL ${e.tool ?? "?"}${e.error ? " [ERROR]" : ""}: ${e.args ?? ""}${e.output ? ` → ${e.output}` : ""}`
+  if (e.t === "error") return `ERROR: ${e.text ?? ""}`
+  return `SAY: ${e.text ?? ""}`
+}
+
+export interface FailureExcerptOpts {
+  maxSessions?: number
+  headEvents?: number
+  tailEvents?: number
+  maxCharsPerSession?: number
+}
+
+/**
+ * Excerpt the most recent FAILING sessions' trajectories for the reflective
+ * proposer — first `headEvents` (task framing) + last `tailEvents` (where failures
+ * live), per-session char-capped. Empty string if none have a trajectory.
+ */
+export function buildFailureExcerpts(storeRoot: string, version: string, opts: FailureExcerptOpts = {}): string {
+  const { maxSessions = 3, headEvents = 5, tailEvents = 30, maxCharsPerSession = 5000 } = opts
+  const score = readScore(storeRoot, version)
+  const failed = score.sessions.filter((s) => !s.passed).slice(-maxSessions).reverse()
+  const blocks: string[] = []
+  for (const s of failed) {
+    const events = readTrajectory(storeRoot, version, s.sessionID)
+    if (!events.length) continue
+    let picked: TrajEvent[]
+    if (events.length <= headEvents + tailEvents) {
+      picked = events
+    } else {
+      const elided = events.length - headEvents - tailEvents
+      picked = [
+        ...events.slice(0, headEvents),
+        { t: "text", text: `[… ${elided} events elided …]` } as TrajEvent,
+        ...events.slice(-tailEvents),
+      ]
+    }
+    const body = picked.map(fmtTrajEvent).join("\n").slice(0, maxCharsPerSession)
+    blocks.push(`### ${s.sessionID} — ${s.note || s.summary || "(no label)"}\n${body}`)
+  }
+  return blocks.join("\n\n")
+}
+
+export function writeDiagnosis(storeRoot: string, version: string, diagnosis: unknown): void {
+  writeJson(candidatePath(storeRoot, version, "diagnosis.json"), diagnosis)
+}
+
+export function readDiagnosis<T = unknown>(storeRoot: string, version: string): T | null {
+  return readJson<T | null>(candidatePath(storeRoot, version, "diagnosis.json"), null)
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function readText(p: string): string {

@@ -179,6 +179,63 @@ def read_candidate_tools(store_root: Path, version: str) -> str:
     return _read_text(_candidate_file(store_root, version, "tools.md"))
 
 
+# ── trajectories (Phase 2) ─────────────────────────────────────────────────
+
+
+def traj_path(store_root: Path, version: str, session_id: str) -> Path:
+    """candidates/<vN>/traj/<sessionID>.ndjson (distinct from traces/ SessionRecords)."""
+    return _candidate_file(store_root, version, "traj", f"{session_id}.ndjson")
+
+
+def write_trajectory(store_root: Path, version: str, session_id: str, events: list) -> None:
+    p = traj_path(store_root, version, session_id)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("\n".join(json.dumps(e) for e in events), encoding="utf-8")
+
+
+def read_trajectory(store_root: Path, version: str, session_id: str) -> list:
+    try:
+        lines = traj_path(store_root, version, session_id).read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    out = []
+    for ln in lines:
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            out.append(json.loads(ln))
+        except Exception:
+            pass
+    return out
+
+
+def prune_trajectories(store_root: Path, version: str,
+                       keep_failures: int = 20, keep_passes: int = 5) -> int:
+    """Keep the most recent keep_failures failing + keep_passes passing trajectories
+    (pass/fail from score.json; unknown session id → treated as a failure, i.e. kept).
+    Returns the number of files removed. Bounds disk (~3MB/candidate for failures-only)."""
+    traj_dir = store_root / "candidates" / version / "traj"
+    if not traj_dir.is_dir():
+        return 0
+    score = read_score(store_root, version)
+    passed_by_id = {s.get("sessionID"): bool(s.get("passed")) for s in score.get("sessions", [])}
+    files = sorted(traj_dir.glob("*.ndjson"), key=lambda p: p.stat().st_mtime, reverse=True)
+    kept_f = kept_p = removed = 0
+    for f in files:
+        if passed_by_id.get(f.stem, False):
+            if kept_p < keep_passes:
+                kept_p += 1
+            else:
+                f.unlink(); removed += 1
+        else:
+            if kept_f < keep_failures:
+                kept_f += 1
+            else:
+                f.unlink(); removed += 1
+    return removed
+
+
 # ── Harness assembly ───────────────────────────────────────────────────────
 
 

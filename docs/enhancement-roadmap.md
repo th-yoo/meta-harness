@@ -183,6 +183,21 @@ carries proposerModel.
 
 ### Phase 2 — Trajectory persistence + causal proposer
 
+> **Status: IMPLEMENTED (2026-07-09).** `normalize_events` (runner.py, unit-tested in
+> test_traj.py) + `run_opencode`/`run_task_once` now return TrajEvents; bench_store
+> `traj_path`/`write_trajectory`/`read_trajectory`/`prune_trajectories`; `cmd_run` +
+> `cmd_ab` persist failing trajectories (`--save-all-traj` for passes; held-out never).
+> TS mirrors (`trajPath`/`writeTrajectory`/`readTrajectory`/`pruneTrajectories`/
+> `buildFailureExcerpts`/`writeDiagnosis`/`readDiagnosis`); `index.ts` buffers events
+> (`sessionTrajectory`, cap 500) from tool/text hooks and writes failure trajectories
+> to all 4 layers on scoring. `propose.ts` gains `FAILURE_TAXONOMY` + a reflective
+> prompt (failing-trajectory excerpts + prior-diagnosis memory) that requires a
+> `diagnosis.json` FIRST, then the rule; `triggerPropose` relocates it (soft-required —
+> warns if missing). **Notes:** interactive tool events capture output+error but not
+> args (the opencode `tool.execute.after` input doesn't expose them); `/mh-status`
+> diagnosis surfacing skipped for now (candidate meta.json already shows in status);
+> diagnosis is soft-required (warn) until the prompt reliably complies, then make hard.
+
 Today run_opencode discards the NDJSON stream; proposer sees 200-char summaries.
 
 - **Bench side**: `normalize_events(ndjson_text) -> list[TrajEvent]` ({"t":"tool",tool,args≤300,output≤800,error} / {"t":"text"} / {"t":"error"}); run_opencode returns events; bench_store gains `traj_path/write_trajectory/prune_trajectories(keep_failures=20, keep_passes=5)` → `candidates/vN/traj/<sid>.ndjson`. Write failures always, passes only with --save-all-traj (~3MB cap/candidate). Held-out trajectories never stored.

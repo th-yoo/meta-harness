@@ -54,9 +54,12 @@ import {
   activateCandidate,
   readAbVerdict,
   abAccepted,
+  writeTrajectory,
+  pruneTrajectories,
   DEFAULT_SYSTEM_PROMPT,
   type StoreLayer,
   type ToolUsage,
+  type TrajEvent,
 } from "./harness-store.ts"
 import { promptHumanScore, handleScoreCommand } from "./score.ts"
 import {
@@ -111,6 +114,19 @@ const sessionAgent = new Map<string, string>()
 const sessionTurns = new Map<string, number>()
 const sessionSummary = new Map<string, string>()
 const sessionToolUsage = new Map<string, ToolUsage>()
+const sessionTrajectory = new Map<string, TrajEvent[]>()
+
+/** Persist trajectories for PASSING sessions too. Default false = failures only. */
+const SAVE_ALL_TRAJ = false
+/** Cap the per-session trajectory buffer (drop-oldest). */
+const TRAJ_BUFFER_CAP = 500
+
+function pushTraj(sessionID: string, ev: TrajEvent): void {
+  const buf = sessionTrajectory.get(sessionID) ?? []
+  buf.push(ev)
+  if (buf.length > TRAJ_BUFFER_CAP) buf.shift()
+  sessionTrajectory.set(sessionID, buf)
+}
 
 /**
  * Tools whose output is execution results (not file content).
@@ -133,6 +149,7 @@ function cleanupSession(sessionID: string): void {
   sessionTurns.delete(sessionID)
   sessionSummary.delete(sessionID)
   sessionToolUsage.delete(sessionID)
+  sessionTrajectory.delete(sessionID)
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -260,13 +277,20 @@ const metaHarness: Plugin = async (input) => {
       // File-content tools (read, grep, glob, write, edit) are skipped —
       // their output is file content which naturally contains error-handling
       // words and would produce false positives.
+      const outText = typeof toolOutput.output === "string" ? toolOutput.output : ""
+      let isError = false
       if (EXECUTION_TOOLS.has(tool)) {
-        const outText = typeof toolOutput.output === "string" ? toolOutput.output : ""
-        if (ERROR_PATTERN.test(outText)) entry.errors++
+        isError = ERROR_PATTERN.test(outText)
+        if (isError) entry.errors++
       }
 
       usage[tool] = entry
       sessionToolUsage.set(sessionID, usage)
+      pushTraj(sessionID, {
+        t: "tool", tool,
+        output: outText.slice(0, 800),
+        error: isError,
+      })
     },
 
     // ── turn counting + summary capture ───────────────────────────────────
@@ -275,6 +299,7 @@ const metaHarness: Plugin = async (input) => {
       if (proposerSessions.has(sessionID)) return
       sessionTurns.set(sessionID, (sessionTurns.get(sessionID) ?? 0) + 1)
       sessionSummary.set(sessionID, output.text.slice(0, 500))
+      if (output.text.trim()) pushTraj(sessionID, { t: "text", text: output.text.slice(0, 800) })
     },
 
     // ── session.idle: scoring + auto-propose ──────────────────────────────
@@ -343,6 +368,17 @@ const metaHarness: Plugin = async (input) => {
         const version = activeVersion(layer.root)
         return { layer, score: recordSession(layer.root, version, record) }
       })
+
+      // Persist the trajectory (failures always; passes only with SAVE_ALL_TRAJ)
+      // to each layer so its proposer can diagnose the root cause later.
+      const traj = sessionTrajectory.get(sessionID) ?? []
+      if (traj.length && (!record.passed || SAVE_ALL_TRAJ)) {
+        for (const { layer } of scores) {
+          const version = activeVersion(layer.root)
+          writeTrajectory(layer.root, version, sessionID, traj)
+          pruneTrajectories(layer.root, version)
+        }
+      }
 
       const prLayer = layers.find((l) => l.scope === "project-role")!
       const pgLayer = layers.find((l) => l.scope === "project-global")!

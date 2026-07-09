@@ -690,6 +690,51 @@ def setup_task(task: str, tb_root: Path) -> None:
 # ── OpenCode invocation ────────────────────────────────────────────────────
 
 
+def normalize_events(ndjson_text: str, max_events: int = 400) -> list[dict]:
+    """opencode `run --format json` NDJSON → compact TrajEvents for the proposer.
+    Shapes (shared with harness-store.ts TrajEvent):
+      {"t":"tool", tool, args<=300, output<=800, error}
+      {"t":"text", text<=800}   {"t":"error", text<=800}
+    step_finish and unparseable lines are dropped; capped at max_events."""
+    events: list[dict] = []
+    for line in ndjson_text.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            ev = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        t = ev.get("type", "")
+        if t == "tool_use":
+            part = ev.get("part", {}) or {}
+            state = part.get("state", {}) or {}
+            tool = part.get("tool", "unknown")
+            raw_args = state.get("input", part.get("input", ""))
+            args = raw_args if isinstance(raw_args, str) else json.dumps(raw_args, default=str)
+            raw_out = state.get("output", "")
+            out = raw_out if isinstance(raw_out, str) else json.dumps(raw_out, default=str)
+            status = state.get("status", "")
+            exit_code = (state.get("metadata") or {}).get("exit", 0)
+            err = status == "error" or bool(exit_code and exit_code != 0)
+            events.append({"t": "tool", "tool": tool, "args": args[:300],
+                           "output": out[:800], "error": err})
+        elif t == "text":
+            txt = ev.get("text") or (ev.get("part") or {}).get("text") or ""
+            if isinstance(txt, str) and txt.strip():
+                events.append({"t": "text", "text": txt[:800]})
+        elif t == "error":
+            err = ev.get("error") or {}
+            if isinstance(err, dict):
+                msg = (err.get("data") or {}).get("message") or err.get("name") or json.dumps(err, default=str)
+            else:
+                msg = str(err)
+            events.append({"t": "error", "text": str(msg)[:800]})
+        if len(events) >= max_events:
+            break
+    return events
+
+
 def run_opencode(
     task: str,
     tb_root: Path,
@@ -697,9 +742,9 @@ def run_opencode(
     variant: Optional[str],
     agent_timeout: float,
     harness_md: str,
-) -> tuple[int, dict]:
+) -> tuple[int, dict, list[dict]]:
     """
-    Write AGENTS.md, run opencode, return (turnCount, toolUsage).
+    Write AGENTS.md, run opencode, return (turnCount, toolUsage, trajEvents).
     """
     instruction_path = tb_root / task / "instruction.md"
     if not instruction_path.exists():
@@ -826,8 +871,9 @@ def run_opencode(
         )
         log(f"  [debug] dumped opencode output → {dbg}")
 
+    events = normalize_events(output)
     log(f"  opencode done in {elapsed:.1f}s, turns={turn_count}")
-    return turn_count, tool_usage
+    return turn_count, tool_usage, events
 
 
 # ── verifier ───────────────────────────────────────────────────────────────
@@ -972,6 +1018,8 @@ def record_to_stores(
     agent: str = "",
     pins: Optional[dict] = None,
     env: Optional[dict] = None,
+    events: Optional[list] = None,
+    save_all_traj: bool = False,
 ) -> None:
     if no_store:
         return
@@ -981,15 +1029,19 @@ def record_to_stores(
         log("  skip store record: 0 agent turns (timeout/transient opencode failure)")
         return
 
-    from bench_store import active_version, record_session
+    from bench_store import active_version, record_session, write_trajectory, prune_trajectories
 
     pins = pins or {}
     record = _session_record(task, session_id, passed, turn_count, tool_usage,
                              model, variant, env)
+    save_traj = events and (not passed or save_all_traj)
 
     for name, root in layer_store_roots(layers, agent, meta_root):
         ver = pins.get(name) or active_version(root)
         score = record_session(root, ver, record)
+        if save_traj:
+            write_trajectory(root, ver, session_id, events)
+            prune_trajectories(root, ver)
         log(f"  store {name} {ver}: nPass={score['nPass']} nFail={score['nFail']}")
 
 
@@ -1083,7 +1135,7 @@ def run_task_once(task: str, tb_root: Path, model: str, variant: str,
                   harness_md: str, agent_timeout: float, verifier_timeout: float) -> dict:
     """One clean-room execution: clean → setup → opencode → copy_tests → verify.
     No store/results side effects. Returns:
-      {session_id, reward, elapsed, turns, tool_usage,
+      {session_id, reward, elapsed, turns, tool_usage, events,
        error: '' | 'setup_failed' | 'agent_no_output'}
     """
     session_id = f"bench-{task}-{int(time.time())}-{uuid.uuid4().hex[:6]}"
@@ -1103,10 +1155,10 @@ def run_task_once(task: str, tb_root: Path, model: str, variant: str,
         log(f"  setup_deps.sh failed (exit {e.returncode}), skipping task")
         return {"session_id": session_id, "reward": 0,
                 "elapsed": round(time.monotonic() - task_start, 1),
-                "turns": 0, "tool_usage": {}, "error": "setup_failed"}
+                "turns": 0, "tool_usage": {}, "events": [], "error": "setup_failed"}
 
     # 3. Run OpenCode
-    turn_count, tool_usage = run_opencode(
+    turn_count, tool_usage, events = run_opencode(
         task, tb_root, model, variant or None, agent_timeout, harness_md
     )
     # 4. Copy tests (with patches)
@@ -1116,7 +1168,7 @@ def run_task_once(task: str, tb_root: Path, model: str, variant: str,
     elapsed = time.monotonic() - task_start
     log(f"  reward={reward}  elapsed={elapsed:.1f}s")
     return {"session_id": session_id, "reward": reward, "elapsed": elapsed,
-            "turns": turn_count, "tool_usage": tool_usage,
+            "turns": turn_count, "tool_usage": tool_usage, "events": events,
             "error": "agent_no_output" if turn_count == 0 else ""}
 
 
@@ -1224,6 +1276,7 @@ def cmd_run(args: argparse.Namespace) -> None:
             record_to_stores(
                 task, res["session_id"], passed, turn_count, res["tool_usage"],
                 model, variant, layers, meta_root, no_store, agent, pins, run_env,
+                res.get("events"), args.save_all_traj,
             )
 
             results.append({
@@ -1486,7 +1539,7 @@ def cmd_ab(args: argparse.Namespace) -> None:
     """
     from bench_store import (
         active_version, candidate_exists, candidate_path,
-        list_versions, record_session,
+        list_versions, record_session, write_trajectory, prune_trajectories,
     )
     from ab_stats import (
         DecisionConfig, paired_run_stats, futility_stop, decide,
@@ -1662,6 +1715,9 @@ def cmd_ab(args: argparse.Namespace) -> None:
                     rec = _session_record(task, res_b["session_id"], res_b["reward"] == 1,
                                           res_b["turns"], res_b["tool_usage"], model, variant, env_b)
                     score = record_session(layer_root, candidate, rec)
+                    if res_b.get("events") and (res_b["reward"] != 1 or args.save_all_traj):
+                        write_trajectory(layer_root, candidate, res_b["session_id"], res_b["events"])
+                        prune_trajectories(layer_root, candidate)
                     log(f"  store {layer} {candidate}: nPass={score['nPass']} nFail={score['nFail']}")
             task_results[task] = tr
             _write_json_atomic(partial_path, _verdict_dict("in_progress"))
@@ -1764,6 +1820,8 @@ def build_parser() -> argparse.ArgumentParser:
              "global=both, account=account-global only, project=project-global only, none=no harness.",
     )
     p_run.add_argument("--no-store", action="store_true", help="Do not write to harness store")
+    p_run.add_argument("--save-all-traj", action="store_true",
+                       help="Persist trajectories for PASSING runs too (default: failures only)")
     p_run.add_argument("--no-harness", action="store_true", help="Do not write AGENTS.md")
     p_run.add_argument(
         "--results-file", metavar="PATH",
@@ -1837,6 +1895,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_ab.add_argument("--no-store", action="store_true",
                       help="Do not write held-in arm-B scores into the candidate's score.json "
                            "(the verdict file is always written)")
+    p_ab.add_argument("--save-all-traj", action="store_true",
+                      help="Persist trajectories for PASSING held-in runs too (default: failures only)")
     p_ab.add_argument("--results-file", metavar="PATH",
                       help="Also write the final verdict JSON here (does NOT disable store)")
 
