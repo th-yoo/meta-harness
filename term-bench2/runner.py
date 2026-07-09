@@ -635,13 +635,16 @@ def run_opencode(
 
     # Build opencode command
     # --format json  → one JSON event per line (NDJSON)
-    # --pure         → skip all plugins (avoid meta-harness plugin overhead)
     # --auto         → approve all tool permissions
+    # NOTE: do NOT use --pure — it strips the provider/auth config, so the
+    # configured Anthropic model (anthropic/claude-sonnet-4-6) fails to resolve
+    # (ProviderModelNotFoundError). The meta-harness plugin is inert for the
+    # default `build` agent (it only injects/scores for mh-* agents), so leaving
+    # plugins enabled does not interfere with the benchmark.
     cmd = [
         "opencode", "run",
         "--dir", str(HOST_APP),
         "--auto",
-        "--pure",
         "--format", "json",
         "--model", model,
     ]
@@ -651,22 +654,49 @@ def run_opencode(
     # Pass instruction as positional arg (opencode run [message..])
     cmd.append(instruction)
 
-    log(f"  opencode run (timeout={agent_timeout:.0f}s)...")
-    start = time.monotonic()
-    try:
-        result = run_cmd(
-            cmd,
-            cwd=REAL_APP,   # real path; opencode sees /app via --dir inside ns
-            timeout=agent_timeout,
-            capture=True,
-            check=False,
-            ns=True,
-            extra_mounts=task_extra_mounts(task),
+    # Retry on transient provider errors (e.g. Anthropic "Overloaded" /
+    # "Unexpected server error") that abort the run before any real work.
+    MAX_ATTEMPTS = 4
+    TRANSIENT_RE = re.compile(
+        r"overloaded|unexpected server error|rate.?limit|429|503|"
+        r"timeout|connection|temporarily unavailable|apicallerror",
+        re.IGNORECASE,
+    )
+    result = None
+    elapsed = 0.0
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        log(f"  opencode run (timeout={agent_timeout:.0f}s, attempt {attempt}/{MAX_ATTEMPTS})...")
+        start = time.monotonic()
+        try:
+            result = run_cmd(
+                cmd,
+                cwd=REAL_APP,   # real path; opencode sees /app via --dir inside ns
+                timeout=agent_timeout,
+                capture=True,
+                check=False,
+                ns=True,
+                extra_mounts=task_extra_mounts(task),
+            )
+        except subprocess.TimeoutExpired:
+            log(f"  opencode timed out after {agent_timeout:.0f}s")
+            return 0, {}
+        elapsed = time.monotonic() - start
+
+        out = result.stdout or ""
+        # Detect a transient error run: an {"type":"error"} event AND no
+        # assistant/tool activity (step_finish/text/tool_use).
+        had_error_event = '"type":"error"' in out
+        had_activity = ('"type":"step_finish"' in out or '"type":"tool_use"' in out)
+        transient = (
+            (had_error_event and not had_activity)
+            or (result.returncode != 0 and not had_activity and TRANSIENT_RE.search(out))
         )
-    except subprocess.TimeoutExpired:
-        log(f"  opencode timed out after {agent_timeout:.0f}s")
-        return 0, {}
-    elapsed = time.monotonic() - start
+        if transient and attempt < MAX_ATTEMPTS:
+            backoff = min(30, 5 * attempt)
+            log(f"  transient provider error — retrying in {backoff}s")
+            time.sleep(backoff)
+            continue
+        break
 
     # Parse NDJSON output for turn count and tool usage.
     # Real event schema (from opencode run --format json):
@@ -709,6 +739,15 @@ def run_opencode(
             part = event.get("part", {})
             if part.get("reason") == "stop":
                 turn_count += 1
+
+    if turn_count == 0 and os.environ.get("MH_DEBUG"):
+        dbg = Path("/tmp") / f"mh_oc_{task}.txt"
+        dbg.write_text(
+            f"exit={result.returncode if result else 'none'}\n"
+            f"--- STDOUT ---\n{(result.stdout if result else '')[:4000]}\n"
+            f"--- STDERR ---\n{(result.stderr if result else '')[:4000]}\n"
+        )
+        log(f"  [debug] dumped opencode output → {dbg}")
 
     log(f"  opencode done in {elapsed:.1f}s, turns={turn_count}")
     return turn_count, tool_usage
