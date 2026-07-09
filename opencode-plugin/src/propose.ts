@@ -853,7 +853,7 @@ After writing, briefly explain what you merged and pruned and why.`
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-async function waitForFile(filePath: string, timeoutMs: number): Promise<boolean> {
+export async function waitForFile(filePath: string, timeoutMs: number): Promise<boolean> {
   const interval = 5_000
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
