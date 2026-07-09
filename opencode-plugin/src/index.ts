@@ -61,6 +61,7 @@ import {
   type StoreLayer,
   readPlaybook,
   activeBulletCount,
+  readLastMetric,
   type ToolUsage,
   type TrajEvent,
 } from "./harness-store.ts"
@@ -668,6 +669,14 @@ const metaHarness: Plugin = async (input) => {
             line += ` | candidate ${newest}: ${vinfo}`
           }
           lines.push(line)
+        }
+        const prLayer = layers.find((l) => l.scope === "project-role")
+        if (prLayer) {
+          const last = readLastMetric(prLayer.root, ["trial", "activate", "ab", "propose", "curate"])
+          if (last) {
+            const detail = [last.action, last.candidate ?? last.version ?? last.trial].filter(Boolean).join(" ")
+            lines.push(`  last: ${last.event} ${detail} (${last.ts})`)
+          }
         }
         throw await toastAndSwallow(client, lines.join("\n"), "info", 15_000)
       }

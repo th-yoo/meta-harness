@@ -360,6 +360,26 @@ export function appendMetaMetric(storeRoot: string, event: Record<string, unknow
   } catch { /* observability must never break the loop */ }
 }
 
+/** Last event of any of the given types from this store's meta-metrics sink, or null. */
+export function readLastMetric(storeRoot: string, events: string[]): Record<string, unknown> | null {
+  try {
+    const sink = metricsSinkFor(storeRoot)
+    if (!sink || !fs.existsSync(sink)) return null
+    const lines = fs.readFileSync(sink, "utf-8").trim().split("\n")
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i]
+      if (!line) continue
+      const s = line.trim()
+      if (!s) continue
+      try {
+        const e = JSON.parse(s) as Record<string, unknown>
+        if (e.event && events.includes(String(e.event))) return e
+      } catch { /* skip bad line */ }
+    }
+    return null
+  } catch { return null }
+}
+
 // ── Store API ──────────────────────────────────────────────────────────────
 
 export function activeVersion(storeRoot: string): string {
