@@ -53,12 +53,20 @@ function tmpRoot(name: string): string {
   return tmp
 }
 
-test("composeAgentConfig: most-specific layer with an active config wins", () => {
+test("composeAgentConfig: most-specific layer wins over a more-general one", () => {
   const general = tmpRoot("general")
   const specific = tmpRoot("specific")
 
-  const specificCfg: AgentConfig = { schemaVersion: 1, fastTimeoutMs: 3000 }
-  writeActive(specific, "v1", "specific system", "", null, specificCfg)
+  // both layers have an ACTIVE agent-config, with different values
+  const generalCfg: AgentConfig = { schemaVersion: 1, fastTimeoutMs: 1111 }
+  const specificCfg: AgentConfig = { schemaVersion: 1, fastTimeoutMs: 2222 }
+  writeActive(general, "v1", "general system", "", undefined, generalCfg)
+  writeActive(specific, "v1", "specific system", "", undefined, specificCfg)
 
+  // most-specific (later in array) wins
   expect(composeAgentConfig([general, specific])).toEqual(specificCfg)
+  expect(composeAgentConfig([general, specific])?.fastTimeoutMs).toBe(2222)
+
+  // order matters: reversed input yields the general one
+  expect(composeAgentConfig([specific, general])?.fastTimeoutMs).toBe(1111)
 })
