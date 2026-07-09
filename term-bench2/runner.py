@@ -876,6 +876,192 @@ def run_opencode(
     return turn_count, tool_usage, events
 
 
+# ── judge-audit (Phase 4 Part D5: anti-gaming) ──────────────────────────────
+#
+# The dense judge (opencode-plugin/src/judge.ts) is calibrated against HUMAN
+# scores in the interactive loop. This is the independent Python-side
+# cross-check: replay the SAME judge rubric on BENCH session trajectories,
+# where the verifier's pass/fail is ground truth (not a human opinion), and
+# alarm if the judge disagrees with the verifier too often. If the judge can
+# be fooled by a trajectory that merely LOOKS successful (the anti-gaming
+# concern), this is where it would show up.
+
+
+def render_judge_audit_events(events: list[dict], cap: int = 8_000) -> str:
+    """Render TrajEvents (the {"t": "tool"|"text"|"error", ...} shape shared
+    with harness-store.ts TrajEvent / normalize_events) into the same
+    tool/text/error lines judge.ts's renderTrajEvents produces, so the
+    Python-side audit prompt mirrors the TS-side rubric byte-for-byte in
+    spirit."""
+    if not events:
+        return "(no trajectory captured)"
+    lines = []
+    for e in events:
+        t = e.get("t")
+        if t == "tool":
+            tool = e.get("tool", "?")
+            err = " [ERROR]" if e.get("error") else ""
+            args = e.get("args", "") or ""
+            out = e.get("output", "") or ""
+            line = f"TOOL {tool}{err}: {args}"
+            if out:
+                line += f" → {out}"
+            lines.append(line)
+        elif t == "error":
+            lines.append(f"ERROR: {e.get('text', '')}")
+        else:
+            lines.append(f"SAY: {e.get('text', '')}")
+    return "\n".join(lines)[:cap]
+
+
+def build_judge_audit_prompt(events: list[dict], task_note: str) -> str:
+    """PURE. Build the judge-audit rubric prompt: same rubric as judge.ts's
+    buildJudgePrompt (task note + rendered trajectory + skepticism
+    instructions), but this is invoked via `opencode run` (headless one-shot
+    CLI, not a live session), so there is no staging file to write to — the
+    judge is instructed to reply with ONLY the JSON verdict, inline, as its
+    FINAL message."""
+    traj_section = render_judge_audit_events(events)
+    return f"""# Meta-Harness Judge Audit
+
+You are scoring whether a coding-agent session ACTUALLY ACCOMPLISHED its task.
+You did not watch the session happen — you only have the evidence below. Be
+SKEPTICAL: a session's own final message claiming success, completion, or that
+tests pass is NOT evidence by itself — only verifiable actions in the
+trajectory (commands that were actually run and actually succeeded, files that
+were actually created/edited, tests that actually passed) count as evidence.
+If the trajectory doesn't verify the claimed outcome, or the evidence is
+ambiguous, or a tool call errored and was never recovered from, lean toward
+failing the session.
+
+## Task
+{task_note}
+
+## Trajectory (tool calls with args/output/errors, plus text/error events)
+{traj_section}
+
+## Your task
+
+Judge whether the task above was completed SUCCESSFULLY, based ONLY on the
+evidence in the trajectory. Then reply with ONLY the JSON verdict below as
+your final message — no markdown fences, no commentary, nothing before or
+after it:
+
+{{"passed":true,"confidence":0.0,"reasoning":"<=500 chars explaining the verdict"}}
+
+The JSON MUST have exactly these keys: "passed" (boolean), "confidence"
+(number, 0..1 — how confident you are in the verdict), "reasoning" (string,
+<=500 chars). Replace the example values with your actual verdict; do not
+leave the placeholder values in place. This is a headless one-shot run — there
+is no staging file, no follow-up turn: your final message IS the answer, so it
+must be ONLY that JSON object."""
+
+
+def parse_judge_reply(text: str) -> Optional[dict]:
+    """PURE. Extract the LAST JSON object in `text` that parses AND carries
+    the verdict shape (passed/confidence/reasoning keys) — a judge model may
+    think out loud before its final verdict, or restate/correct itself, so we
+    want the last valid verdict-shaped object, not the first `{...}` found.
+    Returns None if no such object exists (garbage/missing reply)."""
+    decoder = json.JSONDecoder()
+    last: Optional[dict] = None
+    for i, ch in enumerate(text):
+        if ch != "{":
+            continue
+        try:
+            obj, _ = decoder.raw_decode(text, i)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict) and {"passed", "confidence", "reasoning"} <= obj.keys():
+            last = obj
+    return last
+
+
+_JUDGE_AUDIT_TRANSIENT_RE = re.compile(
+    r"overloaded|unexpected server error|rate.?limit|429|503|"
+    r"timeout|connection|temporarily unavailable|apicallerror",
+    re.IGNORECASE,
+)
+
+
+def _judge_reply_text(ndjson_out: str) -> str:
+    """Extract and concatenate 'text' event content from opencode run's NDJSON
+    stdout — the same event stream shape normalize_events reads
+    (type=='text' -> text or part.text)."""
+    texts: list[str] = []
+    for line in ndjson_out.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            ev = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if ev.get("type") == "text":
+            txt = ev.get("text") or (ev.get("part") or {}).get("text") or ""
+            if isinstance(txt, str) and txt.strip():
+                texts.append(txt)
+    return "\n".join(texts)
+
+
+def run_judge_opencode(
+    prompt: str,
+    model: str,
+    timeout: float = 90.0,
+    max_attempts: int = 3,
+) -> Optional[str]:
+    """Invoke the judge headlessly the way run_opencode invokes the task
+    agent: `opencode run --format json --model <judge> "<prompt>"`, but in a
+    fresh scratch --dir (the judge never touches a task workspace — no bwrap
+    sandbox needed, this is a plain subprocess) and with a short one-turn
+    timeout (default 90s, mirroring judge.ts's JUDGE_TIMEOUT_MS).
+
+    Retries on transient provider errors using the same detection run_opencode
+    uses (an error event with no real activity), with a short capped backoff.
+    Returns the judge's reply text (concatenated 'text' events), or None if
+    every attempt times out / fails / errors transiently — callers must treat
+    None as a skip, not a crash.
+    """
+    with tempfile.TemporaryDirectory(prefix="mh-judge-audit-") as scratch:
+        cmd = [
+            "opencode", "run",
+            "--dir", scratch,
+            "--auto",
+            "--format", "json",
+            "--model", model,
+            prompt,
+        ]
+        for attempt in range(1, max_attempts + 1):
+            log(f"  judge opencode run (timeout={timeout:.0f}s, attempt {attempt}/{max_attempts})...")
+            try:
+                result = subprocess.run(
+                    cmd, cwd=scratch, capture_output=True, text=True, timeout=timeout,
+                )
+            except subprocess.TimeoutExpired:
+                log(f"  judge opencode timed out after {timeout:.0f}s")
+                if attempt < max_attempts:
+                    continue
+                return None
+
+            out = result.stdout or ""
+            had_error_event = '"type":"error"' in out
+            had_activity = ('"type":"step_finish"' in out or '"type":"text"' in out)
+            transient = (
+                (had_error_event and not had_activity)
+                or (result.returncode != 0 and not had_activity
+                    and _JUDGE_AUDIT_TRANSIENT_RE.search(out))
+            )
+            if transient and attempt < max_attempts:
+                backoff = min(20, 5 * attempt)
+                log(f"  judge transient provider error — retrying in {backoff}s")
+                time.sleep(backoff)
+                continue
+
+            text = _judge_reply_text(out)
+            return text if text.strip() else None
+    return None
+
+
 # ── verifier ───────────────────────────────────────────────────────────────
 
 
@@ -1776,6 +1962,139 @@ def cmd_ab(args: argparse.Namespace) -> None:
         _write_json_atomic(Path(args.results_file), final)
 
 
+# ── judge-audit command ─────────────────────────────────────────────────────
+
+
+DEFAULT_JUDGE_MODEL = "openrouter/google/gemini-2.5-flash"
+JUDGE_AUDIT_ALARM_THRESHOLD = 0.8
+
+
+def cmd_judge_audit(args: argparse.Namespace) -> None:
+    """Anti-gaming audit: replay the dense judge on BENCH session trajectories
+    where the verifier's pass/fail is ground truth (not a human opinion), and
+    alarm if the judge diverges from it too often. This is the Python-side
+    cross-check for the TS-side judge (opencode-plugin/src/judge.ts), which is
+    calibrated against human scores in the interactive loop — bench trajectories
+    give us an independent, objective ground truth to replay against.
+    """
+    from bench_store import (
+        append_meta_metric, candidate_exists, list_versions, read_score, read_trajectory,
+    )
+
+    meta_root = META_ROOT
+    layer = args.layer
+    candidate = args.candidate
+    agent = args.agent or ""
+    model = args.model
+    limit = args.limit
+
+    if not re.fullmatch(r"v\d+", candidate):
+        die(f"--candidate must look like vN, got {candidate!r}")
+
+    # Reuse the same layer-root resolution ab/run use (LAYER_CHOICES + the
+    # bench_store root resolvers); "global" pulls in both account/project
+    # rows, agent (if given) additionally pulls in the two role rows.
+    roots = dict(layer_store_roots("global", agent, meta_root))
+    if layer not in roots:
+        die(f"--layer {layer} requires --agent (role layers need --agent)")
+    layer_root = roots[layer]
+
+    if not candidate_exists(layer_root, candidate):
+        have = ", ".join(list_versions(layer_root)) or "none"
+        die(f"judge-audit: no such candidate {candidate!r} under {layer_root} (have: {have})")
+
+    score = read_score(layer_root, candidate)
+    sessions = score.get("sessions", [])
+    if not sessions:
+        log(f"judge-audit: no sessions recorded for {layer} {candidate} under "
+            f"{layer_root} — nothing to audit")
+        return
+
+    # Eligible: a trace with ground-truth `passed` AND a (non-pruned) traj ndjson.
+    eligible: list[tuple[str, bool, list, str]] = []
+    for s in sessions:
+        sid = s.get("sessionID")
+        if not sid or "passed" not in s:
+            continue
+        traj = read_trajectory(layer_root, candidate, sid)
+        if not traj:
+            continue
+        note = s.get("summary") or s.get("note") or sid
+        eligible.append((sid, bool(s["passed"]), traj, note))
+
+    if not eligible:
+        log(f"judge-audit: {len(sessions)} session(s) recorded for {layer} {candidate}, "
+            f"but none have BOTH a trace and a trajectory ndjson (likely pruned by "
+            f"prune_trajectories, or all-passing runs with save_all_traj off) — "
+            f"nothing to audit")
+        return
+
+    eligible = eligible[:limit]
+    log(f"judge-audit: {layer} {candidate} — replaying judge ({model}) on "
+        f"{len(eligible)} session(s) (of {len(sessions)} recorded)")
+
+    rows: list[tuple[str, bool, Optional[bool], str]] = []
+    n_scored = 0
+    n_agree = 0
+    n_skipped = 0
+
+    for sid, truth, traj, note in eligible:
+        prompt = build_judge_audit_prompt(traj, note)
+        reply_text = run_judge_opencode(prompt, model)
+        if reply_text is None:
+            log(f"  {sid}: judge call failed after retries — skip")
+            rows.append((sid, truth, None, "skip"))
+            n_skipped += 1
+            continue
+        verdict = parse_judge_reply(reply_text)
+        if verdict is None:
+            log(f"  {sid}: judge reply had no parseable verdict — skip")
+            rows.append((sid, truth, None, "skip"))
+            n_skipped += 1
+            continue
+        judge_passed = bool(verdict["passed"])
+        agree = judge_passed == truth
+        n_scored += 1
+        if agree:
+            n_agree += 1
+        rows.append((sid, truth, judge_passed, "agree" if agree else "DISAGREE"))
+
+    # Per-session table
+    print("\n" + "=" * 74)
+    print(f"{'sessionID':<44} {'truth':>6} {'judge':>7} {'agree?':>9}")
+    print("-" * 74)
+    for sid, truth, judged, tag in rows:
+        truth_s = "PASS" if truth else "FAIL"
+        judge_s = "PASS" if judged is True else ("FAIL" if judged is False else "SKIP")
+        print(f"{sid[:44]:<44} {truth_s:>6} {judge_s:>7} {tag:>9}")
+    print("=" * 74)
+
+    agreement = (n_agree / n_scored) if n_scored else 0.0
+    print(f"judge-audit: {n_scored} scored, {n_skipped} skipped (of {len(eligible)}) — "
+          f"agreement={agreement:.1%}")
+
+    append_meta_metric({
+        "event": "judge-audit", "n": n_scored, "agreement": round(agreement, 4),
+        "model": model, "layer": layer, "candidate": candidate,
+    })
+
+    if n_scored == 0:
+        log("judge-audit: no scoreable verdicts (every judge call failed/parsed as "
+            "garbage) — cannot assess agreement, treating as a non-alarm (fix the "
+            "judge invocation and re-run)")
+        return
+
+    if agreement < JUDGE_AUDIT_ALARM_THRESHOLD:
+        print(f"\n*** ALARM: judge-audit agreement {agreement:.1%} is BELOW the "
+              f"{JUDGE_AUDIT_ALARM_THRESHOLD:.0%} threshold ***")
+        print("*** The judge disagrees with the verifier's ground truth too often — "
+              "it may be gameable (fooled by trajectories that look successful but "
+              "aren't verified). Investigate before trusting judge-gated decisions. ***")
+        sys.exit(1)
+
+    log(f"judge-audit: agreement {agreement:.1%} >= {JUDGE_AUDIT_ALARM_THRESHOLD:.0%} — OK")
+
+
 # ── CLI ────────────────────────────────────────────────────────────────────
 
 
@@ -2069,6 +2388,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_report.add_argument("--sink", action="append", metavar="PATH",
                           help="Extra meta-metrics.jsonl to merge (repeatable)")
 
+    # judge-audit
+    p_judge_audit = sub.add_parser(
+        "judge-audit",
+        help="Anti-gaming audit: replay the dense judge on bench trajectories vs verifier ground truth",
+    )
+    p_judge_audit.add_argument("--layer", required=True, choices=list(LAYER_CHOICES),
+                               help="Which layer's candidate store to read sessions from")
+    p_judge_audit.add_argument("--candidate", required=True, metavar="vN",
+                               help="Candidate version to audit")
+    p_judge_audit.add_argument("--model", default=DEFAULT_JUDGE_MODEL,
+                               help=f"Judge model ID, provider-prefixed (default: {DEFAULT_JUDGE_MODEL})")
+    p_judge_audit.add_argument("--limit", type=int, default=10,
+                               help="Max sessions to replay the judge on (default 10)")
+    p_judge_audit.add_argument("--agent", default="", metavar="NAME",
+                               help="Role agent (required for account-role/project-role layers)")
+
     return parser
 
 
@@ -2092,6 +2427,8 @@ def main() -> None:
         cmd_oracle(args)
     elif args.command == "report-loop":
         cmd_report_loop(args)
+    elif args.command == "judge-audit":
+        cmd_judge_audit(args)
     else:
         parser.print_help()
         sys.exit(1)
