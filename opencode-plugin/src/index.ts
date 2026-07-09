@@ -53,6 +53,7 @@ import {
   resolveTrial,
   activateCandidate,
   readAbVerdict,
+  abAccepted,
   DEFAULT_SYSTEM_PROMPT,
   type StoreLayer,
   type ToolUsage,
@@ -315,6 +316,16 @@ const metaHarness: Plugin = async (input) => {
         return
       }
 
+      // Record into all 4 stores
+      const layers = layersFor(worktree, agent)
+      const model = sessionModel.get(sessionID) ?? "unknown"
+      // Confound-control provenance: which harness composed this session.
+      const env = {
+        provider: model.includes("/") ? model.split("/")[0] : "unknown",
+        layerVersions: Object.fromEntries(
+          layers.map((l) => [l.scope, activeVersion(l.root)]),
+        ),
+      }
       const record = {
         sessionID,
         passed: result.passed,
@@ -322,13 +333,12 @@ const metaHarness: Plugin = async (input) => {
         turnCount: sessionTurns.get(sessionID) ?? 0,
         timestamp: new Date().toISOString(),
         summary: sessionSummary.get(sessionID) ?? "",
-        model: sessionModel.get(sessionID) ?? "unknown",
+        model,
         variant: sessionVariant.get(sessionID) ?? "",
         toolUsage: sessionToolUsage.get(sessionID) ?? {},
+        env,
       }
 
-      // Record into all 4 stores
-      const layers = layersFor(worktree, agent)
       const scores = layers.map((layer) => {
         const version = activeVersion(layer.root)
         return { layer, score: recordSession(layer.root, version, record) }
@@ -443,10 +453,15 @@ const metaHarness: Plugin = async (input) => {
         if (isAccount && !force) {
           const verdict = readAbVerdict(layer.root, version)
           if (!verdict) {
-            throw new Error(`Meta-Harness: no ab-verdict.json for ${layer.scope} ${version} — run "runner.py ab --layer ${layer.scope} --candidate ${version} ..." first, or pass --force`)
+            throw new Error(`Meta-Harness: no ab-verdict.json for ${layer.scope} ${version} — run "runner.py ab --layer ${layer.scope} --candidate ${version}" first, or pass --force`)
           }
-          if (verdict.winner !== "candidate") {
-            throw new Error(`Meta-Harness: ${version} did not win the ab compare (candidate ${fmtRate(verdict.candidateRate)} vs active ${fmtRate(verdict.activeRate)}, n=${verdict.nTasks}, winner=${verdict.winner}) — refusing; pass --force to override`)
+          if (!abAccepted(verdict)) {
+            const dec = verdict.decision ?? `winner=${verdict.winner}`
+            const hi = verdict.heldIn
+            const detail = hi
+              ? `held-in delta=${hi.delta >= 0 ? "+" : ""}${hi.delta} p=${hi.mcnemarP} CI90=${JSON.stringify(hi.bootCI90)}`
+              : `candidate ${fmtRate(verdict.candidateRate)} vs active ${fmtRate(verdict.activeRate)}, n=${verdict.nTasks}`
+            throw new Error(`Meta-Harness: ${version} was not accepted by the ab gate (${dec}; ${detail}) — refusing; pass --force to override`)
           }
         }
         const ok = activateCandidate(layer.root, version)
@@ -498,9 +513,14 @@ const metaHarness: Plugin = async (input) => {
           const newest = versions.length ? versions[versions.length - 1] : undefined
           if (newest && newest !== ver) {
             const verdict = readAbVerdict(layer.root, newest)
-            const vinfo = verdict
-              ? `verdict=${verdict.winner} (${fmtRate(verdict.candidateRate)} vs ${fmtRate(verdict.activeRate)})`
-              : "no verdict"
+            let vinfo = "no verdict"
+            if (verdict) {
+              const dec = verdict.decision ?? `winner=${verdict.winner}`
+              const hi = verdict.heldIn
+              vinfo = hi
+                ? `${dec} (held-in delta=${hi.delta >= 0 ? "+" : ""}${hi.delta} p=${hi.mcnemarP} CI90=${JSON.stringify(hi.bootCI90)})`
+                : `${dec} (${fmtRate(verdict.candidateRate)} vs ${fmtRate(verdict.activeRate)})`
+            }
             line += ` | candidate ${newest}: ${vinfo}`
           }
           lines.push(line)

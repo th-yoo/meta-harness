@@ -93,6 +93,8 @@ export interface SessionRecord {
   variant: string
   /** Tool call counts + best-effort error counts for this session. */
   toolUsage: ToolUsage
+  /** Confound-control provenance (harness hash, plugin sha, provider…); optional. */
+  env?: Record<string, unknown>
 }
 
 export interface CandidateScore {
@@ -132,13 +134,39 @@ export type TrialResolution =
   | { action: "confirmed"; trial: string; trialRate: number; baselineRate: number | null }
   | { action: "reverted"; trial: string; baseline: string; trialRate: number; baselineRate: number }
 
-/** Verdict written by the Python `ab` runner into candidates/<vN>/ab-verdict.json. */
+/** Per-set paired statistics block in a v2 verdict. */
+export interface AbSetStats {
+  nTasks: number
+  nPairs: number
+  b: number
+  c: number
+  delta: number
+  mcnemarP: number
+  bootCI90: [number, number]
+}
+
+/** Verdict written by the Python `ab` runner into candidates/<vN>/ab-verdict.json.
+ * v1 fields (winner/rates) are always present; v2 adds the statistical decision. */
 export interface AbVerdict {
   winner: "candidate" | "active" | "tie"
   candidateRate: number
   activeRate: number
   nTasks: number
   timestamp: string
+  // v2 (optional — old verdicts still parse)
+  schemaVersion?: number
+  decision?: "accept" | "reject" | "inconclusive"
+  reasons?: string[]
+  heldIn?: AbSetStats
+  heldOut?: AbSetStats | null
+  earlyStopped?: boolean
+  split?: unknown
+}
+
+/** Accept a candidate iff the v2 decision says "accept"; fall back to the v1
+ * winner field for pre-v2 verdicts. This is the single gate /mh-activate uses. */
+export function abAccepted(v: AbVerdict): boolean {
+  return v.decision !== undefined ? v.decision === "accept" : v.winner === "candidate"
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -290,10 +318,25 @@ function passRate(score: CandidateScore): number {
   return score.sessions.length > 0 ? score.nPass / score.sessions.length : 0
 }
 
+function sessionModel(s: SessionRecord): string {
+  return s.model || "unknown"
+}
+
+function rateOf(sessions: SessionRecord[]): number {
+  return sessions.length > 0 ? sessions.filter((s) => s.passed).length / sessions.length : 0
+}
+
 /**
  * Resolve an in-progress trial: confirm (keep) if it matches/beats the baseline
  * rate after minSessions, revert (restore baseline text) otherwise. No-op while
  * fewer than minSessions have been scored.
+ *
+ * Confound control: the comparison is **same-model only** — a model switch must
+ * not masquerade as a rule effect (harness gains are model-specific). Trial
+ * sessions are filtered to the model set present in the baseline; other-model
+ * sessions are still recorded, just excluded from this gate. If the baseline has
+ * no sessions there is nothing to match, so the original (unfiltered) behaviour
+ * applies.
  */
 export function resolveTrial(storeRoot: string): TrialResolution {
   const trial = readTrial(storeRoot)
@@ -306,15 +349,27 @@ export function resolveTrial(storeRoot: string): TrialResolution {
   }
 
   const trialScore = readScore(storeRoot, trial.trial)
-  if (trialScore.sessions.length < trial.minSessions) {
-    return { action: "pending", have: trialScore.sessions.length, need: trial.minSessions }
+  const baselineScore = readScore(storeRoot, trial.baseline)
+
+  // No baseline to compare against — nothing to stratify by; keep original path.
+  if (baselineScore.sessions.length === 0) {
+    if (trialScore.sessions.length < trial.minSessions) {
+      return { action: "pending", have: trialScore.sessions.length, need: trial.minSessions }
+    }
+    clearTrial(storeRoot)
+    return { action: "confirmed", trial: trial.trial, trialRate: passRate(trialScore), baselineRate: null }
   }
 
-  const baselineScore = readScore(storeRoot, trial.baseline)
-  const baselineRate = baselineScore.sessions.length > 0 ? passRate(baselineScore) : null
-  const trialRate = passRate(trialScore)
+  const baseModels = new Set(baselineScore.sessions.map(sessionModel))
+  const trialSame = trialScore.sessions.filter((s) => baseModels.has(sessionModel(s)))
+  if (trialSame.length < trial.minSessions) {
+    return { action: "pending", have: trialSame.length, need: trial.minSessions }
+  }
 
-  if (baselineRate === null || trialRate >= baselineRate) {
+  const baselineRate = passRate(baselineScore)
+  const trialRate = rateOf(trialSame)
+
+  if (trialRate >= baselineRate) {
     clearTrial(storeRoot)
     return { action: "confirmed", trial: trial.trial, trialRate, baselineRate }
   }

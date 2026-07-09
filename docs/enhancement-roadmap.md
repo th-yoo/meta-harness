@@ -95,6 +95,16 @@ TBD
 
 ### Phase 1 — Statistical gate + held-out split (ships first, alone; gates everything)
 
+> **Status: IMPLEMENTED (2026-07-09).** `term-bench2/ab_stats.py` (+ `test_ab_stats.py`,
+> 16/16), `splits.json` + `split make|rotate|show` + `load_active_split`, reworked
+> `cmd_ab` (split-based, held-in-first futility, held-out arm-B never recorded, verdict
+> schema v2), provenance `env` block (harnessHash/pluginSha/opencodeVersion/provider/
+> maxAgentTimeout) on bench SessionRecords + verdict, and TS `AbVerdict` v2 +
+> `abAccepted` gate + `/mh-status` + same-model `resolveTrial`. **Deferred:** the
+> score.json concurrent-writer flock (from the Storage decision below) — the race
+> loses ≤1 entry and is recoverable from per-session `traces/`; land it when a real
+> concurrent-writer scenario appears.
+
 **Honest power analysis (design constraint):** paired McNemar at ~20% discordance: 43 pairs detect ~14pp; 33 held-in × k=2 (66 pairs) ~11pp; k=3 ~9pp; a 5pp effect needs ~500 pairs (unaffordable). Consequence: single `ab` can't certify small wins → three-way `decision: accept|reject|inconclusive`; gate's job = reject regressions/noise cheaply, accept only large effects, surface CI to the human otherwise.
 
 - **New `term-bench2/ab_stats.py`** (pure, no I/O, no scipy): `paired_run_stats(task_results) -> PairStats {n_tasks,n_pairs,b,c,delta,task_deltas}`; `mcnemar_exact_one_sided(b,c)` (binomial tail); `bootstrap_task_ci(task_deltas, n_boot=10k, alpha=.10)`; `futility_stop(b,c,tasks_done,min_tasks=12,net_behind=3)` (early-KILL only — no early-accept, no alpha inflation); `decide(held_in, held_out, cfg) -> (decision, reasons)`.

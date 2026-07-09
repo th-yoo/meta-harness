@@ -21,8 +21,10 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import random
 import re
 import shlex
 import shutil
@@ -41,6 +43,7 @@ from typing import Optional
 SCRIPT_DIR = Path(__file__).resolve().parent
 META_ROOT = SCRIPT_DIR.parent
 TB_ROOT_DEFAULT = META_ROOT.parent / "terminal-bench-2"
+SPLITS_PATH_DEFAULT = SCRIPT_DIR / "splits.json"
 
 # TB2 task scripts hardcode /app, /tests, /logs/verifier.
 # We never touch the real filesystem root. Instead every subprocess runs inside
@@ -892,8 +895,54 @@ def run_verifier(verifier_timeout: float, task: str = "") -> int:
 # ── store recording ────────────────────────────────────────────────────────
 
 
+# ── run provenance (env block for confound control) ────────────────────────
+
+_ENV_CACHE: dict = {}
+
+
+def _opencode_version() -> str:
+    if "oc" not in _ENV_CACHE:
+        try:
+            out = subprocess.run(["opencode", "--version"], capture_output=True,
+                                 text=True, timeout=10)
+            _ENV_CACHE["oc"] = ((out.stdout or out.stderr).strip().splitlines() or ["unknown"])[0][:40]
+        except Exception:
+            _ENV_CACHE["oc"] = "unknown"
+    return _ENV_CACHE["oc"]
+
+
+def _plugin_sha() -> str:
+    if "sha" not in _ENV_CACHE:
+        try:
+            out = subprocess.run(["git", "-C", str(META_ROOT), "rev-parse", "--short", "HEAD"],
+                                 capture_output=True, text=True, timeout=10)
+            _ENV_CACHE["sha"] = out.stdout.strip() or "unknown"
+        except Exception:
+            _ENV_CACHE["sha"] = "unknown"
+    return _ENV_CACHE["sha"]
+
+
+def harness_hash(harness_md: str) -> str:
+    """sha256 (first 16 hex) of the exact injected AGENTS.md bytes — pins record
+    which candidate, this records what was actually composed and served."""
+    return hashlib.sha256(harness_md.encode("utf-8")).hexdigest()[:16]
+
+
+def env_block(harness_md: str, max_agent_timeout: float, model: str) -> dict:
+    """Confound-control provenance: the config that, per the infra-noise study,
+    swings outcomes independently of the harness rule under test."""
+    return {
+        "opencodeVersion": _opencode_version(),
+        "pluginSha": _plugin_sha(),
+        "harnessHash": harness_hash(harness_md),
+        "maxAgentTimeout": max_agent_timeout or 0,
+        "provider": model.split("/")[0] if "/" in model else "unknown",
+    }
+
+
 def _session_record(task: str, session_id: str, passed: bool, turn_count: int,
-                    tool_usage: dict, model: str, variant: str) -> dict:
+                    tool_usage: dict, model: str, variant: str,
+                    env: Optional[dict] = None) -> dict:
     """Build a SessionRecord (matches harness-store.ts SessionRecord shape)."""
     return {
         "sessionID": session_id,
@@ -905,6 +954,7 @@ def _session_record(task: str, session_id: str, passed: bool, turn_count: int,
         "model": model,
         "variant": variant or "",
         "toolUsage": tool_usage,
+        "env": env or {},
     }
 
 
@@ -921,6 +971,7 @@ def record_to_stores(
     no_store: bool,
     agent: str = "",
     pins: Optional[dict] = None,
+    env: Optional[dict] = None,
 ) -> None:
     if no_store:
         return
@@ -933,7 +984,8 @@ def record_to_stores(
     from bench_store import active_version, record_session
 
     pins = pins or {}
-    record = _session_record(task, session_id, passed, turn_count, tool_usage, model, variant)
+    record = _session_record(task, session_id, passed, turn_count, tool_usage,
+                             model, variant, env)
 
     for name, root in layer_store_roots(layers, agent, meta_root):
         ver = pins.get(name) or active_version(root)
@@ -1115,6 +1167,7 @@ def cmd_run(args: argparse.Namespace) -> None:
     # Snapshot harness provenance before any runs
     harness_meta = (_harness_meta(layers, meta_root, agent, pins)
                     if layers != "none" else {"layers": "none"})
+    run_env = env_block(harness_md, args.max_agent_timeout, model)
 
     results: list[dict] = []
     # Per-task aggregated results for results file: {task: {rewards:[], elapsed:[], turns:[]}}
@@ -1170,7 +1223,7 @@ def cmd_run(args: argparse.Namespace) -> None:
             # Record to candidate store (skipped when results_file / --no-store)
             record_to_stores(
                 task, res["session_id"], passed, turn_count, res["tool_usage"],
-                model, variant, layers, meta_root, no_store, agent, pins,
+                model, variant, layers, meta_root, no_store, agent, pins, run_env,
             )
 
             results.append({
@@ -1363,20 +1416,81 @@ def cmd_oracle(args: argparse.Namespace) -> None:
         })
 
 
+# ── held-out split ─────────────────────────────────────────────────────────
+
+
+def load_active_split(splits_path: Path) -> tuple[list[str], list[str], dict]:
+    """Return (held_in, held_out, split_meta) from splits.json.
+    held_out = folds[activeFold]; held_in = all other folds concatenated."""
+    data = json.loads(splits_path.read_text())
+    folds = data["folds"]
+    active = int(data.get("activeFold", 0))
+    held_out = list(folds[active])
+    held_in = [t for i, f in enumerate(folds) if i != active for t in f]
+    meta = {"file": splits_path.name, "activeFold": active,
+            "heldIn": held_in, "heldOut": held_out}
+    return held_in, held_out, meta
+
+
+def cmd_split(args: argparse.Namespace) -> None:
+    splits_path = Path(args.split_file) if args.split_file else SPLITS_PATH_DEFAULT
+    if args.split_cmd == "make":
+        source = SCRIPT_DIR / args.source
+        tasks = [ln.strip() for ln in source.read_text().splitlines()
+                 if ln.strip() and not ln.startswith("#")]
+        if not tasks:
+            die(f"split make: no tasks in {source}")
+        shuffled = tasks[:]
+        random.Random(args.seed).shuffle(shuffled)
+        k = args.folds
+        folds = [shuffled[i::k] for i in range(k)]   # round-robin over a shuffled list → balanced
+        data = {"schemaVersion": 1, "seed": args.seed, "source": source.name,
+                "folds": folds, "activeFold": 0, "rotatedAt": None}
+        _write_json_atomic(splits_path, data)
+        log(f"split: wrote {splits_path} — {len(tasks)} tasks, {k} folds "
+            f"(sizes {[len(f) for f in folds]})")
+    elif args.split_cmd == "rotate":
+        if not splits_path.exists():
+            die(f"split rotate: {splits_path} not found — run 'split make' first")
+        data = json.loads(splits_path.read_text())
+        n = len(data["folds"])
+        data["activeFold"] = (int(data.get("activeFold", 0)) + 1) % n
+        data["rotatedAt"] = datetime.now(timezone.utc).isoformat()
+        _write_json_atomic(splits_path, data)
+        log(f"split: rotated → activeFold={data['activeFold']} of {n}")
+    else:  # show
+        if not splits_path.exists():
+            die(f"split show: {splits_path} not found — run 'split make' first")
+        data = json.loads(splits_path.read_text())
+        held_in, held_out, meta = load_active_split(splits_path)
+        print(f"splits: {splits_path}  seed={data.get('seed')}  folds={len(data['folds'])}  "
+              f"activeFold={meta['activeFold']}  sizes={[len(f) for f in data['folds']]}")
+        print(f"  held-out ({len(held_out)}): {', '.join(held_out)}")
+        print(f"  held-in  ({len(held_in)}): {', '.join(held_in)}")
+
+
 # ── ab command ─────────────────────────────────────────────────────────────
 
 
 def cmd_ab(args: argparse.Namespace) -> None:
-    """A/B compare a candidate vs the active version of ONE layer on a task set.
+    """Statistically-gated A/B of a candidate vs the active version of ONE layer.
 
-    Runs each task through both arms (arm A = all-active composition, arm B =
-    same but the target layer pinned to the candidate), interleaved per pair to
-    neutralise environment drift. Writes candidates/<vN>/ab-verdict.json — the
-    cross-language contract read by the opencode plugin's /mh-activate.
+    Arm A = all-active composition, arm B = same but the target layer pinned to
+    the candidate; interleaved per run-pair to neutralise drift. By default the
+    task set is the checked-in held-in/held-out split (splits.json): held-in is
+    scored first with a futility early-kill; the held-out fold is run only if the
+    candidate survives, and its arm-B sessions are NEVER written to score.json
+    (the proposer must never see them). The decision (accept|reject|inconclusive)
+    comes from ab_stats.decide over paired McNemar + a held-out no-regression
+    guard. Writes candidates/<vN>/ab-verdict.json — the contract /mh-activate reads.
     """
     from bench_store import (
         active_version, candidate_exists, candidate_path,
         list_versions, record_session,
+    )
+    from ab_stats import (
+        DecisionConfig, paired_run_stats, futility_stop, decide,
+        bootstrap_task_ci, mcnemar_exact_one_sided,
     )
     tb_root = Path(args.tb_root).expanduser().resolve()
     if not tb_root.exists():
@@ -1397,7 +1511,6 @@ def cmd_ab(args: argparse.Namespace) -> None:
     if layer in ("account-role", "project-role") and not agent:
         die(f"--layer {layer} requires --agent")
 
-    # Resolve the layer's store root from the composition
     roots = dict(layer_store_roots(layers, agent, meta_root))
     if layer not in roots:
         die(f"--layer {layer} not included by --layers {layers}"
@@ -1412,123 +1525,184 @@ def cmd_ab(args: argparse.Namespace) -> None:
     if baseline == candidate:
         die(f"candidate {candidate} is already the active version — nothing to compare")
 
-    tasks = select_tasks(args)
+    # ── Task selection: split (default) vs legacy explicit ──────────────────
+    explicit = bool(args.tasks or args.task_file or args.all)
+    if explicit:
+        held_in_tasks = select_tasks(args)
+        held_out_tasks: list[str] = []
+        split_meta = None
+        active_fold = -1
+        log("ab: LEGACY mode (explicit tasks) — no held-out split; a verdict can be "
+            "reject/inconclusive only, never accept")
+    else:
+        splits_path = Path(args.split_file) if args.split_file else SPLITS_PATH_DEFAULT
+        if not splits_path.exists():
+            die(f"no split at {splits_path} — run 'runner.py split make', or pass "
+                "--tasks/--task-file/--all for legacy mode")
+        held_in_tasks, held_out_tasks, split_meta = load_active_split(splits_path)
+        active_fold = split_meta["activeFold"]
+        manifest = load_manifest()
+        for t in held_in_tasks + held_out_tasks:
+            if t not in manifest:
+                die(f"split task {t!r} not in manifest.json")
 
     # Compose both arms once (they differ in exactly one layer by construction)
     harness_a = assemble_agents_md(layers, meta_root, agent, pins={})
     harness_b = assemble_agents_md(layers, meta_root, agent, pins={layer: candidate})
+    env_b = env_block(harness_b, args.max_agent_timeout, model)
+
+    cfg = DecisionConfig(alpha=args.alpha, nonregress_margin=args.nonregress_margin)
+    early_stop = not args.no_early_stop
+    min_tasks = args.min_tasks_before_stop
 
     verdict_path = candidate_path(layer_root, candidate, "ab-verdict.json")
     partial_path = candidate_path(layer_root, candidate, "ab-verdict.partial.json")
 
-    run_meta = {"layer": layer, "candidate": candidate, "baseline": baseline,
-                "model": model, "k": k}
+    run_ident = {"layer": layer, "candidate": candidate, "baseline": baseline,
+                 "model": model, "k": k, "activeFold": active_fold}
 
-    log(f"A/B: {layer} {candidate} vs active {baseline} on {len(tasks)} task(s) × k={k}")
+    log(f"A/B: {layer} {candidate} vs active {baseline}  "
+        f"held-in={len(held_in_tasks)} held-out={len(held_out_tasks)}  k={k}  "
+        f"fold={active_fold}")
     if agent:
         log(f"Agent role layers: {agent}")
 
-    # Resume: carry over tasks already fully evaluated (both arms × k, or setup_failed)
     task_results: dict[str, dict] = {}
+    early_stopped = False
+
     if args.resume and partial_path.exists():
         try:
             prev = json.loads(partial_path.read_text())
         except Exception:
             prev = {}
-        for kk in ("layer", "candidate", "baseline", "model", "k"):
-            if prev.get(kk) != run_meta[kk]:
-                die(f"--resume: prior partial {kk}={prev.get(kk)!r} != {run_meta[kk]!r}; "
+        for kk, v in run_ident.items():
+            if prev.get(kk) != v:
+                die(f"--resume: prior partial {kk}={prev.get(kk)!r} != {v!r}; "
                     "delete the partial to restart")
+        early_stopped = bool(prev.get("earlyStopped", False))
         for t, tr in prev.get("taskResults", {}).items():
             if tr.get("error") == "setup_failed":
                 task_results[t] = tr
             elif len(tr.get("candidate", [])) >= k and len(tr.get("active", [])) >= k:
                 task_results[t] = tr
         if task_results:
-            log(f"Resuming ab: {len(task_results)} task(s) already complete")
+            log(f"Resuming ab: {len(task_results)} task(s) already complete"
+                + (" (early-stopped)" if early_stopped else ""))
 
     run_start_ts = datetime.now(timezone.utc).isoformat()
 
+    def _stats(phase: str):
+        sub = {t: tr for t, tr in task_results.items() if tr.get("phase") == phase}
+        return paired_run_stats(sub)
+
+    def _stats_block(ps) -> dict:
+        return {"nTasks": ps.n_tasks, "nPairs": ps.n_pairs, "b": ps.b, "c": ps.c,
+                "delta": round(ps.delta, 4),
+                "mcnemarP": round(mcnemar_exact_one_sided(ps.b, ps.c), 4),
+                "bootCI90": list(bootstrap_task_ci(list(ps.task_deltas.values())))}
+
     def _verdict_dict(status: str) -> dict:
-        included = {t: tr for t, tr in task_results.items()
-                    if tr.get("error") != "setup_failed"}
-        n_tasks = len(included)
-        cand_pass = sum(1 for tr in included.values() if max(tr["candidate"]) == 1)
-        act_pass = sum(1 for tr in included.values() if max(tr["active"]) == 1)
-        cand_rate = round(cand_pass / n_tasks, 4) if n_tasks else 0.0
-        act_rate = round(act_pass / n_tasks, 4) if n_tasks else 0.0
-        if cand_pass > act_pass:
-            winner = "candidate"
-        elif cand_pass < act_pass:
-            winner = "active"
-        else:
-            winner = "tie"
+        hi = _stats("held-in")
+        ho = _stats("held-out") if held_out_tasks else None
+        decision, reasons = decide(hi, ho, cfg)
+        if early_stopped and decision != "reject":
+            decision = "reject"
+            reasons.append("early-stopped on futility")
+        winner = {"accept": "candidate", "reject": "active", "inconclusive": "tie"}[decision]
+        included = {t: tr for t, tr in task_results.items() if not tr.get("error")}
+        n_all = len(included)
+        cand_pass = sum(1 for tr in included.values() if tr["candidate"] and max(tr["candidate"]) == 1)
+        act_pass = sum(1 for tr in included.values() if tr["active"] and max(tr["active"]) == 1)
         d = {
-            "layer": layer,
-            "candidate": candidate,
-            "baseline": baseline,
-            "winner": winner,
-            "candidateRate": cand_rate,
-            "activeRate": act_rate,
-            "nTasks": n_tasks,
-            "k": k,
+            "schemaVersion": 2,
+            "layer": layer, "candidate": candidate, "baseline": baseline,
+            "decision": decision, "winner": winner, "reasons": reasons,
+            "candidateRate": round(cand_pass / n_all, 4) if n_all else 0.0,
+            "activeRate": round(act_pass / n_all, 4) if n_all else 0.0,
+            "nTasks": n_all, "k": k,
+            "heldIn": _stats_block(hi),
+            "heldOut": _stats_block(ho) if ho else None,
+            "earlyStopped": early_stopped,
+            "split": split_meta,
+            "env": env_b,
             "taskResults": task_results,
-            "model": model,
-            "timestamp": run_start_ts,
+            "model": model, "variant": variant, "timestamp": run_start_ts,
         }
         if status:
             d["status"] = status
         return d
 
-    for task in tasks:
-        if task in task_results:
-            log(f"\n=== ab {task} (skipped — already done) ===")
-            continue
-        log(f"\n=== ab {task}: {candidate} vs active {baseline} ===")
-        agent_timeout, verifier_timeout = task_timeouts(task, tb_root, args.max_agent_timeout)
-        tr: dict = {"candidate": [], "active": []}
-        for ki in range(k):
-            if k > 1:
-                log(f"  -- pair {ki+1}/{k} --")
-            log("  [arm A: active]")
-            res_a = run_task_once(task, tb_root, model, variant, harness_a,
-                                  agent_timeout, verifier_timeout)
-            log("  [arm B: candidate]")
-            res_b = run_task_once(task, tb_root, model, variant, harness_b,
-                                  agent_timeout, verifier_timeout)
-            if res_a["error"] == "setup_failed" or res_b["error"] == "setup_failed":
-                tr["error"] = "setup_failed"
-                log("  setup_failed — task excluded from rates")
+    def _run_phase(phase: str, task_list: list[str], record_arm_b: bool) -> None:
+        nonlocal early_stopped
+        for task in task_list:
+            if early_stopped:
                 break
-            tr["active"].append(res_a["reward"])
-            tr["candidate"].append(res_b["reward"])
-            # Record ONLY arm B (the candidate) into the candidate's score.json
-            if not no_store and res_b["turns"] > 0:
-                rec = _session_record(task, res_b["session_id"], res_b["reward"] == 1,
-                                      res_b["turns"], res_b["tool_usage"], model, variant)
-                score = record_session(layer_root, candidate, rec)
-                log(f"  store {layer} {candidate}: nPass={score['nPass']} nFail={score['nFail']}")
-        task_results[task] = tr
-        _write_json_atomic(partial_path, _verdict_dict("in_progress"))
+            if task in task_results:
+                log(f"\n=== ab {task} [{phase}] (skipped — already done) ===")
+                continue
+            log(f"\n=== ab {task} [{phase}]: {candidate} vs active {baseline} ===")
+            at, vt = task_timeouts(task, tb_root, args.max_agent_timeout)
+            tr: dict = {"candidate": [], "active": [], "phase": phase}
+            for ki in range(k):
+                if k > 1:
+                    log(f"  -- pair {ki+1}/{k} --")
+                log("  [arm A: active]")
+                res_a = run_task_once(task, tb_root, model, variant, harness_a, at, vt)
+                log("  [arm B: candidate]")
+                res_b = run_task_once(task, tb_root, model, variant, harness_b, at, vt)
+                if res_a["error"] == "setup_failed" or res_b["error"] == "setup_failed":
+                    tr["error"] = "setup_failed"
+                    log("  setup_failed — task excluded from rates")
+                    break
+                tr["active"].append(res_a["reward"])
+                tr["candidate"].append(res_b["reward"])
+                # Record ONLY arm B, and ONLY for held-in (held-out stays invisible
+                # to the proposer — evaluator outside the loop).
+                if record_arm_b and not no_store and res_b["turns"] > 0:
+                    rec = _session_record(task, res_b["session_id"], res_b["reward"] == 1,
+                                          res_b["turns"], res_b["tool_usage"], model, variant, env_b)
+                    score = record_session(layer_root, candidate, rec)
+                    log(f"  store {layer} {candidate}: nPass={score['nPass']} nFail={score['nFail']}")
+            task_results[task] = tr
+            _write_json_atomic(partial_path, _verdict_dict("in_progress"))
+
+            if phase == "held-in" and early_stop:
+                hi = _stats("held-in")
+                if futility_stop(hi.b, hi.c, hi.n_tasks, min_tasks=min_tasks):
+                    early_stopped = True
+                    log(f"  FUTILITY: candidate behind (b={hi.b} c={hi.c}) after "
+                        f"{hi.n_tasks} held-in tasks — early stop")
+
+    _run_phase("held-in", held_in_tasks, record_arm_b=True)
+    if not early_stopped:
+        _run_phase("held-out", held_out_tasks, record_arm_b=False)
 
     final = _verdict_dict("")   # final file never carries a status key
     _write_json_atomic(verdict_path, final)
     partial_path.unlink(missing_ok=True)
 
     # Summary
-    print("\n" + "=" * 68)
-    print(f"{'Task':<34} {'candidate':>12} {'active':>10}  {'verdict':>8}")
-    print("-" * 68)
+    print("\n" + "=" * 74)
+    print(f"{'Task':<30} {'phase':>9} {'candidate':>12} {'active':>10}  {'verdict':>7}")
+    print("-" * 74)
     for t, tr in task_results.items():
+        ph = tr.get("phase", "?")
         if tr.get("error") == "setup_failed":
-            print(f"{t[:33]:<34} {'—':>12} {'—':>10}  {'skip':>8}")
+            print(f"{t[:29]:<30} {ph:>9} {'—':>12} {'—':>10}  {'skip':>7}")
             continue
         cp = max(tr["candidate"]); ap = max(tr["active"])
         v = "cand" if cp > ap else ("active" if cp < ap else "tie")
-        print(f"{t[:33]:<34} {str(tr['candidate']):>12} {str(tr['active']):>10}  {v:>8}")
-    print("=" * 68)
-    print(f"WINNER: {final['winner']}  (candidate {final['candidateRate']} "
-          f"vs active {final['activeRate']}, n={final['nTasks']})")
+        print(f"{t[:29]:<30} {ph:>9} {str(tr['candidate']):>12} {str(tr['active']):>10}  {v:>7}")
+    print("=" * 74)
+    hi = final["heldIn"]; ho = final["heldOut"]
+    print(f"DECISION: {final['decision'].upper()}   (winner={final['winner']})")
+    print(f"  held-in : delta={hi['delta']:+.3f} McNemar p={hi['mcnemarP']} "
+          f"CI90={hi['bootCI90']} (n={hi['nPairs']} pairs, b={hi['b']} c={hi['c']})")
+    if ho:
+        print(f"  held-out: delta={ho['delta']:+.3f} McNemar p={ho['mcnemarP']} "
+              f"CI90={ho['bootCI90']} (n={ho['nPairs']} pairs)")
+    for r in final["reasons"]:
+        print(f"  · {r}")
     log(f"Verdict written → {verdict_path}")
 
     if args.results_file:
@@ -1630,28 +1804,51 @@ def build_parser() -> argparse.ArgumentParser:
                       help="Which layer's candidate to test")
     p_ab.add_argument("--candidate", required=True, metavar="vN",
                       help="Candidate version to compare against the active version")
-    p_ab.add_argument("--tasks", nargs="+", metavar="TASK", help="Task name(s)")
+    p_ab.add_argument("--tasks", nargs="+", metavar="TASK",
+                      help="Explicit task(s) — LEGACY mode (no held-out split; never accepts)")
     p_ab.add_argument("--task-file", metavar="PATH",
-                      help="File with one task name per line")
-    p_ab.add_argument("--all", action="store_true", help="Use all target tasks")
+                      help="File with one task name per line — LEGACY mode")
+    p_ab.add_argument("--all", action="store_true", help="All target tasks — LEGACY mode")
+    p_ab.add_argument("--split-file", metavar="PATH",
+                      help="splits.json path (default: term-bench2/splits.json). "
+                           "Ignored when --tasks/--task-file/--all is given.")
     p_ab.add_argument("--model", default="anthropic/claude-sonnet-4-6",
                       help="Model ID (provider-prefixed; a bare name may fail "
                            "provider resolution under oauth)")
     p_ab.add_argument("--variant", default="", help="Model variant (e.g. high, low)")
-    p_ab.add_argument("--k", type=int, default=1, help="Pairs (A+B) per task")
+    p_ab.add_argument("--k", type=int, default=2,
+                      help="Run-pairs (A+B) per task (default 2 — the inferential unit)")
     p_ab.add_argument("--layers", default="global", choices=["global", "account", "project"],
                       help="Which side layers to compose (ab needs a composition; no 'none')")
     p_ab.add_argument("--agent", default="", metavar="NAME",
                       help="Role agent (required for account-role/project-role layers)")
+    p_ab.add_argument("--alpha", type=float, default=0.05,
+                      help="Held-in McNemar significance threshold for acceptance")
+    p_ab.add_argument("--nonregress-margin", type=float, default=0.05,
+                      help="Tolerated held-out point drop before it counts as a regression")
+    p_ab.add_argument("--min-tasks-before-stop", type=int, default=12,
+                      help="Held-in tasks completed before futility early-kill can trigger")
+    p_ab.add_argument("--no-early-stop", action="store_true",
+                      help="Disable the futility early-kill (run every task)")
     p_ab.add_argument("--max-agent-timeout", type=float, metavar="SEC", default=0,
                       help="Cap each task's agent timeout at SEC seconds")
     p_ab.add_argument("--resume", action="store_true",
                       help="Resume from ab-verdict.partial.json (completed tasks skipped)")
     p_ab.add_argument("--no-store", action="store_true",
-                      help="Do not write arm-B scores into the candidate's score.json "
+                      help="Do not write held-in arm-B scores into the candidate's score.json "
                            "(the verdict file is always written)")
     p_ab.add_argument("--results-file", metavar="PATH",
                       help="Also write the final verdict JSON here (does NOT disable store)")
+
+    # split
+    p_split = sub.add_parser("split", help="Manage the held-in/held-out task split (splits.json)")
+    p_split.add_argument("split_cmd", choices=["make", "rotate", "show"])
+    p_split.add_argument("--seed", type=int, default=42, help="shuffle seed for 'make'")
+    p_split.add_argument("--folds", type=int, default=4, help="number of folds for 'make'")
+    p_split.add_argument("--source", default="baseline-tasks.txt",
+                         help="task list file in term-bench2/ (for 'make')")
+    p_split.add_argument("--split-file", metavar="PATH",
+                         help="splits.json path (default: term-bench2/splits.json)")
 
     # oracle
     p_oracle = sub.add_parser("oracle", help="Validate pipeline with solution/solve.sh")
@@ -1678,6 +1875,8 @@ def main() -> None:
         cmd_run(args)
     elif args.command == "ab":
         cmd_ab(args)
+    elif args.command == "split":
+        cmd_split(args)
     elif args.command == "oracle":
         cmd_oracle(args)
     else:
