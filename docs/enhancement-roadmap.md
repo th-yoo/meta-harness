@@ -131,6 +131,17 @@ noise confound alongside Phase 1's fitness noise) and gives rule provenance.
   (calls are rare — cost negligible); task agent under evaluation = the optimization
   target model (already pinned via `ab --model`); Phase 4 judge = pinned and ideally
   a *different* model from the proposer (anti-gaming).
+- **Concrete pin (decided 2026-07-09): `anthropic/claude-opus-4-8`, variant `high`**,
+  via the existing oauth subscription. Fable 5 rejected for this role despite higher
+  capability: its cyber safety classifiers risk false-positive refusals on TB2
+  security-flavored trajectories (feal-cryptanalysis, password-recovery,
+  git-leak-recovery, model-extraction), its minutes-long turns collide with
+  triggerPropose's 10-min waitForFile staging timeout, and it requires 30-day data
+  retention at 2× the price. Sonnet 5 viable but wrong economy (STOP: weak proposer
+  → net-negative loop; proposer calls are rare). The available OpenRouter key is
+  reserved for: (a) the Phase-4 judge on a *different vendor* (cross-vendor
+  judge ≠ proposer ≠ task-agent = strongest anti-gaming), (b) a provider-outage
+  fallback proposer config (Anthropic degradation on 2026-07-09 stalled the loop).
 
 **Verify:** /mh-propose with an intentionally cheap interactive session model →
 proposer session logs the pinned model, not the session model; candidate metadata
