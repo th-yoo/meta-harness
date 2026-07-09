@@ -127,6 +127,8 @@ export interface TrialState {
   minSessions: number
   /** Snapshot of the baseline playbook so a revert restores it (Phase 3). */
   baselinePlaybook?: Playbook | null
+  /** Snapshot of the baseline agent config so a revert restores it (Phase 4B). */
+  baselineAgentConfig?: AgentConfig | null
 }
 
 export type TrialResolution =
@@ -418,6 +420,7 @@ export function writeActive(
   system: string,
   tools = "",
   playbook?: Playbook | null,
+  agentConfig?: AgentConfig | null,
 ): void {
   writeText(activePath(storeRoot, "system.md"), system)
   writeText(activePath(storeRoot, ".version"), version)
@@ -433,6 +436,11 @@ export function writeActive(
   if (playbook !== undefined) {
     if (playbook) writeJson(activePath(storeRoot, "playbook.json"), playbook)
     else fs.rmSync(activePath(storeRoot, "playbook.json"), { force: true })
+  }
+  // agentConfig: same tri-state contract as playbook above (Phase 4 Part B).
+  if (agentConfig !== undefined) {
+    if (agentConfig) writeJson(activePath(storeRoot, AGENT_CONFIG_FILE), agentConfig)
+    else fs.rmSync(activePath(storeRoot, AGENT_CONFIG_FILE), { force: true })
   }
 }
 
@@ -466,10 +474,12 @@ export function createCandidate(
   system: string,
   tools = "",
   playbook?: Playbook,
+  agentConfig?: AgentConfig,
 ): void {
   writeText(candidatePath(storeRoot, version, "system.md"), system)
   if (tools) writeText(candidatePath(storeRoot, version, "tools.md"), tools)
   if (playbook) writeJson(candidatePath(storeRoot, version, "playbook.json"), playbook)
+  if (agentConfig) writeJson(candidatePath(storeRoot, version, AGENT_CONFIG_FILE), agentConfig)
   writeJson(candidatePath(storeRoot, version, "score.json"), {
     version, nPass: 0, nFail: 0, sessions: [],
   })
@@ -593,6 +603,72 @@ export function seedPlaybook(storeRoot: string): Playbook | null {
   return pb
 }
 
+// ── AgentConfig (Phase 4 Part B — evolvable bash-timeout knobs) ────────────
+//
+// Rides the same lifecycle as the playbook (createCandidate → active →
+// activateCandidate/trial revert), one file per store: agent-config.json.
+// No field-level merging across layers — composeAgentConfig picks the whole
+// artifact from the most-specific layer that has one.
+
+export interface AgentConfig {
+  schemaVersion: 1
+  fastTimeoutMs?: number
+  extraFastCommands?: string[]
+  extraSlowCommands?: string[]
+}
+
+const AGENT_CONFIG_FILE = "agent-config.json"
+const FAST_TIMEOUT_MIN_MS = 500
+const FAST_TIMEOUT_MAX_MS = 30000
+const AGENT_CONFIG_COMMAND_RE = /^[a-z0-9._+-]{1,32}$/
+const AGENT_CONFIG_MAX_COMMANDS = 20
+
+function filterCommandList(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  return raw
+    .filter((c): c is string => typeof c === "string" && AGENT_CONFIG_COMMAND_RE.test(c))
+    .slice(0, AGENT_CONFIG_MAX_COMMANDS)
+}
+
+/** Validate/normalize a raw agent-config.json payload. null if not an object
+ * or schemaVersion !== 1. Clamps fastTimeoutMs, filters command lists to the
+ * allowed pattern (capped at 20 entries each), and drops unknown fields. */
+export function validateAgentConfig(raw: unknown): AgentConfig | null {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null
+  const r = raw as Record<string, unknown>
+  if (r["schemaVersion"] !== 1) return null
+
+  const out: AgentConfig = { schemaVersion: 1 }
+  if (typeof r["fastTimeoutMs"] === "number" && !Number.isNaN(r["fastTimeoutMs"])) {
+    out.fastTimeoutMs = Math.min(FAST_TIMEOUT_MAX_MS, Math.max(FAST_TIMEOUT_MIN_MS, r["fastTimeoutMs"]))
+  }
+  const extraFastCommands = filterCommandList(r["extraFastCommands"])
+  if (extraFastCommands) out.extraFastCommands = extraFastCommands
+  const extraSlowCommands = filterCommandList(r["extraSlowCommands"])
+  if (extraSlowCommands) out.extraSlowCommands = extraSlowCommands
+  return out
+}
+
+/** Dual-read like readPlaybook: candidate version if given, else the active
+ * layer file. Always validates — corrupt/legacy-shaped JSON reads as null. */
+export function readAgentConfig(storeRoot: string, version?: string): AgentConfig | null {
+  const p = version
+    ? candidatePath(storeRoot, version, AGENT_CONFIG_FILE)
+    : activePath(storeRoot, AGENT_CONFIG_FILE)
+  return validateAgentConfig(readJson<unknown>(p, null))
+}
+
+/** Most-specific layer (last in `layerRoots`) that HAS an active agent-config
+ * wins outright — no field-level merging across layers. */
+export function composeAgentConfig(layerRoots: string[]): AgentConfig | null {
+  let result: AgentConfig | null = null
+  for (const root of layerRoots) {
+    const cfg = readAgentConfig(root)
+    if (cfg) result = cfg
+  }
+  return result
+}
+
 // ── Trial mode + activation gate ───────────────────────────────────────────
 
 const TRIAL_FILE = ".trial"
@@ -620,6 +696,7 @@ export function startTrial(
   tools: string,
   minSessions: number,
   playbook: Playbook | null = null,
+  agentConfig: AgentConfig | null = null,
 ): void {
   const state: TrialState = {
     trial: trialVersion,
@@ -627,11 +704,12 @@ export function startTrial(
     baselineSystem: readActiveSystem(storeRoot),
     baselineTools: readActiveTools(storeRoot),
     baselinePlaybook: readPlaybook(storeRoot),
+    baselineAgentConfig: readAgentConfig(storeRoot),
     startedAt: new Date().toISOString(),
     minSessions,
   }
   writeJson(activePath(storeRoot, TRIAL_FILE), state)
-  writeActive(storeRoot, trialVersion, system, tools, playbook)
+  writeActive(storeRoot, trialVersion, system, tools, playbook, agentConfig)
   appendMetaMetric(storeRoot, { event: "trial", action: "started", trial: trialVersion, baseline: state.baseline })
 }
 
@@ -699,7 +777,7 @@ export function resolveTrial(storeRoot: string): TrialResolution {
   }
 
   writeActive(storeRoot, trial.baseline, trial.baselineSystem, trial.baselineTools,
-    trial.baselinePlaybook ?? null)
+    trial.baselinePlaybook ?? null, trial.baselineAgentConfig ?? null)
   clearTrial(storeRoot)
   appendMetaMetric(storeRoot, { event: "trial", action: "reverted", trial: trial.trial, trialRate, baselineRate })
   return { action: "reverted", trial: trial.trial, baseline: trial.baseline, trialRate, baselineRate }
@@ -711,7 +789,8 @@ export function activateCandidate(storeRoot: string, version: string): boolean {
   if (!system) return false
   const tools = readText(candidatePath(storeRoot, version, "tools.md"))
   const playbook = readPlaybook(storeRoot, version)
-  writeActive(storeRoot, version, system, tools, playbook)
+  const agentConfig = readAgentConfig(storeRoot, version)
+  writeActive(storeRoot, version, system, tools, playbook, agentConfig)
   appendMetaMetric(storeRoot, { event: "activate", version })
   clearTrial(storeRoot) // manual activation supersedes any in-flight trial
   return true
