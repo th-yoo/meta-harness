@@ -1,0 +1,536 @@
+{
+  "label": "account-global-v0-baseline-haiku",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "harness": {
+    "layers": "account",
+    "account_active": "v0",
+    "project_active": "v6",
+    "agent": "",
+    "pins": {}
+  },
+  "k": 1,
+  "timestamp": "2026-07-10T09:28:01.772353+00:00",
+  "n_pass": 12,
+  "n_total": 43,
+  "pass_rate": 0.2791,
+  "tasks": {
+    "adaptive-rejection-sampler": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        678.7
+      ],
+      "turns": [
+        0
+      ],
+      "errors": []
+    },
+    "cancel-async-tasks": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        34.4
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "circuit-fibsqrt": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        704.9
+      ],
+      "turns": [
+        0
+      ],
+      "errors": []
+    },
+    "code-from-image": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        18.4
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "constraints-scheduling": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        43.3
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "count-dataset-tokens": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        63.0
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "db-wal-recovery": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        95.4
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "distribution-search": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        482.4
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "dna-assembly": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        229.0
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "dna-insert": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        204.4
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "extract-elf": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        215.7
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "extract-moves-from-video": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        8.2
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "feal-differential-cryptanalysis": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        999.3
+      ],
+      "turns": [
+        0
+      ],
+      "errors": []
+    },
+    "feal-linear-cryptanalysis": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        538.7
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "filter-js-from-html": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        331.7
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "financial-document-processor": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        89.6
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "gcode-to-text": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        22.3
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "git-leak-recovery": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        64.8
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "kv-store-grpc": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        166.9
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "large-scale-text-editing": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        1203.8
+      ],
+      "turns": [
+        0
+      ],
+      "errors": []
+    },
+    "largest-eigenval": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        216.6
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "llm-inference-batching-scheduler": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        601.5
+      ],
+      "turns": [
+        0
+      ],
+      "errors": []
+    },
+    "log-summary-date-ranges": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        32.9
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "merge-diff-arc-agi-task": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        77.0
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "model-extraction-relu-logits": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        243.3
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "openssl-selfsigned-cert": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        65.6
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "overfull-hbox": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        201.1
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "password-recovery": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        321.9
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "path-tracing": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        78.0
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "path-tracing-reverse": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        435.3
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "polyglot-c-py": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        13.1
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "polyglot-rust-c": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        15.9
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "prove-plus-comm": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        101.7
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "raman-fitting": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        53.3
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "regex-chess": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        419.0
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "regex-log": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        14.5
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "sanitize-git-repo": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        17.8
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "sparql-university": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        91.4
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "sqlite-db-truncate": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        38.9
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "sqlite-with-gcov": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        77.6
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "tune-mjcf": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        611.3
+      ],
+      "turns": [
+        0
+      ],
+      "errors": []
+    },
+    "video-processing": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        260.2
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    },
+    "write-compressor": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        601.6
+      ],
+      "turns": [
+        0
+      ],
+      "errors": []
+    }
+  },
+  "status": "complete"
+}
