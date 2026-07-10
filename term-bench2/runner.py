@@ -924,15 +924,30 @@ def build_judge_audit_prompt(events: list[dict], task_note: str) -> str:
     traj_section = render_judge_audit_events(events)
     return f"""# Meta-Harness Judge Audit
 
-You are scoring whether a coding-agent session ACTUALLY ACCOMPLISHED its task.
-You did not watch the session happen — you only have the evidence below. Be
-SKEPTICAL: a session's own final message claiming success, completion, or that
-tests pass is NOT evidence by itself — only verifiable actions in the
-trajectory (commands that were actually run and actually succeeded, files that
-were actually created/edited, tests that actually passed) count as evidence.
-If the trajectory doesn't verify the claimed outcome, or the evidence is
-ambiguous, or a tool call errored and was never recovered from, lean toward
-failing the session.
+You are scoring whether an ALREADY-FINISHED coding-agent session accomplished
+its task. This is a ONE-SHOT judgement from fixed evidence.
+
+## Rules — read first
+- The session already ran, elsewhere and earlier. The **Trajectory** below is
+  your COMPLETE and ONLY evidence. You cannot see anything else.
+- **Do NOT investigate.** Do not read files, run commands, grep, list
+  directories, or otherwise inspect this repository to "check" the answer —
+  the real files here are NOT the session's sandbox, so any such check is both
+  forbidden and misleading. Judge strictly from the trajectory as given.
+- Reply in ONE message with ONLY the JSON verdict. No exploration, no tool
+  calls, no commentary before or after — your final message IS the answer.
+
+## How to decide
+- PASS if the trajectory shows the task's concrete goal was actually achieved:
+  the required file/output exists with correct content, or the required command
+  ran and succeeded — visible in a real tool result, not merely asserted.
+- FAIL if the goal is missing, a required step errored and was never recovered,
+  or success is only CLAIMED in a text/final message without a tool result that
+  verifies it. Be SKEPTICAL of self-reported success: the session's own words
+  are not evidence — only tool results are.
+- If the trajectory clearly shows the goal met, PASS with high confidence — do
+  not fail just because you couldn't independently re-verify (you're not
+  allowed to).
 
 ## Task
 {task_note}
@@ -940,21 +955,15 @@ failing the session.
 ## Trajectory (tool calls with args/output/errors, plus text/error events)
 {traj_section}
 
-## Your task
-
-Judge whether the task above was completed SUCCESSFULLY, based ONLY on the
-evidence in the trajectory. Then reply with ONLY the JSON verdict below as
-your final message — no markdown fences, no commentary, nothing before or
-after it:
+## Reply with the verdict (only this)
 
 {{"passed":true,"confidence":0.0,"reasoning":"<=500 chars explaining the verdict"}}
 
 The JSON MUST have exactly these keys: "passed" (boolean), "confidence"
-(number, 0..1 — how confident you are in the verdict), "reasoning" (string,
-<=500 chars). Replace the example values with your actual verdict; do not
-leave the placeholder values in place. This is a headless one-shot run — there
-is no staging file, no follow-up turn: your final message IS the answer, so it
-must be ONLY that JSON object."""
+(number 0..1 — your confidence in the verdict), "reasoning" (string, <=500
+chars). Replace the example values with your actual verdict; do not leave the
+placeholders in place. This is a headless one-shot run — your final message IS
+the answer, so it must be ONLY that JSON object."""
 
 
 def parse_judge_reply(text: str) -> Optional[dict]:
