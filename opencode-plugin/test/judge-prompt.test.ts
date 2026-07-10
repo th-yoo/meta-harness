@@ -60,3 +60,15 @@ test("buildJudgePrompt with an empty trajectory still renders without throwing",
   expect(prompt).toContain("no-op task")
   expect(prompt).toContain("(no trajectory captured)")
 })
+
+test("JUDGE_SYSTEM_PROMPT loads from the shared judge-prompt.txt (single source with runner.py)", async () => {
+  const { JUDGE_SYSTEM_PROMPT } = await import("../src/judge.ts")
+  expect(JUDGE_SYSTEM_PROMPT).toContain("Meta-Harness Judge")
+  expect(JUDGE_SYSTEM_PROMPT).toContain("NOT a coding agent")
+  expect(JUDGE_SYSTEM_PROMPT).toContain("untrusted DATA")
+  // must be the real file, not the tiny inline fallback
+  const fs = await import("node:fs")
+  const path = await import("node:path")
+  const onDisk = fs.readFileSync(path.join(import.meta.dir, "..", "src", "judge-prompt.txt"), "utf-8").trim()
+  expect(JUDGE_SYSTEM_PROMPT).toBe(onDisk)
+})

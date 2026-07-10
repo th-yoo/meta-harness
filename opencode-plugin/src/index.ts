@@ -74,7 +74,7 @@ import {
   type SessionRecord,
 } from "./harness-store.ts"
 import { promptHumanScore, handleScoreCommand } from "./score.ts"
-import { runJudge, type JudgeVerdict } from "./judge.ts"
+import { runJudge, JUDGE_SYSTEM_PROMPT, type JudgeVerdict } from "./judge.ts"
 import {
   triggerPropose,
   triggerPromote,
@@ -83,7 +83,7 @@ import {
   PROJECT_ROLE_THRESHOLD,
   PROJECT_GLOBAL_THRESHOLD,
 } from "./propose.ts"
-import { proposerSessions } from "./session-state.ts"
+import { proposerSessions, judgeSessions } from "./session-state.ts"
 
 // ── Role detection ─────────────────────────────────────────────────────────
 
@@ -302,6 +302,20 @@ const metaHarness: Plugin = async (input) => {
     // ── system.transform: inject all 4 layers + env snapshot ─────────────
     "experimental.chat.system.transform": async (sysInput, output) => {
       const sessionID = sysInput.sessionID ?? ""
+
+      // Judge sessions: REPLACE the entire system array with the judge
+      // persona. opencode assembles base-coding-prompt + env block +
+      // instructions BEFORE this hook runs, and the hook is the only
+      // mechanism that can remove them (source: session/llm/request.ts) —
+      // without this, the judge runs as "a coding agent" with the judge
+      // rubric merely appended, which is what made weak judges wander.
+      if (judgeSessions.has(sessionID)) {
+        output.system.length = 0
+        output.system.push(JUDGE_SYSTEM_PROMPT)
+        await log(client, "info", `[judge] system prompt replaced for ${sessionID}`)
+        return
+      }
+
       if (proposerSessions.has(sessionID)) return
 
       const agent = sessionAgent.get(sessionID) ?? ""

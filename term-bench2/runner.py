@@ -1018,6 +1018,36 @@ def _judge_reply_text(ndjson_out: str) -> str:
     return "\n".join(texts)
 
 
+JUDGE_PROMPT_PATH = META_ROOT / "opencode-plugin" / "src" / "judge-prompt.txt"
+
+
+def judge_agent_config(prompt_path: Path = JUDGE_PROMPT_PATH) -> Optional[dict]:
+    """PURE. Build the locked-down `mh-judge` agent block from the shared
+    judge persona file (opencode-plugin/src/judge-prompt.txt — the SINGLE
+    source of truth, also loaded by judge.ts for the plugin's shadow judge).
+    Returns None if the file is missing/empty (callers fall back to the
+    default agent + prompt-only rules).
+
+    The block's prompt REPLACES opencode's base coding-agent prompt (a
+    non-empty agent prompt is mutually exclusive with the base prompt —
+    opencode source session/llm/request.ts), and `"*": deny` strips every
+    tool — including dynamically-named MCP tools — from the model's schema.
+    NOTE: mode must be "all" or "primary"; opencode run silently falls back
+    to the default agent for mode "subagent" (cli/cmd/run.ts)."""
+    try:
+        prompt = prompt_path.read_text(encoding="utf-8").strip()
+    except Exception:
+        return None
+    if not prompt:
+        return None
+    return {
+        "description": "Meta-harness judge — evidence-only session evaluator (headless judge-audit)",
+        "mode": "all",
+        "prompt": prompt,
+        "permission": {"*": "deny"},
+    }
+
+
 def run_judge_opencode(
     prompt: str,
     model: str,
@@ -1030,16 +1060,36 @@ def run_judge_opencode(
     sandbox needed, this is a plain subprocess) and with a short one-turn
     timeout (default 90s, mirroring judge.ts's JUDGE_TIMEOUT_MS).
 
+    The locked-down `mh-judge` agent block is built from the shared persona
+    file (judge_agent_config) and written into a minimal opencode.json inside
+    the scratch dir (the scratch --dir doesn't see the repo config), and the
+    run gets `--agent mh-judge`: the judge then runs under the judge persona
+    (base coding-agent prompt REPLACED) with zero tools in its schema. If the
+    persona file is missing, falls back to the default agent + prompt-only
+    rules as before.
+
     Retries on transient provider errors using the same detection run_opencode
     uses (an error event with no real activity), with a short capped backoff.
     Returns the judge's reply text (concatenated 'text' events), or None if
     every attempt times out / fails / errors transiently — callers must treat
     None as a skip, not a crash.
     """
+    agent_block = judge_agent_config()
     with tempfile.TemporaryDirectory(prefix="mh-judge-audit-") as scratch:
+        agent_args: list[str] = []
+        if agent_block:
+            _write_json_atomic(Path(scratch) / "opencode.json", {
+                "$schema": "https://opencode.ai/config.json",
+                "agent": {"mh-judge": agent_block},
+            })
+            agent_args = ["--agent", "mh-judge"]
+            log("  judge agent: mh-judge (locked-down persona)")
+        else:
+            log("  judge agent: default (judge-prompt.txt missing)")
         cmd = [
             "opencode", "run",
             "--dir", scratch,
+            *agent_args,
             "--auto",
             "--format", "json",
             "--model", model,

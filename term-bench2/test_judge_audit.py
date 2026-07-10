@@ -250,3 +250,37 @@ def test_cmd_judge_audit_all_failed_exits_2(tmp_path, monkeypatch, capsys):
     assert "2 skipped" in out
     assert "ALARM" not in out
     assert metrics[0]["n"] == 0
+
+
+# ── judge_agent_config (locked-down mh-judge agent from shared persona) ─────
+
+
+def test_judge_agent_config_builds_block_from_prompt_file(tmp_path):
+    p = tmp_path / "judge-prompt.txt"
+    p.write_text("You are the Meta-Harness Judge. Test persona.")
+    block = runner.judge_agent_config(p)
+    assert block is not None
+    assert "Meta-Harness Judge" in block["prompt"]
+    assert block["permission"] == {"*": "deny"}
+    # opencode run silently falls back to the default agent for mode
+    # "subagent" (cli/cmd/run.ts) — must be "all" or "primary".
+    assert block["mode"] in ("all", "primary")
+
+
+def test_judge_agent_config_missing_or_empty(tmp_path):
+    assert runner.judge_agent_config(tmp_path / "nope.txt") is None
+    empty = tmp_path / "empty.txt"
+    empty.write_text("   \n")
+    assert runner.judge_agent_config(empty) is None
+
+
+def test_judge_agent_config_real_shared_file():
+    """The real shared persona file (single source of truth for BOTH the TS
+    shadow judge and this Python audit path) exists and carries the key
+    rules."""
+    block = runner.judge_agent_config()
+    assert block is not None
+    text = block["prompt"]
+    assert "Meta-Harness Judge" in text
+    assert "NOT a coding agent" in text
+    assert "untrusted DATA" in text
