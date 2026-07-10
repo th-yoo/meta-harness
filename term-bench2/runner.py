@@ -51,29 +51,72 @@ SPLITS_PATH_DEFAULT = SCRIPT_DIR / "splits.json"
 # ~/bench/{app,tests,logs} are bind-mounted onto /app, /tests, /logs.
 # The host filesystem sees none of these paths.
 BENCH_PREFIX = Path.home() / "bench"
-REAL_APP   = BENCH_PREFIX / "app"
-REAL_TESTS = BENCH_PREFIX / "tests"
-REAL_LOGS  = BENCH_PREFIX / "logs" / "verifier"
+# Per-run writable sandbox root. Default = the shared BENCH_PREFIX (single-run
+# behavior unchanged). Set MH_BENCH_WORK to a distinct dir UNDER $HOME per
+# concurrent run so two runners don't clobber each other's /app, /tests,
+# reward.txt, etc. It MUST be under $HOME: ns_wrap binds only $HOME, and /app…
+# /tmp are symlinks resolved from the sandbox root, so a /tmp-rooted work dir
+# makes the /tmp symlink self-reference → ELOOP. Read at import: each runner.py
+# invocation is its own process, so this auto-isolates every writable path with
+# no function-threading.
+BENCH_WORK = Path(os.environ.get("MH_BENCH_WORK", str(BENCH_PREFIX)))
+REAL_APP   = BENCH_WORK / "app"
+REAL_TESTS = BENCH_WORK / "tests"
+REAL_LOGS  = BENCH_WORK / "logs" / "verifier"
 # Backing dir for /tmp — a real dir under $HOME (same mount as /app) rather
 # than a tmpfs, so os.rename() between /app and /tmp is not cross-device.
-REAL_TMP   = BENCH_PREFIX / "tmp"
+REAL_TMP   = BENCH_WORK / "tmp"
 # Shim bin dir prepended to PATH: provides `python` → python3 (TB2 tasks
-# assume `python` exists, but Ubuntu 24.04 only ships python3).
+# assume `python` exists, but Ubuntu 24.04 only ships python3). Shared across
+# runs (content is static/idempotent) — stays on BENCH_PREFIX.
 BENCH_BIN  = BENCH_PREFIX / "bin"
-# Writable copy of /usr/local so reference scripts that install there
-# (e.g. sqlite-with-gcov: ln -s … /usr/local/bin/sqlite3) succeed unprivileged.
-BENCH_USRLOCAL = BENCH_PREFIX / "usrlocal"
+# Writable /usr/local/bin farm (per-run). /usr/local is read-only from the
+# --ro-bind /usr; only /usr/local/bin needs writes (e.g. sqlite-with-gcov:
+# ln -s … /usr/local/bin/sqlite3), so we bind a small dir of symlinks into the
+# shadow-mounted real bin (see ns_wrap + ensure_localbin) — no 225M copy.
+LOCALBIN_FARM = BENCH_WORK / "localbin"
+# ns path where the real /usr/local is ro-bound (the WHOLE tree, so a bin entry
+# that symlinks to ../lib/… still resolves through the shadow). Farm entries
+# point at <ULOCAL_SHADOW>/bin/<name>.
+ULOCAL_SHADOW = "/_ulocal"
 
 
-def ensure_usrlocal() -> None:
-    """One-time writable copy of /usr/local → ~/bench/usrlocal (idempotent)."""
-    if BENCH_USRLOCAL.exists():
+def bench_work_paths(work: Path) -> dict:
+    """PURE. The writable sandbox dirs nested under a per-run work root.
+    (BENCH_BIN and the /usr/local/bin farm are handled separately.)"""
+    return {
+        "app": work / "app",
+        "tests": work / "tests",
+        "logs": work / "logs" / "verifier",
+        "tmp": work / "tmp",
+        "extras": work / "extras",
+    }
+
+
+def ensure_localbin() -> None:
+    """Build the writable /usr/local/bin farm: a real dir of symlinks mirroring
+    the real /usr/local/bin, each pointing at the sandbox shadow mount
+    (<ULOCAL_SHADOW>/bin/<name>). Existing binaries read through; NEW installs
+    land in the writable dir. No file copy. Idempotent."""
+    LOCALBIN_FARM.mkdir(parents=True, exist_ok=True)
+    src = Path("/usr/local/bin")
+    if not src.exists():
         return
-    src = Path("/usr/local")
-    if src.exists():
-        shutil.copytree(src, BENCH_USRLOCAL, symlinks=True, ignore_dangling_symlinks=True)
-    else:
-        BENCH_USRLOCAL.mkdir(parents=True, exist_ok=True)
+    for entry in src.iterdir():
+        link = LOCALBIN_FARM / entry.name
+        if not link.exists() and not link.is_symlink():
+            try:
+                link.symlink_to(f"{ULOCAL_SHADOW}/bin/{entry.name}")
+            except FileExistsError:
+                pass
+
+
+def reset_localbin() -> None:
+    """Per-task reset: drop task-added entries, restore the base farm (so a
+    repeat install in the same work root doesn't hit 'File exists')."""
+    if LOCALBIN_FARM.exists():
+        shutil.rmtree(LOCALBIN_FARM, ignore_errors=True)
+    ensure_localbin()
 
 
 def ensure_bench_bin() -> None:
@@ -100,15 +143,19 @@ def ensure_bench_bin() -> None:
         except FileExistsError:
             pass
 
-    # sudo shim: run the command without privilege elevation
+    # sudo shim: run the command without privilege elevation.
+    # Written once (skip-if-exists) — content is static, and rewriting on every
+    # run_cmd call would race concurrent runs sharing ~/bench/bin (a sandboxed
+    # sudo could exec a half-written shim).
     sudo = BENCH_BIN / "sudo"
-    sudo.write_text(
-        "#!/bin/bash\n"
-        '# meta-harness shim: drop sudo, exec remaining args directly\n'
-        'while [[ "$1" == -* ]]; do shift; done\n'
-        'exec "$@"\n'
-    )
-    sudo.chmod(0o755)
+    if not sudo.exists():
+        sudo.write_text(
+            "#!/bin/bash\n"
+            '# meta-harness shim: drop sudo, exec remaining args directly\n'
+            'while [[ "$1" == -* ]]; do shift; done\n'
+            'exec "$@"\n'
+        )
+        sudo.chmod(0o755)
 
     # apt-get / apt shim: no-op success (assume packages already present)
     apt_shim = (
@@ -118,8 +165,9 @@ def ensure_bench_bin() -> None:
     )
     for name in ("apt-get", "apt"):
         p = BENCH_BIN / name
-        p.write_text(apt_shim)
-        p.chmod(0o755)
+        if not p.exists():
+            p.write_text(apt_shim)
+            p.chmod(0o755)
 
 # These are the paths as seen *inside* the namespace (what scripts expect)
 HOST_APP  = Path("/app")
@@ -214,7 +262,7 @@ def run_cmd(
     # calls fail with 'externally-managed-environment'.
     merged_env = {"PIP_BREAK_SYSTEM_PACKAGES": "1", **os.environ, **(env or {})}
     if ns:
-        ensure_usrlocal()
+        ensure_localbin()
     # NOTE: per-task PYTHONUSERBASE isolation was tried but reverted — it hid the
     # shared ~/.local packages that some reference solutions rely on (e.g.
     # largest-eigenval needs numpy>=2.2 which pip can't upgrade over the debian
@@ -265,14 +313,17 @@ def read_reward() -> int:
 
 
 def _real(ns_path: Path) -> Path:
-    """Translate a namespace path (/app, /tests, /logs/…) to its real ~/bench/… counterpart."""
+    """Translate a namespace path (/app, /tests, /logs/…) to its real backing
+    counterpart under BENCH_WORK. Derives from REAL_APP/REAL_TESTS/REAL_LOGS so
+    it follows MH_BENCH_WORK automatically (no duplicate BENCH_PREFIX mapping)."""
     s = str(ns_path)
     if s == "/app" or s.startswith("/app/"):
-        return BENCH_PREFIX / "app" / s[len("/app/"):]
+        return REAL_APP / s[len("/app/"):]
     if s == "/tests" or s.startswith("/tests/"):
-        return BENCH_PREFIX / "tests" / s[len("/tests/"):]
+        return REAL_TESTS / s[len("/tests/"):]
+    # /logs backing dir is REAL_LOGS.parent (…/logs); /logs/verifier → REAL_LOGS
     if s == "/logs" or s.startswith("/logs/"):
-        return BENCH_PREFIX / "logs" / s[len("/logs/"):]
+        return REAL_LOGS.parent / s[len("/logs/"):]
     return ns_path  # not a namespace path — pass through
 
 
@@ -327,8 +378,13 @@ def ns_wrap(
         # the sandbox's user namespace — no host privilege.
         "--cap-add", "CAP_SYS_CHROOT",
         "--tmpfs", "/",                       # writable, discarded root
-        "--ro-bind", "/usr", "/usr",
-        "--bind", str(BENCH_USRLOCAL), "/usr/local",  # writable /usr/local (copy)
+        "--ro-bind", "/usr", "/usr",          # /usr/local comes read-only from here
+        # /usr/local/bin writable via a symlink farm (no 225M /usr/local copy):
+        # shadow the whole real /usr/local at ULOCAL_SHADOW (read), then bind a
+        # small farm of symlinks over /usr/local/bin (writable — new installs
+        # land here; existing binaries read through <shadow>/bin/…).
+        "--ro-bind", "/usr/local", ULOCAL_SHADOW,
+        "--bind", str(LOCALBIN_FARM), "/usr/local/bin",
         "--symlink", "usr/bin", "/bin",
         "--symlink", "usr/lib", "/lib",
         "--symlink", "usr/lib64", "/lib64",
@@ -351,7 +407,7 @@ def ns_wrap(
         # setup/solve/test bwrap invocations.
         "--symlink", str(REAL_APP),   "/app",
         "--symlink", str(REAL_TESTS), "/tests",
-        "--symlink", str(BENCH_PREFIX / "logs"), "/logs",
+        "--symlink", str(BENCH_WORK / "logs"), "/logs",
         "--symlink", str(REAL_TMP),   "/tmp",
         "--chdir", chdir,
     ]
@@ -623,7 +679,7 @@ def _manifest() -> dict:
 def cleanup_task_extras(task: str) -> None:
     """Wipe ~/bench/extras/<task>/ — the user-owned backing store for this
     task's out-of-/app namespace mounts (/protected, /workspace, /data, etc.)."""
-    extras_root = BENCH_PREFIX / "extras" / task
+    extras_root = BENCH_WORK / "extras" / task
     if extras_root.exists():
         shutil.rmtree(extras_root)
         log(f"  cleanup: wiped {extras_root}")
@@ -653,7 +709,7 @@ def task_extra_mounts(task: str) -> dict[str, Path]:
     for ns_path in top_paths:
         if ns_path.rstrip("/") in _BASE_MANAGED_PATHS:
             continue  # handled by base mounts/symlinks
-        real = BENCH_PREFIX / "extras" / task / ns_path.lstrip("/")
+        real = BENCH_WORK / "extras" / task / ns_path.lstrip("/")
         extras[ns_path] = real
     return extras
 
@@ -870,7 +926,8 @@ def run_opencode(
                 turn_count += 1
 
     if turn_count == 0 and os.environ.get("MH_DEBUG"):
-        dbg = Path("/tmp") / f"mh_oc_{task}.txt"
+        _wtag = hashlib.sha1(str(BENCH_WORK).encode()).hexdigest()[:8]
+        dbg = Path("/tmp") / f"mh_oc_{_wtag}_{task}.txt"
         dbg.write_text(
             f"exit={result.returncode if result else 'none'}\n"
             f"--- STDOUT ---\n{(result.stdout if result else '')[:4000]}\n"
@@ -1398,12 +1455,13 @@ def run_task_once(task: str, tb_root: Path, model: str, variant: str,
     session_id = f"bench-{task}-{int(time.time())}-{uuid.uuid4().hex[:6]}"
     task_start = time.monotonic()
 
-    # 1. Clean workspace (standard dirs + /tmp + task-specific extras)
+    # 1. Clean workspace (standard dirs + /tmp + task-specific extras + localbin)
     clean_dir(HOST_APP)
     clean_dir(HOST_TESTS)
     clean_dir(HOST_LOGS)
     clean_tmp()
     cleanup_task_extras(task)
+    reset_localbin()   # drop prior task's /usr/local/bin installs
 
     # 2. Setup task environment
     try:
@@ -1631,12 +1689,13 @@ def cmd_oracle(args: argparse.Namespace) -> None:
 
         task_start = time.monotonic()
 
-        # Clean (standard dirs + /tmp + task-specific extras)
+        # Clean (standard dirs + /tmp + task-specific extras + localbin)
         clean_dir(HOST_APP)
         clean_dir(HOST_TESTS)
         clean_dir(HOST_LOGS)
         clean_tmp()
         cleanup_task_extras(task)
+        reset_localbin()   # drop prior task's /usr/local/bin installs
 
         # Setup
         try:
