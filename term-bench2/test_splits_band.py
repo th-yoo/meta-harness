@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import pytest
 import runner
 from runner import task_pass_rates, band_partition
 
@@ -68,3 +69,14 @@ def test_split_make_without_results_unchanged(tmp_path, monkeypatch):
     d = json.loads(out.read_text())
     assert d["schemaVersion"] == 1
     assert "sentinels" not in d and "band" not in d
+
+def test_split_make_malformed_band_dies(tmp_path, monkeypatch):
+    src = tmp_path / "tasks.txt"; src.write_text("a\nb\n")
+    res = _oracle_results(tmp_path, "r.json", {"a": 1, "b": 0})
+    monkeypatch.setattr(runner, "SCRIPT_DIR", tmp_path)
+    for bad in ("foo", "0.8,0.2", "1,2,3"):
+        args = runner.build_parser().parse_args(
+            ["split", "make", "--source", "tasks.txt", "--split-file", str(tmp_path/"s.json"),
+             "--results", str(res), "--band", bad])
+        with pytest.raises(SystemExit):
+            runner.cmd_split(args)

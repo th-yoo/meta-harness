@@ -1801,8 +1801,14 @@ def cmd_split(args: argparse.Namespace) -> None:
         excluded: list[str] = []
         rates: dict[str, float] = {}
         if args.results:
-            lo_str, hi_str = args.band.split(",")
-            band = [float(lo_str), float(hi_str)]
+            try:
+                lo_str, hi_str = args.band.split(",")
+                band_lo, band_hi = float(lo_str), float(hi_str)
+            except ValueError:
+                die(f"--band must be LO,HI (two floats), got {args.band!r}")
+            if band_lo > band_hi:
+                die(f"--band LO must be <= HI, got {args.band!r}")
+            band = [band_lo, band_hi]
             rates = task_pass_rates([Path(p) for p in args.results])
             pool_tasks, sentinels, excluded = band_partition(
                 tasks, rates, band[0], band[1], args.sentinel_hi, args.sentinels, args.seed)
