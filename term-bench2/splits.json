@@ -1,60 +1,76 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "seed": 42,
   "source": "baseline-tasks.txt",
   "folds": [
     [
-      "dna-insert",
-      "sqlite-db-truncate",
-      "constraints-scheduling",
-      "path-tracing-reverse",
-      "sanitize-git-repo",
-      "merge-diff-arc-agi-task",
-      "polyglot-c-py",
-      "regex-log",
-      "password-recovery",
-      "dna-assembly",
-      "cancel-async-tasks"
-    ],
-    [
-      "code-from-image",
-      "kv-store-grpc",
-      "raman-fitting",
-      "llm-inference-batching-scheduler",
-      "sparql-university",
-      "largest-eigenval",
-      "large-scale-text-editing",
-      "polyglot-rust-c",
-      "count-dataset-tokens",
-      "filter-js-from-html",
-      "distribution-search"
-    ],
-    [
-      "extract-elf",
-      "write-compressor",
-      "log-summary-date-ranges",
-      "feal-differential-cryptanalysis",
-      "prove-plus-comm",
+      "extract-moves-from-video",
       "path-tracing",
-      "gcode-to-text",
-      "adaptive-rejection-sampler",
+      "polyglot-c-py",
+      "sqlite-db-truncate",
       "regex-chess",
-      "financial-document-processor",
-      "tune-mjcf"
+      "polyglot-rust-c",
+      "model-extraction-relu-logits",
+      "password-recovery",
+      "largest-eigenval",
+      "feal-linear-cryptanalysis"
     ],
     [
       "overfull-hbox",
-      "openssl-selfsigned-cert",
-      "extract-moves-from-video",
-      "model-extraction-relu-logits",
-      "feal-linear-cryptanalysis",
-      "sqlite-with-gcov",
-      "video-processing",
-      "circuit-fibsqrt",
+      "prove-plus-comm",
+      "regex-log",
+      "gcode-to-text",
+      "log-summary-date-ranges",
       "db-wal-recovery",
-      "git-leak-recovery"
+      "dna-assembly",
+      "dna-insert",
+      "llm-inference-batching-scheduler"
+    ],
+    [
+      "kv-store-grpc",
+      "raman-fitting",
+      "sqlite-with-gcov",
+      "git-leak-recovery",
+      "write-compressor",
+      "video-processing",
+      "tune-mjcf",
+      "path-tracing-reverse",
+      "merge-diff-arc-agi-task"
+    ],
+    [
+      "financial-document-processor",
+      "extract-elf",
+      "sparql-university",
+      "openssl-selfsigned-cert",
+      "feal-differential-cryptanalysis",
+      "large-scale-text-editing",
+      "sanitize-git-repo",
+      "filter-js-from-html",
+      "distribution-search"
     ]
   ],
   "activeFold": 0,
-  "rotatedAt": null
+  "rotatedAt": null,
+  "band": [
+    0.2,
+    0.8
+  ],
+  "sentinels": [
+    "constraints-scheduling",
+    "circuit-fibsqrt",
+    "code-from-image"
+  ],
+  "passRates": {
+    "adaptive-rejection-sampler": 1.0,
+    "cancel-async-tasks": 0.0,
+    "circuit-fibsqrt": 1.0,
+    "code-from-image": 1.0,
+    "constraints-scheduling": 1.0,
+    "count-dataset-tokens": 1.0
+  },
+  "excluded": [
+    "cancel-async-tasks",
+    "count-dataset-tokens",
+    "adaptive-rejection-sampler"
+  ]
 }
