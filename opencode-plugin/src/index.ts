@@ -475,7 +475,13 @@ const metaHarness: Plugin = async (input) => {
       if (calBefore.calibrated) {
         const early = await Promise.race([judgePromise, new Promise<null>((r) => setTimeout(() => r(null), 60_000))])
         if (early) {
-          prefill = `/mh-score ${early.passed ? "good" : "bad"} judge: ${early.reasoning.slice(0, 80)}`
+          // 80-char hint in the prompt box (full reasoning is in record.judge);
+          // cut on a word boundary + ellipsis so it never ends mid-word.
+          const r = early.reasoning
+          const hint = r.length <= 80
+            ? r
+            : (() => { const c = r.slice(0, 80); const sp = c.lastIndexOf(" "); return (sp > 48 ? c.slice(0, sp) : c).trimEnd() + "…" })()
+          prefill = `/mh-score ${early.passed ? "good" : "bad"} judge: ${hint}`
           usedPrefill = true
         }
       }
