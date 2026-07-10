@@ -40,6 +40,12 @@ opencode auth (`~/.local/share/opencode/auth.json`).
 |---|---|
 | `autofill` | on session-idle the plugin prefills `/mh-score good`; submitting it renders the `Score recorded` toast |
 
+**Diagnostics — manual, not in the suite** (`smoke/diag/`):
+
+| script | what it shows |
+|---|---|
+| `trivial-filter.sh` | the interactive triviality filter (Task 7): with the judge enabled, a single-file-read session is rated trivial and the scoring toast reports it excluded from fitness (`… — trivial: recorded, not counted toward fitness`). Run by hand — the toast awaits the judge's LLM call (~40-60 s), too slow/environment-variable to gate unattended. The deterministic exclusion math is in `opencode-plugin/test/judge-trivial-fitness.test.ts`. |
+
 ## Isolation — the real store is never touched
 
 Every scenario runs in a throwaway env built by `lib/oc-env.sh`:
@@ -84,3 +90,19 @@ Two timing rules the primitives encode (do not fight them):
 the agent can drive a pane via typed tools (`capture-pane`, `execute-command`,
 session mgmt). MCP servers load at session start, so those tools appear on the
 **next** Claude Code session; the `oc-driver.sh` primitives work now.
+
+## Watching it live (tmux is not headless)
+
+`new-session -d` is **detached, not headless** — the session is live and
+attachable, and tmux sessions are shared, so a human can watch (or take over)
+exactly what the agent drives. `smoke/watch.sh` starts a visible opencode
+session in the isolated env and prints the attach command:
+
+```bash
+bash smoke/watch.sh --status      # launches opencode, drives /mh-status, keeps it alive
+# then, from ANY terminal on this machine (same user):
+tmux attach -t mh-watch           # watch live; Ctrl-b d to detach; type to take over
+```
+
+The session lives on your per-user tmux socket (`/tmp/tmux-<uid>`), so an
+attach from your own shell finds the same session the agent is driving.
