@@ -1,5 +1,12 @@
 # Tier 3 — Interactive Plugin Loop Test Manual
 
+> **Automated now:** the token-free command surfaces (Part A `/mh-status`, Part F
+> `/mh-activate`, plus the propose/curate/promote acks) and the score-autofill
+> are covered by the tmux smoke suite — `bash smoke/run.sh` (add
+> `MH_SMOKE_LIVE=1` for the live autofill+scoring scenario). See `smoke/README.md`.
+> This manual remains the by-hand fallback and the full-loop walkthrough
+> (auto-propose → trial → confirm/revert), which the suite does not drive.
+
 Exercises the full evolution loop through the opencode TUI: score → auto-propose
 → trial → confirm/revert, plus the account-layer ab gate. Cannot be driven
 headlessly (scoring is interactive), so follow this by hand.
