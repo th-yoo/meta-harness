@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 import runner
 from runner import task_pass_rates, band_partition
+from ab_stats import DecisionConfig, PairStats, decide, paired_run_stats
 
 def _agent_results(tmp_path, name, tasks):   # {"rewards":[...]} shape
     p = tmp_path / name
@@ -80,3 +81,169 @@ def test_split_make_malformed_band_dies(tmp_path, monkeypatch):
              "--results", str(res), "--band", bad])
         with pytest.raises(SystemExit):
             runner.cmd_split(args)
+
+
+# ── Task 2, Step 1: load_active_split sentinels ─────────────────────────────
+
+def test_load_active_split_appends_sentinels(tmp_path):
+    d = {"schemaVersion": 2, "seed": 1, "source": "x",
+         "folds": [["a", "b"], ["c", "d"]], "activeFold": 0, "rotatedAt": None,
+         "band": [0.2, 0.8], "sentinels": ["easy1", "easy2"], "excluded": []}
+    p = tmp_path / "splits.json"; p.write_text(json.dumps(d))
+    held_in, held_out, meta = runner.load_active_split(p)
+    assert held_in == ["c", "d"]
+    assert held_out == ["a", "b", "easy1", "easy2"]       # fold first, sentinels appended
+    assert meta["sentinels"] == ["easy1", "easy2"]
+
+
+def test_load_active_split_v1_no_sentinels(tmp_path):
+    d = {"schemaVersion": 1, "seed": 1, "source": "x",
+         "folds": [["a"], ["b"]], "activeFold": 1, "rotatedAt": None}
+    p = tmp_path / "splits.json"; p.write_text(json.dumps(d))
+    held_in, held_out, meta = runner.load_active_split(p)
+    assert held_out == ["b"] and meta["sentinels"] == []
+    assert held_in == ["a"]
+
+
+def test_load_active_split_dedupes_sentinel_already_in_fold(tmp_path):
+    d = {"schemaVersion": 2, "seed": 1, "source": "x",
+         "folds": [["a", "b"], ["c", "sent1"]], "activeFold": 1, "rotatedAt": None,
+         "band": [0.2, 0.8], "sentinels": ["sent1", "other"], "excluded": []}
+    p = tmp_path / "splits.json"; p.write_text(json.dumps(d))
+    held_in, held_out, meta = runner.load_active_split(p)
+    # sent1 is already a fold member -> not appended a second time
+    assert held_out == ["c", "sent1", "other"]
+    assert held_out.count("sent1") == 1
+    assert "sent1" not in held_in                      # sentinels never in held_in
+
+
+def test_load_active_split_show_prints_sentinel_line(tmp_path, monkeypatch, capsys):
+    d = {"schemaVersion": 2, "seed": 1, "source": "x",
+         "folds": [["a", "b"], ["c", "d"]], "activeFold": 0, "rotatedAt": None,
+         "band": [0.2, 0.8], "sentinels": ["easy1", "easy2"], "excluded": []}
+    p = tmp_path / "splits.json"; p.write_text(json.dumps(d))
+    args = runner.build_parser().parse_args(["split", "show", "--split-file", str(p)])
+    runner.cmd_split(args)
+    out = capsys.readouterr().out
+    assert "sentinels (2): easy1, easy2" in out
+
+
+def test_split_show_no_sentinel_line_when_none(tmp_path, capsys):
+    d = {"schemaVersion": 1, "seed": 1, "source": "x",
+         "folds": [["a"], ["b"]], "activeFold": 0, "rotatedAt": None}
+    p = tmp_path / "splits.json"; p.write_text(json.dumps(d))
+    args = runner.build_parser().parse_args(["split", "show", "--split-file", str(p)])
+    runner.cmd_split(args)
+    out = capsys.readouterr().out
+    assert "sentinels" not in out
+
+
+# ── Task 2, Step 1b: stratified held-out gate (dilution fix) ───────────────
+
+def test_sentinel_dilution_pooled_would_pass_but_fold_only_rejects():
+    """Proves the architect fix: pooling sentinel passes into the held-out gate
+    dilutes a marginal fold regression below --nonregress-margin, flipping a
+    reject into an accept. The fold-only view (as cmd_ab now feeds decide())
+    must still catch the regression."""
+    held_in_results = {
+        f"hi{i}": {"phase": "held-in", "sentinel": False,
+                   "candidate": [1], "active": [0]}
+        for i in range(6)
+    }
+    # 3 fold tasks, 18 run-pairs total, one net discordant pair favouring
+    # active -> delta = -1/18 ~= -0.0556, just past the default 0.05 margin.
+    fold_results = {
+        "fold_a": {"phase": "held-out", "sentinel": False,
+                   "candidate": [1] * 6, "active": [1] * 6},
+        "fold_b": {"phase": "held-out", "sentinel": False,
+                   "candidate": [1] * 6, "active": [1] * 6},
+        "fold_c": {"phase": "held-out", "sentinel": False,
+                   "candidate": [1] * 5 + [0], "active": [1] * 6},
+    }
+    # 3 concordant-pass sentinels: inflate n_pairs without moving b/c.
+    sentinel_results = {
+        f"sent_{x}": {"phase": "held-out", "sentinel": True,
+                      "candidate": [1], "active": [1]}
+        for x in ("a", "b", "c")
+    }
+    task_results = {**held_in_results, **fold_results, **sentinel_results}
+    cfg = DecisionConfig()   # defaults: alpha=0.05, nonregress_margin=0.05
+
+    hi_stats = paired_run_stats(runner.filter_task_results(task_results, "held-in"))
+
+    fold_only = runner.filter_task_results(task_results, "held-out", sentinel=False)
+    ho_fold_stats = paired_run_stats(fold_only)
+    assert ho_fold_stats.delta < -cfg.nonregress_margin      # marginal regression
+
+    pooled = runner.filter_task_results(task_results, "held-out")   # sentinel=None -> no filter
+    ho_pooled_stats = paired_run_stats(pooled)
+    assert ho_pooled_stats.delta >= -cfg.nonregress_margin   # dilution "fixes" it away — the bug
+
+    fold_decision, fold_reasons = decide(hi_stats, ho_fold_stats, cfg)
+    pooled_decision, _ = decide(hi_stats, ho_pooled_stats, cfg)
+
+    assert pooled_decision == "accept"          # what the OLD pooled gate would wrongly do
+    assert fold_decision == "reject"            # what the stratified gate correctly does
+    assert any("held-out regression" in r for r in fold_reasons)
+
+
+def test_sentinel_only_regression_forces_reject():
+    ho_sentinel = PairStats(n_tasks=3, n_pairs=3, b=0, c=3, cand_pass=0, act_pass=3,
+                            delta=-1.0, task_deltas={"s1": -1.0, "s2": -1.0, "s3": -1.0})
+    decision, reasons = runner.sentinel_regression_reject(
+        "accept", ["accept: held-in significant win, held-out non-regress"],
+        ho_sentinel, margin=0.05)
+    assert decision == "reject"
+    assert "sentinel regression" in reasons
+
+
+def test_sentinel_regression_guard_is_noop_when_no_regression():
+    ho_sentinel = PairStats(n_tasks=3, n_pairs=3, b=0, c=0, cand_pass=3, act_pass=3,
+                            delta=0.0, task_deltas={"s1": 0.0, "s2": 0.0, "s3": 0.0})
+    decision, reasons = runner.sentinel_regression_reject("accept", ["ok"], ho_sentinel, margin=0.05)
+    assert decision == "accept"
+    assert reasons == ["ok"]
+
+    decision2, reasons2 = runner.sentinel_regression_reject("accept", ["ok"], None, margin=0.05)
+    assert decision2 == "accept" and reasons2 == ["ok"]
+
+
+# ── Task 2: --resume split fingerprint (splitHash) ──────────────────────────
+
+def test_split_hash_deterministic_and_order_invariant():
+    h1 = runner._split_hash(["b", "a"], ["d", "c"])
+    h2 = runner._split_hash(["a", "b"], ["c", "d"])
+    assert h1 == h2                       # sorted internally -> order doesn't matter
+    assert len(h1) == 12
+
+
+def test_split_hash_changes_with_composition():
+    h1 = runner._split_hash(["a", "b"], ["c", "d"])
+    h2 = runner._split_hash(["a", "b"], ["c", "e"])   # regenerated split, one task swapped
+    assert h1 != h2
+
+
+def test_resume_ident_check_passes_when_matching():
+    run_ident = {"layer": "project-global", "candidate": "v3", "baseline": "v2",
+                "model": "m", "k": 2, "activeFold": 0, "splitHash": "abc123"}
+    prev = dict(run_ident)
+    runner._resume_ident_check(prev, run_ident)   # must not raise
+
+
+def test_resume_ident_check_dies_on_split_hash_mismatch():
+    """A regenerated splits.json mid-run (same fold index, different task
+    composition) must fail --resume instead of silently splicing two
+    compositions into one verdict."""
+    run_ident = {"layer": "project-global", "candidate": "v3", "baseline": "v2",
+                "model": "m", "k": 2, "activeFold": 0, "splitHash": "abc123"}
+    prev = dict(run_ident, splitHash="old999")   # stale hash from the partial file
+    with pytest.raises(SystemExit):
+        runner._resume_ident_check(prev, run_ident)
+
+
+def test_resume_ident_check_dies_on_any_other_field_mismatch():
+    run_ident = {"layer": "project-global", "candidate": "v3", "baseline": "v2",
+                "model": "m", "k": 2, "activeFold": 0, "splitHash": "abc123"}
+    prev = dict(run_ident, model="different-model")
+    with pytest.raises(SystemExit):
+        runner._resume_ident_check(prev, run_ident)

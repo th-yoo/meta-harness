@@ -1774,15 +1774,67 @@ def band_partition(tasks: list[str], rates: dict[str, float], lo: float, hi: flo
 
 def load_active_split(splits_path: Path) -> tuple[list[str], list[str], dict]:
     """Return (held_in, held_out, split_meta) from splits.json.
-    held_out = folds[activeFold]; held_in = all other folds concatenated."""
+    held_out = folds[activeFold] + sentinels (easy-task regression canaries from
+    `split make --results`; [] for schemaVersion 1 files), fold tasks first,
+    deduped so a sentinel already in the active fold isn't appended twice.
+    held_in = all other folds concatenated — sentinels NEVER appear in held_in."""
     data = json.loads(splits_path.read_text())
     folds = data["folds"]
     active = int(data.get("activeFold", 0))
-    held_out = list(folds[active])
+    fold_held_out = list(folds[active])
     held_in = [t for i, f in enumerate(folds) if i != active for t in f]
+    sentinels = list(data.get("sentinels", []))
+    extra_sentinels = [t for t in sentinels if t not in fold_held_out]
+    held_out = fold_held_out + extra_sentinels
     meta = {"file": splits_path.name, "activeFold": active,
-            "heldIn": held_in, "heldOut": held_out}
+            "heldIn": held_in, "heldOut": held_out, "sentinels": sentinels}
     return held_in, held_out, meta
+
+
+def _split_hash(held_in: list[str], held_out: list[str]) -> str:
+    """PURE. A short fingerprint of a task-set composition, used to detect a
+    splits.json (or --tasks list) that changed underneath an in-progress
+    --resume — comparing this alongside the other run_ident fields makes a
+    regenerated split fail the resume ident-check instead of silently
+    splicing two different compositions into one verdict."""
+    payload = json.dumps(sorted(held_in) + ["|"] + sorted(held_out))
+    return hashlib.sha256(payload.encode()).hexdigest()[:12]
+
+
+def _resume_ident_check(prev: dict, run_ident: dict) -> None:
+    """Die if any run_ident field doesn't match the prior partial file's
+    recorded value — guards --resume against silently continuing a run under
+    a different composition (model swap, re-rotated fold, regenerated
+    splits.json, etc)."""
+    for kk, v in run_ident.items():
+        if prev.get(kk) != v:
+            die(f"--resume: prior partial {kk}={prev.get(kk)!r} != {v!r}; "
+                "delete the partial to restart")
+
+
+def filter_task_results(task_results: dict, phase: str,
+                        sentinel: Optional[bool] = None) -> dict:
+    """PURE. Subset of task_results for a given phase, optionally further
+    filtered by the 'sentinel' tag cmd_ab attaches to each held-out result.
+    This is the stratification fix: a sentinel both arms pass inflates
+    n_pairs without moving b/c, which can dilute a marginal fold regression's
+    delta below --nonregress-margin — so the held-out gate must be computed
+    from fold-only results, with sentinels scored separately."""
+    return {t: tr for t, tr in task_results.items()
+            if tr.get("phase") == phase
+            and (sentinel is None or bool(tr.get("sentinel", False)) == sentinel)}
+
+
+def sentinel_regression_reject(decision: str, reasons: list, ho_sentinel,
+                               margin: float) -> tuple:
+    """PURE. Sentinels are easy tasks both arms are expected to pass; if the
+    sentinel-only paired stats show a regression beyond `margin`, force a
+    reject regardless of the (fold-only) held-out gate's own decision — a
+    correctness signal independent of the fold sample size."""
+    if ho_sentinel is not None and ho_sentinel.delta < -margin:
+        decision = "reject"
+        reasons = reasons + ["sentinel regression"]
+    return decision, reasons
 
 
 def cmd_split(args: argparse.Namespace) -> None:
@@ -1848,6 +1900,8 @@ def cmd_split(args: argparse.Namespace) -> None:
               f"activeFold={meta['activeFold']}  sizes={[len(f) for f in data['folds']]}")
         print(f"  held-out ({len(held_out)}): {', '.join(held_out)}")
         print(f"  held-in  ({len(held_in)}): {', '.join(held_in)}")
+        if meta["sentinels"]:
+            print(f"  sentinels ({len(meta['sentinels'])}): {', '.join(meta['sentinels'])}")
 
 
 # ── ab command ─────────────────────────────────────────────────────────────
@@ -1927,6 +1981,13 @@ def cmd_ab(args: argparse.Namespace) -> None:
             if t not in manifest:
                 die(f"split task {t!r} not in manifest.json")
 
+    # Sentinels ride held_out (see load_active_split) but must never dilute the
+    # fold-only regression gate — stratify held-out into fold vs sentinel now,
+    # so both branches (legacy: no sentinels; split: from split_meta) agree.
+    sentinel_set = set(split_meta["sentinels"]) if split_meta else set()
+    fold_out_tasks = [t for t in held_out_tasks if t not in sentinel_set]
+    sentinel_out_tasks = [t for t in held_out_tasks if t in sentinel_set]
+
     # Compose both arms once (they differ in exactly one layer by construction)
     harness_a = assemble_agents_md(layers, meta_root, agent, pins={})
     harness_b = assemble_agents_md(layers, meta_root, agent, pins={layer: candidate})
@@ -1940,7 +2001,8 @@ def cmd_ab(args: argparse.Namespace) -> None:
     partial_path = candidate_path(layer_root, candidate, "ab-verdict.partial.json")
 
     run_ident = {"layer": layer, "candidate": candidate, "baseline": baseline,
-                 "model": model, "k": k, "activeFold": active_fold}
+                 "model": model, "k": k, "activeFold": active_fold,
+                 "splitHash": _split_hash(held_in_tasks, held_out_tasks)}
 
     log(f"A/B: {layer} {candidate} vs active {baseline}  "
         f"held-in={len(held_in_tasks)} held-out={len(held_out_tasks)}  k={k}  "
@@ -1956,10 +2018,7 @@ def cmd_ab(args: argparse.Namespace) -> None:
             prev = json.loads(partial_path.read_text())
         except Exception:
             prev = {}
-        for kk, v in run_ident.items():
-            if prev.get(kk) != v:
-                die(f"--resume: prior partial {kk}={prev.get(kk)!r} != {v!r}; "
-                    "delete the partial to restart")
+        _resume_ident_check(prev, run_ident)
         early_stopped = bool(prev.get("earlyStopped", False))
         for t, tr in prev.get("taskResults", {}).items():
             if tr.get("error") == "setup_failed":
@@ -1972,9 +2031,8 @@ def cmd_ab(args: argparse.Namespace) -> None:
 
     run_start_ts = datetime.now(timezone.utc).isoformat()
 
-    def _stats(phase: str):
-        sub = {t: tr for t, tr in task_results.items() if tr.get("phase") == phase}
-        return paired_run_stats(sub)
+    def _stats(phase: str, sentinel: Optional[bool] = None):
+        return paired_run_stats(filter_task_results(task_results, phase, sentinel))
 
     def _stats_block(ps) -> dict:
         return {"nTasks": ps.n_tasks, "nPairs": ps.n_pairs, "b": ps.b, "c": ps.c,
@@ -1984,11 +2042,17 @@ def cmd_ab(args: argparse.Namespace) -> None:
 
     def _verdict_dict(status: str) -> dict:
         hi = _stats("held-in")
-        ho = _stats("held-out") if held_out_tasks else None
+        # Stratified held-out gate: decide() only ever sees fold-only stats —
+        # a sentinel both arms pass would otherwise inflate n_pairs without
+        # moving b/c, diluting a marginal fold regression under the margin.
+        ho = _stats("held-out", sentinel=False) if fold_out_tasks else None
+        ho_sentinel = _stats("held-out", sentinel=True) if sentinel_out_tasks else None
         decision, reasons = decide(hi, ho, cfg)
         if early_stopped and decision != "reject":
             decision = "reject"
             reasons.append("early-stopped on futility")
+        decision, reasons = sentinel_regression_reject(
+            decision, reasons, ho_sentinel, cfg.nonregress_margin)
         winner = {"accept": "candidate", "reject": "active", "inconclusive": "tie"}[decision]
         included = {t: tr for t, tr in task_results.items() if not tr.get("error")}
         n_all = len(included)
@@ -1997,12 +2061,14 @@ def cmd_ab(args: argparse.Namespace) -> None:
         d = {
             "schemaVersion": 2,
             "layer": layer, "candidate": candidate, "baseline": baseline,
+            "activeFold": active_fold, "splitHash": run_ident["splitHash"],
             "decision": decision, "winner": winner, "reasons": reasons,
             "candidateRate": round(cand_pass / n_all, 4) if n_all else 0.0,
             "activeRate": round(act_pass / n_all, 4) if n_all else 0.0,
             "nTasks": n_all, "k": k,
             "heldIn": _stats_block(hi),
             "heldOut": _stats_block(ho) if ho else None,
+            "sentinels": _stats_block(ho_sentinel) if ho_sentinel else None,
             "earlyStopped": early_stopped,
             "split": split_meta,
             "env": env_b,
@@ -2023,7 +2089,8 @@ def cmd_ab(args: argparse.Namespace) -> None:
                 continue
             log(f"\n=== ab {task} [{phase}]: {candidate} vs active {baseline} ===")
             at, vt = task_timeouts(task, tb_root, args.max_agent_timeout)
-            tr: dict = {"candidate": [], "active": [], "phase": phase}
+            tr: dict = {"candidate": [], "active": [], "phase": phase,
+                       "sentinel": task in sentinel_set}
             for ki in range(k):
                 if k > 1:
                     log(f"  -- pair {ki+1}/{k} --")
@@ -2093,6 +2160,9 @@ def cmd_ab(args: argparse.Namespace) -> None:
     if ho:
         print(f"  held-out: delta={ho['delta']:+.3f} McNemar p={ho['mcnemarP']} "
               f"CI90={ho['bootCI90']} (n={ho['nPairs']} pairs)")
+    sent = final["sentinels"]
+    if sent:
+        print(f"  sentinels: delta={sent['delta']:+.3f} (n={sent['nPairs']} pairs)")
     for r in final["reasons"]:
         print(f"  · {r}")
     log(f"Verdict written → {verdict_path}")
