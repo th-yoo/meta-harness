@@ -185,6 +185,13 @@ def log(msg: str) -> None:
     print(f"[{ts}] {msg}", flush=True)
 
 
+def log_err(msg: str) -> None:
+    """Like log(), but to stderr — for messages that must never pollute a
+    command's machine-readable stdout (e.g. --json output)."""
+    ts = datetime.now().strftime("%H:%M:%S")
+    print(f"[{ts}] {msg}", file=sys.stderr, flush=True)
+
+
 def run_cmd(
     cmd: list[str],
     *,
@@ -2362,6 +2369,111 @@ def default_meta_metrics_sinks() -> list[Path]:
     ]
 
 
+PLATEAU_AB_K = 3          # last K ab events (per layer) all non-accept
+PLATEAU_TRIAL_K = 4       # last K resolved project trials without strict improvement
+PAUSED_FLAG = META_ROOT / ".meta-harness" / "paused"
+
+
+def _slope(ys: list) -> float:
+    """Least-squares slope of ys over their 0-based index. Fewer than 2 points
+    has no meaningful slope; callers treat that as "condition passes"."""
+    n = len(ys)
+    if n < 2:
+        return 0.0
+    xs = list(range(n))
+    mean_x = sum(xs) / n
+    mean_y = sum(ys) / n
+    num = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
+    den = sum((x - mean_x) ** 2 for x in xs)
+    return num / den if den else 0.0
+
+
+def _bench_layer_verdict(layer_events: list, ab_k: int) -> dict:
+    """One bench layer's report-only verdict. See plateau_verdict for the
+    exact semantics (heldInDelta trend, break-on-accept)."""
+    n = len(layer_events)
+    if n < ab_k:
+        return {"plateaued": False, "n": n, "reason": "insufficient data"}
+    window = layer_events[-ab_k:]
+    no_accept = all(e.get("decision") != "accept" for e in window)
+    held_in = [e.get("heldInDelta") for e in window if e.get("heldInDelta") is not None]
+    slope_ok = len(held_in) < 2 or _slope(held_in) <= 0
+    plateaued = no_accept and slope_ok
+    if plateaued:
+        reason = f"last {ab_k} ab events non-accept, heldInDelta flat/falling"
+    elif not no_accept:
+        reason = "accept within window"
+    else:
+        reason = "heldInDelta rising — underpowered, not stuck"
+    return {"plateaued": plateaued, "n": n, "reason": reason}
+
+
+def _is_strict_improvement(e: dict) -> bool:
+    """confirmed AND baselineRate not None AND trialRate > baselineRate. A
+    null-baseline confirm (first-candidate bootstrap) and a tie are both
+    neutral — neither counts as an improvement."""
+    return (e.get("action") == "confirmed"
+            and e.get("baselineRate") is not None
+            and e.get("trialRate") is not None
+            and e.get("trialRate") > e.get("baselineRate"))
+
+
+def plateau_verdict(events: list, ab_k: int = PLATEAU_AB_K,
+                     trial_k: int = PLATEAU_TRIAL_K,
+                     project_sink: "str | None" = None) -> dict:
+    """PURE. Streams (architect fixes #3, #4, #5, #7 applied):
+    bench (PER LAYER, report-only): group `ab` events by their `layer` field;
+             for each layer with >= ab_k events, plateaued iff the last ab_k
+             have no decision=="accept" AND the heldInDelta series over them
+             has slope <= 0 (least-squares over event index; None excluded;
+             <2 points => slope condition passes). heldInDelta — NOT
+             heldOutDelta — is the trend series: larger sample, undiluted by
+             sentinels, and the metric `accept` keys on; a rising heldInDelta
+             under all-inconclusive verdicts means "underpowered, not stuck"
+             and must NOT read as plateau.
+    project (drives the flag): last trial_k RESOLVED `trial` events
+             (action confirmed|reverted) FROM THE PROJECT SINK ONLY (see
+             _sink annotation below) — plateaued iff >= trial_k AND none is a
+             strict improvement. Strict improvement = action=="confirmed" AND
+             baselineRate is not None AND trialRate > baselineRate.
+             (confirmed with baselineRate None = first-candidate bootstrap =>
+             neutral; confirmed tie counts toward the streak.)
+    Returns {"bench": {layer: {"plateaued", "n", "reason"}, ...},
+             "project": {"plateaued": bool, "n": int, "reason": str},
+             "plateaued": project.plateaued}      # FLAG BASIS = project only
+    Rationale: bench `ab` runs are manual — a flag can't stop them, and an
+    account-layer plateau must not pause the project loop. Bench verdicts are
+    printed to inform the human to stop spending on that layer.
+    Insufficient data => plateaued False, reason "insufficient data".
+
+    project_sink: exact `_sink` string trial events must carry to count toward
+    the project stream; None = accept all (back-compat / unit tests without
+    sinks). cmd_report_loop passes str(default_meta_metrics_sinks()[1])."""
+    layer_events: dict = {}
+    for e in events:
+        if e.get("event") != "ab":
+            continue
+        layer = e.get("layer", "account-global")
+        layer_events.setdefault(layer, []).append(e)
+    bench = {layer: _bench_layer_verdict(evs, ab_k) for layer, evs in layer_events.items()}
+
+    resolved = [e for e in events
+                if e.get("event") == "trial"
+                and e.get("action") in ("confirmed", "reverted")
+                and (project_sink is None or e.get("_sink") == project_sink)]
+    n = len(resolved)
+    if n < trial_k:
+        project = {"plateaued": False, "n": n, "reason": "insufficient data"}
+    else:
+        window = resolved[-trial_k:]
+        plateaued = not any(_is_strict_improvement(e) for e in window)
+        reason = (f"no strict improvement in last {trial_k} resolved trials" if plateaued
+                   else f"strict improvement within last {trial_k} resolved trials")
+        project = {"plateaued": plateaued, "n": n, "reason": reason}
+
+    return {"bench": bench, "project": project, "plateaued": project["plateaued"]}
+
+
 def _parse_ts(e: dict):
     """Parse ISO-8601 timestamp from event dict, handling both +00:00 and Z formats.
     Returns a datetime for comparison; normalizes naive datetimes to UTC-aware.
@@ -2377,7 +2489,10 @@ def _parse_ts(e: dict):
 
 def load_meta_metrics(paths: list[Path]) -> list[dict]:
     """Read each JSONL path that exists, skip missing files and unparseable
-    lines, merge, and sort by parsed ISO-8601 timestamp (handles +00:00 and Z suffixes)."""
+    lines, merge, and sort by parsed ISO-8601 timestamp (handles +00:00 and Z suffixes).
+    Each event is annotated with "_sink": str(path) at read time (in-memory
+    provenance only — never re-serialized back to the sink) so downstream
+    consumers (plateau_verdict) can tell which sink an event came from."""
     events: list[dict] = []
     for p in paths:
         if not p.exists():
@@ -2387,9 +2502,11 @@ def load_meta_metrics(paths: list[Path]) -> list[dict]:
             if not line:
                 continue
             try:
-                events.append(json.loads(line))
+                event = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            event["_sink"] = str(p)
+            events.append(event)
     events.sort(key=_parse_ts)
     return events
 
@@ -2430,13 +2547,41 @@ def summarize_loop(events: list[dict]) -> dict:
         "trialActions": trial_actions,
         "heldOutDeltas": held_out_deltas,
         "judgeAgreement": judge_agreement,
+        "plateau": plateau_verdict(events),
     }
 
 
 def cmd_report_loop(args: argparse.Namespace) -> None:
-    sinks = default_meta_metrics_sinks() + [Path(s) for s in (args.sink or [])]
+    extra_sinks = args.sink or []
+    sinks = default_meta_metrics_sinks() + [Path(s) for s in extra_sinks]
     events = load_meta_metrics(sinks)
     summary = summarize_loop(events)
+
+    ab_k = args.plateau_ab_k if getattr(args, "plateau_ab_k", None) is not None else PLATEAU_AB_K
+    trial_k = args.plateau_trial_k if getattr(args, "plateau_trial_k", None) is not None else PLATEAU_TRIAL_K
+    project_sink = str(default_meta_metrics_sinks()[1])
+    verdict = plateau_verdict(events, ab_k=ab_k, trial_k=trial_k, project_sink=project_sink)
+    summary["plateau"] = verdict   # supersede the unfiltered back-compat verdict with the sink-scoped one
+
+    # Flag write/clear + logging goes to stderr so it never pollutes --json's
+    # stdout; "log either way" per the spec, just not on the machine-readable channel.
+    no_flag = getattr(args, "no_flag", False)
+    if extra_sinks:
+        log_err("plateau: extra --sink present — pause flag left untouched (ad-hoc analysis)")
+    elif no_flag:
+        log_err("plateau: --no-flag — pause flag left untouched")
+    elif verdict["project"]["plateaued"]:
+        _write_json_atomic(PAUSED_FLAG, {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "verdict": verdict,
+        })
+        log_err(f"plateau: project verdict PLATEAUED — wrote pause flag → {PAUSED_FLAG}")
+    else:
+        if PAUSED_FLAG.exists():
+            PAUSED_FLAG.unlink()
+            log_err(f"plateau: project verdict ok — removed pause flag {PAUSED_FLAG}")
+        else:
+            log_err("plateau: project verdict ok — no pause flag to remove")
 
     if args.json:
         print(json.dumps(summary, indent=2))
@@ -2480,6 +2625,16 @@ def cmd_report_loop(args: argparse.Namespace) -> None:
         print(f"  n={ja['n']}  rate={ja['rate']:.2%}")
     else:
         print("  (no judge events)")
+    print()
+
+    print("Plateau:")
+    proj = verdict["project"]
+    proj_status = "PLATEAUED — pausing the loop" if proj["plateaued"] else "ok"
+    print(f"  project: {proj_status}  (n={proj['n']}, {proj['reason']})")
+    for layer in sorted(verdict["bench"]):
+        b = verdict["bench"][layer]
+        b_status = "PLATEAUED — stop spending on ab here" if b["plateaued"] else "ok"
+        print(f"  bench {layer}: {b_status}  (report-only; n={b['n']}, {b['reason']})")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -2645,7 +2800,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_report = sub.add_parser("report-loop", help="Loop observability: decisions, held-out trend, judge agreement")
     p_report.add_argument("--json", action="store_true", help="Machine-readable summary")
     p_report.add_argument("--sink", action="append", metavar="PATH",
-                          help="Extra meta-metrics.jsonl to merge (repeatable)")
+                          help="Extra meta-metrics.jsonl to merge (repeatable). "
+                               "Any extra --sink disables the auto-pause flag write/clear.")
+    p_report.add_argument("--no-flag", action="store_true",
+                          help="Do not write or clear the pause flag based on the project plateau verdict")
+    p_report.add_argument("--plateau-ab-k", type=int, default=None, metavar="K",
+                          help=f"Override PLATEAU_AB_K (default {PLATEAU_AB_K})")
+    p_report.add_argument("--plateau-trial-k", type=int, default=None, metavar="K",
+                          help=f"Override PLATEAU_TRIAL_K (default {PLATEAU_TRIAL_K})")
 
     # judge-audit
     p_judge_audit = sub.add_parser(
