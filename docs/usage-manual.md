@@ -136,8 +136,15 @@ account scopes.
 
 ### …enable the dense judge?
 
-The judge is an LLM that shadow-scores sessions in parallel with you, learning when it can
-be trusted. It is **OFF by default**. Set `judgeModel` in
+The judge is a second LLM that scores every session **in parallel with you** — a dense,
+per-session signal to complement your sparse `/mh-score`. It runs as a dedicated
+**evidence-only evaluator**, not a coding agent: its entire system prompt is replaced with
+a judge persona, it has **zero tools** (can't read files, run commands, or use MCP/browser
+tools), and it judges *only* from the session's recorded trajectory — treating that
+trajectory as untrusted data, not instructions (so a task agent can't steer the verdict).
+It replies inline with one JSON verdict `{passed, confidence, reasoning}`.
+
+**OFF by default.** Enable it by setting `judgeModel` in
 `~/.config/opencode/.meta-harness/config.json`:
 
 **Option A — works now, zero setup** (same vendor, cheap; weaker anti-gaming):
@@ -152,16 +159,37 @@ provider configured in opencode first — `opencode auth login` → OpenRouter, 
 { "judgeModel": "openrouter/google/gemini-2.5-flash" }
 ```
 
-- Takes effect on your **next scored session** — no restart (config is read fresh each idle).
-- It only sets the judge; the proposer stays pinned to opus (the file's other keys default).
-- **Lifecycle:** *shadow* (records agreement only, never touches your score) → *calibrated*
-  once agreement ≥ **0.8** over the last ≥ **20** decisions → *maker-checker*: the prompt
-  now pre-fills `/mh-score <judge-verdict> judge: <reason>` for you to approve or edit. You
-  are always the final checker.
-- Watch it: `grep '\[judge\]' ~/.local/share/opencode/log/opencode.log | tail -5` shows
-  `[judge] AGREE/DISAGREE … calibration 7/20 @ 71%`. Decisions accumulate in
-  `~/.config/opencode/.meta-harness/judge-calibration.json`.
-- Cost: one judge LLM call per scored mh-* session while enabled.
+The config *value* is read fresh each scored session (change the model without a restart),
+but the judge only exists if the running plugin build has it — after **updating the plugin**,
+restart opencode once. It only sets the judge; the proposer stays pinned to opus.
+
+**The three-stage lifecycle:**
+
+1. **Shadow** — the judge scores in the background and records whether it AGREED with your
+   `/mh-score`. It **never touches or delays your score**. Log line per session:
+   `[judge] AGREE|DISAGREE judge=<t/f> human=<t/f> — calibration <n>/20 @ <x>%`
+   (plus `[judge] system prompt replaced …` confirming the persona swap fired).
+2. **Calibrated** — once agreement is ≥ **`judgeMinAgreement`** (0.8) over the last ≥
+   **`judgeMinSessions`** (20) decisions. A judge that can't reach that bar **never graduates**
+   — it stays shadow-only, so a weak judge is safe, just unhelpful.
+3. **Maker-checker** — from then on, the score box **pre-fills the judge's suggestion**:
+   `/mh-score good judge: <short reason>` (or `bad`). You approve it (Enter) or **override**
+   it — the judge proposes, you remain the final checker. Your submitted verdict is what's
+   recorded, never the judge's.
+
+**What to expect:** verdicts land in ~1–3 s. A good judge genuinely **disagrees** sometimes
+(and agrees on real failures) — that discrimination is the point; if it agreed with
+everything it'd be worthless. When it's wrong in maker-checker mode, just edit the prefill.
+Each scored session's verdict is stored on its trace as `record.judge`
+(`{passed, confidence, mode: "shadow"|"prefill", agreed}`); the running agreement lives in
+`~/.config/opencode/.meta-harness/judge-calibration.json`.
+
+- Watch it: `grep '\[judge\]' ~/.local/share/opencode/log/opencode.log | tail -5`.
+- Cost: one judge LLM call per scored mh-* session while enabled. To turn off, set
+  `judgeModel` back to `""` or delete the config file.
+- If the judge wanders or judges poorly, it's usually the model: haiku works but is
+  middling; a stronger or cross-vendor model calibrates more reliably. The
+  **…audit the judge for gaming?** how-to (next section) cross-checks it against verifier truth.
 
 ### …audit the judge for gaming?
 
