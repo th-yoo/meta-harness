@@ -48,9 +48,12 @@ of the real `/usr/local` — existing binaries read/execute through it, and NEW
 installs (e.g. `sqlite-with-gcov`'s `ln -s … /usr/local/bin/sqlite3`) land in the
 writable farm. This replaced a 225M writable copytree.
 
-- **Add/replace-only:** creating or replacing a `/usr/local/bin` entry works;
-  modifying a *pre-existing* binary in place does not (it reads through to the
-  read-only real file). No baseline task needs the latter.
+- **New installs land cleanly.** Creating a `/usr/local/bin` name that isn't
+  already present works (e.g. `sqlite-with-gcov` installs `sqlite3`, which
+  otherwise lives in `/usr/bin`, so the farm doesn't pre-seed it). *Replacing* a
+  pre-existing entry needs `ln -sf`/rm-first (a bare `ln -s` hits `EEXIST` on the
+  pre-seeded symlink), and *modifying* a pre-existing binary in place fails (it
+  reads through to the read-only real file). No baseline task needs either.
 - The stale `~/bench/usrlocal` (from the old copytree) is dead — safe to
   `rm -rf ~/bench/usrlocal`.
 

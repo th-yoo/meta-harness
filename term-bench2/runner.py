@@ -371,6 +371,18 @@ def ns_wrap(
     that must PERSIST to ~/bench/extras/<task> (bound), rather than living in
     the discarded tmpfs. Used for setup-created assets the verifier reads back.
     """
+    # MH_BENCH_WORK must be under $HOME: only $HOME is bind-mounted, and /app…
+    # /tmp are symlinks resolved from the sandbox root, so a non-$HOME work root
+    # (e.g. /tmp/...) makes the /tmp symlink self-reference → ELOOP. Fail here
+    # with a clear message rather than deep in an opaque bwrap error. (Guarded
+    # at the sandbox-build choke point, not at import, so path-only unit tests
+    # that set a /tmp MH_BENCH_WORK without running bwrap still work.)
+    _home = Path.home().resolve()
+    _work = BENCH_WORK.resolve()
+    if _work != _home and _home not in _work.parents:
+        die(f"MH_BENCH_WORK must be under $HOME ({_home}); got {BENCH_WORK} — "
+            f"a non-$HOME sandbox root ELOOPs the sandbox.")
+
     bwrap_args = [
         "bwrap",
         # CAP_SYS_CHROOT: some tests chroot into a jail to verify a static

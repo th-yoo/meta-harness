@@ -57,6 +57,21 @@ def test_ensure_localbin_builds_symlink_farm(tmp_path, monkeypatch):
         assert not link.is_file() or link.is_symlink()   # no real file copy
 
 
+def test_ns_wrap_rejects_non_home_work(monkeypatch):
+    # M1: building a sandbox with a non-$HOME MH_BENCH_WORK must die clearly
+    import pytest
+    monkeypatch.setattr(runner, "BENCH_WORK", Path("/tmp/not-home-xyz"))
+    with pytest.raises(SystemExit):
+        runner.ns_wrap(["true"])
+
+
+def test_ns_wrap_allows_home_work(monkeypatch):
+    # a $HOME-rooted work dir builds args without dying
+    monkeypatch.setattr(runner, "BENCH_WORK", Path.home() / "bench-test-zzz")
+    args = runner.ns_wrap(["true"])
+    assert args[0] == "bwrap" and args[-1] == "true"
+
+
 def test_reset_localbin_drops_extras_restores_base(tmp_path, monkeypatch):
     farm = tmp_path / "localbin"
     monkeypatch.setattr(runner, "LOCALBIN_FARM", farm)
