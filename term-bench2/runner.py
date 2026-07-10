@@ -1837,6 +1837,48 @@ def sentinel_regression_reject(decision: str, reasons: list, ho_sentinel,
     return decision, reasons
 
 
+def ab_decision(task_results: dict, cfg: "DecisionConfig", early_stopped: bool,
+                fold_out_tasks: list, sentinel_out_tasks: list) -> tuple:
+    """PURE. Compute the A/B verdict from task_results + config — this is the
+    single place that wires the stratified held-out gate:
+
+      - held-in stats are pooled as usual.
+      - held-out stats fed to decide() are FOLD-ONLY (filter_task_results with
+        sentinel=False) — sentinels are excluded so a sentinel-both-arms-pass
+        can never dilute a marginal fold regression under
+        cfg.nonregress_margin (see filter_task_results / dilution test).
+      - an early-stopped run is always forced to reject, regardless of what
+        decide() would otherwise say.
+      - sentinel-only results are checked separately via
+        sentinel_regression_reject, which can force a reject independently of
+        the fold gate's own decision.
+
+    Extracted out of cmd_ab's _verdict_dict so this wiring is directly
+    unit-testable: reverting to a pooled held-out stat here (instead of
+    sentinel=False) flips the dilution test in test_splits_band.py from green
+    to red instead of silently reintroducing the dilution bug.
+
+    Returns (decision, reasons, held_in, held_out, held_out_sentinel) where the
+    last two are PairStats or None — None iff there were no fold / sentinel
+    held-out tasks in this split respectively (mirrors the prior inline logic:
+    an empty fold_out_tasks/sentinel_out_tasks means "no such stat", not "a
+    zero stat").
+    """
+    from ab_stats import decide, paired_run_stats
+    hi = paired_run_stats(filter_task_results(task_results, "held-in"))
+    ho = (paired_run_stats(filter_task_results(task_results, "held-out", sentinel=False))
+          if fold_out_tasks else None)
+    ho_sentinel = (paired_run_stats(filter_task_results(task_results, "held-out", sentinel=True))
+                  if sentinel_out_tasks else None)
+    decision, reasons = decide(hi, ho, cfg)
+    if early_stopped and decision != "reject":
+        decision = "reject"
+        reasons.append("early-stopped on futility")
+    decision, reasons = sentinel_regression_reject(
+        decision, reasons, ho_sentinel, cfg.nonregress_margin)
+    return decision, reasons, hi, ho, ho_sentinel
+
+
 def cmd_split(args: argparse.Namespace) -> None:
     from bench_store import append_meta_metric
     splits_path = Path(args.split_file) if args.split_file else SPLITS_PATH_DEFAULT
@@ -1924,7 +1966,7 @@ def cmd_ab(args: argparse.Namespace) -> None:
         list_versions, record_session, write_trajectory, prune_trajectories,
     )
     from ab_stats import (
-        DecisionConfig, paired_run_stats, futility_stop, decide,
+        DecisionConfig, paired_run_stats, futility_stop,
         bootstrap_task_ci, mcnemar_exact_one_sided,
     )
     tb_root = Path(args.tb_root).expanduser().resolve()
@@ -2041,18 +2083,10 @@ def cmd_ab(args: argparse.Namespace) -> None:
                 "bootCI90": list(bootstrap_task_ci(list(ps.task_deltas.values())))}
 
     def _verdict_dict(status: str) -> dict:
-        hi = _stats("held-in")
-        # Stratified held-out gate: decide() only ever sees fold-only stats —
-        # a sentinel both arms pass would otherwise inflate n_pairs without
-        # moving b/c, diluting a marginal fold regression under the margin.
-        ho = _stats("held-out", sentinel=False) if fold_out_tasks else None
-        ho_sentinel = _stats("held-out", sentinel=True) if sentinel_out_tasks else None
-        decision, reasons = decide(hi, ho, cfg)
-        if early_stopped and decision != "reject":
-            decision = "reject"
-            reasons.append("early-stopped on futility")
-        decision, reasons = sentinel_regression_reject(
-            decision, reasons, ho_sentinel, cfg.nonregress_margin)
+        # All decision logic (including the stratified held-out gate wiring)
+        # lives in ab_decision — this is now just a thin formatter.
+        decision, reasons, hi, ho, ho_sentinel = ab_decision(
+            task_results, cfg, early_stopped, fold_out_tasks, sentinel_out_tasks)
         winner = {"accept": "candidate", "reject": "active", "inconclusive": "tie"}[decision]
         included = {t: tr for t, tr in task_results.items() if not tr.get("error")}
         n_all = len(included)

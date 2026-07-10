@@ -208,6 +208,117 @@ def test_sentinel_regression_guard_is_noop_when_no_regression():
     assert decision2 == "accept" and reasons2 == ["ok"]
 
 
+# ── Task 2, Step 1c: ab_decision — pins the fold-only gate wiring ──────────
+#
+# _verdict_dict used to build the held-out stats fed to decide() inline
+# (`ho = _stats("held-out", sentinel=False)`), with zero test exercising that
+# exact wiring — the dilution test above feeds hand-built PairStats straight
+# into ab_stats.decide(), so silently reverting to a pooled
+# `_stats("held-out")` would leave the whole suite green. These tests drive
+# the extracted `runner.ab_decision` (now the only thing _verdict_dict calls)
+# directly, so that revert breaks a test instead of silently reintroducing
+# the dilution bug.
+
+def test_ab_decision_fold_only_wiring_rejects_marginal_regression_despite_sentinel_dilution():
+    """Same fixture as test_sentinel_dilution_pooled_would_pass_but_fold_only_rejects,
+    driven through ab_decision end-to-end (not decide() directly): a marginal
+    fold regression must still reject even though 3 concordant-pass sentinels
+    would dilute the pooled delta back inside --nonregress-margin."""
+    held_in_results = {
+        f"hi{i}": {"phase": "held-in", "sentinel": False,
+                   "candidate": [1], "active": [0]}
+        for i in range(6)
+    }
+    fold_results = {
+        "fold_a": {"phase": "held-out", "sentinel": False,
+                   "candidate": [1] * 6, "active": [1] * 6},
+        "fold_b": {"phase": "held-out", "sentinel": False,
+                   "candidate": [1] * 6, "active": [1] * 6},
+        "fold_c": {"phase": "held-out", "sentinel": False,
+                   "candidate": [1] * 5 + [0], "active": [1] * 6},
+    }
+    sentinel_results = {
+        f"sent_{x}": {"phase": "held-out", "sentinel": True,
+                      "candidate": [1], "active": [1]}
+        for x in ("a", "b", "c")
+    }
+    task_results = {**held_in_results, **fold_results, **sentinel_results}
+    cfg = DecisionConfig()   # defaults: alpha=0.05, nonregress_margin=0.05
+
+    decision, reasons, hi, ho, ho_sentinel = runner.ab_decision(
+        task_results, cfg, early_stopped=False,
+        fold_out_tasks=list(fold_results), sentinel_out_tasks=list(sentinel_results))
+
+    # Discrimination: prove this is a fold-only-vs-pooled distinction, not an
+    # accident of these numbers — the pooled view (what a reverted wiring
+    # would feed decide()) dilutes the same regression back inside margin.
+    pooled = paired_run_stats(runner.filter_task_results(task_results, "held-out"))
+    assert pooled.delta >= -cfg.nonregress_margin           # pooled "fixes" it away — the bug
+    assert ho.delta < -cfg.nonregress_margin                # fold-only still shows the regression
+
+    assert decision == "reject"
+    assert any("held-out regression" in r for r in reasons)
+    assert ho_sentinel is not None and ho_sentinel.delta == 0.0   # sentinels themselves concordant
+
+
+def test_ab_decision_sentinel_regression_forces_reject_over_would_be_accept():
+    """Held-in wins significantly and the fold is clean (decide() alone would
+    accept) — but a sentinel regression must force reject regardless."""
+    held_in_results = {
+        f"hi{i}": {"phase": "held-in", "sentinel": False,
+                   "candidate": [1], "active": [0]}
+        for i in range(6)
+    }
+    fold_results = {
+        "fold_a": {"phase": "held-out", "sentinel": False,
+                   "candidate": [1] * 6, "active": [1] * 6},
+        "fold_b": {"phase": "held-out", "sentinel": False,
+                   "candidate": [1] * 6, "active": [1] * 6},
+    }
+    sentinel_results = {
+        f"sent_{x}": {"phase": "held-out", "sentinel": True,
+                      "candidate": [0], "active": [1]}
+        for x in ("a", "b", "c")
+    }
+    task_results = {**held_in_results, **fold_results, **sentinel_results}
+    cfg = DecisionConfig()
+
+    decision, reasons, hi, ho, ho_sentinel = runner.ab_decision(
+        task_results, cfg, early_stopped=False,
+        fold_out_tasks=list(fold_results), sentinel_out_tasks=list(sentinel_results))
+
+    assert any("accept: held-in significant win" in r for r in reasons)  # decide() itself said accept
+    assert decision == "reject"                                          # sentinel override wins
+    assert "sentinel regression" in reasons
+
+
+def test_ab_decision_early_stopped_forces_reject_over_would_be_accept():
+    """A futility early-stop must force reject even when the (necessarily
+    partial) stats decide() sees would otherwise say accept."""
+    held_in_results = {
+        f"hi{i}": {"phase": "held-in", "sentinel": False,
+                   "candidate": [1], "active": [0]}
+        for i in range(6)
+    }
+    fold_results = {
+        "fold_a": {"phase": "held-out", "sentinel": False,
+                   "candidate": [1] * 6, "active": [1] * 6},
+        "fold_b": {"phase": "held-out", "sentinel": False,
+                   "candidate": [1] * 6, "active": [1] * 6},
+    }
+    task_results = {**held_in_results, **fold_results}
+    cfg = DecisionConfig()
+
+    decision, reasons, hi, ho, ho_sentinel = runner.ab_decision(
+        task_results, cfg, early_stopped=True,
+        fold_out_tasks=list(fold_results), sentinel_out_tasks=[])
+
+    assert any("accept: held-in significant win" in r for r in reasons)  # decide() itself said accept
+    assert decision == "reject"                                          # early-stop override wins
+    assert "early-stopped on futility" in reasons
+    assert ho_sentinel is None
+
+
 # ── Task 2: --resume split fingerprint (splitHash) ──────────────────────────
 
 def test_split_hash_deterministic_and_order_invariant():
