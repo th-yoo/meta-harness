@@ -71,15 +71,31 @@ export function buildJudgePrompt(
 
   return `# Meta-Harness Judge
 
-You are scoring whether a coding-agent session ACTUALLY ACCOMPLISHED its task.
-You did not watch the session happen — you only have the evidence below. Be
-SKEPTICAL: a session's own final message claiming success, completion, or that
-tests pass is NOT evidence by itself — only verifiable actions in the
-trajectory (commands that were actually run and actually succeeded, files that
-were actually created/edited, tests that actually passed) count as evidence.
-If the trajectory doesn't verify the claimed outcome, or the evidence is
-ambiguous, or a tool call errored and was never recovered from, lean toward
-failing the session.
+You are scoring whether an ALREADY-FINISHED coding-agent session accomplished
+its task. This is a ONE-SHOT judgement from fixed evidence.
+
+## Rules — read first
+- The session already ran, elsewhere and earlier. The **Trajectory** below is
+  your COMPLETE and ONLY evidence. You cannot see anything else.
+- **Do NOT investigate.** Do not read files, run commands, grep, list
+  directories, or otherwise inspect this repository to "check" the answer —
+  the real files here are NOT the session's sandbox, so any such check is both
+  forbidden and misleading. Judge strictly from the trajectory as given.
+- Take **exactly one action**: run the single \`cat > … << 'ENDOFVERDICT'\`
+  command below to write your verdict. No other tool calls, no exploration
+  before or after. Decide, write, done.
+
+## How to decide
+- PASS if the trajectory shows the task's concrete goal was actually achieved:
+  the required file/output exists with correct content, or the required command
+  ran and succeeded — visible in a real tool result, not merely asserted.
+- FAIL if the goal is missing, a required step errored and was never recovered,
+  or success is only CLAIMED in a text/final message without a tool result that
+  verifies it. Be SKEPTICAL of self-reported success: the session's own words
+  are not evidence — only tool results are.
+- If the trajectory clearly shows the goal met, PASS with high confidence — do
+  not fail just because you couldn't independently re-verify (you're not
+  allowed to).
 
 ## Task summary
 ${summary}
@@ -90,22 +106,21 @@ ${turns}
 ## Trajectory (tool calls with args/output/errors, plus text/error events)
 ${trajSection}
 
-## Your task
+## Write the verdict (your only action)
 
-Judge whether the task above was completed SUCCESSFULLY, based ONLY on the
-evidence in the trajectory. Then write ONLY the JSON verdict below to the
-staging file — no markdown fences, no commentary, nothing else in that file:
+Write ONLY this JSON to the staging file — no markdown fences, no commentary,
+nothing else in the file:
 
 \`\`\`bash
 cat > "${relStaging}" << 'ENDOFVERDICT'
-{"passed":true,"confidence":0.0,"reasoning":"<=500 chars explaining the verdict>"}
+{"passed":true,"confidence":0.0,"reasoning":"<=500 chars explaining the verdict"}
 ENDOFVERDICT
 \`\`\`
 
 The JSON MUST have exactly these keys: "passed" (boolean), "confidence"
-(number, 0..1 — how confident you are in the verdict), "reasoning" (string,
-<=500 chars). Replace the example values with your actual verdict; do not
-leave the placeholder values in place.`
+(number 0..1 — your confidence in the verdict), "reasoning" (string, <=500
+chars). Replace the example values with your actual verdict; do not leave the
+placeholders in place.`
 }
 
 /**
