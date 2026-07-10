@@ -52,9 +52,32 @@ test("buildJudgePrompt with an empty trajectory still renders without throwing",
 
 // ── parseVerdict (reads the judge's inline reply) ──────────────────────────
 
-test("parseVerdict extracts a bare JSON verdict", () => {
+test("parseVerdict extracts a bare JSON verdict — trivial absent defaults to false", () => {
   const v = parseVerdict(`{"passed":true,"confidence":0.9,"reasoning":"file created and verified"}`)
-  expect(v).toEqual({ passed: true, confidence: 0.9, reasoning: "file created and verified" })
+  expect(v).toEqual({ passed: true, confidence: 0.9, reasoning: "file created and verified", trivial: false })
+})
+
+test("parseVerdict parses trivial:true when present", () => {
+  const v = parseVerdict(`{"passed":true,"confidence":0.9,"reasoning":"just said hi","trivial":true}`)
+  expect(v?.trivial).toBe(true)
+})
+
+test("parseVerdict parses trivial:false when explicitly present", () => {
+  const v = parseVerdict(`{"passed":true,"confidence":0.9,"reasoning":"real work","trivial":false}`)
+  expect(v?.trivial).toBe(false)
+})
+
+test("parseVerdict defaults trivial to false when the key is a non-boolean", () => {
+  expect(parseVerdict(`{"passed":true,"confidence":0.9,"reasoning":"x","trivial":"yes"}`)?.trivial).toBe(false)
+  expect(parseVerdict(`{"passed":true,"confidence":0.9,"reasoning":"x","trivial":1}`)?.trivial).toBe(false)
+  expect(parseVerdict(`{"passed":true,"confidence":0.9,"reasoning":"x","trivial":null}`)?.trivial).toBe(false)
+})
+
+test("a verdict without a trivial key is still a fully valid verdict (back-compat)", () => {
+  const v = parseVerdict(`{"passed":false,"confidence":0.3,"reasoning":"errored and unrecovered"}`)
+  expect(v).not.toBeNull()
+  expect(v?.passed).toBe(false)
+  expect(v?.trivial).toBe(false)
 })
 
 test("parseVerdict tolerates prose + markdown fences around the JSON", () => {

@@ -103,6 +103,13 @@ export interface SessionRecord {
     confidence?: number
     mode: "shadow" | "prefill"
     agreed?: boolean
+    /** Judge-rated triviality (Task 7 / Option A): a session too trivial
+     * (greeting, single-file read, one-liner lookup…) to be an informative
+     * fitness signal. When true, `resolveTrial` excludes this session from
+     * both the trial-side and baseline-side rate computations, and index.ts
+     * excludes it from auto-propose counts and judge calibration. Absent on
+     * pre-Task-7 records and treated the same as false. */
+    trivial?: boolean
   }
 }
 
@@ -891,16 +898,21 @@ export function startTrial(
   appendMetaMetric(storeRoot, { event: "trial", action: "started", trial: trialVersion, baseline: state.baseline })
 }
 
-function passRate(score: CandidateScore): number {
-  return score.sessions.length > 0 ? score.nPass / score.sessions.length : 0
-}
-
 function sessionModel(s: SessionRecord): string {
   return s.model || "unknown"
 }
 
 function rateOf(sessions: SessionRecord[]): number {
   return sessions.length > 0 ? sessions.filter((s) => s.passed).length / sessions.length : 0
+}
+
+/** Sessions the judge rated `trivial:true` are excluded from every rate/count
+ * computation below (Task 7 / Option A) — they're still recorded on disk, just
+ * uninformative about harness quality (greetings, single-file reads…), so they
+ * must not move a trial confirm/revert decision in either direction. Sessions
+ * with no judge verdict (judge disabled, or verdict null) are unaffected. */
+function nonTrivial(sessions: SessionRecord[]): SessionRecord[] {
+  return sessions.filter((s) => s.judge?.trivial !== true)
 }
 
 /**
@@ -927,25 +939,27 @@ export function resolveTrial(storeRoot: string): TrialResolution {
 
   const trialScore = readScore(storeRoot, trial.trial)
   const baselineScore = readScore(storeRoot, trial.baseline)
+  const trialSessions = nonTrivial(trialScore.sessions)
+  const baselineSessions = nonTrivial(baselineScore.sessions)
 
   // No baseline to compare against — nothing to stratify by; keep original path.
-  if (baselineScore.sessions.length === 0) {
-    if (trialScore.sessions.length < trial.minSessions) {
-      return { action: "pending", have: trialScore.sessions.length, need: trial.minSessions }
+  if (baselineSessions.length === 0) {
+    if (trialSessions.length < trial.minSessions) {
+      return { action: "pending", have: trialSessions.length, need: trial.minSessions }
     }
     clearTrial(storeRoot)
-    const trialRate = passRate(trialScore)
+    const trialRate = rateOf(trialSessions)
     appendMetaMetric(storeRoot, { event: "trial", action: "confirmed", trial: trial.trial, trialRate, baselineRate: null })
     return { action: "confirmed", trial: trial.trial, trialRate, baselineRate: null }
   }
 
-  const baseModels = new Set(baselineScore.sessions.map(sessionModel))
-  const trialSame = trialScore.sessions.filter((s) => baseModels.has(sessionModel(s)))
+  const baseModels = new Set(baselineSessions.map(sessionModel))
+  const trialSame = trialSessions.filter((s) => baseModels.has(sessionModel(s)))
   if (trialSame.length < trial.minSessions) {
     return { action: "pending", have: trialSame.length, need: trial.minSessions }
   }
 
-  const baselineRate = passRate(baselineScore)
+  const baselineRate = rateOf(baselineSessions)
   const trialRate = rateOf(trialSame)
 
   if (trialRate >= baselineRate) {

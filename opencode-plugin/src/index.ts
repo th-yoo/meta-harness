@@ -109,6 +109,15 @@ function isDegenerateSession(turnCount: number, toolUsage: ToolUsage, summary: s
 
 const fmtRate = (r: number): string => `${(r * 100).toFixed(0)}%`
 
+/** Count of a score's sessions the judge did NOT rate `trivial:true` (Task 7 /
+ * Option A) — auto-propose thresholds must fire on informative sessions only,
+ * so a run of greetings/one-liners can't itself trigger a proposal. Sessions
+ * with no judge verdict (judge disabled, or verdict null) always count, same
+ * as before this feature existed. */
+function nonTrivialCount(sessions: SessionRecord[] | undefined): number {
+  return (sessions ?? []).filter((s) => s.judge?.trivial !== true).length
+}
+
 /** Map a /mh-* scope argument to a StoreLayer (shared by propose/activate). */
 function resolveScopeLayer(scope: string, layers: StoreLayer[]): StoreLayer | undefined {
   const s = scope.trim().toLowerCase()
@@ -548,29 +557,39 @@ const metaHarness: Plugin = async (input) => {
       let judgeLogLine: string | undefined
       if (judgeVerdict) {
         const agreed = judgeVerdict.passed === result.passed
+        const trivial = judgeVerdict.trivial === true
         record.judge = {
           passed: judgeVerdict.passed,
           confidence: judgeVerdict.confidence,
           mode: usedPrefill ? "prefill" : "shadow",
           agreed,
+          trivial,
         }
-        appendJudgeDecision({
-          ts: record.timestamp,
-          sessionID: recordID,
-          judge: judgeVerdict.passed,
-          human: result.passed,
-          model: mhCfg.judgeModel,
-        })
-        const cal = judgeCalibration(mhCfg.judgeMinSessions, mhCfg.judgeMinAgreement)
-        appendMetaMetric(prLayer.root, {
-          event: "judge",
-          agreed,
-          judge: judgeVerdict.passed,
-          human: result.passed,
-          agreement: cal.agreement,
-          n: cal.n,
-        })
-        judgeLogLine = `[judge] ${agreed ? "AGREE" : "DISAGREE"} judge=${judgeVerdict.passed} human=${result.passed} — calibration ${cal.n}/${mhCfg.judgeMinSessions} @ ${(cal.agreement * 100).toFixed(0)}%`
+        // Trivial sessions (Task 7 / Option A) are recorded but must NOT
+        // inflate judge calibration — a trivial agreement is not evidence the
+        // judge is well-calibrated on real work, so skip both the per-decision
+        // log and the meta-metric that calibration reads from.
+        if (!trivial) {
+          appendJudgeDecision({
+            ts: record.timestamp,
+            sessionID: recordID,
+            judge: judgeVerdict.passed,
+            human: result.passed,
+            model: mhCfg.judgeModel,
+          })
+          const cal = judgeCalibration(mhCfg.judgeMinSessions, mhCfg.judgeMinAgreement)
+          appendMetaMetric(prLayer.root, {
+            event: "judge",
+            agreed,
+            judge: judgeVerdict.passed,
+            human: result.passed,
+            agreement: cal.agreement,
+            n: cal.n,
+          })
+          judgeLogLine = `[judge] ${agreed ? "AGREE" : "DISAGREE"} judge=${judgeVerdict.passed} human=${result.passed} — calibration ${cal.n}/${mhCfg.judgeMinSessions} @ ${(cal.agreement * 100).toFixed(0)}%`
+        } else {
+          judgeLogLine = `[judge] trivial session — judge=${judgeVerdict.passed} human=${result.passed} (excluded from calibration/fitness)`
+        }
       }
 
       const scores = layers.map((layer) => {
@@ -599,7 +618,7 @@ const metaHarness: Plugin = async (input) => {
 
       await client.tui.showToast({
         body: {
-          message: `Score recorded: ${result.passed ? "✓ good" : "✗ bad"} (${agent} project-role: ${projectRoleScore?.nPass}/${projectRoleScore?.sessions.length})`,
+          message: `Score recorded: ${result.passed ? "✓ good" : "✗ bad"} (${agent} project-role: ${projectRoleScore?.nPass}/${projectRoleScore?.sessions.length})${record.judge?.trivial ? " — trivial: recorded, not counted toward fitness" : ""}`,
           variant: result.passed ? "success" : "warning",
           duration: 4_000,
         },
@@ -635,11 +654,13 @@ const metaHarness: Plugin = async (input) => {
       // stays eligible on the next scored session instead of being lost at the
       // exact multiple; the readTrial guard prevents proposing over an in-flight
       // trial (proposer's own inFlight guard prevents concurrent proposals).
+      // Counts exclude judge-rated-trivial sessions (Task 7 / Option A) — a
+      // run of greetings/one-liners must not itself trigger a proposal.
       const prDue = !!projectRoleScore
-        && projectRoleScore.sessions.length >= PROJECT_ROLE_THRESHOLD
+        && nonTrivialCount(projectRoleScore.sessions) >= PROJECT_ROLE_THRESHOLD
         && readTrial(prLayer.root) === null
       const pgDue = !!projectGlobalScore
-        && projectGlobalScore.sessions.length >= PROJECT_GLOBAL_THRESHOLD
+        && nonTrivialCount(projectGlobalScore.sessions) >= PROJECT_GLOBAL_THRESHOLD
         && readTrial(pgLayer.root) === null
 
       // Check for project plateau pause flag. When present and a propose trigger

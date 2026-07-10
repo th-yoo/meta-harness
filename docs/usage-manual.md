@@ -58,6 +58,13 @@ session"* and pre-fills `/mh-score good`. Type your verdict:
   distinct ids (`<sessionID>#2`, `#3`).
 - **Degenerate sessions are auto-skipped** (never pollute the signal): 0 turns, or 0 tool
   calls **and** a <50-char response → toast *"session skipped (no substantive work)"*.
+- **Trivial-but-tool-using sessions are recorded, not counted** (needs the dense judge
+  enabled — see next section): a greeting, a single-file read, a one-liner lookup still
+  passes the degenerate filter but tells you nothing about harness quality. When the judge
+  rates such a session `trivial:true`, it's still written to `traces/`/`score.json`, but
+  excluded from trial confirm/revert rates, auto-propose thresholds, and judge calibration.
+  The confirmation toast adds *"— trivial: recorded, not counted toward fitness"*. Judge
+  disabled or its verdict missing → no trivial marking, session counts as always.
 - The score prompt times out after **5 minutes** (session skipped).
 - The score feeds **all four layers** at once. Confirmation toast:
   `Score recorded: ✓ good (mh-build project-role: 3/5)`.
@@ -142,7 +149,8 @@ per-session signal to complement your sparse `/mh-score`. It runs as a dedicated
 a judge persona, it has **zero tools** (can't read files, run commands, or use MCP/browser
 tools), and it judges *only* from the session's recorded trajectory — treating that
 trajectory as untrusted data, not instructions (so a task agent can't steer the verdict).
-It replies inline with one JSON verdict `{passed, confidence, reasoning}`.
+It replies inline with one JSON verdict `{passed, confidence, reasoning}`, plus an optional
+`trivial` rating (see **cost control: triviality filtering** below).
 
 **OFF by default.** Enable it by setting `judgeModel` in
 `~/.config/opencode/.meta-harness/config.json`:
@@ -181,12 +189,26 @@ restart opencode once. It only sets the judge; the proposer stays pinned to opus
 (and agrees on real failures) — that discrimination is the point; if it agreed with
 everything it'd be worthless. When it's wrong in maker-checker mode, just edit the prefill.
 Each scored session's verdict is stored on its trace as `record.judge`
-(`{passed, confidence, mode: "shadow"|"prefill", agreed}`); the running agreement lives in
-`~/.config/opencode/.meta-harness/judge-calibration.json`.
+(`{passed, confidence, mode: "shadow"|"prefill", agreed, trivial}`); the running agreement
+lives in `~/.config/opencode/.meta-harness/judge-calibration.json`.
 
-- Watch it: `grep '\[judge\]' ~/.local/share/opencode/log/opencode.log | tail -5`.
-- Cost: one judge LLM call per scored mh-* session while enabled. To turn off, set
-  `judgeModel` back to `""` or delete the config file.
+**Cost control: triviality filtering.** The same judge call also rates whether the session
+was **informative** — would succeeding at it tell you anything about the harness's quality?
+Greetings, single-file reads, one-liner lookups, and rote commands come back `trivial:true`;
+anything requiring real multi-step work, judgment, or where failure was plausible comes back
+`trivial:false` (the judge defaults to `false` when unsure, or when it omits the field
+entirely). A `trivial:true` session is still recorded — its trace and `score.json` entry are
+unchanged — but it is **excluded** from: trial confirm/revert rates (both the trial and the
+baseline side), auto-propose session-count thresholds, and judge calibration (a trivial
+agreement doesn't inflate the agreement stat). This needs the judge **enabled**; with the
+judge off (or its verdict missing for a given session), nothing changes — every session
+counts exactly as it did before this feature.
+
+- Watch it: `grep '\[judge\]' ~/.local/share/opencode/log/opencode.log | tail -5` (a trivial
+  session logs `[judge] trivial session — … (excluded from calibration/fitness)`).
+- Cost: one judge LLM call per scored mh-* session while enabled — triviality rating adds
+  **zero extra LLM cost** (it rides the same verdict call). To turn off the judge entirely,
+  set `judgeModel` back to `""` or delete the config file.
 - If the judge wanders or judges poorly, it's usually the model: haiku works but is
   middling; a stronger or cross-vendor model calibrates more reliably. The
   **…audit the judge for gaming?** how-to (next section) cross-checks it against verifier truth.

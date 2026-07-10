@@ -78,6 +78,17 @@ def test_parse_judge_reply_ignores_json_missing_required_keys():
     assert got == {"passed": True, "confidence": 0.5, "reasoning": "ok"}
 
 
+def test_parse_judge_reply_tolerates_extra_trivial_key():
+    # Task 7 / Option A: judge-prompt.txt (the shared persona file) now also
+    # asks the judge to rate `trivial`. parse_judge_reply requires only
+    # passed/confidence/reasoning (a subset check) so the extra key must pass
+    # straight through, unvalidated — judge-audit ignores it since bench tasks
+    # already have verifier ground truth.
+    text = '{"passed": true, "confidence": 0.9, "reasoning": "ok", "trivial": true}'
+    got = parse_judge_reply(text)
+    assert got == {"passed": True, "confidence": 0.9, "reasoning": "ok", "trivial": True}
+
+
 # ── cmd_judge_audit control flow ─────────────────────────────────────────────
 #
 # No LLM, no sandbox: run_judge_opencode is monkeypatched to canned replies,

@@ -49,6 +49,11 @@ export interface JudgeVerdict {
   passed: boolean
   confidence: number
   reasoning: string
+  /** Whether the session was too trivial to be an informative fitness signal
+   * (Task 7 / Option A) — e.g. a greeting or a one-liner lookup. Optional:
+   * `parseVerdict` always fills it in (defaulting to false), but the field
+   * doesn't exist on pre-Task-7 verdicts. */
+  trivial?: boolean
 }
 
 /**
@@ -109,10 +114,11 @@ ${trajSection}
 Reply with ONLY the JSON verdict as your entire message — no tools, no markdown
 fences, no commentary before or after:
 
-{"passed":true,"confidence":0.0,"reasoning":"<=500 chars explaining the verdict"}
+{"passed":true,"confidence":0.0,"reasoning":"<=500 chars explaining the verdict","trivial":false}
 
-Exactly these keys: "passed" (boolean), "confidence" (number 0..1), "reasoning"
-(string, <=500 chars). Replace the example values with your actual verdict.`
+Required keys: "passed" (boolean), "confidence" (number 0..1), "reasoning"
+(string, <=500 chars). Optional key: "trivial" (boolean) — defaults to false
+when omitted. Replace the example values with your actual verdict.`
 }
 
 /**
@@ -144,7 +150,16 @@ export function parseVerdict(text: string): JudgeVerdict | null {
         typeof raw.confidence === "number" && raw.confidence >= 0 && raw.confidence <= 1 &&
         typeof raw.reasoning === "string"
       ) {
-        last = { passed: raw.passed, confidence: raw.confidence, reasoning: raw.reasoning.slice(0, 500) }
+        last = {
+          passed: raw.passed,
+          confidence: raw.confidence,
+          reasoning: raw.reasoning.slice(0, 500),
+          // Optional and separately validated: present+boolean is honored,
+          // absent or wrong-typed defaults to false — never rejects the
+          // whole verdict (passed/confidence/reasoning are still all this
+          // requires).
+          trivial: typeof raw.trivial === "boolean" ? raw.trivial : false,
+        }
       }
     } catch { /* not a JSON object here — keep scanning */ }
   }
