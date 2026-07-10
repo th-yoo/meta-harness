@@ -278,6 +278,13 @@ with `append_meta_metric`/`appendMetaMetric`. Reporter: `python3 term-bench2/run
 report-loop [--json]` summarizes held-out pass-rate trajectory, accept/reject/inconclusive
 counts, and cumulative judge-agreement rate. `/mh-status` shows last decision.
 
+**Difficulty-band filtering + sentinels + plateau detection** (Phase 4 cost control): To focus
+the `ab` gate on tasks the model struggles with (not the trivially easy ones), use `split make
+--results` to compute per-task pass rates, then filter to a pass-rate band [0.2, 0.8] with a
+small set of easy-task "sentinels" that ride held-out only as regression guards. `report-loop`
+detects project plateau (4 trials without improvement) and writes an auto-pause flag that skips
+auto-propose; unpause manually or via a fresh plateau-free verdict.
+
 ## 12. Status & gotchas
 
 - Selection gate, promotion, degenerate-session filter, role wiring, version

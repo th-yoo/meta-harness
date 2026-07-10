@@ -219,6 +219,74 @@ counts, trial confirm/revert counts, held-out delta per split rotation, and judg
 Notes: needs **Python 3.12+**; the default project sink assumes you're in this repo — for
 another project pass `--sink <that-worktree>/.meta-harness/meta-metrics.jsonl`.
 
+### …focus the loop on hard tasks (difficulty band)?
+
+By default, `ab` evaluates all baseline tasks. To focus on tasks the current model struggles
+with (difficulty-band filtering), create a difficulty-calibrated split:
+
+```bash
+# Generate/update results file with pass rates from prior runs
+python3 term-bench2/runner.py run --all --agent mh-build --results-file results.json
+
+# Create a split with tasks in pass-rate band [0.2, 0.8] (hard tasks)
+# Exclude very easy tasks (rate ≥0.9); keep sentinels (easy-regression guards)
+python3 term-bench2/runner.py split make --results results.json \
+  --band 0.2,0.8 --sentinels 3 --sentinel-hi 0.9
+```
+
+Then use this split in `ab` runs: `ab --split-file term-bench2/splits.json …`
+
+**What the band does:**
+- **Held-in pool** (folds 1–3): only tasks in [band-lo, band-hi]. This focuses evaluation
+  on the hard middle where the model is actually learning.
+- **Unknown-rate tasks stay in** — if you haven't run a task yet, it can't be ruled out and
+  stays in the fold (they're valuable for discovery).
+- **Sentinels** (easy-regression guards, ~3 tasks): tasks with rate ≥ sentinel-hi (default
+  0.9). They ride the held-out fold only, never held-in. This catches regressions on easy
+  tasks where the model shouldn't slip.
+- **Excluded** (very easy, or out of reach): tasks below band-lo and easy-task overflow stay
+  out entirely; they're neither hard nor regression-guards.
+
+**Sentinel role** — Sentinels are paired-compared separately (stratified gate) so they can
+detect easy-task regressions *independently* of fold regression. If a candidate both arms
+pass on sentinels, that's no signal; only sentinel-only regressions (arm A passes, arm B
+fails) force a reject with reason "sentinel regression."
+
+**Caveat: Excluded tasks have NO automatic graduation path.** They re-enter the fold only
+via a future `split make --results` run with fresh pass-rate data on them. This requires
+deliberately re-running those tasks. Don't expect the band to self-correct downward as the
+model improves — you must refresh the calibration yourself.
+
+### …know when to stop (plateau)?
+
+The loop detects and flags project plateau — when recent trials and `ab` runs show no
+meaningful progress. Check with:
+
+```bash
+python3 term-bench2/runner.py report-loop        # shows Plateau: section
+python3 term-bench2/runner.py report-loop --json  # includes plateau verdict
+```
+
+**Plateau detection and auto-pause:**
+
+- **Project plateau** (triggers auto-pause): last 4 resolved trials without strict improvement
+  (each trial's pass-rate < prior active version's pass-rate + epsilon). When detected,
+  `report-loop` writes `<repo>/.meta-harness/paused` with a timestamp. This signals the
+  plugin to skip auto-propose (manual `/mh-propose` still works).
+- **Per-layer bench advice** (REPORT-ONLY, no auto-pause): last 3 `ab` events all non-accept
+  + held-out delta slope ≤ 0. This suggests you should stop manual `ab` spending on that
+  layer, but doesn't pause auto-propose.
+
+**Unpause:** Remove the paused flag manually (`rm .meta-harness/paused`) or run another
+`report-loop` with no plateau detected — it clears the flag. Meanwhile, `/mh-propose` and
+manual `/mh-curate` still work (only auto-propose is paused).
+
+**Caveat: Don't rerun `split make` while an `ab --resume` is in flight.** The active split
+carries a hash that `ab --resume` validates. If you regenerate the split mid-run, the hash
+won't match and `ab --resume` will refuse to continue (splitHash mismatch). **Restart the
+`ab` instead** — the interrupted run's partial results are kept in `score.json` and will
+resume cleanly on a fresh `ab` run.
+
 ### …run the benchmark?
 
 ```bash
@@ -279,9 +347,9 @@ Models must be `provider/model` — a bare name fails resolution under oauth.
   `--layers {global,account,project}`, `--agent` (required for role layers), `--alpha` (0.05),
   `--nonregress-margin` (0.05), `--min-tasks-before-stop` (12), `--no-early-stop`,
   `--max-agent-timeout`, `--resume`, `--no-store`, `--save-all-traj`, `--results-file`.
-- **`split`** `{make,rotate,show}` `--seed` (42) `--folds` (4) `--source` (`baseline-tasks.txt`) `--split-file`.
+- **`split`** `{make,rotate,show}` `--seed` (42) `--folds` (4) `--source` (`baseline-tasks.txt`) `--split-file`, `--results PATH` (repeatable, enables difficulty band), `--band LO,HI` (0.2,0.8), `--sentinels N` (3), `--sentinel-hi HI` (0.9).
 - **`oracle`** `[--tasks T…] [--results-file P]` — token-free pipeline validation via solution scripts.
-- **`report-loop`** `[--json] [--sink PATH …]` — merged loop observability (Python 3.12+).
+- **`report-loop`** `[--json] [--sink PATH …]` `[--no-flag]` `[--plateau-ab-k K]` `[--plateau-trial-k K]` — merged loop observability + plateau detection (Python 3.12+).
 - **`judge-audit`** `--layer L --candidate vN [--agent A] [--model M]` (default
   `openrouter/google/gemini-2.5-flash`) `[--limit 10]` — exit **0** clean / **1** alarm / **2** could-not-assess.
 
@@ -312,6 +380,9 @@ Four layer roots (injection order general → specific → env snapshot):
   (bench), `<worktree>/.meta-harness/meta-metrics.jsonl` (project),
   `~/.config/opencode/.meta-harness/meta-metrics.jsonl` (account). Judge decisions:
   `~/.config/opencode/.meta-harness/judge-calibration.json`.
+- **Pause flag** (project plateau): `<worktree>/.meta-harness/paused` (present only when
+  the project is detected as plateaued). Write/clear via `report-loop`; remove manually to
+  unpause auto-propose.
 
 ### Thresholds
 
@@ -324,6 +395,11 @@ Four layer roots (injection order general → specific → env snapshot):
 | curator budget | 25 | active bullets/layer before curation is suggested |
 | proposer timeout | 10 min | background proposer/promoter/curator wait |
 | score-prompt timeout | 5 min | human score prompt before the session is skipped |
+| difficulty band default | 0.2, 0.8 | pass-rate range for held-in pool (LO, HI) |
+| sentinel count default | 3 | easy-task regression guards in held-out |
+| sentinel-hi threshold | 0.9 | pass rate at/above which a task qualifies as sentinel |
+| plateau trial window | 4 | last K resolved trials for project plateau detection |
+| plateau ab window | 3 | last K ab events per layer for bench plateau advice |
 
 ### Environment variables
 
