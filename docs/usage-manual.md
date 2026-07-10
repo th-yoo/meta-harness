@@ -270,11 +270,11 @@ python3 term-bench2/runner.py report-loop --json  # includes plateau verdict
 **Plateau detection and auto-pause:**
 
 - **Project plateau** (triggers auto-pause): last 4 resolved trials without strict improvement
-  (each trial's pass-rate < prior active version's pass-rate + epsilon). When detected,
-  `report-loop` writes `<repo>/.meta-harness/paused` with a timestamp. This signals the
+  (no trial's pass-rate exceeded its prior active version's pass-rate). When detected,
+  `report-loop` writes `<worktree>/.meta-harness/paused` with a timestamp. This signals the
   plugin to skip auto-propose (manual `/mh-propose` still works).
 - **Per-layer bench advice** (REPORT-ONLY, no auto-pause): last 3 `ab` events all non-accept
-  + held-out delta slope ≤ 0. This suggests you should stop manual `ab` spending on that
+  + held-IN delta slope ≤ 0 (larger sample, undiluted by sentinels). This suggests you should stop manual `ab` spending on that
   layer, but doesn't pause auto-propose.
 
 **Unpause:** Remove the paused flag manually (`rm .meta-harness/paused`) or run another
@@ -284,8 +284,8 @@ manual `/mh-curate` still work (only auto-propose is paused).
 **Caveat: Don't rerun `split make` while an `ab --resume` is in flight.** The active split
 carries a hash that `ab --resume` validates. If you regenerate the split mid-run, the hash
 won't match and `ab --resume` will refuse to continue (splitHash mismatch). **Restart the
-`ab` instead** — the interrupted run's partial results are kept in `score.json` and will
-resume cleanly on a fresh `ab` run.
+`ab` instead** — a plain restart (no `--resume`) simply reruns the full comparison from
+scratch under the new split — nothing carries over.
 
 ### …run the benchmark?
 
