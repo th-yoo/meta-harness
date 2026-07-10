@@ -1722,6 +1722,56 @@ def cmd_oracle(args: argparse.Namespace) -> None:
 # ── held-out split ─────────────────────────────────────────────────────────
 
 
+def task_pass_rates(results_paths: list[Path]) -> dict[str, float]:
+    """PURE. Merge per-task pass rates from result files. Handles BOTH shapes:
+    agent-run ({"rewards":[...]}) and oracle/scalar ({"reward":0|1}).
+    Multiple files: pool all rewards per task (sum passes / sum runs).
+    Unreadable file → die() with a clear message; unknown task shape → skip."""
+    passes: dict[str, int] = {}
+    runs: dict[str, int] = {}
+    for p in results_paths:
+        try:
+            data = json.loads(Path(p).read_text())
+        except (OSError, json.JSONDecodeError) as e:
+            die(f"task_pass_rates: cannot read {p}: {e}")
+        for task, entry in data.get("tasks", {}).items():
+            if "rewards" in entry:
+                rs = entry["rewards"]
+            elif "reward" in entry:
+                rs = [entry["reward"]]
+            else:
+                continue  # unknown shape → skip
+            passes[task] = passes.get(task, 0) + sum(rs)
+            runs[task] = runs.get(task, 0) + len(rs)
+    return {t: passes[t] / runs[t] for t in runs if runs[t] > 0}
+
+
+def band_partition(tasks: list[str], rates: dict[str, float], lo: float, hi: float,
+                   sentinel_hi: float, n_sentinels: int, seed: int) -> tuple[list[str], list[str], list[str]]:
+    """PURE. Returns (pool, sentinels, excluded):
+    pool      = tasks with rate in [lo, hi] OR no rate data (unknown stays in)
+    sentinels = up to n_sentinels tasks with rate >= sentinel_hi, seeded-random pick
+    excluded  = the rest (too easy beyond sentinel quota, or rate < lo = out of reach)"""
+    pool: list[str] = []
+    easy_candidates: list[str] = []
+    excluded: list[str] = []
+    for t in tasks:
+        r = rates.get(t)
+        if r is None:
+            pool.append(t)
+        elif r >= sentinel_hi:
+            easy_candidates.append(t)
+        elif lo <= r <= hi:
+            pool.append(t)
+        else:
+            excluded.append(t)
+    shuffled_easy = easy_candidates[:]
+    random.Random(seed).shuffle(shuffled_easy)
+    sentinels = shuffled_easy[:n_sentinels]
+    excluded = excluded + shuffled_easy[n_sentinels:]
+    return pool, sentinels, excluded
+
+
 def load_active_split(splits_path: Path) -> tuple[list[str], list[str], dict]:
     """Return (held_in, held_out, split_meta) from splits.json.
     held_out = folds[activeFold]; held_in = all other folds concatenated."""
@@ -1744,14 +1794,33 @@ def cmd_split(args: argparse.Namespace) -> None:
                  if ln.strip() and not ln.startswith("#")]
         if not tasks:
             die(f"split make: no tasks in {source}")
-        shuffled = tasks[:]
+
+        pool_tasks = tasks
+        band = None
+        sentinels: list[str] = []
+        excluded: list[str] = []
+        rates: dict[str, float] = {}
+        if args.results:
+            lo_str, hi_str = args.band.split(",")
+            band = [float(lo_str), float(hi_str)]
+            rates = task_pass_rates([Path(p) for p in args.results])
+            pool_tasks, sentinels, excluded = band_partition(
+                tasks, rates, band[0], band[1], args.sentinel_hi, args.sentinels, args.seed)
+
+        shuffled = pool_tasks[:]
         random.Random(args.seed).shuffle(shuffled)
         k = args.folds
         folds = [shuffled[i::k] for i in range(k)]   # round-robin over a shuffled list → balanced
         data = {"schemaVersion": 1, "seed": args.seed, "source": source.name,
                 "folds": folds, "activeFold": 0, "rotatedAt": None}
+        if args.results:
+            data["schemaVersion"] = 2
+            data["band"] = band
+            data["sentinels"] = sentinels
+            data["passRates"] = rates
+            data["excluded"] = excluded
         _write_json_atomic(splits_path, data)
-        log(f"split: wrote {splits_path} — {len(tasks)} tasks, {k} folds "
+        log(f"split: wrote {splits_path} — {len(pool_tasks)} tasks, {k} folds "
             f"(sizes {[len(f) for f in folds]})")
     elif args.split_cmd == "rotate":
         if not splits_path.exists():
@@ -2444,6 +2513,15 @@ def build_parser() -> argparse.ArgumentParser:
                          help="task list file in term-bench2/ (for 'make')")
     p_split.add_argument("--split-file", metavar="PATH",
                          help="splits.json path (default: term-bench2/splits.json)")
+    p_split.add_argument("--results", action="append", metavar="PATH",
+                         help="Result file(s) to compute per-task pass rates from (repeatable); "
+                              "enables difficulty-band filtering for 'make'")
+    p_split.add_argument("--band", default="0.2,0.8", metavar="LO,HI",
+                         help="Pass-rate band [lo,hi] kept in the pool (default: 0.2,0.8)")
+    p_split.add_argument("--sentinels", type=int, default=3,
+                         help="Number of easy tasks to keep as sentinels (default: 3)")
+    p_split.add_argument("--sentinel-hi", type=float, default=0.9,
+                         help="Pass rate at/above which a task is sentinel-eligible (default: 0.9)")
 
     # oracle
     p_oracle = sub.add_parser("oracle", help="Validate pipeline with solution/solve.sh")
