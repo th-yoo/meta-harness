@@ -61,12 +61,20 @@ mk_oc_env() {
     "$REPO_ROOT" > "$OC_PROJ/opencode.json"
 
   # The mh-* agent + slash-command definitions live in the repo's .opencode/
-  # (agents/mh-build.md, commands/mh-*.md) plus the plugin's installed deps
-  # (.opencode/node_modules). These are STATIC config — the plugin only mutates
-  # .meta-harness (temp) and the account store (temp XDG) — so symlinking the
-  # real .opencode read-only is safe and makes `--agent mh-build` + the slash
-  # commands resolve without a per-run npm install.
-  ln -s "$REPO_ROOT/.opencode" "$OC_PROJ/.opencode"
+  # (agents/mh-build.md, commands/mh-*.md). COPY the git-tracked config so the
+  # temp env can never write through to the real repo (a symlink would leave the
+  # real agents/commands exposed, and any write to a gitignored path there —
+  # e.g. a lockfile refresh — would escape the "git status stays clean" check).
+  # Only .opencode/node_modules (gitignored plugin deps, large) is symlinked
+  # read-side so we don't reinstall per run.
+  mkdir -p "$OC_PROJ/.opencode"
+  cp -r "$REPO_ROOT/.opencode/agents"   "$OC_PROJ/.opencode/agents"
+  cp -r "$REPO_ROOT/.opencode/commands" "$OC_PROJ/.opencode/commands"
+  for f in package.json package-lock.json bun.lock; do
+    [ -e "$REPO_ROOT/.opencode/$f" ] && cp "$REPO_ROOT/.opencode/$f" "$OC_PROJ/.opencode/$f"
+  done
+  [ -d "$REPO_ROOT/.opencode/node_modules" ] && \
+    ln -s "$REPO_ROOT/.opencode/node_modules" "$OC_PROJ/.opencode/node_modules"
 
   # Seed a baseline project-role (mh-build) store: active v0 + empty candidate.
   OC_ROLE_ROOT="$OC_PROJ/.meta-harness/roles/mh-build"

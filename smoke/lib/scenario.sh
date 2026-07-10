@@ -40,6 +40,9 @@ TRIAL_JSON='{"trial":"v1","baseline":"v0","baselineSystem":"# baseline","baselin
 assert_no_spawn() {
   local n L
   L="$(ls -t "$OC_DATA/opencode/log"/*.log 2>/dev/null | head -1)"
-  n="$(grep -cE 'message=created id=ses_' "$L" 2>/dev/null || echo 99)"
-  [ "${n:-99}" -le 1 ]
+  [ -n "$L" ] || return 0   # no log at all → nothing was created
+  # grep -c prints "0" and exits 1 on zero matches; capture the count directly
+  # (do NOT `|| echo 99` — that appends a second line and breaks the [ -le ]).
+  n="$(grep -cE 'message=created id=ses_' "$L" 2>/dev/null)"
+  [ "${n:-0}" -le 1 ]
 }

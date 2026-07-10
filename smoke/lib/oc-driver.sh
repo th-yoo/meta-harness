@@ -23,6 +23,7 @@ require_tools() {
   local missing=""
   command -v tmux >/dev/null 2>&1 || missing="$missing tmux"
   command -v opencode >/dev/null 2>&1 || missing="$missing opencode"
+  command -v git >/dev/null 2>&1 || missing="$missing git"   # mk_oc_env needs `git init` for the worktree boundary
   if [ -n "$missing" ]; then
     echo "SKIP: missing required tool(s):$missing"
     exit 0
