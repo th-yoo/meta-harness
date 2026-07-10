@@ -96,5 +96,10 @@ oc_run_command() {
 # oc_key <KEY...> — send special tmux key names (Escape, Tab, C-p, Up, Down, ...).
 oc_key() { tmux send-keys -t "$OC_SESSION" "$@"; }
 
+# oc_settle [poll_iters=2500] — burn real wall-clock (each capture-pane fork is
+# the clock) to let a background trigger run before inspecting state. Matches a
+# never-present pattern so it always runs the full budget.
+oc_settle() { oc_wait_for "___never___settle___" "${1:-2500}" || true; }
+
 # oc_kill — tear down the pane.
 oc_kill() { tmux kill-session -t "$OC_SESSION" 2>/dev/null; return 0; }
