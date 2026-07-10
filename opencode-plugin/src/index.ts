@@ -34,6 +34,8 @@
  */
 
 import type { Plugin, PluginInput, PluginModule } from "@opencode-ai/plugin"
+import fs from "fs"
+import path from "path"
 import { gatherEnvSnapshot } from "./env-snapshot.ts"
 import { adjustedTimeout } from "./bash-timeout.ts"
 import {
@@ -127,6 +129,12 @@ const pendingScore = new Set<string>()
 // overwrite. NOT cleared by cleanupSession — it must persist across cycles;
 // it resets naturally on plugin reload / opencode restart.
 const sessionScoreCount = new Map<string, number>()
+// Tracks which sessions have already shown the plateau pause toast.
+// NOT cleared by cleanupSession (unlike snapshotCache, etc.) — similar to
+// sessionScoreCount, which must persist across scoring cycles. This prevents
+// toast spam when the pause flag exists: each session shows the toast once,
+// then is cleaned up. The Set resets naturally on plugin reload.
+const pausedToastShown = new Set<string>()
 const snapshotCache = new Map<string, string>()
 const snapshotInjected = new Set<string>()
 const sessionModel = new Map<string, string>()
@@ -634,10 +642,25 @@ const metaHarness: Plugin = async (input) => {
         && projectGlobalScore.sessions.length >= PROJECT_GLOBAL_THRESHOLD
         && readTrial(pgLayer.root) === null
 
-      if (prDue) {
+      // Check for project plateau pause flag. When present and a propose trigger
+      // is due, skip the auto-propose and show an info toast once per session.
+      const pausedFlagPath = path.join(worktree, ".meta-harness", "paused")
+      const paused = fs.existsSync(pausedFlagPath)
+      if (paused && (prDue || pgDue) && !pausedToastShown.has(sessionID)) {
+        pausedToastShown.add(sessionID)
+        await log(client, "info", "[hook:event] auto-propose skipped — project plateau pause flag present")
+        await client.tui.showToast({
+          body: {
+            title: "Meta-Harness",
+            message: "auto-propose paused (project plateau) — rm .meta-harness/paused to resume; /mh-propose still works",
+            variant: "info",
+            duration: 10_000,
+          },
+        })
+      } else if (prDue && !paused) {
         await log(client, "info", `[hook:event] auto-propose project-role for ${agent}`)
         void triggerPropose(client, worktree, prLayer)
-      } else if (pgDue) {
+      } else if (pgDue && !paused) {
         await log(client, "info", `[hook:event] auto-propose project-global`)
         void triggerPropose(client, worktree, pgLayer)
       }
@@ -795,6 +818,22 @@ const metaHarness: Plugin = async (input) => {
           }
           lines.push(line)
         }
+
+        // Check for plateau pause flag and show status
+        const pausedFlagPath = path.join(worktree, ".meta-harness", "paused")
+        if (fs.existsSync(pausedFlagPath)) {
+          let ts = "unknown"
+          try {
+            const pausedContent = JSON.parse(fs.readFileSync(pausedFlagPath, "utf8"))
+            if (typeof pausedContent.ts === "string") {
+              ts = pausedContent.ts
+            }
+          } catch {
+            // Tolerate unreadable/garbage flag content — presence alone means paused
+          }
+          lines.push(`  PAUSED: auto-propose disabled (plateau since ${ts}) — rm .meta-harness/paused to resume`)
+        }
+
         const prLayer = layers.find((l) => l.scope === "project-role")
         if (prLayer) {
           const last = readLastMetric(prLayer.root, ["trial", "activate", "ab", "propose", "curate"])
