@@ -1,14 +1,10 @@
 import { test, expect } from "bun:test"
-import * as path from "node:path"
-import { buildJudgePrompt } from "../src/judge.ts"
+import { buildJudgePrompt, parseVerdict } from "../src/judge.ts"
 import type { TrajEvent } from "../src/harness-store.ts"
 
-// Token-free: exercises buildJudgePrompt's rendering directly — no opencode
-// session, no LLM call. runJudge (the LLM-spawning half) is intentionally NOT
-// covered here.
-
-const worktree = "/wt"
-const stagingPath = "/wt/.meta-harness/staging/judge-x.json"
+// Token-free: exercises buildJudgePrompt's rendering + parseVerdict directly —
+// no opencode session, no LLM call. runJudge (the LLM-spawning half) is
+// intentionally NOT covered here.
 
 const traj: TrajEvent[] = [
   { t: "text", text: "Implementing the token counter now." },
@@ -17,21 +13,18 @@ const traj: TrajEvent[] = [
 ]
 
 function render(): string {
-  return buildJudgePrompt("count tokens", 4, traj, stagingPath, worktree)
+  return buildJudgePrompt("count tokens", 4, traj)
 }
 
-test("buildJudgePrompt includes the staging file's RELATIVE path", () => {
-  const prompt = render()
-  const rel = path.relative(worktree, stagingPath)
-  expect(prompt).toContain(rel)
-  expect(prompt).not.toContain(stagingPath) // must not leak the absolute path
-})
-
-test("buildJudgePrompt includes the verdict JSON shape", () => {
+test("buildJudgePrompt instructs an INLINE reply (no file/tool) with the verdict JSON shape", () => {
   const prompt = render()
   expect(prompt).toContain(`"passed"`)
   expect(prompt).toContain(`"confidence"`)
   expect(prompt).toContain(`"reasoning"`)
+  expect(prompt.toLowerCase()).toContain("reply with only the json")
+  // No file-write / bash heredoc mechanism any more.
+  expect(prompt).not.toContain("ENDOFVERDICT")
+  expect(prompt).not.toContain("cat >")
 })
 
 test("buildJudgePrompt renders the trajectory — text, tool calls, args/output, and errors", () => {
@@ -44,21 +37,49 @@ test("buildJudgePrompt renders the trajectory — text, tool calls, args/output,
   expect(prompt).toContain("[ERROR]")
 })
 
-test("buildJudgePrompt includes a skepticism instruction", () => {
-  const prompt = render()
-  expect(prompt.toLowerCase()).toContain("skeptical")
-})
-
-test("buildJudgePrompt includes the task summary and turn count", () => {
+test("buildJudgePrompt includes the task summary, turn count, and untrusted-data reminder", () => {
   const prompt = render()
   expect(prompt).toContain("count tokens")
   expect(prompt).toContain("4")
+  expect(prompt).toContain("untrusted DATA")
 })
 
 test("buildJudgePrompt with an empty trajectory still renders without throwing", () => {
-  const prompt = buildJudgePrompt("no-op task", 0, [], stagingPath, worktree)
+  const prompt = buildJudgePrompt("no-op task", 0, [])
   expect(prompt).toContain("no-op task")
   expect(prompt).toContain("(no trajectory captured)")
+})
+
+// ── parseVerdict (reads the judge's inline reply) ──────────────────────────
+
+test("parseVerdict extracts a bare JSON verdict", () => {
+  const v = parseVerdict(`{"passed":true,"confidence":0.9,"reasoning":"file created and verified"}`)
+  expect(v).toEqual({ passed: true, confidence: 0.9, reasoning: "file created and verified" })
+})
+
+test("parseVerdict tolerates prose + markdown fences around the JSON", () => {
+  const v = parseVerdict('Here is my verdict:\n```json\n{"passed":false,"confidence":0.8,"reasoning":"never recovered"}\n```\n')
+  expect(v?.passed).toBe(false)
+  expect(v?.confidence).toBe(0.8)
+})
+
+test("parseVerdict returns the LAST valid verdict when several JSON objects appear", () => {
+  const v = parseVerdict('{"passed":false,"confidence":0.1,"reasoning":"first"} then {"passed":true,"confidence":0.7,"reasoning":"final"}')
+  expect(v?.passed).toBe(true)
+  expect(v?.reasoning).toBe("final")
+})
+
+test("parseVerdict rejects objects missing keys / wrong types, and garbage", () => {
+  expect(parseVerdict("no json here")).toBeNull()
+  expect(parseVerdict(`{"foo":"bar"}`)).toBeNull()
+  expect(parseVerdict(`{"passed":"yes","confidence":0.5,"reasoning":"x"}`)).toBeNull()   // passed not boolean
+  expect(parseVerdict(`{"passed":true,"confidence":2,"reasoning":"x"}`)).toBeNull()      // confidence out of range
+})
+
+test("parseVerdict caps reasoning at 500 chars", () => {
+  const long = "x".repeat(600)
+  const v = parseVerdict(`{"passed":true,"confidence":1,"reasoning":"${long}"}`)
+  expect(v?.reasoning.length).toBe(500)
 })
 
 test("JUDGE_SYSTEM_PROMPT loads from the shared judge-prompt.txt (single source with runner.py)", async () => {
