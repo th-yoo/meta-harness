@@ -1,22 +1,29 @@
 /**
  * cli.ts — mini argv parser + dispatcher for the bench runner port.
  *
- * Structured for extension (more subcommands land in later phases: run, ab,
- * split, report, judge — see the task brief's "Explicitly OUT of scope");
- * only `prep` and `oracle` exist today, no speculative flags for the others.
+ * Structured for extension (`run`, `ab`, `judge-audit` land in P6 — see the
+ * task brief's "Explicitly OUT of scope"); `prep`, `oracle`, `split`, and
+ * `report-loop` exist today, no speculative flags for the others.
  */
 import { makeBenchPaths } from "./paths.ts"
 import { cmdPrep } from "./cmd-prep.ts"
 import { cmdOracle } from "./cmd-oracle.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
+import { cmdSplit, type SplitArgs } from "./splits.ts"
+import { cmdReportLoop, type ReportLoopArgs } from "./report-loop.ts"
 import { BenchError } from "./util.ts"
 
 const USAGE = `usage: runner.ts [--tb-root PATH] <command> [options]
 
 commands:
-  prep   [--apply]
-  oracle [--tasks TASK [TASK ...]] [--task-file PATH] [--results-file PATH]
-         [--staging scripts|runtime]  (default: runtime)`
+  prep        [--apply]
+  oracle      [--tasks TASK [TASK ...]] [--task-file PATH] [--results-file PATH]
+              [--staging scripts|runtime]  (default: runtime)
+  split       make|rotate|show [--seed N] [--folds N] [--source FILE]
+              [--split-file PATH] [--results PATH]... [--band LO,HI]
+              [--sentinels N] [--sentinel-hi F]
+  report-loop [--json] [--sink PATH]... [--no-flag]
+              [--plateau-ab-k K] [--plateau-trial-k K]`
 
 function printUsage(): void {
   console.error(USAGE)
@@ -105,6 +112,118 @@ function parseOracleArgs(argv: string[]): OracleArgs | null {
   return out
 }
 
+function parseSplitArgs(argv: string[]): SplitArgs | null {
+  if (argv.length === 0) return null
+  const splitCmd = argv[0]
+  if (splitCmd !== "make" && splitCmd !== "rotate" && splitCmd !== "show") return null
+  const out: SplitArgs = { splitCmd }
+  let i = 1
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--seed") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.seed = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--folds") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.folds = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--source") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.source = v
+      i += 2
+      continue
+    }
+    if (a === "--split-file") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.splitFile = v
+      i += 2
+      continue
+    }
+    if (a === "--results") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.results = out.results ?? []
+      out.results.push(v)
+      i += 2
+      continue
+    }
+    if (a === "--band") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.band = v
+      i += 2
+      continue
+    }
+    if (a === "--sentinels") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.sentinels = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--sentinel-hi") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.sentinelHi = Number(v)
+      i += 2
+      continue
+    }
+    return null
+  }
+  return out
+}
+
+function parseReportLoopArgs(argv: string[]): ReportLoopArgs | null {
+  const out: ReportLoopArgs = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--json") {
+      out.json = true
+      i++
+      continue
+    }
+    if (a === "--no-flag") {
+      out.noFlag = true
+      i++
+      continue
+    }
+    if (a === "--sink") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.sink = out.sink ?? []
+      out.sink.push(v)
+      i += 2
+      continue
+    }
+    if (a === "--plateau-ab-k") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.plateauAbK = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--plateau-trial-k") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.plateauTrialK = Number(v)
+      i += 2
+      continue
+    }
+    return null
+  }
+  return out
+}
+
 export async function main(argv: string[]): Promise<number> {
   try {
     const global = extractTbRoot(argv)
@@ -138,6 +257,24 @@ export async function main(argv: string[]): Promise<number> {
           return 2
         }
         await cmdOracle(paths, oracleArgs)
+        return 0
+      }
+      case "split": {
+        const splitArgs = parseSplitArgs(subArgs)
+        if (splitArgs === null) {
+          printUsage()
+          return 2
+        }
+        cmdSplit(paths, splitArgs)
+        return 0
+      }
+      case "report-loop": {
+        const reportArgs = parseReportLoopArgs(subArgs)
+        if (reportArgs === null) {
+          printUsage()
+          return 2
+        }
+        cmdReportLoop(paths, reportArgs)
         return 0
       }
       default:

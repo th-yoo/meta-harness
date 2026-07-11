@@ -21,6 +21,28 @@ export function pySigned(x: number, digits: number): string {
   return x >= 0 && !s.startsWith("-") ? `+${s}` : s
 }
 
+/**
+ * Vendored seeded PRNG (mulberry32) — deterministic, no third-party deps.
+ * Lives here (rather than duplicated per call site) because both
+ * ab-stats.ts (bootstrapTaskCi) and splits.ts (band_partition's sentinel
+ * pick, cmd_split's pool shuffle/fold assignment) need the SAME seeded
+ * source of randomness; ab-stats.ts re-exports this for its existing import
+ * sites. Ports the *algorithm* Python's random.Random(seed) is used for
+ * (uniform draws driving a Fisher-Yates shuffle / resampling), not its
+ * MT19937 bit stream, which is irreproducible outside CPython — see
+ * ab-stats.ts's file header and splits.ts's header for the consequences.
+ */
+export function mulberry32(seed: number): () => number {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
 /** Thrown by pure functions instead of Python's `die()`. The CLI (P3) is
  * expected to catch this at the top level, print to stderr, and exit 1. */
 export class BenchError extends Error {}

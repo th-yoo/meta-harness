@@ -19,7 +19,9 @@
  *    vendors a seeded mulberry32 PRNG instead, so results are deterministic
  *    under a seed but numerically different from the Python run.
  */
-import { pyFixed, pySigned } from "./util.ts"
+import { pyFixed, pySigned, mulberry32 } from "./util.ts"
+
+export { mulberry32 } from "./util.ts"
 
 export interface PairStats {
   nTasks: number
@@ -144,18 +146,6 @@ function binomialCoefficient(n: bigint, k: bigint): bigint {
     result = (result * (n - i)) / (i + 1n)
   }
   return result
-}
-
-/** Vendored seeded PRNG (mulberry32) — deterministic, no third-party deps. */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0
-    let t = a
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
 }
 
 /**
