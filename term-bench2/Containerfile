@@ -1,0 +1,98 @@
+# term-bench2/Containerfile — the bench sandbox image (built by `cmd-prep` in
+# the P3 exec funnel; see opencode-plugin/src/bench/sandbox.ts for the podman
+# argv builders that consume this).
+#
+# This replaces the old Python runner's bwrap sandbox (a fresh tmpfs root
+# bind-mounted over the host's /usr, /etc, ~/bench, ...) with a real,
+# throwaway container per task attempt: podman create/start once, then
+# `podman exec` per step (setup -> agent -> verifier) against this image,
+# then `podman rm -f -t 0`. Containers run as root, with real sudo/apt-get —
+# determinism instead comes from SKIP_APT=1 plus the packages already baked
+# in below (task setup_deps.sh scripts still run with SKIP_APT=1 and never
+# hit the network for apt).
+#
+# The apt package list below is the union of term-bench2/apt-packages.txt and
+# the EXTRA_APT list in runner.py (~line 190), plus a few packages the podman
+# design needs that the bwrap sandbox got for free from the host: sudo (bwrap
+# ran unprivileged and shimmed sudo/apt-get as no-ops; here sudo is real),
+# python-is-python3 (TB2 tasks assume a bare `python`; bwrap's ~/bench/bin
+# shim provided this — here it's a real system symlink), ca-certificates,
+# curl, wget, git (used to fetch uv below and by tasks that clone/fetch).
+# NOT hand-maintained forever: P4 makes this apt union Dockerfile-derived
+# from apt-packages.txt directly instead of being manually inlined here.
+#
+# NOT included here (added at container-run time in later phases):
+#   - opencode itself and any credential mounts for the agent phase (P6).
+FROM docker.io/library/ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_BREAK_SYSTEM_PACKAGES=1
+
+RUN apt-get update && apt-get install -y \
+    apache2-utils \
+    asciinema \
+    bc \
+    binutils \
+    build-essential \
+    ca-certificates \
+    coq \
+    curl \
+    e2fsprogs \
+    expect \
+    extundelete \
+    ffmpeg \
+    foremost \
+    fossil \
+    g++ \
+    gcc \
+    git \
+    less \
+    libgl1 \
+    libglib2.0-0t64 \
+    libgomp1 \
+    libjpeg-dev \
+    libsm6 \
+    libtesseract-dev \
+    libxext6 \
+    libxrender-dev \
+    mailman3 \
+    mailutils \
+    make \
+    nano \
+    net-tools \
+    nginx \
+    nodejs \
+    npm \
+    openssh-server \
+    openssl \
+    postfix \
+    primer3 \
+    python-is-python3 \
+    python3 \
+    python3-opencv \
+    python3-pip \
+    python3-venv \
+    r-base \
+    rustc \
+    screen \
+    sleuthkit \
+    sqlite3 \
+    sudo \
+    tclsh \
+    tesseract-ocr \
+    texlive-latex-base \
+    tmux \
+    unzip \
+    vim \
+    wget \
+    xxd \
+    zip \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# uv, for test.sh's uvx/pytest self-bootstrap (each container's cache warms
+# per-run; network stays enabled for exactly this — see sandbox.ts header).
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+WORKDIR /app
