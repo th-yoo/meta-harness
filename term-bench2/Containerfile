@@ -95,4 +95,9 @@ RUN apt-get update && apt-get install -y \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
+# Buildah records WORKDIR in image config but does not materialize the
+# directory as a filesystem layer — and `podman create -w /app` makes `start`
+# refuse when it's missing. Create the standard task dirs explicitly.
+RUN mkdir -p /app /tests /logs/verifier
+
 WORKDIR /app
