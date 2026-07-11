@@ -12,7 +12,7 @@ is the VT parser; `capture-pane` reads the rendered grid) and asserts on it.
 
 ```bash
 bash smoke/run.sh                 # Tier A only (token-free, no model calls)
-MH_SMOKE_LIVE=1 bash smoke/run.sh # + Tier B (one cheap Haiku session)
+MH_SMOKE_LIVE=1 bash smoke/run.sh # + Tier B (one Haiku session + one pinned-Opus proposer session)
 ```
 
 Exits nonzero if any scenario fails; skips cleanly (exit 0) if `tmux` or
@@ -34,11 +34,12 @@ opencode auth (`~/.local/share/opencode/auth.json`).
 | `s7-curate-guard`  | `/mh-curate role` acks **and spawns no curator** (trial-guarded) |
 | `s8-promote-gate`  | `/mh-promote role` acks **and spawns no promoter** (evidence-gated) |
 
-**Tier B — live** (gated by `MH_SMOKE_LIVE=1`, ~$0.01 of Haiku):
+**Tier B — live** (gated by `MH_SMOKE_LIVE=1`; ~$0.01 of Haiku + one pinned-Opus proposer session, ~1–2 min):
 
 | scenario | asserts |
 |---|---|
 | `autofill` | on session-idle the plugin prefills `/mh-score good`; submitting it renders the `Score recorded` toast |
+| `propose-live` | `/mh-propose role` end-to-end on a seeded archive: proposer spawns (pinned model), **reads the full trajectories on disk** (agentic store access, evolution-loop.md §11b), writes diagnosis+ops, plugin consumes staging → candidate v1 + auto-trial; v0 archive stays byte-intact (read-only guard) |
 
 **Diagnostics — manual, not in the suite** (`smoke/diag/`):
 

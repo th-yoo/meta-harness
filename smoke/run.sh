@@ -4,8 +4,9 @@
 # Tier A (default): token-free scenarios — slash commands that never call the
 #   model. Each runs in a fully isolated temp env (temp XDG + git-init'd temp
 #   project); the user's real store is never touched.
-# Tier B (opt-in, MH_SMOKE_LIVE=1): one cheap Haiku session for the autofill +
-#   scoring surfaces, which require a real interactive session to render.
+# Tier B (opt-in, MH_SMOKE_LIVE=1): live scenarios — one cheap Haiku session
+#   (autofill + scoring) and one pinned-Opus proposer session (propose-live),
+#   surfaces that require a real interactive/background session to render.
 #
 # Exits nonzero if any scenario fails. Skips cleanly (exit 0) if tmux/opencode
 # are unavailable.
@@ -31,10 +32,10 @@ echo "── Tier A (token-free) ──"
 for f in "$SMOKE_DIR"/tier-a/s*.sh; do run_scenario "$f"; done
 
 if [ "${MH_SMOKE_LIVE:-0}" = "1" ]; then
-  echo; echo "── Tier B (live, one Haiku session) ──"
+  echo; echo "── Tier B (live: one Haiku + one pinned-Opus proposer session) ──"
   for f in "$SMOKE_DIR"/tier-b/*.sh; do [ -e "$f" ] && run_scenario "$f"; done
 else
-  echo; echo "── Tier B skipped (set MH_SMOKE_LIVE=1 to run the live autofill scenario) ──"
+  echo; echo "── Tier B skipped (set MH_SMOKE_LIVE=1 to run the live scenarios) ──"
 fi
 
 echo
