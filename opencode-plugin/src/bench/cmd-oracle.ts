@@ -56,6 +56,7 @@ export async function runOneOracleTask(paths: BenchPaths, task: string): Promise
     await podman(buildStartArgv(name))
     await podman(buildExecArgv(name, ["mkdir", "-p", "/app", "/tests", "/logs/verifier"]))
 
+    log(`  setup_deps.sh (${task})...`)
     const setupResult = await podman(
       buildExecArgv(name, ["bash", `/mh/tasks/${task}/setup_deps.sh`], {
         env: { TB_ROOT: "/tb", WORKDIR: "/app", EXTRAS_ROOT: "", SKIP_APT: "1" },
@@ -138,6 +139,7 @@ function writeOracleResults(
     tasks: tasksDict(results),
     status,
   })
+  log(`Results written → ${resultsFile}`)
 }
 
 export async function cmdOracle(

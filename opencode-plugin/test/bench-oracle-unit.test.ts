@@ -232,7 +232,18 @@ test("cmdOracle: incremental + final results-file JSON matches Python cmd_oracle
     return { reward: 1, elapsed: 12.3, error: "" }
   }
 
-  await cmdOracle(paths, { tasks: ["a", "b"], resultsFile }, fake)
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await cmdOracle(paths, { tasks: ["a", "b"], resultsFile }, fake)
+
+    // Python parity (runner.py:1402-1405 `_write_results`): every write to the
+    // results file — incremental and final — logs "Results written → <path>".
+    const messages = errSpy.mock.calls.map((c) => c[0])
+    const writtenMessages = messages.filter((m) => m === `Results written → ${resultsFile}`)
+    expect(writtenMessages.length).toBe(3) // 2 incremental (task a, task b) + 1 final
+  } finally {
+    errSpy.mockRestore()
+  }
 
   const final = JSON.parse(fs.readFileSync(resultsFile, "utf-8"))
   expect(final).toEqual({
