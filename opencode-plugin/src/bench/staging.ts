@@ -10,11 +10,29 @@
  *    shared bench image (term-bench2/Containerfile) is a deliberate
  *    approximation that unions every task's real dependencies, so a
  *    non-ubuntu:24.04 base is just noted, not honored.
- *  - WORKDIR and other lifecycle directives (ARG/CMD/ENTRYPOINT/EXPOSE/...)
- *    are ignored exactly as gen_setup_deps.py ignores them — the generator's
- *    WORKDIR handler is a no-op (`pass`), and the generated scripts always
- *    operate against a fixed $WORKDIR (here, the podman container's fixed
- *    /app), never the Dockerfile's own WORKDIR value.
+ *  - WORKDIR is HONORED as a persistent cwd — a deliberate DEVIATION from
+ *    gen_setup_deps.py (whose WORKDIR handler is a no-op `pass`; the
+ *    generated scripts always operate against a fixed $WORKDIR regardless of
+ *    the Dockerfile's own WORKDIR value). That no-op is a genuine generator
+ *    bug: crack-7z-hash's `WORKDIR /app/john/src` then `RUN ./configure` must
+ *    run in /app/john/src, not /app. This port tracks a current-workdir
+ *    threaded through parseTaskDockerfile's single instruction pass
+ *    (default "/app"): absolute WORKDIR replaces it, relative WORKDIR
+ *    resolves against the previous value (Docker semantics), and every
+ *    subsequent "run"/"pip" step records the cwd active when it was
+ *    encountered (stageTaskRuntime mkdir -p's and cd's into it before the
+ *    command — see cwdPrefix — but only when it differs from the default
+ *    /app, so existing behavior for WORKDIR-less Dockerfiles is unchanged).
+ *    COPY dst resolution ("." / "./") also resolves against the current
+ *    cwd instead of a hardcoded /app.
+ *  - ARG: a bare `ARG NAME` (no default) is build-arg-supplied and
+ *    contributes nothing (none of our tasks pass build args). `ARG
+ *    NAME=default` is a second DEVIATION from gen_setup_deps.py (which
+ *    ignores ARG entirely, lumped in with the other lifecycle directives):
+ *    Docker makes a defaulted ARG available to subsequent RUN steps exactly
+ *    like ENV, so this port accumulates `ARG NAME=default` into the same env
+ *    map ENV uses — bn-fit-modify's `ARG BN_URL=...` followed by `RUN curl
+ *    "${BN_URL}"` otherwise trips `set -u` (unbound variable).
  *  - ENV: accumulated into one flat map and applied (as `export K="V"` lines,
  *    with any embedded `$VAR` reference guarded as `${VAR:-}` to survive
  *    `set -u`, mirroring gen_setup_deps.py's make_env_section) before EVERY
@@ -31,7 +49,15 @@
  *    financial-document-processor's multi-stage Dockerfile) is skipped
  *    entirely, matching the generator's own silent no-op for both cases
  *    (it only special-cases uv as a *flag*, `has_uv_copy`, which the codegen
- *    template never actually reads).
+ *    template never actually reads). Multi-source COPY (`COPY a b c dest/`)
+ *    is a third DEVIATION from gen_setup_deps.py: the generator keeps only
+ *    `parts[0]`/`parts[-1]` (bug-for-bug — a real instance is build-pmars's
+ *    `COPY warriors/flashpaper.red warriors/rave.red /app/`, which the
+ *    generator would silently drop rave.red from). Docker requires the dest
+ *    of a multi-source COPY to be a directory, so this port instead emits a
+ *    copy for EVERY source when there are 2+ of them — correctness for
+ *    non-vendored tasks over exact generator parity. Single-source COPY
+ *    behavior is unchanged.
  *  - RUN: apt-get/apt INSTALL lines contribute package names (verbatim port
  *    of gen_setup_deps.py's extract_apt_packages token rules — noise-word
  *    filtering, version-pin stripping, the libgl1-mesa-glx/libglib2.0-0
@@ -49,8 +75,16 @@
  *    included) to ONE combined venv+`uv pip install` step — mirroring
  *    gen_setup_deps.py's make_pip_section, which always combines every
  *    task's pip packages into a single install line regardless of how many
- *    RUN lines matched. `uv run ...` lines and any other unclassified RUN
- *    line become verbatim "run" steps, executed with cwd /app. Lines that
+ *    RUN lines matched. The venv lives at PIP_VENV (/opt/.venv, NOT /app —
+ *    a DEVIATION from the generator's /$WORKDIR/.venv, made for the B1 live
+ *    diagnosis fix; see PIP_VENV's own doc comment) and every subsequent
+ *    "run" step's script sources it first if present (VENV_ACTIVATE_GUARD —
+ *    the B2 live diagnosis fix), since each step is its own `podman exec`
+ *    and a venv `source`'d in one exec never carries over to the next.
+ *    `uv run ...` lines and any other unclassified RUN
+ *    line become verbatim "run" steps, executed with the WORKDIR-tracked cwd
+ *    active at that line (default /app — see the WORKDIR porting note
+ *    above). Lines that
  *    are pure cleanup (`rm ...`, `find ... -delete`, `apt-get
  *    clean`/`autoremove`) are dropped outright, matching the generator. A
  *    RUN line that still mentions `apt`/`apt-get` as a whole word but has no
@@ -109,6 +143,11 @@ export interface StagingStep {
   /** pip: accumulated package specs (verbatim, version pins included) across
    * every pip/uv-pip/uv-add RUN line in the Dockerfile */
   packages?: string[]
+  /** run/pip: the WORKDIR-tracked cwd active when this step was encountered
+   * (see A2 porting note above) — undefined/omitted when it's the default
+   * /app, so stageTaskRuntime only emits an extra mkdir -p/cd wrapper when
+   * it actually differs. */
+  cwd?: string
 }
 
 export interface TaskStaging {
@@ -122,15 +161,13 @@ export interface TaskStaging {
   aptPackages: string[]
 }
 
-// Lifecycle / metadata directives gen_setup_deps.py's parser silently
-// ignores (no branch touches them at all — parse_instruction's kw simply
-// never matches, and the loop just moves on). WORKDIR is the one directive
-// worth calling out explicitly: its handler is a literal `pass` in the
-// generator (workspace path is "handled by runner" instead) — it does NOT
-// `cd` anywhere, so there is nothing else to honor here either.
+// Lifecycle / metadata directives with no effect on staging — neither the
+// generator nor this port do anything with them. WORKDIR and ARG are
+// deliberately NOT in this set (unlike gen_setup_deps.py, which ignores both):
+// this port gives each its own case in parseTaskDockerfile's switch (WORKDIR
+// tracks a persistent cwd, ARG-with-default joins the env accumulation) —
+// see the module header's A1/A2 porting notes.
 const IGNORABLE_KEYWORDS = new Set([
-  "WORKDIR",
-  "ARG",
   "CMD",
   "ENTRYPOINT",
   "EXPOSE",
@@ -143,6 +180,38 @@ const IGNORABLE_KEYWORDS = new Set([
   "ONBUILD",
   "MAINTAINER",
 ])
+
+/** Default WORKDIR, matching this runner's container fixed workdir (see
+ * sandbox.ts's SandboxSpec.workdir default). */
+const DEFAULT_CWD = "/app"
+
+/** Where the isolated per-task pip venv lives — deliberately OUTSIDE /app
+ * (see the B1 live-diagnosis fix, fix-code-vulnerability). It used to be
+ * /app/.venv (matching gen_setup_deps.py's make_pip_section verbatim), but
+ * that leaks a stray `.venv` directory into the task's own workspace: any
+ * later "run" step that expects /app to be pristine — most concretely,
+ * fix-code-vulnerability's `RUN git clone ... /app` — trips Docker/git's
+ * "destination path '/app' already exists and is not an empty directory",
+ * even though /app WAS empty when the task's OWN Dockerfile ran that clone
+ * (this port's fixed phase order runs the one combined pip step, which
+ * creates the venv, BEFORE any "run" step — see the module header's phase
+ * order note — regardless of the clone RUN line's earlier position in the
+ * Dockerfile's own source order). /opt is never a COPY/git-clone target in
+ * the upstream corpus, so relocating the venv there is safe and needs no
+ * Containerfile change (both /app and /opt already exist in the shared
+ * image — see the Containerfile's `RUN mkdir -p /app /tests /logs/verifier`
+ * and stock Ubuntu's own /opt). */
+const PIP_VENV = "/opt/.venv"
+
+/** Resolve one WORKDIR directive's body against the previous cwd — Docker
+ * semantics: an absolute value replaces the cwd outright; a relative value
+ * resolves against the previous cwd. Trailing slashes are normalized away
+ * (except the root itself). */
+function resolveWorkdir(body: string, prevCwd: string): string {
+  const w = body.trim()
+  const next = w.startsWith("/") ? posixPath.normalize(w) : posixPath.normalize(posixPath.join(prevCwd, w))
+  return next.length > 1 ? next.replace(/\/+$/, "") : next
+}
 
 // Destination paths that are always directories (COPY file <dir> puts the
 // file inside) — verbatim port of gen_setup_deps.py's _KNOWN_DIR_DESTS.
@@ -301,9 +370,26 @@ function extractPipPackages(body: string): string[] {
 const CLEANUP_ONLY_RE = /^(rm\s|find\s.*-delete|apt-get clean|apt-get autoremove)/
 const APT_WORD_RE = /\bapt(?:-get)?\b/
 
+/** One raw RUN line kept verbatim, tagged with the WORKDIR-tracked cwd active
+ * when it was encountered (see A2 porting note). */
+interface RawRun {
+  cmd: string
+  cwd: string
+}
+
 /** Classify one RUN body, mutating the accumulators — port of gen_setup_deps.py's
- * RUN-handling branch inside parse_dockerfile. */
-function classifyRun(body: string, pipPackages: string[], rawRunLines: string[], aptPackages: string[]): void {
+ * RUN-handling branch inside parse_dockerfile. `pipCwdState` records the cwd
+ * active at the last pip-classified RUN line (there is only ever ONE combined
+ * pip step regardless of how many RUN lines contributed to it — see
+ * parseTaskDockerfile — so this is the closest single cwd to attach to it). */
+function classifyRun(
+  body: string,
+  cwd: string,
+  pipPackages: string[],
+  rawRunLines: RawRun[],
+  aptPackages: string[],
+  pipCwdState: { cwd: string },
+): void {
   const bodyLower = body.toLowerCase()
   let classified = false
 
@@ -316,13 +402,14 @@ function classifyRun(body: string, pipPackages: string[], rawRunLines: string[],
   }
   if (hasPip(bodyLower)) {
     pipPackages.push(...extractPipPackages(body))
+    pipCwdState.cwd = cwd
     classified = true
   }
   if (hasUvRun(bodyLower)) {
     // `uv run ...` is always kept verbatim, unconditionally — matches
     // gen_setup_deps.py appending to raw_runs inside this same branch,
     // bypassing the cleanup/apt-word checks below entirely.
-    rawRunLines.push(body)
+    rawRunLines.push({ cmd: body, cwd })
     classified = true
   }
 
@@ -338,14 +425,16 @@ function classifyRun(body: string, pipPackages: string[], rawRunLines: string[],
       // this line is redundant either way — drop it outright.
       return
     }
-    rawRunLines.push(body)
+    rawRunLines.push({ cmd: body, cwd })
   }
 }
 
 /** Resolve one raw (src, dst) COPY pair into a StagingStep, checking the
  * source on the host (parse_dockerfile / make_copy_section's src_is_dir /
- * dir_target logic, ported verbatim). */
-function resolveCopyStep(paths: BenchPaths, task: string, src: string, dst: string): StagingStep {
+ * dir_target logic, ported verbatim). `cwd` is the WORKDIR-tracked cwd active
+ * at this COPY (see A2 porting note) — used only to resolve the "." / "./"
+ * shorthand dst form; every other dst is already an absolute container path. */
+function resolveCopyStep(paths: BenchPaths, task: string, src: string, dst: string, cwd: string): StagingStep {
   const envDir = join(paths.tbRoot, task, "environment")
   const srcTrimmed = src.replace(/\/+$/, "")
   let srcIsDir = false
@@ -355,11 +444,11 @@ function resolveCopyStep(paths: BenchPaths, task: string, src: string, dst: stri
     srcIsDir = false
   }
 
-  // xlate(): "./" or "." -> "/app/"; anything else is already a real
+  // xlate(): "./" or "." -> "<cwd>/"; anything else is already a real
   // absolute container path (no more ${EXTRAS_ROOT} indirection — see
   // module header). Every COPY dst across the full 91-task upstream corpus
   // is one of these two forms (verified empirically; see bench-staging test).
-  const dstResolved = dst === "./" || dst === "." ? "/app/" : dst
+  const dstResolved = dst === "./" || dst === "." ? `${cwd.replace(/\/+$/, "")}/` : dst
 
   const dstNoSlash = dstResolved.replace(/\/+$/, "")
   const dirTarget = dstResolved.endsWith("/") || KNOWN_DIR_DESTS.has(dstNoSlash) || srcIsDir
@@ -392,10 +481,12 @@ export function parseTaskDockerfile(paths: BenchPaths, task: string): TaskStagin
 
   let baseImage = ""
   const envPairs: [string, string][] = []
-  const rawCopies: { src: string; dst: string }[] = []
+  const rawCopies: { src: string; dst: string; cwd: string }[] = []
   const pipPackages: string[] = []
-  const rawRunLines: string[] = []
+  const rawRunLines: RawRun[] = []
   const rawAptPackages: string[] = []
+  const pipCwdState = { cwd: DEFAULT_CWD }
+  let cwd = DEFAULT_CWD
 
   for (const line of instructions) {
     const [kw, body] = parseInstruction(line)
@@ -405,6 +496,22 @@ export function parseTaskDockerfile(paths: BenchPaths, task: string): TaskStagin
       case "FROM": {
         if (!baseImage) {
           baseImage = body.trim().split(/\s+/)[0] ?? ""
+        }
+        break
+      }
+      case "WORKDIR": {
+        cwd = resolveWorkdir(body, cwd)
+        break
+      }
+      case "ARG": {
+        // `ARG NAME=default` joins the same env accumulation ENV uses, so
+        // subsequent RUN steps see it exported (Docker semantics — see A1
+        // porting note). Bare `ARG NAME` (no default) is build-arg-supplied
+        // and contributes nothing: none of our tasks pass build args.
+        const trimmed = body.trim()
+        const kv = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(trimmed)
+        if (kv) {
+          envPairs.push([kv[1]!, kv[2]!])
         }
         break
       }
@@ -428,17 +535,22 @@ export function parseTaskDockerfile(paths: BenchPaths, task: string): TaskStagin
         }
         const parts = body.trim().split(/\s+/).filter((p) => p.length > 0)
         if (parts.length >= 2) {
-          // Only the first source and the last token (dst) are honored —
-          // a multi-source `COPY a b dst` silently drops the middle
-          // sources, verbatim port of gen_setup_deps.py's `parts[0], parts[-1]`
-          // (see build-pmars for the one real instance of this in the
-          // upstream corpus; it is not part of the Gate-B baseline set).
-          rawCopies.push({ src: parts[0]!, dst: parts[parts.length - 1]! })
+          const dst = parts[parts.length - 1]!
+          const sources = parts.slice(0, -1)
+          // Multi-source COPY (`COPY a b c dest/`): Docker requires the dest
+          // to be a directory, and ALL sources copy into it — a deliberate
+          // DEVIATION from gen_setup_deps.py's `parts[0]`/`parts[-1]`
+          // bug-for-bug port (see module header's COPY porting note / A3;
+          // build-pmars is the one real instance in the upstream corpus).
+          // Single-source COPY (the overwhelmingly common case) is unchanged.
+          for (const src of sources) {
+            rawCopies.push({ src, dst, cwd })
+          }
         }
         break
       }
       case "RUN": {
-        classifyRun(body, pipPackages, rawRunLines, rawAptPackages)
+        classifyRun(body, cwd, pipPackages, rawRunLines, rawAptPackages, pipCwdState)
         break
       }
       default: {
@@ -463,9 +575,17 @@ export function parseTaskDockerfile(paths: BenchPaths, task: string): TaskStagin
   // of this whole `steps` array.
   const steps: StagingStep[] = []
   for (const [k, v] of envPairs) steps.push({ kind: "env", key: k, value: v })
-  for (const rc of rawCopies) steps.push(resolveCopyStep(paths, task, rc.src, rc.dst))
-  if (pipPackages.length > 0) steps.push({ kind: "pip", packages: pipPackages })
-  for (const cmd of rawRunLines) steps.push({ kind: "run", cmd })
+  for (const rc of rawCopies) steps.push(resolveCopyStep(paths, task, rc.src, rc.dst, rc.cwd))
+  if (pipPackages.length > 0) {
+    steps.push({
+      kind: "pip",
+      packages: pipPackages,
+      cwd: pipCwdState.cwd === DEFAULT_CWD ? undefined : pipCwdState.cwd,
+    })
+  }
+  for (const rr of rawRunLines) {
+    steps.push({ kind: "run", cmd: rr.cmd, cwd: rr.cwd === DEFAULT_CWD ? undefined : rr.cwd })
+  }
 
   return { steps, envs, baseImage, aptPackages }
 }
@@ -484,6 +604,30 @@ function envPrelude(envs: Record<string, string>): string {
 }
 
 export type ExecFn = (argv: string[]) => Promise<ExecResult>
+
+/** `mkdir -p "<cwd>" && cd "<cwd>" && ` prefix for a run/pip step's script —
+ * empty when `cwd` is undefined (the default /app, unchanged behavior) per
+ * the A2 porting note. mkdir -p is needed because WORKDIR implicitly creates
+ * the directory in Docker, and this port never runs a separate WORKDIR step. */
+function cwdPrefix(cwd: string | undefined): string {
+  return cwd ? `mkdir -p "${cwd}" && cd "${cwd}" && ` : ""
+}
+
+/** Guard that sources the task's pip venv (see the "pip" step's own script)
+ * IF one has already been created by an earlier step in THIS SAME container —
+ * i.e. an earlier RUN line in the Dockerfile that pip-installed a package.
+ * Every step is its own separate `podman exec`, so environment/PATH changes
+ * from an earlier step never carry over on their own (unlike a real Docker
+ * build, where a later RUN layer inherits everything an earlier RUN layer
+ * left on disk). Without this, a Dockerfile like chess-best-move's `RUN pip3
+ * install pillow ... --break-system-packages` followed by a LATER, separate
+ * `RUN python3 make.py` (which does `from PIL import Image`) fails with
+ * `ModuleNotFoundError: No module named 'PIL'`, even though pip extraction
+ * correctly captured pillow — the package was simply never on this step's
+ * PATH. `if [ -f ... ]; then ...; fi` (not `[ -f ... ] && ...`) so a missing
+ * venv — the common case, most tasks have no pip step at all — is not itself
+ * a failure under this script's `set -euo pipefail`. */
+const VENV_ACTIVATE_GUARD = `if [ -f "${PIP_VENV}/bin/activate" ]; then source "${PIP_VENV}/bin/activate"; fi\n`
 
 function describeStep(step: StagingStep): string {
   switch (step.kind) {
@@ -557,14 +701,15 @@ export async function stageTaskRuntime(
       script =
         setE +
         prelude +
+        cwdPrefix(step.cwd) +
         [
           "command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh",
-          'uv venv --python python3 "/app/.venv" 2>/dev/null || true',
-          'source "/app/.venv/bin/activate"',
+          `uv venv --python python3 "${PIP_VENV}" 2>/dev/null || true`,
+          `source "${PIP_VENV}/bin/activate"`,
           `uv pip install ${pkgs}`,
         ].join("\n")
     } else {
-      script = `${setE}${prelude}${step.cmd}`
+      script = `${setE}${prelude}${VENV_ACTIVATE_GUARD}${cwdPrefix(step.cwd)}${step.cmd}`
     }
 
     const argv = buildExecArgv(name, ["bash", "-c", script])

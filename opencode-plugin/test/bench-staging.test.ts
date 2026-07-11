@@ -274,18 +274,220 @@ test("parseTaskDockerfile: unclassifiable Dockerfile keyword throws BenchError n
   }
 })
 
-test("parseTaskDockerfile: WORKDIR/ARG/CMD/ENTRYPOINT are ignored, not classified as exotic", () => {
+test("parseTaskDockerfile: CMD/ENTRYPOINT/EXPOSE are ignored, not classified as exotic (WORKDIR/ARG are now honored — see A1/A2 tests)", () => {
   const dir = tmpDir()
   const task = "ignorable-directives"
   mkdirSync(path.join(dir, task, "environment"), { recursive: true })
   writeFileSync(
     path.join(dir, task, "environment", "Dockerfile"),
-    "FROM ubuntu:24.04\nARG X=1\nWORKDIR /somewhere-else\nEXPOSE 8080\nCMD [\"true\"]\n",
+    'FROM ubuntu:24.04\nWORKDIR /somewhere-else\nEXPOSE 8080\nCMD ["true"]\n',
   )
   const fakePaths = fakeBenchPaths(dir)
   const staging = parseTaskDockerfile(fakePaths, task)
   expect(staging.baseImage).toBe("ubuntu:24.04")
+  // WORKDIR itself never emits a step (it just updates the tracked cwd for
+  // subsequent run/copy steps — see A2 tests); with no RUN/COPY after it and
+  // no ARG at all, there is nothing left to emit.
   expect(staging.steps).toEqual([])
+})
+
+// ── A1: ARG-with-default -> prelude env (bn-fit-modify) ──────────────────
+// bn-fit-modify/environment/Dockerfile: `ARG BN_URL=https://...` followed by
+// `RUN curl -fsSL "${BN_URL}" -o bn_sample_10k.csv` — Docker makes a
+// build-time ARG's default available to subsequent RUN steps exactly like
+// ENV. Without this, `${BN_URL}` is unbound under `set -u` and the RUN trips
+// `bash: line 2: BN_URL: unbound variable`.
+
+test("parseTaskDockerfile: ARG NAME=default is exported like ENV; bare ARG NAME (no default) is NOT", () => {
+  const dir = tmpDir()
+  const task = "arg-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    "FROM ubuntu:24.04\nARG X=y\nARG Z\nRUN echo $X\n",
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const staging = parseTaskDockerfile(fakePaths, task)
+  // X (has a default) accumulates into envs exactly like ENV would; bare Z
+  // (no default — would be build-arg-supplied, and none of our tasks pass
+  // build args) contributes nothing.
+  expect(staging.envs).toEqual({ X: "y" })
+  expect(staging.steps).toEqual([
+    { kind: "env", key: "X", value: "y" },
+    { kind: "run", cmd: "echo $X" },
+  ])
+})
+
+test("stageTaskRuntime: ARG-with-default's export lands in the RUN step's prelude (bn-fit-modify shape)", async () => {
+  const dir = tmpDir()
+  const task = "arg-prelude-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    'FROM ubuntu:24.04\nWORKDIR /app\nARG BN_URL=https://example.com/x.csv\nRUN curl -fsSL "${BN_URL}" -o x.csv\n',
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+  expect(recordedArgvs.length).toBe(1)
+  const script = recordedArgvs[0]![recordedArgvs[0]!.length - 1]!
+  expect(script).toContain('export BN_URL="https://example.com/x.csv"')
+  expect(script).toContain('curl -fsSL "${BN_URL}" -o x.csv')
+})
+
+// ── A2: WORKDIR as persistent cwd (crack-7z-hash) ─────────────────────────
+// crack-7z-hash/environment/Dockerfile: `WORKDIR /app/john/src` then
+// `RUN ./configure --without-openssl && make` must run in /app/john/src, not
+// /app — Docker semantics: WORKDIR persists for all subsequent RUN/COPY-dest
+// until changed; relative WORKDIR is relative to the previous one.
+
+test("parseTaskDockerfile: WORKDIR sets cwd on subsequent RUN steps", () => {
+  const dir = tmpDir()
+  const task = "workdir-run-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    "FROM ubuntu:24.04\nWORKDIR /a/b\nRUN ./configure\n",
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const staging = parseTaskDockerfile(fakePaths, task)
+  expect(staging.steps).toEqual([{ kind: "run", cmd: "./configure", cwd: "/a/b" }])
+})
+
+test("parseTaskDockerfile: two WORKDIRs (absolute then relative) compose", () => {
+  const dir = tmpDir()
+  const task = "workdir-compose-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    "FROM ubuntu:24.04\nWORKDIR /a/b\nWORKDIR c\nRUN make\n",
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const staging = parseTaskDockerfile(fakePaths, task)
+  expect(staging.steps).toEqual([{ kind: "run", cmd: "make", cwd: "/a/b/c" }])
+})
+
+test("parseTaskDockerfile: WORKDIR then COPY x . lands under the workdir", () => {
+  const dir = tmpDir()
+  const task = "workdir-copy-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(path.join(dir, task, "environment", "x"), "data")
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    "FROM ubuntu:24.04\nWORKDIR /a/b\nCOPY x .\n",
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const staging = parseTaskDockerfile(fakePaths, task)
+  expect(staging.steps).toEqual([
+    { kind: "copy", src: "x", dst: "/a/b/", srcIsDir: false, dirTarget: true, contentsOnly: false },
+  ])
+})
+
+test("parseTaskDockerfile: WORKDIR resets back after a later absolute WORKDIR (crack-7z-hash shape: /app/john/src then /app)", () => {
+  const dir = tmpDir()
+  const task = "workdir-reset-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(path.join(dir, task, "environment", "x"), "data")
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    "FROM ubuntu:24.04\nWORKDIR /app/john/src\nRUN ./configure && make\nWORKDIR /app\nCOPY x .\n",
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const staging = parseTaskDockerfile(fakePaths, task)
+  // fixed phase order (copy before run — see module header), NOT Dockerfile
+  // source order; the point under test is that the RUN step still carries
+  // the earlier /app/john/src cwd while the COPY resolves against the later
+  // (reset-back) /app cwd.
+  expect(staging.steps).toEqual([
+    { kind: "copy", src: "x", dst: "/app/", srcIsDir: false, dirTarget: true, contentsOnly: false },
+    { kind: "run", cmd: "./configure && make", cwd: "/app/john/src" },
+  ])
+})
+
+test("stageTaskRuntime: a non-default cwd RUN step mkdir -p's and cd's into the workdir before the command", async () => {
+  const dir = tmpDir()
+  const task = "workdir-exec-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    "FROM ubuntu:24.04\nWORKDIR /app/john/src\nRUN ./configure\n",
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+  expect(recordedArgvs.length).toBe(1)
+  const script = recordedArgvs[0]![recordedArgvs[0]!.length - 1]!
+  expect(script).toContain('mkdir -p "/app/john/src"')
+  expect(script).toContain('cd "/app/john/src"')
+  expect(script).toContain("./configure")
+})
+
+test("stageTaskRuntime: default cwd (/app, no WORKDIR) emits no extra mkdir/cd wrapper (unchanged behavior)", async () => {
+  const dir = tmpDir()
+  const task = "workdir-default-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(path.join(dir, task, "environment", "Dockerfile"), "FROM ubuntu:24.04\nRUN echo hi\n")
+  const fakePaths = fakeBenchPaths(dir)
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+  const script = recordedArgvs[0]![recordedArgvs[0]!.length - 1]!
+  expect(script).not.toContain("mkdir -p")
+  expect(script).not.toContain("cd \"")
+})
+
+// ── A3: multi-source COPY (build-pmars) ───────────────────────────────────
+// build-pmars/environment/Dockerfile: `COPY warriors/flashpaper.red
+// warriors/rave.red /app/` — a genuine 2-source COPY into a directory dest.
+// gen_setup_deps.py bug-for-bug keeps only parts[0]/parts[-1] (dropping any
+// middle sources); this port deliberately DEVIATES for correctness on
+// non-vendored tasks: ALL sources copy into a directory dest.
+
+test("parseTaskDockerfile: 3-source COPY into dest/ copies all three sources", () => {
+  const dir = tmpDir()
+  const task = "multi-copy-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(path.join(dir, task, "environment", "a.txt"), "a")
+  writeFileSync(path.join(dir, task, "environment", "b.txt"), "b")
+  writeFileSync(path.join(dir, task, "environment", "c.txt"), "c")
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    "FROM ubuntu:24.04\nCOPY a.txt b.txt c.txt dest/\n",
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const staging = parseTaskDockerfile(fakePaths, task)
+  expect(staging.steps).toEqual([
+    { kind: "copy", src: "a.txt", dst: "dest/", srcIsDir: false, dirTarget: true, contentsOnly: false },
+    { kind: "copy", src: "b.txt", dst: "dest/", srcIsDir: false, dirTarget: true, contentsOnly: false },
+    { kind: "copy", src: "c.txt", dst: "dest/", srcIsDir: false, dirTarget: true, contentsOnly: false },
+  ])
+})
+
+test("parseTaskDockerfile: single-source COPY behavior unchanged (2 parts = src, dst — not multi-source)", () => {
+  const dir = tmpDir()
+  const task = "single-copy-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(path.join(dir, task, "environment", "a.txt"), "a")
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    "FROM ubuntu:24.04\nCOPY a.txt /app/\n",
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const staging = parseTaskDockerfile(fakePaths, task)
+  expect(staging.steps).toEqual([
+    { kind: "copy", src: "a.txt", dst: "/app/", srcIsDir: false, dirTarget: true, contentsOnly: false },
+  ])
 })
 
 // ── ENV: accumulation, later-wins, and the ${VAR:-} guard on execution ────
@@ -518,6 +720,106 @@ test("stageTaskRuntime: every step's script (copy, pip, run) starts with `set -e
   // `set -euo pipefail` prefix, this `;`-joined command would exit 0 even
   // though `false` failed midway — the guard is what makes it fail loud.
   expect(scripts[2]).toContain("false; true")
+})
+
+// ── B2 live diagnosis fix: a later RUN step sources the pip venv ─────────
+// chess-best-move/environment/Dockerfile: `RUN pip3 install pillow==11.2.1
+// --break-system-packages` followed (as a SEPARATE RUN, hence a separate
+// podman exec) by `RUN python3 make.py`, which does `from PIL import Image`.
+// pip extraction correctly captures "pillow==11.2.1" (verified live), but
+// without this guard the later run step's own `podman exec` never sees the
+// isolated /opt/.venv pip installed into — `python3 make.py` fails with
+// `ModuleNotFoundError: No module named 'PIL'` even though staging "worked".
+
+test("stageTaskRuntime: a run step sources /opt/.venv if a pip step already created it (chess-best-move shape)", async () => {
+  const dir = tmpDir()
+  const task = "pip-then-run-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    [
+      "FROM ubuntu:24.04",
+      "RUN pip3 install pillow==11.2.1 --break-system-packages",
+      "RUN python3 make.py",
+    ].join("\n"),
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+
+  // one combined pip step, then the raw run — the run step's script must
+  // source the venv (guarded so a Dockerfile with NO pip step at all, the
+  // common case, doesn't fail on a missing /opt/.venv under set -e).
+  expect(recordedArgvs.length).toBe(2)
+  const scripts = recordedArgvs.map((argv) => argv[argv.length - 1]!)
+  expect(scripts[0]).toContain("uv pip install")
+  expect(scripts[0]).toContain('"pillow==11.2.1"')
+  expect(scripts[1]).toContain('if [ -f "/opt/.venv/bin/activate" ]; then source "/opt/.venv/bin/activate"; fi')
+  expect(scripts[1]).toContain("python3 make.py")
+})
+
+// ── B1 live diagnosis fix: the pip venv lives OUTSIDE /app ────────────────
+// fix-code-vulnerability/environment/Dockerfile: `RUN git clone ... /app`
+// followed (later in Dockerfile source order) by `RUN pip install
+// --upgrade pip==24.2 && pip install flit==3.12.0`. This port's FIXED phase
+// order (copy -> pip -> run, matching gen_setup_deps.py's own section order
+// — see the module header) runs the combined pip step BEFORE the git-clone
+// run step regardless of their Dockerfile source order. If the venv were
+// created at /app/.venv (the old location), /app would already contain a
+// stray `.venv` by the time `git clone ... /app` runs, and git refuses to
+// clone into a non-empty directory — even though /app genuinely WAS empty
+// at the point this exact RUN line appears in the Dockerfile.
+
+test("stageTaskRuntime: the pip step's venv lives at /opt/.venv, not /app/.venv (fix-code-vulnerability shape: RUN git clone .../app then RUN pip install)", async () => {
+  const dir = tmpDir()
+  const task = "clone-then-pip-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    [
+      "FROM python:3.11-slim",
+      "WORKDIR /app",
+      "RUN git clone -o origin --single-branch https://example.com/repo.git /app",
+      "RUN pip install --upgrade pip==24.2 && pip install flit==3.12.0",
+    ].join("\n"),
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+
+  // fixed phase order still runs pip before run (unchanged — see A2/B2
+  // tests); what changed is WHERE the venv lands, so it never collides with
+  // a later (in this fixed order) run step's own use of /app.
+  expect(recordedArgvs.length).toBe(2)
+  const scripts = recordedArgvs.map((argv) => argv[argv.length - 1]!)
+  expect(scripts[0]).toContain('uv venv --python python3 "/opt/.venv"')
+  expect(scripts[0]).not.toContain('"/app/.venv"')
+  expect(scripts[1]).toContain("git clone")
+})
+
+test("stageTaskRuntime: the venv-source guard is present even with no pip step at all (harmless no-op — missing venv doesn't trip set -e)", async () => {
+  const dir = tmpDir()
+  const task = "no-pip-run-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(path.join(dir, task, "environment", "Dockerfile"), "FROM ubuntu:24.04\nRUN echo hi\n")
+  const fakePaths = fakeBenchPaths(dir)
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+  const script = recordedArgvs[0]![recordedArgvs[0]!.length - 1]!
+  expect(script).toContain('if [ -f "/opt/.venv/bin/activate" ]; then source "/opt/.venv/bin/activate"; fi')
+  expect(script).toContain("echo hi")
 })
 
 // ── flag plumbing: --staging scripts still routes to the old path ────────
