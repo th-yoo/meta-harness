@@ -4,6 +4,7 @@ import * as path from "node:path"
 import * as os from "node:os"
 import type { BenchPaths } from "../src/bench/paths.ts"
 import { cmdRun, runTaskOnce, inContainerOpencodeVersion, type RunOneTaskFn, type RunTaskResult } from "../src/bench/cmd-run.ts"
+import { runOneOracleTask } from "../src/bench/cmd-oracle.ts"
 import { readScore, projectGlobalRoot, createCandidate, writeActive } from "../src/harness-store.ts"
 import { BenchError } from "../src/bench/util.ts"
 
@@ -319,6 +320,71 @@ test("runTaskOnce: scripts-mode setup_deps.sh exec has no SKIP_APT in its env (O
   // the other setup env vars are still present, unaffected
   expect(setupArgv).toContain("TB_ROOT=/tb")
   expect(setupArgv).toContain("WORKDIR=/app")
+})
+
+// ── provider API key env-passthrough ──────────────────────────────────────
+// A host env-var like OPENROUTER_API_KEY must reach the agent-phase
+// container's create argv (additive to auth.json — see paths.ts's
+// apiKeyEnv), but must NEVER reach the oracle container (no LLM, no keys).
+
+test("runTaskOnce: agent container create argv passes through a *_API_KEY host env var", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const prev = process.env["OPENROUTER_API_KEY"]
+  process.env["OPENROUTER_API_KEY"] = "sk-test-123"
+
+  let createArgv: string[] = []
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "create") createArgv = argv
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      return { rc: 1, stdout: "", stderr: "boom", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn)
+  } finally {
+    errSpy.mockRestore()
+    if (prev === undefined) delete process.env["OPENROUTER_API_KEY"]
+    else process.env["OPENROUTER_API_KEY"] = prev
+  }
+
+  expect(createArgv).toContain("-e")
+  expect(createArgv).toContain("OPENROUTER_API_KEY=sk-test-123")
+})
+
+test("runOneOracleTask: oracle container create argv does NOT pass through *_API_KEY host env (oracle never spends LLM tokens)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const prev = process.env["OPENROUTER_API_KEY"]
+  process.env["OPENROUTER_API_KEY"] = "sk-test-123"
+
+  let createArgv: string[] = []
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "create") createArgv = argv
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      return { rc: 1, stdout: "", stderr: "boom", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runOneOracleTask(paths, "t", "scripts", execFn)
+  } finally {
+    errSpy.mockRestore()
+    if (prev === undefined) delete process.env["OPENROUTER_API_KEY"]
+    else process.env["OPENROUTER_API_KEY"] = prev
+  }
+
+  expect(createArgv.some((a) => a.startsWith("OPENROUTER_API_KEY"))).toBe(false)
+  expect(createArgv).not.toContain("-e")
 })
 
 // ── inContainerOpencodeVersion ────────────────────────────────────────────

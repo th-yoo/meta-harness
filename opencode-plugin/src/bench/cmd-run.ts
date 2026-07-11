@@ -21,7 +21,7 @@ import { join, parse as parsePath } from "node:path"
 import { podman } from "./exec.ts"
 import type { ExecFn } from "./staging.ts"
 import { buildCreateArgv, buildStartArgv, buildExecArgv, buildRmArgv } from "./sandbox.ts"
-import { BENCH_IMAGE, containerName, type BenchPaths } from "./paths.ts"
+import { BENCH_IMAGE, apiKeyEnv, containerName, type BenchPaths } from "./paths.ts"
 import { selectTasks, taskTimeouts } from "./tasks.ts"
 import { stageTaskRuntime } from "./staging.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
@@ -139,6 +139,12 @@ export async function runTaskOnce(
             { host: paths.termBenchDir, container: "/mh", ro: true },
             ...credentialMounts(),
           ],
+          // Provider API key passthrough (additive to auth.json — see
+          // paths.ts's apiKeyEnv doc comment). No explicit env is set on
+          // this create call otherwise, so there's nothing for apiKeyEnv()
+          // to collide with; spread order still puts apiKeyEnv() first so
+          // any future explicit entry here would win on key collision.
+          env: { ...apiKeyEnv() },
           network: true,
           workdir: "/app",
         }),

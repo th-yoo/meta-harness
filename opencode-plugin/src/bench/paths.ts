@@ -73,6 +73,29 @@ export function makeBenchPaths(opts?: { tbRoot?: string }): BenchPaths {
   }
 }
 
+/**
+ * Provider API keys to pass through into the agent-phase container as `-e
+ * KEY=val` (see cmd-run.ts's runTaskOnce). auth.json (bind-mounted from
+ * `~/.local/share/opencode`) stays the primary, documented credential path;
+ * this is an additive convenience so a bare env-var-only setup (CI/headless)
+ * also works inside containers — today it silently doesn't (research
+ * finding, docs/usage-manual.md "Configuring providers").
+ *
+ * Matches ANY host env var whose name ends in `_API_KEY` (generic and
+ * future-proof: OPENROUTER_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY,
+ * ANTHROPIC_API_KEY, GROQ_API_KEY, ...), excluding unset/empty values.
+ * Deliberately NOT wired into the oracle container (cmd-oracle.ts) — oracle
+ * runs solve.sh, never the LLM, so it needs no provider keys, and keeping it
+ * key-free avoids leaking keys into token-free runs.
+ */
+export function apiKeyEnv(env: Record<string, string | undefined> = process.env): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(env)) {
+    if (/_API_KEY$/.test(k) && v) out[k] = v
+  }
+  return out
+}
+
 const MAX_TASK_LEN = 40
 
 /**

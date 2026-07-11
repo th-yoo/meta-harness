@@ -6,6 +6,7 @@ import {
   makeBenchPaths,
   containerName,
   BENCH_IMAGE,
+  apiKeyEnv,
 } from "../src/bench/paths.ts"
 import {
   buildCreateArgv,
@@ -79,6 +80,58 @@ test("containerName truncates a 60-char task to 40 chars", () => {
   expect(name).toContain("a".repeat(40))
   expect(name).not.toContain("a".repeat(41))
   expect(name).toMatch(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/)
+})
+
+// ── apiKeyEnv ────────────────────────────────────────────────────────────
+
+test("apiKeyEnv: includes a *_API_KEY var with a defined non-empty value", () => {
+  const out = apiKeyEnv({ FOO_API_KEY: "x" })
+  expect(out).toEqual({ FOO_API_KEY: "x" })
+})
+
+test("apiKeyEnv: excludes vars that don't match /_API_KEY$/, even if key-shaped", () => {
+  const out = apiKeyEnv({ PATH: "/bin", HOME: "/root", FOO_API_KEYS: "x" })
+  expect(out).toEqual({})
+})
+
+test("apiKeyEnv: excludes an empty-valued *_API_KEY var", () => {
+  const out = apiKeyEnv({ BAR_API_KEY: "" })
+  expect(out).toEqual({})
+})
+
+test("apiKeyEnv: excludes undefined-valued vars", () => {
+  const out = apiKeyEnv({ BAZ_API_KEY: undefined })
+  expect(out).toEqual({})
+})
+
+test("apiKeyEnv: collects multiple matching provider keys deterministically", () => {
+  const out = apiKeyEnv({
+    OPENROUTER_API_KEY: "or-1",
+    OPENAI_API_KEY: "oa-1",
+    GEMINI_API_KEY: "g-1",
+    ANTHROPIC_API_KEY: "a-1",
+    GROQ_API_KEY: "gr-1",
+    PATH: "/bin",
+  })
+  expect(out).toEqual({
+    OPENROUTER_API_KEY: "or-1",
+    OPENAI_API_KEY: "oa-1",
+    GEMINI_API_KEY: "g-1",
+    ANTHROPIC_API_KEY: "a-1",
+    GROQ_API_KEY: "gr-1",
+  })
+})
+
+test("apiKeyEnv: defaults to reading process.env when called with no argument", () => {
+  const prev = process.env["MH_TEST_ZZZ_API_KEY"]
+  process.env["MH_TEST_ZZZ_API_KEY"] = "zzz"
+  try {
+    const out = apiKeyEnv()
+    expect(out["MH_TEST_ZZZ_API_KEY"]).toBe("zzz")
+  } finally {
+    if (prev === undefined) delete process.env["MH_TEST_ZZZ_API_KEY"]
+    else process.env["MH_TEST_ZZZ_API_KEY"] = prev
+  }
 })
 
 // ── sandbox argv builders ──────────────────────────────────────────────────
