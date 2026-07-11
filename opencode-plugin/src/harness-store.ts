@@ -514,6 +514,29 @@ export function readActiveTools(storeRoot: string): string {
   return readText(activePath(storeRoot, "tools.md"))
 }
 
+/** True iff `<storeRoot>/candidates/<version>` exists as a directory.
+ * Mirrors bench_store.py's candidate_exists (term-bench2/bench_store.py:185). */
+export function candidateExists(storeRoot: string, version: string): boolean {
+  try {
+    return fs.statSync(candidatePath(storeRoot, version)).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+/** Read a candidate version's system.md (as opposed to the active layer's).
+ * Mirrors bench_store.py's read_candidate_system (:189) — used by the bench
+ * runner's --pin support (record.ts's assembleAgentsMd). */
+export function readCandidateSystem(storeRoot: string, version: string): string {
+  return readText(candidatePath(storeRoot, version, "system.md"))
+}
+
+/** Read a candidate version's tools.md. Mirrors bench_store.py's
+ * read_candidate_tools (:193). */
+export function readCandidateTools(storeRoot: string, version: string): string {
+  return readText(candidatePath(storeRoot, version, "tools.md"))
+}
+
 export function writeActive(
   storeRoot: string,
   version: string,

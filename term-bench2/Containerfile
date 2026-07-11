@@ -21,8 +21,18 @@
 # NOT hand-maintained forever: P4 makes this apt union Dockerfile-derived
 # from apt-packages.txt directly instead of being manually inlined here.
 #
-# NOT included here (added at container-run time in later phases):
-#   - opencode itself and any credential mounts for the agent phase (P6).
+# opencode itself is baked into this image (below) rather than bind-mounted
+# from the host at container-run time: the host running this build (macOS/
+# darwin, per the P6 task brief) cannot supply a linux binary onto a linux
+# container. Credential mounts (~/.claude, ~/.local/share/opencode) ARE still
+# host bind-mounts, added at container-create time by cmd-run.ts — those are
+# plain data directories (JSON/auth files), not architecture-specific.
+#
+# Provenance note: env_block's `opencodeVersion` field (record.ts) records
+# the version by running `opencode --version` INSIDE the container via one
+# `podman exec` per run — never the host's `opencode --version` — since the
+# host and container binaries are two different installs (and, per the
+# above, may not even be the same architecture).
 FROM docker.io/library/ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -94,6 +104,17 @@ RUN apt-get update && apt-get install -y \
 # per-run; network stays enabled for exactly this — see sandbox.ts header).
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
+
+# opencode itself — the P6 agent phase (record.ts/cmd-run.ts) execs this
+# INSIDE the container (`podman exec ... opencode run --dir /app ...`), never
+# on the host. The installer (https://opencode.ai/install) unpacks to
+# ~/.opencode/bin and tries to add that to PATH by appending an export line
+# to a shell rc file (~/.bashrc etc) — which `podman exec` never sources (it
+# execs argv directly, no login/interactive shell), so that alone would leave
+# `opencode` unresolvable. The explicit ENV PATH below is what actually makes
+# it resolvable for `podman exec`.
+RUN curl -fsSL https://opencode.ai/install | bash
+ENV PATH="/root/.opencode/bin:${PATH}"
 
 # Buildah records WORKDIR in image config but does not materialize the
 # directory as a filesystem layer — and `podman create -w /app` makes `start`

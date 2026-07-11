@@ -9,6 +9,8 @@ import { makeBenchPaths } from "./paths.ts"
 import { cmdPrep } from "./cmd-prep.ts"
 import { cmdOracle } from "./cmd-oracle.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
+import { cmdRun, type CmdRunArgs } from "./cmd-run.ts"
+import { cmdJudgeAudit, type JudgeAuditArgs } from "./judge-audit.ts"
 import { cmdSplit, type SplitArgs } from "./splits.ts"
 import { cmdReportLoop, type ReportLoopArgs } from "./report-loop.ts"
 import { BenchError } from "./util.ts"
@@ -19,6 +21,12 @@ commands:
   prep        [--apply]
   oracle      [--tasks TASK [TASK ...]] [--task-file PATH] [--results-file PATH]
               [--staging scripts|runtime]  (default: runtime)
+  run         [--tasks TASK [TASK ...]] [--task-file PATH] [--all]
+              [--model ID] [--variant V] [--k N] [--layers global|account|project|none]
+              [--no-store] [--save-all-traj] [--no-harness] [--results-file PATH]
+              [--label NAME] [--max-agent-timeout SEC] [--resume] [--agent NAME]
+              [--pin LAYER=vN]... [--staging scripts|runtime]
+  judge-audit --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
   split       make|rotate|show [--seed N] [--folds N] [--source FILE]
               [--split-file PATH] [--results PATH]... [--band LO,HI]
               [--sentinels N] [--sentinel-hi F]
@@ -110,6 +118,185 @@ function parseOracleArgs(argv: string[]): OracleArgs | null {
     return null
   }
   return out
+}
+
+/** Consume a `--tasks TASK [TASK...]` run, stopping at the next `--flag`.
+ * Shared by parseRunArgs/parseAbArgs (both accept the same nargs="+" form). */
+function consumeTasksList(argv: string[], i: number): { vals: string[]; next: number } | null {
+  const vals: string[] = []
+  let j = i + 1
+  while (j < argv.length && !argv[j]!.startsWith("--")) {
+    vals.push(argv[j]!)
+    j++
+  }
+  if (vals.length === 0) return null
+  return { vals, next: j }
+}
+
+function parseRunArgs(argv: string[]): CmdRunArgs | null {
+  const out: CmdRunArgs = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--tasks") {
+      const r = consumeTasksList(argv, i)
+      if (r === null) return null
+      out.tasks = r.vals
+      i = r.next
+      continue
+    }
+    if (a === "--task-file") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.taskFile = v
+      i += 2
+      continue
+    }
+    if (a === "--all") {
+      out.all = true
+      i++
+      continue
+    }
+    if (a === "--model") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.model = v
+      i += 2
+      continue
+    }
+    if (a === "--variant") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.variant = v
+      i += 2
+      continue
+    }
+    if (a === "--k") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.k = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--layers") {
+      const v = argv[i + 1]
+      if (v !== "global" && v !== "account" && v !== "project" && v !== "none") return null
+      out.layers = v
+      i += 2
+      continue
+    }
+    if (a === "--no-store") {
+      out.noStore = true
+      i++
+      continue
+    }
+    if (a === "--save-all-traj") {
+      out.saveAllTraj = true
+      i++
+      continue
+    }
+    if (a === "--no-harness") {
+      out.noHarness = true
+      i++
+      continue
+    }
+    if (a === "--results-file") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.resultsFile = v
+      i += 2
+      continue
+    }
+    if (a === "--label") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.label = v
+      i += 2
+      continue
+    }
+    if (a === "--max-agent-timeout") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.maxAgentTimeout = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--resume") {
+      out.resume = true
+      i++
+      continue
+    }
+    if (a === "--agent") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.agent = v
+      i += 2
+      continue
+    }
+    if (a === "--pin") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.pin = out.pin ?? []
+      out.pin.push(v)
+      i += 2
+      continue
+    }
+    if (a === "--staging") {
+      const v = argv[i + 1]
+      if (v !== "scripts" && v !== "runtime") return null
+      out.staging = v
+      i += 2
+      continue
+    }
+    return null
+  }
+  return out
+}
+
+function parseJudgeAuditArgs(argv: string[]): JudgeAuditArgs | null {
+  const out: Partial<JudgeAuditArgs> = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--layer") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.layer = v
+      i += 2
+      continue
+    }
+    if (a === "--candidate") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.candidate = v
+      i += 2
+      continue
+    }
+    if (a === "--agent") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.agent = v
+      i += 2
+      continue
+    }
+    if (a === "--model") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.model = v
+      i += 2
+      continue
+    }
+    if (a === "--limit") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.limit = Number(v)
+      i += 2
+      continue
+    }
+    return null
+  }
+  if (out.layer === undefined || out.candidate === undefined) return null
+  return out as JudgeAuditArgs
 }
 
 function parseSplitArgs(argv: string[]): SplitArgs | null {
@@ -258,6 +445,23 @@ export async function main(argv: string[]): Promise<number> {
         }
         await cmdOracle(paths, oracleArgs)
         return 0
+      }
+      case "run": {
+        const runArgs = parseRunArgs(subArgs)
+        if (runArgs === null) {
+          printUsage()
+          return 2
+        }
+        await cmdRun(paths, runArgs)
+        return 0
+      }
+      case "judge-audit": {
+        const judgeArgs = parseJudgeAuditArgs(subArgs)
+        if (judgeArgs === null) {
+          printUsage()
+          return 2
+        }
+        return await cmdJudgeAudit(paths, judgeArgs)
       }
       case "split": {
         const splitArgs = parseSplitArgs(subArgs)

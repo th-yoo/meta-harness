@@ -1,15 +1,29 @@
 /**
- * judge-audit.ts — pure half of the `judge-audit` anti-gaming subcommand
- * (the spawning half — run_judge_opencode/cmd_judge_audit — is P6).
+ * judge-audit.ts — the `judge-audit` anti-gaming subcommand: pure half (this
+ * file's original P5 content) + the spawning half (cmdJudgeAudit, added in
+ * P6 — run_judge_opencode itself lives in opencode-run.ts since it shares
+ * the transient-retry machinery with the main agent phase).
  *
  * Mirrors term-bench2/runner.py's: render_judge_audit_events (:966),
  * build_judge_audit_prompt (:993), parse_judge_reply (:1050),
- * _judge_reply_text (:1077), judge_agent_config (:1100), and the
- * DEFAULT_JUDGE_MODEL/JUDGE_AUDIT_ALARM_THRESHOLD constants (:2289-2290).
+ * _judge_reply_text (:1077), judge_agent_config (:1100), the
+ * DEFAULT_JUDGE_MODEL/JUDGE_AUDIT_ALARM_THRESHOLD constants (:2289-2290),
+ * and cmd_judge_audit (:2293-2425).
  */
 import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
-import type { TrajEvent } from "../harness-store.ts"
+import { runJudgeOpencode } from "./opencode-run.ts"
+import { layerStoreRoots, type LayerName } from "./record.ts"
+import type { BenchPaths } from "./paths.ts"
+import { die, log } from "./util.ts"
+import {
+  appendMetaMetric,
+  candidateExists,
+  listVersions,
+  readScore,
+  readTrajectory,
+  type TrajEvent,
+} from "../harness-store.ts"
 
 export const DEFAULT_JUDGE_MODEL = "openrouter/google/gemini-2.5-flash"
 export const JUDGE_AUDIT_ALARM_THRESHOLD = 0.8
@@ -243,4 +257,152 @@ export function judgeAgentConfig(promptPath: string = defaultJudgePromptPath()):
     prompt,
     permission: { "*": "deny" },
   }
+}
+
+// ── cmd_judge_audit (spawning half) ─────────────────────────────────────
+
+export interface JudgeAuditArgs {
+  layer: string
+  candidate: string
+  agent?: string
+  model?: string
+  limit?: number
+}
+
+export type RunJudgeFn = (prompt: string, model: string) => Promise<string | null>
+
+/**
+ * Anti-gaming audit: replay the dense judge on BENCH session trajectories
+ * where the verifier's pass/fail is ground truth, and alarm if the judge
+ * diverges from it too often. Verbatim port of runner.py:2293-2425's
+ * cmd_judge_audit, BenchError-free — returns an exit code the CLI maps
+ * directly (0 clean, 1 alarm, 2 could-not-assess), matching Python's
+ * sys.exit(1)/sys.exit(2)/implicit-0 paths.
+ *
+ * Meta-metric sink: like splits.ts's `rotate` (see that file's header),
+ * this reuses harness-store.ts's appendMetaMetric (which walks up from a
+ * storeRoot to the nearest ".meta-harness" ancestor) rather than Python's
+ * fixed term-bench2/results/meta-metrics.jsonl sink — a DOCUMENTED
+ * deviation, same rationale and precedent as cmdSplit's rotate event.
+ */
+export async function cmdJudgeAudit(
+  paths: BenchPaths,
+  args: JudgeAuditArgs,
+  runJudge: RunJudgeFn = (prompt, model) => runJudgeOpencode(prompt, model),
+): Promise<number> {
+  const agent = args.agent || ""
+  const model = args.model || DEFAULT_JUDGE_MODEL
+  const limit = args.limit ?? 20
+  const candidate = args.candidate
+
+  if (!/^v\d+$/.test(candidate)) die(`--candidate must look like vN, got '${candidate}'`)
+
+  const roots = new Map(layerStoreRoots("global", agent, paths.metaRoot))
+  const layerRoot = roots.get(args.layer as LayerName)
+  if (!layerRoot) die(`--layer ${args.layer} requires --agent (role layers need --agent)`)
+
+  if (!candidateExists(layerRoot, candidate)) {
+    const have = listVersions(layerRoot).join(", ") || "none"
+    die(`judge-audit: no such candidate '${candidate}' under ${layerRoot} (have: ${have})`)
+  }
+
+  const score = readScore(layerRoot, candidate)
+  const sessions = score.sessions
+  if (sessions.length === 0) {
+    log(`judge-audit: no sessions recorded for ${args.layer} ${candidate} under ${layerRoot} — nothing to audit`)
+    return 0
+  }
+
+  // Eligible: a trace with ground-truth `passed` AND a (non-pruned) traj ndjson.
+  const eligible: { sid: string; truth: boolean; traj: TrajEvent[]; note: string }[] = []
+  for (const s of sessions) {
+    const sid = s.sessionID
+    if (!sid) continue
+    const traj = readTrajectory(layerRoot, candidate, sid)
+    if (traj.length === 0) continue
+    const note = s.summary || s.note || sid
+    eligible.push({ sid, truth: Boolean(s.passed), traj, note })
+  }
+
+  if (eligible.length === 0) {
+    log(
+      `judge-audit: ${sessions.length} session(s) recorded for ${args.layer} ${candidate}, but none have BOTH a ` +
+        `trace and a trajectory ndjson (likely pruned by pruneTrajectories, or all-passing runs with ` +
+        `save_all_traj off) — nothing to audit`,
+    )
+    return 0
+  }
+
+  const capped = eligible.slice(0, limit)
+  log(`judge-audit: ${args.layer} ${candidate} — replaying judge (${model}) on ${capped.length} session(s) (of ${sessions.length} recorded)`)
+
+  const rows: { sid: string; truth: boolean; judged: boolean | null; tag: string }[] = []
+  let nScored = 0
+  let nAgree = 0
+  let nSkipped = 0
+
+  for (const { sid, truth, traj, note } of capped) {
+    const prompt = buildJudgeAuditPrompt(traj, note)
+    const replyText = await runJudge(prompt, model)
+    if (replyText === null) {
+      log(`  ${sid}: judge call failed after retries — skip`)
+      rows.push({ sid, truth, judged: null, tag: "skip" })
+      nSkipped += 1
+      continue
+    }
+    const verdict = parseJudgeReply(replyText)
+    if (verdict === null) {
+      log(`  ${sid}: judge reply had no parseable verdict — skip`)
+      rows.push({ sid, truth, judged: null, tag: "skip" })
+      nSkipped += 1
+      continue
+    }
+    const judgePassed = Boolean(verdict["passed"])
+    const agree = judgePassed === truth
+    nScored += 1
+    if (agree) nAgree += 1
+    rows.push({ sid, truth, judged: judgePassed, tag: agree ? "agree" : "DISAGREE" })
+  }
+
+  console.log("\n" + "=".repeat(74))
+  console.log(`${"sessionID".padEnd(44)} ${"truth".padStart(6)} ${"judge".padStart(7)} ${"agree?".padStart(9)}`)
+  console.log("-".repeat(74))
+  for (const { sid, truth, judged, tag } of rows) {
+    const truthS = truth ? "PASS" : "FAIL"
+    const judgeS = judged === true ? "PASS" : judged === false ? "FAIL" : "SKIP"
+    console.log(`${sid.slice(0, 44).padEnd(44)} ${truthS.padStart(6)} ${judgeS.padStart(7)} ${tag.padStart(9)}`)
+  }
+  console.log("=".repeat(74))
+
+  const agreement = nScored ? nAgree / nScored : 0.0
+  console.log(`judge-audit: ${nScored} scored, ${nSkipped} skipped (of ${capped.length}) — agreement=${(agreement * 100).toFixed(1)}%`)
+
+  appendMetaMetric(join(paths.metaRoot, ".meta-harness"), {
+    event: "judge-audit",
+    n: nScored,
+    agreement: Math.round(agreement * 10000) / 10000,
+    model,
+    layer: args.layer,
+    candidate,
+  })
+
+  if (nScored === 0) {
+    log(
+      "judge-audit: no scoreable verdicts (every judge call failed/parsed as garbage) — cannot assess " +
+        "agreement, treating as a non-alarm (fix the judge invocation and re-run)",
+    )
+    return 2
+  }
+
+  if (agreement < JUDGE_AUDIT_ALARM_THRESHOLD) {
+    console.log(`\n*** ALARM: judge-audit agreement ${(agreement * 100).toFixed(1)}% is BELOW the ${(JUDGE_AUDIT_ALARM_THRESHOLD * 100).toFixed(0)}% threshold ***`)
+    console.log(
+      "*** The judge disagrees with the verifier's ground truth too often — it may be gameable (fooled by " +
+        "trajectories that look successful but aren't verified). Investigate before trusting judge-gated decisions. ***",
+    )
+    return 1
+  }
+
+  log(`judge-audit: agreement ${(agreement * 100).toFixed(1)}% >= ${(JUDGE_AUDIT_ALARM_THRESHOLD * 100).toFixed(0)}% — OK`)
+  return 0
 }

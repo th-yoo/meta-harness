@@ -1,0 +1,413 @@
+import { test, expect, spyOn } from "bun:test"
+import * as fs from "node:fs"
+import * as path from "node:path"
+import * as os from "node:os"
+import {
+  normalizeEvents,
+  runOpencode,
+  runJudgeOpencode,
+  TRANSIENT_MARK,
+  TIMEOUT_MARK,
+  REALWORK_RE,
+  TRANSIENT_RE,
+  EXECUTION_TOOLS,
+} from "../src/bench/opencode-run.ts"
+import type { BenchPaths } from "../src/bench/paths.ts"
+import type { ExecResult } from "../src/bench/exec.ts"
+
+function tmpDir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "mh-bench-opencode-run-"))
+}
+
+function fakeBenchPaths(tbRoot: string): BenchPaths {
+  const termBenchDir = path.join(tbRoot, "..", "term-bench2")
+  return {
+    metaRoot: path.dirname(termBenchDir),
+    termBenchDir,
+    tbRoot,
+    resultsDir: path.join(termBenchDir, "results"),
+    patchesDir: path.join(termBenchDir, "patches"),
+    baselineTasksFile: path.join(termBenchDir, "baseline-tasks.txt"),
+    splitsFile: path.join(termBenchDir, "splits.json"),
+  }
+}
+
+function ok(stdout: string, rc = 0): ExecResult {
+  return { rc, stdout, stderr: "", timedOut: false }
+}
+
+// ── normalizeEvents ──────────────────────────────────────────────────────
+
+test("normalizeEvents: tool_use event -> compact tool event, args/output capped", () => {
+  const line = JSON.stringify({
+    type: "tool_use",
+    part: { tool: "bash", state: { input: "echo hi", output: "hi", status: "completed", metadata: { exit: 0 } } },
+  })
+  const events = normalizeEvents(line)
+  expect(events).toEqual([{ t: "tool", tool: "bash", args: "echo hi", output: "hi", error: false }])
+})
+
+test("normalizeEvents: tool_use with error status flags error:true", () => {
+  const line = JSON.stringify({
+    type: "tool_use",
+    part: { tool: "bash", state: { input: "false", output: "", status: "error", metadata: { exit: 1 } } },
+  })
+  expect(normalizeEvents(line)[0]).toEqual({ t: "tool", tool: "bash", args: "false", output: "", error: true })
+})
+
+test("normalizeEvents: tool_use with nonzero exit (no explicit error status) also flags error", () => {
+  const line = JSON.stringify({
+    type: "tool_use",
+    part: { tool: "bash", state: { input: "x", output: "", status: "completed", metadata: { exit: 2 } } },
+  })
+  expect(normalizeEvents(line)[0]!.error).toBe(true)
+})
+
+test("normalizeEvents: non-string args/output are JSON-stringified", () => {
+  const line = JSON.stringify({
+    type: "tool_use",
+    part: { tool: "edit", state: { input: { path: "a.txt" }, output: { ok: true } } },
+  })
+  const ev = normalizeEvents(line)[0]!
+  expect(ev.args).toBe('{"path":"a.txt"}')
+  expect(ev.output).toBe('{"ok":true}')
+})
+
+test("normalizeEvents: args/output truncated at 300/800 chars", () => {
+  const bigArgs = "a".repeat(400)
+  const bigOut = "b".repeat(900)
+  const line = JSON.stringify({ type: "tool_use", part: { tool: "bash", state: { input: bigArgs, output: bigOut } } })
+  const ev = normalizeEvents(line)[0]!
+  expect(ev.args!.length).toBe(300)
+  expect(ev.output!.length).toBe(800)
+})
+
+test("normalizeEvents: text event kept, blank text skipped", () => {
+  const lines = [JSON.stringify({ type: "text", text: "hello" }), JSON.stringify({ type: "text", text: "   " })].join("\n")
+  expect(normalizeEvents(lines)).toEqual([{ t: "text", text: "hello" }])
+})
+
+test("normalizeEvents: text via part.text fallback", () => {
+  const line = JSON.stringify({ type: "text", part: { text: "from part" } })
+  expect(normalizeEvents(line)).toEqual([{ t: "text", text: "from part" }])
+})
+
+test("normalizeEvents: error event extracts data.message, falls back to name, then stringifies", () => {
+  const withMessage = JSON.stringify({ type: "error", error: { data: { message: "boom" }, name: "Fallback" } })
+  expect(normalizeEvents(withMessage)).toEqual([{ t: "error", text: "boom" }])
+  const withNameOnly = JSON.stringify({ type: "error", error: { name: "SomeError" } })
+  expect(normalizeEvents(withNameOnly)).toEqual([{ t: "error", text: "SomeError" }])
+})
+
+test("normalizeEvents: step_finish and unparseable/non-object lines are dropped", () => {
+  const lines = [
+    "not json at all",
+    JSON.stringify({ type: "step_finish", part: { reason: "stop" } }),
+    "{not valid json",
+    JSON.stringify({ type: "text", text: "kept" }),
+  ].join("\n")
+  expect(normalizeEvents(lines)).toEqual([{ t: "text", text: "kept" }])
+})
+
+test("normalizeEvents: caps at maxEvents", () => {
+  const lines = Array.from({ length: 10 }, (_, i) => JSON.stringify({ type: "text", text: `t${i}` })).join("\n")
+  expect(normalizeEvents(lines, 3).length).toBe(3)
+})
+
+// ── EXECUTION_TOOLS ──────────────────────────────────────────────────────
+
+test("EXECUTION_TOOLS is exactly {bash, task}", () => {
+  expect([...EXECUTION_TOOLS].sort()).toEqual(["bash", "task"])
+})
+
+// ── runOpencode ──────────────────────────────────────────────────────────
+
+test("runOpencode: happy path parses turns + toolUsage + events, logs 'opencode done in ... turns=N'", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "mytask"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "mytask", "instruction.md"), "do the thing")
+  const paths = fakeBenchPaths(tbRoot)
+
+  const ndjson = [
+    JSON.stringify({ type: "tool_use", part: { tool: "bash", state: { status: "completed", metadata: { exit: 0 } } } }),
+    JSON.stringify({ type: "tool_use", part: { tool: "bash", state: { status: "error", metadata: { exit: 1 } } } }),
+    JSON.stringify({ type: "tool_use", part: { tool: "read", state: { status: "error" } } }), // not an execution tool -> no error counted
+    JSON.stringify({ type: "step_finish", part: { reason: "tool-calls" } }), // not counted (reason != stop)
+    JSON.stringify({ type: "step_finish", part: { reason: "stop" } }),
+    JSON.stringify({ type: "text", text: "done" }),
+  ].join("\n")
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result
+  try {
+    result = await runOpencode(paths, "mh-container-1", "mytask", "anthropic/claude-x", "", 60, "", async () => ok(ndjson))
+  } finally {
+    errSpy.mockRestore()
+  }
+
+  expect(result.turnCount).toBe(1)
+  expect(result.toolUsage).toEqual({ bash: { calls: 2, errors: 1 }, read: { calls: 1, errors: 0 } })
+  expect(result.events.some((e) => e.t === "text" && e.text === "done")).toBe(true)
+})
+
+test("runOpencode: timeout returns {0,{},[]} immediately, logs the TIMEOUT_MARK line, no retry", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "x")
+  const paths = fakeBenchPaths(tbRoot)
+
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    return { rc: 124, stdout: "", stderr: "", timedOut: true }
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result
+  try {
+    result = await runOpencode(paths, "c1", "t", "m", "", 30, "", execFn)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes(TIMEOUT_MARK) && m.includes("30s"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(result).toEqual({ turnCount: 0, toolUsage: {}, events: [] })
+  expect(calls).toBe(1) // no retry after a timeout
+})
+
+test("runOpencode: transient provider error retries (logs TRANSIENT_MARK), then succeeds", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "x")
+  const paths = fakeBenchPaths(tbRoot)
+
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    if (calls === 1) {
+      return ok('{"type":"error","error":{"name":"Overloaded"}}', 1)
+    }
+    return ok(JSON.stringify({ type: "step_finish", part: { reason: "stop" } }))
+  }
+  const sleeps: number[] = []
+  const sleepFn = async (s: number) => {
+    sleeps.push(s)
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result
+  try {
+    result = await runOpencode(paths, "c1", "t", "m", "", 30, "", execFn, sleepFn)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes(TRANSIENT_MARK))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(calls).toBe(2)
+  expect(sleeps).toEqual([5]) // min(30, 5*1)
+  expect(result.turnCount).toBe(1)
+})
+
+test("runOpencode: exhausts MAX_ATTEMPTS(4) on persistent transient errors, still returns parsed (empty) result", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "x")
+  const paths = fakeBenchPaths(tbRoot)
+
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    return ok('{"type":"error","error":{"name":"Overloaded"}}', 1)
+  }
+  const sleepFn = async () => {}
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const result = await runOpencode(paths, "c1", "t", "m", "", 30, "", execFn, sleepFn)
+    expect(result.turnCount).toBe(0)
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(calls).toBe(4)
+})
+
+test("runOpencode: instruction.md missing dies (BenchError)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(tbRoot)
+  await expect(runOpencode(paths, "c1", "no-such-task", "m", "", 30, "", async () => ok(""))).rejects.toThrow()
+})
+
+test("runOpencode: harnessMd is cp'd into the container as /app/AGENTS.md (via buildCpToArgv, not stdin)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "x")
+  const paths = fakeBenchPaths(tbRoot)
+
+  const seenArgv: string[][] = []
+  let capturedHostFile: string | undefined
+  const execFn = async (argv: string[]): Promise<ExecResult> => {
+    seenArgv.push(argv)
+    if (argv[1] === "cp") capturedHostFile = argv[2]
+    return ok(JSON.stringify({ type: "step_finish", part: { reason: "stop" } }))
+  }
+
+  await runOpencode(paths, "my-container", "t", "m", "", 30, "hello harness", execFn)
+
+  const cpCall = seenArgv.find((a) => a[1] === "cp")
+  expect(cpCall).toEqual(["podman", "cp", capturedHostFile!, "my-container:/app/AGENTS.md"])
+  expect(fs.existsSync(capturedHostFile!)).toBe(false) // scratch cleaned up after use
+})
+
+test("runOpencode: never passes --pure", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "x")
+  const paths = fakeBenchPaths(tbRoot)
+
+  let seenArgv: string[] = []
+  const execFn = async (argv: string[]): Promise<ExecResult> => {
+    seenArgv = argv
+    return ok(JSON.stringify({ type: "step_finish", part: { reason: "stop" } }))
+  }
+  await runOpencode(paths, "c1", "t", "anthropic/claude-x", "high", 30, "", execFn)
+  expect(seenArgv).not.toContain("--pure")
+  expect(seenArgv).toContain("--variant")
+  expect(seenArgv).toContain("high")
+})
+
+// ── runJudgeOpencode ─────────────────────────────────────────────────────
+
+test("runJudgeOpencode: returns concatenated text on success", async () => {
+  const execFn = async () => ok(JSON.stringify({ type: "text", text: "the verdict" }))
+  const result = await runJudgeOpencode("prompt", "judge-model", 90, 3, execFn)
+  expect(result).toBe("the verdict")
+})
+
+test("runJudgeOpencode: timeout with attempts remaining retries, then null if never succeeds", async () => {
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    return { rc: 0, stdout: "", stderr: "", timedOut: true }
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result: string | null
+  try {
+    result = await runJudgeOpencode("p", "m", 5, 2, execFn, async () => {})
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(result).toBeNull()
+  expect(calls).toBe(2)
+})
+
+test("runJudgeOpencode: blank reply text -> null", async () => {
+  const execFn = async () => ok(JSON.stringify({ type: "text", text: "   " }))
+  expect(await runJudgeOpencode("p", "m", 5, 1, execFn)).toBeNull()
+})
+
+test("runJudgeOpencode: transient error retries then succeeds, logs 'judge transient provider error'", async () => {
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    if (calls === 1) return ok('{"type":"error","error":{"name":"rate limited"}}', 1)
+    return ok(JSON.stringify({ type: "text", text: "ok verdict" }))
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result: string | null
+  try {
+    result = await runJudgeOpencode("p", "m", 90, 3, execFn, async () => {})
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes(`judge ${TRANSIENT_MARK}`))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(result).toBe("ok verdict")
+})
+
+// ── marker-string producer/consumer contract ─────────────────────────────
+// retry-provider.ts's REALWORK_RE / TRANSIENT_MARK are imported (not
+// redeclared) from this module — see test/bench-retry-provider.test.ts for
+// the wiring assertion. Here we verify the log lines THIS module actually
+// emits are matched by those same constants.
+
+test("marker contract: the timeout log line matches REALWORK_RE", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "x")
+  const paths = fakeBenchPaths(tbRoot)
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let messages: string[] = []
+  try {
+    await runOpencode(paths, "c1", "t", "m", "", 900, "", async () => ({ rc: 124, stdout: "", stderr: "", timedOut: true }))
+    messages = errSpy.mock.calls.map((c) => String(c[0]))
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(messages.some((m) => REALWORK_RE.test(m))).toBe(true)
+})
+
+test("marker contract: the 'opencode done ... turns=N' log line matches REALWORK_RE when turns>=1", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "x")
+  const paths = fakeBenchPaths(tbRoot)
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let messages: string[] = []
+  try {
+    await runOpencode(paths, "c1", "t", "m", "", 900, "", async () => ok(JSON.stringify({ type: "step_finish", part: { reason: "stop" } })))
+    messages = errSpy.mock.calls.map((c) => String(c[0]))
+  } finally {
+    errSpy.mockRestore()
+  }
+  const doneLine = messages.find((m) => m.includes("opencode done"))
+  expect(doneLine).toBeDefined()
+  expect(REALWORK_RE.test(doneLine!)).toBe(true)
+})
+
+test("marker contract: the transient-retry log line contains TRANSIENT_MARK verbatim", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "x")
+  const paths = fakeBenchPaths(tbRoot)
+
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    if (calls === 1) return ok('{"type":"error","error":{"name":"Overloaded"}}', 1)
+    return ok(JSON.stringify({ type: "step_finish", part: { reason: "stop" } }))
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let messages: string[] = []
+  try {
+    await runOpencode(paths, "c1", "t", "m", "", 30, "", execFn, async () => {})
+    messages = errSpy.mock.calls.map((c) => String(c[0]))
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(messages.some((m) => m.includes(TRANSIENT_MARK))).toBe(true)
+  // and REALWORK_RE must NOT match a transient-retry line on its own (would
+  // wrongly signal "provider up" mid-retry — the caller only scans the FULL
+  // stream, but this documents the regex's precision).
+  const transientLine = messages.find((m) => m.includes(TRANSIENT_MARK))!
+  expect(REALWORK_RE.test(transientLine)).toBe(false)
+})
+
+test("TRANSIENT_RE matches Python's verbatim pattern set", () => {
+  for (const s of ["Overloaded", "unexpected server error", "rate limit", "ratelimit", "429", "503", "Timeout", "connection reset", "temporarily unavailable", "APICallError"]) {
+    expect(TRANSIENT_RE.test(s)).toBe(true)
+  }
+  expect(TRANSIENT_RE.test("some other message")).toBe(false)
+})
