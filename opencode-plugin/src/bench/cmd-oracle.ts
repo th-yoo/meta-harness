@@ -1,0 +1,196 @@
+/**
+ * cmd-oracle.ts — `oracle` subcommand: validate the pipeline using each
+ * task's solution/solve.sh, no LLM tokens spent. Mirrors term-bench2/
+ * runner.py's cmd_oracle (:1678-1798) — log wording, summary table, and
+ * results-file JSON shape are Python-parity; the per-task execution itself
+ * is a fresh podman container per the task brief's binding "Design" section
+ * (one create+start, several `podman exec` steps, one final `podman rm -f`),
+ * replacing bwrap's clean_dir/task_extra_mounts/localbin machinery — the
+ * container filesystem is already a clean room, so none of that host-side
+ * reset bookkeeping is needed.
+ *
+ * The per-task container lifecycle (`runOneOracleTask`) is injectable so
+ * `cmdOracle`'s looping/logging/results-file logic can be unit tested without
+ * ever spawning podman (see test/bench-oracle-unit.test.ts).
+ */
+import { existsSync } from "node:fs"
+import { join } from "node:path"
+import { podman, withTimeout } from "./exec.ts"
+import {
+  buildCreateArgv,
+  buildStartArgv,
+  buildExecArgv,
+  buildRmArgv,
+} from "./sandbox.ts"
+import { BENCH_IMAGE, containerName, type BenchPaths } from "./paths.ts"
+import { selectTasks, taskTimeouts } from "./tasks.ts"
+import { copyTests, runVerifier } from "./verifier.ts"
+import { log, pyFixed, writeJsonAtomic } from "./util.ts"
+
+export interface OracleTaskResult {
+  reward: number
+  elapsed: number
+  error: string
+}
+
+export type RunOneOracleTask = (paths: BenchPaths, task: string) => Promise<OracleTaskResult>
+
+/** One clean-room container lifecycle for a single oracle task — see the
+ * task brief's binding "Design" section for the exact step-by-step contract. */
+export async function runOneOracleTask(paths: BenchPaths, task: string): Promise<OracleTaskResult> {
+  const name = containerName(task, "oracle")
+  const taskStart = Date.now()
+  try {
+    await podman(
+      buildCreateArgv({
+        image: BENCH_IMAGE,
+        name,
+        mounts: [
+          { host: paths.tbRoot, container: "/tb", ro: true },
+          { host: paths.termBenchDir, container: "/mh", ro: true },
+        ],
+        network: true,
+        workdir: "/app",
+      }),
+    )
+    await podman(buildStartArgv(name))
+    await podman(buildExecArgv(name, ["mkdir", "-p", "/app", "/tests", "/logs/verifier"]))
+
+    const setupResult = await podman(
+      buildExecArgv(name, ["bash", `/mh/tasks/${task}/setup_deps.sh`], {
+        env: { TB_ROOT: "/tb", WORKDIR: "/app", EXTRAS_ROOT: "", SKIP_APT: "1" },
+        workdir: "/app",
+      }),
+    )
+    if (setupResult.rc !== 0) {
+      log(`  setup_deps.sh failed (exit ${setupResult.rc})`)
+      return { reward: 0, elapsed: 0.0, error: "setup_failed" }
+    }
+
+    // Oracle never caps the agent (solve.sh) timeout — Python's cmd_oracle
+    // reads task.toml directly with no max_agent_timeout concept at all.
+    const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, 0)
+
+    const solveShHost = join(paths.tbRoot, task, "solution", "solve.sh")
+    if (!existsSync(solveShHost)) {
+      log("  WARNING: no solution/solve.sh — skipping agent step")
+    } else {
+      log(`  Running solution/solve.sh (timeout=${pyFixed(agentTimeout, 0)}s)...`)
+      const solveResult = await podman(
+        buildExecArgv(name, withTimeout(["bash", `/tb/${task}/solution/solve.sh`], agentTimeout), {
+          workdir: "/app",
+        }),
+      )
+      if (solveResult.timedOut) {
+        log("  solve.sh timed out")
+      }
+    }
+
+    await copyTests(paths, name, task)
+    const reward = await runVerifier(paths, name, task, verifierTimeout)
+    const elapsed = Math.round(((Date.now() - taskStart) / 1000) * 10) / 10
+    return { reward, elapsed, error: "" }
+  } finally {
+    await podman(buildRmArgv(name))
+  }
+}
+
+function resolveOracleTasks(
+  paths: BenchPaths,
+  args: { tasks?: string[]; taskFile?: string },
+): string[] {
+  if (args.tasks && args.tasks.length > 0) return selectTasks(paths, { tasks: args.tasks })
+  if (args.taskFile) return selectTasks(paths, { taskFile: args.taskFile })
+  return selectTasks(paths, { all: true })
+}
+
+function round4(x: number): number {
+  return Math.round(x * 10000) / 10000
+}
+
+interface OracleResultRow {
+  task: string
+  reward: number
+  elapsed: number
+  error: string
+}
+
+function tasksDict(results: OracleResultRow[]): Record<string, { reward: number; elapsed: number; error: string }> {
+  const out: Record<string, { reward: number; elapsed: number; error: string }> = {}
+  for (const r of results) out[r.task] = { reward: r.reward, elapsed: r.elapsed, error: r.error }
+  return out
+}
+
+function writeOracleResults(
+  resultsFile: string,
+  runStartTs: string,
+  results: OracleResultRow[],
+  status: "in_progress" | "complete",
+): void {
+  const nPass = results.reduce((s, r) => s + r.reward, 0)
+  const nTotal = results.length
+  writeJsonAtomic(resultsFile, {
+    label: "oracle",
+    timestamp: runStartTs,
+    n_pass: nPass,
+    n_total: nTotal,
+    pass_rate: nTotal ? round4(nPass / nTotal) : 0.0,
+    tasks: tasksDict(results),
+    status,
+  })
+}
+
+export async function cmdOracle(
+  paths: BenchPaths,
+  args: { tasks?: string[]; taskFile?: string; resultsFile?: string },
+  runOneTask: RunOneOracleTask = runOneOracleTask,
+): Promise<void> {
+  const tasks = resolveOracleTasks(paths, args)
+  const resultsFile = args.resultsFile
+
+  log(`Oracle validation: ${tasks.length} task(s)`)
+  if (resultsFile) log(`Results file: ${resultsFile}`)
+
+  const results: OracleResultRow[] = []
+  const runStartTs = new Date().toISOString()
+
+  for (const task of tasks) {
+    log(`\n=== Oracle: ${task} ===`)
+    const result = await runOneTask(paths, task)
+    results.push({ task, reward: result.reward, elapsed: result.elapsed, error: result.error })
+
+    if (result.error !== "setup_failed") {
+      const status = result.reward === 1 ? "PASS" : "FAIL"
+      log(`  [${status}] reward=${result.reward}  elapsed=${pyFixed(result.elapsed, 1)}s`)
+    }
+
+    if (resultsFile) {
+      writeOracleResults(resultsFile, runStartTs, results, "in_progress")
+    }
+  }
+
+  console.log("\n" + "=".repeat(60))
+  console.log(`${"Task".padEnd(40)}  ${"Result".padStart(6)}  ${"Elapsed".padStart(8)}`)
+  console.log("-".repeat(60))
+  let totalPass = 0
+  for (const r of results) {
+    const name = r.task.slice(0, 39)
+    totalPass += r.reward
+    const status = r.reward === 1 ? "PASS" : "FAIL"
+    console.log(`${name.padEnd(40)}  ${status.padStart(6)}  ${pyFixed(r.elapsed, 1).padStart(7)}s`)
+  }
+  console.log("=".repeat(60))
+  const n = results.length
+  if (n) {
+    const pct = (100 * totalPass) / n
+    console.log(`Oracle pass rate: ${totalPass}/${n}  (${pyFixed(pct, 1)}%)`)
+    if (totalPass < n) {
+      const failing = results.filter((r) => r.reward === 0).map((r) => r.task)
+      console.log(`Failing tasks (${failing.length}): ${failing.join(", ")}`)
+    }
+  }
+
+  if (resultsFile) {
+    writeOracleResults(resultsFile, runStartTs, results, "complete")
+  }
+}
