@@ -287,6 +287,40 @@ test("runTaskOnce: create mounts include credential dirs (~/.claude, opencode da
   expect(mountFlags.every((m) => !m.endsWith(":ro"))).toBe(true) // rw, not ro
 })
 
+// Option A (2026-07-11): podman containers have real root + network, so
+// setup_deps.sh's own SKIP_APT-guarded apt section now genuinely runs — the
+// runner must no longer suppress it. Locking test for the env dict the
+// scripts-mode setup_deps.sh exec is called with.
+test("runTaskOnce: scripts-mode setup_deps.sh exec has no SKIP_APT in its env (Option A — apt genuinely runs now)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let setupArgv: string[] = []
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      setupArgv = argv
+      return { rc: 1, stdout: "", stderr: "boom", timedOut: false } // stop right after (unit scope)
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn)
+  } finally {
+    errSpy.mockRestore()
+  }
+
+  expect(setupArgv.length).toBeGreaterThan(0)
+  expect(setupArgv).not.toContain("SKIP_APT=1")
+  expect(setupArgv.some((a) => a.startsWith("SKIP_APT"))).toBe(false)
+  // the other setup env vars are still present, unaffected
+  expect(setupArgv).toContain("TB_ROOT=/tb")
+  expect(setupArgv).toContain("WORKDIR=/app")
+})
+
 // ── inContainerOpencodeVersion ────────────────────────────────────────────
 // The provenance version must come from INSIDE the container (a throwaway
 // one, since envBlock is computed once before the per-task loop) — never

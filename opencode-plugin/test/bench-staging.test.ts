@@ -116,8 +116,15 @@ test.skipIf(!tbRootExists)("parseTaskDockerfile: git-multibranch (verbatim RUNs 
     { kind: "run", cmd: opensslCmd },
     { kind: "run", cmd: "mkdir -p /var/www/html /var/www/dev" },
   ])
-  // the apt-get install line must not surface as any step at all
+  // the apt-get install line must not surface as any step at all — it's
+  // extracted into aptPackages instead (Option A), installed as its own
+  // first exec, not part of the `steps` pipeline.
   expect(staging.steps.some((s) => (s.cmd ?? "").includes("apt"))).toBe(false)
+  // manifest.json's git-multibranch "apt" field (sorted+deduped) is the
+  // ground truth this extraction must match exactly.
+  expect(staging.aptPackages).toEqual([
+    "ca-certificates", "curl", "git", "net-tools", "nginx", "openssh-server", "openssl", "python3", "python3-pip",
+  ])
 })
 
 // term-bench2/tasks/build-cython-ext/setup_deps.sh:36-41 — non-ubuntu base
@@ -128,6 +135,19 @@ test.skipIf(!tbRootExists)("parseTaskDockerfile: build-cython-ext (pip + non-ubu
   expect(staging.baseImage).toBe("python:3.13-slim-bookworm")
   expect(staging.envs).toEqual({})
   expect(staging.steps).toEqual([{ kind: "pip", packages: ["numpy==2.3.0"] }])
+  // manifest.json: "build-cython-ext": {"apt": ["build-essential", "git", "libgl1"], ...}
+  // — also exercises the Ubuntu 24.04 rename table (libgl1-mesa-glx -> libgl1).
+  expect(staging.aptPackages).toEqual(["build-essential", "git", "libgl1"])
+})
+
+// term-bench2/tasks/build-pmars/environment/Dockerfile:5 — a single combined
+// `apt-get update && apt-get install -y tmux asciinema` line; not in the
+// Gate-B 43-task baseline but a clean, real second apt-extraction vector
+// (manifest.json: "build-pmars": {"apt": ["asciinema", "tmux"], ...}).
+test.skipIf(!tbRootExists)("parseTaskDockerfile: build-pmars (apt extraction — simple package list)", () => {
+  const staging = parseTaskDockerfile(paths, "build-pmars")
+  expect(staging.baseImage).toBe("debian:13.0-slim")
+  expect(staging.aptPackages).toEqual(["asciinema", "tmux"])
 })
 
 // term-bench2/tasks/feal-linear-cryptanalysis/setup_deps.sh:29-49 — a
@@ -169,6 +189,10 @@ test.skipIf(!tbRootExists)("parseTaskDockerfile: circuit-fibsqrt — bare 'apt-g
     { kind: "copy", src: "gates.txt", dst: "/app", srcIsDir: false, dirTarget: true, contentsOnly: false },
   ])
   expect(staging.steps.some((s) => (s.cmd ?? "").includes("apt"))).toBe(false)
+  // the bare "apt-get update" (no install) contributes nothing; the second
+  // RUN ("apt-get install -y gcc") is the only source of aptPackages —
+  // matches manifest.json's "circuit-fibsqrt": {"apt": ["gcc"], ...}.
+  expect(staging.aptPackages).toEqual(["gcc"])
 })
 
 // term-bench2/tasks/large-scale-text-editing/setup_deps.sh:36-44 — apt-get
@@ -343,6 +367,91 @@ test("stageTaskRuntime: executes copy -> pip -> run in that fixed phase order, o
 
   // every exec uses the same argv shape as sandbox.ts's buildExecArgv
   expect(recordedArgvs[0]).toEqual(buildExecArgv("container-1", ["bash", "-c", scripts[0]!]))
+})
+
+test("stageTaskRuntime: apt install runs FIRST, ahead of copy/pip/run, when the Dockerfile has an apt-get install line", async () => {
+  const dir = tmpDir()
+  const task = "apt-first-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  mkdirSync(path.join(dir, task, "environment", "adir"), { recursive: true })
+  writeFileSync(path.join(dir, task, "environment", "adir", "f.txt"), "x")
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    [
+      "FROM ubuntu:24.04",
+      "RUN apt-get update && apt-get install -y git build-essential libgl1-mesa-glx && rm -rf /var/lib/apt/lists/*",
+      "RUN pip install somepkg",
+      "COPY adir/ /app/",
+      "RUN echo raw-step",
+    ].join("\n"),
+  )
+  const fakePaths = fakeBenchPaths(dir)
+
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+
+  // apt install, then copy, then the combined pip install, then the raw run.
+  expect(recordedArgvs.length).toBe(4)
+  const scripts = recordedArgvs.map((argv) => argv[argv.length - 1]!)
+  expect(scripts[0]).toContain("apt-get update && apt-get install -y --no-install-recommends")
+  // deduped + sorted + Ubuntu-24.04-renamed (libgl1-mesa-glx -> libgl1),
+  // same rules as manifest.json's build-cython-ext "apt" field.
+  expect(scripts[0]).toContain("build-essential git libgl1")
+  expect(scripts[0]!.startsWith("set -euo pipefail\n")).toBe(true)
+  expect(scripts[1]).toContain("mkdir -p")
+  expect(scripts[1]).toContain('"/app/"')
+  expect(scripts[2]).toContain("uv pip install")
+  expect(scripts[3]).toContain("echo raw-step")
+})
+
+test("stageTaskRuntime: empty apt list — no apt exec at all", async () => {
+  const dir = tmpDir()
+  const task = "no-apt-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    ["FROM ubuntu:24.04", "RUN echo hello"].join("\n"),
+  )
+  const fakePaths = fakeBenchPaths(dir)
+
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+
+  // exactly one exec (the raw "echo hello" run) — no apt-get anywhere.
+  expect(recordedArgvs.length).toBe(1)
+  expect(recordedArgvs[0]![recordedArgvs[0]!.length - 1]).not.toContain("apt-get")
+})
+
+test("stageTaskRuntime: a nonzero apt install exit throws BenchError naming it as an apt install failure", async () => {
+  const dir = tmpDir()
+  const task = "apt-fail-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    ["FROM ubuntu:24.04", "RUN apt-get update && apt-get install -y gcc"].join("\n"),
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const fakeExec = async (): Promise<ExecResult> => ({ rc: 100, stdout: "", stderr: "boom", timedOut: false })
+
+  await expect(stageTaskRuntime(fakePaths, "container-1", task, fakeExec)).rejects.toThrow(BenchError)
+  try {
+    await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+    throw new Error("unreachable")
+  } catch (e) {
+    expect((e as BenchError).message).toContain("apt install")
+    expect((e as BenchError).message).toContain("gcc")
+    expect((e as BenchError).message).toContain("boom")
+  }
 })
 
 test("stageTaskRuntime: a nonzero step exit throws BenchError naming the step", async () => {

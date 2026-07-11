@@ -6,20 +6,46 @@
 # bind-mounted over the host's /usr, /etc, ~/bench, ...) with a real,
 # throwaway container per task attempt: podman create/start once, then
 # `podman exec` per step (setup -> agent -> verifier) against this image,
-# then `podman rm -f -t 0`. Containers run as root, with real sudo/apt-get —
-# determinism instead comes from SKIP_APT=1 plus the packages already baked
-# in below (task setup_deps.sh scripts still run with SKIP_APT=1 and never
-# hit the network for apt).
+# then `podman rm -f -t 0`. Containers run as root, with real sudo/apt-get
+# and real network — podman containers have genuine root + network, unlike
+# bwrap's unprivileged sandbox, so apt-get genuinely works inside them.
 #
-# The apt package list below is the union of term-bench2/apt-packages.txt and
-# the EXTRA_APT list in runner.py (~line 190), plus a few packages the podman
-# design needs that the bwrap sandbox got for free from the host: sudo (bwrap
-# ran unprivileged and shimmed sudo/apt-get as no-ops; here sudo is real),
-# python-is-python3 (TB2 tasks assume a bare `python`; bwrap's ~/bench/bin
-# shim provided this — here it's a real system symlink), ca-certificates,
-# curl, wget, git (used to fetch uv below and by tasks that clone/fetch).
-# NOT hand-maintained forever: P4 makes this apt union Dockerfile-derived
-# from apt-packages.txt directly instead of being manually inlined here.
+# Per-task apt (Option A, 2026-07-11): each task's OWN apt packages are
+# installed at STAGING time, not baked into this shared image — see
+# opencode-plugin/src/bench/staging.ts's aptPackages step (runtime staging
+# mode) and term-bench2/gen_setup_deps.py's SKIP_APT-guarded apt section
+# (scripts mode; the runner no longer sets SKIP_APT=1, so that guarded
+# section now actually executes). This retires the old bwrap-era emulation
+# where SKIP_APT=1 was required because apt-get was a no-op shim.
+#
+# Root cause this fixes: the apt union below used to ALSO include
+# Python-library carrier packages (python3-opencv, mailman3). Debian's
+# python3-opencv pulls in a Debian-packaged numpy (1.26.4 at the time of
+# writing) into the system site-packages — which then SHADOWS a task's own
+# `pip install numpy==<newer>` inside the container ("Cannot uninstall ...
+# it is a distutils installed project" / "installed by debian"), because pip
+# refuses to remove a dpkg-owned file. mailman3 is the same shape of hazard
+# (also carries its own Python deps into system site-packages). This broke
+# 5 of 43 oracle tasks. The fix: this shared image now carries ONLY the
+# non-Python toolchain (compilers, network tools, docs/OCR/etc. binaries)
+# plus the bare Python INTERPRETER packages below (python3, python3-pip,
+# python3-venv, python-is-python3 — these four ship no library payload, so
+# they cannot shadow anything a task pip-installs). Any package that drags
+# in Python *libraries* via apt (python3-<anything-but-pip/venv>, and by
+# extension anything like mailman3 that transitively pulls one in) must
+# NEVER be added back to this union — such deps belong in the task's own
+# Dockerfile, installed at staging time (podman gives every task attempt a
+# fresh container, so a per-task apt install cannot cross-contaminate
+# another task's run).
+#
+# The apt package list below (minus the two removed Python-library carriers
+# above) is the union of term-bench2/apt-packages.txt and the EXTRA_APT list
+# in runner.py (~line 190), plus a few packages the podman design needs that
+# the bwrap sandbox got for free from the host: sudo (bwrap ran unprivileged
+# and shimmed sudo/apt-get as no-ops; here sudo is real), python-is-python3
+# (TB2 tasks assume a bare `python`; bwrap's ~/bench/bin shim provided this —
+# here it's a real system symlink), ca-certificates, curl, wget, git (used to
+# fetch uv below and by tasks that clone/fetch).
 #
 # opencode itself is baked into this image (below) rather than bind-mounted
 # from the host at container-run time: the host running this build (macOS/
@@ -65,7 +91,6 @@ RUN apt-get update && apt-get install -y \
     libtesseract-dev \
     libxext6 \
     libxrender-dev \
-    mailman3 \
     mailutils \
     make \
     nano \
@@ -79,7 +104,6 @@ RUN apt-get update && apt-get install -y \
     primer3 \
     python-is-python3 \
     python3 \
-    python3-opencv \
     python3-pip \
     python3-venv \
     r-base \

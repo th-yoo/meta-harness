@@ -167,7 +167,11 @@ export async function runTaskOnce(
       log(`  setup_deps.sh (${task})...`)
       const setupResult = await execFn(
         buildExecArgv(name, ["bash", `/mh/tasks/${task}/setup_deps.sh`], {
-          env: { TB_ROOT: "/tb", WORKDIR: "/app", EXTRAS_ROOT: "", SKIP_APT: "1" },
+          // no SKIP_APT (Option A, 2026-07-11): podman containers have real
+          // root + network, so setup_deps.sh's own SKIP_APT-guarded apt
+          // section now genuinely runs (see term-bench2/Containerfile's
+          // header for the retired bwrap-era apt-shim rationale).
+          env: { TB_ROOT: "/tb", WORKDIR: "/app", EXTRAS_ROOT: "" },
           workdir: "/app",
         }),
       )

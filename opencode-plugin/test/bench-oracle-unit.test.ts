@@ -321,6 +321,44 @@ test("runOneOracleTask: a failing `podman start` (rc 125) is setup_failed, namin
   expect(result).toEqual({ reward: 0, elapsed: 0.0, error: "setup_failed" })
 })
 
+// Option A (2026-07-11): podman containers have real root + network, so
+// setup_deps.sh's own SKIP_APT-guarded apt section now genuinely runs — the
+// runner must no longer suppress it via SKIP_APT=1.
+test("runOneOracleTask: scripts-mode setup_deps.sh exec has no SKIP_APT in its env (Option A — apt genuinely runs now)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["sometask"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  // The setup_deps.sh exec deliberately returns rc 1 (setup_failed) so this
+  // test stops right after capturing its argv — runOneOracleTask's later
+  // steps (copyTests/runVerifier) hardcode the REAL podman funnel with no
+  // injectable execFn (see verifier.ts), so this test must never reach them.
+  let setupArgv: string[] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      setupArgv = argv
+      return { rc: 1, stdout: "", stderr: "boom", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result: Awaited<ReturnType<typeof runOneOracleTask>>
+  try {
+    result = await runOneOracleTask(paths, "sometask", "scripts", fakeExec)
+  } finally {
+    errSpy.mockRestore()
+  }
+
+  expect(result.error).toBe("setup_failed")
+  expect(setupArgv.length).toBeGreaterThan(0)
+  expect(setupArgv).not.toContain("SKIP_APT=1")
+  expect(setupArgv.some((a) => a.startsWith("SKIP_APT"))).toBe(false)
+  expect(setupArgv).toContain("TB_ROOT=/tb")
+  expect(setupArgv).toContain("WORKDIR=/app")
+})
+
 // ── cli.ts: arg errors → rc 2, BenchError → rc 1 ──────────────────────────
 
 test("cli main: no subcommand → rc 2", async () => {

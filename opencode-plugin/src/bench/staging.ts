@@ -32,29 +32,41 @@
  *    entirely, matching the generator's own silent no-op for both cases
  *    (it only special-cases uv as a *flag*, `has_uv_copy`, which the codegen
  *    template never actually reads).
- *  - RUN: apt-get/apt install lines are dropped (informational only — the
- *    shared image's package union covers them; runtime staging never runs
- *    apt). pip3/pip/uv-pip-install/uv-add lines contribute package specs
- *    (verbatim, version pins included) to ONE combined venv+`uv pip install`
- *    step — mirroring gen_setup_deps.py's make_pip_section, which always
- *    combines every task's pip packages into a single install line
- *    regardless of how many RUN lines matched. `uv run ...` lines and any
- *    other unclassified RUN line become verbatim "run" steps, executed with
- *    cwd /app. Lines that are pure cleanup (`rm ...`, `find ... -delete`,
- *    `apt-get clean`/`autoremove`) are dropped outright, matching the
- *    generator. A RUN line that still mentions `apt`/`apt-get` as a whole
- *    word (e.g. a bare `apt-get update`, with no `install`) is *also*
- *    dropped outright here: the generated script wraps such lines in
- *    `if [[ -z "$SKIP_APT" ]]; then ...; fi`, and every current caller of
- *    the scripts-mode setup path always sets SKIP_APT=1 — so the observable
- *    behavior this must match is "no-op", which dropping the step achieves
- *    directly (see report.md's circuit-fibsqrt/distribution-search cases).
+ *  - RUN: apt-get/apt INSTALL lines contribute package names (verbatim port
+ *    of gen_setup_deps.py's extract_apt_packages token rules — noise-word
+ *    filtering, version-pin stripping, the libgl1-mesa-glx/libglib2.0-0
+ *    Ubuntu-24.04 rename table, chromium/chromium-driver/sudo skip-list) into
+ *    `TaskStaging.aptPackages`, deduped+sorted (matching manifest.json's
+ *    `apt` field and gen_setup_deps.py's own make_apt_section, both of which
+ *    apply `sorted(set(...))`). This is Option A (2026-07-11): the shared
+ *    bench image no longer carries a Python-library-shadowing package union
+ *    (see term-bench2/Containerfile's header for the debian-numpy-shadowing
+ *    root cause) — each task now genuinely `apt-get install`s its own real
+ *    Dockerfile-declared packages at staging time, since podman containers
+ *    have real root + network (see stageTaskRuntime: this becomes the FIRST
+ *    exec'd step, ahead of copy/pip/run, when non-empty). pip3/pip/uv-pip-
+ *    install/uv-add lines contribute package specs (verbatim, version pins
+ *    included) to ONE combined venv+`uv pip install` step — mirroring
+ *    gen_setup_deps.py's make_pip_section, which always combines every
+ *    task's pip packages into a single install line regardless of how many
+ *    RUN lines matched. `uv run ...` lines and any other unclassified RUN
+ *    line become verbatim "run" steps, executed with cwd /app. Lines that
+ *    are pure cleanup (`rm ...`, `find ... -delete`, `apt-get
+ *    clean`/`autoremove`) are dropped outright, matching the generator. A
+ *    RUN line that still mentions `apt`/`apt-get` as a whole word but has no
+ *    `install` (e.g. a bare `apt-get update`) is *also* dropped outright
+ *    here: it installs nothing by itself, and if the same Dockerfile also
+ *    has a real install line, this port's own apt step already runs its own
+ *    `apt-get update` first — so the bare line is redundant either way (see
+ *    report.md's circuit-fibsqrt/distribution-search cases).
  *  - Steps execute in the SAME fixed phase order the generated script's
- *    template uses: env (informational; already folded into the exported
- *    prelude) -> copy -> one combined pip install -> run — NOT Dockerfile
- *    source order across categories. This is a deliberate, documented
- *    departure from "interleaved as written" and mirrors
- *    SETUP_DEPS_TEMPLATE's fixed section order in gen_setup_deps.py.
+ *    template uses: apt install (if any) -> env (informational; already
+ *    folded into the exported prelude) -> copy -> one combined pip install
+ *    -> run — NOT Dockerfile source order across categories. This is a
+ *    deliberate, documented departure from "interleaved as written" and
+ *    mirrors SETUP_DEPS_TEMPLATE's fixed section order in gen_setup_deps.py
+ *    (apt ahead of copy/pip there too, modulo the env section's cosmetic
+ *    placement).
  *  - A Dockerfile instruction keyword we cannot classify (i.e. not one of
  *    FROM/ENV/COPY/RUN, and not a known-ignorable lifecycle directive) fails
  *    loud via BenchError naming the directive, rather than silently
@@ -104,6 +116,10 @@ export interface TaskStaging {
   /** Flat accumulated ENV map (later directives win on key collision) */
   envs: Record<string, string>
   baseImage: string
+  /** Deduped, sorted apt package names extracted from RUN apt-get/apt
+   * install lines (see extractAptPackages) — installed as the FIRST step in
+   * stageTaskRuntime when non-empty. Matches manifest.json's `apt` field. */
+  aptPackages: string[]
 }
 
 // Lifecycle / metadata directives gen_setup_deps.py's parser silently
@@ -180,6 +196,75 @@ function hasApt(bodyLower: string): boolean {
   return bodyLower.includes("apt-get install") || bodyLower.includes("apt install")
 }
 
+// ── apt package extraction — verbatim port of gen_setup_deps.py's ──────────
+// extract_apt_packages / APT_NOISE / SKIP_APT_PACKAGES / APT_RENAME (used
+// there for both the manifest's `apt` field and make_apt_section's actual
+// installed package list — same function, same rules, both contexts).
+
+const APT_NOISE = new Set([
+  "apt", "get", "install", "update", "upgrade", "y", "q", "f",
+  "rm", "rf", "var", "lib", "lists", "apt-get",
+  "no-install-recommends", "no-install-suggests",
+  "debian-frontend", "noninteractive",
+  "true", "false", "clean", "autoremove",
+  "source", "the", "and", "to", "e", "x",
+  "amd64", "http", "https", "com", "org", "io",
+  "run", "env", "export",
+])
+
+// Packages skipped entirely — already available, or provided by another
+// mechanism (Playwright ships its own chromium; sudo is already installed).
+const SKIP_APT_PACKAGES = new Set(["chromium", "chromium-driver", "sudo"])
+
+// Ubuntu 24.04 package renames: old name -> new name.
+const APT_RENAME: Record<string, string> = {
+  "libgl1-mesa-glx": "libgl1",
+  "libglib2.0-0": "libglib2.0-0t64",
+}
+
+const APT_PACKAGE_RE = /^[a-z0-9][a-z0-9.+-]+$/
+
+/** Verbatim port of gen_setup_deps.py's extract_apt_packages: pulls package
+ * names out of an `apt-get install ...` (or `apt install ...`) RUN body,
+ * stripping version pins, applying the Ubuntu 24.04 rename table, and
+ * skipping noise/flag/path tokens exactly as the generator does. */
+function extractAptPackages(body: string): string[] {
+  const packages: string[] = []
+  let inInstall = false
+  for (const rawToken of body.split(/\s+|&&|\|\||;/)) {
+    const token = rawToken.replace(/^["'\\]+/, "").replace(/["'\\]+$/, "")
+    if (!token) continue
+    if (token === "apt-get" || token === "apt") {
+      inInstall = false
+      continue
+    }
+    if (token === "install") {
+      inInstall = true
+      continue
+    }
+    if (token === "update" || token === "upgrade" || token === "clean" || token === "autoremove" || token === "purge") {
+      inInstall = false
+      continue
+    }
+    if (["rm", "find", "echo", "mkdir", "cd", "cp", "mv", "ln"].includes(token)) {
+      inInstall = false
+      continue
+    }
+    if (token.startsWith("-")) continue
+    if (token.startsWith("/")) {
+      inInstall = false
+      continue
+    }
+    if (inInstall) {
+      const pkg = token.split(/[=<>]/)[0] ?? ""
+      if (pkg && !APT_NOISE.has(pkg) && !SKIP_APT_PACKAGES.has(pkg) && APT_PACKAGE_RE.test(pkg)) {
+        packages.push(APT_RENAME[pkg] ?? pkg)
+      }
+    }
+  }
+  return packages
+}
+
 function hasPip(bodyLower: string): boolean {
   return /\bpip3?\s+install\b|\buv\s+pip\s+install\b|\buv\s+add\b/.test(bodyLower)
 }
@@ -218,13 +303,15 @@ const APT_WORD_RE = /\bapt(?:-get)?\b/
 
 /** Classify one RUN body, mutating the accumulators — port of gen_setup_deps.py's
  * RUN-handling branch inside parse_dockerfile. */
-function classifyRun(body: string, pipPackages: string[], rawRunLines: string[]): void {
+function classifyRun(body: string, pipPackages: string[], rawRunLines: string[], aptPackages: string[]): void {
   const bodyLower = body.toLowerCase()
   let classified = false
 
   if (hasApt(bodyLower)) {
-    // apt lines: informational only under this port (the shared image's
-    // package union covers them) — dropped, no step emitted.
+    // apt install line: extracted into aptPackages (Option A — installed for
+    // real at staging time, see stageTaskRuntime); no step emitted here since
+    // the apt install runs once, up front, ahead of every other step.
+    aptPackages.push(...extractAptPackages(body))
     classified = true
   }
   if (hasPip(bodyLower)) {
@@ -244,9 +331,11 @@ function classifyRun(body: string, pipPackages: string[], rawRunLines: string[])
       return // pure cleanup line — dropped, matches the generator exactly
     }
     if (APT_WORD_RE.test(body)) {
-      // The generated script wraps this in `if [[ -z "$SKIP_APT" ]]; then
-      // ...; fi`; every current caller sets SKIP_APT=1, so the observable
-      // behavior is a no-op — drop the step outright to match it.
+      // A bare apt/apt-get reference with no "install" (e.g. `apt-get
+      // update` alone) installs nothing by itself; if this Dockerfile also
+      // has a real install line, this port's own apt step (see
+      // stageTaskRuntime) already runs its own `apt-get update` first, so
+      // this line is redundant either way — drop it outright.
       return
     }
     rawRunLines.push(body)
@@ -306,6 +395,7 @@ export function parseTaskDockerfile(paths: BenchPaths, task: string): TaskStagin
   const rawCopies: { src: string; dst: string }[] = []
   const pipPackages: string[] = []
   const rawRunLines: string[] = []
+  const rawAptPackages: string[] = []
 
   for (const line of instructions) {
     const [kw, body] = parseInstruction(line)
@@ -348,7 +438,7 @@ export function parseTaskDockerfile(paths: BenchPaths, task: string): TaskStagin
         break
       }
       case "RUN": {
-        classifyRun(body, pipPackages, rawRunLines)
+        classifyRun(body, pipPackages, rawRunLines, rawAptPackages)
         break
       }
       default: {
@@ -362,16 +452,22 @@ export function parseTaskDockerfile(paths: BenchPaths, task: string): TaskStagin
   const envs: Record<string, string> = {}
   for (const [k, v] of envPairs) envs[k] = v
 
+  // Deduped + sorted, matching manifest.json's `apt` field and
+  // gen_setup_deps.py's make_apt_section (both apply `sorted(set(...))`).
+  const aptPackages = Array.from(new Set(rawAptPackages)).sort()
+
   // Fixed phase order, matching SETUP_DEPS_TEMPLATE exactly: env -> copy ->
   // one combined pip step -> run. NOT Dockerfile source order across
-  // categories (see module header).
+  // categories (see module header). apt install is NOT one of these `steps`
+  // — stageTaskRuntime executes it separately, as the very first exec, ahead
+  // of this whole `steps` array.
   const steps: StagingStep[] = []
   for (const [k, v] of envPairs) steps.push({ kind: "env", key: k, value: v })
   for (const rc of rawCopies) steps.push(resolveCopyStep(paths, task, rc.src, rc.dst))
   if (pipPackages.length > 0) steps.push({ kind: "pip", packages: pipPackages })
   for (const cmd of rawRunLines) steps.push({ kind: "run", cmd })
 
-  return { steps, envs, baseImage }
+  return { steps, envs, baseImage, aptPackages }
 }
 
 /** `export K="V"` lines for every accumulated ENV, with any embedded `$VAR`
@@ -428,6 +524,24 @@ export async function stageTaskRuntime(
   // EVERY step kind, so a `;`-joined RUN body (e.g. `false; true`) or a
   // failing copy/pip command fails loud instead of exiting 0.
   const setE = "set -euo pipefail\n"
+
+  // apt install — the FIRST step, ahead of copy/pip/run, when this task's
+  // Dockerfile declared any `apt-get install`/`apt install` packages (Option
+  // A: podman containers have real root + network, so this genuinely
+  // installs — see term-bench2/Containerfile's header for why the shared
+  // image no longer carries these). One exec, same set -euo pipefail guard
+  // as every other step.
+  if (staging.aptPackages.length > 0) {
+    const aptScript = `${setE}apt-get update && apt-get install -y --no-install-recommends ${staging.aptPackages.join(" ")}`
+    const aptArgv = buildExecArgv(name, ["bash", "-c", aptScript])
+    const aptResult = await execFn(aptArgv)
+    if (aptResult.rc !== 0) {
+      throw new BenchError(
+        `stageTaskRuntime(${task}): step failed (apt install ${staging.aptPackages.join(" ")}): exit ${aptResult.rc}` +
+          (aptResult.stderr.trim() ? ` — ${aptResult.stderr.trim()}` : ""),
+      )
+    }
+  }
 
   for (const step of staging.steps) {
     if (step.kind === "env") continue // already folded into `prelude`, applied to every step below

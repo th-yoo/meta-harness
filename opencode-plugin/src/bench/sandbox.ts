@@ -20,8 +20,10 @@
  * Network stays ENABLED by default (parity: bwrap shared the host network
  * namespace, and upstream test.sh self-bootstraps uvx/pytest over the
  * network). Root inside the container is fine — real sudo, real /app, real
- * apt-get — because determinism instead comes from SKIP_APT=1 plus
- * pre-unioned packages baked into the image (see term-bench2/Containerfile).
+ * apt-get — determinism comes from each task getting its own fresh
+ * container, not from suppressing apt: per-task packages are installed at
+ * staging time (Option A, 2026-07-11 — see staging.ts's aptPackages step and
+ * term-bench2/Containerfile's header), never baked into a shared union.
  *
  * Credential mounts for the agent phase are NOT this task's concern (P6).
  * The exec funnel that actually calls podman is P3.
