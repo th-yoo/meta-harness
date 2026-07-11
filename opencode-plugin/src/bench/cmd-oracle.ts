@@ -37,7 +37,7 @@ import {
 } from "./sandbox.ts"
 import { BENCH_IMAGE, containerName, type BenchPaths } from "./paths.ts"
 import { selectTasks, taskTimeouts } from "./tasks.ts"
-import { stageTaskRuntime } from "./staging.ts"
+import { stageTaskRuntime, type ExecFn } from "./staging.ts"
 import { copyTests, runVerifier } from "./verifier.ts"
 import { BenchError, log, pyFixed, writeJsonAtomic } from "./util.ts"
 
@@ -61,28 +61,47 @@ export async function runOneOracleTask(
   paths: BenchPaths,
   task: string,
   staging: StagingMode = "runtime",
+  execFn: ExecFn = podman,
 ): Promise<OracleTaskResult> {
   const name = containerName(task, "oracle")
   const taskStart = Date.now()
   try {
-    await podman(
-      buildCreateArgv({
-        image: BENCH_IMAGE,
-        name,
-        mounts: [
-          { host: paths.tbRoot, container: "/tb", ro: true },
-          { host: paths.termBenchDir, container: "/mh", ro: true },
-        ],
-        network: true,
-        workdir: "/app",
-      }),
-    )
-    await podman(buildStartArgv(name))
-    await podman(buildExecArgv(name, ["mkdir", "-p", "/app", "/tests", "/logs/verifier"]))
+    try {
+      const createResult = await execFn(
+        buildCreateArgv({
+          image: BENCH_IMAGE,
+          name,
+          mounts: [
+            { host: paths.tbRoot, container: "/tb", ro: true },
+            { host: paths.termBenchDir, container: "/mh", ro: true },
+          ],
+          network: true,
+          workdir: "/app",
+        }),
+      )
+      if (createResult.rc !== 0) {
+        throw new BenchError(
+          `runOneOracleTask(${task}): podman create failed: exit ${createResult.rc}` +
+            (createResult.stderr.trim() ? ` — ${createResult.stderr.trim()}` : ""),
+        )
+      }
+      const startResult = await execFn(buildStartArgv(name))
+      if (startResult.rc !== 0) {
+        throw new BenchError(
+          `runOneOracleTask(${task}): podman start failed: exit ${startResult.rc}` +
+            (startResult.stderr.trim() ? ` — ${startResult.stderr.trim()}` : ""),
+        )
+      }
+    } catch (e) {
+      const msg = e instanceof BenchError ? e.message : (e as Error).message
+      log(`  container bring-up failed: ${msg}`)
+      return { reward: 0, elapsed: 0.0, error: "setup_failed" }
+    }
+    await execFn(buildExecArgv(name, ["mkdir", "-p", "/app", "/tests", "/logs/verifier"]))
 
     if (staging === "scripts") {
       log(`  setup_deps.sh (${task})...`)
-      const setupResult = await podman(
+      const setupResult = await execFn(
         buildExecArgv(name, ["bash", `/mh/tasks/${task}/setup_deps.sh`], {
           env: { TB_ROOT: "/tb", WORKDIR: "/app", EXTRAS_ROOT: "", SKIP_APT: "1" },
           workdir: "/app",
@@ -95,7 +114,7 @@ export async function runOneOracleTask(
     } else {
       log(`  staging (runtime): ${task}...`)
       try {
-        await stageTaskRuntime(paths, name, task)
+        await stageTaskRuntime(paths, name, task, execFn)
       } catch (e) {
         const msg = e instanceof BenchError ? e.message : (e as Error).message
         log(`  staging (runtime) failed: ${msg}`)
@@ -112,7 +131,7 @@ export async function runOneOracleTask(
       log("  WARNING: no solution/solve.sh — skipping agent step")
     } else {
       log(`  Running solution/solve.sh (timeout=${pyFixed(agentTimeout, 0)}s)...`)
-      const solveResult = await podman(
+      const solveResult = await execFn(
         buildExecArgv(name, withTimeout(["bash", `/tb/${task}/solution/solve.sh`], agentTimeout), {
           workdir: "/app",
         }),
@@ -127,7 +146,7 @@ export async function runOneOracleTask(
     const elapsed = Math.round(((Date.now() - taskStart) / 1000) * 10) / 10
     return { reward, elapsed, error: "" }
   } finally {
-    await podman(buildRmArgv(name))
+    await execFn(buildRmArgv(name))
   }
 }
 

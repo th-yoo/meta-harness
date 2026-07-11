@@ -423,6 +423,12 @@ export async function stageTaskRuntime(
   const prelude = envPrelude(staging.envs)
   const envDir = `/tb/${task}/environment`
 
+  // Whole-script `set -euo pipefail`, mirroring SETUP_DEPS_TEMPLATE's line
+  // 325 (module header) — applied uniformly ahead of the env prelude for
+  // EVERY step kind, so a `;`-joined RUN body (e.g. `false; true`) or a
+  // failing copy/pip command fails loud instead of exiting 0.
+  const setE = "set -euo pipefail\n"
+
   for (const step of staging.steps) {
     if (step.kind === "env") continue // already folded into `prelude`, applied to every step below
 
@@ -431,20 +437,20 @@ export async function stageTaskRuntime(
       const srcTrimmed = (step.src ?? "").replace(/\/+$/, "")
       const srcForCp = step.contentsOnly ? `"${envDir}/${srcTrimmed}/."` : `"${envDir}/${step.src}"`
       const mkdirTarget = step.dirTarget ? step.dst! : posixPath.dirname(step.dst!)
-      script = `${prelude}mkdir -p "${mkdirTarget}" && cp -r ${srcForCp} "${step.dst}"`
+      script = `${setE}${prelude}mkdir -p "${mkdirTarget}" && cp -r ${srcForCp} "${step.dst}"`
     } else if (step.kind === "pip") {
       const pkgs = (step.packages ?? []).map((p) => `"${p}"`).join(" ")
       script =
+        setE +
         prelude +
         [
-          "set -e",
           "command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh",
           'uv venv --python python3 "/app/.venv" 2>/dev/null || true',
           'source "/app/.venv/bin/activate"',
           `uv pip install ${pkgs}`,
         ].join("\n")
     } else {
-      script = `${prelude}${step.cmd}`
+      script = `${setE}${prelude}${step.cmd}`
     }
 
     const argv = buildExecArgv(name, ["bash", "-c", script])

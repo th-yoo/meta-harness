@@ -5,9 +5,10 @@ import * as os from "node:os"
 import type { BenchPaths } from "../src/bench/paths.ts"
 import { selectTasks, taskTimeouts } from "../src/bench/tasks.ts"
 import { runHost, withTimeout } from "../src/bench/exec.ts"
-import { cmdOracle, type RunOneOracleTask } from "../src/bench/cmd-oracle.ts"
+import { cmdOracle, runOneOracleTask, type RunOneOracleTask } from "../src/bench/cmd-oracle.ts"
 import { main } from "../src/bench/cli.ts"
 import { BenchError } from "../src/bench/util.ts"
+import type { ExecResult } from "../src/bench/exec.ts"
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "mh-bench-oracle-unit-"))
@@ -292,6 +293,32 @@ test("cmdOracle: defaults to all tasks when neither --tasks nor --task-file give
   }
   await cmdOracle(paths, {}, fake)
   expect(seen).toEqual(["only-task"])
+})
+
+// ── runOneOracleTask: podman create/start rc must not be ignored ─────────
+
+test("runOneOracleTask: a failing `podman start` (rc 125) is setup_failed, naming the start phase — not swallowed into confusing later 'exec on non-running container' errors", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["sometask"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    if (argv[1] === "start") return { rc: 125, stdout: "", stderr: "boom", timedOut: false }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result: Awaited<ReturnType<typeof runOneOracleTask>>
+  try {
+    result = await runOneOracleTask(paths, "sometask", "runtime", fakeExec)
+    const messages = errSpy.mock.calls.map((c) => c[0])
+    expect(messages.some((m) => typeof m === "string" && m.includes("podman start failed"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+  }
+
+  expect(result).toEqual({ reward: 0, elapsed: 0.0, error: "setup_failed" })
 })
 
 // ── cli.ts: arg errors → rc 2, BenchError → rc 1 ──────────────────────────

@@ -379,6 +379,38 @@ test("stageTaskRuntime: no podman spawned when execFn is injected (never touches
   expect(calls).toBe(0) // no steps at all for a bare FROM-only Dockerfile
 })
 
+test("stageTaskRuntime: every step's script (copy, pip, run) starts with `set -euo pipefail` — a `;`-joined RUN body can't silently swallow a mid-command failure", async () => {
+  const dir = tmpDir()
+  const task = "set-e-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  mkdirSync(path.join(dir, task, "environment", "adir"), { recursive: true })
+  writeFileSync(path.join(dir, task, "environment", "adir", "f.txt"), "x")
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    ["FROM ubuntu:24.04", "COPY adir/ /app/", "RUN pip install somepkg", "RUN false; true"].join("\n"),
+  )
+  const fakePaths = fakeBenchPaths(dir)
+
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+
+  // copy, the combined pip install, and the raw run — one exec call each.
+  expect(recordedArgvs.length).toBe(3)
+  const scripts = recordedArgvs.map((argv) => argv[argv.length - 1]!)
+  for (const script of scripts) {
+    expect(script.startsWith("set -euo pipefail\n")).toBe(true)
+  }
+  // the raw RUN step is the `false; true` body: without the whole-script
+  // `set -euo pipefail` prefix, this `;`-joined command would exit 0 even
+  // though `false` failed midway — the guard is what makes it fail loud.
+  expect(scripts[2]).toContain("false; true")
+})
+
 // ── flag plumbing: --staging scripts still routes to the old path ────────
 
 function fakePathsWithTask(task: string): BenchPaths {
