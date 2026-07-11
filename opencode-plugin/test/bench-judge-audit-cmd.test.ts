@@ -276,3 +276,213 @@ test("cmd_judge_audit: role layer without --agent dies", async () => {
   const paths = fakeBenchPaths(metaRoot)
   await expect(cmdJudgeAudit(paths, args({ layer: "project-role" }), async () => null)).rejects.toThrow(BenchError)
 })
+
+// ── stratified sampling (balanced across verifier classes) ─────────────────
+// Ported from this task's brief (task-judge-stratify-brief.md), NOT from
+// runner.py — cmd_judge_audit's Python original samples first-N (deliberately
+// left as-is, Python is deprecated). Sids are fixed-width zero-padded
+// ("pass-01".."pass-20" / "fail-01".."fail-20") so no sid is a substring
+// prefix of another — required for the `prompt.includes(sid)` matcher below.
+
+function padSids(prefix: string, n: number): string[] {
+  return Array.from({ length: n }, (_, i) => `${prefix}-${String(i + 1).padStart(2, "0")}`)
+}
+
+/** Seed `nPass` passing + `nFail` failing sessions, each with a minimal
+ * trajectory, all sharing one candidate v1. */
+function seedBalancedStore(metaRoot: string, nPass: number, nFail: number): { passSids: string[]; failSids: string[] } {
+  const traj: TrajEvent[] = [{ t: "text", text: "done" }]
+  const passSids = padSids("pass", nPass)
+  const failSids = padSids("fail", nFail)
+  const recs: [string, boolean, TrajEvent[] | null][] = [
+    ...passSids.map((sid): [string, boolean, TrajEvent[] | null] => [sid, true, traj]),
+    ...failSids.map((sid): [string, boolean, TrajEvent[] | null] => [sid, false, traj]),
+  ]
+  seedStore(metaRoot, recs)
+  return { passSids, failSids }
+}
+
+/** A runJudge stub that always agrees with ground truth (verdict === truth
+ * implied by the caller construction) and records which sid each call was
+ * for, in call order — via the sid literal embedded in the prompt's
+ * `## Task` section (note=sid in seedStore/seedBalancedStore). */
+function sidRecordingJudge(allSids: string[], verdictFor: (sid: string) => boolean = (sid) => sid.startsWith("pass")) {
+  const called: string[] = []
+  const runJudge = async (prompt: string) => {
+    const sid = allSids.find((s) => prompt.includes(s))
+    if (!sid) throw new Error("prompt matched no known sid — test bug")
+    called.push(sid)
+    return JSON.stringify({ passed: verdictFor(sid), confidence: 0.9, reasoning: "ok" })
+  }
+  return { runJudge, called }
+}
+
+test("cmd_judge_audit: balanced pool (8 pass + 8 fail, limit 10) -> 5 fail + 5 pass, first-N per class", async () => {
+  const metaRoot = tmpDir()
+  const paths = fakeBenchPaths(metaRoot)
+  const { passSids, failSids } = seedBalancedStore(metaRoot, 8, 8)
+  const { runJudge, called } = sidRecordingJudge([...passSids, ...failSids])
+
+  const logs: string[] = []
+  const logSpy = spyOn(console, "log").mockImplementation((...a) => logs.push(a.join(" ")))
+  const errSpy = spyOn(console, "error").mockImplementation((...a) => logs.push(a.join(" ")))
+  try {
+    await cmdJudgeAudit(paths, args({ limit: 10 }), runJudge)
+  } finally {
+    logSpy.mockRestore()
+    errSpy.mockRestore()
+  }
+
+  expect(called.length).toBe(10)
+  const calledPass = called.filter((s) => s.startsWith("pass-")).sort()
+  const calledFail = called.filter((s) => s.startsWith("fail-")).sort()
+  expect(calledPass).toEqual(passSids.slice(0, 5))
+  expect(calledFail).toEqual(failSids.slice(0, 5))
+  expect(logs.join("\n")).toContain("sampling 5 pass / 5 fail (of 8 pass / 8 fail eligible)")
+})
+
+test("cmd_judge_audit: pass-limited pool (2 pass + 20 fail, limit 10) -> 2 pass + 8 fail (backfill)", async () => {
+  const metaRoot = tmpDir()
+  const paths = fakeBenchPaths(metaRoot)
+  const { passSids, failSids } = seedBalancedStore(metaRoot, 2, 20)
+  const { runJudge, called } = sidRecordingJudge([...passSids, ...failSids])
+
+  const logs: string[] = []
+  const logSpy = spyOn(console, "log").mockImplementation((...a) => logs.push(a.join(" ")))
+  const errSpy = spyOn(console, "error").mockImplementation((...a) => logs.push(a.join(" ")))
+  try {
+    await cmdJudgeAudit(paths, args({ limit: 10 }), runJudge)
+  } finally {
+    logSpy.mockRestore()
+    errSpy.mockRestore()
+  }
+
+  expect(called.length).toBe(10)
+  const calledPass = called.filter((s) => s.startsWith("pass-")).sort()
+  const calledFail = called.filter((s) => s.startsWith("fail-")).sort()
+  expect(calledPass).toEqual(passSids) // all 2 passers used
+  expect(calledFail).toEqual(failSids.slice(0, 8)) // backfilled with 8 first failers
+  expect(logs.join("\n")).toContain("sampling 2 pass / 8 fail (of 2 pass / 20 fail eligible)")
+})
+
+test("cmd_judge_audit: fail-limited pool (20 pass + 1 fail, limit 10) -> 1 fail + 9 pass (backfill)", async () => {
+  const metaRoot = tmpDir()
+  const paths = fakeBenchPaths(metaRoot)
+  const { passSids, failSids } = seedBalancedStore(metaRoot, 20, 1)
+  const { runJudge, called } = sidRecordingJudge([...passSids, ...failSids])
+
+  const logs: string[] = []
+  const logSpy = spyOn(console, "log").mockImplementation((...a) => logs.push(a.join(" ")))
+  const errSpy = spyOn(console, "error").mockImplementation((...a) => logs.push(a.join(" ")))
+  try {
+    await cmdJudgeAudit(paths, args({ limit: 10 }), runJudge)
+  } finally {
+    logSpy.mockRestore()
+    errSpy.mockRestore()
+  }
+
+  expect(called.length).toBe(10)
+  const calledPass = called.filter((s) => s.startsWith("pass-")).sort()
+  const calledFail = called.filter((s) => s.startsWith("fail-")).sort()
+  expect(calledFail).toEqual(failSids) // the only failer, always included
+  expect(calledPass).toEqual(passSids.slice(0, 9)) // backfilled with 9 first passers
+  expect(logs.join("\n")).toContain("sampling 9 pass / 1 fail (of 20 pass / 1 fail eligible)")
+})
+
+test("cmd_judge_audit: zero passers -> all failers, no crash, split logged", async () => {
+  const metaRoot = tmpDir()
+  const paths = fakeBenchPaths(metaRoot)
+  const { passSids, failSids } = seedBalancedStore(metaRoot, 0, 5)
+  expect(passSids.length).toBe(0)
+  const { runJudge, called } = sidRecordingJudge([...passSids, ...failSids])
+
+  const logs: string[] = []
+  const logSpy = spyOn(console, "log").mockImplementation((...a) => logs.push(a.join(" ")))
+  const errSpy = spyOn(console, "error").mockImplementation((...a) => logs.push(a.join(" ")))
+  let rc: number
+  try {
+    rc = await cmdJudgeAudit(paths, args({ limit: 10 }), runJudge)
+  } finally {
+    logSpy.mockRestore()
+    errSpy.mockRestore()
+  }
+
+  expect(rc).toBe(0)
+  expect(called.sort()).toEqual(failSids)
+  expect(logs.join("\n")).toContain("sampling 0 pass / 5 fail (of 0 pass / 5 fail eligible)")
+})
+
+test("cmd_judge_audit: per-class agreement (pass 1/2, fail 3/3) -> passAgreement=0.5, failAgreement=1.0, overall=4/5, meta-metric carries all four", async () => {
+  const metaRoot = tmpDir()
+  const paths = fakeBenchPaths(metaRoot)
+  const { passSids, failSids } = seedBalancedStore(metaRoot, 2, 3)
+  // pass class (truth=true): agree on pass-01 (judge PASS=true), disagree on pass-02 (judge FAIL=false) -> 1/2
+  // fail class (truth=false): agree on all 3 (judge FAIL=false) -> 3/3
+  const runJudge = async (prompt: string) => {
+    const allSids = [...passSids, ...failSids]
+    const sid = allSids.find((s) => prompt.includes(s))
+    if (!sid) throw new Error("prompt matched no known sid — test bug")
+    const judged = sid === "pass-02" ? false : sid.startsWith("pass") ? true : false
+    return JSON.stringify({ passed: judged, confidence: 0.9, reasoning: "x" })
+  }
+
+  const logs: string[] = []
+  const logSpy = spyOn(console, "log").mockImplementation((...a) => logs.push(a.join(" ")))
+  const errSpy = spyOn(console, "error").mockImplementation((...a) => logs.push(a.join(" ")))
+  let rc: number
+  try {
+    rc = await cmdJudgeAudit(paths, args({ limit: 5 }), runJudge)
+  } finally {
+    logSpy.mockRestore()
+    errSpy.mockRestore()
+  }
+
+  expect(rc).toBe(0) // overall 4/5 = 0.8, not below threshold
+  const m = metrics(metaRoot)
+  expect(m.length).toBe(1)
+  expect(m[0]!["n"]).toBe(5)
+  expect(m[0]!["agreement"]).toBe(0.8)
+  expect(m[0]!["nPass"]).toBe(2)
+  expect(m[0]!["nFail"]).toBe(3)
+  expect(m[0]!["passAgreement"]).toBe(0.5)
+  expect(m[0]!["failAgreement"]).toBe(1.0)
+  const out = logs.join("\n")
+  expect(out).toContain("pass=50.0%")
+  expect(out).toContain("fail=100.0%")
+})
+
+test("cmd_judge_audit: exit code keyed on OVERALL agreement -> exit 1 even if one class is perfect", async () => {
+  const metaRoot = tmpDir()
+  const paths = fakeBenchPaths(metaRoot)
+  const { passSids, failSids } = seedBalancedStore(metaRoot, 3, 7)
+  // fail class: 7/7 agree (perfect). pass class: 0/3 agree (all disagree).
+  // overall = 7/10 = 0.7 < 0.8 threshold -> alarm, even though fail class is perfect.
+  const runJudge = async (prompt: string) => {
+    const allSids = [...passSids, ...failSids]
+    const sid = allSids.find((s) => prompt.includes(s))
+    if (!sid) throw new Error("prompt matched no known sid — test bug")
+    // pass-*: truth=true, judge always says FAIL (false) -> disagree
+    // fail-*: truth=false, judge always says FAIL (false) -> agree
+    const judged = false
+    return JSON.stringify({ passed: judged, confidence: 0.9, reasoning: "x" })
+  }
+
+  const logs: string[] = []
+  const logSpy = spyOn(console, "log").mockImplementation((...a) => logs.push(a.join(" ")))
+  const errSpy = spyOn(console, "error").mockImplementation((...a) => logs.push(a.join(" ")))
+  let rc: number
+  try {
+    rc = await cmdJudgeAudit(paths, args({ limit: 10 }), runJudge)
+  } finally {
+    logSpy.mockRestore()
+    errSpy.mockRestore()
+  }
+
+  expect(rc).toBe(1)
+  expect(logs.join("\n")).toContain("ALARM")
+  const m = metrics(metaRoot)
+  expect(m[0]!["nPass"]).toBe(3)
+  expect(m[0]!["nFail"]).toBe(7)
+  expect(m[0]!["passAgreement"]).toBe(0)
+  expect(m[0]!["failAgreement"]).toBe(1.0)
+})

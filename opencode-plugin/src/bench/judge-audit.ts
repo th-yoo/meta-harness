@@ -333,13 +333,57 @@ export async function cmdJudgeAudit(
     return 0
   }
 
-  const capped = eligible.slice(0, limit)
+  // Stratified selection: balance the sample across the verifier's
+  // ground-truth classes instead of first-N (which skews failure-heavy,
+  // since passing trajectories are under-stored) — see this task's brief
+  // (task-judge-stratify-brief.md). DELIBERATE divergence from runner.py's
+  // cmd_judge_audit (:2332-2360), which is first-N; Python is deprecated
+  // (deleted at P7) so it's left as-is.
+  //
+  // Target ceil(limit/2) failers + floor(limit/2) passers (failers get the
+  // larger half on an odd limit — the gameable direction matters more), each
+  // preserving eligible's stored order (first-N within the class, no rng).
+  // If a class is short of its quota, backfill the remainder from the other
+  // class so the sample still totals `limit` (or all of `eligible`, if
+  // fewer are available overall). Degenerates gracefully to all-one-class
+  // when the other class is empty.
+  const passers = eligible.filter((e) => e.truth)
+  const failers = eligible.filter((e) => !e.truth)
+  const failQuota = Math.ceil(limit / 2)
+  const passQuota = limit - failQuota
+
+  let failTake = Math.min(failQuota, failers.length)
+  let passTake = Math.min(passQuota, passers.length)
+  let shortage = limit - failTake - passTake
+  if (shortage > 0) {
+    const failSpare = failers.length - failTake
+    const add = Math.min(shortage, failSpare)
+    failTake += add
+    shortage -= add
+  }
+  if (shortage > 0) {
+    const passSpare = passers.length - passTake
+    const add = Math.min(shortage, passSpare)
+    passTake += add
+    shortage -= add
+  }
+
+  const selectedSids = new Set([...failers.slice(0, failTake), ...passers.slice(0, passTake)].map((e) => e.sid))
+  const capped = eligible.filter((e) => selectedSids.has(e.sid))
+
+  log(
+    `judge-audit: sampling ${passTake} pass / ${failTake} fail (of ${passers.length} pass / ${failers.length} fail eligible)`,
+  )
   log(`judge-audit: ${args.layer} ${candidate} — replaying judge (${model}) on ${capped.length} session(s) (of ${sessions.length} recorded)`)
 
   const rows: { sid: string; truth: boolean; judged: boolean | null; tag: string }[] = []
   let nScored = 0
   let nAgree = 0
   let nSkipped = 0
+  let nScoredPass = 0
+  let nAgreePass = 0
+  let nScoredFail = 0
+  let nAgreeFail = 0
 
   for (const { sid, truth, traj, note } of capped) {
     const prompt = buildJudgeAuditPrompt(traj, note)
@@ -361,6 +405,13 @@ export async function cmdJudgeAudit(
     const agree = judgePassed === truth
     nScored += 1
     if (agree) nAgree += 1
+    if (truth) {
+      nScoredPass += 1
+      if (agree) nAgreePass += 1
+    } else {
+      nScoredFail += 1
+      if (agree) nAgreeFail += 1
+    }
     rows.push({ sid, truth, judged: judgePassed, tag: agree ? "agree" : "DISAGREE" })
   }
 
@@ -375,12 +426,23 @@ export async function cmdJudgeAudit(
   console.log("=".repeat(74))
 
   const agreement = nScored ? nAgree / nScored : 0.0
-  console.log(`judge-audit: ${nScored} scored, ${nSkipped} skipped (of ${capped.length}) — agreement=${(agreement * 100).toFixed(1)}%`)
+  const passAgreement = nScoredPass ? nAgreePass / nScoredPass : null
+  const failAgreement = nScoredFail ? nAgreeFail / nScoredFail : null
+  const passAgreementS = passAgreement === null ? "n/a" : `${(passAgreement * 100).toFixed(1)}%`
+  const failAgreementS = failAgreement === null ? "n/a" : `${(failAgreement * 100).toFixed(1)}%`
+  console.log(
+    `judge-audit: ${nScored} scored, ${nSkipped} skipped (of ${capped.length}) — agreement=${(agreement * 100).toFixed(1)}% ` +
+      `(pass=${passAgreementS}, fail=${failAgreementS})`,
+  )
 
   appendMetaMetric(join(paths.metaRoot, ".meta-harness"), {
     event: "judge-audit",
     n: nScored,
     agreement: Math.round(agreement * 10000) / 10000,
+    nPass: nScoredPass,
+    nFail: nScoredFail,
+    passAgreement: passAgreement === null ? null : Math.round(passAgreement * 10000) / 10000,
+    failAgreement: failAgreement === null ? null : Math.round(failAgreement * 10000) / 10000,
     model,
     layer: args.layer,
     candidate,
