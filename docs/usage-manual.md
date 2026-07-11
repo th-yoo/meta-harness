@@ -355,6 +355,33 @@ Read fresh every scored session (no restart). File need not exist; defaults appl
 
 Models must be `provider/model` — a bare name fails resolution under oauth.
 
+### Configuring providers (OpenRouter and others)
+
+Anthropic is already wired via the `opencode-claude-auth` plugin (it reads Claude
+Code's oauth and refreshes it). To use another provider — e.g. an OpenRouter model
+as `judgeModel` — add its key through opencode's own auth store:
+
+```bash
+opencode auth login          # pick the provider (e.g. OpenRouter), paste the key
+opencode auth list           # confirm it's stored alongside "Anthropic · oauth"
+```
+
+Then reference it provider-prefixed, e.g.
+`{"judgeModel": "openrouter/google/gemini-2.5-flash"}` in the config above.
+
+**Why `opencode auth login` and not an env var.** The key lands in
+`~/.local/share/opencode/auth.json`, which reaches *all* consumers: the interactive
+TUI, the plugin's judge/proposer sessions, the host-side `judge-audit`, **and** the
+bench containers — the runner bind-mounts `~/.local/share/opencode` into every task
+container, so the key propagates for free. A bare `OPENROUTER_API_KEY` export works
+for everything *except* bench containers (the container-create call passes no `-e`
+env), so it silently fails there. Put keys in `auth.json`.
+
+- **Coexistence:** `opencode-claude-auth`'s refresh does a targeted rewrite of only
+  the `anthropic` entry, so a hand-added `openrouter` key is preserved across its
+  5-minute background sync.
+- **Get an OpenRouter key:** https://openrouter.ai/settings/keys
+
 ### Runner subcommands — `python3 term-bench2/runner.py <sub>` (top-level `--tb-root PATH`)
 
 - **`prep`** `[--apply] [--uninstall] [--clean-mountpoints]` — host setup (mkdir + apt);
