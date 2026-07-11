@@ -10,7 +10,9 @@ import { cmdPrep } from "./cmd-prep.ts"
 import { cmdOracle } from "./cmd-oracle.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
 import { cmdRun, type CmdRunArgs } from "./cmd-run.ts"
+import { cmdAb, type CmdAbArgs } from "./cmd-ab.ts"
 import { cmdJudgeAudit, type JudgeAuditArgs } from "./judge-audit.ts"
+import { LAYER_CHOICES, type LayerName } from "./record.ts"
 import { cmdSplit, type SplitArgs } from "./splits.ts"
 import { cmdReportLoop, type ReportLoopArgs } from "./report-loop.ts"
 import { BenchError } from "./util.ts"
@@ -26,6 +28,12 @@ commands:
               [--no-store] [--save-all-traj] [--no-harness] [--results-file PATH]
               [--label NAME] [--max-agent-timeout SEC] [--resume] [--agent NAME]
               [--pin LAYER=vN]... [--staging scripts|runtime]
+  ab          --layer L --candidate vN [--tasks TASK [TASK ...]] [--task-file PATH]
+              [--all] [--split-file PATH] [--model ID] [--variant V] [--k N]
+              [--layers global|account|project] [--agent NAME] [--alpha F]
+              [--nonregress-margin F] [--min-tasks-before-stop N] [--no-early-stop]
+              [--max-agent-timeout SEC] [--resume] [--no-store] [--save-all-traj]
+              [--results-file PATH] [--staging scripts|runtime]
   judge-audit --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
   split       make|rotate|show [--seed N] [--folds N] [--source FILE]
               [--split-file PATH] [--results PATH]... [--band LO,HI]
@@ -253,6 +261,155 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
   return out
 }
 
+function parseAbArgs(argv: string[]): CmdAbArgs | null {
+  const out: Partial<CmdAbArgs> = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--layer") {
+      const v = argv[i + 1]
+      if (v === undefined || !(LAYER_CHOICES as string[]).includes(v)) return null
+      out.layer = v as LayerName
+      i += 2
+      continue
+    }
+    if (a === "--candidate") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.candidate = v
+      i += 2
+      continue
+    }
+    if (a === "--tasks") {
+      const r = consumeTasksList(argv, i)
+      if (r === null) return null
+      out.tasks = r.vals
+      i = r.next
+      continue
+    }
+    if (a === "--task-file") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.taskFile = v
+      i += 2
+      continue
+    }
+    if (a === "--all") {
+      out.all = true
+      i++
+      continue
+    }
+    if (a === "--split-file") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.splitFile = v
+      i += 2
+      continue
+    }
+    if (a === "--model") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.model = v
+      i += 2
+      continue
+    }
+    if (a === "--variant") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.variant = v
+      i += 2
+      continue
+    }
+    if (a === "--k") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.k = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--layers") {
+      const v = argv[i + 1]
+      if (v !== "global" && v !== "account" && v !== "project") return null
+      out.layers = v
+      i += 2
+      continue
+    }
+    if (a === "--agent") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.agent = v
+      i += 2
+      continue
+    }
+    if (a === "--alpha") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.alpha = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--nonregress-margin") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.nonregressMargin = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--min-tasks-before-stop") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.minTasksBeforeStop = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--no-early-stop") {
+      out.noEarlyStop = true
+      i++
+      continue
+    }
+    if (a === "--max-agent-timeout") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.maxAgentTimeout = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--resume") {
+      out.resume = true
+      i++
+      continue
+    }
+    if (a === "--no-store") {
+      out.noStore = true
+      i++
+      continue
+    }
+    if (a === "--save-all-traj") {
+      out.saveAllTraj = true
+      i++
+      continue
+    }
+    if (a === "--results-file") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.resultsFile = v
+      i += 2
+      continue
+    }
+    if (a === "--staging") {
+      const v = argv[i + 1]
+      if (v !== "scripts" && v !== "runtime") return null
+      out.staging = v
+      i += 2
+      continue
+    }
+    return null
+  }
+  if (out.layer === undefined || out.candidate === undefined) return null
+  return out as CmdAbArgs
+}
+
+
 function parseJudgeAuditArgs(argv: string[]): JudgeAuditArgs | null {
   const out: Partial<JudgeAuditArgs> = {}
   let i = 0
@@ -453,6 +610,15 @@ export async function main(argv: string[]): Promise<number> {
           return 2
         }
         await cmdRun(paths, runArgs)
+        return 0
+      }
+      case "ab": {
+        const abArgs = parseAbArgs(subArgs)
+        if (abArgs === null) {
+          printUsage()
+          return 2
+        }
+        await cmdAb(paths, abArgs)
         return 0
       }
       case "judge-audit": {
