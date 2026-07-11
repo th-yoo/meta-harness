@@ -12,6 +12,19 @@
  * The per-task container lifecycle (`runOneOracleTask`) is injectable so
  * `cmdOracle`'s looping/logging/results-file logic can be unit tested without
  * ever spawning podman (see test/bench-oracle-unit.test.ts).
+ *
+ * Staging happens one of two ways, selected by `--staging scripts|runtime`
+ * (default runtime — see the task brief for P4):
+ *  - "scripts": the ORIGINAL behavior — exec the committed, pre-generated
+ *    `/mh/tasks/<task>/setup_deps.sh` (term-bench2/gen_setup_deps.py's
+ *    output). Kept side-by-side, verbatim, purely so Gate B can compare it
+ *    against runtime staging for equivalence before scripts mode is retired.
+ *  - "runtime": staging.ts parses `<tbRoot>/<task>/environment/Dockerfile`
+ *    straight from the upstream checkout and executes the derived steps via
+ *    podman exec — no vendored per-task script involved at all.
+ * Both modes log a step header, but with deliberately DIFFERENT wording
+ * (`setup_deps.sh (<task>)...` vs `staging (runtime): <task>...`) so Gate B
+ * logs are attributable to whichever mode actually ran.
  */
 import { existsSync } from "node:fs"
 import { join } from "node:path"
@@ -24,8 +37,9 @@ import {
 } from "./sandbox.ts"
 import { BENCH_IMAGE, containerName, type BenchPaths } from "./paths.ts"
 import { selectTasks, taskTimeouts } from "./tasks.ts"
+import { stageTaskRuntime } from "./staging.ts"
 import { copyTests, runVerifier } from "./verifier.ts"
-import { log, pyFixed, writeJsonAtomic } from "./util.ts"
+import { BenchError, log, pyFixed, writeJsonAtomic } from "./util.ts"
 
 export interface OracleTaskResult {
   reward: number
@@ -33,11 +47,21 @@ export interface OracleTaskResult {
   error: string
 }
 
-export type RunOneOracleTask = (paths: BenchPaths, task: string) => Promise<OracleTaskResult>
+export type StagingMode = "scripts" | "runtime"
+
+export type RunOneOracleTask = (
+  paths: BenchPaths,
+  task: string,
+  staging?: StagingMode,
+) => Promise<OracleTaskResult>
 
 /** One clean-room container lifecycle for a single oracle task — see the
  * task brief's binding "Design" section for the exact step-by-step contract. */
-export async function runOneOracleTask(paths: BenchPaths, task: string): Promise<OracleTaskResult> {
+export async function runOneOracleTask(
+  paths: BenchPaths,
+  task: string,
+  staging: StagingMode = "runtime",
+): Promise<OracleTaskResult> {
   const name = containerName(task, "oracle")
   const taskStart = Date.now()
   try {
@@ -56,16 +80,27 @@ export async function runOneOracleTask(paths: BenchPaths, task: string): Promise
     await podman(buildStartArgv(name))
     await podman(buildExecArgv(name, ["mkdir", "-p", "/app", "/tests", "/logs/verifier"]))
 
-    log(`  setup_deps.sh (${task})...`)
-    const setupResult = await podman(
-      buildExecArgv(name, ["bash", `/mh/tasks/${task}/setup_deps.sh`], {
-        env: { TB_ROOT: "/tb", WORKDIR: "/app", EXTRAS_ROOT: "", SKIP_APT: "1" },
-        workdir: "/app",
-      }),
-    )
-    if (setupResult.rc !== 0) {
-      log(`  setup_deps.sh failed (exit ${setupResult.rc})`)
-      return { reward: 0, elapsed: 0.0, error: "setup_failed" }
+    if (staging === "scripts") {
+      log(`  setup_deps.sh (${task})...`)
+      const setupResult = await podman(
+        buildExecArgv(name, ["bash", `/mh/tasks/${task}/setup_deps.sh`], {
+          env: { TB_ROOT: "/tb", WORKDIR: "/app", EXTRAS_ROOT: "", SKIP_APT: "1" },
+          workdir: "/app",
+        }),
+      )
+      if (setupResult.rc !== 0) {
+        log(`  setup_deps.sh failed (exit ${setupResult.rc})`)
+        return { reward: 0, elapsed: 0.0, error: "setup_failed" }
+      }
+    } else {
+      log(`  staging (runtime): ${task}...`)
+      try {
+        await stageTaskRuntime(paths, name, task)
+      } catch (e) {
+        const msg = e instanceof BenchError ? e.message : (e as Error).message
+        log(`  staging (runtime) failed: ${msg}`)
+        return { reward: 0, elapsed: 0.0, error: "setup_failed" }
+      }
     }
 
     // Oracle never caps the agent (solve.sh) timeout — Python's cmd_oracle
@@ -144,11 +179,12 @@ function writeOracleResults(
 
 export async function cmdOracle(
   paths: BenchPaths,
-  args: { tasks?: string[]; taskFile?: string; resultsFile?: string },
+  args: { tasks?: string[]; taskFile?: string; resultsFile?: string; staging?: StagingMode },
   runOneTask: RunOneOracleTask = runOneOracleTask,
 ): Promise<void> {
   const tasks = resolveOracleTasks(paths, args)
   const resultsFile = args.resultsFile
+  const staging = args.staging ?? "runtime"
 
   log(`Oracle validation: ${tasks.length} task(s)`)
   if (resultsFile) log(`Results file: ${resultsFile}`)
@@ -158,7 +194,7 @@ export async function cmdOracle(
 
   for (const task of tasks) {
     log(`\n=== Oracle: ${task} ===`)
-    const result = await runOneTask(paths, task)
+    const result = await runOneTask(paths, task, staging)
     results.push({ task, reward: result.reward, elapsed: result.elapsed, error: result.error })
 
     if (result.error !== "setup_failed") {

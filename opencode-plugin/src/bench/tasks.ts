@@ -2,17 +2,28 @@
  * tasks.ts — task-list resolution + per-task timeouts.
  *
  * Mirrors term-bench2/runner.py's load_manifest/all_task_names (:212-220),
- * select_tasks (:1431-1446), and task_timeouts (:1449-1457), with one
- * intentional swap: timeouts are read from task.toml via `Bun.TOML.parse`
- * instead of Python's hand-rolled `read_toml_value` minimal regex reader.
- * `test/bench-toml-audit.test.ts` audits that swap against every task.toml in
- * a real terminal-bench-2 checkout — see that file for the exact
- * minimal-reader semantics ported as a comparison oracle.
+ * select_tasks (:1431-1446), and task_timeouts (:1449-1457), with two
+ * intentional swaps:
+ *  - timeouts are read from task.toml via `Bun.TOML.parse` instead of
+ *    Python's hand-rolled `read_toml_value` minimal regex reader.
+ *    `test/bench-toml-audit.test.ts` audits that swap against every
+ *    task.toml in a real terminal-bench-2 checkout — see that file for the
+ *    exact minimal-reader semantics ported as a comparison oracle.
+ *  - `selectTasks`'s validity check no longer consults manifest.json (which
+ *    only ever covered the 59 non-excluded tasks gen_setup_deps.py
+ *    generated scripts for — see term-bench2/gen_setup_deps.py's
+ *    EXCLUDED_TASKS). Now that P4's runtime staging (staging.ts) parses
+ *    Dockerfiles straight from tbRoot with no vendored per-task script, a
+ *    task is valid iff `<tbRoot>/<task>/task.toml` exists — all 91 upstream
+ *    tasks become addressable, not just the 59 the generator covered.
+ *    `loadManifest` stays exported (other callers may still want the
+ *    generator's aggregated metadata later) but selectTasks no longer calls it.
  */
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { die, log, pyFixed } from "./util.ts"
 import type { BenchPaths } from "./paths.ts"
+import type { Dirent } from "node:fs"
 
 // See exec.ts's header note on why Bun globals are declared locally instead
 // of depending on `bun-types` (no new deps).
@@ -41,19 +52,42 @@ export function loadManifest(paths: BenchPaths): Record<string, unknown> {
   }
 }
 
+/** True iff `<tbRoot>/<task>/task.toml` exists — the sole validity source
+ * for selectTasks (see this module's header for why manifest.json is no
+ * longer consulted). */
+function isValidTask(paths: BenchPaths, task: string): boolean {
+  return existsSync(join(paths.tbRoot, task, "task.toml"))
+}
+
+/** All `<tbRoot>/<dir>` entries with a `task.toml`, sorted — the --all
+ * enumeration source, replacing `Object.keys(manifest)`. Dies (BenchError)
+ * if tbRoot itself can't be read, naming tbRoot rather than manifest.json. */
+function allTaskNames(paths: BenchPaths): string[] {
+  let entries: Dirent[]
+  try {
+    entries = readdirSync(paths.tbRoot, { withFileTypes: true })
+  } catch (e) {
+    die(`Cannot read tbRoot (${paths.tbRoot}): ${(e as Error).message}`)
+  }
+  return entries
+    .filter((e) => e.isDirectory() && isValidTask(paths, e.name))
+    .map((e) => e.name)
+    .sort()
+}
+
 /**
- * Resolve --all / --task-file / --tasks into a manifest-validated task list,
+ * Resolve --all / --task-file / --tasks into a tbRoot-validated task list,
  * in that priority order — matching Python's select_tasks resolution order
- * exactly (runner.py:1431-1446).
+ * exactly (runner.py:1431-1446). Validity source: `<tbRoot>/<task>/task.toml`
+ * existence (see this module's header) — REPLACES the old manifest.json check.
  */
 export function selectTasks(
   paths: BenchPaths,
   opts: { all?: boolean; taskFile?: string; tasks?: string[] },
 ): string[] {
-  const manifest = loadManifest(paths)
   let tasks: string[]
   if (opts.all) {
-    tasks = Object.keys(manifest).sort()
+    tasks = allTaskNames(paths)
   } else if (opts.taskFile) {
     const text = readFileSync(opts.taskFile, "utf-8")
     tasks = text
@@ -66,8 +100,8 @@ export function selectTasks(
     die("Specify --tasks TASK [TASK...], --task-file PATH, or --all")
   }
   for (const t of tasks) {
-    if (!(t in manifest)) {
-      die(`Unknown task: '${t}'. Check manifest.json.`)
+    if (!isValidTask(paths, t)) {
+      die(`Unknown task: '${t}'. Check tbRoot (${paths.tbRoot}) for a matching task.toml.`)
     }
   }
   return tasks

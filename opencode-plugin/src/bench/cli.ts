@@ -8,13 +8,15 @@
 import { makeBenchPaths } from "./paths.ts"
 import { cmdPrep } from "./cmd-prep.ts"
 import { cmdOracle } from "./cmd-oracle.ts"
+import type { StagingMode } from "./cmd-oracle.ts"
 import { BenchError } from "./util.ts"
 
 const USAGE = `usage: runner.ts [--tb-root PATH] <command> [options]
 
 commands:
   prep   [--apply]
-  oracle [--tasks TASK [TASK ...]] [--task-file PATH] [--results-file PATH]`
+  oracle [--tasks TASK [TASK ...]] [--task-file PATH] [--results-file PATH]
+         [--staging scripts|runtime]  (default: runtime)`
 
 function printUsage(): void {
   console.error(USAGE)
@@ -58,6 +60,7 @@ interface OracleArgs {
   tasks?: string[]
   taskFile?: string
   resultsFile?: string
+  staging?: StagingMode
 }
 
 function parseOracleArgs(argv: string[]): OracleArgs | null {
@@ -87,6 +90,13 @@ function parseOracleArgs(argv: string[]): OracleArgs | null {
       const v = argv[i + 1]
       if (v === undefined) return null
       out.resultsFile = v
+      i += 2
+      continue
+    }
+    if (a === "--staging") {
+      const v = argv[i + 1]
+      if (v !== "scripts" && v !== "runtime") return null
+      out.staging = v
       i += 2
       continue
     }

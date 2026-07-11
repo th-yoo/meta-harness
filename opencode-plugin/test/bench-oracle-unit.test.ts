@@ -25,42 +25,49 @@ function fakeBenchPaths(termBenchDir: string, tbRoot?: string): BenchPaths {
   }
 }
 
-function writeManifest(termBenchDir: string, tasks: string[]): void {
-  fs.mkdirSync(termBenchDir, { recursive: true })
-  const manifest: Record<string, unknown> = {}
-  for (const t of tasks) manifest[t] = {}
-  fs.writeFileSync(path.join(termBenchDir, "manifest.json"), JSON.stringify(manifest))
+/** selectTasks's validity source is now `<tbRoot>/<task>/task.toml` (see
+ * tasks.ts's header) — write one empty task.toml per task under a fresh
+ * tbRoot dir, replacing the old manifest.json fixture. */
+function writeTaskTomls(tbRoot: string, tasks: string[]): void {
+  for (const t of tasks) {
+    fs.mkdirSync(path.join(tbRoot, t), { recursive: true })
+    fs.writeFileSync(path.join(tbRoot, t, "task.toml"), "")
+  }
 }
 
 // ── selectTasks ──────────────────────────────────────────────────────────
 
-test("selectTasks: --all returns sorted manifest keys", () => {
+test("selectTasks: --all returns sorted task.toml dirs under tbRoot", () => {
   const dir = tmpDir()
-  writeManifest(dir, ["zeta", "alpha", "mu"])
-  const paths = fakeBenchPaths(dir)
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["zeta", "alpha", "mu"])
+  const paths = fakeBenchPaths(dir, tbRoot)
   expect(selectTasks(paths, { all: true })).toEqual(["alpha", "mu", "zeta"])
 })
 
 test("selectTasks: --task-file strips blank lines and # comments", () => {
   const dir = tmpDir()
-  writeManifest(dir, ["foo", "bar", "baz"])
-  const paths = fakeBenchPaths(dir)
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["foo", "bar", "baz"])
+  const paths = fakeBenchPaths(dir, tbRoot)
   const taskFile = path.join(dir, "tasks.txt")
   fs.writeFileSync(taskFile, "foo\n\n# a comment\nbar\n   \nbaz\n")
   expect(selectTasks(paths, { taskFile })).toEqual(["foo", "bar", "baz"])
 })
 
-test("selectTasks: explicit --tasks list, validated against manifest", () => {
+test("selectTasks: explicit --tasks list, validated against tbRoot task.toml", () => {
   const dir = tmpDir()
-  writeManifest(dir, ["foo", "bar"])
-  const paths = fakeBenchPaths(dir)
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["foo", "bar"])
+  const paths = fakeBenchPaths(dir, tbRoot)
   expect(selectTasks(paths, { tasks: ["bar", "foo"] })).toEqual(["bar", "foo"])
 })
 
 test("selectTasks: resolution order is all > task-file > tasks", () => {
   const dir = tmpDir()
-  writeManifest(dir, ["foo", "bar", "baz"])
-  const paths = fakeBenchPaths(dir)
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["foo", "bar", "baz"])
+  const paths = fakeBenchPaths(dir, tbRoot)
   const taskFile = path.join(dir, "tasks.txt")
   fs.writeFileSync(taskFile, "foo\n")
   // --all wins even though task-file and tasks are also given
@@ -69,23 +76,25 @@ test("selectTasks: resolution order is all > task-file > tasks", () => {
   expect(selectTasks(paths, { taskFile, tasks: ["bar"] })).toEqual(["foo"])
 })
 
-test("selectTasks: unknown task dies with Python-parity message", () => {
+test("selectTasks: unknown task dies naming tbRoot", () => {
   const dir = tmpDir()
-  writeManifest(dir, ["foo"])
-  const paths = fakeBenchPaths(dir)
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["foo"])
+  const paths = fakeBenchPaths(dir, tbRoot)
   expect(() => selectTasks(paths, { tasks: ["nope"] })).toThrow(BenchError)
   try {
     selectTasks(paths, { tasks: ["nope"] })
     throw new Error("unreachable")
   } catch (e) {
-    expect((e as BenchError).message).toBe("Unknown task: 'nope'. Check manifest.json.")
+    expect((e as BenchError).message).toBe(`Unknown task: 'nope'. Check tbRoot (${tbRoot}) for a matching task.toml.`)
   }
 })
 
 test("selectTasks: none of all/task-file/tasks dies with the Python usage message", () => {
   const dir = tmpDir()
-  writeManifest(dir, ["foo"])
-  const paths = fakeBenchPaths(dir)
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["foo"])
+  const paths = fakeBenchPaths(dir, tbRoot)
   expect(() => selectTasks(paths, {})).toThrow(BenchError)
   try {
     selectTasks(paths, {})
@@ -95,10 +104,20 @@ test("selectTasks: none of all/task-file/tasks dies with the Python usage messag
   }
 })
 
-test("selectTasks: manifest missing dies", () => {
+test("selectTasks: tbRoot missing dies", () => {
   const dir = tmpDir()
-  const paths = fakeBenchPaths(dir) // no manifest.json written
+  const paths = fakeBenchPaths(dir) // tbRoot ("tb-root-unused") never created
   expect(() => selectTasks(paths, { all: true })).toThrow(BenchError)
+})
+
+test("selectTasks: --all skips upstream dirs without a task.toml", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["real-task"])
+  // a dir with no task.toml (e.g. a stray non-task directory) must not appear
+  fs.mkdirSync(path.join(tbRoot, "not-a-task"), { recursive: true })
+  const paths = fakeBenchPaths(dir, tbRoot)
+  expect(selectTasks(paths, { all: true })).toEqual(["real-task"])
 })
 
 // ── taskTimeouts ─────────────────────────────────────────────────────────
@@ -208,8 +227,9 @@ test("runHost: host-side timeout kills the process and normalizes rc to -1", asy
 
 test("cmdOracle: incremental + final results-file JSON matches Python cmd_oracle's shape", async () => {
   const dir = tmpDir()
-  writeManifest(dir, ["a", "b"])
-  const paths = fakeBenchPaths(dir)
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a", "b"])
+  const paths = fakeBenchPaths(dir, tbRoot)
   const resultsFile = path.join(dir, "oracle-results.json")
 
   const fake: RunOneOracleTask = async (_paths, task) => {
@@ -262,8 +282,9 @@ test("cmdOracle: incremental + final results-file JSON matches Python cmd_oracle
 
 test("cmdOracle: defaults to all tasks when neither --tasks nor --task-file given", async () => {
   const dir = tmpDir()
-  writeManifest(dir, ["only-task"])
-  const paths = fakeBenchPaths(dir)
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["only-task"])
+  const paths = fakeBenchPaths(dir, tbRoot)
   const seen: string[] = []
   const fake: RunOneOracleTask = async (_paths, task) => {
     seen.push(task)
