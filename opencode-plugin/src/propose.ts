@@ -23,6 +23,8 @@ import {
   activeVersion,
   appendMetaMetric,
   buildProposerContext,
+  candidatePath,
+  listVersions,
   buildPromotionEvidence,
   createCandidate,
   nextVersion,
@@ -158,7 +160,7 @@ export async function triggerPropose(
 
     // Poll for the primary artifact: ops.json in playbook mode, system.md otherwise.
     const primary = playbook ? stagingOps : stagingSystem
-    let found = await waitForFile(primary, 10 * 60 * 1000)
+    let found = await waitForFile(primary, cfg.proposerTimeoutMin * 60 * 1000)
     // Grace: playbook mode but the proposer wrote a whole system.md instead.
     if (!found && playbook && fs.existsSync(stagingSystem)) found = true
     proposerSessions.delete(sessionID)
@@ -377,7 +379,7 @@ export async function triggerPromote(
       },
     })
 
-    const found = await waitForFile(stagingSystem, 10 * 60 * 1000)
+    const found = await waitForFile(stagingSystem, cfg.proposerTimeoutMin * 60 * 1000)
     proposerSessions.delete(sessionID)
 
     if (!found) {
@@ -449,6 +451,61 @@ the role's general behavior for this project's particular constraints, quirks, o
 Do not repeat anything from the higher layers.`,
 }
 
+/**
+ * Store-access section: tells the (agentic) proposer session it can — and
+ * should — read the candidate archive directly with its file tools, instead of
+ * relying only on the compressed excerpts embedded in the prompt. This is the
+ * founding paper's core mechanism (Meta-Harness, arXiv 2603.28052): the
+ * proposer inspects raw source, scores, and execution traces of prior
+ * candidates through the filesystem; compressed digests lose the evidence.
+ * Held-out trajectories are never written to the store, so nothing leakable
+ * exists under this root by construction.
+ */
+export function buildStoreAccessSection(layer: StoreLayer): string {
+  const active = activeVersion(layer.root)
+  const versions = listVersions(layer.root)
+  const MAX_INDEX = 20
+  const shown = versions.slice(-MAX_INDEX)
+  const lines = shown.map((v) => {
+    const score = readScore(layer.root, v)
+    let trajCount = 0
+    try {
+      trajCount = fs
+        .readdirSync(candidatePath(layer.root, v, "traj"))
+        .filter((f) => f.endsWith(".ndjson")).length
+    } catch { /* no traj dir */ }
+    const hasDx = fs.existsSync(candidatePath(layer.root, v, "diagnosis.json"))
+    const marker = v === active ? " (ACTIVE)" : ""
+    return `- ${v}${marker} — pass ${score.nPass} / fail ${score.nFail} — trajectories: ${trajCount} — diagnosis: ${hasDx ? "yes" : "no"}`
+  })
+  const elided = versions.length > shown.length
+    ? `\n(${versions.length - shown.length} older versions elided — list \`candidates/\` for all)`
+    : ""
+
+  return `## Store access — read the archive before diagnosing
+
+You are an agent with file tools. The full candidate archive for this layer is on disk at:
+
+    ${layer.root}
+
+Layout: \`active/{system.md,tools.md,.version}\` (current), and per candidate
+\`candidates/<vN>/\`: \`system.md\` + \`tools.md\` (the rules that ran), \`score.json\`
+(pass/fail + per-session records), \`traj/<sessionID>.ndjson\` (FULL execution
+traces — one JSON event per line), \`diagnosis.json\` (that generation's root-cause
+analysis), \`meta.json\` (which proposer produced it).
+
+Candidate index:
+${lines.join("\n") || "(no candidates yet)"}${elided}
+
+Before proposing, INSPECT the archive: read the full trajectories of failing
+sessions (the excerpts below are an index, not the evidence), and read prior
+candidates' rules alongside their scores — what was already tried, and did it
+help? Do not re-propose a rule a prior candidate already tried without effect.
+
+STRICTLY READ-ONLY: never create, modify, or delete anything under ${layer.root}.
+Your ONLY write target is the staging directory named at the end of this prompt.`
+}
+
 export function buildProposerPrompt(
   layer: StoreLayer,
   version: string,
@@ -492,10 +549,12 @@ export function buildProposerPrompt(
     ? `## Current ${layer.scope} tools.md (refine — do not discard good rules)\n\n\`\`\`\n${currentTools}\n\`\`\``
     : `## Current ${layer.scope} tools.md\n\n(empty — write from scratch if tool patterns warrant it)`
 
+  const storeAccessSection = buildStoreAccessSection(layer)
+
   const failing = buildFailureExcerpts(layer.root, activeVer)
   const failingSection = failing
-    ? `## Failing trajectories (full tool I/O — where the agent actually went wrong)\n\n${failing}`
-    : "## Failing trajectories\n\n(none captured yet — diagnose from the scores/notes above)"
+    ? `## Failing-trajectory excerpts (an INDEX of where to look — read the full traces via Store access above)\n\n${failing}`
+    : "## Failing-trajectory excerpts\n\n(none captured yet — check the archive via Store access above, or diagnose from the scores/notes)"
   const priorDx = readDiagnosis<Record<string, unknown>>(layer.root, activeVer)
   const priorSection = priorDx
     ? `## Root causes already diagnosed for ${activeVer} — do NOT re-propose the same fix\n\n\`\`\`json\n${JSON.stringify(priorDx, null, 2).slice(0, 2000)}\n\`\`\`\n`
@@ -601,6 +660,8 @@ ${currentToolsSection}
 ## Prior session scores and traces for this layer
 
 ${context || "(no sessions scored yet — write a sensible baseline for this scope)"}
+
+${storeAccessSection}
 
 ${failingSection}
 
@@ -784,7 +845,7 @@ export async function triggerCurate(
       body: { parts: [{ type: "text", text: prompt }], ...(proposerModel ? { model: proposerModel } : {}) },
     })
 
-    const found = await waitForFile(stagingOps, 10 * 60 * 1000)
+    const found = await waitForFile(stagingOps, cfg.proposerTimeoutMin * 60 * 1000)
     proposerSessions.delete(sessionID)
     if (!found) {
       await client.tui.showToast({ body: { title: "Meta-Harness",
@@ -830,7 +891,7 @@ export async function triggerCurate(
   }
 }
 
-function buildCuratePrompt(layer: StoreLayer, playbook: Playbook, stagingOps: string, worktree: string): string {
+export function buildCuratePrompt(layer: StoreLayer, playbook: Playbook, stagingOps: string, worktree: string): string {
   const active = playbook.bullets.filter((b) => b.status === "active")
   const relOps = path.relative(worktree, stagingOps)
   const stagingDir = path.relative(worktree, path.dirname(stagingOps))
@@ -843,6 +904,12 @@ You maintain the ${layer.scope} playbook: short behavioral rules. It has ${activ
 \`\`\`json
 ${JSON.stringify(active, null, 2)}
 \`\`\`
+
+${buildStoreAccessSection(layer)}
+
+Use the archive as evidence for merge/prune decisions: a bullet's helpful/harmful
+counters summarize sessions whose full trajectories are on disk — when a prune is
+borderline, read the traces before deciding.
 
 ## Your task — consolidate, do NOT invent
 

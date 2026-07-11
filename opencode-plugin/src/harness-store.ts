@@ -210,15 +210,26 @@ export interface MhConfig {
   /** Minimum judge/human agreement rate (over the last judgeMinSessions decisions)
    * required before the judge is considered calibrated. */
   judgeMinAgreement: number
+  /** Minutes the plugin waits for a proposer/promoter/curator session to write
+   * its staging artifact. An agentic proposer that explores the candidate
+   * archive (source + trajectories) needs longer than the old digest-only
+   * proposer did. */
+  proposerTimeoutMin: number
 }
 
 const DEFAULT_PROPOSER_MODEL = "anthropic/claude-opus-4-8"
 const DEFAULT_PROPOSER_VARIANT = "high"
 const DEFAULT_JUDGE_MIN_SESSIONS = 20
 const DEFAULT_JUDGE_MIN_AGREEMENT = 0.8
+const DEFAULT_PROPOSER_TIMEOUT_MIN = 20
 
-export function readMhConfig(): MhConfig {
-  const raw = readJson<Partial<MhConfig>>(path.join(ACCOUNT_MH_DIR, "config.json"), {})
+export function readMhConfig(configDir: string = ACCOUNT_MH_DIR): MhConfig {
+  const raw = readJson<Partial<MhConfig>>(path.join(configDir, "config.json"), {})
+  const timeoutRaw = raw.proposerTimeoutMin
+  const proposerTimeoutMin =
+    typeof timeoutRaw === "number" && Number.isFinite(timeoutRaw) && timeoutRaw > 0
+      ? Math.min(timeoutRaw, 120)
+      : DEFAULT_PROPOSER_TIMEOUT_MIN
   return {
     proposerModel: raw.proposerModel || DEFAULT_PROPOSER_MODEL,
     proposerVariant: raw.proposerVariant || DEFAULT_PROPOSER_VARIANT,
@@ -226,6 +237,7 @@ export function readMhConfig(): MhConfig {
     judgeVariant: raw.judgeVariant ?? "",
     judgeMinSessions: raw.judgeMinSessions ?? DEFAULT_JUDGE_MIN_SESSIONS,
     judgeMinAgreement: raw.judgeMinAgreement ?? DEFAULT_JUDGE_MIN_AGREEMENT,
+    proposerTimeoutMin,
   }
 }
 

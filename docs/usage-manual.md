@@ -351,6 +351,7 @@ Read fresh every scored session (no restart). File need not exist; defaults appl
 | `judgeVariant` | `""` | judge variant |
 | `judgeMinSessions` | `20` | shadow decisions before the judge can calibrate |
 | `judgeMinAgreement` | `0.8` | judge/human agreement needed to calibrate |
+| `proposerTimeoutMin` | `20` | minutes to wait for a proposer/promoter/curator to write its staging artifact (cap 120) |
 
 Models must be `provider/model` — a bare name fails resolution under oauth.
 

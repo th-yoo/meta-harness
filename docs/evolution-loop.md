@@ -285,6 +285,25 @@ small set of easy-task "sentinels" that ride held-out only as regression guards.
 detects project plateau (4 trials without improvement) and writes an auto-pause flag that skips
 auto-propose; unpause manually or via a fresh plateau-free verdict.
 
+## 11b. Agentic proposer store access (2026-07-11)
+
+The founding paper's core mechanism (Meta-Harness, arXiv 2603.28052) is a
+proposer that reads the RAW archive — source, scores, full traces of prior
+candidates — through the filesystem, because compressed digests lose the
+evidence. Our proposer session always had file tools (it delivers artifacts by
+writing staging files); the prompt just never told it to read.
+
+Now it does: `propose.ts:buildStoreAccessSection` injects the layer's store
+root, the on-disk layout, and a candidate index (per version: pass/fail,
+trajectory count, diagnosis present) into the proposer AND curator prompts,
+with the instruction to inspect full failing trajectories and prior candidates'
+rules/scores before proposing — the embedded 5KB excerpts are demoted to an
+index. The store is declared STRICTLY READ-ONLY to the session; staging remains
+the only write target, and selection gates are untouched. Held-out trajectories
+are never written to any store, so nothing leakable exists on disk for the
+proposer to find. Because an exploring proposer runs longer, the staging wait
+is now `proposerTimeoutMin` (config, default 20 min, was fixed 10).
+
 ## 12. Status & gotchas
 
 - Selection gate, promotion, degenerate-session filter, role wiring, version
