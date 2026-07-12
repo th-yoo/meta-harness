@@ -27,6 +27,7 @@ import path from "node:path"
 import type { EvolutionEngine, SessionState, SessionStateStore } from "../../engine.ts"
 import { parseScoreArgs } from "../../score.ts"
 import { MH_CHILD_ENV, type ClaudeCodeHost } from "./cc-host.ts"
+import { applyPendingArtifacts } from "./proposer.ts"
 
 /** The union of hook stdin shapes across the events we install (verified live
  * against claude 2.1.207 — see the brief's raw probe evidence). All event-
@@ -110,8 +111,15 @@ export async function dispatch(
   // proposer session never records itself — a self-referential capture loop.
   if (env[MH_CHILD_ENV]) return undefined
 
-  const sessionId = input.session_id ?? ""
   const cwd = input.cwd ?? host.projectRoot
+
+  // ── apply-on-next-event (Task L8) ─────────────────────────────────────────
+  // Any hook event is a chance to flush completed proposer/promoter/curator
+  // artifacts whose spawning hook process has already exited. Cheap (a readdir
+  // of a usually-empty lock dir) and self-guarded (never throws into the hook).
+  await applyPendingArtifacts(host, cwd)
+
+  const sessionId = input.session_id ?? ""
   if (!sessionId) return undefined
 
   switch (event) {

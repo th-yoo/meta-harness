@@ -47,8 +47,9 @@
 import fs from "node:fs"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
-import type { HarnessHost, ScoreResult } from "../../host.ts"
+import type { HarnessHost, ScoreResult, StagedArtifactDescriptor } from "../../host.ts"
 import { ccRuntimeDir } from "./file-state.ts"
+import { writeProposerLock, proposerInFlight as lockInFlight } from "./proposer.ts"
 
 // Minimal module-scoped Bun ambient (this project has no `bun-types` dep — see
 // bench/exec.ts for the same pattern). Covers both exec()'s bash -c calls and
@@ -467,6 +468,19 @@ export class ClaudeCodeHost implements HarnessHost {
       (level, msg) => this.log(level, msg),
       this.taskSpawnFn,
     )
+  }
+
+  // ── apply-on-next-event seam (Task L8) ────────────────────────────────────
+  // triggerPropose/Promote/Curate hand the descriptor here right after the
+  // detached spawn; we persist it as a lock so a LATER hook event applies it
+  // (see proposer.ts). The lock's presence also answers proposerInFlight.
+
+  stageArtifactApply(descriptor: StagedArtifactDescriptor): void {
+    writeProposerLock(descriptor)
+  }
+
+  proposerInFlight(root: string): boolean {
+    return lockInFlight(this.projectRoot, root)
   }
 
   async exec(cmd: string, timeoutMs = 30_000): Promise<{ stdout: string; exitCode: number }> {
