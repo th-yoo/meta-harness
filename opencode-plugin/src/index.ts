@@ -85,6 +85,7 @@ import {
 } from "./propose.ts"
 import { proposerSessions, judgeSessions } from "./session-state.ts"
 import { composeHarness, renderSystemBlocks } from "./compose.ts"
+import { OpencodeHost } from "./adapters/opencode-host.ts"
 
 // ── Role detection ─────────────────────────────────────────────────────────
 
@@ -230,6 +231,7 @@ const toastAndSwallow = async (
 
 const metaHarness: Plugin = async (input) => {
   const { worktree, client } = input
+  const host = new OpencodeHost(input)
 
   // One-time migration of legacy flat store into project-global
   migrateFlatToProjectGlobal(worktree)
@@ -310,7 +312,7 @@ const metaHarness: Plugin = async (input) => {
       // envPolicy (Phase 4 Part C) is composed the same way as agent-config:
       // most-specific layer that has an active env-policy wins outright.
       const envPolicy = composeEnvPolicy(layersFor(worktree, agent).map((l) => l.root))
-      const snapshot = await gatherEnvSnapshot(input.$, envPolicy)
+      const snapshot = await gatherEnvSnapshot(host, envPolicy)
       if (snapshot) snapshotCache.set(sessionID, snapshot)
       await log(client, "debug", `[hook:chat.message] env snapshot length=${snapshot.length}`)
     },
@@ -465,7 +467,7 @@ const metaHarness: Plugin = async (input) => {
       const mhCfg = readMhConfig()
       const judgePromise: Promise<JudgeVerdict | null> = mhCfg.judgeModel
         ? runJudge(
-            client, worktree, sessionID,
+            host, worktree, sessionID,
             sessionSummary.get(sessionID) ?? "", sessionTurns.get(sessionID) ?? 0,
             sessionTrajectory.get(sessionID) ?? [],
           ).catch(() => null)
@@ -496,7 +498,7 @@ const metaHarness: Plugin = async (input) => {
           usedPrefill = true
         }
       }
-      const result = await promptHumanScore(client, sessionID, undefined, prefill)
+      const result = await promptHumanScore(host, sessionID, undefined, prefill)
       if (result === null) {
         await log(client, "info", `[hook:event] scoring timed out — skipping ${sessionID}`)
         pendingScore.delete(sessionID)
@@ -675,10 +677,10 @@ const metaHarness: Plugin = async (input) => {
         })
       } else if (prDue && !paused) {
         await log(client, "info", `[hook:event] auto-propose project-role for ${agent}`)
-        void triggerPropose(client, worktree, prLayer)
+        void triggerPropose(host, worktree, prLayer)
       } else if (pgDue && !paused) {
         await log(client, "info", `[hook:event] auto-propose project-global`)
-        void triggerPropose(client, worktree, pgLayer)
+        void triggerPropose(host, worktree, pgLayer)
       }
 
       // Anti-bloat nudge: suggest curation when a project layer is over budget.
@@ -715,7 +717,7 @@ const metaHarness: Plugin = async (input) => {
         const layer = resolveScopeLayer(cmdInput.arguments, layers)
         if (layer) {
           await log(client, "info", `[hook:command] /mh-propose scope=${layer.scope} agent=${agent}`)
-          void triggerPropose(client, worktree, layer)
+          void triggerPropose(host, worktree, layer)
           throw await toastAndSwallow(client, "propose cycle started ✓", "success")
         }
         throw await toastAndSwallow(client, `/mh-propose — unknown scope "${cmdInput.arguments.trim()}" (use role|project|role-global|account)`, "error")
@@ -776,7 +778,7 @@ const metaHarness: Plugin = async (input) => {
         }
         if (source && target) {
           await log(client, "info", `[hook:command] /mh-promote ${source.scope}→${target.scope} agent=${agent}`)
-          void triggerPromote(client, worktree, source, target)
+          void triggerPromote(host, worktree, source, target)
           throw await toastAndSwallow(client, "promote cycle started ✓", "success")
         }
         throw await toastAndSwallow(client, `/mh-promote — unknown scope "${scope}" (use global|role)`, "error")
@@ -791,7 +793,7 @@ const metaHarness: Plugin = async (input) => {
           throw await toastAndSwallow(client, `/mh-curate — unknown scope "${cmdInput.arguments.trim()}" (use role|project|role-global|account)`, "error")
         }
         await log(client, "info", `[hook:command] /mh-curate scope=${layer.scope} agent=${agent}`)
-        void triggerCurate(client, worktree, layer)
+        void triggerCurate(host, worktree, layer)
         throw await toastAndSwallow(client, "curate cycle started ✓", "success")
       }
 

@@ -1,31 +1,38 @@
 import { test, expect } from "bun:test"
 import { promptHumanScore, handleScoreCommand } from "../src/score.ts"
+import type { HarnessHost } from "../src/host.ts"
 
-// Token-free: stubs client.tui so promptHumanScore's toast/clearPrompt/
-// appendPrompt calls are captured instead of hitting a real TUI. Exercises
-// the D4 maker-checker prefill param: default vs. judge-supplied prefill,
-// and the toast copy that flags a judge suggestion.
+// Token-free: stubs host.showScorePrompt so promptHumanScore's prompt-side
+// call is captured instead of hitting a real TUI (the toast/clearPrompt/
+// appendPrompt decomposition of showScorePrompt is OpencodeHost's job —
+// covered by host-opencode.test.ts). Exercises the D4 maker-checker prefill
+// param: default vs. judge-supplied prefill, and the copy that flags a judge
+// suggestion, plus the pending-Promise/timeout machinery that stayed in
+// score.ts.
 
-function fakeClient() {
+function fakeHost() {
   const calls = {
     toastMessages: [] as string[],
     appendedTexts: [] as string[],
-    clearCount: 0,
   }
-  const client: any = {
-    tui: {
-      showToast: async ({ body }: any) => {
-        calls.toastMessages.push(body.message)
-      },
-      clearPrompt: async () => {
-        calls.clearCount++
-      },
-      appendPrompt: async ({ body }: any) => {
-        calls.appendedTexts.push(body.text)
-      },
+  const host: HarnessHost = {
+    platform: "fake",
+    projectRoot: "/unused",
+    log: async () => {},
+    notify: async () => {},
+    showScorePrompt: async (text, isJudgeSuggestion) => {
+      calls.toastMessages.push(
+        isJudgeSuggestion
+          ? "Type /mh-score good  or  /mh-score bad (judge suggestion — edit if wrong)"
+          : "Type /mh-score good  or  /mh-score bad",
+      )
+      calls.appendedTexts.push(text)
     },
+    runTextAgent: async () => null,
+    runTaskAgent: async () => null,
+    exec: async () => ({ stdout: "", exitCode: 0 }),
   }
-  return { client, calls }
+  return { host, calls }
 }
 
 async function resolveShortly(sessionID: string, verdict: "good" | "bad" = "good") {
@@ -37,10 +44,10 @@ async function resolveShortly(sessionID: string, verdict: "good" | "bad" = "good
 }
 
 test("promptHumanScore defaults to the plain /mh-score good prefill", async () => {
-  const { client, calls } = fakeClient()
+  const { host, calls } = fakeHost()
   const sessionID = "sess-default"
 
-  const pending = promptHumanScore(client, sessionID, 5_000)
+  const pending = promptHumanScore(host, sessionID, 5_000)
   await resolveShortly(sessionID)
   const result = await pending
 
@@ -50,11 +57,11 @@ test("promptHumanScore defaults to the plain /mh-score good prefill", async () =
 })
 
 test("promptHumanScore honors a custom judge prefill and flags it in the toast", async () => {
-  const { client, calls } = fakeClient()
+  const { host, calls } = fakeHost()
   const sessionID = "sess-prefill"
   const prefill = "/mh-score bad judge: looked wrong to me"
 
-  const pending = promptHumanScore(client, sessionID, 5_000, prefill)
+  const pending = promptHumanScore(host, sessionID, 5_000, prefill)
   await resolveShortly(sessionID, "bad")
   const result = await pending
 
@@ -68,9 +75,9 @@ test("promptHumanScore treats an explicit default-valued prefill as non-judge", 
   // suggestion — only a prefill argument DIFFERENT from the default triggers
   // the "(judge suggestion — edit if wrong)" toast copy. This documents the
   // `prefill !== DEFAULT_PREFILL` check rather than `prefill !== undefined`.
-  const { client, calls } = fakeClient()
+  const { host, calls } = fakeHost()
   const sessionID = "sess-explicit-default"
-  const pending = promptHumanScore(client, sessionID, 5_000, "/mh-score good")
+  const pending = promptHumanScore(host, sessionID, 5_000, "/mh-score good")
   resolveShortly(sessionID)
   return pending.then(() => {
     expect(calls.toastMessages[0]).not.toContain("judge suggestion")

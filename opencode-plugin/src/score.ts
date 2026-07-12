@@ -18,14 +18,9 @@
  *   hook — no TUI-side changes needed.
  */
 
-import type { PluginInput } from "@opencode-ai/plugin"
+import type { HarnessHost, ScoreResult } from "./host.ts"
 
-export interface ScoreResult {
-  passed: boolean
-  note: string
-}
-
-type Client = PluginInput["client"]
+export type { ScoreResult }
 
 // One pending resolver per session. At most one session is scored at a time
 // in practice, but we key by sessionID to be safe.
@@ -44,7 +39,7 @@ const pending = new Map<string, (result: ScoreResult) => void>()
 const DEFAULT_PREFILL = "/mh-score good"
 
 export async function promptHumanScore(
-  client: Client,
+  host: HarnessHost,
   sessionID: string,
   timeoutMs = 5 * 60 * 1000,
   prefill?: string,
@@ -52,22 +47,7 @@ export async function promptHumanScore(
   const text = prefill ?? DEFAULT_PREFILL
   const isJudgeSuggestion = prefill !== undefined && prefill !== DEFAULT_PREFILL
 
-  await client.tui.showToast({
-    body: {
-      title: "Meta-Harness: rate this session",
-      message: isJudgeSuggestion
-        ? "Type /mh-score good  or  /mh-score bad (judge suggestion — edit if wrong)"
-        : "Type /mh-score good  or  /mh-score bad",
-      variant: "info",
-      duration: 30_000,
-    },
-  })
-
-  // Clear any existing text then pre-fill the command
-  await client.tui.clearPrompt()
-  await client.tui.appendPrompt({
-    body: { text },
-  })
+  await host.showScorePrompt(text, isJudgeSuggestion)
 
   return new Promise<ScoreResult | null>((resolve) => {
     pending.set(sessionID, resolve)

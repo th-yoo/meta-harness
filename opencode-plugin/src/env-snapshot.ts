@@ -15,6 +15,7 @@
  */
 
 import type { EnvPolicy } from "./harness-store.ts"
+import type { HarnessHost } from "./host.ts"
 
 const DEFAULT_LS_PATH = "/app"
 const DEFAULT_MAX_LS_ENTRIES = 25
@@ -153,23 +154,29 @@ export function buildSnapshot(sections: Sections, policy?: EnvPolicy | null): st
 }
 
 /**
- * Executes the bootstrap command via Bun's shell and returns the snapshot
- * string. Returns "" on any error so callers can safely ignore failures.
+ * Executes the bootstrap command via the host's exec (opencode: Bun's shell,
+ * wrapped by OpencodeHost.exec) and returns the snapshot string. Returns ""
+ * on any error so callers can safely ignore failures.
  *
  * `policy` (an evolved EnvPolicy, Phase 4 Part C) drives which probes run,
  * the ls path/cap, and the language-probe subset. Omitted/null reproduces
  * the original fixed-probe behavior.
+ *
+ * Takes `Pick<HarnessHost, "exec">` rather than the full HarnessHost — least
+ * churn: this is the only capability gatherEnvSnapshot needs, so callers
+ * (index.ts) can pass the host directly (it structurally satisfies the pick)
+ * without env-snapshot.ts depending on the rest of the platform surface.
  */
 export async function gatherEnvSnapshot(
-  $: import("@opencode-ai/plugin").PluginInput["$"],
+  host: Pick<HarnessHost, "exec">,
   policy?: EnvPolicy | null,
 ): Promise<string> {
   try {
     const cmd = buildBootstrapCmd(policy)
-    const result = await $`bash -c ${cmd}`.quiet().nothrow()
-    const stdout = result.stdout.toString("utf8").trim()
-    if (!stdout) return ""
-    const sections = parseSections(stdout)
+    const { stdout } = await host.exec(cmd)
+    const trimmed = stdout.trim()
+    if (!trimmed) return ""
+    const sections = parseSections(trimmed)
     return buildSnapshot(sections, policy)
   } catch {
     return ""

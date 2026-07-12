@@ -13,13 +13,10 @@
  * system prompt cannot break its output path.
  */
 
-import type { PluginInput } from "@opencode-ai/plugin"
 import * as fs from "fs"
 import * as path from "path"
 import { readMhConfig, parseModelSpec, type TrajEvent } from "./harness-store.ts"
-import { proposerSessions, judgeSessions } from "./session-state.ts"
-
-type Client = PluginInput["client"]
+import type { HarnessHost } from "./host.ts"
 
 /**
  * The judge's ENTIRE system prompt — loaded from judge-prompt.txt, the SINGLE
@@ -176,56 +173,32 @@ export function parseVerdict(text: string): JudgeVerdict | null {
  * signature so the idle-hook call site doesn't change.
  */
 export async function runJudge(
-  client: Client,
+  host: HarnessHost,
   _worktree: string,
   sessionID: string,
   summary: string,
   turns: number,
   traj: TrajEvent[],
 ): Promise<JudgeVerdict | null> {
-  let judgeSessionID: string | undefined
   try {
     const cfg = readMhConfig()
     const judgeModel = parseModelSpec(cfg.judgeModel)
     const prompt = buildJudgePrompt(summary, turns, traj)
 
-    const sessionRes = await client.session.create({
-      body: { title: `[meta-harness] judge ${sessionID}` },
+    // The session-create/mark/prompt/read-reply mechanics (incl. dynamically-
+    // named MCP tools can't be enumerated here — the persona forbids them and
+    // the trajectory-as-data rule covers injection) now live in the host's
+    // runTextAgent; judgeSessions/proposerSessions registration BEFORE the
+    // prompt (so system.transform replaces the persona) is preserved there.
+    const text = await host.runTextAgent({
+      title: `[meta-harness] judge ${sessionID}`,
+      system: JUDGE_SYSTEM_PROMPT,
+      prompt,
+      model: judgeModel,
     })
-    judgeSessionID = sessionRes.data?.id
-    if (!judgeSessionID) return null
-
-    proposerSessions.add(judgeSessionID)   // skip all scoring/trajectory hooks
-    judgeSessions.add(judgeSessionID)      // system.transform replaces the persona
-    const res = await client.session.prompt({
-      path: { id: judgeSessionID },
-      body: {
-        parts: [{ type: "text", text: prompt }],
-        ...(judgeModel ? { model: judgeModel } : {}),
-        // No tool needed — the judge replies inline. Disable everything as a
-        // structural belt (with the persona-replaced system prompt the judge
-        // has no tool-use scaffolding anyway). Dynamically-named MCP tools
-        // can't be enumerated here; the persona forbids them and the
-        // trajectory-as-data rule covers injection.
-        tools: {
-          bash: false, read: false, grep: false, glob: false, list: false,
-          edit: false, write: false, patch: false,
-          webfetch: false, websearch: false,
-          task: false, todowrite: false, todoread: false, skill: false,
-        },
-      },
-    })
-
-    const text = (res.data?.parts ?? [])
-      .map((p) => (p.type === "text" ? (p as { text?: string }).text ?? "" : ""))
-      .join("\n")
+    if (text === null) return null
     return parseVerdict(text)
   } catch {
     return null
-  } finally {
-    if (judgeSessionID) {
-      proposerSessions.delete(judgeSessionID)
-      judgeSessions.delete(judgeSessionID)
-    }
   }
 }

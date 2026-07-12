@@ -15,7 +15,6 @@
  * account-level stores under ~/.config/opencode/.meta-harness/.
  */
 
-import type { PluginInput } from "@opencode-ai/plugin"
 import * as fs from "fs"
 import * as path from "path"
 import {
@@ -55,8 +54,7 @@ import {
   type EnvPolicy,
 } from "./harness-store.ts"
 import { proposerSessions } from "./session-state.ts"
-
-type Client = PluginInput["client"]
+import type { HarnessHost } from "./host.ts"
 
 /** Failure-taxonomy labels the proposer must pick from when diagnosing. */
 export const FAILURE_TAXONOMY = [
@@ -88,24 +86,17 @@ const inFlight = new Set<string>()
  * then relocates it into `layer.root` after the session completes.
  */
 export async function triggerPropose(
-  client: Client,
+  host: HarnessHost,
   worktree: string,
   layer: StoreLayer,
 ): Promise<void> {
   if (inFlight.has(layer.root)) {
-    await client.app.log({
-      body: { service: "meta-harness", level: "info",
-              message: `propose skipped: ${layer.scope} already has a session in flight` },
-    })
+    await host.log("info", `propose skipped: ${layer.scope} already has a session in flight`)
     return
   }
   const isProject = layer.scope === "project-global" || layer.scope === "project-role"
   if (isProject && readTrial(layer.root) !== null) {
-    await client.tui.showToast({
-      body: { title: "Meta-Harness",
-              message: `Trial in progress for ${layer.scope} — skipping propose`,
-              variant: "info", duration: 5_000 },
-    })
+    await host.notify(`Trial in progress for ${layer.scope} — skipping propose`, "info", 5_000)
     return
   }
 
@@ -129,34 +120,19 @@ export async function triggerPropose(
     const cfg = readMhConfig()
     const proposerModel = parseModelSpec(cfg.proposerModel)
 
-    await client.app.log({
-      body: { service: "meta-harness", level: "info",
-              message: `Starting proposer for ${layer.scope} → ${version} (model=${cfg.proposerModel})` },
-    })
-    await client.tui.showToast({
-      body: { title: "Meta-Harness", message: `Proposing ${layer.scope} ${version}…`,
-              variant: "info", duration: 5_000 },
-    })
+    await host.log("info", `Starting proposer for ${layer.scope} → ${version} (model=${cfg.proposerModel})`)
+    await host.notify(`Proposing ${layer.scope} ${version}…`, "info", 5_000)
 
-    const sessionRes = await client.session.create({
-      body: { title: `[meta-harness] ${layer.scope} ${version}` },
+    const task = await host.runTaskAgent({
+      title: `[meta-harness] ${layer.scope} ${version}`,
+      prompt,
+      model: proposerModel,
     })
-    const sessionID = sessionRes.data?.id
-    if (!sessionID) {
-      await client.app.log({
-        body: { service: "meta-harness", level: "error", message: "Failed to create proposer session" },
-      })
+    if (!task) {
+      await host.log("error", "Failed to create proposer session")
       return
     }
-
-    proposerSessions.add(sessionID)
-    await client.session.prompt({
-      path: { id: sessionID },
-      body: {
-        parts: [{ type: "text", text: prompt }],
-        ...(proposerModel ? { model: proposerModel } : {}),
-      },
-    })
+    const sessionID = task.id
 
     // Poll for the primary artifact: ops.json in playbook mode, system.md otherwise.
     const primary = playbook ? stagingOps : stagingSystem
@@ -166,11 +142,7 @@ export async function triggerPropose(
     proposerSessions.delete(sessionID)
 
     if (!found) {
-      await client.tui.showToast({
-        body: { title: "Meta-Harness",
-                message: `Proposer timed out for ${layer.scope} — keeping current`,
-                variant: "warning", duration: 5_000 },
-      })
+      await host.notify(`Proposer timed out for ${layer.scope} — keeping current`, "warning", 5_000)
       return
     }
 
@@ -184,13 +156,11 @@ export async function triggerPropose(
     let diagnosis: Record<string, unknown> | null = null
     if (fs.existsSync(stagingDiagnosis)) {
       try { diagnosis = JSON.parse(fs.readFileSync(stagingDiagnosis, "utf-8")) } catch {
-        await client.app.log({ body: { service: "meta-harness", level: "warn",
-          message: `proposer ${layer.scope} ${version}: diagnosis.json malformed — skipped` } })
+        await host.log("warn", `proposer ${layer.scope} ${version}: diagnosis.json malformed — skipped`)
       }
       fs.rmSync(stagingDiagnosis, { force: true })
     } else {
-      await client.app.log({ body: { service: "meta-harness", level: "warn",
-        message: `proposer ${layer.scope} ${version}: no diagnosis.json written (soft-required)` } })
+      await host.log("warn", `proposer ${layer.scope} ${version}: no diagnosis.json written (soft-required)`)
     }
 
     // Build the candidate: ops mode edits the playbook; legacy/grace uses system.md.
@@ -224,12 +194,10 @@ export async function triggerPropose(
         const parsed = JSON.parse(fs.readFileSync(stagingAgentConfig, "utf-8"))
         agentConfig = validateAgentConfig(parsed)
         if (!agentConfig) {
-          await client.app.log({ body: { service: "meta-harness", level: "warn",
-            message: `proposer ${layer.scope} ${version}: agent-config.json invalid — skipped` } })
+          await host.log("warn", `proposer ${layer.scope} ${version}: agent-config.json invalid — skipped`)
         }
       } catch {
-        await client.app.log({ body: { service: "meta-harness", level: "warn",
-          message: `proposer ${layer.scope} ${version}: agent-config.json malformed — skipped` } })
+        await host.log("warn", `proposer ${layer.scope} ${version}: agent-config.json malformed — skipped`)
       }
       fs.rmSync(stagingAgentConfig, { force: true })
     }
@@ -244,12 +212,10 @@ export async function triggerPropose(
         const parsed = JSON.parse(fs.readFileSync(stagingEnvPolicy, "utf-8"))
         envPolicy = validateEnvPolicy(parsed)
         if (!envPolicy) {
-          await client.app.log({ body: { service: "meta-harness", level: "warn",
-            message: `proposer ${layer.scope} ${version}: env-policy.json invalid — skipped` } })
+          await host.log("warn", `proposer ${layer.scope} ${version}: env-policy.json invalid — skipped`)
         }
       } catch {
-        await client.app.log({ body: { service: "meta-harness", level: "warn",
-          message: `proposer ${layer.scope} ${version}: env-policy.json malformed — skipped` } })
+        await host.log("warn", `proposer ${layer.scope} ${version}: env-policy.json malformed — skipped`)
       }
       fs.rmSync(stagingEnvPolicy, { force: true })
     }
@@ -282,27 +248,19 @@ export async function triggerPropose(
       // TRIAL_MIN_SESSIONS scored sessions (see resolveTrial in the idle hook).
       const baseline = activeVersion(layer.root)
       startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook ?? null, effAgentConfig, effEnvPolicy)
-      await client.tui.showToast({
-        body: { title: "Meta-Harness",
-                message: `Trial started: ${layer.scope} ${version}${toolsNote} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
-                variant: "info", duration: 8_000 },
-      })
-      await client.app.log({
-        body: { service: "meta-harness", level: "info",
-                message: `Trial started ${layer.scope} ${version} (baseline ${baseline})` },
-      })
+      await host.notify(
+        `Trial started: ${layer.scope} ${version}${toolsNote} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
+        "info", 8_000,
+      )
+      await host.log("info", `Trial started ${layer.scope} ${version} (baseline ${baseline})`)
     } else {
       // Account layers are validated by TB2, not everyday usage — leave the
       // candidate INACTIVE pending an ab-verdict; the human activates via /mh-activate.
-      await client.tui.showToast({
-        body: { title: "Meta-Harness",
-                message: `Candidate ${version}${toolsNote} created for ${layer.scope} — validate with bun term-bench2/runner.ts ab, then /mh-activate ${layer.scope} ${version}`,
-                variant: "info", duration: 10_000 },
-      })
-      await client.app.log({
-        body: { service: "meta-harness", level: "info",
-                message: `Candidate ${layer.scope} ${version} created (inactive, awaiting ab-verdict)` },
-      })
+      await host.notify(
+        `Candidate ${version}${toolsNote} created for ${layer.scope} — validate with bun term-bench2/runner.ts ab, then /mh-activate ${layer.scope} ${version}`,
+        "info", 10_000,
+      )
+      await host.log("info", `Candidate ${layer.scope} ${version} created (inactive, awaiting ab-verdict)`)
     }
   } finally {
     inFlight.delete(layer.root)
@@ -316,26 +274,22 @@ export async function triggerPropose(
  * account candidate (the TB2 ab-verdict gate then decides activation).
  */
 export async function triggerPromote(
-  client: Client,
+  host: HarnessHost,
   worktree: string,
   source: StoreLayer,   // project-global | project-role
   target: StoreLayer,   // account-global | account-role
 ): Promise<void> {
   if (inFlight.has(target.root)) {
-    await client.app.log({
-      body: { service: "meta-harness", level: "info",
-              message: `promote skipped: ${target.scope} already has a session in flight` },
-    })
+    await host.log("info", `promote skipped: ${target.scope} already has a session in flight`)
     return
   }
 
   const srcScore = readScore(source.root, activeVersion(source.root))
   if (srcScore.sessions.length < PROMOTE_MIN_EVIDENCE || srcScore.nPass === 0) {
-    await client.tui.showToast({
-      body: { title: "Meta-Harness",
-              message: `Not enough evidence to promote ${source.scope} (need ≥${PROMOTE_MIN_EVIDENCE} scored sessions with ≥1 pass; have ${srcScore.sessions.length} sessions, ${srcScore.nPass} pass)`,
-              variant: "warning", duration: 8_000 },
-    })
+    await host.notify(
+      `Not enough evidence to promote ${source.scope} (need ≥${PROMOTE_MIN_EVIDENCE} scored sessions with ≥1 pass; have ${srcScore.sessions.length} sessions, ${srcScore.nPass} pass)`,
+      "warning", 8_000,
+    )
     return
   }
 
@@ -350,44 +304,25 @@ export async function triggerPromote(
     const cfg = readMhConfig()
     const proposerModel = parseModelSpec(cfg.proposerModel)
 
-    await client.app.log({
-      body: { service: "meta-harness", level: "info",
-              message: `Starting promoter ${source.scope} → ${target.scope} ${version} (model=${cfg.proposerModel})` },
-    })
-    await client.tui.showToast({
-      body: { title: "Meta-Harness", message: `Promoting ${source.scope} → ${target.scope} ${version}…`,
-              variant: "info", duration: 5_000 },
-    })
+    await host.log("info", `Starting promoter ${source.scope} → ${target.scope} ${version} (model=${cfg.proposerModel})`)
+    await host.notify(`Promoting ${source.scope} → ${target.scope} ${version}…`, "info", 5_000)
 
-    const sessionRes = await client.session.create({
-      body: { title: `[meta-harness] promote ${source.scope}→${target.scope} ${version}` },
+    const task = await host.runTaskAgent({
+      title: `[meta-harness] promote ${source.scope}→${target.scope} ${version}`,
+      prompt,
+      model: proposerModel,
     })
-    const sessionID = sessionRes.data?.id
-    if (!sessionID) {
-      await client.app.log({
-        body: { service: "meta-harness", level: "error", message: "Failed to create promoter session" },
-      })
+    if (!task) {
+      await host.log("error", "Failed to create promoter session")
       return
     }
-
-    proposerSessions.add(sessionID)
-    await client.session.prompt({
-      path: { id: sessionID },
-      body: {
-        parts: [{ type: "text", text: prompt }],
-        ...(proposerModel ? { model: proposerModel } : {}),
-      },
-    })
+    const sessionID = task.id
 
     const found = await waitForFile(stagingSystem, cfg.proposerTimeoutMin * 60 * 1000)
     proposerSessions.delete(sessionID)
 
     if (!found) {
-      await client.tui.showToast({
-        body: { title: "Meta-Harness",
-                message: `Promoter timed out for ${target.scope} — nothing created`,
-                variant: "warning", duration: 5_000 },
-      })
+      await host.notify(`Promoter timed out for ${target.scope} — nothing created`, "warning", 5_000)
       return
     }
 
@@ -409,15 +344,11 @@ export async function triggerPromote(
     })
 
     const toolsNote = tools ? " + tools.md" : ""
-    await client.tui.showToast({
-      body: { title: "Meta-Harness",
-              message: `Promotion candidate ${version}${toolsNote} for ${target.scope} — validate with bun term-bench2/runner.ts ab, then /mh-activate ${target.scope} ${version}`,
-              variant: "success", duration: 10_000 },
-    })
-    await client.app.log({
-      body: { service: "meta-harness", level: "info",
-              message: `Promotion candidate ${target.scope} ${version} created (inactive)` },
-    })
+    await host.notify(
+      `Promotion candidate ${version}${toolsNote} for ${target.scope} — validate with bun term-bench2/runner.ts ab, then /mh-activate ${target.scope} ${version}`,
+      "success", 10_000,
+    )
+    await host.log("info", `Promotion candidate ${target.scope} ${version} created (inactive)`)
   } finally {
     inFlight.delete(target.root)
   }
@@ -796,26 +727,23 @@ export const CURATOR_BUDGET = 25
  * gate as a proposal (project → trial; account → inactive pending ab).
  */
 export async function triggerCurate(
-  client: Client,
+  host: HarnessHost,
   worktree: string,
   layer: StoreLayer,
 ): Promise<void> {
   if (inFlight.has(layer.root)) {
-    await client.app.log({ body: { service: "meta-harness", level: "info",
-      message: `curate skipped: ${layer.scope} already has a session in flight` } })
+    await host.log("info", `curate skipped: ${layer.scope} already has a session in flight`)
     return
   }
   const isProject = layer.scope === "project-global" || layer.scope === "project-role"
   if (isProject && readTrial(layer.root) !== null) {
-    await client.tui.showToast({ body: { title: "Meta-Harness",
-      message: `Trial in progress for ${layer.scope} — skipping curate`, variant: "info", duration: 5_000 } })
+    await host.notify(`Trial in progress for ${layer.scope} — skipping curate`, "info", 5_000)
     return
   }
   const playbook = seedPlaybook(layer.root)   // seed from system.md if first use
   const activeBullets = playbook?.bullets.filter((b) => b.status === "active") ?? []
   if (!playbook || activeBullets.length === 0) {
-    await client.tui.showToast({ body: { title: "Meta-Harness",
-      message: `No playbook to curate for ${layer.scope} (empty layer)`, variant: "warning", duration: 6_000 } })
+    await host.notify(`No playbook to curate for ${layer.scope} (empty layer)`, "warning", 6_000)
     return
   }
 
@@ -828,28 +756,24 @@ export async function triggerCurate(
     const cfg = readMhConfig()
     const proposerModel = parseModelSpec(cfg.proposerModel)
 
-    await client.app.log({ body: { service: "meta-harness", level: "info",
-      message: `Starting curator ${layer.scope} → ${version} (${activeBullets.length} bullets, model=${cfg.proposerModel})` } })
-    await client.tui.showToast({ body: { title: "Meta-Harness",
-      message: `Curating ${layer.scope} ${version}…`, variant: "info", duration: 5_000 } })
+    await host.log("info", `Starting curator ${layer.scope} → ${version} (${activeBullets.length} bullets, model=${cfg.proposerModel})`)
+    await host.notify(`Curating ${layer.scope} ${version}…`, "info", 5_000)
 
-    const sessionRes = await client.session.create({ body: { title: `[meta-harness] curate ${layer.scope} ${version}` } })
-    const sessionID = sessionRes.data?.id
-    if (!sessionID) {
-      await client.app.log({ body: { service: "meta-harness", level: "error", message: "Failed to create curator session" } })
+    const task = await host.runTaskAgent({
+      title: `[meta-harness] curate ${layer.scope} ${version}`,
+      prompt,
+      model: proposerModel,
+    })
+    if (!task) {
+      await host.log("error", "Failed to create curator session")
       return
     }
-    proposerSessions.add(sessionID)
-    await client.session.prompt({
-      path: { id: sessionID },
-      body: { parts: [{ type: "text", text: prompt }], ...(proposerModel ? { model: proposerModel } : {}) },
-    })
+    const sessionID = task.id
 
     const found = await waitForFile(stagingOps, cfg.proposerTimeoutMin * 60 * 1000)
     proposerSessions.delete(sessionID)
     if (!found) {
-      await client.tui.showToast({ body: { title: "Meta-Harness",
-        message: `Curator timed out for ${layer.scope} — nothing changed`, variant: "warning", duration: 5_000 } })
+      await host.notify(`Curator timed out for ${layer.scope} — nothing changed`, "warning", 5_000)
       return
     }
 
@@ -878,13 +802,15 @@ export async function triggerCurate(
     if (isProject) {
       const baseline = activeVersion(layer.root)
       startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook, agentConfig, envPolicy)
-      await client.tui.showToast({ body: { title: "Meta-Harness",
-        message: `Curation trial: ${layer.scope} ${version} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
-        variant: "info", duration: 8_000 } })
+      await host.notify(
+        `Curation trial: ${layer.scope} ${version} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
+        "info", 8_000,
+      )
     } else {
-      await client.tui.showToast({ body: { title: "Meta-Harness",
-        message: `Curation candidate ${version} for ${layer.scope} — validate with bun term-bench2/runner.ts ab, then /mh-activate`,
-        variant: "info", duration: 10_000 } })
+      await host.notify(
+        `Curation candidate ${version} for ${layer.scope} — validate with bun term-bench2/runner.ts ab, then /mh-activate`,
+        "info", 10_000,
+      )
     }
   } finally {
     inFlight.delete(layer.root)
