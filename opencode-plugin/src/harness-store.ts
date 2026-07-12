@@ -1225,7 +1225,8 @@ export function migrateAccountRoot(): void {
 
 /**
  * Check if oldRoot is a "real" store with content (not just empty scaffolding).
- * Looks for: (a) non-empty global/active/, (b) any entry under roles/, (c) config.json exists.
+ * Looks for: (a) non-empty global/active/, (b) any entry under roles/, (c) config.json exists,
+ * (d) non-empty legacy top-level active/ (pre-layer store layout).
  */
 export function isRealStore(storeRoot: string): boolean {
   // Check (a): global/active has content (new account-store layout)
