@@ -42,10 +42,16 @@ then the env snapshot is appended.
 
 | Layer | Root | Scope of rules |
 |---|---|---|
-| account-global | `~/.config/opencode/.meta-harness/global/` | true for ALL coding, ALL projects |
+| account-global | `~/.config/meta-harness/global/` | true for ALL coding, ALL projects |
 | project-global | `<repo>/.meta-harness/global/` | this project, all roles |
-| account-role | `~/.config/opencode/.meta-harness/roles/<agent>/` | this role (e.g. `mh-build`), all projects |
+| account-role | `~/.config/meta-harness/roles/<agent>/` | this role (e.g. `mh-build`), all projects |
 | project-role | `<repo>/.meta-harness/roles/<agent>/` | this role in this project (most specific) |
+
+The account roots are resolved lazily by `accountMetaRoot()` (harness-store.ts,
+Task L5): `$META_HARNESS_HOME` (used as-is) > `$XDG_CONFIG_HOME/meta-harness` >
+`~/.config/meta-harness` (default). A one-time migration moves any pre-L5 store
+from the old opencode-owned `~/.config/opencode/.meta-harness` location the
+first time either the plugin or the bench CLI runs after upgrading.
 
 Builder: `harness-store.ts:layersFor(worktree, agent)`. Each layer carries the
 roots of the more-general layers (`higherRoots`); the proposer is shown those as
@@ -256,7 +262,7 @@ the proposer can evolve configuration knobs that affect the agent's runtime envi
 (5-session trial gate) is noisy and expensive. A calibrated LLM judge can densify the
 signal:
 
-- **Shadow mode:** Set `judgeModel` in `~/.config/opencode/.meta-harness/config.json`
+- **Shadow mode:** Set `judgeModel` in `~/.config/meta-harness/config.json`
   (e.g., `{"judgeModel": "openrouter/google/gemini-2.5-flash"}`) to enable. The judge
   scores sessions in parallel with `/mh-score` (human ground truth).
 - **Calibration:** Judge and human verdicts are compared. Once the judge agrees with
@@ -273,7 +279,7 @@ decisions.
 
 **Observability:** All loop events (ab, trial, activate, curate, rotate, judge) are
 recorded to three sinks: `term-bench2/results/meta-metrics.jsonl` (bench),
-`<repo>/.meta-harness/meta-metrics.jsonl` (project), and `~/.config/opencode/.meta-harness/meta-metrics.jsonl` (account)
+`<repo>/.meta-harness/meta-metrics.jsonl` (project), and `~/.config/meta-harness/meta-metrics.jsonl` (account)
 with `append_meta_metric`/`appendMetaMetric`. Reporter: `bun term-bench2/runner.ts
 report-loop [--json]` summarizes held-out pass-rate trajectory, accept/reject/inconclusive
 counts, and cumulative judge-agreement rate. `/mh-status` shows last decision.

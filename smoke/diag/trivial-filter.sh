@@ -17,9 +17,9 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/scenario.sh"
 env_up
 
-mkdir -p "$OC_CONFIG/opencode/.meta-harness"
+mkdir -p "$OC_CONFIG/meta-harness"
 printf '{"judgeModel":"anthropic/claude-haiku-4-5"}' \
-  > "$OC_CONFIG/opencode/.meta-harness/config.json"
+  > "$OC_CONFIG/meta-harness/config.json"
 
 oc_start --model anthropic/claude-haiku-4-5 >/dev/null || { report 1 "opencode failed to start"; exit 1; }
 

@@ -5,8 +5,8 @@
  *
  * Four stores form a 2×2 lattice (scope × location):
  *
- *   account-global  ~/.config/opencode/.meta-harness/global/
- *   account-role    ~/.config/opencode/.meta-harness/roles/<agent>/
+ *   account-global  <accountMetaRoot()>/global/          (default ~/.config/meta-harness/global/)
+ *   account-role    <accountMetaRoot()>/roles/<agent>/    (default ~/.config/meta-harness/roles/<agent>/)
  *   project-global  <project>/.meta-harness/global/
  *   project-role    <project>/.meta-harness/roles/<agent>/
  *
@@ -38,20 +38,44 @@ import * as os from "os"
 import * as path from "path"
 
 // ── Root resolvers ─────────────────────────────────────────────────────────
+//
+// The account-layer root is platform-neutral (Task L5) — it used to be an
+// opencode-owned, IMPORT-TIME constant (`~/.config/opencode/.meta-harness`),
+// which was wrong the moment the loop runs on a different coding agent AND
+// made env stubbing in tests infeasible (an import happens once, long before
+// any test's `beforeEach`/`beforeAll` runs). `accountMetaRoot()` reads env
+// fresh on every call instead — cheap (a couple of env lookups + path
+// joins, no filesystem access), and it doubles as the test seam: tests set
+// META_HARNESS_HOME in-process around the calls they care about.
+//
+// Resolution order:
+//   1. META_HARNESS_HOME (absolute path, used as-is)
+//   2. $XDG_CONFIG_HOME/meta-harness
+//   3. ~/.config/meta-harness
 
-const OPENCODE_CONFIG_DIR =
-  process.env["XDG_CONFIG_HOME"]
-    ? path.join(process.env["XDG_CONFIG_HOME"], "opencode")
-    : path.join(os.homedir(), ".config", "opencode")
+export function accountMetaRoot(): string {
+  const override = process.env["META_HARNESS_HOME"]
+  if (override) return override
+  const xdg = process.env["XDG_CONFIG_HOME"]
+  if (xdg) return path.join(xdg, "meta-harness")
+  return path.join(os.homedir(), ".config", "meta-harness")
+}
 
-const ACCOUNT_MH_DIR = path.join(OPENCODE_CONFIG_DIR, ".meta-harness")
+/** The PRE-L5 account root: opencode-owned, XDG-aware exactly like the old
+ * import-time OPENCODE_CONFIG_DIR constant. Used ONLY by migrateAccountRoot()
+ * to find legacy content to move — never a general-purpose path helper. */
+function legacyAccountRoot(): string {
+  const xdg = process.env["XDG_CONFIG_HOME"]
+  const opencodeConfigDir = xdg ? path.join(xdg, "opencode") : path.join(os.homedir(), ".config", "opencode")
+  return path.join(opencodeConfigDir, ".meta-harness")
+}
 
 export function accountGlobalRoot(): string {
-  return path.join(ACCOUNT_MH_DIR, "global")
+  return path.join(accountMetaRoot(), "global")
 }
 
 export function accountRoleRoot(agent: string): string {
-  return path.join(ACCOUNT_MH_DIR, "roles", agent)
+  return path.join(accountMetaRoot(), "roles", agent)
 }
 
 export function projectGlobalRoot(worktree: string): string {
@@ -202,7 +226,8 @@ export function abAccepted(v: AbVerdict): boolean {
  * The proposer/promoter/curator run on a PINNED strong model — a weak proposer
  * makes the self-improvement loop net-negative (STOP, arXiv 2310.02304), and an
  * unpinned proposer inherits whatever model the user happens to be running.
- * Config: ~/.config/opencode/.meta-harness/config.json.
+ * Config: <accountMetaRoot()>/config.json (see the "Root resolvers" section
+ * above — default ~/.config/meta-harness/config.json).
  */
 export interface MhConfig {
   proposerModel: string
@@ -228,7 +253,7 @@ const DEFAULT_JUDGE_MIN_SESSIONS = 20
 const DEFAULT_JUDGE_MIN_AGREEMENT = 0.8
 const DEFAULT_PROPOSER_TIMEOUT_MIN = 20
 
-export function readMhConfig(configDir: string = ACCOUNT_MH_DIR): MhConfig {
+export function readMhConfig(configDir: string = accountMetaRoot()): MhConfig {
   const raw = readJson<Partial<MhConfig>>(path.join(configDir, "config.json"), {})
   const timeoutRaw = raw.proposerTimeoutMin
   const proposerTimeoutMin =
@@ -270,7 +295,7 @@ export function writeCandidateMeta(storeRoot: string, version: string, meta: Rec
 const JUDGE_CALIBRATION_FILE = "judge-calibration.json"
 
 function judgeCalibrationPath(file?: string): string {
-  return file ?? path.join(ACCOUNT_MH_DIR, JUDGE_CALIBRATION_FILE)
+  return file ?? path.join(accountMetaRoot(), JUDGE_CALIBRATION_FILE)
 }
 
 export interface JudgeDecision {
@@ -443,7 +468,7 @@ function writeJson(p: string, data: unknown): void {
 // Mirrors the Python appender (term-bench2/bench_store.py append_meta_metric).
 // Sink lives at the nearest ".meta-harness" ancestor of storeRoot, so project
 // stores land in the repo-local (git-tracked) sink and account stores land in
-// ~/.config/opencode/.meta-harness/meta-metrics.jsonl.
+// <accountMetaRoot()>/meta-metrics.jsonl (default ~/.config/meta-harness/meta-metrics.jsonl).
 
 function metricsSinkFor(storeRoot: string): string | null {
   let dir = path.resolve(storeRoot)
@@ -1101,6 +1126,73 @@ export function migrateFlatToProjectGlobal(worktree: string): void {
     fs.mkdirSync(path.dirname(targetCandidatesDir), { recursive: true })
     fs.renameSync(flatCandidatesDir, targetCandidatesDir)
   }
+}
+
+/**
+ * One-time migration of the account-layer root off its old opencode-owned
+ * location (legacyAccountRoot(): ~/.config/opencode/.meta-harness, XDG-aware
+ * exactly like the pre-L5 constant) onto the new platform-neutral one
+ * (accountMetaRoot(): META_HARNESS_HOME > $XDG_CONFIG_HOME/meta-harness >
+ * ~/.config/meta-harness).
+ *
+ * Called from BOTH the plugin's init (index.ts) and the bench CLI's process
+ * entrypoint (term-bench2/runner.ts) — either can be first to touch the
+ * store, so this must be idempotent regardless of call order:
+ *
+ *   new root exists (real dir or otherwise)  -> no-op. Already migrated, or
+ *     a fresh install that never had an old store; either way there's
+ *     nothing to move, and touching it again would be destructive.
+ *   new missing, old missing                 -> no-op. Nothing to migrate;
+ *     the caller's own bootstrapStore/mkdir scaffolding handles first-run.
+ *   new missing, old is a real directory     -> fs.renameSync(old, new),
+ *     then fs.symlinkSync(new, old) so anything stale still reading the old
+ *     path keeps working. Logs one line.
+ *   new missing, old is already a symlink    -> no-op (a prior migration
+ *     already ran; don't re-migrate a symlink even if its target has since
+ *     vanished — that's a foreign/manual state, not this function's job).
+ *
+ * EDGE — META_HARNESS_HOME set: migration still targets the RESOLVED root.
+ * An env override changes WHERE content lands, not WHETHER a real old store
+ * gets migrated: migrate old -> resolved-new whenever resolved-new doesn't
+ * exist and old is a real directory. This is deliberately the simplest
+ * correct rule (task-L5-brief.md) — no special-casing based on which tier of
+ * accountMetaRoot()'s precedence produced the resolved path.
+ *
+ * Concurrent-safe enough for solo use: the rename+symlink pair is wrapped so
+ * a lost race (the other entry point already migrated) or a genuine failure
+ * both fall back to a silent no-op rather than throwing — migration must
+ * never block plugin or bench startup.
+ */
+export function migrateAccountRoot(): void {
+  const newRoot = accountMetaRoot()
+  if (fs.existsSync(newRoot)) return
+
+  const oldRoot = legacyAccountRoot()
+  let oldStat: fs.Stats
+  try {
+    oldStat = fs.lstatSync(oldRoot)
+  } catch {
+    return // nothing at the old location either — first run, nothing to migrate
+  }
+  if (!oldStat.isDirectory()) return // symlink (prior migration) or non-dir — no-op
+
+  try {
+    fs.mkdirSync(path.dirname(newRoot), { recursive: true })
+    fs.renameSync(oldRoot, newRoot)
+  } catch {
+    // Lost a race with a concurrent migration, or genuinely failed (e.g. an
+    // EXDEV cross-device rename under an unusual META_HARNESS_HOME) — either
+    // way, never block startup. If newRoot exists now, the other entry point
+    // already finished; otherwise the old store is simply left in place for
+    // the next call to retry.
+    return
+  }
+
+  try {
+    fs.symlinkSync(newRoot, oldRoot)
+  } catch { /* best-effort back-compat link only; the move itself already succeeded */ }
+
+  console.error(`[meta-harness] migrated account store: ${oldRoot} -> ${newRoot} (symlink left at old path)`)
 }
 
 /**

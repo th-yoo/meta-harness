@@ -12,7 +12,7 @@
  * The proposer writes a new system.md to an in-project staging file via bash,
  * then the plugin relocates it into the target storeRoot via Node fs.
  * This avoids external-directory permission prompts when writing to the
- * account-level stores under ~/.config/opencode/.meta-harness/.
+ * account-level stores under accountMetaRoot() (default ~/.config/meta-harness/).
  */
 
 import * as fs from "fs"

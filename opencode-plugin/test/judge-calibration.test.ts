@@ -26,14 +26,22 @@ function decision(overrides: Partial<JudgeDecision>): JudgeDecision {
 }
 
 test("readMhConfig defaults judge fields to disabled", () => {
-  // No override hook for the config path exists, so we just assert on the
-  // documented defaults directly via the shape readMhConfig returns when no
-  // config.json is present (fresh account dir in CI / this sandbox).
-  const cfg = readMhConfig()
-  expect(typeof cfg.judgeModel).toBe("string")
-  expect(typeof cfg.judgeVariant).toBe("string")
-  expect(typeof cfg.judgeMinSessions).toBe("number")
-  expect(typeof cfg.judgeMinAgreement).toBe("number")
+  // readMhConfig()'s default configDir is accountMetaRoot() (Task L5, lazy —
+  // reads META_HARNESS_HOME per call), which is now a real test seam: redirect
+  // it into an empty tmp dir so this never reads the developer's real account
+  // config.json, then assert the documented defaults for a missing file.
+  const savedMhHome = process.env["META_HARNESS_HOME"]
+  process.env["META_HARNESS_HOME"] = fs.mkdtempSync(path.join(os.tmpdir(), "mh-judge-calibration-cfg-"))
+  try {
+    const cfg = readMhConfig()
+    expect(cfg.judgeModel).toBe("")
+    expect(cfg.judgeVariant).toBe("")
+    expect(cfg.judgeMinSessions).toBe(20)
+    expect(cfg.judgeMinAgreement).toBe(0.8)
+  } finally {
+    if (savedMhHome === undefined) delete process.env["META_HARNESS_HOME"]
+    else process.env["META_HARNESS_HOME"] = savedMhHome
+  }
 })
 
 test("judgeCalibration on a missing file returns n:0, not calibrated", () => {

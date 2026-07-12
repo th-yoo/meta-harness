@@ -8,18 +8,20 @@
  * (:2482), plateau_verdict (:2492), _parse_ts (:2548), load_meta_metrics
  * (:2561), summarize_loop (:2585), cmd_report_loop (:2625).
  *
- * `defaultMetaMetricsSinks` and `cmdReportLoop` take an optional `home`
- * parameter (default `os.homedir()`) instead of Python's module-global
- * `Path.home()` — a pure-injection point so tests can isolate the
- * account-layer sink under a tmp dir without monkeypatching os.homedir()
- * (which ties named ESM imports to a live binding across modules) or
- * touching the real ~/.config/opencode/.meta-harness store. Production call
- * sites (cli.ts) never pass it, so behavior is unchanged.
+ * The account-layer sink (3rd of `defaultMetaMetricsSinks`) is derived from
+ * harness-store.ts's `accountMetaRoot()` (Task L5) — a LAZY resolver
+ * (META_HARNESS_HOME > $XDG_CONFIG_HOME/meta-harness > ~/.config/meta-harness)
+ * that reads env fresh per call. That supersedes this file's old `home`
+ * parameter, which existed only as a workaround for the pre-L5 account root
+ * being an import-time constant (env stubbing in tests was infeasible
+ * otherwise) — tests now isolate the account-layer sink by setting
+ * META_HARNESS_HOME in-process instead. Production call sites (cli.ts)
+ * never touch it either way, so behavior there is unchanged.
  */
 import { existsSync, readFileSync, rmSync } from "node:fs"
-import { homedir } from "node:os"
 import { join } from "node:path"
 import type { BenchPaths } from "./paths.ts"
+import { accountMetaRoot } from "../harness-store.ts"
 import { log, pySigned, writeJsonAtomic } from "./util.ts"
 
 // ── constants ────────────────────────────────────────────────────────────
@@ -30,11 +32,11 @@ export const PLATEAU_TRIAL_K = 4 // last K resolved project trials without stric
 /** The three loop-observability sinks, in write-order precedence: bench
  * (Python appender), project (TS appender, this repo's store), account (TS
  * appender, the user's global opencode config). */
-export function defaultMetaMetricsSinks(paths: BenchPaths, home: string = homedir()): string[] {
+export function defaultMetaMetricsSinks(paths: BenchPaths): string[] {
   return [
     join(paths.resultsDir, "meta-metrics.jsonl"),
     join(paths.metaRoot, ".meta-harness", "meta-metrics.jsonl"),
-    join(home, ".config", "opencode", ".meta-harness", "meta-metrics.jsonl"),
+    join(accountMetaRoot(), "meta-metrics.jsonl"),
   ]
 }
 
@@ -324,8 +326,8 @@ export interface ReportLoopArgs {
  * All flag-related logging goes through `log()` (stderr, see util.ts) so it
  * never pollutes --json's stdout.
  */
-export function cmdReportLoop(paths: BenchPaths, args: ReportLoopArgs, home: string = homedir()): void {
-  const baseSinks = defaultMetaMetricsSinks(paths, home)
+export function cmdReportLoop(paths: BenchPaths, args: ReportLoopArgs): void {
+  const baseSinks = defaultMetaMetricsSinks(paths)
   const extraSinks = args.sink ?? []
   const sinks = [...baseSinks, ...extraSinks]
   const events = loadMetaMetrics(sinks)

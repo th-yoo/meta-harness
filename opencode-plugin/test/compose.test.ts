@@ -20,8 +20,9 @@
  *     `renderSystemBlocks` matches it for the same fixture store.
  *
  * Hygiene: NO test here ever READS or WRITES into real account-scoped stores
- * (accountGlobalRoot()/accountRoleRoot() are real, un-sandboxed host paths
- * under ~/.config/opencode/). All layer roots are explicitly constructed to
+ * (accountGlobalRoot()/accountRoleRoot() are real, un-sandboxed host paths —
+ * default ~/.config/meta-harness/, see harness-store.ts's accountMetaRoot()).
+ * All layer roots are explicitly constructed to
  * point into tmpDir, bypassing layersFor's account-path resolution. This ensures
  * hermetic tests: no real $HOME reads/writes, no nondeterministic state from
  * the developer's actual account-global or account-role harness content.

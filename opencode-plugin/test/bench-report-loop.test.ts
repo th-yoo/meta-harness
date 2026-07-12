@@ -108,7 +108,7 @@ test("plateauVerdict: project stream (project sink only) drives the flag", () =>
   expect(plateauVerdict(boot, undefined, undefined, PROJECT_SINK).project.plateaued).toBe(true)
 
   // trial events from a NON-project sink are ignored
-  const foreign = Array(4).fill(trial("confirmed", 0.8, 0.8, "/home/u/.config/opencode/.meta-harness/meta-metrics.jsonl"))
+  const foreign = Array(4).fill(trial("confirmed", 0.8, 0.8, "/home/u/.config/meta-harness/meta-metrics.jsonl"))
   const v2 = plateauVerdict(foreign, undefined, undefined, PROJECT_SINK)
   expect(v2.project.reason.startsWith("insufficient")).toBe(true)
 })
@@ -149,8 +149,12 @@ test("loadMetaMetrics sorts across mixed ISO-8601 formats (Z vs +00:00)", () => 
 test("cmdReportLoop: writes/clears PAUSED_FLAG based on the project verdict only; extra --sink / --no-flag never touch it", () => {
   const dir = tmpDir()
   const paths = fakeBenchPaths(path.join(dir, "term-bench2"))
-  const homeDir = path.join(dir, "home")
-  const [benchSink, projectSink] = defaultMetaMetricsSinks(paths, homeDir)
+  // defaultMetaMetricsSinks' account-layer sink is now derived from
+  // harness-store.ts's accountMetaRoot() (Task L5) — redirect it into this
+  // test's tmp dir so nothing here ever resolves against the real $HOME.
+  const savedMhHome = process.env["META_HARNESS_HOME"]
+  process.env["META_HARNESS_HOME"] = path.join(dir, "account-root")
+  const [benchSink, projectSink] = defaultMetaMetricsSinks(paths)
   const flagPath = pausedFlagPath(paths)
 
   function writeSink(sink: string, events: unknown[]): void {
@@ -158,6 +162,7 @@ test("cmdReportLoop: writes/clears PAUSED_FLAG based on the project verdict only
     fs.writeFileSync(sink, events.map((e) => JSON.stringify(e)).join("\n") + "\n")
   }
 
+  try {
   // 4 tie/revert project trials -> project plateaued -> flag written
   writeSink(projectSink!, [
     { event: "trial", action: "confirmed", trialRate: 0.8, baselineRate: 0.8, ts: "2026-07-10T00:00:00Z" },
@@ -165,7 +170,7 @@ test("cmdReportLoop: writes/clears PAUSED_FLAG based on the project verdict only
     { event: "trial", action: "confirmed", trialRate: 0.8, baselineRate: 0.8, ts: "2026-07-10T00:00:02Z" },
     { event: "trial", action: "reverted", trialRate: 0.6, baselineRate: 0.8, ts: "2026-07-10T00:00:03Z" },
   ])
-  cmdReportLoop(paths, {}, homeDir)
+  cmdReportLoop(paths, {})
   expect(fs.existsSync(flagPath)).toBe(true)
   const flagData = JSON.parse(fs.readFileSync(flagPath, "utf-8"))
   expect(flagData.ts).toBeDefined()
@@ -180,7 +185,7 @@ test("cmdReportLoop: writes/clears PAUSED_FLAG based on the project verdict only
     { event: "trial", action: "reverted", trialRate: 0.6, baselineRate: 0.8, ts: "2026-07-10T00:00:03Z" },
     { event: "trial", action: "confirmed", trialRate: 0.95, baselineRate: 0.8, ts: "2026-07-10T00:00:04Z" },
   ])
-  cmdReportLoop(paths, {}, homeDir)
+  cmdReportLoop(paths, {})
   expect(fs.existsSync(flagPath)).toBe(false)
 
   // bench-only plateau (3 non-accept ab events, no trial events) must NOT write the flag
@@ -190,7 +195,7 @@ test("cmdReportLoop: writes/clears PAUSED_FLAG based on the project verdict only
     { event: "ab", layer: "account-global", decision: "reject", heldInDelta: 0.0, ts: "2026-07-10T00:00:01Z" },
     { event: "ab", layer: "account-global", decision: "reject", heldInDelta: 0.0, ts: "2026-07-10T00:00:02Z" },
   ])
-  cmdReportLoop(paths, {}, homeDir)
+  cmdReportLoop(paths, {})
   expect(fs.existsSync(flagPath)).toBe(false)
 
   // re-seed project plateau, then run with extra --sink -> flag untouched (not created)
@@ -202,10 +207,14 @@ test("cmdReportLoop: writes/clears PAUSED_FLAG based on the project verdict only
   ])
   const extraSink = path.join(dir, "extra", "meta-metrics.jsonl")
   writeSink(extraSink, [])
-  cmdReportLoop(paths, { sink: [extraSink] }, homeDir)
+  cmdReportLoop(paths, { sink: [extraSink] })
   expect(fs.existsSync(flagPath)).toBe(false)
 
   // default sinks again (no extra --sink) but --no-flag -> opts out entirely
-  cmdReportLoop(paths, { noFlag: true }, homeDir)
+  cmdReportLoop(paths, { noFlag: true })
   expect(fs.existsSync(flagPath)).toBe(false)
+  } finally {
+    if (savedMhHome === undefined) delete process.env["META_HARNESS_HOME"]
+    else process.env["META_HARNESS_HOME"] = savedMhHome
+  }
 })

@@ -8,7 +8,10 @@
  * none of which was reachable without opencode before this extraction.
  *
  * Hermetic: XDG_CONFIG_HOME is redirected into a tmp dir so accountRoleRoot()/
- * accountGlobalRoot() never touch the developer's real ~/.config/opencode.
+ * accountGlobalRoot() never touch the developer's real ~/.config/meta-harness.
+ * This actually WORKS now (Task L5's lazy accountMetaRoot()) — pre-L5, the
+ * account root was an import-time constant, so a beforeAll env stub here
+ * would have been silently too late (the L2-era bug this task fixed).
  */
 import { test, expect, beforeAll } from "bun:test"
 import * as fs from "node:fs"

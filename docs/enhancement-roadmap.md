@@ -136,7 +136,7 @@ model-specific. Additions:
 
 > **Status: IMPLEMENTED (2026-07-09).** `readMhConfig()` / `parseModelSpec()` /
 > `writeCandidateMeta()` in harness-store.ts; `triggerPropose` + `triggerPromote` read
-> `~/.config/opencode/.meta-harness/config.json` (defaults `anthropic/claude-opus-4-8` /
+> `~/.config/meta-harness/config.json` (defaults `anthropic/claude-opus-4-8` /
 > `high`) and pass `model: {providerID, modelID}` into `session.prompt`, and stamp
 > `candidates/<vN>/meta.json` with the proposer model/variant/kind. **API limitation:**
 > the opencode `session.prompt` body exposes `model` but not a thinking `variant`, so
@@ -150,7 +150,7 @@ proposer** (GPT-4 helped, GPT-3.5/Mixtral hurt), so a daily-driver cheap model w
 silently poison the loop. Pinning also removes proposal-quality variance (another
 noise confound alongside Phase 1's fitness noise) and gives rule provenance.
 
-- Config: `~/.config/opencode/.meta-harness/config.json` →
+- Config: `~/.config/meta-harness/config.json` →
   `{"proposerModel": "anthropic/claude-opus-4-8", "proposerVariant": "high"}`;
   constant fallback in `propose.ts`. Read via a `readMhConfig()` helper in
   harness-store.ts.
@@ -234,7 +234,7 @@ Today run_opencode discards the NDJSON stream; proposer sees 200-char summaries.
 
 > **Status: IMPLEMENTED (2026-07-10).** Observability: three sinks —
 > `term-bench2/results/meta-metrics.jsonl` (bench), `<root>/.meta-harness/meta-metrics.jsonl` (project),
-> `~/.config/opencode/.meta-harness/meta-metrics.jsonl` (account),
+> `~/.config/meta-harness/meta-metrics.jsonl` (account),
 > `append_meta_metric`/`appendMetaMetric` writers on ab/rotate/trial/activate/propose/curate/judge
 > events, `runner.py report-loop [--json]` reporter, `/mh-status` last-decision line.
 > Evolvable knobs (project-layer-only scope): `AgentConfig` (`active/agent-config.json`,

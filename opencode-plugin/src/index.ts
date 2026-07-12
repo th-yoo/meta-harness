@@ -4,9 +4,9 @@
  * 4-layer harness evolution system for mh-* agents.
  *
  * Layers (injection order, general → specific):
- *   account-global  ~/.config/opencode/.meta-harness/global/
+ *   account-global  <accountMetaRoot()>/global/          (default ~/.config/meta-harness/global/)
  *   project-global  <project>/.meta-harness/global/
- *   account-role    ~/.config/opencode/.meta-harness/roles/<agent>/
+ *   account-role    <accountMetaRoot()>/roles/<agent>/    (default ~/.config/meta-harness/roles/<agent>/)
  *   project-role    <project>/.meta-harness/roles/<agent>/
  *   env-snapshot    (pushed last as context)
  *
@@ -45,6 +45,7 @@ import {
   projectGlobalRoot,
   bootstrapStore,
   migrateFlatToProjectGlobal,
+  migrateAccountRoot,
   DEFAULT_SYSTEM_PROMPT,
 } from "./harness-store.ts"
 import { proposerSessions, judgeSessions } from "./session-state.ts"
@@ -100,6 +101,11 @@ const metaHarness: Plugin = async (input) => {
 
   // One-time migration of legacy flat store into project-global
   migrateFlatToProjectGlobal(worktree)
+
+  // One-time migration of the account-layer root off its old opencode-owned
+  // location (Task L5) — safe to run every init; no-op once migrated (or on
+  // a fresh install that never had an old store).
+  migrateAccountRoot()
 
   // Bootstrap project-global with DEFAULT_SYSTEM_PROMPT (account layers start empty)
   bootstrapStore(projectGlobalRoot(worktree), DEFAULT_SYSTEM_PROMPT)

@@ -153,7 +153,8 @@ It replies inline with one JSON verdict `{passed, confidence, reasoning}`, plus 
 `trivial` rating (see **cost control: triviality filtering** below).
 
 **OFF by default.** Enable it by setting `judgeModel` in
-`~/.config/opencode/.meta-harness/config.json`:
+`~/.config/meta-harness/config.json` (or `$XDG_CONFIG_HOME/meta-harness/config.json`,
+or `$META_HARNESS_HOME/config.json` — see **Store layout** below):
 
 **Option A — works now, zero setup** (same vendor, cheap; weaker anti-gaming):
 ```json
@@ -190,7 +191,7 @@ restart opencode once. It only sets the judge; the proposer stays pinned to opus
 everything it'd be worthless. When it's wrong in maker-checker mode, just edit the prefill.
 Each scored session's verdict is stored on its trace as `record.judge`
 (`{passed, confidence, mode: "shadow"|"prefill", agreed, trivial}`); the running agreement
-lives in `~/.config/opencode/.meta-harness/judge-calibration.json`.
+lives in `~/.config/meta-harness/judge-calibration.json`.
 
 **Cost control: triviality filtering.** The same judge call also rates whether the session
 was **informative** — would succeeding at it tell you anything about the harness's quality?
@@ -339,7 +340,7 @@ See the Reference below for every flag.
 project-global · `role-global`/`account-role` = account-role · `account`/`account-global` =
 account-global. (`/mh-promote` uses only `global`/`role`.)
 
-### Config — `~/.config/opencode/.meta-harness/config.json`
+### Config — `~/.config/meta-harness/config.json`
 
 Read fresh every scored session (no restart). File need not exist; defaults apply.
 
@@ -443,14 +444,27 @@ These are set automatically by the runner; no manual configuration is needed.
 
 ### Store layout
 
-Four layer roots (injection order general → specific → env snapshot):
+Four layer roots (injection order general → specific → env snapshot). The two
+account-scoped roots are platform-neutral (`accountMetaRoot()` in
+`harness-store.ts`, Task L5) — resolved lazily, in this order:
+
+1. `$META_HARNESS_HOME` (absolute path, used as-is)
+2. `$XDG_CONFIG_HOME/meta-harness`
+3. `~/.config/meta-harness` (default)
 
 ```
-~/.config/opencode/.meta-harness/global/        (account-global)   most general
-<worktree>/.meta-harness/global/                (project-global)
-~/.config/opencode/.meta-harness/roles/<agent>/ (account-role)
-<worktree>/.meta-harness/roles/<agent>/         (project-role)     most specific (wins)
+~/.config/meta-harness/global/        (account-global)   most general
+<worktree>/.meta-harness/global/      (project-global)
+~/.config/meta-harness/roles/<agent>/ (account-role)
+<worktree>/.meta-harness/roles/<agent>/ (project-role)   most specific (wins)
 ```
+
+**Migration:** the account root used to live under the opencode-owned
+`~/.config/opencode/.meta-harness` (XDG-aware the same way). The first plugin
+init or bench CLI invocation after upgrading moves that directory to the new
+location one time (`fs.renameSync`) and leaves a symlink at the old path for
+anything stale still reading it — idempotent, and a no-op on a fresh install
+that never had an old store.
 
 ```
 <storeRoot>/
@@ -466,8 +480,8 @@ Four layer roots (injection order general → specific → env snapshot):
   always kept, passes only with `--save-all-traj`; pruned to last 20 failures / 5 passes.
 - **Metrics sinks** (merged by `report-loop`): `term-bench2/results/meta-metrics.jsonl`
   (bench), `<worktree>/.meta-harness/meta-metrics.jsonl` (project),
-  `~/.config/opencode/.meta-harness/meta-metrics.jsonl` (account). Judge decisions:
-  `~/.config/opencode/.meta-harness/judge-calibration.json`.
+  `~/.config/meta-harness/meta-metrics.jsonl` (account). Judge decisions:
+  `~/.config/meta-harness/judge-calibration.json`.
 - **Pause flag** (project plateau): `<worktree>/.meta-harness/paused` (present only when
   the project is detected as plateaued). Write/clear via `report-loop`; remove manually to
   unpause auto-propose.

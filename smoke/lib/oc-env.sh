@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # oc-env.sh — build a fully ISOLATED opencode environment in a temp dir so the
 # smoke harness can seed fixtures and launch real opencode TUI sessions WITHOUT
-# ever touching the user's real store (~/.config/opencode/.meta-harness or
+# ever touching the user's real store (~/.config/meta-harness or
 # <repo>/.meta-harness).
 #
 # Isolation = temp XDG_CONFIG_HOME + temp XDG_DATA_HOME + temp project dir.
-#   - account mh store  -> $OC_CONFIG/opencode/.meta-harness   (temp)
+#   - account mh store  -> $OC_CONFIG/meta-harness              (temp; resolved
+#                          via XDG_CONFIG_HOME — accountMetaRoot(), Task L5)
 #   - project mh store  -> $OC_PROJ/.meta-harness              (temp)
 #   - auth              -> $OC_DATA/opencode/auth.json         (copied real creds)
 #   - mh plugin         -> loaded via $OC_PROJ/opencode.json (ABSOLUTE path)

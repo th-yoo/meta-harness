@@ -143,7 +143,7 @@ also exercises the fixed error-toast path.
 This demonstrates the dense judge (Phase 4) in shadow mode: it scores sessions in
 parallel with `/mh-score`, learning when to calibrate for maker-checker mode.
 
-15. Enable the judge in `~/.config/opencode/.meta-harness/config.json`:
+15. Enable the judge in `~/.config/meta-harness/config.json`:
     ```json
     {"judgeModel": "openrouter/google/gemini-2.5-flash"}
     ```

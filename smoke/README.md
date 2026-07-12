@@ -57,7 +57,7 @@ Every scenario runs in a throwaway env built by `lib/oc-env.sh`:
 - the mh plugin is loaded by **absolute path**; the repo's `.opencode/` (agents,
   slash commands, plugin deps) is symlinked **read-only**; auth is copied;
 - the store lives under the temp dirs, so the real
-  `~/.config/opencode/.meta-harness` and `<repo>/.meta-harness` are untouched.
+  `~/.config/meta-harness` and `<repo>/.meta-harness` are untouched.
 
 The propose/curate/promote scenarios additionally assert **no background LLM
 session spawned** (`assert_no_spawn` — the isolated log must have exactly one
