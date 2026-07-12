@@ -108,7 +108,10 @@ const MAX_ATTEMPTS = 4
 
 export type SleepFn = (seconds: number) => Promise<void>
 
-async function defaultSleep(seconds: number): Promise<void> {
+/** Default SleepFn — a real `setTimeout`-backed delay. Shared by runAgent
+ * below and by opencode-run.ts's runJudgeOpencode (ledger B1a: the two
+ * modules had identical private copies; this is now the single source). */
+export async function defaultSleep(seconds: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, seconds * 1000))
 }
 

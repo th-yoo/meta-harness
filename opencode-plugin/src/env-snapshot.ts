@@ -164,7 +164,7 @@ export function buildSnapshot(sections: Sections, policy?: EnvPolicy | null): st
  *
  * Takes `Pick<HarnessHost, "exec">` rather than the full HarnessHost — least
  * churn: this is the only capability gatherEnvSnapshot needs, so callers
- * (index.ts) can pass the host directly (it structurally satisfies the pick)
+ * (engine.ts) can pass the host directly (it structurally satisfies the pick)
  * without env-snapshot.ts depending on the rest of the platform surface.
  */
 export async function gatherEnvSnapshot(

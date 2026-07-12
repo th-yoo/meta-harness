@@ -31,16 +31,18 @@
  *                session must not record itself. See runClaudeCodeTextAgent
  *                below for the full contract (model-strip / timeout / JSON
  *                parse / never-throw).
- *   - runTaskAgent → NOT implemented in Phase A (proposer = L8). Logs a clear
- *                notice and returns null — the documented "failed to create
- *                session" sentinel that propose.ts already degrades on
- *                gracefully (log-and-skip), so an auto-propose trigger can
- *                never crash a scoring hook. See the report's score-inversion
- *                / degradation section for why null-return (not throw) is
- *                used: the engine fires these fire-and-forget via
- *                `void trigger*(...)` with no catch, so a throw would become
- *                an unhandled rejection and risk the adapter's exit-0 prime
- *                directive.
+ *   - runTaskAgent → the proposer/promoter/curator transport (Task L8): spawns
+ *                a DETACHED, long-running `claude -p` child (runClaudeCodeTaskAgent
+ *                below) and returns `{id}` immediately without waiting — the
+ *                staged artifact is applied on a LATER hook event via a lock
+ *                file (proposer.ts's apply-on-next-event scan), not polled
+ *                in-process. NEVER throws: returns null on any spawn/model
+ *                failure, the documented "failed to create session" sentinel
+ *                that propose.ts already degrades on gracefully (log-and-skip),
+ *                so an auto-propose trigger can never crash a scoring hook —
+ *                the engine fires these fire-and-forget via `void trigger*(...)`
+ *                with no catch, so a throw would become an unhandled rejection
+ *                and risk the adapter's exit-0 prime directive.
  *   - exec     → Bun.spawn bash -c (env-snapshot's bootstrap probes).
  */
 

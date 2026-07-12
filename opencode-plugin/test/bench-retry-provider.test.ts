@@ -141,14 +141,9 @@ test("runRetryProvider: echoes every merged line via writeLine (so a human sees 
 
 // ── marker-string producer/consumer wiring ────────────────────────────────
 // retry-provider.ts imports (does not redeclare) REALWORK_RE/TRANSIENT_MARK
-// from opencode-run.ts — assert it is literally the SAME export, and that
-// scanning opencode-run.ts's actual log-line shapes works end to end.
-
-test("marker contract: retry-provider re-exports the SAME REALWORK_RE/TRANSIENT_MARK objects opencode-run.ts produces", async () => {
-  const oc = await import("../src/bench/opencode-run.ts")
-  expect(REALWORK_RE).toBe(oc.REALWORK_RE)
-  expect(TRANSIENT_MARK).toBe(oc.TRANSIENT_MARK)
-})
+// from agent-run.ts (the single source of truth — see that module's file
+// header) — it scans a merged runOpencode/runAgent transcript's actual
+// log-line shapes end to end.
 
 test("marker contract: a full opencode-run.ts transcript (transient retry then real turns) correctly signals 'provider up'", async () => {
   const args: RetryProviderArgs = { base: 30, cap: 600, maxAttempts: 0, runnerArgs: ["run"] }

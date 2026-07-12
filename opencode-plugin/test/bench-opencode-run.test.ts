@@ -2,19 +2,9 @@ import { test, expect, spyOn } from "bun:test"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
-import {
-  normalizeEvents,
-  runOpencode,
-  runJudgeOpencode,
-  TRANSIENT_MARK,
-  TIMEOUT_MARK,
-  REALWORK_RE,
-  TRANSIENT_RE,
-  EXECUTION_TOOLS,
-  AUTH_ERROR_RE,
-  AUTH_FAIL_MARK,
-} from "../src/bench/opencode-run.ts"
-import { opencodeDriver } from "../src/bench/drivers/opencode.ts"
+import { runOpencode, runJudgeOpencode } from "../src/bench/opencode-run.ts"
+import { TRANSIENT_MARK, TIMEOUT_MARK, REALWORK_RE, TRANSIENT_RE, AUTH_ERROR_RE, AUTH_FAIL_MARK } from "../src/bench/agent-run.ts"
+import { normalizeEvents, EXECUTION_TOOLS, opencodeDriver } from "../src/bench/drivers/opencode.ts"
 import type { BenchPaths } from "../src/bench/paths.ts"
 import type { ExecResult } from "../src/bench/exec.ts"
 

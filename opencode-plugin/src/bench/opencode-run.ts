@@ -10,19 +10,14 @@
  * task-B1-brief.md (pure refactor, zero behavior change) split this module:
  * the generic retry loop moved to agent-run.ts, and the opencode-specific
  * argv/parsing/classification moved to drivers/opencode.ts, behind the
- * AgentDriver interface (drivers/types.ts) — this file now re-exports
- * everything that moved so retry-provider.ts, judge-audit.ts, and
- * test/bench-opencode-run.test.ts keep compiling and behaving unchanged.
- * `runOpencode` itself is now a one-line wrapper around agent-run.ts's
- * generic `runAgent`, bound to the opencode driver.
- *
- * Marker-string producer/consumer contract: TRANSIENT_MARK and REALWORK_RE
- * are re-exported here (declared in agent-run.ts, the actual source of
- * truth) and re-used (not re-declared) by retry-provider.ts (port of
- * retry_provider.py:43-45), which scans this module's own log output for
- * them. test/bench-opencode-run.test.ts asserts the log lines this module
- * actually emits contain these driver-neutral markers — see that file for the
- * producer/consumer wiring evidence.
+ * AgentDriver interface (drivers/types.ts). What remains here is `runOpencode`
+ * itself — now a one-line wrapper around agent-run.ts's generic `runAgent`,
+ * bound to the opencode driver — plus `runJudgeOpencode`, the judge transport,
+ * which legitimately still lives in this file (it shares the transient-retry
+ * marker contract but is not part of the driver split). task-L9-brief.md
+ * (loop-track cleanup) deleted the transitional re-exports this file carried
+ * for callers that have since been flipped to import directly from
+ * agent-run.ts / drivers/opencode.ts.
  */
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -33,20 +28,17 @@ import type { ExecFn } from "./staging.ts"
 import type { BenchPaths } from "./paths.ts"
 import { log, pyFixed, writeJsonAtomic } from "./util.ts"
 import { judgeAgentConfig, judgeReplyText } from "./judge-audit.ts"
-import { runAgent, TRANSIENT_MARK, TRANSIENT_RE } from "./agent-run.ts"
+import { runAgent, TRANSIENT_MARK, TRANSIENT_RE, defaultSleep } from "./agent-run.ts"
 import type { SleepFn } from "./agent-run.ts"
 import { opencodeDriver } from "./drivers/opencode.ts"
 import type { AgentRunOutput } from "./drivers/types.ts"
 
-export { TRANSIENT_MARK, TIMEOUT_MARK, REALWORK_RE, TRANSIENT_RE, AUTH_FAIL_MARK, AUTH_ERROR_RE } from "./agent-run.ts"
-export type { SleepFn } from "./agent-run.ts"
-export { normalizeEvents, EXECUTION_TOOLS } from "./drivers/opencode.ts"
-
 // ── run_opencode ─────────────────────────────────────────────────────────
 
 // FOLLOW-UP (caller-abort bonus, deferred — task-authfix-brief.md's bonus
-// section): today an auth failure fails fast per-arm (this module) but the
-// caller (cmd-run.ts's cmd_run loop, and cmd-ab.ts's own loop over the same
+// section): today an auth failure fails fast per-arm (agent-run.ts's
+// runAgent, invoked via runOpencode below) but the caller (cmd-run.ts's
+// cmd_run loop, and cmd-ab.ts's own loop over the same
 // injectable runTaskOnce) still moves on to the NEXT task/arm, each failing
 // fast again — no more infinite retry, but still one wasted attempt per
 // remaining task. Aborting the WHOLE run on first auth failure would need an
@@ -54,11 +46,6 @@ export { normalizeEvents, EXECUTION_TOOLS } from "./drivers/opencode.ts"
 // cmd-ab.ts's separate loop (which has its own early-stop/regression-stats
 // control flow to reconcile this with) — more than a trivially-clean change,
 // so left as this follow-up rather than forced. Not implemented.
-
-/** Alias of agent-run.ts's driver-agnostic AgentRunOutput — kept as its own
- * exported name since callers (cmd-run.ts) already destructure this shape
- * off `runOpencode`. */
-export type RunOpencodeResult = AgentRunOutput
 
 /**
  * Run opencode inside the already-created+started container. Thin wrapper
@@ -76,17 +63,13 @@ export async function runOpencode(
   harnessMd: string,
   execFn?: ExecFn,
   sleepFn?: SleepFn,
-): Promise<RunOpencodeResult> {
+): Promise<AgentRunOutput> {
   return runAgent(opencodeDriver, paths, containerName, task, model, variant, agentTimeout, harnessMd, execFn, sleepFn)
 }
 
 // ── run_judge_opencode (judge transport — runs on the HOST, no container) ──
 
 export type HostExecFn = (argv: string[], opts?: { timeoutSec?: number }) => Promise<ExecResult>
-
-async function defaultSleep(seconds: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, seconds * 1000))
-}
 
 /**
  * Invoke the judge headlessly on the HOST (no bwrap/podman sandbox — the

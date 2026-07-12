@@ -9,7 +9,7 @@
  *
  * MUST stay free of opencode types in its signature — opencode-specific
  * types/imports live only in adapters/opencode-host.ts. This is the
- * interface the L4 EvolutionEngine extraction (index.ts) will depend on.
+ * interface EvolutionEngine (engine.ts) depends on.
  */
 
 import type { StoreLayer } from "./harness-store.ts"
@@ -82,10 +82,11 @@ export interface HarnessHost {
    * sessionID. Resolution arrives asynchronously via the command.execute.before
    * hook intercept (wired in index.ts, unchanged here) — a host method can't
    * "return" through that intercept without the host also owning command
-   * dispatch, which is out of scope until L4. Least churn + identical
-   * behavior: only the toast/clearPrompt/appendPrompt block moves behind the
-   * host; the Map, the Promise, and the timeout all stay exactly where they
-   * were.
+   * dispatch, which stayed a hook-plumbing concern in index.ts/engine.ts
+   * (EvolutionEngine.handleCommand) rather than moving onto this host
+   * interface. Least churn + identical behavior: only the
+   * toast/clearPrompt/appendPrompt block moves behind the host; the Map, the
+   * Promise, and the timeout all stay exactly where they were.
    */
   showScorePrompt(text: string, isJudgeSuggestion: boolean): Promise<void>
 
@@ -119,8 +120,8 @@ export interface HarnessHost {
    * `system` is accepted for interface generality (a future host may inject
    * it directly per-call); OpencodeHost does not consume it — opencode's
    * replacement mechanism is keyed off session-id Set membership consulted
-   * by the system.transform hook (still in index.ts until L4), not a value
-   * passed per-call.
+   * by the system.transform hook (kept in index.ts by design — see that
+   * file's header), not a value passed per-call.
    */
   runTextAgent(opts: {
     title: string
