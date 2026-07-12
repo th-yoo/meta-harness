@@ -273,6 +273,62 @@ test("sessionIdle happy path writes a SessionRecord stamped with the host platfo
   expect(store.get("h1")!.role).toBeNull() // cleanup() ran
 })
 
+test("sessionIdle folds a configured judgeModel's verdict into record.judge (host.runTextAgent wired = judge flows end to end)", async () => {
+  // judge.ts/engine.ts are platform-neutral — they only ever see the
+  // HarnessHost interface. This proves that ANY host whose runTextAgent
+  // replies with the judge's inline JSON verdict (which is exactly what
+  // ClaudeCodeHost.runTextAgent — Task L7's `claude -p` transport — now
+  // does) makes the full shadow-judge pipeline flow: verdict parsed,
+  // agreement computed against the human score, folded into the recorded
+  // SessionRecord. cc-host.test.ts covers the CC-specific transport
+  // mechanics (argv/isolation/timeout/parsing); this is the "wired up"
+  // proof at the engine level the L7 brief asked for.
+  const worktree = tmpWorktree()
+  const store = new InMemorySessionStateStore()
+  const { host } = fakeHost(worktree)
+  host.runTextAgent = async () => JSON.stringify({ passed: true, confidence: 0.95, reasoning: "looks solid" })
+  const engine = new EvolutionEngine(host, store)
+  bootstrapProjectStores(worktree)
+
+  // sessionIdle only invokes runJudge when judgeModel is configured — seed
+  // it via the same META_HARNESS_HOME test seam judge-calibration.test.ts /
+  // harness-store-account-root.test.ts use, scoped to this test only.
+  const savedHome = process.env["META_HARNESS_HOME"]
+  const judgeHome = fs.mkdtempSync(path.join(os.tmpdir(), "mh-engine-judge-cfg-"))
+  process.env["META_HARNESS_HOME"] = judgeHome
+  try {
+    fs.writeFileSync(path.join(judgeHome, "config.json"), JSON.stringify({ judgeModel: "anthropic/claude-sonnet-4-5" }))
+
+    await engine.sessionMessage("j1", { role: "mh-build", isPrimary: true, participates: true, model: "anthropic/claude-x" })
+    const st = store.get("j1")!
+    st.turns = 2
+    st.summary = "implemented the feature and verified it end to end with tests"
+    st.toolUsage = { bash: { calls: 3, errors: 0 } }
+    st.trajectory = [{ t: "text", text: "work" }]
+    store.put("j1", st)
+
+    const idle = engine.sessionIdle("j1")
+    await new Promise((r) => setTimeout(r, 10))
+    handleScoreCommand("mh-score", "good extra note", "j1")
+    await idle
+
+    const prRoot = projectRoleRoot(worktree, "mh-build")
+    const score = readScore(prRoot, activeVersion(prRoot))
+    expect(score.sessions.length).toBe(1)
+    expect(score.sessions[0]!.judge).toEqual({
+      passed: true,
+      confidence: 0.95,
+      mode: "shadow",
+      agreed: true, // judge.passed===true === human result.passed===true
+      trivial: false,
+    })
+  } finally {
+    if (savedHome === undefined) delete process.env["META_HARNESS_HOME"]
+    else process.env["META_HARNESS_HOME"] = savedHome
+    fs.rmSync(judgeHome, { recursive: true, force: true })
+  }
+})
+
 test("handleCommand routes /mh-score to a throw-only (no toast) swallow", async () => {
   const store = new InMemorySessionStateStore()
   const { host } = fakeHost(tmpWorktree())

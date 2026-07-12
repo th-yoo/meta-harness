@@ -2,7 +2,7 @@ import { test, expect, beforeEach, afterEach } from "bun:test"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
-import { ClaudeCodeHost } from "../src/adapters/claude-code/cc-host.ts"
+import { ClaudeCodeHost, type CCChildProcess, type CCSpawnFn } from "../src/adapters/claude-code/cc-host.ts"
 import { promptHumanScore } from "../src/score.ts"
 
 let home: string
@@ -45,10 +45,9 @@ test("promptHumanScore returns the staged verdict WITHOUT prompting (the inversi
   expect(prompted).toBe(false)
 })
 
-test("runTaskAgent / runTextAgent degrade to null in Phase A (no throw — exit-0 safe)", async () => {
+test("runTaskAgent degrades to null in Phase A (no throw — exit-0 safe; proposer = L8)", async () => {
   const host = new ClaudeCodeHost("/p")
   expect(await host.runTaskAgent({ title: "t", prompt: "p" })).toBeNull()
-  expect(await host.runTextAgent({ title: "t", system: "s", prompt: "p" })).toBeNull()
 })
 
 test("exec runs a shell command in projectRoot", async () => {
@@ -68,4 +67,210 @@ test("log appends to the runtime logfile (best-effort durability)", () => {
   host.log("info", "hello-log-marker")
   const logFile = path.join(home, "runtime", "cc", "hook.log")
   expect(fs.readFileSync(logFile, "utf-8")).toContain("hello-log-marker")
+})
+
+// ── runTextAgent (judge transport, Task L7) ───────────────────────────────
+//
+// Hermetic: NO real `claude` binary is ever spawned — every test injects a
+// fake CCSpawnFn via the ClaudeCodeHost constructor's `spawnFn` option.
+
+/** A completed child process whose stdout is the given text and whose
+ * `exited` promise resolves immediately to `exitCode`. */
+function completedProc(stdoutText: string, exitCode = 0): CCChildProcess {
+  return {
+    stdout: new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(stdoutText))
+        controller.close()
+      },
+    }),
+    exited: Promise.resolve(exitCode),
+    kill() { /* already exited — no-op, matches real Bun.spawn semantics */ },
+  }
+}
+
+/** A child process that hangs until `.kill()` is called — simulates a stuck
+ * `claude -p` so the timeout-kill path can be exercised without a real
+ * timer-length wait. `killed()` reports whether kill() has fired. */
+function hangingProc(): { proc: CCChildProcess; killed: () => boolean } {
+  let killedFlag = false
+  let closeController!: ReadableStreamDefaultController<Uint8Array>
+  let resolveExited!: (n: number) => void
+  const stdout = new ReadableStream<Uint8Array>({
+    start(c) { closeController = c },
+  })
+  const exited = new Promise<number>((res) => { resolveExited = res })
+  return {
+    proc: {
+      stdout,
+      exited,
+      kill() {
+        killedFlag = true
+        closeController.close()
+        resolveExited(143) // SIGTERM-ish, matches exec.ts's signal-death convention
+      },
+    },
+    killed: () => killedFlag,
+  }
+}
+
+const OK_RESULT = JSON.stringify({
+  type: "result", subtype: "success", is_error: false,
+  result: "the judge verdict text", num_turns: 1, total_cost_usd: 0.0123, session_id: "s1",
+})
+
+function hostWithSpawn(spawnFn: CCSpawnFn, projectRoot = "/some/project"): { host: ClaudeCodeHost; logs: { level: string; msg: string }[] } {
+  const logs: { level: string; msg: string }[] = []
+  const host = new ClaudeCodeHost(projectRoot, { spawnFn })
+  host.log = (level, msg) => { logs.push({ level, msg }) }
+  return { host, logs }
+}
+
+test("runTextAgent: argv is claude -p <prompt> --system-prompt <system> --output-format json --model <modelID> --disallowedTools <verified list>; stdin ignored; cwd outside the project", async () => {
+  let capturedArgv: string[] | undefined
+  let capturedOpts: { cwd: string; stdin: "ignore" } | undefined
+  const spawnFn: CCSpawnFn = (argv, opts) => {
+    capturedArgv = argv
+    capturedOpts = opts
+    return completedProc(OK_RESULT)
+  }
+  const { host } = hostWithSpawn(spawnFn, "/some/project")
+
+  const text = await host.runTextAgent({
+    title: "[meta-harness] judge sess-1",
+    system: "you are the judge",
+    prompt: "judge this session",
+    model: { providerID: "anthropic", modelID: "claude-sonnet-4-5" },
+  })
+
+  expect(text).toBe("the judge verdict text")
+  expect(capturedArgv).toEqual([
+    "claude", "-p", "judge this session",
+    "--system-prompt", "you are the judge",
+    "--output-format", "json",
+    "--model", "claude-sonnet-4-5", // "anthropic/" prefix STRIPPED
+    "--disallowedTools",
+    "Bash", "Read", "Write", "Edit", "Glob", "Grep", "Task", "WebFetch", "WebSearch", "NotebookEdit",
+  ])
+  expect(capturedOpts!.stdin).toBe("ignore")
+  // Isolation: cwd must be OUTSIDE the project (so project .claude/settings.json
+  // hooks — cwd-scoped — can never fire for the judge process).
+  expect(capturedOpts!.cwd).not.toBe("/some/project")
+  expect(capturedOpts!.cwd.startsWith("/some/project")).toBe(false)
+  expect(capturedOpts!.cwd).toContain(path.join("runtime", "cc", "judge"))
+})
+
+test("runTextAgent: scratch cwd is cleaned up after the call (no leaked tmp dirs)", async () => {
+  let seenCwd: string | undefined
+  const spawnFn: CCSpawnFn = (_argv, opts) => { seenCwd = opts.cwd; return completedProc(OK_RESULT) }
+  const { host } = hostWithSpawn(spawnFn)
+  await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
+  expect(seenCwd).toBeDefined()
+  expect(fs.existsSync(seenCwd!)).toBe(false)
+})
+
+test("runTextAgent: omits --model when no model is given (lets claude use its default)", async () => {
+  let capturedArgv: string[] | undefined
+  const spawnFn: CCSpawnFn = (argv) => { capturedArgv = argv; return completedProc(OK_RESULT) }
+  const { host } = hostWithSpawn(spawnFn)
+  await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
+  expect(capturedArgv).not.toContain("--model")
+})
+
+test("runTextAgent: a malformed model spec (not {providerID,modelID}) is ignored — warns, omits --model, still proceeds", async () => {
+  let capturedArgv: string[] | undefined
+  const spawnFn: CCSpawnFn = (argv) => { capturedArgv = argv; return completedProc(OK_RESULT) }
+  const { host, logs } = hostWithSpawn(spawnFn)
+
+  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p", model: "anthropic/claude-x" })
+
+  expect(text).toBe("the judge verdict text")
+  expect(capturedArgv).not.toContain("--model")
+  expect(logs.some((l) => l.level === "warn" && l.msg.includes("unrecognized model spec"))).toBe(true)
+})
+
+test("runTextAgent: non-anthropic judgeModel -> null, actionable log, spawnFn NEVER called", async () => {
+  let spawnCalls = 0
+  const spawnFn: CCSpawnFn = () => { spawnCalls++; return completedProc(OK_RESULT) }
+  const { host, logs } = hostWithSpawn(spawnFn)
+
+  const text = await host.runTextAgent({
+    title: "t", system: "s", prompt: "p",
+    model: { providerID: "openrouter", modelID: "google/gemini-2.5-flash" },
+  })
+
+  expect(text).toBeNull()
+  expect(spawnCalls).toBe(0)
+  const warning = logs.find((l) => l.level === "warn" && l.msg.includes("openrouter"))
+  expect(warning).toBeDefined()
+  expect(warning!.msg).toContain("anthropic")
+  expect(warning!.msg.toLowerCase()).toContain("judgemodel")
+})
+
+test("runTextAgent: reply extraction from a canned --output-format json result", async () => {
+  const spawnFn: CCSpawnFn = () => completedProc(OK_RESULT)
+  const { host } = hostWithSpawn(spawnFn)
+  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
+  expect(text).toBe("the judge verdict text")
+})
+
+test("runTextAgent: is_error in the JSON result -> null + warn log", async () => {
+  const errJson = JSON.stringify({ type: "result", subtype: "error_during_execution", is_error: true, result: "", total_cost_usd: 0 })
+  const spawnFn: CCSpawnFn = () => completedProc(errJson)
+  const { host, logs } = hostWithSpawn(spawnFn)
+  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
+  expect(text).toBeNull()
+  expect(logs.some((l) => l.level === "warn" && l.msg.includes("is_error"))).toBe(true)
+})
+
+test("runTextAgent: non-zero exit code -> null + warn log", async () => {
+  const spawnFn: CCSpawnFn = () => completedProc("", 1)
+  const { host, logs } = hostWithSpawn(spawnFn)
+  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
+  expect(text).toBeNull()
+  expect(logs.some((l) => l.level === "warn" && l.msg.includes("exited 1"))).toBe(true)
+})
+
+test("runTextAgent: unparseable JSON stdout -> null + warn log", async () => {
+  const spawnFn: CCSpawnFn = () => completedProc("not json at all")
+  const { host, logs } = hostWithSpawn(spawnFn)
+  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
+  expect(text).toBeNull()
+  expect(logs.some((l) => l.level === "warn" && l.msg.includes("could not parse"))).toBe(true)
+})
+
+test("runTextAgent: logs total_cost_usd at debug level on success", async () => {
+  const spawnFn: CCSpawnFn = () => completedProc(OK_RESULT)
+  const { host, logs } = hostWithSpawn(spawnFn)
+  await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
+  expect(logs.some((l) => l.level === "debug" && l.msg.includes("0.0123"))).toBe(true)
+})
+
+test("runTextAgent: timeout kills the child and returns null (makes timeoutMs real for CC)", async () => {
+  const { proc, killed } = hangingProc()
+  const spawnFn: CCSpawnFn = () => proc
+  const { host, logs } = hostWithSpawn(spawnFn)
+
+  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p", timeoutMs: 20 })
+
+  expect(text).toBeNull()
+  expect(killed()).toBe(true)
+  expect(logs.some((l) => l.level === "warn" && l.msg.includes("timed out"))).toBe(true)
+})
+
+test("runTextAgent: default timeout is used when timeoutMs is omitted (proc completes well within it)", async () => {
+  // Not a timing assertion (that would be flaky) — just proves the call
+  // succeeds end-to-end without an explicit timeoutMs.
+  const spawnFn: CCSpawnFn = () => completedProc(OK_RESULT)
+  const { host } = hostWithSpawn(spawnFn)
+  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
+  expect(text).toBe("the judge verdict text")
+})
+
+test("runTextAgent: never throws even if spawnFn itself throws", async () => {
+  const spawnFn: CCSpawnFn = () => { throw new Error("spawn EMFILE") }
+  const { host, logs } = hostWithSpawn(spawnFn)
+  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
+  expect(text).toBeNull()
+  expect(logs.some((l) => l.level === "warn")).toBe(true)
 })
