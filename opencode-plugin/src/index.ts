@@ -542,6 +542,7 @@ const metaHarness: Plugin = async (input) => {
         variant: sessionVariant.get(sessionID) ?? "",
         toolUsage: sessionToolUsage.get(sessionID) ?? {},
         env,
+        platform: "opencode",
       }
 
       // Resolve the shadow judge (already running concurrently, or already

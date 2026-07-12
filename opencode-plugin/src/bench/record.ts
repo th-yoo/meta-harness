@@ -255,7 +255,12 @@ export async function envBlock(
 }
 
 /** Build a SessionRecord (matches harness-store.ts's SessionRecord shape).
- * Verbatim port of runner.py:1315's _session_record. */
+ * Verbatim port of runner.py:1315's _session_record, PLUS `platform`
+ * (Task L1): bench sessions are driven by a selectable AgentDriver
+ * (task-B3), so `platform` provenance is the driver id already threaded
+ * into `env.driver` by envBlock — no new parameter needed here. Absent when
+ * `env` has no `driver` key (e.g. direct/unit-test callers that bypass
+ * envBlock), never invented. */
 export function sessionRecord(
   task: string,
   sessionId: string,
@@ -266,6 +271,7 @@ export function sessionRecord(
   variant: string,
   env: Record<string, unknown> = {},
 ): SessionRecord {
+  const driver = env["driver"]
   return {
     sessionID: sessionId,
     passed,
@@ -277,6 +283,7 @@ export function sessionRecord(
     variant: variant || "",
     toolUsage,
     env,
+    ...(typeof driver === "string" ? { platform: driver } : {}),
   }
 }
 

@@ -95,6 +95,11 @@ export interface SessionRecord {
   toolUsage: ToolUsage
   /** Confound-control provenance (harness hash, plugin sha, provider…); optional. */
   env?: Record<string, unknown>
+  /** Which coding-agent platform produced this session (Task L1): "opencode"
+   * for the live opencode plugin loop, or the bench AgentDriver id
+   * (drivers/index.ts) for bench-recorded sessions — e.g. "claude-code".
+   * Optional so every pre-L1 on-disk score.json keeps parsing. */
+  platform?: string
   /** Dense LLM judge verdict for this session (Phase 4 Part D), when the judge
    * ran — shadow mode never affects `passed`; prefill mode may pre-populate the
    * human /mh-score prompt. Optional so pre-D1 records keep parsing. */

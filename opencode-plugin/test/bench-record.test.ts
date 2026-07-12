@@ -283,6 +283,22 @@ test("sessionRecord: variant defaults to '' when falsy", () => {
   expect(sessionRecord("t", "s", false, 1, {}, "m", "").variant).toBe("")
 })
 
+// Task L1: bench sessions are driven by a selectable AgentDriver (task-B3),
+// so `platform` provenance on a bench-recorded SessionRecord is the DRIVER
+// id, not a hardcoded "opencode" — envBlock already threads driverId into
+// `env.driver` (see envBlock's driver tests above), so sessionRecord reads
+// it from there rather than needing a new parameter.
+
+test("sessionRecord: platform is set to env.driver (the AgentDriver id envBlock threaded through)", () => {
+  const rec = sessionRecord("t", "s", true, 1, {}, "m", "", { driver: "claude-code" })
+  expect(rec.platform).toBe("claude-code")
+})
+
+test("sessionRecord: no env.driver present -> platform stays undefined (no invented default)", () => {
+  const rec = sessionRecord("t", "s", true, 1, {}, "m", "", { foo: "bar" })
+  expect(rec.platform).toBeUndefined()
+})
+
 // ── recordToStores ───────────────────────────────────────────────────────
 // Only ever exercises project-scoped layers under a fresh tmp metaRoot — no
 // account-global/account-role writes anywhere in this file (see file header).
@@ -324,6 +340,19 @@ test("recordToStores: writes a SessionRecord into project-global's active versio
   const score = readScore(root, "v0")
   expect(score.nPass).toBe(1)
   expect(score.sessions[0]!.sessionID).toBe("sess-a")
+})
+
+test("recordToStores: persisted record.platform equals the driver id carried in env.driver", () => {
+  const metaRoot = tmpDir()
+  const root = projectGlobalRoot(metaRoot)
+  createCandidate(root, "v0", "sys")
+  const { writeActive } = require("../src/harness-store.ts") as typeof import("../src/harness-store.ts")
+  writeActive(root, "v0", "sys")
+
+  recordToStores("t", "sess-driver", true, 2, {}, "m", "", "project", metaRoot, false, "", {}, { driver: "claude-code" })
+
+  const score = readScore(root, "v0")
+  expect(score.sessions[0]!.platform).toBe("claude-code")
 })
 
 test("recordToStores: pinned layer records into the PINNED candidate, not the active one", () => {
