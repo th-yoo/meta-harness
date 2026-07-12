@@ -146,7 +146,12 @@ export function prepareAgentAuthMounts(opts: PrepareAgentAuthMountsOpts = {}): A
   const opencodeDataDir = join(xdgDataHome, "opencode")
 
   const mounts: AgentAuthMount[] = [
-    { host: configDir, container: "/root/.config/opencode", ro: true },
+    // Config dir is RW, not ro: opencode writes a `.gitignore` (and caches the
+    // fetched plugin) into its config dir at startup — a ro mount makes that
+    // write fail ("FileSystem.writeFile /root/.config/opencode/.gitignore") and
+    // opencode exits 0-turn. Safe to be rw because it's a per-run temp dir,
+    // isolated per container (verified live: ro fails, rw runs a real turn).
+    { host: configDir, container: "/root/.config/opencode", ro: false },
     { host: claudeHost, container: "/root/.claude", ro: true },
     { host: opencodeDataDir, container: "/root/.local/share/opencode", ro: false },
   ]

@@ -289,7 +289,7 @@ test("runTaskOnce: merges prepareAuth()'s mounts into the create argv (config ro
   const cleanupCalls = { count: 0 }
   const prepareAuth = () => ({
     mounts: [
-      { host: "/tmp/auth-config", container: "/root/.config/opencode", ro: true },
+      { host: "/tmp/auth-config", container: "/root/.config/opencode", ro: false },
       { host: "/tmp/auth-claude", container: "/root/.claude", ro: true },
       { host: "/tmp/auth-ocdata", container: "/root/.local/share/opencode", ro: false },
     ],
@@ -319,7 +319,7 @@ test("runTaskOnce: merges prepareAuth()'s mounts into the create argv (config ro
   }
 
   expect(createArgv).toContain("-v")
-  expect(createArgv).toContain("/tmp/auth-config:/root/.config/opencode:ro")
+  expect(createArgv).toContain("/tmp/auth-config:/root/.config/opencode")
   expect(createArgv).toContain("/tmp/auth-claude:/root/.claude:ro")
   expect(createArgv).toContain("/tmp/auth-ocdata:/root/.local/share/opencode")
   expect(createArgv).not.toContain("/tmp/auth-ocdata:/root/.local/share/opencode:ro")

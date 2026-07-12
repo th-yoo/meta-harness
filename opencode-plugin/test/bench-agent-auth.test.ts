@@ -23,7 +23,7 @@ test("prepareAgentAuthMounts: minimal opencode config content is exactly the plu
       $schema: "https://opencode.ai/config.json",
       plugin: ["opencode-claude-auth@latest"],
     })
-    expect(configMount.ro).toBe(true)
+    expect(configMount.ro).toBe(false)
   } finally {
     cleanup()
   }
@@ -47,7 +47,7 @@ test("prepareAgentAuthMounts: linux — mounts real ~/.claude (ro) when .credent
     expect(ocDataMount.ro).toBe(false)
 
     const configMount = mounts.find((m) => m.container === "/root/.config/opencode")!
-    expect(configMount.ro).toBe(true)
+    expect(configMount.ro).toBe(false)  // rw: opencode writes .gitignore/plugin-cache into its config dir at startup
   } finally {
     cleanup()
   }
