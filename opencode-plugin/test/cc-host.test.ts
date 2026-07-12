@@ -2,7 +2,7 @@ import { test, expect, beforeEach, afterEach } from "bun:test"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
-import { ClaudeCodeHost, type CCChildProcess, type CCSpawnFn } from "../src/adapters/claude-code/cc-host.ts"
+import { ClaudeCodeHost, type CCChildProcess, type CCSpawnFn, type CCTaskSpawnFn, MH_CHILD_ENV } from "../src/adapters/claude-code/cc-host.ts"
 import { promptHumanScore } from "../src/score.ts"
 
 let home: string
@@ -45,9 +45,98 @@ test("promptHumanScore returns the staged verdict WITHOUT prompting (the inversi
   expect(prompted).toBe(false)
 })
 
-test("runTaskAgent degrades to null in Phase A (no throw — exit-0 safe; proposer = L8)", async () => {
-  const host = new ClaudeCodeHost("/p")
-  expect(await host.runTaskAgent({ title: "t", prompt: "p" })).toBeNull()
+// ── runTaskAgent (detached proposer/promoter/curator transport, Task L8) ────
+//
+// Hermetic: NO real `claude` binary — every test injects a fake CCTaskSpawnFn.
+
+test("runTaskAgent: detached claude -p with scoped --allowedTools, cwd=project, MH_CHILD env, returns {id}, unref'd", async () => {
+  const calls: { argv: string[]; opts: { cwd: string; env: Record<string, string> } }[] = []
+  let unrefs = 0
+  const spawnFn: CCTaskSpawnFn = (argv, opts) => {
+    calls.push({ argv, opts })
+    return { unref() { unrefs++ } }
+  }
+  const host = new ClaudeCodeHost("/some/project", { taskSpawnFn: spawnFn })
+
+  const task = await host.runTaskAgent({
+    title: "[meta-harness] project-role v3",
+    prompt: "propose stuff",
+    model: { providerID: "anthropic", modelID: "claude-opus-4-8" },
+  })
+
+  expect(task).not.toBeNull()
+  expect(typeof task!.id).toBe("string")
+  expect(task!.id.length).toBeGreaterThan(0)
+  expect(calls.length).toBe(1)
+  const { argv, opts } = calls[0]!
+  // argv: claude -p <prompt> --model <id> --allowedTools <scoped> --session-id <uuid>
+  expect(argv.slice(0, 5)).toEqual(["claude", "-p", "propose stuff", "--model", "claude-opus-4-8"])
+  const at = argv.indexOf("--allowedTools")
+  expect(at).toBeGreaterThan(0)
+  expect(argv.slice(at + 1, at + 6)).toEqual(["Read", "Grep", "Glob", "Write", "Bash"])
+  // --session-id carries the returned id (comes AFTER the variadic allowedTools)
+  const sid = argv.indexOf("--session-id")
+  expect(sid).toBeGreaterThan(at)
+  expect(argv[sid + 1]).toBe(task!.id)
+  // cwd is the PROJECT (child needs the repo + store)
+  expect(opts.cwd).toBe("/some/project")
+  // MH_CHILD sentinel present so the child's own hooks self-exit
+  expect(opts.env[MH_CHILD_ENV]).toBe("1")
+  // parent env inherited (PATH etc.)
+  expect(opts.env["PATH"]).toBeDefined()
+  // detached: unref called so the short-lived hook can exit
+  expect(unrefs).toBe(1)
+})
+
+test("runTaskAgent: omits --model when no model is given (child uses its default)", async () => {
+  const calls: string[][] = []
+  const spawnFn: CCTaskSpawnFn = (argv) => { calls.push(argv); return { unref() {} } }
+  const host = new ClaudeCodeHost("/p", { taskSpawnFn: spawnFn })
+  await host.runTaskAgent({ title: "t", prompt: "p" })
+  expect(calls[0]!).not.toContain("--model")
+})
+
+test("runTaskAgent: non-anthropic proposerModel -> null, actionable log, spawnFn NEVER called (exit-0 safe)", async () => {
+  let spawnCalls = 0
+  const spawnFn: CCTaskSpawnFn = () => { spawnCalls++; return { unref() {} } }
+  const logs: { level: string; msg: string }[] = []
+  const host = new ClaudeCodeHost("/p", { taskSpawnFn: spawnFn })
+  host.log = (level, msg) => { logs.push({ level, msg }) }
+
+  const task = await host.runTaskAgent({
+    title: "t", prompt: "p",
+    model: { providerID: "openrouter", modelID: "x/y" },
+  })
+
+  expect(task).toBeNull()
+  expect(spawnCalls).toBe(0)
+  const warn = logs.find((l) => l.level === "warn" && l.msg.includes("openrouter"))
+  expect(warn).toBeDefined()
+  expect(warn!.msg).toContain("anthropic")
+})
+
+test("runTaskAgent: unrecognized model spec -> warns, omits --model, still spawns", async () => {
+  const calls: string[][] = []
+  const spawnFn: CCTaskSpawnFn = (argv) => { calls.push(argv); return { unref() {} } }
+  const logs: { level: string; msg: string }[] = []
+  const host = new ClaudeCodeHost("/p", { taskSpawnFn: spawnFn })
+  host.log = (level, msg) => { logs.push({ level, msg }) }
+
+  const task = await host.runTaskAgent({ title: "t", prompt: "p", model: "anthropic/claude-x" })
+
+  expect(task).not.toBeNull()
+  expect(calls[0]!).not.toContain("--model")
+  expect(logs.some((l) => l.level === "warn" && l.msg.includes("unrecognized model spec"))).toBe(true)
+})
+
+test("runTaskAgent: never throws even if the spawn itself throws (returns null)", async () => {
+  const spawnFn: CCTaskSpawnFn = () => { throw new Error("spawn EMFILE") }
+  const logs: { level: string; msg: string }[] = []
+  const host = new ClaudeCodeHost("/p", { taskSpawnFn: spawnFn })
+  host.log = (level, msg) => { logs.push({ level, msg }) }
+  const task = await host.runTaskAgent({ title: "t", prompt: "p" })
+  expect(task).toBeNull()
+  expect(logs.some((l) => l.level === "warn")).toBe(true)
 })
 
 test("exec runs a shell command in projectRoot", async () => {

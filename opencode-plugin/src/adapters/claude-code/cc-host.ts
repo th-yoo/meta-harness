@@ -46,6 +46,7 @@
 
 import fs from "node:fs"
 import path from "node:path"
+import { randomUUID } from "node:crypto"
 import type { HarnessHost, ScoreResult } from "../../host.ts"
 import { ccRuntimeDir } from "./file-state.ts"
 
@@ -58,14 +59,17 @@ declare const Bun: {
     cmd: string[],
     opts: {
       cwd?: string
-      stdout: "pipe"
-      stderr: "ignore"
-      stdin: "ignore"
+      env?: Record<string, string | undefined>
+      stdout?: "pipe" | "ignore"
+      stderr?: "pipe" | "ignore"
+      stdin?: "pipe" | "ignore"
     },
   ): {
     readonly stdout: ReadableStream<Uint8Array>
     readonly exited: Promise<number>
     kill(signal?: number | string): void
+    unref(): void
+    ref(): void
   }
 }
 
@@ -255,6 +259,118 @@ export async function runClaudeCodeTextAgent(
   }
 }
 
+// ── task transport (Task L8: proposer / promoter / curator) ───────────────
+
+/** VERIFIED (claude 2.1.207 `--help`): the scoped tool set the propose.ts
+ * prompts actually need — Read/Grep/Glob to inspect the store archive, Write +
+ * Bash (heredoc `cat >`) to emit the staging files. `--allowedTools` pre-approves
+ * exactly these in headless `-p` (no interactive prompt possible); any OTHER tool
+ * the child reaches for is auto-denied. Narrower than `--dangerously-skip-
+ * permissions` / `--permission-mode bypassPermissions`, which the brief rejects as
+ * too blunt for a background child in the user's real repo. */
+const PROPOSER_ALLOWED_TOOLS = ["Read", "Grep", "Glob", "Write", "Bash"] as const
+
+/** Sentinel that neutralizes the project's own mh hooks for the detached child.
+ * The child `claude -p` runs IN the project worktree (it needs the repo + store),
+ * so CC WOULD fire this project's SessionStart/PostToolUse/Stop hooks for it —
+ * a self-referential capture loop. Every hook process the child spawns inherits
+ * this env; hook-cli/dispatch see MH_CHILD and exit 0 before any engine call
+ * (mechanism (d): a sentinel env var — robust regardless of which settings the
+ * child loads, and purely additive). See dispatch.ts / hook-cli.ts. */
+export const MH_CHILD_ENV = "MH_CHILD"
+
+/** Detached child handle — the subset of Bun.spawn's return this transport uses.
+ * Only `unref()` (let the short-lived hook process exit without waiting on the
+ * long-running proposer). stdout/stderr/stdin are all "ignore": nobody reads the
+ * child; its artifact-delivery contract is the staging file, not stdout. */
+export interface CCTaskChild {
+  unref(): void
+}
+
+/** Injectable detached-spawn seam (mirrors CCSpawnFn) — tests supply a fake to
+ * assert argv/env/cwd and to confirm unref() without ever spawning a real
+ * `claude`. Distinct from CCSpawnFn because the task child needs `env` (to carry
+ * the MH_CHILD sentinel) and never pipes stdout. */
+export type CCTaskSpawnFn = (
+  argv: string[],
+  opts: { cwd: string; env: Record<string, string> },
+) => CCTaskChild
+
+function defaultCCTaskSpawn(argv: string[], opts: { cwd: string; env: Record<string, string> }): CCTaskChild {
+  return Bun.spawn(argv, {
+    cwd: opts.cwd,
+    env: opts.env,
+    stdout: "ignore",
+    stderr: "ignore",
+    stdin: "ignore",
+  })
+}
+
+/**
+ * The proposer/promoter/curator transport: spawn a DETACHED, long-running
+ * `claude -p` child that runs the propose.ts prompt IN the project worktree
+ * (it needs file tools to read traces and write staging files), then return
+ * `{id}` IMMEDIATELY without waiting. The hook process that called this exits
+ * seconds later; the child keeps running (unref'd). Nobody in THIS process ever
+ * polls for the artifact — the staged output is applied on a LATER hook event
+ * (see proposer.ts's apply-on-next-event scan). That inversion is why this is a
+ * fire-and-forget detached spawn, not the judge's await-to-completion child.
+ *
+ * NEVER throws (exit-0 prime directive): returns null on any failure, which
+ * propose.ts already degrades on (log "Failed to create ... session" + return).
+ * Non-anthropic proposerModel → null with an actionable log, same as the judge:
+ * a native `claude -p` can only run anthropic models.
+ */
+export function runClaudeCodeTaskAgent(
+  opts: { title: string; prompt: string; model?: unknown; cwd: string },
+  log: (level: LogLevel, msg: string) => void,
+  spawnFn: CCTaskSpawnFn = defaultCCTaskSpawn,
+  env: Record<string, string | undefined> = process.env,
+): { id: string } | null {
+  try {
+    let modelId: string | undefined
+    if (opts.model !== undefined) {
+      if (!isProviderModelSpec(opts.model)) {
+        log("warn", `[cc-host] runTaskAgent: unrecognized model spec ${JSON.stringify(opts.model)} — ignoring, letting claude use its default model`)
+      } else if (opts.model.providerID !== "anthropic") {
+        log(
+          "warn",
+          `[cc-host] runTaskAgent: proposerModel provider "${opts.model.providerID}" is not "anthropic" — ` +
+            `Claude Code's proposer transport is a native \`claude -p\` child and can ONLY use anthropic models. ` +
+            `Set config.json's proposerModel to an "anthropic/<model>" slug (e.g. "anthropic/claude-opus-4-8"). Skipping this proposer.`,
+        )
+        return null
+      } else {
+        modelId = opts.model.modelID
+      }
+    }
+
+    // A known UUID up front so the returned {id} matches the child's own
+    // session id (used for the pending-artifact descriptor + logging).
+    const sessionId = randomUUID()
+
+    const argv = [
+      "claude", "-p", opts.prompt,
+      ...(modelId ? ["--model", modelId] : []),
+      "--allowedTools", ...PROPOSER_ALLOWED_TOOLS,
+      "--session-id", sessionId,
+    ]
+
+    // Inherit the parent env (PATH/HOME/auth the child needs) + the sentinel.
+    const childEnv: Record<string, string> = {}
+    for (const [k, v] of Object.entries(env)) if (v !== undefined) childEnv[k] = v
+    childEnv[MH_CHILD_ENV] = "1"
+
+    const child = spawnFn(argv, { cwd: opts.cwd, env: childEnv })
+    try { child.unref() } catch { /* not fatal — worst case the parent waits briefly */ }
+    log("info", `[cc-host] runTaskAgent: spawned detached proposer "${opts.title}" (session ${sessionId}, cwd ${opts.cwd})`)
+    return { id: sessionId }
+  } catch (err) {
+    log("warn", `[cc-host] runTaskAgent: failed to spawn detached claude -p — ${err instanceof Error ? err.message : String(err)}`)
+    return null
+  }
+}
+
 export class ClaudeCodeHost implements HarnessHost {
   readonly platform = "claude-code"
   readonly projectRoot: string
@@ -271,10 +387,18 @@ export class ClaudeCodeHost implements HarnessHost {
    * suite never touches a real `claude` binary. */
   private readonly spawnFn: CCSpawnFn
 
-  constructor(projectRoot: string, opts: { logFile?: string; spawnFn?: CCSpawnFn } = {}) {
+  /** Injectable detached-spawn seam for the task transport (runTaskAgent) —
+   * defaults to the real detached `claude -p` child. Tests inject a fake. */
+  private readonly taskSpawnFn: CCTaskSpawnFn
+
+  constructor(
+    projectRoot: string,
+    opts: { logFile?: string; spawnFn?: CCSpawnFn; taskSpawnFn?: CCTaskSpawnFn } = {},
+  ) {
     this.projectRoot = projectRoot
     this.logFile = opts.logFile ?? path.join(ccRuntimeDir(), "hook.log")
     this.spawnFn = opts.spawnFn ?? defaultCCSpawn
+    this.taskSpawnFn = opts.taskSpawnFn ?? defaultCCTaskSpawn
   }
 
   log(level: LogLevel, msg: string): void {
@@ -331,13 +455,18 @@ export class ClaudeCodeHost implements HarnessHost {
     return runClaudeCodeTextAgent(opts, (level, msg) => this.log(level, msg), this.spawnFn)
   }
 
-  async runTaskAgent(_opts: {
+  async runTaskAgent(opts: {
     title: string
     prompt: string
     model?: unknown
   }): Promise<{ id: string } | null> {
-    this.log("warn", "[cc-host] runTaskAgent not implemented in Phase A (proposer = L8) — auto-propose/promote/curate skipped")
-    return null
+    // Detached child in the PROJECT worktree (needs the repo + store). Fire-and-
+    // forget: returns {id} at once; the artifact is applied on a later hook event.
+    return runClaudeCodeTaskAgent(
+      { ...opts, cwd: this.projectRoot },
+      (level, msg) => this.log(level, msg),
+      this.taskSpawnFn,
+    )
   }
 
   async exec(cmd: string, timeoutMs = 30_000): Promise<{ stdout: string; exitCode: number }> {
