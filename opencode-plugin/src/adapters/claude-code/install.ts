@@ -91,6 +91,97 @@ export function resolveHookCliPath(): string {
   return path.join(here, "hook-cli.ts")
 }
 
+/**
+ * ── /mh-* command stubs ──────────────────────────────────────────────────
+ *
+ * FINDING (live-smoke, claude 2.1.207): CC's slash-command parser rejects an
+ * unregistered command like /mh-score with "Unknown command" BEFORE the
+ * UserPromptSubmit hook ever fires — the adapter's /^\/mh-/ interception in
+ * dispatch.ts never runs. But when a matching command file exists at
+ * .claude/commands/mh-<name>.md, CC instead routes the RAW prompt text
+ * ("/mh-score good ...") through UserPromptSubmit, where dispatch.ts's
+ * matcher blocks + handles it. So these stub files exist purely to make CC
+ * accept the slash command syntax at all; the file's *body* is never
+ * expanded into a prompt in normal operation (the hook blocks first).
+ *
+ * One entry per command engine.ts's handleCommand routes on (see
+ * src/engine.ts handleCommand + dispatch.ts's mh-score special case).
+ */
+export const MH_COMMANDS: { name: string; description: string }[] = [
+  {
+    name: "mh-score",
+    description: "Rate the last session: /mh-score good|bad [note]  (accepted: good/bad/1/0/yes/no)",
+  },
+  {
+    name: "mh-propose",
+    description: "Trigger a meta-harness proposer. Scope: (none)=project-role, project=project-global, role-global=account-role, account=account-global",
+  },
+  {
+    name: "mh-activate",
+    description: "Activate a candidate version: /mh-activate <scope> <vN> [--force]. Account scopes require a winning ab-verdict.json (use --force to override). Scope: role|project|role-global|account",
+  },
+  {
+    name: "mh-promote",
+    description: "Promote proven project-layer rules up to the account layer: /mh-promote [global|role]. Creates an inactive account candidate to validate with runner.py ab.",
+  },
+  {
+    name: "mh-curate",
+    description: "Consolidate a layer's playbook (merge duplicates, prune net-harmful bullets, enforce budget): /mh-curate [scope]. Output goes through the trial/ab gate.",
+  },
+  {
+    name: "mh-status",
+    description: "Show meta-harness per-layer state: active version, scores, in-progress trials, and pending candidate ab-verdicts.",
+  },
+]
+
+/** The stub file's content: frontmatter description (shown in CC's command
+ * picker) + a passthrough body that's a fallback only — see MH_COMMANDS doc
+ * comment above for why the body normally never reaches the model. */
+function commandStubContent(description: string): string {
+  return [
+    "---",
+    `description: ${JSON.stringify(description)}`,
+    "---",
+    "",
+    "mh:passthrough $ARGUMENTS",
+    "<!-- Fallback only: UserPromptSubmit intercepts the raw /mh-* prompt text",
+    "     before this body would ever be expanded (see dispatch.ts). This line",
+    "     only matters if the meta-harness hooks are disabled. -->",
+    "",
+  ].join("\n")
+}
+
+/**
+ * Write the six /mh-* command stubs into `commandsDir` (typically
+ * <project>/.claude/commands). MERGE semantics mirror computeSettings:
+ * never clobber a user's existing file of the same name (skip + warn);
+ * re-running with identical content already on disk is a no-op.
+ */
+export function installCommandStubs(commandsDir: string): { actions: string[] } {
+  fs.mkdirSync(commandsDir, { recursive: true })
+  const actions: string[] = []
+
+  for (const { name, description } of MH_COMMANDS) {
+    const filePath = path.join(commandsDir, `${name}.md`)
+    const content = commandStubContent(description)
+
+    if (fs.existsSync(filePath)) {
+      const existing = fs.readFileSync(filePath, "utf-8")
+      if (existing === content) {
+        actions.push(`${name}.md: already installed — skipped`)
+      } else {
+        actions.push(`${name}.md: existing user file preserved — skipped (WARNING: customized, not overwritten)`)
+      }
+      continue
+    }
+
+    fs.writeFileSync(filePath, content)
+    actions.push(`${name}.md: installed`)
+  }
+
+  return { actions }
+}
+
 function parseArgs(argv: string[]): { project: string; role: string } {
   let project = process.cwd()
   let role = DEFAULT_ROLE
@@ -120,9 +211,14 @@ function main(): void {
   fs.mkdirSync(path.dirname(settingsPath), { recursive: true })
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n")
 
+  const commandsDir = path.join(project, ".claude", "commands")
+  const { actions: commandActions } = installCommandStubs(commandsDir)
+
   console.log(`meta-harness Claude Code hooks → ${settingsPath}`)
   console.log(`  hook-cli: ${hookCliPath}`)
   for (const a of actions) console.log(`  ${a}`)
+  console.log(`meta-harness Claude Code command stubs → ${commandsDir}`)
+  for (const a of commandActions) console.log(`  ${a}`)
 }
 
 // Run only when invoked directly (not when imported by tests).
