@@ -54,7 +54,7 @@ import {
   type EnvPolicy,
 } from "./harness-store.ts"
 import { proposerSessions } from "./session-state.ts"
-import type { HarnessHost } from "./host.ts"
+import type { HarnessHost, StagedArtifactDescriptor } from "./host.ts"
 
 /** Failure-taxonomy labels the proposer must pick from when diagnosing. */
 export const FAILURE_TAXONOMY = [
@@ -77,6 +77,27 @@ export const PROMOTE_MIN_EVIDENCE = 3
 /** Store roots with a proposer/promoter session currently running (one per root). */
 const inFlight = new Set<string>()
 
+/** Result of an apply attempt: the staged artifact was consumed and the
+ * candidate/trial created ("applied"), or the primary artifact isn't on disk
+ * yet so nothing was done ("pending" — try again on a later event). */
+export type ApplyResult = "applied" | "pending"
+
+/**
+ * Apply a completed staged artifact for an in-flight proposer/promoter/curator
+ * cycle (Task L8). The single entry point both transports use: opencode calls it
+ * inline once waitForFile settles; Claude Code calls it from a later hook event
+ * (applyPendingArtifacts) because the spawning hook process is already gone.
+ * Dispatches to the kind-specific extracted apply body. Returns "pending" when
+ * the child hasn't written its primary artifact yet (idempotent — safe to retry).
+ */
+export async function applyStagedArtifact(host: HarnessHost, d: StagedArtifactDescriptor): Promise<ApplyResult> {
+  switch (d.kind) {
+    case "propose": return applyProposeArtifact(host, d)
+    case "promote": return applyPromoteArtifact(host, d)
+    case "curate":  return applyCurateArtifact(host, d)
+  }
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────
 
 /**
@@ -90,7 +111,7 @@ export async function triggerPropose(
   worktree: string,
   layer: StoreLayer,
 ): Promise<void> {
-  if (inFlight.has(layer.root)) {
+  if (inFlight.has(layer.root) || host.proposerInFlight?.(layer.root)) {
     await host.log("info", `propose skipped: ${layer.scope} already has a session in flight`)
     return
   }
@@ -134,6 +155,24 @@ export async function triggerPropose(
     }
     const sessionID = task.id
 
+    const descriptor: StagedArtifactDescriptor = {
+      kind: "propose", worktree, version, layer,
+      playbookMode: !!playbook,
+      proposerModel: cfg.proposerModel, proposerVariant: cfg.proposerVariant,
+      sessionId: sessionID, spawnedAt: Date.now(),
+      timeoutMs: cfg.proposerTimeoutMin * 60 * 1000, pid: process.pid,
+    }
+
+    // Claude Code path: the spawning hook process is short-lived and can't poll.
+    // Persist the descriptor (a lock file) and return; the artifact is applied on
+    // a later hook event by applyStagedArtifact (via applyPendingArtifacts).
+    if (host.stageArtifactApply) {
+      host.stageArtifactApply(descriptor)
+      await host.log("info", `proposer ${layer.scope} ${version} detached — applies on next hook event`)
+      return
+    }
+
+    // opencode path: wait inline for the artifact, then apply in-process.
     // Poll for the primary artifact: ops.json in playbook mode, system.md otherwise.
     const primary = playbook ? stagingOps : stagingSystem
     let found = await waitForFile(primary, cfg.proposerTimeoutMin * 60 * 1000)
@@ -146,125 +185,156 @@ export async function triggerPropose(
       return
     }
 
-    const tools = fs.existsSync(stagingTools)
-      ? fs.readFileSync(stagingTools, "utf-8").trim()
-      : ""
-    if (tools) fs.rmSync(stagingTools, { force: true })
-
-    // Read + relocate the diagnosis first — its bulletAssessments must be applied
-    // to the ACTIVE playbook before we branch the ops off it.
-    let diagnosis: Record<string, unknown> | null = null
-    if (fs.existsSync(stagingDiagnosis)) {
-      try { diagnosis = JSON.parse(fs.readFileSync(stagingDiagnosis, "utf-8")) } catch {
-        await host.log("warn", `proposer ${layer.scope} ${version}: diagnosis.json malformed — skipped`)
-      }
-      fs.rmSync(stagingDiagnosis, { force: true })
-    } else {
-      await host.log("warn", `proposer ${layer.scope} ${version}: no diagnosis.json written (soft-required)`)
-    }
-
-    // Build the candidate: ops mode edits the playbook; legacy/grace uses system.md.
-    let system: string
-    let newPlaybook: Playbook | undefined
-    if (playbook && fs.existsSync(stagingOps)) {
-      let ops: PlaybookOp[] = []
-      try {
-        const parsed = JSON.parse(fs.readFileSync(stagingOps, "utf-8"))
-        if (Array.isArray(parsed?.ops)) ops = parsed.ops
-      } catch { /* malformed ops → no-op edit */ }
-      fs.rmSync(stagingOps, { force: true })
-      const assessments = (diagnosis?.["bulletAssessments"] as { id: string; verdict: "helpful" | "harmful" }[]) || []
-      if (assessments.length) applyBulletAssessments(layer.root, assessments)
-      const base = readPlaybook(layer.root) ?? playbook   // re-read after assessments
-      newPlaybook = applyPlaybookOps(base, ops)
-      system = renderPlaybook(newPlaybook)
-    } else {
-      system = fs.readFileSync(stagingSystem, "utf-8").trim()
-      newPlaybook = undefined
-    }
-    if (fs.existsSync(stagingSystem)) fs.rmSync(stagingSystem, { force: true })
-
-    // Optional agent-config op — PROJECT layers only (gated). Account-layer
-    // candidates are validated by bench `ab`, which runs the default `build`
-    // agent where the plugin is inert, so an evolved agent-config there can't
-    // be measured — never pick one up for account scopes.
-    let agentConfig: AgentConfig | null = null
-    if (isProject && fs.existsSync(stagingAgentConfig)) {
-      try {
-        const parsed = JSON.parse(fs.readFileSync(stagingAgentConfig, "utf-8"))
-        agentConfig = validateAgentConfig(parsed)
-        if (!agentConfig) {
-          await host.log("warn", `proposer ${layer.scope} ${version}: agent-config.json invalid — skipped`)
-        }
-      } catch {
-        await host.log("warn", `proposer ${layer.scope} ${version}: agent-config.json malformed — skipped`)
-      }
-      fs.rmSync(stagingAgentConfig, { force: true })
-    }
-
-    // Optional env-policy op — PROJECT layers only (gated), same rationale as
-    // agent-config above: bench `ab` validates account-layer candidates by
-    // running the default `build` agent, where an evolved env-policy can
-    // never be measured — never pick one up for account scopes.
-    let envPolicy: EnvPolicy | null = null
-    if (isProject && fs.existsSync(stagingEnvPolicy)) {
-      try {
-        const parsed = JSON.parse(fs.readFileSync(stagingEnvPolicy, "utf-8"))
-        envPolicy = validateEnvPolicy(parsed)
-        if (!envPolicy) {
-          await host.log("warn", `proposer ${layer.scope} ${version}: env-policy.json invalid — skipped`)
-        }
-      } catch {
-        await host.log("warn", `proposer ${layer.scope} ${version}: env-policy.json malformed — skipped`)
-      }
-      fs.rmSync(stagingEnvPolicy, { force: true })
-    }
-
-    // Carry the active knob forward when this cycle didn't re-emit one — the
-    // staged value (if any) always wins, otherwise durability requires we
-    // re-derive from active (same reasoning as the playbook: never let an
-    // absent stage mean "delete the evolved knob"). Must read BEFORE
-    // startTrial below, which overwrites active via writeActive.
-    const effAgentConfig = agentConfig ?? readAgentConfig(layer.root)
-    const effEnvPolicy = envPolicy ?? readEnvPolicy(layer.root)
-
-    createCandidate(layer.root, version, system, tools, newPlaybook, effAgentConfig ?? undefined, effEnvPolicy ?? undefined)
-    appendMetaMetric(layer.root, {
-      event: "propose", candidate: version, scope: layer.scope,
-      kind: newPlaybook ? "propose-ops" : "propose",
-    })
-    writeCandidateMeta(layer.root, version, {
-      proposerModel: cfg.proposerModel,
-      proposerVariant: cfg.proposerVariant,
-      scope: layer.scope,
-      kind: newPlaybook ? "propose-ops" : "propose",
-      createdAt: new Date().toISOString(),
-    })
-    if (diagnosis) writeDiagnosis(layer.root, version, diagnosis)
-
-    const toolsNote = tools ? " + tools.md" : ""
-    if (isProject) {
-      // Selection gate: go live provisionally as a trial; confirm/revert after
-      // TRIAL_MIN_SESSIONS scored sessions (see resolveTrial in the idle hook).
-      const baseline = activeVersion(layer.root)
-      startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook ?? null, effAgentConfig, effEnvPolicy)
-      await host.notify(
-        `Trial started: ${layer.scope} ${version}${toolsNote} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
-        "info", 8_000,
-      )
-      await host.log("info", `Trial started ${layer.scope} ${version} (baseline ${baseline})`)
-    } else {
-      // Account layers are validated by TB2, not everyday usage — leave the
-      // candidate INACTIVE pending an ab-verdict; the human activates via /mh-activate.
-      await host.notify(
-        `Candidate ${version}${toolsNote} created for ${layer.scope} — validate with bun term-bench2/runner.ts ab, then /mh-activate ${layer.scope} ${version}`,
-        "info", 10_000,
-      )
-      await host.log("info", `Candidate ${layer.scope} ${version} created (inactive, awaiting ab-verdict)`)
-    }
+    await applyStagedArtifact(host, descriptor)
   } finally {
     inFlight.delete(layer.root)
   }
+}
+
+/**
+ * The post-spawn apply body of triggerPropose, extracted so it can run in a
+ * DIFFERENT process than the one that spawned the child (Task L8). Returns
+ * "pending" (nothing done) when the primary staged artifact isn't on disk yet,
+ * or "applied" once the candidate/trial has been created and staging consumed.
+ * Behavior is byte-identical to the original inline block: opencode reaches here
+ * after waitForFile; Claude Code reaches here from applyPendingArtifacts.
+ */
+async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescriptor): Promise<ApplyResult> {
+  const { layer, version, worktree } = d
+  const isProject = layer.scope === "project-global" || layer.scope === "project-role"
+  const playbook = d.playbookMode ? seedPlaybook(layer.root) : null
+
+  const stagingBase = path.join(worktree, ".meta-harness", "staging")
+  const stagingSystem = path.join(stagingBase, `${layer.scope}-${version}-system.md`)
+  const stagingTools  = path.join(stagingBase, `${layer.scope}-${version}-tools.md`)
+  const stagingDiagnosis = path.join(stagingBase, `${layer.scope}-${version}-diagnosis.json`)
+  const stagingOps = path.join(stagingBase, `${layer.scope}-${version}-ops.json`)
+  const stagingAgentConfig = path.join(stagingBase, `${layer.scope}-${version}-agent-config.json`)
+  const stagingEnvPolicy = path.join(stagingBase, `${layer.scope}-${version}-env-policy.json`)
+
+  // Primary artifact: ops.json in playbook mode, system.md otherwise (+ the
+  // playbook-mode grace where the proposer wrote a whole system.md instead).
+  const primary = playbook ? stagingOps : stagingSystem
+  const present = fs.existsSync(primary) || (!!playbook && fs.existsSync(stagingSystem))
+  if (!present) return "pending"
+
+  const tools = fs.existsSync(stagingTools)
+    ? fs.readFileSync(stagingTools, "utf-8").trim()
+    : ""
+  if (tools) fs.rmSync(stagingTools, { force: true })
+
+  // Read + relocate the diagnosis first — its bulletAssessments must be applied
+  // to the ACTIVE playbook before we branch the ops off it.
+  let diagnosis: Record<string, unknown> | null = null
+  if (fs.existsSync(stagingDiagnosis)) {
+    try { diagnosis = JSON.parse(fs.readFileSync(stagingDiagnosis, "utf-8")) } catch {
+      await host.log("warn", `proposer ${layer.scope} ${version}: diagnosis.json malformed — skipped`)
+    }
+    fs.rmSync(stagingDiagnosis, { force: true })
+  } else {
+    await host.log("warn", `proposer ${layer.scope} ${version}: no diagnosis.json written (soft-required)`)
+  }
+
+  // Build the candidate: ops mode edits the playbook; legacy/grace uses system.md.
+  let system: string
+  let newPlaybook: Playbook | undefined
+  if (playbook && fs.existsSync(stagingOps)) {
+    let ops: PlaybookOp[] = []
+    try {
+      const parsed = JSON.parse(fs.readFileSync(stagingOps, "utf-8"))
+      if (Array.isArray(parsed?.ops)) ops = parsed.ops
+    } catch { /* malformed ops → no-op edit */ }
+    fs.rmSync(stagingOps, { force: true })
+    const assessments = (diagnosis?.["bulletAssessments"] as { id: string; verdict: "helpful" | "harmful" }[]) || []
+    if (assessments.length) applyBulletAssessments(layer.root, assessments)
+    const base = readPlaybook(layer.root) ?? playbook   // re-read after assessments
+    newPlaybook = applyPlaybookOps(base, ops)
+    system = renderPlaybook(newPlaybook)
+  } else {
+    system = fs.readFileSync(stagingSystem, "utf-8").trim()
+    newPlaybook = undefined
+  }
+  if (fs.existsSync(stagingSystem)) fs.rmSync(stagingSystem, { force: true })
+
+  // Optional agent-config op — PROJECT layers only (gated). Account-layer
+  // candidates are validated by bench `ab`, which runs the default `build`
+  // agent where the plugin is inert, so an evolved agent-config there can't
+  // be measured — never pick one up for account scopes.
+  let agentConfig: AgentConfig | null = null
+  if (isProject && fs.existsSync(stagingAgentConfig)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(stagingAgentConfig, "utf-8"))
+      agentConfig = validateAgentConfig(parsed)
+      if (!agentConfig) {
+        await host.log("warn", `proposer ${layer.scope} ${version}: agent-config.json invalid — skipped`)
+      }
+    } catch {
+      await host.log("warn", `proposer ${layer.scope} ${version}: agent-config.json malformed — skipped`)
+    }
+    fs.rmSync(stagingAgentConfig, { force: true })
+  }
+
+  // Optional env-policy op — PROJECT layers only (gated), same rationale as
+  // agent-config above: bench `ab` validates account-layer candidates by
+  // running the default `build` agent, where an evolved env-policy can
+  // never be measured — never pick one up for account scopes.
+  let envPolicy: EnvPolicy | null = null
+  if (isProject && fs.existsSync(stagingEnvPolicy)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(stagingEnvPolicy, "utf-8"))
+      envPolicy = validateEnvPolicy(parsed)
+      if (!envPolicy) {
+        await host.log("warn", `proposer ${layer.scope} ${version}: env-policy.json invalid — skipped`)
+      }
+    } catch {
+      await host.log("warn", `proposer ${layer.scope} ${version}: env-policy.json malformed — skipped`)
+    }
+    fs.rmSync(stagingEnvPolicy, { force: true })
+  }
+
+  // Carry the active knob forward when this cycle didn't re-emit one — the
+  // staged value (if any) always wins, otherwise durability requires we
+  // re-derive from active (same reasoning as the playbook: never let an
+  // absent stage mean "delete the evolved knob"). Must read BEFORE
+  // startTrial below, which overwrites active via writeActive.
+  const effAgentConfig = agentConfig ?? readAgentConfig(layer.root)
+  const effEnvPolicy = envPolicy ?? readEnvPolicy(layer.root)
+
+  createCandidate(layer.root, version, system, tools, newPlaybook, effAgentConfig ?? undefined, effEnvPolicy ?? undefined)
+  appendMetaMetric(layer.root, {
+    event: "propose", candidate: version, scope: layer.scope,
+    kind: newPlaybook ? "propose-ops" : "propose",
+  })
+  writeCandidateMeta(layer.root, version, {
+    proposerModel: d.proposerModel,
+    proposerVariant: d.proposerVariant,
+    scope: layer.scope,
+    kind: newPlaybook ? "propose-ops" : "propose",
+    createdAt: new Date().toISOString(),
+  })
+  if (diagnosis) writeDiagnosis(layer.root, version, diagnosis)
+
+  const toolsNote = tools ? " + tools.md" : ""
+  if (isProject) {
+    // Selection gate: go live provisionally as a trial; confirm/revert after
+    // TRIAL_MIN_SESSIONS scored sessions (see resolveTrial in the idle hook).
+    const baseline = activeVersion(layer.root)
+    startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook ?? null, effAgentConfig, effEnvPolicy)
+    await host.notify(
+      `Trial started: ${layer.scope} ${version}${toolsNote} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
+      "info", 8_000,
+    )
+    await host.log("info", `Trial started ${layer.scope} ${version} (baseline ${baseline})`)
+  } else {
+    // Account layers are validated by TB2, not everyday usage — leave the
+    // candidate INACTIVE pending an ab-verdict; the human activates via /mh-activate.
+    await host.notify(
+      `Candidate ${version}${toolsNote} created for ${layer.scope} — validate with bun term-bench2/runner.ts ab, then /mh-activate ${layer.scope} ${version}`,
+      "info", 10_000,
+    )
+    await host.log("info", `Candidate ${layer.scope} ${version} created (inactive, awaiting ab-verdict)`)
+  }
+  return "applied"
 }
 
 /**
@@ -318,6 +388,20 @@ export async function triggerPromote(
     }
     const sessionID = task.id
 
+    const descriptor: StagedArtifactDescriptor = {
+      kind: "promote", worktree, version, layer: target, source,
+      playbookMode: false,
+      proposerModel: cfg.proposerModel, proposerVariant: cfg.proposerVariant,
+      sessionId: sessionID, spawnedAt: Date.now(),
+      timeoutMs: cfg.proposerTimeoutMin * 60 * 1000, pid: process.pid,
+    }
+
+    if (host.stageArtifactApply) {
+      host.stageArtifactApply(descriptor)
+      await host.log("info", `promoter ${target.scope} ${version} detached — applies on next hook event`)
+      return
+    }
+
     const found = await waitForFile(stagingSystem, cfg.proposerTimeoutMin * 60 * 1000)
     proposerSessions.delete(sessionID)
 
@@ -326,32 +410,46 @@ export async function triggerPromote(
       return
     }
 
-    const system = fs.readFileSync(stagingSystem, "utf-8").trim()
-    fs.rmSync(stagingSystem, { force: true })
-    const tools = fs.existsSync(stagingTools)
-      ? fs.readFileSync(stagingTools, "utf-8").trim()
-      : ""
-    if (tools) fs.rmSync(stagingTools, { force: true })
-
-    createCandidate(target.root, version, system, tools) // inactive — account gate applies
-    writeCandidateMeta(target.root, version, {
-      proposerModel: cfg.proposerModel,
-      proposerVariant: cfg.proposerVariant,
-      scope: target.scope,
-      kind: "promote",
-      source: source.scope,
-      createdAt: new Date().toISOString(),
-    })
-
-    const toolsNote = tools ? " + tools.md" : ""
-    await host.notify(
-      `Promotion candidate ${version}${toolsNote} for ${target.scope} — validate with bun term-bench2/runner.ts ab, then /mh-activate ${target.scope} ${version}`,
-      "success", 10_000,
-    )
-    await host.log("info", `Promotion candidate ${target.scope} ${version} created (inactive)`)
+    await applyStagedArtifact(host, descriptor)
   } finally {
     inFlight.delete(target.root)
   }
+}
+
+/** Post-spawn apply body of triggerPromote (extracted for the L8 apply-on-next-
+ * event path). "pending" until the merged system.md is staged, then "applied". */
+async function applyPromoteArtifact(host: HarnessHost, d: StagedArtifactDescriptor): Promise<ApplyResult> {
+  const { layer: target, source, version, worktree } = d
+  const stagingBase = path.join(worktree, ".meta-harness", "staging")
+  const stagingSystem = path.join(stagingBase, `promote-${target.scope}-${version}-system.md`)
+  const stagingTools  = path.join(stagingBase, `promote-${target.scope}-${version}-tools.md`)
+
+  if (!fs.existsSync(stagingSystem)) return "pending"
+
+  const system = fs.readFileSync(stagingSystem, "utf-8").trim()
+  fs.rmSync(stagingSystem, { force: true })
+  const tools = fs.existsSync(stagingTools)
+    ? fs.readFileSync(stagingTools, "utf-8").trim()
+    : ""
+  if (tools) fs.rmSync(stagingTools, { force: true })
+
+  createCandidate(target.root, version, system, tools) // inactive — account gate applies
+  writeCandidateMeta(target.root, version, {
+    proposerModel: d.proposerModel,
+    proposerVariant: d.proposerVariant,
+    scope: target.scope,
+    kind: "promote",
+    source: source?.scope,
+    createdAt: new Date().toISOString(),
+  })
+
+  const toolsNote = tools ? " + tools.md" : ""
+  await host.notify(
+    `Promotion candidate ${version}${toolsNote} for ${target.scope} — validate with bun term-bench2/runner.ts ab, then /mh-activate ${target.scope} ${version}`,
+    "success", 10_000,
+  )
+  await host.log("info", `Promotion candidate ${target.scope} ${version} created (inactive)`)
+  return "applied"
 }
 
 // ── Proposer prompt ────────────────────────────────────────────────────────
@@ -731,7 +829,7 @@ export async function triggerCurate(
   worktree: string,
   layer: StoreLayer,
 ): Promise<void> {
-  if (inFlight.has(layer.root)) {
+  if (inFlight.has(layer.root) || host.proposerInFlight?.(layer.root)) {
     await host.log("info", `curate skipped: ${layer.scope} already has a session in flight`)
     return
   }
@@ -770,6 +868,20 @@ export async function triggerCurate(
     }
     const sessionID = task.id
 
+    const descriptor: StagedArtifactDescriptor = {
+      kind: "curate", worktree, version, layer,
+      playbookMode: true,
+      proposerModel: cfg.proposerModel, proposerVariant: cfg.proposerVariant,
+      sessionId: sessionID, spawnedAt: Date.now(),
+      timeoutMs: cfg.proposerTimeoutMin * 60 * 1000, pid: process.pid,
+    }
+
+    if (host.stageArtifactApply) {
+      host.stageArtifactApply(descriptor)
+      await host.log("info", `curator ${layer.scope} ${version} detached — applies on next hook event`)
+      return
+    }
+
     const found = await waitForFile(stagingOps, cfg.proposerTimeoutMin * 60 * 1000)
     proposerSessions.delete(sessionID)
     if (!found) {
@@ -777,44 +889,69 @@ export async function triggerCurate(
       return
     }
 
-    let ops: PlaybookOp[] = []
-    try {
-      const parsed = JSON.parse(fs.readFileSync(stagingOps, "utf-8"))
-      if (Array.isArray(parsed?.ops)) ops = parsed.ops
-    } catch { /* malformed → no-op curation */ }
-    fs.rmSync(stagingOps, { force: true })
-
-    const newPlaybook = applyPlaybookOps(playbook, ops)
-    const system = renderPlaybook(newPlaybook)
-    const tools = readActiveTools(layer.root)
-    // Curation only ever edits the playbook — it never stages its own
-    // agent-config/env-policy, so the active knob must be carried forward
-    // unconditionally here (read BEFORE startTrial below overwrites active).
-    const agentConfig = readAgentConfig(layer.root)
-    const envPolicy = readEnvPolicy(layer.root)
-    createCandidate(layer.root, version, system, tools, newPlaybook, agentConfig ?? undefined, envPolicy ?? undefined)
-    appendMetaMetric(layer.root, { event: "curate", candidate: version, scope: layer.scope })
-    writeCandidateMeta(layer.root, version, {
-      proposerModel: cfg.proposerModel, scope: layer.scope, kind: "curate",
-      createdAt: new Date().toISOString(),
-    })
-
-    if (isProject) {
-      const baseline = activeVersion(layer.root)
-      startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook, agentConfig, envPolicy)
-      await host.notify(
-        `Curation trial: ${layer.scope} ${version} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
-        "info", 8_000,
-      )
-    } else {
-      await host.notify(
-        `Curation candidate ${version} for ${layer.scope} — validate with bun term-bench2/runner.ts ab, then /mh-activate`,
-        "info", 10_000,
-      )
-    }
+    await applyStagedArtifact(host, descriptor)
   } finally {
     inFlight.delete(layer.root)
   }
+}
+
+/** Post-spawn apply body of triggerCurate (extracted for the L8 apply-on-next-
+ * event path). "pending" until the ops.json is staged, then "applied". The
+ * curation playbook base is re-seeded from the layer (idempotent) so this is
+ * safe to run in a later process. */
+async function applyCurateArtifact(host: HarnessHost, d: StagedArtifactDescriptor): Promise<ApplyResult> {
+  const { layer, version, worktree } = d
+  const isProject = layer.scope === "project-global" || layer.scope === "project-role"
+  const stagingBase = path.join(worktree, ".meta-harness", "staging")
+  const stagingOps = path.join(stagingBase, `curate-${layer.scope}-${version}-ops.json`)
+
+  if (!fs.existsSync(stagingOps)) return "pending"
+
+  const playbook = seedPlaybook(layer.root)
+  if (!playbook) {
+    // Layer lost its playbook between spawn and apply (shouldn't happen — the
+    // store is read-only to the child) — nothing to curate; consume the stage.
+    fs.rmSync(stagingOps, { force: true })
+    await host.log("warn", `curator ${layer.scope} ${version}: no playbook at apply time — skipped`)
+    return "applied"
+  }
+
+  let ops: PlaybookOp[] = []
+  try {
+    const parsed = JSON.parse(fs.readFileSync(stagingOps, "utf-8"))
+    if (Array.isArray(parsed?.ops)) ops = parsed.ops
+  } catch { /* malformed → no-op curation */ }
+  fs.rmSync(stagingOps, { force: true })
+
+  const newPlaybook = applyPlaybookOps(playbook, ops)
+  const system = renderPlaybook(newPlaybook)
+  const tools = readActiveTools(layer.root)
+  // Curation only ever edits the playbook — it never stages its own
+  // agent-config/env-policy, so the active knob must be carried forward
+  // unconditionally here (read BEFORE startTrial below overwrites active).
+  const agentConfig = readAgentConfig(layer.root)
+  const envPolicy = readEnvPolicy(layer.root)
+  createCandidate(layer.root, version, system, tools, newPlaybook, agentConfig ?? undefined, envPolicy ?? undefined)
+  appendMetaMetric(layer.root, { event: "curate", candidate: version, scope: layer.scope })
+  writeCandidateMeta(layer.root, version, {
+    proposerModel: d.proposerModel, scope: layer.scope, kind: "curate",
+    createdAt: new Date().toISOString(),
+  })
+
+  if (isProject) {
+    const baseline = activeVersion(layer.root)
+    startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook, agentConfig, envPolicy)
+    await host.notify(
+      `Curation trial: ${layer.scope} ${version} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
+      "info", 8_000,
+    )
+  } else {
+    await host.notify(
+      `Curation candidate ${version} for ${layer.scope} — validate with bun term-bench2/runner.ts ab, then /mh-activate`,
+      "info", 10_000,
+    )
+  }
+  return "applied"
 }
 
 export function buildCuratePrompt(layer: StoreLayer, playbook: Playbook, stagingOps: string, worktree: string): string {

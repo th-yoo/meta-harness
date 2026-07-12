@@ -12,9 +12,48 @@
  * interface the L4 EvolutionEngine extraction (index.ts) will depend on.
  */
 
+import type { StoreLayer } from "./harness-store.ts"
+
 export interface ScoreResult {
   passed: boolean
   note: string
+}
+
+/**
+ * A fully-serializable description of an in-flight proposer/promoter/curator
+ * cycle — enough to apply its staged artifact from a DIFFERENT process than the
+ * one that spawned it (Task L8, Claude Code). On opencode the spawn + apply run
+ * in one long-lived process and this is passed in-memory to applyStagedArtifact;
+ * on Claude Code it is written to a lock file at spawn time and re-read on a
+ * later hook event (short-lived hook processes can't poll for the artifact).
+ *
+ * Everything here is JSON-round-trippable: StoreLayer is `{root, scope,
+ * higherRoots}` (all strings), and the staging paths are re-derived from
+ * `{worktree, kind, layer.scope, version}` rather than stored, so the descriptor
+ * stays small and canonical.
+ */
+export interface StagedArtifactDescriptor {
+  kind: "propose" | "promote" | "curate"
+  worktree: string
+  version: string
+  /** propose/curate: the target layer. promote: the TARGET (account) layer. */
+  layer: StoreLayer
+  /** promote only: the source (project) layer being generalized upward. */
+  source?: StoreLayer
+  /** propose/curate: was the layer in playbook (ops) mode at spawn time. */
+  playbookMode: boolean
+  /** Captured at spawn (config may change before apply) — recorded in meta.json. */
+  proposerModel: string
+  proposerVariant: string
+  /** The child session id (from runTaskAgent). */
+  sessionId: string
+  /** Epoch ms the child was spawned — drives stale-lock expiry. */
+  spawnedAt: number
+  /** Give-up horizon (ms). Mirrors opencode's waitForFile timeout so a crashed
+   * child's lock can't wedge the layer forever. */
+  timeoutMs: number
+  /** Spawning process pid (diagnostic only; expiry is timestamp-based). */
+  pid: number
 }
 
 export interface HarnessHost {
@@ -104,6 +143,27 @@ export interface HarnessHost {
     prompt: string
     model?: unknown
   }): Promise<{ id: string } | null>
+
+  /**
+   * Apply-on-next-event seam (Task L8 — Claude Code).
+   *
+   * OPTIONAL. When a host implements this, trigger{Propose,Promote,Curate}
+   * spawn the detached child, hand the descriptor here, and RETURN immediately
+   * WITHOUT polling waitForFile — the host persists the descriptor (a lock file)
+   * and applies the staged artifact on a later hook event via applyStagedArtifact.
+   * A host that does NOT implement it (OpencodeHost) keeps the original inline
+   * waitForFile-then-apply path — behavior byte-identical to before this seam.
+   */
+  stageArtifactApply?(descriptor: StagedArtifactDescriptor): void
+
+  /**
+   * Cross-process in-flight guard (Task L8 — Claude Code). OPTIONAL. Returns
+   * true when a live (non-stale) proposer/promoter/curator lock already exists
+   * for `root`, so trigger* can skip a double-fire even though its in-memory
+   * `inFlight` Set is empty in a fresh hook process. Absent on opencode (whose
+   * in-memory Set suffices) → guard is a no-op there.
+   */
+  proposerInFlight?(root: string): boolean
 
   /** env-snapshot's bootstrap-probe shell-out. */
   exec(cmd: string, timeoutMs?: number): Promise<{ stdout: string; exitCode: number }>
