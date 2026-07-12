@@ -43,4 +43,10 @@ export interface AgentDriver {
   prepareAuth(): AgentAuthMounts
   /** In-container version probe argv, e.g. ["opencode","--version"]. */
   versionArgv: string[]
+  /** Driver-specific remediation text logged after AUTH_FAIL_MARK
+   * (agent-run.ts's runAgent) on an unrecoverable auth failure — e.g. which
+   * command re-authenticates THIS driver's CLI. Optional: a driver that
+   * doesn't set one gets agent-run.ts's generic (driver-neutral) fallback
+   * tail instead of another driver's CLI-specific wording. */
+  authHint?: string
 }

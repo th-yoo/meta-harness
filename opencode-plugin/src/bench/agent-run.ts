@@ -13,10 +13,11 @@
  * Marker-string producer/consumer contract: TRANSIENT_MARK and REALWORK_RE
  * are exported here as the single source of truth and re-used (not
  * re-declared) by retry-provider.ts (port of retry_provider.py:43-45), which
- * scans this module's log output (re-exported, unchanged, from
- * opencode-run.ts) for them. test/bench-opencode-run.test.ts asserts the log
- * lines this module actually emits contain these markers — see that file for
- * the producer/consumer wiring evidence.
+ * imports them directly from this module (agent-run.ts) — it has scanned
+ * this module's log output directly since B2, not via a re-export from
+ * opencode-run.ts. test/bench-opencode-run.test.ts asserts the log lines
+ * this module actually emits contain these markers — see that file for the
+ * producer/consumer wiring evidence.
  */
 import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -63,6 +64,14 @@ export const TRANSIENT_RE =
  * TRANSIENT_MARK so retry-provider.ts's TRANSIENT_MARK scan never confuses
  * the two (an auth failure must never read as "provider degradation"). */
 export const AUTH_FAIL_MARK = "authentication error"
+
+/** Fallback remediation tail for a driver that doesn't set its own
+ * `authHint` (drivers/types.ts) — deliberately driver-neutral (no
+ * opencode-specific filenames/commands), since it may be shown for ANY
+ * driver, not just opencode (final-review fix 5: the old hardcoded message
+ * named opencode's `auth.json`/`opencode auth login` even when the driver
+ * that actually failed was claude-code). */
+const AUTH_FAIL_GENERIC_HINT = "the model credential was rejected. Refresh it, or set a long-lived *_API_KEY."
 
 /** Unrecoverable-auth-failure detection — root-caused live: an expired
  * auth.json oauth token surfaces from `opencode run` as a `{"type":"error"}`
@@ -180,11 +189,18 @@ export async function runAgent(
     const cls = driver.classifyAttempt(result)
 
     if (cls === "auth") {
-      log(
-        `  ${AUTH_FAIL_MARK} — the model credential was rejected (auth.json oauth token likely expired). ` +
-          "Refresh it (run a host `opencode run`, or `opencode auth login`), or set a long-lived *_API_KEY. NOT retrying.",
-      )
-      break
+      log(`  ${AUTH_FAIL_MARK} — ${driver.authHint ?? AUTH_FAIL_GENERIC_HINT} NOT retrying.`)
+      // Zero result — exactly like the timeout path above, and NOT
+      // driver.parseOutput(output) (final-review fix 2): an unrecoverable
+      // auth failure is not real agent work, but at least one driver's
+      // auth-failure output DOES parse to a non-zero turnCount (claude-code
+      // emits a synthetic assistant echo with num_turns:1 even for a pure
+      // pre-flight auth rejection — see drivers/claude-code.ts's file
+      // header). Returning that as the result would let a bogus
+      // turnCount>0 SessionRecord slip past recordToStores' turnCount===0
+      // skip guard, and would accidentally satisfy REALWORK_RE via the
+      // logged "turns=1" line.
+      return { turnCount: 0, toolUsage: {}, events: [] }
     }
 
     if (cls === "transient" && attempt < MAX_ATTEMPTS) {

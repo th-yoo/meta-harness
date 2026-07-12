@@ -205,3 +205,13 @@ test("claudeCodeDriver: id, harness, versionArgv", () => {
   expect(claudeCodeDriver.harness).toEqual({ kind: "workspace-file", filename: "CLAUDE.md" })
   expect(claudeCodeDriver.versionArgv).toEqual(["claude", "--version"])
 })
+
+// final-review fix 5: claude-code's auth remediation must be CC-appropriate
+// (a claude-code CLI command / ANTHROPIC_API_KEY), never opencode's wording.
+test("claudeCodeDriver: authHint is CC-appropriate, not opencode's", () => {
+  expect(claudeCodeDriver.authHint).toBeDefined()
+  expect(claudeCodeDriver.authHint).toContain("claude")
+  expect(claudeCodeDriver.authHint).toContain("ANTHROPIC_API_KEY")
+  expect(claudeCodeDriver.authHint).not.toContain("opencode")
+  expect(claudeCodeDriver.authHint).not.toContain("auth.json")
+})

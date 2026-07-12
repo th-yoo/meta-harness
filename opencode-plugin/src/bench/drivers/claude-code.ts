@@ -271,4 +271,9 @@ export const claudeCodeDriver: AgentDriver = {
   classifyAttempt,
   prepareAuth: () => prepareClaudeCodeAuth(),
   versionArgv: ["claude", "--version"],
+  // CC-appropriate remediation (final-review fix 5) — the pre-fix message
+  // wrongly told a claude-code user to run `opencode auth login`.
+  authHint:
+    "the model credential was rejected (a missing/expired claude-code session). " +
+    "Refresh it (run `claude /login` on the host), or set ANTHROPIC_API_KEY.",
 }

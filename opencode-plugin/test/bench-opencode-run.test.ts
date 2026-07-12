@@ -14,6 +14,7 @@ import {
   AUTH_ERROR_RE,
   AUTH_FAIL_MARK,
 } from "../src/bench/opencode-run.ts"
+import { opencodeDriver } from "../src/bench/drivers/opencode.ts"
 import type { BenchPaths } from "../src/bench/paths.ts"
 import type { ExecResult } from "../src/bench/exec.ts"
 
@@ -381,6 +382,15 @@ test("runOpencode: top-level 'Permission denied' failure is not misreported as a
 test("marker constants: AUTH_FAIL_MARK is distinct from TRANSIENT_MARK and does not match REALWORK_RE", () => {
   expect(AUTH_FAIL_MARK).not.toBe(TRANSIENT_MARK)
   expect(REALWORK_RE.test(AUTH_FAIL_MARK)).toBe(false)
+})
+
+// final-review fix 5: opencode's own auth remediation must be unchanged
+// (byte-identical wording to the old hardcoded runAgent message) now that
+// it's driver-selected instead of hardcoded for every driver.
+test("opencodeDriver: authHint preserves the original opencode-specific remediation wording", () => {
+  expect(opencodeDriver.authHint).toBeDefined()
+  expect(opencodeDriver.authHint).toContain("auth.json")
+  expect(opencodeDriver.authHint).toContain("opencode auth login")
 })
 
 test("runOpencode: instruction.md missing dies (BenchError)", async () => {

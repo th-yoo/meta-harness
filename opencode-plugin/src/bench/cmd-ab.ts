@@ -175,6 +175,14 @@ export async function cmdAb(
   const harnessA = assembleAgentsMd(layers, paths.metaRoot, agent, {})
   const harnessB = assembleAgentsMd(layers, paths.metaRoot, agent, { [layer]: candidate })
   const agentVersion = await inContainerAgentVersion(paths, driver, execFn)
+  // Same non-default-driver-unknown-probe gate as cmd-run.ts's cmdRun
+  // (final-review fix 3) — a claude-code (etc) probe coming back "unknown"
+  // means the bench image is missing that driver's binary; die before
+  // burning an A/B run's worth of container lifecycles on guaranteed-0
+  // scores. opencode (the default) keeps its pre-existing lenient behavior.
+  if (agentVersion === "unknown" && driver.id !== "opencode") {
+    die(`bench image missing ${driver.id} — rebuild with prep --apply`)
+  }
   const envB = await envBlock(harnessB, maxAgentTimeout, model, paths.metaRoot, undefined, agentVersion, driver.id)
 
   const cfg: DecisionConfig = {

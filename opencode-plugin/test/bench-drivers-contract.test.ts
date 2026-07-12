@@ -170,7 +170,6 @@ for (const id of DRIVER_IDS) {
   test(`[${id}] runAgent: auth fixture fails fast — 1 attempt, no backoff, AUTH_FAIL_MARK logged, TRANSIENT_MARK absent`, async () => {
     const paths = setupTask()
     const authOut = fixture(kase.fixtureDir, kase.files.auth)
-    const expectedResult = driver.parseOutput(authOut)
 
     let calls = 0
     const execFn = async (): Promise<ExecResult> => {
@@ -194,7 +193,14 @@ for (const id of DRIVER_IDS) {
     }
     expect(calls).toBe(1)
     expect(sleeps).toEqual([])
-    expect(result).toEqual(expectedResult)
+    // Auth fail-fast must return the zero result — never driver.parseOutput's
+    // result (final-review fix 2). This is the load-bearing assertion for
+    // claude-code in particular: its REAL captured auth-error.txt fixture
+    // carries a synthetic assistant echo with num_turns:1, so
+    // driver.parseOutput(authOut) is NOT the zero result — proving this
+    // path is genuinely driver-agnostic, not just true-by-coincidence like
+    // opencode's (whose auth fixture happens to already parse to 0 turns).
+    expect(result).toEqual({ turnCount: 0, toolUsage: {}, events: [] })
   })
 
   // ── 4. transient fixture via runAgent: retries then gives up ──────────

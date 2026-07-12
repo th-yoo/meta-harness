@@ -153,6 +153,39 @@ test("cmdRun: --resume skips already-done tasks, carrying prior results forward"
   expect(final.n_total).toBe(2)
 })
 
+test("cmdRun: --resume against a results file from a DIFFERENT driver dies before any task runs (final-review fix 1)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a", "b"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+  const resultsFile = path.join(dir, "run-results.json")
+  fs.writeFileSync(
+    resultsFile,
+    JSON.stringify({
+      driver: "opencode",
+      tasks: { a: { rewards: [1], elapsed: [1.0], turns: [2], errors: [] } },
+    }),
+  )
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return result({ reward: 1 })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await expect(
+      cmdRun(paths, { tasks: ["a", "b"], resultsFile, resume: true, layers: "none", driver: "claude-code" }, fake, fakeExec),
+    ).rejects.toThrow(BenchError)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(ran).toBe(false)
+})
+
 test("cmdRun: --pin combined with --no-harness dies", async () => {
   const dir = tmpDir()
   const tbRoot = path.join(dir, "tb-root")
@@ -585,6 +618,23 @@ test("inContainerAgentVersion: exec throwing -> 'unknown' (never throws)", async
   expect(await inContainerAgentVersion(paths, opencodeDriver, execFn)).toBe("unknown")
 })
 
+// final-review fix 3: the version probe must respect the exec's exit code —
+// a stale bench image missing the agent binary can still print SOMETHING to
+// stdout/stderr (e.g. "bash: opencode: command not found") with a non-zero
+// rc; treating that text as a real version silently records garbage
+// provenance and lets the run proceed to (silently) score 0.
+test("inContainerAgentVersion: version exec rc!=0 -> 'unknown', even though stdout/stderr carry text", async () => {
+  const dir = tmpDir()
+  const paths = fakeBenchPaths(dir)
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "exec") {
+      return { rc: 127, stdout: "", stderr: "bash: opencode: command not found\n", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  expect(await inContainerAgentVersion(paths, opencodeDriver, execFn)).toBe("unknown")
+})
+
 test("cmdRun: envBlock is populated from inContainerAgentVersion, not a host lookup", async () => {
   const dir = tmpDir()
   const tbRoot = path.join(dir, "tb-root")
@@ -679,4 +729,61 @@ test("cmdRun: unknown --driver id dies (BenchError) before any task runs", async
     cmdRun(paths, { tasks: ["a"], layers: "none", driver: "nope" }, fake, fakeExec),
   ).rejects.toThrow(BenchError)
   expect(ran).toBe(false)
+})
+
+// ── version-probe rc gate (final-review fix 3) ─────────────────────────────
+// A NON-default driver (e.g. claude-code) whose in-container version probe
+// comes back "unknown" means the bench image doesn't actually have that
+// driver's binary baked in — proceeding would silently score every task 0
+// rather than surface the real problem (missing image layer). The DEFAULT
+// driver (opencode) keeps the old lenient behavior (proceed with "unknown"
+// recorded) to avoid breaking existing flows/tests.
+
+test("cmdRun: --driver claude-code + an 'unknown' version probe dies before any task runs", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return result()
+  }
+  // rc!=0 on the version-probe exec -> inContainerAgentVersion returns
+  // "unknown" (fix 3's other half).
+  const unknownProbeExec = async (argv: string[]) => {
+    if (argv[1] === "exec") return { rc: 127, stdout: "", stderr: "no such binary", timedOut: false }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  await expect(
+    cmdRun(paths, { tasks: ["a"], layers: "none", driver: "claude-code" }, fake, unknownProbeExec),
+  ).rejects.toThrow(BenchError)
+  expect(ran).toBe(false)
+})
+
+test("cmdRun: default driver (opencode) + an 'unknown' version probe still proceeds (lenient, unchanged)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+  const resultsFile = path.join(dir, "run-results.json")
+
+  const fake: RunOneTaskFn = async () => result()
+  const unknownProbeExec = async (argv: string[]) => {
+    if (argv[1] === "exec") return { rc: 127, stdout: "", stderr: "no such binary", timedOut: false }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], resultsFile, layers: "none" }, fake, unknownProbeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  const final = JSON.parse(fs.readFileSync(resultsFile, "utf-8"))
+  expect(final.status).toBe("complete")
 })

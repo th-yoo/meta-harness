@@ -50,6 +50,7 @@ const FAKE_RESULT: AgentRunOutput = {
 function makeFakeDriver(opts: {
   harness?: HarnessDelivery
   classify?: (result: ExecResult) => AttemptClass
+  authHint?: string
 } = {}): AgentDriver {
   return {
     id: "fake-agent",
@@ -66,6 +67,7 @@ function makeFakeDriver(opts: {
     classifyAttempt: opts.classify ?? (() => "done"),
     prepareAuth: () => ({ mounts: [], cleanup: () => {} }),
     versionArgv: ["fake-agent", "--version"],
+    ...(opts.authHint !== undefined ? { authHint: opts.authHint } : {}),
   }
 }
 
@@ -122,7 +124,53 @@ test("runAgent: auth classification fails fast — no retry, no backoff, AUTH_FA
   }
   expect(calls).toBe(1)
   expect(sleeps).toEqual([])
-  expect(result).toEqual(FAKE_RESULT)
+  // Auth fail-fast must return the zero result — never driver.parseOutput's
+  // result (final-review fix 2): the claude-code auth fixture carries a
+  // synthetic assistant echo with num_turns:1, and returning that as the
+  // real result would slip a bogus turnCount>0 SessionRecord past
+  // recordToStores' turnCount===0 skip guard.
+  expect(result).toEqual({ turnCount: 0, toolUsage: {}, events: [] })
+})
+
+// ── 2b. driver-neutral auth remediation (final-review fix 5) ────────────
+
+test("runAgent: auth log line uses driver.authHint when the driver sets one", async () => {
+  const paths = setupTask()
+  const driver = makeFakeDriver({ classify: () => "auth", authHint: "USE FAKE-AGENT'S OWN REMEDIATION COMMAND" })
+
+  const execFn = async (): Promise<ExecResult> => ok("boom", 1)
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runAgent(driver, paths, "c1", "t", "m", "", 30, "", execFn, async () => {})
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes("USE FAKE-AGENT'S OWN REMEDIATION COMMAND"))).toBe(true)
+    // Must not fall back to another driver's hardcoded wording.
+    expect(messages.some((m) => m.includes("opencode"))).toBe(false)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("runAgent: auth log line falls back to a driver-neutral generic hint when the driver sets no authHint", async () => {
+  const paths = setupTask()
+  const driver = makeFakeDriver({ classify: () => "auth" }) // no authHint
+
+  const execFn = async (): Promise<ExecResult> => ok("boom", 1)
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runAgent(driver, paths, "c1", "t", "m", "", 30, "", execFn, async () => {})
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    const authMsg = messages.find((m) => m.includes(AUTH_FAIL_MARK))
+    expect(authMsg).toBeDefined()
+    // The generic fallback must not name opencode-specific files/commands —
+    // it may be shown for ANY driver.
+    expect(authMsg).not.toContain("opencode")
+    expect(authMsg).not.toContain("auth.json")
+  } finally {
+    errSpy.mockRestore()
+  }
 })
 
 // ── 3. transient classification ─────────────────────────────────────────

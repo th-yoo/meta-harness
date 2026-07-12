@@ -94,6 +94,12 @@ export async function inContainerAgentVersion(
     const startResult = await execFn(buildStartArgv(name))
     if (startResult.rc !== 0) return "unknown"
     const verResult = await execFn(buildExecArgv(name, driver.versionArgv))
+    // rc!=0 -> "unknown" unconditionally (final-review fix 3): a stale image
+    // missing the agent binary can still print SOMETHING to stdout/stderr
+    // (e.g. a shell's "command not found"), and treating that text as a real
+    // version would record garbage provenance while letting the run proceed
+    // to silently score 0.
+    if (verResult.rc !== 0) return "unknown"
     const combined = (verResult.stdout || verResult.stderr || "").trim()
     const firstLine = combined.split("\n")[0] ?? ""
     return firstLine.slice(0, 40) || "unknown"
@@ -325,9 +331,20 @@ export async function cmdRun(
 
   const harnessMetaVal = layers !== "none" ? harnessMeta(layers, paths.metaRoot, agent, pins) : { layers: "none" }
   const agentVersion = await inContainerAgentVersion(paths, driver, execFn)
+  // A NON-default driver probing as "unknown" means the bench image doesn't
+  // actually have that driver's binary baked in — die loudly rather than
+  // silently proceeding to score every task 0 (final-review fix 3). The
+  // default driver (opencode) keeps the pre-existing lenient behavior
+  // (proceed, "unknown" recorded as provenance) so existing flows/tests are
+  // unaffected — opencode is baked into every bench image unconditionally,
+  // so an "unknown" probe for it is far more likely a throwaway-container
+  // hiccup than a genuinely missing binary.
+  if (agentVersion === "unknown" && driver.id !== "opencode") {
+    die(`bench image missing ${driver.id} — rebuild with prep --apply`)
+  }
   const runEnv = await envBlock(harnessMd, maxAgentTimeout, model, paths.metaRoot, undefined, agentVersion, driver.id)
 
-  const { taskAgg, doneTasks } = resumeCarryForward(resultsFile, Boolean(args.resume))
+  const { taskAgg, doneTasks } = resumeCarryForward(resultsFile, Boolean(args.resume), driver.id)
   const results: { task: string; k: number; reward: number; elapsed: number }[] = []
 
   const runStartTs = new Date().toISOString()

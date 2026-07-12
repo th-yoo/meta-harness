@@ -326,3 +326,55 @@ test("cmdAb: unknown --driver id dies (BenchError) before any task runs", async 
   ).rejects.toThrow(BenchError)
   expect(ran).toBe(false)
 })
+
+// ── version-probe rc gate (final-review fix 3) ─────────────────────────────
+
+test("cmdAb: --driver claude-code + an 'unknown' version probe dies before any task runs", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeTaskTomls(tbRoot, ["t1"])
+  setupCandidate(paths, "project-global", "v1")
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return res({ reward: 1, turns: 3 })
+  }
+  const unknownProbeExec = async (argv: string[]) => {
+    if (argv[1] === "exec") return { rc: 127, stdout: "", stderr: "no such binary", timedOut: false }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  await expect(
+    quiet(() =>
+      cmdAb(
+        paths,
+        { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, driver: "claude-code" } as CmdAbArgs,
+        fake,
+        unknownProbeExec,
+      ),
+    ),
+  ).rejects.toThrow(BenchError)
+  expect(ran).toBe(false)
+})
+
+test("cmdAb: default driver (opencode) + an 'unknown' version probe still proceeds (lenient, unchanged)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeTaskTomls(tbRoot, ["t1"])
+  const root = setupCandidate(paths, "project-global", "v1")
+
+  const fake: RunOneTaskFn = async () => res({ reward: 1, turns: 3 })
+  const unknownProbeExec = async (argv: string[]) => {
+    if (argv[1] === "exec") return { rc: 127, stdout: "", stderr: "no such binary", timedOut: false }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  await quiet(() =>
+    cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1 }, fake, unknownProbeExec),
+  )
+  const verdict = readAbVerdict(root, "v1")! as unknown as Record<string, unknown>
+  expect((verdict["env"] as Record<string, unknown>)["driver"]).toBe("opencode")
+})

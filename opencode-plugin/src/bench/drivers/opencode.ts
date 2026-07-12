@@ -173,4 +173,10 @@ export const opencodeDriver: AgentDriver = {
   classifyAttempt,
   prepareAuth: () => prepareAgentAuthMounts(),
   versionArgv: ["opencode", "--version"],
+  // Byte-identical to the pre-fix hardcoded tail in agent-run.ts's runAgent
+  // (final-review fix 5) — opencode's own auth remediation is unchanged,
+  // only now driver-selected instead of hardcoded for every driver.
+  authHint:
+    "the model credential was rejected (auth.json oauth token likely expired). " +
+    "Refresh it (run a host `opencode run`, or `opencode auth login`), or set a long-lived *_API_KEY.",
 }

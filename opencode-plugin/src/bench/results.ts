@@ -18,7 +18,7 @@
  * run/ab-results schema.
  */
 import { existsSync, readFileSync } from "node:fs"
-import { log, writeJsonAtomic } from "./util.ts"
+import { BenchError, die, log, writeJsonAtomic } from "./util.ts"
 
 export { resumeIdentCheck } from "./splits.ts"
 
@@ -58,13 +58,41 @@ export interface ResumeCarryForward {
  * iff its carried-forward `rewards` array is non-empty (mirrors Python's
  * `if agg.get("rewards")`). Any read/parse failure degrades to "start
  * fresh" (empty taskAgg/doneTasks) with a log line, never throws.
+ *
+ * `expectedDriver` guards against forged provenance (final whole-branch
+ * review): the FINAL `writeRunResults` call stamps the CURRENT driver id
+ * (results.ts's `driver` field), so blindly carrying forward tasks from a
+ * prior results file produced by a DIFFERENT driver would silently claim
+ * those tasks were run by `expectedDriver` when they weren't. A prior file
+ * with a `driver` field that disagrees with `expectedDriver` is a hard die
+ * (never silently degrades — this is a correctness/provenance bug, not a
+ * missing/corrupt file). A prior file with NO `driver` field at all is a
+ * legacy pre-driver-abstraction results file (drivers didn't exist yet, so
+ * there is nothing to mismatch) — that case only warns and proceeds.
  */
-export function resumeCarryForward(resultsFile: string | undefined, resume: boolean): ResumeCarryForward {
+export function resumeCarryForward(
+  resultsFile: string | undefined,
+  resume: boolean,
+  expectedDriver: string,
+): ResumeCarryForward {
   const taskAgg: Record<string, TaskAgg> = {}
   const doneTasks = new Set<string>()
   if (resume && resultsFile && existsSync(resultsFile)) {
     try {
-      const prev = JSON.parse(readFileSync(resultsFile, "utf-8")) as { tasks?: Record<string, TaskAgg> }
+      const prev = JSON.parse(readFileSync(resultsFile, "utf-8")) as {
+        tasks?: Record<string, TaskAgg>
+        driver?: string
+      }
+      if (prev.driver !== undefined && prev.driver !== expectedDriver) {
+        die(
+          `--resume: ${resultsFile} was produced by driver "${prev.driver}", but this run is using ` +
+            `driver "${expectedDriver}" — refusing to carry its tasks forward (that would forge ` +
+            `provenance). Use a per-driver --results-file, or re-run with --driver ${prev.driver}.`,
+        )
+      }
+      if (prev.driver === undefined) {
+        log(`  --resume: prior results file has no driver field (legacy, pre-driver) — assuming it matches, proceeding`)
+      }
       for (const [t, agg] of Object.entries(prev.tasks ?? {})) {
         if (agg.rewards && agg.rewards.length > 0) {
           taskAgg[t] = agg
@@ -75,6 +103,7 @@ export function resumeCarryForward(resultsFile: string | undefined, resume: bool
         log(`Resuming: ${doneTasks.size} task(s) already done, will skip them`)
       }
     } catch (e) {
+      if (e instanceof BenchError) throw e
       log(`  --resume: could not read prior results (${(e as Error).message}); starting fresh`)
     }
   }
