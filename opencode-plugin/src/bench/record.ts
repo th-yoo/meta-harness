@@ -18,10 +18,6 @@ import {
   projectGlobalRoot,
   projectRoleRoot,
   activeVersion,
-  readActiveSystem,
-  readActiveTools,
-  readCandidateSystem,
-  readCandidateTools,
   candidateExists,
   listVersions,
   recordSession,
@@ -31,6 +27,7 @@ import {
   type TrajEvent,
   type SessionRecord,
 } from "../harness-store.ts"
+import { composeHarness, renderAgentsMd, type LayerRef } from "../compose.ts"
 
 // ── harness assembly ───────────────────────────────────────────────────────
 
@@ -43,7 +40,7 @@ export const LAYER_CHOICES: LayerName[] = ["account-global", "project-global", "
 // Verbatim port of runner.py:582's _LAYER_LABELS — the two global layers keep
 // their historical headings so default output is byte-identical to the
 // pre-role version.
-const LAYER_LABELS: Record<LayerName, [string, string]> = {
+export const LAYER_LABELS: Record<LayerName, [string, string]> = {
   "account-global": ["General coding guidance", "General coding tool usage"],
   "project-global": ["Project guidance", "Project tool usage"],
   "account-role": ["Role guidance ({agent})", "Role tool usage ({agent})"],
@@ -112,7 +109,10 @@ export function parsePins(
 /**
  * Build AGENTS.md content from the store layers (Option Y order). With
  * agent="" and pins empty, output is identical to the two-global-layer form.
- * Verbatim port of runner.py:646's assemble_agents_md.
+ * Verbatim port of runner.py:646's assemble_agents_md. Thin delegate onto
+ * ../compose.ts's shared layer composition (Task L2) — this function's
+ * export + signature are unchanged; see test/compose.test.ts for the
+ * byte-parity proof that the delegation didn't change this output.
  */
 export function assembleAgentsMd(
   layers: string,
@@ -120,23 +120,8 @@ export function assembleAgentsMd(
   agent = "",
   pins: Record<string, string> = {},
 ): string {
-  const parts: string[] = []
-  for (const [name, root] of layerStoreRoots(layers, agent, metaRoot)) {
-    const ver = pins[name]
-    let sysTxt: string
-    let toolsTxt: string
-    if (ver) {
-      sysTxt = readCandidateSystem(root, ver)
-      toolsTxt = readCandidateTools(root, ver)
-    } else {
-      sysTxt = readActiveSystem(root)
-      toolsTxt = readActiveTools(root)
-    }
-    const [sysHead, toolsHead] = LAYER_LABELS[name]
-    if (sysTxt) parts.push(`## ${sysHead.replace("{agent}", agent)}\n\n${sysTxt}`)
-    if (toolsTxt) parts.push(`## ${toolsHead.replace("{agent}", agent)}\n\n${toolsTxt}`)
-  }
-  return parts.join("\n\n---\n\n")
+  const layerRefs: LayerRef[] = layerStoreRoots(layers, agent, metaRoot).map(([name, root]) => ({ scope: name, root }))
+  return renderAgentsMd(composeHarness(layerRefs, pins), LAYER_LABELS, agent)
 }
 
 /** Snapshot which store versions are active/pinned, for results provenance.

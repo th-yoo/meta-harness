@@ -48,8 +48,6 @@ import {
   migrateFlatToProjectGlobal,
   activeVersion,
   listVersions,
-  readActiveSystem,
-  readActiveTools,
   recordSession,
   readScore,
   readTrial,
@@ -86,6 +84,7 @@ import {
   PROJECT_GLOBAL_THRESHOLD,
 } from "./propose.ts"
 import { proposerSessions, judgeSessions } from "./session-state.ts"
+import { composeHarness, renderSystemBlocks } from "./compose.ts"
 
 // ── Role detection ─────────────────────────────────────────────────────────
 
@@ -339,35 +338,30 @@ const metaHarness: Plugin = async (input) => {
       if (!isMhRole(agent)) return
 
       const layers = layersFor(worktree, agent)
+      const composed = composeHarness(layers.map((l) => ({ scope: l.scope, root: l.root })))
 
-      // Inject each layer's system.md in order (general → specific)
-      for (const layer of layers) {
-        const system = readActiveSystem(layer.root)
-        if (system) {
-          output.system.push(system)
-          await log(client, "debug", `[hook:system.transform] injected ${layer.scope} system — ${system.length} chars`)
+      // Env snapshot injects once per session (pushed last, if present).
+      const wantsSnapshot = sessionID && !snapshotInjected.has(sessionID)
+      const snapshot = wantsSnapshot ? snapshotCache.get(sessionID) : undefined
+
+      for (const block of renderSystemBlocks(composed, snapshot)) {
+        output.system.push(block)
+      }
+
+      // Logging (unchanged wording, recomputed from `composed` rather than
+      // re-reading the stores — renderSystemBlocks itself is pure).
+      for (const layer of composed) {
+        if (layer.system) {
+          await log(client, "debug", `[hook:system.transform] injected ${layer.scope} system — ${layer.system.length} chars`)
         }
       }
-
-      // Assemble tool-usage guidance from all 4 layers into one section
-      const toolParts: string[] = []
-      for (const layer of layers) {
-        const tools = readActiveTools(layer.root)
-        if (tools) toolParts.push(tools)
+      const toolLayerCount = composed.filter((l) => l.tools).length
+      if (toolLayerCount > 0) {
+        await log(client, "debug", `[hook:system.transform] injected tool guidance from ${toolLayerCount} layer(s)`)
       }
-      if (toolParts.length > 0) {
-        output.system.push(`## Tool usage guidance\n\n${toolParts.join("\n\n")}`)
-        await log(client, "debug", `[hook:system.transform] injected tool guidance from ${toolParts.length} layer(s)`)
-      }
-
-      // Inject env snapshot once per session (pushed last)
-      if (sessionID && !snapshotInjected.has(sessionID)) {
-        const snapshot = snapshotCache.get(sessionID)
-        if (snapshot) {
-          snapshotInjected.add(sessionID)
-          output.system.push(snapshot)
-          await log(client, "debug", `[hook:system.transform] injected env snapshot`)
-        }
+      if (snapshot) {
+        snapshotInjected.add(sessionID)
+        await log(client, "debug", `[hook:system.transform] injected env snapshot`)
       }
     },
 
