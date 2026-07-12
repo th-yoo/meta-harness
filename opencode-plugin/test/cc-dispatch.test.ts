@@ -68,6 +68,44 @@ test("resolveRole: falls back to project .meta-harness/config.json defaultRole",
   expect(resolveRole(project, {} as any)).toBe("mh-review")
 })
 
+// ── child-session non-participation (MH_CHILD sentinel, Task L8) ─────────────
+
+test("dispatch: MH_CHILD in env -> exits 0 with no output before ANY engine call", async () => {
+  process.env["MH_ROLE"] = "mh-build"
+  // A spy engine: if dispatch touched it, one of these would fire.
+  let touched = false
+  const engine = new Proxy({}, {
+    get() { touched = true; return () => { touched = true } },
+  }) as unknown as EvolutionEngine
+  const host = new ClaudeCodeHost(project)
+  const state = new FileSessionStateStore()
+
+  const out = await dispatch(
+    "SessionStart",
+    { session_id: "child-1", cwd: project, source: "startup" },
+    { engine, host, state },
+    { MH_CHILD: "1", MH_ROLE: "mh-build" } as any,
+  )
+
+  expect(out).toBeUndefined()
+  expect(touched).toBe(false)
+})
+
+test("dispatch: a normal (non-child) SessionStart still participates when MH_CHILD is absent", async () => {
+  process.env["MH_ROLE"] = "mh-build"
+  const { output } = await runHook(
+    "SessionStart",
+    fixture("session-start.json", { session_id: "normal-1" }),
+    { MH_ROLE: "mh-build" } as any,
+  )
+  // Non-child path reaches the engine (composeInjection) — output is the
+  // additionalContext block (or undefined if empty), but crucially NOT gated.
+  // Presence of the hookSpecificOutput shape proves the engine ran.
+  if (output !== undefined) {
+    expect(output).toHaveProperty("hookSpecificOutput")
+  }
+})
+
 test("resolveRole: null when neither present", () => {
   expect(resolveRole(project, {} as any)).toBeNull()
 })

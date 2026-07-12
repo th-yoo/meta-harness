@@ -26,7 +26,7 @@ import fs from "node:fs"
 import path from "node:path"
 import type { EvolutionEngine, SessionState, SessionStateStore } from "../../engine.ts"
 import { parseScoreArgs } from "../../score.ts"
-import type { ClaudeCodeHost } from "./cc-host.ts"
+import { MH_CHILD_ENV, type ClaudeCodeHost } from "./cc-host.ts"
 
 /** The union of hook stdin shapes across the events we install (verified live
  * against claude 2.1.207 — see the brief's raw probe evidence). All event-
@@ -101,6 +101,15 @@ export async function dispatch(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<HookOutput> {
   const { engine, host, state } = ctx
+
+  // ── child-session non-participation (Task L8, mechanism (d)) ──────────────
+  // A detached proposer/promoter/curator `claude -p` runs IN this project, so CC
+  // fires THIS project's hooks for it. runClaudeCodeTaskAgent stamps MH_CHILD=1
+  // on the child's env; every hook process it spawns inherits it. Bail before
+  // ANY engine call (no capture, no injection, no pending-artifact scan) so a
+  // proposer session never records itself — a self-referential capture loop.
+  if (env[MH_CHILD_ENV]) return undefined
+
   const sessionId = input.session_id ?? ""
   const cwd = input.cwd ?? host.projectRoot
   if (!sessionId) return undefined

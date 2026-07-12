@@ -19,7 +19,7 @@
 
 import { EvolutionEngine } from "../../engine.ts"
 import { FileSessionStateStore } from "./file-state.ts"
-import { ClaudeCodeHost } from "./cc-host.ts"
+import { ClaudeCodeHost, MH_CHILD_ENV } from "./cc-host.ts"
 import { dispatch, type HookInput } from "./dispatch.ts"
 
 // Minimal module-scoped Bun ambient (no `bun-types` dep — see bench/exec.ts).
@@ -38,6 +38,13 @@ process.on("uncaughtException", (err) => {
 
 async function main(): Promise<void> {
   const event = process.argv[2] ?? ""
+
+  // Child-session non-participation (Task L8): a detached proposer/promoter/
+  // curator `claude -p` runs IN the project, so CC fires this project's hooks
+  // for it. runClaudeCodeTaskAgent stamps MH_CHILD=1 on the child; exit 0 here
+  // — before any stdin read, engine construction, or dispatch — so the proposer
+  // session never captures itself. (dispatch re-checks as defense in depth.)
+  if (process.env[MH_CHILD_ENV]) return
 
   let input: HookInput = {}
   try {
