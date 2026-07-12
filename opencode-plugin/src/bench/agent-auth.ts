@@ -55,6 +55,13 @@ export interface AgentAuthMount {
 export interface AgentAuthMounts {
   mounts: AgentAuthMount[]
   cleanup: () => void
+  /** Optional container env vars a driver's auth needs alongside its mounts
+   * (task-B3-brief.md) — e.g. a claude-code driver's ANTHROPIC_API_KEY.
+   * opencode's own `prepareAgentAuthMounts` below returns none (auth flows
+   * entirely through the mounts); cmd-run.ts merges this into the
+   * agent-container create env AFTER `apiKeyEnv()`, so a driver's own auth
+   * env wins on key collision. */
+  env?: Record<string, string>
 }
 
 /** Runs a host command and returns its stdout, throwing on nonzero exit.

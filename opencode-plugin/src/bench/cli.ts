@@ -16,6 +16,7 @@ import { LAYER_CHOICES, type LayerName } from "./record.ts"
 import { cmdSplit, type SplitArgs } from "./splits.ts"
 import { cmdReportLoop, type ReportLoopArgs } from "./report-loop.ts"
 import { BenchError } from "./util.ts"
+import { DRIVER_IDS } from "./drivers/index.ts"
 
 const USAGE = `usage: runner.ts [--tb-root PATH] <command> [options]
 
@@ -27,13 +28,13 @@ commands:
               [--model ID] [--variant V] [--k N] [--layers global|account|project|none]
               [--no-store] [--save-all-traj] [--no-harness] [--results-file PATH]
               [--label NAME] [--max-agent-timeout SEC] [--resume] [--agent NAME]
-              [--pin LAYER=vN]... [--staging scripts|runtime]
+              [--pin LAYER=vN]... [--staging scripts|runtime] [--driver ID]
   ab          --layer L --candidate vN [--tasks TASK [TASK ...]] [--task-file PATH]
               [--all] [--split-file PATH] [--model ID] [--variant V] [--k N]
               [--layers global|account|project] [--agent NAME] [--alpha F]
               [--nonregress-margin F] [--min-tasks-before-stop N] [--no-early-stop]
               [--max-agent-timeout SEC] [--resume] [--no-store] [--save-all-traj]
-              [--results-file PATH] [--staging scripts|runtime]
+              [--results-file PATH] [--staging scripts|runtime] [--driver ID]
   judge-audit --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
   split       make|rotate|show [--seed N] [--folds N] [--source FILE]
               [--split-file PATH] [--results PATH]... [--band LO,HI]
@@ -256,6 +257,13 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
       i += 2
       continue
     }
+    if (a === "--driver") {
+      const v = argv[i + 1]
+      if (v === undefined || !(DRIVER_IDS as readonly string[]).includes(v)) return null
+      out.driver = v
+      i += 2
+      continue
+    }
     return null
   }
   return out
@@ -400,6 +408,13 @@ function parseAbArgs(argv: string[]): CmdAbArgs | null {
       const v = argv[i + 1]
       if (v !== "scripts" && v !== "runtime") return null
       out.staging = v
+      i += 2
+      continue
+    }
+    if (a === "--driver") {
+      const v = argv[i + 1]
+      if (v === undefined || !(DRIVER_IDS as readonly string[]).includes(v)) return null
+      out.driver = v
       i += 2
       continue
     }

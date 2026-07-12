@@ -27,3 +27,30 @@ test("cli main: ab with valid flags but a nonexistent candidate -> rc 1 (BenchEr
     errSpy.mockRestore()
   }
 })
+
+// ── --driver (task-B3-brief.md) ───────────────────────────────────────────
+
+test("cli main: ab --driver with an unknown id -> rc 2", async () => {
+  expect(
+    await main(["ab", "--layer", "project-global", "--candidate", "v1", "--all", "--driver", "nope"]),
+  ).toBe(2)
+})
+
+test("cli main: ab --driver opencode (only known id) parses fine and falls through to normal flow (rc 1, nonexistent candidate)", async () => {
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main([
+      "ab",
+      "--layer",
+      "project-global",
+      "--candidate",
+      "v999999",
+      "--all",
+      "--driver",
+      "opencode",
+    ])
+    expect(rc).toBe(1)
+  } finally {
+    errSpy.mockRestore()
+  }
+})

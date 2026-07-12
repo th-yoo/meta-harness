@@ -59,7 +59,7 @@ function setupCandidate(paths: BenchPaths, layer: "project-global", candidate: s
   return root
 }
 
-/** cmdAb computes its provenance env block via `inContainerOpencodeVersion`
+/** cmdAb computes its provenance env block via `inContainerAgentVersion`
  * (a throwaway create+start+exec+rm), independent of the injected
  * `runOneTask` fake — every cmdAb call that runs to completion in this file
  * also injects this fake execFn so that lookup never spawns a real podman. */
@@ -279,4 +279,50 @@ test("cmdAb: partial file is removed after a completed run, and --results-file g
   expect(fs.existsSync(resultsFile)).toBe(true)
   const fromResultsFile = JSON.parse(fs.readFileSync(resultsFile, "utf-8"))
   expect(fromResultsFile.candidate).toBe("v1")
+})
+
+// ── driver selection (task-B3-brief.md) ───────────────────────────────────
+
+test("cmdAb: default (no --driver) resolves the opencode driver, threading it into runOneTask and the verdict's env block", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeTaskTomls(tbRoot, ["t1"])
+  const root = setupCandidate(paths, "project-global", "v1")
+
+  const seenDrivers: unknown[] = []
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, driver) => {
+    seenDrivers.push(driver?.id)
+    return res({ reward: 1, turns: 3 })
+  }
+  await quiet(() =>
+    cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1 }, fake, fakeExec),
+  )
+
+  expect(seenDrivers.every((d) => d === "opencode")).toBe(true)
+  const verdict = readAbVerdict(root, "v1")! as unknown as Record<string, unknown>
+  expect((verdict["env"] as Record<string, unknown>)["driver"]).toBe("opencode")
+})
+
+test("cmdAb: unknown --driver id dies (BenchError) before any task runs", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeTaskTomls(tbRoot, ["t1"])
+  setupCandidate(paths, "project-global", "v1")
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return res({ reward: 1, turns: 3 })
+  }
+  await expect(
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, driver: "nope" } as CmdAbArgs,
+      fake,
+      fakeExec,
+    ),
+  ).rejects.toThrow(BenchError)
+  expect(ran).toBe(false)
 })

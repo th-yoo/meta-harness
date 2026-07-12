@@ -202,27 +202,33 @@ export function harnessHash(harnessMd: string): string {
 }
 
 export interface EnvBlock {
-  opencodeVersion: string
+  agentVersion: string
   pluginSha: string
   harnessHash: string
   maxAgentTimeout: number
   provider: string
+  driver: string
 }
 
 /**
  * Confound-control provenance: the config that, per the infra-noise study,
  * swings outcomes independently of the harness rule under test. Verbatim
- * port of runner.py:1303's env_block, EXCEPT `opencodeVersion`: Python's
+ * port of runner.py:1303's env_block, EXCEPT `agentVersion`: Python's
  * `_opencode_version()` ran `opencode --version` on the host because Python's
  * whole runner executed directly on the host (via bwrap) — host and
  * "runtime environment" were the same machine. Under podman they are NOT
  * (see term-bench2/Containerfile's provenance note) — the task brief
  * resolves this explicitly: record the IN-CONTAINER version. Callers that
  * have one (cmd-run.ts/cmd-ab.ts, via a throwaway container — see
- * `inContainerOpencodeVersion` in cmd-run.ts) pass it as
- * `opencodeVersionOverride`; omitting it falls back to the host lookup
+ * `inContainerAgentVersion` in cmd-run.ts) pass it as
+ * `agentVersionOverride`; omitting it falls back to the host opencode lookup
  * (kept for direct/unit-test callers, and so this function's own default
  * behavior is never silently wrong if a caller forgets to wire the override).
+ *
+ * `driverId` (task-B3-brief.md) is opaque provenance — which AgentDriver
+ * (drivers/index.ts) produced `agentVersion` — not itself used to pick the
+ * version lookup; defaults to "opencode" so every pre-B3 caller (direct/
+ * unit-test callers that never pass it) is unaffected.
  */
 export async function envBlock(
   harnessMd: string,
@@ -230,19 +236,21 @@ export async function envBlock(
   model: string,
   metaRoot: string,
   execFn: SpawnFn = runHost,
-  opencodeVersionOverride?: string,
+  agentVersionOverride?: string,
+  driverId = "opencode",
 ): Promise<EnvBlock> {
-  const [ocVersion, sha] = await Promise.all([
-    opencodeVersionOverride !== undefined ? Promise.resolve(opencodeVersionOverride) : opencodeVersion(execFn),
+  const [ver, sha] = await Promise.all([
+    agentVersionOverride !== undefined ? Promise.resolve(agentVersionOverride) : opencodeVersion(execFn),
     pluginSha(metaRoot, execFn),
   ])
   const provider = model.includes("/") ? model.split("/")[0]! : "unknown"
   return {
-    opencodeVersion: ocVersion,
+    agentVersion: ver,
     pluginSha: sha,
     harnessHash: harnessHash(harnessMd),
     maxAgentTimeout: maxAgentTimeout || 0,
     provider,
+    driver: driverId,
   }
 }
 

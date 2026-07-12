@@ -90,6 +90,9 @@ export interface RunResultsMeta {
   timestamp: string
   taskAgg: Record<string, TaskAgg>
   status: "in_progress" | "complete"
+  /** Driver-id provenance (task-B3-brief.md) — which AgentDriver produced
+   * these results (drivers/index.ts's DRIVER_IDS). */
+  driver: string
 }
 
 /**
@@ -112,6 +115,7 @@ export function writeRunResults(resultsFile: string, meta: RunResultsMeta): void
     pass_rate: nTotal ? round4(nPass / nTotal) : 0.0,
     tasks: meta.taskAgg,
     status: meta.status,
+    driver: meta.driver,
   })
   log(`Results written → ${resultsFile}`)
 }

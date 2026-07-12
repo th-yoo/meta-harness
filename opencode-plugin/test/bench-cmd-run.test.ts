@@ -3,11 +3,12 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
 import type { BenchPaths } from "../src/bench/paths.ts"
-import { cmdRun, runTaskOnce, inContainerOpencodeVersion, type RunOneTaskFn, type RunTaskResult } from "../src/bench/cmd-run.ts"
+import { cmdRun, runTaskOnce, inContainerAgentVersion, type RunOneTaskFn, type RunTaskResult } from "../src/bench/cmd-run.ts"
 import { runOneOracleTask } from "../src/bench/cmd-oracle.ts"
 import { readScore, projectGlobalRoot, createCandidate, writeActive } from "../src/harness-store.ts"
 import { BenchError } from "../src/bench/util.ts"
 import type { AgentAuthMounts } from "../src/bench/agent-auth.ts"
+import { opencodeDriver } from "../src/bench/drivers/opencode.ts"
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "mh-bench-cmd-run-"))
@@ -61,7 +62,7 @@ function result(overrides: Partial<RunTaskResult> = {}): RunTaskResult {
   }
 }
 
-/** cmdRun computes its provenance env block via `inContainerOpencodeVersion`
+/** cmdRun computes its provenance env block via `inContainerAgentVersion`
  * (a throwaway create+start+exec+rm), independent of the injected
  * `runOneTask` fake — every cmdRun call in this file also injects this fake
  * execFn so that lookup never spawns a real podman. */
@@ -241,7 +242,7 @@ test("runTaskOnce: podman create failure -> setup_failed, no crash", async () =>
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   let res: RunTaskResult
   try {
-    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "runtime", execFn, fakeAuthMounts())
+    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "runtime", opencodeDriver, execFn, fakeAuthMounts())
   } finally {
     errSpy.mockRestore()
   }
@@ -267,7 +268,7 @@ test("runTaskOnce: rm is always called, even when an earlier step throws", async
 
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
-    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn, fakeAuthMounts())
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, fakeAuthMounts())
   } finally {
     errSpy.mockRestore()
   }
@@ -313,7 +314,7 @@ test("runTaskOnce: merges prepareAuth()'s mounts into the create argv (config ro
   }
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
-    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn, prepareAuth)
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, prepareAuth)
   } finally {
     errSpy.mockRestore()
   }
@@ -345,7 +346,7 @@ test("runTaskOnce: prepareAuth() failure (missing credentials) -> setup_failed, 
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   let res: RunTaskResult
   try {
-    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn, prepareAuth)
+    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, prepareAuth)
   } finally {
     errSpy.mockRestore()
   }
@@ -376,7 +377,7 @@ test("runTaskOnce: scripts-mode setup_deps.sh exec has no SKIP_APT in its env (O
 
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
-    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn, fakeAuthMounts())
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, fakeAuthMounts())
   } finally {
     errSpy.mockRestore()
   }
@@ -413,7 +414,7 @@ test("runTaskOnce: agent container create argv passes through a *_API_KEY host e
   }
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
-    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn, fakeAuthMounts())
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, fakeAuthMounts())
   } finally {
     errSpy.mockRestore()
     if (prev === undefined) delete process.env["OPENROUTER_API_KEY"]
@@ -422,6 +423,73 @@ test("runTaskOnce: agent container create argv passes through a *_API_KEY host e
 
   expect(createArgv).toContain("-e")
   expect(createArgv).toContain("OPENROUTER_API_KEY=sk-test-123")
+})
+
+// ── driver auth env merge (task-B3-brief.md) ──────────────────────────────
+// A driver's prepareAuth() may return container env (opencode's never does —
+// auth flows entirely through its mounts) that must reach the create argv
+// AFTER apiKeyEnv(), so a driver's own auth env wins on key collision.
+
+test("runTaskOnce: merges prepareAuth()'s env into the create argv AFTER apiKeyEnv() (driver env wins on collision)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const prev = process.env["OPENROUTER_API_KEY"]
+  process.env["OPENROUTER_API_KEY"] = "sk-from-host"
+
+  const prepareAuth = () => ({
+    mounts: [],
+    cleanup: () => {},
+    env: { OPENROUTER_API_KEY: "sk-from-driver", DRIVER_ONLY_KEY: "driver-value" },
+  })
+
+  let createArgv: string[] = []
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "create") createArgv = argv
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      return { rc: 1, stdout: "", stderr: "boom", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, prepareAuth)
+  } finally {
+    errSpy.mockRestore()
+    if (prev === undefined) delete process.env["OPENROUTER_API_KEY"]
+    else process.env["OPENROUTER_API_KEY"] = prev
+  }
+
+  // driver's env wins over apiKeyEnv() on the colliding key ...
+  expect(createArgv).toContain("OPENROUTER_API_KEY=sk-from-driver")
+  expect(createArgv).not.toContain("OPENROUTER_API_KEY=sk-from-host")
+  // ... and a driver-only key still reaches the container.
+  expect(createArgv).toContain("DRIVER_ONLY_KEY=driver-value")
+})
+
+test("runTaskOnce: prepareAuth() returning no env -> create argv unaffected (opencode driver default)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let createArgv: string[] = []
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "create") createArgv = argv
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      return { rc: 1, stdout: "", stderr: "boom", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, fakeAuthMounts())
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(createArgv).not.toContain("-e")
 })
 
 test("runOneOracleTask: oracle container create argv does NOT pass through *_API_KEY host env (oracle never spends LLM tokens)", async () => {
@@ -454,12 +522,12 @@ test("runOneOracleTask: oracle container create argv does NOT pass through *_API
   expect(createArgv).not.toContain("-e")
 })
 
-// ── inContainerOpencodeVersion ────────────────────────────────────────────
+// ── inContainerAgentVersion ────────────────────────────────────────────
 // The provenance version must come from INSIDE the container (a throwaway
 // one, since envBlock is computed once before the per-task loop) — never
 // the host's own opencode install. See record.ts's envBlock header.
 
-test("inContainerOpencodeVersion: execs 'opencode --version' inside a throwaway container, then removes it", async () => {
+test("inContainerAgentVersion: execs the driver's versionArgv inside a throwaway container, then removes it", async () => {
   const dir = tmpDir()
   const paths = fakeBenchPaths(dir)
   const seenArgv: string[][] = []
@@ -470,14 +538,31 @@ test("inContainerOpencodeVersion: execs 'opencode --version' inside a throwaway 
     }
     return { rc: 0, stdout: "", stderr: "", timedOut: false }
   }
-  const version = await inContainerOpencodeVersion(paths, execFn)
+  const version = await inContainerAgentVersion(paths, opencodeDriver, execFn)
   expect(version).toBe("opencode 3.2.1 (in-container)")
   expect(seenArgv.some((a) => a[1] === "create")).toBe(true)
   expect(seenArgv.some((a) => a[1] === "start")).toBe(true)
   expect(seenArgv.some((a) => a[1] === "rm")).toBe(true)
 })
 
-test("inContainerOpencodeVersion: create failure -> 'unknown', still removes the container", async () => {
+test("inContainerAgentVersion: uses driver.versionArgv, not a hardcoded opencode probe", async () => {
+  const dir = tmpDir()
+  const paths = fakeBenchPaths(dir)
+  const fakeDriver = { ...opencodeDriver, id: "fake", versionArgv: ["fake-agent", "--ver"] }
+  const seenArgv: string[][] = []
+  const execFn = async (argv: string[]) => {
+    seenArgv.push(argv)
+    if (argv[1] === "exec" && argv.includes("fake-agent") && argv.includes("--ver")) {
+      return { rc: 0, stdout: "fake-agent 1.0.0\n", stderr: "", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  const version = await inContainerAgentVersion(paths, fakeDriver, execFn)
+  expect(version).toBe("fake-agent 1.0.0")
+  expect(seenArgv.some((a) => a[1] === "exec" && a.includes("fake-agent"))).toBe(true)
+})
+
+test("inContainerAgentVersion: create failure -> 'unknown', still removes the container", async () => {
   const dir = tmpDir()
   const paths = fakeBenchPaths(dir)
   let rmCalled = false
@@ -486,21 +571,21 @@ test("inContainerOpencodeVersion: create failure -> 'unknown', still removes the
     if (argv[1] === "rm") rmCalled = true
     return { rc: 0, stdout: "", stderr: "", timedOut: false }
   }
-  expect(await inContainerOpencodeVersion(paths, execFn)).toBe("unknown")
+  expect(await inContainerAgentVersion(paths, opencodeDriver, execFn)).toBe("unknown")
   expect(rmCalled).toBe(true)
 })
 
-test("inContainerOpencodeVersion: exec throwing -> 'unknown' (never throws)", async () => {
+test("inContainerAgentVersion: exec throwing -> 'unknown' (never throws)", async () => {
   const dir = tmpDir()
   const paths = fakeBenchPaths(dir)
   const execFn = async (argv: string[]) => {
     if (argv[1] === "exec") throw new Error("boom")
     return { rc: 0, stdout: "", stderr: "", timedOut: false }
   }
-  expect(await inContainerOpencodeVersion(paths, execFn)).toBe("unknown")
+  expect(await inContainerAgentVersion(paths, opencodeDriver, execFn)).toBe("unknown")
 })
 
-test("cmdRun: envBlock is populated from inContainerOpencodeVersion, not a host lookup", async () => {
+test("cmdRun: envBlock is populated from inContainerAgentVersion, not a host lookup", async () => {
   const dir = tmpDir()
   const tbRoot = path.join(dir, "tb-root")
   writeTaskTomls(tbRoot, ["a"])
@@ -527,4 +612,71 @@ test("cmdRun: envBlock is populated from inContainerOpencodeVersion, not a host 
   // crash wiring the override through and used the injected execFn (not a
   // real host `opencode --version`, which isn't installed in this sandbox).
   expect(fs.existsSync(resultsFile)).toBe(true)
+})
+
+// ── driver selection (task-B3-brief.md) ───────────────────────────────────
+
+test("cmdRun: default (no --driver) resolves the opencode driver and writes driver:'opencode' into results", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+  const resultsFile = path.join(dir, "run-results.json")
+
+  let seenDriver: unknown
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, driver) => {
+    seenDriver = driver?.id
+    return result()
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], resultsFile, layers: "none" }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(seenDriver).toBe("opencode")
+  const final = JSON.parse(fs.readFileSync(resultsFile, "utf-8"))
+  expect(final.driver).toBe("opencode")
+})
+
+test("cmdRun: --driver opencode (explicit) behaves identically to the default (no flag)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+  const resultsFile = path.join(dir, "run-results.json")
+
+  const fake: RunOneTaskFn = async () => result()
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], resultsFile, layers: "none", driver: "opencode" }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  const final = JSON.parse(fs.readFileSync(resultsFile, "utf-8"))
+  expect(final.driver).toBe("opencode")
+})
+
+test("cmdRun: unknown --driver id dies (BenchError) before any task runs", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return result()
+  }
+
+  await expect(
+    cmdRun(paths, { tasks: ["a"], layers: "none", driver: "nope" }, fake, fakeExec),
+  ).rejects.toThrow(BenchError)
+  expect(ran).toBe(false)
 })

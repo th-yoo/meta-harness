@@ -407,6 +407,33 @@ test("resumeIdentCheck dies on any other field mismatch", () => {
   expect(() => resumeIdentCheck(prev, runIdent)).toThrow(BenchError)
 })
 
+// ── cross-driver --resume refusal (task-B3-brief.md) ──────────────────────
+// cmd-ab.ts's runIdent now carries `driver: driver.id`; resumeIdentCheck
+// compares every runIdent key against the prior partial's value generically
+// (no driver-specific code needed), so a partial written by one driver
+// refuses to resume under a different one automatically. DRIVER_IDS only
+// has "opencode" at this point in the track (claude-code lands in B5), so
+// this is exercised at the resumeIdentCheck unit level with a synthetic
+// ident diff, matching the pattern of the two tests above.
+
+test("resumeIdentCheck dies on a driver mismatch (cross-driver --resume refusal)", () => {
+  const runIdent = {
+    layer: "project-global", candidate: "v3", baseline: "v2",
+    model: "m", k: 2, activeFold: 0, splitHash: "abc123", driver: "opencode",
+  }
+  const prev = { ...runIdent, driver: "claude-code" }
+  expect(() => resumeIdentCheck(prev, runIdent)).toThrow(BenchError)
+})
+
+test("resumeIdentCheck passes when driver matches (same-driver --resume allowed)", () => {
+  const runIdent = {
+    layer: "project-global", candidate: "v3", baseline: "v2",
+    model: "m", k: 2, activeFold: 0, splitHash: "abc123", driver: "opencode",
+  }
+  const prev = { ...runIdent }
+  expect(() => resumeIdentCheck(prev, runIdent)).not.toThrow()
+})
+
 // ── real committed splits.json fixture (read-only!) ─────────────────────
 //
 // term-bench2/splits.json is the live oracle-gate fixture: read-only in this

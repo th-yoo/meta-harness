@@ -17,7 +17,8 @@
  *     from the host (darwin/linux mismatch) — it must be baked into the
  *     bench image (see term-bench2/Containerfile's opencode layer, added in
  *     this same commit).
- *  2. An agent phase (runOpencode) runs between staging and copy-tests.
+ *  2. An agent phase (runAgent, bound to the selected AgentDriver — task-
+ *     B3-brief.md) runs between staging and copy-tests.
  */
 import { randomBytes } from "node:crypto"
 import { join, parse as parsePath } from "node:path"
@@ -25,12 +26,15 @@ import { podman } from "./exec.ts"
 import type { ExecFn } from "./staging.ts"
 import { buildCreateArgv, buildStartArgv, buildExecArgv, buildRmArgv } from "./sandbox.ts"
 import { BENCH_IMAGE, apiKeyEnv, containerName, type BenchPaths } from "./paths.ts"
-import { prepareAgentAuthMounts, type AgentAuthMounts } from "./agent-auth.ts"
+import type { AgentAuthMounts } from "./agent-auth.ts"
 import { selectTasks, taskTimeouts } from "./tasks.ts"
 import { stageTaskRuntime } from "./staging.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
 import { copyTests, runVerifier } from "./verifier.ts"
-import { runOpencode } from "./opencode-run.ts"
+import { runAgent } from "./agent-run.ts"
+import { getDriver } from "./drivers/index.ts"
+import { opencodeDriver } from "./drivers/opencode.ts"
+import type { AgentDriver } from "./drivers/types.ts"
 import { assembleAgentsMd, envBlock, harnessMeta, parsePins, recordToStores } from "./record.ts"
 import { resumeCarryForward, writeRunResults, aggTotals } from "./results.ts"
 import { BenchError, die, log, pyFixed } from "./util.ts"
@@ -57,6 +61,7 @@ export type RunOneTaskFn = (
   agentTimeout: number,
   verifierTimeout: number,
   staging?: StagingMode,
+  driver?: AgentDriver,
 ) => Promise<RunTaskResult>
 
 function round1(x: number): number {
@@ -64,16 +69,22 @@ function round1(x: number): number {
 }
 
 /**
- * The opencode version actually baked into the bench image — via a
+ * The agent CLI version actually baked into the bench image — via a
  * throwaway container (create+start+exec+rm, no mounts, network off), since
  * envBlock's provenance must record what's INSIDE the container the agent
- * phase runs in, not the host's own opencode install (see record.ts's
- * envBlock header for why these differ under podman). Called once per
- * `run`/`ab` invocation, matching Python's env_block being computed once
- * before the per-task loop. "unknown" on any failure (never throws — a
- * provenance field must not abort a run).
+ * phase runs in, not the host's own install (see record.ts's envBlock
+ * header for why these differ under podman). Uses `driver.versionArgv`
+ * (task-B3-brief.md) so this generalizes across drivers instead of
+ * hardcoding `opencode --version`. Called once per `run`/`ab` invocation,
+ * matching Python's env_block being computed once before the per-task loop.
+ * "unknown" on any failure (never throws — a provenance field must not
+ * abort a run).
  */
-export async function inContainerOpencodeVersion(paths: BenchPaths, execFn: ExecFn = podman): Promise<string> {
+export async function inContainerAgentVersion(
+  paths: BenchPaths,
+  driver: AgentDriver,
+  execFn: ExecFn = podman,
+): Promise<string> {
   const name = containerName("provenance", "ocver")
   try {
     const createResult = await execFn(
@@ -82,7 +93,7 @@ export async function inContainerOpencodeVersion(paths: BenchPaths, execFn: Exec
     if (createResult.rc !== 0) return "unknown"
     const startResult = await execFn(buildStartArgv(name))
     if (startResult.rc !== 0) return "unknown"
-    const verResult = await execFn(buildExecArgv(name, ["opencode", "--version"]))
+    const verResult = await execFn(buildExecArgv(name, driver.versionArgv))
     const combined = (verResult.stdout || verResult.stderr || "").trim()
     const firstLine = combined.split("\n")[0] ?? ""
     return firstLine.slice(0, 40) || "unknown"
@@ -107,8 +118,9 @@ export async function runTaskOnce(
   agentTimeout: number,
   verifierTimeout: number,
   staging: StagingMode = "runtime",
+  driver: AgentDriver = opencodeDriver,
   execFn: ExecFn = podman,
-  prepareAuth: () => AgentAuthMounts = prepareAgentAuthMounts,
+  prepareAuth: () => AgentAuthMounts = () => driver.prepareAuth(),
 ): Promise<RunTaskResult> {
   const sessionId = `bench-${task}-${Math.floor(Date.now() / 1000)}-${randomBytes(3).toString("hex")}`
   const taskStart = Date.now()
@@ -145,11 +157,13 @@ export async function runTaskOnce(
             ...auth.mounts,
           ],
           // Provider API key passthrough (additive to auth.json — see
-          // paths.ts's apiKeyEnv doc comment). No explicit env is set on
-          // this create call otherwise, so there's nothing for apiKeyEnv()
-          // to collide with; spread order still puts apiKeyEnv() first so
-          // any future explicit entry here would win on key collision.
-          env: { ...apiKeyEnv() },
+          // paths.ts's apiKeyEnv doc comment), THEN the driver's own auth env
+          // (task-B3-brief.md — e.g. a claude-code driver's ANTHROPIC_API_KEY
+          // mounted alongside its credential files) spread last so it wins on
+          // any key collision with apiKeyEnv(). opencode's own driver never
+          // returns env (auth flows entirely through mounts), so this is a
+          // no-op for the default driver.
+          env: { ...apiKeyEnv(), ...(auth.env ?? {}) },
           network: true,
           workdir: "/app",
         }),
@@ -201,7 +215,8 @@ export async function runTaskOnce(
       }
     }
 
-    const { turnCount, toolUsage, events } = await runOpencode(
+    const { turnCount, toolUsage, events } = await runAgent(
+      driver,
       paths,
       name,
       task,
@@ -258,6 +273,7 @@ export interface CmdRunArgs {
   agent?: string
   pin?: string[]
   staging?: StagingMode
+  driver?: string
 }
 
 export async function cmdRun(
@@ -279,6 +295,7 @@ export async function cmdRun(
   const agent = args.agent || ""
   const staging = args.staging ?? "runtime"
   const maxAgentTimeout = args.maxAgentTimeout ?? 0
+  const driver = getDriver(args.driver ?? "opencode")
 
   if (args.pin && args.pin.length > 0 && (args.noHarness || layers === "none")) {
     die("--pin cannot be combined with --no-harness / --layers none")
@@ -307,8 +324,8 @@ export async function cmdRun(
   }
 
   const harnessMetaVal = layers !== "none" ? harnessMeta(layers, paths.metaRoot, agent, pins) : { layers: "none" }
-  const ocVersion = await inContainerOpencodeVersion(paths, execFn)
-  const runEnv = await envBlock(harnessMd, maxAgentTimeout, model, paths.metaRoot, undefined, ocVersion)
+  const agentVersion = await inContainerAgentVersion(paths, driver, execFn)
+  const runEnv = await envBlock(harnessMd, maxAgentTimeout, model, paths.metaRoot, undefined, agentVersion, driver.id)
 
   const { taskAgg, doneTasks } = resumeCarryForward(resultsFile, Boolean(args.resume))
   const results: { task: string; k: number; reward: number; elapsed: number }[] = []
@@ -328,7 +345,7 @@ export async function cmdRun(
     for (let ki = 0; ki < k; ki++) {
       if (k > 1) log(`  -- run ${ki + 1}/${k} --`)
 
-      const res = await runOneTask(paths, task, model, variant, harnessMd, agentTimeout, verifierTimeout, staging)
+      const res = await runOneTask(paths, task, model, variant, harnessMd, agentTimeout, verifierTimeout, staging, driver)
 
       if (res.error === "setup_failed") {
         results.push({ task, k: ki + 1, reward: 0, elapsed: 0.0 })
@@ -373,6 +390,7 @@ export async function cmdRun(
           timestamp: runStartTs,
           taskAgg,
           status: "in_progress",
+          driver: driver.id,
         })
       }
     }
@@ -405,6 +423,7 @@ export async function cmdRun(
       timestamp: runStartTs,
       taskAgg,
       status: "complete",
+      driver: driver.id,
     })
     const [np, nt] = aggTotals(taskAgg)
     log(nt ? `FINAL: ${np}/${nt} passed (${pyFixed((100 * np) / nt, 1)}%)` : "FINAL: no tasks")

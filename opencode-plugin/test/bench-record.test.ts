@@ -216,7 +216,7 @@ test("harnessHash: sha256 hex, first 16 chars, deterministic", () => {
   expect(h1).toMatch(/^[0-9a-f]{16}$/)
 })
 
-test("envBlock: assembles opencodeVersion/pluginSha/harnessHash/maxAgentTimeout/provider", async () => {
+test("envBlock: assembles agentVersion/pluginSha/harnessHash/maxAgentTimeout/provider/driver", async () => {
   let calls = 0
   const execFn = async (argv: string[]): Promise<ExecResult> => {
     calls++
@@ -225,13 +225,21 @@ test("envBlock: assembles opencodeVersion/pluginSha/harnessHash/maxAgentTimeout/
   }
   const env = await envBlock("harness text", 600, "anthropic/claude-sonnet-4-6", "/repo", execFn)
   expect(env).toEqual({
-    opencodeVersion: "opencode 9.9.9",
+    agentVersion: "opencode 9.9.9",
     pluginSha: "deadbee",
     harnessHash: harnessHash("harness text"),
     maxAgentTimeout: 600,
     provider: "anthropic",
+    driver: "opencode",
   })
   expect(calls).toBe(2)
+})
+
+test("envBlock: driverId param defaults to 'opencode' but is carried through verbatim when supplied", async () => {
+  const execFn = async (): Promise<ExecResult> => ({ rc: 0, stdout: "v1\n", stderr: "", timedOut: false })
+  const env = await envBlock("h", 0, "anthropic/claude-x", "/repo", execFn, "some-version", "fake-driver")
+  expect(env.driver).toBe("fake-driver")
+  expect(env.agentVersion).toBe("some-version")
 })
 
 test("envBlock: bare (unprefixed) model -> provider 'unknown'; maxAgentTimeout 0 stays 0", async () => {
@@ -240,9 +248,9 @@ test("envBlock: bare (unprefixed) model -> provider 'unknown'; maxAgentTimeout 0
   expect(env.maxAgentTimeout).toBe(0)
 })
 
-test("envBlock: opencodeVersionOverride bypasses the (host) opencodeVersion lookup entirely", async () => {
+test("envBlock: agentVersionOverride bypasses the (host) opencodeVersion lookup entirely", async () => {
   // cmd-run.ts/cmd-ab.ts pass the IN-CONTAINER version here (see
-  // inContainerOpencodeVersion in cmd-run.ts) — the host lookup must not
+  // inContainerAgentVersion in cmd-run.ts) — the host lookup must not
   // even be attempted when an override is supplied.
   let opencodeCalls = 0
   const execFn = async (argv: string[]): Promise<ExecResult> => {
@@ -250,7 +258,7 @@ test("envBlock: opencodeVersionOverride bypasses the (host) opencodeVersion look
     return { rc: 0, stdout: "deadbee\n", stderr: "", timedOut: false }
   }
   const env = await envBlock("h", 0, "anthropic/claude-x", "/repo", execFn, "opencode 9.9.9 (in-container)")
-  expect(env.opencodeVersion).toBe("opencode 9.9.9 (in-container)")
+  expect(env.agentVersion).toBe("opencode 9.9.9 (in-container)")
   expect(opencodeCalls).toBe(0) // host `opencode --version` never invoked
   expect(env.pluginSha).toBe("deadbee") // pluginSha (git) still runs on the host
 })

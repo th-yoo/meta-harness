@@ -25,7 +25,8 @@ import { join } from "node:path"
 import type { StagingMode } from "./cmd-oracle.ts"
 import { podman } from "./exec.ts"
 import type { ExecFn } from "./staging.ts"
-import { runTaskOnce, inContainerOpencodeVersion, type RunOneTaskFn } from "./cmd-run.ts"
+import { runTaskOnce, inContainerAgentVersion, type RunOneTaskFn } from "./cmd-run.ts"
+import { getDriver } from "./drivers/index.ts"
 import { assembleAgentsMd, envBlock, sessionRecord } from "./record.ts"
 import { layerStoreRoots, type LayerName } from "./record.ts"
 import { selectTasks, taskTimeouts } from "./tasks.ts"
@@ -84,6 +85,7 @@ export interface CmdAbArgs {
   saveAllTraj?: boolean
   resultsFile?: string
   staging?: StagingMode
+  driver?: string
 }
 
 function round4(x: number): number {
@@ -106,6 +108,7 @@ export async function cmdAb(
   const noStore = Boolean(args.noStore)
   const staging = args.staging ?? "runtime"
   const maxAgentTimeout = args.maxAgentTimeout ?? 0
+  const driver = getDriver(args.driver ?? "opencode")
 
   if (!/^v\d+$/.test(candidate)) die(`--candidate must look like vN, got '${candidate}'`)
   if ((layer === "account-role" || layer === "project-role") && !agent) {
@@ -171,8 +174,8 @@ export async function cmdAb(
   // Compose both arms once (they differ in exactly one layer by construction).
   const harnessA = assembleAgentsMd(layers, paths.metaRoot, agent, {})
   const harnessB = assembleAgentsMd(layers, paths.metaRoot, agent, { [layer]: candidate })
-  const ocVersion = await inContainerOpencodeVersion(paths, execFn)
-  const envB = await envBlock(harnessB, maxAgentTimeout, model, paths.metaRoot, undefined, ocVersion)
+  const agentVersion = await inContainerAgentVersion(paths, driver, execFn)
+  const envB = await envBlock(harnessB, maxAgentTimeout, model, paths.metaRoot, undefined, agentVersion, driver.id)
 
   const cfg: DecisionConfig = {
     alpha: args.alpha ?? 0.05,
@@ -193,6 +196,7 @@ export async function cmdAb(
     k,
     activeFold,
     splitHash: splitHash(heldInTasks, heldOutTasks),
+    driver: driver.id,
   }
 
   log(
@@ -299,9 +303,9 @@ export async function cmdAb(
       for (let ki = 0; ki < k; ki++) {
         if (k > 1) log(`  -- pair ${ki + 1}/${k} --`)
         log("  [arm A: active]")
-        const resA = await runOneTask(paths, task, model, variant, harnessA, agentTimeout, verifierTimeout, staging)
+        const resA = await runOneTask(paths, task, model, variant, harnessA, agentTimeout, verifierTimeout, staging, driver)
         log("  [arm B: candidate]")
-        const resB = await runOneTask(paths, task, model, variant, harnessB, agentTimeout, verifierTimeout, staging)
+        const resB = await runOneTask(paths, task, model, variant, harnessB, agentTimeout, verifierTimeout, staging, driver)
 
         if (resA.error === "setup_failed" || resB.error === "setup_failed") {
           tr.error = "setup_failed"
