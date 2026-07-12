@@ -73,3 +73,7 @@ writable-`/usr/local/bin` farm hold under concurrency. Also unit-covered:
 Each sandbox binds all of `$HOME`, so with N concurrent runs each run's agent can
 in principle see the others' `~/bench-*` work trees. Fine for trusted baselines;
 not an adversarial-isolation guarantee.
+
+## Running with multiple agent drivers
+
+The runner supports pluggable agent drivers via `--driver {opencode|claude-code}` (default: `opencode`). Each driver runs a different agent binary (e.g. the opencode CLI vs. the Claude Code CLI) but implements the same contract for output parsing, tool tracking, and pass/fail classification. This allows evaluating different agents on the same task set. See [usage-manual.md](../docs/usage-manual.md) for driver details and authentication setup.

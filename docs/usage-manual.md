@@ -355,6 +355,15 @@ Read fresh every scored session (no restart). File need not exist; defaults appl
 
 Models must be `provider/model` — a bare name fails resolution under oauth.
 
+### Choosing an agent driver — `--driver`
+
+The `run` and `ab` subcommands accept `--driver {opencode|claude-code}` (default: `opencode`). The driver determines which agent binary runs the tasks in the bench container:
+
+- **`--driver opencode`** (default) — runs `opencode run` inside the container. Model is specified as `<provider>/<model>` (e.g. `anthropic/claude-sonnet-4-6`).
+- **`--driver claude-code`** — runs `claude` (the Claude Code CLI) inside the container. **Accepts only `anthropic/*` models**; other providers are rejected with an error. Model is specified the same way (`anthropic/claude-haiku-4-5-20251001`), and the prefix is stripped for the container invocation.
+
+Both drivers implement the same contract (output parsing, tool tracking, attempt classification) so results are interchangeable within a single run/ab invocation — **`ab` enforces same-driver for both arms** (candidate and active), and **cross-driver `--resume` is refused** (resuming a claude-code run with `--driver opencode` or vice versa will error).
+
 ### Configuring providers (OpenRouter and others)
 
 Anthropic is already wired via the `opencode-claude-auth` plugin (it reads Claude
@@ -381,6 +390,35 @@ env), so it silently fails there. Put keys in `auth.json`.
   the `anthropic` entry, so a hand-added `openrouter` key is preserved across its
   5-minute background sync.
 - **Get an OpenRouter key:** https://openrouter.ai/settings/keys
+
+### Claude Code agent container authentication
+
+When `--driver claude-code` is used, the `claude` binary in the container needs Anthropic credentials. Two paths are supported:
+
+**Path 1: API key (durable, zero mounts)**
+
+Set `ANTHROPIC_API_KEY` on the host, e.g. `export ANTHROPIC_API_KEY=sk-ant-...`. The runner forwards it into the container as an env var, and claude-code uses it instead of oauth:
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... bun term-bench2/runner.ts run --driver claude-code --model anthropic/claude-haiku-4-5 --tasks hello_world
+```
+
+This is the simplest path for unattended runs and avoids any mount setup.
+
+**Path 2: OAuth (refresh tokens, platform-specific)**
+
+If `ANTHROPIC_API_KEY` is not set, the runner exports the host's Claude Code credentials into the container. The exact mechanism depends on the OS:
+
+- **Linux** — The runner mounts the real `~/.claude/` directory read-write into the container at `/root/.claude`. The claude-code CLI reads `.credentials.json` (which already exists on linux hosts) and can rotate refresh tokens. Works out-of-the-box after `claude` or `opencode auth login` have been run on the host.
+- **macOS** — Claude Code stores credentials in the Keychain (no `.credentials.json` on disk). The runner exports the Keychain item via `security find-generic-password -s "Claude Code-credentials" -w` into a temporary directory, mounts it read-write at `/root/.claude`, and shreds (overwrites with zeros) it after the run. Any refresh-token rotation inside the container is discarded — acceptable for single-task runs, but not for sequential multi-task workloads. For long-running benches, use the API key path (above) instead.
+
+**Container setup (both paths)**
+
+Both auth paths require:
+- A onboarding-gate file `/root/.claude.json` containing `{"hasCompletedOnboarding":true}` (fixture-verified to be necessary for headless runs).
+- The env var `IS_SANDBOX=1`, which tells claude-code to accept `--dangerously-skip-permissions` while running as root inside the container.
+
+These are set automatically by the runner; no manual configuration is needed.
 
 ### Runner subcommands — `bun term-bench2/runner.ts <sub>` (top-level `--tb-root PATH`)
 
@@ -456,6 +494,63 @@ Four layer roots (injection order general → specific → env snapshot):
 - `XDG_CONFIG_HOME` — overrides the `~/.config` base for the account store + config.
 - `MH_DEBUG=1` — runner dumps opencode stdout/stderr to `/tmp/mh_oc_<task>.txt` when a run
   produces 0 turns (debugging silent agent failures).
+
+### Adding a driver
+
+To add a new agent driver (e.g. a different CLI tool or agent framework), implement the AgentDriver interface:
+
+**1. Create a driver file**
+
+Add `opencode-plugin/src/bench/drivers/<id>.ts` implementing `AgentDriver`:
+
+```typescript
+export const myDriver: AgentDriver = {
+  id: "my-agent",
+  buildArgv: (opts) => { /* return ['bin', '--arg', opts.model, opts.instruction] */ },
+  modelArg: (canonicalModel) => { /* validate/transform provider/model slug */ },
+  harness: { kind: "workspace-file", filename: "AGENTS.md" },  // or "env-var"
+  parseOutput: (stdout) => { /* return TrajEvent[] */ },
+  classifyAttempt: (stdout, stderr) => { /* return "done" | "auth" | "transient" */ },
+  prepareAuth: () => { /* return AgentAuthMounts */ },
+  versionArgv: ["bin", "--version"],
+}
+```
+
+See `drivers/opencode.ts` and `drivers/claude-code.ts` as references.
+
+**2. Register the driver**
+
+Edit `opencode-plugin/src/bench/drivers/index.ts`:
+
+```typescript
+import { myDriver } from "./my-agent.ts"
+
+export const DRIVER_IDS = ["opencode", "claude-code", "my-agent"] as const
+
+export function getDriver(id: string): AgentDriver {
+  if (id === "my-agent") return myDriver
+  // ... existing cases ...
+}
+```
+
+**3. Add fixtures**
+
+Create test fixtures in `opencode-plugin/test/fixtures/drivers/my-agent/` matching the success/auth-error/transient/tool-error cases. These are used by the contract suite.
+
+**4. Add Containerfile layer**
+
+Edit `term-bench2/Containerfile` to install your agent binary (if not already available):
+
+```dockerfile
+RUN apt-get install -y my-agent
+# or: COPY my-agent /usr/local/bin/
+```
+
+**5. Contract suite**
+
+Add a row to the `DRIVER_CASES` table in `opencode-plugin/test/bench-drivers-contract.test.ts`. The contract suite auto-validates every registered DRIVER_IDS entry via parameterized tests, so new drivers are immediately tested for output parsing, model-arg handling, and attempt classification across success/auth/transient/timeout scenarios.
+
+The output contract is language-agnostic: return `TrajEvent[]` where each event is `{t: "tool" | "text" | "error", ...}`, count turns from a success result, and classify attempts by scanning stdout/stderr against `AUTH_ERROR_RE` and `TRANSIENT_RE` (see `agent-run.ts`).
 
 ---
 

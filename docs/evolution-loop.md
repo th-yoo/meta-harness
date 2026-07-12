@@ -165,10 +165,10 @@ harness into `AGENTS.md`. Relevant subcommands:
 
 - `run` — run tasks through opencode, score, optionally record into the store.
   Flags added for evolution: `--agent NAME` (compose role layers), `--pin
-  LAYER=vN` (evaluate a specific candidate instead of the active version).
+  LAYER=vN` (evaluate a specific candidate instead of the active version), `--driver ID` (choose the agent binary).
 - `ab` — the **account-layer referee**. Runs each task through two arms — arm A =
   all-active composition, arm B = the same but the target layer pinned to the
-  candidate — interleaved per pair, then writes the verdict.
+  candidate — interleaved per pair, then writes the verdict. Both arms use the same driver by construction. The store records (TrajEvent, ToolUsage, SessionRecord, ab-verdict) are driver-invariant; driver provenance (which agent ran) is stored in the trace's environment snapshot.
 
 ### `ab-verdict.json` — the cross-language contract
 
