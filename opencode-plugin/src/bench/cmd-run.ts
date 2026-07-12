@@ -226,8 +226,15 @@ export async function runTaskOnce(
       error: turnCount === 0 ? "agent_no_output" : "",
     }
   } finally {
-    await execFn(buildRmArgv(name))
-    auth?.cleanup()
+    // auth?.cleanup() shreds the darwin Keychain-exported .credentials.json (a
+    // live refresh token) — it MUST run even if `podman rm` throws (Bun.spawn
+    // throws synchronously on a missing binary), so guard the rm in its own
+    // try/finally rather than letting a teardown throw skip the credential shred.
+    try {
+      await execFn(buildRmArgv(name))
+    } finally {
+      auth?.cleanup()
+    }
   }
 }
 
