@@ -51,6 +51,33 @@ export const REALWORK_RE = /turns=[1-9]\d*|opencode timed out after|reward=1/
 export const TRANSIENT_RE =
   /overloaded|unexpected server error|rate.?limit|429|503|timeout|connection|temporarily unavailable|apicallerror/i
 
+/** Logged instead of TRANSIENT_MARK when an auth failure is detected — an
+ * expired oauth token / bad api key can never recover by retrying, so this
+ * marks a fail-fast path rather than a retry-with-backoff one. Distinct from
+ * TRANSIENT_MARK so retry-provider.ts's TRANSIENT_MARK scan never confuses
+ * the two (an auth failure must never read as "provider degradation"). */
+export const AUTH_FAIL_MARK = "authentication error"
+
+/** Unrecoverable-auth-failure detection — root-caused live: an expired
+ * auth.json oauth token surfaces from `opencode run` as a `{"type":"error"}`
+ * event whose message is an ordinary 401/"unauthorized"/"invalid api key"
+ * string, indistinguishable from a transient provider hiccup by shape alone
+ * (both are "an error event with no activity"). This regex is what tells
+ * the two apart so an auth failure fails fast instead of being retried
+ * MAX_ATTEMPTS times as "transient provider error" (the bug this module
+ * fixes — see opencode-run.ts's file header / task-authfix-brief.md).
+ *
+ * Deliberately does NOT include a bare `\b403\b` alternative: real task
+ * output legitimately contains standalone "403" (e.g. "403 lines
+ * processed") with nothing to do with auth, and matching it here would
+ * wrongly fail-fast a normal run. "forbidden" is included instead, since
+ * genuine 403-as-auth-failure text virtually always names itself as such
+ * ("403 Forbidden", "Forbidden: ...") rather than appearing as a bare
+ * number. 401 IS matched bare — in practice it does not collide with
+ * ordinary task output the way "403" can. */
+export const AUTH_ERROR_RE =
+  /\b401\b|authentication[_ ]?error|unauthorized|forbidden|invalid[_ ]?(?:api[_ ]?key|token|credential)|oauth|token[_ ]?expired|expired[_ ]?token|permission[_ ]?denied/i
+
 /** Tools whose non-zero exit / "error" status counts as a tool error —
  * runner.py:906's EXECUTION_TOOLS. */
 export const EXECUTION_TOOLS = new Set(["bash", "task"])
@@ -129,6 +156,17 @@ export function normalizeEvents(ndjsonText: string, maxEvents = 400): TrajEvent[
 
 // ── run_opencode ─────────────────────────────────────────────────────────
 
+// FOLLOW-UP (caller-abort bonus, deferred — task-authfix-brief.md's bonus
+// section): today an auth failure fails fast per-arm (this module) but the
+// caller (cmd-run.ts's cmd_run loop, and cmd-ab.ts's own loop over the same
+// injectable runTaskOnce) still moves on to the NEXT task/arm, each failing
+// fast again — no more infinite retry, but still one wasted attempt per
+// remaining task. Aborting the WHOLE run on first auth failure would need an
+// authFailed flag threaded through RunTaskResult (cmd-run.ts) AND through
+// cmd-ab.ts's separate loop (which has its own early-stop/regression-stats
+// control flow to reconcile this with) — more than a trivially-clean change,
+// so left as this follow-up rather than forced. Not implemented.
+
 export interface RunOpencodeResult {
   turnCount: number
   toolUsage: ToolUsage
@@ -205,6 +243,22 @@ export async function runOpencode(
     // assistant/tool activity (step_finish/text/tool_use).
     const hadErrorEvent = out.includes('"type":"error"')
     const hadActivity = out.includes('"type":"step_finish"') || out.includes('"type":"tool_use"')
+
+    // Auth failures take PRECEDENCE over the transient path: an expired
+    // oauth token / bad api key can never recover by retrying, so it must
+    // fail fast with an actionable message rather than being classified as
+    // "transient provider error" and burned through MAX_ATTEMPTS retries
+    // (the root cause this module fixes — the old first clause below
+    // treated ANY failed-with-no-activity run as transient, auth included).
+    const isAuth = ((hadErrorEvent || result.rc !== 0) && !hadActivity) && AUTH_ERROR_RE.test(out)
+    if (isAuth) {
+      log(
+        `  ${AUTH_FAIL_MARK} — the model credential was rejected (auth.json oauth token likely expired). ` +
+          "Refresh it (run a host `opencode run`, or `opencode auth login`), or set a long-lived *_API_KEY. NOT retrying.",
+      )
+      break
+    }
+
     const transient = (hadErrorEvent && !hadActivity) || (result.rc !== 0 && !hadActivity && TRANSIENT_RE.test(out))
 
     if (transient && attempt < MAX_ATTEMPTS) {

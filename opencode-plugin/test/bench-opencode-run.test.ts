@@ -11,6 +11,8 @@ import {
   REALWORK_RE,
   TRANSIENT_RE,
   EXECUTION_TOOLS,
+  AUTH_ERROR_RE,
+  AUTH_FAIL_MARK,
 } from "../src/bench/opencode-run.ts"
 import type { BenchPaths } from "../src/bench/paths.ts"
 import type { ExecResult } from "../src/bench/exec.ts"
@@ -233,6 +235,116 @@ test("runOpencode: exhausts MAX_ATTEMPTS(4) on persistent transient errors, stil
     errSpy.mockRestore()
   }
   expect(calls).toBe(4)
+})
+
+// ── auth-error fail-fast (expired-oauth 401 must NOT be retried as transient) ─
+
+test.each([
+  ["401", '{"type":"error","error":{"data":{"message":"401 Unauthorized"}}}'],
+  ["authentication_error", '{"type":"error","error":{"name":"authentication_error"}}'],
+  ["invalid api key", '{"type":"error","error":{"data":{"message":"invalid api key provided"}}}'],
+  ["oauth", '{"type":"error","error":{"data":{"message":"oauth token rejected"}}}'],
+])("runOpencode: auth error (%s) fails fast — no retry, 0 turns, logs AUTH_FAIL_MARK not TRANSIENT_MARK", async (_label, out) => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "x")
+  const paths = fakeBenchPaths(tbRoot)
+
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    return ok(out, 1)
+  }
+  const sleeps: number[] = []
+  const sleepFn = async (s: number) => {
+    sleeps.push(s)
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result
+  try {
+    result = await runOpencode(paths, "c1", "t", "m", "", 30, "", execFn, sleepFn)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes(AUTH_FAIL_MARK))).toBe(true)
+    expect(messages.some((m) => m.includes(TRANSIENT_MARK))).toBe(false)
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(calls).toBe(1) // no retry — auth can never recover
+  expect(sleeps).toEqual([]) // no backoff
+  expect(result.turnCount).toBe(0)
+})
+
+test("runOpencode: auth error takes precedence over transient even if TRANSIENT_RE would also match", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "x")
+  const paths = fakeBenchPaths(tbRoot)
+
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    // Carries BOTH an auth marker and a transient marker ("timeout") — auth
+    // must win, never be logged/retried as transient.
+    return ok('{"type":"error","error":{"data":{"message":"unauthorized: connection timeout"}}}', 1)
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result
+  try {
+    result = await runOpencode(paths, "c1", "t", "m", "", 30, "", execFn, async () => {})
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes(AUTH_FAIL_MARK))).toBe(true)
+    expect(messages.some((m) => m.includes(TRANSIENT_MARK))).toBe(false)
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(calls).toBe(1)
+  expect(result.turnCount).toBe(0)
+})
+
+test("runOpencode: genuine transient error (unchanged) never logs AUTH_FAIL_MARK", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "x")
+  const paths = fakeBenchPaths(tbRoot)
+
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    if (calls < 4) return ok('{"type":"error","error":{"name":"Overloaded"}}', 1)
+    return ok(JSON.stringify({ type: "step_finish", part: { reason: "stop" } }))
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const result = await runOpencode(paths, "c1", "t", "m", "", 30, "", execFn, async () => {})
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes(TRANSIENT_MARK))).toBe(true)
+    expect(messages.some((m) => m.includes(AUTH_FAIL_MARK))).toBe(false)
+    expect(result.turnCount).toBe(1)
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(calls).toBe(4)
+})
+
+test("AUTH_ERROR_RE: matches known auth-failure text", () => {
+  for (const s of ["401", "authentication_error", "invalid api key", "token expired", "unauthorized"]) {
+    expect(AUTH_ERROR_RE.test(s)).toBe(true)
+  }
+})
+
+test("AUTH_ERROR_RE: does not false-positive on benign task output", () => {
+  for (const s of ["reward=1", "403 lines processed"]) {
+    expect(AUTH_ERROR_RE.test(s)).toBe(false)
+  }
+})
+
+test("marker constants: AUTH_FAIL_MARK is distinct from TRANSIENT_MARK and does not match REALWORK_RE", () => {
+  expect(AUTH_FAIL_MARK).not.toBe(TRANSIENT_MARK)
+  expect(REALWORK_RE.test(AUTH_FAIL_MARK)).toBe(false)
 })
 
 test("runOpencode: instruction.md missing dies (BenchError)", async () => {
