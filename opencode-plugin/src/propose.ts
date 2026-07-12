@@ -349,7 +349,7 @@ export async function triggerPromote(
   source: StoreLayer,   // project-global | project-role
   target: StoreLayer,   // account-global | account-role
 ): Promise<void> {
-  if (inFlight.has(target.root)) {
+  if (inFlight.has(target.root) || host.proposerInFlight?.(target.root)) {
     await host.log("info", `promote skipped: ${target.scope} already has a session in flight`)
     return
   }
