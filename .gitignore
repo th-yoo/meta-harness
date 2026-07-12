@@ -6,3 +6,5 @@ term-bench2/.prep-installed.txt
 term-bench2/results/
 uv.lock
 .superpowers/
+data/
+logs/

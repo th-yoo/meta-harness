@@ -76,4 +76,4 @@ not an adversarial-isolation guarantee.
 
 ## Running with multiple agent drivers
 
-The runner supports pluggable agent drivers via `--driver {opencode|claude-code}` (default: `opencode`). Each driver runs a different agent binary (e.g. the opencode CLI vs. the Claude Code CLI) but implements the same contract for output parsing, tool tracking, and pass/fail classification. This allows evaluating different agents on the same task set. See [usage-manual.md](../docs/usage-manual.md) for driver details and authentication setup.
+The runner supports pluggable agent drivers via `--driver {opencode|claude-code}` (default: `opencode`). Each driver runs a different agent binary (e.g. the opencode CLI vs. the Claude Code CLI) but implements the same contract for output parsing, tool tracking, and attempt classification (the driver classifies attempts for the retry loop; the verifier decides task success). This allows evaluating different agents on the same task set. See [usage-manual.md](../docs/usage-manual.md) for driver details and authentication setup.

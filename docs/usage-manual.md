@@ -362,7 +362,7 @@ The `run` and `ab` subcommands accept `--driver {opencode|claude-code}` (default
 - **`--driver opencode`** (default) — runs `opencode run` inside the container. Model is specified as `<provider>/<model>` (e.g. `anthropic/claude-sonnet-4-6`).
 - **`--driver claude-code`** — runs `claude` (the Claude Code CLI) inside the container. **Accepts only `anthropic/*` models**; other providers are rejected with an error. Model is specified the same way (`anthropic/claude-haiku-4-5-20251001`), and the prefix is stripped for the container invocation.
 
-Both drivers implement the same contract (output parsing, tool tracking, attempt classification) so results are interchangeable within a single run/ab invocation — **`ab` enforces same-driver for both arms** (candidate and active), and **cross-driver `--resume` is refused** (resuming a claude-code run with `--driver opencode` or vice versa will error).
+Both drivers implement the same contract (output parsing, tool tracking, attempt classification) so results are interchangeable within a single run/ab invocation — **`ab` enforces same-driver for both arms** (candidate and active). For `ab`, cross-driver `--resume` is refused (driver is part of the run identity, so resuming a claude-code run with `--driver opencode` or vice versa will error). For `run`, `--resume` does NOT check the driver — completed tasks from a prior results file are carried forward regardless of which driver produced them, so use distinct `--results-file` paths per driver when comparing.
 
 ### Configuring providers (OpenRouter and others)
 
@@ -415,7 +415,7 @@ If `ANTHROPIC_API_KEY` is not set, the runner exports the host's Claude Code cre
 **Container setup (both paths)**
 
 Both auth paths require:
-- A onboarding-gate file `/root/.claude.json` containing `{"hasCompletedOnboarding":true}` (fixture-verified to be necessary for headless runs).
+- An onboarding-gate file `/root/.claude.json` containing `{"hasCompletedOnboarding":true}` (fixture-verified to be necessary for headless runs).
 - The env var `IS_SANDBOX=1`, which tells claude-code to accept `--dangerously-skip-permissions` while running as root inside the container.
 
 These are set automatically by the runner; no manual configuration is needed.
@@ -426,13 +426,13 @@ These are set automatically by the runner; no manual configuration is needed.
   dry-run unless `--apply`.
 - **`run`** `--tasks T… | --task-file P | --all`, `--model` (default
   `anthropic/claude-sonnet-4-6`), `--variant`, `--k` (1), `--layers {global,account,project,none}`
-  (global), `--agent NAME`, `--pin LAYER=vN` (repeatable), `--no-store`, `--save-all-traj`,
+  (global), `--agent NAME`, `--pin LAYER=vN` (repeatable), `--driver ID` (opencode), `--no-store`, `--save-all-traj`,
   `--no-harness`, `--results-file P` (implies `--no-store`), `--label`, `--max-agent-timeout SEC`,
   `--resume`.
 - **`ab`** `--layer {account-global,project-global,account-role,project-role}` + `--candidate vN`
   (both required); split via `--split-file` (default `term-bench2/splits.json`) or legacy
   `--tasks/--task-file/--all` (never accepts); `--model` (sonnet-4-6), `--variant`, `--k` (2),
-  `--layers {global,account,project}`, `--agent` (required for role layers), `--alpha` (0.05),
+  `--layers {global,account,project}`, `--agent` (required for role layers), `--driver ID` (opencode), `--alpha` (0.05),
   `--nonregress-margin` (0.05), `--min-tasks-before-stop` (12), `--no-early-stop`,
   `--max-agent-timeout`, `--resume`, `--no-store`, `--save-all-traj`, `--results-file`.
 - **`split`** `{make,rotate,show}` `--seed` (42) `--folds` (4) `--source` (`baseline-tasks.txt`) `--split-file`, `--results PATH` (repeatable, enables difficulty band), `--band LO,HI` (0.2,0.8), `--sentinels N` (3), `--sentinel-hi HI` (0.9).
@@ -508,9 +508,9 @@ export const myDriver: AgentDriver = {
   id: "my-agent",
   buildArgv: (opts) => { /* return ['bin', '--arg', opts.model, opts.instruction] */ },
   modelArg: (canonicalModel) => { /* validate/transform provider/model slug */ },
-  harness: { kind: "workspace-file", filename: "AGENTS.md" },  // or "env-var"
-  parseOutput: (stdout) => { /* return TrajEvent[] */ },
-  classifyAttempt: (stdout, stderr) => { /* return "done" | "auth" | "transient" */ },
+  harness: { kind: "workspace-file", filename: "AGENTS.md" },  // or {kind: "argv-flags", buildFlags(harnessMd): string[]}
+  parseOutput: (stdout) => { /* return AgentRunOutput ({turnCount, toolUsage, events}) */ },
+  classifyAttempt: (result: ExecResult) => { /* return "done" | "auth" | "transient" */ },
   prepareAuth: () => { /* return AgentAuthMounts */ },
   versionArgv: ["bin", "--version"],
 }
@@ -550,7 +550,7 @@ RUN apt-get install -y my-agent
 
 Add a row to the `DRIVER_CASES` table in `opencode-plugin/test/bench-drivers-contract.test.ts`. The contract suite auto-validates every registered DRIVER_IDS entry via parameterized tests, so new drivers are immediately tested for output parsing, model-arg handling, and attempt classification across success/auth/transient/timeout scenarios.
 
-The output contract is language-agnostic: return `TrajEvent[]` where each event is `{t: "tool" | "text" | "error", ...}`, count turns from a success result, and classify attempts by scanning stdout/stderr against `AUTH_ERROR_RE` and `TRANSIENT_RE` (see `agent-run.ts`).
+The output contract is language-agnostic: `parseOutput` returns `AgentRunOutput` with fields `turnCount: number`, `toolUsage: ToolUsage`, and `events: TrajEvent[]` (each event: `{t: "tool" | "text" | "error", ...}`); classify attempts by scanning stdout/stderr against `AUTH_ERROR_RE` and `TRANSIENT_RE` (see `agent-run.ts`).
 
 ---
 
