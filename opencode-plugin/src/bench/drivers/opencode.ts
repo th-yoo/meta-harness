@@ -19,7 +19,10 @@ import type { AgentDriver, AgentRunOutput, AttemptClass } from "./types.ts"
  * runner.py:906's EXECUTION_TOOLS. */
 export const EXECUTION_TOOLS = new Set(["bash", "task"])
 
-function jsonStringify(v: unknown): string {
+/** Exported for drivers/claude-code.ts, which needs the identical
+ * "stringify-or-fall-back-to-String()" behavior for its tool_use `input` /
+ * tool_result `content` fields (task-B5-brief.md's shared-helper note). */
+export function jsonStringify(v: unknown): string {
   try {
     return JSON.stringify(v) ?? String(v)
   } catch {

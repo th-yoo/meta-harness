@@ -8,11 +8,13 @@
  */
 import { die } from "../util.ts"
 import { opencodeDriver } from "./opencode.ts"
+import { claudeCodeDriver } from "./claude-code.ts"
 import type { AgentDriver } from "./types.ts"
 
-export const DRIVER_IDS = ["opencode"] as const
+export const DRIVER_IDS = ["opencode", "claude-code"] as const
 
 export function getDriver(id: string): AgentDriver {
   if (id === "opencode") return opencodeDriver
+  if (id === "claude-code") return claudeCodeDriver
   return die(`getDriver: unknown agent driver id "${id}" (expected one of ${DRIVER_IDS.join(", ")})`)
 }

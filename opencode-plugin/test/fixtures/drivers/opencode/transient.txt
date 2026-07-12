@@ -1,0 +1,4 @@
+# SYNTHETIC — mirrors bench-opencode-run.test.ts's inline transient-retry
+# fixture verbatim (that test file is not modified; this is a copy for the
+# contract suite's use per task-B5-brief.md section 3).
+{"type":"error","error":{"name":"Overloaded"}}

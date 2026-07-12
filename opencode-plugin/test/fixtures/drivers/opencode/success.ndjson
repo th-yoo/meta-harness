@@ -1,0 +1,3 @@
+{"type":"tool_use","part":{"tool":"bash","state":{"input":"echo hi","output":"hi","status":"completed","metadata":{"exit":0}}}}
+{"type":"step_finish","part":{"reason":"stop"}}
+{"type":"text","text":"done"}

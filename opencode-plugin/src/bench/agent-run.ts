@@ -80,9 +80,20 @@ export const AUTH_FAIL_MARK = "authentication error"
  * genuine 403-as-auth-failure text virtually always names itself as such
  * ("403 Forbidden", "Forbidden: ...") rather than appearing as a bare
  * number. 401 IS matched bare — in practice it does not collide with
- * ordinary task output the way "403" can. */
+ * ordinary task output the way "403" can.
+ *
+ * `authentication[_ ]?(?:error|failed)` (not just `...error`): task-B5-brief
+ * fixture evidence — a REAL captured claude-code auth failure (an
+ * unauthenticated CLAUDE_CONFIG_DIR, test/fixtures/drivers/claude-code/
+ * auth-error.txt) reports `"error":"authentication_failed"` and result text
+ * "Not logged in - Please run /login", neither of which the original
+ * `authentication[_ ]?error` alternative (nor any other alternative here)
+ * matched -- a genuine miss on real driver output, not a hypothetical one.
+ * `failed` is added as a second accepted suffix; this is a SHARED regex
+ * (both drivers import it), so the extension benefits opencode too if it
+ * ever emits the same wording. */
 export const AUTH_ERROR_RE =
-  /\b401\b|authentication[_ ]?error|unauthorized|forbidden|invalid[_ ]?(?:api[_ ]?key|token|credential)|oauth|token[_ ]?expired|expired[_ ]?token/i
+  /\b401\b|authentication[_ ]?(?:error|failed)|unauthorized|forbidden|invalid[_ ]?(?:api[_ ]?key|token|credential)|oauth|token[_ ]?expired|expired[_ ]?token/i
 
 const MAX_ATTEMPTS = 4
 

@@ -39,6 +39,10 @@
  * Testability: `platform` / `execFn` / `home` are all injectable so tests
  * never touch the real Keychain, spawn `security`, or read the real host
  * `~/.claude`.
+ *
+ * task-B5-brief.md adds a second export below, `prepareClaudeCodeAuth` — the
+ * claude-code driver's OWN auth path (no opencode plugin involved), see its
+ * doc comment for the differences.
  */
 import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync, chmodSync } from "node:fs"
@@ -176,4 +180,117 @@ export function prepareAgentAuthMounts(opts: PrepareAgentAuthMountsOpts = {}): A
   }
 
   return { mounts, cleanup }
+}
+
+// ── prepareClaudeCodeAuth ────────────────────────────────────────────────
+
+/**
+ * Claude Code's own oauth/onboarding mounts (task-B5-brief.md §2) — same
+ * shape as prepareAgentAuthMounts above (injectable platform/exec/home,
+ * try/finally-guaranteed shred, actionable BenchError on missing
+ * credential) but for the `claude` CLI directly rather than opencode's
+ * `opencode-claude-auth` plugin path:
+ *
+ *  - `ANTHROPIC_API_KEY` present: no credential mounts at all — CC reads the
+ *    key straight from its own env var (paths.ts's `apiKeyEnv()` already
+ *    forwards it into the container create env; this function just needs to
+ *    skip the Keychain/`.credentials.json` dance).
+ *  - otherwise: linux mounts the real `~/.claude` dir RW at `/root/.claude`
+ *    (CC rotates its oauth refresh token + writes settings on use — same
+ *    "must be RW" rationale as opencode's data-dir mount above); darwin
+ *    exports the Keychain item (`security find-generic-password -s "Claude
+ *    Code-credentials" -w`) into a fresh 0700 temp dir / 0600 file and mounts
+ *    THAT rw at `/root/.claude`, shredding it in `cleanup()`. The refresh
+ *    token CC rotates to inside the container is therefore silently
+ *    discarded on darwin (never written back to the real Keychain) — fine
+ *    for a single task-length run, not a durable multi-run credential store.
+ *  - ALWAYS (both branches, and the API-key path too): a `/root/.claude.json`
+ *    file mount with `{"hasCompletedOnboarding":true}` — CC's headless
+ *    first-run gate; verified live (this task's fixture captures) that a
+ *    fresh CLAUDE_CONFIG_DIR with no prior onboarding state fails before
+ *    ever reaching the model. Plus env `IS_SANDBOX:"1"`, which CC requires to
+ *    accept `--dangerously-skip-permissions` while running as the
+ *    container's root user.
+ */
+export interface PrepareClaudeCodeAuthOpts {
+  /** default: process.platform */
+  platform?: NodeJS.Platform
+  /** default: a wrapper around node:child_process's execFileSync */
+  execFn?: SecurityExecFn
+  /** default: os.homedir() */
+  home?: string
+  /** default: process.env — injectable so tests never depend on the real
+   * host's ANTHROPIC_API_KEY being set or unset. */
+  env?: Record<string, string | undefined>
+}
+
+const ONBOARDED_CLAUDE_JSON = { hasCompletedOnboarding: true }
+
+export function prepareClaudeCodeAuth(opts: PrepareClaudeCodeAuthOpts = {}): AgentAuthMounts {
+  const platform = opts.platform ?? process.platform
+  const home = opts.home ?? homedir()
+  const execFn = opts.execFn ?? defaultSecurityExec
+  const env = opts.env ?? process.env
+
+  const tmpRoot = mkdtempSync(join(tmpdir(), "mh-bench-cc-auth-"))
+
+  const onboardingPath = join(tmpRoot, "claude.json")
+  writeFileSync(onboardingPath, JSON.stringify(ONBOARDED_CLAUDE_JSON) + "\n")
+
+  const mounts: AgentAuthMount[] = [{ host: onboardingPath, container: "/root/.claude.json", ro: true }]
+  const runEnv: Record<string, string> = { IS_SANDBOX: "1" }
+
+  if (env["ANTHROPIC_API_KEY"]) {
+    return { mounts, env: runEnv, cleanup: () => cleanupTmp(tmpRoot) }
+  }
+
+  let claudeHost: string
+  let shredPath: string | undefined
+
+  if (platform === "linux") {
+    const realClaudeDir = join(home, ".claude")
+    if (!existsSync(join(realClaudeDir, ".credentials.json"))) {
+      cleanupTmp(tmpRoot)
+      throw new BenchError(
+        `prepareClaudeCodeAuth: ${join(realClaudeDir, ".credentials.json")} not found. ${ACTIONABLE_AUTH_MSG}`,
+      )
+    }
+    claudeHost = realClaudeDir
+  } else if (platform === "darwin") {
+    let creds: string
+    try {
+      creds = execFn(["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"]).trim()
+      if (!creds) throw new Error("empty credential export")
+    } catch {
+      cleanupTmp(tmpRoot)
+      throw new BenchError(`prepareClaudeCodeAuth: Keychain export failed. ${ACTIONABLE_AUTH_MSG}`)
+    }
+    const claudeDir = join(tmpRoot, "claude")
+    mkdirSync(claudeDir, { recursive: true })
+    chmodSync(claudeDir, 0o700)
+    const credsPath = join(claudeDir, ".credentials.json")
+    writeFileSync(credsPath, creds + "\n")
+    chmodSync(credsPath, 0o600)
+    claudeHost = claudeDir
+    shredPath = credsPath
+  } else {
+    cleanupTmp(tmpRoot)
+    throw new BenchError(`prepareClaudeCodeAuth: unsupported platform "${platform}" (expected "linux" or "darwin")`)
+  }
+
+  mounts.push({ host: claudeHost, container: "/root/.claude", ro: false })
+
+  const cleanup = (): void => {
+    if (shredPath) {
+      try {
+        const size = statSync(shredPath).size
+        writeFileSync(shredPath, "0".repeat(size))
+      } catch {
+        // already gone / unreadable — the recursive rm below still cleans up
+      }
+    }
+    cleanupTmp(tmpRoot)
+  }
+
+  return { mounts, env: runEnv, cleanup }
 }
