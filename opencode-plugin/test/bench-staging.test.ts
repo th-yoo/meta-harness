@@ -722,16 +722,16 @@ test("stageTaskRuntime: every step's script (copy, pip, run) starts with `set -e
   expect(scripts[2]).toContain("false; true")
 })
 
-// ── B2 live diagnosis fix: a later RUN step sources the pip venv ─────────
-// chess-best-move/environment/Dockerfile: `RUN pip3 install pillow==11.2.1
-// --break-system-packages` followed (as a SEPARATE RUN, hence a separate
-// podman exec) by `RUN python3 make.py`, which does `from PIL import Image`.
-// pip extraction correctly captures "pillow==11.2.1" (verified live), but
-// without this guard the later run step's own `podman exec` never sees the
-// isolated /opt/.venv pip installed into — `python3 make.py` fails with
-// `ModuleNotFoundError: No module named 'PIL'` even though staging "worked".
+// ── B2 live diagnosis fix (part 1): a later RUN step sources the pip venv ──
+// A plain (non-`--break-system-packages`) `RUN pip install <pkg>` isolates
+// into /opt/.venv; a SEPARATE later `RUN python3 ...` (its own podman exec)
+// needs that venv sourced to see the package. Without the guard, the later
+// run's own exec never inherits the earlier `source .venv/bin/activate`, so a
+// `from <pkg> import ...` fails with ModuleNotFoundError even though staging
+// "worked". (The chess-best-move Dockerfile itself uses --break-system-
+// packages, which routes system-wide instead — see the part-2 tests below.)
 
-test("stageTaskRuntime: a run step sources /opt/.venv if a pip step already created it (chess-best-move shape)", async () => {
+test("stageTaskRuntime: a run step sources /opt/.venv if a plain pip step already created it", async () => {
   const dir = tmpDir()
   const task = "pip-then-run-task"
   mkdirSync(path.join(dir, task, "environment"), { recursive: true })
@@ -739,7 +739,7 @@ test("stageTaskRuntime: a run step sources /opt/.venv if a pip step already crea
     path.join(dir, task, "environment", "Dockerfile"),
     [
       "FROM ubuntu:24.04",
-      "RUN pip3 install pillow==11.2.1 --break-system-packages",
+      "RUN pip3 install somelib==1.0.0",
       "RUN python3 make.py",
     ].join("\n"),
   )
@@ -751,13 +751,13 @@ test("stageTaskRuntime: a run step sources /opt/.venv if a pip step already crea
   }
   await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
 
-  // one combined pip step, then the raw run — the run step's script must
+  // one combined venv pip step, then the raw run — the run step's script must
   // source the venv (guarded so a Dockerfile with NO pip step at all, the
   // common case, doesn't fail on a missing /opt/.venv under set -e).
   expect(recordedArgvs.length).toBe(2)
   const scripts = recordedArgvs.map((argv) => argv[argv.length - 1]!)
   expect(scripts[0]).toContain("uv pip install")
-  expect(scripts[0]).toContain('"pillow==11.2.1"')
+  expect(scripts[0]).toContain('"somelib==1.0.0"')
   expect(scripts[1]).toContain('if [ -f "/opt/.venv/bin/activate" ]; then source "/opt/.venv/bin/activate"; fi')
   expect(scripts[1]).toContain("python3 make.py")
 })
@@ -820,6 +820,80 @@ test("stageTaskRuntime: the venv-source guard is present even with no pip step a
   const script = recordedArgvs[0]![recordedArgvs[0]!.length - 1]!
   expect(script).toContain('if [ -f "/opt/.venv/bin/activate" ]; then source "/opt/.venv/bin/activate"; fi')
   expect(script).toContain("echo hi")
+})
+
+// ── B2 live diagnosis fix (part 2): --break-system-packages → SYSTEM pip ──
+// chess-best-move / make-mips-interpreter / make-doom-for-mips all use `RUN
+// pip3 install <pkgs> --break-system-packages`. That flag is Docker/PEP-668's
+// explicit request to install into the SYSTEM python (not an isolated venv).
+// The task's own solution/solve.sh then runs bare `python3 solve.py` — which
+// only sees those packages if they went system-wide. Isolating them into
+// /opt/.venv (the default for a plain `pip install`) leaves bare python3
+// without them, so the oracle fails at solve time even though staging
+// "succeeded". Fix: a pip line carrying --break-system-packages installs its
+// packages system-wide via `pip3 install --break-system-packages`, NOT into
+// the venv.
+
+test("parseTaskDockerfile: a --break-system-packages pip line yields a system-wide pip step (systemWide flag), not the venv pip step", () => {
+  const dir = tmpDir()
+  const task = "break-sys-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    "FROM ubuntu:24.04\nRUN pip3 install pillow==11.2.1 --break-system-packages\n",
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const staging = parseTaskDockerfile(fakePaths, task)
+  expect(staging.steps).toEqual([
+    { kind: "pip", packages: ["pillow==11.2.1"], systemWide: true },
+  ])
+})
+
+test("parseTaskDockerfile: plain pip (no flag) stays a venv pip step; both kinds can coexist as two separate pip steps", () => {
+  const dir = tmpDir()
+  const task = "mixed-pip-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    [
+      "FROM ubuntu:24.04",
+      "RUN pip install scipy==1.15.3",
+      "RUN pip3 install pillow==11.2.1 --break-system-packages",
+    ].join("\n"),
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const staging = parseTaskDockerfile(fakePaths, task)
+  // system-wide step first, then the venv step (both in the pip phase slot)
+  expect(staging.steps).toEqual([
+    { kind: "pip", packages: ["pillow==11.2.1"], systemWide: true },
+    { kind: "pip", packages: ["scipy==1.15.3"] },
+  ])
+})
+
+test("stageTaskRuntime: a systemWide pip step runs `pip3 install --break-system-packages` with NO venv (chess-best-move shape)", async () => {
+  const dir = tmpDir()
+  const task = "break-sys-exec-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    ["FROM ubuntu:24.04", "RUN pip3 install pillow==11.2.1 --break-system-packages", "RUN python3 make.py"].join("\n"),
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+  expect(recordedArgvs.length).toBe(2)
+  const scripts = recordedArgvs.map((argv) => argv[argv.length - 1]!)
+  // system-wide install: plain pip3 with the flag, NO uv venv creation/source
+  expect(scripts[0]).toContain("pip3 install --break-system-packages")
+  expect(scripts[0]).toContain('"pillow==11.2.1"')
+  expect(scripts[0]).not.toContain("uv venv")
+  expect(scripts[0]).not.toContain("/opt/.venv")
+  // the later run step still runs (bare python3 will now see system pillow)
+  expect(scripts[1]).toContain("python3 make.py")
 })
 
 // ── flag plumbing: --staging scripts still routes to the old path ────────

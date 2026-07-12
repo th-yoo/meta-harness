@@ -81,6 +81,13 @@
  *    "run" step's script sources it first if present (VENV_ACTIVATE_GUARD —
  *    the B2 live diagnosis fix), since each step is its own `podman exec`
  *    and a venv `source`'d in one exec never carries over to the next.
+ *    EXCEPTION: a pip line carrying `--break-system-packages` (PEP 668 /
+ *    Docker's explicit "install into the SYSTEM python" request) installs
+ *    system-wide via `pip3 install --break-system-packages` in its OWN pip
+ *    step (StagingStep.systemWide) — NOT the venv — so bare `python3`
+ *    everywhere, including the task's own solve.sh run outside staging, sees
+ *    those packages (the other half of the B2 fix: chess-best-move / make-
+ *    mips-interpreter / make-doom-for-mips).
  *    `uv run ...` lines and any other unclassified RUN
  *    line become verbatim "run" steps, executed with the WORKDIR-tracked cwd
  *    active at that line (default /app — see the WORKDIR porting note
@@ -148,6 +155,13 @@ export interface StagingStep {
    * /app, so stageTaskRuntime only emits an extra mkdir -p/cd wrapper when
    * it actually differs. */
   cwd?: string
+  /** pip: true when the originating `pip install` line carried
+   * `--break-system-packages` (PEP 668 / Docker's explicit "install into the
+   * SYSTEM python" request) — such packages install system-wide via `pip3
+   * install --break-system-packages`, NOT into the isolated /opt/.venv, so a
+   * later bare-`python3` step (including the task's own solve.sh, run outside
+   * staging) can see them. See the module header's pip porting note. */
+  systemWide?: boolean
 }
 
 export interface TaskStaging {
@@ -338,6 +352,13 @@ function hasPip(bodyLower: string): boolean {
   return /\bpip3?\s+install\b|\buv\s+pip\s+install\b|\buv\s+add\b/.test(bodyLower)
 }
 
+/** True if a pip RUN line carries `--break-system-packages` (PEP 668 / the
+ * Docker-explicit "install into the SYSTEM python" request) — see the
+ * StagingStep.systemWide field and the pip porting note. */
+function hasBreakSystemPackages(bodyLower: string): boolean {
+  return bodyLower.includes("--break-system-packages")
+}
+
 function hasUvRun(bodyLower: string): boolean {
   return /\buv\s+run\b/.test(bodyLower)
 }
@@ -381,11 +402,15 @@ interface RawRun {
  * RUN-handling branch inside parse_dockerfile. `pipCwdState` records the cwd
  * active at the last pip-classified RUN line (there is only ever ONE combined
  * pip step regardless of how many RUN lines contributed to it — see
- * parseTaskDockerfile — so this is the closest single cwd to attach to it). */
+ * parseTaskDockerfile — so this is the closest single cwd to attach to it).
+ * A pip line carrying `--break-system-packages` routes to `systemPipPackages`
+ * (installed system-wide) instead of `pipPackages` (the isolated venv) — see
+ * hasBreakSystemPackages / StagingStep.systemWide. */
 function classifyRun(
   body: string,
   cwd: string,
   pipPackages: string[],
+  systemPipPackages: string[],
   rawRunLines: RawRun[],
   aptPackages: string[],
   pipCwdState: { cwd: string },
@@ -401,8 +426,12 @@ function classifyRun(
     classified = true
   }
   if (hasPip(bodyLower)) {
-    pipPackages.push(...extractPipPackages(body))
-    pipCwdState.cwd = cwd
+    if (hasBreakSystemPackages(bodyLower)) {
+      systemPipPackages.push(...extractPipPackages(body))
+    } else {
+      pipPackages.push(...extractPipPackages(body))
+      pipCwdState.cwd = cwd
+    }
     classified = true
   }
   if (hasUvRun(bodyLower)) {
@@ -483,6 +512,7 @@ export function parseTaskDockerfile(paths: BenchPaths, task: string): TaskStagin
   const envPairs: [string, string][] = []
   const rawCopies: { src: string; dst: string; cwd: string }[] = []
   const pipPackages: string[] = []
+  const systemPipPackages: string[] = []
   const rawRunLines: RawRun[] = []
   const rawAptPackages: string[] = []
   const pipCwdState = { cwd: DEFAULT_CWD }
@@ -550,7 +580,7 @@ export function parseTaskDockerfile(paths: BenchPaths, task: string): TaskStagin
         break
       }
       case "RUN": {
-        classifyRun(body, cwd, pipPackages, rawRunLines, rawAptPackages, pipCwdState)
+        classifyRun(body, cwd, pipPackages, systemPipPackages, rawRunLines, rawAptPackages, pipCwdState)
         break
       }
       default: {
@@ -576,6 +606,13 @@ export function parseTaskDockerfile(paths: BenchPaths, task: string): TaskStagin
   const steps: StagingStep[] = []
   for (const [k, v] of envPairs) steps.push({ kind: "env", key: k, value: v })
   for (const rc of rawCopies) steps.push(resolveCopyStep(paths, task, rc.src, rc.dst, rc.cwd))
+  // System-wide pip step FIRST (--break-system-packages lines — installed into
+  // the system python so bare `python3` everywhere, including the task's own
+  // solve.sh, sees them), then the isolated-venv pip step. Both occupy the
+  // one "pip" phase slot, ahead of every run step (see module header).
+  if (systemPipPackages.length > 0) {
+    steps.push({ kind: "pip", packages: systemPipPackages, systemWide: true })
+  }
   if (pipPackages.length > 0) {
     steps.push({
       kind: "pip",
@@ -698,16 +735,25 @@ export async function stageTaskRuntime(
       script = `${setE}${prelude}mkdir -p "${mkdirTarget}" && cp -r ${srcForCp} "${step.dst}"`
     } else if (step.kind === "pip") {
       const pkgs = (step.packages ?? []).map((p) => `"${p}"`).join(" ")
-      script =
-        setE +
-        prelude +
-        cwdPrefix(step.cwd) +
-        [
-          "command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh",
-          `uv venv --python python3 "${PIP_VENV}" 2>/dev/null || true`,
-          `source "${PIP_VENV}/bin/activate"`,
-          `uv pip install ${pkgs}`,
-        ].join("\n")
+      if (step.systemWide) {
+        // --break-system-packages: install into the SYSTEM python (bare pip3),
+        // NOT the isolated venv — so bare `python3` everywhere (staging run
+        // steps AND the task's own solve.sh, which runs outside staging) sees
+        // these packages. Docker-faithful (chess-best-move, make-mips-
+        // interpreter, make-doom-for-mips). See StagingStep.systemWide.
+        script = `${setE}${prelude}pip3 install --break-system-packages ${pkgs}`
+      } else {
+        script =
+          setE +
+          prelude +
+          cwdPrefix(step.cwd) +
+          [
+            "command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh",
+            `uv venv --python python3 "${PIP_VENV}" 2>/dev/null || true`,
+            `source "${PIP_VENV}/bin/activate"`,
+            `uv pip install ${pkgs}`,
+          ].join("\n")
+      }
     } else {
       script = `${setE}${prelude}${VENV_ACTIVATE_GUARD}${cwdPrefix(step.cwd)}${step.cmd}`
     }
