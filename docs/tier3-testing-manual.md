@@ -12,7 +12,7 @@ Exercises the full evolution loop through the opencode TUI: score → auto-propo
 headlessly (scoring is interactive), so follow this by hand.
 
 Target layer: **project-role** (cheapest full loop — uses the 5-session trial
-gate, no token-heavy `runner.py ab`).
+gate, no token-heavy `runner.ts ab`).
 
 Facts baked into this manual (from the code):
 - Scoring fires on **session.idle**, once per substantive session. A session with

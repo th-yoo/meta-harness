@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# run-parallel.sh — launch N isolated concurrent `runner.ts run` invocations,
-# each on its own MH_BENCH_WORK sandbox root so they don't clobber each other.
+# run-parallel.sh — launch N concurrent `runner.ts run` invocations.
+# The podman sandbox gives every task attempt its own container, so concurrent
+# runs are isolated natively; each spec only needs its own --results-file.
 #
 # Usage:
 #   bash run-parallel.sh [--dry-run] [RUNNER_ARGS...] -- MODEL:RESULTS_FILE [MODEL:RESULTS_FILE ...]
@@ -10,9 +11,7 @@
 #     anthropic/claude-haiku-4-5:results/account-global-v0-baseline-haiku.json \
 #     anthropic/claude-sonnet-4-6:results/account-global-v0-baseline-sonnet.json
 #
-# Each run gets MH_BENCH_WORK=$HOME/bench-runs/<results-stem> (always under $HOME
-# — a /tmp root ELOOPs the sandbox). Never uses ~/bench (the shared default).
-# Work dirs are removed on completion; --results-file (and its .log) persist.
+# Each run logs to <results-file>.log; pass rates are printed at the end.
 set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -28,30 +27,20 @@ done
 SPECS=("$@")
 [ ${#SPECS[@]} -ge 1 ] || { echo "usage: run-parallel.sh [--dry-run] [RUNNER_ARGS] -- MODEL:RESULTS_FILE ..." >&2; exit 2; }
 
-pids=(); works=(); rfiles=()
+pids=(); rfiles=()
 for spec in "${SPECS[@]}"; do
   model="${spec%%:*}"; rfile="${spec#*:}"
   if [ -z "$model" ] || [ -z "$rfile" ] || [ "$model" = "$spec" ]; then
     echo "bad spec '$spec' — want MODEL:RESULTS_FILE" >&2; exit 2
   fi
-  slug="$(basename "$rfile" .json)"
-  work="$HOME/bench-runs/$slug"
-  case "$work" in
-    "$HOME"/*) : ;;
-    *) echo "refuse: work dir '$work' is not under \$HOME" >&2; exit 2 ;;
-  esac
-  if [ "$work" = "$HOME/bench" ]; then
-    echo "refuse: work dir resolves to ~/bench (the shared default)" >&2; exit 2
-  fi
   cmd=(bun "$SCRIPT_DIR/runner.ts" run --model "$model" --results-file "$rfile" "${PASS_ARGS[@]}")
   if [ "$DRY" = 1 ]; then
-    echo "MH_BENCH_WORK=$work ${cmd[*]}"
+    echo "${cmd[*]}"
     continue
   fi
-  mkdir -p "$work"
-  MH_BENCH_WORK="$work" "${cmd[@]}" > "${rfile}.log" 2>&1 &
-  pids+=("$!"); works+=("$work"); rfiles+=("$rfile")
-  echo "launched $model → $rfile  (MH_BENCH_WORK=$work, pid $!)"
+  "${cmd[@]}" > "${rfile}.log" 2>&1 &
+  pids+=("$!"); rfiles+=("$rfile")
+  echo "launched $model → $rfile  (pid $!)"
 done
 [ "$DRY" = 1 ] && exit 0
 
@@ -63,5 +52,4 @@ for rf in "${rfiles[@]}"; do
   pr=$(jq -r '.pass_rate // "?"' "$rf" 2>/dev/null || echo "?")
   echo "  $rf  pass_rate=$pr"
 done
-for w in "${works[@]}"; do rm -rf "$w"; done
 exit $rc

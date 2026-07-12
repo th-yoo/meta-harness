@@ -141,8 +141,7 @@ proposer-LLM output compliance, which had to be observed first.
 | Gap | Why accepted | Revisit trigger |
 |---|---|---|
 | `score.json` concurrent-writer race (no flock) | Race loses ≤1 session entry and is recoverable from per-session `traces/`; verdict writes are already atomic. Proportionate-fix principle from the storage decision. | A real concurrent-writer scenario appears (e.g. routine parallel interactive + bench scoring on the same layer). Fix is an advisory flock, already designed. |
-| Two concurrent `ab` invocations race the shared store/meta-metrics | `MH_BENCH_WORK` isolates the *sandbox*, deliberately not the store — declared a non-goal in `term-bench2/README.md`. | Same as above: routine concurrent `ab` runs. |
-| Sandbox binds all of `$HOME` — concurrent runs can see each other's work trees | Trusted-baseline threat model; adversarial isolation was never the goal. | Running untrusted/agent-authored code in the sandbox (would arrive with §2.1). |
+| Two concurrent `ab` invocations race the shared store/meta-metrics | The podman sandbox isolates *task execution* (fresh container per attempt), deliberately not the store — declared a non-goal in `term-bench2/README.md`. | Same as above: routine concurrent `ab` runs. |
 | `proposerVariant` is provenance-only | opencode's `session.prompt` API exposes `model` but no thinking variant — the STOP-critical part (model pinning) is live; effort pinning is not possible from a plugin. | opencode API gains a variant/effort field on `session.prompt`. |
 | Interactive trajectory events lack tool *args* | `tool.execute.after` hook doesn't expose them; bench-side trajectories are unaffected. | opencode hook API exposes call args. |
 | `/mh-status` doesn't surface `diagnosis.json` | Candidate `meta.json` already shows in status; diagnosis surfacing was judged redundant UI for now. | Diagnosis becomes hard-required (§4) — at that point it's first-class state worth showing. |

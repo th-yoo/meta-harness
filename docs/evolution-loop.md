@@ -29,7 +29,7 @@ layer's active `system.md` (`readActiveSystem`) and pushes it into the model's
 system prompt, then a combined `## Tool usage guidance` section, then the env
 snapshot. So evolved rules actually reach the model on the next run.
 
-**Injection (benchmark side)** — `term-bench2/runner.py:assemble_agents_md`
+**Injection (benchmark side)** — `opencode-plugin/src/bench/record.ts:assembleAgentsMd`
 composes the same layer text into an `AGENTS.md` written into the task's `/app`
 workspace before the run.
 
@@ -86,7 +86,8 @@ two kinds of layer:
   the session: `/mh-score good|bad [note]`. Pass/fail is the signal
   (`score.ts` + the `session.idle` handler in `index.ts`).
 - **Terminal-Bench 2 → account layers.** Objective and human-free: run the task,
-  the verifier reports pass/fail. Produced by `term-bench2/runner.py`.
+  the verifier reports pass/fail. Produced by the bench runner
+  (`term-bench2/runner.ts`).
 
 Intended direction of travel: evolve **project** layers from daily use first, then
 **promote** what generalizes up to **account** layers, where TB2 validates it.
@@ -166,8 +167,9 @@ its threshold and no trial is in progress.
 
 ## 7. The TB2 side (`term-bench2/`)
 
-`runner.py` runs Terminal-Bench 2 tasks in a bwrap/tmpfs sandbox and composes the
-harness into `AGENTS.md`. Relevant subcommands:
+`runner.ts` (Bun) runs Terminal-Bench 2 tasks in a podman sandbox — one fresh
+container per task attempt — and composes the harness into `AGENTS.md`.
+Relevant subcommands:
 
 - `run` — run tasks through opencode, score, optionally record into the store.
   Flags added for evolution: `--agent NAME` (compose role layers), `--pin
@@ -176,9 +178,10 @@ harness into `AGENTS.md`. Relevant subcommands:
   all-active composition, arm B = the same but the target layer pinned to the
   candidate — interleaved per pair, then writes the verdict. Both arms use the same driver by construction. The store records (TrajEvent, ToolUsage, SessionRecord, ab-verdict) are driver-invariant; driver provenance (which agent ran) is stored in the trace's environment snapshot.
 
-### `ab-verdict.json` — the cross-language contract
+### `ab-verdict.json` — the runner↔plugin contract
 
-Written by Python `ab` into `candidates/<vN>/ab-verdict.json`; read by the plugin's
+Written by `runner.ts ab` (`opencode-plugin/src/bench/cmd-ab.ts`) into
+`candidates/<vN>/ab-verdict.json`; read by the plugin's
 `/mh-activate` (`harness-store.ts:readAbVerdict`):
 
 ```json
@@ -232,8 +235,7 @@ bun term-bench2/runner.ts ab \
 | Hooks: inject, score, resolve trial, auto-propose, commands | `opencode-plugin/src/index.ts` |
 | Proposer + promoter (LLM sessions) | `opencode-plugin/src/propose.ts` |
 | Human scoring prompt | `opencode-plugin/src/score.ts` |
-| TB2 runner: compose harness, `run`, `ab`, pinning, roles | `term-bench2/runner.py` |
-| TB2 store helpers (Python mirror) | `term-bench2/bench_store.py` |
+| TB2 runner: compose harness, `run`, `ab`, pinning, roles | `term-bench2/runner.ts` → `opencode-plugin/src/bench/` |
 
 ---
 
