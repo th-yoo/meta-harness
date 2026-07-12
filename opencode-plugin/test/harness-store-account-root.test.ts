@@ -23,6 +23,7 @@ import {
   accountRoleRoot,
   migrateAccountRoot,
   readMhConfig,
+  isRealStore,
 } from "../src/harness-store.ts"
 
 // ── env isolation ────────────────────────────────────────────────────────
@@ -323,4 +324,53 @@ test("migrateAccountRoot: both exist but old is symlink -> no warning (successfu
   // Everything should remain as-is
   expect(fs.lstatSync(oldRoot).isSymbolicLink()).toBe(true)
   expect(fs.realpathSync(oldRoot)).toBe(fs.realpathSync(newRoot))
+})
+
+// ── isRealStore edge cases (stranded-store warning coverage) ────────────────
+
+test("isRealStore: global/active with content (system.md only) returns true", () => {
+  const root = tmpDir("is-real-store-global-active-")
+  fs.mkdirSync(path.join(root, "global", "active"), { recursive: true })
+  fs.writeFileSync(path.join(root, "global", "active", "system.md"), "evolved rule\n")
+  // Empty scaffolding (no roles/, no config.json)
+  fs.mkdirSync(path.join(root, "global"), { recursive: true })
+  fs.mkdirSync(path.join(root, "roles"), { recursive: true })
+
+  expect(isRealStore(root)).toBe(true)
+})
+
+test("isRealStore: config.json only (no roles/, no global/active content) returns true", () => {
+  const root = tmpDir("is-real-store-config-json-")
+  fs.mkdirSync(root, { recursive: true })
+  fs.writeFileSync(path.join(root, "config.json"), JSON.stringify({ proposerModel: "claude-3-5-sonnet-20241022" }))
+  // Empty scaffolding
+  fs.mkdirSync(path.join(root, "global", "active"), { recursive: true })
+  fs.mkdirSync(path.join(root, "roles"), { recursive: true })
+
+  expect(isRealStore(root)).toBe(true)
+})
+
+test("isRealStore: empty scaffold (global/active exists but empty, roles/ empty, no config.json) returns false", () => {
+  const root = tmpDir("is-real-store-empty-scaffold-")
+  fs.mkdirSync(path.join(root, "global", "active"), { recursive: true })
+  fs.mkdirSync(path.join(root, "roles"), { recursive: true })
+  // No config.json, no files in global/active
+
+  expect(isRealStore(root)).toBe(false)
+})
+
+test("isRealStore: existing check — roles/ with content returns true", () => {
+  const root = tmpDir("is-real-store-roles-")
+  fs.mkdirSync(path.join(root, "roles", "mh-build"), { recursive: true })
+  fs.writeFileSync(path.join(root, "roles", "mh-build", "marker.txt"), "role content")
+
+  expect(isRealStore(root)).toBe(true)
+})
+
+test("isRealStore: existing check — active/ (old layout) with content returns true", () => {
+  const root = tmpDir("is-real-store-active-")
+  fs.mkdirSync(path.join(root, "active"), { recursive: true })
+  fs.writeFileSync(path.join(root, "active", "system.md"), "old layout system prompt")
+
+  expect(isRealStore(root)).toBe(true)
 })

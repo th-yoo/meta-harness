@@ -1225,21 +1225,39 @@ export function migrateAccountRoot(): void {
 
 /**
  * Check if oldRoot is a "real" store with content (not just empty scaffolding).
- * Looks for any entry under roles/ or any non-empty active/.
+ * Looks for: (a) non-empty global/active/, (b) any entry under roles/, (c) config.json exists.
  */
-function isRealStore(storeRoot: string): boolean {
+export function isRealStore(storeRoot: string): boolean {
+  // Check (a): global/active has content (new account-store layout)
+  try {
+    const globalActiveDir = path.join(storeRoot, "global", "active")
+    const entries = fs.readdirSync(globalActiveDir)
+    if (entries.length > 0) return true
+  } catch {
+    // global/active doesn't exist or can't be read — check other conditions
+  }
+
+  // Check (b): roles/ has any entries (existing check, any layer)
   try {
     const rolesDir = path.join(storeRoot, "roles")
     const entries = fs.readdirSync(rolesDir)
     if (entries.length > 0) return true
   } catch {
-    // roles dir doesn't exist or can't be read — check active
+    // roles dir doesn't exist or can't be read — check config.json
   }
 
+  // Check (c): config.json exists at storeRoot
+  try {
+    const configPath = path.join(storeRoot, "config.json")
+    if (fs.existsSync(configPath)) return true
+  } catch {
+    // config.json check failed — not a real store
+  }
+
+  // Also check legacy layout: active/ (not global/active) for backward compat with old stores
   try {
     const activeDir = path.join(storeRoot, "active")
     const entries = fs.readdirSync(activeDir)
-    // Has any file beyond empty scaffolding
     if (entries.length > 0) return true
   } catch {
     // active dir doesn't exist or can't be read — not a real store
