@@ -1,0 +1,21 @@
+{
+  "session_id": "9c29b235-8854-491a-8273-6e8553259a29",
+  "transcript_path": "/Users/yoo/.claude/projects/x/9c29b235.jsonl",
+  "cwd": "/private/tmp/claude-501/-Users-yoo-z2-meta-harness/79a454a4-5eb4-4a73-bc2d-40e686d15135/scratchpad/cc-verify/proj1",
+  "permission_mode": "bypassPermissions",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls /nope",
+    "description": "list"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "ls: /nope: No such file or directory",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  },
+  "tool_use_id": "toolu_err",
+  "duration_ms": 12
+}

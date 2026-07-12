@@ -51,6 +51,27 @@ export interface HarnessHost {
   showScorePrompt(text: string, isJudgeSuggestion: boolean): Promise<void>
 
   /**
+   * Score-inversion seam (Task L6 — Claude Code adapter).
+   *
+   * OPTIONAL. The opencode flow is idle-THEN-wait-for-score: sessionIdle shows
+   * the prompt (showScorePrompt) and blocks on a pending Promise that a LATER
+   * command-intercept resolves. Claude Code inverts this to score-THEN-run-idle:
+   * hooks are short-lived processes, so the /mh-score UserPromptSubmit hook first
+   * stores the human verdict, then invokes sessionIdle IN-PROCESS. There is no
+   * separate process to hold a pending Promise, so promptHumanScore must be able
+   * to obtain the already-known verdict synchronously instead of prompting.
+   *
+   * Contract: return a ScoreResult when a verdict has been pre-staged for this
+   * session (promptHumanScore then returns it immediately, WITHOUT calling
+   * showScorePrompt or arming the pending-Promise/timeout machinery); return
+   * undefined when none is staged (promptHumanScore falls through to the normal
+   * opencode prompt-and-wait path). A host that never pre-stages (OpencodeHost)
+   * simply does not implement this method — behavior is then byte-identical to
+   * before this seam existed.
+   */
+  takePendingScore?(sessionID: string): ScoreResult | undefined
+
+  /**
    * Judge transport: text-in/text-out, ALL tools denied, system prompt
    * REPLACED. opencode impl: session.create + judgeSessions marking (BEFORE
    * the prompt, so the system.transform hook fires the replacement) +

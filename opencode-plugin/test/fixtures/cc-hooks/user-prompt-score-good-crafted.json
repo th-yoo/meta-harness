@@ -1,0 +1,9 @@
+{
+  "session_id": "58c3f159-5123-4dac-a6f5-f2a42e5e07b9",
+  "transcript_path": "/Users/yoo/.claude/projects/x/58c3f159.jsonl",
+  "cwd": "/private/tmp/claude-501/-Users-yoo-z2-meta-harness/79a454a4-5eb4-4a73-bc2d-40e686d15135/scratchpad/cc-verify/proj1",
+  "prompt_id": "aaaa1111-0000-0000-0000-000000000001",
+  "permission_mode": "bypassPermissions",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "/mh-score good solid work on the parser"
+}

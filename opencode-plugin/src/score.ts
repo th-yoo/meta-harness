@@ -44,6 +44,14 @@ export async function promptHumanScore(
   timeoutMs = 5 * 60 * 1000,
   prefill?: string,
 ): Promise<ScoreResult | null> {
+  // Score-inversion seam (Task L6): if the host has a verdict pre-staged for
+  // this session (Claude Code's score-then-run-idle flow), consume it and return
+  // immediately — no prompt, no pending Promise. Hosts that never pre-stage
+  // (OpencodeHost) don't implement takePendingScore, so this is a no-op there
+  // and the original prompt-and-wait path below runs unchanged.
+  const staged = host.takePendingScore?.(sessionID)
+  if (staged) return staged
+
   const text = prefill ?? DEFAULT_PREFILL
   const isJudgeSuggestion = prefill !== undefined && prefill !== DEFAULT_PREFILL
 
@@ -63,6 +71,29 @@ export async function promptHumanScore(
 }
 
 /**
+ * Pure parse of "/mh-score good|bad [note...]" into a ScoreResult, or null when
+ * the verdict token isn't recognized. Factored out (Task L6) so the Claude Code
+ * adapter — which must obtain the verdict WITHOUT the in-memory pending-Promise
+ * machinery (its /mh-score arrives in a fresh hook process) — can reuse the
+ * exact same parsing the opencode command-intercept uses.
+ *
+ *   good/1/yes/y/ok/pass → passed
+ *   bad/0/no/n/fail      → failed
+ */
+export function parseScoreArgs(args: string): ScoreResult | null {
+  const parts = args.trim().split(/\s+/)
+  const raw = parts[0]?.toLowerCase()
+  const note = parts.slice(1).join(" ")
+
+  const PASS = new Set(["good", "1", "yes", "y", "ok", "pass"])
+  const FAIL = new Set(["bad", "0", "no", "n", "fail"])
+
+  if (PASS.has(raw ?? "")) return { passed: true, note }
+  if (FAIL.has(raw ?? "")) return { passed: false, note }
+  return null
+}
+
+/**
  * Called from the command.execute.before hook in index.ts.
  *
  * Parses "/mh-score good|bad [note...]" and resolves the pending Promise
@@ -75,22 +106,13 @@ export function handleScoreCommand(
 ): boolean {
   if (command !== "mh-score") return false
 
-  const parts = args.trim().split(/\s+/)
-  const raw = parts[0]?.toLowerCase()
-  const note = parts.slice(1).join(" ")
-
-  // Accept: good/1/yes/y/ok/pass → passed
-  //         bad/0/no/n/fail      → failed
-  const PASS = new Set(["good", "1", "yes", "y", "ok", "pass"])
-  const FAIL = new Set(["bad", "0", "no", "n", "fail"])
-
-  const verdict = PASS.has(raw ?? "") ? "good" : FAIL.has(raw ?? "") ? "bad" : null
+  const verdict = parseScoreArgs(args)
   if (verdict === null) return false
 
   const resolve = pending.get(sessionID)
   if (resolve) {
     pending.delete(sessionID)
-    resolve({ passed: verdict === "good", note })
+    resolve(verdict)
   }
 
   return true

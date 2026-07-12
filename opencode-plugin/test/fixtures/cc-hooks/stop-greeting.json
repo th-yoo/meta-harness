@@ -1,0 +1,11 @@
+{
+  "session_id": "58c3f159-5123-4dac-a6f5-f2a42e5e07b9",
+  "transcript_path": "/Users/yoo/.claude/projects/x/58c3f159.jsonl",
+  "cwd": "/private/tmp/claude-501/-Users-yoo-z2-meta-harness/79a454a4-5eb4-4a73-bc2d-40e686d15135/scratchpad/cc-verify/proj1",
+  "permission_mode": "bypassPermissions",
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "Hello!",
+  "background_tasks": [],
+  "session_crons": []
+}
