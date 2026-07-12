@@ -48,9 +48,10 @@ export class OpencodeHost implements HarnessHost {
     message: string,
     variant: "info" | "success" | "warning" | "error" = "info",
     durationMs = 5_000,
+    title: string | null = "Meta-Harness",
   ): Promise<void> {
     await this.client.tui.showToast({
-      body: { title: "Meta-Harness", message, variant, duration: durationMs },
+      body: { ...(title === null ? {} : { title }), message, variant, duration: durationMs },
     })
   }
 

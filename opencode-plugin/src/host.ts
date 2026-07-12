@@ -22,10 +22,16 @@ export interface HarnessHost {
   readonly projectRoot: string // worktree
 
   log(level: "debug" | "info" | "warn" | "error", msg: string): Promise<void> | void
+  /**
+   * Show a user-facing notification. `title` defaults to "Meta-Harness"; pass
+   * `null` to omit the title entirely (some notifications embed the branding in
+   * the message instead and must render title-less).
+   */
   notify(
     msg: string,
     variant?: "info" | "success" | "warning" | "error",
     durationMs?: number,
+    title?: string | null,
   ): Promise<void> | void
 
   /**

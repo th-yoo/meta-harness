@@ -16,6 +16,16 @@ import * as path from "node:path"
 import * as os from "node:os"
 import type { HarnessHost } from "../src/host.ts"
 import {
+  projectRoleRoot,
+  projectGlobalRoot,
+  accountGlobalRoot,
+  readScore,
+  activeVersion,
+  bootstrapStore,
+  DEFAULT_SYSTEM_PROMPT,
+} from "../src/harness-store.ts"
+import { handleScoreCommand } from "../src/score.ts"
+import {
   EvolutionEngine,
   InMemorySessionStateStore,
   type SessionState,
@@ -32,7 +42,7 @@ function tmpWorktree(): string {
 
 type HostCalls = {
   logs: { level: string; msg: string }[]
-  notifies: { msg: string; variant?: string; dur?: number }[]
+  notifies: { msg: string; variant?: string; dur?: number; title?: string | null }[]
 }
 
 function fakeHost(worktree: string): { host: HarnessHost; calls: HostCalls } {
@@ -41,13 +51,20 @@ function fakeHost(worktree: string): { host: HarnessHost; calls: HostCalls } {
     platform: "fake",
     projectRoot: worktree,
     log: async (level, msg) => { calls.logs.push({ level, msg }) },
-    notify: async (msg, variant, dur) => { calls.notifies.push({ msg, variant, dur }) },
+    notify: async (msg, variant, dur, title) => { calls.notifies.push({ msg, variant, dur, title }) },
     showScorePrompt: async () => {},
     runTextAgent: async () => null,
     runTaskAgent: async () => null,
     exec: async () => ({ stdout: "", exitCode: 0 }),
   }
   return { host, calls }
+}
+
+/** Bootstrap the two non-role store layers (sessionMessage bootstraps the role
+ * layers itself) so recordSession has all 4 roots to write into. */
+function bootstrapProjectStores(worktree: string): void {
+  bootstrapStore(projectGlobalRoot(worktree), DEFAULT_SYSTEM_PROMPT)
+  bootstrapStore(accountGlobalRoot(), "")
 }
 
 /** A participating (mh-role) capture state, seeded directly so recordTool/
@@ -195,6 +212,62 @@ test("composeInjection returns [] for a non-participating session and no state",
   st.participates = false
   store.put("s7", st)
   expect(await engine.composeInjection("s7")).toEqual([])
+})
+
+test("sessionIdle skips a degenerate session without recording a score", async () => {
+  const worktree = tmpWorktree()
+  const store = new InMemorySessionStateStore()
+  const { host, calls } = fakeHost(worktree)
+  const engine = new EvolutionEngine(host, store)
+  bootstrapProjectStores(worktree)
+
+  // First message under mh-build → participating, bootstrapped, turns=0.
+  await engine.sessionMessage("d1", { role: "mh-build", isPrimary: true, participates: true, model: "anthropic/x" })
+  await engine.sessionIdle("d1") // turns===0 → degenerate
+
+  const prRoot = projectRoleRoot(worktree, "mh-build")
+  expect(readScore(prRoot, activeVersion(prRoot)).sessions.length).toBe(0)
+  const skip = calls.notifies.find((n) => n.msg.includes("session skipped"))
+  expect(skip).toBeDefined()
+  expect(skip!.title).toBeNull() // title-less toast (branding embedded in message)
+})
+
+test("sessionIdle happy path writes a SessionRecord stamped with the host platform", async () => {
+  const worktree = tmpWorktree()
+  const store = new InMemorySessionStateStore()
+  const { host, calls } = fakeHost(worktree)
+  const engine = new EvolutionEngine(host, store)
+  bootstrapProjectStores(worktree)
+
+  await engine.sessionMessage("h1", { role: "mh-build", isPrimary: true, participates: true, model: "anthropic/claude-x" })
+  // Make the session substantive so it isn't filtered as degenerate.
+  const st = store.get("h1")!
+  st.turns = 2
+  st.summary = "implemented the feature and verified it end to end with tests"
+  st.toolUsage = { bash: { calls: 3, errors: 0 } }
+  st.trajectory = [{ t: "text", text: "work" }]
+  store.put("h1", st)
+
+  // Drive the human score: sessionIdle awaits promptHumanScore (score.ts's
+  // pending map), which handleScoreCommand resolves.
+  const idle = engine.sessionIdle("h1")
+  await new Promise((r) => setTimeout(r, 10))
+  handleScoreCommand("mh-score", "good extra note", "h1")
+  await idle
+
+  const prRoot = projectRoleRoot(worktree, "mh-build")
+  const score = readScore(prRoot, activeVersion(prRoot))
+  expect(score.sessions.length).toBe(1)
+  expect(score.sessions[0]!.passed).toBe(true)
+  expect(score.sessions[0]!.note).toBe("extra note")
+  expect(score.sessions[0]!.platform).toBe("fake") // == host.platform
+  expect(score.sessions[0]!.model).toBe("anthropic/claude-x")
+
+  // Score-recorded toast is title-less; session state was cleaned up.
+  const rec = calls.notifies.find((n) => n.msg.startsWith("Score recorded:"))
+  expect(rec).toBeDefined()
+  expect(rec!.title).toBeNull()
+  expect(store.get("h1")!.role).toBeNull() // cleanup() ran
 })
 
 test("cleanup resets transient state but preserves scoreCount and pausedToastShown", () => {

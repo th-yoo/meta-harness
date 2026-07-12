@@ -399,4 +399,224 @@ export class EvolutionEngine {
     if (text.trim()) this.pushTraj(st, { t: "text", text: text.slice(0, 800) })
     this.state.put(sessionId, st)
   }
+
+  // ── session.idle: the whole scoring + auto-propose pipeline ────────────────
+  async sessionIdle(sessionId: string): Promise<void> {
+    const st0 = this.state.get(sessionId)
+    const agent = st0?.role ?? ""
+    await this.host.log("info", `[hook:event] session.idle — sessionID=${sessionId} agent=${agent} bootstrapped=${!!st0?.bootstrapped}`)
+
+    if (!st0?.bootstrapped) return
+    if (!st0.participates) return
+    if (st0.pendingScore) return
+
+    const st = st0
+
+    // Skip degenerate sessions (greetings / no substantive work) BEFORE
+    // bothering the human — they must never pollute the fitness signal.
+    const turns = st.turns
+    const usage = st.toolUsage
+    const summary = st.summary
+    if (isDegenerateSession(turns, usage, summary)) {
+      await this.host.log("info", `[hook:event] skipping degenerate session ${sessionId} (turns=${turns}, toolCalls=${Object.values(usage).reduce((n, t) => n + t.calls, 0)})`)
+      await this.host.notify("Meta-Harness: session skipped (no substantive work)", "info", 4_000, null)
+      this.cleanup(sessionId)
+      return
+    }
+
+    st.bootstrapped = false
+    st.pendingScore = true
+    this.state.put(sessionId, st)
+
+    // Shadow-mode dense judge (Phase 4 Part D): kicked off CONCURRENTLY with the
+    // human prompt below so it never delays scoring. Disabled by default
+    // (judgeModel === "") — zero behavior change unless explicitly configured.
+    const mhCfg = readMhConfig()
+    const judgePromise: Promise<JudgeVerdict | null> = mhCfg.judgeModel
+      ? runJudge(this.host, this.worktree, sessionId, st.summary, st.turns, st.trajectory).catch(() => null)
+      : Promise.resolve(null)
+
+    // Maker-checker (Phase 4 Part D4): once the judge is calibrated, pre-fill the
+    // human's score prompt with the judge's verdict — judge proposes, human checks.
+    const calBefore = mhCfg.judgeModel
+      ? judgeCalibration(mhCfg.judgeMinSessions, mhCfg.judgeMinAgreement)
+      : { n: 0, agreement: 0, calibrated: false }
+    let prefill: string | undefined
+    let usedPrefill = false
+    if (calBefore.calibrated) {
+      const early = await Promise.race([judgePromise, new Promise<null>((r) => setTimeout(() => r(null), 60_000))])
+      if (early) {
+        const r = early.reasoning
+        const hint = r.length <= 80
+          ? r
+          : (() => { const c = r.slice(0, 80); const sp = c.lastIndexOf(" "); return (sp > 48 ? c.slice(0, sp) : c).trimEnd() + "…" })()
+        prefill = `/mh-score ${early.passed ? "good" : "bad"} judge: ${hint}`
+        usedPrefill = true
+      }
+    }
+    const result = await promptHumanScore(this.host, sessionId, undefined, prefill)
+    if (result === null) {
+      await this.host.log("info", `[hook:event] scoring timed out — skipping ${sessionId}`)
+      st.pendingScore = false
+      this.state.put(sessionId, st)
+      return
+    }
+
+    // De-collide the recorded ID when this session is scored more than once.
+    const priorScores = st.scoreCount
+    st.scoreCount = priorScores + 1
+    this.state.put(sessionId, st)
+    const recordID = priorScores === 0 ? sessionId : `${sessionId}#${priorScores + 1}`
+
+    // Record into all 4 stores
+    const layers = layersFor(this.worktree, agent)
+    const prLayer = layers.find((l) => l.scope === "project-role")!
+    const model = st.model ?? "unknown"
+    const env = {
+      provider: model.includes("/") ? model.split("/")[0] : "unknown",
+      layerVersions: Object.fromEntries(
+        layers.map((l) => [l.scope, activeVersion(l.root)]),
+      ),
+    }
+    const record: SessionRecord = {
+      sessionID: recordID,
+      passed: result.passed,
+      note: result.note,
+      turnCount: st.turns,
+      timestamp: new Date().toISOString(),
+      summary: st.summary,
+      model,
+      variant: st.variant ?? "",
+      toolUsage: st.toolUsage,
+      env,
+      platform: this.host.platform,
+    }
+
+    // Resolve the shadow judge and fold its verdict into `record` BEFORE the
+    // recordSession calls below (recordSession writes `record` synchronously).
+    const judgeVerdict = await judgePromise
+    let judgeLogLine: string | undefined
+    if (judgeVerdict) {
+      const agreed = judgeVerdict.passed === result.passed
+      const trivial = judgeVerdict.trivial === true
+      record.judge = {
+        passed: judgeVerdict.passed,
+        confidence: judgeVerdict.confidence,
+        mode: usedPrefill ? "prefill" : "shadow",
+        agreed,
+        trivial,
+      }
+      if (!trivial) {
+        appendJudgeDecision({
+          ts: record.timestamp,
+          sessionID: recordID,
+          judge: judgeVerdict.passed,
+          human: result.passed,
+          model: mhCfg.judgeModel,
+        })
+        const cal = judgeCalibration(mhCfg.judgeMinSessions, mhCfg.judgeMinAgreement)
+        appendMetaMetric(prLayer.root, {
+          event: "judge",
+          agreed,
+          judge: judgeVerdict.passed,
+          human: result.passed,
+          agreement: cal.agreement,
+          n: cal.n,
+        })
+        judgeLogLine = `[judge] ${agreed ? "AGREE" : "DISAGREE"} judge=${judgeVerdict.passed} human=${result.passed} — calibration ${cal.n}/${mhCfg.judgeMinSessions} @ ${(cal.agreement * 100).toFixed(0)}%`
+      } else {
+        judgeLogLine = `[judge] trivial session — judge=${judgeVerdict.passed} human=${result.passed} (excluded from calibration/fitness)`
+      }
+    }
+
+    const scores = layers.map((layer) => {
+      const version = activeVersion(layer.root)
+      return { layer, score: recordSession(layer.root, version, record) }
+    })
+
+    if (judgeLogLine) await this.host.log("info", judgeLogLine)
+
+    // Persist the trajectory (failures always; passes only with SAVE_ALL_TRAJ).
+    const traj = st.trajectory
+    if (traj.length && (!record.passed || SAVE_ALL_TRAJ)) {
+      for (const { layer } of scores) {
+        const version = activeVersion(layer.root)
+        writeTrajectory(layer.root, version, recordID, traj)
+        pruneTrajectories(layer.root, version)
+      }
+    }
+
+    const pgLayer = layers.find((l) => l.scope === "project-global")!
+    const projectRoleScore = scores.find((s) => s.layer.scope === "project-role")?.score
+    const projectGlobalScore = scores.find((s) => s.layer.scope === "project-global")?.score
+
+    await this.host.log("info", `[hook:event] scored ${result.passed ? "PASS" : "FAIL"} model=${record.model} agent=${agent} — project-role ${projectRoleScore?.nPass}/${projectRoleScore?.sessions.length}`)
+
+    await this.host.notify(
+      `Score recorded: ${result.passed ? "✓ good" : "✗ bad"} (${agent} project-role: ${projectRoleScore?.nPass}/${projectRoleScore?.sessions.length})${record.judge?.trivial ? " — trivial: recorded, not counted toward fitness" : ""}`,
+      result.passed ? "success" : "warning",
+      4_000, null,
+    )
+
+    this.cleanup(sessionId)
+
+    // Resolve any in-progress project-layer trial now that a new score landed.
+    for (const l of [pgLayer, prLayer]) {
+      const res = resolveTrial(l.root)
+      if (res.action === "confirmed") {
+        await this.host.log("info", `[hook:event] trial confirmed ${l.scope} ${res.trial}`)
+        await this.host.notify(
+          `Trial confirmed: ${l.scope} ${res.trial} kept (${fmtRate(res.trialRate)} vs baseline ${res.baselineRate === null ? "n/a" : fmtRate(res.baselineRate)})`,
+          "success", 6_000, null,
+        )
+      } else if (res.action === "reverted") {
+        await this.host.log("warn", `[hook:event] trial reverted ${l.scope} → ${res.baseline}`)
+        await this.host.notify(
+          `Trial reverted: ${l.scope} back to ${res.baseline} (${fmtRate(res.trialRate)} < baseline ${fmtRate(res.baselineRate)})`,
+          "warning", 6_000, null,
+        )
+      } else if (res.action === "abandoned") {
+        await this.host.log("warn", `[hook:event] trial abandoned ${l.scope}: ${res.reason}`)
+      }
+    }
+
+    // Selection-gated auto-propose.
+    const prDue = !!projectRoleScore
+      && nonTrivialCount(projectRoleScore.sessions) >= PROJECT_ROLE_THRESHOLD
+      && readTrial(prLayer.root) === null
+    const pgDue = !!projectGlobalScore
+      && nonTrivialCount(projectGlobalScore.sessions) >= PROJECT_GLOBAL_THRESHOLD
+      && readTrial(pgLayer.root) === null
+
+    // Check for project plateau pause flag.
+    const pausedFlagPath = path.join(this.worktree, ".meta-harness", "paused")
+    const paused = fs.existsSync(pausedFlagPath)
+    const stAfter = this.state.get(sessionId)
+    if (paused && (prDue || pgDue) && stAfter && !stAfter.pausedToastShown) {
+      stAfter.pausedToastShown = true
+      this.state.put(sessionId, stAfter)
+      await this.host.log("info", "[hook:event] auto-propose skipped — project plateau pause flag present")
+      await this.host.notify(
+        "auto-propose paused (project plateau) — rm .meta-harness/paused to resume; /mh-propose still works",
+        "info", 10_000,
+      )
+    } else if (prDue && !paused) {
+      await this.host.log("info", `[hook:event] auto-propose project-role for ${agent}`)
+      void triggerPropose(this.host, this.worktree, prLayer)
+    } else if (pgDue && !paused) {
+      await this.host.log("info", `[hook:event] auto-propose project-global`)
+      void triggerPropose(this.host, this.worktree, pgLayer)
+    }
+
+    // Anti-bloat nudge: suggest curation when a project layer is over budget.
+    for (const l of [prLayer, pgLayer]) {
+      if (activeBulletCount(readPlaybook(l.root)) > CURATOR_BUDGET && readTrial(l.root) === null) {
+        await this.host.notify(
+          `Meta-Harness: ${l.scope} playbook over ${CURATOR_BUDGET} bullets — run /mh-curate`,
+          "info", 5_000, null,
+        )
+        break
+      }
+    }
+  }
 }
