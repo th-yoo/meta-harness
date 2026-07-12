@@ -40,34 +40,13 @@
  */
 
 import type { Plugin, PluginInput, PluginModule } from "@opencode-ai/plugin"
-import fs from "fs"
-import path from "path"
 import {
   accountGlobalRoot,
   projectGlobalRoot,
-  layersFor,
   bootstrapStore,
   migrateFlatToProjectGlobal,
-  activeVersion,
-  listVersions,
-  readScore,
-  readTrial,
-  activateCandidate,
-  readAbVerdict,
-  abAccepted,
   DEFAULT_SYSTEM_PROMPT,
-  type StoreLayer,
-  readPlaybook,
-  activeBulletCount,
-  readLastMetric,
 } from "./harness-store.ts"
-import { handleScoreCommand } from "./score.ts"
-import {
-  triggerPropose,
-  triggerPromote,
-  triggerCurate,
-  CURATOR_BUDGET,
-} from "./propose.ts"
 import { proposerSessions, judgeSessions } from "./session-state.ts"
 import { OpencodeHost } from "./adapters/opencode-host.ts"
 import { EvolutionEngine, InMemorySessionStateStore } from "./engine.ts"
@@ -77,18 +56,6 @@ import { EvolutionEngine, InMemorySessionStateStore } from "./engine.ts"
 /** Any primary agent named "mh-*" opts into the harness system. */
 function isMhRole(agent: string): boolean {
   return agent.startsWith("mh-")
-}
-
-const fmtRate = (r: number): string => `${(r * 100).toFixed(0)}%`
-
-/** Map a /mh-* scope argument to a StoreLayer (shared by propose/activate). */
-function resolveScopeLayer(scope: string, layers: StoreLayer[]): StoreLayer | undefined {
-  const s = scope.trim().toLowerCase()
-  if (!s || s === "role" || s === "project-role") return layers.find((l) => l.scope === "project-role")
-  if (s === "project" || s === "project-global") return layers.find((l) => l.scope === "project-global")
-  if (s === "role-global" || s === "account-role") return layers.find((l) => l.scope === "account-role")
-  if (s === "account" || s === "account-global") return layers.find((l) => l.scope === "account-global")
-  return undefined
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -214,174 +181,16 @@ const metaHarness: Plugin = async (input) => {
       await engine.sessionIdle(sessionID)
     },
 
-    // ── /mh-score + /mh-propose commands ─────────────────────────────────
+    // ── /mh-* commands (routed by the engine; rendered here) ─────────────
     "command.execute.before": async (cmdInput, _output) => {
       await log(client, "debug", `[hook:command.execute.before] command=${cmdInput.command} args="${cmdInput.arguments}"`)
 
-      // /mh-score good|bad [note]
-      const scoreConsumed = handleScoreCommand(
-        cmdInput.command,
-        cmdInput.arguments,
-        cmdInput.sessionID,
-      )
-      if (scoreConsumed) {
-        await log(client, "info", `[hook:command.execute.before] /mh-score consumed`)
-        throw new Error("Meta-Harness: score recorded ✓ (this notice is expected)")
-      }
-
-      // /mh-propose [scope]
-      if (cmdInput.command === "mh-propose") {
-        const agent = state.get(cmdInput.sessionID)?.role ?? "mh-build"
-        const layers = layersFor(worktree, agent)
-        const layer = resolveScopeLayer(cmdInput.arguments, layers)
-        if (layer) {
-          await log(client, "info", `[hook:command] /mh-propose scope=${layer.scope} agent=${agent}`)
-          void triggerPropose(host, worktree, layer)
-          throw await toastAndSwallow(client, "propose cycle started ✓", "success")
-        }
-        throw await toastAndSwallow(client, `/mh-propose — unknown scope "${cmdInput.arguments.trim()}" (use role|project|role-global|account)`, "error")
-      }
-
-      // /mh-activate <scope> <vN> [--force]
-      if (cmdInput.command === "mh-activate") {
-        const parts = cmdInput.arguments.trim().split(/\s+/).filter(Boolean)
-        const force = parts.includes("--force")
-        const positional = parts.filter((p) => p !== "--force")
-        const scopeArg = positional[0] ?? ""
-        const version = positional[1] ?? ""
-        const agent = state.get(cmdInput.sessionID)?.role ?? "mh-build"
-        const layers = layersFor(worktree, agent)
-        const layer = resolveScopeLayer(scopeArg, layers)
-        if (!layer) {
-          throw await toastAndSwallow(client, `/mh-activate — unknown scope "${scopeArg}" (use account|project|role-global|role)`, "error")
-        }
-        if (!/^v\d+$/.test(version)) {
-          throw await toastAndSwallow(client, `/mh-activate — expected a version like v3, got "${version}"`, "error")
-        }
-        const isAccount = layer.scope === "account-global" || layer.scope === "account-role"
-        if (isAccount && !force) {
-          const verdict = readAbVerdict(layer.root, version)
-          if (!verdict) {
-            throw await toastAndSwallow(client, `no ab-verdict.json for ${layer.scope} ${version} — run "bun term-bench2/runner.ts ab --layer ${layer.scope} --candidate ${version}" first, or pass --force`, "error")
-          }
-          if (!abAccepted(verdict)) {
-            const dec = verdict.decision ?? `winner=${verdict.winner}`
-            const hi = verdict.heldIn
-            const detail = hi
-              ? `held-in delta=${hi.delta >= 0 ? "+" : ""}${hi.delta} p=${hi.mcnemarP} CI90=${JSON.stringify(hi.bootCI90)}`
-              : `candidate ${fmtRate(verdict.candidateRate)} vs active ${fmtRate(verdict.activeRate)}, n=${verdict.nTasks}`
-            throw await toastAndSwallow(client, `${version} was not accepted by the ab gate (${dec}; ${detail}) — refusing; pass --force to override`, "error")
-          }
-        }
-        const ok = activateCandidate(layer.root, version)
-        if (!ok) {
-          throw await toastAndSwallow(client, `candidate ${version} not found (no system.md) for ${layer.scope}`, "error")
-        }
-        await log(client, "info", `[hook:command] /mh-activate ${layer.scope} ${version}${force ? " --force" : ""}`)
-        throw await toastAndSwallow(client, `activated ${layer.scope} ${version} ✓`, "success")
-      }
-
-      // /mh-promote [global|role]
-      if (cmdInput.command === "mh-promote") {
-        const scope = cmdInput.arguments.trim().toLowerCase()
-        const agent = state.get(cmdInput.sessionID)?.role ?? "mh-build"
-        const layers = layersFor(worktree, agent)
-        let source: StoreLayer | undefined
-        let target: StoreLayer | undefined
-        if (!scope || scope === "global") {
-          source = layers.find((l) => l.scope === "project-global")
-          target = layers.find((l) => l.scope === "account-global")
-        } else if (scope === "role") {
-          source = layers.find((l) => l.scope === "project-role")
-          target = layers.find((l) => l.scope === "account-role")
-        }
-        if (source && target) {
-          await log(client, "info", `[hook:command] /mh-promote ${source.scope}→${target.scope} agent=${agent}`)
-          void triggerPromote(host, worktree, source, target)
-          throw await toastAndSwallow(client, "promote cycle started ✓", "success")
-        }
-        throw await toastAndSwallow(client, `/mh-promote — unknown scope "${scope}" (use global|role)`, "error")
-      }
-
-      // /mh-curate <scope> — consolidate/prune a layer's playbook (through the gate)
-      if (cmdInput.command === "mh-curate") {
-        const agent = state.get(cmdInput.sessionID)?.role ?? "mh-build"
-        const layers = layersFor(worktree, agent)
-        const layer = resolveScopeLayer(cmdInput.arguments, layers)
-        if (!layer) {
-          throw await toastAndSwallow(client, `/mh-curate — unknown scope "${cmdInput.arguments.trim()}" (use role|project|role-global|account)`, "error")
-        }
-        await log(client, "info", `[hook:command] /mh-curate scope=${layer.scope} agent=${agent}`)
-        void triggerCurate(host, worktree, layer)
-        throw await toastAndSwallow(client, "curate cycle started ✓", "success")
-      }
-
-      // /mh-status
-      if (cmdInput.command === "mh-status") {
-        const tracked = state.get(cmdInput.sessionID)?.role ?? undefined
-        const trackedParticipates = state.get(cmdInput.sessionID)?.participates ?? false
-        const agent = tracked ?? "mh-build"
-        const layers = layersFor(worktree, agent)
-        const sessionState = tracked === undefined
-          ? "no message yet — use an mh-* agent to enable scoring"
-          : trackedParticipates
-            ? `agent=${tracked}, scoring ON`
-            : `agent=${tracked} — not scored (switch to an mh-* agent to activate the harness)`
-        const lines: string[] = [`Meta-Harness status (stores for ${agent}; this session: ${sessionState}):`]
-        for (const layer of layers) {
-          const ver = activeVersion(layer.root)
-          const score = readScore(layer.root, ver)
-          const rate = score.sessions.length > 0 ? `${score.nPass}/${score.sessions.length}` : "no sessions"
-          const bullets = activeBulletCount(readPlaybook(layer.root))
-          const bulletInfo = bullets > 0 ? ` [${bullets} bullets${bullets > CURATOR_BUDGET ? " — over budget, /mh-curate" : ""}]` : ""
-          let line = `  ${layer.scope}: active=${ver} (${rate})${bulletInfo}`
-          const trial = readTrial(layer.root)
-          if (trial) {
-            const ts = readScore(layer.root, trial.trial)
-            line += ` | TRIAL ${trial.trial} vs ${trial.baseline} (${ts.sessions.length}/${trial.minSessions})`
-          }
-          const versions = listVersions(layer.root)
-          const newest = versions.length ? versions[versions.length - 1] : undefined
-          if (newest && newest !== ver) {
-            const verdict = readAbVerdict(layer.root, newest)
-            let vinfo = "no verdict"
-            if (verdict) {
-              const dec = verdict.decision ?? `winner=${verdict.winner}`
-              const hi = verdict.heldIn
-              vinfo = hi
-                ? `${dec} (held-in delta=${hi.delta >= 0 ? "+" : ""}${hi.delta} p=${hi.mcnemarP} CI90=${JSON.stringify(hi.bootCI90)})`
-                : `${dec} (${fmtRate(verdict.candidateRate)} vs ${fmtRate(verdict.activeRate)})`
-            }
-            line += ` | candidate ${newest}: ${vinfo}`
-          }
-          lines.push(line)
-        }
-
-        // Check for plateau pause flag and show status
-        const pausedFlagPath = path.join(worktree, ".meta-harness", "paused")
-        if (fs.existsSync(pausedFlagPath)) {
-          let ts = "unknown"
-          try {
-            const pausedContent = JSON.parse(fs.readFileSync(pausedFlagPath, "utf8"))
-            if (typeof pausedContent.ts === "string") {
-              ts = pausedContent.ts
-            }
-          } catch {
-            // Tolerate unreadable/garbage flag content — presence alone means paused
-          }
-          lines.push(`  PAUSED: auto-propose disabled (plateau since ${ts}) — rm .meta-harness/paused to resume`)
-        }
-
-        const prLayer = layers.find((l) => l.scope === "project-role")
-        if (prLayer) {
-          const last = readLastMetric(prLayer.root, ["trial", "activate", "ab", "propose", "curate"])
-          if (last) {
-            const detail = [last.action, last.candidate ?? last.version ?? last.trial].filter(Boolean).join(" ")
-            lines.push(`  last: ${last.event} ${detail} (${last.ts})`)
-          }
-        }
-        throw await toastAndSwallow(client, lines.join("\n"), "info", 15_000)
-      }
+      const result = await engine.handleCommand(cmdInput.command, cmdInput.arguments, cmdInput.sessionID)
+      if (!result.consumed) return
+      // Swallow the command so its (often empty) body never reaches the LLM.
+      // /mh-score throws only (opencode logs it); the rest toast then throw.
+      if (result.kind === "throw") throw new Error(result.message)
+      throw await toastAndSwallow(client, result.message, result.variant, result.duration)
     },
   }
 }

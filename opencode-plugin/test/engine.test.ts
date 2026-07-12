@@ -270,6 +270,55 @@ test("sessionIdle happy path writes a SessionRecord stamped with the host platfo
   expect(store.get("h1")!.role).toBeNull() // cleanup() ran
 })
 
+test("handleCommand routes /mh-score to a throw-only (no toast) swallow", async () => {
+  const store = new InMemorySessionStateStore()
+  const { host } = fakeHost(tmpWorktree())
+  const engine = new EvolutionEngine(host, store)
+  const r = await engine.handleCommand("mh-score", "good nice work", "c1")
+  expect(r).toEqual({
+    consumed: true,
+    kind: "throw",
+    message: "Meta-Harness: score recorded ✓ (this notice is expected)",
+  })
+})
+
+test("handleCommand /mh-status: 'no message yet' for an unknown session; 'scoring ON' for a participating one", async () => {
+  const worktree = tmpWorktree()
+  bootstrapProjectStores(worktree)
+  const store = new InMemorySessionStateStore()
+  const { host } = fakeHost(worktree)
+  const engine = new EvolutionEngine(host, store)
+
+  const unknown = await engine.handleCommand("mh-status", "", "nope")
+  expect(unknown.consumed).toBe(true)
+  if (!(unknown.consumed && unknown.kind === "toast")) throw new Error("expected toast")
+  expect(unknown.variant).toBe("info")
+  expect(unknown.duration).toBe(15_000)
+  expect(unknown.message).toContain("no message yet")
+
+  await engine.sessionMessage("live", { role: "mh-build", isPrimary: true, participates: true })
+  const live = await engine.handleCommand("mh-status", "", "live")
+  if (!(live.consumed && live.kind === "toast")) throw new Error("expected toast")
+  expect(live.message).toContain("agent=mh-build, scoring ON")
+})
+
+test("handleCommand /mh-propose with an unknown scope returns an error toast", async () => {
+  const store = new InMemorySessionStateStore()
+  const { host } = fakeHost(tmpWorktree())
+  const engine = new EvolutionEngine(host, store)
+  const r = await engine.handleCommand("mh-propose", "bogus", "s")
+  if (!(r.consumed && r.kind === "toast")) throw new Error("expected toast")
+  expect(r.variant).toBe("error")
+  expect(r.message).toContain(`unknown scope "bogus"`)
+})
+
+test("handleCommand returns consumed:false for a non-mh command", async () => {
+  const store = new InMemorySessionStateStore()
+  const { host } = fakeHost(tmpWorktree())
+  const engine = new EvolutionEngine(host, store)
+  expect(await engine.handleCommand("some-other-command", "args", "s")).toEqual({ consumed: false })
+})
+
 test("cleanup resets transient state but preserves scoreCount and pausedToastShown", () => {
   const store = new InMemorySessionStateStore()
   const { host } = fakeHost("/wt")

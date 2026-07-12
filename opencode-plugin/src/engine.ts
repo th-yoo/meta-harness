@@ -619,4 +619,170 @@ export class EvolutionEngine {
       }
     }
   }
+
+  // ── /mh-* command routing (the adapter renders the returned data) ──────────
+  async handleCommand(command: string, args: string, sessionId: string): Promise<CommandResult> {
+    // /mh-score good|bad [note]
+    if (handleScoreCommand(command, args, sessionId)) {
+      await this.host.log("info", `[hook:command.execute.before] /mh-score consumed`)
+      return { consumed: true, kind: "throw", message: "Meta-Harness: score recorded ✓ (this notice is expected)" }
+    }
+
+    // /mh-propose [scope]
+    if (command === "mh-propose") {
+      const agent = this.state.get(sessionId)?.role ?? "mh-build"
+      const layers = layersFor(this.worktree, agent)
+      const layer = resolveScopeLayer(args, layers)
+      if (layer) {
+        await this.host.log("info", `[hook:command] /mh-propose scope=${layer.scope} agent=${agent}`)
+        void triggerPropose(this.host, this.worktree, layer)
+        return { consumed: true, kind: "toast", message: "propose cycle started ✓", variant: "success" }
+      }
+      return { consumed: true, kind: "toast", message: `/mh-propose — unknown scope "${args.trim()}" (use role|project|role-global|account)`, variant: "error" }
+    }
+
+    // /mh-activate <scope> <vN> [--force]
+    if (command === "mh-activate") {
+      const parts = args.trim().split(/\s+/).filter(Boolean)
+      const force = parts.includes("--force")
+      const positional = parts.filter((p) => p !== "--force")
+      const scopeArg = positional[0] ?? ""
+      const version = positional[1] ?? ""
+      const agent = this.state.get(sessionId)?.role ?? "mh-build"
+      const layers = layersFor(this.worktree, agent)
+      const layer = resolveScopeLayer(scopeArg, layers)
+      if (!layer) {
+        return { consumed: true, kind: "toast", message: `/mh-activate — unknown scope "${scopeArg}" (use account|project|role-global|role)`, variant: "error" }
+      }
+      if (!/^v\d+$/.test(version)) {
+        return { consumed: true, kind: "toast", message: `/mh-activate — expected a version like v3, got "${version}"`, variant: "error" }
+      }
+      const isAccount = layer.scope === "account-global" || layer.scope === "account-role"
+      if (isAccount && !force) {
+        const verdict = readAbVerdict(layer.root, version)
+        if (!verdict) {
+          return { consumed: true, kind: "toast", message: `no ab-verdict.json for ${layer.scope} ${version} — run "bun term-bench2/runner.ts ab --layer ${layer.scope} --candidate ${version}" first, or pass --force`, variant: "error" }
+        }
+        if (!abAccepted(verdict)) {
+          const dec = verdict.decision ?? `winner=${verdict.winner}`
+          const hi = verdict.heldIn
+          const detail = hi
+            ? `held-in delta=${hi.delta >= 0 ? "+" : ""}${hi.delta} p=${hi.mcnemarP} CI90=${JSON.stringify(hi.bootCI90)}`
+            : `candidate ${fmtRate(verdict.candidateRate)} vs active ${fmtRate(verdict.activeRate)}, n=${verdict.nTasks}`
+          return { consumed: true, kind: "toast", message: `${version} was not accepted by the ab gate (${dec}; ${detail}) — refusing; pass --force to override`, variant: "error" }
+        }
+      }
+      const ok = activateCandidate(layer.root, version)
+      if (!ok) {
+        return { consumed: true, kind: "toast", message: `candidate ${version} not found (no system.md) for ${layer.scope}`, variant: "error" }
+      }
+      await this.host.log("info", `[hook:command] /mh-activate ${layer.scope} ${version}${force ? " --force" : ""}`)
+      return { consumed: true, kind: "toast", message: `activated ${layer.scope} ${version} ✓`, variant: "success" }
+    }
+
+    // /mh-promote [global|role]
+    if (command === "mh-promote") {
+      const scope = args.trim().toLowerCase()
+      const agent = this.state.get(sessionId)?.role ?? "mh-build"
+      const layers = layersFor(this.worktree, agent)
+      let source: StoreLayer | undefined
+      let target: StoreLayer | undefined
+      if (!scope || scope === "global") {
+        source = layers.find((l) => l.scope === "project-global")
+        target = layers.find((l) => l.scope === "account-global")
+      } else if (scope === "role") {
+        source = layers.find((l) => l.scope === "project-role")
+        target = layers.find((l) => l.scope === "account-role")
+      }
+      if (source && target) {
+        await this.host.log("info", `[hook:command] /mh-promote ${source.scope}→${target.scope} agent=${agent}`)
+        void triggerPromote(this.host, this.worktree, source, target)
+        return { consumed: true, kind: "toast", message: "promote cycle started ✓", variant: "success" }
+      }
+      return { consumed: true, kind: "toast", message: `/mh-promote — unknown scope "${scope}" (use global|role)`, variant: "error" }
+    }
+
+    // /mh-curate <scope> — consolidate/prune a layer's playbook (through the gate)
+    if (command === "mh-curate") {
+      const agent = this.state.get(sessionId)?.role ?? "mh-build"
+      const layers = layersFor(this.worktree, agent)
+      const layer = resolveScopeLayer(args, layers)
+      if (!layer) {
+        return { consumed: true, kind: "toast", message: `/mh-curate — unknown scope "${args.trim()}" (use role|project|role-global|account)`, variant: "error" }
+      }
+      await this.host.log("info", `[hook:command] /mh-curate scope=${layer.scope} agent=${agent}`)
+      void triggerCurate(this.host, this.worktree, layer)
+      return { consumed: true, kind: "toast", message: "curate cycle started ✓", variant: "success" }
+    }
+
+    // /mh-status
+    if (command === "mh-status") {
+      const st = this.state.get(sessionId)
+      const tracked = st?.role ?? undefined
+      const trackedParticipates = st?.participates ?? false
+      const agent = tracked ?? "mh-build"
+      const layers = layersFor(this.worktree, agent)
+      const sessionState = tracked === undefined
+        ? "no message yet — use an mh-* agent to enable scoring"
+        : trackedParticipates
+          ? `agent=${tracked}, scoring ON`
+          : `agent=${tracked} — not scored (switch to an mh-* agent to activate the harness)`
+      const lines: string[] = [`Meta-Harness status (stores for ${agent}; this session: ${sessionState}):`]
+      for (const layer of layers) {
+        const ver = activeVersion(layer.root)
+        const score = readScore(layer.root, ver)
+        const rate = score.sessions.length > 0 ? `${score.nPass}/${score.sessions.length}` : "no sessions"
+        const bullets = activeBulletCount(readPlaybook(layer.root))
+        const bulletInfo = bullets > 0 ? ` [${bullets} bullets${bullets > CURATOR_BUDGET ? " — over budget, /mh-curate" : ""}]` : ""
+        let line = `  ${layer.scope}: active=${ver} (${rate})${bulletInfo}`
+        const trial = readTrial(layer.root)
+        if (trial) {
+          const ts = readScore(layer.root, trial.trial)
+          line += ` | TRIAL ${trial.trial} vs ${trial.baseline} (${ts.sessions.length}/${trial.minSessions})`
+        }
+        const versions = listVersions(layer.root)
+        const newest = versions.length ? versions[versions.length - 1] : undefined
+        if (newest && newest !== ver) {
+          const verdict = readAbVerdict(layer.root, newest)
+          let vinfo = "no verdict"
+          if (verdict) {
+            const dec = verdict.decision ?? `winner=${verdict.winner}`
+            const hi = verdict.heldIn
+            vinfo = hi
+              ? `${dec} (held-in delta=${hi.delta >= 0 ? "+" : ""}${hi.delta} p=${hi.mcnemarP} CI90=${JSON.stringify(hi.bootCI90)})`
+              : `${dec} (${fmtRate(verdict.candidateRate)} vs ${fmtRate(verdict.activeRate)})`
+          }
+          line += ` | candidate ${newest}: ${vinfo}`
+        }
+        lines.push(line)
+      }
+
+      // Check for plateau pause flag and show status
+      const pausedFlagPath = path.join(this.worktree, ".meta-harness", "paused")
+      if (fs.existsSync(pausedFlagPath)) {
+        let ts = "unknown"
+        try {
+          const pausedContent = JSON.parse(fs.readFileSync(pausedFlagPath, "utf8"))
+          if (typeof pausedContent.ts === "string") {
+            ts = pausedContent.ts
+          }
+        } catch {
+          // Tolerate unreadable/garbage flag content — presence alone means paused
+        }
+        lines.push(`  PAUSED: auto-propose disabled (plateau since ${ts}) — rm .meta-harness/paused to resume`)
+      }
+
+      const prLayer = layers.find((l) => l.scope === "project-role")
+      if (prLayer) {
+        const last = readLastMetric(prLayer.root, ["trial", "activate", "ab", "propose", "curate"])
+        if (last) {
+          const detail = [last.action, last.candidate ?? last.version ?? last.trial].filter(Boolean).join(" ")
+          lines.push(`  last: ${last.event} ${detail} (${last.ts})`)
+        }
+      }
+      return { consumed: true, kind: "toast", message: lines.join("\n"), variant: "info", duration: 15_000 }
+    }
+
+    return { consumed: false }
+  }
 }
