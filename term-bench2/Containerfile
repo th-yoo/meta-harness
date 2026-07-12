@@ -54,11 +54,17 @@
 # host bind-mounts, added at container-create time by cmd-run.ts — those are
 # plain data directories (JSON/auth files), not architecture-specific.
 #
+# Claude Code CLI is also baked into this image (below), pinned to a specific
+# version. The B5 claude-code AgentDriver execs `claude -p` INSIDE the
+# container; the stream-json schema drifts across versions and the parser is
+# written against this pinned version only.
+#
 # Provenance note: env_block's `opencodeVersion` field (record.ts) records
 # the version by running `opencode --version` INSIDE the container via one
 # `podman exec` per run — never the host's `opencode --version` — since the
 # host and container binaries are two different installs (and, per the
-# above, may not even be the same architecture).
+# above, may not even be the same architecture). Similarly, per-driver
+# in-container version detection (not the image tag) is used by B5's driver.
 FROM docker.io/library/ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -139,6 +145,11 @@ ENV PATH="/root/.local/bin:${PATH}"
 # it resolvable for `podman exec`.
 RUN curl -fsSL https://opencode.ai/install | bash
 ENV PATH="/root/.opencode/bin:${PATH}"
+
+# Claude Code — the claude-code AgentDriver execs `claude -p` INSIDE the
+# container. Pinned exactly: the stream-json output schema drifts across
+# versions and drivers/claude-code.ts's parser is written against this one.
+RUN npm install -g @anthropic-ai/claude-code@2.1.207
 
 # Buildah records WORKDIR in image config but does not materialize the
 # directory as a filesystem layer — and `podman create -w /app` makes `start`
