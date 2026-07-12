@@ -1165,13 +1165,35 @@ export function migrateFlatToProjectGlobal(worktree: string): void {
  */
 export function migrateAccountRoot(): void {
   const newRoot = accountMetaRoot()
-  if (fs.existsSync(newRoot)) return
 
+  // Detect poisoned state: newRoot exists AND old path exists as a real directory with content.
+  // This means a prior migration failed (rename threw) but mkdir(newRoot.parent) already
+  // succeeded, permanently poisoning the guard. Log once per call so it's discoverable.
   const oldRoot = legacyAccountRoot()
-  let oldStat: fs.Stats
+  let oldStat: fs.Stats | null = null
   try {
     oldStat = fs.lstatSync(oldRoot)
   } catch {
+    // nothing at the old location — first run or already cleaned up
+  }
+
+  if (fs.existsSync(newRoot) && oldStat && oldStat.isDirectory()) {
+    // Both exist and old is a real directory — check if it has any content beyond empty scaffolding
+    const hasContent = isRealStore(oldRoot)
+    if (hasContent) {
+      console.error(
+        `[meta-harness] WARNING: account store stranded at old path (migration may have failed earlier):\n` +
+        `  Old path (has evolved content): ${oldRoot}\n` +
+        `  New path (exists): ${newRoot}\n` +
+        `  Remediation: move the old directory to the new location manually or unset META_HARNESS_HOME and retry`,
+      )
+    }
+    return
+  }
+
+  if (fs.existsSync(newRoot)) return
+
+  if (!oldStat) {
     return // nothing at the old location either — first run, nothing to migrate
   }
   if (!oldStat.isDirectory()) return // symlink (prior migration) or non-dir — no-op
@@ -1179,12 +1201,18 @@ export function migrateAccountRoot(): void {
   try {
     fs.mkdirSync(path.dirname(newRoot), { recursive: true })
     fs.renameSync(oldRoot, newRoot)
-  } catch {
+  } catch (err) {
     // Lost a race with a concurrent migration, or genuinely failed (e.g. an
-    // EXDEV cross-device rename under an unusual META_HARNESS_HOME) — either
-    // way, never block startup. If newRoot exists now, the other entry point
-    // already finished; otherwise the old store is simply left in place for
-    // the next call to retry.
+    // EXDEV cross-device rename under an unusual META_HARNESS_HOME) — log it
+    // loud so the user can discover the stranded store, then never block startup.
+    const errorMsg = err instanceof Error ? err.message : String(err)
+    console.error(
+      `[meta-harness] ERROR: account store migration failed (old store stranded):\n` +
+      `  Old path: ${oldRoot}\n` +
+      `  New path: ${newRoot}\n` +
+      `  Error: ${errorMsg}\n` +
+      `  Remediation: move the old directory to the new location manually or unset META_HARNESS_HOME and retry`,
+    )
     return
   }
 
@@ -1193,6 +1221,31 @@ export function migrateAccountRoot(): void {
   } catch { /* best-effort back-compat link only; the move itself already succeeded */ }
 
   console.error(`[meta-harness] migrated account store: ${oldRoot} -> ${newRoot} (symlink left at old path)`)
+}
+
+/**
+ * Check if oldRoot is a "real" store with content (not just empty scaffolding).
+ * Looks for any entry under roles/ or any non-empty active/.
+ */
+function isRealStore(storeRoot: string): boolean {
+  try {
+    const rolesDir = path.join(storeRoot, "roles")
+    const entries = fs.readdirSync(rolesDir)
+    if (entries.length > 0) return true
+  } catch {
+    // roles dir doesn't exist or can't be read — check active
+  }
+
+  try {
+    const activeDir = path.join(storeRoot, "active")
+    const entries = fs.readdirSync(activeDir)
+    // Has any file beyond empty scaffolding
+    if (entries.length > 0) return true
+  } catch {
+    // active dir doesn't exist or can't be read — not a real store
+  }
+
+  return false
 }
 
 /**

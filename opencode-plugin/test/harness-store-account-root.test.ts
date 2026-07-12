@@ -221,3 +221,106 @@ test("migrateAccountRoot: EDGE — META_HARNESS_HOME override still migrates a r
   expect(fs.readFileSync(path.join(overrideRoot, "marker.txt"), "utf-8")).toBe("pre-override content")
   expect(fs.lstatSync(oldRoot).isSymbolicLink()).toBe(true)
 })
+
+// ── Fix L5: migration failure logging ────────────────────────────────────
+
+test("migrateAccountRoot: rename failure logs error with both paths and remediation", () => {
+  const { oldRoot, newRoot, mhBase } = setupRoots()
+  fs.mkdirSync(path.join(oldRoot, "global"), { recursive: true })
+  fs.writeFileSync(path.join(oldRoot, "global", "marker.txt"), "stranded content")
+
+  // Simulate EXDEV by making newRoot's parent read-only so rename fails
+  fs.mkdirSync(mhBase, { recursive: true })
+  const logs: string[] = []
+  const originalError = console.error
+  console.error = (...args: unknown[]) => {
+    logs.push(args.map(String).join(" "))
+  }
+
+  try {
+    // Make parent read-only to force rename to fail
+    fs.chmodSync(mhBase, 0o444)
+    migrateAccountRoot()
+  } finally {
+    console.error = originalError
+    fs.chmodSync(mhBase, 0o755)
+  }
+
+  // Should have logged the error with both paths and remediation
+  const errorLog = logs.find((l) => l.includes("migration") && l.includes("failed"))
+  expect(errorLog).toBeDefined()
+  expect(errorLog).toContain(oldRoot)
+  expect(errorLog).toContain(newRoot)
+  expect(errorLog).toContain("move the old directory")
+
+  // Old content should still be stranded at old location
+  expect(fs.readFileSync(path.join(oldRoot, "global", "marker.txt"), "utf-8")).toBe("stranded content")
+  // New location should not exist
+  expect(fs.existsSync(newRoot)).toBe(false)
+})
+
+test("migrateAccountRoot: poisoned state (both exist, old is real dir with content) logs warning", () => {
+  const { oldRoot, newRoot } = setupRoots()
+
+  // Create old store with evolved content
+  fs.mkdirSync(path.join(oldRoot, "global", "active"), { recursive: true })
+  fs.mkdirSync(path.join(oldRoot, "roles"), { recursive: true })
+  fs.writeFileSync(path.join(oldRoot, "roles", "marker.txt"), "evolved rules")
+
+  // Create new store (simulating prior failed migration or poison)
+  fs.mkdirSync(newRoot, { recursive: true })
+
+  const logs: string[] = []
+  const originalError = console.error
+  console.error = (...args: unknown[]) => {
+    logs.push(args.map(String).join(" "))
+  }
+
+  try {
+    migrateAccountRoot()
+  } finally {
+    console.error = originalError
+  }
+
+  // Should have logged warning about poisoned state
+  const warningLog = logs.find((l) => l.includes("stranded") && l.includes(oldRoot))
+  expect(warningLog).toBeDefined()
+  expect(warningLog).toContain(oldRoot)
+  expect(warningLog).toContain(newRoot)
+  expect(warningLog).toContain("move the old directory")
+
+  // Old content should still be at old location (untouched)
+  expect(fs.readFileSync(path.join(oldRoot, "roles", "marker.txt"), "utf-8")).toBe("evolved rules")
+})
+
+test("migrateAccountRoot: both exist but old is symlink -> no warning (successful prior migration)", () => {
+  const { oldRoot, newRoot } = setupRoots()
+
+  // Create the real new store
+  fs.mkdirSync(newRoot, { recursive: true })
+  fs.writeFileSync(path.join(newRoot, "marker.txt"), "new content")
+
+  // Create old as a symlink to new (successful prior migration)
+  fs.mkdirSync(path.dirname(oldRoot), { recursive: true })
+  fs.symlinkSync(newRoot, oldRoot)
+
+  const logs: string[] = []
+  const originalError = console.error
+  console.error = (...args: unknown[]) => {
+    logs.push(args.map(String).join(" "))
+  }
+
+  try {
+    migrateAccountRoot()
+  } finally {
+    console.error = originalError
+  }
+
+  // Should NOT log any warning (this is a successful state)
+  const warnings = logs.filter((l) => l.includes("stranded") || l.includes("warning"))
+  expect(warnings.length).toBe(0)
+
+  // Everything should remain as-is
+  expect(fs.lstatSync(oldRoot).isSymbolicLink()).toBe(true)
+  expect(fs.realpathSync(oldRoot)).toBe(fs.realpathSync(newRoot))
+})
