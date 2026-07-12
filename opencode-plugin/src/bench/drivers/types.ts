@@ -1,0 +1,46 @@
+/**
+ * drivers/types.ts — the generic AgentDriver interface.
+ *
+ * B1 (task-B1-brief.md) extracts this seam so the generic retry loop in
+ * agent-run.ts can drive any coding agent CLI (opencode today; claude-code /
+ * codex are future drivers), not just opencode. Every opencode-specific
+ * detail (its NDJSON event shape, its `--auto --format json` flags, its
+ * error-classification heuristics) lives behind this interface in
+ * drivers/opencode.ts — nothing opencode-specific belongs in agent-run.ts.
+ */
+import type { ExecResult } from "../exec.ts"
+import type { TrajEvent, ToolUsage } from "../../harness-store.ts"
+import type { AgentAuthMounts } from "../agent-auth.ts"
+
+export interface AgentRunOutput {
+  turnCount: number
+  toolUsage: ToolUsage
+  events: TrajEvent[]
+}
+
+/** How the evolvable harness markdown reaches the agent. */
+export type HarnessDelivery =
+  | { kind: "workspace-file"; filename: string } // podman cp to /app/<filename>
+  | { kind: "argv-flags"; buildFlags(harnessMd: string): string[] } // future drivers
+
+/** Per-attempt classification, checked in this precedence order by the
+ *  generic retry loop (auth beats transient). */
+export type AttemptClass = "auth" | "transient" | "done"
+
+export interface AgentDriver {
+  /** Registry id + provenance string + log prefix. */
+  id: string
+  /** In-container argv for one agent attempt (cwd is /app). `model` is already driver-native (modelArg applied by caller). */
+  buildArgv(opts: { model: string; variant: string; instruction: string }): string[]
+  /** Canonical "provider/model" slug -> driver-native model arg; may die() on unsupported. */
+  modelArg(canonicalModel: string): string
+  harness: HarnessDelivery
+  /** Driver stdout -> neutral result (turn counting + tool errors + TrajEvents). */
+  parseOutput(stdout: string): AgentRunOutput
+  /** Classify a finished (non-timed-out) attempt for the retry loop. */
+  classifyAttempt(result: ExecResult): AttemptClass
+  /** Host-side auth prep: mounts + optional container env + cleanup. */
+  prepareAuth(): AgentAuthMounts
+  /** In-container version probe argv, e.g. ["opencode","--version"]. */
+  versionArgv: string[]
+}

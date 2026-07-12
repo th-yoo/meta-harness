@@ -1,0 +1,223 @@
+import { test, expect, spyOn } from "bun:test"
+import * as fs from "node:fs"
+import * as path from "node:path"
+import * as os from "node:os"
+import { runAgent, TRANSIENT_MARK, TIMEOUT_MARK, AUTH_FAIL_MARK } from "../src/bench/agent-run.ts"
+import type { AgentDriver, AgentRunOutput, AttemptClass, HarnessDelivery } from "../src/bench/drivers/types.ts"
+import type { BenchPaths } from "../src/bench/paths.ts"
+import type { ExecResult } from "../src/bench/exec.ts"
+
+// Minimal FAKE driver + tmpDir/fakeBenchPaths helpers, replicated (minimally)
+// from test/bench-opencode-run.test.ts's pattern — that file is not exported
+// from / imported here, per task-B1-brief.md's constraint that it stay
+// untouched.
+
+function tmpDir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "mh-bench-agent-run-"))
+}
+
+function fakeBenchPaths(tbRoot: string): BenchPaths {
+  const termBenchDir = path.join(tbRoot, "..", "term-bench2")
+  return {
+    metaRoot: path.dirname(termBenchDir),
+    termBenchDir,
+    tbRoot,
+    resultsDir: path.join(termBenchDir, "results"),
+    patchesDir: path.join(termBenchDir, "patches"),
+    baselineTasksFile: path.join(termBenchDir, "baseline-tasks.txt"),
+    splitsFile: path.join(termBenchDir, "splits.json"),
+  }
+}
+
+function ok(stdout: string, rc = 0): ExecResult {
+  return { rc, stdout, stderr: "", timedOut: false }
+}
+
+function setupTask(): BenchPaths {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "do the thing")
+  return fakeBenchPaths(tbRoot)
+}
+
+const FAKE_RESULT: AgentRunOutput = {
+  turnCount: 7,
+  toolUsage: { fake: { calls: 1, errors: 0 } },
+  events: [{ t: "text", text: "fake output" }],
+}
+
+function makeFakeDriver(opts: {
+  harness?: HarnessDelivery
+  classify?: (result: ExecResult) => AttemptClass
+} = {}): AgentDriver {
+  return {
+    id: "fake-agent",
+    buildArgv: ({ model, variant, instruction }) => [
+      "fake-agent",
+      "--model",
+      model,
+      ...(variant ? ["--variant", variant] : []),
+      instruction,
+    ],
+    modelArg: (canonicalModel) => canonicalModel,
+    harness: opts.harness ?? { kind: "workspace-file", filename: "HARNESS.md" },
+    parseOutput: () => FAKE_RESULT,
+    classifyAttempt: opts.classify ?? (() => "done"),
+    prepareAuth: () => ({ mounts: [], cleanup: () => {} }),
+    versionArgv: ["fake-agent", "--version"],
+  }
+}
+
+// ── 1. timeout short-circuit ────────────────────────────────────────────
+
+test("runAgent: timeout short-circuits to {0,{},[]} and logs TIMEOUT_MARK, no retry", async () => {
+  const paths = setupTask()
+  const driver = makeFakeDriver()
+
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    return { rc: 124, stdout: "", stderr: "", timedOut: true }
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result: AgentRunOutput
+  try {
+    result = await runAgent(driver, paths, "c1", "t", "m", "", 30, "", execFn)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes(TIMEOUT_MARK) && m.includes("30s"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(result).toEqual({ turnCount: 0, toolUsage: {}, events: [] })
+  expect(calls).toBe(1)
+})
+
+// ── 2. auth classification ──────────────────────────────────────────────
+
+test("runAgent: auth classification fails fast — no retry, no backoff, AUTH_FAIL_MARK logged, not TRANSIENT_MARK", async () => {
+  const paths = setupTask()
+  const driver = makeFakeDriver({ classify: () => "auth" })
+
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    return ok("boom", 1)
+  }
+  const sleeps: number[] = []
+  const sleepFn = async (s: number) => {
+    sleeps.push(s)
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result: AgentRunOutput
+  try {
+    result = await runAgent(driver, paths, "c1", "t", "m", "", 30, "", execFn, sleepFn)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes(AUTH_FAIL_MARK))).toBe(true)
+    expect(messages.some((m) => m.includes(TRANSIENT_MARK))).toBe(false)
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(calls).toBe(1)
+  expect(sleeps).toEqual([])
+  expect(result).toEqual(FAKE_RESULT)
+})
+
+// ── 3. transient classification ─────────────────────────────────────────
+
+test("runAgent: transient classification retries with backoff 5,10,15 (cap 30), MAX_ATTEMPTS(4) total calls", async () => {
+  const paths = setupTask()
+  const driver = makeFakeDriver({ classify: () => "transient" })
+
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    return ok("still failing", 1)
+  }
+  const sleeps: number[] = []
+  const sleepFn = async (s: number) => {
+    sleeps.push(s)
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result: AgentRunOutput
+  try {
+    result = await runAgent(driver, paths, "c1", "t", "m", "", 30, "", execFn, sleepFn)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.filter((m) => m.includes(TRANSIENT_MARK)).length).toBe(3)
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(calls).toBe(4)
+  expect(sleeps).toEqual([5, 10, 15])
+  expect(result).toEqual(FAKE_RESULT) // still returns driver.parseOutput after exhausting attempts
+})
+
+// ── 4. done on first attempt + workspace-file harness delivery ─────────
+
+test("runAgent: done on first attempt returns parseOutput result; workspace-file harness delivered via cp", async () => {
+  const paths = setupTask()
+  const driver = makeFakeDriver({ harness: { kind: "workspace-file", filename: "HARNESS.md" } })
+
+  const seenArgv: string[][] = []
+  let capturedHostFile: string | undefined
+  const execFn = async (argv: string[]): Promise<ExecResult> => {
+    seenArgv.push(argv)
+    if (argv[1] === "cp") capturedHostFile = argv[2]
+    return ok("done")
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result: AgentRunOutput
+  try {
+    result = await runAgent(driver, paths, "my-container", "t", "m", "", 30, "harness contents", execFn)
+  } finally {
+    errSpy.mockRestore()
+  }
+
+  expect(result).toEqual(FAKE_RESULT)
+  const cpCall = seenArgv.find((a) => a[1] === "cp")
+  expect(cpCall).toEqual(["podman", "cp", capturedHostFile!, "my-container:/app/HARNESS.md"])
+  expect(fs.existsSync(capturedHostFile!)).toBe(false) // scratch cleaned up after use
+
+  // exec call (not the cp) never used --pure-style content — just sanity that
+  // buildArgv's argv reached execFn as the actual exec command.
+  const execCall = seenArgv.find((a) => a[1] === "exec")
+  expect(execCall).toBeDefined()
+})
+
+// ── 5. argv-flags harness delivery variant ──────────────────────────────
+
+test("runAgent: argv-flags harness delivery appends buildFlags(harnessMd) to argv, issues no cp", async () => {
+  const paths = setupTask()
+  const driver = makeFakeDriver({
+    harness: {
+      kind: "argv-flags",
+      buildFlags: (harnessMd) => ["--harness-inline", harnessMd],
+    },
+  })
+
+  const seenArgv: string[][] = []
+  const execFn = async (argv: string[]): Promise<ExecResult> => {
+    seenArgv.push(argv)
+    return ok("done")
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result: AgentRunOutput
+  try {
+    result = await runAgent(driver, paths, "c1", "t", "m", "myvariant", 30, "the harness md", execFn)
+  } finally {
+    errSpy.mockRestore()
+  }
+
+  expect(result).toEqual(FAKE_RESULT)
+  expect(seenArgv.some((a) => a[1] === "cp")).toBe(false)
+  const execCall = seenArgv.find((a) => a[1] === "exec")!
+  expect(execCall).toContain("--harness-inline")
+  expect(execCall).toContain("the harness md")
+  expect(execCall).toContain("--variant")
+  expect(execCall).toContain("myvariant")
+})
