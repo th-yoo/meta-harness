@@ -24,7 +24,7 @@
 
 import fs from "node:fs"
 import path from "node:path"
-import type { EvolutionEngine, SessionState, SessionStateStore } from "../../engine.ts"
+import type { EvolutionEngine, SessionIdleOutcome, SessionState, SessionStateStore } from "../../engine.ts"
 import { parseScoreArgs } from "../../score.ts"
 import { MH_CHILD_ENV, type ClaudeCodeHost } from "./cc-host.ts"
 import { applyPendingArtifacts } from "./proposer.ts"
@@ -84,6 +84,32 @@ export function resolveRole(cwd: string, env: NodeJS.ProcessEnv): string | null 
     /* no project config, or unreadable → fall through to null */
   }
   return null
+}
+
+/**
+ * F3 — the /mh-score block message, per sessionIdle's honest outcome. Every
+ * outcome gets a DISTINCT message so a user (or a script scraping hook
+ * output) can tell an actual record from a no-op. "not-active" doubles as
+ * CC's one-score-per-session Phase-A note: cleanup() resets `bootstrapped`
+ * to false right after a score is recorded, and — unlike opencode — no
+ * SessionStart re-fires mid-session on Claude Code, so a second /mh-score in
+ * the same session hits this same branch as a never-started one.
+ */
+function scoreOutcomeMessage(outcome: SessionIdleOutcome): string {
+  switch (outcome) {
+    case "recorded":
+      return "Meta-Harness: score recorded ✓ (this notice is expected)"
+    case "skipped-degenerate":
+      return "Meta-Harness: session skipped — no substantive work to score (this notice is expected)"
+    case "not-active":
+      return (
+        "Meta-Harness: no active session to score — nothing tracked, or this " +
+        "session already scored (Claude Code scores once per session: resume " +
+        "or start a new session to score more work)"
+      )
+    case "pending":
+      return "Meta-Harness: a score is already pending for this session — try again in a moment"
+  }
 }
 
 /** Conservative degenerate-session filter for the Stop reminder gate — replicated
@@ -163,8 +189,8 @@ export async function dispatch(
           return { decision: "block", reason: "Meta-Harness: usage — /mh-score good|bad [note]" }
         }
         host.setPendingScore(sessionId, verdict)
-        await engine.sessionIdle(sessionId)
-        return { decision: "block", reason: "Meta-Harness: score recorded ✓ (this notice is expected)" }
+        const outcome = await engine.sessionIdle(sessionId)
+        return { decision: "block", reason: scoreOutcomeMessage(outcome) }
       }
 
       // Other /mh-* commands route through the shared engine handler; the

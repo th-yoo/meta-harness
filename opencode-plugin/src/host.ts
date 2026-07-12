@@ -154,6 +154,10 @@ export interface HarnessHost {
    * and applies the staged artifact on a later hook event via applyStagedArtifact.
    * A host that does NOT implement it (OpencodeHost) keeps the original inline
    * waitForFile-then-apply path — behavior byte-identical to before this seam.
+   *
+   * F6 — pairing requirement: hosts implementing stageArtifactApply MUST also
+   * implement proposerInFlight (the in-memory inFlight Set alone cannot guard
+   * across short-lived processes).
    */
   stageArtifactApply?(descriptor: StagedArtifactDescriptor): void
 

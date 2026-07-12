@@ -226,13 +226,34 @@ test("sessionIdle skips a degenerate session without recording a score", async (
 
   // First message under mh-build → participating, bootstrapped, turns=0.
   await engine.sessionMessage("d1", { role: "mh-build", isPrimary: true, participates: true, model: "anthropic/x" })
-  await engine.sessionIdle("d1") // turns===0 → degenerate
+  const outcome = await engine.sessionIdle("d1") // turns===0 → degenerate
+  expect(outcome).toBe("skipped-degenerate") // F3
 
   const prRoot = projectRoleRoot(worktree, "mh-build")
   expect(readScore(prRoot, activeVersion(prRoot)).sessions.length).toBe(0)
   const skip = calls.notifies.find((n) => n.msg.includes("session skipped"))
   expect(skip).toBeDefined()
   expect(skip!.title).toBeNull() // title-less toast (branding embedded in message)
+})
+
+// F3: sessionIdle's outcome return value, exercised directly (not-active,
+// pending) — dispatch-level coverage of the resulting block messages lives
+// in cc-dispatch.test.ts; this proves the engine-level contract the opencode
+// adapter also relies on (it just ignores the return value — no behavior
+// change there, per the existing happy-path/degenerate tests above/below).
+test("sessionIdle returns 'not-active' for an unknown/untracked session, and 'pending' when a pendingScore wedge is set", async () => {
+  const worktree = tmpWorktree()
+  const store = new InMemorySessionStateStore()
+  const { host } = fakeHost(worktree)
+  const engine = new EvolutionEngine(host, store)
+
+  expect(await engine.sessionIdle("no-such-session")).toBe("not-active")
+
+  const st = seedParticipating(store, "pend1")
+  st.bootstrapped = true
+  st.pendingScore = true
+  store.put("pend1", st)
+  expect(await engine.sessionIdle("pend1")).toBe("pending")
 })
 
 test("sessionIdle happy path writes a SessionRecord stamped with the host platform", async () => {
@@ -256,7 +277,7 @@ test("sessionIdle happy path writes a SessionRecord stamped with the host platfo
   const idle = engine.sessionIdle("h1")
   await new Promise((r) => setTimeout(r, 10))
   handleScoreCommand("mh-score", "good extra note", "h1")
-  await idle
+  expect(await idle).toBe("recorded") // F3
 
   const prRoot = projectRoleRoot(worktree, "mh-build")
   const score = readScore(prRoot, activeVersion(prRoot))

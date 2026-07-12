@@ -103,6 +103,12 @@ function freshCommandsDir(): string {
   return cmdsDir
 }
 
+test("F4: mh-promote's description references the current bun runner, not the deleted runner.py stub text", () => {
+  const promote = MH_COMMANDS.find((c) => c.name === "mh-promote")!
+  expect(promote.description).toContain("bun term-bench2/runner.ts ab")
+  expect(promote.description).not.toContain("runner.py")
+})
+
 test("MH_COMMANDS covers all six engine-routed /mh-* commands", () => {
   expect(MH_COMMANDS.map((c) => c.name).sort()).toEqual(
     ["mh-activate", "mh-curate", "mh-promote", "mh-propose", "mh-score", "mh-status"].sort(),

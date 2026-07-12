@@ -148,6 +148,15 @@ export type CommandResult =
   | { consumed: true; kind: "throw"; message: string }
   | { consumed: true; kind: "toast"; message: string; variant: ToastVariant; duration?: number }
 
+/**
+ * F3 — sessionIdle's honest outcome (see its doc comment for the precise
+ * guard-branch mapping). Additive: opencode's index.ts discards it, so this
+ * has zero effect there; the Claude Code adapter (dispatch.ts) uses it to
+ * render a distinct block message per outcome instead of always claiming
+ * "score recorded ✓".
+ */
+export type SessionIdleOutcome = "recorded" | "skipped-degenerate" | "not-active" | "pending"
+
 // ── Constants / pure helpers (moved verbatim from index.ts) ──────────────────
 
 /** Persist trajectories for PASSING sessions too. Default false = failures only. */
@@ -294,6 +303,18 @@ export class EvolutionEngine {
     }
     st.bootstrapped = true
     st.turns = 0
+    // F1 — clear a stale pendingScore wedge: sessionIdle persists
+    // {bootstrapped:false, pendingScore:true} BEFORE it runs the human-score
+    // prompt (see below). If the process dies mid-pipeline (a CC hook
+    // timeout/crash), the file-backed state is stuck there forever, and
+    // sessionIdle's `if (st0.pendingScore) return` guard would no-op on
+    // every future /mh-score. This branch only runs when st.bootstrapped
+    // was false, i.e. exactly the state sessionIdle leaves behind on a
+    // crash (or a session's genuine first bootstrap, where pendingScore is
+    // already false) — in a short-lived-process world, a fresh SessionStart
+    // can never observe a score pipeline that is truly still in flight from
+    // ITS OWN perspective, so it's always safe to clear.
+    st.pendingScore = false
 
     // Bootstrap all role stores on first message (participating roles only).
     if (participates) {
@@ -401,14 +422,32 @@ export class EvolutionEngine {
   }
 
   // ── session.idle: the whole scoring + auto-propose pipeline ────────────────
-  async sessionIdle(sessionId: string): Promise<void> {
+  /**
+   * F3 — honest outcomes. Additive return value (was `void`); the opencode
+   * adapter (index.ts) awaits sessionIdle and discards the result, so this
+   * is zero behavior change there. The Claude Code adapter (dispatch.ts)
+   * uses it to render a distinct, honest /mh-score block message instead of
+   * an unconditional "score recorded ✓":
+   *   "not-active"         — the `!st0?.bootstrapped` / `!st0.participates`
+   *                           guards: nothing is tracked for this session,
+   *                           OR (on CC) the session was already scored once
+   *                           and cleanup() reset it — CC's one-score-per-
+   *                           session Phase-A behavior, since no SessionStart
+   *                           re-fires without a resume.
+   *   "pending"             — the `st0.pendingScore` guard (already-in-flight
+   *                           scoring, incl. a not-yet-cleared F1 wedge), or
+   *                           promptHumanScore timing out with no verdict.
+   *   "skipped-degenerate"  — the degenerate-session filter.
+   *   "recorded"            — the full happy path completed.
+   */
+  async sessionIdle(sessionId: string): Promise<SessionIdleOutcome> {
     const st0 = this.state.get(sessionId)
     const agent = st0?.role ?? ""
     await this.host.log("info", `[hook:event] session.idle — sessionID=${sessionId} agent=${agent} bootstrapped=${!!st0?.bootstrapped}`)
 
-    if (!st0?.bootstrapped) return
-    if (!st0.participates) return
-    if (st0.pendingScore) return
+    if (!st0?.bootstrapped) return "not-active"
+    if (!st0.participates) return "not-active"
+    if (st0.pendingScore) return "pending"
 
     const st = st0
 
@@ -421,7 +460,7 @@ export class EvolutionEngine {
       await this.host.log("info", `[hook:event] skipping degenerate session ${sessionId} (turns=${turns}, toolCalls=${Object.values(usage).reduce((n, t) => n + t.calls, 0)})`)
       await this.host.notify("Meta-Harness: session skipped (no substantive work)", "info", 4_000, null)
       this.cleanup(sessionId)
-      return
+      return "skipped-degenerate"
     }
 
     st.bootstrapped = false
@@ -459,7 +498,7 @@ export class EvolutionEngine {
       await this.host.log("info", `[hook:event] scoring timed out — skipping ${sessionId}`)
       st.pendingScore = false
       this.state.put(sessionId, st)
-      return
+      return "pending"
     }
 
     // De-collide the recorded ID when this session is scored more than once.
@@ -602,9 +641,19 @@ export class EvolutionEngine {
       )
     } else if (prDue && !paused) {
       await this.host.log("info", `[hook:event] auto-propose project-role for ${agent}`)
+      // F5 — microtask invariant: `void` here means the fire-and-forget
+      // propose child is only launched because every `await` between here
+      // and stageArtifactApply's synchronous spawn call resolves within the
+      // current microtask queue drain. On Claude Code, hook-cli.ts's process
+      // exits (see its own F5 note) once `main()`'s promise settles — that
+      // happens to still be AFTER this point today, but inserting a real
+      // async boundary (a genuine I/O await) before stageArtifactApply would
+      // silently kill auto-propose on CC: the process would exit before the
+      // detached child ever gets spawned, with no error, no log, nothing.
       void triggerPropose(this.host, this.worktree, prLayer)
     } else if (pgDue && !paused) {
       await this.host.log("info", `[hook:event] auto-propose project-global`)
+      // F5 — same microtask-invariant caveat as the prDue branch above.
       void triggerPropose(this.host, this.worktree, pgLayer)
     }
 
@@ -618,6 +667,7 @@ export class EvolutionEngine {
         break
       }
     }
+    return "recorded"
   }
 
   // ── /mh-* command routing (the adapter renders the returned data) ──────────
@@ -635,6 +685,9 @@ export class EvolutionEngine {
       const layer = resolveScopeLayer(args, layers)
       if (layer) {
         await this.host.log("info", `[hook:command] /mh-propose scope=${layer.scope} agent=${agent}`)
+        // F5 — same microtask-invariant caveat as sessionIdle's auto-propose
+        // `void triggerPropose` calls above: relies on this settling before
+        // hook-cli.ts's process exits.
         void triggerPropose(this.host, this.worktree, layer)
         return { consumed: true, kind: "toast", message: "propose cycle started ✓", variant: "success" }
       }
@@ -696,6 +749,8 @@ export class EvolutionEngine {
       }
       if (source && target) {
         await this.host.log("info", `[hook:command] /mh-promote ${source.scope}→${target.scope} agent=${agent}`)
+        // F5 — same microtask-invariant caveat as sessionIdle's auto-propose
+        // `void triggerPropose` calls above.
         void triggerPromote(this.host, this.worktree, source, target)
         return { consumed: true, kind: "toast", message: "promote cycle started ✓", variant: "success" }
       }
@@ -711,6 +766,8 @@ export class EvolutionEngine {
         return { consumed: true, kind: "toast", message: `/mh-curate — unknown scope "${args.trim()}" (use role|project|role-global|account)`, variant: "error" }
       }
       await this.host.log("info", `[hook:command] /mh-curate scope=${layer.scope} agent=${agent}`)
+      // F5 — same microtask-invariant caveat as sessionIdle's auto-propose
+      // `void triggerPropose` calls above.
       void triggerCurate(this.host, this.worktree, layer)
       return { consumed: true, kind: "toast", message: "curate cycle started ✓", variant: "success" }
     }

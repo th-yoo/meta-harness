@@ -21,6 +21,7 @@ import { EvolutionEngine } from "../../engine.ts"
 import { FileSessionStateStore } from "./file-state.ts"
 import { ClaudeCodeHost, MH_CHILD_ENV } from "./cc-host.ts"
 import { dispatch, type HookInput } from "./dispatch.ts"
+import { migrateAccountRoot } from "../../harness-store.ts"
 
 // Minimal module-scoped Bun ambient (no `bun-types` dep — see bench/exec.ts).
 declare const Bun: {
@@ -45,6 +46,20 @@ async function main(): Promise<void> {
   // — before any stdin read, engine construction, or dispatch — so the proposer
   // session never captures itself. (dispatch re-checks as defense in depth.)
   if (process.env[MH_CHILD_ENV]) return
+
+  // F2 — CC entrypoint migration. Claude Code has no long-lived plugin init
+  // (unlike opencode's index.ts) to run this once at startup; every hook is
+  // its own short-lived process, and on a CC-only install (no opencode
+  // plugin ever loaded) NOTHING else ever calls migrateAccountRoot(). Must
+  // run before FileSessionStateStore ever touches accountMetaRoot() — its
+  // mkdir on first `put()` would otherwise create an empty new root first,
+  // making migrateAccountRoot() see "new root exists" and no-op, stranding
+  // any real old store at the legacy opencode-owned path forever. Wrapped in
+  // the same exit-0-net as everything else: migration must never break a
+  // hook (migrateAccountRoot() itself already never throws, but belt+braces).
+  try { migrateAccountRoot() } catch (e) {
+    try { process.stderr.write(`[mh-hook] migrateAccountRoot failed (swallowed): ${e}\n`) } catch { /* ignore */ }
+  }
 
   let input: HookInput = {}
   try {
@@ -76,5 +91,16 @@ main()
   .finally(() => {
     // Explicit exit so a detached fire-and-forget promise (auto-propose) can't
     // hold the process open; all real work is awaited above.
+    //
+    // F5 — microtask invariant: engine.ts's `void triggerPropose`/
+    // `void triggerCurate`/`void triggerPromote` calls (fired from inside
+    // `dispatch(...)`, awaited just above) only get a chance to run their
+    // synchronous spawn-and-return prefix because everything awaited before
+    // them resolves within the SAME microtask-queue drain that this
+    // `process.exit(0)` follows. If a real async boundary (a genuine I/O
+    // await) were ever inserted between a trigger* call and its detached
+    // child's spawn — or if this exit moved earlier — auto-propose on CC
+    // would silently die: the process would exit before the child ever
+    // launches, with no error and no log line.
     process.exit(0)
   })

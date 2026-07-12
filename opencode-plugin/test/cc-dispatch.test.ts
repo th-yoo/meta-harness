@@ -226,6 +226,142 @@ test("full flow: /mh-score good records a SessionRecord with platform 'claude-co
   expect(score.sessions[0]!.platform).toBe("claude-code")
 })
 
+// ── F1: pendingScore wedge recovery ───────────────────────────────────────
+//
+// engine.ts's sessionIdle persists {bootstrapped:false, pendingScore:true}
+// BEFORE running the human-score prompt. If the hook process dies mid-
+// pipeline (CC hook timeout/crash), that file-backed state is stuck forever
+// — sessionIdle's `if (st0.pendingScore) return` guard no-ops on every
+// future /mh-score. The fix: a fresh SessionStart (which, in a short-lived-
+// process world, can only observe a session whose previous pipeline either
+// finished or died — never one genuinely "in flight" from ITS OWN
+// perspective) clears the wedge.
+
+test("F1: a pendingScore wedge left by a crashed sessionIdle is cleared by the next SessionStart, so /mh-score works again", async () => {
+  bootstrapStore(projectRoleRoot(project, "mh-build"), "SYS")
+
+  // Simulate the crash: sessionIdle wrote {bootstrapped:false,
+  // pendingScore:true} and then the process died before promptHumanScore
+  // ever resolved — exactly the file-backed leftover a CC crash produces.
+  const preState = new FileSessionStateStore()
+  preState.put("test-sess-1", {
+    role: "mh-build",
+    participates: true,
+    turns: 1,
+    summary: "prior work before the crash",
+    toolUsage: { bash: { calls: 1, errors: 0 } },
+    trajectory: [],
+    bootstrapped: false,
+    pendingScore: true,
+    snapshotInjected: false,
+    scoreCount: 0,
+    pausedToastShown: false,
+  })
+
+  // A fresh SessionStart (resume, or the start of a later session that
+  // happens to reuse the id in this test) must clear the wedge.
+  await runHook("SessionStart", fixture("session-start.json"), { MH_ROLE: "mh-build" } as any)
+  expect(preState.get("test-sess-1")?.pendingScore).toBe(false)
+
+  // The rest of a normal flow must now actually record — not silently no-op
+  // at the pendingScore guard forever, as it would before this fix.
+  await runHook("PostToolUse", fixture("posttooluse-bash.json"))
+  await runHook("Stop", fixture("stop.json"))
+  const { output } = await runHook(
+    "UserPromptSubmit",
+    fixture("user-prompt-score-good-crafted.json"),
+    { MH_ROLE: "mh-build" } as any,
+  )
+  expect((output as any)?.decision).toBe("block")
+  expect((output as any)?.reason).toContain("score recorded")
+
+  const root = projectRoleRoot(project, "mh-build")
+  const score = readScore(root, activeVersion(root))
+  expect(score.sessions.length).toBe(1)
+})
+
+// ── F3: /mh-score honest outcomes ─────────────────────────────────────────
+//
+// dispatch used to hard-code "score recorded ✓" as the block reason
+// regardless of what sessionIdle actually did. Each of sessionIdle's guard
+// branches must now produce a DISTINCT, honest block message.
+
+test("F3: /mh-score on a degenerate session blocks with a skipped (not \"recorded\") message", async () => {
+  bootstrapStore(projectRoleRoot(project, "mh-build"), "SYS")
+  await runHook("SessionStart", fixture("session-start.json"), { MH_ROLE: "mh-build" } as any)
+  // No PostToolUse/Stop → turns stay 0 → degenerate session.
+  const { output } = await runHook(
+    "UserPromptSubmit",
+    fixture("user-prompt-score-good-crafted.json"),
+    { MH_ROLE: "mh-build" } as any,
+  )
+  expect((output as any)?.decision).toBe("block")
+  expect((output as any)?.reason).toContain("skipped")
+  expect((output as any)?.reason).not.toContain("score recorded")
+
+  const root = projectRoleRoot(project, "mh-build")
+  expect(readScore(root, activeVersion(root)).sessions.length).toBe(0)
+})
+
+test("F3: /mh-score with no session ever tracked blocks with a not-active message, mentioning the one-score-per-session behavior", async () => {
+  const { output } = await runHook(
+    "UserPromptSubmit",
+    fixture("user-prompt-score-good-crafted.json", { session_id: "never-started" }),
+    { MH_ROLE: "mh-build" } as any,
+  )
+  expect((output as any)?.decision).toBe("block")
+  expect((output as any)?.reason).toContain("no active session")
+  expect((output as any)?.reason).toContain("resume or start a new session")
+})
+
+test("F3: a second /mh-score in the same CC session (no resume in between) blocks with the not-active/one-score-per-session message, records only once", async () => {
+  bootstrapStore(projectRoleRoot(project, "mh-build"), "SYS")
+  await runHook("SessionStart", fixture("session-start.json"), { MH_ROLE: "mh-build" } as any)
+  await runHook("PostToolUse", fixture("posttooluse-bash.json"))
+  await runHook("Stop", fixture("stop.json"))
+  await runHook("UserPromptSubmit", fixture("user-prompt-score-good-crafted.json"), { MH_ROLE: "mh-build" } as any)
+
+  // No SessionStart resume in between → cleanup() already reset bootstrapped
+  // to false, so this hits the same "not-active" guard as never-started.
+  const { output } = await runHook(
+    "UserPromptSubmit",
+    fixture("user-prompt-score-good-crafted.json"),
+    { MH_ROLE: "mh-build" } as any,
+  )
+  expect((output as any)?.reason).toContain("resume or start a new session")
+
+  const root = projectRoleRoot(project, "mh-build")
+  expect(readScore(root, activeVersion(root)).sessions.length).toBe(1) // not double-recorded
+})
+
+test("F3: /mh-score while a pendingScore wedge is set blocks with a pending message, records nothing", async () => {
+  bootstrapStore(projectRoleRoot(project, "mh-build"), "SYS")
+  const state = new FileSessionStateStore()
+  state.put("test-sess-1", {
+    role: "mh-build",
+    participates: true,
+    turns: 2,
+    summary: "work in flight",
+    toolUsage: {},
+    trajectory: [],
+    bootstrapped: true,
+    pendingScore: true,
+    snapshotInjected: false,
+    scoreCount: 0,
+    pausedToastShown: false,
+  })
+
+  const { output } = await runHook(
+    "UserPromptSubmit",
+    fixture("user-prompt-score-good-crafted.json"),
+    { MH_ROLE: "mh-build" } as any,
+  )
+  expect((output as any)?.reason).toContain("pending")
+
+  const root = projectRoleRoot(project, "mh-build")
+  expect(readScore(root, activeVersion(root)).sessions.length).toBe(0)
+})
+
 test("/mh-score with no verdict token blocks with a usage message and records nothing", async () => {
   bootstrapStore(projectRoleRoot(project, "mh-build"), "SYS")
   await runHook("SessionStart", fixture("session-start.json"), { MH_ROLE: "mh-build" } as any)

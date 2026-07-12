@@ -23,6 +23,7 @@
 
 import fs from "node:fs"
 import path from "node:path"
+import { migrateAccountRoot } from "../../harness-store.ts"
 
 interface HookEntry { type: "command"; command: string; timeout?: number }
 interface HookGroup { matcher?: string; hooks: HookEntry[] }
@@ -122,7 +123,7 @@ export const MH_COMMANDS: { name: string; description: string }[] = [
   },
   {
     name: "mh-promote",
-    description: "Promote proven project-layer rules up to the account layer: /mh-promote [global|role]. Creates an inactive account candidate to validate with runner.py ab.",
+    description: "Promote proven project-layer rules up to the account layer: /mh-promote [global|role]. Creates an inactive account candidate to validate with bun term-bench2/runner.ts ab.",
   },
   {
     name: "mh-curate",
@@ -193,6 +194,14 @@ function parseArgs(argv: string[]): { project: string; role: string } {
 }
 
 function main(): void {
+  // F2 — CC entrypoint migration. install.ts can be the very first
+  // meta-harness process a Claude-Code-only user ever runs (no opencode
+  // plugin init to have already called this); run it before anything else
+  // could touch accountMetaRoot() and strand an old evolved store at the
+  // legacy opencode-owned path. Never blocks install: migrateAccountRoot()
+  // already never throws (see harness-store.ts's doc comment).
+  migrateAccountRoot()
+
   const { project, role } = parseArgs(process.argv.slice(2))
   const hookCliPath = resolveHookCliPath()
   const settingsPath = path.join(project, ".claude", "settings.json")
