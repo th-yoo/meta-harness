@@ -451,6 +451,43 @@ test("cmd_judge_audit: per-class agreement (pass 1/2, fail 3/3) -> passAgreement
   expect(out).toContain("fail=100.0%")
 })
 
+test("cmd_judge_audit: zero-scored class -> meta-metric persists passAgreement=null (not 0), prints n/a", async () => {
+  // "no pass-sessions sampled" must be recorded as null, never 0 — a 0 would
+  // read as 0% pass agreement in the historical record (catastrophic
+  // miscalibration) when the truth is simply "no data for this class".
+  const metaRoot = tmpDir()
+  const paths = fakeBenchPaths(metaRoot)
+  const { failSids } = seedBalancedStore(metaRoot, 0, 3)
+  // fail class: judge agrees on all 3; pass class: empty.
+  const runJudge = async (prompt: string) => {
+    const sid = failSids.find((s) => prompt.includes(s))
+    if (!sid) throw new Error("prompt matched no known sid — test bug")
+    return JSON.stringify({ passed: false, confidence: 0.9, reasoning: "x" })
+  }
+
+  const logs: string[] = []
+  const logSpy = spyOn(console, "log").mockImplementation((...a) => logs.push(a.join(" ")))
+  const errSpy = spyOn(console, "error").mockImplementation((...a) => logs.push(a.join(" ")))
+  let rc: number
+  try {
+    rc = await cmdJudgeAudit(paths, args({ limit: 3 }), runJudge)
+  } finally {
+    logSpy.mockRestore()
+    errSpy.mockRestore()
+  }
+
+  expect(rc).toBe(0) // overall 3/3 = 1.0
+  const m = metrics(metaRoot)
+  expect(m.length).toBe(1)
+  expect(m[0]!["nPass"]).toBe(0)
+  expect(m[0]!["nFail"]).toBe(3)
+  expect(m[0]!["passAgreement"]).toBeNull()
+  expect(m[0]!["failAgreement"]).toBe(1.0)
+  const out = logs.join("\n")
+  expect(out).toContain("pass=n/a")
+  expect(out).toContain("fail=100.0%")
+})
+
 test("cmd_judge_audit: exit code keyed on OVERALL agreement -> exit 1 even if one class is perfect", async () => {
   const metaRoot = tmpDir()
   const paths = fakeBenchPaths(metaRoot)

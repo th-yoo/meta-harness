@@ -76,7 +76,7 @@ export const AUTH_FAIL_MARK = "authentication error"
  * number. 401 IS matched bare — in practice it does not collide with
  * ordinary task output the way "403" can. */
 export const AUTH_ERROR_RE =
-  /\b401\b|authentication[_ ]?error|unauthorized|forbidden|invalid[_ ]?(?:api[_ ]?key|token|credential)|oauth|token[_ ]?expired|expired[_ ]?token|permission[_ ]?denied/i
+  /\b401\b|authentication[_ ]?error|unauthorized|forbidden|invalid[_ ]?(?:api[_ ]?key|token|credential)|oauth|token[_ ]?expired|expired[_ ]?token/i
 
 /** Tools whose non-zero exit / "error" status counts as a tool error —
  * runner.py:906's EXECUTION_TOOLS. */

@@ -342,6 +342,42 @@ test("AUTH_ERROR_RE: does not false-positive on benign task output", () => {
   }
 })
 
+test("AUTH_ERROR_RE: filesystem 'Permission denied' is not an auth signal", () => {
+  // "Permission denied" is what bash/ssh/chmod print — the weakest auth
+  // signal and the only one likely in non-provider output. Real credential
+  // failures always carry 401/unauthorized/token_expired/invalid api key.
+  for (const s of [
+    "bash: ./solve.sh: Permission denied",
+    "mkdir: cannot create directory '/x': Permission denied",
+    "permission_denied",
+  ]) {
+    expect(AUTH_ERROR_RE.test(s)).toBe(false)
+  }
+})
+
+test("runOpencode: top-level 'Permission denied' failure is not misreported as an auth failure", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "x")
+  const paths = fakeBenchPaths(tbRoot)
+
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    return ok('{"type":"error","error":{"data":{"message":"exec /root/agent.sh: Permission denied"}}}', 1)
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const result = await runOpencode(paths, "c1", "t", "m", "", 30, "", execFn, async () => {})
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes(AUTH_FAIL_MARK))).toBe(false)
+    expect(result.turnCount).toBe(0)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
 test("marker constants: AUTH_FAIL_MARK is distinct from TRANSIENT_MARK and does not match REALWORK_RE", () => {
   expect(AUTH_FAIL_MARK).not.toBe(TRANSIENT_MARK)
   expect(REALWORK_RE.test(AUTH_FAIL_MARK)).toBe(false)
