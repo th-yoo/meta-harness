@@ -5,23 +5,27 @@
  *
  * Container lifecycle per (task, k-repeat) mirrors cmd-oracle.ts's
  * runOneOracleTask (create/start/exec-steps/rm), with two differences:
- *  1. Credential + opencode-binary mounts are added at create time —
- *     `~/.claude` and `${XDG_DATA_HOME:-~/.local/share}/opencode`, both rw
- *     (credential rotation writes back through the same host file/dir the
- *     interactive plugin uses — SHARED single-file semantics, matching the
- *     Python bwrap sandbox's shared $HOME). opencode itself is NOT mounted
+ *  1. CC-oauth + opencode-binary mounts are added at create time (see
+ *     agent-auth.ts's `prepareAgentAuthMounts`): a minimal opencode config
+ *     that loads the `opencode-claude-auth` plugin (ro), the source
+ *     `.credentials.json` the plugin reads (ro — real `~/.claude` on linux,
+ *     a per-run Keychain export on darwin), and the opencode data dir
+ *     (rw — auth.json; credential rotation writes back through the same
+ *     host dir the interactive plugin uses, matching the Python bwrap
+ *     sandbox's shared $HOME). `apiKeyEnv()` (below) coexists as the durable
+ *     API-key alternative to this oauth path. opencode itself is NOT mounted
  *     from the host (darwin/linux mismatch) — it must be baked into the
  *     bench image (see term-bench2/Containerfile's opencode layer, added in
  *     this same commit).
  *  2. An agent phase (runOpencode) runs between staging and copy-tests.
  */
 import { randomBytes } from "node:crypto"
-import { homedir } from "node:os"
 import { join, parse as parsePath } from "node:path"
 import { podman } from "./exec.ts"
 import type { ExecFn } from "./staging.ts"
 import { buildCreateArgv, buildStartArgv, buildExecArgv, buildRmArgv } from "./sandbox.ts"
 import { BENCH_IMAGE, apiKeyEnv, containerName, type BenchPaths } from "./paths.ts"
+import { prepareAgentAuthMounts, type AgentAuthMounts } from "./agent-auth.ts"
 import { selectTasks, taskTimeouts } from "./tasks.ts"
 import { stageTaskRuntime } from "./staging.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
@@ -57,16 +61,6 @@ export type RunOneTaskFn = (
 
 function round1(x: number): number {
   return Math.round(x * 10) / 10
-}
-
-function credentialMounts(): { host: string; container: string }[] {
-  const claudeDir = join(homedir(), ".claude")
-  const xdgDataHome = process.env["XDG_DATA_HOME"] || join(homedir(), ".local", "share")
-  const opencodeDataDir = join(xdgDataHome, "opencode")
-  return [
-    { host: claudeDir, container: "/root/.claude" },
-    { host: opencodeDataDir, container: "/root/.local/share/opencode" },
-  ]
 }
 
 /**
@@ -114,6 +108,7 @@ export async function runTaskOnce(
   verifierTimeout: number,
   staging: StagingMode = "runtime",
   execFn: ExecFn = podman,
+  prepareAuth: () => AgentAuthMounts = prepareAgentAuthMounts,
 ): Promise<RunTaskResult> {
   const sessionId = `bench-${task}-${Math.floor(Date.now() / 1000)}-${randomBytes(3).toString("hex")}`
   const taskStart = Date.now()
@@ -128,8 +123,18 @@ export async function runTaskOnce(
     error,
   })
 
+  // CC-oauth mounts (config + credentials + opencode data dir) are prepared
+  // fresh per container lifecycle and torn down in the outer `finally` below,
+  // alongside `podman rm` — see agent-auth.ts's module header for what each
+  // mount is and why cleanup must run even when a later step throws. A
+  // missing-credential BenchError from `prepareAuth()` is deliberately
+  // caught by the SAME bring-up catch as create/start failures (fail-fast,
+  // no retry, matches the auth-error handling in opencode-run.ts) rather
+  // than crashing the whole multi-task `run`/`ab` invocation.
+  let auth: AgentAuthMounts | undefined
   try {
     try {
+      auth = prepareAuth()
       const createResult = await execFn(
         buildCreateArgv({
           image: BENCH_IMAGE,
@@ -137,7 +142,7 @@ export async function runTaskOnce(
           mounts: [
             { host: paths.tbRoot, container: "/tb", ro: true },
             { host: paths.termBenchDir, container: "/mh", ro: true },
-            ...credentialMounts(),
+            ...auth.mounts,
           ],
           // Provider API key passthrough (additive to auth.json — see
           // paths.ts's apiKeyEnv doc comment). No explicit env is set on
@@ -222,6 +227,7 @@ export async function runTaskOnce(
     }
   } finally {
     await execFn(buildRmArgv(name))
+    auth?.cleanup()
   }
 }
 

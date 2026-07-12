@@ -7,9 +7,26 @@ import { cmdRun, runTaskOnce, inContainerOpencodeVersion, type RunOneTaskFn, typ
 import { runOneOracleTask } from "../src/bench/cmd-oracle.ts"
 import { readScore, projectGlobalRoot, createCandidate, writeActive } from "../src/harness-store.ts"
 import { BenchError } from "../src/bench/util.ts"
+import type { AgentAuthMounts } from "../src/bench/agent-auth.ts"
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "mh-bench-cmd-run-"))
+}
+
+/** Stub for runTaskOnce's `prepareAuth` param — every unit test in this file
+ * must inject this (or a variant) instead of relying on the real
+ * prepareAgentAuthMounts default, which would otherwise shell out to the
+ * real macOS Keychain / read the real host ~/.claude on every single test
+ * run. Tests that care about the actual mounts/cleanup wiring build their
+ * own fake with recognizable host paths — see the dedicated auth-mounts
+ * test below. */
+function fakeAuthMounts(cleanupCalls?: { count: number }): () => AgentAuthMounts {
+  return () => ({
+    mounts: [],
+    cleanup: () => {
+      if (cleanupCalls) cleanupCalls.count += 1
+    },
+  })
 }
 
 function fakeBenchPaths(termBenchDir: string, tbRoot?: string): BenchPaths {
@@ -224,7 +241,7 @@ test("runTaskOnce: podman create failure -> setup_failed, no crash", async () =>
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   let res: RunTaskResult
   try {
-    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "runtime", execFn)
+    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "runtime", execFn, fakeAuthMounts())
   } finally {
     errSpy.mockRestore()
   }
@@ -250,18 +267,36 @@ test("runTaskOnce: rm is always called, even when an earlier step throws", async
 
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
-    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn)
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn, fakeAuthMounts())
   } finally {
     errSpy.mockRestore()
   }
   expect(seenArgv.some((a) => a[1] === "rm")).toBe(true)
 })
 
-test("runTaskOnce: create mounts include credential dirs (~/.claude, opencode data dir), rw", async () => {
+// ── CC-oauth mounts (agent-auth.ts's prepareAgentAuthMounts) ──────────────
+// The mounts/cleanup themselves are unit-tested against a real filesystem in
+// bench-agent-auth.test.ts; here we only verify cmd-run.ts's WIRING: the
+// injected mounts land verbatim in the create argv, and cleanup() runs even
+// though this test only drives execution through container bring-up.
+
+test("runTaskOnce: merges prepareAuth()'s mounts into the create argv (config ro, claude ro, opencode-data rw) and calls cleanup()", async () => {
   const dir = tmpDir()
   const tbRoot = path.join(dir, "tb-root")
   fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
   const paths = fakeBenchPaths(dir, tbRoot)
+
+  const cleanupCalls = { count: 0 }
+  const prepareAuth = () => ({
+    mounts: [
+      { host: "/tmp/auth-config", container: "/root/.config/opencode", ro: true },
+      { host: "/tmp/auth-claude", container: "/root/.claude", ro: true },
+      { host: "/tmp/auth-ocdata", container: "/root/.local/share/opencode", ro: false },
+    ],
+    cleanup: () => {
+      cleanupCalls.count += 1
+    },
+  })
 
   // Stop right after container bring-up (before the agent/copy-tests/verify
   // steps, which this unit test isn't exercising — see cmd-oracle-unit's own
@@ -278,14 +313,46 @@ test("runTaskOnce: create mounts include credential dirs (~/.claude, opencode da
   }
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
-    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn)
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn, prepareAuth)
   } finally {
     errSpy.mockRestore()
   }
 
-  const mountFlags = createArgv.filter((a) => a.includes(":/root/.claude") || a.includes(":/root/.local/share/opencode"))
-  expect(mountFlags.length).toBe(2)
-  expect(mountFlags.every((m) => !m.endsWith(":ro"))).toBe(true) // rw, not ro
+  expect(createArgv).toContain("-v")
+  expect(createArgv).toContain("/tmp/auth-config:/root/.config/opencode:ro")
+  expect(createArgv).toContain("/tmp/auth-claude:/root/.claude:ro")
+  expect(createArgv).toContain("/tmp/auth-ocdata:/root/.local/share/opencode")
+  expect(createArgv).not.toContain("/tmp/auth-ocdata:/root/.local/share/opencode:ro")
+  expect(cleanupCalls.count).toBe(1)
+})
+
+test("runTaskOnce: prepareAuth() failure (missing credentials) -> setup_failed, no crash, no podman create attempted", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const prepareAuth = (): AgentAuthMounts => {
+    throw new BenchError("prepareAgentAuthMounts: no credentials found. set ANTHROPIC_API_KEY")
+  }
+
+  let createCalled = false
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "create") createCalled = true
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let res: RunTaskResult
+  try {
+    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn, prepareAuth)
+  } finally {
+    errSpy.mockRestore()
+  }
+
+  expect(res.error).toBe("setup_failed")
+  expect(res.reward).toBe(0)
+  expect(createCalled).toBe(false)
 })
 
 // Option A (2026-07-11): podman containers have real root + network, so
@@ -309,7 +376,7 @@ test("runTaskOnce: scripts-mode setup_deps.sh exec has no SKIP_APT in its env (O
 
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
-    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn)
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn, fakeAuthMounts())
   } finally {
     errSpy.mockRestore()
   }
@@ -346,7 +413,7 @@ test("runTaskOnce: agent container create argv passes through a *_API_KEY host e
   }
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
-    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn)
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", execFn, fakeAuthMounts())
   } finally {
     errSpy.mockRestore()
     if (prev === undefined) delete process.env["OPENROUTER_API_KEY"]
