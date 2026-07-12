@@ -21,12 +21,12 @@
  * minutes (600s) by default: 30 -> 60 -> 120 -> 240 -> 480 -> 600 -> 600 ...
  *
  * Marker strings: REALWORK_RE / TRANSIENT_MARK are imported (not
- * re-declared) from opencode-run.ts, the PRODUCER of the log lines this
+ * re-declared) from agent-run.ts, the PRODUCER of the log lines this
  * scans — see that file's header for the shared-constant contract.
  */
 import { join } from "node:path"
 import { makeBenchPaths } from "./paths.ts"
-import { REALWORK_RE, TRANSIENT_MARK } from "./opencode-run.ts"
+import { REALWORK_RE, TRANSIENT_MARK } from "./agent-run.ts"
 import { pyFixed } from "./util.ts"
 
 // See exec.ts's header note on why Bun globals are declared locally instead

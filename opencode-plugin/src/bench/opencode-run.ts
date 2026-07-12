@@ -21,7 +21,7 @@
  * truth) and re-used (not re-declared) by retry-provider.ts (port of
  * retry_provider.py:43-45), which scans this module's own log output for
  * them. test/bench-opencode-run.test.ts asserts the log lines this module
- * actually emits contain these markers — see that file for the
+ * actually emits contain these driver-neutral markers — see that file for the
  * producer/consumer wiring evidence.
  */
 import { mkdtempSync, rmSync } from "node:fs"

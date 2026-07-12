@@ -37,16 +37,19 @@ import type { AgentDriver, AgentRunOutput } from "./drivers/types.ts"
  * TRANSIENT_MARK ported unchanged. */
 export const TRANSIENT_MARK = "transient provider error"
 
-/** Logged on an agent-phase timeout (runner.py:878's f-string prefix,
- * verbatim). Also matched by REALWORK_RE below — a timeout is "the provider
+/** Logged on an agent-phase timeout (driver-neutral wording, ported from
+ * runner.py:878). Also matched by REALWORK_RE below — a timeout is "the provider
  * did something", not a provider outage (see retry_provider.py's module
- * docstring: "This deliberately treats a *timeout* as 'up'"). */
-export const TIMEOUT_MARK = "opencode timed out after"
+ * docstring: "This deliberately treats a *timeout* as 'up'"). The phrase
+ * "timed out after" (substring) also matches the judge's host-side timeout
+ * line — an accepted, pre-existing property (the old judge line
+ * "judge opencode timed out after 90s" contained this as a substring too). */
+export const TIMEOUT_MARK = "agent timed out after"
 
 /** Evidence the provider actually did something this attempt: real turns, a
- * task that hit the agent timeout, or an outright pass. Verbatim port of
- * retry_provider.py:43's REALWORK_RE. */
-export const REALWORK_RE = /turns=[1-9]\d*|opencode timed out after|reward=1/
+ * task that hit the agent timeout, or an outright pass. Driver-neutral
+ * version; ported from retry_provider.py:43's REALWORK_RE. */
+export const REALWORK_RE = /turns=[1-9]\d*|timed out after|reward=1/
 
 /** Provider-error detection regex — verbatim port of runner.py:857-861
  * (TRANSIENT_RE) and :1070-1074 (_JUDGE_AUDIT_TRANSIENT_RE), which are

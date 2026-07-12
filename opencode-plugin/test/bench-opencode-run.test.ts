@@ -501,6 +501,8 @@ test("marker contract: the timeout log line matches REALWORK_RE", async () => {
     errSpy.mockRestore()
   }
   expect(messages.some((m) => REALWORK_RE.test(m))).toBe(true)
+  // claude-code-style timeout log line (substring match, per doc comment):
+  expect(REALWORK_RE.test("  agent timed out after 30s")).toBe(true)
 })
 
 test("marker contract: the 'opencode done ... turns=N' log line matches REALWORK_RE when turns>=1", async () => {

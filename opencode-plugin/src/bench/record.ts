@@ -297,7 +297,7 @@ export function recordToStores(
 ): void {
   if (noStore) return
   if (turnCount === 0) {
-    log("  skip store record: 0 agent turns (timeout/transient opencode failure)")
+    log("  skip store record: 0 agent turns (timeout/transient agent failure)")
     return
   }
 

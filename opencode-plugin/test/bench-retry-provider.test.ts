@@ -5,7 +5,7 @@ import {
   type SpawnedRun,
   type RetryProviderArgs,
 } from "../src/bench/retry-provider.ts"
-import { REALWORK_RE, TRANSIENT_MARK } from "../src/bench/opencode-run.ts"
+import { REALWORK_RE, TRANSIENT_MARK } from "../src/bench/agent-run.ts"
 
 // Ported from term-bench2/retry_provider.py's argparse + main() loop
 // (:48-105). Never spawns `bun term-bench2/runner.ts` for real — spawnFn is
@@ -69,7 +69,7 @@ test("runRetryProvider: provider responding on first attempt (real work seen) ->
 
 test("runRetryProvider: a timeout line counts as 'up' (per module docstring) — not retried", async () => {
   const args: RetryProviderArgs = { base: 30, cap: 600, maxAttempts: 0, runnerArgs: ["run"] }
-  const lines = [`  ${TRANSIENT_MARK}`, "  opencode timed out after 900s"]
+  const lines = [`  ${TRANSIENT_MARK}`, "  agent timed out after 900s"]
   let sleepCalls = 0
   const rc = await runRetryProvider(args, fakeSpawn(lines, 1), async () => sleepCalls++, () => {})
   expect(rc).toBe(1)
