@@ -121,7 +121,7 @@ Account layers are gated by the statistical A/B test, not everyday usage. First 
 gate (spends tokens — real bench tasks):
 
 ```bash
-python3 term-bench2/runner.py ab \
+bun term-bench2/runner.ts ab \
   --layer account-global --candidate v1 \
   --model anthropic/claude-sonnet-4-6 --k 2
 # (for account-role add: --agent mh-build)
@@ -219,7 +219,7 @@ Replay the judge on bench sessions where the verifier gives ground truth, and al
 divergence:
 
 ```bash
-python3 term-bench2/runner.py judge-audit \
+bun term-bench2/runner.ts judge-audit \
   --layer account-global --candidate v1 --limit 10
 # role layers: add --agent mh-build ; override model with --model
 ```
@@ -232,8 +232,8 @@ no scorable sessions). Needs bench trajectories — generate them with
 ### …check whether the loop is actually working?
 
 ```bash
-python3 term-bench2/runner.py report-loop        # human table
-python3 term-bench2/runner.py report-loop --json  # machine summary
+bun term-bench2/runner.ts report-loop        # human table
+bun term-bench2/runner.ts report-loop --json  # machine summary
 ```
 
 It merges three `meta-metrics.jsonl` sinks (bench, project, account) and reports ab-decision
@@ -248,11 +248,11 @@ with (difficulty-band filtering), create a difficulty-calibrated split:
 
 ```bash
 # Generate/update results file with pass rates from prior runs
-python3 term-bench2/runner.py run --all --agent mh-build --results-file results.json
+bun term-bench2/runner.ts run --all --agent mh-build --results-file results.json
 
 # Create a split with tasks in pass-rate band [0.2, 0.8] (hard tasks)
 # Exclude very easy tasks (rate ≥0.9); keep sentinels (easy-regression guards)
-python3 term-bench2/runner.py split make --results results.json \
+bun term-bench2/runner.ts split make --results results.json \
   --band 0.2,0.8 --sentinels 3 --sentinel-hi 0.9
 ```
 
@@ -285,8 +285,8 @@ The loop detects and flags project plateau — when recent trials and `ab` runs 
 meaningful progress. Check with:
 
 ```bash
-python3 term-bench2/runner.py report-loop        # shows Plateau: section
-python3 term-bench2/runner.py report-loop --json  # includes plateau verdict
+bun term-bench2/runner.ts report-loop        # shows Plateau: section
+bun term-bench2/runner.ts report-loop --json  # includes plateau verdict
 ```
 
 **Plateau detection and auto-pause:**
@@ -312,10 +312,10 @@ scratch under the new split — nothing carries over.
 ### …run the benchmark?
 
 ```bash
-python3 term-bench2/runner.py prep --apply             # one-time host setup (sudo; dry-run without --apply)
-python3 term-bench2/runner.py oracle                   # token-free pipeline check via solution scripts
-python3 term-bench2/runner.py run --all --agent mh-build --layers project   # score real runs into the store
-python3 term-bench2/runner.py run --tasks regex-log --pin project-role=v3   # test a specific candidate
+bun term-bench2/runner.ts prep --apply             # one-time host setup (sudo; dry-run without --apply)
+bun term-bench2/runner.ts oracle                   # token-free pipeline check via solution scripts
+bun term-bench2/runner.ts run --all --agent mh-build --layers project   # score real runs into the store
+bun term-bench2/runner.ts run --tasks regex-log --pin project-role=v3   # test a specific candidate
 ```
 
 See the Reference below for every flag.
@@ -382,7 +382,7 @@ env), so it silently fails there. Put keys in `auth.json`.
   5-minute background sync.
 - **Get an OpenRouter key:** https://openrouter.ai/settings/keys
 
-### Runner subcommands — `python3 term-bench2/runner.py <sub>` (top-level `--tb-root PATH`)
+### Runner subcommands — `bun term-bench2/runner.ts <sub>` (top-level `--tb-root PATH`)
 
 - **`prep`** `[--apply] [--uninstall] [--clean-mountpoints]` — host setup (mkdir + apt);
   dry-run unless `--apply`.

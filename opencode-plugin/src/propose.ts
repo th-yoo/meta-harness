@@ -296,7 +296,7 @@ export async function triggerPropose(
       // candidate INACTIVE pending an ab-verdict; the human activates via /mh-activate.
       await client.tui.showToast({
         body: { title: "Meta-Harness",
-                message: `Candidate ${version}${toolsNote} created for ${layer.scope} — validate with runner.py ab, then /mh-activate ${layer.scope} ${version}`,
+                message: `Candidate ${version}${toolsNote} created for ${layer.scope} — validate with bun term-bench2/runner.ts ab, then /mh-activate ${layer.scope} ${version}`,
                 variant: "info", duration: 10_000 },
       })
       await client.app.log({
@@ -411,7 +411,7 @@ export async function triggerPromote(
     const toolsNote = tools ? " + tools.md" : ""
     await client.tui.showToast({
       body: { title: "Meta-Harness",
-              message: `Promotion candidate ${version}${toolsNote} for ${target.scope} — validate with runner.py ab, then /mh-activate ${target.scope} ${version}`,
+              message: `Promotion candidate ${version}${toolsNote} for ${target.scope} — validate with bun term-bench2/runner.ts ab, then /mh-activate ${target.scope} ${version}`,
               variant: "success", duration: 10_000 },
     })
     await client.app.log({
@@ -883,7 +883,7 @@ export async function triggerCurate(
         variant: "info", duration: 8_000 } })
     } else {
       await client.tui.showToast({ body: { title: "Meta-Harness",
-        message: `Curation candidate ${version} for ${layer.scope} — validate with runner.py ab, then /mh-activate`,
+        message: `Curation candidate ${version} for ${layer.scope} — validate with bun term-bench2/runner.ts ab, then /mh-activate`,
         variant: "info", duration: 10_000 } })
     }
   } finally {

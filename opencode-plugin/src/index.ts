@@ -746,7 +746,7 @@ const metaHarness: Plugin = async (input) => {
         if (isAccount && !force) {
           const verdict = readAbVerdict(layer.root, version)
           if (!verdict) {
-            throw await toastAndSwallow(client, `no ab-verdict.json for ${layer.scope} ${version} — run "runner.py ab --layer ${layer.scope} --candidate ${version}" first, or pass --force`, "error")
+            throw await toastAndSwallow(client, `no ab-verdict.json for ${layer.scope} ${version} — run "bun term-bench2/runner.ts ab --layer ${layer.scope} --candidate ${version}" first, or pass --force`, "error")
           }
           if (!abAccepted(verdict)) {
             const dec = verdict.decision ?? `winner=${verdict.winner}`

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run-parallel.sh — launch N isolated concurrent `runner.py run` invocations,
+# run-parallel.sh — launch N isolated concurrent `runner.ts run` invocations,
 # each on its own MH_BENCH_WORK sandbox root so they don't clobber each other.
 #
 # Usage:
@@ -43,7 +43,7 @@ for spec in "${SPECS[@]}"; do
   if [ "$work" = "$HOME/bench" ]; then
     echo "refuse: work dir resolves to ~/bench (the shared default)" >&2; exit 2
   fi
-  cmd=(python3 "$SCRIPT_DIR/runner.py" run --model "$model" --results-file "$rfile" "${PASS_ARGS[@]}")
+  cmd=(bun "$SCRIPT_DIR/runner.ts" run --model "$model" --results-file "$rfile" "${PASS_ARGS[@]}")
   if [ "$DRY" = 1 ]; then
     echo "MH_BENCH_WORK=$work ${cmd[*]}"
     continue
@@ -60,7 +60,7 @@ for p in "${pids[@]}"; do wait "$p" || rc=1; done
 
 echo "=== results ==="
 for rf in "${rfiles[@]}"; do
-  pr=$(python3 -c "import json,sys;print(json.load(open('$rf')).get('pass_rate'))" 2>/dev/null || echo "?")
+  pr=$(jq -r '.pass_rate // "?"' "$rf" 2>/dev/null || echo "?")
   echo "  $rf  pass_rate=$pr"
 done
 for w in "${works[@]}"; do rm -rf "$w"; done

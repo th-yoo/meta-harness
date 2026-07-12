@@ -201,7 +201,7 @@ Example:
 ```bash
 # propose an account-global candidate, then referee it on the baseline
 /mh-propose account
-python3 term-bench2/runner.py ab \
+bun term-bench2/runner.ts ab \
     --layer account-global --candidate v4 --task-file term-bench2/baseline-tasks.txt --k 1
 /mh-activate account v4        # honors the verdict
 ```
@@ -264,7 +264,7 @@ signal:
 - **Maker-checker mode:** Pre-fills the score prompt with the judge's suggested verdict
   for human approval/edit before saving (small change in score.ts).
 
-**Anti-gaming audit:** `python3 term-bench2/runner.py judge-audit --layer <layer>
+**Anti-gaming audit:** `bun term-bench2/runner.ts judge-audit --layer <layer>
 --candidate vN [--agent NAME] [--model <model>] [--limit N]` replays the judge on
 bench trial sessions against verifier ground truth. Exit codes: `0` = clean (≥80%
 agreement), `1` = alarm (< 80% — judge may be gameable), `2` = could-not-assess
@@ -274,7 +274,7 @@ decisions.
 **Observability:** All loop events (ab, trial, activate, curate, rotate, judge) are
 recorded to three sinks: `term-bench2/results/meta-metrics.jsonl` (bench),
 `<repo>/.meta-harness/meta-metrics.jsonl` (project), and `~/.config/opencode/.meta-harness/meta-metrics.jsonl` (account)
-with `append_meta_metric`/`appendMetaMetric`. Reporter: `python3 term-bench2/runner.py
+with `append_meta_metric`/`appendMetaMetric`. Reporter: `bun term-bench2/runner.ts
 report-loop [--json]` summarizes held-out pass-rate trajectory, accept/reject/inconclusive
 counts, and cumulative judge-agreement rate. `/mh-status` shows last decision.
 

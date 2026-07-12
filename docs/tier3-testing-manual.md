@@ -132,7 +132,7 @@ also exercises the fixed error-toast path.
 
 14. `/mh-activate account v1`
     - **Expect toast (error/red):** `no ab-verdict.json for account-global v1 —
-      run "runner.py ab --layer account-global --candidate v1" first, or pass --force`.
+      run "bun term-bench2/runner.ts ab --layer account-global --candidate v1" first, or pass --force`.
     - (There is no account-global v1, and even if there were, without an accepted
       ab-verdict the gate refuses. This is the intended behavior.)
 
@@ -161,7 +161,7 @@ parallel with `/mh-score`, learning when to calibrate for maker-checker mode.
     suggestion for you to approve or edit.
 
 18. Check observability:
-    - `python3 term-bench2/runner.py report-loop [--json]` → includes judge agreement
+    - `bun term-bench2/runner.ts report-loop [--json]` → includes judge agreement
       in the summary.
     - `cat .meta-harness/meta-metrics.jsonl | grep judge | tail -5`
       → judge events recorded (one per scored session when judgeModel is set).

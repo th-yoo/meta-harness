@@ -5,7 +5,13 @@ host-side Python implementation entirely.
 
 > Companion to [evolution-loop.md](evolution-loop.md) (architecture) and
 > [explicitly-not-now.md](explicitly-not-now.md) (deferral register). Status:
-> **planned** — verified feasible 2026-07-11 against the upstream TB2 clone.
+> **complete** — verified feasible 2026-07-11 against the upstream TB2 clone.
+>
+> **Done (2026-07-12):** ported to `opencode-plugin/src/bench` (Bun/TS), running
+> under the podman sandbox; the host-side Python (`runner.py`, `ab_stats.py`,
+> `bench_store.py`, `gen_setup_deps.py`, `test_*.py`) is deleted. The harbor
+> leaderboard-publish path (`agent.py`, `anthropic_caching.py`) is retained,
+> out of the loop.
 
 ---
 
