@@ -31,18 +31,20 @@
  *   /mh-promote [global|role]          — promote proven project rules to the account layer
  *   /mh-curate [scope]                 — consolidate/prune a layer's playbook (through the gate)
  *   /mh-status                         — per-layer active version, scores, trials, verdicts, bullet count
+ *
+ * The platform-independent evolution logic (per-session capture, the idle
+ * scoring pipeline, the /mh-* command handlers) lives in EvolutionEngine
+ * (engine.ts). This file is the opencode ADAPTER: it maps opencode hooks onto
+ * engine methods, owns mh-role detection (the engine never sniffs "mh-"), the
+ * judge/proposer session Sets, and command rendering (toast + throw-to-swallow).
  */
 
 import type { Plugin, PluginInput, PluginModule } from "@opencode-ai/plugin"
 import fs from "fs"
 import path from "path"
-import { gatherEnvSnapshot } from "./env-snapshot.ts"
-import { adjustedTimeout } from "./bash-timeout.ts"
 import {
   accountGlobalRoot,
-  accountRoleRoot,
   projectGlobalRoot,
-  projectRoleRoot,
   layersFor,
   bootstrapStore,
   migrateFlatToProjectGlobal,
@@ -62,11 +64,7 @@ import {
   readPlaybook,
   activeBulletCount,
   readLastMetric,
-  composeAgentConfig,
-  composeEnvPolicy,
   type ToolUsage,
-  type TrajEvent,
-  type AgentConfig,
   readMhConfig,
   appendJudgeDecision,
   judgeCalibration,
@@ -74,7 +72,7 @@ import {
   type SessionRecord,
 } from "./harness-store.ts"
 import { promptHumanScore, handleScoreCommand } from "./score.ts"
-import { runJudge, JUDGE_SYSTEM_PROMPT, type JudgeVerdict } from "./judge.ts"
+import { runJudge, type JudgeVerdict } from "./judge.ts"
 import {
   triggerPropose,
   triggerPromote,
@@ -84,10 +82,10 @@ import {
   PROJECT_GLOBAL_THRESHOLD,
 } from "./propose.ts"
 import { proposerSessions, judgeSessions } from "./session-state.ts"
-import { composeHarness, renderSystemBlocks } from "./compose.ts"
 import { OpencodeHost } from "./adapters/opencode-host.ts"
+import { EvolutionEngine, InMemorySessionStateStore } from "./engine.ts"
 
-// ── Role detection ─────────────────────────────────────────────────────────
+// ── Role detection (adapter-owned — the engine never sniffs "mh-") ──────────
 
 /** Any primary agent named "mh-*" opts into the harness system. */
 function isMhRole(agent: string): boolean {
@@ -109,6 +107,9 @@ function isDegenerateSession(turnCount: number, toolUsage: ToolUsage, summary: s
 
 const fmtRate = (r: number): string => `${(r * 100).toFixed(0)}%`
 
+/** Persist trajectories for PASSING sessions too. Default false = failures only. */
+const SAVE_ALL_TRAJ = false
+
 /** Count of a score's sessions the judge did NOT rate `trivial:true` (Task 7 /
  * Option A) — auto-propose thresholds must fire on informative sessions only,
  * so a run of greetings/one-liners can't itself trigger a proposal. Sessions
@@ -126,73 +127,6 @@ function resolveScopeLayer(scope: string, layers: StoreLayer[]): StoreLayer | un
   if (s === "role-global" || s === "account-role") return layers.find((l) => l.scope === "account-role")
   if (s === "account" || s === "account-global") return layers.find((l) => l.scope === "account-global")
   return undefined
-}
-
-// ── Per-session state ──────────────────────────────────────────────────────
-
-const bootstrappedSessions = new Set<string>()
-const pendingScore = new Set<string>()
-// How many times each opencode session has already been scored. A single
-// opencode session can be scored more than once (it re-bootstraps after each
-// score cycle); this de-collides the recorded IDs so traces/traj don't
-// overwrite. NOT cleared by cleanupSession — it must persist across cycles;
-// it resets naturally on plugin reload / opencode restart.
-const sessionScoreCount = new Map<string, number>()
-// Tracks which sessions have already shown the plateau pause toast.
-// NOT cleared by cleanupSession (unlike snapshotCache, etc.) — similar to
-// sessionScoreCount, which must persist across scoring cycles. This prevents
-// toast spam when the pause flag exists: each session shows the toast once,
-// then is cleaned up. The Set resets naturally on plugin reload.
-const pausedToastShown = new Set<string>()
-const snapshotCache = new Map<string, string>()
-const snapshotInjected = new Set<string>()
-const sessionModel = new Map<string, string>()
-const sessionVariant = new Map<string, string>()
-const sessionAgent = new Map<string, string>()
-const sessionTurns = new Map<string, number>()
-const sessionSummary = new Map<string, string>()
-const sessionToolUsage = new Map<string, ToolUsage>()
-const sessionTrajectory = new Map<string, TrajEvent[]>()
-// Composed agent-config (bash-timeout knobs), cached per session so a bash
-// call doesn't re-read all 4 layer files every time. Populated lazily on the
-// session's first bash call; cleared in cleanupSession.
-const sessionAgentConfig = new Map<string, AgentConfig | null>()
-
-/** Persist trajectories for PASSING sessions too. Default false = failures only. */
-const SAVE_ALL_TRAJ = false
-/** Cap the per-session trajectory buffer (drop-oldest). */
-const TRAJ_BUFFER_CAP = 500
-
-function pushTraj(sessionID: string, ev: TrajEvent): void {
-  const buf = sessionTrajectory.get(sessionID) ?? []
-  buf.push(ev)
-  if (buf.length > TRAJ_BUFFER_CAP) buf.shift()
-  sessionTrajectory.set(sessionID, buf)
-}
-
-/**
- * Tools whose output is execution results (not file content).
- * Only these get error-heuristic analysis — applying it to read/grep/glob
- * would false-positive on source code that contains error-handling words.
- */
-const EXECUTION_TOOLS = new Set(["bash", "task"])
-
-/** Best-effort error detection from execution tool output. */
-const ERROR_PATTERN = /\berror\b|\bfailed\b|\bexception\b|no such file|exit code [1-9]|traceback|command not found/i
-
-function cleanupSession(sessionID: string): void {
-  bootstrappedSessions.delete(sessionID)
-  pendingScore.delete(sessionID)
-  snapshotCache.delete(sessionID)
-  snapshotInjected.delete(sessionID)
-  sessionModel.delete(sessionID)
-  sessionVariant.delete(sessionID)
-  sessionAgent.delete(sessionID)
-  sessionTurns.delete(sessionID)
-  sessionSummary.delete(sessionID)
-  sessionToolUsage.delete(sessionID)
-  sessionTrajectory.delete(sessionID)
-  sessionAgentConfig.delete(sessionID)
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -232,6 +166,8 @@ const toastAndSwallow = async (
 const metaHarness: Plugin = async (input) => {
   const { worktree, client } = input
   const host = new OpencodeHost(input)
+  const state = new InMemorySessionStateStore()
+  const engine = new EvolutionEngine(host, state)
 
   // One-time migration of legacy flat store into project-global
   migrateFlatToProjectGlobal(worktree)
@@ -244,187 +180,67 @@ const metaHarness: Plugin = async (input) => {
 
   return {
 
-    // ── chat.message: capture model/variant/agent, gather env snapshot ────
+    // ── chat.message: capture model/variant/role, gather env snapshot ─────
     "chat.message": async (msgInput, output) => {
       const { sessionID } = output.message
       if (proposerSessions.has(sessionID)) return
 
       const agent = msgInput.agent ?? ""
-
-      // Track model + variant LIVE (both can change mid-session via the TUI;
-      // the SessionRecord must reflect what actually ran the scored turns).
       const isPrimary = isMhRole(agent) || agent === "build" || agent === "plan" || agent === ""
-      if (isPrimary && msgInput.model) {
-        const model = `${msgInput.model.providerID}/${msgInput.model.modelID}`
-        sessionModel.set(sessionID, model)
-        sessionVariant.set(sessionID, msgInput.variant ?? "")
-      }
+      const model = msgInput.model ? `${msgInput.model.providerID}/${msgInput.model.modelID}` : undefined
 
-      // Track the agent LIVE. On a switch, reset the per-session fitness
-      // counters so the eventual score reflects ONLY work done under the new
-      // agent — system.transform injects per message off this map, so every
-      // post-switch turn runs under the new agent's harness composition.
-      // (Capture-once was the old behavior; it silently refused to score
-      // sessions whose agent was switched to mh-* after the first message.)
-      const prev = sessionAgent.get(sessionID)
-      if (isPrimary && agent && prev !== undefined && prev !== agent) {
-        sessionAgent.set(sessionID, agent)
-        sessionTurns.set(sessionID, 0)
-        sessionToolUsage.delete(sessionID)
-        sessionTrajectory.delete(sessionID)
-        sessionSummary.delete(sessionID)
-        // The composed agent-config (bash-timeout knobs) is keyed by role
-        // layers, so a stale cache entry from the previous agent must go too.
-        sessionAgentConfig.delete(sessionID)
-        bootstrappedSessions.add(sessionID)
-        if (isMhRole(agent)) {
-          bootstrapStore(accountRoleRoot(agent), "")
-          bootstrapStore(projectRoleRoot(worktree, agent), "")
-          await client.tui.showToast({
-            body: { title: "Meta-Harness",
-                    message: `Harness active for ${agent} from this turn — the session will be scored on work from here.`,
-                    variant: "info", duration: 8_000 },
-          })
-        } else if (isMhRole(prev)) {
-          await client.tui.showToast({
-            body: { title: "Meta-Harness",
-                    message: `Switched to ${agent} — harness inactive; this session will no longer be scored.`,
-                    variant: "info", duration: 8_000 },
-          })
-        }
-        await log(client, "info", `[hook:chat.message] agent switch ${prev || "(none)"} → ${agent} — session counters reset`)
-      } else if (isPrimary && agent && prev === undefined) {
-        sessionAgent.set(sessionID, agent)
-      }
-
-      if (bootstrappedSessions.has(sessionID)) return
-      bootstrappedSessions.add(sessionID)
-      sessionTurns.set(sessionID, 0)
-
-      // Bootstrap all 4 stores for this role on first message
-      if (isMhRole(agent)) {
-        bootstrapStore(accountRoleRoot(agent), "")
-        bootstrapStore(projectRoleRoot(worktree, agent), "")
-        await log(client, "debug", `[hook:chat.message] bootstrapped stores for agent=${agent}`)
-      }
-
-      // Gather env snapshot (async OK — fires before the LLM call).
-      // envPolicy (Phase 4 Part C) is composed the same way as agent-config:
-      // most-specific layer that has an active env-policy wins outright.
-      const envPolicy = composeEnvPolicy(layersFor(worktree, agent).map((l) => l.root))
-      const snapshot = await gatherEnvSnapshot(host, envPolicy)
-      if (snapshot) snapshotCache.set(sessionID, snapshot)
-      await log(client, "debug", `[hook:chat.message] env snapshot length=${snapshot.length}`)
+      await engine.sessionMessage(sessionID, {
+        role: agent,
+        isPrimary,
+        participates: isMhRole(agent),
+        model,
+        variant: msgInput.variant,
+      })
     },
 
     // ── system.transform: inject all 4 layers + env snapshot ─────────────
     "experimental.chat.system.transform": async (sysInput, output) => {
       const sessionID = sysInput.sessionID ?? ""
 
-      // Judge sessions: REPLACE the entire system array with the judge
-      // persona. opencode assembles base-coding-prompt + env block +
-      // instructions BEFORE this hook runs, and the hook is the only
-      // mechanism that can remove them (source: session/llm/request.ts) —
-      // without this, the judge runs as "a coding agent" with the judge
-      // rubric merely appended, which is what made weak judges wander.
+      // Judge sessions: REPLACE the entire system array with the judge persona.
       if (judgeSessions.has(sessionID)) {
+        const jp = engine.judgeSystemPrompt(sessionID)
         output.system.length = 0
-        output.system.push(JUDGE_SYSTEM_PROMPT)
+        if (jp !== null) output.system.push(jp)
         await log(client, "info", `[judge] system prompt replaced for ${sessionID}`)
         return
       }
 
       if (proposerSessions.has(sessionID)) return
 
-      const agent = sessionAgent.get(sessionID) ?? ""
-      if (!isMhRole(agent)) return
-
-      const layers = layersFor(worktree, agent)
-      const composed = composeHarness(layers.map((l) => ({ scope: l.scope, root: l.root })))
-
-      // Env snapshot injects once per session (pushed last, if present).
-      const wantsSnapshot = sessionID && !snapshotInjected.has(sessionID)
-      const snapshot = wantsSnapshot ? snapshotCache.get(sessionID) : undefined
-
-      for (const block of renderSystemBlocks(composed, snapshot)) {
+      for (const block of await engine.composeInjection(sessionID)) {
         output.system.push(block)
-      }
-
-      // Logging (unchanged wording, recomputed from `composed` rather than
-      // re-reading the stores — renderSystemBlocks itself is pure).
-      for (const layer of composed) {
-        if (layer.system) {
-          await log(client, "debug", `[hook:system.transform] injected ${layer.scope} system — ${layer.system.length} chars`)
-        }
-      }
-      const toolLayerCount = composed.filter((l) => l.tools).length
-      if (toolLayerCount > 0) {
-        await log(client, "debug", `[hook:system.transform] injected tool guidance from ${toolLayerCount} layer(s)`)
-      }
-      if (snapshot) {
-        snapshotInjected.add(sessionID)
-        await log(client, "debug", `[hook:system.transform] injected env snapshot`)
       }
     },
 
     // ── fast-command timeout ──────────────────────────────────────────────
     "tool.execute.before": async (toolInput, output) => {
-      if (toolInput.tool !== "bash") return
-      const args = output.args as { command?: string; timeout?: number; workdir?: string }
-      if (typeof args.command !== "string") return
-
-      const sessionID = toolInput.sessionID
-      let cfg = sessionAgentConfig.get(sessionID)
-      if (cfg === undefined) {
-        const agent = sessionAgent.get(sessionID) ?? ""
-        cfg = agent ? composeAgentConfig(layersFor(worktree, agent).map((l) => l.root)) : null
-        sessionAgentConfig.set(sessionID, cfg)
-      }
-
-      const adjusted = adjustedTimeout(args.command, args.timeout, cfg)
-      if (adjusted !== undefined) {
-        output.args = { ...args, timeout: adjusted }
-      }
+      const newArgs = engine.adjustToolArgs(
+        toolInput.sessionID,
+        toolInput.tool,
+        output.args as { command?: string; timeout?: number; workdir?: string },
+      )
+      if (newArgs) output.args = newArgs
     },
 
     // ── tool-usage capture (mh-* sessions only) ───────────────────────────
     "tool.execute.after": async (toolInput, toolOutput) => {
       const { tool, sessionID } = toolInput
-      const agent = sessionAgent.get(sessionID) ?? ""
-      if (!isMhRole(agent)) return
       if (proposerSessions.has(sessionID)) return
-
-      const usage = sessionToolUsage.get(sessionID) ?? {}
-      const entry = usage[tool] ?? { calls: 0, errors: 0 }
-      entry.calls++
-
-      // Error detection only for execution tools (bash, task).
-      // File-content tools (read, grep, glob, write, edit) are skipped —
-      // their output is file content which naturally contains error-handling
-      // words and would produce false positives.
       const outText = typeof toolOutput.output === "string" ? toolOutput.output : ""
-      let isError = false
-      if (EXECUTION_TOOLS.has(tool)) {
-        isError = ERROR_PATTERN.test(outText)
-        if (isError) entry.errors++
-      }
-
-      usage[tool] = entry
-      sessionToolUsage.set(sessionID, usage)
-      pushTraj(sessionID, {
-        t: "tool", tool,
-        output: outText.slice(0, 800),
-        error: isError,
-      })
+      engine.recordTool(sessionID, tool, outText)
     },
 
     // ── turn counting + summary capture ───────────────────────────────────
     "experimental.text.complete": async (textInput, output) => {
       const { sessionID } = textInput
       if (proposerSessions.has(sessionID)) return
-      sessionTurns.set(sessionID, (sessionTurns.get(sessionID) ?? 0) + 1)
-      sessionSummary.set(sessionID, output.text.slice(0, 500))
-      if (output.text.trim()) pushTraj(sessionID, { t: "text", text: output.text.slice(0, 800) })
+      engine.recordTurn(sessionID, output.text)
     },
 
     // ── session.idle: scoring + auto-propose ──────────────────────────────
@@ -435,51 +251,49 @@ const metaHarness: Plugin = async (input) => {
       if (!sessionID) return
       if (proposerSessions.has(sessionID)) return
 
-      const agent = sessionAgent.get(sessionID) ?? ""
-      await log(client, "info", `[hook:event] session.idle — sessionID=${sessionID} agent=${agent} bootstrapped=${bootstrappedSessions.has(sessionID)}`)
+      const st0 = state.get(sessionID)
+      const agent = st0?.role ?? ""
+      await log(client, "info", `[hook:event] session.idle — sessionID=${sessionID} agent=${agent} bootstrapped=${!!st0?.bootstrapped}`)
 
-      if (!bootstrappedSessions.has(sessionID)) return
-      if (!isMhRole(agent)) return
-      if (pendingScore.has(sessionID)) return
+      if (!st0?.bootstrapped) return
+      if (!st0.participates) return
+      if (st0.pendingScore) return
+
+      const st = st0
 
       // Skip degenerate sessions (greetings / no substantive work) BEFORE
       // bothering the human — they must never pollute the fitness signal.
-      const turns = sessionTurns.get(sessionID) ?? 0
-      const usage = sessionToolUsage.get(sessionID) ?? {}
-      const summary = sessionSummary.get(sessionID) ?? ""
+      const turns = st.turns
+      const usage = st.toolUsage
+      const summary = st.summary
       if (isDegenerateSession(turns, usage, summary)) {
         await log(client, "info", `[hook:event] skipping degenerate session ${sessionID} (turns=${turns}, toolCalls=${Object.values(usage).reduce((n, t) => n + t.calls, 0)})`)
         await client.tui.showToast({
           body: { message: "Meta-Harness: session skipped (no substantive work)", variant: "info", duration: 4_000 },
         })
-        cleanupSession(sessionID)
+        engine.cleanup(sessionID)
         return
       }
 
-      bootstrappedSessions.delete(sessionID)
-      pendingScore.add(sessionID)
+      st.bootstrapped = false
+      st.pendingScore = true
+      state.put(sessionID, st)
 
       // Shadow-mode dense judge (Phase 4 Part D): kicked off CONCURRENTLY with
       // the human prompt below so it never delays scoring. Disabled by default
       // (judgeModel === "") — zero behavior change unless explicitly configured.
-      // .catch(() => null) means a broken/slow judge degrades to "no verdict"
-      // rather than ever affecting the human's score.
       const mhCfg = readMhConfig()
       const judgePromise: Promise<JudgeVerdict | null> = mhCfg.judgeModel
         ? runJudge(
             host, worktree, sessionID,
-            sessionSummary.get(sessionID) ?? "", sessionTurns.get(sessionID) ?? 0,
-            sessionTrajectory.get(sessionID) ?? [],
+            st.summary, st.turns,
+            st.trajectory,
           ).catch(() => null)
         : Promise.resolve(null)
 
-      // Maker-checker (Phase 4 Part D4): once the judge is calibrated (>=80%
-      // agreement over >=20 sessions), pre-fill the human's score prompt with
-      // the judge's verdict so the human just approves/edits — judge
-      // proposes, human checks. The 60s race only runs when calibrated, so
-      // the common (uncalibrated / judge disabled) path is completely
-      // unaffected: `prefill` stays undefined and promptHumanScore falls
-      // back to its "/mh-score good" default — zero behavior change.
+      // Maker-checker (Phase 4 Part D4): once the judge is calibrated, pre-fill
+      // the human's score prompt with the judge's verdict so the human just
+      // approves/edits — judge proposes, human checks.
       const calBefore = mhCfg.judgeModel
         ? judgeCalibration(mhCfg.judgeMinSessions, mhCfg.judgeMinAgreement)
         : { n: 0, agreement: 0, calibrated: false }
@@ -488,8 +302,6 @@ const metaHarness: Plugin = async (input) => {
       if (calBefore.calibrated) {
         const early = await Promise.race([judgePromise, new Promise<null>((r) => setTimeout(() => r(null), 60_000))])
         if (early) {
-          // 80-char hint in the prompt box (full reasoning is in record.judge);
-          // cut on a word boundary + ellipsis so it never ends mid-word.
           const r = early.reasoning
           const hint = r.length <= 80
             ? r
@@ -501,26 +313,21 @@ const metaHarness: Plugin = async (input) => {
       const result = await promptHumanScore(host, sessionID, undefined, prefill)
       if (result === null) {
         await log(client, "info", `[hook:event] scoring timed out — skipping ${sessionID}`)
-        pendingScore.delete(sessionID)
+        st.pendingScore = false
+        state.put(sessionID, st)
         return
       }
 
-      // De-collide the recorded ID when this opencode session is scored more
-      // than once. First score keeps the raw sessionID (back-compat); later
-      // scores get "<sessionID>#N" so score.json entries + traces/ + traj/
-      // stay distinct. In-memory maps below stay keyed by the raw sessionID.
-      const priorScores = sessionScoreCount.get(sessionID) ?? 0
-      sessionScoreCount.set(sessionID, priorScores + 1)
+      // De-collide the recorded ID when this session is scored more than once.
+      const priorScores = st.scoreCount
+      st.scoreCount = priorScores + 1
+      state.put(sessionID, st)
       const recordID = priorScores === 0 ? sessionID : `${sessionID}#${priorScores + 1}`
 
       // Record into all 4 stores
       const layers = layersFor(worktree, agent)
-      // Resolved early (rather than after `scores`) because the shadow-judge
-      // fold-in below needs a layer root for its meta-metric, and it must run
-      // BEFORE `recordSession` so `record.judge` is present when persisted.
       const prLayer = layers.find((l) => l.scope === "project-role")!
-      const model = sessionModel.get(sessionID) ?? "unknown"
-      // Confound-control provenance: which harness composed this session.
+      const model = st.model ?? "unknown"
       const env = {
         provider: model.includes("/") ? model.split("/")[0] : "unknown",
         layerVersions: Object.fromEntries(
@@ -531,26 +338,19 @@ const metaHarness: Plugin = async (input) => {
         sessionID: recordID,
         passed: result.passed,
         note: result.note,
-        turnCount: sessionTurns.get(sessionID) ?? 0,
+        turnCount: st.turns,
         timestamp: new Date().toISOString(),
-        summary: sessionSummary.get(sessionID) ?? "",
+        summary: st.summary,
         model,
-        variant: sessionVariant.get(sessionID) ?? "",
-        toolUsage: sessionToolUsage.get(sessionID) ?? {},
+        variant: st.variant ?? "",
+        toolUsage: st.toolUsage,
         env,
         platform: "opencode",
       }
 
-      // Resolve the shadow judge (already running concurrently, or already
-      // resolved by now) and fold its verdict into `record` BEFORE the
-      // recordSession calls below — recordSession writes `record` to disk
-      // synchronously, so anything set on it after that point would be lost.
-      // Shadow mode: the judge NEVER alters `record.passed` or `result.passed`;
-      // it only records agreement for later calibration.
+      // Resolve the shadow judge and fold its verdict into `record` BEFORE the
+      // recordSession calls below (recordSession writes `record` synchronously).
       const judgeVerdict = await judgePromise
-      // Deferred until AFTER recordSession below persists the human's score —
-      // this log is diagnostic only and must never gate/delay persistence if
-      // client.app.log ever rejects (no outer try/catch on this idle handler).
       let judgeLogLine: string | undefined
       if (judgeVerdict) {
         const agreed = judgeVerdict.passed === result.passed
@@ -562,10 +362,6 @@ const metaHarness: Plugin = async (input) => {
           agreed,
           trivial,
         }
-        // Trivial sessions (Task 7 / Option A) are recorded but must NOT
-        // inflate judge calibration — a trivial agreement is not evidence the
-        // judge is well-calibrated on real work, so skip both the per-decision
-        // log and the meta-metric that calibration reads from.
         if (!trivial) {
           appendJudgeDecision({
             ts: record.timestamp,
@@ -596,9 +392,8 @@ const metaHarness: Plugin = async (input) => {
 
       if (judgeLogLine) await log(client, "info", judgeLogLine)
 
-      // Persist the trajectory (failures always; passes only with SAVE_ALL_TRAJ)
-      // to each layer so its proposer can diagnose the root cause later.
-      const traj = sessionTrajectory.get(sessionID) ?? []
+      // Persist the trajectory (failures always; passes only with SAVE_ALL_TRAJ).
+      const traj = st.trajectory
       if (traj.length && (!record.passed || SAVE_ALL_TRAJ)) {
         for (const { layer } of scores) {
           const version = activeVersion(layer.root)
@@ -621,7 +416,7 @@ const metaHarness: Plugin = async (input) => {
         },
       })
 
-      cleanupSession(sessionID)
+      engine.cleanup(sessionID)
 
       // Resolve any in-progress project-layer trial now that a new score landed.
       for (const l of [pgLayer, prLayer]) {
@@ -647,12 +442,7 @@ const metaHarness: Plugin = async (input) => {
         }
       }
 
-      // Selection-gated auto-propose. `>=` (not `% N`) so a deferred trigger
-      // stays eligible on the next scored session instead of being lost at the
-      // exact multiple; the readTrial guard prevents proposing over an in-flight
-      // trial (proposer's own inFlight guard prevents concurrent proposals).
-      // Counts exclude judge-rated-trivial sessions (Task 7 / Option A) — a
-      // run of greetings/one-liners must not itself trigger a proposal.
+      // Selection-gated auto-propose.
       const prDue = !!projectRoleScore
         && nonTrivialCount(projectRoleScore.sessions) >= PROJECT_ROLE_THRESHOLD
         && readTrial(prLayer.root) === null
@@ -660,12 +450,13 @@ const metaHarness: Plugin = async (input) => {
         && nonTrivialCount(projectGlobalScore.sessions) >= PROJECT_GLOBAL_THRESHOLD
         && readTrial(pgLayer.root) === null
 
-      // Check for project plateau pause flag. When present and a propose trigger
-      // is due, skip the auto-propose and show an info toast once per session.
+      // Check for project plateau pause flag.
       const pausedFlagPath = path.join(worktree, ".meta-harness", "paused")
       const paused = fs.existsSync(pausedFlagPath)
-      if (paused && (prDue || pgDue) && !pausedToastShown.has(sessionID)) {
-        pausedToastShown.add(sessionID)
+      const stAfter = state.get(sessionID)
+      if (paused && (prDue || pgDue) && stAfter && !stAfter.pausedToastShown) {
+        stAfter.pausedToastShown = true
+        state.put(sessionID, stAfter)
         await log(client, "info", "[hook:event] auto-propose skipped — project plateau pause flag present")
         await client.tui.showToast({
           body: {
@@ -712,7 +503,7 @@ const metaHarness: Plugin = async (input) => {
 
       // /mh-propose [scope]
       if (cmdInput.command === "mh-propose") {
-        const agent = sessionAgent.get(cmdInput.sessionID) ?? "mh-build"
+        const agent = state.get(cmdInput.sessionID)?.role ?? "mh-build"
         const layers = layersFor(worktree, agent)
         const layer = resolveScopeLayer(cmdInput.arguments, layers)
         if (layer) {
@@ -730,7 +521,7 @@ const metaHarness: Plugin = async (input) => {
         const positional = parts.filter((p) => p !== "--force")
         const scopeArg = positional[0] ?? ""
         const version = positional[1] ?? ""
-        const agent = sessionAgent.get(cmdInput.sessionID) ?? "mh-build"
+        const agent = state.get(cmdInput.sessionID)?.role ?? "mh-build"
         const layers = layersFor(worktree, agent)
         const layer = resolveScopeLayer(scopeArg, layers)
         if (!layer) {
@@ -765,7 +556,7 @@ const metaHarness: Plugin = async (input) => {
       // /mh-promote [global|role]
       if (cmdInput.command === "mh-promote") {
         const scope = cmdInput.arguments.trim().toLowerCase()
-        const agent = sessionAgent.get(cmdInput.sessionID) ?? "mh-build"
+        const agent = state.get(cmdInput.sessionID)?.role ?? "mh-build"
         const layers = layersFor(worktree, agent)
         let source: StoreLayer | undefined
         let target: StoreLayer | undefined
@@ -786,7 +577,7 @@ const metaHarness: Plugin = async (input) => {
 
       // /mh-curate <scope> — consolidate/prune a layer's playbook (through the gate)
       if (cmdInput.command === "mh-curate") {
-        const agent = sessionAgent.get(cmdInput.sessionID) ?? "mh-build"
+        const agent = state.get(cmdInput.sessionID)?.role ?? "mh-build"
         const layers = layersFor(worktree, agent)
         const layer = resolveScopeLayer(cmdInput.arguments, layers)
         if (!layer) {
@@ -799,12 +590,13 @@ const metaHarness: Plugin = async (input) => {
 
       // /mh-status
       if (cmdInput.command === "mh-status") {
-        const tracked = sessionAgent.get(cmdInput.sessionID)
+        const tracked = state.get(cmdInput.sessionID)?.role ?? undefined
+        const trackedParticipates = state.get(cmdInput.sessionID)?.participates ?? false
         const agent = tracked ?? "mh-build"
         const layers = layersFor(worktree, agent)
         const sessionState = tracked === undefined
           ? "no message yet — use an mh-* agent to enable scoring"
-          : isMhRole(tracked)
+          : trackedParticipates
             ? `agent=${tracked}, scoring ON`
             : `agent=${tracked} — not scored (switch to an mh-* agent to activate the harness)`
         const lines: string[] = [`Meta-Harness status (stores for ${agent}; this session: ${sessionState}):`]
