@@ -12,7 +12,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import { STANDARD_SQUAD, type SquadDef } from "../src/fleet/squad-def.ts"
-import { answerGate, newSquadState, runSquad } from "../src/fleet/squad.ts"
+import { answerGate, newSquadState, runSquad, type DriveFn } from "../src/fleet/squad.ts"
 import { OK, scripted } from "./fleet-helpers.ts"
 
 const AUTO: SquadDef = STANDARD_SQUAD // gate1/gate2 auto by default
@@ -104,6 +104,35 @@ describe("squad runner", () => {
       // escalation surfaces its id too (spec §2 "surface on escalation
       // outcomes when an implementer drive exists").
       expect(outcome.implementerSessionId).toMatch(/-implementer$/)
+    }
+  })
+
+  test("R3 exhaustion escalation carries the EXACT last implementer drive id, not just a matching shape", async () => {
+    // Under-tested sub-case (fleet-integration.md:111-125): an escalation
+    // that fires AFTER at least one implementer drive already ran (R3
+    // exhaustion is exactly this — implementer drives repeatedly, once per
+    // FAIL-impl loop, before the R3 bound trips) must carry THAT specific
+    // drive's id, not merely something id-shaped. Wraps scripted()'s drive
+    // to independently capture every implementer id squad.ts itself saw,
+    // so the assertion below doesn't just re-derive squad.ts's own
+    // bookkeeping — it cross-checks it against a second, test-owned record.
+    const failForever = Array(10).fill("VERDICT: FAIL cause=impl\n## Test Spec\nx")
+    const { drive: baseDrive, score } = scripted({ "evaluator-verdict": failForever })
+    const implementerIds: string[] = []
+    const drive: DriveFn = async (phase, input, sliceId) => {
+      const r = await baseDrive(phase, input, sliceId)
+      if (phase === "implementer") implementerIds.push(r.id)
+      return r
+    }
+    const { outcome } = await runSquad(newSquadState("s4b", "x"), AUTO, drive, score)
+    expect(outcome.status).toBe("escalation")
+    // R3 bound is 3 (squad-def.ts) -> implementer drives 4 times (r3 hits 4
+    // > 3 on the 4th FAIL-impl) before exhaustion trips.
+    expect(implementerIds.length).toBe(4)
+    if (outcome.status === "escalation") {
+      expect(outcome.escalation.type).toBe("Exhausted")
+      expect(outcome.implementerSessionId).toBe(implementerIds[implementerIds.length - 1])
+      expect(outcome.implementerSessionId).not.toBeUndefined()
     }
   })
 
