@@ -1328,7 +1328,20 @@ export function buildProposerContext(
     )
   }
 
-  return coveredSection + sections.join("\n\n---\n\n")
+  // Generic, store-level wire-contract surfacing (spec §1.5: the wire is the
+  // consumer-owned contract; the generator must SEE it, not infer it from
+  // examples). A layer root MAY contain contract.md — written by a fleet
+  // squad def via syncWireContracts (squad-def.ts) — with NO import of fleet
+  // code here; this function only reads a plain file if present. A live
+  // propose-loop demo found three generations converge on a plausible-but-
+  // wrong verdict casing because that requirement appeared nowhere in the
+  // evidence shown to the proposer — this closes that gap for any layer.
+  const contract = readText(path.join(storeRoot, "contract.md"))
+  const contractSection = contract
+    ? `\n\n---\n\n## Consumer wire contract (verbatim — outputs MUST satisfy this)\n\n${contract}`
+    : ""
+
+  return coveredSection + sections.join("\n\n---\n\n") + contractSection
 }
 
 // ── Layer stack builder ────────────────────────────────────────────────────

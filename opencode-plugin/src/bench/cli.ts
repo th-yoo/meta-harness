@@ -18,7 +18,7 @@ import { cmdReportLoop, type ReportLoopArgs } from "./report-loop.ts"
 import { BenchError, log } from "./util.ts"
 import { DRIVER_IDS } from "./drivers/index.ts"
 import { readFileSync } from "node:fs"
-import { writeSquadDefV1, STANDARD_SQUAD } from "../fleet/squad-def.ts"
+import { writeSquadDefV1, readActiveSquadDef, syncWireContracts, STANDARD_SQUAD } from "../fleet/squad-def.ts"
 import { cmdRolesRender } from "../fleet/render.ts"
 import { cmdRolesImport } from "../fleet/import.ts"
 import { cmdRoleRun } from "../fleet/run.ts"
@@ -1031,8 +1031,19 @@ export async function main(argv: string[]): Promise<number> {
         return 0
       }
       case "squad-def-init": {
-        writeSquadDefV1(STANDARD_SQUAD)
-        log("squad def 'standard' v1 written + active")
+        // Idempotent refresh (live-loop finding): the def's own "already
+        // active" die is preserved (writeSquadDefV1 unchanged), but this CLI
+        // path treats it as the existing tolerated case — re-sync the
+        // active def's wire contracts either way, so a stale contract.md
+        // never lingers after the squad def or its wire block evolves.
+        try {
+          writeSquadDefV1(STANDARD_SQUAD)
+          log("squad def 'standard' v1 written + active")
+        } catch (e) {
+          if (!(e instanceof BenchError) || !/already has an active version/.test(e.message)) throw e
+          syncWireContracts(readActiveSquadDef(STANDARD_SQUAD.type))
+          log(`squad def '${STANDARD_SQUAD.type}' already active — wire contracts refreshed`)
+        }
         return 0
       }
       case "roles-render": {

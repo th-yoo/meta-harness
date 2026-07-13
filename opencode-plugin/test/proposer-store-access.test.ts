@@ -3,7 +3,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
 import { buildProposerPrompt, buildStoreAccessSection, buildCuratePrompt } from "../src/propose.ts"
-import { readMhConfig, writeActive, type StoreLayer, type Playbook } from "../src/harness-store.ts"
+import { readMhConfig, writeActive, buildProposerContext, type StoreLayer, type Playbook } from "../src/harness-store.ts"
 
 // Token-free: exercises prompt rendering + config parsing directly — no
 // opencode session, no LLM call. Covers the agentic-proposer store access
@@ -129,6 +129,31 @@ test("buildCuratePrompt: embeds the store-access section as prune evidence", () 
   expect(prompt).toContain("## Store access — read the archive before diagnosing")
   expect(prompt).toContain(storeRoot)
   expect(prompt).toContain("read the traces before deciding")
+})
+
+// Fix B (live-loop finding): a layer root MAY contain contract.md — the
+// consumer-owned wire contract, written by fleet's syncWireContracts
+// (squad-def.ts) — and buildProposerContext must surface it verbatim to the
+// proposer when present. This is store-level and generic: no fleet import
+// here, just a plain file read.
+test("buildProposerContext: layer root with contract.md → context contains the wire section", () => {
+  const storeRoot = tmpDir("store-contract")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  fs.writeFileSync(path.join(storeRoot, "contract.md"), "# Consumer wire contract — evaluator\n\nVERDICT: PASS\n")
+
+  const context = buildProposerContext(storeRoot, [])
+
+  expect(context).toContain("## Consumer wire contract (verbatim — outputs MUST satisfy this)")
+  expect(context).toContain("VERDICT: PASS")
+})
+
+test("buildProposerContext: no contract.md → context unchanged (no wire section)", () => {
+  const storeRoot = tmpDir("store-no-contract")
+  writeActive(storeRoot, "v1", "- some rule", "")
+
+  const context = buildProposerContext(storeRoot, [])
+
+  expect(context).not.toContain("Consumer wire contract")
 })
 
 test("readMhConfig: proposerTimeoutMin defaults to 20, honors valid overrides, rejects junk, caps at 120", () => {

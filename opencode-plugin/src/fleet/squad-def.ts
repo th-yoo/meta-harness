@@ -5,8 +5,8 @@
  */
 import { existsSync, mkdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import { accountMetaRoot } from "../harness-store.ts"
-import { die, writeJsonAtomic } from "../bench/util.ts"
+import { accountMetaRoot, accountRoleRoot } from "../harness-store.ts"
+import { die, writeJsonAtomic, writeTextAtomic } from "../bench/util.ts"
 
 export type SlotBinding =
   | { kind: "agent"; role: string; platform: "opencode" | "claude-code"; model: string }
@@ -87,6 +87,78 @@ export function writeSquadDefV1(def: SquadDef): void {
   mkdirSync(join(root, "active"), { recursive: true })
   writeJsonAtomic(join(root, "candidates", "v1", "squad.json"), def)
   writeJsonAtomic(activePath, { ...def, __version: "v1" })
+  syncWireContracts(def)
+}
+
+/**
+ * Render the consumer-owned wire contract for one role (spec §1.5: the wire
+ * is the consumer's contract; the generator — the proposer writing that
+ * role's system.md — must be able to SEE it, not infer it). Includes the
+ * role-level OR-groups plus any phase-specific overrides (e.g.
+ * "evaluator-verdict"), and for the evaluator, the verdictRe pattern
+ * verbatim plus a literal example line — this is exactly the detail a live
+ * propose-loop demo found three generations converging blindly without
+ * (verdictRe's uppercase requirement appeared nowhere in proposer evidence).
+ */
+function renderWireContract(def: SquadDef, role: string): string {
+  const groups: string[][] = []
+  const seen = new Set<string>()
+  const addGroups = (gs: string[][] | undefined) => {
+    if (!gs) return
+    for (const g of gs) {
+      const key = g.join(" ")
+      if (seen.has(key)) continue
+      seen.add(key)
+      groups.push(g)
+    }
+  }
+  addGroups(def.wire.headings[role])
+  for (const [key, gs] of Object.entries(def.wire.headings)) {
+    if (key !== role && key.startsWith(`${role}-`)) addGroups(gs)
+  }
+
+  const lines: string[] = [
+    `# Consumer wire contract — ${role} (verbatim — outputs MUST satisfy this)`,
+    "",
+    "Your payload must satisfy EVERY heading in AT LEAST ONE of the following groups:",
+    "",
+    ...groups.map((g) => `- ${g.join(" + ")}`),
+  ]
+
+  if (role === "evaluator") {
+    lines.push(
+      "",
+      "## Verdict line — required pattern (verbatim, matched case-insensitively)",
+      "",
+      "```",
+      def.wire.verdictRe,
+      "```",
+      "",
+      "Example lines:",
+      "```",
+      "VERDICT: PASS",
+      "VERDICT: FAIL cause=impl",
+      "```",
+    )
+  }
+
+  return lines.join("\n") + "\n"
+}
+
+/**
+ * Write <accountRoleRoot(mh-<role>)>/contract.md for every agent-kind slot in
+ * `def` (generic, store-level — no propose.ts import here; propose.ts reads
+ * contract.md back via buildProposerContext). Idempotent: safe to call on
+ * every writeSquadDefV1 and on every squad-def-init CLI invocation, including
+ * the already-active tolerated path, so an evolved squad def always keeps
+ * its stores' contracts current.
+ */
+export function syncWireContracts(def: SquadDef): void {
+  for (const slot of Object.values(def.slots)) {
+    if (slot.kind !== "agent") continue
+    const root = accountRoleRoot(`mh-${slot.role}`)
+    writeTextAtomic(join(root, "contract.md"), renderWireContract(def, slot.role))
+  }
 }
 
 export function readActiveSquadDef(type: string): SquadDef {
@@ -124,8 +196,14 @@ export function parseVerdict(
   def: SquadDef,
   payload: string,
 ): { verdict: "PASS" } | { verdict: "FAIL"; cause: "impl" | "design" | "intent" } | null {
-  const m = new RegExp(def.wire.verdictRe, "m").exec(payload)
+  // "mi" (not just "m"): the wire contract is invisible to the proposer (it
+  // appears nowhere in the evidence it's shown), so generations converge on
+  // plausible-but-wrong casing (e.g. "verdict: pass") — parse case-
+  // insensitively and normalize the captures rather than rejecting them.
+  const m = new RegExp(def.wire.verdictRe, "mi").exec(payload)
   if (!m) return null
-  if (m[1] === "PASS") return { verdict: "PASS" }
-  return { verdict: "FAIL", cause: (m[2] as "impl" | "design" | "intent") ?? "impl" }
+  const verdict = m[1]!.toUpperCase() as "PASS" | "FAIL"
+  if (verdict === "PASS") return { verdict: "PASS" }
+  const cause = (m[2]?.toLowerCase() ?? "impl") as "impl" | "design" | "intent"
+  return { verdict: "FAIL", cause }
 }
