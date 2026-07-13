@@ -533,13 +533,39 @@ Held last: weakest signal (subjective), highest blast radius (human trust +
 outward actions). Evolving the human interface before the loop proves itself
 on verifier-grounded roles = maximum risk, minimum evidence.
 
+## 10. Prompt ownership (DECIDED — D2): the store is truth
+
+oc-test `doctrine/*.md` is imported ONCE (`roles-import` -> account-role v1);
+after that the meta-harness store owns all role-prompt truth. Platform
+persona files (opencode agents-md, CC agents, master doctrine) are RENDERED
+outputs.
+
+Why not the alternatives:
+
+- *Doctrine-as-truth*: a PR round-trip per candidate kills automated
+  trial/ab cycles; attribution breaks; the store degrades to a cache with
+  drift.
+- *Split truth (identity in doctrine, guidance in store)*: the protection it
+  seeks already exists structurally — manifest owns frontmatter
+  (permissions/mode/model) as code, squad-def wire lint blocks
+  contract-breaking bodies, master invariants live in the shell. Only body
+  guidance evolves, and it is gated.
+
+Riders:
+
+1. **Rendered persona files are committed into fleet targets** — the fleet
+   runs standalone; the store is needed to CHANGE prompts, not to run them
+   (§0 independence).
+2. **Human edits are first-class**: manual candidate -> activate -> render.
+   Hand fixes enter the same attribution stream as proposer output — a
+   regressive hand edit is caught by the same gates.
+3. After import, oc-test doctrine = bootstrap artifact (mark legacy or
+   delete in the fleet-side rework; delivery mechanics = D7).
+
 ---
 
 ## Open decisions (queue)
 
-- **D2 — canonical prompt ownership**: oc-test doctrine vs meta-harness
-  layer store as source of truth. (Leaning: truth lives in the shared store,
-  regimes only render/consume — but not yet decided.)
 - **D5 remainder**: exact event->score mapping table (which events are
   scores vs meta-metrics; weights; evaluator meta-scoring).
 - **D7 — repo boundary**: oc-test read-only + recipe vs meta-harness writes
