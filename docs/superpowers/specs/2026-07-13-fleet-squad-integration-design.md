@@ -1,0 +1,374 @@
+# Fleet × meta-harness integration — design (WORKING DRAFT)
+
+Status: brainstorm in progress.
+Decided: node grammar (D1), orchestration, squad flow, drive platform (D3),
+store topology (D6), squad evolution model (D5 core).
+Open: D2 prompt ownership, D4 master contract, D5 remainder (exact
+event→score table), D7 repo boundary.
+
+Companion: [improvement-loops.md](../../improvement-loops.md) — how the
+existing static & dynamic improvement loops work; this design plugs the fleet
+in as a third regime.
+
+---
+
+## 0. What integrates with what
+
+meta-harness today = one evolution core (store / compose / propose / judge)
+with **two evaluation regimes**:
+
+- **static** — TB2 bench (`runner.ts`, podman, verifier, k-trials, McNemar ab).
+  Objective, repeatable, expensive. Feeds account layers.
+- **dynamic** — runtime hosts (opencode plugin, cc-adapter). Live sessions,
+  judge-prefilled human scores, trial gate. Free but weak-stats. Feeds
+  project layers.
+
+**The fleet does not exist yet.** When it does, it becomes a **third regime,
+dynamic-class**: headless runtime like the plugin, but with denser and
+better-labeled signal (typed failure routes, per-gate events instead of one
+human score per session). Its role prompts are additionally grounded on the
+static side (TB2) for statistical power.
+
+Deliberate independence: the fleet must run with meta-harness absent (static
+personas, no plugin in fleet targets) and meta-harness must prove its loop on
+the bench alone. Integration = composition through two thin interfaces
+(render, score), not mutual dependency.
+
+## 1. Node grammar (DECIDED — D1)
+
+Filesystem analogy: the **fleet is the root directory**.
+
+```
+node := agent | squad
+agent := leaf executor (may own PRIVATE sub-agents — internal machinery,
+         invisible to fleet topology, never separately scored)
+squad := { Analyzer, Designer, Implementer, Evaluator }
+         where EVERY slot is itself a node (agent or squad) → recursion
+```
+
+- 4-role squad: Analyzer / Designer split (oc-test's fused `architect`
+  doctrine = legacy to migrate).
+- `nodePath` = filesystem-style path (`root/slice-42/implementer.squad/analyzer`),
+  recorded as provenance on every score record. Never a store split.
+- Node interface, uniform at every depth:
+
+```
+run(input) -> payload | escalation
+```
+
+A parent cannot tell whether a slot is an agent or a whole squad behind it.
+
+**Contract constraint (decided):** the node interface stays
+**AgentDriver-compatible** — a squad node must be driveable as a bench arm
+(task in, payload + telemetry out, classifiable failure) without bench
+modification. No squad-on-bench machinery is built now; this one-paragraph
+alignment keeps it a later adapter instead of a rewrite. Trigger to build:
+tier-2 policy evolution needs referee-grade gating, or compositional
+role-prompt effects need measuring.
+
+## 2. Orchestration (DECIDED)
+
+**Deterministic runner per squad.** No LLM orchestrator. A→D→I→E is a fixed
+state machine in code; gate behavior is policy config; every loop has a
+counter bound. Root master (OpenClaw) remains the only special node: human IO
+(Slack), remote git, human gates.
+
+The determinism is load-bearing for evolution: internal events stay
+observable and stamp-attributed, so credit assignment (see §6) never has to
+guess which member caused an outcome.
+
+## 3. The squad flow (DECIDED — full state machine)
+
+### 3.1 Universal slot pattern
+
+Every slot runs the same micro-loop shape (the fractal, one level down):
+
+```
+[work step(s)] -> [self-check] -> route:
+    ADVANCE   (downstream: next slot / squad output)
+  | REDO      (internal retry, bounded R1)
+  | UPSTREAM  (re-enter an earlier slot, bounded R2)
+  | ESCALATE  (out of the squad, up the nodePath)
+```
+
+### 3.2 Flow diagram (ASCII)
+
+```
+ slice in
+    |
+    v
++-------------------- ANALYZER ---------------------+
+| 1. analyze: slice -> use cases + functional spec  |
+| 2. self-check: well-formed? intent clear?         |
+|      malformed (<=R1) ----> goto 1                |
++---------------------------------------------------+
+    |                       |
+    | intent fork           | pass
+    | ("## Clarify")        v
+    +--> ESCALATE ^    {Gate 1: intent}  root: human / inner: auto
+                        |         |
+                 revise |         | approve
+                 (goto Analyzer.1)|
+                        +---------+-------------------------+
+                                  |                         |
+                                  v                         v
+                    +--------- DESIGNER ---------+   +-- EVALUATOR (spec) --+
+                    | 1. design: spec -> OOD     |   | author test-spec     |
+                    |    alternatives+trade-offs |   | from functional spec |
+                    | 2. self-check: interfaces? |   | (never from code)    |
+                    |    test plan? covers all   |   +----------------------+
+                    |    use cases?              |        (held for verdict)
+                    |     incomplete (<=R1)->1   |
+                    +----------------------------+
+                        |                |
+        spec ambiguous  |                | pass
+        (<=R2)          v                v
+        --> Analyzer.1  {Gate 2: OOD decide}  root: human / inner: auto-pick
+                                 |            recommended
+                          revise | decided design + task DAG
+                          (goto  |
+                        Designer.1)
+                                 v
+                    +-------- IMPLEMENTER ---------------------+
+                    | 1. analyze-implementation:               |
+                    |    design -> concrete edit plan          |
+                    |      design decision needed (<=R2)       |
+                    |      ------------------> Designer.1      |
+                    | 2. implement                             |
+                    |      inconsistency/design smell -> 1     |
+                    | 3. dev-test: compile/syntax/lint ONLY    |
+                    |      syntax error (<=R1) -> 2            |
+                    +------------------------------------------+
+                                 | pass
+                                 v
+                    +------- EVALUATOR (verdict) --------------+
+                    | run test-spec + build + lint             |
+                    | + adversarial diff review vs intent      |
+                    |   and design                             |
+                    | VERDICT:                                 |
+                    |   FAIL impl   (<=R3) -> Implementer.1    |
+                    |   FAIL design (<=R2) -> Designer.1       |
+                    |   FAIL intent (<=R2) -> Analyzer.1       |
+                    |   PASS -> payload out                    |
+                    +------------------------------------------+
+                                 | PASS
+                                 v
+                     payload (diff + report) -> parent node
+                     at root: master -> human merge gate
+
+ any bound exhausted anywhere --> ESCALATE up the nodePath
+                                  with failure report (never silent-loop)
+```
+
+### 3.3 Routing rules
+
+| # | From | Condition | To | Bound |
+|---|---|---|---|---|
+| 1 | Analyzer self-check | malformed payload | Analyzer.1 | R1 (default 2) |
+| 2 | Analyzer self-check | genuine intent fork (`## Clarify`) | ESCALATE | immediate |
+| 3 | Gate 1 | revise | Analyzer.1 | human gates: own counter (see 3.7) |
+| 4 | Designer self-check | design incomplete | Designer.1 | R1 |
+| 5 | Designer self-check | spec ambiguous | Analyzer.1 | R2 (upstream-hop cap, default 1) |
+| 6 | Gate 2 | revise | Designer.1 | human gates: own counter |
+| 7 | Implementer.1 | design decision needed | Designer.1 | R2 |
+| 8 | Implementer.2 | inconsistency found | Implementer.1 | R1 |
+| 9 | Implementer.3 dev-test | syntax/compile error | Implementer.2 | R1 |
+| 10 | Verdict | FAIL — implementation | Implementer.1 | R3 (macro loop, default 3) |
+| 11 | Verdict | FAIL — design flaw | Designer.1 | R2 |
+| 12 | Verdict | FAIL — intent | Analyzer.1 | R2; invalidates test-spec (see 3.7) |
+| 13 | any | bound exhausted | ESCALATE `Exhausted` + failure report | — |
+| 14 | any squad total | global step/token budget exhausted | ESCALATE `Exhausted` | hard cap |
+
+Escalation payload types (the ONLY thing that crosses node boundaries
+upward): `Clarify | DesignDecision | Exhausted`. Bubbles up the nodePath;
+only the root reaches the human (via master).
+
+### 3.4 Gate policy
+
+Gates are **policy, not structure**: `gatePolicy: human | auto` per node.
+
+- Root squad: Gate 1 (intent), Gate 2 (OOD decision), merge gate — human,
+  via master in Slack.
+- Inner squads (depth >= 1): auto — Gate 1 approves any well-formed intent,
+  Gate 2 picks the designer's recommended alternative.
+
+### 3.5 Key properties
+
+1. **Same loop at every scale.** Slot micro-loop == squad macro-loop ==
+   fleet level. `run(input) -> payload | escalation` is function-call
+   semantics: escalation = typed exception, nodePath = stack trace.
+2. **Upstream edges make it a feedback system, not a waterfall** — and every
+   one is bounded, so every execution terminates in PASS-out or ESCALATE-up.
+3. **Typed backward edges = built-in credit assignment.** FAIL-impl vs
+   FAIL-design vs FAIL-intent arrive pre-labeled with which role owns the
+   failure — richer diagnosis than any single PASS/FAIL.
+4. **Anti-circularity preserved.** Evaluator authors the test-spec from the
+   functional spec right after Gate 1 — before any code exists.
+5. **Private sub-agents stay private.** Runner neither sees nor scores them.
+6. **Cost-staged verification.** Syntax-only dev-test before the expensive
+   evaluator.
+
+### 3.6 Sample trace
+
+```
+Analyzer pass -> Gate1 approve -> [Evaluator writes test-spec]
+Designer pass -> Gate2 decide
+Implementer.1: missing design decision -> Designer.1 (R2: 1 spent)
+Designer pass -> Gate2 (auto) -> Implementer.1 -> .2 -> .3 syntax error
+  -> .2 -> .3 pass
+Verdict: FAIL impl -> Implementer.1 (R3: 1 spent) -> ... -> Verdict PASS
+payload -> parent (root: master -> human merge gate)
+```
+
+### 3.7 Contracts still to pin in this spec (from design review)
+
+1. **Self-check depth boundary.** Slot self-check = FORM only (payload
+   headings, schema — mechanical lint, code not LLM where possible).
+   Substance belongs to the Evaluator + tests. If self-check grows judgment,
+   grade-own-homework circularity returns.
+2. **Re-entry contract.** Upstream re-entry delivers
+   `{prior artifact + specific question}` and expects a REVISION, not a
+   from-scratch rewrite (else churn burns R2 without converging).
+3. **Artifact versioning.** design.md v2 after re-entry: define what
+   survives (task-DAG diff); rule 12 invalidates the test-spec — Evaluator
+   re-authors after any Analyzer re-pass.
+4. **Global budget.** Per-edge bounds don't cap compound cycles
+   (I→D→I→D ping-pong); rule 14's per-squad step/token budget is the
+   backstop.
+5. **Human-gate counters separate from machine counters.** Human revisions
+   at root gates must not exhaust machine retry bounds.
+
+## 4. Evolution surface — what meta-harness improves here
+
+Three tiers, decreasing directness:
+
+**Tier 1 — role prompts (NOW; this is the T1–T6 plan):**
+
+| Flow element | Meta-harness piece |
+|---|---|
+| Slot prompt bodies (A/D/I/E) | 4-layer store per role name; compose renders agent files |
+| Which version ran | render stamp -> pins -> exact-candidate attribution |
+| Gate/verdict events | scores into role stores (see §6) |
+| Failure runs | NDJSON trajectories -> proposer diagnosis |
+| Candidate gating | TB2 ab (solo role grounding) or trial gate (live fleet) |
+| Slot self-check | mh-judge + judge-audit (calibration built in) |
+
+**Tier 2 — flow parameters (config-as-text, cheap addition):** bounds
+R1/R2/R3, gate policy, self-check lint rules, re-entry templates — rendered
+per squad like a layer, versioned in the same store, evolved under the same
+selection gate. Signal: per-slice meta-metrics (redo counts, upstream hops,
+tokens, escalation rate, merge rate). Trial-gate stats until squad-on-bench
+exists.
+
+**Tier 3 — flow STRUCTURE (edges, steps, state machine): explicitly not
+now.** Harness-code evolution, red zone in explicitly-not-now.md. Reopen
+trigger: report-loop plateau on tiers 1–2.
+
+**Reverse direction:** the flow improves meta-harness — typed backward edges
+hand the proposer LABELED failure attribution (which role failed, how),
+richer than TB2's binary pass/fail.
+
+## 5. Drive platform (DECIDED — D3)
+
+**Both platforms, via the existing AgentDriver seam; host excluded.**
+
+```
+AgentNode(role, platform, model).run(input):
+  render   role layers -> platform persona file      [compose / T1 render]
+  spawn    platform driver argv on host workspace    [AgentDriver seam]
+  parse    driver.parseOutput -> payload + telemetry
+  classify driver.classifyAttempt -> advance | redo | escalate
+  record   recordToStores(stamp pins, nodePath env)  [T4 score path]
+```
+
+- Squad runner sits ABOVE the driver: never knows which platform a slot ran
+  on. Mixed squads legal (e.g. haiku-opencode analyzer + sonnet-CC
+  implementer).
+- Platform + model = per-slot manifest config, overridable per drive.
+- **HarnessHost is deliberately excluded from fleet targets** (plugin-off
+  requirement): a leaf node is pure caller semantics (drive/parse/classify),
+  the host is callee semantics (live in a platform's event loop). The two
+  seams converge only at recordToStores.
+- opencode = first-proven path (T0). **CC persona probe = precondition
+  task** before the CC leaf lands: prove headless persona injection
+  (.claude/agents/*.md vs --append-system-prompt) and per-platform
+  permission rendering (opencode frontmatter `permission:` vs CC settings).
+
+## 6. Squad evolution — how a squad improves without a central prompt (DECIDED — D5 core)
+
+**Principle: every node owns exactly ONE evolvable artifact.**
+
+- Agent node: its `system.md`.
+- Squad node: its **manifest + flow policy** (slot->role mapping,
+  model/platform per slot, bounds, gate policy, re-entry templates). That IS
+  the squad's "system prompt": the behavior-determining text that lives in no
+  member. Tier-2 artifact, same store machinery.
+
+**Channel 1 — members improve via INTERNAL signal.** The runner's typed
+events are per-member fitness, already labeled:
+
+| Flow event | Score lands on |
+|---|---|
+| Gate 1 approve / revise | analyzer |
+| Gate 2 decide / revise | designer |
+| VERDICT PASS / FAIL-impl | implementer |
+| FAIL-design routed upstream | designer (blame), implementer (absolved) |
+| redo counts, clean handoffs | emitting slot |
+| verdict-vs-merge agreement (later) | evaluator |
+
+Each slot scored at its own gates -> recordToStores with stamp pins -> the
+role-name store — identical to a lone agent. Members get their own reviews,
+not just the company's stock price.
+
+**Channel 2 — squad-level score improves the squad's OWN artifact.** Parent
+gate on the squad's payload + slice meta-metrics (cost, iterations,
+escalation rate, merge outcome) = fitness for manifest/policy candidates.
+Trial-gate stats now; referee-grade later via squad-on-bench (§1 contract).
+
+Squad-level scores also flow down as a weak tiebreaker (participating
+versions logged in provenance), but primary member signal = local gates.
+
+**Fractal consistency:** "one node = one artifact + a score channel for its
+children" recurses — a sub-squad in the implementer slot owns its policy,
+its members their prompts, and its VERDICT feeds the outer implementer-slot
+score.
+
+## 7. Store topology (DECIDED — D6, reaffirmed)
+
+One evolvable store per role NAME across all depths. `nodePath` is
+provenance on records, never a store split — depth-3 analyzer and depth-1
+analyzer pool learning. Squad policies get store names by squad type (e.g.
+`squad:standard`), instances distinguished by nodePath provenance.
+
+## 8. Ordering constraint (Gall)
+
+The base evolution loop has produced zero accepted candidates end-to-end.
+Sequence, non-negotiable:
+
+1. **Close the simplest working loop first**: k=5 store-writing baseline ->
+   one propose -> one ab -> one accept/reject. (Also seeds the proposer:
+   old baselines were --no-store, the store holds no trajectories yet.)
+2. Depth-1 squad E2E, opencode-only, plain agents in all 4 slots,
+   demo-script master (existing T1–T5 plan).
+3. Live fleet scores accumulate; CC leaf after its probe.
+4. Recursion when a real slice needs a sub-squad — not before.
+5. Tier-2 policy evolution after tier-1 accepts candidates.
+6. Mixed-platform squads later still.
+
+Recursion stays cheap the whole time because it's an interface property
+(uniform node contract), not machinery.
+
+---
+
+## Open decisions (queue)
+
+- **D2 — canonical prompt ownership**: oc-test doctrine vs meta-harness
+  layer store as source of truth. (Leaning: truth lives in the shared store,
+  regimes only render/consume — but not yet decided.)
+- **D4 — master integration contract**: exact subcommand surface the master
+  shells (roles-render / role-run / role-score); demo-script stand-in.
+- **D5 remainder**: exact event->score mapping table (which events are
+  scores vs meta-metrics; weights; evaluator meta-scoring).
+- **D7 — repo boundary**: oc-test read-only + recipe vs meta-harness writes
+  adapters into oc-test (incl. the shell->bash permission-key flag, still
+  only recorded meta-harness-side).
