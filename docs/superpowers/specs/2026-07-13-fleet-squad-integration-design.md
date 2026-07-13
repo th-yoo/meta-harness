@@ -1,7 +1,7 @@
-# Fleet × meta-harness integration — design (WORKING DRAFT)
+# Fleet × meta-harness integration — design
 
-Status: all design decisions closed (D1–D7). Pending: spec self-review,
-user review gate, writing-plans.
+Status: all design decisions closed (D1–D7); self-review done. Pending:
+user review gate, then writing-plans.
 Decided: D1 node grammar, D2 prompt ownership (store is truth), D3 drive
 platform, D4 master contract + OpenClaw seat, D5 squad evolution + full
 event→score mapping + escalation taxonomy + communication grammar, D6
@@ -94,7 +94,9 @@ workspace, created at run time, never persisted as definition.
   "wire": {
     "headings": {
       "analyzer":  [["## Use Cases", "## Functional Spec"], ["## Clarify"]],
-      "designer":  [["## Decided Design", "## Task DAG"]],
+      "designer":  [["## Alternatives", "## Recommended"]],
+      // decided design.md + task DAG = Gate 2 OUTPUT (runner materializes
+      // the chosen alternative), not a designer payload heading
       "evaluator": [["## Test Spec"], ["VERDICT:"]]
     },
     "verdictRe": "^VERDICT: (PASS|FAIL)"
@@ -331,7 +333,7 @@ Verdict: FAIL impl -> Implementer.1 (R3: 1 spent) -> ... -> Verdict PASS
 payload -> parent (root: master -> human merge gate)
 ```
 
-### 3.7 Contracts still to pin in this spec (from design review)
+### 3.7 Pinned contracts (from design review)
 
 1. **Self-check depth boundary.** Slot self-check = FORM only (payload
    headings, schema — mechanical lint, code not LLM where possible).
@@ -464,7 +466,7 @@ Full event -> score mapping (DECIDED — D5):
 | VERDICT FAIL-impl | implementer | bad |
 | VERDICT FAIL-design | implementer NEUTRAL (absolved); designer's revision drive scored at its own Gate 2 | — |
 | evaluator payload well-formed (spec + verdict) | evaluator | good / bad (v1, lint-grade) |
-| root merge accept / reject | squad def (channel 2) + implementer confirm | good / bad |
+| root merge accept / reject | squad def (channel 2); merge-reject also flags the implementer's VERDICT-PASS for evaluator-v2 accounting | good / bad |
 | `Exhausted` | squad def | bad |
 | `Infeasible` — human confirms / overrides | analyzer (or emitting slot) | good / bad |
 | `Refused` | — | NEVER scored (§3.3.1 safety rule) |
@@ -548,7 +550,7 @@ Irreducible master jobs — everything that cannot move into the runner:
 | Slack dialogue, slice intake (backlog -> slice text) | needs LLM + human conversation — the one legitimately LLM-ish part |
 | Invoke root node `run(slice)` | someone must call root |
 | Answer root gates (1, 2, merge) | human decisions, async via Slack |
-| Receive escalations (`Clarify \| DesignDecision \| Exhausted`) | terminal point of the bubble-up chain |
+| Receive escalations (all five §3.3.1 types) | terminal point of the bubble-up chain |
 | Remote git: push, PR | side-effect owner — sole-remote-writer invariant survives |
 | Emit merge-gate score (role-score) | fitness for the squad artifact |
 | Re-run roles-render on activation | keeps personas current |
@@ -563,7 +565,9 @@ squad-run --project X --slice s.md --gate-policy root=human
 master relays to Slack; human answers
 squad-run --resume --gate-answer approve
   -> continues to next pause point
-exit statuses: done | gate | escalation | exhausted
+exit statuses: done | gate | escalation   (escalation payload carries its
+                                           §3.3.1 type — Exhausted is a type,
+                                           not a separate status)
 ```
 
 Same idiom as `ab --resume` (proven in-codebase). Inner squads never pause
