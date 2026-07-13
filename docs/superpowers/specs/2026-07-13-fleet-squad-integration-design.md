@@ -434,6 +434,105 @@ Sequence, non-negotiable:
 Recursion stays cheap the whole time because it's an interface property
 (uniform node contract), not machinery.
 
+## 9. Master — the boundary layer (DECIDED — D4)
+
+**Self-orchestrating squads demote the master from orchestrator to boundary
+layer**: the shell between human and fleet. (Filesystem analogy: squads =
+directories, agents = files, master = the shell that spawns root and relays
+its IO to the human.)
+
+Irreducible master jobs — everything that cannot move into the runner:
+
+| Job | Why it stays |
+|---|---|
+| Slack dialogue, slice intake (backlog -> slice text) | needs LLM + human conversation — the one legitimately LLM-ish part |
+| Invoke root node `run(slice)` | someone must call root |
+| Answer root gates (1, 2, merge) | human decisions, async via Slack |
+| Receive escalations (`Clarify \| DesignDecision \| Exhausted`) | terminal point of the bubble-up chain |
+| Remote git: push, PR | side-effect owner — sole-remote-writer invariant survives |
+| Emit merge-gate score (role-score) | fitness for the squad artifact |
+| Re-run roles-render on activation | keeps personas current |
+| `.fleet/state.json` | cross-slice memory |
+
+### 9.1 Gate mechanism — checkpoint/resume, no callbacks
+
+```
+squad-run --project X --slice s.md --gate-policy root=human
+  -> runs until Gate 1 -> writes state checkpoint -> exits
+     {status: "gate", gate: "gate1", payload: <analyzer output>}
+master relays to Slack; human answers
+squad-run --resume --gate-answer approve
+  -> continues to next pause point
+exit statuses: done | gate | escalation | exhausted
+```
+
+Same idiom as `ab --resume` (proven in-codebase). Inner squads never pause
+(auto gates); only root exits-and-waits. Escalations use the identical
+mechanism. Master shells exactly four subcommands: `roles-render`,
+`squad-run`, `role-run` (single-node drives / debugging), `role-score`.
+
+Interim (Gall): the T5 demo script is the master stand-in — auto-answers
+gates, prints escalations. OpenClaw wiring happens fleet-side, later,
+against this frozen contract.
+
+### 9.2 Master platform (DECIDED): OpenClaw
+
+The master's defining requirement is **inbound-event residency**: it must
+wake on a human Slack reply days later — a persistent, messaging-native
+daemon. That is OpenClaw's architecture. opencode/CC are structurally the
+wrong shape for this seat: ephemeral sessions, no inbound-message trigger
+(gluing them in = rebuilding OpenClaw poorly around `claude -p` one-shots).
+
+The stack asymmetry is principled, one tool per layer:
+
+- **Nodes** = caller semantics -> AgentDriver -> opencode / claude-code.
+- **Master** = callee-of-human semantics (host-nature w.r.t. Slack) ->
+  OpenClaw.
+
+oc-test's existing OpenClaw investment (doctrine, installer, Slack Socket
+Mode, gh-guard plugin enforcing sole-remote-writer) carries over. Pin the
+OpenClaw version like any other platform dependency.
+
+### 9.3 Improving the master itself
+
+Master = two materials:
+
+1. **Shell (code, tier 3 — never evolved):** subcommand calls,
+   checkpoint/resume relay, git mechanics, state. **Safety invariants live
+   here**: halt-on-PASS, sole-remote-writer, human-owns-outward-actions.
+   The persona can phrase and propose; every side effect goes through shell
+   functions that enforce the halt. Persona proposes, shell disposes —
+   evolution can degrade master's eloquence at worst, never its obedience.
+2. **Persona (text — evolvable, `mh-master` role store):** slice
+   formulation, gate-question phrasing, escalation summarization, PR
+   descriptions.
+
+Fitness signal, three sources:
+
+1. **Human scores via the existing dynamic loop** — master sessions are
+   human-facing conversations, exactly what capture -> judge -> /mh-score
+   was built for. Mechanically requires an OpenClaw HarnessHost adapter
+   (third host; the seam exists for this).
+2. **Downstream proxies (objective-ish, free):** slices carry the master
+   version stamp -> analyzer Clarify/escalation rate ON THOSE SLICES =
+   slice-quality signal. Same trick as evaluator's verdict-vs-merge:
+   judge a boundary role by what happens across the boundary.
+3. **Merge-gate friction** — human revise rate at gates master presented.
+   Confounded; tiebreaker only.
+
+**Automation order (risk-sorted; master deliberately LAST):**
+
+```
+implementer, evaluator   verifier-groundable       -> automate first
+analyzer, designer       gate-scored               -> next
+squad policy (tier 2)    slice meta-metrics        -> after tier-1 accepts
+master persona           human scores + proxies    -> LAST (hold)
+```
+
+Held last: weakest signal (subjective), highest blast radius (human trust +
+outward actions). Evolving the human interface before the loop proves itself
+on verifier-grounded roles = maximum risk, minimum evidence.
+
 ---
 
 ## Open decisions (queue)
@@ -441,8 +540,6 @@ Recursion stays cheap the whole time because it's an interface property
 - **D2 — canonical prompt ownership**: oc-test doctrine vs meta-harness
   layer store as source of truth. (Leaning: truth lives in the shared store,
   regimes only render/consume — but not yet decided.)
-- **D4 — master integration contract**: exact subcommand surface the master
-  shells (roles-render / role-run / role-score); demo-script stand-in.
 - **D5 remainder**: exact event->score mapping table (which events are
   scores vs meta-metrics; weights; evaluator meta-scoring).
 - **D7 — repo boundary**: oc-test read-only + recipe vs meta-harness writes
