@@ -15,8 +15,10 @@ import { cmdJudgeAudit, type JudgeAuditArgs } from "./judge-audit.ts"
 import { LAYER_CHOICES, type LayerName } from "./record.ts"
 import { cmdSplit, type SplitArgs } from "./splits.ts"
 import { cmdReportLoop, type ReportLoopArgs } from "./report-loop.ts"
-import { BenchError } from "./util.ts"
+import { BenchError, log } from "./util.ts"
 import { DRIVER_IDS } from "./drivers/index.ts"
+import { writeSquadDefV1, STANDARD_SQUAD } from "../fleet/squad-def.ts"
+import { cmdRolesRender } from "../fleet/render.ts"
 
 const USAGE = `usage: runner.ts [--tb-root PATH] <command> [options]
 
@@ -583,6 +585,52 @@ function parseReportLoopArgs(argv: string[]): ReportLoopArgs | null {
   return out
 }
 
+interface RolesRenderArgs {
+  project: string
+  roles?: string[]
+  pins?: string[]
+  force?: boolean
+}
+
+function parseRolesRenderArgs(argv: string[]): RolesRenderArgs | null {
+  const out: Partial<RolesRenderArgs> = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--project") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.project = v
+      i += 2
+      continue
+    }
+    if (a === "--role") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.roles = out.roles ?? []
+      out.roles.push(v)
+      i += 2
+      continue
+    }
+    if (a === "--pin") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.pins = out.pins ?? []
+      out.pins.push(v)
+      i += 2
+      continue
+    }
+    if (a === "--force") {
+      out.force = true
+      i++
+      continue
+    }
+    return null
+  }
+  if (out.project === undefined) return null
+  return out as RolesRenderArgs
+}
+
 export async function main(argv: string[]): Promise<number> {
   try {
     const global = extractTbRoot(argv)
@@ -660,6 +708,20 @@ export async function main(argv: string[]): Promise<number> {
           return 2
         }
         cmdReportLoop(paths, reportArgs)
+        return 0
+      }
+      case "squad-def-init": {
+        writeSquadDefV1(STANDARD_SQUAD)
+        log("squad def 'standard' v1 written + active")
+        return 0
+      }
+      case "roles-render": {
+        const rolesRenderArgs = parseRolesRenderArgs(subArgs)
+        if (rolesRenderArgs === null) {
+          printUsage()
+          return 2
+        }
+        cmdRolesRender(rolesRenderArgs)
         return 0
       }
       default:
