@@ -23,6 +23,15 @@ describe("squad runner", () => {
     const { outcome } = await runSquad(newSquadState("s1", "add slugify"), AUTO, drive, score)
     expect(outcome.status).toBe("done")
     expect(scores.filter((s) => s.verdict === "good").length).toBeGreaterThanOrEqual(4)
+    // Additive outcome field (fleet-integration §2): the done outcome names
+    // the IMPLEMENTER's drive id specifically — never the evaluator's, even
+    // though the evaluator's evaluator-verdict drive is the one that ran
+    // last and closed the slice. scripted() ids are `d<n>-<phase>`; the
+    // sequential v1 flow drives analyzer/evaluator-spec/designer/implementer/
+    // evaluator-verdict in that order, so the implementer is drive 4.
+    if (outcome.status === "done") {
+      expect(outcome.implementerSessionId).toBe("d4-implementer")
+    }
   })
 
   test("lint fail scores bad + redoes within R1, then passes", async () => {
@@ -84,12 +93,18 @@ describe("squad runner", () => {
     expect(state.history.filter((h) => h.phase === "designer").length).toBe(2)
   })
 
-  test("R3 exhaustion escalates Exhausted", async () => {
+  test("R3 exhaustion escalates Exhausted; escalation still names the last implementer drive", async () => {
     const failForever = Array(10).fill("VERDICT: FAIL cause=impl\n## Test Spec\nx")
     const { drive, score } = scripted({ "evaluator-verdict": failForever })
     const { outcome } = await runSquad(newSquadState("s4", "x"), AUTO, drive, score)
     expect(outcome.status).toBe("escalation")
-    if (outcome.status === "escalation") expect(outcome.escalation.type).toBe("Exhausted")
+    if (outcome.status === "escalation") {
+      expect(outcome.escalation.type).toBe("Exhausted")
+      // An implementer drive ran (repeatedly) before R3 tripped — the
+      // escalation surfaces its id too (spec §2 "surface on escalation
+      // outcomes when an implementer drive exists").
+      expect(outcome.implementerSessionId).toMatch(/-implementer$/)
+    }
   })
 
   test("FAIL-intent invalidates test spec (evaluator-spec redriven)", async () => {
@@ -106,6 +121,10 @@ describe("squad runner", () => {
     const c = scripted({ analyzer: ["## Clarify\nA or B?"] })
     const r1 = await runSquad(newSquadState("s6", "x"), AUTO, c.drive, c.score)
     expect(r1.outcome.status).toBe("escalation")
+    // No implementer drive ever ran on this slice (Clarify fires at the
+    // analyzer, the very first phase) — implementerSessionId must be absent,
+    // not some stale/undefined-coerced value.
+    if (r1.outcome.status === "escalation") expect(r1.outcome.implementerSessionId).toBeUndefined()
 
     const r = scripted({ implementer: ["## Refused\nharmful"] })
     const r2 = await runSquad(newSquadState("s7", "x"), AUTO, r.drive, r.score)

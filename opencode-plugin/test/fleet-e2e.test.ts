@@ -29,6 +29,7 @@ import { cmdRolesImport } from "../src/fleet/import.ts"
 import { cmdRolesRender } from "../src/fleet/render.ts"
 import { cmdRoleRun, type ExecFn } from "../src/fleet/run.ts"
 import { pendingDir } from "../src/fleet/pending.ts"
+import { cmdRoleScore } from "../src/fleet/score.ts"
 import { cmdSquadRun, roleForPhase } from "../src/fleet/squad-cli.ts"
 import { STANDARD_SQUAD, writeSquadDefV1 } from "../src/fleet/squad-def.ts"
 import type { DriveFn } from "../src/fleet/squad.ts"
@@ -145,7 +146,14 @@ describe("fleet squad E2E (hermetic, zero tokens)", () => {
     )
 
     expect(outcome.status).toBe("done")
-    if (outcome.status === "done") expect(outcome.payload).toContain("## Implementation Report")
+    if (outcome.status === "done") {
+      expect(outcome.payload).toContain("## Implementation Report")
+      // Additive outcome field (fleet-integration.md §2): the master's
+      // merge-gate scoring depends on this id — it must name the
+      // IMPLEMENTER's real session, not (say) the evaluator's, which drove
+      // last.
+      expect(outcome.implementerSessionId).toBe(ids.implementer)
+    }
 
     // -- per-role stores got scores on the STAMPED v1 (cmdRolesImport wrote
     // v1 as each role's active account-role version; renderRole pinned that
@@ -172,6 +180,26 @@ describe("fleet squad E2E (hermetic, zero tokens)", () => {
     expect(leftover).toEqual(["scored", `squad-${sliceId}.json`].sort())
     for (const id of Object.values(ids)) {
       expect(existsSync(join(pendingDir(project), "scored", `${id}.json`))).toBe(true)
+    }
+
+    // -- the master's merge-gate score: role-score --gate merge on the
+    // outcome's implementerSessionId, post-done. The implementer id is
+    // ALREADY archived (squad-run's own verdict auto-score, above) — this
+    // exercises score.ts's archived-session fallback for real, through the
+    // full run/pending/score chain, not a hand-built fixture. --
+    if (outcome.status === "done") {
+      await cmdRoleScore({ project, id: outcome.implementerSessionId!, verdict: "good", gate: "merge" })
+      const implScore = readScore(accountRoleRoot("mh-implementer"), "v1")
+      expect(implScore.sessions.length).toBe(2) // verdict score + merge score
+      expect(
+        implScore.sessions.some((s) => (s.env?.["fleet"] as { gate?: string } | undefined)?.gate === "merge"),
+      ).toBe(true)
+
+      // Double-merge-score refused — the same session cannot be merge-scored
+      // twice.
+      await expect(
+        cmdRoleScore({ project, id: outcome.implementerSessionId!, verdict: "good", gate: "merge" }),
+      ).rejects.toThrow(/merge/)
     }
   })
 })

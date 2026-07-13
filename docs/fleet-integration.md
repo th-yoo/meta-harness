@@ -19,9 +19,10 @@ integration code. Meta-harness ships this recipe plus the frozen contracts
 (node interface, subcommands, checkpoint/resume statuses, SquadDef schema,
 wire lint); the fleet-side rework (4-role doctrine split, master shell
 wiring, doctrine retirement, installer rework) happens later, in `oc-test`,
-against the contracts frozen here. The one bounded exception already
-executed: a docs-only `KNOWN-ISSUES.md` commit in `oc-test` flagging a bug
-found during this integration's T0 probe (§3 below).
+against the contracts frozen here. The one bounded exception: a docs-only
+`KNOWN-ISSUES.md` commit in `oc-test` (`711298b`) flagging a bug found
+during this integration's T0 probe (§3 below) — it exists in `oc-test`
+already.
 
 ## 1. Node / squad grammar (spec §1, §1.5)
 
@@ -80,7 +81,7 @@ subcommands"*) — the ones a running fleet actually shells per slice:
 | `roles-render --project DIR [--role R]... [--pin LAYER=vN]... [--force]` | compose each role's 4-layer store into `<project>/.opencode/agents/mh-<role>.md`, stamped. Re-run on every store activation (idempotent — a byte-identical re-render is a no-op). |
 | `squad-run --project DIR --slice-id S (--slice "text" \| --slice-file F) [--resume --gate-answer approve\|revise] [--gate-policy root-human\|auto] [--squad-type T] [--json]` | drive one squad leg to its next non-running outcome; checkpoint to disk; print the outcome JSON. |
 | `role-run --project DIR --role R [--model M] [--node-path P] [--slice-id S] [--timeout-sec N] [--json] (--input-file F \| "input")` | single-node drive — debugging / manual intervention, not part of the normal squad loop. |
-| `role-score --project DIR --id ID good\|bad [--note S] [--node-path P] [--gate gate1\|gate2\|verdict\|merge\|lint\|infeasible]` | manual fitness entry — normally `squad-run` scores gates/verdicts itself; this is for the merge gate (root-only, master-owned) and any out-of-band correction. |
+| `role-score --project DIR --id ID good\|bad [--note S] [--node-path P] [--gate gate1\|gate2\|verdict\|merge\|lint\|infeasible]` | manual fitness entry — normally `squad-run` scores gates/verdicts itself; this is for the merge gate (root-only, master-owned) and any out-of-band correction. **`--gate merge` is special**: `squad-run`'s own evaluator-verdict PASS branch already auto-scores the implementer good/verdict *before* printing `done` (§5 below), so by the time the master calls `role-score --gate merge` the implementer's session has already been archived out of `pending/`. A merge-gate score therefore reads (and re-marks) the archived copy instead of dying "no pending fleet session" — it is a deliberate SECOND score of the same session. Refused on a THIRD attempt: merge-scoring the same id twice dies ("already merge-scored"). Every other gate keeps the original pending-only, single-score contract unchanged. |
 
 **Checkpoint/resume, no callbacks** (spec §9.1):
 
@@ -99,6 +100,29 @@ a separate exit status. This repo's CLI (`squad-cli.ts`'s `cmdSquadRun`)
 returns **process exit code 0 for all three** — the status distinction lives
 entirely in the printed outcome JSON on stdout, not in the shell exit code.
 A caller must parse the JSON to tell `done` from `gate` from `escalation`.
+
+**Outcome JSON, with the `implementerSessionId` field (additive):**
+
+```jsonc
+// status: "done"
+{"status": "done", "payload": "## Implementation Report\n...", "implementerSessionId": "ses_..."}
+// status: "gate" — unchanged, no implementer drive to name yet
+{"status": "gate", "gate": "gate1", "payload": "## Use Cases\n..."}
+// status: "escalation" — implementerSessionId present only if an
+// implementer drive ran before the escalation fired (e.g. R3 exhaustion
+// mid FAIL-impl loop); absent for an analyzer-phase Clarify, etc.
+{"status": "escalation", "escalation": {"type": "Exhausted", "body": "..."}, "implementerSessionId": "ses_..."}
+```
+
+`implementerSessionId` names the **implementer's** own drive id (`SquadState.
+lastImplementerDriveId`, maintained independently of the generic
+`lastDriveId` which gets overwritten by every analyzer/designer/implementer
+transition) — never the evaluator's, even though the evaluator-verdict drive
+is what actually ran last and closed the slice. This is what makes the
+master's merge-gate scoring (`role-score --id <SESSION_ID> good|bad --gate
+merge`, §2 table above) invocable at all from outcome data: the id doesn't
+otherwise appear anywhere in the printed outcome JSON. The field is omitted
+(not `null`) when no implementer drive has happened yet on this slice.
 
 Inner squads (depth ≥ 1) never pause — their gates are always `auto`
 (`gate-policy` defaults to `root-human`, which is an *instance-position*

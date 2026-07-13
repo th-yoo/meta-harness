@@ -43,12 +43,21 @@ export interface SquadState {
    * evaluator-verdict). Consumed by autoGate/answerGate (gate scoring) and
    * the PASS/FAIL-impl verdict branches (implementer scoring). */
   lastDriveId?: string
+  /** id of the most recent IMPLEMENTER drive specifically. Unlike
+   * `lastDriveId` (overwritten by every analyzer/designer/implementer
+   * transition, and meaningless-for-this-purpose once evaluator-verdict has
+   * moved on), this persists across phase changes so a `done` outcome or a
+   * later escalation can still name the implementer session that produced
+   * the report — the fleet master's merge-gate `role-score --id ID --gate
+   * merge` has no other way to learn this id from the printed outcome JSON
+   * (fleet-integration.md §2/§5). */
+  lastImplementerDriveId?: string
 }
 
 export type SquadOutcome =
-  | { status: "done"; payload: string }
+  | { status: "done"; payload: string; implementerSessionId?: string }
   | { status: "gate"; gate: "gate1" | "gate2"; payload: string }
-  | { status: "escalation"; escalation: { type: string; body: string } }
+  | { status: "escalation"; escalation: { type: string; body: string }; implementerSessionId?: string }
   | { status: "running" } // internal — runSquad loops until non-running
 
 export interface DriveResult { id: string; payload: string }
@@ -113,7 +122,7 @@ function esc(s: SquadState, reason: string): SquadOutcome {
   s.history.push({ phase: s.phase, event: `exhausted: ${reason}` })
   const lines = s.history.map((h) => `- [${h.phase}] ${h.event}${h.id ? ` (${h.id})` : ""}`).join("\n")
   const body = ["## Exhausted", reason, "", "### History", lines || "(no drives recorded)"].join("\n")
-  return { status: "escalation", escalation: { type: "Exhausted", body } }
+  return { status: "escalation", escalation: { type: "Exhausted", body }, implementerSessionId: s.lastImplementerDriveId }
 }
 
 /** Gate 2 output: decided design.md = the chosen alternative (the
@@ -181,7 +190,7 @@ export async function squadStep(
   const escalation = detectEscalation(payload)
   if (escalation) {
     s.history.push({ phase: s.phase, event: `escalation: ${escalation.type}`, id })
-    return { state: s, outcome: { status: "escalation", escalation } }
+    return { state: s, outcome: { status: "escalation", escalation, implementerSessionId: s.lastImplementerDriveId } }
   }
 
   const lint = lintPayload(def, lintKey, payload)
@@ -220,6 +229,7 @@ export async function squadStep(
     case "implementer":
       s.artifacts.implReport = payload
       s.lastDriveId = id
+      s.lastImplementerDriveId = id
       s.phase = "evaluator-verdict"
       return { state: s, outcome: { status: "running" } }
 
@@ -239,7 +249,10 @@ export async function squadStep(
         await score(id, "good", "lint")
         await score(s.lastDriveId!, "good", "verdict") // implementer good
         s.phase = "done"
-        return { state: s, outcome: { status: "done", payload: s.artifacts.implReport! } }
+        return {
+          state: s,
+          outcome: { status: "done", payload: s.artifacts.implReport!, implementerSessionId: s.lastImplementerDriveId },
+        }
       }
       // FAIL — evaluator itself still graded good on well-formedness.
       await score(id, "good", "lint")

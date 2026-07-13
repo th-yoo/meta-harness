@@ -71,6 +71,42 @@ describe("role-score", () => {
     await expect(cmdRoleScore({ project, id: "ses_c3", verdict: "bad" })).rejects.toThrow(/never scored/)
   })
 
+  test("--gate merge scores an id squad-run's own verdict scoring already archived (a SECOND score of the same session)", async () => {
+    // Reality this closes (fleet-integration.md §2/§5): squad-run's own
+    // evaluator-verdict PASS branch already auto-scores the implementer
+    // good/verdict BEFORE the "done" outcome is even printed — by the time
+    // the fleet master calls `role-score --id <implementerSessionId> --gate
+    // merge`, that id is long gone from pending/ (archivePending already
+    // moved it into scored/). A merge-gate score must therefore be able to
+    // read from scored/ instead of dying "no pending fleet session".
+    const root = accountRoleRoot("mh-implementer")
+    createCandidate(root, "v1", "implementer v1 body")
+    writeActive(root, "v1", "implementer v1 body")
+
+    writePending({ ...basePending("ses_impl1", "## Implementation Report\ndone"), role: "implementer", agent: "mh-implementer", project })
+    await cmdRoleScore({ project, id: "ses_impl1", verdict: "good", gate: "verdict" }) // squad-run's own auto-score
+    expect(existsSync(join(project, ".meta-harness/runtime/fleet/scored/ses_impl1.json"))).toBe(true)
+
+    // Master's merge-gate score, on the SAME id, post-done.
+    await cmdRoleScore({ project, id: "ses_impl1", verdict: "good", gate: "merge" })
+
+    const score = readScore(root, "v1")
+    expect(score.nPass).toBe(2) // verdict score + merge score, both landed
+    expect(score.sessions.length).toBe(2)
+    expect(score.sessions.some((s) => s.env?.["fleet"] && (s.env["fleet"] as { gate?: string }).gate === "merge")).toBe(true)
+  })
+
+  test("double merge-score refused", async () => {
+    const root = accountRoleRoot("mh-implementer")
+    createCandidate(root, "v1", "implementer v1 body")
+    writeActive(root, "v1", "implementer v1 body")
+
+    writePending({ ...basePending("ses_impl2", "## Implementation Report\ndone"), role: "implementer", agent: "mh-implementer", project })
+    await cmdRoleScore({ project, id: "ses_impl2", verdict: "good", gate: "verdict" })
+    await cmdRoleScore({ project, id: "ses_impl2", verdict: "good", gate: "merge" })
+    await expect(cmdRoleScore({ project, id: "ses_impl2", verdict: "good", gate: "merge" })).rejects.toThrow(/merge/)
+  })
+
   test("bad verdict normalizes raw NDJSON events before writing the trajectory (not empty SAY lines)", async () => {
     const root = accountRoleRoot("mh-analyzer")
     createCandidate(root, "v1", "analyzer v1 body")

@@ -32,7 +32,7 @@
  *    tool_use/text/error branches the live opencode driver uses to build
  *    `TrajEvent`s from NDJSON) instead of casting raw events through.
  */
-import { archivePending, readPending } from "./pending.ts"
+import { archivePending, hasPending, markMergeScored, readArchived, readPending } from "./pending.ts"
 import { detectEscalation } from "./squad-def.ts"
 import { recordToStores } from "../bench/record.ts"
 import { normalizeEvents } from "../bench/drivers/opencode.ts"
@@ -70,9 +70,27 @@ export async function cmdRoleScore(args: {
   project: string; id: string; verdict: "good" | "bad"
   note?: string; nodePath?: string; gate?: FleetGate
 }): Promise<void> {
-  // die()s if missing OR already archived (a double-score re-reads the same
-  // id after archivePending moved it to scored/, so it's gone from pending/).
-  const pending = readPending(args.project, args.id)
+  // Merge-gate reality (fleet-integration.md §2/§5): squad-run's own
+  // evaluator-verdict PASS branch already auto-scores the implementer
+  // good/verdict BEFORE printing its "done" outcome — by the time the fleet
+  // master calls `role-score --gate merge` on that same id, it has long
+  // since been archivePending()'d out of pending/. A merge-gate score is
+  // therefore, legitimately, a SECOND score of an already-archived session:
+  // fall back to reading (and re-marking) the scored/ copy instead of dying
+  // "no pending fleet session". Every OTHER gate keeps the strict
+  // pending-only read below (a double-score there stays refused exactly as
+  // before — dies, since the id is gone from pending/ and this fallback
+  // doesn't apply).
+  const isMergeGate = args.gate === "merge"
+  const readFromArchive = isMergeGate && !hasPending(args.project, args.id)
+  const pending = readFromArchive ? readArchived(args.project, args.id) : readPending(args.project, args.id)
+
+  // Double-merge-score guard: a merge score is allowed exactly once per id
+  // (it's already a deliberate second score of a verdict-scored session;
+  // a third would silently double-count the same merge decision).
+  if (isMergeGate && pending.mergeScoredAt) {
+    die(`session ${args.id} was already merge-scored at ${pending.mergeScoredAt} — refusing double merge-score`)
+  }
 
   // Refused guard BEFORE any store write (spec §3.3.1) — constitutionally
   // unscoreable, never lands in a fitness record.
@@ -114,6 +132,13 @@ export async function cmdRoleScore(args: {
     toTrajEvents(pending.events),
     false,
   )
-  archivePending(args.project, args.id)
+  if (readFromArchive) {
+    // Already archived (the normal case for a merge-gate score) — just tag
+    // the merge-scored marker in place, nothing to move.
+    markMergeScored(args.project, args.id)
+  } else {
+    archivePending(args.project, args.id)
+    if (isMergeGate) markMergeScored(args.project, args.id) // first-ever merge score reached via pending/
+  }
   log(`scored ${args.id} ${args.verdict} (gate=${args.gate ?? "-"}) on stamped ${JSON.stringify(pins)}`)
 }
