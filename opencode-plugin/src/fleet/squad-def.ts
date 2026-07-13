@@ -53,7 +53,24 @@ export function squadRoot(type: string): string {
   return join(accountMetaRoot(), "squads", type)
 }
 
+/**
+ * Guard rail (spec §8 nested squads, §5 claude-code leaves): both are
+ * schema-legal (SlotBinding allows kind:"squad" and platform:"claude-code")
+ * but have no runtime support yet. Applied on both write and read so a
+ * hand-edited or externally-produced squad.json can't silently activate an
+ * unsupported topology.
+ */
+function validateSlots(def: SquadDef): void {
+  for (const slot of Object.values(def.slots)) {
+    if (slot.kind === "squad") die("nested squads not yet supported (spec §8)")
+    if (slot.kind === "agent" && slot.platform === "claude-code") {
+      die("claude-code leaf not yet supported — CC persona probe pending (spec §5)")
+    }
+  }
+}
+
 export function writeSquadDefV1(def: SquadDef): void {
+  validateSlots(def)
   const root = squadRoot(def.type)
   const activePath = join(root, "active", "squad.json")
   if (existsSync(activePath)) die(`squad def '${def.type}' already has an active version`)
@@ -66,7 +83,9 @@ export function writeSquadDefV1(def: SquadDef): void {
 export function readActiveSquadDef(type: string): SquadDef {
   const p = join(squadRoot(type), "active", "squad.json")
   if (!existsSync(p)) die(`no active squad def '${type}' — run: runner.ts squad-def-init`)
-  return JSON.parse(readFileSync(p, "utf-8")) as SquadDef
+  const def = JSON.parse(readFileSync(p, "utf-8")) as SquadDef
+  validateSlots(def)
+  return def
 }
 
 /** OR-groups: payload passes if EVERY heading of AT LEAST ONE group is present. */

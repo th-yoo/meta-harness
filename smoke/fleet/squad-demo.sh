@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# smoke/fleet/squad-demo.sh — live depth-1 squad E2E (controller-run; ~5
-# haiku-class drives). Drives the real `term-bench2/runner.ts` subcommands
+# smoke/fleet/squad-demo.sh — live depth-1 squad E2E (controller-run;
+# 5 drives (3 haiku, 2 sonnet — per FLEET_ROLES models)). Drives the real
+# `term-bench2/runner.ts` subcommands
 # end to end against fixture personas (test/fixtures/fleet — NOT oc-test;
 # the fleet repo stays read-only per spec §11): squad-def-init, roles-import,
 # roles-render, squad-run --gate-policy auto, then prints the outcome JSON

@@ -285,7 +285,8 @@ to the hermetic pipeline test
 `squad-def-init` → `roles-import` (from this repo's test fixtures, **not**
 `oc-test` — the fleet repo stays read-only) → `roles-render` →
 `squad-run --gate-policy auto --json` chain against a throwaway git-init'd
-project, using real (haiku-class) opencode drives, then prints the outcome
+project, using real opencode drives (3 haiku, 2 sonnet — per FLEET_ROLES
+models), then prints the outcome
 JSON and each role store's `score.json` `nPass`/`nFail` counts. It is
 controller-run only (not part of CI — it spends real tokens) and carries its
 own copy of the migration-hazard guard from §8. It is deliberately **not**

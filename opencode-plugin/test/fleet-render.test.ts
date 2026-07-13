@@ -1,10 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { createHash } from "node:crypto"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { renderRole, parseStamp } from "../src/fleet/render.ts"
+import { renderRole, parseStamp, harnessHashOf } from "../src/fleet/render.ts"
 import { writeSquadDefV1, STANDARD_SQUAD } from "../src/fleet/squad-def.ts"
 import { accountRoleRoot, createCandidate, writeActive } from "../src/harness-store.ts"
+
+// seed analyzer account-role v1 whose body teaches the wire format (shared
+// across tests so the frontmatter-covering test below can recompute the
+// exact hash renderRole produced without re-deriving the body from disk).
+const ANALYZER_BODY = "You are the analyzer.\nEmit `## Use Cases` and `## Functional Spec`; escalate with `## Clarify`."
 
 let home: string, project: string
 beforeEach(() => {
@@ -12,11 +18,9 @@ beforeEach(() => {
   project = mkdtempSync(join(tmpdir(), "mh-render-proj-"))
   process.env.META_HARNESS_HOME = home
   writeSquadDefV1(STANDARD_SQUAD)
-  // seed analyzer account-role v1 whose body teaches the wire format
-  const body = "You are the analyzer.\nEmit `## Use Cases` and `## Functional Spec`; escalate with `## Clarify`."
   const root = accountRoleRoot("mh-analyzer")
-  createCandidate(root, "v1", body)
-  writeActive(root, "v1", body, null, null, null, null)
+  createCandidate(root, "v1", ANALYZER_BODY)
+  writeActive(root, "v1", ANALYZER_BODY, null, null, null, null)
 })
 afterEach(() => {
   delete process.env.META_HARNESS_HOME
@@ -43,5 +47,36 @@ describe("renderRole", () => {
     writeActive(root, "v1", "You design things. No format promised.", null, null, null, null)
     expect(() => renderRole(project, "designer")).toThrow(/wire/)
     expect(() => renderRole(project, "designer", { force: true })).not.toThrow()
+  })
+
+  test("harnessHashOf covers frontmatter, not just body: identical body, different role → different hash", () => {
+    // analyzer (read-only permission, haiku model) vs. implementer (allow-all
+    // permission, sonnet model) — frontmatter differs, body is byte-identical.
+    // A body-only hash would collide here; the fix must not.
+    expect(harnessHashOf("analyzer", ANALYZER_BODY)).not.toBe(harnessHashOf("implementer", ANALYZER_BODY))
+    // and it must also differ from the OLD (pre-fix) body-only formula, so a
+    // stamp produced before this fix is correctly treated as not matching.
+    const bodyOnlyHash = createHash("sha256").update(ANALYZER_BODY).digest("hex").slice(0, 16)
+    expect(harnessHashOf("analyzer", ANALYZER_BODY)).not.toBe(bodyOnlyHash)
+  })
+
+  test("stamp whose hash predates frontmatter-coverage is treated as stale and gets rewritten", () => {
+    // Render once for real, then hand-craft a stamp that looks like it came
+    // from the OLD (body-only) hash formula — standing in for "roles.ts
+    // permission changed since this file was last rendered" without needing
+    // to actually mutate the static roles.ts manifest at runtime.
+    const { path, stamp } = renderRole(project, "analyzer")
+    const fresh = readFileSync(path, "utf-8")
+    const staleHash = createHash("sha256").update(ANALYZER_BODY).digest("hex").slice(0, 16)
+    expect(staleHash).not.toBe(stamp.harnessHash) // sanity: the two formulas really do disagree
+    writeFileSync(path, fresh.replace(stamp.harnessHash, staleHash))
+
+    const second = renderRole(project, "analyzer")
+    // Recomputed to the correct, frontmatter-covering hash — NOT short-circuited
+    // to (nor left carrying on disk) the frontmatter-blind stale one.
+    expect(second.stamp.harnessHash).toBe(stamp.harnessHash)
+    expect(second.stamp.harnessHash).not.toBe(staleHash)
+    const rewritten = readFileSync(path, "utf-8")
+    expect(parseStamp(rewritten)?.harnessHash).toBe(stamp.harnessHash)
   })
 })

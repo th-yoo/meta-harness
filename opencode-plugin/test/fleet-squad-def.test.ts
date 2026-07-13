@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   STANDARD_SQUAD, detectEscalation, lintPayload, parseVerdict,
   readActiveSquadDef, squadRoot, writeSquadDefV1,
 } from "../src/fleet/squad-def.ts"
+import type { SquadDef } from "../src/fleet/squad-def.ts"
 
 let home: string
 beforeEach(() => {
@@ -33,6 +34,36 @@ describe("SquadDef store", () => {
 
   test("readActiveSquadDef dies with actionable hint when missing", () => {
     expect(() => readActiveSquadDef("standard")).toThrow(/squad-def-init/)
+  })
+})
+
+describe("SquadDef slot guards (unsupported topologies, spec §5/§8)", () => {
+  test("writeSquadDefV1 dies on a nested-squad slot", () => {
+    const def: SquadDef = {
+      ...STANDARD_SQUAD,
+      type: "nested-test",
+      slots: { ...STANDARD_SQUAD.slots, designer: { kind: "squad", type: "standard" } },
+    }
+    expect(() => writeSquadDefV1(def)).toThrow(/nested squads/)
+  })
+
+  test("readActiveSquadDef dies on a claude-code leaf slot", () => {
+    // Hand-write the active squad.json directly (bypassing writeSquadDefV1's
+    // own guard) to prove readActiveSquadDef independently validates a
+    // def that reached disk some other way (e.g. hand-edited or produced by
+    // an older writer).
+    const def: SquadDef = {
+      ...STANDARD_SQUAD,
+      type: "cc-test",
+      slots: {
+        ...STANDARD_SQUAD.slots,
+        evaluator: { kind: "agent", role: "evaluator", platform: "claude-code", model: "anthropic/claude-haiku-4-5" },
+      },
+    }
+    const root = squadRoot("cc-test")
+    mkdirSync(join(root, "active"), { recursive: true })
+    writeFileSync(join(root, "active", "squad.json"), JSON.stringify({ ...def, __version: "v1" }))
+    expect(() => readActiveSquadDef("cc-test")).toThrow(/claude-code leaf/)
   })
 })
 

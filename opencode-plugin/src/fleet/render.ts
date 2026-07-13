@@ -62,6 +62,19 @@ function frontmatter(role: string): string {
 }
 
 /**
+ * Idempotence hash input: frontmatter + body, NOT body alone. A role's
+ * frontmatter (permission/model/temperature — roles.ts) can change without
+ * the store body or pins changing at all; hashing body-only would make the
+ * render.ts idempotence check (below) silently short-circuit to a file that
+ * carries a now-stale, security-relevant permission block. Exported so it
+ * can be unit-tested directly (test/fleet-render.test.ts) without needing to
+ * fake a roles.ts edit at runtime.
+ */
+export function harnessHashOf(role: string, body: string): string {
+  return createHash("sha256").update(`${frontmatter(role)}\n${body}`).digest("hex").slice(0, 16)
+}
+
+/**
  * Compose the role's body from its 4 store layers (account-global ->
  * project-global -> account-role -> project-role, Option Y order — the same
  * `layers="global"` + `agent` pair cmd-run.ts's `--agent` path uses), stamp
@@ -95,7 +108,7 @@ export function renderRole(
     log(`WARNING: --force render of mh-${role} without wire headings`)
   }
 
-  const stampBase = { versions, harnessHash: createHash("sha256").update(body).digest("hex").slice(0, 16) }
+  const stampBase = { versions, harnessHash: harnessHashOf(role, body) }
   const stamp: RenderStamp = { ...stampBase, renderedAt: opts?.now ?? new Date().toISOString() }
   const md = `${frontmatter(role)}\n<!-- mh-render ${JSON.stringify(stamp)} -->\n${body}\n`
 
