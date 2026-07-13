@@ -146,6 +146,18 @@ proposer-LLM output compliance, which had to be observed first.
 | Interactive trajectory events lack tool *args* | `tool.execute.after` hook doesn't expose them; bench-side trajectories are unaffected. | opencode hook API exposes call args. |
 | `/mh-status` doesn't surface `diagnosis.json` | Candidate `meta.json` already shows in status; diagnosis surfacing was judged redundant UI for now. | Diagnosis becomes hard-required (§4) — at that point it's first-class state worth showing. |
 
+### 5.1 Fleet depth-1 deferrals (2026-07-13, from the squad E2E final review)
+
+Documented as v1 limitations in `docs/fleet-integration.md` §10; registered
+here so each has an owner-of-record trigger, not just a warning label.
+
+| Deferral | Why deferred | Reopen trigger |
+|---|---|---|
+| `SquadDef.slots` never read at runtime — drives resolve model/platform from `roles.ts` defaults; `validateSlots` die-guards reject unsupported bindings loudly | Wiring it = half a feature until the CC persona probe passes (spec §5 precondition) and recursion machinery exists (spec §8.4); today's only def (`STANDARD_SQUAD`) agrees with the manifest, so nothing mis-drives | CC persona probe passes → wire `slot.model`/`slot.platform` into `squad-cli`'s prod DriveFn and remove the claude-code die-guard in the same change. ALSO hard-required before any tier-2 evolution of squad defs (an evolver mutating `slot.model` today gets a silent no-op) |
+| Delta re-entry (`flow.reentry: "delta"`) unimplemented — all backward edges re-drive with first-visit prompts | Cost optimization, not correctness (spec §3.8 files it under mitigations); prompt-template design should follow evidence from live squad runs, not precede it | First live slices show re-entry churn (R2/R3 spent on regenerate-from-scratch drift) in meta-metrics — then implement `{prior artifact + question}` inputs in `inputFor` |
+| Pending/checkpoint gc — escalated + absolved drives never archived, `done` checkpoints never cleaned | Orphans only accumulate across many live runs of one project; zero live slices so far; files are tiny JSON and correct-by-design (never-scored is intentional) | Routine live fleet use on a real project (pending dir visibly accumulating), or the first time `listPending` output confuses a human |
+| Coverage gaps: `run.ts` auth/transient die paths, `squad-cli` invalid `--gate-answer` path, `materializeDesign` output | All hand-traced in review; untested branches are die-and-stop, not silent corruption | First regression touching any of these files, or the first live-run auth failure behaving unexpectedly — add the test with the fix |
+
 ---
 
 ## 6. Storage: no SQLite (decided 2026-07-09)
