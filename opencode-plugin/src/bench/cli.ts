@@ -19,6 +19,7 @@ import { BenchError, log } from "./util.ts"
 import { DRIVER_IDS } from "./drivers/index.ts"
 import { writeSquadDefV1, STANDARD_SQUAD } from "../fleet/squad-def.ts"
 import { cmdRolesRender } from "../fleet/render.ts"
+import { cmdRolesImport } from "../fleet/import.ts"
 
 const USAGE = `usage: runner.ts [--tb-root PATH] <command> [options]
 
@@ -42,7 +43,10 @@ commands:
               [--split-file PATH] [--results PATH]... [--band LO,HI]
               [--sentinels N] [--sentinel-hi F]
   report-loop [--json] [--sink PATH]... [--no-flag]
-              [--plateau-ab-k K] [--plateau-trial-k K]`
+              [--plateau-ab-k K] [--plateau-trial-k K]
+  squad-def-init
+  roles-render  --project PATH [--role R]... [--pin LAYER=vN]... [--force]
+  roles-import  --from DIR [--role R]... [--force] [--map SRC=DEST1,DEST2]...`
 
 function printUsage(): void {
   console.error(USAGE)
@@ -631,6 +635,55 @@ function parseRolesRenderArgs(argv: string[]): RolesRenderArgs | null {
   return out as RolesRenderArgs
 }
 
+interface RolesImportArgs {
+  from: string
+  roles?: string[]
+  force?: boolean
+  map?: Record<string, string[]>
+}
+
+function parseRolesImportArgs(argv: string[]): RolesImportArgs | null {
+  const out: Partial<RolesImportArgs> = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--from") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.from = v
+      i += 2
+      continue
+    }
+    if (a === "--role") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.roles = out.roles ?? []
+      out.roles.push(v)
+      i += 2
+      continue
+    }
+    if (a === "--force") {
+      out.force = true
+      i++
+      continue
+    }
+    if (a === "--map") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.map = out.map ?? {}
+      const [src, destStr] = v.split("=")
+      if (!src || !destStr) return null
+      const dests = destStr.split(",")
+      out.map[src] = dests
+      i += 2
+      continue
+    }
+    return null
+  }
+  if (out.from === undefined) return null
+  return out as RolesImportArgs
+}
+
 export async function main(argv: string[]): Promise<number> {
   try {
     const global = extractTbRoot(argv)
@@ -722,6 +775,15 @@ export async function main(argv: string[]): Promise<number> {
           return 2
         }
         cmdRolesRender(rolesRenderArgs)
+        return 0
+      }
+      case "roles-import": {
+        const rolesImportArgs = parseRolesImportArgs(subArgs)
+        if (rolesImportArgs === null) {
+          printUsage()
+          return 2
+        }
+        cmdRolesImport(rolesImportArgs)
         return 0
       }
       default:
