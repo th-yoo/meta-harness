@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { cmdRoleRun, extractFinalPayload } from "../src/fleet/run.ts"
@@ -7,6 +7,7 @@ import { listPending, readPending } from "../src/fleet/pending.ts"
 import { renderRole } from "../src/fleet/render.ts"
 import { accountRoleRoot, createCandidate, writeActive } from "../src/harness-store.ts"
 import { roleSpec } from "../src/fleet/roles.ts"
+import { REMOTE_WRITE_DENY_ENV } from "../src/fleet/sandbox.ts"
 import { seedRenderedRole } from "./fleet-helpers.ts"
 
 /** Renders an ADDITIONAL role's persona onto a project already seeded by
@@ -118,23 +119,32 @@ describe("role-run", () => {
     expect(envelope.toolUsage).toBeTruthy()
   })
 
-  test("credential isolation: a bash:allow role (implementer) drive passes the remote-write deny-list as env", async () => {
+  test("credential isolation: a bash:allow role (implementer) drive passes the remote-write deny-list plus the dynamic sandbox keys as env", async () => {
     seedExtraRenderedRole(project, "implementer", "You are the implementer.\n## Implementation Report\ndone")
     let seenOpts: { timeoutSec: number; env?: Record<string, string> } | undefined
+    let writtenGitConfig: string | undefined
     const execFn = async (_argv: string[], opts: { timeoutSec: number; env?: Record<string, string> }) => {
       seenOpts = opts
+      // Read the written sandbox files INSIDE the exec call — cmdRoleRun's
+      // `finally` shreds them the instant this promise resolves.
+      writtenGitConfig = readFileSync(opts.env!["GIT_CONFIG_GLOBAL"]!, "utf-8")
+      expect(existsSync(opts.env!["GH_CONFIG_DIR"]!)).toBe(true)
       return { stdout: multiTurn, rc: 0 }
     }
     await cmdRoleRun({ project, role: "implementer", input: "do it" }, execFn)
-    expect(seenOpts?.env).toEqual({
-      GH_TOKEN: "",
-      GITHUB_TOKEN: "",
-      GIT_TERMINAL_PROMPT: "0",
-      GIT_ASKPASS: "/bin/false",
-      SSH_ASKPASS: "/bin/false",
-      GIT_SSH_COMMAND: "/bin/false",
-      SSH_AUTH_SOCK: "",
-    })
+
+    for (const [k, v] of Object.entries(REMOTE_WRITE_DENY_ENV)) {
+      expect(seenOpts?.env?.[k]).toBe(v)
+    }
+    expect(seenOpts?.env?.["GIT_CONFIG_GLOBAL"]).toMatch(/mh-fleet-sandbox-.*\/gitconfig$/)
+    expect(seenOpts?.env?.["GH_CONFIG_DIR"]).toMatch(/mh-fleet-sandbox-.*\/gh-config$/)
+    // Credential helper reset present regardless of whether this host has a
+    // configured git identity.
+    expect(writtenGitConfig).toMatch(/\[credential\]\s*\n\s*helper\s*=\s*(\n|$)/)
+
+    // cleanup() ran in cmdRoleRun's `finally` — tmp sandbox files are gone.
+    expect(existsSync(seenOpts!.env!["GIT_CONFIG_GLOBAL"]!)).toBe(false)
+    expect(existsSync(seenOpts!.env!["GH_CONFIG_DIR"]!)).toBe(false)
   })
 
   test("credential isolation: a bash:deny role (analyzer) drive passes no env override — unaffected by the scrub", async () => {

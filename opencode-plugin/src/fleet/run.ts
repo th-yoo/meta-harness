@@ -209,47 +209,53 @@ export async function cmdRoleRun(
   // Squad-spawned bash:allow roles (implementer/evaluator) run `opencode run`
   // with the owner's full ambient env by default (runHost merges onto
   // process.env) — that includes remote-write git/gh credentials. sandboxEnv
-  // returns a blocking override for those roles (undefined for bash:deny
-  // roles, which can't exec anything anyway — behavior there is
-  // byte-identical to before this change). See fleet/sandbox.ts.
+  // returns a blocking override + a cleanup handle for those roles
+  // (undefined for bash:deny roles, which can't exec anything anyway —
+  // behavior there is byte-identical to before this change). The tmp files
+  // sandboxEnv writes (per-role git config, empty gh config dir) MUST be
+  // shredded even if the drive dies partway through — see fleet/sandbox.ts.
   const sbx = sandboxEnv(spec)
-  const { stdout, rc, stderr, timedOut } = await execFn(argv, { timeoutSec, env: sbx })
+  try {
+    const { stdout, rc, stderr, timedOut } = await execFn(argv, { timeoutSec, env: sbx?.env })
 
-  // Timeout is checked BEFORE classification — see file header (agent-run.ts
-  // parity: a timed-out kill mid-run can otherwise read as "done").
-  if (timedOut) die(`timeout driving ${spec.agent} (${timeoutSec}s) — re-drive`)
+    // Timeout is checked BEFORE classification — see file header (agent-run.ts
+    // parity: a timed-out kill mid-run can otherwise read as "done").
+    if (timedOut) die(`timeout driving ${spec.agent} (${timeoutSec}s) — re-drive`)
 
-  const cls = opencodeDriver.classifyAttempt({ rc, stdout, stderr: stderr ?? "", timedOut: false })
-  if (cls === "auth") die(`auth error driving ${spec.agent}: ${opencodeDriver.authHint ?? "check opencode auth"}`)
-  if (cls === "transient") die(`transient error driving ${spec.agent} — re-drive`)
+    const cls = opencodeDriver.classifyAttempt({ rc, stdout, stderr: stderr ?? "", timedOut: false })
+    if (cls === "auth") die(`auth error driving ${spec.agent}: ${opencodeDriver.authHint ?? "check opencode auth"}`)
+    if (cls === "transient") die(`transient error driving ${spec.agent} — re-drive`)
 
-  const parsed = opencodeDriver.parseOutput(stdout)
-  if (parsed.turnCount === 0 || parsed.events.length === 0) {
-    die(`${spec.agent} produced 0 turns / no events — nothing recorded`)
-  }
-
-  const rawEvents = parseNdjsonLines(stdout)
-  const id = extractSessionId(rawEvents) ?? `fleet-${args.role}-${Math.floor(Date.now() / 1000)}-${randomBytes(3).toString("hex")}`
-  const payload = extractFinalPayload(rawEvents)
-  const toolUsage = toolCallCounts(parsed.toolUsage)
-
-  const pending: FleetPendingSession = {
-    id, role: args.role, agent: spec.agent, project: args.project, model,
-    turnCount: parsed.turnCount, toolUsage,
-    payload, events: rawEvents,
-    nodePath: args.nodePath, sliceId: args.sliceId, renderStamp: stamp,
-    tokens: sumTokens(rawEvents), cost: sumCost(rawEvents),
-    ts: new Date().toISOString(),
-  }
-  writePending(pending)
-
-  const result: RoleRunResult = { id, payload, turnCount: parsed.turnCount, toolUsage }
-  if (!args.silent) {
-    if (args.json) console.log(JSON.stringify(result))
-    else {
-      console.log(payload)
-      console.error(`id: ${id}`)
+    const parsed = opencodeDriver.parseOutput(stdout)
+    if (parsed.turnCount === 0 || parsed.events.length === 0) {
+      die(`${spec.agent} produced 0 turns / no events — nothing recorded`)
     }
+
+    const rawEvents = parseNdjsonLines(stdout)
+    const id = extractSessionId(rawEvents) ?? `fleet-${args.role}-${Math.floor(Date.now() / 1000)}-${randomBytes(3).toString("hex")}`
+    const payload = extractFinalPayload(rawEvents)
+    const toolUsage = toolCallCounts(parsed.toolUsage)
+
+    const pending: FleetPendingSession = {
+      id, role: args.role, agent: spec.agent, project: args.project, model,
+      turnCount: parsed.turnCount, toolUsage,
+      payload, events: rawEvents,
+      nodePath: args.nodePath, sliceId: args.sliceId, renderStamp: stamp,
+      tokens: sumTokens(rawEvents), cost: sumCost(rawEvents),
+      ts: new Date().toISOString(),
+    }
+    writePending(pending)
+
+    const result: RoleRunResult = { id, payload, turnCount: parsed.turnCount, toolUsage }
+    if (!args.silent) {
+      if (args.json) console.log(JSON.stringify(result))
+      else {
+        console.log(payload)
+        console.error(`id: ${id}`)
+      }
+    }
+    return result
+  } finally {
+    sbx?.cleanup()
   }
-  return result
 }
