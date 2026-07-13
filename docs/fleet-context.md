@@ -1,5 +1,17 @@
 # The Fleet — context for meta-harness
 
+> **Status update (2026-07-13):** integration decisions now live in
+> [superpowers/specs/2026-07-13-fleet-squad-integration-design.md](superpowers/specs/2026-07-13-fleet-squad-integration-design.md)
+> (D1–D7 all closed) — that spec supersedes this briefing where they
+> disagree. Corrections to this doc's claims: the 4-role opencode personas
+> described below were an UNCOMMITTED rework (its branch
+> `feat/analysis-design-phase` and plan file no longer exist); oc-test
+> **main** actually has a 3-role doctrine (`architect` [analysis+design
+> fused] / `implementer` / `evaluator` + `master`) with an OpenClaw adapter
+> only. The 4-role split is the DECIDED target (spec D1); the doctrine on
+> main is the import source pending that split. The `shell:`→`bash`
+> permission-key bug is now flagged in oc-test's `KNOWN-ISSUES.md` (D7).
+
 Briefing on the **OpenClaw dev-fleet** (repo `~/z2/oc-test`, `agents-fleet/`), written
 for meta-harness dev sessions. The fleet is meta-harness's sibling: same
 **mutation + empirical selection** DNA, applied to *shipping features* rather than

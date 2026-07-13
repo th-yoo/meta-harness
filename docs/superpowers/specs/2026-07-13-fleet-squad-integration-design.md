@@ -1,11 +1,12 @@
 # Fleet × meta-harness integration — design (WORKING DRAFT)
 
-Status: brainstorm in progress.
+Status: all design decisions closed (D1–D7). Pending: spec self-review,
+user review gate, writing-plans.
 Decided: D1 node grammar, D2 prompt ownership (store is truth), D3 drive
 platform, D4 master contract + OpenClaw seat, D5 squad evolution + full
 event→score mapping + escalation taxonomy + communication grammar, D6
-store topology; orchestration; squad flow; SquadDef schema.
-Open: D7 repo boundary.
+store topology, D7 repo boundary; orchestration; squad flow; SquadDef
+schema.
 
 Companion: [improvement-loops.md](../../improvement-loops.md) — how the
 existing static & dynamic improvement loops work; this design plugs the fleet
@@ -663,8 +664,28 @@ Riders:
 
 ---
 
+## 11. Repo boundary (DECIDED — D7)
+
+**oc-test stays read-only for ALL integration code**, with exactly one
+bounded exception executed immediately: a docs-only commit to oc-test
+(`KNOWN-ISSUES.md`) delivering the shell->bash permission-key bug flag —
+safety-relevant knowledge does not wait on a rework schedule; bug delivery
+is not integration coupling.
+
+Everything else flows one way:
+
+- meta-harness ships the recipe (`docs/fleet-integration.md`, T6) +
+  this spec's frozen contracts (node interface, 4 subcommands,
+  checkpoint/resume statuses, SquadDef schema, wire lint).
+- Fleet-side sessions (in oc-test, later) do: 4-role doctrine split for
+  import, master shell wiring against the frozen contract, doctrine
+  retirement after `roles-import` verifies (doctrine/ -> legacy/ or
+  delete), installer rework.
+- meta-harness also fixes its own stale `fleet-context.md` pointers (dead
+  branch, dead plan file, 4-role-as-existing description) — done with this
+  decision.
+
 ## Open decisions (queue)
 
-- **D7 — repo boundary**: oc-test read-only + recipe vs meta-harness writes
-  adapters into oc-test (incl. the shell->bash permission-key flag, still
-  only recorded meta-harness-side).
+None — all decisions (D1–D7) closed. Next: spec self-review, user review
+gate, then writing-plans.
