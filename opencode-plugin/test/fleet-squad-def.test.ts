@@ -129,6 +129,31 @@ describe("escalations + verdict", () => {
     expect(parseVerdict(STANDARD_SQUAD, "verdict: FAIL cause=DESIGN"))
       .toEqual({ verdict: "FAIL", cause: "design" })
   })
+
+  // Live-loop finding, generation 4: a haiku evaluator emitted
+  // "**VERDICT: pass**" (markdown bold) and the bare ^VERDICT:...$ anchors
+  // rejected it. parseVerdict now strips markdown emphasis/backticks +
+  // surrounding whitespace per line before matching.
+  test("parseVerdict tolerates markdown bold: '**VERDICT: pass**' normalizes to PASS", () => {
+    expect(parseVerdict(STANDARD_SQUAD, "**VERDICT: pass**")).toEqual({ verdict: "PASS" })
+  })
+
+  test("parseVerdict tolerates underscores + surrounding whitespace: '  __verdict: FAIL cause=design__  '", () => {
+    expect(parseVerdict(STANDARD_SQUAD, "  __verdict: FAIL cause=design__  "))
+      .toEqual({ verdict: "FAIL", cause: "design" })
+  })
+
+  test("parseVerdict tolerates backticks: '`VERDICT: PASS`'", () => {
+    expect(parseVerdict(STANDARD_SQUAD, "`VERDICT: PASS`")).toEqual({ verdict: "PASS" })
+  })
+
+  test("parseVerdict leaves a plain unadorned VERDICT line unchanged", () => {
+    expect(parseVerdict(STANDARD_SQUAD, "VERDICT: PASS")).toEqual({ verdict: "PASS" })
+  })
+
+  test("parseVerdict still returns null for garbage even after emphasis stripping", () => {
+    expect(parseVerdict(STANDARD_SQUAD, "**looks good**")).toBeNull()
+  })
 })
 
 describe("syncWireContracts (Fix B — wire contract visible to the proposer)", () => {

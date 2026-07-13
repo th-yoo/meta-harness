@@ -139,6 +139,8 @@ function renderWireContract(def: SquadDef, role: string): string {
       "VERDICT: PASS",
       "VERDICT: FAIL cause=impl",
       "```",
+      "",
+      "Emit the verdict line as PLAIN TEXT — no bold/italics/backticks.",
     )
   }
 
@@ -200,7 +202,18 @@ export function parseVerdict(
   // appears nowhere in the evidence it's shown), so generations converge on
   // plausible-but-wrong casing (e.g. "verdict: pass") — parse case-
   // insensitively and normalize the captures rather than rejecting them.
-  const m = new RegExp(def.wire.verdictRe, "mi").exec(payload)
+  //
+  // Live-loop finding (gen-4): a haiku evaluator emitted "**VERDICT: pass**"
+  // (markdown bold) — the ^VERDICT: anchor rejects it outright since the
+  // line doesn't literally start/end with "VERDICT"/"PASS". Strip leading/
+  // trailing markdown emphasis (*, _, `) + surrounding whitespace per LINE
+  // (not the whole payload, so the ^/$ multiline anchors stay meaningful)
+  // before matching.
+  const normalized = payload
+    .split("\n")
+    .map((line) => line.replace(/^[\s*_`]+|[\s*_`]+$/g, ""))
+    .join("\n")
+  const m = new RegExp(def.wire.verdictRe, "mi").exec(normalized)
   if (!m) return null
   const verdict = m[1]!.toUpperCase() as "PASS" | "FAIL"
   if (verdict === "PASS") return { verdict: "PASS" }
