@@ -184,6 +184,13 @@ export async function cmdRoleRun(
     sliceId?: string
     timeoutSec?: number
     json?: boolean
+    /** When true, suppress ALL stdout/stderr output this call would
+     * otherwise print (the payload console.log, the `id:` console.error,
+     * and the `--json` envelope) — e.g. squad-run's prod DriveFn, which
+     * drives several role-runs per outcome and needs the final outcome
+     * JSON to be the only line on stdout. Return value unchanged. Default
+     * false — standalone `role-run` CLI behavior is unaffected. */
+    silent?: boolean
   },
   execFn: ExecFn = defaultExec,
 ): Promise<RoleRunResult> {
@@ -229,10 +236,12 @@ export async function cmdRoleRun(
   writePending(pending)
 
   const result: RoleRunResult = { id, payload, turnCount: parsed.turnCount, toolUsage }
-  if (args.json) console.log(JSON.stringify(result))
-  else {
-    console.log(payload)
-    console.error(`id: ${id}`)
+  if (!args.silent) {
+    if (args.json) console.log(JSON.stringify(result))
+    else {
+      console.log(payload)
+      console.error(`id: ${id}`)
+    }
   }
   return result
 }

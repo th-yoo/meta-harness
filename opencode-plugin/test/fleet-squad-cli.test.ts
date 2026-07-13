@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync, existsSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { cmdSquadRun, checkpointPath } from "../src/fleet/squad-cli.ts"
+import { cmdSquadRun, checkpointPath, roleForPhase } from "../src/fleet/squad-cli.ts"
 import { writeSquadDefV1, STANDARD_SQUAD } from "../src/fleet/squad-def.ts"
 import { scripted } from "./fleet-helpers.ts"
 
@@ -22,6 +22,16 @@ afterEach(() => {
   delete process.env.META_HARNESS_HOME
   rmSync(home, { recursive: true, force: true })
   rmSync(project, { recursive: true, force: true })
+})
+
+describe("roleForPhase", () => {
+  test("collapses squad.ts phases to cmdRoleRun's 4 wire slots", () => {
+    expect(roleForPhase("analyzer")).toBe("analyzer")
+    expect(roleForPhase("evaluator-spec")).toBe("evaluator")
+    expect(roleForPhase("evaluator-verdict")).toBe("evaluator")
+    expect(roleForPhase("designer")).toBe("designer")
+    expect(roleForPhase("implementer")).toBe("implementer")
+  })
 })
 
 describe("squad-run CLI", () => {

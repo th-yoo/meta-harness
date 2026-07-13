@@ -67,6 +67,24 @@ describe("role-run", () => {
     expect(res.turnCount).toBe(1)
   })
 
+  test("silent:true suppresses all console.log/console.error output", async () => {
+    const execFn = async () => ({ stdout: multiTurn, rc: 0 })
+    const logs: unknown[] = []
+    const errs: unknown[] = []
+    const origLog = console.log
+    const origErr = console.error
+    console.log = (...a: unknown[]) => { logs.push(a) }
+    console.error = (...a: unknown[]) => { errs.push(a) }
+    try {
+      await cmdRoleRun({ project, role: "analyzer", input: "x", silent: true }, execFn)
+    } finally {
+      console.log = origLog
+      console.error = origErr
+    }
+    expect(logs).toEqual([])
+    expect(errs).toEqual([])
+  })
+
   test("--json path emits an {id,payload,turnCount,toolUsage} envelope to stdout", async () => {
     const execFn = async () => ({ stdout: multiTurn, rc: 0 })
     const logs: string[] = []

@@ -41,7 +41,7 @@ import { die, writeJsonAtomic } from "../bench/util.ts"
  * — kept as a separate copy here since that function isn't exported and the
  * two call sites want the mapping for different reasons (lint slot vs.
  * `cmdRoleRun`'s `role` argument). */
-function roleForPhase(phase: string): string {
+export function roleForPhase(phase: string): string {
   switch (phase) {
     case "evaluator-spec":
     case "evaluator-verdict":
@@ -105,6 +105,10 @@ export async function cmdSquadRun(
         input,
         sliceId,
         nodePath: `root/${sliceId}/${phase}`,
+        // Each squad-run outcome drives several role-runs; only the final
+        // outcome JSON (cmdSquadRun's own console.log below) should land on
+        // stdout, or it's not machine-parseable (task-8 concern #3).
+        silent: true,
       })
       return { id: r.id, payload: r.payload }
     })
