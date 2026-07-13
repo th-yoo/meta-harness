@@ -72,3 +72,16 @@ export function writeJsonAtomic(path: string, data: unknown): void {
   writeFileSync(tmp, JSON.stringify(data, null, 2) + "\n")
   renameSync(tmp, path)
 }
+
+/**
+ * Write plain text via a same-dir temp file + rename — same tmp-then-rename
+ * discipline as writeJsonAtomic above, for callers whose store file isn't JSON.
+ * Creates parent dirs first.
+ */
+export function writeTextAtomic(path: string, text: string): void {
+  const dir = dirname(path)
+  mkdirSync(dir, { recursive: true })
+  const tmp = join(dir, `${basename(path)}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`)
+  writeFileSync(tmp, text)
+  renameSync(tmp, path)
+}
