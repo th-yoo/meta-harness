@@ -42,7 +42,7 @@ export function cmdRolesImport(args: {
       die(`roles-import: ${spec.agent} already has an active body — pass --force to overwrite`)
     }
     createCandidate(root, "v1", body)
-    writeActive(root, "v1", body, null, null, null, null)
+    writeActive(root, "v1", body, "", null, null, null)
     log(`imported ${srcPath} -> ${spec.agent} account-role v1 (active)`)
   }
 }
