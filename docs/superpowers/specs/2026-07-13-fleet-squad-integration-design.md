@@ -66,6 +66,82 @@ alignment keeps it a later adapter instead of a rewrite. Trigger to build:
 tier-2 policy evolution needs referee-grade gating, or compositional
 role-prompt effects need measuring.
 
+## 1.5 Squad definition (DECIDED)
+
+**Definition vs instance** (program vs process): a **SquadDef** is the
+declarative, versioned artifact — the squad's evolvable "system prompt"
+(§6 channel 2). A **squad instance** = SquadDef + nodePath + slice +
+workspace, created at run time, never persisted as definition.
+
+```jsonc
+// store: squads/standard/candidates/vN/squad.json  (active pointer, same as layers)
+{
+  "type": "standard",              // store key: squad:standard
+  "slots": {
+    "analyzer":    { "kind": "agent", "role": "mh-analyzer",    "platform": "opencode",    "model": "anthropic/claude-haiku-4-5" },
+    "designer":    { "kind": "agent", "role": "mh-designer",    "platform": "opencode",    "model": "anthropic/claude-sonnet-4-6" },
+    "implementer": { "kind": "agent", "role": "mh-implementer", "platform": "claude-code", "model": "anthropic/claude-sonnet-4-6" },
+    "evaluator":   { "kind": "agent", "role": "mh-evaluator",   "platform": "opencode",    "model": "anthropic/claude-haiku-4-5" }
+    // recursion: { "kind": "squad", "type": "standard" } in any slot
+  },
+  "flow": {
+    "bounds": { "R1": 2, "R2": 1, "R3": 3, "globalBudgetSteps": 40 },
+    "gatePolicy": { "gate1": "auto", "gate2": "auto" },   // root instance overrides to human
+    "reentry": "delta"                                    // {prior artifact + question} -> revision
+  },
+  "wire": {
+    "headings": {
+      "analyzer":  [["## Use Cases", "## Functional Spec"], ["## Clarify"]],
+      "designer":  [["## Decided Design", "## Task DAG"]],
+      "evaluator": [["## Test Spec"], ["VERDICT:"]]
+    },
+    "verdictRe": "^VERDICT: (PASS|FAIL)"
+  }
+}
+```
+
+Rules:
+
+1. **`type` = the store key** (`squad:standard`, §7). Evolve the def → all
+   instances of that type inherit on next render. Instances distinguished by
+   nodePath provenance only.
+2. **Slot binding owns platform/model** (§5's per-slot config). The slot's
+   `role` names which role store renders the persona.
+3. **`wire` = the inter-role protocol, owned by its consumer.** The squad is
+   what breaks when members stop speaking its protocol, so required headings
+   + verdict regex live here, not in the role manifest. Render-time lint
+   checks role candidates against the CONSUMING squad's wire block.
+   (Consequence: T1's `FLEET_ROLES` shrinks to frontmatter/permission
+   templates; headings move here.)
+4. **Gate policy in the def is the default; instance position overrides** —
+   a root instance forces human gates, inner instances keep the def's auto.
+5. **Recursion = one line**: slot kind `squad` + type. No new schema.
+
+### 1.5.1 What `flow` is — and is not
+
+`flow` = the knobs of §3's state machine, never the machine:
+
+- **Runner CODE (structure — tier 3, frozen):** states, edges (rules 1–14),
+  escalation types, the slot pattern. Changing these = harness-code
+  evolution = explicitly-not-now.
+- **`flow` block (parameters — tier 2, evolvable):** what those rules read:
+
+| Field | Parameterizes | §3 rules |
+|---|---|---|
+| `bounds.R1` | in-slot retries (self-check redo, syntax redo) | 1, 4, 8, 9 |
+| `bounds.R2` | upstream hops (ambiguity, design-decision, FAIL-design/intent) | 5, 7, 11, 12 |
+| `bounds.R3` | macro loop (FAIL-impl → Implementer) | 10 |
+| `bounds.globalBudgetSteps` | whole-squad hard cap (ping-pong backstop) | 14 |
+| `gatePolicy.*` | who decides at gates | §3.4 |
+| `reentry` | delta (revise) vs full (regenerate) re-entry | §3.7-2 |
+
+Whether an edge EXISTS is code's decision; how often it may fire, who
+approves, and what re-entry carries are flow's decisions. Evolution can
+safely turn knobs (bad R3=7 wastes tokens → selection rejects it — bounded
+blast radius) but cannot rewrite topology (bad edge = infinite loop or
+skipped verification — unbounded). This schema line IS §4's tier-2/tier-3
+boundary, made physical.
+
 ## 2. Orchestration (DECIDED)
 
 **Deterministic runner per squad.** No LLM orchestrator. A→D→I→E is a fixed
