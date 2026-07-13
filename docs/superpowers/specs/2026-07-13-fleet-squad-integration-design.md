@@ -1,10 +1,11 @@
 # Fleet × meta-harness integration — design (WORKING DRAFT)
 
 Status: brainstorm in progress.
-Decided: node grammar (D1), orchestration, squad flow, drive platform (D3),
-store topology (D6), squad evolution model (D5 core).
-Open: D2 prompt ownership, D4 master contract, D5 remainder (exact
-event→score table), D7 repo boundary.
+Decided: D1 node grammar, D2 prompt ownership (store is truth), D3 drive
+platform, D4 master contract + OpenClaw seat, D5 squad evolution + full
+event→score mapping + escalation taxonomy + communication grammar, D6
+store topology; orchestration; squad flow; SquadDef schema.
+Open: D7 repo boundary.
 
 Companion: [improvement-loops.md](../../improvement-loops.md) — how the
 existing static & dynamic improvement loops work; this design plugs the fleet
@@ -255,9 +256,42 @@ Every slot runs the same micro-loop shape (the fractal, one level down):
 | 13 | any | bound exhausted | ESCALATE `Exhausted` + failure report | — |
 | 14 | any squad total | global step/token budget exhausted | ESCALATE `Exhausted` | hard cap |
 
-Escalation payload types (the ONLY thing that crosses node boundaries
-upward): `Clarify | DesignDecision | Exhausted`. Bubbles up the nodePath;
-only the root reaches the human (via master).
+### 3.3.1 Escalation taxonomy (DECIDED — final)
+
+Escalations are the ONLY thing that crosses node boundaries upward. They
+bubble up the nodePath; only the root reaches the human (via master).
+
+```
+Clarify        { question }                     need info: intent fork
+DesignDecision { question, options? }           need info: design fork
+Exhausted      { bounds, failure report }       ran out of budget trying
+Infeasible     { reason, evidence, suggestion? } reasoned: won't work as specified
+Refused        { category: harm|policy, reason } alignment: won't ever
+```
+
+| | retry by runner | human override | scoring |
+|---|---|---|---|
+| Clarify / DesignDecision | resume with answer | n/a (it IS a question) | neutral (asking ≠ failing); meta-metric rate |
+| Exhausted | no — more budget might help, human's call | rescope or re-run with bigger bounds | bad → squad def |
+| Infeasible | no — reasoned conclusion | legitimate: abandon \| rescope \| override ("proceed anyway", rationale recorded) | human confirms → GOOD (correct rejection saves doomed slices); human overrides → bad |
+| Refused | **never** — no R1, no re-drive (retry-pressure on a safety refusal is a harness bug) | **not a thing** — resume-directive disabled; human may only rescope; forcing is impossible (model refuses again) | **excluded from automatic scoring** — meta-metric + human-review flag only |
+
+Emitters: any slot, post-analysis (Infeasible after real work, not
+first-glance reflex). `Refused` originates in the underlying model's
+alignment — the harness recognizes it (`classifyAttempt` types it as an
+outcome, never a transient error), routes it, and stays out of its way.
+
+**Safety-design rule:** `Refused` events never enter fitness. If refusals
+could score bad, evolution would select for refusal-suppressing prompt
+wording — the fitness gradient must never point across the safety boundary.
+Over-refusal from clumsy prompts is fixed by human-initiated candidates,
+never by automatic selection pressure. (Same principle as master invariants
+in the shell: evolution touches eloquence, never obedience.)
+
+Defense-in-depth for harmful instructions (e.g. "turn off the ECMO"):
+(1) capability scoping — permission-scoped worktrees, no device/network
+reach, tier-3 code; (2) model alignment refuses; (3) taxonomy carries the
+refusal cleanly to the human. The flow never relies on (3) alone.
 
 ### 3.4 Gate policy
 
@@ -313,6 +347,34 @@ payload -> parent (root: master -> human merge gate)
    backstop.
 5. **Human-gate counters separate from machine counters.** Human revisions
    at root gates must not exhaust machine retry bounds.
+
+### 3.8 Communication grammar (DECIDED) — star per squad, no sibling channels
+
+- **Vertical (parent ⇄ child):** duplex over process boundaries,
+  request/response only — invocation input + `--resume --gate-answer/
+  --directive` down; payload / typed escalation up (§9.1, §3.3.1). No live
+  socket; a child never chats mid-drive.
+- **Horizontal (slot ⇄ slot): none.** All sibling communication = typed
+  artifact exchange routed through the runner: spec via Gate 1, design.md
+  via Gate 2, re-entry `{prior artifact + question}` for design gaps,
+  test-spec/VERDICT via rules 10–12. The payload IS the message; wire
+  headings are the message format.
+
+Why no direct channel (each load-bearing): (1) credit assignment — an
+unlogged sibling DM makes FAIL attribution undecidable; scoring (§6)
+presumes runner-mediated influence; (2) artifact truth — Q&A forced through
+re-entry lands every clarification in design.md, so approved design ==
+built design; (3) wire lint runs at runner boundaries, DMs bypass it;
+(4) node opacity — a sibling may be a whole squad, "chat" is undefined,
+artifact exchange stays well-defined; (5) determinism/replay.
+
+Re-entry cost mitigations: `reentry: delta`; inner gates auto; optional
+later flow knob — Gate 2 distinguishing material-change (re-gate) vs
+clarification-annotation (auto).
+
+**Peer collaboration = composition, not messaging:** if two roles ever need
+to genuinely collaborate (pair-programming pattern), the pair becomes a
+sub-squad node. Every level stays a star.
 
 ## 4. Evolution surface — what meta-harness improves here
 
@@ -381,16 +443,53 @@ AgentNode(role, platform, model).run(input):
   member. Tier-2 artifact, same store machinery.
 
 **Channel 1 — members improve via INTERNAL signal.** The runner's typed
-events are per-member fitness, already labeled:
+events are per-member fitness, already labeled.
 
-| Flow event | Score lands on |
-|---|---|
-| Gate 1 approve / revise | analyzer |
-| Gate 2 decide / revise | designer |
-| VERDICT PASS / FAIL-impl | implementer |
-| FAIL-design routed upstream | designer (blame), implementer (absolved) |
-| redo counts, clean handoffs | emitting slot |
-| verdict-vs-merge agreement (later) | evaluator |
+**Granularity rule: one score per DRIVE (slot invocation), adjudicated by
+the drive's natural judge.** Slot micro-loop steps are the agent's internal
+business inside one session; the runner scores only what it can adjudicate:
+gates, verdicts, lint. A revise scores that drive bad; the re-drive is a new
+session scored on its own outcome. Matches per-session store machinery
+exactly.
+
+Full event -> score mapping (DECIDED — D5):
+
+| Event | Artifact scored | Score |
+|---|---|---|
+| payload lint fail (wire headings) | that slot's role | bad — automatic, objective |
+| Gate 1 approve / revise | analyzer | good / bad |
+| Gate 2 decided / revise | designer | good / bad |
+| VERDICT PASS | implementer | good |
+| VERDICT FAIL-impl | implementer | bad |
+| VERDICT FAIL-design | implementer NEUTRAL (absolved); designer's revision drive scored at its own Gate 2 | — |
+| evaluator payload well-formed (spec + verdict) | evaluator | good / bad (v1, lint-grade) |
+| root merge accept / reject | squad def (channel 2) + implementer confirm | good / bad |
+| `Exhausted` | squad def | bad |
+| `Infeasible` — human confirms / overrides | analyzer (or emitting slot) | good / bad |
+| `Refused` | — | NEVER scored (§3.3.1 safety rule) |
+| inner-squad payload at outer gate/verdict | inner squad def | good / bad (parent's judge scores the child-squad) |
+
+**Meta-metrics, NOT scores** (proposer diagnosis + plateau + tier-2
+fitness): redo counts, upstream hops `{from,to,reason}`, Clarify rate (also
+the master slice-quality proxy), dev-test retry counts, tokens/cost per
+drive and slice, human gate latency, bound exhaustion locations, FAIL-cause
+distribution, Refused occurrences (flagged for human review).
+
+Three deliberate calls:
+
+1. **No retroactive scoring.** A later-discovered design gap lands as an
+   upstream-hop meta-metric; the design REVISION gets its own score. Scores
+   stay append-only, attribution unambiguous.
+2. **Clarify = neutral, never bad.** Punishing escalation of genuine
+   ambiguity trains analyzers to guess.
+3. **No weights.** Binary good/bad into existing nPass/nFail. Weighting =
+   premature sophistication with zero evidence.
+
+**Evaluator v2 (deferred until merge outcomes accumulate):**
+confusion-matrix scoring against downstream truth — PASS+merge-accept =
+good, PASS+merge-reject = bad (missed defect), FAIL+human-override = bad
+(false alarm), FAIL+fix-confirms = good. Same trick as judge-audit:
+calibrate the gate against the oracle behind it.
 
 Each slot scored at its own gates -> recordToStores with stamp pins -> the
 role-name store — identical to a lone agent. Members get their own reviews,
@@ -566,8 +665,6 @@ Riders:
 
 ## Open decisions (queue)
 
-- **D5 remainder**: exact event->score mapping table (which events are
-  scores vs meta-metrics; weights; evaluator meta-scoring).
 - **D7 — repo boundary**: oc-test read-only + recipe vs meta-harness writes
   adapters into oc-test (incl. the shell->bash permission-key flag, still
   only recorded meta-harness-side).
