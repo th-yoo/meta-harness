@@ -23,6 +23,7 @@ import { cmdRolesRender } from "../fleet/render.ts"
 import { cmdRolesImport } from "../fleet/import.ts"
 import { cmdRoleRun } from "../fleet/run.ts"
 import { cmdRoleScore, FLEET_GATES, type FleetGate } from "../fleet/score.ts"
+import { cmdSquadRun } from "../fleet/squad-cli.ts"
 
 const USAGE = `usage: runner.ts [--tb-root PATH] <command> [options]
 
@@ -53,7 +54,10 @@ commands:
   role-run      --project PATH --role R [--model M] [--node-path P] [--slice-id S]
                 [--timeout-sec N] [--json] (--input-file F | "input")
   role-score    --project PATH --id ID good|bad [--note S] [--node-path P]
-                [--gate gate1|gate2|verdict|merge|lint|infeasible]`
+                [--gate gate1|gate2|verdict|merge|lint|infeasible]
+  squad-run     --project PATH --slice-id S (--slice "text" | --slice-file F)
+                [--resume --gate-answer approve|revise]
+                [--gate-policy root-human|auto] [--squad-type T] [--json]`
 
 function printUsage(): void {
   console.error(USAGE)
@@ -842,6 +846,92 @@ function parseRoleScoreArgs(argv: string[]): RoleScoreCliArgs | null {
   return out as RoleScoreCliArgs
 }
 
+interface SquadRunCliArgs {
+  project: string
+  sliceId: string
+  slice?: string
+  sliceFile?: string
+  resume?: boolean
+  gateAnswer?: string
+  gatePolicy?: "root-human" | "auto"
+  squadType?: string
+  json?: boolean
+}
+
+function parseSquadRunArgs(argv: string[]): SquadRunCliArgs | null {
+  const out: Partial<SquadRunCliArgs> = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--project") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.project = v
+      i += 2
+      continue
+    }
+    if (a === "--slice-id") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.sliceId = v
+      i += 2
+      continue
+    }
+    if (a === "--slice") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.slice = v
+      i += 2
+      continue
+    }
+    if (a === "--slice-file") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.sliceFile = v
+      i += 2
+      continue
+    }
+    if (a === "--resume") {
+      out.resume = true
+      i++
+      continue
+    }
+    if (a === "--gate-answer") {
+      const v = argv[i + 1]
+      if (v === undefined || (v !== "approve" && v !== "revise")) return null
+      out.gateAnswer = v
+      i += 2
+      continue
+    }
+    if (a === "--gate-policy") {
+      const v = argv[i + 1]
+      if (v === undefined || (v !== "root-human" && v !== "auto")) return null
+      out.gatePolicy = v
+      i += 2
+      continue
+    }
+    if (a === "--squad-type") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.squadType = v
+      i += 2
+      continue
+    }
+    if (a === "--json") {
+      out.json = true
+      i++
+      continue
+    }
+    return null
+  }
+  if (out.project === undefined || out.sliceId === undefined) return null
+  // --slice and --slice-file are mutually exclusive when both given; fresh
+  // runs require exactly one, but resume needs neither (cmdSquadRun itself
+  // enforces "fresh run requires a slice").
+  if (out.slice !== undefined && out.sliceFile !== undefined) return null
+  return out as SquadRunCliArgs
+}
+
 export async function main(argv: string[]): Promise<number> {
   try {
     const global = extractTbRoot(argv)
@@ -976,6 +1066,26 @@ export async function main(argv: string[]): Promise<number> {
           note: roleScoreArgs.note,
           nodePath: roleScoreArgs.nodePath,
           gate: roleScoreArgs.gate,
+        })
+        return 0
+      }
+      case "squad-run": {
+        const squadRunArgs = parseSquadRunArgs(subArgs)
+        if (squadRunArgs === null) {
+          printUsage()
+          return 2
+        }
+        const slice =
+          squadRunArgs.sliceFile !== undefined ? readFileSync(squadRunArgs.sliceFile, "utf-8") : squadRunArgs.slice
+        await cmdSquadRun({
+          project: squadRunArgs.project,
+          sliceId: squadRunArgs.sliceId,
+          slice,
+          resume: squadRunArgs.resume,
+          gateAnswer: squadRunArgs.gateAnswer,
+          gatePolicy: squadRunArgs.gatePolicy,
+          squadType: squadRunArgs.squadType,
+          json: squadRunArgs.json,
         })
         return 0
       }
