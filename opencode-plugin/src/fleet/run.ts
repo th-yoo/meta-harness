@@ -53,6 +53,7 @@ import { randomBytes } from "node:crypto"
 import { roleSpec } from "./roles.ts"
 import { parseStamp } from "./render.ts"
 import { writePending, type FleetPendingSession } from "./pending.ts"
+import { sandboxEnv } from "./sandbox.ts"
 import { opencodeDriver } from "../bench/drivers/opencode.ts"
 import { runHost } from "../bench/exec.ts"
 import { die } from "../bench/util.ts"
@@ -67,13 +68,13 @@ export interface RoleRunResult {
 
 export type ExecFn = (
   argv: string[],
-  opts: { timeoutSec: number },
+  opts: { timeoutSec: number; env?: Record<string, string> },
 ) => Promise<{ stdout: string; rc: number; stderr?: string; timedOut?: boolean }>
 
 /** Real default: bench/exec.ts's `runHost` (the project's single spawn
  * funnel — see file header). Tests always inject their own `execFn`; this
  * is never exercised hermetically. */
-const defaultExec: ExecFn = (argv, opts) => runHost(argv, { timeoutSec: opts.timeoutSec })
+const defaultExec: ExecFn = (argv, opts) => runHost(argv, { timeoutSec: opts.timeoutSec, env: opts.env })
 
 /** Same per-line parse `drivers/opencode.ts`'s `parseOutput`/`normalizeEvents`
  * use (trim, skip non-'{' lines, tolerate unparseable JSON) — kept local
@@ -205,7 +206,14 @@ export async function cmdRoleRun(
     "opencode", "run", "--dir", args.project, "--agent", spec.agent,
     "--auto", "--format", "json", "--model", model, args.input,
   ]
-  const { stdout, rc, stderr, timedOut } = await execFn(argv, { timeoutSec })
+  // Squad-spawned bash:allow roles (implementer/evaluator) run `opencode run`
+  // with the owner's full ambient env by default (runHost merges onto
+  // process.env) — that includes remote-write git/gh credentials. sandboxEnv
+  // returns a blocking override for those roles (undefined for bash:deny
+  // roles, which can't exec anything anyway — behavior there is
+  // byte-identical to before this change). See fleet/sandbox.ts.
+  const sbx = sandboxEnv(spec)
+  const { stdout, rc, stderr, timedOut } = await execFn(argv, { timeoutSec, env: sbx })
 
   // Timeout is checked BEFORE classification — see file header (agent-run.ts
   // parity: a timed-out kill mid-run can otherwise read as "done").

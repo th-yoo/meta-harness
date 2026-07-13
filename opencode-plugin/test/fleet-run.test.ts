@@ -4,7 +4,22 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { cmdRoleRun, extractFinalPayload } from "../src/fleet/run.ts"
 import { listPending, readPending } from "../src/fleet/pending.ts"
+import { renderRole } from "../src/fleet/render.ts"
+import { accountRoleRoot, createCandidate, writeActive } from "../src/harness-store.ts"
+import { roleSpec } from "../src/fleet/roles.ts"
 import { seedRenderedRole } from "./fleet-helpers.ts"
+
+/** Renders an ADDITIONAL role's persona onto a project already seeded by
+ * `seedRenderedRole` (which one-shot-writes the squad def) — skips the
+ * squad-def write `seedRenderedRole` would otherwise repeat (that dies:
+ * "squad def 'standard' already has an active version"). */
+function seedExtraRenderedRole(project: string, role: string, body: string) {
+  const agent = roleSpec(role).agent
+  const root = accountRoleRoot(agent)
+  createCandidate(root, "v1", body)
+  writeActive(root, "v1", body, null, null, null, null)
+  return renderRole(project, role)
+}
 
 const FIXTURES = join(import.meta.dir, "fixtures", "fleet")
 const multiTurn = readFileSync(join(FIXTURES, "trace-multi-turn.ndjson"), "utf-8")
@@ -101,5 +116,34 @@ describe("role-run", () => {
     expect(envelope.payload).toContain("## Use Cases")
     expect(envelope.turnCount).toBeGreaterThan(0)
     expect(envelope.toolUsage).toBeTruthy()
+  })
+
+  test("credential isolation: a bash:allow role (implementer) drive passes the remote-write deny-list as env", async () => {
+    seedExtraRenderedRole(project, "implementer", "You are the implementer.\n## Implementation Report\ndone")
+    let seenOpts: { timeoutSec: number; env?: Record<string, string> } | undefined
+    const execFn = async (_argv: string[], opts: { timeoutSec: number; env?: Record<string, string> }) => {
+      seenOpts = opts
+      return { stdout: multiTurn, rc: 0 }
+    }
+    await cmdRoleRun({ project, role: "implementer", input: "do it" }, execFn)
+    expect(seenOpts?.env).toEqual({
+      GH_TOKEN: "",
+      GITHUB_TOKEN: "",
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_ASKPASS: "/bin/false",
+      SSH_ASKPASS: "/bin/false",
+      GIT_SSH_COMMAND: "/bin/false",
+      SSH_AUTH_SOCK: "",
+    })
+  })
+
+  test("credential isolation: a bash:deny role (analyzer) drive passes no env override — unaffected by the scrub", async () => {
+    let seenOpts: { timeoutSec: number; env?: Record<string, string> } | undefined
+    const execFn = async (_argv: string[], opts: { timeoutSec: number; env?: Record<string, string> }) => {
+      seenOpts = opts
+      return { stdout: multiTurn, rc: 0 }
+    }
+    await cmdRoleRun({ project, role: "analyzer", input: "x" }, execFn)
+    expect(seenOpts?.env).toBeUndefined()
   })
 })
