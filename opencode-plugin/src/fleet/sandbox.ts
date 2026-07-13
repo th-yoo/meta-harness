@@ -182,8 +182,11 @@ export interface SandboxEnvOpts {
  * fully replaces which file counts as "global" rather than layering onto it.
  * Also: this closes credential-helper- and keyring-based auth; it does
  * nothing about a determined implementer explicitly re-adding a helper via
- * `git -c credential.helper=... push` (local `-c` overrides still win) or
- * exfiltrating a secret to a file the master later reads — true isolation
+ * `git -c credential.helper=... push`, a pre-existing `credential.helper` in
+ * the target repo's own `.git/config` (read AFTER global, so it re-enables the
+ * helper — same class as `-c`; never present in a git-tracked config, requires
+ * an explicit local set), or exfiltrating a secret to a file the master later
+ * reads — true isolation
  * needs worktree/process separation, out of scope here (same caveat 7bd204c
  * already carried).
  */
