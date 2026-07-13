@@ -17,9 +17,11 @@ import { cmdSplit, type SplitArgs } from "./splits.ts"
 import { cmdReportLoop, type ReportLoopArgs } from "./report-loop.ts"
 import { BenchError, log } from "./util.ts"
 import { DRIVER_IDS } from "./drivers/index.ts"
+import { readFileSync } from "node:fs"
 import { writeSquadDefV1, STANDARD_SQUAD } from "../fleet/squad-def.ts"
 import { cmdRolesRender } from "../fleet/render.ts"
 import { cmdRolesImport } from "../fleet/import.ts"
+import { cmdRoleRun } from "../fleet/run.ts"
 
 const USAGE = `usage: runner.ts [--tb-root PATH] <command> [options]
 
@@ -46,7 +48,9 @@ commands:
               [--plateau-ab-k K] [--plateau-trial-k K]
   squad-def-init
   roles-render  --project PATH [--role R]... [--pin LAYER=vN]... [--force]
-  roles-import  --from DIR [--role R]... [--force] [--map SRC=DEST1,DEST2]...`
+  roles-import  --from DIR [--role R]... [--force] [--map SRC=DEST1,DEST2]...
+  role-run      --project PATH --role R [--model M] [--node-path P] [--slice-id S]
+                [--timeout-sec N] [--json] (--input-file F | "input")`
 
 function printUsage(): void {
   console.error(USAGE)
@@ -684,6 +688,94 @@ function parseRolesImportArgs(argv: string[]): RolesImportArgs | null {
   return out as RolesImportArgs
 }
 
+interface RoleRunCliArgs {
+  project: string
+  role: string
+  model?: string
+  nodePath?: string
+  sliceId?: string
+  timeoutSec?: number
+  json?: boolean
+  inputFile?: string
+  input?: string
+}
+
+function parseRoleRunArgs(argv: string[]): RoleRunCliArgs | null {
+  const out: Partial<RoleRunCliArgs> = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--project") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.project = v
+      i += 2
+      continue
+    }
+    if (a === "--role") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.role = v
+      i += 2
+      continue
+    }
+    if (a === "--model") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.model = v
+      i += 2
+      continue
+    }
+    if (a === "--node-path") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.nodePath = v
+      i += 2
+      continue
+    }
+    if (a === "--slice-id") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.sliceId = v
+      i += 2
+      continue
+    }
+    if (a === "--timeout-sec") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.timeoutSec = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--json") {
+      out.json = true
+      i++
+      continue
+    }
+    if (a === "--input-file") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.inputFile = v
+      i += 2
+      continue
+    }
+    // Sole positional: the input string. Only one is accepted (matches the
+    // brief's `"input"` singular positional — a caller passes it as one
+    // already-quoted argv element, same convention role-run's other single-
+    // value flags use).
+    if (out.input === undefined) {
+      out.input = a
+      i++
+      continue
+    }
+    return null
+  }
+  if (out.project === undefined || out.role === undefined) return null
+  // Exactly one of --input-file / positional input must be given.
+  if ((out.inputFile === undefined) === (out.input === undefined)) return null
+  return out as RoleRunCliArgs
+}
+
 export async function main(argv: string[]): Promise<number> {
   try {
     const global = extractTbRoot(argv)
@@ -784,6 +876,25 @@ export async function main(argv: string[]): Promise<number> {
           return 2
         }
         cmdRolesImport(rolesImportArgs)
+        return 0
+      }
+      case "role-run": {
+        const roleRunArgs = parseRoleRunArgs(subArgs)
+        if (roleRunArgs === null) {
+          printUsage()
+          return 2
+        }
+        const input = roleRunArgs.inputFile !== undefined ? readFileSync(roleRunArgs.inputFile, "utf-8") : roleRunArgs.input!
+        await cmdRoleRun({
+          project: roleRunArgs.project,
+          role: roleRunArgs.role,
+          input,
+          model: roleRunArgs.model,
+          nodePath: roleRunArgs.nodePath,
+          sliceId: roleRunArgs.sliceId,
+          timeoutSec: roleRunArgs.timeoutSec,
+          json: roleRunArgs.json,
+        })
         return 0
       }
       default:

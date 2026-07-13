@@ -1,0 +1,3 @@
+{"type":"tool_use","sessionID":"ses_single0001","part":{"tool":"bash","state":{"input":"echo hi","output":"hi","status":"completed","metadata":{"exit":0}}}}
+{"type":"text","sessionID":"ses_single0001","text":"## Use Cases\n- UC1: greet the caller\n\n## Functional Spec\n- prints a friendly greeting to stdout"}
+{"type":"step_finish","sessionID":"ses_single0001","part":{"reason":"stop","tokens":{"input":50,"output":80},"cost":0.0011}}
