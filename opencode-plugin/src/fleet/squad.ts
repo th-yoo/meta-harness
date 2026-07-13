@@ -85,11 +85,15 @@ function inputFor(phase: Phase, state: SquadState, def: SquadDef): string {
   }
 }
 
-/** Wire slot each driving phase's payload is linted against. `def.wire.
- * headings`/`SquadDef.slots` are keyed by the 4 role slots, not the 5
- * driving phases — evaluator-spec and evaluator-verdict share the
- * "evaluator" slot, including its R1 redo counter. gate1/gate2/done never
- * reach this function (see squadStep). */
+/** Collapsed wire slot each driving phase rolls up to for R1 redo-counter
+ * purposes — evaluator-spec and evaluator-verdict share the "evaluator"
+ * slot's counter even though (task-9 fix) they no longer share its LINT
+ * key: squadStep looks up `def.wire.headings[phase]` first (the
+ * phase-specific "evaluator-spec"/"evaluator-verdict" overrides) and only
+ * falls back to this collapsed slot if the def doesn't teach one. `def.wire.
+ * headings`'s role-level "evaluator" entry is the render-lint contract (see
+ * squad-def.ts). gate1/gate2/done never reach this function (see
+ * squadStep). */
 function wireSlotFor(phase: Phase): string {
   switch (phase) {
     case "analyzer": return "analyzer"
@@ -163,6 +167,12 @@ export async function squadStep(
   }
 
   const wireSlot = wireSlotFor(s.phase)
+  // Lint key: phase-specific override if the squad def teaches one (task-9
+  // live-smoke fix — evaluator-spec/evaluator-verdict have different wire
+  // contracts and must not lint-pass via each other's OR-group), else the
+  // collapsed slot. R1 counters stay keyed by the collapsed slot below —
+  // only the lint LOOKUP is phase-aware.
+  const lintKey = def.wire.headings[s.phase] ? s.phase : wireSlot
   const { id, payload } = await drive(s.phase, inputFor(s.phase, s, def), s.sliceId)
 
   // detectEscalation FIRST — Refused/Infeasible/Exhausted/Clarify/
@@ -174,7 +184,7 @@ export async function squadStep(
     return { state: s, outcome: { status: "escalation", escalation } }
   }
 
-  const lint = lintPayload(def, wireSlot, payload)
+  const lint = lintPayload(def, lintKey, payload)
   if (!lint.ok) {
     await score(id, "bad", "lint")
     s.history.push({ phase: s.phase, event: "lint-fail", id })

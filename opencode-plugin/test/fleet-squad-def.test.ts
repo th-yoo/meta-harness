@@ -79,6 +79,25 @@ describe("wire lint", () => {
   test("analyzer Clarify alone also satisfies the OR-group contract", () => {
     expect(lintPayload(STANDARD_SQUAD, "analyzer", "## Clarify\nwhich db?").ok).toBe(true)
   })
+
+  test("STANDARD_SQUAD carries phase-specific evaluator overrides alongside the role-level entry", () => {
+    expect(STANDARD_SQUAD.wire.headings["evaluator"]).toEqual([["## Test Spec"], ["VERDICT:"]])
+    expect(STANDARD_SQUAD.wire.headings["evaluator-spec"]).toEqual([["## Test Spec"]])
+    expect(STANDARD_SQUAD.wire.headings["evaluator-verdict"]).toEqual([["VERDICT:"]])
+  })
+
+  test("evaluator-verdict lint key fails a spec-only payload (live-smoke finding)", () => {
+    const specOnly = "## Test Spec\nran\nno verdict line here"
+    const bad = lintPayload(STANDARD_SQUAD, "evaluator-verdict", specOnly)
+    expect(bad.ok).toBe(false)
+    // Would have passed under the old collapsed "evaluator" key, since that
+    // key's OR-group is satisfied by "## Test Spec" alone.
+    expect(lintPayload(STANDARD_SQUAD, "evaluator", specOnly).ok).toBe(true)
+  })
+
+  test("evaluator-verdict lint key passes a proper VERDICT payload", () => {
+    expect(lintPayload(STANDARD_SQUAD, "evaluator-verdict", "VERDICT: PASS").ok).toBe(true)
+  })
 })
 
 describe("escalations + verdict", () => {

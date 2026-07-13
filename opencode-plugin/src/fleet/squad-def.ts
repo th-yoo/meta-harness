@@ -43,7 +43,16 @@ export const STANDARD_SQUAD: SquadDef = {
       analyzer:    [["## Use Cases", "## Functional Spec"], ["## Clarify"]],
       designer:    [["## Alternatives", "## Recommended"]],
       implementer: [["## Implementation Report"]],
+      // Role-level contract (used by render.ts's persona-body lint, which
+      // lints the whole persona by ROLE and must stay satisfied whichever
+      // mode the body teaches): either mode's heading is acceptable.
       evaluator:   [["## Test Spec"], ["VERDICT:"]],
+      // Phase-specific overrides (squad.ts's live-drive lint, task-9 fix):
+      // the evaluator plays two MODES with different contracts — a
+      // verdict-mode payload that re-emits a test spec (no VERDICT line)
+      // must NOT lint-pass by satisfying the OTHER mode's OR-group.
+      "evaluator-spec":    [["## Test Spec"]],
+      "evaluator-verdict": [["VERDICT:"]],
     },
     verdictRe: "^VERDICT: (PASS|FAIL)(?: cause=(impl|design|intent))?\\s*$",
   },

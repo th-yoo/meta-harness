@@ -32,6 +32,35 @@ describe("squad runner", () => {
     expect(scores.some((s) => s.gate === "lint" && s.verdict === "bad")).toBe(true)
   })
 
+  test("evaluator-verdict spec-only payload (no VERDICT line) lint-fails immediately, not via unparseable-verdict; retries within R1 then passes", async () => {
+    // Live-smoke finding (task-9): a verdict-mode payload that re-emits a
+    // test spec (no VERDICT line) used to lint-PASS via the collapsed
+    // "evaluator" slot's spec-mode OR-group, reach parseVerdict, fail there
+    // (unparseable), and only THEN get scored bad — i.e. two "lint-ok"
+    // history entries for the bad attempt's phase, never a "lint-fail". The
+    // phase-aware lint key ("evaluator-verdict": [["VERDICT:"]]) must catch
+    // this at the wire-lint gate instead, before parseVerdict ever runs.
+    const specOnly = "## Test Spec\nran\nno verdict line here"
+    const { drive, score, scores } = scripted({
+      "evaluator-verdict": [specOnly, OK["evaluator-verdict"]!],
+    })
+    const { state, outcome } = await runSquad(newSquadState("s3v", "x"), AUTO, drive, score)
+    expect(outcome.status).toBe("done")
+
+    const evVerdictEvents = state.history
+      .filter((h) => h.phase === "evaluator-verdict")
+      .map((h) => h.event)
+    expect(evVerdictEvents).toEqual(["lint-fail", "lint-ok"])
+
+    // Scored bad/lint for the first (spec-only) attempt's own id.
+    const badLint = scores.find((s) => s.gate === "lint" && s.verdict === "bad")
+    expect(badLint).toBeDefined()
+    expect(badLint!.id).toContain("evaluator-verdict")
+    // R1 exhaustion never triggered — this was a within-bound retry, not an
+    // escalation.
+    expect(state.counters.r1["evaluator"]).toBe(1)
+  })
+
   test("VERDICT FAIL-impl loops implementer within R3 then passes", async () => {
     const { drive, score, scores } = scripted({
       "evaluator-verdict": ["## Test Spec\nx\nVERDICT: FAIL cause=impl", OK["evaluator-verdict"]!],
