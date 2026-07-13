@@ -10,6 +10,7 @@ import {
   activateCandidate,
   createCandidate,
   readScore,
+  readTrajectory,
   writeActive,
 } from "../src/harness-store.ts" // real reader name — score.json accessor
 
@@ -68,5 +69,30 @@ describe("role-score", () => {
   test("Refused payload is never scored", async () => {
     writePending({ ...basePending("ses_c3", "## Refused\nharmful"), project })
     await expect(cmdRoleScore({ project, id: "ses_c3", verdict: "bad" })).rejects.toThrow(/never scored/)
+  })
+
+  test("bad verdict normalizes raw NDJSON events before writing the trajectory (not empty SAY lines)", async () => {
+    const root = accountRoleRoot("mh-analyzer")
+    createCandidate(root, "v1", "analyzer v1 body")
+    writeActive(root, "v1", "analyzer v1 body")
+
+    // Raw opencode NDJSON tool_use event shape (run.ts's parseNdjsonLines
+    // output) — NOT the compact TrajEvent shape. Before the fix this was
+    // cast straight through and collapsed to an empty "SAY: " line.
+    const rawEvents = [
+      {
+        type: "tool_use",
+        sessionID: "ses_d4",
+        part: { tool: "bash", state: { status: "completed", input: "ls -la", output: "file1\nfile2" } },
+      },
+    ]
+    writePending({ ...basePending("ses_d4"), project, events: rawEvents })
+    await cmdRoleScore({ project, id: "ses_d4", verdict: "bad", gate: "verdict" })
+
+    const traj = readTrajectory(root, "v1", "ses_d4")
+    expect(traj.length).toBe(1)
+    // Compact TrajEvent shape with the tool name intact — not a raw event
+    // (which has no `.t`) collapsing to `{ t: undefined }` → "SAY: ".
+    expect(traj[0]).toMatchObject({ t: "tool", tool: "bash", args: "ls -la", output: "file1\nfile2", error: false })
   })
 })

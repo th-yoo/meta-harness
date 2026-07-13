@@ -20,14 +20,22 @@
  *    harness-store.ts's compact `TrajEvent` (`{t, tool, args, output, error,
  *    text}`) shape `recordToStores` types its `events` param as.
  *    `recordToStores` only ever writes a trajectory file for a FAILED
- *    session (its own `saveTraj` gate, record.ts:305), so this shape
- *    mismatch never corrupts a passing score's on-disk trace; the raw events
- *    are still JSON-serializable and worth keeping as failure forensics, so
- *    they're passed through with a type-only cast rather than dropped.
+ *    session (its own `saveTraj` gate, record.ts:305) — i.e. exactly the
+ *    case that matters most for forensics. Raw events passed straight
+ *    through were NOT harmless: every consumer of a written trajectory
+ *    (harness-store.ts's `fmtTrajEvent`, `buildFailureExcerpts` →
+ *    propose.ts:583, judge-audit.ts) assumes the compact `TrajEvent` shape,
+ *    so a raw tool_use event (no `.t`) rendered as an empty `SAY: ` line —
+ *    malformed proposer/judge-audit input with the error signal silently
+ *    dropped on every BAD verdict. `toTrajEvents` below fixes this by
+ *    reusing drivers/opencode.ts's `normalizeEvents` (the same
+ *    tool_use/text/error branches the live opencode driver uses to build
+ *    `TrajEvent`s from NDJSON) instead of casting raw events through.
  */
 import { archivePending, readPending } from "./pending.ts"
 import { detectEscalation } from "./squad-def.ts"
 import { recordToStores } from "../bench/record.ts"
+import { normalizeEvents } from "../bench/drivers/opencode.ts"
 import { die, log } from "../bench/util.ts"
 import type { ToolUsage, TrajEvent } from "../harness-store.ts"
 
@@ -44,6 +52,18 @@ function toToolUsage(counts: Record<string, number>): ToolUsage {
   const out: ToolUsage = {}
   for (const [tool, calls] of Object.entries(counts)) out[tool] = { calls, errors: 0 }
   return out
+}
+
+/** Normalize `FleetPendingSession.events` (raw, already-parsed opencode
+ * NDJSON events) into harness-store.ts's compact TrajEvent shape, by
+ * re-serializing to NDJSON text and feeding it through
+ * drivers/opencode.ts's `normalizeEvents` — the exact same tool_use/text/
+ * error branches the live driver uses, so a written trajectory (BAD verdict
+ * only, see file header) round-trips through the same shape every other
+ * consumer (fmtTrajEvent, buildFailureExcerpts, judge-audit.ts) expects. */
+function toTrajEvents(events: unknown[]): TrajEvent[] {
+  const ndjson = events.map((e) => JSON.stringify(e)).join("\n")
+  return normalizeEvents(ndjson)
 }
 
 export async function cmdRoleScore(args: {
@@ -91,7 +111,7 @@ export async function cmdRoleScore(args: {
     pending.agent,
     pins,
     env,
-    pending.events as unknown as TrajEvent[],
+    toTrajEvents(pending.events),
     false,
   )
   archivePending(args.project, args.id)
