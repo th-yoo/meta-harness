@@ -32,7 +32,7 @@ import {
   type SquadOutcome,
   type SquadState,
 } from "./squad.ts"
-import { cmdRoleRun } from "./run.ts"
+import { cmdRoleRun, type ExecFn } from "./run.ts"
 import { cmdRoleScore, type FleetGate } from "./score.ts"
 import { die, writeJsonAtomic } from "../bench/util.ts"
 
@@ -82,10 +82,30 @@ export async function cmdSquadRun(
     gateAnswer?: string
     gatePolicy?: "root-human" | "auto"
     squadType?: string
+    /** Flat per-squad model override (cli.ts's `--model`), forwarded
+     * verbatim into every `cmdRoleRun` call the default DriveFn makes below.
+     * Undefined (the default) leaves each role's own `spec.model` tiering
+     * untouched — same fallback `cmdRoleRun` itself already does
+     * (`args.model ?? spec.model`, run.ts:203). A flat override COLLAPSES
+     * that per-role tiering onto one model for every role when set; that's
+     * the accepted tradeoff for a single override (a per-role map is a
+     * bigger, deferred design). */
+    model?: string
     json?: boolean
   },
   driveFn?: DriveFn,
   scoreFn?: ScoreFn,
+  /** Test-only seam: threaded into the default (non-injected) DriveFn's
+   * `cmdRoleRun` call in place of `cmdRoleRun`'s own real default
+   * (`bench/exec.ts`'s `runHost`, a genuine host spawn). Never passed by any
+   * real (non-test) caller — `cli.ts`'s squad-run case calls `cmdSquadRun`
+   * with just the args object, so prod behavior is byte-identical to before
+   * this param existed. Exists so tests can drive the REAL default DriveFn
+   * closure (including the `model` forwarding above) hermetically, the same
+   * way `fleet-e2e.test.ts` already injects an `ExecFn` through
+   * `cmdRoleRun` directly — without duplicating this closure's logic in
+   * test code or resorting to module mocking. */
+  execFn?: ExecFn,
 ): Promise<SquadOutcome> {
   let def: SquadDef = readActiveSquadDef(args.squadType ?? "standard")
   // root-human (default) is an instance-position override (spec §1.5 rule
@@ -99,17 +119,21 @@ export async function cmdSquadRun(
     driveFn ??
     (async (phase, input, sliceId) => {
       const role = roleForPhase(phase)
-      const r = await cmdRoleRun({
-        project: args.project,
-        role,
-        input,
-        sliceId,
-        nodePath: `root/${sliceId}/${phase}`,
-        // Each squad-run outcome drives several role-runs; only the final
-        // outcome JSON (cmdSquadRun's own console.log below) should land on
-        // stdout, or it's not machine-parseable (task-8 concern #3).
-        silent: true,
-      })
+      const r = await cmdRoleRun(
+        {
+          project: args.project,
+          role,
+          input,
+          model: args.model,
+          sliceId,
+          nodePath: `root/${sliceId}/${phase}`,
+          // Each squad-run outcome drives several role-runs; only the final
+          // outcome JSON (cmdSquadRun's own console.log below) should land
+          // on stdout, or it's not machine-parseable (task-8 concern #3).
+          silent: true,
+        },
+        execFn,
+      )
       return { id: r.id, payload: r.payload }
     })
   const score: ScoreFn =

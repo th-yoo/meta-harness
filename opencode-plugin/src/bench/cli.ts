@@ -57,7 +57,7 @@ commands:
                 [--gate gate1|gate2|verdict|merge|lint|infeasible]
   squad-run     --project PATH --slice-id S (--slice "text" | --slice-file F)
                 [--resume --gate-answer approve|revise]
-                [--gate-policy root-human|auto] [--squad-type T] [--json]`
+                [--gate-policy root-human|auto] [--squad-type T] [--model M] [--json]`
 
 function printUsage(): void {
   console.error(USAGE)
@@ -855,10 +855,22 @@ interface SquadRunCliArgs {
   gateAnswer?: string
   gatePolicy?: "root-human" | "auto"
   squadType?: string
+  /** Flat per-squad model override, forwarded verbatim into every
+   * `cmdRoleRun` call the drive makes for this squad-run invocation (see
+   * squad-cli.ts's default `DriveFn`). This COLLAPSES the per-role model
+   * tiering (haiku analyzer/evaluator, sonnet designer/implementer,
+   * roles.ts's `spec.model`) onto a single model for every role when set —
+   * a single flat flag can't express a per-role map. That's the accepted
+   * tradeoff for this override; a per-role map (e.g. `--model-map
+   * analyzer=haiku,...`) is a bigger, deferred design. Omitted (undefined)
+   * preserves the existing per-role tiering unchanged, same as `role-run`'s
+   * own `--model` (cli.ts's role-run case, run.ts:203 `args.model ??
+   * spec.model`). */
+  model?: string
   json?: boolean
 }
 
-function parseSquadRunArgs(argv: string[]): SquadRunCliArgs | null {
+export function parseSquadRunArgs(argv: string[]): SquadRunCliArgs | null {
   const out: Partial<SquadRunCliArgs> = {}
   let i = 0
   while (i < argv.length) {
@@ -914,6 +926,13 @@ function parseSquadRunArgs(argv: string[]): SquadRunCliArgs | null {
       const v = argv[i + 1]
       if (v === undefined) return null
       out.squadType = v
+      i += 2
+      continue
+    }
+    if (a === "--model") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.model = v
       i += 2
       continue
     }
@@ -1085,6 +1104,7 @@ export async function main(argv: string[]): Promise<number> {
           gateAnswer: squadRunArgs.gateAnswer,
           gatePolicy: squadRunArgs.gatePolicy,
           squadType: squadRunArgs.squadType,
+          model: squadRunArgs.model,
           json: squadRunArgs.json,
         })
         return 0
