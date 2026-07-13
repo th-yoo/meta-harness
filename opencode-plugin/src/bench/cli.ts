@@ -22,6 +22,7 @@ import { writeSquadDefV1, STANDARD_SQUAD } from "../fleet/squad-def.ts"
 import { cmdRolesRender } from "../fleet/render.ts"
 import { cmdRolesImport } from "../fleet/import.ts"
 import { cmdRoleRun } from "../fleet/run.ts"
+import { cmdRoleScore, FLEET_GATES, type FleetGate } from "../fleet/score.ts"
 
 const USAGE = `usage: runner.ts [--tb-root PATH] <command> [options]
 
@@ -50,7 +51,9 @@ commands:
   roles-render  --project PATH [--role R]... [--pin LAYER=vN]... [--force]
   roles-import  --from DIR [--role R]... [--force] [--map SRC=DEST1,DEST2]...
   role-run      --project PATH --role R [--model M] [--node-path P] [--slice-id S]
-                [--timeout-sec N] [--json] (--input-file F | "input")`
+                [--timeout-sec N] [--json] (--input-file F | "input")
+  role-score    --project PATH --id ID good|bad [--note S] [--node-path P]
+                [--gate gate1|gate2|verdict|merge|lint|infeasible]`
 
 function printUsage(): void {
   console.error(USAGE)
@@ -776,6 +779,69 @@ function parseRoleRunArgs(argv: string[]): RoleRunCliArgs | null {
   return out as RoleRunCliArgs
 }
 
+interface RoleScoreCliArgs {
+  project: string
+  id: string
+  verdict: "good" | "bad"
+  note?: string
+  nodePath?: string
+  gate?: FleetGate
+}
+
+function parseRoleScoreArgs(argv: string[]): RoleScoreCliArgs | null {
+  const out: Partial<RoleScoreCliArgs> = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--project") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.project = v
+      i += 2
+      continue
+    }
+    if (a === "--id") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.id = v
+      i += 2
+      continue
+    }
+    if (a === "--note") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.note = v
+      i += 2
+      continue
+    }
+    if (a === "--node-path") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.nodePath = v
+      i += 2
+      continue
+    }
+    if (a === "--gate") {
+      const v = argv[i + 1]
+      if (v === undefined || !(FLEET_GATES as string[]).includes(v)) return null
+      out.gate = v as FleetGate
+      i += 2
+      continue
+    }
+    // Sole positional: the verdict, "good" or "bad" (matches role-run's
+    // single-positional convention).
+    if (out.verdict === undefined) {
+      if (a !== "good" && a !== "bad") return null
+      out.verdict = a
+      i++
+      continue
+    }
+    return null
+  }
+  if (out.project === undefined || out.id === undefined || out.verdict === undefined) return null
+  return out as RoleScoreCliArgs
+}
+
 export async function main(argv: string[]): Promise<number> {
   try {
     const global = extractTbRoot(argv)
@@ -894,6 +960,22 @@ export async function main(argv: string[]): Promise<number> {
           sliceId: roleRunArgs.sliceId,
           timeoutSec: roleRunArgs.timeoutSec,
           json: roleRunArgs.json,
+        })
+        return 0
+      }
+      case "role-score": {
+        const roleScoreArgs = parseRoleScoreArgs(subArgs)
+        if (roleScoreArgs === null) {
+          printUsage()
+          return 2
+        }
+        await cmdRoleScore({
+          project: roleScoreArgs.project,
+          id: roleScoreArgs.id,
+          verdict: roleScoreArgs.verdict,
+          note: roleScoreArgs.note,
+          nodePath: roleScoreArgs.nodePath,
+          gate: roleScoreArgs.gate,
         })
         return 0
       }
