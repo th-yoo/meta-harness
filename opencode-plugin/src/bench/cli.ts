@@ -37,13 +37,15 @@ commands:
   run         [--tasks TASK [TASK ...]] [--task-file PATH] [--all]
               [--model ID] [--variant V] [--k N] [--layers global|account|project|none]
               [--no-store] [--save-all-traj] [--self-check] [--no-harness] [--results-file PATH]
-              [--label NAME] [--max-agent-timeout SEC] [--resume] [--agent NAME]
+              [--label NAME] [--max-agent-timeout SEC] [--max-verifier-timeout SEC]
+              [--resume] [--agent NAME]
               [--pin LAYER=vN]... [--staging scripts|runtime] [--driver ID]
   ab          --layer L --candidate vN [--tasks TASK [TASK ...]] [--task-file PATH]
               [--all] [--split-file PATH] [--model ID] [--variant V] [--k N]
               [--layers global|account|project] [--agent NAME] [--alpha F]
               [--nonregress-margin F] [--min-tasks-before-stop N] [--no-early-stop]
-              [--max-agent-timeout SEC] [--resume] [--no-store] [--save-all-traj]
+              [--max-agent-timeout SEC] [--max-verifier-timeout SEC] [--resume]
+              [--no-store] [--save-all-traj]
               [--results-file PATH] [--staging scripts|runtime] [--driver ID]
   judge-audit --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
   split       make|rotate|show [--seed N] [--folds N] [--source FILE]
@@ -260,6 +262,13 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
       i += 2
       continue
     }
+    if (a === "--max-verifier-timeout") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.maxVerifierTimeout = Number(v)
+      i += 2
+      continue
+    }
     if (a === "--resume") {
       out.resume = true
       i++
@@ -409,6 +418,13 @@ function parseAbArgs(argv: string[]): CmdAbArgs | null {
       const v = argv[i + 1]
       if (v === undefined) return null
       out.maxAgentTimeout = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--max-verifier-timeout") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.maxVerifierTimeout = Number(v)
       i += 2
       continue
     }

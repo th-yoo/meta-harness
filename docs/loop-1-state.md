@@ -43,7 +43,15 @@ Defaults: alpha 0.05, nonregress-margin 0.05, min-tasks-before-stop 12, early-st
 
 **On the MacBook, to run `ab` you need v1 in its store. Either:** (a) `scp -r ~/.config/meta-harness` from this host to the MacBook (fastest — carries v0 diet + v1); or (b) re-run the loop from the git-tracked split: store-writing band run → `/mh-propose account` (re-derives a v1 from fresh trajectories — will differ). Option (a) preserves THIS v1.
 
-## BUG — `--max-agent-timeout` does NOT bound total attempt time (found 2026-07-14, ab smoke)
+## BUG — `--max-agent-timeout` does NOT bound total attempt time (found 2026-07-14, ab smoke) — FIXED 2026-07-15
+
+**FIXED:** added `--max-verifier-timeout SEC`, threaded exactly as the fix sketch below
+(`cli.ts` parse for both run+ab, `tasks.ts` `taskTimeouts` gains an optional
+`maxVerifierTimeout` param that caps `verifierTimeout` with a `capping verifier timeout
+Xs → Ys` log, `cmd-run.ts`/`cmd-ab.ts` pass-through). Optional (default 0 = uncapped)
+so every existing caller is byte-unchanged. To bound an attempt now, pass BOTH:
+`--max-agent-timeout 600 --max-verifier-timeout 300` → attempt ≤ ~900s. Tests:
+`bench-oracle-unit.test.ts` (verifier cap + uncapped-when-0). Original analysis below.
 
 `taskTimeouts` (`opencode-plugin/src/bench/tasks.ts:120-134`) applies `maxAgentTimeout`
 to the **agent only** (`:129-132`); `verifierTimeout` (`:127`, from `task.toml`

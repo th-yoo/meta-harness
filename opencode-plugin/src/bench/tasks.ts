@@ -121,6 +121,7 @@ export function taskTimeouts(
   paths: BenchPaths,
   task: string,
   maxAgentTimeout: number,
+  maxVerifierTimeout = 0,
 ): { agentTimeout: number; verifierTimeout: number } {
   const tomlPath = join(paths.tbRoot, task, "task.toml")
   let doc: TaskToml | undefined
@@ -134,11 +135,15 @@ export function taskTimeouts(
   const agentRaw = doc?.agent?.timeout_sec
   const verifierRaw = doc?.verifier?.timeout_sec
   let agentTimeout = typeof agentRaw === "number" && agentRaw ? agentRaw : 900
-  const verifierTimeout = typeof verifierRaw === "number" && verifierRaw ? verifierRaw : 300
+  let verifierTimeout = typeof verifierRaw === "number" && verifierRaw ? verifierRaw : 300
 
   if (maxAgentTimeout && agentTimeout > maxAgentTimeout) {
     log(`  capping agent timeout ${pyFixed(agentTimeout, 0)}s → ${pyFixed(maxAgentTimeout, 0)}s`)
     agentTimeout = maxAgentTimeout
+  }
+  if (maxVerifierTimeout && verifierTimeout > maxVerifierTimeout) {
+    log(`  capping verifier timeout ${pyFixed(verifierTimeout, 0)}s → ${pyFixed(maxVerifierTimeout, 0)}s`)
+    verifierTimeout = maxVerifierTimeout
   }
   return { agentTimeout, verifierTimeout }
 }

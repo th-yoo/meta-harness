@@ -179,6 +179,33 @@ test("taskTimeouts: caps agent timeout and logs the Python-parity capping messag
   }
 })
 
+test("taskTimeouts: caps verifier timeout and logs the capping message", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "vcapped"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "vcapped", "task.toml"), "[verifier]\ntimeout_sec = 1200\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const result = taskTimeouts(paths, "vcapped", 0, 600)
+    expect(result).toEqual({ agentTimeout: 900, verifierTimeout: 600 })
+    const messages = errSpy.mock.calls.map((c) => c[0])
+    expect(messages).toContain("  capping verifier timeout 1200s → 600s")
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("taskTimeouts: maxVerifierTimeout of 0 means verifier uncapped", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "vuncapped"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "vuncapped", "task.toml"), "[verifier]\ntimeout_sec = 1200\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  expect(taskTimeouts(paths, "vuncapped", 0, 0)).toEqual({ agentTimeout: 900, verifierTimeout: 1200 })
+})
+
 test("taskTimeouts: maxAgentTimeout of 0 means uncapped", () => {
   const dir = tmpDir()
   const tbRoot = path.join(dir, "tb-root")

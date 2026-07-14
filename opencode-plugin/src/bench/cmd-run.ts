@@ -287,6 +287,7 @@ export interface CmdRunArgs {
   resultsFile?: string
   label?: string
   maxAgentTimeout?: number
+  maxVerifierTimeout?: number
   resume?: boolean
   agent?: string
   pin?: string[]
@@ -317,6 +318,7 @@ export async function cmdRun(
   const agent = args.agent || ""
   const staging = args.staging ?? "runtime"
   const maxAgentTimeout = args.maxAgentTimeout ?? 0
+  const maxVerifierTimeout = args.maxVerifierTimeout ?? 0
   const driver = getDriver(args.driver ?? "opencode")
 
   if (args.pin && args.pin.length > 0 && (args.noHarness || layers === "none")) {
@@ -378,7 +380,7 @@ export async function cmdRun(
       continue
     }
     log(`\n=== Task: ${task} ===`)
-    const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout)
+    const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout)
 
     taskAgg[task] = { rewards: [], elapsed: [], turns: [], errors: [], ...(selfCheckOn ? { selfScores: [] } : {}) }
 

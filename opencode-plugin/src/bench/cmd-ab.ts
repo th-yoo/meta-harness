@@ -80,6 +80,7 @@ export interface CmdAbArgs {
   minTasksBeforeStop?: number
   noEarlyStop?: boolean
   maxAgentTimeout?: number
+  maxVerifierTimeout?: number
   resume?: boolean
   noStore?: boolean
   saveAllTraj?: boolean
@@ -108,6 +109,7 @@ export async function cmdAb(
   const noStore = Boolean(args.noStore)
   const staging = args.staging ?? "runtime"
   const maxAgentTimeout = args.maxAgentTimeout ?? 0
+  const maxVerifierTimeout = args.maxVerifierTimeout ?? 0
   const driver = getDriver(args.driver ?? "opencode")
 
   if (!/^v\d+$/.test(candidate)) die(`--candidate must look like vN, got '${candidate}'`)
@@ -305,7 +307,7 @@ export async function cmdAb(
         continue
       }
       log(`\n=== ab ${task} [${phase}]: ${candidate} vs active ${baseline} ===`)
-      const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout)
+      const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout)
       const tr: AbTaskResult = { candidate: [], active: [], phase, sentinel: sentinelSet.has(task) }
 
       for (let ki = 0; ki < k; ki++) {
