@@ -19,16 +19,19 @@ Landed overnight 2026-07-15→16 (MacBook, pushed to `main`):
   `explicitly-not-now.md` §2.4). Raw extraction scratch: `.superpowers/sdd/mining/`
   (host-local, MacBook). Seed corpus is measure-first: do NOT hand-seed until
   loop-1's ab shows what propose finds on its own.
-- **Phase-0 self-score correlation run IN FLIGHT** (best-of-k gate; MacBook,
-  detached): 43 baseline tasks × k=1 haiku with `--self-check`,
-  `term-bench2/results/phase0-selfscore-haiku.json` (+ log in `term-bench2/logs/`).
-  Mechanism proven live (AGENTS.md delivers instruction; one captured pair was
-  self=1.0/reward=0 — a false-positive self-report, exactly what Phase 0 measures).
-  CAVEAT: capture rate low so far (~1/7 — haiku often skips the self-check);
-  verdict via `bun term-bench2/runner.ts self-score-report --results-file
-  term-bench2/results/phase0-selfscore-haiku.json` — if n_selfpass < floor,
-  the finding is "capture rate too low", then strengthen the instruction and re-run
-  (deliberate revision, not mid-run surgery).
+- **Phase-0 self-score correlation run DONE** (best-of-k gate; MacBook, 2026-07-16
+  morning): 43 baseline tasks × k=1 haiku `--self-check` →
+  `term-bench2/results/phase0-selfscore-haiku.json`. **GATE: UNDERSIZED, not
+  predictive on current data** — pass@1 5/43 (11.6%); capture rate 11/43 (26%,
+  haiku usually skips the self-check); among captured pairs essentially every
+  self-claim is 1.0 (no variance), so score-value lift is only +2.7pp (30% vs
+  27.3% within-pairs base) with 7/10 self-PASS claims false-positive; N=11 < 30
+  floor. Per the plan's stopping rule: do NOT build the k-loop on this. Two real
+  findings: (1) the self-report VALUE is near-uninformative as-is; (2) writing a
+  self-check at ALL correlates with success (27.3% vs 6.3% for non-compliant
+  runs) — compliance is the stronger signal. NEXT (deliberate revision):
+  strengthen `SELF_CHECK_INSTRUCTION` (`opencode-plugin/src/bench/self-score.ts`)
+  to force compliance + honest fractions, then re-run the 43-task night.
 
 Landed 2026-07-15 (all pushed to `main`):
 - **Store is git-syncable** — `term-bench2/store-sync.sh` + `term-bench2/store/` snapshot (next section). No more scp.
