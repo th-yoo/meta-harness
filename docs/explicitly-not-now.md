@@ -152,6 +152,38 @@ proposer-LLM output compliance, which had to be observed first.
 | `/mh-status` doesn't surface `diagnosis.json` | Candidate `meta.json` already shows in status; diagnosis surfacing was judged redundant UI for now. | Diagnosis becomes hard-required (§4) — at that point it's first-class state worth showing. |
 | Proposer failure retrieval is importance×taxonomy-**diversity**, not semantic **similarity** (2026-07-14, `failure-retrieval.ts`) — no query-task, no embeddings, no vector store | Current regime = structured signals + coverage over a small corpus; §6 already rejects even SQLite; propose has no query task. | Retrieval becomes query-driven ("find failures whose *content* resembles THIS task/error") over a large corpus → add task-identity to `SessionRecord`, then **BUY not build** (see §6.1 pre-scoped candidates) — NOT a standalone vector DB, NOT from scratch. |
 
+### 5.05 Two memory/knowledge axes — keep separate
+
+The system has TWO distinct retrieval needs; do not conflate them:
+
+- **Experience memory** (past failures/outcomes, for the PROPOSER — "learn from
+  what failed"): structured ranker today (`failure-retrieval.ts`); semantic
+  upgrade pre-scoped in §6.1 (buy `mcp-memory-libsql`, gated).
+- **Domain knowledge** (facts/docs/code, for the WORKER agents — "know how to
+  do the task"): the row below.
+
+### 5.06 Domain-knowledge RAG for worker agents (evaluated 2026-07-14)
+
+| Consumer | Need it? | Why / mechanism |
+|---|---|---|
+| Benchmark agents (TB2 solvers) | **No** | Self-contained tasks + knowledgeable models; the paper's proven coding win was env-snapshot bootstrapping, not KB-retrieval (its RAG win was *math* reasoning — domain-gated, not TB2-coding). Adding a KB = infra + context cost for uncertain gain. |
+| Fleet squad on a REAL repo | **Yes, eventually — COMPOSE, don't build** | Wire existing retrieval MCPs into roles: **serena** (code RAG), **context7** (library-docs RAG), + optional project KB over the repo's own `docs/`. Nothing to build from scratch. |
+
+Key property: **which KB/tools each role gets is a per-role, EVOLVABLE config
+decision** (designer→docs-RAG, implementer→code-RAG, evaluator→both), living in
+each role's tools.md/agent-config + the target's MCP setup — tunable by the same
+loop that evolves role prompts. Not a monolithic "add RAG."
+
+**Gap today:** the fleet role manifest carries frontmatter/permission but no
+tools/KB surface, and targets run plugin-off — so *which MCP tools a squad role
+gets is undefined*. Deferred correctly (depth-1 demo used bare roles).
+
+**Reopen trigger:** the squad runs on a real repo (not a toy slice) → add a
+per-role MCP-tool/KB surface to the role manifest, wire serena/context7, and let
+selection find which roles actually benefit. Read LEGOMem (2510.04851,
+memory-landscape §4) first — modular per-role procedural+knowledge memory for
+multi-agent workflows is exactly this shape.
+
 ### 5.1 Fleet depth-1 deferrals (2026-07-13, from the squad E2E final review)
 
 Documented as v1 limitations in `docs/fleet-integration.md` §10; registered
