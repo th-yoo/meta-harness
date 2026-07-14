@@ -178,8 +178,8 @@ export function buildSquadProposerPrompt(type: string, active: SquadDef, staging
 
 You are proposing ONE candidate mutation of the '${type}' squad's FLOW KNOBS —
 never its structure. Whether an edge EXISTS is code's frozen decision; how
-often it fires, who approves, and what re-entry carries are flow's evolvable
-decisions. The squad def is this node's OWN evolvable artifact (§6): a
+often it fires and who approves are flow's evolvable decisions (\`reentry\` is
+frozen — see below). The squad def is this node's OWN evolvable artifact (§6): a
 \`done\` outcome is good fitness for it, an \`Exhausted\` escalation is bad.
 
 ## Active squad.json (version ${version}) — verbatim
@@ -205,20 +205,24 @@ ${membersSection}
 | \`bounds.R3\` | macro loop (FAIL-impl → Implementer) | 10 |
 | \`bounds.globalBudgetSteps\` | whole-squad hard cap (ping-pong backstop) | 14 |
 | \`gatePolicy.gate1\` / \`gatePolicy.gate2\` | who decides at each gate: \`"human"\` pauses for a person, \`"auto"\` auto-approves / auto-picks the recommended alternative | §3.4 |
-| \`reentry\` | \`"delta"\` — upstream re-entry carries {prior artifact + question}, expects a REVISION, not a rewrite; \`"full"\` — regenerate from scratch | §3.7-2 |
+
+**\`flow.reentry\` is FROZEN — do NOT propose a change to it.** The runner does
+not read \`reentry\` yet (dead knob), so mutating it changes nothing and is
+rejected. Copy \`reentry\` into your output UNCHANGED, exactly as it appears in
+the active def above.
 
 ## Your task
 
-Propose exactly ONE mutation of \`flow\` (bounds / gatePolicy / reentry) and
-nothing else. \`type\`, \`slots\`, and \`wire\` are FROZEN for this proposer —
-copy them into your output UNCHANGED, verbatim.
+Propose exactly ONE mutation of \`flow\` (\`bounds\` or \`gatePolicy\` — NOT
+\`reentry\`) and nothing else. \`type\`, \`slots\`, \`wire\`, and \`flow.reentry\`
+are FROZEN for this proposer — copy them into your output UNCHANGED, verbatim.
 
-Legal ranges (a mutation outside these is rejected outright, no candidate
-written):
+Legal ranges (a mutation outside these — or ANY change to a frozen field — is
+rejected outright, no candidate written):
 - \`bounds.R1\`, \`bounds.R2\`, \`bounds.R3\`: integers in [1, 10]
 - \`bounds.globalBudgetSteps\`: integer in [10, 200]
 - \`gatePolicy.gate1\`, \`gatePolicy.gate2\`: \`"human"\` | \`"auto"\`
-- \`reentry\`: \`"delta"\` | \`"full"\`
+- \`reentry\`: FROZEN — must stay \`"${active.flow.reentry}"\` (copy unchanged)
 
 ## Write the results
 
@@ -310,9 +314,17 @@ export function validateFlowMutation(active: SquadDef, proposed: SquadDef): { ok
     }
   }
 
-  const reentry = proposed.flow?.reentry
-  if (reentry !== "delta" && reentry !== "full") {
-    errors.push(`flow.reentry must be "delta" | "full" — got ${JSON.stringify(reentry)}`)
+  // reentry is FROZEN (dead knob — Fix 4): the runner (squad.ts) never reads
+  // `flow.reentry`, so evolving it changes fitness nothing while bloating the
+  // candidate space with meaningless mutations. Treat it exactly like
+  // type/slots/wire — it must be deep-equal to active — until the runner
+  // actually consumes it. The field stays in the schema (existing def.json
+  // remains valid); it is simply non-evolvable.
+  if (proposed.flow?.reentry !== active.flow.reentry) {
+    errors.push(
+      `flow.reentry is frozen (dead knob — the runner does not read it yet): ` +
+        `must equal active '${active.flow.reentry}', got ${JSON.stringify(proposed.flow?.reentry)}`,
+    )
   }
 
   return { ok: errors.length === 0, errors }
@@ -393,6 +405,15 @@ export async function cmdSquadPropose(
       )
     }
 
+    // Reject a no-op candidate (Fix 5): the only evolvable surface is `flow`
+    // (everything else is validated frozen-equal above), so an unchanged flow
+    // means the proposer produced the active def verbatim — nothing to trial,
+    // no version bump. Compared on `flow` alone so a stray `__version` key the
+    // model may have echoed from the active-def evidence can't mask it.
+    if (isDeepStrictEqual(proposed.flow, active.flow)) {
+      die(`squad-propose: no mutation proposed — the candidate is identical to the active '${type}' def`)
+    }
+
     const version = nextSquadVersion(type)
     writeJsonAtomic(join(squadRoot(type), "candidates", version, "squad.json"), proposed)
     if (existsSync(diagnosisPath)) {
@@ -404,5 +425,11 @@ export async function cmdSquadPropose(
   } finally {
     sbx?.cleanup()
     rmSync(scratch, { recursive: true, force: true })
+    // Fix 5: shred the .staging scratch (the proposed squad.json + its
+    // diagnosis) so the store's .staging/ dir doesn't accumulate litter across
+    // repeated propose runs — the candidate copy (if valid) already landed
+    // under candidates/<vN>/. Runs on every exit path (valid, invalid, timeout).
+    rmSync(stagingPath, { force: true })
+    rmSync(diagnosisPath, { force: true })
   }
 }

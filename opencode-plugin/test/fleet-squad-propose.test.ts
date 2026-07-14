@@ -156,7 +156,7 @@ describe("validateFlowMutation", () => {
     expect(errors.some((e) => /gatePolicy\.gate1/.test(e))).toBe(true)
   })
 
-  test("rejects a bad reentry enum", () => {
+  test("rejects a bad reentry value (frozen — Fix 4)", () => {
     const proposed = {
       ...STANDARD_SQUAD,
       flow: { ...STANDARD_SQUAD.flow, reentry: "whenever" },
@@ -164,6 +164,27 @@ describe("validateFlowMutation", () => {
     const { ok, errors } = validateFlowMutation(STANDARD_SQUAD, proposed)
     expect(ok).toBe(false)
     expect(errors.some((e) => /reentry/.test(e))).toBe(true)
+  })
+
+  test("rejects CHANGING reentry to the other valid enum — it is frozen, not evolvable (Fix 4)", () => {
+    // STANDARD_SQUAD.flow.reentry is "delta"; "full" is a valid enum value but
+    // the runner never reads reentry, so evolving it is a dead knob — frozen.
+    const proposed: SquadDef = {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, reentry: "full" },
+    }
+    const { ok, errors } = validateFlowMutation(STANDARD_SQUAD, proposed)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => /reentry.*frozen/i.test(e))).toBe(true)
+  })
+
+  test("accepts reentry left UNCHANGED alongside a real knob mutation (Fix 4)", () => {
+    const proposed: SquadDef = {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, reentry: "delta", bounds: { ...STANDARD_SQUAD.flow.bounds, R2: 2 } },
+    }
+    const { ok } = validateFlowMutation(STANDARD_SQUAD, proposed)
+    expect(ok).toBe(true)
   })
 
   test("multi-error: lists every violation at once, not just the first", () => {
@@ -201,7 +222,9 @@ describe("buildSquadProposerPrompt", () => {
     expect(prompt).toContain("bounds.R1")
     expect(prompt).toContain("bounds.globalBudgetSteps")
     expect(prompt).toContain("gatePolicy.gate1")
-    expect(prompt).toContain("reentry");
+    // Fix 4: reentry is still mentioned, but ONLY as a frozen/non-evolvable
+    // field — never taught as a knob to propose.
+    expect(prompt).toMatch(/reentry.*frozen/i)
     // B4: s1 passed → excluded from the failing-only list (was `toContain sliceId=s1`);
     // the pass/fail ratio line (#4) preserves the passed count instead.
     expect(prompt).toContain("1 done / 1 exhausted")
@@ -317,6 +340,35 @@ describe("cmdSquadPropose", () => {
     // sandbox files are gone once the call returns.
     expect(existsSync(seenOpts!.env!["GIT_CONFIG_GLOBAL"]!)).toBe(false)
     expect(existsSync(seenOpts!.env!["GH_CONFIG_DIR"]!)).toBe(false)
+  })
+
+  test("rejects an active-identical candidate — no mutation proposed, no version bump (Fix 5)", async () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    // The proposer writes back the active def verbatim (no flow change).
+    const execFn = fakeExecWriting(STANDARD_SQUAD)
+    await expect(cmdSquadPropose({}, execFn)).rejects.toThrow(/no.*mutation|identical/i)
+    // No candidate directory was created (active untouched, no v2).
+    expect(existsSync(join(squadRoot("standard"), "candidates", "v2"))).toBe(false)
+  })
+
+  test("cleans up its .staging scratch files in finally (Fix 5)", async () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    const mutated: SquadDef = {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, bounds: { ...STANDARD_SQUAD.flow.bounds, R1: 3 } },
+    }
+    let stagingPath = ""
+    const execFn: ExecFn = async (argv) => {
+      const prompt = argv[argv.length - 1]!
+      stagingPath = stagingPathFromPrompt(prompt)
+      writeFileSync(stagingPath, JSON.stringify(mutated, null, 2))
+      writeFileSync(`${stagingPath}.diagnosis.md`, "## Diagnosis\n\nx\n")
+      return { stdout: "", rc: 0 }
+    }
+    await cmdSquadPropose({}, execFn)
+    // The scratch staging files are gone — the store dir doesn't accumulate litter.
+    expect(existsSync(stagingPath)).toBe(false)
+    expect(existsSync(`${stagingPath}.diagnosis.md`)).toBe(false)
   })
 
   test("uses the given --squad-type (not just 'standard')", async () => {
