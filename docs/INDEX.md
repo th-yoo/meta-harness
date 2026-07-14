@@ -19,6 +19,7 @@ design state. Git is the backstop; `~/.claude/.../memory/MEMORY.md` points here.
 ## Capabilities / strategy
 - [capability-envelope.md](capability-envelope.md) — `discoverable = mutable ∩ benchmarked`: what the loop can/can't improve, the inner-loop gap map, and the reordered roadmap (search-with-verifier #1). Read before adding a deferral with an off-benchmark trigger.
 - [external-practices-openclaw.md](external-practices-openclaw.md) — mined OpenClaw "vibe coding" best practices → mapped to our system (mostly validates it) + a seed-bullet corpus for the proposer (test what propose discovers before hand-seeding). We add the selection gate they lack.
+- [external-prompts-cc-opencode.md](external-prompts-cc-opencode.md) — mined Claude Code / opencode / official-plugin prompts → a 22-bullet seed corpus tagged A–D × universal/vendor/model (deduped against opencode's common base) + 6 meta-prompt lessons for `buildProposerPrompt`/`judge-prompt.txt`. Same "measure before seeding" discipline; we add the selection gate they lack.
 
 ## Fleet / squad (the multi-agent builder)
 - [superpowers/specs/2026-07-13-fleet-squad-integration-design.md](superpowers/specs/2026-07-13-fleet-squad-integration-design.md) — **the design spec** (D1–D7 all decided): node grammar, SquadDef, flow state machine, escalation taxonomy, score routing, master boundary layer, repo boundary.
