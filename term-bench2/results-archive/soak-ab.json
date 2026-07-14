@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 2,
+  "layer": "project-global",
+  "candidate": "v1",
+  "baseline": "v0",
+  "activeFold": 0,
+  "splitHash": "f46cd353a062",
+  "decision": "inconclusive",
+  "winner": "tie",
+  "reasons": [
+    "held-in: delta=+0.000 p=1.000 (b=0,c=0,n=2)",
+    "held-out: delta=+0.000 p_active=1.000 (b=0,c=0,n=1)",
+    "inconclusive: held-in win not significant"
+  ],
+  "candidateRate": 0,
+  "activeRate": 0,
+  "nTasks": 3,
+  "k": 1,
+  "heldIn": {
+    "nTasks": 2,
+    "nPairs": 2,
+    "b": 0,
+    "c": 0,
+    "delta": 0,
+    "mcnemarP": 1,
+    "bootCI90": [
+      0,
+      0
+    ]
+  },
+  "heldOut": {
+    "nTasks": 1,
+    "nPairs": 1,
+    "b": 0,
+    "c": 0,
+    "delta": 0,
+    "mcnemarP": 1,
+    "bootCI90": [
+      0,
+      0
+    ]
+  },
+  "sentinels": null,
+  "earlyStopped": false,
+  "split": {
+    "file": "soak-split.json",
+    "activeFold": 0,
+    "heldIn": [
+      "regex-log",
+      "sqlite-db-truncate"
+    ],
+    "heldOut": [
+      "openssl-selfsigned-cert"
+    ],
+    "sentinels": []
+  },
+  "env": {
+    "opencodeVersion": "1.17.18",
+    "pluginSha": "3a99673",
+    "harnessHash": "ea3051f80efa9deb",
+    "maxAgentTimeout": 0,
+    "provider": "anthropic"
+  },
+  "taskResults": {
+    "regex-log": {
+      "candidate": [
+        0
+      ],
+      "active": [
+        0
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "sqlite-db-truncate": {
+      "candidate": [
+        0
+      ],
+      "active": [
+        0
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "openssl-selfsigned-cert": {
+      "candidate": [
+        0
+      ],
+      "active": [
+        0
+      ],
+      "phase": "held-out",
+      "sentinel": false
+    }
+  },
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "timestamp": "2026-07-11T23:38:24.869Z"
+}

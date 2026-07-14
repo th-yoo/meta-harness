@@ -1,0 +1,225 @@
+{
+  "label": "oracle",
+  "timestamp": "2026-07-11T10:23:55.925Z",
+  "n_pass": 38,
+  "n_total": 43,
+  "pass_rate": 0.8837,
+  "tasks": {
+    "adaptive-rejection-sampler": {
+      "reward": 1,
+      "elapsed": 44.9,
+      "error": ""
+    },
+    "cancel-async-tasks": {
+      "reward": 1,
+      "elapsed": 33.3,
+      "error": ""
+    },
+    "circuit-fibsqrt": {
+      "reward": 1,
+      "elapsed": 166,
+      "error": ""
+    },
+    "code-from-image": {
+      "reward": 1,
+      "elapsed": 25.3,
+      "error": ""
+    },
+    "constraints-scheduling": {
+      "reward": 1,
+      "elapsed": 29.9,
+      "error": ""
+    },
+    "count-dataset-tokens": {
+      "reward": 1,
+      "elapsed": 174.2,
+      "error": ""
+    },
+    "db-wal-recovery": {
+      "reward": 1,
+      "elapsed": 38.9,
+      "error": ""
+    },
+    "distribution-search": {
+      "reward": 1,
+      "elapsed": 52,
+      "error": ""
+    },
+    "dna-assembly": {
+      "reward": 1,
+      "elapsed": 76,
+      "error": ""
+    },
+    "dna-insert": {
+      "reward": 1,
+      "elapsed": 72.5,
+      "error": ""
+    },
+    "extract-elf": {
+      "reward": 1,
+      "elapsed": 36.5,
+      "error": ""
+    },
+    "extract-moves-from-video": {
+      "reward": 1,
+      "elapsed": 34.5,
+      "error": ""
+    },
+    "feal-differential-cryptanalysis": {
+      "reward": 1,
+      "elapsed": 49.3,
+      "error": ""
+    },
+    "feal-linear-cryptanalysis": {
+      "reward": 1,
+      "elapsed": 42,
+      "error": ""
+    },
+    "filter-js-from-html": {
+      "reward": 1,
+      "elapsed": 433,
+      "error": ""
+    },
+    "financial-document-processor": {
+      "reward": 1,
+      "elapsed": 944.1,
+      "error": ""
+    },
+    "gcode-to-text": {
+      "reward": 0,
+      "elapsed": 56.9,
+      "error": ""
+    },
+    "git-leak-recovery": {
+      "reward": 1,
+      "elapsed": 29.1,
+      "error": ""
+    },
+    "kv-store-grpc": {
+      "reward": 0,
+      "elapsed": 23.1,
+      "error": ""
+    },
+    "large-scale-text-editing": {
+      "reward": 1,
+      "elapsed": 268,
+      "error": ""
+    },
+    "largest-eigenval": {
+      "reward": 0,
+      "elapsed": 18.1,
+      "error": ""
+    },
+    "llm-inference-batching-scheduler": {
+      "reward": 1,
+      "elapsed": 40.3,
+      "error": ""
+    },
+    "log-summary-date-ranges": {
+      "reward": 1,
+      "elapsed": 74.4,
+      "error": ""
+    },
+    "merge-diff-arc-agi-task": {
+      "reward": 1,
+      "elapsed": 35.7,
+      "error": ""
+    },
+    "model-extraction-relu-logits": {
+      "reward": 1,
+      "elapsed": 54.4,
+      "error": ""
+    },
+    "openssl-selfsigned-cert": {
+      "reward": 1,
+      "elapsed": 29.7,
+      "error": ""
+    },
+    "overfull-hbox": {
+      "reward": 1,
+      "elapsed": 94.1,
+      "error": ""
+    },
+    "password-recovery": {
+      "reward": 1,
+      "elapsed": 27.3,
+      "error": ""
+    },
+    "path-tracing": {
+      "reward": 1,
+      "elapsed": 74.1,
+      "error": ""
+    },
+    "path-tracing-reverse": {
+      "reward": 1,
+      "elapsed": 35.4,
+      "error": ""
+    },
+    "polyglot-c-py": {
+      "reward": 1,
+      "elapsed": 41.3,
+      "error": ""
+    },
+    "polyglot-rust-c": {
+      "reward": 1,
+      "elapsed": 33.4,
+      "error": ""
+    },
+    "prove-plus-comm": {
+      "reward": 1,
+      "elapsed": 25.2,
+      "error": ""
+    },
+    "raman-fitting": {
+      "reward": 0,
+      "elapsed": 34,
+      "error": ""
+    },
+    "regex-chess": {
+      "reward": 1,
+      "elapsed": 930.8,
+      "error": ""
+    },
+    "regex-log": {
+      "reward": 1,
+      "elapsed": 23.9,
+      "error": ""
+    },
+    "sanitize-git-repo": {
+      "reward": 1,
+      "elapsed": 28.7,
+      "error": ""
+    },
+    "sparql-university": {
+      "reward": 1,
+      "elapsed": 30.2,
+      "error": ""
+    },
+    "sqlite-db-truncate": {
+      "reward": 1,
+      "elapsed": 25.3,
+      "error": ""
+    },
+    "sqlite-with-gcov": {
+      "reward": 1,
+      "elapsed": 80.2,
+      "error": ""
+    },
+    "tune-mjcf": {
+      "reward": 0,
+      "elapsed": 77.8,
+      "error": ""
+    },
+    "video-processing": {
+      "reward": 1,
+      "elapsed": 48.8,
+      "error": ""
+    },
+    "write-compressor": {
+      "reward": 1,
+      "elapsed": 119.7,
+      "error": ""
+    }
+  },
+  "status": "complete"
+}

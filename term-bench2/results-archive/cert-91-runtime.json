@@ -1,0 +1,190 @@
+{
+  "label": "oracle",
+  "timestamp": "2026-07-11T12:43:21.911Z",
+  "n_pass": 23,
+  "n_total": 36,
+  "pass_rate": 0.6389,
+  "tasks": {
+    "adaptive-rejection-sampler": {
+      "reward": 1,
+      "elapsed": 36.8,
+      "error": ""
+    },
+    "bn-fit-modify": {
+      "reward": 0,
+      "elapsed": 0,
+      "error": "setup_failed"
+    },
+    "break-filter-js-from-html": {
+      "reward": 0,
+      "elapsed": 30.1,
+      "error": ""
+    },
+    "build-cython-ext": {
+      "reward": 0,
+      "elapsed": 119.2,
+      "error": ""
+    },
+    "build-pmars": {
+      "reward": 0,
+      "elapsed": 31,
+      "error": ""
+    },
+    "build-pov-ray": {
+      "reward": 1,
+      "elapsed": 71.2,
+      "error": ""
+    },
+    "caffe-cifar-10": {
+      "reward": 0,
+      "elapsed": 1234.9,
+      "error": ""
+    },
+    "cancel-async-tasks": {
+      "reward": 1,
+      "elapsed": 32.7,
+      "error": ""
+    },
+    "chess-best-move": {
+      "reward": 0,
+      "elapsed": 0,
+      "error": "setup_failed"
+    },
+    "circuit-fibsqrt": {
+      "reward": 1,
+      "elapsed": 120.5,
+      "error": ""
+    },
+    "cobol-modernization": {
+      "reward": 1,
+      "elapsed": 32.3,
+      "error": ""
+    },
+    "code-from-image": {
+      "reward": 1,
+      "elapsed": 17.7,
+      "error": ""
+    },
+    "compile-compcert": {
+      "reward": 0,
+      "elapsed": 2413.6,
+      "error": ""
+    },
+    "configure-git-webserver": {
+      "reward": 1,
+      "elapsed": 33,
+      "error": ""
+    },
+    "constraints-scheduling": {
+      "reward": 1,
+      "elapsed": 22.7,
+      "error": ""
+    },
+    "count-dataset-tokens": {
+      "reward": 1,
+      "elapsed": 88,
+      "error": ""
+    },
+    "crack-7z-hash": {
+      "reward": 0,
+      "elapsed": 0,
+      "error": "setup_failed"
+    },
+    "custom-memory-heap-crash": {
+      "reward": 1,
+      "elapsed": 2095.2,
+      "error": ""
+    },
+    "db-wal-recovery": {
+      "reward": 1,
+      "elapsed": 33,
+      "error": ""
+    },
+    "distribution-search": {
+      "reward": 0,
+      "elapsed": 37.5,
+      "error": ""
+    },
+    "dna-assembly": {
+      "reward": 1,
+      "elapsed": 60.1,
+      "error": ""
+    },
+    "dna-insert": {
+      "reward": 1,
+      "elapsed": 73.6,
+      "error": ""
+    },
+    "extract-elf": {
+      "reward": 1,
+      "elapsed": 37.3,
+      "error": ""
+    },
+    "extract-moves-from-video": {
+      "reward": 1,
+      "elapsed": 25.8,
+      "error": ""
+    },
+    "feal-differential-cryptanalysis": {
+      "reward": 1,
+      "elapsed": 23.4,
+      "error": ""
+    },
+    "feal-linear-cryptanalysis": {
+      "reward": 1,
+      "elapsed": 28.3,
+      "error": ""
+    },
+    "filter-js-from-html": {
+      "reward": 1,
+      "elapsed": 134.7,
+      "error": ""
+    },
+    "financial-document-processor": {
+      "reward": 1,
+      "elapsed": 518.8,
+      "error": ""
+    },
+    "fix-code-vulnerability": {
+      "reward": 0,
+      "elapsed": 0,
+      "error": "setup_failed"
+    },
+    "fix-git": {
+      "reward": 0,
+      "elapsed": 27.6,
+      "error": ""
+    },
+    "fix-ocaml-gc": {
+      "reward": 1,
+      "elapsed": 629.1,
+      "error": ""
+    },
+    "gcode-to-text": {
+      "reward": 0,
+      "elapsed": 78.5,
+      "error": ""
+    },
+    "git-leak-recovery": {
+      "reward": 1,
+      "elapsed": 22.8,
+      "error": ""
+    },
+    "git-multibranch": {
+      "reward": 1,
+      "elapsed": 41.9,
+      "error": ""
+    },
+    "gpt2-codegolf": {
+      "reward": 1,
+      "elapsed": 228.6,
+      "error": ""
+    },
+    "headless-terminal": {
+      "reward": 0,
+      "elapsed": 22.9,
+      "error": ""
+    }
+  },
+  "status": "in_progress"
+}

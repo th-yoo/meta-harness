@@ -1,0 +1,666 @@
+{
+  "label": "phase0-selfscore-haiku",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "harness": {
+    "layers": "global",
+    "account_active": "v0",
+    "project_active": "v0",
+    "agent": "",
+    "pins": {}
+  },
+  "k": 1,
+  "timestamp": "2026-07-14T16:36:23.361Z",
+  "n_pass": 5,
+  "n_total": 43,
+  "pass_rate": 0.1163,
+  "tasks": {
+    "adaptive-rejection-sampler": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        642.9
+      ],
+      "turns": [
+        0
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "cancel-async-tasks": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        247.7
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "circuit-fibsqrt": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        645.9
+      ],
+      "turns": [
+        0
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "code-from-image": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        148.2
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "constraints-scheduling": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        143.1
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "count-dataset-tokens": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        484.8
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "db-wal-recovery": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        259.9
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        1
+      ]
+    },
+    "distribution-search": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        629.2
+      ],
+      "turns": [
+        0
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "dna-assembly": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        362
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "dna-insert": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        270.7
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "extract-elf": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        169.7
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        1
+      ]
+    },
+    "extract-moves-from-video": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        80.7
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "feal-differential-cryptanalysis": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        196.6
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "feal-linear-cryptanalysis": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        628
+      ],
+      "turns": [
+        0
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "filter-js-from-html": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        189.2
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        1
+      ]
+    },
+    "financial-document-processor": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        631.7
+      ],
+      "turns": [
+        0
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "gcode-to-text": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        76.2
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "git-leak-recovery": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        140
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "kv-store-grpc": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        451.6
+      ],
+      "turns": [
+        0
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "large-scale-text-editing": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        928.3
+      ],
+      "turns": [
+        0
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "largest-eigenval": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        421.7
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        0.9894736842105263
+      ]
+    },
+    "llm-inference-batching-scheduler": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        624.7
+      ],
+      "turns": [
+        0
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "log-summary-date-ranges": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        117.6
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "merge-diff-arc-agi-task": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        375
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        1
+      ]
+    },
+    "model-extraction-relu-logits": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        627.3
+      ],
+      "turns": [
+        0
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "openssl-selfsigned-cert": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        221.9
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        1
+      ]
+    },
+    "overfull-hbox": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        277.7
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        1
+      ]
+    },
+    "password-recovery": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        536
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "path-tracing": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        405.3
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "path-tracing-reverse": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        575.3
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        1
+      ]
+    },
+    "polyglot-c-py": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        415.1
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        1
+      ]
+    },
+    "polyglot-rust-c": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        491.4
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "prove-plus-comm": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        175.7
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "raman-fitting": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        296.8
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "regex-chess": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        624.8
+      ],
+      "turns": [
+        0
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "regex-log": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        91.1
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "sanitize-git-repo": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        118.1
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "sparql-university": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        372.5
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "sqlite-db-truncate": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        119.6
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "sqlite-with-gcov": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        177.6
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        1
+      ]
+    },
+    "tune-mjcf": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        693
+      ],
+      "turns": [
+        0
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    },
+    "video-processing": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        284.2
+      ],
+      "turns": [
+        1
+      ],
+      "errors": [],
+      "selfScores": [
+        1
+      ]
+    },
+    "write-compressor": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        633.7
+      ],
+      "turns": [
+        0
+      ],
+      "errors": [],
+      "selfScores": [
+        null
+      ]
+    }
+  },
+  "status": "complete",
+  "driver": "opencode"
+}
