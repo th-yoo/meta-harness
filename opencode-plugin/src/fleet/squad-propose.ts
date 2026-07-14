@@ -61,6 +61,7 @@ import { die, log, writeJsonAtomic, writeTextAtomic } from "../bench/util.ts"
 import { sandboxEnv } from "./sandbox.ts"
 import type { RoleSpec } from "./roles.ts"
 import type { ExecFn } from "./run.ts"
+import { rankSquadFailures, type SquadOutcomeLike } from "../failure-retrieval.ts"
 
 /**
  * Synthetic bash:allow `RoleSpec` used ONLY to reach `sandboxEnv`'s existing
@@ -144,15 +145,22 @@ const MAX_SESSIONS_SHOWN = 20
 export function buildSquadProposerPrompt(type: string, active: SquadDef, stagingPath: string): string {
   const version = activeSquadVersion(type)
   const evidence = readSquadScoreEvidence(type, version)
-  const sessionLines = evidence.sessions
-    .slice(-MAX_SESSIONS_SHOWN)
-    .map((s) =>
-      `- sliceId=${s.sliceId} passed=${s.passed} steps=${s.steps}` +
-      (s.escalationType ? ` escalationType=${s.escalationType}` : ""),
-    )
-  const sessionsSection = sessionLines.length
+  // Fitness ratio (#4): filtering to failing-only below removes the proposer's
+  // only view of the pass/fail rate, which a flow-knob proposer reasons on.
+  const nTotal = evidence.nPass + evidence.nFail
+  const rate = nTotal ? Math.round((evidence.nPass / nTotal) * 100) : 0
+  const ratioLine = `outcomes: ${evidence.nPass} done / ${evidence.nFail} exhausted (${rate}%) over ${nTotal} runs`
+  // Rank failing outcomes by repeat-count then recency (minimal — squad has no
+  // real diversity axis: all failures are escalationType "Exhausted", B2). The
+  // render hardcodes the B2 invariants so it stays wire-compatible.
+  const ranked = rankSquadFailures(evidence.sessions as SquadOutcomeLike[], MAX_SESSIONS_SHOWN)
+  const sessionLines = ranked.map((s) =>
+    `- sliceId=${s.sliceId} passed=false steps=${s.steps} escalationType=Exhausted` +
+    (s.count > 1 ? ` ×${s.count}` : ""),
+  )
+  const sessionsSection = `${ratioLine}\n` + (sessionLines.length
     ? sessionLines.join("\n")
-    : "(no scored sessions yet for this squad-def version — propose conservatively)"
+    : "(no failing sessions yet for this squad-def version — propose conservatively)")
 
   const memberLines: string[] = []
   for (const [role, slot] of Object.entries(active.slots)) {

@@ -36,6 +36,9 @@
 import * as fs from "fs"
 import * as os from "os"
 import * as path from "path"
+// Function-level cycle (failure-retrieval imports store readers back) — safe:
+// every cross-reference resolves at call time, not import time.
+import { rankRoleFailures, type RoleRankOpts } from "./failure-retrieval.ts"
 
 // ── Root resolvers ─────────────────────────────────────────────────────────
 //
@@ -398,26 +401,31 @@ function fmtTrajEvent(e: TrajEvent): string {
   return `SAY: ${e.text ?? ""}`
 }
 
-export interface FailureExcerptOpts {
-  maxSessions?: number
+/** Merged opts: excerpt-shaping fields (consumed here) + RoleRankOpts fields
+ * (forwarded to rankRoleFailures; maxSessions is used ONLY by this function's
+ * over-select loop — inert inside rankRoleFailures). */
+export interface FailureExcerptOpts extends RoleRankOpts {
   headEvents?: number
   tailEvents?: number
   maxCharsPerSession?: number
 }
 
 /**
- * Excerpt the most recent FAILING sessions' trajectories for the reflective
- * proposer — first `headEvents` (task framing) + last `tailEvents` (where failures
- * live), per-session char-capped. Empty string if none have a trajectory.
+ * Excerpt the most instructive FAILING sessions' trajectories for the
+ * reflective proposer, ranked by importance × taxonomy-diversity across ALL
+ * candidate versions (not just the active one's recency tail). Over-selects
+ * and skips sessions whose trajectory was pruned (E1). Per session: first
+ * `headEvents` (task framing) + last `tailEvents` (where failures live),
+ * char-capped. Empty string if none of the ranked failures has a trajectory.
  */
-export function buildFailureExcerpts(storeRoot: string, version: string, opts: FailureExcerptOpts = {}): string {
+export function buildFailureExcerpts(storeRoot: string, opts: FailureExcerptOpts = {}): string {
   const { maxSessions = 3, headEvents = 5, tailEvents = 30, maxCharsPerSession = 5000 } = opts
-  const score = readScore(storeRoot, version)
-  const failed = score.sessions.filter((s) => !s.passed).slice(-maxSessions).reverse()
+  const ranked = rankRoleFailures(storeRoot, opts)
   const blocks: string[] = []
-  for (const s of failed) {
-    const events = readTrajectory(storeRoot, version, s.sessionID)
-    if (!events.length) continue
+  for (const r of ranked) {
+    if (blocks.length >= maxSessions) break
+    const events = readTrajectory(storeRoot, r.version, r.sessionID)
+    if (!events.length) continue // pruned/missing trajectory — skip (E1)
     let picked: TrajEvent[]
     if (events.length <= headEvents + tailEvents) {
       picked = events
@@ -430,9 +438,16 @@ export function buildFailureExcerpts(storeRoot: string, version: string, opts: F
       ]
     }
     const body = picked.map(fmtTrajEvent).join("\n").slice(0, maxCharsPerSession)
-    blocks.push(`### ${s.sessionID} — ${s.note || s.summary || "(no label)"}\n${body}`)
+    const label = labelForSession(storeRoot, r.version, r.sessionID)
+    blocks.push(`### ${r.sessionID} [${r.taxonomy}] — ${label}\n${body}`)
   }
   return blocks.join("\n\n")
+}
+
+/** note || summary || "(no label)" for a session, looked up by (version, id). */
+function labelForSession(storeRoot: string, version: string, sessionID: string): string {
+  const s = readScore(storeRoot, version).sessions.find((x) => x.sessionID === sessionID)
+  return (s?.note || s?.summary || "(no label)")
 }
 
 export function writeDiagnosis(storeRoot: string, version: string, diagnosis: unknown): void {

@@ -39,10 +39,15 @@ it is exactly what separates us from a plain RAG "Memory" system.
 Each gap already appears in `explicitly-not-now.md`; here it's paired with the
 literature that solves it.
 
-- **Retrieval by relevance, not recency.** Our proposer reads *last-N*
-  sessions + char-capped trajectories (`buildFailureExcerpts`). A task-similar
-  failure from 50 runs ago is invisible. SOTA embeds/indexes all experience:
-  **AssoMem** (2510.10397, multi-signal associative), **SwiftMem**
+- **Retrieval by relevance, not recency.** PARTIALLY ADOPTED (2026-07-14,
+  `failure-retrieval.ts`): the proposer's `buildFailureExcerpts` now ranks by
+  **importance × taxonomy-diversity across ALL candidate versions** (was:
+  active-version last-3 recency tail). Non-parametric — structured signals
+  (taxonomy via a global diagnosis map, tool-error counts, judge confidence,
+  recency) + diversity coverage, no embeddings. Squad side stays minimal
+  (recency + dedupe-by-sliceId). STILL DEFERRED: query-driven *semantic
+  similarity* (needs task-identity + embeddings) — see §… deferred list; SOTA
+  there is **AssoMem** (2510.10397, multi-signal associative), **SwiftMem**
   (2601.08160, query-aware indexing), **SYNAPSE** (2601.02744, spreading
   activation), Generative-Agents recency×importance×relevance scoring.
 - **Temporal / graph memory + consolidation.** No cross-role KG, no

@@ -188,7 +188,7 @@ describe("validateFlowMutation", () => {
 })
 
 describe("buildSquadProposerPrompt", () => {
-  test("contains active json, knob cheat-sheet, and outcome sessions when present", () => {
+  test("contains active json, knob cheat-sheet, failing outcomes + fitness ratio", () => {
     writeSquadDefV1(STANDARD_SQUAD)
     recordSquadOutcome("standard", { sliceId: "s1", passed: true, steps: 9, ts: "t1" })
     recordSquadOutcome("standard", {
@@ -202,18 +202,22 @@ describe("buildSquadProposerPrompt", () => {
     expect(prompt).toContain("bounds.globalBudgetSteps")
     expect(prompt).toContain("gatePolicy.gate1")
     expect(prompt).toContain("reentry");
-    expect(prompt).toContain("sliceId=s1")
+    // B4: s1 passed → excluded from the failing-only list (was `toContain sliceId=s1`);
+    // the pass/fail ratio line (#4) preserves the passed count instead.
+    expect(prompt).toContain("1 done / 1 exhausted")
+    expect(prompt).not.toMatch(/- sliceId=s1 /)
     expect(prompt).toContain("sliceId=s2")
     expect(prompt).toContain("escalationType=Exhausted")
     expect(prompt).toContain(stagingPath)
     expect(prompt).toContain(`${stagingPath}.diagnosis.md`)
   })
 
-  test("falls back to a 'no scored sessions' note when the active version has none", () => {
+  test("falls back to a 'no failing sessions' note when the active version has none", () => {
     writeSquadDefV1(STANDARD_SQUAD)
     const stagingPath = join(squadRoot("standard"), ".staging", "y.json")
     const prompt = buildSquadProposerPrompt("standard", STANDARD_SQUAD, stagingPath)
-    expect(prompt).toContain("no scored sessions yet")
+    expect(prompt).toContain("no failing sessions yet")
+    expect(prompt).toContain("0 done / 0 exhausted")
   })
 })
 

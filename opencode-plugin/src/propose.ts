@@ -580,7 +580,7 @@ export function buildProposerPrompt(
 
   const storeAccessSection = buildStoreAccessSection(layer)
 
-  const failing = buildFailureExcerpts(layer.root, activeVer)
+  const failing = buildFailureExcerpts(layer.root)
   const failingSection = failing
     ? `## Failing-trajectory excerpts (an INDEX of where to look — read the full traces via Store access above)\n\n${failing}`
     : "## Failing-trajectory excerpts\n\n(none captured yet — check the archive via Store access above, or diagnose from the scores/notes)"

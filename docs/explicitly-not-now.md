@@ -150,6 +150,7 @@ proposer-LLM output compliance, which had to be observed first.
 | `proposerVariant` is provenance-only | opencode's `session.prompt` API exposes `model` but no thinking variant — the STOP-critical part (model pinning) is live; effort pinning is not possible from a plugin. | opencode API gains a variant/effort field on `session.prompt`. |
 | Interactive trajectory events lack tool *args* | `tool.execute.after` hook doesn't expose them; bench-side trajectories are unaffected. | opencode hook API exposes call args. |
 | `/mh-status` doesn't surface `diagnosis.json` | Candidate `meta.json` already shows in status; diagnosis surfacing was judged redundant UI for now. | Diagnosis becomes hard-required (§4) — at that point it's first-class state worth showing. |
+| Proposer failure retrieval is importance×taxonomy-**diversity**, not semantic **similarity** (2026-07-14, `failure-retrieval.ts`) — no query-task, no embeddings, no vector store | Current regime = structured signals + coverage over a small corpus; §6 already rejects even SQLite; propose has no query task. | Retrieval becomes query-driven ("find failures whose *content* resembles THIS task/error") over a large corpus → add task-identity to `SessionRecord`, then an embedded vector index (sqlite-vec-style) OR lean on the engram/kratos memory MCPs — NOT a standalone vector DB. |
 
 ### 5.1 Fleet depth-1 deferrals (2026-07-13, from the squad E2E final review)
 
