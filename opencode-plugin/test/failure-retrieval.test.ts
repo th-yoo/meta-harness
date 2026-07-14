@@ -64,13 +64,22 @@ afterEach(() => { rmSync(store, { recursive: true, force: true }) })
 describe("selectDiverse", () => {
   const mk = (bucket: string, importance: number, id: string): RankItem<string> => ({ item: id, bucket, importance })
 
-  test("covers distinct buckets before doubling up", () => {
+  test("importance competes with diversity (not diversity-first round-robin)", () => {
     const items = [
       mk("a", 0.9, "a1"), mk("a", 0.8, "a2"), mk("a", 0.7, "a3"),
       mk("b", 0.5, "b1"), mk("c", 0.4, "c1"),
     ]
-    // round0: a1(a),b1(b),c1(c) → then round1: a2 → top-4 = a1,b1,c1,a2
-    expect(selectDiverse(items, 4)).toEqual(["a1", "b1", "c1", "a2"])
+    // Old diversity-FIRST round-robin took every bucket's best (a1,b1,c1) before
+    // any bucket's 2nd pick, dropping the important a2/a3 for the trivial c1 at
+    // maxN=3. The importance-vs-diversity blend must let a1's strong bucket-mate
+    // a2 (0.8, discounted once for the repeat) beat c1 (0.4, fresh bucket) —
+    // importance now genuinely trades off against diversity, not just orders
+    // within a bucket.
+    expect(selectDiverse(items, 3)).toEqual(["a1", "b1", "a2"])
+    // Diversity is still rewarded: a fresh bucket's top item (b1=0.5) still
+    // outranks a same-bucket repeat (a2 discounted to 0.4) — see maxN=4 below,
+    // where c1 finally appears once a3 has been discounted twice.
+    expect(selectDiverse(items, 4)).toEqual(["a1", "b1", "a2", "c1"])
   })
 
   test("all-one-bucket degenerates to importance sort", () => {
@@ -90,6 +99,27 @@ describe("selectDiverse", () => {
   test("importance ties keep stable input order", () => {
     const items = [mk("a", 0.5, "first"), mk("a", 0.5, "second")]
     expect(selectDiverse(items, 2)).toEqual(["first", "second"])
+  })
+
+  test("diversity still wins when importances are close", () => {
+    // a1 and a2 are near-identical importance; b1 is meaningfully lower but
+    // fresh — the diminishing per-bucket penalty should still let a1's
+    // close-second a2 lose to a fresh bucket only once discounted enough.
+    const items = [mk("a", 0.60, "a1"), mk("a", 0.58, "a2"), mk("b", 0.55, "b1")]
+    // a1 picked first (0.60 highest). Round2: a2 discounted (0.58*0.5=0.29) vs
+    // b1 fresh (0.55) → b1 wins → diversity rewarded despite close importance.
+    expect(selectDiverse(items, 2)).toEqual(["a1", "b1"])
+  })
+
+  test("determinism: same input → same order on repeated calls", () => {
+    const items = [
+      mk("a", 0.9, "a1"), mk("a", 0.8, "a2"), mk("a", 0.7, "a3"),
+      mk("b", 0.5, "b1"), mk("c", 0.4, "c1"),
+    ]
+    const run1 = selectDiverse(items, 3)
+    const run2 = selectDiverse(items, 3)
+    expect(run1).toEqual(run2)
+    expect(run1).toEqual(["a1", "b1", "a2"])
   })
 })
 
