@@ -140,6 +140,14 @@ helps both and harms neither, or (b) is **duplicated** into
 independently gate-evolvable. Duplication is cheap and keeps every coordinate a
 single scope key (§4). This keeps the resolver a flat lookup, not a matcher.
 
+The class-file-derived `model:` coordinates in §2.2 (`model:trinity`,
+`model:beast-class`) are class-shaped, not single-model-id, so they read as
+set-valued against §2's "one model id" definition of the model level. They are
+handled exactly like vendors here: each is a **named slice** treated as one flat
+coordinate key, and if a class ever splits into distinct members that need
+diverging rules, the bullet is **duplicated** into the split coordinates — never
+made a set-valued match.
+
 ## 3. THE core design decision — additive, not override
 
 This is the decision a reviewer must be able to read back verbatim.
@@ -200,8 +208,8 @@ the matching `model` blocks — all concatenated, none removed.
   bullet's job is to add a fallback instruction; whether the model obeys the
   more-specific instruction is a model-behavior question, not a store-merge
   question. If measurement later shows additive-only is insufficient for a real
-  contradiction *inside our store*, that reopens the override deferral (§6 /
-  register §2.4) — with evidence, not speculatively.
+  contradiction *inside our store*, that reopens the override deferral (register
+  §2.4) — with evidence, not speculatively.
 
 Additive-only is the Gall's-law choice: it reuses the one merge mechanism the
 store already has (concatenation), adds zero new masking/precedence logic, and

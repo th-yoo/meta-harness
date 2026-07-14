@@ -139,6 +139,45 @@ test("buildProposerPrompt: carries the untrusted-evidence + rejection clauses in
   expect(prompt).toContain("Do NOT propose")
 })
 
+// Final-review fix: the "not grounded in a failing trajectory" rejection item is
+// evidence-conditional. On a fresh/empty layer (bootstrap path, no captured
+// failures) that categorical prohibition would forbid the very baseline the
+// prompt asks for → with no-op candidates rejected, bootstrap stalls. It must
+// apply ONLY when failing evidence is actually present.
+test("buildProposerPrompt: fresh/empty layer drops the failing-trajectory prohibition and grants a baseline escape hatch", () => {
+  const worktree = tmpDir("worktree-fresh")
+  const storeRoot = tmpDir("store-fresh") // truly empty — no candidates, no active
+  const layer: StoreLayer = { root: storeRoot, scope: "project-role", higherRoots: [] }
+  const sp = stagingPaths(worktree, layer.scope, "v1")
+
+  const prompt = buildProposerPrompt(
+    layer, "v1", "", sp.system, sp.tools, sp.diagnosis, sp.ops, sp.agentConfig, sp.envPolicy, worktree, null,
+  )
+
+  // The categorical prohibition must NOT be present with no failures.
+  expect(prompt).not.toContain("not grounded in a failing trajectory")
+  // The rejection list still renders, with the empty-layer escape hatch.
+  expect(prompt).toContain("Do NOT propose")
+  expect(prompt).toContain("write a sensible baseline grounded in this scope's purpose")
+})
+
+test("buildProposerPrompt: layer WITH failures keeps the failing-trajectory prohibition", () => {
+  const worktree = tmpDir("worktree-fail")
+  const storeRoot = tmpDir("store-fail")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  seedCandidate(storeRoot, "v1", { nPass: 1, nFail: 2, trajFiles: 2 })
+  const layer: StoreLayer = { root: storeRoot, scope: "project-role", higherRoots: [] }
+  const sp = stagingPaths(worktree, layer.scope, "v2")
+
+  const prompt = buildProposerPrompt(
+    layer, "v2", "", sp.system, sp.tools, sp.diagnosis, sp.ops, sp.agentConfig, sp.envPolicy, worktree, null,
+  )
+
+  // With real failing evidence, the categorical prohibition IS asserted.
+  expect(prompt).toContain("not grounded in a failing trajectory")
+  expect(prompt).not.toContain("write a sensible baseline grounded in this scope's purpose")
+})
+
 test("buildCuratePrompt: embeds the store-access section as prune evidence", () => {
   const worktree = tmpDir("worktree-cur")
   const storeRoot = tmpDir("store-cur")

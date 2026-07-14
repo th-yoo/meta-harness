@@ -39,7 +39,7 @@ as playbook bullets, but structure itself isn't searched). Red = explicitly not 
 
 ---
 
-## 2. The big three (Phase 4 "explicitly NOT now")
+## 2. The big deferrals (Phase 4 "explicitly NOT now")
 
 ### 2.1 Full harness-code self-modification
 

@@ -673,7 +673,15 @@ ENDOFENVPOLICY
   // enumerates what to reject. The layer-dedup rule ("already covered by a
   // more-general layer") is already stated in step2 above, so it is NOT
   // repeated here — only the genuinely-new rejection items are added.
-  const rejectionClause = `Do NOT propose: generic best practices any competent agent already follows; one-off fixes tied to a single task, file, or error rather than a recurring behavior; or any rule not grounded in a failing trajectory above. Every rule must earn its place by addressing a diagnosed root cause.`
+  // The "must be grounded in a failing trajectory" item is scoped to the case
+  // where failing evidence actually exists (`failing` non-empty). On a fresh /
+  // empty layer — the bootstrap path via triggerPropose — no failures have been
+  // captured, so that categorical prohibition would forbid the very baseline the
+  // fresh-layer prompt asks for (harness rejects no-op candidates since bc73ebf →
+  // bootstrap stalls). There it is replaced with a scope-grounded escape hatch.
+  const rejectionClause = failing
+    ? `Do NOT propose: generic best practices any competent agent already follows; one-off fixes tied to a single task, file, or error rather than a recurring behavior; or any rule not grounded in a failing trajectory above. Every rule must earn its place by addressing a diagnosed root cause.`
+    : `Do NOT propose: generic best practices any competent agent already follows; or one-off fixes tied to a single task, file, or error rather than a recurring behavior. No failing trajectories have been captured for this layer yet — write a sensible baseline grounded in this scope's purpose instead of citing specific failures.`
 
   const diagShape = playbook
     ? `{"failures":[{"sessionID":"<id>","taxonomy":"<one label>","rootCause":"<2-5 sentences>","firstUnrecoverableStep":"<quote>"}],"bulletAssessments":[{"id":"<bullet id followed-and-helped or followed-and-hurt>","verdict":"helpful"|"harmful"}]}`
