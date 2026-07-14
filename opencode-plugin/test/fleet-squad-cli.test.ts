@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { parseSquadRunArgs } from "../src/bench/cli.ts"
+import { parseSquadRunArgs, parseSquadTrialArgs } from "../src/bench/cli.ts"
 import { cmdSquadRun, checkpointPath, roleForPhase } from "../src/fleet/squad-cli.ts"
 import { writeSquadDefV1, STANDARD_SQUAD, squadRoot, type SquadDef } from "../src/fleet/squad-def.ts"
 import { scripted } from "./fleet-helpers.ts"
@@ -137,6 +137,45 @@ describe("parseSquadRunArgs --def-version (CLI wiring, spec §6 ch2)", () => {
     const out = parseSquadRunArgs(["--project", "P", "--slice-id", "S", "--slice", "x"])
     expect(out).not.toBeNull()
     expect(out!.defVersion).toBeUndefined()
+  })
+})
+
+describe("parseSquadTrialArgs (CLI wiring, review minors)", () => {
+  test("missing --project returns null", () => {
+    const out = parseSquadTrialArgs(["--candidate", "v2", "--slice", "x"])
+    expect(out).toBeNull()
+  })
+
+  test("missing --candidate returns null", () => {
+    const out = parseSquadTrialArgs(["--project", "P", "--slice", "x"])
+    expect(out).toBeNull()
+  })
+
+  test("--slice and --slice-file together returns null (mutual exclusion, mirrors parseSquadRunArgs)", () => {
+    const out = parseSquadTrialArgs([
+      "--project", "P",
+      "--candidate", "v2",
+      "--slice", "x",
+      "--slice-file", "f.txt",
+    ])
+    expect(out).toBeNull()
+  })
+
+  test("happy path returns the parsed shape", () => {
+    const out = parseSquadTrialArgs([
+      "--project", "P",
+      "--candidate", "v2",
+      "--squad-type", "standard",
+      "--slice", "add slugify",
+      "--n", "5",
+    ])
+    expect(out).toEqual({
+      project: "P",
+      candidate: "v2",
+      squadType: "standard",
+      slice: "add slugify",
+      n: 5,
+    })
   })
 })
 

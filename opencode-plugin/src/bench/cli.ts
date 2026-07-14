@@ -1015,7 +1015,7 @@ interface SquadTrialCliArgs {
   n?: number
 }
 
-function parseSquadTrialArgs(argv: string[]): SquadTrialCliArgs | null {
+export function parseSquadTrialArgs(argv: string[]): SquadTrialCliArgs | null {
   const out: Partial<SquadTrialCliArgs> = {}
   let i = 0
   while (i < argv.length) {

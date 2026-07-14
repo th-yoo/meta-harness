@@ -115,6 +115,9 @@ export async function cmdSquadTrial(
 ): Promise<SquadTrialResult> {
   const run = runFn ?? cmdSquadRun
   const squadType = args.squadType ?? "standard"
+  if (args.n !== undefined && (!Number.isInteger(args.n) || args.n < 1)) {
+    die(`squad-trial: --n must be a positive integer, got: ${args.n}`)
+  }
   const n = args.n ?? 3
   const sliceTexts = resolveSliceTexts(args)
 

@@ -141,6 +141,20 @@ describe("cmdSquadTrial", () => {
     await expect(cmdSquadTrial({ project, candidate: "v2", n: 1 }, runFn)).rejects.toThrow(/slice/)
   })
 
+  test("--n 0 dies (not a positive integer)", async () => {
+    const { runFn } = fakeRunFn([DONE])
+    await expect(cmdSquadTrial({ project, candidate: "v2", slice: "x", n: 0 }, runFn)).rejects.toThrow(
+      /--n must be a positive integer/,
+    )
+  })
+
+  test("--n -1 dies (not a positive integer)", async () => {
+    const { runFn } = fakeRunFn([DONE])
+    await expect(cmdSquadTrial({ project, candidate: "v2", slice: "x", n: -1 }, runFn)).rejects.toThrow(
+      /--n must be a positive integer/,
+    )
+  })
+
   test("never throws when the squad type has no active def at all (activeSquadVersion defaults, no sessions)", async () => {
     const { runFn } = fakeRunFn([DONE])
     const result = await cmdSquadTrial({ project, squadType: "ghost", candidate: "v1", slice: "x", n: 1 }, runFn)
