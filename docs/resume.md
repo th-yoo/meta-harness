@@ -3,7 +3,18 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## Where we are (2026-07-15)
+## AT THE OFFICE (2026-07-16) — do this first
+
+The ONE blocker lives on the office linux host (unreachable from home —
+SSH to 221.151.107.42 times out outside the office network):
+
+1. **Linux host:** `cd ~/z2/meta-harness && git pull && term-bench2/store-sync.sh export && git add term-bench2/store && git commit -m "store: loop-1 v1" && git push`
+   → v1 finally crosses into git. Sanity: `ls term-bench2/store/global/candidates/` should show `v0 v1`.
+2. Then `ab` can run on ANY host (see "Resume the loop" below). The linux host
+   itself is fine for it: `store-sync.sh import` is a no-op there (it has v1),
+   just `git pull` and launch the `ab` command.
+
+## Where we are (2026-07-16)
 
 First propose→ab improvement loop (#5). Done: baseline (haiku pass@5 **0.381**),
 14-task band split, store-writing run, **propose → account-global `v1`**
@@ -88,6 +99,15 @@ then start opencode + `/mh-propose account` (the `external_directory` grant is a
 - Account-scope propose needs `opencode.json` → `"permission": {"external_directory": "allow"}` (committed) — else the headless proposer hangs on a permission prompt.
 - `--results-file` forces `--no-store` (a run feeds the store OR writes results, never both); store-writing runs aren't resumable; `ab` is.
 
+## Pending decisions (not started, need a go)
+- **Phase-0 re-run** (MacBook, overnight ~7h): strengthen `SELF_CHECK_INSTRUCTION`
+  in `opencode-plugin/src/bench/self-score.ts` (force compliance + honest
+  fractions — current one yields 26% capture, all-1.0 claims), then re-run the
+  43-task `--self-check` night and re-check the gate.
+- **Seed corpus** (`docs/external-prompts-cc-opencode.md`): measure-first — only
+  after loop-1's `ab` verdict shows what propose finds on its own.
+
 ## Bigger map
-`docs/INDEX.md` → all design docs. Saved-but-unexecuted plan:
-`docs/superpowers/plans/2026-07-14-cc-opencode-prompt-mining.md`.
+`docs/INDEX.md` → all design docs. The prompt-mining plan
+(`docs/superpowers/plans/2026-07-14-cc-opencode-prompt-mining.md`) was EXECUTED
+2026-07-15→16 (see "Landed overnight" above) — no saved-but-unexecuted plans remain.
