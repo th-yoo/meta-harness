@@ -22,7 +22,13 @@
  */
 import { existsSync, mkdirSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
-import { readActiveSquadDef, readSquadDefVersion, recordSquadOutcome, type SquadDef } from "./squad-def.ts"
+import {
+  activeSquadVersion,
+  readActiveSquadDef,
+  readSquadDefVersion,
+  recordSquadOutcome,
+  type SquadDef,
+} from "./squad-def.ts"
 import {
   answerGate,
   newSquadState,
@@ -162,11 +168,19 @@ export async function cmdSquadRun(
     })
 
   let state: SquadState
-  // The def version this run is pinned to (spec §6 ch2 def-version pin): an
-  // explicit `--def-version` wins; failing that, `--resume` inherits
-  // whatever version the checkpoint itself carries (set on the run that
-  // first created it); a fresh run with neither is unpinned (undefined ->
-  // read the active def, same as before this knob existed).
+  // The CONCRETE def version this run's whole lifecycle is pinned to (spec §6
+  // ch2 def-version pin; Fix 1 — version drift). Resolved ONCE, at run start,
+  // and threaded into BOTH the flow execution and `recordSquadOutcome` so a
+  // slice can never split across two defs:
+  //  - an explicit `--def-version` always wins;
+  //  - a fresh UNPINNED run captures `activeSquadVersion` NOW (run time), not
+  //    at record time — the runner is exit-and-wait, so `/mh-activate` can
+  //    promote a new version between a gate pause and its resume; recording
+  //    to whatever happens to be active by then would credit/blame a def that
+  //    never ran this slice, polluting the score.json squad-trial reads;
+  //  - a `--resume` inherits the version the checkpoint itself carries (set by
+  //    the run that first created it), so a paused run stays on its original
+  //    def regardless of what got activated in between.
   let pinnedDefVersion: string | undefined = args.defVersion
   if (args.resume) {
     const checkpoint = loadCheckpoint(args.project, args.sliceId)
@@ -179,7 +193,11 @@ export async function cmdSquadRun(
     if (!checkpoint.lastDriveId) {
       die(`checkpoint for slice '${args.sliceId}' is missing its pending gate's producer drive id`)
     }
-    pinnedDefVersion = args.defVersion ?? checkpoint.defVersion
+    // Prefer the checkpoint's own captured version. `?? activeSquadVersion`
+    // is a backward-compat fallback for pre-Fix-1 checkpoints written without
+    // a resolved version — such a checkpoint could still drift, but a fresh
+    // run created after this fix always carries a concrete version.
+    pinnedDefVersion = args.defVersion ?? checkpoint.defVersion ?? activeSquadVersion(squadType)
     // BEFORE answerGate: score the gate's producer drive — approve → good,
     // revise → bad — under the gate's own name (squad.ts's `answerGate`
     // doc comment; mirrors `autoGate`'s scoring shape for the auto path).
@@ -187,9 +205,16 @@ export async function cmdSquadRun(
     state = answerGate(checkpoint, args.gateAnswer)
   } else {
     if (!args.slice) die("fresh squad-run requires a slice (text or --slice-file)")
+    // Resolve the active pointer to a CONCRETE version now, at run start, so
+    // the whole slice lifecycle (including any later resume + record) is
+    // pinned to it and can't drift onto a mid-run activation.
+    pinnedDefVersion = args.defVersion ?? activeSquadVersion(squadType)
     state = newSquadState(args.sliceId, args.slice)
   }
 
+  // pinnedDefVersion is now always concrete; readSquadDefVersion reads that
+  // exact candidate's def. (readActiveSquadDef stays only as a defensive
+  // fallback for the theoretically-impossible undefined case.)
   let def: SquadDef =
     pinnedDefVersion !== undefined ? readSquadDefVersion(squadType, pinnedDefVersion) : readActiveSquadDef(squadType)
   // root-human (default) is an instance-position override (spec §1.5 rule

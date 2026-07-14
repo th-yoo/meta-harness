@@ -126,6 +126,50 @@ describe("squad-run channel 2 — squad-level fitness (spec §6, D5)", () => {
   })
 })
 
+describe("squad-run version drift (Fix 1 — spec §6 ch2 def-version pin)", () => {
+  /** Activate a new version: write its candidate squad.json + flip active to
+   * point at it (mirrors what /mh-activate does between a run's gate pause
+   * and its resume). */
+  function activate(version: string, def: SquadDef): void {
+    const root = squadRoot("standard")
+    mkdirSync(join(root, "candidates", version), { recursive: true })
+    writeFileSync(join(root, "candidates", version, "squad.json"), JSON.stringify(def))
+    writeFileSync(join(root, "active", "squad.json"), JSON.stringify({ ...def, __version: version }))
+  }
+
+  test("an unpinned run stays pinned to the version active AT RUN START, even if a newer version is activated between gate pause and resume", async () => {
+    // Fresh unpinned run against active v1 (generous budget 40) pauses at
+    // gate1. v1's happy path reaches done. A tight-budget v2 (2) exhausts.
+    const { drive, score } = scripted({})
+    const first = await cmdSquadRun({ project, sliceId: "drift1", slice: "x", gatePolicy: "root-human" }, drive, score)
+    expect(first.status).toBe("gate")
+
+    // The checkpoint must have captured the concrete resolved version (v1),
+    // even though the run was unpinned (no --def-version).
+    const ckpt = JSON.parse(readFileSync(checkpointPath(project, "drift1"), "utf-8"))
+    expect(ckpt.defVersion).toBe("v1")
+
+    // Simulate /mh-activate promoting a tight-budget v2 mid-run.
+    activate("v2", {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, bounds: { ...STANDARD_SQUAD.flow.bounds, globalBudgetSteps: 2 } },
+    })
+
+    // Resume: must keep executing against v1 (budget 40 → reaches gate2, then
+    // done), NOT drift onto the freshly-activated v2 (budget 2 → would exhaust).
+    const second = await cmdSquadRun({ project, sliceId: "drift1", resume: true, gateAnswer: "approve" }, drive, score)
+    expect(second.status).toBe("gate") // gate2 — v1 still executing
+    const third = await cmdSquadRun({ project, sliceId: "drift1", resume: true, gateAnswer: "approve" }, drive, score)
+    expect(third.status).toBe("done")
+
+    // The outcome is recorded to the ORIGINAL version (v1) that earned it —
+    // never to v2, which never ran this slice.
+    const v1Score = JSON.parse(readFileSync(join(squadRoot("standard"), "candidates", "v1", "score.json"), "utf-8"))
+    expect(v1Score.sessions.some((s: { sliceId: string }) => s.sliceId === "drift1")).toBe(true)
+    expect(existsSync(join(squadRoot("standard"), "candidates", "v2", "score.json"))).toBe(false)
+  })
+})
+
 describe("parseSquadRunArgs --def-version (CLI wiring, spec §6 ch2)", () => {
   test("parses --def-version into SquadRunCliArgs.defVersion", () => {
     const out = parseSquadRunArgs(["--project", "P", "--slice-id", "S", "--slice", "x", "--def-version", "v3"])
