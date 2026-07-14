@@ -4,11 +4,12 @@
  * uses) so this never spawns opencode; hermetic META_HARNESS_HOME per test.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { parseSquadRunArgs } from "../src/bench/cli.ts"
 import { cmdSquadRun, checkpointPath, roleForPhase } from "../src/fleet/squad-cli.ts"
-import { writeSquadDefV1, STANDARD_SQUAD, squadRoot } from "../src/fleet/squad-def.ts"
+import { writeSquadDefV1, STANDARD_SQUAD, squadRoot, type SquadDef } from "../src/fleet/squad-def.ts"
 import { scripted } from "./fleet-helpers.ts"
 
 let home: string, project: string
@@ -122,5 +123,95 @@ describe("squad-run channel 2 — squad-level fitness (spec §6, D5)", () => {
     const s = JSON.parse(readFileSync(scorePath(), "utf-8"))
     expect(s.nPass).toBe(1)
     expect(s.sessions[0]).toMatchObject({ sliceId: "sc3", passed: true })
+  })
+})
+
+describe("parseSquadRunArgs --def-version (CLI wiring, spec §6 ch2)", () => {
+  test("parses --def-version into SquadRunCliArgs.defVersion", () => {
+    const out = parseSquadRunArgs(["--project", "P", "--slice-id", "S", "--slice", "x", "--def-version", "v3"])
+    expect(out).not.toBeNull()
+    expect(out!.defVersion).toBe("v3")
+  })
+
+  test("without --def-version, defVersion is undefined", () => {
+    const out = parseSquadRunArgs(["--project", "P", "--slice-id", "S", "--slice", "x"])
+    expect(out).not.toBeNull()
+    expect(out!.defVersion).toBeUndefined()
+  })
+})
+
+describe("squad-run --def-version pin (spec §6 ch2 — tier-2 candidate selection)", () => {
+  test("uses the CANDIDATE def (not active) when --def-version is given, and records to that candidate's score.json", async () => {
+    // Candidate v2's tight budget (2) discriminates it from active v1's
+    // generous default (40): the happy path costs 7 counted steps
+    // (analyzer, gate1, evaluator-spec, designer, gate2, implementer,
+    // evaluator-verdict), so v1 sails to "done" while v2 exhausts early.
+    const candidate: SquadDef = {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, bounds: { ...STANDARD_SQUAD.flow.bounds, globalBudgetSteps: 2 } },
+    }
+    mkdirSync(join(squadRoot("standard"), "candidates", "v2"), { recursive: true })
+    writeFileSync(join(squadRoot("standard"), "candidates", "v2", "squad.json"), JSON.stringify(candidate))
+
+    const { drive, score } = scripted({})
+    const candOut = await cmdSquadRun(
+      { project, sliceId: "dv1", slice: "x", gatePolicy: "auto", defVersion: "v2" },
+      drive, score,
+    )
+    expect(candOut.status).toBe("escalation")
+    if (candOut.status === "escalation") expect(candOut.escalation.type).toBe("Exhausted")
+
+    // Sanity: the active def (v1, budget 40) really would have passed —
+    // proves the discriminator is real, not an unrelated scripted() quirk.
+    const activeOut = await cmdSquadRun({ project, sliceId: "dv1b", slice: "x", gatePolicy: "auto" }, drive, score)
+    expect(activeOut.status).toBe("done")
+
+    const v2Score = JSON.parse(readFileSync(join(squadRoot("standard"), "candidates", "v2", "score.json"), "utf-8"))
+    expect(v2Score.nFail).toBe(1)
+    expect(v2Score.sessions[0]).toMatchObject({ sliceId: "dv1", passed: false, escalationType: "Exhausted" })
+
+    // v1's score.json only has the SANITY run recorded, never the v2-pinned one.
+    const v1Score = JSON.parse(readFileSync(join(squadRoot("standard"), "candidates", "v1", "score.json"), "utf-8"))
+    expect(v1Score.sessions.length).toBe(1)
+    expect(v1Score.sessions[0]).toMatchObject({ sliceId: "dv1b", passed: true })
+  })
+
+  test("checkpoint carries defVersion; --resume without --def-version stays pinned to the candidate", async () => {
+    // v2: gate1 forced human (so the FIRST call pauses+checkpoints) and a
+    // tight budget (2) that only trips AFTER resuming — discriminates a
+    // correctly-pinned resume (exhausts) from an incorrectly-defaulted one
+    // (would fall back to v1's budget of 40 and sail to "done").
+    const candidate: SquadDef = {
+      ...STANDARD_SQUAD,
+      flow: {
+        ...STANDARD_SQUAD.flow,
+        gatePolicy: { gate1: "human", gate2: "auto" },
+        bounds: { ...STANDARD_SQUAD.flow.bounds, globalBudgetSteps: 2 },
+      },
+    }
+    mkdirSync(join(squadRoot("standard"), "candidates", "v2"), { recursive: true })
+    writeFileSync(join(squadRoot("standard"), "candidates", "v2", "squad.json"), JSON.stringify(candidate))
+
+    const { drive, score } = scripted({})
+    const first = await cmdSquadRun(
+      { project, sliceId: "dv2", slice: "x", gatePolicy: "auto", defVersion: "v2" },
+      drive, score,
+    )
+    expect(first.status).toBe("gate")
+    if (first.status === "gate") expect(first.gate).toBe("gate1")
+
+    // No --def-version here — must still read v2 (tight budget), not silently
+    // fall back to the active v1 def (budget 40, which would reach "done").
+    const second = await cmdSquadRun(
+      { project, sliceId: "dv2", resume: true, gateAnswer: "approve", gatePolicy: "auto" },
+      drive, score,
+    )
+    expect(second.status).toBe("escalation")
+    if (second.status === "escalation") expect(second.escalation.type).toBe("Exhausted")
+
+    const v2Score = JSON.parse(readFileSync(join(squadRoot("standard"), "candidates", "v2", "score.json"), "utf-8"))
+    expect(v2Score.nFail).toBe(1)
+    // v1's score.json was never written — the resumed run stayed pinned to v2.
+    expect(existsSync(join(squadRoot("standard"), "candidates", "v1", "score.json"))).toBe(false)
   })
 })

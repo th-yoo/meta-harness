@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   STANDARD_SQUAD, activeSquadVersion, detectEscalation, lintPayload, parseVerdict,
-  readActiveSquadDef, recordSquadOutcome, squadRoot, syncWireContracts, writeSquadDefV1,
+  readActiveSquadDef, readSquadDefVersion, recordSquadOutcome, squadRoot, syncWireContracts, writeSquadDefV1,
 } from "../src/fleet/squad-def.ts"
 import type { SquadDef } from "../src/fleet/squad-def.ts"
 import { accountRoleRoot } from "../src/harness-store.ts"
@@ -230,5 +230,70 @@ describe("channel 2 — squad-level fitness (spec §6, D5)", () => {
       recordSquadOutcome("nonexistent", { sliceId: "s1", passed: true, steps: 1, ts: "t" }),
     ).not.toThrow()
     expect(existsSync(join(squadRoot("nonexistent"), "candidates"))).toBe(false)
+  })
+})
+
+describe("readSquadDefVersion (def-version pin, spec §6 ch2)", () => {
+  test("happy: reads an INACTIVE candidate version's squad.json", () => {
+    writeSquadDefV1(STANDARD_SQUAD) // active = v1
+    const v2: SquadDef = {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, bounds: { ...STANDARD_SQUAD.flow.bounds, R1: 5 } },
+    }
+    mkdirSync(join(squadRoot("standard"), "candidates", "v2"), { recursive: true })
+    writeFileSync(join(squadRoot("standard"), "candidates", "v2", "squad.json"), JSON.stringify(v2))
+
+    const read = readSquadDefVersion("standard", "v2")
+    expect(read.flow.bounds.R1).toBe(5)
+    // Active def untouched/unaffected by reading a candidate directly.
+    expect(readActiveSquadDef("standard").flow.bounds.R1).toBe(2)
+  })
+
+  test("missing version: dies actionably, naming the version and squad type", () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    expect(() => readSquadDefVersion("standard", "v9")).toThrow(/v9/)
+    expect(() => readSquadDefVersion("standard", "v9")).toThrow(/standard/)
+  })
+
+  test("missing squad type entirely: dies actionably", () => {
+    expect(() => readSquadDefVersion("nope", "v1")).toThrow(/nope/)
+  })
+
+  test("validates slots like readActiveSquadDef: dies on a hand-written claude-code leaf", () => {
+    const def: SquadDef = {
+      ...STANDARD_SQUAD,
+      type: "cc-cand-test",
+      slots: {
+        ...STANDARD_SQUAD.slots,
+        evaluator: { kind: "agent", role: "evaluator", platform: "claude-code", model: "anthropic/claude-haiku-4-5" },
+      },
+    }
+    const dir = join(squadRoot("cc-cand-test"), "candidates", "v1")
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, "squad.json"), JSON.stringify(def))
+    expect(() => readSquadDefVersion("cc-cand-test", "v1")).toThrow(/claude-code leaf/)
+  })
+})
+
+describe("recordSquadOutcome version override (spec §6 ch2 def-version pin / trial machinery)", () => {
+  test("explicit version routes the outcome to THAT candidate's score.json, not the active one", () => {
+    writeSquadDefV1(STANDARD_SQUAD) // active = v1
+    mkdirSync(join(squadRoot("standard"), "candidates", "v2"), { recursive: true })
+    writeFileSync(join(squadRoot("standard"), "candidates", "v2", "squad.json"), JSON.stringify(STANDARD_SQUAD))
+
+    recordSquadOutcome("standard", { sliceId: "s1", passed: true, steps: 4, ts: "t1" }, "v2")
+
+    const v2Score = JSON.parse(readFileSync(join(squadRoot("standard"), "candidates", "v2", "score.json"), "utf-8"))
+    expect(v2Score.nPass).toBe(1)
+    expect(v2Score.sessions[0]).toMatchObject({ sliceId: "s1", passed: true })
+    // v1 (active) never touched by a v2-routed record.
+    expect(existsSync(join(squadRoot("standard"), "candidates", "v1", "score.json"))).toBe(false)
+  })
+
+  test("omitted version still falls back to activeSquadVersion (unchanged existing behavior)", () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    recordSquadOutcome("standard", { sliceId: "s1", passed: true, steps: 4, ts: "t1" })
+    const v1Score = JSON.parse(readFileSync(join(squadRoot("standard"), "candidates", "v1", "score.json"), "utf-8"))
+    expect(v1Score.nPass).toBe(1)
   })
 })

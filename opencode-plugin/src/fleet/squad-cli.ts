@@ -22,7 +22,7 @@
  */
 import { existsSync, mkdirSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
-import { readActiveSquadDef, recordSquadOutcome, type SquadDef } from "./squad-def.ts"
+import { readActiveSquadDef, readSquadDefVersion, recordSquadOutcome, type SquadDef } from "./squad-def.ts"
 import {
   answerGate,
   newSquadState,
@@ -61,16 +61,30 @@ export function checkpointPath(project: string, sliceId: string): string {
   )
 }
 
-export function saveCheckpoint(project: string, state: SquadState): void {
-  const p = checkpointPath(project, state.sliceId)
-  mkdirSync(dirname(p), { recursive: true })
-  writeJsonAtomic(p, state)
+/**
+ * On-disk checkpoint shape: `SquadState` plus a CLI-only sidecar field.
+ * squad.ts's `SquadState` is the pure runner core's own state — it has no
+ * notion of "which squad-def CANDIDATE VERSION produced this run" (that's a
+ * squad-cli.ts / def-version-pin concern, spec §6 ch2 trial machinery), so
+ * that pin rides along as an extra field on the same JSON blob rather than
+ * growing the pure state type. `defVersion` undefined = this run was
+ * unpinned (drove against whatever was active at the time).
+ */
+export interface SquadCheckpoint extends SquadState {
+  defVersion?: string
 }
 
-export function loadCheckpoint(project: string, sliceId: string): SquadState {
+export function saveCheckpoint(project: string, state: SquadState, defVersion?: string): void {
+  const p = checkpointPath(project, state.sliceId)
+  mkdirSync(dirname(p), { recursive: true })
+  const checkpoint: SquadCheckpoint = defVersion !== undefined ? { ...state, defVersion } : state
+  writeJsonAtomic(p, checkpoint)
+}
+
+export function loadCheckpoint(project: string, sliceId: string): SquadCheckpoint {
   const p = checkpointPath(project, sliceId)
   if (!existsSync(p)) die(`no checkpoint for slice '${sliceId}' at ${p}`)
-  return JSON.parse(readFileSync(p, "utf-8")) as SquadState
+  return JSON.parse(readFileSync(p, "utf-8")) as SquadCheckpoint
 }
 
 export async function cmdSquadRun(
@@ -91,6 +105,17 @@ export async function cmdSquadRun(
      * the accepted tradeoff for a single override (a per-role map is a
      * bigger, deferred design). */
     model?: string
+    /** Pin this run to a specific squad-def CANDIDATE version instead of the
+     * active one (spec §6 ch2 trial machinery — squad-trial drives runs
+     * against a candidate before it's activated, and a human debugging a
+     * specific candidate wants the same knob directly). An explicit
+     * `--def-version` always wins; on `--resume` with this omitted, the
+     * checkpoint's own pinned version (set by the run that created it) is
+     * reused automatically — a paused trial run must never silently drift
+     * onto whatever the active def happens to be by the time a gate answer
+     * comes back. Undefined (the default) throughout a slice's whole
+     * lifecycle preserves existing behavior: always read the active def. */
+    defVersion?: string
     json?: boolean
   },
   driveFn?: DriveFn,
@@ -108,13 +133,6 @@ export async function cmdSquadRun(
   execFn?: ExecFn,
 ): Promise<SquadOutcome> {
   const squadType = args.squadType ?? "standard"
-  let def: SquadDef = readActiveSquadDef(squadType)
-  // root-human (default) is an instance-position override (spec §1.5 rule
-  // 4): it overrides BOTH gates to human regardless of what the def itself
-  // says. "auto" leaves the def's own gatePolicy untouched.
-  if ((args.gatePolicy ?? "root-human") === "root-human") {
-    def = { ...def, flow: { ...def.flow, gatePolicy: { gate1: "human", gate2: "human" } } }
-  }
 
   const drive: DriveFn =
     driveFn ??
@@ -144,25 +162,41 @@ export async function cmdSquadRun(
     })
 
   let state: SquadState
+  // The def version this run is pinned to (spec §6 ch2 def-version pin): an
+  // explicit `--def-version` wins; failing that, `--resume` inherits
+  // whatever version the checkpoint itself carries (set on the run that
+  // first created it); a fresh run with neither is unpinned (undefined ->
+  // read the active def, same as before this knob existed).
+  let pinnedDefVersion: string | undefined = args.defVersion
   if (args.resume) {
-    state = loadCheckpoint(args.project, args.sliceId)
+    const checkpoint = loadCheckpoint(args.project, args.sliceId)
     if (args.gateAnswer !== "approve" && args.gateAnswer !== "revise") {
       die("--resume requires --gate-answer approve|revise")
     }
-    if (!state.pendingGate) {
+    if (!checkpoint.pendingGate) {
       die(`checkpoint for slice '${args.sliceId}' has no pending gate — nothing to resume`)
     }
-    if (!state.lastDriveId) {
+    if (!checkpoint.lastDriveId) {
       die(`checkpoint for slice '${args.sliceId}' is missing its pending gate's producer drive id`)
     }
+    pinnedDefVersion = args.defVersion ?? checkpoint.defVersion
     // BEFORE answerGate: score the gate's producer drive — approve → good,
     // revise → bad — under the gate's own name (squad.ts's `answerGate`
     // doc comment; mirrors `autoGate`'s scoring shape for the auto path).
-    await score(state.lastDriveId, args.gateAnswer === "revise" ? "bad" : "good", state.pendingGate.gate)
-    state = answerGate(state, args.gateAnswer)
+    await score(checkpoint.lastDriveId, args.gateAnswer === "revise" ? "bad" : "good", checkpoint.pendingGate.gate)
+    state = answerGate(checkpoint, args.gateAnswer)
   } else {
     if (!args.slice) die("fresh squad-run requires a slice (text or --slice-file)")
     state = newSquadState(args.sliceId, args.slice)
+  }
+
+  let def: SquadDef =
+    pinnedDefVersion !== undefined ? readSquadDefVersion(squadType, pinnedDefVersion) : readActiveSquadDef(squadType)
+  // root-human (default) is an instance-position override (spec §1.5 rule
+  // 4): it overrides BOTH gates to human regardless of what the def itself
+  // says. "auto" leaves the def's own gatePolicy untouched.
+  if ((args.gatePolicy ?? "root-human") === "root-human") {
+    def = { ...def, flow: { ...def.flow, gatePolicy: { gate1: "human", gate2: "human" } } }
   }
 
   const result = await runSquad(state, def, drive, score)
@@ -174,20 +208,25 @@ export async function cmdSquadRun(
   // (neutral or scored elsewhere — see squad-def.ts's channel-2 section).
   // This is the single exit point both a fresh run and a `--resume`
   // continuation converge on, so a resumed run that lands on done/Exhausted
-  // is recorded exactly the same way.
+  // is recorded exactly the same way. `pinnedDefVersion` routes the record
+  // to the def version that actually RAN (undefined = active, unchanged).
   const outcome = result.outcome
   if (outcome.status === "done" || (outcome.status === "escalation" && outcome.escalation.type === "Exhausted")) {
-    recordSquadOutcome(squadType, {
-      sliceId: args.sliceId,
-      passed: outcome.status === "done",
-      steps: result.state.counters.steps,
-      escalationType: outcome.status === "escalation" ? outcome.escalation.type : undefined,
-      nodePath: `root/${args.sliceId}`,
-      ts: new Date().toISOString(),
-    })
+    recordSquadOutcome(
+      squadType,
+      {
+        sliceId: args.sliceId,
+        passed: outcome.status === "done",
+        steps: result.state.counters.steps,
+        escalationType: outcome.status === "escalation" ? outcome.escalation.type : undefined,
+        nodePath: `root/${args.sliceId}`,
+        ts: new Date().toISOString(),
+      },
+      pinnedDefVersion,
+    )
   }
 
-  saveCheckpoint(args.project, result.state)
+  saveCheckpoint(args.project, result.state, pinnedDefVersion)
   console.log(JSON.stringify(result.outcome))
   return result.outcome
 }

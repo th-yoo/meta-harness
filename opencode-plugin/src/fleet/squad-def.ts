@@ -171,6 +171,24 @@ export function readActiveSquadDef(type: string): SquadDef {
   return def
 }
 
+/**
+ * Read one INACTIVE candidate version of a squad def directly (spec §6 ch2
+ * trial machinery — squad-run's `--def-version` pin and squad-trial both
+ * need to drive against a specific candidate, never just the active
+ * pointer). Same validation as readActiveSquadDef (a hand-edited or
+ * externally-produced candidate squad.json can't silently activate an
+ * unsupported topology either).
+ */
+export function readSquadDefVersion(type: string, version: string): SquadDef {
+  const p = join(squadRoot(type), "candidates", version, "squad.json")
+  if (!existsSync(p)) {
+    die(`no squad def candidate '${version}' for '${type}' at ${p} — check the version exists under candidates/`)
+  }
+  const def = JSON.parse(readFileSync(p, "utf-8")) as SquadDef
+  validateSlots(def)
+  return def
+}
+
 /** OR-groups: payload passes if EVERY heading of AT LEAST ONE group is present. */
 export function lintPayload(def: SquadDef, slot: string, payload: string): { ok: boolean; missing: string[] } {
   const groups = def.wire.headings[slot]
@@ -273,27 +291,34 @@ function squadScorePath(type: string, version: string): string {
 
 /**
  * Record one squad-level outcome (done → passed:true, Exhausted escalation
- * → passed:false) into the active squad def version's score.json —
- * read-modify-write, same nPass/nFail/sessions shape as a role's score.json
- * (recordSession, harness-store.ts). Never throws: if no active squad def
- * exists for `type`, logs a skip and returns — recording must never break a
- * run (squad-cli.ts calls this AFTER the squad already reached done/
- * Exhausted; failing to record it is a lesser evil than crashing the run
- * that just succeeded/exhausted).
+ * → passed:false) into a squad def version's score.json — read-modify-write,
+ * same nPass/nFail/sessions shape as a role's score.json (recordSession,
+ * harness-store.ts). Never throws: if no active squad def exists for
+ * `type`, logs a skip and returns — recording must never break a run
+ * (squad-cli.ts calls this AFTER the squad already reached done/Exhausted;
+ * failing to record it is a lesser evil than crashing the run that just
+ * succeeded/exhausted).
+ *
+ * `version` (spec §6 ch2 trial machinery): optional override routing the
+ * record to the def version that actually RAN — a `--def-version`-pinned
+ * squad-run (or squad-trial's own batch) must score the CANDIDATE it drove,
+ * never silently fall through to whatever happens to be active by the time
+ * the run finishes. Omitted (the default) preserves the original behavior:
+ * route to `activeSquadVersion(type)`.
  */
-export function recordSquadOutcome(type: string, rec: SquadOutcomeRecord): void {
+export function recordSquadOutcome(type: string, rec: SquadOutcomeRecord, version?: string): void {
   const activeDefPath = join(squadRoot(type), "active", "squad.json")
   if (!existsSync(activeDefPath)) {
     log(`recordSquadOutcome: no active squad def '${type}' — skipping squad-level fitness record`)
     return
   }
-  const version = activeSquadVersion(type)
-  const scorePath = squadScorePath(type, version)
+  const targetVersion = version ?? activeSquadVersion(type)
+  const scorePath = squadScorePath(type, targetVersion)
   let score: SquadScore
   try {
     score = JSON.parse(readFileSync(scorePath, "utf-8")) as SquadScore
   } catch {
-    score = { version, nPass: 0, nFail: 0, sessions: [] }
+    score = { version: targetVersion, nPass: 0, nFail: 0, sessions: [] }
   }
   score.sessions.push(rec)
   score.nPass = score.sessions.filter((s) => s.passed).length

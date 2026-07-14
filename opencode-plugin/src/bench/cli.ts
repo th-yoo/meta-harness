@@ -25,6 +25,7 @@ import { cmdRoleRun } from "../fleet/run.ts"
 import { cmdRoleScore, FLEET_GATES, type FleetGate } from "../fleet/score.ts"
 import { cmdSquadRun } from "../fleet/squad-cli.ts"
 import { cmdSquadPropose } from "../fleet/squad-propose.ts"
+import { cmdSquadTrial } from "../fleet/squad-trial.ts"
 
 const USAGE = `usage: runner.ts [--tb-root PATH] <command> [options]
 
@@ -58,8 +59,11 @@ commands:
                 [--gate gate1|gate2|verdict|merge|lint|infeasible]
   squad-run     --project PATH --slice-id S (--slice "text" | --slice-file F)
                 [--resume --gate-answer approve|revise]
-                [--gate-policy root-human|auto] [--squad-type T] [--model M] [--json]
-  squad-propose [--squad-type T] [--model M] [--timeout-sec N]`
+                [--gate-policy root-human|auto] [--squad-type T] [--model M]
+                [--def-version vN] [--json]
+  squad-propose [--squad-type T] [--model M] [--timeout-sec N]
+  squad-trial   --project PATH --candidate vN [--squad-type T]
+                [--slice "text" | --slice-file F] [--n N]`
 
 function printUsage(): void {
   console.error(USAGE)
@@ -869,6 +873,11 @@ interface SquadRunCliArgs {
    * own `--model` (cli.ts's role-run case, run.ts:203 `args.model ??
    * spec.model`). */
   model?: string
+  /** Pin this run to a specific squad-def CANDIDATE version instead of the
+   * active one (spec §6 ch2 — def-version pin / squad-trial's own use of
+   * this same knob). See squad-cli.ts's `cmdSquadRun` doc comment for the
+   * full resume-inheritance contract. */
+  defVersion?: string
   json?: boolean
 }
 
@@ -938,6 +947,13 @@ export function parseSquadRunArgs(argv: string[]): SquadRunCliArgs | null {
       i += 2
       continue
     }
+    if (a === "--def-version") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.defVersion = v
+      i += 2
+      continue
+    }
     if (a === "--json") {
       out.json = true
       i++
@@ -988,6 +1004,69 @@ function parseSquadProposeArgs(argv: string[]): SquadProposeCliArgs | null {
     return null
   }
   return out
+}
+
+interface SquadTrialCliArgs {
+  project: string
+  candidate: string
+  squadType?: string
+  slice?: string
+  sliceFile?: string
+  n?: number
+}
+
+function parseSquadTrialArgs(argv: string[]): SquadTrialCliArgs | null {
+  const out: Partial<SquadTrialCliArgs> = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--project") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.project = v
+      i += 2
+      continue
+    }
+    if (a === "--candidate") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.candidate = v
+      i += 2
+      continue
+    }
+    if (a === "--squad-type") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.squadType = v
+      i += 2
+      continue
+    }
+    if (a === "--slice") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.slice = v
+      i += 2
+      continue
+    }
+    if (a === "--slice-file") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.sliceFile = v
+      i += 2
+      continue
+    }
+    if (a === "--n") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.n = Number(v)
+      i += 2
+      continue
+    }
+    return null
+  }
+  if (out.project === undefined || out.candidate === undefined) return null
+  if (out.slice !== undefined && out.sliceFile !== undefined) return null
+  return out as SquadTrialCliArgs
 }
 
 export async function main(argv: string[]): Promise<number> {
@@ -1155,6 +1234,7 @@ export async function main(argv: string[]): Promise<number> {
           gatePolicy: squadRunArgs.gatePolicy,
           squadType: squadRunArgs.squadType,
           model: squadRunArgs.model,
+          defVersion: squadRunArgs.defVersion,
           json: squadRunArgs.json,
         })
         return 0
@@ -1171,6 +1251,22 @@ export async function main(argv: string[]): Promise<number> {
           timeoutSec: squadProposeArgs.timeoutSec,
         })
         console.log(JSON.stringify(result))
+        return 0
+      }
+      case "squad-trial": {
+        const squadTrialArgs = parseSquadTrialArgs(subArgs)
+        if (squadTrialArgs === null) {
+          printUsage()
+          return 2
+        }
+        await cmdSquadTrial({
+          project: squadTrialArgs.project,
+          squadType: squadTrialArgs.squadType,
+          candidate: squadTrialArgs.candidate,
+          slice: squadTrialArgs.slice,
+          sliceFile: squadTrialArgs.sliceFile,
+          n: squadTrialArgs.n,
+        })
         return 0
       }
       default:
