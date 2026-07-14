@@ -58,6 +58,10 @@ After that, ANY host: `git pull && store-sync.sh import` → v1 is in the store 
 
 Full detail + v1's diagnosis & playbook: **[loop-1-state.md](loop-1-state.md)**.
 
+**Completed run data also travels via git now:** `term-bench2/results-archive/`
+holds committed copies of final results (both baselines, phase-0 self-score,
+gate/soak) — the working `term-bench2/results/` dir stays git-ignored.
+
 ## The store travels via git now (no scp)
 
 The account store (`~/.config/meta-harness` — candidates v0/v1, active, playbooks,
