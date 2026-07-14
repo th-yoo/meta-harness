@@ -9,6 +9,27 @@ First propose→ab improvement loop (#5). Done: baseline (haiku pass@5 **0.381**
 14-task band split, store-writing run, **propose → account-global `v1`**
 (a real generalized playbook). The `ab` verdict (v0 vs v1) is the last step.
 
+Landed overnight 2026-07-15→16 (MacBook, pushed to `main`):
+- **Prompt-mining plan EXECUTED** (was saved-only) — `docs/external-prompts-cc-opencode.md`
+  (17-row verdict table, 22-bullet dual-tagged seed corpus, 6 meta-prompt lessons),
+  the two HIGH lessons applied to `buildProposerPrompt` (L1 untrusted-evidence,
+  L2 evidence-gated rejection list — conditional on non-empty failures so fresh-layer
+  bootstrap still writes a baseline; live propose smoke passed), and
+  `docs/target-model-axis.md` spec (additive-only v1; build deferred,
+  `explicitly-not-now.md` §2.4). Raw extraction scratch: `.superpowers/sdd/mining/`
+  (host-local, MacBook). Seed corpus is measure-first: do NOT hand-seed until
+  loop-1's ab shows what propose finds on its own.
+- **Phase-0 self-score correlation run IN FLIGHT** (best-of-k gate; MacBook,
+  detached): 43 baseline tasks × k=1 haiku with `--self-check`,
+  `term-bench2/results/phase0-selfscore-haiku.json` (+ log in `term-bench2/logs/`).
+  Mechanism proven live (AGENTS.md delivers instruction; one captured pair was
+  self=1.0/reward=0 — a false-positive self-report, exactly what Phase 0 measures).
+  CAVEAT: capture rate low so far (~1/7 — haiku often skips the self-check);
+  verdict via `bun term-bench2/runner.ts self-score-report --results-file
+  term-bench2/results/phase0-selfscore-haiku.json` — if n_selfpass < floor,
+  the finding is "capture rate too low", then strengthen the instruction and re-run
+  (deliberate revision, not mid-run surgery).
+
 Landed 2026-07-15 (all pushed to `main`):
 - **Store is git-syncable** — `term-bench2/store-sync.sh` + `term-bench2/store/` snapshot (next section). No more scp.
 - **Verifier-timeout bug fixed** — `--max-verifier-timeout` now bounds each attempt (was unbounded; `ab` command below already includes it).
