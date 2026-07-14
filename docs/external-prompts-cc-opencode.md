@@ -193,3 +193,22 @@ Do **not** hand-seed before measuring what the loop finds on its own — that is
 experiment. Bucket-B lessons are independent of the `ab` verdict and can be
 applied to `propose.ts` / `judge-prompt.txt` whenever a later task picks them up
 (start with L1 and L2, the two HIGH-confidence edits).
+
+## Loop-1 v1 vs corpus — MEASURED (2026-07-16, before ab verdict)
+
+v1's playbook (3 bullets, from 4 failure trajectories) vs Bucket-A. This is the
+measure-first result — done while `ab` runs; independent of accept/reject.
+
+| v1 bullet (propose-discovered) | from failure | closest Bucket-A | relation |
+|---|---|---|---|
+| Satisfy the literal named mechanism/syntax/format; equivalent output a different way is failure; debug the required mechanism, don't substitute; re-read every constraint before "done" | large-scale-text-editing (spec-misread) | A5 (verify before done) + A3 (diagnose don't blind-retry) | **thematic overlap, but the "literal-mechanism ≠ equivalent-output" rule is NOVEL** — not in the corpus |
+| Ground every count/measurement in tool output, never estimate/guess; scope searches to exactly what's asked | harness-store count (tool-misuse) | anti-hallucination (B "no fabricated URL", kimi) + A4 (pattern-match ≠ proof) | **partial overlap; "grounded counts" framing is propose's own** |
+| Never run a long-lived/blocking process in a shell's foreground; detach from stdio; verify separately | kv-store-grpc (tool-misuse) | B3 (prefer dedicated tools, reserve Bash) | **partial overlap; "detach background process" specific is NOVEL** |
+
+**Findings:**
+1. **Validation** — all 3 land in areas the corpus predicted (verification, anti-hallucination/grounding, tool discipline). The loop finds the *right kinds* of improvement.
+2. **Propose is MORE specific than the corpus** — it emits failure-grounded *operational* rules, not the corpus's general principles. That's the discipline Bucket-B **L2** would enforce ("only bullets evidenced by a failing trajectory; no generic best-practice"). The proposer already behaves as L2 prescribes — an argument that **L2 is lower-priority** than assumed (propose isn't over-proposing generics).
+3. **Corpus general bullets are NOT seed candidates yet** — none of loop-1's 4 failures evidenced A1 (read-before-write), A2 (plan-mode), B1/B2, C*, D* etc. Measure-first holds: seed a corpus bullet only when a *future* failure evidences it (e.g. a read-before-write error → A1 becomes a candidate). No hand-seeding now.
+4. **No target-model tags fired** — all 3 v1 bullets are UNIVERSAL-flavored (haiku failure modes that generalize). The VENDOR/MODEL corpus bullets (objectivity, GPT-persistence, Beast-web-verify) need multi-model runs to become relevant — consistent with the target-model axis being deferred.
+
+Net: loop-1 corroborates the proposer's evidence-tied discipline; the corpus's value is a *future* seed pool keyed to failure types not yet seen, not an immediate injection.
