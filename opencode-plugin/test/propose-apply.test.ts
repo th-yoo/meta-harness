@@ -257,6 +257,27 @@ test("applyPromoteArtifact: system.md absent → 'pending'", async () => {
   expect(listVersions(target)).not.toContain("v2")
 })
 
+test("applyPromoteArtifact: merged IDENTICAL to active target → no-op (no wasted ab)", async () => {
+  const target = path.join(home, "stores", "acct-role-noop")
+  writeActive(target, "v1", "- base account-role", "")
+  const source = path.join(home, "stores", "proj-role-noop")
+  writeActive(source, "v3", "- proven project rule", "")
+  const targetLayer: StoreLayer = { root: target, scope: "account-role", higherRoots: [] }
+  const sourceLayer: StoreLayer = { root: source, scope: "project-role", higherRoots: [] }
+
+  const b = stagingBase()
+  // merged result equals the active target system.md → nothing new generalized
+  fs.writeFileSync(path.join(b, "promote-account-role-v2-system.md"), "- base account-role\n")
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(fakeHost(rec),
+    descriptor({ kind: "promote", layer: targetLayer, source: sourceLayer, version: "v2" }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(target)).not.toContain("v2")   // identical → skipped, no ab wasted
+  expect(rec.logs.some((l) => l.includes("no-op"))).toBe(true)
+})
+
 // ── applyStagedArtifact: curate ─────────────────────────────────────────────
 
 test("applyCurateArtifact: ops.json → curated playbook trial (project layer)", async () => {

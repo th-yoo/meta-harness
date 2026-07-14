@@ -454,6 +454,17 @@ async function applyPromoteArtifact(host: HarnessHost, d: StagedArtifactDescript
     : ""
   if (tools) fs.rmSync(stagingTools, { force: true })
 
+  // No-op guard (review follow-up 2026-07-16): a promotion with nothing new to
+  // generalize merges to the active target verbatim → an identical INACTIVE
+  // account candidate that would waste a whole (multi-hour) `ab` run just to
+  // reject it. Skip. Completes the no-op family (propose / curate / promote).
+  if (system.trim() === readActiveSystem(target.root).trim()
+      && (tools ?? "").trim() === readActiveTools(target.root).trim()) {
+    await host.log("info", `promote ${target.scope}: no-op — merged result identical to active ${activeVersion(target.root)}; no candidate created`)
+    await host.notify(`Promote ${target.scope}: nothing new to generalize — no candidate`, "info", 8_000)
+    return "applied"
+  }
+
   createCandidate(target.root, version, system, tools) // inactive — account gate applies
   writeCandidateMeta(target.root, version, {
     proposerModel: d.proposerModel,
