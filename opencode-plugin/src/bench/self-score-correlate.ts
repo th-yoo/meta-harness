@@ -24,6 +24,16 @@ export interface CorrelationReport {
   nPairs: number
   nTasks: number
   minTasks: number
+  /** Count of attempts whose selfScore ≥ selfPassThreshold (= passIdx.length) —
+   * the sample size liftSelfPass is actually computed over. Surfaced
+   * separately from nTasks (the TASK floor) because the two can diverge a
+   * lot: at the default selfPassThreshold=1.0 on hard bands, most attempts
+   * self-report below 1.0, so nSelfPass ≪ nTasks is the EXPECTED case, not an
+   * edge case (review C1). */
+  nSelfPass: number
+  /** Gate: minimum self-PASS attempts (n_selfpass) before liftSelfPass is
+   * trustworthy — see CorrelateOpts.minSelfPass. */
+  minSelfPass: number
   baseRewardRate: number
   selfPassThreshold: number
   rewardRateGivenSelfPass: number
@@ -45,6 +55,17 @@ export interface CorrelateOpts {
    * a lucky handful of self-PASS runs must NOT greenlight the whole feature
    * (review R4#1). Tests override to exercise the lift axis on small fixtures. */
   minTasks?: number
+  /** gate: minimum self-PASS ATTEMPTS (n_selfpass = passIdx.length) before
+   * liftSelfPass is trustworthy. `minTasks` floors the task count, but
+   * liftSelfPass is computed over the self-PASS subset only, whose size is
+   * independent of nTasks — a single lucky self-PASS attempt among 30 tasks
+   * still clears the nTasks floor and can produce a huge (n=1) lift (review
+   * C1). Default = ceil(minTasks / 3): a third of the task floor, scaling
+   * with whatever minTasks the caller picks (including test fixtures that
+   * shrink minTasks to isolate the lift axis) rather than a fixed constant
+   * that would either be too strict for small fixtures or too loose at
+   * production scale. */
+  minSelfPass?: number
 }
 
 function pearson(xs: number[], ys: number[]): number {
@@ -71,6 +92,7 @@ export function correlateSelfScores(results: ResultsLike, opts: CorrelateOpts = 
   const selfPassThreshold = opts.selfPassThreshold ?? 1.0
   const liftGate = opts.liftGate ?? 0.20
   const minTasks = opts.minTasks ?? 30
+  const minSelfPass = opts.minSelfPass ?? Math.ceil(minTasks / 3)
 
   const selfScores: number[] = []
   const rewards: number[] = []
@@ -117,6 +139,8 @@ export function correlateSelfScores(results: ResultsLike, opts: CorrelateOpts = 
     nPairs,
     nTasks: bestOfKTasks,
     minTasks,
+    nSelfPass: passIdx.length,
+    minSelfPass,
     baseRewardRate,
     selfPassThreshold,
     rewardRateGivenSelfPass,
@@ -124,10 +148,14 @@ export function correlateSelfScores(results: ResultsLike, opts: CorrelateOpts = 
     bestOfKSelectionRate,
     bestOfKLift,
     pointBiserial,
-    // Gate: ENOUGH DATA (N ≥ minTasks, the plan's mandatory ≥30-band-task
-    // floor — review R4#1) + at least one self-PASS observation + self-PASS
-    // lift clears the bar (the plan's ≥+20pp). Without the N floor the gate
-    // fires PREDICTIVE on a single lucky self-PASS run.
-    predictive: bestOfKTasks >= minTasks && passIdx.length >= 1 && liftSelfPass >= liftGate,
+    // Gate: ENOUGH TASK DATA (N ≥ minTasks, the plan's mandatory ≥30-band-task
+    // floor — review R4#1) + ENOUGH SELF-PASS DATA (passIdx.length ≥
+    // minSelfPass — review C1: minTasks floors the task count, but
+    // liftSelfPass is computed over the self-PASS subset, which can be n=1
+    // even when nTasks clears 30) + self-PASS lift clears the bar (the
+    // plan's ≥+20pp). Without the n_selfpass floor, one lucky self-PASS
+    // attempt among many tasks can fire PREDICTIVE on a sample of one.
+    predictive:
+      bestOfKTasks >= minTasks && passIdx.length >= minSelfPass && liftSelfPass >= liftGate,
   }
 }

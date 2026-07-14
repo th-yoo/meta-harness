@@ -10,8 +10,9 @@ describe("correlateSelfScores", () => {
         c: { rewards: [0, 0], selfScores: [0.4, 0.2] },
       },
     }
-    const rep = correlateSelfScores(r, { minTasks: 1 }) // small fixture; exercise the lift axis
+    const rep = correlateSelfScores(r, { minTasks: 1, minSelfPass: 1 }) // small fixture; exercise the lift axis
     expect(rep.nPairs).toBe(6)
+    expect(rep.nSelfPass).toBe(2) // a and b each contribute one selfScore=1.0 attempt
     expect(rep.baseRewardRate).toBeCloseTo(2 / 6, 5)
     expect(rep.rewardRateGivenSelfPass).toBe(1)          // both selfScore=1.0 attempts passed
     expect(rep.liftSelfPass).toBeGreaterThan(0.2)
@@ -104,5 +105,44 @@ describe("correlateSelfScores", () => {
     expect(rep.nTasks).toBe(40)
     expect(rep.liftSelfPass).toBeCloseTo(0, 5)
     expect(rep.predictive).toBe(false)
+  })
+
+  test("self-PASS sample floor: 29 self-FAIL + 1 lucky self-PASS over 30 tasks (lift ~0.967) → NOT predictive", () => {
+    // Reproduces the C1 gap: bestOfKTasks (30) clears minTasks (30), and the
+    // single self-PASS attempt happens to have reward=1 → huge liftSelfPass —
+    // but n_selfpass=1 must NOT be enough to trust that lift.
+    const tasks: ResultsLike["tasks"] = {}
+    for (let i = 0; i < 29; i++) tasks[`fail${i}`] = { rewards: [0], selfScores: [0.0] }
+    tasks["luckyPass"] = { rewards: [1], selfScores: [1.0] }
+    const rep = correlateSelfScores({ tasks })
+    expect(rep.nTasks).toBe(30)
+    expect(rep.nSelfPass).toBe(1)
+    expect(rep.liftSelfPass).toBeGreaterThan(0.9)
+    expect(rep.predictive).toBe(false) // n_selfpass floor, not the lift, blocks this
+  })
+
+  test("self-PASS sample floor met + real lift → predictive", () => {
+    // 30 tasks, 10 genuine self-PASS (all reward=1) + 20 self-FAIL (reward=0).
+    const tasks: ResultsLike["tasks"] = {}
+    for (let i = 0; i < 10; i++) tasks[`pass${i}`] = { rewards: [1], selfScores: [1.0] }
+    for (let i = 0; i < 20; i++) tasks[`fail${i}`] = { rewards: [0], selfScores: [0.0] }
+    const rep = correlateSelfScores({ tasks })
+    expect(rep.nTasks).toBe(30)
+    expect(rep.nSelfPass).toBe(10)
+    expect(rep.liftSelfPass).toBeGreaterThan(0.2)
+    expect(rep.predictive).toBe(true)
+  })
+
+  test("minSelfPass is configurable and defaults to a fraction of minTasks", () => {
+    // minTasks:1 (isolates the N-task floor, as other small-fixture tests do)
+    // but minSelfPass explicitly raised above the fixture's 1 self-PASS.
+    const r: ResultsLike = {
+      tasks: {
+        a: { rewards: [1], selfScores: [1.0] },
+        b: { rewards: [0], selfScores: [0.0] },
+      },
+    }
+    expect(correlateSelfScores(r, { minTasks: 1, minSelfPass: 1 }).predictive).toBe(true)
+    expect(correlateSelfScores(r, { minTasks: 1, minSelfPass: 2 }).predictive).toBe(false)
   })
 })

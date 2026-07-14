@@ -1196,11 +1196,22 @@ export async function main(argv: string[]): Promise<number> {
         const report = correlateSelfScores(results)
         console.log(JSON.stringify(report, null, 2))
         const liftPp = `${(report.liftSelfPass * 100).toFixed(1)}pp`
-        const nNote = report.nTasks < report.minTasks ? ` — N=${report.nTasks} < ${report.minTasks} (undersized)` : ""
+        // Print BOTH sample sizes — n_tasks (the task-count floor) and
+        // n_selfpass (the self-PASS attempt-count floor liftSelfPass is
+        // actually computed over) — so a verdict resting on a tiny
+        // n_selfpass (e.g. one lucky self-PASS among 30 tasks) is visible to
+        // the operator instead of hidden behind a healthy-looking N (review
+        // C1).
+        const sizes = `N=${report.nTasks}, n_selfpass=${report.nSelfPass}`
+        const undersizedNote = [
+          report.nTasks < report.minTasks ? `N < ${report.minTasks}` : null,
+          report.nSelfPass < report.minSelfPass ? `n_selfpass < ${report.minSelfPass}` : null,
+        ].filter(Boolean).join(", ")
+        const nNote = undersizedNote ? ` — ${undersizedNote} (undersized)` : ""
         console.log(
           report.predictive
-            ? `\nGATE: PREDICTIVE (self-PASS lift ${liftPp}, N=${report.nTasks}) — best-of-k worth building`
-            : `\nGATE: NOT predictive (self-PASS lift ${liftPp}${nNote}) — do NOT build the k-loop; reassess the selector`,
+            ? `\nGATE: PREDICTIVE (self-PASS lift ${liftPp}, ${sizes}) — best-of-k worth building`
+            : `\nGATE: NOT predictive (self-PASS lift ${liftPp}, ${sizes}${nNote}) — do NOT build the k-loop; reassess the selector`,
         )
         return 0
       }
