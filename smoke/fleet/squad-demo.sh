@@ -70,8 +70,12 @@ if ! "${RUNNER[@]}" squad-def-init; then
   echo "(squad def already active — idempotent-refuse, continuing)"
 fi
 
-echo "== roles-import (fixtures — repo read-only) =="
-"${RUNNER[@]}" roles-import --from "$FIXTURES" --map architect=analyzer,designer --force
+if [ -s "$META_HARNESS_HOME/roles/mh-evaluator/active/system.md" ]; then
+  echo "== roles-import skipped (store already populated — preserving evolved activations) =="
+else
+  echo "== roles-import (fixtures — repo read-only) =="
+  "${RUNNER[@]}" roles-import --from "$FIXTURES" --map architect=analyzer,designer
+fi
 
 echo "== roles-render =="
 "${RUNNER[@]}" roles-render --project "$PROJ"
