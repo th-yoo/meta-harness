@@ -22,7 +22,7 @@
  */
 import { existsSync, mkdirSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
-import { readActiveSquadDef, type SquadDef } from "./squad-def.ts"
+import { readActiveSquadDef, recordSquadOutcome, type SquadDef } from "./squad-def.ts"
 import {
   answerGate,
   newSquadState,
@@ -107,7 +107,8 @@ export async function cmdSquadRun(
    * test code or resorting to module mocking. */
   execFn?: ExecFn,
 ): Promise<SquadOutcome> {
-  let def: SquadDef = readActiveSquadDef(args.squadType ?? "standard")
+  const squadType = args.squadType ?? "standard"
+  let def: SquadDef = readActiveSquadDef(squadType)
   // root-human (default) is an instance-position override (spec §1.5 rule
   // 4): it overrides BOTH gates to human regardless of what the def itself
   // says. "auto" leaves the def's own gatePolicy untouched.
@@ -165,6 +166,27 @@ export async function cmdSquadRun(
   }
 
   const result = await runSquad(state, def, drive, score)
+
+  // Channel 2 — squad-level fitness (spec §6, D5 table): `done` → squad def
+  // GOOD, an `Exhausted` escalation → squad def BAD. Every other exit
+  // (a gate pause, or an escalation of any OTHER type — Clarify/
+  // DesignDecision/Infeasible/Refused) is deliberately NOT recorded here
+  // (neutral or scored elsewhere — see squad-def.ts's channel-2 section).
+  // This is the single exit point both a fresh run and a `--resume`
+  // continuation converge on, so a resumed run that lands on done/Exhausted
+  // is recorded exactly the same way.
+  const outcome = result.outcome
+  if (outcome.status === "done" || (outcome.status === "escalation" && outcome.escalation.type === "Exhausted")) {
+    recordSquadOutcome(squadType, {
+      sliceId: args.sliceId,
+      passed: outcome.status === "done",
+      steps: result.state.counters.steps,
+      escalationType: outcome.status === "escalation" ? outcome.escalation.type : undefined,
+      nodePath: `root/${args.sliceId}`,
+      ts: new Date().toISOString(),
+    })
+  }
+
   saveCheckpoint(args.project, result.state)
   console.log(JSON.stringify(result.outcome))
   return result.outcome

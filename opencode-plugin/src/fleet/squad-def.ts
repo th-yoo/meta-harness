@@ -6,7 +6,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { accountMetaRoot, accountRoleRoot } from "../harness-store.ts"
-import { die, writeJsonAtomic, writeTextAtomic } from "../bench/util.ts"
+import { die, log, writeJsonAtomic, writeTextAtomic } from "../bench/util.ts"
 
 export type SlotBinding =
   | { kind: "agent"; role: string; platform: "opencode" | "claude-code"; model: string }
@@ -219,4 +219,84 @@ export function parseVerdict(
   if (verdict === "PASS") return { verdict: "PASS" }
   const cause = (m[2]?.toLowerCase() ?? "impl") as "impl" | "design" | "intent"
   return { verdict: "FAIL", cause }
+}
+
+// ── Channel 2 — squad-level fitness (spec §6, D5 table) ────────────────────
+//
+// The squad def is a node's OWN evolvable artifact (§6): a `done` outcome is
+// good fitness for the squad manifest/policy that produced it, an
+// `Exhausted` escalation is bad. Other escalation types (Clarify/
+// DesignDecision/Infeasible/Refused) are NOT squad-def outcomes — they're
+// either neutral (asking isn't failing) or scored elsewhere (Infeasible at
+// the human-confirm boundary, Refused never at all) — so callers only ever
+// construct a SquadOutcomeRecord for done/Exhausted (squad-cli.ts's
+// cmdSquadRun gates on this same distinction).
+
+export interface SquadOutcomeRecord {
+  sliceId: string
+  passed: boolean
+  steps: number
+  escalationType?: string
+  nodePath?: string
+  ts: string
+}
+
+/** score.json shape at squadRoot(type)/candidates/<version>/score.json —
+ * deliberately IDENTICAL to harness-store.ts's CandidateScore
+ * ({version, nPass, nFail, sessions}) so future proposer/trial machinery can
+ * reuse the same readers against a squad-def store as a role store. */
+interface SquadScore {
+  version: string
+  nPass: number
+  nFail: number
+  sessions: SquadOutcomeRecord[]
+}
+
+/** Active squad def's `__version` pin (written alongside the def by
+ * writeSquadDefV1), defaulting to "v1" if absent or unparsable — never
+ * throws, since callers use this to route a squad-level score write and a
+ * recording path must never be the reason a run fails. */
+export function activeSquadVersion(type: string): string {
+  const p = join(squadRoot(type), "active", "squad.json")
+  if (!existsSync(p)) return "v1"
+  try {
+    const raw = JSON.parse(readFileSync(p, "utf-8")) as { __version?: string }
+    return raw.__version ?? "v1"
+  } catch {
+    return "v1"
+  }
+}
+
+function squadScorePath(type: string, version: string): string {
+  return join(squadRoot(type), "candidates", version, "score.json")
+}
+
+/**
+ * Record one squad-level outcome (done → passed:true, Exhausted escalation
+ * → passed:false) into the active squad def version's score.json —
+ * read-modify-write, same nPass/nFail/sessions shape as a role's score.json
+ * (recordSession, harness-store.ts). Never throws: if no active squad def
+ * exists for `type`, logs a skip and returns — recording must never break a
+ * run (squad-cli.ts calls this AFTER the squad already reached done/
+ * Exhausted; failing to record it is a lesser evil than crashing the run
+ * that just succeeded/exhausted).
+ */
+export function recordSquadOutcome(type: string, rec: SquadOutcomeRecord): void {
+  const activeDefPath = join(squadRoot(type), "active", "squad.json")
+  if (!existsSync(activeDefPath)) {
+    log(`recordSquadOutcome: no active squad def '${type}' — skipping squad-level fitness record`)
+    return
+  }
+  const version = activeSquadVersion(type)
+  const scorePath = squadScorePath(type, version)
+  let score: SquadScore
+  try {
+    score = JSON.parse(readFileSync(scorePath, "utf-8")) as SquadScore
+  } catch {
+    score = { version, nPass: 0, nFail: 0, sessions: [] }
+  }
+  score.sessions.push(rec)
+  score.nPass = score.sessions.filter((s) => s.passed).length
+  score.nFail = score.sessions.filter((s) => !s.passed).length
+  writeJsonAtomic(scorePath, score)
 }

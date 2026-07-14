@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
-  STANDARD_SQUAD, detectEscalation, lintPayload, parseVerdict,
-  readActiveSquadDef, squadRoot, syncWireContracts, writeSquadDefV1,
+  STANDARD_SQUAD, activeSquadVersion, detectEscalation, lintPayload, parseVerdict,
+  readActiveSquadDef, recordSquadOutcome, squadRoot, syncWireContracts, writeSquadDefV1,
 } from "../src/fleet/squad-def.ts"
 import type { SquadDef } from "../src/fleet/squad-def.ts"
 import { accountRoleRoot } from "../src/harness-store.ts"
@@ -183,5 +183,52 @@ describe("syncWireContracts (Fix B — wire contract visible to the proposer)", 
     writeSquadDefV1(STANDARD_SQUAD)
     const content = readFileSync(join(accountRoleRoot("mh-implementer"), "contract.md"), "utf-8")
     expect(content).toContain("## Implementation Report")
+  })
+})
+
+describe("channel 2 — squad-level fitness (spec §6, D5)", () => {
+  test("activeSquadVersion reads the active def's __version", () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    expect(activeSquadVersion("standard")).toBe("v1")
+  })
+
+  test("activeSquadVersion defaults to v1 when no active def exists", () => {
+    expect(activeSquadVersion("nope")).toBe("v1")
+  })
+
+  test("recordSquadOutcome creates score.json under the active version, same shape as a role score", () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    recordSquadOutcome("standard", {
+      sliceId: "s1", passed: true, steps: 12, nodePath: "root/s1", ts: "2026-07-14T00:00:00.000Z",
+    })
+    const p = join(squadRoot("standard"), "candidates", "v1", "score.json")
+    const score = JSON.parse(readFileSync(p, "utf-8"))
+    expect(score.version).toBe("v1")
+    expect(score.nPass).toBe(1)
+    expect(score.nFail).toBe(0)
+    expect(score.sessions).toEqual([
+      { sliceId: "s1", passed: true, steps: 12, nodePath: "root/s1", ts: "2026-07-14T00:00:00.000Z" },
+    ])
+  })
+
+  test("recordSquadOutcome appends across calls and bumps nPass/nFail independently", () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    recordSquadOutcome("standard", { sliceId: "s1", passed: true, steps: 5, ts: "t1" })
+    recordSquadOutcome("standard", {
+      sliceId: "s2", passed: false, steps: 40, escalationType: "Exhausted", ts: "t2",
+    })
+    const p = join(squadRoot("standard"), "candidates", "v1", "score.json")
+    const score = JSON.parse(readFileSync(p, "utf-8"))
+    expect(score.nPass).toBe(1)
+    expect(score.nFail).toBe(1)
+    expect(score.sessions.length).toBe(2)
+    expect(score.sessions[1].escalationType).toBe("Exhausted")
+  })
+
+  test("recordSquadOutcome never throws when no active squad def exists (recording must never break a run)", () => {
+    expect(() =>
+      recordSquadOutcome("nonexistent", { sliceId: "s1", passed: true, steps: 1, ts: "t" }),
+    ).not.toThrow()
+    expect(existsSync(join(squadRoot("nonexistent"), "candidates"))).toBe(false)
   })
 })
