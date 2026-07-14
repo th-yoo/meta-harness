@@ -43,6 +43,22 @@ Defaults: alpha 0.05, nonregress-margin 0.05, min-tasks-before-stop 12, early-st
 
 **On the MacBook, to run `ab` you need v1 in its store. Either:** (a) `scp -r ~/.config/meta-harness` from this host to the MacBook (fastest — carries v0 diet + v1); or (b) re-run the loop from the git-tracked split: store-writing band run → `/mh-propose account` (re-derives a v1 from fresh trajectories — will differ). Option (a) preserves THIS v1.
 
+## BUG — `--max-agent-timeout` does NOT bound total attempt time (found 2026-07-14, ab smoke)
+
+`taskTimeouts` (`opencode-plugin/src/bench/tasks.ts:120-134`) applies `maxAgentTimeout`
+to the **agent only** (`:129-132`); `verifierTimeout` (`:127`, from `task.toml`
+`verifier.timeout_sec`, else 300) is **never capped**. So one attempt's wall-time =
+agentCap + verifierCap. Evidence (ab smoke, `large-scale-text-editing` arm B): agent
+timed out at 600s (no "done in" line → `agent-run.ts:181-184` fail-fast, NOT a retry),
+then `verifier (timeout=1200s)` ran ~600s → `elapsed=1209.6s` despite `--max-agent-timeout 600`.
+NOT a retry-multiply (timeouts don't retry; only transient provider errors do, `agent-run.ts:209`).
+
+**Impact:** time-boxed runs (like a 1-hr smoke) can't be bounded — a task with a large
+`verifier.timeout_sec` blows the budget. **Fix:** add a `--max-verifier-timeout` flag
+threaded into `taskTimeouts` (mirror `maxAgentTimeout`, cap `verifierTimeout`) — or a
+single `--max-attempt-timeout` bounding the sum. Touch: `bench/cli.ts` (parse), `tasks.ts:120`
+(cap), `cmd-run.ts:381`/`cmd-ab.ts:308` (pass through). NOT done yet.
+
 ## Gotchas that bit us (also in `improvement-loops.md` §3)
 - Account-scope propose needs `opencode.json` → `"permission": {"external_directory": "allow"}` (the account store is outside the worktree; without it the headless proposer hangs on a permission prompt). **Committed to `opencode.json`.**
 - `--results-file` forces `--no-store`; store-writing runs aren't resumable; Phase-0 self-check can't piggyback.
