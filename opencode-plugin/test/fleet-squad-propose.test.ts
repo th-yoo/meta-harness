@@ -1,0 +1,274 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import {
+  buildSquadProposerPrompt, cmdSquadPropose, nextSquadVersion, validateFlowMutation,
+} from "../src/fleet/squad-propose.ts"
+import {
+  STANDARD_SQUAD, readActiveSquadDef, recordSquadOutcome, squadRoot, writeSquadDefV1,
+} from "../src/fleet/squad-def.ts"
+import type { SquadDef } from "../src/fleet/squad-def.ts"
+import type { ExecFn } from "../src/fleet/run.ts"
+
+let home: string
+beforeEach(() => {
+  home = mkdtempSync(join(tmpdir(), "mh-squad-propose-"))
+  process.env.META_HARNESS_HOME = home
+})
+afterEach(() => {
+  delete process.env.META_HARNESS_HOME
+  rmSync(home, { recursive: true, force: true })
+})
+
+/** Pull the staging file path out of the prompt's `cat > "<path>" <<
+ * 'ENDOFSQUADJSON'` heredoc — the fake ExecFn stands in for the LLM: it
+ * "reads" the prompt (the last argv element) and follows the same write
+ * instruction a real opencode session would. */
+function stagingPathFromPrompt(prompt: string): string {
+  const m = /cat > "([^"]+)" << 'ENDOFSQUADJSON'/.exec(prompt)
+  if (!m) throw new Error("no staging path found in prompt")
+  return m[1]!
+}
+
+/** Fake ExecFn that writes `def` (and an optional diagnosis) to the staging
+ * path it parses out of the prompt, mirroring a real session's file-write
+ * side effect — never spawns a real opencode process. */
+function fakeExecWriting(def: SquadDef, opts: { diagnosis?: string } = {}): ExecFn {
+  return async (argv) => {
+    const prompt = argv[argv.length - 1]!
+    const stagingPath = stagingPathFromPrompt(prompt)
+    writeFileSync(stagingPath, JSON.stringify(def, null, 2))
+    if (opts.diagnosis !== undefined) {
+      writeFileSync(`${stagingPath}.diagnosis.md`, opts.diagnosis)
+    }
+    return { stdout: "", rc: 0 }
+  }
+}
+
+describe("nextSquadVersion", () => {
+  test("v2 after seeding v1", () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    expect(nextSquadVersion("standard")).toBe("v2")
+  })
+
+  test("gaps handled: v1 + v5 present -> v6, not v2", () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    const v5Dir = join(squadRoot("standard"), "candidates", "v5")
+    mkdirSync(v5Dir, { recursive: true })
+    writeFileSync(join(v5Dir, "squad.json"), JSON.stringify(STANDARD_SQUAD))
+    expect(nextSquadVersion("standard")).toBe("v6")
+  })
+})
+
+describe("validateFlowMutation", () => {
+  test("accepts a pure flow-knob change", () => {
+    const proposed: SquadDef = {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, bounds: { ...STANDARD_SQUAD.flow.bounds, R1: 4 } },
+    }
+    const { ok, errors } = validateFlowMutation(STANDARD_SQUAD, proposed)
+    expect(ok).toBe(true)
+    expect(errors).toEqual([])
+  })
+
+  test("rejects a slot change", () => {
+    const proposed: SquadDef = {
+      ...STANDARD_SQUAD,
+      slots: { ...STANDARD_SQUAD.slots, designer: { ...STANDARD_SQUAD.slots.designer, model: "anthropic/other-model" } },
+    }
+    const { ok, errors } = validateFlowMutation(STANDARD_SQUAD, proposed)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => /slots/.test(e))).toBe(true)
+  })
+
+  test("rejects a wire change", () => {
+    const proposed: SquadDef = { ...STANDARD_SQUAD, wire: { ...STANDARD_SQUAD.wire, verdictRe: "^X" } }
+    const { ok, errors } = validateFlowMutation(STANDARD_SQUAD, proposed)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => /wire/.test(e))).toBe(true)
+  })
+
+  test("rejects R1=0 (below legal range)", () => {
+    const proposed: SquadDef = {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, bounds: { ...STANDARD_SQUAD.flow.bounds, R1: 0 } },
+    }
+    const { ok, errors } = validateFlowMutation(STANDARD_SQUAD, proposed)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => /R1/.test(e))).toBe(true)
+  })
+
+  test("rejects R1=99 (above legal range)", () => {
+    const proposed: SquadDef = {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, bounds: { ...STANDARD_SQUAD.flow.bounds, R1: 99 } },
+    }
+    const { ok, errors } = validateFlowMutation(STANDARD_SQUAD, proposed)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => /R1/.test(e))).toBe(true)
+  })
+
+  test("rejects globalBudgetSteps=5 (below legal range)", () => {
+    const proposed: SquadDef = {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, bounds: { ...STANDARD_SQUAD.flow.bounds, globalBudgetSteps: 5 } },
+    }
+    const { ok, errors } = validateFlowMutation(STANDARD_SQUAD, proposed)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => /globalBudgetSteps/.test(e))).toBe(true)
+  })
+
+  test("rejects a bad gatePolicy enum", () => {
+    const proposed = {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, gatePolicy: { gate1: "robot", gate2: "auto" } },
+    } as unknown as SquadDef
+    const { ok, errors } = validateFlowMutation(STANDARD_SQUAD, proposed)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => /gatePolicy\.gate1/.test(e))).toBe(true)
+  })
+
+  test("rejects a bad reentry enum", () => {
+    const proposed = {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, reentry: "whenever" },
+    } as unknown as SquadDef
+    const { ok, errors } = validateFlowMutation(STANDARD_SQUAD, proposed)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => /reentry/.test(e))).toBe(true)
+  })
+
+  test("multi-error: lists every violation at once, not just the first", () => {
+    const proposed = {
+      ...STANDARD_SQUAD,
+      slots: { ...STANDARD_SQUAD.slots, designer: { ...STANDARD_SQUAD.slots.designer, model: "x" } },
+      wire: { ...STANDARD_SQUAD.wire, verdictRe: "^X" },
+      flow: {
+        bounds: { R1: 0, R2: 1, R3: 3, globalBudgetSteps: 40 },
+        gatePolicy: { gate1: "robot", gate2: "auto" },
+        reentry: "delta",
+      },
+    } as unknown as SquadDef
+    const { ok, errors } = validateFlowMutation(STANDARD_SQUAD, proposed)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => /slots/.test(e))).toBe(true)
+    expect(errors.some((e) => /wire/.test(e))).toBe(true)
+    expect(errors.some((e) => /R1/.test(e))).toBe(true)
+    expect(errors.some((e) => /gatePolicy\.gate1/.test(e))).toBe(true)
+    expect(errors.length).toBeGreaterThanOrEqual(4)
+  })
+})
+
+describe("buildSquadProposerPrompt", () => {
+  test("contains active json, knob cheat-sheet, and outcome sessions when present", () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    recordSquadOutcome("standard", { sliceId: "s1", passed: true, steps: 9, ts: "t1" })
+    recordSquadOutcome("standard", {
+      sliceId: "s2", passed: false, steps: 41, escalationType: "Exhausted", ts: "t2",
+    })
+    const stagingPath = join(squadRoot("standard"), ".staging", "x.json")
+    const prompt = buildSquadProposerPrompt("standard", STANDARD_SQUAD, stagingPath)
+
+    expect(prompt).toContain('"type": "standard"')
+    expect(prompt).toContain("bounds.R1")
+    expect(prompt).toContain("bounds.globalBudgetSteps")
+    expect(prompt).toContain("gatePolicy.gate1")
+    expect(prompt).toContain("reentry");
+    expect(prompt).toContain("sliceId=s1")
+    expect(prompt).toContain("sliceId=s2")
+    expect(prompt).toContain("escalationType=Exhausted")
+    expect(prompt).toContain(stagingPath)
+    expect(prompt).toContain(`${stagingPath}.diagnosis.md`)
+  })
+
+  test("falls back to a 'no scored sessions' note when the active version has none", () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    const stagingPath = join(squadRoot("standard"), ".staging", "y.json")
+    const prompt = buildSquadProposerPrompt("standard", STANDARD_SQUAD, stagingPath)
+    expect(prompt).toContain("no scored sessions yet")
+  })
+})
+
+describe("cmdSquadPropose", () => {
+  test("happy path: valid knob mutation -> candidate v2 written, active untouched", async () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    const mutated: SquadDef = {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, bounds: { ...STANDARD_SQUAD.flow.bounds, R1: 3 } },
+    }
+    const execFn = fakeExecWriting(mutated, { diagnosis: "## Diagnosis\n\nbumped R1.\n" })
+
+    const result = await cmdSquadPropose({}, execFn)
+    expect(result.version).toBe("v2")
+    expect(result.def.flow.bounds.R1).toBe(3)
+
+    const candidateJson = join(squadRoot("standard"), "candidates", "v2", "squad.json")
+    expect(existsSync(candidateJson)).toBe(true)
+    const written = JSON.parse(readFileSync(candidateJson, "utf-8"))
+    expect(written.flow.bounds.R1).toBe(3)
+
+    const candidateDiag = join(squadRoot("standard"), "candidates", "v2", "diagnosis.md")
+    expect(existsSync(candidateDiag)).toBe(true)
+    expect(readFileSync(candidateDiag, "utf-8")).toContain("## Diagnosis")
+
+    // active untouched
+    const active = readActiveSquadDef("standard")
+    expect(active.flow.bounds.R1).toBe(2)
+  })
+
+  test("happy path with no diagnosis written: candidate still lands, no diagnosis.md copied", async () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    const mutated: SquadDef = {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, gatePolicy: { gate1: "human", gate2: "auto" } },
+    }
+    const execFn = fakeExecWriting(mutated)
+    const result = await cmdSquadPropose({}, execFn)
+    expect(result.version).toBe("v2")
+    expect(existsSync(join(squadRoot("standard"), "candidates", "v2", "squad.json"))).toBe(true)
+    expect(existsSync(join(squadRoot("standard"), "candidates", "v2", "diagnosis.md"))).toBe(false)
+  })
+
+  test("invalid staged def (slot change) -> dies, no candidate dir written", async () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    const mutated: SquadDef = {
+      ...STANDARD_SQUAD,
+      slots: { ...STANDARD_SQUAD.slots, analyzer: { ...STANDARD_SQUAD.slots.analyzer, model: "anthropic/other" } },
+    }
+    const execFn = fakeExecWriting(mutated)
+    await expect(cmdSquadPropose({}, execFn)).rejects.toThrow(/slots/)
+    expect(existsSync(join(squadRoot("standard"), "candidates", "v2"))).toBe(false)
+  })
+
+  test("invalid staged def (out-of-range bound) -> dies listing the violation", async () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    const mutated: SquadDef = {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, bounds: { ...STANDARD_SQUAD.flow.bounds, R3: 99 } },
+    }
+    const execFn = fakeExecWriting(mutated)
+    await expect(cmdSquadPropose({}, execFn)).rejects.toThrow(/R3/)
+    expect(existsSync(join(squadRoot("standard"), "candidates", "v2"))).toBe(false)
+  })
+
+  test("timeout: ExecFn writes nothing -> dies cleanly, no candidate dir", async () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    const execFn: ExecFn = async () => ({ stdout: "", rc: 0 })
+    await expect(cmdSquadPropose({ timeoutSec: 0.2 }, execFn)).rejects.toThrow(/timed out/)
+    expect(existsSync(join(squadRoot("standard"), "candidates", "v2"))).toBe(false)
+  })
+
+  test("uses the given --squad-type (not just 'standard')", async () => {
+    const custom: SquadDef = { ...STANDARD_SQUAD, type: "custom" }
+    writeSquadDefV1(custom)
+    const mutated: SquadDef = {
+      ...custom,
+      flow: { ...custom.flow, bounds: { ...custom.flow.bounds, R2: 2 } },
+    }
+    const execFn = fakeExecWriting(mutated)
+    const result = await cmdSquadPropose({ squadType: "custom" }, execFn)
+    expect(result.version).toBe("v2")
+    expect(existsSync(join(squadRoot("custom"), "candidates", "v2", "squad.json"))).toBe(true)
+  })
+})

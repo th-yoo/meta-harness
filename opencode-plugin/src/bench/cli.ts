@@ -24,6 +24,7 @@ import { cmdRolesImport } from "../fleet/import.ts"
 import { cmdRoleRun } from "../fleet/run.ts"
 import { cmdRoleScore, FLEET_GATES, type FleetGate } from "../fleet/score.ts"
 import { cmdSquadRun } from "../fleet/squad-cli.ts"
+import { cmdSquadPropose } from "../fleet/squad-propose.ts"
 
 const USAGE = `usage: runner.ts [--tb-root PATH] <command> [options]
 
@@ -57,7 +58,8 @@ commands:
                 [--gate gate1|gate2|verdict|merge|lint|infeasible]
   squad-run     --project PATH --slice-id S (--slice "text" | --slice-file F)
                 [--resume --gate-answer approve|revise]
-                [--gate-policy root-human|auto] [--squad-type T] [--model M] [--json]`
+                [--gate-policy root-human|auto] [--squad-type T] [--model M] [--json]
+  squad-propose [--squad-type T] [--model M] [--timeout-sec N]`
 
 function printUsage(): void {
   console.error(USAGE)
@@ -951,6 +953,43 @@ export function parseSquadRunArgs(argv: string[]): SquadRunCliArgs | null {
   return out as SquadRunCliArgs
 }
 
+interface SquadProposeCliArgs {
+  squadType?: string
+  model?: string
+  timeoutSec?: number
+}
+
+function parseSquadProposeArgs(argv: string[]): SquadProposeCliArgs | null {
+  const out: SquadProposeCliArgs = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--squad-type") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.squadType = v
+      i += 2
+      continue
+    }
+    if (a === "--model") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.model = v
+      i += 2
+      continue
+    }
+    if (a === "--timeout-sec") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.timeoutSec = Number(v)
+      i += 2
+      continue
+    }
+    return null
+  }
+  return out
+}
+
 export async function main(argv: string[]): Promise<number> {
   try {
     const global = extractTbRoot(argv)
@@ -1118,6 +1157,20 @@ export async function main(argv: string[]): Promise<number> {
           model: squadRunArgs.model,
           json: squadRunArgs.json,
         })
+        return 0
+      }
+      case "squad-propose": {
+        const squadProposeArgs = parseSquadProposeArgs(subArgs)
+        if (squadProposeArgs === null) {
+          printUsage()
+          return 2
+        }
+        const result = await cmdSquadPropose({
+          squadType: squadProposeArgs.squadType,
+          model: squadProposeArgs.model,
+          timeoutSec: squadProposeArgs.timeoutSec,
+        })
+        console.log(JSON.stringify(result))
         return 0
       }
       default:
