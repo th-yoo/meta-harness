@@ -15,6 +15,7 @@ import { cmdJudgeAudit, type JudgeAuditArgs } from "./judge-audit.ts"
 import { LAYER_CHOICES, type LayerName } from "./record.ts"
 import { cmdSplit, type SplitArgs } from "./splits.ts"
 import { cmdReportLoop, type ReportLoopArgs } from "./report-loop.ts"
+import { correlateSelfScores, type ResultsLike } from "./self-score-correlate.ts"
 import { BenchError, log } from "./util.ts"
 import { DRIVER_IDS } from "./drivers/index.ts"
 import { readFileSync } from "node:fs"
@@ -50,6 +51,7 @@ commands:
               [--sentinels N] [--sentinel-hi F]
   report-loop [--json] [--sink PATH]... [--no-flag]
               [--plateau-ab-k K] [--plateau-trial-k K]
+  self-score-report --results-file PATH   (best-of-k Phase 0 gate)
   squad-def-init
   roles-render  --project PATH [--role R]... [--pin LAYER=vN]... [--force]
   roles-import  --from DIR [--role R]... [--force] [--map SRC=DEST1,DEST2]...
@@ -1151,6 +1153,25 @@ export async function main(argv: string[]): Promise<number> {
           return 2
         }
         cmdReportLoop(paths, reportArgs)
+        return 0
+      }
+      case "self-score-report": {
+        // best-of-k Phase 0 GATE: correlate a --self-check run's self-scores
+        // against the hidden reward. Prints the report as JSON.
+        const idx = subArgs.indexOf("--results-file")
+        const rf = idx >= 0 ? subArgs[idx + 1] : undefined
+        if (!rf) {
+          console.error("usage: self-score-report --results-file PATH")
+          return 2
+        }
+        const results = JSON.parse(readFileSync(rf, "utf-8")) as ResultsLike
+        const report = correlateSelfScores(results)
+        console.log(JSON.stringify(report, null, 2))
+        console.log(
+          report.predictive
+            ? `\nGATE: PREDICTIVE (self-PASS lift ${(report.liftSelfPass * 100).toFixed(1)}pp) — best-of-k worth building`
+            : `\nGATE: NOT predictive (self-PASS lift ${(report.liftSelfPass * 100).toFixed(1)}pp) — do NOT build the k-loop; reassess the selector`,
+        )
         return 0
       }
       case "squad-def-init": {
