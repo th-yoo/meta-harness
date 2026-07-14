@@ -3,11 +3,21 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## Where we are (2026-07-14)
+## Where we are (2026-07-15)
 
 First propose→ab improvement loop (#5). Done: baseline (haiku pass@5 **0.381**),
 14-task band split, store-writing run, **propose → account-global `v1`**
-(a real generalized playbook). **NEXT: run `ab` (v0 vs v1) — the verdict step.**
+(a real generalized playbook). The `ab` verdict (v0 vs v1) is the last step.
+
+Two things landed 2026-07-15 (both pushed to main):
+- **Store is git-syncable** — `term-bench2/store-sync.sh` + `term-bench2/store/` snapshot (next section). No more scp.
+- **Verifier-timeout bug fixed** — `--max-verifier-timeout` now bounds each attempt (was unbounded; `ab` command below already includes it).
+
+**BLOCKER / NEXT (precise):** `v1` currently lives ONLY in the **linux host's**
+store — it is NOT yet in the git snapshot (`term-bench2/store/global/candidates/`
+holds `v0` only, seeded from the MacBook). So the *one immediate action* is on the
+**linux host**: `git pull && term-bench2/store-sync.sh export && git add term-bench2/store && git commit -m "store: loop-1 v1" && git push`.
+After that, ANY host: `git pull && store-sync.sh import` → v1 is in the store → run `ab`.
 
 Full detail + v1's diagnosis & playbook: **[loop-1-state.md](loop-1-state.md)**.
 
