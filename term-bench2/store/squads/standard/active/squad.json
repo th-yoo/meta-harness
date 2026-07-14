@@ -1,0 +1,86 @@
+{
+  "type": "standard",
+  "slots": {
+    "analyzer": {
+      "kind": "agent",
+      "role": "analyzer",
+      "platform": "opencode",
+      "model": "anthropic/claude-haiku-4-5"
+    },
+    "designer": {
+      "kind": "agent",
+      "role": "designer",
+      "platform": "opencode",
+      "model": "anthropic/claude-sonnet-4-6"
+    },
+    "implementer": {
+      "kind": "agent",
+      "role": "implementer",
+      "platform": "opencode",
+      "model": "anthropic/claude-sonnet-4-6"
+    },
+    "evaluator": {
+      "kind": "agent",
+      "role": "evaluator",
+      "platform": "opencode",
+      "model": "anthropic/claude-haiku-4-5"
+    }
+  },
+  "flow": {
+    "bounds": {
+      "R1": 2,
+      "R2": 1,
+      "R3": 3,
+      "globalBudgetSteps": 40
+    },
+    "gatePolicy": {
+      "gate1": "auto",
+      "gate2": "auto"
+    },
+    "reentry": "delta"
+  },
+  "wire": {
+    "headings": {
+      "analyzer": [
+        [
+          "## Use Cases",
+          "## Functional Spec"
+        ],
+        [
+          "## Clarify"
+        ]
+      ],
+      "designer": [
+        [
+          "## Alternatives",
+          "## Recommended"
+        ]
+      ],
+      "implementer": [
+        [
+          "## Implementation Report"
+        ]
+      ],
+      "evaluator": [
+        [
+          "## Test Spec"
+        ],
+        [
+          "VERDICT:"
+        ]
+      ],
+      "evaluator-spec": [
+        [
+          "## Test Spec"
+        ]
+      ],
+      "evaluator-verdict": [
+        [
+          "VERDICT:"
+        ]
+      ]
+    },
+    "verdictRe": "^VERDICT: (PASS|FAIL)(?: cause=(impl|design|intent))?\\s*$"
+  },
+  "__version": "v1"
+}

@@ -1,0 +1,26 @@
+{
+  "sessionID": "h1",
+  "passed": true,
+  "note": "extra note",
+  "turnCount": 2,
+  "timestamp": "2026-07-12T10:55:34.043Z",
+  "summary": "implemented the feature and verified it end to end with tests",
+  "model": "anthropic/claude-x",
+  "variant": "",
+  "toolUsage": {
+    "bash": {
+      "calls": 3,
+      "errors": 0
+    }
+  },
+  "env": {
+    "provider": "anthropic",
+    "layerVersions": {
+      "account-global": "v0",
+      "project-global": "v0",
+      "account-role": "v0",
+      "project-role": "v0"
+    }
+  },
+  "platform": "fake"
+}

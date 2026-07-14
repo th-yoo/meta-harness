@@ -1,0 +1,31 @@
+{
+  "sessionID": "ses_0a38f9450ffe6pfnRsAUtu8pON",
+  "passed": true,
+  "note": "bench:slugify1",
+  "turnCount": 1,
+  "timestamp": "2026-07-13T17:05:37.792Z",
+  "summary": "slugify1",
+  "model": "anthropic/claude-sonnet-4-6",
+  "variant": "",
+  "toolUsage": {
+    "glob": {
+      "calls": 2,
+      "errors": 0
+    },
+    "read": {
+      "calls": 3,
+      "errors": 0
+    }
+  },
+  "env": {
+    "driver": "opencode",
+    "harnessHash": "b3f7b38b29ca25e9",
+    "fleet": {
+      "nodePath": "root/slugify1/designer",
+      "sliceId": "slugify1",
+      "gate": "gate2",
+      "note": null
+    }
+  },
+  "platform": "opencode"
+}

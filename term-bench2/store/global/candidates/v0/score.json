@@ -1,0 +1,379 @@
+{
+  "version": "v0",
+  "nPass": 13,
+  "nFail": 0,
+  "sessions": [
+    {
+      "sessionID": "h1",
+      "passed": true,
+      "note": "extra note",
+      "turnCount": 2,
+      "timestamp": "2026-07-12T10:45:43.103Z",
+      "summary": "implemented the feature and verified it end to end with tests",
+      "model": "anthropic/claude-x",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "provider": "anthropic",
+        "layerVersions": {
+          "account-global": "v0",
+          "project-global": "v0",
+          "account-role": "v0",
+          "project-role": "v0"
+        }
+      },
+      "platform": "fake"
+    },
+    {
+      "sessionID": "h1",
+      "passed": true,
+      "note": "extra note",
+      "turnCount": 2,
+      "timestamp": "2026-07-12T10:45:56.470Z",
+      "summary": "implemented the feature and verified it end to end with tests",
+      "model": "anthropic/claude-x",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "provider": "anthropic",
+        "layerVersions": {
+          "account-global": "v0",
+          "project-global": "v0",
+          "account-role": "v0",
+          "project-role": "v0"
+        }
+      },
+      "platform": "fake"
+    },
+    {
+      "sessionID": "h1",
+      "passed": true,
+      "note": "extra note",
+      "turnCount": 2,
+      "timestamp": "2026-07-12T10:48:59.376Z",
+      "summary": "implemented the feature and verified it end to end with tests",
+      "model": "anthropic/claude-x",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "provider": "anthropic",
+        "layerVersions": {
+          "account-global": "v0",
+          "project-global": "v0",
+          "account-role": "v0",
+          "project-role": "v0"
+        }
+      },
+      "platform": "fake"
+    },
+    {
+      "sessionID": "h1",
+      "passed": true,
+      "note": "extra note",
+      "turnCount": 2,
+      "timestamp": "2026-07-12T10:49:49.698Z",
+      "summary": "implemented the feature and verified it end to end with tests",
+      "model": "anthropic/claude-x",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "provider": "anthropic",
+        "layerVersions": {
+          "account-global": "v0",
+          "project-global": "v0",
+          "account-role": "v0",
+          "project-role": "v0"
+        }
+      },
+      "platform": "fake"
+    },
+    {
+      "sessionID": "h1",
+      "passed": true,
+      "note": "extra note",
+      "turnCount": 2,
+      "timestamp": "2026-07-12T10:49:57.609Z",
+      "summary": "implemented the feature and verified it end to end with tests",
+      "model": "anthropic/claude-x",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "provider": "anthropic",
+        "layerVersions": {
+          "account-global": "v0",
+          "project-global": "v0",
+          "account-role": "v0",
+          "project-role": "v0"
+        }
+      },
+      "platform": "fake"
+    },
+    {
+      "sessionID": "h1",
+      "passed": true,
+      "note": "extra note",
+      "turnCount": 2,
+      "timestamp": "2026-07-12T10:50:46.772Z",
+      "summary": "implemented the feature and verified it end to end with tests",
+      "model": "anthropic/claude-x",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "provider": "anthropic",
+        "layerVersions": {
+          "account-global": "v0",
+          "project-global": "v0",
+          "account-role": "v0",
+          "project-role": "v0"
+        }
+      },
+      "platform": "fake"
+    },
+    {
+      "sessionID": "h1",
+      "passed": true,
+      "note": "extra note",
+      "turnCount": 2,
+      "timestamp": "2026-07-12T10:55:34.043Z",
+      "summary": "implemented the feature and verified it end to end with tests",
+      "model": "anthropic/claude-x",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "provider": "anthropic",
+        "layerVersions": {
+          "account-global": "v0",
+          "project-global": "v0",
+          "account-role": "v0",
+          "project-role": "v0"
+        }
+      },
+      "platform": "fake"
+    },
+    {
+      "sessionID": "ses_0a3903e32ffeA0JJjQA18wRumP",
+      "passed": true,
+      "note": "bench:slugify1",
+      "turnCount": 1,
+      "timestamp": "2026-07-13T17:04:36.327Z",
+      "summary": "slugify1",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "read": {
+          "calls": 4,
+          "errors": 0
+        },
+        "glob": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "driver": "opencode",
+        "harnessHash": "37c86c4dd98f4b02",
+        "fleet": {
+          "nodePath": "root/slugify1/analyzer",
+          "sliceId": "slugify1",
+          "gate": "gate1",
+          "note": null
+        }
+      },
+      "platform": "opencode"
+    },
+    {
+      "sessionID": "ses_0a38fe6eeffehxnvQpgLqnYIqV",
+      "passed": true,
+      "note": "bench:slugify1",
+      "turnCount": 1,
+      "timestamp": "2026-07-13T17:04:57.355Z",
+      "summary": "slugify1",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "read": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "driver": "opencode",
+        "harnessHash": "87f0d015056cfb56",
+        "fleet": {
+          "nodePath": "root/slugify1/evaluator-spec",
+          "sliceId": "slugify1",
+          "gate": "lint",
+          "note": null
+        }
+      },
+      "platform": "opencode"
+    },
+    {
+      "sessionID": "ses_0a38f9450ffe6pfnRsAUtu8pON",
+      "passed": true,
+      "note": "bench:slugify1",
+      "turnCount": 1,
+      "timestamp": "2026-07-13T17:05:37.792Z",
+      "summary": "slugify1",
+      "model": "anthropic/claude-sonnet-4-6",
+      "variant": "",
+      "toolUsage": {
+        "glob": {
+          "calls": 2,
+          "errors": 0
+        },
+        "read": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "driver": "opencode",
+        "harnessHash": "b3f7b38b29ca25e9",
+        "fleet": {
+          "nodePath": "root/slugify1/designer",
+          "sliceId": "slugify1",
+          "gate": "gate2",
+          "note": null
+        }
+      },
+      "platform": "opencode"
+    },
+    {
+      "sessionID": "ses_0a38dd81effe2D7H1ddru6yMyp",
+      "passed": true,
+      "note": "bench:slugify1",
+      "turnCount": 1,
+      "timestamp": "2026-07-13T17:07:29.605Z",
+      "summary": "slugify1",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 9,
+          "errors": 0
+        }
+      },
+      "env": {
+        "driver": "opencode",
+        "harnessHash": "87f0d015056cfb56",
+        "fleet": {
+          "nodePath": "root/slugify1/evaluator-verdict",
+          "sliceId": "slugify1",
+          "gate": "lint",
+          "note": null
+        }
+      },
+      "platform": "opencode"
+    },
+    {
+      "sessionID": "ses_0a38ef53dffe3jUx9PvtADGbhx",
+      "passed": true,
+      "note": "bench:slugify1",
+      "turnCount": 1,
+      "timestamp": "2026-07-13T17:07:29.609Z",
+      "summary": "slugify1",
+      "model": "anthropic/claude-sonnet-4-6",
+      "variant": "",
+      "toolUsage": {
+        "read": {
+          "calls": 4,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 11,
+          "errors": 0
+        },
+        "write": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "driver": "opencode",
+        "harnessHash": "1d5c6ee582699c25",
+        "fleet": {
+          "nodePath": "root/slugify1/implementer",
+          "sliceId": "slugify1",
+          "gate": "verdict",
+          "note": null
+        }
+      },
+      "platform": "opencode"
+    },
+    {
+      "sessionID": "ses_0a38ef53dffe3jUx9PvtADGbhx",
+      "passed": true,
+      "note": "bench:slugify1",
+      "turnCount": 1,
+      "timestamp": "2026-07-13T17:07:29.998Z",
+      "summary": "slugify1",
+      "model": "anthropic/claude-sonnet-4-6",
+      "variant": "",
+      "toolUsage": {
+        "read": {
+          "calls": 4,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 11,
+          "errors": 0
+        },
+        "write": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "driver": "opencode",
+        "harnessHash": "1d5c6ee582699c25",
+        "fleet": {
+          "nodePath": "root/slugify1/implementer",
+          "sliceId": "slugify1",
+          "gate": "merge",
+          "note": "live acceptance — approved"
+        }
+      },
+      "platform": "opencode"
+    }
+  ]
+}

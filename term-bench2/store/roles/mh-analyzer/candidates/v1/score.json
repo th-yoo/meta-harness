@@ -1,0 +1,38 @@
+{
+  "version": "v1",
+  "nPass": 1,
+  "nFail": 0,
+  "sessions": [
+    {
+      "sessionID": "ses_0a3903e32ffeA0JJjQA18wRumP",
+      "passed": true,
+      "note": "bench:slugify1",
+      "turnCount": 1,
+      "timestamp": "2026-07-13T17:04:36.327Z",
+      "summary": "slugify1",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "read": {
+          "calls": 4,
+          "errors": 0
+        },
+        "glob": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "driver": "opencode",
+        "harnessHash": "37c86c4dd98f4b02",
+        "fleet": {
+          "nodePath": "root/slugify1/analyzer",
+          "sliceId": "slugify1",
+          "gate": "gate1",
+          "note": null
+        }
+      },
+      "platform": "opencode"
+    }
+  ]
+}
