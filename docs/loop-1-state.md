@@ -65,7 +65,7 @@ NOT a retry-multiply (timeouts don't retry; only transient provider errors do, `
 `verifier.timeout_sec` blows the budget. **Fix:** add a `--max-verifier-timeout` flag
 threaded into `taskTimeouts` (mirror `maxAgentTimeout`, cap `verifierTimeout`) — or a
 single `--max-attempt-timeout` bounding the sum. Touch: `bench/cli.ts` (parse), `tasks.ts:120`
-(cap), `cmd-run.ts:381`/`cmd-ab.ts:308` (pass through). NOT done yet.
+(cap), `cmd-run.ts:381`/`cmd-ab.ts:308` (pass through). **DONE 2026-07-15** (`--max-verifier-timeout`, commit `d282e9f`) — see the FIXED banner at the top of this section.
 
 ## Gotchas that bit us (also in `improvement-loops.md` §3)
 - Account-scope propose needs `opencode.json` → `"permission": {"external_directory": "allow"}` (the account store is outside the worktree; without it the headless proposer hangs on a permission prompt). **Committed to `opencode.json`.**
