@@ -1,5 +1,7 @@
 # docs/ index — the durable map
 
+- **[resume.md](resume.md) — START HERE on a new host/session** (how to continue the loop; personal memory doesn't transfer).
+
 One entry per canonical doc so a fresh/cleared-context session can re-find the
 design state. Git is the backstop; `~/.claude/.../memory/MEMORY.md` points here.
 
