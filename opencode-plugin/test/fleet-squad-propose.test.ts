@@ -10,6 +10,7 @@ import {
 } from "../src/fleet/squad-def.ts"
 import type { SquadDef } from "../src/fleet/squad-def.ts"
 import type { ExecFn } from "../src/fleet/run.ts"
+import { REMOTE_WRITE_DENY_ENV } from "../src/fleet/sandbox.ts"
 
 let home: string
 beforeEach(() => {
@@ -70,6 +71,32 @@ describe("validateFlowMutation", () => {
     const { ok, errors } = validateFlowMutation(STANDARD_SQUAD, proposed)
     expect(ok).toBe(true)
     expect(errors).toEqual([])
+  })
+
+  test("rejects a type-only mutation", () => {
+    const proposed: SquadDef = { ...STANDARD_SQUAD, type: "other-squad-type" }
+    const { ok, errors } = validateFlowMutation(STANDARD_SQUAD, proposed)
+    expect(ok).toBe(false)
+    expect(errors.some((e) => /type must be unchanged/.test(e))).toBe(true)
+    // nothing else was mutated — this should be the ONLY violation
+    expect(errors.length).toBe(1)
+  })
+
+  test("null/non-object proposed def -> clean {ok:false}, never throws", () => {
+    expect(() => validateFlowMutation(STANDARD_SQUAD, null as unknown as SquadDef)).not.toThrow()
+    const nullResult = validateFlowMutation(STANDARD_SQUAD, null as unknown as SquadDef)
+    expect(nullResult.ok).toBe(false)
+    expect(nullResult.errors).toEqual(["proposed def is not an object"])
+
+    expect(() => validateFlowMutation(STANDARD_SQUAD, "not-an-object" as unknown as SquadDef)).not.toThrow()
+    const stringResult = validateFlowMutation(STANDARD_SQUAD, "not-an-object" as unknown as SquadDef)
+    expect(stringResult.ok).toBe(false)
+    expect(stringResult.errors).toEqual(["proposed def is not an object"])
+
+    expect(() => validateFlowMutation(STANDARD_SQUAD, [] as unknown as SquadDef)).not.toThrow()
+    const arrayResult = validateFlowMutation(STANDARD_SQUAD, [] as unknown as SquadDef)
+    expect(arrayResult.ok).toBe(false)
+    expect(arrayResult.errors).toEqual(["proposed def is not an object"])
   })
 
   test("rejects a slot change", () => {
@@ -257,6 +284,35 @@ describe("cmdSquadPropose", () => {
     const execFn: ExecFn = async () => ({ stdout: "", rc: 0 })
     await expect(cmdSquadPropose({ timeoutSec: 0.2 }, execFn)).rejects.toThrow(/timed out/)
     expect(existsSync(join(squadRoot("standard"), "candidates", "v2"))).toBe(false)
+  })
+
+  test("credential isolation: the spawn env is scrubbed via sandboxEnv (remote-write creds denied, same as fleet/run.ts)", async () => {
+    writeSquadDefV1(STANDARD_SQUAD)
+    const mutated: SquadDef = {
+      ...STANDARD_SQUAD,
+      flow: { ...STANDARD_SQUAD.flow, bounds: { ...STANDARD_SQUAD.flow.bounds, R1: 3 } },
+    }
+    let seenOpts: { timeoutSec: number; env?: Record<string, string> } | undefined
+    const execFn: ExecFn = async (argv, opts) => {
+      seenOpts = opts
+      const prompt = argv[argv.length - 1]!
+      const stagingPath = stagingPathFromPrompt(prompt)
+      writeFileSync(stagingPath, JSON.stringify(mutated, null, 2))
+      return { stdout: "", rc: 0 }
+    }
+
+    await cmdSquadPropose({}, execFn)
+
+    for (const [k, v] of Object.entries(REMOTE_WRITE_DENY_ENV)) {
+      expect(seenOpts?.env?.[k]).toBe(v)
+    }
+    expect(seenOpts?.env?.["GIT_CONFIG_GLOBAL"]).toMatch(/mh-fleet-sandbox-.*\/gitconfig$/)
+    expect(seenOpts?.env?.["GH_CONFIG_DIR"]).toMatch(/mh-fleet-sandbox-.*\/gh-config$/)
+
+    // sandboxEnv's cleanup() ran in cmdSquadPropose's `finally` — tmp
+    // sandbox files are gone once the call returns.
+    expect(existsSync(seenOpts!.env!["GIT_CONFIG_GLOBAL"]!)).toBe(false)
+    expect(existsSync(seenOpts!.env!["GH_CONFIG_DIR"]!)).toBe(false)
   })
 
   test("uses the given --squad-type (not just 'standard')", async () => {

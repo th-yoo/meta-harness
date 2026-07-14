@@ -58,7 +58,34 @@ import {
 import { accountRoleRoot, activeVersion, candidatePath, nextVersion, readScore } from "../harness-store.ts"
 import { runHost } from "../bench/exec.ts"
 import { die, log, writeJsonAtomic, writeTextAtomic } from "../bench/util.ts"
+import { sandboxEnv } from "./sandbox.ts"
+import type { RoleSpec } from "./roles.ts"
 import type { ExecFn } from "./run.ts"
+
+/**
+ * Synthetic bash:allow `RoleSpec` used ONLY to reach `sandboxEnv`'s existing
+ * credential scrub (fleet/sandbox.ts, same mechanism `fleet/run.ts`'s
+ * `cmdRoleRun` applies to the implementer/evaluator roles). The proposer
+ * spawns its own one-shot `opencode run --dir <scratch> --auto` child (this
+ * module's header, "Reality-binding notes") — it has no `FleetRoleName` of
+ * its own (it drives a scratch dir, not a rendered role persona) but
+ * legitimately needs bash+write (it stages squad.json/diagnosis.md via
+ * heredoc) and, exactly like an implementer/evaluator drive, would
+ * otherwise inherit the operator's ambient env (GH_TOKEN/SSH_AUTH_SOCK/git
+ * credential-helper) and could write outside its scratch dir or exfiltrate
+ * secrets. `sandboxEnv` only reads `spec.permission["bash"]` — the rest of
+ * this object exists purely to satisfy `RoleSpec`'s shape and is otherwise
+ * unused.
+ */
+const PROPOSER_SANDBOX_SPEC: RoleSpec = {
+  role: "implementer",
+  agent: "squad-propose",
+  description: "squad-def flow-knob proposer one-shot session (synthetic — not a rendered fleet role)",
+  mode: "all",
+  model: "n/a",
+  temperature: 0,
+  permission: { bash: "allow", write: "allow" },
+}
 
 export interface SquadProposeResult {
   version: string
@@ -230,6 +257,17 @@ function checkIntBound(name: string, value: unknown, lo: number, hi: number, err
  * picture in one shot.
  */
 export function validateFlowMutation(active: SquadDef, proposed: SquadDef): { ok: boolean; errors: string[] } {
+  // Robustness guard (review finding): `proposed` is only TYPED as SquadDef —
+  // it's actually `JSON.parse`d from an LLM-staged file (cmdSquadPropose)
+  // and can be `null` (bare `null` is valid JSON) or a non-object (a bare
+  // string/number/array) at runtime. Property access below would otherwise
+  // throw a TypeError that escapes as an unhandled rejection instead of the
+  // clean `{ok:false}` every other invalid-shape case returns.
+  const p: unknown = proposed
+  if (p === null || typeof p !== "object" || Array.isArray(p)) {
+    return { ok: false, errors: ["proposed def is not an object"] }
+  }
+
   const errors: string[] = []
 
   if (proposed.type !== active.type) {
@@ -312,12 +350,18 @@ export async function cmdSquadPropose(
 
   const prompt = buildSquadProposerPrompt(type, active, stagingPath)
   const scratch = mkdtempSync(join(tmpdir(), "mh-squad-propose-"))
+  // Credential isolation (review finding): this spawns a real, unrestricted
+  // --auto bash session that would otherwise inherit the operator's ambient
+  // env wholesale. Same scrub fleet/run.ts's cmdRoleRun applies to
+  // bash:allow roles — env overrides + tmp git/gh config, shredded in the
+  // `finally` below regardless of how the drive exits.
+  const sbx = sandboxEnv(PROPOSER_SANDBOX_SPEC)
 
   try {
     const argv = ["opencode", "run", "--dir", scratch, "--auto", "--format", "json", "--model", model, prompt]
 
     const startedAt = Date.now()
-    await execFn(argv, { timeoutSec })
+    await execFn(argv, { timeoutSec, env: sbx?.env })
     const elapsedMs = Date.now() - startedAt
     const remainingMs = Math.max(0, timeoutSec * 1000 - elapsedMs)
     const found = await waitForStagingFile(stagingPath, remainingMs)
@@ -350,6 +394,7 @@ export async function cmdSquadPropose(
     log(`squad-propose: candidate ${version} written for squad '${type}' (active untouched)`)
     return { version, def: proposed }
   } finally {
+    sbx?.cleanup()
     rmSync(scratch, { recursive: true, force: true })
   }
 }
