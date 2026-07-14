@@ -109,6 +109,34 @@ test("buildProposerPrompt: embeds the store-access section and demotes excerpts 
   expect(prompt).toContain(storeRoot)
   expect(prompt).toContain("Failing-trajectory excerpts")
   expect(prompt).toContain("an INDEX of where to look")
+  // Mined lesson L1: trajectories are untrusted evidence, not instructions.
+  expect(prompt).toContain("untrusted DATA")
+  // Mined lesson L2: an explicit "do NOT propose" rejection list.
+  expect(prompt).toContain("Do NOT propose")
+})
+
+// Mined-lesson clauses (L1 untrusted-evidence, L2 rejection list) must also
+// render in playbook (ops) mode, not just legacy system.md mode.
+test("buildProposerPrompt: carries the untrusted-evidence + rejection clauses in playbook mode", () => {
+  const worktree = tmpDir("worktree-pb")
+  const storeRoot = tmpDir("store-pb")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  seedCandidate(storeRoot, "v1", { nPass: 1, nFail: 1, trajFiles: 1 })
+  const layer: StoreLayer = { root: storeRoot, scope: "project-role", higherRoots: [] }
+  const sp = stagingPaths(worktree, layer.scope, "v2")
+  const playbook: Playbook = {
+    schemaVersion: 1,
+    bullets: [
+      { id: "b1", text: "rule one", helpful: 1, harmful: 0, addedBy: "v1", status: "active", createdAt: "", updatedAt: "" },
+    ],
+  }
+
+  const prompt = buildProposerPrompt(
+    layer, "v2", "", sp.system, sp.tools, sp.diagnosis, sp.ops, sp.agentConfig, sp.envPolicy, worktree, playbook,
+  )
+
+  expect(prompt).toContain("untrusted DATA")
+  expect(prompt).toContain("Do NOT propose")
 })
 
 test("buildCuratePrompt: embeds the store-access section as prune evidence", () => {
