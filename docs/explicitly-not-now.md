@@ -110,6 +110,52 @@ measurably burn ab budget (meta-metrics: repeated `inconclusive` on near-identic
 diffs), or the search space widens to code (§2.1) where near-duplicate diffs are
 harder for an LLM curator to spot.
 
+### 2.4 Target-model / content-generality axis — BUILD + multi-model panel gate
+
+**What it would be.** A new, evolvable **content-generality** dimension on
+playbook bullets — `universal → vendor → model` — orthogonal to the existing
+`global → role` scope axis, so a rule that only earns its place for one
+vendor/model family (opencode ships ten per-provider prompts as proof) is scoped
+there instead of injected blindly onto every model. Full design in
+[target-model-axis.md](target-model-axis.md): additive-only merge (no override),
+one global budget over the resolved coordinate set, and — the second, coupled
+mechanism — an **N-model panel `ab`** with a **worst-case-nonregression**
+decision-combination policy, since today's `ab` runs a single model on both arms
+(`cmd-ab.ts:106`) and so can only *assert*, never *prove*, that a candidate is
+universal.
+
+**Why not now.** Gall's law (a mix of criteria *b* and *c*). The simple
+single-model loop is not yet shown to work — loop-1's account-global **v1** has
+not cleared its `ab` verdict (the standing blocker, `docs/loop-1-state.md`). A
+second axis before the first loop produces one accepted candidate is complexity
+with no measured payoff. And a vendor/model axis is *unfalsifiable* while only
+one primary-loop model runs: there is nothing for a `vendor:X` bullet to be
+scoped away from, so the store's current model-agnostic (all-universal) playbook
+already covers today's regime. The multi-model panel is a materially new runner
+capability whose cost is only justified once a real second model exists.
+
+**What it costs.** Until built, every account-global bullet is injected for every
+model regardless of the model family it actually compensates — a candidate gated
+on the one model `ab` happens to run can silently regress an unmeasured model.
+The seed corpus's 2 VENDOR + 3 MODEL bullets
+(`external-prompts-cc-opencode.md`) have nowhere to live and stay unseeded. The
+cost is bounded precisely *because* only one primary model runs today — it grows
+the moment a second does.
+
+**Revisit trigger (BOTH required for the build; either fires the reconsideration).**
+- **loop-1 `ab` accepted** — account-global v1 clears its verdict, proving the
+  single-model loop produces an accepted candidate (Gall's-law precondition).
+- **a second primary-loop model goes live** — an actual second model in the
+  primary loop, making vendor/model divergence observable and the axis
+  falsifiable. Build **`vendor` level first**, `model` level only when a vendor
+  cell demonstrably needs splitting.
+The multi-model **panel gate** (N-model `ab` + worst-case-nonregression) is its
+own sub-deferral inside this one: it reopens with the second-model trigger, since
+a single model cannot exercise a panel. Additive-only override forbiddance
+(§3.2 of the spec) reopens *only* on measured evidence that a real
+in-store contradiction cannot be handled by demote-the-universal — not
+speculatively.
+
 ---
 
 ## 3. Dropped and scoped-down knobs (Phase 4 decisions)
