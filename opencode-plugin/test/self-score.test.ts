@@ -27,6 +27,13 @@ describe("readSelfScore", () => {
     expect(await readSelfScore("c", async () => ok("0/0"))).toBeNull()
   })
 
+  // R3#1: passed>total (>1.0) would count as "self-PASS" at threshold 1.0 and
+  // poison the correlation/argmax — reject to null, same class as R2#1.
+  test("passed>total (score>1) → null", async () => {
+    expect(await readSelfScore("c", async () => ok("8/4"))).toBeNull()
+    expect(await readSelfScore("c", async () => ok("5/0"))).toBeNull()
+  })
+
   test("execFn is called with a cat of the fixed self-score path", async () => {
     let seen: string[] = []
     await readSelfScore("mh-task-123", async (argv) => { seen = argv; return ok("1/1") })

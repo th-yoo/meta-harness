@@ -10,7 +10,7 @@ describe("correlateSelfScores", () => {
         c: { rewards: [0, 0], selfScores: [0.4, 0.2] },
       },
     }
-    const rep = correlateSelfScores(r)
+    const rep = correlateSelfScores(r, { minTasks: 1 }) // small fixture; exercise the lift axis
     expect(rep.nPairs).toBe(6)
     expect(rep.baseRewardRate).toBeCloseTo(2 / 6, 5)
     expect(rep.rewardRateGivenSelfPass).toBe(1)          // both selfScore=1.0 attempts passed
@@ -61,7 +61,48 @@ describe("correlateSelfScores", () => {
       },
     }
     // base=0.5, self-PASS rate=1.0 → lift=0.5. Gate 0.6 → not predictive; 0.4 → predictive.
-    expect(correlateSelfScores(r, { liftGate: 0.6 }).predictive).toBe(false)
-    expect(correlateSelfScores(r, { liftGate: 0.4 }).predictive).toBe(true)
+    // minTasks:1 isolates the lift axis (N=2 would otherwise fail the N floor).
+    expect(correlateSelfScores(r, { liftGate: 0.6, minTasks: 1 }).predictive).toBe(false)
+    expect(correlateSelfScores(r, { liftGate: 0.4, minTasks: 1 }).predictive).toBe(true)
+  })
+
+  test("N floor (default 30): huge lift on tiny N is NOT predictive (review R4#1)", () => {
+    // 2 tasks, a perfect self-PASS→reward signal, lift = +100pp — but N=2 ≪ 30.
+    const r: ResultsLike = {
+      tasks: {
+        a: { rewards: [1], selfScores: [1.0] },
+        b: { rewards: [0], selfScores: [0.0] },
+      },
+    }
+    const rep = correlateSelfScores(r) // default minTasks = 30
+    expect(rep.nTasks).toBe(2)
+    expect(rep.minTasks).toBe(30)
+    expect(rep.liftSelfPass).toBeCloseTo(0.5, 5)
+    expect(rep.predictive).toBe(false) // N floor forces false despite the lift
+  })
+
+  test("N floor met + lift clears bar → predictive", () => {
+    // 30 tasks: self-PASS ⇒ pass, self-fail ⇒ fail → base 0.5, self-PASS rate 1.0.
+    const tasks: ResultsLike["tasks"] = {}
+    for (let i = 0; i < 30; i++) {
+      tasks[`pass${i}`] = { rewards: [1], selfScores: [1.0] }
+      tasks[`fail${i}`] = { rewards: [0], selfScores: [0.0] }
+    }
+    const rep = correlateSelfScores({ tasks })
+    expect(rep.nTasks).toBe(60)
+    expect(rep.liftSelfPass).toBeCloseTo(0.5, 5)
+    expect(rep.predictive).toBe(true)
+  })
+
+  test("N floor met but lift below gate → not predictive", () => {
+    // 40 tasks, self-score uncorrelated with reward → ~0 lift.
+    const tasks: ResultsLike["tasks"] = {}
+    for (let i = 0; i < 40; i++) {
+      tasks[`t${i}`] = { rewards: [i % 2], selfScores: [1.0] } // all self-PASS, half reward
+    }
+    const rep = correlateSelfScores({ tasks })
+    expect(rep.nTasks).toBe(40)
+    expect(rep.liftSelfPass).toBeCloseTo(0, 5)
+    expect(rep.predictive).toBe(false)
   })
 })

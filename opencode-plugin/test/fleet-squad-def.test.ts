@@ -164,6 +164,29 @@ describe("escalations + verdict", () => {
       .toEqual({ verdict: "FAIL", cause: "impl" })
   })
 
+  // R2#1: passed>total would make score>1.0, ranking a garbage candidate above
+  // every legit 1.0 in best-of-k argmax. Reject → score absent, verdict intact.
+  test("parseVerdict rejects passed>total (score>1) → score absent, verdict kept", () => {
+    expect(parseVerdict(STANDARD_SQUAD, "VERDICT: PASS score=50/10")).toEqual({ verdict: "PASS" })
+    expect(parseVerdict(STANDARD_SQUAD, "VERDICT: FAIL cause=impl score=5/4"))
+      .toEqual({ verdict: "FAIL", cause: "impl" })
+  })
+
+  // R2#2: score= is welded into the anchored verdictRe, so a present-but-off
+  // format used to void the WHOLE verdict → null → lint-fail + wasted R1 retry.
+  // The decision must now survive; a malformed score just degrades to absent.
+  test("parseVerdict decouples score: off-format score keeps the verdict", () => {
+    // spaces around '=', parenthesized, float, percent — verdict still PASS/FAIL.
+    expect(parseVerdict(STANDARD_SQUAD, "VERDICT: PASS score = 5/10")).toEqual({ verdict: "PASS", score: 0.5 })
+    expect(parseVerdict(STANDARD_SQUAD, "VERDICT: PASS (score=30/32)"))
+      .toEqual({ verdict: "PASS", score: 30 / 32 })
+    expect(parseVerdict(STANDARD_SQUAD, "VERDICT: PASS score=1.5/2")).toEqual({ verdict: "PASS" }) // float → absent
+    expect(parseVerdict(STANDARD_SQUAD, "VERDICT: PASS score=95%")).toEqual({ verdict: "PASS" }) // percent → absent
+    // score/cause reordered — the decision (FAIL cause=impl) must survive.
+    expect(parseVerdict(STANDARD_SQUAD, "VERDICT: FAIL score=28/32 cause=impl"))
+      .toEqual({ verdict: "FAIL", cause: "impl", score: 0.875 })
+  })
+
   test("evaluator wire contract instructs the optional score suffix", () => {
     const home = mkdtempSync(join(tmpdir(), "mh-wire-"))
     process.env.META_HARNESS_HOME = home

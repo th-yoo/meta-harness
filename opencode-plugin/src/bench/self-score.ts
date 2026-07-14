@@ -50,7 +50,14 @@ type ExecArgvFn = (argv: string[]) => Promise<ExecResult>
  * as a 0..1 fraction. Mirrors the exec+read PATTERN of verifier.ts:runVerifier
  * (`podman exec cat <file>` → trim), but that reads a BINARY "0"/"1" — the
  * fraction parse here is new. Returns null when the file is absent (agent
- * skipped the self-check) or malformed / total=0. Injectable execFn for tests.
+ * skipped the self-check) or malformed / total=0 / passed>total. Injectable
+ * execFn for tests.
+ *
+ * The parse stays strict-anchored ($, no /m): a multi-line / prose-contaminated
+ * file yields null (a dropped pair — conservative for a *measurement* gate)
+ * rather than risking a wrong-fraction grab from a first-match sweep (review
+ * R3#2 — a deliberate safety/coverage trade; revisit only if Phase 0 capture
+ * rate is low).
  */
 export async function readSelfScore(name: string, execFn: ExecArgvFn = podman): Promise<number | null> {
   const res = await execFn(buildExecArgv(name, ["cat", SELF_SCORE_PATH]))
@@ -59,5 +66,7 @@ export async function readSelfScore(name: string, execFn: ExecArgvFn = podman): 
   if (!m) return null
   const passed = Number(m[1])
   const total = Number(m[2])
-  return total > 0 ? passed / total : null
+  // Reject total=0 (Infinity) and passed>total (>1.0): either poisons the
+  // downstream self-PASS threshold + argmax (review R3#1, same class as R2#1).
+  return total > 0 && passed <= total ? passed / total : null
 }

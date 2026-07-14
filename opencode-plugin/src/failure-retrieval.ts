@@ -134,7 +134,12 @@ function importanceOf(s: SessionRecord, refNowMs: number, halfLifeDays: number):
  * truncated (over-select headroom for the caller to skip pruned trajectories).
  */
 export function rankRoleFailures(storeRoot: string, opts: RoleRankOpts = {}): RankedFailure[] {
-  const halfLife = opts.recencyHalfLifeDays ?? 14
+  // Clamp to a positive floor: a <=0 (or NaN) half-life makes importanceOf
+  // divide by <=0 → NaN importance, which selectDiverse's `??`/subtraction
+  // comparators silently treat as insertion-order (review R1#1). Exposed via
+  // RoleRankOpts, so guard even though no current caller sets it.
+  const rawHalfLife = opts.recencyHalfLifeDays
+  const halfLife = rawHalfLife !== undefined && rawHalfLife > 0 ? rawHalfLife : 14
   const taxMap = globalTaxonomyMap(storeRoot)
 
   const gathered: { version: string; session: SessionRecord }[] = []

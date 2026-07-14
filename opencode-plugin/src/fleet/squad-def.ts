@@ -235,14 +235,26 @@ export function parseVerdict(
     .split("\n")
     .map((line) => line.replace(/^[\s*_`]+|[\s*_`]+$/g, ""))
     .join("\n")
-  const m = new RegExp(def.wire.verdictRe, "mi").exec(normalized)
+  // Decouple the score from the verdict DECISION (review R2#2): score= lives
+  // inside the anchored ^…$ verdictRe, so a present-but-off-format score
+  // (spaces around =, parens, float, or score/cause reordered) would fail the
+  // whole line match → null → squad.ts scores a lint-fail + burns an R1 retry
+  // on an otherwise-valid PASS/FAIL. The wire contract now *invites* score=, so
+  // strip any score token before deciding, then parse it independently.
+  const decisionText = normalized.replace(/\s*\(?\bscore\s*=\s*[^\s)]+\)?/gi, "")
+  const m = new RegExp(def.wire.verdictRe, "mi").exec(decisionText)
   if (!m) return null
-  // Optional score=<passed>/<total> (#2, verdict→score): a rankable signal for
-  // a future best-of-k. m[3]/m[4] are the score capture groups when the
-  // verdictRe carries them; guard total>0 to avoid a degenerate 0/0.
-  const passed = m[3] !== undefined ? Number(m[3]) : NaN
-  const total = m[4] !== undefined ? Number(m[4]) : NaN
-  const score = Number.isFinite(passed) && Number.isFinite(total) && total > 0 ? passed / total : undefined
+  // Parse score leniently from the SAME verdict line in the original text
+  // (line count is preserved by the strip, so m.index maps to a line). Reject
+  // total<=0 (0/0, x/0 → Infinity) AND passed>total (>1.0) — either would
+  // poison best-of-k argmax, ranking garbage above every legit 1.0 candidate
+  // (review R2#1).
+  const lineIdx = decisionText.slice(0, m.index).split("\n").length - 1
+  const verdictLine = normalized.split("\n")[lineIdx] ?? ""
+  const sm = /\bscore\s*=\s*(\d+)\s*\/\s*(\d+)/i.exec(verdictLine)
+  const passed = sm ? Number(sm[1]) : NaN
+  const total = sm ? Number(sm[2]) : NaN
+  const score = sm && total > 0 && passed <= total ? passed / total : undefined
   const verdict = m[1]!.toUpperCase() as "PASS" | "FAIL"
   if (verdict === "PASS") return score !== undefined ? { verdict: "PASS", score } : { verdict: "PASS" }
   const cause = (m[2]?.toLowerCase() ?? "impl") as "impl" | "design" | "intent"

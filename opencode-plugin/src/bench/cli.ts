@@ -1164,13 +1164,27 @@ export async function main(argv: string[]): Promise<number> {
           console.error("usage: self-score-report --results-file PATH")
           return 2
         }
-        const results = JSON.parse(readFileSync(rf, "utf-8")) as ResultsLike
+        // Fail closed with a clean message, not a raw stack (review R4#2): a
+        // missing file, bad JSON, or wrong artifact (no `tasks`) is operator
+        // error on a hand-run gate, so translate to BenchError (the only class
+        // the outer handler rescues) instead of an unhandled rejection.
+        let results: ResultsLike
+        try {
+          results = JSON.parse(readFileSync(rf, "utf-8")) as ResultsLike
+        } catch (e) {
+          throw new BenchError(`self-score-report: cannot read/parse '${rf}': ${(e as Error).message}`)
+        }
+        if (!results || typeof results.tasks !== "object" || results.tasks === null) {
+          throw new BenchError(`self-score-report: '${rf}' has no 'tasks' object — not a bench results file`)
+        }
         const report = correlateSelfScores(results)
         console.log(JSON.stringify(report, null, 2))
+        const liftPp = `${(report.liftSelfPass * 100).toFixed(1)}pp`
+        const nNote = report.nTasks < report.minTasks ? ` — N=${report.nTasks} < ${report.minTasks} (undersized)` : ""
         console.log(
           report.predictive
-            ? `\nGATE: PREDICTIVE (self-PASS lift ${(report.liftSelfPass * 100).toFixed(1)}pp) — best-of-k worth building`
-            : `\nGATE: NOT predictive (self-PASS lift ${(report.liftSelfPass * 100).toFixed(1)}pp) — do NOT build the k-loop; reassess the selector`,
+            ? `\nGATE: PREDICTIVE (self-PASS lift ${liftPp}, N=${report.nTasks}) — best-of-k worth building`
+            : `\nGATE: NOT predictive (self-PASS lift ${liftPp}${nNote}) — do NOT build the k-loop; reassess the selector`,
         )
         return 0
       }

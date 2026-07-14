@@ -23,6 +23,7 @@ export interface ResultsLike {
 export interface CorrelationReport {
   nPairs: number
   nTasks: number
+  minTasks: number
   baseRewardRate: number
   selfPassThreshold: number
   rewardRateGivenSelfPass: number
@@ -39,6 +40,11 @@ export interface CorrelateOpts {
   selfPassThreshold?: number
   /** gate: predictive iff self-PASS lift ≥ this (default 0.20 = +20pp). */
   liftGate?: number
+  /** gate: minimum self-check tasks (N) before a verdict is trustworthy
+   * (default 30, per plan Phase 0). Below this, `predictive` is forced false —
+   * a lucky handful of self-PASS runs must NOT greenlight the whole feature
+   * (review R4#1). Tests override to exercise the lift axis on small fixtures. */
+  minTasks?: number
 }
 
 function pearson(xs: number[], ys: number[]): number {
@@ -59,6 +65,7 @@ function pearson(xs: number[], ys: number[]): number {
 export function correlateSelfScores(results: ResultsLike, opts: CorrelateOpts = {}): CorrelationReport {
   const selfPassThreshold = opts.selfPassThreshold ?? 1.0
   const liftGate = opts.liftGate ?? 0.20
+  const minTasks = opts.minTasks ?? 30
 
   const selfScores: number[] = []
   const rewards: number[] = []
@@ -98,6 +105,7 @@ export function correlateSelfScores(results: ResultsLike, opts: CorrelateOpts = 
   return {
     nPairs,
     nTasks: bestOfKTasks,
+    minTasks,
     baseRewardRate,
     selfPassThreshold,
     rewardRateGivenSelfPass,
@@ -105,7 +113,10 @@ export function correlateSelfScores(results: ResultsLike, opts: CorrelateOpts = 
     bestOfKSelectionRate,
     bestOfKLift,
     pointBiserial,
-    // Gate: enough data + self-PASS lift clears the bar (the plan's ≥+20pp).
-    predictive: nPairs >= 1 && passIdx.length >= 1 && liftSelfPass >= liftGate,
+    // Gate: ENOUGH DATA (N ≥ minTasks, the plan's mandatory ≥30-band-task
+    // floor — review R4#1) + at least one self-PASS observation + self-PASS
+    // lift clears the bar (the plan's ≥+20pp). Without the N floor the gate
+    // fires PREDICTIVE on a single lucky self-PASS run.
+    predictive: bestOfKTasks >= minTasks && passIdx.length >= 1 && liftSelfPass >= liftGate,
   }
 }
