@@ -31,6 +31,7 @@ import { selectTasks, taskTimeouts } from "./tasks.ts"
 import { stageTaskRuntime } from "./staging.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
 import { copyTests, runVerifier } from "./verifier.ts"
+import { readSelfScore, SELF_CHECK_INSTRUCTION, SELF_CHECK_MARKER } from "./self-score.ts"
 import { runAgent } from "./agent-run.ts"
 import { getDriver } from "./drivers/index.ts"
 import { opencodeDriver } from "./drivers/opencode.ts"
@@ -50,6 +51,10 @@ export interface RunTaskResult {
   toolUsage: ToolUsage
   events: TrajEvent[]
   error: "" | "setup_failed" | "agent_no_output"
+  /** Phase-0 self-check: the agent's own passed/total fraction (harness-
+   * controlled transport of a self-report, NOT verified — see self-score.ts).
+   * null when self-check is off or the agent wrote no/invalid score.txt. */
+  selfScore?: number | null
 }
 
 export type RunOneTaskFn = (
@@ -235,8 +240,14 @@ export async function runTaskOnce(
 
     await copyTests(paths, name, task)
     const reward = await runVerifier(paths, name, task, verifierTimeout)
+    // Phase-0 self-check: only when the harness carries the instruction (else
+    // zero overhead + byte-identical behavior). Read BEFORE the container is
+    // removed in `finally`.
+    const selfScore = harnessMd.includes(SELF_CHECK_MARKER)
+      ? await readSelfScore(name, execFn)
+      : null
     const elapsed = (Date.now() - taskStart) / 1000
-    log(`  reward=${reward}  elapsed=${pyFixed(elapsed, 1)}s`)
+    log(`  reward=${reward}${selfScore !== null ? `  self=${round1(selfScore)}` : ""}  elapsed=${pyFixed(elapsed, 1)}s`)
     return {
       sessionId,
       reward,
@@ -245,6 +256,7 @@ export async function runTaskOnce(
       toolUsage,
       events,
       error: turnCount === 0 ? "agent_no_output" : "",
+      selfScore,
     }
   } finally {
     // auth?.cleanup() shreds the darwin Keychain-exported .credentials.json (a
@@ -280,6 +292,10 @@ export interface CmdRunArgs {
   pin?: string[]
   staging?: StagingMode
   driver?: string
+  /** Phase-0 (best-of-k): append the self-check instruction to the harness so
+   * each attempt records the agent's own passed/total for the correlation gate.
+   * Default off → byte-identical to a normal run. */
+  selfCheck?: boolean
 }
 
 export async function cmdRun(
@@ -328,6 +344,13 @@ export async function cmdRun(
     if (harnessMd) log(`Harness assembled (${harnessMd.length} chars)`)
     else log("No active harness content found — running without AGENTS.md")
   }
+  // Phase-0 (best-of-k correlation gate): append the self-check instruction so
+  // each attempt records the agent's own passed/total. Default off.
+  const selfCheckOn = Boolean(args.selfCheck)
+  if (selfCheckOn) {
+    harnessMd = harnessMd ? `${harnessMd}\n\n${SELF_CHECK_INSTRUCTION}` : SELF_CHECK_INSTRUCTION
+    log("Self-check ON — agents will record passed/total to score.txt")
+  }
 
   const harnessMetaVal = layers !== "none" ? harnessMeta(layers, paths.metaRoot, agent, pins) : { layers: "none" }
   const agentVersion = await inContainerAgentVersion(paths, driver, execFn)
@@ -357,7 +380,7 @@ export async function cmdRun(
     log(`\n=== Task: ${task} ===`)
     const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout)
 
-    taskAgg[task] = { rewards: [], elapsed: [], turns: [], errors: [] }
+    taskAgg[task] = { rewards: [], elapsed: [], turns: [], errors: [], ...(selfCheckOn ? { selfScores: [] } : {}) }
 
     for (let ki = 0; ki < k; ki++) {
       if (k > 1) log(`  -- run ${ki + 1}/${k} --`)
@@ -370,6 +393,7 @@ export async function cmdRun(
         taskAgg[task]!.elapsed.push(0.0)
         taskAgg[task]!.turns.push(0)
         taskAgg[task]!.errors.push("setup_failed")
+        if (selfCheckOn) taskAgg[task]!.selfScores!.push(null)
         continue
       }
 
@@ -396,6 +420,7 @@ export async function cmdRun(
       taskAgg[task]!.rewards.push(res.reward)
       taskAgg[task]!.elapsed.push(round1(res.elapsed))
       taskAgg[task]!.turns.push(res.turns)
+      if (selfCheckOn) taskAgg[task]!.selfScores!.push(res.selfScore ?? null)
 
       if (resultsFile) {
         writeRunResults(resultsFile, {

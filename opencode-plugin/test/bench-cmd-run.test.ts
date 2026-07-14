@@ -100,6 +100,55 @@ test("cmdRun: incremental + final results-file JSON, task_agg shape matches Pyth
   expect(final.tasks.b).toEqual({ rewards: [1], elapsed: [12.3], turns: [4], errors: [] })
 })
 
+test("cmdRun --self-check ON: records per-attempt selfScores parallel to rewards", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a", "b"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+  const resultsFile = path.join(dir, "run-results.json")
+
+  const fake: RunOneTaskFn = async (_p, task) =>
+    task === "a"
+      ? result({ reward: 1, selfScore: 0.875 })
+      : result({ error: "setup_failed", reward: 1 }) // setup_failed → selfScores null
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a", "b"], resultsFile, layers: "none", selfCheck: true }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+
+  const final = JSON.parse(fs.readFileSync(resultsFile, "utf-8"))
+  expect(final.tasks.a.selfScores).toEqual([0.875])
+  expect(final.tasks.b.selfScores).toEqual([null]) // setup_failed still pushes a slot
+})
+
+test("cmdRun --self-check OFF: results JSON has NO selfScores key (byte-identical back-compat)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+  const resultsFile = path.join(dir, "run-results.json")
+
+  // fake returns a selfScore, but with selfCheck OFF it must NOT be recorded.
+  const fake: RunOneTaskFn = async () => result({ reward: 1, selfScore: 0.5 })
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], resultsFile, layers: "none" }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+
+  const final = JSON.parse(fs.readFileSync(resultsFile, "utf-8"))
+  expect(final.tasks.a).toEqual({ rewards: [1], elapsed: [1.2], turns: [3], errors: [] })
+  expect(final.tasks.a).not.toHaveProperty("selfScores")
+})
+
 test("cmdRun: setup_failed appends 0-reward/0-elapsed and 'setup_failed' to errors[]", async () => {
   const dir = tmpDir()
   const tbRoot = path.join(dir, "tb-root")

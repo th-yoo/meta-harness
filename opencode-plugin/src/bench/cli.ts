@@ -35,7 +35,7 @@ commands:
               [--staging scripts|runtime]  (default: runtime)
   run         [--tasks TASK [TASK ...]] [--task-file PATH] [--all]
               [--model ID] [--variant V] [--k N] [--layers global|account|project|none]
-              [--no-store] [--save-all-traj] [--no-harness] [--results-file PATH]
+              [--no-store] [--save-all-traj] [--self-check] [--no-harness] [--results-file PATH]
               [--label NAME] [--max-agent-timeout SEC] [--resume] [--agent NAME]
               [--pin LAYER=vN]... [--staging scripts|runtime] [--driver ID]
   ab          --layer L --candidate vN [--tasks TASK [TASK ...]] [--task-file PATH]
@@ -224,6 +224,11 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
     }
     if (a === "--save-all-traj") {
       out.saveAllTraj = true
+      i++
+      continue
+    }
+    if (a === "--self-check") {
+      out.selfCheck = true
       i++
       continue
     }

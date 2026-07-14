@@ -28,6 +28,11 @@ export interface TaskAgg {
   elapsed: number[]
   turns: number[]
   errors: string[]
+  /** Phase-0 self-check (best-of-k): per-attempt agent self-reported
+   * passed/total fraction, parallel to `rewards`. Absent unless --self-check
+   * (keeps normal-run results.json byte-identical). null = agent wrote no/
+   * invalid score.txt for that attempt. */
+  selfScores?: (number | null)[]
 }
 
 function round4(x: number): number {

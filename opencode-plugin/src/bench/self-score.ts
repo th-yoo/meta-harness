@@ -20,11 +20,16 @@ import { buildExecArgv } from "./sandbox.ts"
 /** Fixed path the agent writes its self-check fraction to, inside the sandbox. */
 export const SELF_SCORE_PATH = "/logs/self-check/score.txt"
 
+/** Stable marker (the instruction's first line) — its presence in the assembled
+ * harnessMd is the signal that self-check is on, so runTaskOnce reads the score
+ * only then (zero overhead + byte-identical results when off). */
+export const SELF_CHECK_MARKER = "## Self-check (harness instruction)"
+
 /** Harness instruction appended to the agent's AGENTS.md (Phase 0, opt-in) —
  * asks the agent to run REAL checks and record the count. Language-agnostic
  * (bash echo), unlike TB2's own pytest/ctrf verifier. */
 export const SELF_CHECK_INSTRUCTION = [
-  "## Self-check (harness instruction)",
+  SELF_CHECK_MARKER,
   "",
   "After you finish implementing, WRITE AND RUN your own checks that verify your",
   "work (compile / execute / assert — real checks, not guesses), then record the",
