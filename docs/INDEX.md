@@ -13,6 +13,9 @@ design state. Git is the backstop; `~/.claude/.../memory/MEMORY.md` points here.
 ## Memory / retrieval
 - [memory-landscape.md](memory-landscape.md) — where meta-harness sits in the agent-memory literature (category, prior art, gap→paper), + how we keep memory under a bounded context window.
 
+## Capabilities / strategy
+- [capability-envelope.md](capability-envelope.md) — `discoverable = mutable ∩ benchmarked`: what the loop can/can't improve, the inner-loop gap map, and the reordered roadmap (search-with-verifier #1). Read before adding a deferral with an off-benchmark trigger.
+
 ## Fleet / squad (the multi-agent builder)
 - [superpowers/specs/2026-07-13-fleet-squad-integration-design.md](superpowers/specs/2026-07-13-fleet-squad-integration-design.md) — **the design spec** (D1–D7 all decided): node grammar, SquadDef, flow state machine, escalation taxonomy, score routing, master boundary layer, repo boundary.
 - [fleet-context.md](fleet-context.md) — the OpenClaw dev-fleet briefing (has a stale-pointer correction header).
