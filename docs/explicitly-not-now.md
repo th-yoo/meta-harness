@@ -150,7 +150,7 @@ proposer-LLM output compliance, which had to be observed first.
 | `proposerVariant` is provenance-only | opencode's `session.prompt` API exposes `model` but no thinking variant — the STOP-critical part (model pinning) is live; effort pinning is not possible from a plugin. | opencode API gains a variant/effort field on `session.prompt`. |
 | Interactive trajectory events lack tool *args* | `tool.execute.after` hook doesn't expose them; bench-side trajectories are unaffected. | opencode hook API exposes call args. |
 | `/mh-status` doesn't surface `diagnosis.json` | Candidate `meta.json` already shows in status; diagnosis surfacing was judged redundant UI for now. | Diagnosis becomes hard-required (§4) — at that point it's first-class state worth showing. |
-| Proposer failure retrieval is importance×taxonomy-**diversity**, not semantic **similarity** (2026-07-14, `failure-retrieval.ts`) — no query-task, no embeddings, no vector store | Current regime = structured signals + coverage over a small corpus; §6 already rejects even SQLite; propose has no query task. | Retrieval becomes query-driven ("find failures whose *content* resembles THIS task/error") over a large corpus → add task-identity to `SessionRecord`, then an embedded vector index (sqlite-vec-style) OR lean on the engram/kratos memory MCPs — NOT a standalone vector DB. |
+| Proposer failure retrieval is importance×taxonomy-**diversity**, not semantic **similarity** (2026-07-14, `failure-retrieval.ts`) — no query-task, no embeddings, no vector store | Current regime = structured signals + coverage over a small corpus; §6 already rejects even SQLite; propose has no query task. | Retrieval becomes query-driven ("find failures whose *content* resembles THIS task/error") over a large corpus → add task-identity to `SessionRecord`, then **BUY not build** (see §6.1 pre-scoped candidates) — NOT a standalone vector DB, NOT from scratch. |
 
 ### 5.1 Fleet depth-1 deferrals (2026-07-13, from the squad E2E final review)
 
@@ -178,6 +178,42 @@ Python runner.
 routinely concurrent writers, or measurably slow stratified queries. Even then:
 mirror into DuckDB/SQLite as a *derived, read-only* analysis layer — never as
 source of truth.
+
+### 6.1 Semantic memory: pre-scoped buy-decision (evaluated 2026-07-14)
+
+The §5 row above defers query-driven *semantic-similarity* failure retrieval.
+When it triggers, **buy not build** — a survey of SQLite-backed vector-memory
+MCP servers was done so the future decision is fast, not re-litigated:
+
+- **Front-runner: `mcp-memory-libsql`** (libSQL, npm). Chosen because our topology
+  is SHARED (spec §7 / D6: one store per role NAME across all depths, nodePath =
+  provenance), and its Turso mode has the server arbitrate writes — the ONLY
+  candidate that escapes the single-writer WAL contention we already hit
+  (score.json race, §5) at squad scale. Standard MCP entities/relations KG +
+  vector similarity.
+- **Local alternative: `@aeriondyseti/vector-memory-mcp`** (Bun/TS, sqlite-vec) —
+  best stack fit, but single-file WAL contention + MiniLM-384. Pick only if we
+  accept local + isolated (contradicts D6's shared topology).
+- **Rejected on stack:** the Python servers (sqlite_mcp/vertexhub/cornebidouil) —
+  we finished python-elimination; do not reintroduce Python. (sqlite_mcp's
+  Qwen3-0.6B/1024-dim embedder is noted below as the quality bar, not adopted.)
+
+**Hard requirements for whatever is adopted:**
+1. **Embedder floor = Qwen3-0.6B-class (1024-dim) or stronger.** MiniLM-384 (the
+   default across most of these) is too weak for code/technical retrieval — it
+   would not beat our existing structured ranker (`failure-retrieval.ts`).
+2. **Complementary, not a replacement.** The harness store stays files-only
+   source of truth (this §6). A vector server is a *derived semantic index*
+   over failure content, exactly like the "derived read-only analysis layer"
+   caveat above — never the fitness/store source of truth.
+
+**The unresolved tension (decide only when triggered):** D6 says memory is
+SHARED across the squad hierarchy → points at libSQL/**Turso** (remote,
+server-arbitrated, solves concurrency). But Turso is a *remote* store (network,
+auth token, off-machine), which breaks §6's files-only / git-inspectable /
+offline / zero-dependency ethos. Shared-topology vs local-git-truth is a real
+fork that is NOT yet forced — the structured ranker covers today's regime, so
+this stays deferred until a query-task + large corpus actually exist.
 
 ---
 
