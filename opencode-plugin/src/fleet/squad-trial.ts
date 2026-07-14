@@ -131,7 +131,11 @@ export async function cmdSquadTrial(
   if (args.n !== undefined && (!Number.isInteger(args.n) || args.n < 1)) {
     die(`squad-trial: --n must be a positive integer, got: ${args.n}`)
   }
-  const n = args.n ?? 3
+  // Default to MIN_TRIAL_PAIRS: a smaller default could never reach the
+  // significance floor, so a no-flag trial would ALWAYS return
+  // insufficient-baseline (never confirm) — a silent footgun. 5 is the
+  // minimum n at which a genuine promotion is statistically reachable.
+  const n = args.n ?? MIN_TRIAL_PAIRS
   const sliceTexts = resolveSliceTexts(args)
   const activeVersion = activeSquadVersion(squadType)
 

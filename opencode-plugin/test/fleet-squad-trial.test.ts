@@ -185,11 +185,11 @@ describe("cmdSquadTrial — batching / retry / arg plumbing", () => {
     expect(candCalls.map((c) => c.slice)).toEqual(["slice A", "slice B", "slice A"])
   })
 
-  test("default n is 3 when omitted", async () => {
-    const { runFn, calls } = pairedFake(outcomes(["D", "D", "D"]), outcomes(["D", "D", "D"]))
+  test("default n is MIN_TRIAL_PAIRS (5) when omitted — so a default trial can reach the significance floor", async () => {
+    const { runFn, calls } = pairedFake(outcomes(["D", "D", "D", "D", "D"]), outcomes(["D", "D", "D", "D", "D"]))
     const result = await cmdSquadTrial({ project, candidate: "v2", slice: "x" }, runFn)
-    expect(result.nRuns).toBe(3)
-    expect(calls.length).toBe(6) // 3 slices × 2 defs
+    expect(result.nRuns).toBe(5)
+    expect(calls.length).toBe(10) // 5 slices × 2 defs
   })
 
   test("requires --slice or --slice-file", async () => {
