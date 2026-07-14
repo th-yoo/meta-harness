@@ -146,6 +146,13 @@ LOOP      propose → ab → activate IMPROVEMENT — the only place versions ch
   general edit; per-task text drifts into benchmark leakage (upstream runs
   regex audits against exactly this).
 
+### Operational gotchas (running it by hand)
+
+- **`--results-file` forces `--no-store`** (`cmd-run.ts`: `noStore = args.noStore || resultsFile`). A run therefore either (a) writes a results-file for `split` (measurement) OR (b) feeds the store the failure trajectories the proposer reads — **never both in one run**. Step 1 (baseline, measurement) and the store-writing run that precedes propose are thus *separate* runs. The store-writing run needs no results-file and only `--k 2` (it wants failing trajectories, not rates).
+- **`--resume` needs `--results-file`** (`resumeCarryForward`), so **store-writing runs are not resumable** — a reboot restarts them; keep them small (band, low k). `ab` *is* resumable.
+- **Propose has no CLI.** `/mh-propose account` is opencode-plugin/cc-adapter resident (proposer independence — it must never sit next to the held-out answer key). Drive it headless via tmux opencode (`smoke/lib/oc-driver.sh`). Account layers don't auto-trial (project-only); wait for `global/candidates/vN/`.
+- **Phase-0 self-check can't piggyback the store-writing run**: `--self-check` captures selfScores into the results aggregation, which needs `--results-file`, which forces `noStore` — the opposite of a store-writing run. Phase 0 needs its own `run --self-check --results-file` pass.
+
 ## 4. Cross-regime wiring
 
 ```

@@ -57,7 +57,12 @@ function pearson(xs: number[], ys: number[]): number {
     const dx = xs[i]! - mx, dy = ys[i]! - my
     sxy += dx * dy; sxx += dx * dx; syy += dy * dy
   }
-  if (sxx === 0 || syy === 0) return 0 // no variance in one axis
+  // No variance in one axis → correlation is undefined; report 0 as "not
+  // measurable" (review R4#3). Common when every attempt self-reports 1.0
+  // (self-check optimism): a printed pointBiserial=0 then means "insufficient
+  // variance to measure", NOT "measured zero correlation". It's a reported
+  // diagnostic only — `predictive` gates on liftSelfPass, never on this.
+  if (sxx === 0 || syy === 0) return 0
   return sxy / Math.sqrt(sxx * syy)
 }
 
@@ -83,6 +88,12 @@ export function correlateSelfScores(results: ResultsLike, opts: CorrelateOpts = 
       if (s === null || s === undefined || r === undefined) continue
       selfScores.push(s)
       rewards.push(r)
+      // argmax tie-break = FIRST attempt at the max score (strict `>`). At the
+      // default threshold 1.0 many attempts self-report exactly 1.0, so ties
+      // are common and this degenerates to "attempt 0" — a deliberate, honest
+      // choice: with no discriminating self-score there's nothing to pick on
+      // (review R4#4). bestOfKSelectionRate is reported, not gated, so this only
+      // affects a diagnostic number.
       if (s > bestScore) { bestScore = s; bestIdx = i }
     }
     if (bestIdx >= 0) {

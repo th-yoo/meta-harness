@@ -80,7 +80,9 @@ describe("selectDiverse", () => {
 
   test("maxN >= available returns all; empty → []", () => {
     const items = [mk("a", 0.9, "a1"), mk("b", 0.5, "b1")]
-    expect(selectDiverse(items, 99).sort()).toEqual(["a1", "b1"])
+    // No .sort(): assert the round-robin ORDER (buckets by descending
+    // max-importance → a before b), not just set membership (review R1 gap).
+    expect(selectDiverse(items, 99)).toEqual(["a1", "b1"])
     expect(selectDiverse([], 5)).toEqual([])
     expect(selectDiverse(items, 0)).toEqual([])
   })
@@ -153,6 +155,19 @@ describe("rankRoleFailures — defensiveness (#8, C3) + signals", () => {
 
   test("empty store → []", () => {
     expect(rankRoleFailures(store)).toEqual([])
+  })
+
+  test("recencyHalfLifeDays <= 0 / NaN is clamped — no NaN importance (R1#1)", () => {
+    seed(store, "v1", { sessions: [
+      { sessionID: "recent", timestamp: "2026-07-14T12:00:00Z" },
+      { sessionID: "old", timestamp: "2026-01-01T00:00:00Z" },
+    ] })
+    for (const hl of [0, -5, Number.NaN]) {
+      const ranked = rankRoleFailures(store, { recencyHalfLifeDays: hl })
+      for (const r of ranked) expect(Number.isFinite(r.importance)).toBe(true)
+    }
+    // clamps to the default (14 days) → the recent failure still ranks first.
+    expect(rankRoleFailures(store, { recencyHalfLifeDays: 0 })[0]!.sessionID).toBe("recent")
   })
 })
 
