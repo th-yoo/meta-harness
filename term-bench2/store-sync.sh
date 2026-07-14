@@ -25,14 +25,31 @@ SNAP="$REPO_ROOT/term-bench2/store"
 
 die() { echo "store-sync: $*" >&2; exit 1; }
 
-MODE="${1:-}"; DRY=""
+MODE="${1:-}"; DRY=""; FORCE=""
 [ "${2:-}" = "--dry-run" ] && DRY="--dry-run"
+[ "${2:-}" = "--force" ] && FORCE=1
 command -v rsync >/dev/null || die "rsync not found"
 
 case "$MODE" in
   export)
     [ -d "$STORE" ] || die "no account store at $STORE (nothing to export)"
     mkdir -p "$SNAP"
+    # SAFETY (2026-07-16 split-brain incident): export is a --delete mirror, so a
+    # STALE host would wipe committed content another host added (e.g. overnight
+    # role stores). Refuse if export would delete anything from the snapshot,
+    # unless --force. This makes destructive deletion an explicit, checked act.
+    if [ -z "$DRY" ] && [ -z "$FORCE" ] && [ -d "$SNAP" ]; then
+      DELETES=$(rsync -a --delete --dry-run -i "$STORE"/ "$SNAP"/ 2>/dev/null | grep -c '^\*deleting ' || true)
+      if [ "${DELETES:-0}" -gt 0 ]; then
+        echo "store-sync: REFUSING export — it would DELETE $DELETES path(s) from the git snapshot." >&2
+        echo "  This host's store is missing content the snapshot has (split-brain?)." >&2
+        echo "  Inspect:  term-bench2/store-sync.sh diff" >&2
+        echo "  Safe fix: 'store-sync.sh import' first, OR surgically copy just your new" >&2
+        echo "            candidate dir into term-bench2/store/ and commit (no --delete)." >&2
+        echo "  If the deletions are truly intended (you removed a candidate): export --force" >&2
+        exit 3
+      fi
+    fi
     echo "export: $STORE  ->  $SNAP  (mirror)"
     # --delete: a candidate removed locally is removed from the snapshot too
     # (the snapshot is a faithful mirror, not an append-only pile).

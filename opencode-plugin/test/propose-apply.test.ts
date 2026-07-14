@@ -280,6 +280,25 @@ test("applyCurateArtifact: ops.json → curated playbook trial (project layer)",
   expect(rec.notes.some((n) => n.includes("Curation trial"))).toBe(true)
 })
 
+test("applyCurateArtifact: no-op curation (empty ops) → no candidate, no trial", async () => {
+  const root = path.join(home, "stores", "cur-noop")
+  writeActive(root, "v1", "- b1", "", { version: 1, bullets: [
+    { id: "b1", text: "b1", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-global", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "curate-project-global-v2-ops.json"), JSON.stringify({ ops: [] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(fakeHost(rec), descriptor({ kind: "curate", layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).not.toContain("v2")   // identical playbook → skipped
+  expect(readTrial(root)).toBeNull()
+  expect(rec.logs.some((l) => l.includes("no-op curation"))).toBe(true)
+})
+
 // ── opencode inline parity: triggerPropose without stageArtifactApply ────────
 
 test("triggerPropose (opencode path): no stageArtifactApply → waits inline, applies via the extracted body", async () => {

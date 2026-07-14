@@ -980,6 +980,18 @@ async function applyCurateArtifact(host: HarnessHost, d: StagedArtifactDescripto
   // unconditionally here (read BEFORE startTrial below overwrites active).
   const agentConfig = readAgentConfig(layer.root)
   const envPolicy = readEnvPolicy(layer.root)
+
+  // No-op guard (review follow-up 2026-07-16, mirrors the propose path): a
+  // curation that nets to no change (nothing left to dedup/prune, or malformed
+  // ops) renders identical to active → skip create+trial rather than mint an
+  // identical candidate that burns TRIAL_MIN_SESSIONS. tools + knobs are read
+  // from active here, so only the playbook-rendered `system` can differ.
+  if (system.trim() === readActiveSystem(layer.root).trim()) {
+    await host.log("info", `curator ${layer.scope}: no-op curation — identical to active ${activeVersion(layer.root)}; no candidate created, no trial`)
+    await host.notify(`Curator ${layer.scope}: no change — nothing to trial`, "info", 8_000)
+    return "applied"
+  }
+
   createCandidate(layer.root, version, system, tools, newPlaybook, agentConfig ?? undefined, envPolicy ?? undefined)
   appendMetaMetric(layer.root, { event: "curate", candidate: version, scope: layer.scope })
   writeCandidateMeta(layer.root, version, {
