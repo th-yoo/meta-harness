@@ -147,6 +147,36 @@ describe("escalations + verdict", () => {
     expect(parseVerdict(STANDARD_SQUAD, "`VERDICT: PASS`")).toEqual({ verdict: "PASS" })
   })
 
+  // #2 (verdict→score): the Evaluator may append `score=<passed>/<total>` so a
+  // future best-of-k can RANK candidates when several pass or all fail. Optional
+  // + backward-compatible: no score → the field is simply absent.
+  test("parseVerdict extracts optional score=N/M (normalized passed/total)", () => {
+    expect(parseVerdict(STANDARD_SQUAD, "VERDICT: PASS score=32/32"))
+      .toEqual({ verdict: "PASS", score: 1 })
+    expect(parseVerdict(STANDARD_SQUAD, "VERDICT: FAIL cause=impl score=28/32"))
+      .toEqual({ verdict: "FAIL", cause: "impl", score: 0.875 })
+  })
+
+  test("parseVerdict score is absent when not emitted (back-compat) and on total=0", () => {
+    expect(parseVerdict(STANDARD_SQUAD, "VERDICT: PASS")).toEqual({ verdict: "PASS" })
+    // total=0 is degenerate — no score field rather than a div-by-zero.
+    expect(parseVerdict(STANDARD_SQUAD, "VERDICT: FAIL cause=impl score=0/0"))
+      .toEqual({ verdict: "FAIL", cause: "impl" })
+  })
+
+  test("evaluator wire contract instructs the optional score suffix", () => {
+    const home = mkdtempSync(join(tmpdir(), "mh-wire-"))
+    process.env.META_HARNESS_HOME = home
+    try {
+      writeSquadDefV1(STANDARD_SQUAD)
+      const contract = readFileSync(join(accountRoleRoot("mh-evaluator"), "contract.md"), "utf-8")
+      expect(contract).toContain("score=")
+    } finally {
+      delete process.env.META_HARNESS_HOME
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
   test("parseVerdict leaves a plain unadorned VERDICT line unchanged", () => {
     expect(parseVerdict(STANDARD_SQUAD, "VERDICT: PASS")).toEqual({ verdict: "PASS" })
   })

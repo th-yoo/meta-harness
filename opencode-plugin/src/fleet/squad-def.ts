@@ -54,7 +54,7 @@ export const STANDARD_SQUAD: SquadDef = {
       "evaluator-spec":    [["## Test Spec"]],
       "evaluator-verdict": [["VERDICT:"]],
     },
-    verdictRe: "^VERDICT: (PASS|FAIL)(?: cause=(impl|design|intent))?\\s*$",
+    verdictRe: "^VERDICT: (PASS|FAIL)(?: cause=(impl|design|intent))?(?: score=(\\d+)/(\\d+))?\\s*$",
   },
 }
 
@@ -141,6 +141,10 @@ function renderWireContract(def: SquadDef, role: string): string {
       "```",
       "",
       "Emit the verdict line as PLAIN TEXT — no bold/italics/backticks.",
+      "",
+      "Optionally append `score=<passed>/<total>` (e.g. `VERDICT: PASS score=32/32`,",
+      "`VERDICT: FAIL cause=impl score=28/32`) — the fraction of checks that passed.",
+      "It lets the harness rank multiple candidate implementations of the same task.",
     )
   }
 
@@ -215,7 +219,7 @@ export function detectEscalation(payload: string): { type: EscalationType; body:
 export function parseVerdict(
   def: SquadDef,
   payload: string,
-): { verdict: "PASS" } | { verdict: "FAIL"; cause: "impl" | "design" | "intent" } | null {
+): { verdict: "PASS"; score?: number } | { verdict: "FAIL"; cause: "impl" | "design" | "intent"; score?: number } | null {
   // "mi" (not just "m"): the wire contract is invisible to the proposer (it
   // appears nowhere in the evidence it's shown), so generations converge on
   // plausible-but-wrong casing (e.g. "verdict: pass") — parse case-
@@ -233,10 +237,16 @@ export function parseVerdict(
     .join("\n")
   const m = new RegExp(def.wire.verdictRe, "mi").exec(normalized)
   if (!m) return null
+  // Optional score=<passed>/<total> (#2, verdict→score): a rankable signal for
+  // a future best-of-k. m[3]/m[4] are the score capture groups when the
+  // verdictRe carries them; guard total>0 to avoid a degenerate 0/0.
+  const passed = m[3] !== undefined ? Number(m[3]) : NaN
+  const total = m[4] !== undefined ? Number(m[4]) : NaN
+  const score = Number.isFinite(passed) && Number.isFinite(total) && total > 0 ? passed / total : undefined
   const verdict = m[1]!.toUpperCase() as "PASS" | "FAIL"
-  if (verdict === "PASS") return { verdict: "PASS" }
+  if (verdict === "PASS") return score !== undefined ? { verdict: "PASS", score } : { verdict: "PASS" }
   const cause = (m[2]?.toLowerCase() ?? "impl") as "impl" | "design" | "intent"
-  return { verdict: "FAIL", cause }
+  return score !== undefined ? { verdict: "FAIL", cause, score } : { verdict: "FAIL", cause }
 }
 
 // ── Channel 2 — squad-level fitness (spec §6, D5 table) ────────────────────

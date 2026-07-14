@@ -245,6 +245,12 @@ export async function squadStep(
         }
         return { state: s, outcome: { status: "running" } }
       }
+      // #2: capture the optional rankable score as telemetry (a future
+      // best-of-k reads parseVerdict().score directly; recorded here for
+      // visibility in the history/failure report).
+      if (v.score !== undefined) {
+        s.history.push({ phase: "evaluator-verdict", event: `score=${v.score.toFixed(3)}`, id })
+      }
       if (v.verdict === "PASS") {
         await score(id, "good", "lint")
         await score(s.lastDriveId!, "good", "verdict") // implementer good
