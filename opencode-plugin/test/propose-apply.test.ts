@@ -160,7 +160,7 @@ test("applyProposeArtifact: playbook ops.json → candidate with edited playbook
   expect(sys).toContain("new behavioral rule")
 })
 
-test("applyProposeArtifact: corrupt ops.json → no crash, applies as no-op edit", async () => {
+test("applyProposeArtifact: corrupt ops.json → no crash, no-op detected → NO candidate", async () => {
   const root = path.join(home, "stores", "pbc")
   writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
     { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
@@ -173,8 +173,50 @@ test("applyProposeArtifact: corrupt ops.json → no crash, applies as no-op edit
   const rec: Rec = { notes: [], logs: [] }
   const res = await applyStagedArtifact(fakeHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
 
+  // corrupt ops → empty ops → playbook renders identical to active → the no-op
+  // guard skips create+trial (review 2026-07-16), rather than minting a
+  // byte-identical v2 that would burn TRIAL_MIN_SESSIONS proving nothing.
   expect(res).toBe("applied")
-  expect(listVersions(root)).toContain("v2")
+  expect(listVersions(root)).not.toContain("v2")
+  expect(readTrial(root)).toBeNull()
+  expect(rec.logs.some((l) => l.includes("no-op proposal"))).toBe(true)
+})
+
+test("applyProposeArtifact: empty ops {ops:[]} → no-op guard, no candidate, no trial", async () => {
+  const root = path.join(home, "stores", "noop")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "project-role-v2-ops.json"), JSON.stringify({ ops: [] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(fakeHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).not.toContain("v2")   // byte-identical → skipped
+  expect(readTrial(root)).toBeNull()
+  expect(rec.notes.some((n) => n.includes("no change proposed"))).toBe(true)
+  // staging still consumed (not left to re-fire)
+  expect(fs.existsSync(path.join(b, "project-role-v2-ops.json"))).toBe(false)
+})
+
+test("applyProposeArtifact: legacy system.md IDENTICAL to active → no-op guard skips", async () => {
+  const root = path.join(home, "stores", "noop-legacy")
+  writeActive(root, "v1", "- baseline rule", "")
+  const layer: StoreLayer = { root, scope: "account-global", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "account-global-v2-system.md"), "- baseline rule\n") // same as active
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(fakeHost(rec), descriptor({ layer, version: "v2" }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).not.toContain("v2")
+  expect(rec.logs.some((l) => l.includes("no-op proposal"))).toBe(true)
 })
 
 // ── applyStagedArtifact: promote ────────────────────────────────────────────

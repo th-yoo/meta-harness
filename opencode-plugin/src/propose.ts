@@ -17,6 +17,7 @@
 
 import * as fs from "fs"
 import * as path from "path"
+import { isDeepStrictEqual } from "node:util"
 import {
   accountGlobalRoot,
   activeVersion,
@@ -299,6 +300,26 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
   // startTrial below, which overwrites active via writeActive.
   const effAgentConfig = agentConfig ?? readAgentConfig(layer.root)
   const effEnvPolicy = envPolicy ?? readEnvPolicy(layer.root)
+
+  // No-op guard (review 2026-07-16): an over-cautious proposer can emit
+  // {"ops":[]} (or ops that net to no change) → newPlaybook renders byte-
+  // identical to active system.md → a candidate that proves nothing yet burns
+  // TRIAL_MIN_SESSIONS (project trial) / pollutes account candidates. Skip
+  // create+trial when the whole injectable surface (system + tools + knobs)
+  // equals active. Mirrors squad-propose.ts's no-op reject on its evolvable
+  // surface. Reads active BEFORE createCandidate/startTrial overwrite it;
+  // staging is already consumed above, so this is a completed apply → "applied".
+  const contentUnchanged =
+    system.trim() === readActiveSystem(layer.root).trim() &&
+    (tools ?? "").trim() === readActiveTools(layer.root).trim()
+  const knobsUnchanged =
+    isDeepStrictEqual(effAgentConfig, readAgentConfig(layer.root)) &&
+    isDeepStrictEqual(effEnvPolicy, readEnvPolicy(layer.root))
+  if (contentUnchanged && knobsUnchanged) {
+    await host.log("info", `proposer ${layer.scope}: no-op proposal — identical to active ${activeVersion(layer.root)}; no candidate created, no trial`)
+    await host.notify(`Proposer ${layer.scope}: no change proposed — nothing to trial`, "info", 8_000)
+    return "applied"
+  }
 
   createCandidate(layer.root, version, system, tools, newPlaybook, effAgentConfig ?? undefined, effEnvPolicy ?? undefined)
   appendMetaMetric(layer.root, {
