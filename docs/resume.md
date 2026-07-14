@@ -3,16 +3,25 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## AT THE OFFICE (2026-07-16) — do this first
+## AT THE OFFICE (2026-07-16) — v1-into-git DONE ✅ (read the warning)
 
-The ONE blocker lives on the office linux host (unreachable from home —
-SSH to 221.151.107.42 times out outside the office network):
+**DONE (commit `9bc5166`):** v1 is now in the git snapshot (`term-bench2/store/global/candidates/` = `v0 v1`).
 
-1. **Linux host:** `cd ~/z2/meta-harness && git pull && term-bench2/store-sync.sh export && git add term-bench2/store && git commit -m "store: loop-1 v1" && git push`
-   → v1 finally crosses into git. Sanity: `ls term-bench2/store/global/candidates/` should show `v0 v1`.
-2. Then `ab` can run on ANY host (see "Resume the loop" below). The linux host
-   itself is fine for it: `store-sync.sh import` is a no-op there (it has v1),
-   just `git pull` and launch the `ab` command.
+⚠️ **The original instruction here (`store-sync.sh export` on the linux host) was a
+DATA-LOSS TRAP and was NOT used.** By 2026-07-16 the hosts were split-brain: the
+linux host had `v1` in its live store but was STALE on the overnight tier-2 work
+(role stores `mh-analyzer/designer/evaluator/implementer`, config, calibration);
+the git snapshot had the overnight work but not `v1`. `export` is `rsync --delete`
+(store→snapshot), so it would have DELETED the overnight role stores from git.
+Instead v1 was added SURGICALLY (`rsync` no `--delete`, only `global/candidates/v1`)
+— zero deletions. **Lesson: always `store-sync.sh diff` first; if it shows
+`*deleting` lines you care about, do NOT export — surgically copy just the new
+candidate dir into `term-bench2/store/` and commit.** The import-before-work
+discipline prevents this; it was skipped when linux made v1 before store-sync existed.
+
+Next: `ab` can run on ANY host. The linux host can run it directly (its live store
+already has `v0 v1`). Other hosts: `git pull && store-sync.sh import` (now safe —
+the snapshot has v1 + the overnight roles).
 
 ## Where we are (2026-07-16)
 
@@ -50,11 +59,10 @@ Landed 2026-07-15 (all pushed to `main`):
 - **Tier-2 machinery HARDENED** (`7503ae0`) — adversarial review of the office-host code found + fixed 2 Critical + 4 Important bugs before any loop leans on it: squad-run pins one def-version per slice (no mid-run-activation drift); `squad-trial` is now a PAIRED comparison with the tier-1 McNemar significance test (no promote-on-noise, default n=5 floor); Phase-0 self-score gate floors on self-PASS sample size (n=1 greenlight killed); `flow.reentry` frozen; failure retrieval blends importance×diversity. 916 tests green. Detail: `.superpowers/sdd/tier2-fix-report.md` + `selfscore-fix-report.md`.
 - **Slack/OpenClaw fixed** (fleet, oc-test side) — root cause of "#oc doesn't answer" was `requireMention` defaulting true (plain messages dropped as `no-mention`), NOT agent provisioning. Fix: `requireMention:false` on #oc. Token-free patch + sanitized gateway template in `oc-test/agents-fleet/gateway/` for office-host bring-up (new bot). Live DM outbound proven.
 
-**BLOCKER / NEXT (precise):** `v1` currently lives ONLY in the **linux host's**
-store — it is NOT yet in the git snapshot (`term-bench2/store/global/candidates/`
-holds `v0` only, seeded from the MacBook). So the *one immediate action* is on the
-**linux host**: `git pull && term-bench2/store-sync.sh export && git add term-bench2/store && git commit -m "store: loop-1 v1" && git push`.
-After that, ANY host: `git pull && store-sync.sh import` → v1 is in the store → run `ab`.
+**BLOCKER RESOLVED (2026-07-16, commit `9bc5166`):** `v1` is now in the git
+snapshot (added surgically — see the office section above for why blind `export`
+was NOT used). NEXT = run `ab` (v0 vs v1). Linux host can run it directly; other
+hosts `git pull && store-sync.sh import` first.
 
 Full detail + v1's diagnosis & playbook: **[loop-1-state.md](loop-1-state.md)**.
 
