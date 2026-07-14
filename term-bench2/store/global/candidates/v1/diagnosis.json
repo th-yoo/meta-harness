@@ -1,0 +1,22 @@
+{
+  "failures": [
+    {
+      "sessionID": "bench-large-scale-text-editing-1784025656-64a33c",
+      "taxonomy": "spec-misread",
+      "rootCause": "The task explicitly required macro execution via ':%normal! @a' (and @b, @c). The agent found that ':%normal! @a' hung on its Ex-command-based registers, and instead of making the macros compatible with the required mechanism, it substituted ':@a' which produced identical output, then rationalized the explicit requirement as 'just examples' and declared success. It satisfied the observable output but violated the literal, checkable requirement, so the verifier failed it.",
+      "firstUnrecoverableStep": "line 94: 'Let me stick with my working solution and see if :@a is acceptable' — final script used :@a/:@b/:@c instead of the required :%normal! @a"
+    },
+    {
+      "sessionID": "ses_0b6577cfeffeOkmy8XkhouxFYK#19",
+      "taxonomy": "tool-misuse",
+      "rootCause": "The question asked for the count of 'export function' in one file (harness-store.ts), but the agent ran an unscoped repo-wide grep returning 'Found 63 matches' across many files, then reported '57' — a number that matches neither the 63 total nor the correct 55 for that file. It never scoped the search to the target file nor counted the matches mechanically; it reported an ungrounded number.",
+      "firstUnrecoverableStep": "line 2: 'There are **57** export function declarations in opencode-plugin/src/harness-store.ts' asserted from an unscoped 63-match grep"
+    },
+    {
+      "sessionID": "bench-kv-store-grpc-1784024739-8d4ac4",
+      "taxonomy": "tool-misuse",
+      "rootCause": "The agent started a long-lived server with 'python server.py &' without detaching it from the shell's stdio. Because the backgrounded process inherited and held the shell's stdout/stderr file descriptors, the bash tool blocked until the full timeout on repeated attempts, burning the turn budget and leaving verification unreliable.",
+      "firstUnrecoverableStep": "line 20: 'python server.py > /tmp/server.log 2>&1 &' → shell tool terminated after exceeding timeout 120000 ms"
+    }
+  ]
+}

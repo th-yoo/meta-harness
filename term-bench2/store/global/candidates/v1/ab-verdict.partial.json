@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 2,
+  "layer": "account-global",
+  "candidate": "v1",
+  "baseline": "v0",
+  "activeFold": -1,
+  "splitHash": "151086b82227",
+  "decision": "inconclusive",
+  "winner": "tie",
+  "reasons": [
+    "held-in: delta=+0.000 p=0.750 (b=1,c=1,n=2)",
+    "no held-out split (legacy mode) — cannot accept"
+  ],
+  "candidateRate": 1,
+  "activeRate": 1,
+  "nTasks": 1,
+  "k": 2,
+  "heldIn": {
+    "nTasks": 1,
+    "nPairs": 2,
+    "b": 1,
+    "c": 1,
+    "delta": 0,
+    "mcnemarP": 0.75,
+    "bootCI90": [
+      0,
+      0
+    ]
+  },
+  "heldOut": null,
+  "sentinels": null,
+  "earlyStopped": false,
+  "split": null,
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "d96afb8",
+    "harnessHash": "490d41b5b4b02954",
+    "maxAgentTimeout": 600,
+    "provider": "anthropic",
+    "driver": "opencode"
+  },
+  "taskResults": {
+    "large-scale-text-editing": {
+      "candidate": [
+        0,
+        1
+      ],
+      "active": [
+        1,
+        0
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    }
+  },
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "timestamp": "2026-07-14T13:08:03.559Z",
+  "status": "in_progress"
+}
