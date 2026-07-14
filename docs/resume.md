@@ -9,9 +9,11 @@ First propose→ab improvement loop (#5). Done: baseline (haiku pass@5 **0.381**
 14-task band split, store-writing run, **propose → account-global `v1`**
 (a real generalized playbook). The `ab` verdict (v0 vs v1) is the last step.
 
-Two things landed 2026-07-15 (both pushed to main):
+Landed 2026-07-15 (all pushed to `main`):
 - **Store is git-syncable** — `term-bench2/store-sync.sh` + `term-bench2/store/` snapshot (next section). No more scp.
 - **Verifier-timeout bug fixed** — `--max-verifier-timeout` now bounds each attempt (was unbounded; `ab` command below already includes it).
+- **Tier-2 machinery HARDENED** (`7503ae0`) — adversarial review of the office-host code found + fixed 2 Critical + 4 Important bugs before any loop leans on it: squad-run pins one def-version per slice (no mid-run-activation drift); `squad-trial` is now a PAIRED comparison with the tier-1 McNemar significance test (no promote-on-noise, default n=5 floor); Phase-0 self-score gate floors on self-PASS sample size (n=1 greenlight killed); `flow.reentry` frozen; failure retrieval blends importance×diversity. 916 tests green. Detail: `.superpowers/sdd/tier2-fix-report.md` + `selfscore-fix-report.md`.
+- **Slack/OpenClaw fixed** (fleet, oc-test side) — root cause of "#oc doesn't answer" was `requireMention` defaulting true (plain messages dropped as `no-mention`), NOT agent provisioning. Fix: `requireMention:false` on #oc. Token-free patch + sanitized gateway template in `oc-test/agents-fleet/gateway/` for office-host bring-up (new bot). Live DM outbound proven.
 
 **BLOCKER / NEXT (precise):** `v1` currently lives ONLY in the **linux host's**
 store — it is NOT yet in the git snapshot (`term-bench2/store/global/candidates/`
