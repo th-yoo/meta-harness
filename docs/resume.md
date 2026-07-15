@@ -3,6 +3,61 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## SESSION END 2026-07-16 (leaving office) — loop-2 CALLED · Loop-3 shipped DARK · T1 shipped
+
+**Everything is committed + pushed. `git status` clean, 0 unpushed. HEAD = `7e23797`.**
+The sections below this one (office/v1/Phase-0) are HISTORICAL — superseded by the loops since.
+
+**Is the necessary data saved?** YES — all code, docs, plans, the Loop-3 build, the T1
+primitive, and the bug fix are in git (`origin/main`). Store note: the account store's
+`active` is the EMPTY baseline (nothing promoted); the git snapshot `term-bench2/store/`
+has `v0 v1`, which is all home needs. Dead candidates `v2` (superseded) and `v3` (loop-2,
+called) are host-local and NOT needed — **do NOT store-export them** (blind export is the
+data-loss trap; nothing new needs syncing anyway). To run anything at home: `git pull`
+(+ `store-sync.sh import` only if you need the candidate store).
+
+**What happened this session:**
+1. **Loop-2 CALLED = `inconclusive / no-lift`** (user decision — grinding the rest was
+   hours of timeout-dominated compute to confirm a near-certain reject). Candidate `v3`
+   (the proposer-fix's output) vs active `v0`: 3 held-in TIES incl **tune-mjcf FAIL/FAIL
+   (both ~600s timeout)**, a `v3` regression hint on distribution-search. `v3` NOT
+   activated; active stays baseline. **Meta-win stands:** the proposer-fix (`679326f`)
+   worked — `v3` self-corrected off `v1`'s reject. Full detail: memory `loop-2-outcome`
+   (host-local) + `.superpowers/sdd/progress.md` ledger (host-local).
+2. **Loop-3 (timeout blind-spot fix) T1–T5 SHIPPED DARK** — commits `062ca93..85fbfed`,
+   final-reviewed (opus) merge-ready. Flag `recordTimeouts` **default-OFF = zero behavior
+   change**. This is the priority self-improvement fix: makes agent timeouts a first-class,
+   proposer-visible failure (today they're 0-turn results invisible to the proposer, so the
+   loop can't learn its frontier failures — tune-mjcf above is the live proof).
+   **To turn it ON (next session):** finish **T6+T7** (stamp `maxAgentTimeout`/
+   `timeoutRecording` into verdictDict + `writeRunResults`; the MANUAL re-baseline op +
+   runbook) + the **pre-flip checklist** (thread the real per-task `agentTimeout` — already
+   captured as `agentElapsedSec` — into the proposer marker, which today uses the run-cap
+   denominator; scope-gate the T4 steer to project layers), THEN set `recordTimeouts=true`
+   in `config.json` + **re-baseline `v0`**, THEN a fresh loop-3 run. Plan:
+   `docs/superpowers/plans/2026-07-16-loop3-timeout-fix.md`; pre-flip details in the ledger.
+3. **T1 git-worktree primitive SHIPPED** (`144f31b..f536b6e`, reviewed-to-merge) — the
+   fleet/self-hosting execution substrate (worktree-isolated squad-runs, ledger survives
+   cleanup). Self-hosting build DAG: **T1 built; T3/T4/T6 + master + Loop-3 planned;
+   T2/T5/T7 unplanned.** Also landed: **master build-plan** (`6c2ee4f`, 8-task deterministic
+   orchestrator, §9+R1-R4), **R4 credit-assignment research** (`9e246d4`, closes the last
+   master gap — exact-replay difference rewards). All mapped in `docs/INDEX.md`.
+4. **Harness bug fixed** (`ac0cd18`): every chunked `ab --resume` was silently dying
+   (`verdictDict` omitted the top-level `driver` field the resume-ident check requires).
+   Fixed + regression-tested. NOTE: a partial written BEFORE `ac0cd18` still lacks the
+   field — patch top-level `"driver":"opencode"` into `ab-verdict.partial.json` to resume
+   it without a full restart.
+
+**Next session — pick up any of:** (a) Loop-3 T6+T7 + pre-flip fixes → flip it ON →
+re-baselined loop-3 run (the throughline); (b) execute a planned self-hosting task
+(T3/T4/T6, SDD like T1); (c) write the remaining plans (T2/T5/T7); (d) resolve the
+~30 open-questions accumulated across the new plans (each plan lists its own). The
+current loop empirically produces NO task-pass lift yet — Loop-3 (honest signal on
+frontier tasks) is the highest-leverage near-term fix; the self-hosting substrate is
+the bigger structural bet after that.
+
+---
+
 ## AT THE OFFICE (2026-07-16) — v1-into-git DONE ✅ (read the warning)
 
 **DONE (commit `9bc5166`):** v1 is now in the git snapshot (`term-bench2/store/global/candidates/` = `v0 v1`).
