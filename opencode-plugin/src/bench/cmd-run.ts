@@ -50,7 +50,13 @@ export interface RunTaskResult {
   turns: number
   toolUsage: ToolUsage
   events: TrajEvent[]
-  error: "" | "setup_failed" | "agent_no_output"
+  /** True iff the agent phase hit its wall-clock timeout (agent-run.ts's
+   * runAgent) — propagated from AgentRunOutput.timedOut (Loop-3 T1),
+   * defaulting to false when unset (auth-fail/transient/normal paths never
+   * set it). Distinguishes a timeout's 0-turn result from a genuine 0-turn
+   * no-output below (see `error`'s split — Loop-3 T2). */
+  timedOut: boolean
+  error: "" | "setup_failed" | "agent_no_output" | "timeout"
   /** Phase-0 self-check: the agent's own passed/total fraction (harness-
    * controlled transport of a self-report, NOT verified — see self-score.ts).
    * null when self-check is off or the agent wrote no/invalid score.txt. */
@@ -143,6 +149,7 @@ export async function runTaskOnce(
     turns: 0,
     toolUsage: {},
     events: [],
+    timedOut: false,
     error,
   })
 
@@ -226,7 +233,7 @@ export async function runTaskOnce(
       }
     }
 
-    const { turnCount, toolUsage, events } = await runAgent(
+    const { turnCount, toolUsage, events, timedOut } = await runAgent(
       driver,
       paths,
       name,
@@ -255,7 +262,8 @@ export async function runTaskOnce(
       turns: turnCount,
       toolUsage,
       events,
-      error: turnCount === 0 ? "agent_no_output" : "",
+      timedOut: timedOut ?? false,
+      error: timedOut ? "timeout" : turnCount === 0 ? "agent_no_output" : "",
       selfScore,
     }
   } finally {

@@ -46,6 +46,7 @@ function res(overrides: Partial<RunTaskResult> = {}): RunTaskResult {
     turns: 3,
     toolUsage: {},
     events: [{ t: "text", text: "did stuff" }],
+    timedOut: false,
     error: "",
     ...overrides,
   }

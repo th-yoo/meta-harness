@@ -1,4 +1,4 @@
-import { test, expect, spyOn } from "bun:test"
+import { test, expect, spyOn, mock } from "bun:test"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
@@ -9,6 +9,22 @@ import { readScore, projectGlobalRoot, createCandidate, writeActive } from "../s
 import { BenchError } from "../src/bench/util.ts"
 import type { AgentAuthMounts } from "../src/bench/agent-auth.ts"
 import { opencodeDriver } from "../src/bench/drivers/opencode.ts"
+import * as verifierReal from "../src/bench/verifier.ts"
+
+// Snapshot the REAL verifier.ts exports at module-eval time (before any
+// test runs, hence before any mock.module call below) — copyTests/
+// runVerifier hardcode the real `podman` funnel with no injectable execFn
+// (see verifier.ts's header), so the two runTaskOnce tests below that must
+// observe a full RunTaskResult (timeout / agent_no_output cases) mock this
+// module out for their narrow critical section and restore it via these
+// captured references afterward. Plain `const` captures the function
+// VALUE, not a live ES-module binding, so it survives later mock.module
+// swaps of verifier.ts's own export slots.
+const realCopyTests = verifierReal.copyTests
+const realRunVerifier = verifierReal.runVerifier
+function restoreVerifier(): void {
+  mock.module("../src/bench/verifier.ts", () => ({ copyTests: realCopyTests, runVerifier: realRunVerifier }))
+}
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "mh-bench-cmd-run-"))
@@ -57,6 +73,7 @@ function result(overrides: Partial<RunTaskResult> = {}): RunTaskResult {
     turns: 3,
     toolUsage: {},
     events: [],
+    timedOut: false,
     error: "",
     ...overrides,
   }
@@ -355,6 +372,95 @@ test("runTaskOnce: rm is always called, even when an earlier step throws", async
     errSpy.mockRestore()
   }
   expect(seenArgv.some((a) => a[1] === "rm")).toBe(true)
+})
+
+// ── timedOut discriminator (Loop-3 T2) ────────────────────────────────────
+// runAgent (agent-run.ts) sets AgentRunOutput.timedOut=true ONLY on the
+// wall-timeout branch (Task 1, commit 062ca93); these tests assert
+// runTaskOnce propagates that flag onto RunTaskResult.timedOut and splits
+// the error union so a wall-timeout's 0-turn result reads "timeout", not
+// the generic "agent_no_output". copyTests/runVerifier (verifier.ts) hard-
+// code the real `podman` funnel with no injectable execFn (see the
+// existing warning on the CC-oauth mounts test below: "a test must never
+// drive execution as far as copyTests/runVerifier") — driving runTaskOnce
+// to its return statement requires passing through them regardless, so
+// these two tests mock verifier.ts out for their narrow critical section
+// (restored immediately after via restoreVerifier(), defined above from a
+// pre-mock snapshot) rather than touch a real podman binary.
+
+test("runTaskOnce: agent-phase wall-timeout -> RunTaskResult.timedOut=true, error='timeout' (Loop-3 T2)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "do the thing")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      return { rc: 0, stdout: "", stderr: "", timedOut: false }
+    }
+    if (argv[1] === "exec" && argv.includes("opencode") && argv.includes("run")) {
+      // A small real delay so RunTaskResult.elapsed (wall-clock, rounded to
+      // 1 decimal) is observably > 0, matching a genuine wall-timeout.
+      await new Promise((resolve) => setTimeout(resolve, 110))
+      return { rc: 124, stdout: "", stderr: "", timedOut: true }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  mock.module("../src/bench/verifier.ts", () => ({ copyTests: async () => {}, runVerifier: async () => 0 }))
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  let res: RunTaskResult
+  try {
+    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, fakeAuthMounts())
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreVerifier()
+  }
+
+  expect(res.timedOut).toBe(true)
+  expect(res.turns).toBe(0)
+  expect(res.error).toBe("timeout")
+  expect(res.elapsed).toBeGreaterThan(0)
+})
+
+test("runTaskOnce: genuine 0-turn no-output (not a timeout) -> timedOut=false, error='agent_no_output'", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "do the thing")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      return { rc: 0, stdout: "", stderr: "", timedOut: false }
+    }
+    if (argv[1] === "exec" && argv.includes("opencode") && argv.includes("run")) {
+      // rc=0, empty stdout, NOT timed out -> parses to turnCount=0 with no
+      // timedOut field at all (agent-run.ts only sets it on the wall-timeout
+      // branch) -> must NOT be mislabeled "timeout".
+      return { rc: 0, stdout: "", stderr: "", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  mock.module("../src/bench/verifier.ts", () => ({ copyTests: async () => {}, runVerifier: async () => 0 }))
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  let res: RunTaskResult
+  try {
+    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, fakeAuthMounts())
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreVerifier()
+  }
+
+  expect(res.timedOut).toBe(false)
+  expect(res.turns).toBe(0)
+  expect(res.error).toBe("agent_no_output")
 })
 
 // ── CC-oauth mounts (agent-auth.ts's prepareAgentAuthMounts) ──────────────
