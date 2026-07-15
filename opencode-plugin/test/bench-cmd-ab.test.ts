@@ -428,3 +428,74 @@ test("cmdAb: partial written mid-run stamps a top-level driver matching runIdent
   const verdict = readAbVerdict(root, "v1")
   expect(verdict).not.toBeNull()
 })
+
+// ── D2 invariant (task-3-brief.md, the ac0cd18 bug class): runIdent must
+// NEVER gain a resourceEnforcement key ─────────────────────────────────────
+
+test("cmdAb resume: resourceEnforcement is NOT a runIdent field (resumeIdentCheck's strict per-key compare never sees it), only an informational env stamp", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  const heldIn = ["hi0", "hi1"]
+  writeSplitsFile(paths, heldIn, ["ho1"])
+  const root = setupCandidate(paths, "project-global", "v1")
+  const partialPath = path.join(root, "candidates", "v1", "ab-verdict.partial.json")
+
+  // Same crash-mid-run trick as the driver-provenance regression test above
+  // — produces a real on-disk partial file (flag OFF) without hand-rolling
+  // a fixture.
+  const crashingFake: RunOneTaskFn = async (_p, task) => {
+    if (task === "hi1") throw new Error("simulated crash mid-run")
+    return res({ reward: 1, turns: 3 })
+  }
+
+  await expect(
+    quiet(() =>
+      cmdAb(paths, { layer: "project-global", candidate: "v1", k: 1, minTasksBeforeStop: 999 } as CmdAbArgs, crashingFake, fakeExec),
+    ),
+  ).rejects.toThrow("simulated crash mid-run")
+
+  const partial = JSON.parse(fs.readFileSync(partialPath, "utf-8")) as Record<string, unknown>
+  // (a) NOT a top-level runIdent field — resumeIdentCheck iterates runIdent's
+  // OWN keys and dies on `prev[k] !== v`; if resourceEnforcement had been
+  // folded into runIdent, this pre-feature-shaped partial (flag off, no
+  // top-level key) would die resuming under flag ON purely from the missing
+  // top-level key, which is exactly the ac0cd18 class this task prevents.
+  expect(Object.prototype.hasOwnProperty.call(partial, "resourceEnforcement")).toBe(false)
+  // (b) IS present as informational provenance nested under env (default
+  // off -> false).
+  expect((partial["env"] as Record<string, unknown>)["resourceEnforcement"]).toBe(false)
+
+  // Resuming under a DIFFERENT resourceEnforcement regime must die via the
+  // separate coalescing guard's own "measurement regimes" message, not
+  // resumeIdentCheck's generic per-key message — proving this is distinct
+  // machinery sitting beside resumeIdentCheck, not a runIdent key.
+  await expect(
+    quiet(() =>
+      cmdAb(
+        paths,
+        {
+          layer: "project-global",
+          candidate: "v1",
+          k: 1,
+          minTasksBeforeStop: 999,
+          resume: true,
+          enforceResources: true,
+        } as CmdAbArgs,
+        async () => res({ reward: 1, turns: 3 }),
+        fakeExec,
+      ),
+    ),
+  ).rejects.toThrow(/resource/i)
+
+  // Resuming under the SAME (matching, off) regime completes normally.
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", k: 1, minTasksBeforeStop: 999, resume: true } as CmdAbArgs,
+      async () => res({ reward: 1, turns: 3 }),
+      fakeExec,
+    ),
+  )
+  expect(readAbVerdict(root, "v1")).not.toBeNull()
+})

@@ -193,7 +193,16 @@ export async function cmdAb(
   if (agentVersion === "unknown" && driver.id !== "opencode") {
     die(`bench image missing ${driver.id} — rebuild with prep --apply`)
   }
-  const envB = await envBlock(harnessB, maxAgentTimeout, model, paths.metaRoot, undefined, agentVersion, driver.id)
+  const envB = await envBlock(
+    harnessB,
+    maxAgentTimeout,
+    model,
+    paths.metaRoot,
+    undefined,
+    agentVersion,
+    driver.id,
+    args.enforceResources ?? false,
+  )
   // Loop-3 T3: whether a wall-clock agent-phase timeout on arm B gets
   // recorded as a genuine stored fail (default OFF). Read once for the
   // whole ab run — see recordToStores's guard doc in record.ts.
@@ -237,6 +246,23 @@ export async function cmdAb(
       prev = {}
     }
     resumeIdentCheck(prev, runIdent)
+    // Separate, coalescing comparison — deliberately NOT folded into
+    // runIdent (task-3-brief.md, D2 / ac0cd18 invariant): resumeIdentCheck
+    // does a strict per-key compare over every runIdent field, so adding a
+    // key there would kill --resume of every pre-feature partial the
+    // instant the flag existed, even with it off everywhere. This guard
+    // reads the informational `env.resourceEnforcement` stamp instead, with
+    // both sides `?? false`-coalesced so an absent key (pre-feature
+    // partial) means the same thing as an explicit `false`.
+    const prevEnv = prev["env"] as { resourceEnforcement?: boolean } | undefined
+    const prevResourceEnforcement = prevEnv?.resourceEnforcement ?? false
+    const expectedResourceEnforcement = args.enforceResources ?? false
+    if (prevResourceEnforcement !== expectedResourceEnforcement) {
+      die(
+        `--resume: ${partialPath} was produced with resourceEnforcement=${prevResourceEnforcement}, this run uses ` +
+          `${expectedResourceEnforcement} — refusing to mix measurement regimes in one results file.`,
+      )
+    }
     earlyStopped = Boolean(prev["earlyStopped"])
     const prevResults = (prev["taskResults"] as AbTaskResults) || {}
     for (const [t, tr] of Object.entries(prevResults)) {

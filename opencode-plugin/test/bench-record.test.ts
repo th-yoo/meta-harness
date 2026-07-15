@@ -240,8 +240,18 @@ test("envBlock: assembles agentVersion/pluginSha/harnessHash/maxAgentTimeout/pro
     maxAgentTimeout: 600,
     provider: "anthropic",
     driver: "opencode",
+    resourceEnforcement: false,
   })
   expect(calls).toBe(2)
+})
+
+test("envBlock: resourceEnforcement defaults to false, but is carried through verbatim when supplied", async () => {
+  const execFn = async (): Promise<ExecResult> => ({ rc: 0, stdout: "v1\n", stderr: "", timedOut: false })
+  const off = await envBlock("h", 0, "anthropic/claude-x", "/repo", execFn)
+  expect(off.resourceEnforcement).toBe(false)
+
+  const on = await envBlock("h", 0, "anthropic/claude-x", "/repo", execFn, "some-version", "opencode", true)
+  expect(on.resourceEnforcement).toBe(true)
 })
 
 test("envBlock: driverId param defaults to 'opencode' but is carried through verbatim when supplied", async () => {

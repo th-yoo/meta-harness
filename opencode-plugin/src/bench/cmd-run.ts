@@ -384,9 +384,23 @@ export async function cmdRun(
   if (agentVersion === "unknown" && driver.id !== "opencode") {
     die(`bench image missing ${driver.id} — rebuild with prep --apply`)
   }
-  const runEnv = await envBlock(harnessMd, maxAgentTimeout, model, paths.metaRoot, undefined, agentVersion, driver.id)
+  const runEnv = await envBlock(
+    harnessMd,
+    maxAgentTimeout,
+    model,
+    paths.metaRoot,
+    undefined,
+    agentVersion,
+    driver.id,
+    args.enforceResources ?? false,
+  )
 
-  const { taskAgg, doneTasks } = resumeCarryForward(resultsFile, Boolean(args.resume), driver.id)
+  const { taskAgg, doneTasks } = resumeCarryForward(
+    resultsFile,
+    Boolean(args.resume),
+    driver.id,
+    args.enforceResources ?? false,
+  )
   const results: { task: string; k: number; reward: number; elapsed: number }[] = []
   // Loop-3 T3: whether a wall-clock agent-phase timeout gets recorded as a
   // genuine stored fail (default OFF — see recordToStores's guard doc).
@@ -461,6 +475,7 @@ export async function cmdRun(
           taskAgg,
           status: "in_progress",
           driver: driver.id,
+          resourceEnforcement: args.enforceResources || undefined,
         })
       }
     }
@@ -494,6 +509,7 @@ export async function cmdRun(
       taskAgg,
       status: "complete",
       driver: driver.id,
+      resourceEnforcement: args.enforceResources || undefined,
     })
     const [np, nt] = aggTotals(taskAgg)
     log(nt ? `FINAL: ${np}/${nt} passed (${pyFixed((100 * np) / nt, 1)}%)` : "FINAL: no tasks")

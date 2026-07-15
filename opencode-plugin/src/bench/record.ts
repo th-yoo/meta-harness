@@ -193,6 +193,17 @@ export interface EnvBlock {
   maxAgentTimeout: number
   provider: string
   driver: string
+  /** Resource-enforcement provenance (task-3-brief.md, D2 invariant):
+   * whether --enforce-resources was on for this run. ALWAYS present
+   * (unlike RunResultsMeta.resourceEnforcement, which is omitted when
+   * false to preserve old results-file shape) — this is a purely
+   * informational field embedded in env blocks, never compared strictly
+   * anywhere: cmd-ab.ts's resume guard reads it via a `?? false`
+   * coalesce, and it is NEVER added to cmd-ab.ts's `runIdent` (the object
+   * resumeIdentCheck does a strict per-key compare over) — doing so would
+   * kill --resume of every pre-feature partial file even with flags off,
+   * the exact ac0cd18 bug class this task fixes. */
+  resourceEnforcement: boolean
 }
 
 /**
@@ -214,6 +225,10 @@ export interface EnvBlock {
  * (drivers/index.ts) produced `agentVersion` — not itself used to pick the
  * version lookup; defaults to "opencode" so every pre-B3 caller (direct/
  * unit-test callers that never pass it) is unaffected.
+ *
+ * `resourceEnforcement` (task-3-brief.md) is provenance for whether
+ * --enforce-resources was on; defaults to false so every pre-existing
+ * caller (direct/unit-test callers that never pass it) is unaffected.
  */
 export async function envBlock(
   harnessMd: string,
@@ -223,6 +238,7 @@ export async function envBlock(
   execFn: SpawnFn = runHost,
   agentVersionOverride?: string,
   driverId = "opencode",
+  resourceEnforcement = false,
 ): Promise<EnvBlock> {
   const [ver, sha] = await Promise.all([
     agentVersionOverride !== undefined ? Promise.resolve(agentVersionOverride) : opencodeVersion(execFn),
@@ -236,6 +252,7 @@ export async function envBlock(
     maxAgentTimeout: maxAgentTimeout || 0,
     provider,
     driver: driverId,
+    resourceEnforcement,
   }
 }
 

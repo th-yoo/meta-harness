@@ -74,11 +74,24 @@ export interface ResumeCarryForward {
  * missing/corrupt file). A prior file with NO `driver` field at all is a
  * legacy pre-driver-abstraction results file (drivers didn't exist yet, so
  * there is nothing to mismatch) — that case only warns and proceeds.
+ *
+ * `expectedResourceEnforcement` (task-3-brief.md) is the same class of guard
+ * for the --enforce-resources regime: a prior file's `resourceEnforcement`
+ * (absent == false, pre-feature files never had this key) is compared
+ * against the CURRENT run's flag via a coalescing `?? false` — mismatched
+ * regimes (e.g. resuming an unconstrained partial run under enforcement, or
+ * vice versa) is a hard die, since mixing rewards measured under different
+ * resource ceilings in one results file would silently corrupt the
+ * aggregate. Unlike the driver guard above, there is no "legacy warn and
+ * proceed" case here: false is a real, meaningful value (not "unknown"), so
+ * an absent key coalesces to false and is compared exactly like a present
+ * `false`.
  */
 export function resumeCarryForward(
   resultsFile: string | undefined,
   resume: boolean,
   expectedDriver: string,
+  expectedResourceEnforcement = false,
 ): ResumeCarryForward {
   const taskAgg: Record<string, TaskAgg> = {}
   const doneTasks = new Set<string>()
@@ -87,6 +100,7 @@ export function resumeCarryForward(
       const prev = JSON.parse(readFileSync(resultsFile, "utf-8")) as {
         tasks?: Record<string, TaskAgg>
         driver?: string
+        resourceEnforcement?: boolean
       }
       if (prev.driver !== undefined && prev.driver !== expectedDriver) {
         die(
@@ -97,6 +111,13 @@ export function resumeCarryForward(
       }
       if (prev.driver === undefined) {
         log(`  --resume: prior results file has no driver field (legacy, pre-driver) — assuming it matches, proceeding`)
+      }
+      const prevEnforce = prev.resourceEnforcement ?? false
+      if (prevEnforce !== expectedResourceEnforcement) {
+        die(
+          `--resume: ${resultsFile} was produced with resourceEnforcement=${prevEnforce}, this run uses ` +
+            `${expectedResourceEnforcement} — refusing to mix measurement regimes in one results file.`,
+        )
       }
       for (const [t, agg] of Object.entries(prev.tasks ?? {})) {
         if (agg.rewards && agg.rewards.length > 0) {
@@ -127,6 +148,13 @@ export interface RunResultsMeta {
   /** Driver-id provenance (task-B3-brief.md) — which AgentDriver produced
    * these results (drivers/index.ts's DRIVER_IDS). */
   driver: string
+  /** Resource-enforcement provenance (task-3-brief.md). Callers pass
+   * `args.enforceResources || undefined` — i.e. OMITTED (not `false`) when
+   * the flag is off, so a flag-off results file's JSON shape is byte-
+   * identical to every pre-feature file. `resumeCarryForward` reads it back
+   * via a `?? false` coalesce, so an absent key and an explicit `false`
+   * mean the same thing on the read side. */
+  resourceEnforcement?: boolean
 }
 
 /**
@@ -150,6 +178,7 @@ export function writeRunResults(resultsFile: string, meta: RunResultsMeta): void
     tasks: meta.taskAgg,
     status: meta.status,
     driver: meta.driver,
+    resourceEnforcement: meta.resourceEnforcement,
   })
   log(`Results written → ${resultsFile}`)
 }

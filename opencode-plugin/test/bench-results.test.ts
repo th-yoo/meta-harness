@@ -2,7 +2,7 @@ import { test, expect, spyOn } from "bun:test"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
-import { resumeCarryForward } from "../src/bench/results.ts"
+import { resumeCarryForward, writeRunResults, type RunResultsMeta } from "../src/bench/results.ts"
 import { BenchError } from "../src/bench/util.ts"
 
 function tmpDir(): string {
@@ -92,4 +92,147 @@ test("resumeCarryForward: no results file / resume=false -> untouched by the dri
   const { taskAgg, doneTasks } = resumeCarryForward(resultsFile, true, "claude-code")
   expect(doneTasks.size).toBe(0)
   expect(Object.keys(taskAgg).length).toBe(0)
+})
+
+// ── resourceEnforcement coalescing resume guard (task-3-brief.md) ─────────
+//
+// Mirrors the driver guard above, but with NO "legacy warn and proceed"
+// case: an absent `resourceEnforcement` key coalesces to `false` and is
+// compared exactly like a present `false` — mixing rewards measured under
+// different resource-ceiling regimes in one results file is always a hard
+// die, never a warn.
+
+test("resumeCarryForward: pre-feature file (no resourceEnforcement field) + flag off -> carries forward", () => {
+  const dir = tmpDir()
+  const resultsFile = path.join(dir, "run-results.json")
+  fs.writeFileSync(
+    resultsFile,
+    JSON.stringify({
+      driver: "opencode",
+      tasks: { a: { rewards: [1], elapsed: [1.0], turns: [2], errors: [] } },
+    }),
+  )
+
+  const { doneTasks } = resumeCarryForward(resultsFile, true, "opencode", false)
+  expect(doneTasks.size).toBeGreaterThan(0)
+})
+
+test("resumeCarryForward: pre-feature file (no resourceEnforcement field) + flag ON -> dies (regime mismatch)", () => {
+  const dir = tmpDir()
+  const resultsFile = path.join(dir, "run-results.json")
+  fs.writeFileSync(
+    resultsFile,
+    JSON.stringify({
+      driver: "opencode",
+      tasks: { a: { rewards: [1], elapsed: [1.0], turns: [2], errors: [] } },
+    }),
+  )
+
+  let thrown: unknown
+  quiet(() => {
+    try {
+      resumeCarryForward(resultsFile, true, "opencode", true)
+    } catch (e) {
+      thrown = e
+    }
+  })
+  expect(thrown).toBeInstanceOf(BenchError)
+  expect((thrown as Error).message).toMatch(/resource/i)
+})
+
+test("resumeCarryForward: stamped resourceEnforcement=true file + flag on -> carries forward", () => {
+  const dir = tmpDir()
+  const resultsFile = path.join(dir, "run-results.json")
+  fs.writeFileSync(
+    resultsFile,
+    JSON.stringify({
+      driver: "opencode",
+      resourceEnforcement: true,
+      tasks: { a: { rewards: [1], elapsed: [1.0], turns: [2], errors: [] } },
+    }),
+  )
+
+  const { doneTasks } = resumeCarryForward(resultsFile, true, "opencode", true)
+  expect(doneTasks.size).toBeGreaterThan(0)
+})
+
+test("resumeCarryForward: stamped resourceEnforcement=true file + flag off -> dies (regime mismatch)", () => {
+  const dir = tmpDir()
+  const resultsFile = path.join(dir, "run-results.json")
+  fs.writeFileSync(
+    resultsFile,
+    JSON.stringify({
+      driver: "opencode",
+      resourceEnforcement: true,
+      tasks: { a: { rewards: [1], elapsed: [1.0], turns: [2], errors: [] } },
+    }),
+  )
+
+  let thrown: unknown
+  quiet(() => {
+    try {
+      resumeCarryForward(resultsFile, true, "opencode", false)
+    } catch (e) {
+      thrown = e
+    }
+  })
+  expect(thrown).toBeInstanceOf(BenchError)
+  expect((thrown as Error).message).toMatch(/resource/i)
+})
+
+// ── writeRunResults: resourceEnforcement omitted (not `false`) when off ──
+//
+// The Interfaces contract (task-3-brief.md) is explicit: callers pass
+// `args.enforceResources || undefined`, and this must be OMITTED from the
+// written JSON when off — not written as a literal `false` — so a flag-off
+// results file is byte-identical to every pre-feature file's shape.
+
+function baseMeta(overrides: Partial<RunResultsMeta> = {}): RunResultsMeta {
+  return {
+    label: "run",
+    model: "m",
+    variant: "",
+    harness: {},
+    k: 1,
+    timestamp: "2026-01-01T00:00:00.000Z",
+    taskAgg: {},
+    status: "complete",
+    driver: "opencode",
+    ...overrides,
+  }
+}
+
+test("writeRunResults: resourceEnforcement undefined -> key OMITTED entirely from the written JSON", () => {
+  const dir = tmpDir()
+  const resultsFile = path.join(dir, "run-results.json")
+  writeRunResults(resultsFile, baseMeta({ resourceEnforcement: undefined }))
+
+  const raw = fs.readFileSync(resultsFile, "utf-8")
+  const parsed = JSON.parse(raw) as Record<string, unknown>
+  expect(Object.prototype.hasOwnProperty.call(parsed, "resourceEnforcement")).toBe(false)
+  expect(raw).not.toContain("resourceEnforcement")
+})
+
+test("writeRunResults: resourceEnforcement=true -> present and true in the written JSON", () => {
+  const dir = tmpDir()
+  const resultsFile = path.join(dir, "run-results.json")
+  writeRunResults(resultsFile, baseMeta({ resourceEnforcement: true }))
+
+  const parsed = JSON.parse(fs.readFileSync(resultsFile, "utf-8")) as Record<string, unknown>
+  expect(parsed["resourceEnforcement"]).toBe(true)
+})
+
+test("resumeCarryForward: 4th param omitted (legacy call site) defaults to flag-off — matches a pre-feature file", () => {
+  const dir = tmpDir()
+  const resultsFile = path.join(dir, "run-results.json")
+  fs.writeFileSync(
+    resultsFile,
+    JSON.stringify({
+      driver: "opencode",
+      tasks: { a: { rewards: [1], elapsed: [1.0], turns: [2], errors: [] } },
+    }),
+  )
+
+  const { doneTasks } = resumeCarryForward(resultsFile, true, "opencode")
+  expect(doneTasks.size).toBeGreaterThan(0)
 })
