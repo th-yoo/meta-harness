@@ -1,0 +1,262 @@
+import { test, expect } from "bun:test"
+import { schedule, AsyncMutex, DEFAULT_BUDGET, type Budget, type ScheduledItem } from "../src/bench/scheduler.ts"
+
+// ── test helpers ─────────────────────────────────────────────────────────
+
+interface Deferred<T> {
+  promise: Promise<T>
+  resolve: (v: T) => void
+  reject: (e: unknown) => void
+}
+
+function deferred<T = void>(): Deferred<T> {
+  let resolve!: (v: T) => void
+  let reject!: (e: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+/** Flush pending microtasks without any real timers/sleeps. */
+async function flush(times = 5): Promise<void> {
+  for (let i = 0; i < times; i++) await Promise.resolve()
+}
+
+function item(key: string, cpus: number, memoryMb = 1024): ScheduledItem {
+  return { key, cpus, memoryMb }
+}
+
+// ── schedule() ───────────────────────────────────────────────────────────
+
+test("3 lights co-run under default budget", async () => {
+  const launched: string[] = []
+  const deferreds = new Map<string, Deferred<void>>()
+  const items = [item("0", 1), item("1", 1), item("2", 1)]
+
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    launched.push(it.key)
+    const d = deferred<void>()
+    deferreds.set(it.key, d)
+    return d.promise
+  }
+
+  const result = schedule(items, DEFAULT_BUDGET, runFn)
+
+  // All three fit synchronously (1+1+1 = 3 <= budget.cpus) — canonical order,
+  // all launched before any of them completes.
+  expect(launched).toEqual(["0", "1", "2"])
+
+  for (const key of ["0", "1", "2"]) deferreds.get(key)!.resolve()
+  await result
+})
+
+test("2-cpu item packs with one 1-cpu, not two", async () => {
+  const launched: string[] = []
+  const deferreds = new Map<string, Deferred<void>>()
+  const budget: Budget = { cpus: 3, memoryMb: 6144 }
+  const items = [item("a", 2), item("b", 1), item("c", 1)]
+
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    launched.push(it.key)
+    const d = deferred<void>()
+    deferreds.set(it.key, d)
+    return d.promise
+  }
+
+  const result = schedule(items, budget, runFn)
+
+  // a (2) + b (1) = 3, fills the budget exactly. c must wait: only two
+  // in flight, not three.
+  expect(launched).toEqual(["a", "b"])
+
+  // Completing a frees 2 cpus, letting c (needs 1) launch.
+  deferreds.get("a")!.resolve()
+  await flush()
+  expect(launched).toEqual(["a", "b", "c"])
+
+  deferreds.get("b")!.resolve()
+  deferreds.get("c")!.resolve()
+  await result
+})
+
+test("over-budget item drains pool then runs alone", async () => {
+  const running = new Set<string>()
+  const deferreds = new Map<string, Deferred<void>>()
+  const budget: Budget = { cpus: 3, memoryMb: 6144 }
+  const items = [item("x", 1), item("y", 4)] // y exceeds the total budget
+
+  let ySawEmptyPool = false
+
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    if (it.key === "y") ySawEmptyPool = running.size === 0
+    running.add(it.key)
+    const d = deferred<void>()
+    deferreds.set(it.key, d)
+    return d.promise.then(() => {
+      running.delete(it.key)
+    })
+  }
+
+  const result = schedule(items, budget, runFn)
+
+  // y cannot launch yet — it must drain the pool first.
+  expect(running.has("y")).toBe(false)
+  expect(running.has("x")).toBe(true)
+
+  deferreds.get("x")!.resolve()
+  await flush()
+
+  // y now runs alone, with nothing else in flight at launch time.
+  expect(ySawEmptyPool).toBe(true)
+  expect(running.has("y")).toBe(true)
+
+  deferreds.get("y")!.resolve()
+  await result
+})
+
+test("canonical order: item i never launches before i-1 has been CONSIDERED", async () => {
+  const launched: string[] = []
+  const deferreds = new Map<string, Deferred<void>>()
+  const budget: Budget = { cpus: 3, memoryMb: 6144 }
+  // a=2 fits (remaining 1). b=2 does NOT fit remaining=1. c=1 WOULD fit
+  // remaining=1, but must not skip ahead of b.
+  const items = [item("a", 2), item("b", 2), item("c", 1)]
+
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    launched.push(it.key)
+    const d = deferred<void>()
+    deferreds.set(it.key, d)
+    return d.promise
+  }
+
+  const result = schedule(items, budget, runFn)
+
+  expect(launched).toEqual(["a"])
+
+  // Free up the budget — b should now fit (2 <= 3), then c (1 <= 1).
+  deferreds.get("a")!.resolve()
+  await flush()
+  expect(launched).toEqual(["a", "b", "c"])
+
+  deferreds.get("b")!.resolve()
+  deferreds.get("c")!.resolve()
+  await result
+})
+
+test("budget released on completion", async () => {
+  const launched: string[] = []
+  const deferreds = new Map<string, Deferred<void>>()
+  const budget: Budget = { cpus: 3, memoryMb: 6144 }
+  // item 0 fills the whole budget; 1,2,3 are blocked behind it in canonical
+  // order until it completes and releases.
+  const items = [item("0", 3), item("1", 1), item("2", 1), item("3", 1)]
+
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    launched.push(it.key)
+    const d = deferred<void>()
+    deferreds.set(it.key, d)
+    return d.promise
+  }
+
+  const result = schedule(items, budget, runFn)
+
+  expect(launched).toEqual(["0"])
+  expect(launched.includes("3")).toBe(false)
+
+  deferreds.get("0")!.resolve()
+  await flush()
+
+  expect(launched).toEqual(["0", "1", "2", "3"])
+
+  deferreds.get("1")!.resolve()
+  deferreds.get("2")!.resolve()
+  deferreds.get("3")!.resolve()
+  await result
+})
+
+test("runFn rejection propagates after in-flight settle", async () => {
+  const deferreds = new Map<string, Deferred<void>>()
+  const budget: Budget = { cpus: 3, memoryMb: 6144 }
+  const items = [item("a", 1), item("b", 1), item("c", 1)]
+  const boom = new Error("boom")
+
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    const d = deferred<void>()
+    deferreds.set(it.key, d)
+    return d.promise
+  }
+
+  const result = schedule(items, budget, runFn)
+
+  let settled = false
+  result.then(
+    () => (settled = true),
+    () => (settled = true),
+  )
+
+  // All three launched together (1+1+1 = 3). Reject b while a and c are
+  // still in flight.
+  deferreds.get("b")!.reject(boom)
+  await flush()
+
+  // The whole schedule() must NOT settle until a and c also settle.
+  expect(settled).toBe(false)
+
+  deferreds.get("a")!.resolve()
+  deferreds.get("c")!.resolve()
+
+  await expect(result).rejects.toBe(boom)
+  expect(settled).toBe(true)
+})
+
+// ── AsyncMutex ───────────────────────────────────────────────────────────
+
+test("AsyncMutex serializes and preserves order", async () => {
+  const mutex = new AsyncMutex()
+  const log: string[] = []
+  const d1 = deferred<void>()
+  const d2 = deferred<void>()
+
+  const p1 = mutex.withLock(async () => {
+    log.push("1-start")
+    await d1.promise
+    log.push("1-end")
+  })
+  const p2 = mutex.withLock(async () => {
+    log.push("2-start")
+    await d2.promise
+    log.push("2-end")
+  })
+
+  await flush()
+  // 2-start causally depends on the first lock's body settling (it can only
+  // begin after d1 resolves), so it cannot have run yet regardless of how
+  // many microtasks have been flushed.
+  expect(log).toEqual(["1-start"])
+
+  d1.resolve()
+  await p1
+  await flush()
+  expect(log).toEqual(["1-start", "1-end", "2-start"])
+
+  d2.resolve()
+  await p2
+
+  expect(log).toEqual(["1-start", "1-end", "2-start", "2-end"])
+})
+
+test("AsyncMutex propagates the value/error and unlocks on rejection", async () => {
+  const mutex = new AsyncMutex()
+
+  await expect(
+    mutex.withLock(async () => {
+      throw new Error("mutex-boom")
+    }),
+  ).rejects.toThrow("mutex-boom")
+
+  // The mutex must still be usable after a rejected body (lock released).
+  const value = await mutex.withLock(() => 42)
+  expect(value).toBe(42)
+})
