@@ -5,14 +5,16 @@
  * an analyzer Clarify short-circuits to a terminal escalation after one drive.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
+import { execFileSync } from "node:child_process"
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { cmdSquadRun } from "../src/fleet/squad-cli.ts"
 import { cmdRolesImport } from "../src/fleet/import.ts"
 import { cmdRolesRender } from "../src/fleet/render.ts"
 import { writeSquadDefV1, STANDARD_SQUAD } from "../src/fleet/squad-def.ts"
-import { listPending } from "../src/fleet/pending.ts"
+import { listPending, readPending } from "../src/fleet/pending.ts"
+import { createWorktree, removeWorktree } from "../src/fleet/worktree.ts"
 import type { ExecFn } from "../src/fleet/run.ts"
 
 const FIXTURES = join(import.meta.dir, "fixtures", "fleet")
@@ -67,5 +69,51 @@ describe("cmdSquadRun worktreeDir threading", () => {
     await cmdSquadRun({ project: rt, sliceId: "s2", slice: "x" }, undefined, undefined, execFn)
     const at = captured[0]!.indexOf("--dir")
     expect(captured[0]![at + 1]).toBe(rt)
+  })
+})
+
+describe("cmdSquadRun in a real worktree (N1 isolation + N1b ledger survival)", () => {
+  let home: string, repo: string
+  function initRepo(): string {
+    const r = mkdtempSync(join(tmpdir(), "mh-sqwt-repo-"))
+    const g = (a: string[]) => execFileSync("git", ["-C", r, ...a], { encoding: "utf-8" })
+    g(["init", "-q", "-b", "main"]); g(["config", "user.email", "t@t.t"]); g(["config", "user.name", "t"])
+    writeFileSync(join(r, ".gitignore"), ".meta-harness/\nnode_modules/\n")
+    writeFileSync(join(r, "README.md"), "hi\n")
+    g(["add", "-A"]); g(["commit", "-qm", "init"])
+    return r
+  }
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), "mh-sqwt-e2e-home-"))
+    repo = initRepo()
+    process.env.META_HARNESS_HOME = home
+    writeSquadDefV1(STANDARD_SQUAD)
+    cmdRolesImport({ from: FIXTURES, map: { architect: ["analyzer", "designer"] } })
+  })
+  afterEach(() => {
+    delete process.env.META_HARNESS_HOME
+    rmSync(home, { recursive: true, force: true })
+    rmSync(repo, { recursive: true, force: true })
+  })
+
+  test("drive targets the worktree, ledger lands in the repo runtimeRoot and survives worktree removal", async () => {
+    const wt = createWorktree(repo, { branch: "fleet/s1" })
+    cmdRolesRender({ project: wt.dir })                    // personas in the worktree
+    const captured: string[][] = []
+    const execFn: ExecFn = async (argv) => { captured.push(argv); return { stdout: trace("## Clarify\nx"), rc: 0 } }
+    await cmdSquadRun({ project: repo, worktreeDir: wt.dir, sliceId: "s1", slice: "x" }, undefined, undefined, execFn)
+
+    const at = captured[0]!.indexOf("--dir")
+    expect(captured[0]![at + 1]).toBe(wt.dir)              // N1: all roles → the worktree
+    // listPending co-locates with the checkpoint (squad-<slice>.json) in the same
+    // dir, so filter to the real session (the trace fixture uses id "ses_wt_1").
+    const sessions = listPending(repo).filter((id) => id.startsWith("ses_"))
+    expect(sessions).toContain("ses_wt_1")                // N1b: session ledger under repo runtimeRoot
+    const status = execFileSync("git", ["-C", repo, "status", "--porcelain"], { encoding: "utf-8" })
+    expect(status.trim()).toBe("")                        // live tree clean (.meta-harness gitignored)
+
+    removeWorktree(wt)                                     // terminal cleanup
+    expect(existsSync(wt.dir)).toBe(false)                // worktree gone
+    expect(readPending(repo, "ses_wt_1").id).toBe("ses_wt_1") // N1b: ledger SURVIVES the removal
   })
 })
