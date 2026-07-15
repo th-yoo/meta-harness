@@ -489,6 +489,18 @@ export async function cmdAb(
       return
     }
 
+    // Resumed-earlyStopped entry guard, mirroring serial's `if (earlyStopped)
+    // break`: a partial can carry earlyStopped: true (parallel persists it,
+    // unlike serial mid-run) while still holding pending held-in tasks that
+    // were never launched (e.g. the process crashed after the stop latched
+    // but before full drain). Without this guard, consume() skips the
+    // futility re-check for preExisting (resumed) entries, so the first
+    // newly-consumed pending task gets counted before stopFired re-latches —
+    // over-counting vs serial-resume, which skips the phase entirely (spec
+    // D5). The phase must do nothing: no footprint computation, no
+    // scheduling, no launches.
+    if (earlyStopped) return
+
     // ── Parallel: a FRESH budget-packed scheduler per phase, run to full
     // drain (spec D3/D5). Completed pairs land in taskResults under the
     // mutex; a consumer advances in strict task-list order, evaluating the

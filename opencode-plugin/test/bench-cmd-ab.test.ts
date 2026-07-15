@@ -705,3 +705,92 @@ test("serial ab: postStop never set; verdict byte-identical to today (existing s
   expect(verdict["decision"]).toBe("accept")
   expect(verdict["nTasks"]).toBe(13)
 })
+
+// ── --resume --parallel of an already earlyStopped partial (D5 equivalence
+// fix): a partial written by a parallel run that crashed AFTER the futility
+// stop had fired (earlyStopped: true persisted) but BEFORE full drain still
+// carries pending held-in tasks that were never launched. Resuming it under
+// --parallel must do nothing — same as serial's `if (earlyStopped) break` —
+// not launch the held-in stragglers. ──────────────────────────────────────
+
+test("ab --parallel resume: earlyStopped partial with pending held-in tasks launches nothing, matching serial's counted set", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeSplitsFile(paths, HELD_IN_7, ["ho0"])
+  const root = setupCandidate(paths, "project-global", "v1")
+  const partialPath = path.join(root, "candidates", "v1", "ab-verdict.partial.json")
+
+  // First run: candidate loses every task (futility fires once 4 held-in
+  // tasks are consumed, minTasksBeforeStop=4), but hi6 throws — simulating a
+  // mid-run crash — so the process aborts leaving a partial on disk with
+  // earlyStopped: true (already latched by the time hi6 is reached) and hi6
+  // itself absent from taskResults (never completed → "pending").
+  const crashFake: RunOneTaskFn = async (_p, task, _m, _v, harnessMd) => {
+    if (task === "hi6") throw new Error("simulated crash mid-run")
+    const isCandidate = harnessMd.includes("candidate sys")
+    return res({ reward: CAND_LOSES(task, isCandidate), turns: 3 })
+  }
+  await expect(
+    quiet(() =>
+      cmdAb(
+        paths,
+        {
+          layer: "project-global",
+          candidate: "v1",
+          k: 1,
+          minTasksBeforeStop: 4,
+          parallel: true,
+          enforceResources: true,
+          cpuBudget: 100,
+          memBudget: 1_000_000,
+        } as CmdAbArgs,
+        crashFake,
+        fakeExec,
+      ),
+    ),
+  ).rejects.toThrow()
+
+  expect(fs.existsSync(partialPath)).toBe(true)
+  const partial = JSON.parse(fs.readFileSync(partialPath, "utf-8")) as Record<string, unknown>
+  expect(partial["earlyStopped"]).toBe(true)
+  const partialTr = partial["taskResults"] as Record<string, unknown>
+  expect(partialTr["hi6"]).toBeUndefined() // never completed — pending
+
+  // Second run: --resume --parallel against that partial. No task (held-in
+  // straggler or held-out) may be launched — the phase must do nothing, per
+  // serial's entry-guard semantics.
+  const resumeState = freshState()
+  const resumeFake = scriptedFake({ outcome: CAND_LOSES, state: resumeState })
+  await quiet(() =>
+    cmdAb(
+      paths,
+      {
+        layer: "project-global",
+        candidate: "v1",
+        k: 1,
+        minTasksBeforeStop: 4,
+        parallel: true,
+        enforceResources: true,
+        cpuBudget: 100,
+        memBudget: 1_000_000,
+        resume: true,
+      } as CmdAbArgs,
+      resumeFake,
+      fakeExec,
+    ),
+  )
+
+  expect(resumeState.launched).toEqual([]) // zero new task launches, incl. hi6
+
+  const resumedVerdict = readAbVerdict(root, "v1")! as unknown as Record<string, unknown>
+  expect(resumedVerdict["earlyStopped"]).toBe(true)
+
+  // Ground truth: an uninterrupted serial run over the same scripted outcomes
+  // stops at exactly hi0..hi3 (see the equivalence test above). The resumed
+  // parallel verdict's counted set must match it exactly — not include hi6.
+  const serialState = freshState()
+  const serial = await runAb(false, {}, serialState)
+  expect(countedKeys(resumedVerdict)).toEqual(countedKeys(serial))
+  expect(countedKeys(resumedVerdict)).toEqual(["hi0", "hi1", "hi2", "hi3"])
+})
