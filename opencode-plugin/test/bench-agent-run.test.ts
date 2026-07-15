@@ -306,6 +306,74 @@ test("runAgent sets timedOut:true (and a finite agentElapsedSec) on a wall-timeo
   expect(result.agentElapsedSec as number).toBeGreaterThanOrEqual(0)
 })
 
+// ── 7. budget-inject (Loop-3 T5) ────────────────────────────────────────
+//
+// The agent gets an advisory budget line derived ONLY from agentTimeout,
+// appended to the instruction before driver.buildArgv is called. It must
+// never depend on the (evolvable, per-arm) harness markdown — that would
+// make the constant an accidental A/B lever and contaminate the gate.
+
+test("runAgent injects an advisory budget line carrying agentTimeout into the instruction", async () => {
+  const paths = setupTask()
+  const driver = makeFakeDriver()
+  let capturedInstruction = ""
+  const baseBuildArgv = driver.buildArgv
+  driver.buildArgv = (opts) => {
+    capturedInstruction = opts.instruction
+    return baseBuildArgv(opts)
+  }
+
+  const execFn = async (): Promise<ExecResult> => ok("done")
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runAgent(driver, paths, "c1", "t", "m", "", 600, "", execFn)
+  } finally {
+    errSpy.mockRestore()
+  }
+
+  expect(capturedInstruction).toContain("600s")
+  expect(capturedInstruction).toContain("Budget it")
+  expect(capturedInstruction.startsWith("do the thing")).toBe(true) // original instruction preserved, budget appended
+})
+
+test("runAgent's injected budget line is byte-identical across arms with the same agentTimeout (arm-symmetry)", async () => {
+  const paths = setupTask()
+
+  async function captureInstruction(harnessMd: string): Promise<string> {
+    const driver = makeFakeDriver()
+    let captured = ""
+    const baseBuildArgv = driver.buildArgv
+    driver.buildArgv = (opts) => {
+      captured = opts.instruction
+      return baseBuildArgv(opts)
+    }
+    const execFn = async (): Promise<ExecResult> => ok("done")
+    const errSpy = spyOn(console, "error").mockImplementation(() => {})
+    try {
+      await runAgent(driver, paths, "c1", "t", "m", "", 600, harnessMd, execFn)
+    } finally {
+      errSpy.mockRestore()
+    }
+    return captured
+  }
+
+  // Simulate arm A (baseline harness) vs arm B (candidate harness) — same
+  // agentTimeout, different evolvable harness markdown.
+  const instructionA = await captureInstruction("# AGENTS.md v0 — baseline harness content")
+  const instructionB = await captureInstruction("# AGENTS.md vN — a completely different candidate harness")
+
+  const marker = "\n\nYou have roughly "
+  const indexA = instructionA.indexOf(marker)
+  const indexB = instructionB.indexOf(marker)
+  expect(indexA).toBeGreaterThanOrEqual(0) // sanity: marker was actually found
+  expect(indexB).toBeGreaterThanOrEqual(0)
+
+  const budgetA = instructionA.slice(indexA)
+  const budgetB = instructionB.slice(indexB)
+  expect(budgetA).toBe(budgetB) // byte-identical — a function of agentTimeout only
+})
+
 test("runAgent leaves timedOut unset on auth-fail and on a normal parse", async () => {
   const paths = setupTask()
 

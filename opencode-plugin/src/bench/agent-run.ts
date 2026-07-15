@@ -152,6 +152,20 @@ export async function runAgent(
     return die(`instruction.md not found: ${instructionPath}`)
   }
 
+  // Advisory wall-clock budget line (Loop-3 T5, task-5-brief.md) — a
+  // CONTROLLED CONSTANT derived only from `agentTimeout`, never from the
+  // (evolvable, per-arm) harness markdown. It is appended to the instruction
+  // here — NOT placed in the evolvable AGENTS.md harness — so it is
+  // byte-identical across both A/B arms of an ab run (which always pass the
+  // same agentTimeout to both arms); making this text proposer-controlled
+  // would turn it into an accidental A/B lever and contaminate the gate. The
+  // wording is deliberately advisory (never a hard "stop at N") and the real
+  // wall (env.maxAgentTimeout, record.ts:236) is unchanged — mitigating
+  // premature termination (design §7).
+  const budgetLine = `\n\nYou have roughly ${pyFixed(agentTimeout, 0)}s of wall-clock for this task. `
+    + `Budget it: prefer a simpler approach that finishes over an ambitious one that risks running out of time.`
+  instruction = instruction + budgetLine
+
   let cmd = driver.buildArgv({ model: driver.modelArg(model), variant, instruction })
 
   if (harnessMd) {
