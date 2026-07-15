@@ -29,7 +29,8 @@ import { runTaskOnce, inContainerAgentVersion, type RunOneTaskFn } from "./cmd-r
 import { getDriver } from "./drivers/index.ts"
 import { assembleAgentsMd, envBlock, sessionRecord } from "./record.ts"
 import { layerStoreRoots, type LayerName } from "./record.ts"
-import { selectTasks, taskTimeouts } from "./tasks.ts"
+import { selectTasks, taskTimeouts, enforcedResources } from "./tasks.ts"
+import { schedule, DEFAULT_BUDGET, AsyncMutex, type Budget, type ScheduledItem } from "./scheduler.ts"
 import {
   loadActiveSplit,
   splitHash,
@@ -61,6 +62,14 @@ interface AbTaskResult {
   phase: "held-in" | "held-out"
   sentinel: boolean
   error?: string
+  /** --parallel canonical-order early-stop tag (spec D5): set on tasks that
+   * completed AFTER the futility stop rule fired in canonical order — i.e.
+   * tasks the equivalent SERIAL run would never have launched. Excluded from
+   * every derived verdict field (nTasks/candidateRate/activeRate + the
+   * paired-stats pipeline) so the parallel verdict is byte-identical to the
+   * serial one; the FULL map (including these) still serializes under
+   * `taskResults`. NEVER set on a serial run. */
+  postStop?: true
 }
 type AbTaskResults = Record<string, AbTaskResult>
 
@@ -95,6 +104,19 @@ export interface CmdAbArgs {
    * NOT yet threaded into this file's runOneTask calls; see the resource-
    * scheduler plan's Task 7. */
   enforceResources?: boolean
+  /** Budget-packed concurrent task execution (spec D3/D4/D5, scheduler.ts).
+   * Default OFF → the existing serial phase loops, verdict byte-identical.
+   * Requires --enforce-resources (each task's declared footprint is what the
+   * budget packs against + the container caps) and a provider API key in the
+   * env (the CLI gate — the shared-oauth credential mount races under
+   * concurrency). A fresh scheduler runs each phase to full drain; completed
+   * pairs are consumed in canonical (task-list) order so the early-stop
+   * verdict matches serial exactly (see runPhase's parallel branch). */
+  parallel?: boolean
+  /** Concurrency budget overrides (only meaningful with --parallel); default
+   * DEFAULT_BUDGET (scheduler.ts). */
+  cpuBudget?: number
+  memBudget?: number
 }
 
 function round4(x: number): number {
@@ -216,6 +238,19 @@ export async function cmdAb(
   const earlyStop = !args.noEarlyStop
   const minTasks = args.minTasksBeforeStop ?? 12
 
+  // ── --enforce-resources / --parallel wiring (spec D3/D4/D5) ─────────────
+  const enforceRes = Boolean(args.enforceResources)
+  const parallel = Boolean(args.parallel)
+  const budget: Budget = {
+    cpus: args.cpuBudget ?? DEFAULT_BUDGET.cpus,
+    memoryMb: args.memBudget ?? DEFAULT_BUDGET.memoryMb,
+  }
+  // --parallel threads the driver's keyOnly auth prep (no shared rw credential
+  // mount — task-4-brief.md), the second half of the concurrency guard whose
+  // primary half is the CLI key gate (cli.ts's validateParallel). Serial runs
+  // pass undefined → the driver's default prepareAuth, byte-identical to before.
+  const parallelPrepareAuth = parallel ? () => driver.prepareAuth({ keyOnly: true }) : undefined
+
   const verdictPath = candidatePath(layerRoot, candidate, "ab-verdict.json")
   const partialPath = candidatePath(layerRoot, candidate, "ab-verdict.partial.json")
 
@@ -279,10 +314,6 @@ export async function cmdAb(
 
   const runStartTs = new Date().toISOString()
 
-  function stats(phase: "held-in" | "held-out", sentinel?: boolean): PairStats {
-    return pairedRunStats(filterTaskResults(taskResults as PhaseTaggedTaskResults, phase, sentinel))
-  }
-
   function statsBlock(ps: PairStats): AbSetStats {
     return {
       nTasks: ps.nTasks,
@@ -296,15 +327,24 @@ export async function cmdAb(
   }
 
   function verdictDict(status: string): Record<string, unknown> {
+    // ONE shared postStop-aware view (spec D5): every derived field — the
+    // paired-stats pipeline AND nTasks/candidateRate/activeRate below — draws
+    // from the same error-and-postStop-excluded entries, so a parallel
+    // early-stop verdict is byte-identical to the serial one. postStop is
+    // never set on a serial run, so `counted` there is exactly the old
+    // non-error set. The FULL taskResults map (postStop entries included) is
+    // still serialized verbatim under `taskResults` further down.
+    const includedEntries = Object.entries(taskResults).filter(([, tr]) => !tr.error && !tr.postStop)
+    const counted: AbTaskResults = Object.fromEntries(includedEntries)
     const [decision, reasons, hi, ho, hoSentinel] = abDecision(
-      taskResults as PhaseTaggedTaskResults,
+      counted as PhaseTaggedTaskResults,
       cfg,
       earlyStopped,
       foldOutTasks,
       sentinelOutTasks,
     )
     const winner = decision === "accept" ? "candidate" : decision === "reject" ? "active" : "tie"
-    const included = Object.entries(taskResults).filter(([, tr]) => !tr.error)
+    const included = includedEntries
     const nAll = included.length
     const candPass = included.filter(([, tr]) => tr.candidate.length > 0 && Math.max(...tr.candidate) === 1).length
     const actPass = included.filter(([, tr]) => tr.active.length > 0 && Math.max(...tr.active) === 1).length
@@ -338,39 +378,58 @@ export async function cmdAb(
     return d
   }
 
-  async function runPhase(phase: "held-in" | "held-out", taskList: string[], recordArmB: boolean): Promise<void> {
-    for (const task of taskList) {
-      if (earlyStopped) break
-      if (taskResults[task]) {
-        log(`\n=== ab ${task} [${phase}] (skipped — already done) ===`)
-        continue
+  // One task's full pipeline: k interleaved arm-A/arm-B pairs, arm B recorded
+  // for held-in only. Shared by the serial and parallel phase drivers so they
+  // can't drift (per the task brief's reuse mandate). `prefix` tags log lines
+  // with the task id under interleaving; `withLock` guards the store-mutating
+  // record block (parallel passes an AsyncMutex-backed lock, serial a
+  // pass-through → byte-identical to the original inline loop). `resources` is
+  // the container footprint (undefined = unenforced) — passed to runOneTask so
+  // --enforce-resources actually caps the container, AND (in parallel) is the
+  // same footprint the budget packed against. `parallelPrepareAuth` (closure)
+  // is threaded straight through as runOneTask's keyOnly override.
+  async function runTaskPairs(
+    task: string,
+    phase: "held-in" | "held-out",
+    recordArmB: boolean,
+    withLock: <T>(fn: () => T | Promise<T>) => Promise<T>,
+    resources: { cpus: number; memoryMb: number } | undefined,
+    prefix: string,
+  ): Promise<AbTaskResult> {
+    log(`${prefix}\n=== ab ${task} [${phase}]: ${candidate} vs active ${baseline} ===`)
+    const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout)
+    const tr: AbTaskResult = { candidate: [], active: [], phase, sentinel: sentinelSet.has(task) }
+
+    for (let ki = 0; ki < k; ki++) {
+      if (k > 1) log(`${prefix}  -- pair ${ki + 1}/${k} --`)
+      log(`${prefix}  [arm A: active]`)
+      const resA = await runOneTask(
+        paths, task, model, variant, harnessA, agentTimeout, verifierTimeout, staging, driver, resources, undefined, parallelPrepareAuth,
+      )
+      log(`${prefix}  [arm B: candidate]`)
+      const resB = await runOneTask(
+        paths, task, model, variant, harnessB, agentTimeout, verifierTimeout, staging, driver, resources, undefined, parallelPrepareAuth,
+      )
+
+      if (resA.error === "setup_failed" || resB.error === "setup_failed") {
+        tr.error = "setup_failed"
+        log(`${prefix}  setup_failed — task excluded from rates`)
+        break
       }
-      log(`\n=== ab ${task} [${phase}]: ${candidate} vs active ${baseline} ===`)
-      const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout)
-      const tr: AbTaskResult = { candidate: [], active: [], phase, sentinel: sentinelSet.has(task) }
+      tr.active.push(resA.reward)
+      tr.candidate.push(resB.reward)
 
-      for (let ki = 0; ki < k; ki++) {
-        if (k > 1) log(`  -- pair ${ki + 1}/${k} --`)
-        log("  [arm A: active]")
-        const resA = await runOneTask(paths, task, model, variant, harnessA, agentTimeout, verifierTimeout, staging, driver)
-        log("  [arm B: candidate]")
-        const resB = await runOneTask(paths, task, model, variant, harnessB, agentTimeout, verifierTimeout, staging, driver)
-
-        if (resA.error === "setup_failed" || resB.error === "setup_failed") {
-          tr.error = "setup_failed"
-          log("  setup_failed — task excluded from rates")
-          break
-        }
-        tr.active.push(resA.reward)
-        tr.candidate.push(resB.reward)
-
-        // Record ONLY arm B, and ONLY for held-in (held-out stays invisible
-        // to the proposer — evaluator outside the loop). The turns>0 check is
-        // the same discriminator as record.ts's recordToStores guard
-        // (Loop-3 T3): with recordTimeouts off (default) a 0-turn arm B —
-        // timeout or otherwise — is dropped, byte-identical to today; on, a
-        // *timeout* 0-turn (resB.timedOut) still falls through and records.
-        if (recordArmB && !noStore && (resB.turns > 0 || (recordTimeouts && resB.timedOut))) {
+      // Record ONLY arm B, and ONLY for held-in (held-out stays invisible
+      // to the proposer — evaluator outside the loop). The turns>0 check is
+      // the same discriminator as record.ts's recordToStores guard
+      // (Loop-3 T3): with recordTimeouts off (default) a 0-turn arm B —
+      // timeout or otherwise — is dropped, byte-identical to today; on, a
+      // *timeout* 0-turn (resB.timedOut) still falls through and records.
+      // The whole store mutation runs under `withLock` (a single leaf-level
+      // critical section — AsyncMutex is non-reentrant, so nothing inside may
+      // take the lock again).
+      if (recordArmB && !noStore && (resB.turns > 0 || (recordTimeouts && resB.timedOut))) {
+        await withLock(() => {
           const rec = sessionRecord(
             task,
             resB.sessionId,
@@ -388,20 +447,119 @@ export async function cmdAb(
             writeTrajectory(layerRoot, candidate, resB.sessionId, resB.events)
             pruneTrajectories(layerRoot, candidate)
           }
-          log(`  store ${layer} ${candidate}: nPass=${score.nPass} nFail=${score.nFail}`)
+          log(`${prefix}  store ${layer} ${candidate}: nPass=${score.nPass} nFail=${score.nFail}`)
+        })
+      }
+    }
+    return tr
+  }
+
+  // Held-in futility stop rule over an ordered subset of completed tasks —
+  // the same check the serial loop runs, factored out so the parallel
+  // canonical-order consumer can evaluate it against the CONSUMED prefix
+  // (never the out-of-order full map). Returns true iff it just fired.
+  function futilityFires(consumed: AbTaskResults): boolean {
+    const hi = pairedRunStats(filterTaskResults(consumed as PhaseTaggedTaskResults, "held-in"))
+    if (futilityStop(hi.b, hi.c, hi.nTasks, minTasks)) {
+      log(`  FUTILITY: candidate behind (b=${hi.b} c=${hi.c}) after ${hi.nTasks} held-in tasks — early stop`)
+      return true
+    }
+    return false
+  }
+
+  async function runPhase(phase: "held-in" | "held-out", taskList: string[], recordArmB: boolean): Promise<void> {
+    if (!parallel) {
+      // ── Serial: pass-through lock + empty prefix → byte-identical to the
+      // original inline loop (postStop never set). ────────────────────────
+      const noopLock = <T>(fn: () => T | Promise<T>): Promise<T> => Promise.resolve().then(fn)
+      for (const task of taskList) {
+        if (earlyStopped) break
+        if (taskResults[task]) {
+          log(`\n=== ab ${task} [${phase}] (skipped — already done) ===`)
+          continue
+        }
+        const resources = enforceRes ? enforcedResources(paths, task) : undefined
+        const tr = await runTaskPairs(task, phase, recordArmB, noopLock, resources, "")
+        taskResults[task] = tr
+        writeJsonAtomic(partialPath, verdictDict("in_progress"))
+        if (phase === "held-in" && earlyStop) {
+          if (futilityFires(taskResults)) earlyStopped = true
         }
       }
-      taskResults[task] = tr
-      writeJsonAtomic(partialPath, verdictDict("in_progress"))
+      return
+    }
 
-      if (phase === "held-in" && earlyStop) {
-        const hi = stats("held-in")
-        if (futilityStop(hi.b, hi.c, hi.nTasks, minTasks)) {
-          earlyStopped = true
-          log(`  FUTILITY: candidate behind (b=${hi.b} c=${hi.c}) after ${hi.nTasks} held-in tasks — early stop`)
+    // ── Parallel: a FRESH budget-packed scheduler per phase, run to full
+    // drain (spec D3/D5). Completed pairs land in taskResults under the
+    // mutex; a consumer advances in strict task-list order, evaluating the
+    // futility rule per newly-consumed held-in task exactly as the serial
+    // loop would — so the counted set (and every derived verdict field) is
+    // byte-identical to serial regardless of completion order. Tasks
+    // consumed AFTER the stop fires are tagged postStop (the serial run
+    // would never have launched them) and excluded from the verdict. ──────
+    const mutex = new AsyncMutex()
+    const preExisting = new Set(Object.keys(taskResults))
+    for (const t of taskList) {
+      if (taskResults[t]) log(`\n=== ab ${t} [${phase}] (skipped — already done) ===`)
+    }
+    const pending = taskList.filter((t) => !taskResults[t])
+    // Footprints computed ONCE per phase (before any container lifecycle):
+    // a gpu-declaring task throws here and dies the run, matching
+    // --enforce-resources' own guard. Reused for BOTH budget packing and the
+    // per-container caps.
+    const footprints = new Map<string, { cpus: number; memoryMb: number }>()
+    for (const t of pending) footprints.set(t, enforcedResources(paths, t))
+
+    let consumedIdx = 0
+    let stopFired = false
+    // Advance over the maximal contiguous completed prefix of taskList,
+    // evaluating (and latching) the stop rule in canonical order. Must run
+    // under the mutex — mutates consumedIdx/stopFired/earlyStopped and tags
+    // postStop.
+    const consume = (): void => {
+      while (consumedIdx < taskList.length) {
+        const t = taskList[consumedIdx]!
+        const tr = taskResults[t]
+        if (!tr) break
+        consumedIdx++
+        if (stopFired) {
+          // A task consumed after the stop already fired: the serial run
+          // would never have launched it. (preExisting = resumed tasks,
+          // which the serial loop never re-checks or re-tags.)
+          if (!preExisting.has(t)) tr.postStop = true
+          continue
+        }
+        if (phase === "held-in" && earlyStop && !preExisting.has(t)) {
+          const consumed: AbTaskResults = {}
+          for (let idx = 0; idx < consumedIdx; idx++) {
+            const tt = taskList[idx]!
+            const r = taskResults[tt]
+            if (r) consumed[tt] = r
+          }
+          if (futilityFires(consumed)) {
+            stopFired = true
+            earlyStopped = true
+          }
         }
       }
     }
+
+    const items: ScheduledItem[] = pending.map((t) => ({ key: t, ...footprints.get(t)! }))
+    await schedule(items, budget, async (it) => {
+      const tr = await runTaskPairs(
+        it.key,
+        phase,
+        recordArmB,
+        (fn) => mutex.withLock(fn),
+        footprints.get(it.key),
+        `[${it.key}] `,
+      )
+      await mutex.withLock(() => {
+        taskResults[it.key] = tr
+        consume()
+        writeJsonAtomic(partialPath, verdictDict("in_progress"))
+      })
+    })
   }
 
   await runPhase("held-in", heldInTasks, true)

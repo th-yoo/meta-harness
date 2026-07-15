@@ -48,6 +48,7 @@ commands:
               [--max-agent-timeout SEC] [--max-verifier-timeout SEC] [--resume]
               [--no-store] [--save-all-traj]
               [--results-file PATH] [--staging scripts|runtime] [--driver ID] [--enforce-resources]
+              [--parallel] [--cpu-budget N] [--mem-budget MB]
   judge-audit --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
   split       make|rotate|show [--seed N] [--folds N] [--source FILE]
               [--split-file PATH] [--results PATH]... [--band LO,HI]
@@ -527,6 +528,25 @@ function parseAbArgs(argv: string[]): CmdAbArgs | null {
     if (a === "--enforce-resources") {
       out.enforceResources = true
       i++
+      continue
+    }
+    if (a === "--parallel") {
+      out.parallel = true
+      i++
+      continue
+    }
+    if (a === "--cpu-budget") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.cpuBudget = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--mem-budget") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.memBudget = Number(v)
+      i += 2
       continue
     }
     return null
@@ -1211,6 +1231,10 @@ export async function main(argv: string[]): Promise<number> {
           printUsage()
           return 2
         }
+        // Shared --parallel gate (spec D3/D4) — same guard `run` uses, before
+        // any podman work; derives the required key var from the effective
+        // model exactly as cmdAb's own default does.
+        validateParallel(abArgs, abArgs.model || "anthropic/claude-sonnet-4-6")
         await cmdAb(paths, abArgs)
         return 0
       }

@@ -499,3 +499,209 @@ test("cmdAb resume: resourceEnforcement is NOT a runIdent field (resumeIdentChec
   )
   expect(readAbVerdict(root, "v1")).not.toBeNull()
 })
+
+// ── --parallel: canonical-order early-stop + postStop (task-7-brief.md) ─────
+
+interface FakeState {
+  seen: string[] // every runOneTask call's task (arm A + arm B)
+  launched: string[] // each task once, at its first arm — launch order
+  maxConcurrent: number // peak concurrent in-flight arms across all tasks
+}
+
+/** A deterministic injected runner: per-task pass/fail outcome + a per-task
+ * delay so the scheduler completes tasks OUT of canonical order. Tracks
+ * launch order + peak concurrency so a parallel run is provably concurrent
+ * (a serial fallback pins maxConcurrent at 1). */
+function scriptedFake(opts: {
+  outcome: (task: string, isCandidate: boolean) => number
+  delayMs?: (task: string) => number
+  state: FakeState
+}): RunOneTaskFn {
+  const started = new Set<string>()
+  let inflight = 0
+  return async (_p, task, _m, _v, harnessMd) => {
+    if (!started.has(task)) {
+      started.add(task)
+      opts.state.launched.push(task)
+    }
+    opts.state.seen.push(task)
+    inflight++
+    opts.state.maxConcurrent = Math.max(opts.state.maxConcurrent, inflight)
+    try {
+      const d = opts.delayMs?.(task) ?? 0
+      if (d > 0) await new Promise((r) => setTimeout(r, d))
+      const isCandidate = harnessMd.includes("candidate sys")
+      return res({ reward: opts.outcome(task, isCandidate), turns: 3 })
+    } finally {
+      inflight--
+    }
+  }
+}
+
+function freshState(): FakeState {
+  return { seen: [], launched: [], maxConcurrent: 0 }
+}
+
+/** Tasks that a completed verdict actually counted: non-error AND non-postStop
+ * — the exact `counted` view verdictDict derives every field from. */
+function countedKeys(verdict: Record<string, unknown>): string[] {
+  const tr = verdict["taskResults"] as Record<string, { error?: string; postStop?: boolean }>
+  return Object.entries(tr)
+    .filter(([, r]) => !r.error && !r.postStop)
+    .map(([t]) => t)
+    .sort()
+}
+
+const HELD_IN_7 = ["hi0", "hi1", "hi2", "hi3", "hi4", "hi5", "hi6"]
+// Distinct per-task delays → a shuffled completion order (hi2, hi4, hi0, hi1,
+// hi3, hi5, hi6) that is deliberately NOT canonical, so hi4 lands (index 4)
+// before hi3 (index 3) — exercising the "completed-early but consumed-after-
+// stop → postStop" path, not just store-time tagging.
+const SHUFFLE_DELAYS: Record<string, number> = { hi0: 50, hi1: 80, hi2: 20, hi3: 90, hi4: 40, hi5: 110, hi6: 130 }
+// candidate loses every task → futility. minTasksBeforeStop=4 makes the rule
+// fire right after the 4th consumed task (hi3, index 3): c-b=4 ≥ 3, done ≥ 4.
+const CAND_LOSES = (_t: string, isCand: boolean): number => (isCand ? 0 : 1)
+
+async function runAb(parallel: boolean, extra: Partial<CmdAbArgs>, state: FakeState) {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeSplitsFile(paths, HELD_IN_7, ["ho0"])
+  const root = setupCandidate(paths, "project-global", "v1")
+  const fake = scriptedFake({ outcome: CAND_LOSES, delayMs: (t) => SHUFFLE_DELAYS[t] ?? 0, state })
+  const parallelArgs: Partial<CmdAbArgs> = parallel
+    ? { parallel: true, enforceResources: true, cpuBudget: 100, memBudget: 1_000_000 }
+    : {}
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", k: 1, minTasksBeforeStop: 4, ...parallelArgs, ...extra } as CmdAbArgs,
+      fake,
+      fakeExec,
+    ),
+  )
+  return readAbVerdict(root, "v1")! as unknown as Record<string, unknown>
+}
+
+test("ab --parallel sequential equivalence: out-of-order completions → identical verdictDict decision fields", async () => {
+  const serialState = freshState()
+  const parallelState = freshState()
+  const serial = await runAb(false, {}, serialState)
+  const parallel = await runAb(true, {}, parallelState)
+
+  // decision + counted set + nTasks/candidateRate/activeRate all byte-identical
+  expect(parallel["decision"]).toBe(serial["decision"])
+  expect(parallel["decision"]).toBe("reject")
+  expect(parallel["nTasks"]).toBe(serial["nTasks"])
+  expect(parallel["nTasks"]).toBe(4)
+  expect(parallel["candidateRate"]).toBe(serial["candidateRate"])
+  expect(parallel["activeRate"]).toBe(serial["activeRate"])
+  expect(parallel["candidateRate"]).toBe(0)
+  expect(parallel["activeRate"]).toBe(1)
+  expect(countedKeys(parallel)).toEqual(countedKeys(serial))
+  expect(countedKeys(serial)).toEqual(["hi0", "hi1", "hi2", "hi3"])
+
+  // Completion order really was shuffled (hi2/hi4 finished before hi3) —
+  // proving equivalence held despite non-canonical completion.
+  const parallelHeldInLaunched = parallelState.launched.filter((t) => t.startsWith("hi"))
+  expect(parallelHeldInLaunched.length).toBe(7) // full drain: every held-in task launched
+  expect(parallelState.maxConcurrent).toBeGreaterThan(1) // genuinely concurrent
+
+  // Serial stopped at 4 tasks; parallel drained all 7 but tagged the 3 that
+  // completed after the stop fired postStop (excluded from the counted set).
+  const serialHeldIn = new Set(serialState.seen.filter((t) => t.startsWith("hi")))
+  expect(serialHeldIn.size).toBe(4)
+  const trFull = parallel["taskResults"] as Record<string, { postStop?: boolean }>
+  for (const t of ["hi4", "hi5", "hi6"]) expect(trFull[t]!.postStop).toBe(true)
+})
+
+test("postStop entries excluded from nTasks/candidateRate/activeRate but present in partial taskResults", async () => {
+  const state = freshState()
+  const verdict = await runAb(true, {}, state)
+
+  // The full map (same serialization the in_progress partial writes) carries
+  // all 7 held-in tasks, incl. the 3 postStop ones…
+  const tr = verdict["taskResults"] as Record<string, { postStop?: boolean; candidate: number[] }>
+  const heldInKeys = Object.keys(tr).filter((t) => t.startsWith("hi"))
+  expect(heldInKeys.sort()).toEqual(HELD_IN_7)
+  expect(tr["hi4"]!.postStop).toBe(true)
+  expect(tr["hi5"]!.postStop).toBe(true)
+  expect(tr["hi6"]!.postStop).toBe(true)
+  // …but they are absent from every derived count.
+  expect(verdict["nTasks"]).toBe(4)
+  expect(verdict["candidateRate"]).toBe(0)
+  expect(verdict["activeRate"]).toBe(1)
+  // heldIn paired-stats block also excludes them: 4 counted pairs, not 7.
+  expect((verdict["heldIn"] as { nPairs: number }).nPairs).toBe(4)
+})
+
+test("scheduler instantiated per phase: no held-out task launches before held-in earlyStopped resolves", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  const heldIn = ["hi0", "hi1", "hi2", "hi3"]
+  const heldOut = ["ho0", "ho1"]
+  writeSplitsFile(paths, heldIn, heldOut)
+  const root = setupCandidate(paths, "project-global", "v1")
+
+  // Candidate WINS every pair (no futility) so the held-out phase runs. Held-in
+  // arms are slow, held-out arms fast: a shared/overlapping scheduler would let
+  // a held-out task launch while held-in is still draining. Fresh-per-phase +
+  // the await between phases forbids it.
+  const state = freshState()
+  const fake = scriptedFake({
+    outcome: (_t, isCand) => (isCand ? 1 : 0),
+    delayMs: (t) => (t.startsWith("hi") ? 60 : 5),
+    state,
+  })
+  await quiet(() =>
+    cmdAb(
+      paths,
+      {
+        layer: "project-global",
+        candidate: "v1",
+        k: 1,
+        alpha: 0.5,
+        nonregressMargin: 0.5,
+        parallel: true,
+        enforceResources: true,
+        cpuBudget: 100,
+        memBudget: 1_000_000,
+      } as CmdAbArgs,
+      fake,
+      fakeExec,
+    ),
+  )
+
+  // Held-in ran genuinely concurrently…
+  expect(state.maxConcurrent).toBeGreaterThan(1)
+  // …and EVERY held-in launch precedes EVERY held-out launch.
+  const lastHeldIn = state.launched.reduce((acc, t, i) => (t.startsWith("hi") ? i : acc), -1)
+  const firstHeldOut = state.launched.findIndex((t) => t.startsWith("ho"))
+  expect(firstHeldOut).toBeGreaterThan(lastHeldIn)
+  // Sanity: the held-out phase actually happened (candidate won, so accept).
+  expect(readAbVerdict(root, "v1")!.decision).toBe("accept")
+})
+
+test("serial ab: postStop never set; verdict byte-identical to today (existing snapshot)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  const heldIn = Array.from({ length: 12 }, (_, i) => `hi${i}`)
+  writeSplitsFile(paths, heldIn, ["ho0"])
+  const root = setupCandidate(paths, "project-global", "v1")
+
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, harnessMd) =>
+    res({ reward: harnessMd.includes("candidate sys") ? 1 : 0, turns: 3 })
+  await quiet(() =>
+    cmdAb(paths, { layer: "project-global", candidate: "v1", k: 1, alpha: 0.5, nonregressMargin: 0.5 }, fake, fakeExec),
+  )
+
+  const verdict = readAbVerdict(root, "v1")! as unknown as Record<string, unknown>
+  const tr = verdict["taskResults"] as Record<string, { postStop?: boolean }>
+  // A serial run must NEVER tag postStop on any result.
+  for (const r of Object.values(tr)) expect(r.postStop).toBeUndefined()
+  // And the verdict is a normal accept over all 13 counted tasks.
+  expect(verdict["decision"]).toBe("accept")
+  expect(verdict["nTasks"]).toBe(13)
+})
