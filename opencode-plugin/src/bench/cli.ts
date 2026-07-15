@@ -33,20 +33,20 @@ const USAGE = `usage: runner.ts [--tb-root PATH] <command> [options]
 commands:
   prep        [--apply]
   oracle      [--tasks TASK [TASK ...]] [--task-file PATH] [--results-file PATH]
-              [--staging scripts|runtime]  (default: runtime)
+              [--staging scripts|runtime]  (default: runtime) [--enforce-resources]
   run         [--tasks TASK [TASK ...]] [--task-file PATH] [--all]
               [--model ID] [--variant V] [--k N] [--layers global|account|project|none]
               [--no-store] [--save-all-traj] [--self-check] [--no-harness] [--results-file PATH]
               [--label NAME] [--max-agent-timeout SEC] [--max-verifier-timeout SEC]
               [--resume] [--agent NAME]
-              [--pin LAYER=vN]... [--staging scripts|runtime] [--driver ID]
+              [--pin LAYER=vN]... [--staging scripts|runtime] [--driver ID] [--enforce-resources]
   ab          --layer L --candidate vN [--tasks TASK [TASK ...]] [--task-file PATH]
               [--all] [--split-file PATH] [--model ID] [--variant V] [--k N]
               [--layers global|account|project] [--agent NAME] [--alpha F]
               [--nonregress-margin F] [--min-tasks-before-stop N] [--no-early-stop]
               [--max-agent-timeout SEC] [--max-verifier-timeout SEC] [--resume]
               [--no-store] [--save-all-traj]
-              [--results-file PATH] [--staging scripts|runtime] [--driver ID]
+              [--results-file PATH] [--staging scripts|runtime] [--driver ID] [--enforce-resources]
   judge-audit --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
   split       make|rotate|show [--seed N] [--folds N] [--source FILE]
               [--split-file PATH] [--results PATH]... [--band LO,HI]
@@ -112,6 +112,7 @@ interface OracleArgs {
   taskFile?: string
   resultsFile?: string
   staging?: StagingMode
+  enforceResources?: boolean
 }
 
 function parseOracleArgs(argv: string[]): OracleArgs | null {
@@ -149,6 +150,11 @@ function parseOracleArgs(argv: string[]): OracleArgs | null {
       if (v !== "scripts" && v !== "runtime") return null
       out.staging = v
       i += 2
+      continue
+    }
+    if (a === "--enforce-resources") {
+      out.enforceResources = true
+      i++
       continue
     }
     return null
@@ -233,6 +239,11 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
     }
     if (a === "--self-check") {
       out.selfCheck = true
+      i++
+      continue
+    }
+    if (a === "--enforce-resources") {
+      out.enforceResources = true
       i++
       continue
     }
@@ -462,6 +473,11 @@ function parseAbArgs(argv: string[]): CmdAbArgs | null {
       if (v === undefined || !(DRIVER_IDS as readonly string[]).includes(v)) return null
       out.driver = v
       i += 2
+      continue
+    }
+    if (a === "--enforce-resources") {
+      out.enforceResources = true
+      i++
       continue
     }
     return null

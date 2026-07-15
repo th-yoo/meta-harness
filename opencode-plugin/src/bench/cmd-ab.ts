@@ -88,6 +88,13 @@ export interface CmdAbArgs {
   resultsFile?: string
   staging?: StagingMode
   driver?: string
+  /** podman create gets --cpus/--memory from each task's declared task.toml
+   * [environment] (tasks.ts's enforcedResources). Default OFF — unconstrained,
+   * byte-identical to before this flag existed. Plumbing-only in this task
+   * (wiring the field so cli.ts can parse it / later tasks can consume it) —
+   * NOT yet threaded into this file's runOneTask calls; see the resource-
+   * scheduler plan's Task 7. */
+  enforceResources?: boolean
 }
 
 function round4(x: number): number {

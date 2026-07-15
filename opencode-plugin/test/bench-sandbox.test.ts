@@ -181,6 +181,19 @@ test("buildCreateArgv: defaults (no mounts/env, network true, workdir /app)", ()
   ])
 })
 
+test("buildCreateArgv with resources appends --cpus/--memory", () => {
+  const argv = buildCreateArgv({ image: "img", name: "n", resources: { cpus: 2, memoryMb: 4096 } })
+  const s = argv.join(" ")
+  expect(s).toContain("--cpus 2")
+  expect(s).toContain("--memory 4096m")
+})
+
+test("buildCreateArgv without resources is byte-identical to before", () => {
+  const argv = buildCreateArgv({ image: "img", name: "n" })
+  expect(argv.join(" ")).not.toContain("--cpus")
+  expect(argv.join(" ")).not.toContain("--memory")
+})
+
 test("buildStartArgv", () => {
   expect(buildStartArgv("mh-hello-run-123-abcd")).toEqual(["podman", "start", "mh-hello-run-123-abcd"])
 })

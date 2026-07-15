@@ -27,7 +27,7 @@ import type { ExecFn } from "./staging.ts"
 import { buildCreateArgv, buildStartArgv, buildExecArgv, buildRmArgv } from "./sandbox.ts"
 import { BENCH_IMAGE, apiKeyEnv, containerName, type BenchPaths } from "./paths.ts"
 import type { AgentAuthMounts } from "./agent-auth.ts"
-import { selectTasks, taskTimeouts } from "./tasks.ts"
+import { selectTasks, taskTimeouts, enforcedResources } from "./tasks.ts"
 import { stageTaskRuntime } from "./staging.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
 import { copyTests, runVerifier } from "./verifier.ts"
@@ -73,6 +73,9 @@ export type RunOneTaskFn = (
   verifierTimeout: number,
   staging?: StagingMode,
   driver?: AgentDriver,
+  /** undefined = unenforced (default). Set only when --enforce-resources is
+   * on (tasks.ts's enforcedResources). */
+  resources?: { cpus: number; memoryMb: number },
 ) => Promise<RunTaskResult>
 
 function round1(x: number): number {
@@ -136,6 +139,7 @@ export async function runTaskOnce(
   verifierTimeout: number,
   staging: StagingMode = "runtime",
   driver: AgentDriver = opencodeDriver,
+  resources?: { cpus: number; memoryMb: number },
   execFn: ExecFn = podman,
   prepareAuth: () => AgentAuthMounts = () => driver.prepareAuth(),
 ): Promise<RunTaskResult> {
@@ -184,6 +188,7 @@ export async function runTaskOnce(
           env: { ...apiKeyEnv(), ...(auth.env ?? {}) },
           network: true,
           workdir: "/app",
+          resources,
         }),
       )
       if (createResult.rc !== 0) {
@@ -305,6 +310,10 @@ export interface CmdRunArgs {
    * each attempt records the agent's own passed/total for the correlation gate.
    * Default off → byte-identical to a normal run. */
   selfCheck?: boolean
+  /** podman create gets --cpus/--memory from the task's declared task.toml
+   * [environment] (tasks.ts's enforcedResources). Default OFF — unconstrained,
+   * byte-identical to before this flag existed. */
+  enforceResources?: boolean
 }
 
 export async function cmdRun(
@@ -394,13 +403,14 @@ export async function cmdRun(
     }
     log(`\n=== Task: ${task} ===`)
     const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout)
+    const resources = args.enforceResources ? enforcedResources(paths, task) : undefined
 
     taskAgg[task] = { rewards: [], elapsed: [], turns: [], errors: [], ...(selfCheckOn ? { selfScores: [] } : {}) }
 
     for (let ki = 0; ki < k; ki++) {
       if (k > 1) log(`  -- run ${ki + 1}/${k} --`)
 
-      const res = await runOneTask(paths, task, model, variant, harnessMd, agentTimeout, verifierTimeout, staging, driver)
+      const res = await runOneTask(paths, task, model, variant, harnessMd, agentTimeout, verifierTimeout, staging, driver, resources)
 
       if (res.error === "setup_failed") {
         results.push({ task, k: ki + 1, reward: 0, elapsed: 0.0 })

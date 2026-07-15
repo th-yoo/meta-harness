@@ -325,6 +325,136 @@ test("cmdRun: k>1 runs the task k times, aggregating pass@k", async () => {
   expect(final.n_total).toBe(1)
 })
 
+// ── --enforce-resources threading (default OFF) ───────────────────────────
+
+test("cmdRun --enforce-resources OFF (default): runOneTask sees resources=undefined", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a"])
+  fs.writeFileSync(path.join(tbRoot, "a", "task.toml"), "[environment]\ncpus = 2\nmemory_mb = 4096\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    seenResources = resources
+    return result({ reward: 1 })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "none" }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(seenResources).toBeUndefined()
+})
+
+test("cmdRun --enforce-resources ON: runOneTask receives the task's declared cpus/memoryMb", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a"])
+  fs.writeFileSync(path.join(tbRoot, "a", "task.toml"), "[environment]\ncpus = 2\nmemory_mb = 4096\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    seenResources = resources
+    return result({ reward: 1 })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "none", enforceResources: true }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(seenResources).toEqual({ cpus: 2, memoryMb: 4096 })
+})
+
+test("cmdRun --enforce-resources ON: a gpus>0 task dies before spending any container lifecycle", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["gputask"])
+  fs.writeFileSync(path.join(tbRoot, "gputask", "task.toml"), "[environment]\ngpus = 1\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let called = false
+  const fake: RunOneTaskFn = async () => {
+    called = true
+    return result({ reward: 1 })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await expect(
+      cmdRun(paths, { tasks: ["gputask"], layers: "none", enforceResources: true }, fake, fakeExec),
+    ).rejects.toThrow(/gpus=1/)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(called).toBe(false)
+})
+
+test("runTaskOnce: resources param appends --cpus/--memory to podman create argv", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let createArgv: string[] = []
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "create") createArgv = argv
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      return { rc: 1, stdout: "", stderr: "boom", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runTaskOnce(
+      paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, { cpus: 2, memoryMb: 4096 }, execFn, fakeAuthMounts(),
+    )
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(createArgv).toContain("--cpus")
+  expect(createArgv).toContain("2")
+  expect(createArgv).toContain("--memory")
+  expect(createArgv).toContain("4096m")
+})
+
+test("runTaskOnce: resources omitted (default) leaves podman create argv byte-identical to before", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let createArgv: string[] = []
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "create") createArgv = argv
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      return { rc: 1, stdout: "", stderr: "boom", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, undefined, execFn, fakeAuthMounts())
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(createArgv).not.toContain("--cpus")
+  expect(createArgv).not.toContain("--memory")
+})
+
 // ── runTaskOnce: fresh container per attempt (exec-level, no real podman) ──
 
 test("runTaskOnce: podman create failure -> setup_failed, no crash", async () => {
@@ -341,7 +471,7 @@ test("runTaskOnce: podman create failure -> setup_failed, no crash", async () =>
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   let res: RunTaskResult
   try {
-    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "runtime", opencodeDriver, execFn, fakeAuthMounts())
+    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "runtime", opencodeDriver, undefined, execFn, fakeAuthMounts())
   } finally {
     errSpy.mockRestore()
   }
@@ -367,7 +497,7 @@ test("runTaskOnce: rm is always called, even when an earlier step throws", async
 
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
-    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, fakeAuthMounts())
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, undefined, execFn, fakeAuthMounts())
   } finally {
     errSpy.mockRestore()
   }
@@ -413,7 +543,7 @@ test("runTaskOnce: agent-phase wall-timeout -> RunTaskResult.timedOut=true, erro
   const logSpy = spyOn(console, "log").mockImplementation(() => {})
   let res: RunTaskResult
   try {
-    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, fakeAuthMounts())
+    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, undefined, execFn, fakeAuthMounts())
   } finally {
     errSpy.mockRestore()
     logSpy.mockRestore()
@@ -451,7 +581,7 @@ test("runTaskOnce: genuine 0-turn no-output (not a timeout) -> timedOut=false, e
   const logSpy = spyOn(console, "log").mockImplementation(() => {})
   let res: RunTaskResult
   try {
-    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, fakeAuthMounts())
+    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, undefined, execFn, fakeAuthMounts())
   } finally {
     errSpy.mockRestore()
     logSpy.mockRestore()
@@ -502,7 +632,7 @@ test("runTaskOnce: merges prepareAuth()'s mounts into the create argv (config ro
   }
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
-    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, prepareAuth)
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, undefined, execFn, prepareAuth)
   } finally {
     errSpy.mockRestore()
   }
@@ -534,7 +664,7 @@ test("runTaskOnce: prepareAuth() failure (missing credentials) -> setup_failed, 
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   let res: RunTaskResult
   try {
-    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, prepareAuth)
+    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, undefined, execFn, prepareAuth)
   } finally {
     errSpy.mockRestore()
   }
@@ -565,7 +695,7 @@ test("runTaskOnce: scripts-mode setup_deps.sh exec has no SKIP_APT in its env (O
 
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
-    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, fakeAuthMounts())
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, undefined, execFn, fakeAuthMounts())
   } finally {
     errSpy.mockRestore()
   }
@@ -602,7 +732,7 @@ test("runTaskOnce: agent container create argv passes through a *_API_KEY host e
   }
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
-    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, fakeAuthMounts())
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, undefined, execFn, fakeAuthMounts())
   } finally {
     errSpy.mockRestore()
     if (prev === undefined) delete process.env["OPENROUTER_API_KEY"]
@@ -643,7 +773,7 @@ test("runTaskOnce: merges prepareAuth()'s env into the create argv AFTER apiKeyE
   }
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
-    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, prepareAuth)
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, undefined, execFn, prepareAuth)
   } finally {
     errSpy.mockRestore()
     if (prev === undefined) delete process.env["OPENROUTER_API_KEY"]
@@ -673,7 +803,7 @@ test("runTaskOnce: prepareAuth() returning no env -> create argv unaffected (ope
   }
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
-    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, execFn, fakeAuthMounts())
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, undefined, execFn, fakeAuthMounts())
   } finally {
     errSpy.mockRestore()
   }

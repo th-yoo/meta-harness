@@ -38,6 +38,10 @@ export interface SandboxSpec {
   workdir?: string
   /** default true (parity — see module header) */
   network?: boolean
+  /** podman create --cpus/--memory caps, from the task's declared [environment]
+   * footprint (tasks.ts's taskResources/enforcedResources). Unset (undefined)
+   * = today's unconstrained behavior — only --enforce-resources sets this. */
+  resources?: { cpus: number; memoryMb: number }
 }
 
 export function buildCreateArgv(spec: SandboxSpec): string[] {
@@ -51,6 +55,7 @@ export function buildCreateArgv(spec: SandboxSpec): string[] {
     "--name",
     spec.name,
     "--init",
+    ...(spec.resources ? ["--cpus", String(spec.resources.cpus), "--memory", `${spec.resources.memoryMb}m`] : []),
     ...(network ? [] : ["--network", "none"]),
     ...mounts.flatMap((m) => ["-v", `${m.host}:${m.container}${m.ro ? ":ro" : ""}`]),
     ...Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]),

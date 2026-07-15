@@ -3,7 +3,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
 import type { BenchPaths } from "../src/bench/paths.ts"
-import { selectTasks, taskTimeouts, taskResources } from "../src/bench/tasks.ts"
+import { selectTasks, taskTimeouts, taskResources, enforcedResources } from "../src/bench/tasks.ts"
 import { runHost, withTimeout } from "../src/bench/exec.ts"
 import { cmdOracle, runOneOracleTask, type RunOneOracleTask } from "../src/bench/cmd-oracle.ts"
 import { main } from "../src/bench/cli.ts"
@@ -255,6 +255,48 @@ test("taskResources: partial fields — missing memory_mb takes fallback, cpus k
   expect(taskResources(paths, "partial-task")).toEqual({ cpus: 2, memoryMb: 2048, gpus: 0, declared: true })
 })
 
+// ── enforcedResources ────────────────────────────────────────────────────
+
+test("enforcedResources: declared fields pass through as {cpus, memoryMb}", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "fixture-task"), { recursive: true })
+  fs.writeFileSync(
+    path.join(tbRoot, "fixture-task", "task.toml"),
+    "[environment]\ncpus = 2\nmemory_mb = 4096\ngpus = 0\n",
+  )
+  const paths = fakeBenchPaths(dir, tbRoot)
+  expect(enforcedResources(paths, "fixture-task")).toEqual({ cpus: 2, memoryMb: 4096 })
+})
+
+test("enforcedResources: no [environment] logs the spec-D1 warning and returns the modal footprint", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "no-env-task"), { recursive: true })
+  const paths = fakeBenchPaths(dir, tbRoot)
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let r: { cpus: number; memoryMb: number }
+  let messages: unknown[]
+  try {
+    r = enforcedResources(paths, "no-env-task")
+    messages = errSpy.mock.calls.map((c) => c[0])
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(r).toEqual({ cpus: 1, memoryMb: 2048 })
+  expect(messages.some((m) => typeof m === "string" && m.includes("no [environment] in task.toml"))).toBe(true)
+})
+
+test("enforcedResources: gpus > 0 throws BenchError naming the task and the gpu count", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "gpu-task"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "gpu-task", "task.toml"), "[environment]\ngpus = 1\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  expect(() => enforcedResources(paths, "gpu-task")).toThrow(BenchError)
+  expect(() => enforcedResources(paths, "gpu-task")).toThrow(/gpu-task.*gpus=1/)
+})
+
 // ── exec funnel: withTimeout + rc-124 mapping (no podman required — plain bash) ──
 
 test("withTimeout wraps a command with coreutils timeout -k 5", () => {
@@ -388,6 +430,78 @@ test("runOneOracleTask: a failing `podman start` (rc 125) is setup_failed, namin
   expect(result).toEqual({ reward: 0, elapsed: 0.0, error: "setup_failed" })
 })
 
+// ── --enforce-resources threading (default OFF) ───────────────────────────
+
+test("runOneOracleTask: resources param appends --cpus/--memory to podman create argv", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["sometask"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let createArgv: string[] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    if (argv[1] === "create") createArgv = argv
+    // stop right after create/start bring-up — mirrors this file's other
+    // runOneOracleTask unit tests (never reach copyTests/runVerifier's
+    // hardcoded real podman funnel).
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      return { rc: 1, stdout: "", stderr: "boom", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runOneOracleTask(paths, "sometask", "scripts", fakeExec, { cpus: 2, memoryMb: 4096 })
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(createArgv).toContain("--cpus")
+  expect(createArgv).toContain("2")
+  expect(createArgv).toContain("--memory")
+  expect(createArgv).toContain("4096m")
+})
+
+test("runOneOracleTask: resources omitted (default) leaves podman create argv byte-identical to before", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["sometask"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let createArgv: string[] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    if (argv[1] === "create") createArgv = argv
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      return { rc: 1, stdout: "", stderr: "boom", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runOneOracleTask(paths, "sometask", "scripts", fakeExec)
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(createArgv).not.toContain("--cpus")
+  expect(createArgv).not.toContain("--memory")
+})
+
+test("cmdOracle --enforce-resources ON: a gpus>0 task dies before any podman call (default runOneTask, no fake injected)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "gputask"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "gputask", "task.toml"), "[environment]\ngpus = 1\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  // No runOneTask fake injected — this exercises cmdOracle's actual default
+  // parameter closure (args.enforceResources -> enforcedResources), which
+  // must throw before ever reaching runOneOracleTask's real `podman` default
+  // execFn (a synchronous throw building the create-call argument, before
+  // the async container lifecycle starts).
+  await expect(cmdOracle(paths, { tasks: ["gputask"], enforceResources: true })).rejects.toThrow(/gpus=1/)
+})
+
 // Option A (2026-07-11): podman containers have real root + network, so
 // setup_deps.sh's own SKIP_APT-guarded apt section now genuinely runs — the
 // runner must no longer suppress it via SKIP_APT=1.
@@ -450,6 +564,18 @@ test("cli main: --tb-root with no value → rc 2", async () => {
 
 test("cli main: prep dry-run (no --apply) → rc 0, no podman spawned", async () => {
   expect(await main(["prep"])).toBe(0)
+})
+
+test("cli main: oracle --enforce-resources parses fine and falls through to normal flow (rc 1, unknown task)", async () => {
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main(["oracle", "--enforce-resources", "--tasks", "definitely-not-a-real-task-xyz"])
+    expect(rc).toBe(1)
+    const messages = errSpy.mock.calls.map((c) => c[0])
+    expect(messages.some((m) => typeof m === "string" && m.startsWith("error: Unknown task"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+  }
 })
 
 test("cli main: BenchError from an unknown oracle task → rc 1", async () => {

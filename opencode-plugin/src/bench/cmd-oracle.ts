@@ -36,7 +36,7 @@ import {
   buildRmArgv,
 } from "./sandbox.ts"
 import { BENCH_IMAGE, containerName, type BenchPaths } from "./paths.ts"
-import { selectTasks, taskTimeouts } from "./tasks.ts"
+import { selectTasks, taskTimeouts, enforcedResources } from "./tasks.ts"
 import { stageTaskRuntime, type ExecFn } from "./staging.ts"
 import { copyTests, runVerifier } from "./verifier.ts"
 import { BenchError, log, pyFixed, writeJsonAtomic } from "./util.ts"
@@ -62,6 +62,11 @@ export async function runOneOracleTask(
   task: string,
   staging: StagingMode = "runtime",
   execFn: ExecFn = podman,
+  /** undefined = unenforced (default). Set only when --enforce-resources is
+   * on — NOT part of the injectable RunOneOracleTask type (kept 3-arg-shaped,
+   * spec D2/finding 6); the flag reaches this concrete function via
+   * cmdOracle's default-parameter closure below. */
+  resources?: { cpus: number; memoryMb: number },
 ): Promise<OracleTaskResult> {
   const name = containerName(task, "oracle")
   const taskStart = Date.now()
@@ -77,6 +82,7 @@ export async function runOneOracleTask(
           ],
           network: true,
           workdir: "/app",
+          resources,
         }),
       )
       if (createResult.rc !== 0) {
@@ -202,8 +208,19 @@ function writeOracleResults(
 
 export async function cmdOracle(
   paths: BenchPaths,
-  args: { tasks?: string[]; taskFile?: string; resultsFile?: string; staging?: StagingMode },
-  runOneTask: RunOneOracleTask = runOneOracleTask,
+  args: {
+    tasks?: string[]
+    taskFile?: string
+    resultsFile?: string
+    staging?: StagingMode
+    /** podman create gets --cpus/--memory from the task's declared task.toml
+     * [environment]. Default OFF — unconstrained, byte-identical to before
+     * this flag existed. Threaded to runOneOracleTask via the default
+     * parameter closure below (its injectable type stays 3-arg-shaped). */
+    enforceResources?: boolean
+  },
+  runOneTask: RunOneOracleTask = (p, t, s) =>
+    runOneOracleTask(p, t, s, undefined, args.enforceResources ? enforcedResources(p, t) : undefined),
 ): Promise<void> {
   const tasks = resolveOracleTasks(paths, args)
   const resultsFile = args.resultsFile

@@ -45,6 +45,20 @@ test("cli main: run --driver opencode (only known id) parses fine and falls thro
   }
 })
 
+// ── --enforce-resources (Task 2) ──────────────────────────────────────────
+
+test("cli main: run --enforce-resources parses fine and falls through to normal flow (rc 1, no tasks)", async () => {
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main(["run", "--enforce-resources", "--layers", "none"])
+    expect(rc).toBe(1)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes("Specify --tasks"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
 test("cli main: judge-audit missing --layer/--candidate -> rc 2", async () => {
   expect(await main(["judge-audit"])).toBe(2)
   expect(await main(["judge-audit", "--layer", "project-global"])).toBe(2)

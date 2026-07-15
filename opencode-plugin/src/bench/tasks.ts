@@ -21,7 +21,7 @@
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import { die, log, pyFixed } from "./util.ts"
+import { BenchError, die, log, pyFixed } from "./util.ts"
 import type { BenchPaths } from "./paths.ts"
 import type { Dirent } from "node:fs"
 
@@ -176,4 +176,22 @@ export function taskResources(paths: BenchPaths, task: string): TaskResources {
     gpus: typeof env?.["gpus"] === "number" ? (env["gpus"] as number) : 0,
     declared: env !== undefined,
   }
+}
+
+/** taskResources + spec-D1 warning + spec Non-goals GPU refusal. Call only
+ * when --enforce-resources is on (undefined resources = unenforced elsewhere).
+ * Consumed by cmd-run.ts's outer loop and cmd-oracle.ts's runOneOracleTask. */
+export function enforcedResources(paths: BenchPaths, task: string): { cpus: number; memoryMb: number } {
+  // taskResources.num()'s fallback also fires for an explicit 0/negative
+  // cpus or memory_mb in task.toml (not just a missing key) — `declared`
+  // stays true in that case, so this silently substitutes the modal
+  // footprint rather than erroring on a malformed declaration.
+  const r = taskResources(paths, task)
+  if (r.gpus > 0) {
+    throw new BenchError(
+      `${task}: declares gpus=${r.gpus}; VM has none — refusing to run it unconstrained under --enforce-resources`,
+    )
+  }
+  if (!r.declared) log(`  ${task}: no [environment] in task.toml — assuming 1 cpu / 2048 MB`)
+  return { cpus: r.cpus, memoryMb: r.memoryMb }
 }
