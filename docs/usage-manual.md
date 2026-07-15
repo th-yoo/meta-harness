@@ -430,7 +430,8 @@ whatever cpu/memory the host has free, one task at a time. Two flags change that
   declared `task.toml` `[environment]` footprint (`cpus`, `memory_mb`; falls back to 1 cpu /
   2048 MB when the table is absent). A task declaring `gpus > 0` is refused outright (the VM
   has none — running it unconstrained under enforcement would be silently wrong). Safe to use
-  alone, serially.
+  alone, serially. `oracle` also accepts `--enforce-resources` (same per-task cap on its
+  solution-script containers) but has no `--parallel` — it always runs serially.
 - **`--parallel`** — packs multiple tasks' containers into concurrent execution under a shared
   budget (`--cpu-budget`/`--mem-budget`, **default 3 cpu / 6144 MB**), using the greedy
   canonical-order packer described below. `--parallel` has two **hard requirements**, both
@@ -499,7 +500,8 @@ re-baseline events.
   budget. Storage and gpus are shown but never enforced (`--enforce-resources` only constrains
   cpu/memory). No podman work.
 - **`split`** `{make,rotate,show}` `--seed` (42) `--folds` (4) `--source` (`baseline-tasks.txt`) `--split-file`, `--results PATH` (repeatable, enables difficulty band), `--band LO,HI` (0.2,0.8), `--sentinels N` (3), `--sentinel-hi HI` (0.9).
-- **`oracle`** `[--tasks T…] [--results-file P]` — token-free pipeline validation via solution scripts.
+- **`oracle`** `[--tasks T…] [--results-file P]` `[--enforce-resources]` — token-free pipeline
+  validation via solution scripts.
 - **`report-loop`** `[--json] [--sink PATH …]` `[--no-flag]` `[--plateau-ab-k K]` `[--plateau-trial-k K]` — merged loop observability + plateau detection (Python 3.12+).
 - **`judge-audit`** `--layer L --candidate vN [--agent A] [--model M]` (default
   `openrouter/google/gemini-2.5-flash`) `[--limit 10]` — exit **0** clean / **1** alarm / **2** could-not-assess.

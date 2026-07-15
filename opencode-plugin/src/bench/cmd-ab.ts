@@ -42,7 +42,7 @@ import {
 } from "./splits.ts"
 import { pairedRunStats, mcnemarExactOneSided, bootstrapTaskCi, futilityStop, type DecisionConfig, type PairStats } from "./ab-stats.ts"
 import { die, log, pyFixed, pySigned, writeJsonAtomic } from "./util.ts"
-import type { BenchPaths } from "./paths.ts"
+import { DEFAULT_BENCH_MODEL, type BenchPaths } from "./paths.ts"
 import {
   candidateExists,
   listVersions,
@@ -133,7 +133,7 @@ export async function cmdAb(
   const candidate = args.candidate
   const agent = args.agent || ""
   const layers = args.layers ?? "global"
-  const model = args.model || "anthropic/claude-sonnet-4-6"
+  const model = args.model || DEFAULT_BENCH_MODEL
   const variant = args.variant || ""
   const k = args.k ?? 2
   const noStore = Boolean(args.noStore)
@@ -273,6 +273,21 @@ export async function cmdAb(
   const taskResults: AbTaskResults = {}
   let earlyStopped = false
 
+  // Resume-mode-switch caveat: a partial that crashed mid-run WITHOUT ever
+  // latching earlyStopped (a genuine parallel in-flight crash, not a
+  // completed-and-persisted stop) can be resumed under either mode. If it's
+  // resumed SERIALLY, runPhase's serial branch evaluates futilityFires over
+  // whatever prefix of `taskResults` happens to already be populated here —
+  // which, for a crashed PARALLEL partial, is a canonical-order CONSUMED
+  // prefix (see runPhase's parallel branch / task-6's D5 equivalence work),
+  // not necessarily a contiguous "first N tasks" prefix the serial futility
+  // check was designed around. A resumed PARALLEL run instead only ever
+  // consumes in canonical order from the start, so it doesn't hit this case.
+  // Net effect: the exact task index at which futility (re-)fires can differ
+  // between "resume serially" and "resume in parallel" for the same crashed
+  // partial. Only reachable via crash + a resume that switches parallel mode
+  // (parallel → serial) between the original run and the resume — not a
+  // concern for same-mode resumes, which is the common case.
   if (args.resume && existsSync(partialPath)) {
     let prev: Record<string, unknown> = {}
     try {
@@ -396,7 +411,7 @@ export async function cmdAb(
     resources: { cpus: number; memoryMb: number } | undefined,
     prefix: string,
   ): Promise<AbTaskResult> {
-    log(`${prefix}\n=== ab ${task} [${phase}]: ${candidate} vs active ${baseline} ===`)
+    log(`\n${prefix}=== ab ${task} [${phase}]: ${candidate} vs active ${baseline} ===`)
     const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout)
     const tr: AbTaskResult = { candidate: [], active: [], phase, sentinel: sentinelSet.has(task) }
 
@@ -428,6 +443,18 @@ export async function cmdAb(
       // The whole store mutation runs under `withLock` (a single leaf-level
       // critical section — AsyncMutex is non-reentrant, so nothing inside may
       // take the lock again).
+      //
+      // Post-stop stragglers still reach here: in --parallel, tasks that
+      // complete AFTER the futility stop fires in canonical order are tagged
+      // `postStop` and excluded from the verdict's counted set (see
+      // verdictDict's includedEntries filter above) — but this record call
+      // runs regardless of that tag, so their arm-B sessions still land in
+      // the (now dead-branch, since the verdict already ignores them) score
+      // store. Net effect: the on-disk store's session/pass count can exceed
+      // the verdict's counted nTasks on an early-stopped parallel phase. Not
+      // a correctness bug in the verdict itself (which never reads these
+      // extra sessions back for THIS decision), but a latent inconsistency
+      // for anything that trusts the store's raw counts in isolation.
       if (recordArmB && !noStore && (resB.turns > 0 || (recordTimeouts && resB.timedOut))) {
         await withLock(() => {
           const rec = sessionRecord(

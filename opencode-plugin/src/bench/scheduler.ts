@@ -40,6 +40,23 @@ export function exceedsTotalBudget(it: ScheduledItem, budget: Budget): boolean {
   return it.cpus > budget.cpus || it.memoryMb > budget.memoryMb
 }
 
+/** Defense in depth (final-review fix): a non-finite or non-positive budget
+ * (e.g. NaN from an unvalidated CLI flag — see cli.ts's parseRunArgs/
+ * parseAbArgs/parseTaskLoadArgs) defeats BOTH `fitsBudget` and
+ * `exceedsTotalBudget` — every comparison against NaN is false, so
+ * `schedule()`'s scan() never launches anything and never finishes (a silent
+ * hang), and `packPreview()`'s inner while-loop breaks immediately without
+ * advancing `i` (an infinite outer loop). The CLI is expected to reject these
+ * values before they ever reach here; this guard exists so no future caller
+ * of `schedule`/`packPreview` can reproduce that hang — fail loudly instead. */
+function assertValidBudget(budget: Budget): void {
+  if (!Number.isFinite(budget.cpus) || budget.cpus <= 0 || !Number.isFinite(budget.memoryMb) || budget.memoryMb <= 0) {
+    throw new Error(
+      `invalid budget: cpus=${budget.cpus} memoryMb=${budget.memoryMb} (both must be finite and > 0)`,
+    )
+  }
+}
+
 /** Greedy canonical-order packing (spec D3): launches items[i] when it fits the
  * remaining budget; over-total-budget items drain the pool and run alone.
  * runFn errors reject the whole schedule() after in-flight items settle. */
@@ -48,6 +65,7 @@ export function schedule(
   budget: Budget,
   runFn: (item: ScheduledItem) => Promise<void>,
 ): Promise<void> {
+  assertValidBudget(budget)
   return new Promise<void>((resolve, reject) => {
     const remaining: Budget = { cpus: budget.cpus, memoryMb: budget.memoryMb }
     let cursor = 0
@@ -150,6 +168,7 @@ export function schedule(
  * comment above for the real runtime semantics.
  */
 export function packPreview(items: ScheduledItem[], budget: Budget): string[][] {
+  assertValidBudget(budget)
   const groups: string[][] = []
   let i = 0
   while (i < items.length) {

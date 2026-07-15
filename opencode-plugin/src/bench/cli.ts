@@ -5,7 +5,7 @@
  * task brief's "Explicitly OUT of scope"); `prep`, `oracle`, `split`, and
  * `report-loop` exist today, no speculative flags for the others.
  */
-import { makeBenchPaths, requiredApiKeyVar } from "./paths.ts"
+import { makeBenchPaths, requiredApiKeyVar, DEFAULT_BENCH_MODEL } from "./paths.ts"
 import { cmdPrep } from "./cmd-prep.ts"
 import { cmdOracle } from "./cmd-oracle.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
@@ -168,6 +168,21 @@ function parseOracleArgs(argv: string[]): OracleArgs | null {
   return out
 }
 
+/** Parses a `--cpu-budget`/`--mem-budget` value, rejecting anything that
+ * would defeat scheduler.ts's fit checks: NaN (a typo'd non-numeric value),
+ * Infinity, zero, or negative. A NaN budget makes both `fitsBudget` and
+ * `exceedsTotalBudget` false for every item, so `schedule()` never launches
+ * anything and hangs forever, and `packPreview()`'s inner loop never
+ * advances its cursor — an infinite loop (verified live). Shared by
+ * parseRunArgs/parseAbArgs/parseTaskLoadArgs (all accept the same two
+ * flags). Returns `null` on any invalid value — same "return null" style
+ * every other invalid-value case in these parsers already uses. */
+function parseBudgetNum(v: string): number | null {
+  const n = Number(v)
+  if (!Number.isFinite(n) || n <= 0) return null
+  return n
+}
+
 /** Consume a `--tasks TASK [TASK...]` run, stopping at the next `--flag`.
  * Shared by parseRunArgs/parseAbArgs/parseTaskLoadArgs (all accept the same
  * nargs="+" form). */
@@ -216,14 +231,18 @@ function parseTaskLoadArgs(argv: string[]): CmdTaskLoadArgs | null {
     if (a === "--cpu-budget") {
       const v = argv[i + 1]
       if (v === undefined) return null
-      out.cpuBudget = Number(v)
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.cpuBudget = n
       i += 2
       continue
     }
     if (a === "--mem-budget") {
       const v = argv[i + 1]
       if (v === undefined) return null
-      out.memBudget = Number(v)
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.memBudget = n
       i += 2
       continue
     }
@@ -312,14 +331,18 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
     if (a === "--cpu-budget") {
       const v = argv[i + 1]
       if (v === undefined) return null
-      out.cpuBudget = Number(v)
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.cpuBudget = n
       i += 2
       continue
     }
     if (a === "--mem-budget") {
       const v = argv[i + 1]
       if (v === undefined) return null
-      out.memBudget = Number(v)
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.memBudget = n
       i += 2
       continue
     }
@@ -593,14 +616,18 @@ function parseAbArgs(argv: string[]): CmdAbArgs | null {
     if (a === "--cpu-budget") {
       const v = argv[i + 1]
       if (v === undefined) return null
-      out.cpuBudget = Number(v)
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.cpuBudget = n
       i += 2
       continue
     }
     if (a === "--mem-budget") {
       const v = argv[i + 1]
       if (v === undefined) return null
-      out.memBudget = Number(v)
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.memBudget = n
       i += 2
       continue
     }
@@ -1276,7 +1303,7 @@ export async function main(argv: string[]): Promise<number> {
         // --parallel gate (before any podman work — matches cmdRun's own
         // default model resolution so the required key var is derived from the
         // effective model).
-        validateParallel(runArgs, runArgs.model || "anthropic/claude-sonnet-4-6")
+        validateParallel(runArgs, runArgs.model || DEFAULT_BENCH_MODEL)
         await cmdRun(paths, runArgs)
         return 0
       }
@@ -1298,7 +1325,7 @@ export async function main(argv: string[]): Promise<number> {
         // Shared --parallel gate (spec D3/D4) — same guard `run` uses, before
         // any podman work; derives the required key var from the effective
         // model exactly as cmdAb's own default does.
-        validateParallel(abArgs, abArgs.model || "anthropic/claude-sonnet-4-6")
+        validateParallel(abArgs, abArgs.model || DEFAULT_BENCH_MODEL)
         await cmdAb(paths, abArgs)
         return 0
       }

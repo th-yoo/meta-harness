@@ -105,6 +105,34 @@ test("cli: run --cpu-budget without --parallel dies (rc 1)", async () => {
   }
 })
 
+// ── --cpu-budget/--mem-budget validation (final-review fix: NaN defeats the
+// scheduler's fit checks and hangs schedule()/packPreview() forever — reject
+// non-finite/non-positive values at parse time, before any of that runs) ───
+
+test("cli: run --cpu-budget abc (non-numeric) -> rc 2", async () => {
+  expect(await main(["run", "--cpu-budget", "abc", "--all"])).toBe(2)
+})
+
+test("cli: run --mem-budget -5 (non-positive) -> rc 2", async () => {
+  expect(await main(["run", "--mem-budget", "-5", "--all"])).toBe(2)
+})
+
+test("cli: run --cpu-budget 0 (non-positive) -> rc 2", async () => {
+  expect(await main(["run", "--cpu-budget", "0", "--all"])).toBe(2)
+})
+
+test("cli: run --mem-budget Infinity (non-finite) -> rc 2", async () => {
+  expect(await main(["run", "--mem-budget", "Infinity", "--all"])).toBe(2)
+})
+
+test("cli: task-load --cpu-budget abc (non-numeric) -> rc 2", async () => {
+  expect(await main(["task-load", "--cpu-budget", "abc", "--all"])).toBe(2)
+})
+
+test("cli: task-load --mem-budget -5 (non-positive) -> rc 2", async () => {
+  expect(await main(["task-load", "--mem-budget", "-5", "--all"])).toBe(2)
+})
+
 test("cli: run --parallel --enforce-resources with the key set parses, falls through to normal flow (rc 1, no tasks)", async () => {
   const prev = process.env["ANTHROPIC_API_KEY"]
   process.env["ANTHROPIC_API_KEY"] = "sk-test-parallel"

@@ -2,7 +2,7 @@ import { test, expect, spyOn, mock } from "bun:test"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
-import type { BenchPaths } from "../src/bench/paths.ts"
+import { DEFAULT_BENCH_MODEL, type BenchPaths } from "../src/bench/paths.ts"
 import { cmdRun, runTaskOnce, inContainerAgentVersion, type RunOneTaskFn, type RunTaskResult } from "../src/bench/cmd-run.ts"
 import { runOneOracleTask } from "../src/bench/cmd-oracle.ts"
 import { readScore, projectGlobalRoot, createCandidate, writeActive } from "../src/harness-store.ts"
@@ -146,7 +146,7 @@ test("cmdRun: incremental + final results-file JSON, task_agg shape matches Pyth
 
   const final = JSON.parse(fs.readFileSync(resultsFile, "utf-8"))
   expect(final.label).toBe("run-results") // default label = stem of --results-file
-  expect(final.model).toBe("anthropic/claude-sonnet-4-6")
+  expect(final.model).toBe(DEFAULT_BENCH_MODEL) // default model when --model is omitted
   expect(final.k).toBe(1)
   expect(final.status).toBe("complete")
   expect(final.n_pass).toBe(1)
@@ -1149,6 +1149,34 @@ test("run --parallel: tasks execute concurrently within budget, results identica
   expect(par.tasks).toEqual(ser.tasks) // aggregate task_agg identical regardless of completion order
   expect(par.n_pass).toBe(ser.n_pass)
   expect(par.n_total).toBe(3)
+})
+
+test("run --parallel: task banner leads with \\n, THEN the [task] prefix (not prefix-then-\\n) — final-review fix", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeResourceTomls(tbRoot, ["a"], 1, 2048)
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const lines: string[] = []
+  const errSpy = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+    lines.push(args.map(String).join(" "))
+  })
+  try {
+    await cmdRun(
+      paths,
+      { tasks: ["a"], layers: "none", parallel: true, enforceResources: true },
+      async (_p, t) => result({ reward: 1, sessionId: `s-${t}` }),
+      fakeExec,
+    )
+  } finally {
+    errSpy.mockRestore()
+  }
+
+  // Orphaned-prefix bug would produce "[a] \n=== Task: a ===" (prefix on its
+  // own line, "===" on the next). The fix keeps the leading \n first, so the
+  // "[task]" prefix sits directly on the same line as "===".
+  const banner = lines.find((l) => l.includes("=== Task: a ==="))
+  expect(banner).toBe("\n[a] === Task: a ===")
 })
 
 test("run --parallel: store/results writes serialized via mutex (no interleave)", async () => {

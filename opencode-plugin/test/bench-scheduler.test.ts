@@ -292,6 +292,117 @@ test("fitsBudget/exceedsTotalBudget: boundary matrix incl. exact-equal-to-budget
   }
 })
 
+test("over-budget item in FIRST position runs alone immediately (empty pool, no wait)", async () => {
+  const running = new Set<string>()
+  const deferreds = new Map<string, Deferred<void>>()
+  const budget: Budget = { cpus: 3, memoryMb: 6144 }
+  const items = [item("huge", 10), item("a", 1)] // huge exceeds the total budget, first in line
+
+  let hugeSawEmptyPool = false
+
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    if (it.key === "huge") hugeSawEmptyPool = running.size === 0
+    running.add(it.key)
+    const d = deferred<void>()
+    deferreds.set(it.key, d)
+    return d.promise.then(() => {
+      running.delete(it.key)
+    })
+  }
+
+  const result = schedule(items, budget, runFn)
+
+  // Nothing was in flight before it, so huge launches right away — no drain wait.
+  expect(hugeSawEmptyPool).toBe(true)
+  expect(running.has("huge")).toBe(true)
+  expect(running.has("a")).toBe(false)
+
+  deferreds.get("huge")!.resolve()
+  await flush()
+  expect(running.has("a")).toBe(true)
+
+  deferreds.get("a")!.resolve()
+  await result
+})
+
+test("reject-during-drain suppresses the pending solo launch", async () => {
+  const running = new Set<string>()
+  const deferreds = new Map<string, Deferred<void>>()
+  const budget: Budget = { cpus: 3, memoryMb: 6144 }
+  // "a" fits and launches; "huge" exceeds the total budget so it must drain
+  // the pool (wait for "a") before it can run solo.
+  const items = [item("a", 1), item("huge", 10)]
+  const boom = new Error("boom-during-drain")
+
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    running.add(it.key)
+    const d = deferred<void>()
+    deferreds.set(it.key, d)
+    return d.promise.then(
+      () => {
+        running.delete(it.key)
+      },
+      (err) => {
+        running.delete(it.key)
+        throw err
+      },
+    )
+  }
+
+  const result = schedule(items, budget, runFn)
+
+  expect(running.has("a")).toBe(true)
+  expect(running.has("huge")).toBe(false) // still draining, waiting for "a"
+
+  let settled = false
+  result.then(
+    () => (settled = true),
+    () => (settled = true),
+  )
+
+  // "a" fails instead of succeeding, while "huge" is still queued behind it.
+  deferreds.get("a")!.reject(boom)
+  await flush()
+
+  // The failure must propagate WITHOUT ever launching "huge" — a
+  // reject-during-drain must suppress the pending solo launch, not let it
+  // slip through after the pool empties.
+  expect(running.has("huge")).toBe(false)
+  await expect(result).rejects.toBe(boom)
+  expect(settled).toBe(true)
+})
+
+test("packPreview: over-budget item in FIRST position starts its own solo group", () => {
+  const budget: Budget = { cpus: 3, memoryMb: 6144 }
+  const items = [item("huge", 10), item("a", 1)]
+  expect(packPreview(items, budget)).toEqual([["huge"], ["a"]])
+})
+
+// ── invalid budget guard (final-review fix: NaN defeats fitsBudget/
+// exceedsTotalBudget silently — schedule() hangs forever, packPreview()
+// loops forever without advancing. Defense in depth: both throw immediately
+// on a non-finite or non-positive budget, even though the CLI is expected to
+// reject these values first — see cli.ts's parseRunArgs/parseAbArgs/
+// parseTaskLoadArgs.) ──────────────────────────────────────────────────────
+
+test("schedule/packPreview: non-finite or non-positive budget throws instead of hanging/looping forever", () => {
+  const badBudgets: Budget[] = [
+    { cpus: NaN, memoryMb: 6144 },
+    { cpus: 3, memoryMb: NaN },
+    { cpus: Infinity, memoryMb: 6144 },
+    { cpus: 3, memoryMb: Infinity },
+    { cpus: 0, memoryMb: 6144 },
+    { cpus: -1, memoryMb: 6144 },
+    { cpus: 3, memoryMb: 0 },
+    { cpus: 3, memoryMb: -5 },
+  ]
+  const items = [item("a", 1)]
+  for (const budget of badBudgets) {
+    expect(() => schedule(items, budget, async () => {})).toThrow()
+    expect(() => packPreview(items, budget)).toThrow()
+  }
+})
+
 // ── AsyncMutex ───────────────────────────────────────────────────────────
 
 test("AsyncMutex serializes and preserves order", async () => {

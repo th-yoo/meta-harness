@@ -25,7 +25,7 @@ import { join, parse as parsePath } from "node:path"
 import { podman } from "./exec.ts"
 import type { ExecFn } from "./staging.ts"
 import { buildCreateArgv, buildStartArgv, buildExecArgv, buildRmArgv } from "./sandbox.ts"
-import { BENCH_IMAGE, apiKeyEnv, containerName, type BenchPaths } from "./paths.ts"
+import { BENCH_IMAGE, apiKeyEnv, containerName, DEFAULT_BENCH_MODEL, type BenchPaths } from "./paths.ts"
 import type { AgentAuthMounts } from "./agent-auth.ts"
 import { selectTasks, taskTimeouts, enforcedResources } from "./tasks.ts"
 import { stageTaskRuntime } from "./staging.ts"
@@ -346,7 +346,7 @@ export async function cmdRun(
       ? selectTasks(paths, { taskFile: args.taskFile })
       : selectTasks(paths, { tasks: args.tasks })
 
-  const model = args.model || "anthropic/claude-sonnet-4-6"
+  const model = args.model || DEFAULT_BENCH_MODEL
   const variant = args.variant || ""
   const k = args.k ?? 1
   const layers = args.layers ?? "global"
@@ -452,10 +452,10 @@ export async function cmdRun(
     resourcesOverride: { cpus: number; memoryMb: number } | undefined,
   ): Promise<void> => {
     if (doneTasks.has(task)) {
-      log(`${prefix}\n=== Task: ${task} (skipped — already done) ===`)
+      log(`\n${prefix}=== Task: ${task} (skipped — already done) ===`)
       return
     }
-    log(`${prefix}\n=== Task: ${task} ===`)
+    log(`\n${prefix}=== Task: ${task} ===`)
     const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout)
     const resources = resourcesOverride ?? (args.enforceResources ? enforcedResources(paths, task) : undefined)
 

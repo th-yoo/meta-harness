@@ -156,6 +156,45 @@ test("cmdAb: LEGACY explicit --tasks mode never records held-out (there is none)
   expect(score.sessions.length).toBe(2)
 })
 
+test("cmdAb --parallel: task-pair banner leads with \\n, THEN the [task] prefix (not prefix-then-\\n) — final-review fix", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["t1"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+  setupCandidate(paths, "project-global", "v1")
+
+  const fake: RunOneTaskFn = async () => res({ reward: 1 })
+  const lines: string[] = []
+  const errSpy = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+    lines.push(args.map(String).join(" "))
+  })
+  try {
+    await cmdAb(
+      paths,
+      {
+        layer: "project-global",
+        candidate: "v1",
+        tasks: ["t1"],
+        k: 1,
+        parallel: true,
+        enforceResources: true,
+        cpuBudget: 100,
+        memBudget: 1_000_000,
+      } as CmdAbArgs,
+      fake,
+      fakeExec,
+    )
+  } finally {
+    errSpy.mockRestore()
+  }
+
+  // Orphaned-prefix bug would produce "[t1] \n=== ab t1 [held-in]: ..." (the
+  // prefix on its own line, "===" on the next). The fix keeps the leading \n
+  // first, so the "[task]" prefix sits directly on the same line as "===".
+  const banner = lines.find((l) => l.includes("=== ab t1 [held-in]"))
+  expect(banner).toBe("\n[t1] === ab t1 [held-in]: v1 vs active v0 ===")
+})
+
 // ── split-based mode + the held-out-never-recorded invariant ─────────────
 
 function writeSplitsFile(paths: BenchPaths, heldIn: string[], heldOut: string[]): void {

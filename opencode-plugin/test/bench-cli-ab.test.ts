@@ -74,3 +74,19 @@ test("cli main: ab --enforce-resources parses fine and falls through to normal f
     errSpy.mockRestore()
   }
 })
+
+// ── --cpu-budget/--mem-budget validation (final-review fix: NaN defeats the
+// scheduler's fit checks and hangs schedule()/packPreview() forever — reject
+// non-finite/non-positive values at parse time, before any of that runs) ───
+
+test("cli main: ab --cpu-budget abc (non-numeric) -> rc 2", async () => {
+  expect(
+    await main(["ab", "--layer", "project-global", "--candidate", "v1", "--all", "--cpu-budget", "abc"]),
+  ).toBe(2)
+})
+
+test("cli main: ab --mem-budget -5 (non-positive) -> rc 2", async () => {
+  expect(
+    await main(["ab", "--layer", "project-global", "--candidate", "v1", "--all", "--mem-budget", "-5"]),
+  ).toBe(2)
+})

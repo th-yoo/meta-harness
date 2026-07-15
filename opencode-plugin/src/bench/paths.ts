@@ -17,6 +17,16 @@ import { die, BenchError } from "./util.ts"
  * cmd-prep). Always `localhost/...` — podman never pushes this anywhere. */
 export const BENCH_IMAGE = "localhost/mh-bench:latest"
 
+/** The model used when `--model` is omitted. ONE shared constant (final-
+ * review fix) — this literal used to be duplicated at cli.ts's
+ * validateParallel call sites (deriving the required provider API key var
+ * for `run`/`ab`'s `--parallel` gate) AND cmd-run.ts's/cmd-ab.ts's own
+ * default-model fallback; a drift between those copies would silently make
+ * the CLI gate check the wrong key var for whichever site didn't get
+ * updated. Import this everywhere a default model is needed instead of
+ * inlining the literal again. */
+export const DEFAULT_BENCH_MODEL = "anthropic/claude-sonnet-4-6"
+
 export interface BenchPaths {
   /** repo root — the dir containing both "term-bench2" and ".git" */
   metaRoot: string
