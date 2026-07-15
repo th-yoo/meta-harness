@@ -92,7 +92,13 @@ test("runAgent: timeout short-circuits to {0,{},[]} and logs TIMEOUT_MARK, no re
   } finally {
     errSpy.mockRestore()
   }
-  expect(result).toEqual({ turnCount: 0, toolUsage: {}, events: [] })
+  expect(result).toEqual({
+    turnCount: 0,
+    toolUsage: {},
+    events: [],
+    timedOut: true,
+    agentElapsedSec: expect.any(Number),
+  })
   expect(calls).toBe(1)
 })
 
@@ -268,4 +274,65 @@ test("runAgent: argv-flags harness delivery appends buildFlags(harnessMd) to arg
   expect(execCall).toContain("the harness md")
   expect(execCall).toContain("--variant")
   expect(execCall).toContain("myvariant")
+})
+
+// ── 6. timedOut discriminator (Loop-3 T1) ───────────────────────────────
+//
+// CRITICAL INVARIANT this guards: runAgent's timeout, auth-fail, and
+// transient-exhaustion branches all return turnCount:0 — indistinguishable
+// on that field alone. timedOut must be true ONLY on the wall-timeout
+// branch, and stay unset (not merely false) on auth-fail and on any
+// non-timeout, non-zero-turn parse — later loop-3 work (recording/skip
+// logic) depends on this discriminator being set at the source.
+
+test("runAgent sets timedOut:true (and a finite agentElapsedSec) on a wall-timeout", async () => {
+  const paths = setupTask()
+  const driver = makeFakeDriver()
+
+  const execFn = async (): Promise<ExecResult> => {
+    return { rc: 124, stdout: "", stderr: "", timedOut: true }
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result: AgentRunOutput
+  try {
+    result = await runAgent(driver, paths, "c1", "t", "m", "", 30, "", execFn)
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(result.timedOut).toBe(true)
+  expect(result.turnCount).toBe(0)
+  expect(typeof result.agentElapsedSec).toBe("number")
+  expect(result.agentElapsedSec as number).toBeGreaterThanOrEqual(0)
+})
+
+test("runAgent leaves timedOut unset on auth-fail and on a normal parse", async () => {
+  const paths = setupTask()
+
+  // auth-fail branch: turnCount:0, same as timeout — but timedOut must NOT
+  // be set, so callers can tell the two apart.
+  const authDriver = makeFakeDriver({ classify: () => "auth" })
+  const authExecFn = async (): Promise<ExecResult> => ok("authentication_failed", 1)
+  const authErrSpy = spyOn(console, "error").mockImplementation(() => {})
+  let authResult: AgentRunOutput
+  try {
+    authResult = await runAgent(authDriver, paths, "c1", "t", "m", "", 30, "", authExecFn, async () => {})
+  } finally {
+    authErrSpy.mockRestore()
+  }
+  expect(authResult.timedOut).toBeUndefined()
+  expect(authResult.turnCount).toBe(0)
+
+  // normal multi-turn parse: turnCount>0, timedOut must stay unset.
+  const normalDriver = makeFakeDriver()
+  const normalExecFn = async (): Promise<ExecResult> => ok("normal multi-turn output")
+  const normalErrSpy = spyOn(console, "error").mockImplementation(() => {})
+  let normalResult: AgentRunOutput
+  try {
+    normalResult = await runAgent(normalDriver, paths, "c1", "t", "m", "", 30, "", normalExecFn)
+  } finally {
+    normalErrSpy.mockRestore()
+  }
+  expect(normalResult.timedOut).toBeUndefined()
+  expect(normalResult.turnCount).toBeGreaterThan(0)
 })

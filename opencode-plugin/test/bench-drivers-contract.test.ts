@@ -254,7 +254,13 @@ for (const id of DRIVER_IDS) {
     } finally {
       errSpy.mockRestore()
     }
-    expect(result).toEqual({ turnCount: 0, toolUsage: {}, events: [] })
+    expect(result).toEqual({
+      turnCount: 0,
+      toolUsage: {},
+      events: [],
+      timedOut: true,
+      agentElapsedSec: expect.any(Number),
+    })
     expect(calls).toBe(1)
   })
 

@@ -166,7 +166,13 @@ test("runOpencode: timeout returns {0,{},[]} immediately, logs the TIMEOUT_MARK 
   } finally {
     errSpy.mockRestore()
   }
-  expect(result).toEqual({ turnCount: 0, toolUsage: {}, events: [] })
+  expect(result).toEqual({
+    turnCount: 0,
+    toolUsage: {},
+    events: [],
+    timedOut: true,
+    agentElapsedSec: expect.any(Number),
+  })
   expect(calls).toBe(1) // no retry after a timeout
 })
 

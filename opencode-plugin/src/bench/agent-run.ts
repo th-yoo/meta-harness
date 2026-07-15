@@ -180,7 +180,7 @@ export async function runAgent(
 
     if (result.timedOut) {
       log(`  ${TIMEOUT_MARK} ${pyFixed(agentTimeout, 0)}s`)
-      return { turnCount: 0, toolUsage: {}, events: [] }
+      return { turnCount: 0, toolUsage: {}, events: [], timedOut: true, agentElapsedSec: elapsedSec }
     }
 
     // Auth failures take PRECEDENCE over the transient path: an expired
