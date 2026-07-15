@@ -245,7 +245,12 @@ export async function envBlock(
  * (task-B3), so `platform` provenance is the driver id already threaded
  * into `env.driver` by envBlock — no new parameter needed here. Absent when
  * `env` has no `driver` key (e.g. direct/unit-test callers that bypass
- * envBlock), never invented. */
+ * envBlock), never invented.
+ *
+ * `elapsed`/`timedOut` (Loop-3 T3) are two new optional trailing params,
+ * stamped onto the record only when provided — same conditional-stamp idiom
+ * as `platform` above — so every existing (8-arg) caller keeps compiling and
+ * producing byte-identical records. */
 export function sessionRecord(
   task: string,
   sessionId: string,
@@ -255,6 +260,8 @@ export function sessionRecord(
   model: string,
   variant: string,
   env: Record<string, unknown> = {},
+  elapsed?: number,
+  timedOut?: boolean,
 ): SessionRecord {
   const driver = env["driver"]
   return {
@@ -269,14 +276,25 @@ export function sessionRecord(
     toolUsage,
     env,
     ...(typeof driver === "string" ? { platform: driver } : {}),
+    ...(elapsed !== undefined ? { elapsed } : {}),
+    ...(timedOut !== undefined ? { timedOut } : {}),
   }
 }
 
 /**
  * Record a session into every applicable layer store. Skipped entirely when
- * noStore, or (hygiene) when turnCount==0 — a 0-turn run is a timeout/
- * transient opencode failure, not a verdict on the harness. Verbatim port of
- * runner.py:1333's record_to_stores.
+ * noStore, or (hygiene) when turnCount==0 AND it's not a flag-opted-in
+ * timeout — a 0-turn run is normally a timeout/auth/transient opencode
+ * failure, not a verdict on the harness. Verbatim port of runner.py:1333's
+ * record_to_stores, EXTENDED by Loop-3 T3: the skip guard is a
+ * DISCRIMINATOR, not a blanket 0-turn drop —
+ * `turnCount === 0 && !(timedOut && recordTimeouts)`. With `recordTimeouts`
+ * false (default) this is identical to the old `turnCount === 0` guard for
+ * every 0-turn run, timeout or not. With it true, a *timeout* 0-turn
+ * (`timedOut` true) falls through and is recorded as a genuine fail
+ * (passed=false, turnCount=0, timedOut=true, elapsed set); an auth/transient
+ * 0-turn (`timedOut` unset/false) is still dropped — that discriminator is
+ * the whole point of carrying `timedOut` instead of just deleting the guard.
  */
 export function recordToStores(
   task: string,
@@ -294,14 +312,17 @@ export function recordToStores(
   env: Record<string, unknown> = {},
   events: TrajEvent[] = [],
   saveAllTraj = false,
+  timedOut = false,
+  recordTimeouts = false,
+  elapsed?: number,
 ): void {
   if (noStore) return
-  if (turnCount === 0) {
-    log("  skip store record: 0 agent turns (timeout/transient agent failure)")
+  if (turnCount === 0 && !(timedOut && recordTimeouts)) {
+    log("  skip store record: 0 agent turns (auth/transient agent failure)")
     return
   }
 
-  const record = sessionRecord(task, sessionId, passed, turnCount, toolUsage, model, variant, env)
+  const record = sessionRecord(task, sessionId, passed, turnCount, toolUsage, model, variant, env, elapsed, timedOut)
   const saveTraj = events.length > 0 && (!passed || saveAllTraj)
 
   for (const [name, root] of layerStoreRoots(layers, agent, metaRoot)) {

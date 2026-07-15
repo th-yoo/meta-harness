@@ -143,6 +143,14 @@ export interface SessionRecord {
      * pre-Task-7 records and treated the same as false. */
     trivial?: boolean
   }
+  /** Wall-clock seconds this session consumed (cmd-run.ts elapsed). Optional so
+   *  pre-Loop-3 records keep parsing; absent ⇒ unknown. */
+  elapsed?: number
+  /** True iff the agent phase hit the wall timeout (turnCount will be 0).
+   *  Optional; absent ⇒ false. Only ever recorded when the operator has
+   *  opted in via MhConfig.recordTimeouts (Loop-3 T3) — see record.ts's
+   *  recordToStores guard. */
+  timedOut?: boolean
 }
 
 export interface CandidateScore {
@@ -248,6 +256,14 @@ export interface MhConfig {
    * archive (source + trajectories) needs longer than the old digest-only
    * proposer did. */
   proposerTimeoutMin: number
+  /** Loop-3 T3: record a wall-clock agent-phase timeout as a genuine stored
+   * fail (passed=false, turnCount=0, timedOut=true) instead of silently
+   * dropping it. Default OFF (false) so today's behavior — every 0-turn run
+   * dropped, timeout or not — is byte-identical until an operator opts in;
+   * flipping it is a deliberate cutover that needs a manual re-baseline
+   * (proposer/AB sees a new failure mode). See record.ts's recordToStores
+   * guard, the single place this flag is consulted for the skip decision. */
+  recordTimeouts: boolean
 }
 
 const DEFAULT_PROPOSER_MODEL = "anthropic/claude-opus-4-8"
@@ -271,6 +287,7 @@ export function readMhConfig(configDir: string = accountMetaRoot()): MhConfig {
     judgeMinSessions: raw.judgeMinSessions ?? DEFAULT_JUDGE_MIN_SESSIONS,
     judgeMinAgreement: raw.judgeMinAgreement ?? DEFAULT_JUDGE_MIN_AGREEMENT,
     proposerTimeoutMin,
+    recordTimeouts: raw.recordTimeouts ?? false,
   }
 }
 

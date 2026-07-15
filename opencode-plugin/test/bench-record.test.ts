@@ -14,7 +14,16 @@ import {
   sessionRecord,
   recordToStores,
 } from "../src/bench/record.ts"
-import { layersFor, createCandidate, readScore, projectGlobalRoot, readTrajectory } from "../src/harness-store.ts"
+import {
+  layersFor,
+  createCandidate,
+  readScore,
+  projectGlobalRoot,
+  readTrajectory,
+  readMhConfig,
+  buildProposerContext,
+  candidatePath,
+} from "../src/harness-store.ts"
 import { BenchError } from "../src/bench/util.ts"
 import type { ExecResult } from "../src/bench/exec.ts"
 
@@ -395,4 +404,124 @@ test("recordToStores: saveAllTraj=true persists trajectories for passing runs to
   recordToStores("t", "pass-sess", true, 2, {}, "m", "", "project", metaRoot, false, "", {}, {}, events, true)
 
   expect(readTrajectory(root, "v0", "pass-sess")).toEqual(events)
+})
+
+// ── Loop-3 T3: recordTimeouts flag (record.ts guard change) ──────────────
+//
+// The 0-turn skip guard is intentionally a DISCRIMINATOR, not a blanket
+// drop: turnCount===0 && !(timedOut && recordTimeouts). Flag OFF (default)
+// keeps today's behavior byte-identical for every 0-turn run (timeout OR
+// auth/transient). Flag ON records ONLY the timeout subset — auth/transient
+// 0-turn runs (timedOut unset/false) must still be dropped even with the
+// flag on, so the proposer never sees pre-agent-phase noise as a fitness
+// signal.
+
+test("recordToStores: flag ON + timedOut=true -> writes a genuine fail (passed=false, turnCount=0, timedOut=true, elapsed set)", () => {
+  const metaRoot = tmpDir()
+  const root = projectGlobalRoot(metaRoot)
+  createCandidate(root, "v0", "sys")
+  const { writeActive } = require("../src/harness-store.ts") as typeof import("../src/harness-store.ts")
+  writeActive(root, "v0", "sys")
+
+  recordToStores(
+    "t", "sess-timeout", false, 0, {}, "m", "", "project", metaRoot, false,
+    "", {}, {}, [], false,
+    /* timedOut */ true, /* recordTimeouts */ true, /* elapsed */ 638.4,
+  )
+
+  const score = readScore(root, "v0")
+  expect(score.sessions).toHaveLength(1)
+  expect(score.sessions[0]!.passed).toBe(false)
+  expect(score.sessions[0]!.turnCount).toBe(0)
+  expect(score.sessions[0]!.timedOut).toBe(true)
+  expect(score.sessions[0]!.elapsed).toBe(638.4)
+  expect(score.nFail).toBe(1)
+})
+
+test("recordToStores: flag OFF (default) still drops a timeout — byte-identical to today", () => {
+  const metaRoot = tmpDir()
+  const root = projectGlobalRoot(metaRoot)
+  createCandidate(root, "v0", "sys")
+  const { writeActive } = require("../src/harness-store.ts") as typeof import("../src/harness-store.ts")
+  writeActive(root, "v0", "sys")
+
+  recordToStores(
+    "t", "sess-timeout", false, 0, {}, "m", "", "project", metaRoot, false,
+    "", {}, {}, [], false,
+    /* timedOut */ true, /* recordTimeouts */ false, /* elapsed */ 638.4,
+  )
+
+  expect(readScore(root, "v0").sessions).toEqual([])
+})
+
+test("recordToStores: flag ON but timedOut=false (auth/transient 0-turn) is STILL dropped (discriminator)", () => {
+  const metaRoot = tmpDir()
+  const root = projectGlobalRoot(metaRoot)
+  createCandidate(root, "v0", "sys")
+  const { writeActive } = require("../src/harness-store.ts") as typeof import("../src/harness-store.ts")
+  writeActive(root, "v0", "sys")
+
+  recordToStores(
+    "t", "sess-authfail", false, 0, {}, "m", "", "project", metaRoot, false,
+    "", {}, {}, [], false,
+    /* timedOut */ false, /* recordTimeouts */ true,
+  )
+
+  expect(readScore(root, "v0").sessions).toEqual([])
+})
+
+test("sessionRecord: elapsed/timedOut stamped only when provided (matches platform's conditional-stamp idiom)", () => {
+  const withBoth = sessionRecord("t", "s", false, 0, {}, "m", "", {}, 12.5, true)
+  expect(withBoth.elapsed).toBe(12.5)
+  expect(withBoth.timedOut).toBe(true)
+
+  const withNeither = sessionRecord("t", "s", true, 3, {}, "m", "")
+  expect(withNeither.elapsed).toBeUndefined()
+  expect(withNeither.timedOut).toBeUndefined()
+})
+
+// ── Loop-3 T3: back-compat (pre-Loop-3 score.json still parses/renders) ──
+
+test("back-compat: a score.json with neither elapsed nor timedOut parses and renders via buildProposerContext", () => {
+  const metaRoot = tmpDir()
+  const root = projectGlobalRoot(metaRoot)
+  createCandidate(root, "v0", "sys")
+
+  const legacyRecord = {
+    sessionID: "legacy-1",
+    passed: false,
+    note: "bench:t",
+    turnCount: 3,
+    timestamp: new Date().toISOString(),
+    summary: "t",
+    model: "m",
+    variant: "",
+    toolUsage: {},
+  }
+  fs.writeFileSync(
+    candidatePath(root, "v0", "score.json"),
+    JSON.stringify({ version: "v0", nPass: 0, nFail: 1, sessions: [legacyRecord] }),
+  )
+
+  const score = readScore(root, "v0")
+  expect(score.sessions).toHaveLength(1)
+  expect(score.sessions[0]!.timedOut).toBeUndefined()
+  expect(score.sessions[0]!.elapsed).toBeUndefined()
+
+  let context = ""
+  expect(() => {
+    context = buildProposerContext(root, [])
+  }).not.toThrow()
+  expect(context).toContain("FAIL")
+})
+
+// ── Loop-3 T3: MhConfig.recordTimeouts default-OFF flag ───────────────────
+
+test("readMhConfig: recordTimeouts defaults to false (OFF); {\"recordTimeouts\":true} honored", () => {
+  const empty = tmpDir()
+  expect(readMhConfig(empty).recordTimeouts).toBe(false)
+
+  const set = tmpDir()
+  fs.writeFileSync(path.join(set, "config.json"), JSON.stringify({ recordTimeouts: true }))
+  expect(readMhConfig(set).recordTimeouts).toBe(true)
 })

@@ -39,7 +39,7 @@ import type { AgentDriver } from "./drivers/types.ts"
 import { assembleAgentsMd, envBlock, harnessMeta, parsePins, recordToStores } from "./record.ts"
 import { resumeCarryForward, writeRunResults, aggTotals } from "./results.ts"
 import { BenchError, die, log, pyFixed } from "./util.ts"
-import type { ToolUsage, TrajEvent } from "../harness-store.ts"
+import { readMhConfig, type ToolUsage, type TrajEvent } from "../harness-store.ts"
 
 // ── run_task_once ───────────────────────────────────────────────────────
 
@@ -379,6 +379,11 @@ export async function cmdRun(
 
   const { taskAgg, doneTasks } = resumeCarryForward(resultsFile, Boolean(args.resume), driver.id)
   const results: { task: string; k: number; reward: number; elapsed: number }[] = []
+  // Loop-3 T3: whether a wall-clock agent-phase timeout gets recorded as a
+  // genuine stored fail (default OFF — see recordToStores's guard doc).
+  // Read once per run, not per task, so a mid-run config edit can't produce
+  // an inconsistent run.
+  const { recordTimeouts } = readMhConfig()
 
   const runStartTs = new Date().toISOString()
 
@@ -424,6 +429,9 @@ export async function cmdRun(
         runEnv as unknown as Record<string, unknown>,
         res.events,
         Boolean(args.saveAllTraj),
+        res.timedOut,
+        recordTimeouts,
+        res.elapsed,
       )
 
       results.push({ task, k: ki + 1, reward: res.reward, elapsed: res.elapsed })

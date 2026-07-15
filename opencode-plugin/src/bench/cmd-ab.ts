@@ -51,6 +51,7 @@ import {
   writeTrajectory,
   pruneTrajectories,
   appendMetaMetric,
+  readMhConfig,
   type AbSetStats,
 } from "../harness-store.ts"
 
@@ -186,6 +187,10 @@ export async function cmdAb(
     die(`bench image missing ${driver.id} — rebuild with prep --apply`)
   }
   const envB = await envBlock(harnessB, maxAgentTimeout, model, paths.metaRoot, undefined, agentVersion, driver.id)
+  // Loop-3 T3: whether a wall-clock agent-phase timeout on arm B gets
+  // recorded as a genuine stored fail (default OFF). Read once for the
+  // whole ab run — see recordToStores's guard doc in record.ts.
+  const { recordTimeouts } = readMhConfig()
 
   const cfg: DecisionConfig = {
     alpha: args.alpha ?? 0.05,
@@ -327,8 +332,12 @@ export async function cmdAb(
         tr.candidate.push(resB.reward)
 
         // Record ONLY arm B, and ONLY for held-in (held-out stays invisible
-        // to the proposer — evaluator outside the loop).
-        if (recordArmB && !noStore && resB.turns > 0) {
+        // to the proposer — evaluator outside the loop). The turns>0 check is
+        // the same discriminator as record.ts's recordToStores guard
+        // (Loop-3 T3): with recordTimeouts off (default) a 0-turn arm B —
+        // timeout or otherwise — is dropped, byte-identical to today; on, a
+        // *timeout* 0-turn (resB.timedOut) still falls through and records.
+        if (recordArmB && !noStore && (resB.turns > 0 || (recordTimeouts && resB.timedOut))) {
           const rec = sessionRecord(
             task,
             resB.sessionId,
@@ -338,6 +347,8 @@ export async function cmdAb(
             model,
             variant,
             envB as unknown as Record<string, unknown>,
+            resB.elapsed,
+            resB.timedOut,
           )
           const score = recordSession(layerRoot, candidate, rec)
           if (resB.events.length > 0 && (resB.reward !== 1 || args.saveAllTraj)) {
