@@ -109,6 +109,10 @@ Nodes (proper granularity — each an independently-buildable + testable unit):
 - **Concurrency safety:** two parallel `squad-run`s do not corrupt `score.json` (advisory flock holds).
 - **Reuse intact:** `bun test` green; existing squad smoke (`smoke/fleet/squad-demo.sh`) still passes.
 
+> **T1-review carry-forward (2026-07-16) — two heads-ups the T4 (fleet-dev scheduler) plan must honor (additive; from T1's final whole-branch review):**
+> 1. **Isolation is only PROXIED by T1.** T1's tests use a mocked `execFn` and prove argv `--dir`=worktree + live-tree-clean, NOT that a real role-written file lands in the worktree and leaves origin clean. **T4's live-run verification MUST assert a real file written by a role appears under the worktree and `git status` on origin stays clean** (the hermetic proxy: an injected `execFn` writes a real file into `--dir` + the orchestrator commits it code-only; the full real-`opencode` all-roles-share-one-worktree check — an Implementer's failing test yielding VERDICT FAIL from the same worktree — stays the §N1 live/smoke gate).
+> 2. **`node_modules` symlink WRITE-THROUGH hazard.** T1 symlinks the worktree's `node_modules` to origin's, so a node running `bun install` / mutating deps writes THROUGH the link into the live repo. **T4 needs an explicit deps policy: a fresh install into the worktree (sever the symlink) before any dependency-changing self-hosting node runs**; the DAG must flag such nodes (`mutatesDeps`), a read-only node keeps the symlink. See the plan `docs/superpowers/plans/2026-07-16-t4-fleet-dev-scheduler.md`.
+
 ## Status
 Design approved 2026-07-16 (brainstorm: human-directed dev, not autonomous Loop B;
 parallel task-DAG centerpiece). **Reviewed to flawless 2026-07-16** via code-architect
