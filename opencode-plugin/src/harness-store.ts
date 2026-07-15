@@ -1346,8 +1346,17 @@ export function buildProposerContext(
     const traceLines = score.sessions.map((s) => {
       const modelStr = s.variant ? `${s.model || "unknown"}+${s.variant}` : (s.model || "unknown")
       const toolSummary = s.toolUsage ? formatToolUsage(s.toolUsage) : ""
+      // Loop-3 T4: a timedOut session (turnCount=0, events:[] — no trajectory
+      // was ever captured) must NOT read as an ordinary FAIL. Render the wall
+      // it hit distinctly using the elapsed/env.maxAgentTimeout fields T3
+      // stamped onto the record, so the proposer can tell "agent ran out of
+      // budget" apart from every other failure mode at a glance. Back-compat:
+      // `s.timedOut` absent/false ⇒ this appends nothing, line is unchanged.
+      const timeoutMarker = s.timedOut
+        ? ` | TIMEOUT ${s.elapsed ?? "?"}s / ${(s.env as { maxAgentTimeout?: number } | undefined)?.maxAgentTimeout ?? "?"}s budget`
+        : ""
       return [
-        `  - ${s.sessionID} | ${s.passed ? "PASS" : "FAIL"} | model=${modelStr} | turns=${s.turnCount}${s.note ? ` | note="${s.note}"` : ""}`,
+        `  - ${s.sessionID} | ${s.passed ? "PASS" : "FAIL"} | model=${modelStr} | turns=${s.turnCount}${timeoutMarker}${s.note ? ` | note="${s.note}"` : ""}`,
         toolSummary ? `    tools: ${toolSummary}` : null,
         `    summary: ${s.summary.slice(0, 200)}`,
       ].filter(Boolean).join("\n")

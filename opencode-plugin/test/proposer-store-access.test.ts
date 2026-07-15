@@ -223,6 +223,91 @@ test("buildProposerContext: no contract.md → context unchanged (no wire sectio
   expect(context).not.toContain("Consumer wire contract")
 })
 
+// Loop-3 T4: a timedOut session must render distinctly from a generic FAIL
+// in buildProposerContext's per-session trace line, carrying the elapsed vs
+// budget numbers (T3's `elapsed`/`env.maxAgentTimeout` fields) — otherwise
+// the proposer can't tell a resource-limit failure apart from any other fail.
+test("buildProposerContext: timedOut session renders a distinct TIMEOUT marker with elapsed/budget", () => {
+  const storeRoot = tmpDir("store-timeout")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  const dir = path.join(storeRoot, "candidates", "v1")
+  fs.mkdirSync(path.join(dir, "traj"), { recursive: true })
+  fs.writeFileSync(path.join(dir, "score.json"), JSON.stringify({
+    version: "v1", nPass: 0, nFail: 1,
+    sessions: [{
+      sessionID: "ses_timeout", passed: false, turnCount: 0, timedOut: true, elapsed: 638.4,
+      env: { maxAgentTimeout: 600 }, model: "m", variant: "", toolUsage: {}, summary: "timed out",
+      note: "", timestamp: "",
+    }],
+  }))
+
+  const context = buildProposerContext(storeRoot, [])
+
+  expect(context).toContain("TIMEOUT")
+  expect(context).toContain("638.4")
+  expect(context).toContain("600")
+})
+
+// Back-compat: a session with no `timedOut` field (every pre-Loop-3 record,
+// and any ordinary agent-loss fail) must render exactly as before — no
+// TIMEOUT marker leaking onto a non-timeout FAIL.
+test("buildProposerContext: ordinary FAIL without timedOut renders unchanged, no TIMEOUT marker", () => {
+  const storeRoot = tmpDir("store-nofail-timeout")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  seedCandidate(storeRoot, "v1", { nPass: 0, nFail: 1, trajFiles: 1 })
+
+  const context = buildProposerContext(storeRoot, [])
+
+  expect(context).not.toContain("TIMEOUT")
+})
+
+// Loop-3 T4: the proposer must be explicitly steered to diagnose a recorded
+// timeout as `resource-limit` (FAILURE_TAXONOMY) rather than missing it
+// entirely — timeouts have events:[] so they appear in NO failing-trajectory
+// excerpt (buildFailureExcerpts scans events); this note is the only place
+// the signal surfaces as actionable guidance rather than a terse trace line.
+test("buildProposerPrompt: timed-out sessions present -> 'Timed-out sessions' note naming resource-limit", () => {
+  const worktree = tmpDir("worktree-to")
+  const storeRoot = tmpDir("store-to")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  const dir = path.join(storeRoot, "candidates", "v1")
+  fs.mkdirSync(path.join(dir, "traj"), { recursive: true })
+  fs.writeFileSync(path.join(dir, "score.json"), JSON.stringify({
+    version: "v1", nPass: 0, nFail: 1,
+    sessions: [{
+      sessionID: "ses_timeout", passed: false, turnCount: 0, timedOut: true, elapsed: 638.4,
+      env: { maxAgentTimeout: 600 }, model: "m", variant: "", toolUsage: {}, summary: "timed out",
+      note: "", timestamp: "",
+    }],
+  }))
+  const layer: StoreLayer = { root: storeRoot, scope: "project-role", higherRoots: [] }
+  const sp = stagingPaths(worktree, layer.scope, "v2")
+
+  const prompt = buildProposerPrompt(
+    layer, "v2", "", sp.system, sp.tools, sp.diagnosis, sp.ops, sp.agentConfig, sp.envPolicy, worktree, null,
+  )
+
+  expect(prompt).toContain("Timed-out sessions")
+  expect(prompt).toContain("resource-limit")
+})
+
+// Negative case: no timedOut sessions in the store -> note must be absent
+// entirely, not just empty-bodied — keeps the prompt additive-only.
+test("buildProposerPrompt: no timed-out sessions -> 'Timed-out sessions' note omitted", () => {
+  const worktree = tmpDir("worktree-noto")
+  const storeRoot = tmpDir("store-noto")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  seedCandidate(storeRoot, "v1", { nPass: 1, nFail: 1, trajFiles: 1 })
+  const layer: StoreLayer = { root: storeRoot, scope: "project-role", higherRoots: [] }
+  const sp = stagingPaths(worktree, layer.scope, "v2")
+
+  const prompt = buildProposerPrompt(
+    layer, "v2", "", sp.system, sp.tools, sp.diagnosis, sp.ops, sp.agentConfig, sp.envPolicy, worktree, null,
+  )
+
+  expect(prompt).not.toContain("Timed-out sessions")
+})
+
 test("readMhConfig: proposerTimeoutMin defaults to 20, honors valid overrides, rejects junk, caps at 120", () => {
   const empty = tmpDir("cfg-empty")
   expect(readMhConfig(empty).proposerTimeoutMin).toBe(20)
