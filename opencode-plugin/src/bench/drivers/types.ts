@@ -47,8 +47,13 @@ export interface AgentDriver {
   parseOutput(stdout: string): AgentRunOutput
   /** Classify a finished (non-timed-out) attempt for the retry loop. */
   classifyAttempt(result: ExecResult): AttemptClass
-  /** Host-side auth prep: mounts + optional container env + cleanup. */
-  prepareAuth(): AgentAuthMounts
+  /** Host-side auth prep: mounts + optional container env + cleanup.
+   * `keyOnly` (task-4-brief.md, consumed by --parallel's gate) asks for ONLY
+   * the per-run temp config-dir mount, no shared/credential mounts — a
+   * driver whose auth doesn't have a shared-mount concurrency hazard (e.g.
+   * claude-code's own prepareClaudeCodeAuth, already key-skipped when
+   * ANTHROPIC_API_KEY is set) may ignore the option. */
+  prepareAuth(opts?: { keyOnly?: boolean }): AgentAuthMounts
   /** In-container version probe argv, e.g. ["opencode","--version"]. */
   versionArgv: string[]
   /** Driver-specific remediation text logged after AUTH_FAIL_MARK

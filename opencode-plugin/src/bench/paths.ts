@@ -11,7 +11,7 @@
 import { dirname, join } from "node:path"
 import { existsSync } from "node:fs"
 import { randomBytes } from "node:crypto"
-import { die } from "./util.ts"
+import { die, BenchError } from "./util.ts"
 
 /** Where the podman bench image is tagged once built (see Containerfile / P3
  * cmd-prep). Always `localhost/...` — podman never pushes this anywhere. */
@@ -94,6 +94,14 @@ export function apiKeyEnv(env: Record<string, string | undefined> = process.env)
     if (/_API_KEY$/.test(k) && v) out[k] = v
   }
   return out
+}
+
+/** Provider-specific key env var for a model string like "anthropic/claude-…" (spec D4).
+ * Mirrors record.ts's provider-prefix convention (model.split("/")[0]). */
+export function requiredApiKeyVar(model: string): string {
+  const provider = model.split("/")[0]
+  if (!provider || provider === model) throw new BenchError(`cannot derive provider from model "${model}" — --parallel needs a provider-prefixed model (e.g. anthropic/…)`)
+  return `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`
 }
 
 const MAX_TASK_LEN = 40

@@ -136,3 +136,33 @@ test("prepareAgentAuthMounts: darwin — cleanup removes the temp claude dir (sh
 
   expect(fs.existsSync(claudeMount.host)).toBe(false)
 })
+
+test("prepareAgentAuthMounts keyOnly: only the config mount, no credential dirs", () => {
+  const failingExec = (): string => {
+    throw new Error("keyOnly must never shell out to the Keychain")
+  }
+  const auth = prepareAgentAuthMounts({ keyOnly: true, platform: "darwin", execFn: failingExec })
+  // failingExec would throw if the Keychain path were taken — keyOnly must not need it
+  expect(auth.mounts).toHaveLength(1)
+  expect(auth.mounts[0]!.container).toBe("/root/.config/opencode")
+  expect(auth.mounts[0]!.ro).toBe(false)
+  auth.cleanup()
+})
+
+test("prepareAgentAuthMounts keyOnly: linux path also skips the ~/.claude/.credentials.json existence check", () => {
+  // No ~/.claude at all under this fixture home — the non-keyOnly linux path
+  // would throw BenchError on this; keyOnly must never reach that check.
+  const home = tmpDir()
+  const auth = prepareAgentAuthMounts({ keyOnly: true, platform: "linux", home })
+  expect(auth.mounts).toHaveLength(1)
+  expect(auth.mounts[0]!.container).toBe("/root/.config/opencode")
+  auth.cleanup()
+})
+
+test("prepareAgentAuthMounts keyOnly: cleanup removes the temp config dir", () => {
+  const auth = prepareAgentAuthMounts({ keyOnly: true, platform: "linux", home: tmpDir() })
+  const configHost = auth.mounts[0]!.host
+  expect(fs.existsSync(configHost)).toBe(true)
+  auth.cleanup()
+  expect(fs.existsSync(configHost)).toBe(false)
+})

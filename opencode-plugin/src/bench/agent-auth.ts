@@ -93,6 +93,22 @@ export interface PrepareAgentAuthMountsOpts {
   execFn?: SecurityExecFn
   /** default: os.homedir() */
   home?: string
+  /** spec D4 / task-4-brief.md: when true, return ONLY the per-run temp
+   * config-dir mount — skip the platform credential branch (Keychain
+   * `security` exec / `~/.claude/.credentials.json` check) entirely AND the
+   * shared rw `opencodeDataDir` mount (this module header's documented
+   * concurrency hazard: every container mounting the SAME rw dir races the
+   * plugin's refresh-token rotation). Callers passing keyOnly are expected
+   * to supply auth purely via the API-key env cmd-run.ts already injects
+   * (paths.ts's `apiKeyEnv()` / a driver's own `requiredApiKeyVar`-gated
+   * env) — the opencode-claude-auth plugin config still loads (so opencode
+   * doesn't 0-turn on a missing plugin), it just has no oauth credential to
+   * read and falls through to the env-var key instead.
+   * Tradeoff: without the shared data dir, opencode's fetched-plugin cache
+   * is cold on every container (network is on inside the bench container,
+   * so the plugin fetch itself still succeeds — this is a per-run latency
+   * cost, not a correctness one; accepted for --parallel's isolation win). */
+  keyOnly?: boolean
 }
 
 function cleanupTmp(tmpRoot: string): void {
@@ -118,6 +134,17 @@ export function prepareAgentAuthMounts(opts: PrepareAgentAuthMountsOpts = {}): A
   const configDir = join(tmpRoot, "config")
   mkdirSync(configDir, { recursive: true })
   writeFileSync(join(configDir, "opencode.json"), JSON.stringify(MINIMAL_OPENCODE_CONFIG) + "\n")
+
+  if (opts.keyOnly) {
+    // Never touch the Keychain/`security` exec or the ~/.claude credential
+    // check below — keyOnly's whole point is a container that needs neither
+    // (see the opts doc comment above). platform/execFn/home are accepted
+    // but unused on this branch.
+    return {
+      mounts: [{ host: configDir, container: "/root/.config/opencode", ro: false }],
+      cleanup: () => cleanupTmp(tmpRoot),
+    }
+  }
 
   let claudeHost: string
   let shredPath: string | undefined

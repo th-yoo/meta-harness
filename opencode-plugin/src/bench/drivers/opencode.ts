@@ -171,7 +171,7 @@ export const opencodeDriver: AgentDriver = {
   harness: { kind: "workspace-file", filename: "AGENTS.md" },
   parseOutput,
   classifyAttempt,
-  prepareAuth: () => prepareAgentAuthMounts(),
+  prepareAuth: (opts) => prepareAgentAuthMounts({ keyOnly: opts?.keyOnly }),
   versionArgv: ["opencode", "--version"],
   // Byte-identical to the pre-fix hardcoded tail in agent-run.ts's runAgent
   // (final-review fix 5) — opencode's own auth remediation is unchanged,
