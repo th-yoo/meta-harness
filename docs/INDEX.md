@@ -25,6 +25,7 @@ design state. Git is the backstop; `~/.claude/.../memory/MEMORY.md` points here.
 
 ## Fleet / squad (the multi-agent builder)
 - [superpowers/specs/2026-07-13-fleet-squad-integration-design.md](superpowers/specs/2026-07-13-fleet-squad-integration-design.md) — **the design spec** (D1–D7 all decided): node grammar, SquadDef, flow state machine, escalation taxonomy, score routing, master boundary layer, repo boundary.
+- [superpowers/specs/2026-07-16-fleet-selfhosting-dev-design.md](superpowers/specs/2026-07-16-fleet-selfhosting-dev-design.md) — **fleet-as-dev-team, self-hosting** (human-directed, NOT autonomous Loop B): the fleet develops meta-harness's own code via a **parallel task-DAG** (decompose→schedule→merge, worktree-isolated squads) → PR → human merges. Two-layer seed model (shared code / per-user prompts). 5 new pieces N1–N5; T1–T6 build DAG. Survey-validated.
 - [fleet-context.md](fleet-context.md) — the OpenClaw dev-fleet briefing (has a stale-pointer correction header).
 - [fleet-integration-plan.md](fleet-integration-plan.md) — the original T0–T6 primitives plan.
 - [fleet-integration.md](fleet-integration.md) — the recipe/how-to for driving the fleet.
