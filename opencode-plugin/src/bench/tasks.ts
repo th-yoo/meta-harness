@@ -147,3 +147,33 @@ export function taskTimeouts(
   }
   return { agentTimeout, verifierTimeout }
 }
+
+export interface TaskResources {
+  cpus: number
+  memoryMb: number
+  gpus: number
+  /** false when task.toml was missing/unparseable OR had no [environment] table. */
+  declared: boolean
+}
+
+/** Declared container footprint from task.toml [environment] (spec D1).
+ * Fallback = the modal TB2 footprint (1 cpu / 2048 MB). Never throws. */
+export function taskResources(paths: BenchPaths, task: string): TaskResources {
+  const tomlPath = join(paths.tbRoot, task, "task.toml")
+  let env: Record<string, unknown> | undefined
+  if (existsSync(tomlPath)) {
+    try {
+      const doc = Bun.TOML.parse(readFileSync(tomlPath, "utf-8")) as { environment?: Record<string, unknown> }
+      env = doc.environment
+    } catch {
+      env = undefined
+    }
+  }
+  const num = (v: unknown, fallback: number): number => (typeof v === "number" && v > 0 ? v : fallback)
+  return {
+    cpus: num(env?.["cpus"], 1),
+    memoryMb: num(env?.["memory_mb"], 2048),
+    gpus: typeof env?.["gpus"] === "number" ? (env["gpus"] as number) : 0,
+    declared: env !== undefined,
+  }
+}

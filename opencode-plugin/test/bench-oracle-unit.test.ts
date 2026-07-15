@@ -3,7 +3,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
 import type { BenchPaths } from "../src/bench/paths.ts"
-import { selectTasks, taskTimeouts } from "../src/bench/tasks.ts"
+import { selectTasks, taskTimeouts, taskResources } from "../src/bench/tasks.ts"
 import { runHost, withTimeout } from "../src/bench/exec.ts"
 import { cmdOracle, runOneOracleTask, type RunOneOracleTask } from "../src/bench/cmd-oracle.ts"
 import { main } from "../src/bench/cli.ts"
@@ -213,6 +213,46 @@ test("taskTimeouts: maxAgentTimeout of 0 means uncapped", () => {
   fs.writeFileSync(path.join(tbRoot, "uncapped", "task.toml"), "[agent]\ntimeout_sec = 1200\n")
   const paths = fakeBenchPaths(dir, tbRoot)
   expect(taskTimeouts(paths, "uncapped", 0)).toEqual({ agentTimeout: 1200, verifierTimeout: 300 })
+})
+
+// ── taskResources ────────────────────────────────────────────────────────
+
+test("taskResources: reads declared [environment] fields", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "fixture-task"), { recursive: true })
+  fs.writeFileSync(
+    path.join(tbRoot, "fixture-task", "task.toml"),
+    "[environment]\ncpus = 2\nmemory_mb = 4096\ngpus = 0\n",
+  )
+  const paths = fakeBenchPaths(dir, tbRoot)
+  expect(taskResources(paths, "fixture-task")).toEqual({ cpus: 2, memoryMb: 4096, gpus: 0, declared: true })
+})
+
+test("taskResources: missing task.toml falls back to modal footprint", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(tbRoot, { recursive: true })
+  const paths = fakeBenchPaths(dir, tbRoot)
+  expect(taskResources(paths, "no-such-task")).toEqual({ cpus: 1, memoryMb: 2048, gpus: 0, declared: false })
+})
+
+test("taskResources: broken toml falls back", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "broken-task"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "broken-task", "task.toml"), "not [ toml")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  expect(taskResources(paths, "broken-task").declared).toBe(false)
+})
+
+test("taskResources: partial fields — missing memory_mb takes fallback, cpus kept", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "partial-task"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "partial-task", "task.toml"), "[environment]\ncpus = 2\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  expect(taskResources(paths, "partial-task")).toEqual({ cpus: 2, memoryMb: 2048, gpus: 0, declared: true })
 })
 
 // ── exec funnel: withTimeout + rc-124 mapping (no podman required — plain bash) ──
