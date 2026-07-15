@@ -600,6 +600,19 @@ oc-test's existing OpenClaw investment (doctrine, installer, Slack Socket
 Mode, gh-guard plugin enforcing sole-remote-writer) carries over. Pin the
 OpenClaw version like any other platform dependency.
 
+> ⚠️ **TRANSPORT NOTE (2026-07-16 research, `docs/master-open-questions-research.md` R1):**
+> **Slack Socket Mode has NO offline durability** — a human gate reply arriving
+> while the master daemon is DOWN is silently dropped (Slack docs: "you may lose
+> events"). For an *unattended* master this needs a durable inbox. But ours is
+> **human-directed**, so the mitigation is cheaper: the human is the durability
+> layer — a down master fails to ack (→ human re-sends), and the human's workflow
+> **asks the master to confirm prior instructions were processed** (catching the
+> acked-then-crashed case too). **REQUIRED: the master must expose its
+> processed-instruction / pending-gate state** so the human can verify + re-send
+> drops. Prefer **Telegram getUpdates** or **Slack-HTTP + Delayed Events** over
+> Socket Mode so a re-sent reply reliably lands. Durable inbox + persist-before-ack
+> = optional hardening, deferred until the master is unattended / higher-volume.
+
 ### 9.3 Improving the master itself
 
 Master = two materials:
