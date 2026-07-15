@@ -96,6 +96,11 @@ export function loadCheckpoint(project: string, sliceId: string): SquadCheckpoin
 export async function cmdSquadRun(
   args: {
     project: string
+    /** The CODE dir every role of this squad-run drives (`--dir`) — a
+     * throwaway git worktree (spec N1) when self-hosting; defaults to
+     * `project`. The ledger (checkpoint/pending/scored) stays under `project`
+     * (runtimeRoot, N1b), so it survives the worktree's removal. */
+    worktreeDir?: string
     sliceId: string
     slice?: string
     resume?: boolean
@@ -147,6 +152,7 @@ export async function cmdSquadRun(
       const r = await cmdRoleRun(
         {
           project: args.project,
+          worktreeDir: args.worktreeDir,
           role,
           input,
           model: args.model,
