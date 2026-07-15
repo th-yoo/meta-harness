@@ -176,6 +176,27 @@ forbids shared oauth mounts by design) — then flipping enforcement on is a
 re-baseline event, bundled with Loop-3's recordTimeouts flip. Deferred
 pre-first-sweep item: interior log-line prefixes under --parallel.
 
+⚠️ **OPEN — the oauth-race rationale behind the --parallel key requirement is
+UNTESTED (user-flagged as a big issue 2026-07-16).** The whole D4 design (no
+oauth under --parallel; ANTHROPIC_API_KEY mandatory) rests on the pre-existing
+`agent-auth.ts:32-37` comment ("plugin rotates the refresh token on use;
+concurrent containers can race auth.json") — a code-grounded ASSUMPTION, never
+reproduced by anyone. What IS verified: every container mounts the same rw
+credential dir (fact, from code). What is NOT verified: that rotation actually
+happens on use, or that concurrent rotations corrupt the store. We designed
+around it without testing because the destructive test would race the REAL
+credential store (asymmetric risk, cheap mitigation). **Safe experiment, defined
+and pending:** copy the auth dir to scratch, point two containers at the COPY
+(XDG override — same isolation the propose-smoke used), force both to refresh
+concurrently (expire the access token in the copy), diff what survives.
+Outcomes: (a) corruption reproduced → assumption confirmed, key requirement
+stands, close the question; (b) no corruption → the key gate is over-strict —
+consider relaxing D4 to allow oauth+parallel (spec + gate change + re-review).
+Until tested, oauth+parallel stays FORBIDDEN (fail-safe default). Also note:
+API keys CAN carry org-set expiry (CC shows remaining days) — check before an
+overnight parallel sweep; mid-run expiry = fail-fast 401, ab resumes, run loses
+in-flight tasks only.
+
 ## Pending decisions (not started, need a go)
 - **Phase-0 re-run** (MacBook, overnight ~7h): strengthen `SELF_CHECK_INSTRUCTION`
   in `opencode-plugin/src/bench/self-score.ts` (force compliance + honest
