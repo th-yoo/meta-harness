@@ -3,6 +3,25 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## OFFICE PICKUP (2026-07-16 evening, MacBook session end)
+
+**Everything pushed, `git status` clean, HEAD = `ce54fd3`.** Discipline first:
+`git pull && term-bench2/store-sync.sh diff` (import only if drift — the
+export-trap nearly fired again today on the stale MacBook store; that's twice).
+
+MacBook session shipped today (details in sections below):
+1. **Bench resource-scheduler SHIPPED DARK** (`d528ae5`) — see its section +
+   the ⚠️ UNTESTED oauth-race block (user-flagged big issue).
+2. Office-runnable pickups, any order:
+   (a) **3-concurrent smoke** = the --parallel flag-flip gate — needs an
+       ANTHROPIC_API_KEY in env; keyOnly mode is platform-independent, linux OK.
+   (b) **oauth-race sandbox experiment** (defined in the ⚠️ block) — settles
+       whether the key requirement is genuinely needed or over-strict.
+   (c) **Loop-3 T6+T7 + pre-flip checklist** (the standing throughline) → then
+       ONE combined re-baseline: recordTimeouts + --enforce-resources together.
+3. Still pending a go (unchanged): Phase-0 SELF_CHECK_INSTRUCTION re-run;
+   seed-corpus stays measure-first behind loop-1's ab.
+
 ## SESSION END 2026-07-16 (leaving office) — loop-2 CALLED · Loop-3 shipped DARK · T1 shipped
 
 **Everything is committed + pushed. `git status` clean, 0 unpushed. HEAD = `7e23797`.**
