@@ -129,11 +129,23 @@ makes store-writing runs safe under `--parallel`.
 `agent-auth.ts:32-37` already documents that every container bind-mounts the
 SAME rw credential dir (`opencodeDataDir`, `agent-auth.ts:156-167`; the
 claude-code linux path mounts `~/.claude` rw directly) and that the plugin
-rotates refresh tokens on use — concurrent containers can corrupt the durable
-host credential store, and no in-process mutex can reach a race between
-container processes. Per-container copies are worse (a rotated refresh token
-in a copy strands the host's). Resolution has TWO required halves (a CLI gate
-alone would NOT stop the mount from being created — architect re-review):
+rotates the refresh token **on refresh** — i.e. at the ~8h access-token expiry,
+NOT per request/task. The refresh token is single-use: one container's refresh
+invalidates every other holder's, and nothing locks the shared file (CONFIRMED
+2026-07-16: Anthropic `claude-code` #22600/#48786 + local `~/.claude` TTL ~8h —
+see `docs/oauth-parallel-race-research.md`). So when a parallel run **crosses that
+~8h refresh boundary**, concurrent containers corrupt the durable host credential
+store, and no in-process mutex can reach a race between container processes.
+Per-container copies are worse (a rotated refresh token in a copy strands the
+host's).
+
+Because the race is per-refresh, NOT per-task, a parallel run that finishes
+within the token TTL never refreshes and would be oauth-safe — so requiring the
+key for **every** `--parallel` run is a **fail-safe over-approximation** (run
+duration can't be predicted up front), the accepted tradeoff of the
+surface-don't-handle policy (`docs/auth-delegation-design.md`), not a per-task
+hazard. Resolution has TWO required halves (a CLI gate alone would NOT stop the
+mount from being created — architect re-review):
 
 1. **Key-only auth mode in the mount layer.** `prepareAgentAuthMounts()`
    (`agent-auth.ts:111-183`) gains a `keyOnly` mode that returns env-only auth
