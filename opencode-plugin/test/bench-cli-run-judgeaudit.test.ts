@@ -59,6 +59,68 @@ test("cli main: run --enforce-resources parses fine and falls through to normal 
   }
 })
 
+// ── --parallel gate (Task 6, cli.ts's validateParallel) ───────────────────
+
+test("cli: run --parallel without --enforce-resources dies (rc 1)", async () => {
+  const prev = process.env["ANTHROPIC_API_KEY"]
+  delete process.env["ANTHROPIC_API_KEY"]
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main(["run", "--parallel"])
+    expect(rc).toBe(1)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes("--enforce-resources"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+    if (prev === undefined) delete process.env["ANTHROPIC_API_KEY"]
+    else process.env["ANTHROPIC_API_KEY"] = prev
+  }
+})
+
+test("cli: run --parallel without ANTHROPIC_API_KEY (anthropic model) dies naming the var", async () => {
+  const prev = process.env["ANTHROPIC_API_KEY"]
+  delete process.env["ANTHROPIC_API_KEY"]
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main(["run", "--parallel", "--enforce-resources"])
+    expect(rc).toBe(1)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes("ANTHROPIC_API_KEY"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+    if (prev === undefined) delete process.env["ANTHROPIC_API_KEY"]
+    else process.env["ANTHROPIC_API_KEY"] = prev
+  }
+})
+
+test("cli: run --cpu-budget without --parallel dies (rc 1)", async () => {
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main(["run", "--cpu-budget", "2"])
+    expect(rc).toBe(1)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes("--parallel"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("cli: run --parallel --enforce-resources with the key set parses, falls through to normal flow (rc 1, no tasks)", async () => {
+  const prev = process.env["ANTHROPIC_API_KEY"]
+  process.env["ANTHROPIC_API_KEY"] = "sk-test-parallel"
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main(["run", "--parallel", "--enforce-resources", "--layers", "none"])
+    expect(rc).toBe(1)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes("Specify --tasks"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+    if (prev === undefined) delete process.env["ANTHROPIC_API_KEY"]
+    else process.env["ANTHROPIC_API_KEY"] = prev
+  }
+})
+
 test("cli main: judge-audit missing --layer/--candidate -> rc 2", async () => {
   expect(await main(["judge-audit"])).toBe(2)
   expect(await main(["judge-audit", "--layer", "project-global"])).toBe(2)

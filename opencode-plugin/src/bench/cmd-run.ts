@@ -38,6 +38,7 @@ import { opencodeDriver } from "./drivers/opencode.ts"
 import type { AgentDriver } from "./drivers/types.ts"
 import { assembleAgentsMd, envBlock, harnessMeta, parsePins, recordToStores } from "./record.ts"
 import { resumeCarryForward, writeRunResults, aggTotals } from "./results.ts"
+import { schedule, DEFAULT_BUDGET, AsyncMutex, type Budget, type ScheduledItem } from "./scheduler.ts"
 import { BenchError, die, log, pyFixed } from "./util.ts"
 import { readMhConfig, type ToolUsage, type TrajEvent } from "../harness-store.ts"
 
@@ -76,6 +77,13 @@ export type RunOneTaskFn = (
   /** undefined = unenforced (default). Set only when --enforce-resources is
    * on (tasks.ts's enforcedResources). */
   resources?: { cpus: number; memoryMb: number },
+  /** Optional podman funnel + auth-prep overrides — mirror runTaskOnce's own
+   * trailing params so cmdRun can thread `--parallel`'s keyOnly prepareAuth
+   * (task-6-brief.md) without reordering the positional signature the many
+   * runTaskOnce unit tests pass execFn/prepareAuth into. Default runs use the
+   * real podman + the driver's default (non-keyOnly) prepareAuth. */
+  execFn?: ExecFn,
+  prepareAuth?: () => AgentAuthMounts,
 ) => Promise<RunTaskResult>
 
 function round1(x: number): number {
@@ -314,6 +322,16 @@ export interface CmdRunArgs {
    * [environment] (tasks.ts's enforcedResources). Default OFF — unconstrained,
    * byte-identical to before this flag existed. */
   enforceResources?: boolean
+  /** Budget-packed concurrent task execution (spec D3/D4, scheduler.ts).
+   * Default OFF → the existing serial for-loop, byte-identical. Requires
+   * --enforce-resources (each task's declared footprint is what the budget
+   * packs against) and a provider API key in the env (the CLI gate — the
+   * shared-oauth-credential mount races under concurrency). */
+  parallel?: boolean
+  /** Concurrency budget overrides (only meaningful with --parallel); default
+   * DEFAULT_BUDGET (scheduler.ts). */
+  cpuBudget?: number
+  memBudget?: number
 }
 
 export async function cmdRun(
@@ -410,74 +428,151 @@ export async function cmdRun(
 
   const runStartTs = new Date().toISOString()
 
-  for (const task of tasks) {
+  // --parallel threads the driver's keyOnly auth prep (no shared rw credential
+  // mount — task-4-brief.md), the additional half of the concurrency guard
+  // whose primary half is the CLI key gate (cli.ts's validateParallel, which
+  // covers drivers that ignore keyOnly). Serial runs pass undefined → the
+  // driver's default prepareAuth, byte-identical to before.
+  const parallelPrepareAuth: (() => AgentAuthMounts) | undefined = args.parallel
+    ? () => driver.prepareAuth({ keyOnly: true })
+    : undefined
+
+  // One task's full pipeline (init agg → k serial attempts → record+write),
+  // shared by both paths so serial/parallel can't drift. `prefix` tags log
+  // lines with the task id under interleaving; `withLock` guards every shared
+  // mutation site (results/taskAgg + store write). Serial passes prefix="" and
+  // a pass-through lock → byte-identical to the original inline loop; parallel
+  // passes `[task] ` and an AsyncMutex-backed lock. `resourcesOverride` lets
+  // the parallel path reuse the footprint already computed for budget packing
+  // (avoids a second enforcedResources call + its "no [environment]" log).
+  const runOneTaskPipeline = async (
+    task: string,
+    prefix: string,
+    withLock: <T>(fn: () => T | Promise<T>) => Promise<T>,
+    resourcesOverride: { cpus: number; memoryMb: number } | undefined,
+  ): Promise<void> => {
     if (doneTasks.has(task)) {
-      log(`\n=== Task: ${task} (skipped — already done) ===`)
-      continue
+      log(`${prefix}\n=== Task: ${task} (skipped — already done) ===`)
+      return
     }
-    log(`\n=== Task: ${task} ===`)
+    log(`${prefix}\n=== Task: ${task} ===`)
     const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout)
-    const resources = args.enforceResources ? enforcedResources(paths, task) : undefined
+    const resources = resourcesOverride ?? (args.enforceResources ? enforcedResources(paths, task) : undefined)
 
     taskAgg[task] = { rewards: [], elapsed: [], turns: [], errors: [], ...(selfCheckOn ? { selfScores: [] } : {}) }
 
     for (let ki = 0; ki < k; ki++) {
-      if (k > 1) log(`  -- run ${ki + 1}/${k} --`)
+      if (k > 1) log(`${prefix}  -- run ${ki + 1}/${k} --`)
 
-      const res = await runOneTask(paths, task, model, variant, harnessMd, agentTimeout, verifierTimeout, staging, driver, resources)
+      const res = await runOneTask(
+        paths,
+        task,
+        model,
+        variant,
+        harnessMd,
+        agentTimeout,
+        verifierTimeout,
+        staging,
+        driver,
+        resources,
+        undefined,
+        parallelPrepareAuth,
+      )
 
       if (res.error === "setup_failed") {
-        results.push({ task, k: ki + 1, reward: 0, elapsed: 0.0 })
-        taskAgg[task]!.rewards.push(0)
-        taskAgg[task]!.elapsed.push(0.0)
-        taskAgg[task]!.turns.push(0)
-        taskAgg[task]!.errors.push("setup_failed")
-        if (selfCheckOn) taskAgg[task]!.selfScores!.push(null)
+        await withLock(() => {
+          results.push({ task, k: ki + 1, reward: 0, elapsed: 0.0 })
+          taskAgg[task]!.rewards.push(0)
+          taskAgg[task]!.elapsed.push(0.0)
+          taskAgg[task]!.turns.push(0)
+          taskAgg[task]!.errors.push("setup_failed")
+          if (selfCheckOn) taskAgg[task]!.selfScores!.push(null)
+        })
         continue
       }
 
       const passed = res.reward === 1
-      recordToStores(
-        task,
-        res.sessionId,
-        passed,
-        res.turns,
-        res.toolUsage,
-        model,
-        variant,
-        layers,
-        paths.metaRoot,
-        noStore,
-        agent,
-        pins,
-        runEnv as unknown as Record<string, unknown>,
-        res.events,
-        Boolean(args.saveAllTraj),
-        res.timedOut,
-        recordTimeouts,
-        res.elapsed,
-      )
-
-      results.push({ task, k: ki + 1, reward: res.reward, elapsed: res.elapsed })
-      taskAgg[task]!.rewards.push(res.reward)
-      taskAgg[task]!.elapsed.push(round1(res.elapsed))
-      taskAgg[task]!.turns.push(res.turns)
-      if (selfCheckOn) taskAgg[task]!.selfScores!.push(res.selfScore ?? null)
-
-      if (resultsFile) {
-        writeRunResults(resultsFile, {
-          label,
+      // Leaf-level lock #1 (store write) — kept separate from the results/agg
+      // lock below; AsyncMutex is non-reentrant, so no critical section may
+      // ever take the lock again (reviewer carry-forward #2).
+      await withLock(() =>
+        recordToStores(
+          task,
+          res.sessionId,
+          passed,
+          res.turns,
+          res.toolUsage,
           model,
           variant,
-          harness: harnessMetaVal,
-          k,
-          timestamp: runStartTs,
-          taskAgg,
-          status: "in_progress",
-          driver: driver.id,
-          resourceEnforcement: args.enforceResources || undefined,
-        })
-      }
+          layers,
+          paths.metaRoot,
+          noStore,
+          agent,
+          pins,
+          runEnv as unknown as Record<string, unknown>,
+          res.events,
+          Boolean(args.saveAllTraj),
+          res.timedOut,
+          recordTimeouts,
+          res.elapsed,
+        ),
+      )
+
+      // Leaf-level lock #2 (results-file + task_agg): the agg pushes happen
+      // synchronously first, then the file write reads that consistent
+      // snapshot — all inside one lock so a concurrent task can't observe or
+      // race a half-updated agg. `return writeRunResults(...)` so an async
+      // writer (were one ever swapped in) stays chained under the lock.
+      await withLock(() => {
+        results.push({ task, k: ki + 1, reward: res.reward, elapsed: res.elapsed })
+        taskAgg[task]!.rewards.push(res.reward)
+        taskAgg[task]!.elapsed.push(round1(res.elapsed))
+        taskAgg[task]!.turns.push(res.turns)
+        if (selfCheckOn) taskAgg[task]!.selfScores!.push(res.selfScore ?? null)
+        if (resultsFile) {
+          return writeRunResults(resultsFile, {
+            label,
+            model,
+            variant,
+            harness: harnessMetaVal,
+            k,
+            timestamp: runStartTs,
+            taskAgg,
+            status: "in_progress",
+            driver: driver.id,
+            resourceEnforcement: args.enforceResources || undefined,
+          })
+        }
+        return undefined
+      })
+    }
+  }
+
+  if (args.parallel) {
+    const budget: Budget = {
+      cpus: args.cpuBudget ?? DEFAULT_BUDGET.cpus,
+      memoryMb: args.memBudget ?? DEFAULT_BUDGET.memoryMb,
+    }
+    const mutex = new AsyncMutex()
+    const pending = tasks.filter((t) => !doneTasks.has(t))
+    // Compute each pending task's footprint ONCE, before scheduling: a
+    // gpu-declaring task throws here (enforcedResources) and dies the run
+    // before any container lifecycle, matching --enforce-resources' own guard.
+    const footprints = new Map<string, { cpus: number; memoryMb: number }>()
+    for (const t of pending) footprints.set(t, enforcedResources(paths, t))
+    // Still surface the skip lines for already-done tasks (they're excluded
+    // from scheduling, so the shared pipeline never logs them in this path).
+    for (const t of tasks) if (doneTasks.has(t)) log(`\n=== Task: ${t} (skipped — already done) ===`)
+    const items: ScheduledItem[] = pending.map((t) => ({ key: t, ...footprints.get(t)! }))
+    await schedule(items, budget, (it) =>
+      runOneTaskPipeline(it.key, `[${it.key}] `, (fn) => mutex.withLock(fn), footprints.get(it.key)),
+    )
+  } else {
+    // Serial: pass-through lock (runs fn immediately) + empty prefix →
+    // byte-identical to the original inline for-loop.
+    const noopLock = <T>(fn: () => T | Promise<T>): Promise<T> => Promise.resolve().then(fn)
+    for (const task of tasks) {
+      await runOneTaskPipeline(task, "", noopLock, undefined)
     }
   }
 

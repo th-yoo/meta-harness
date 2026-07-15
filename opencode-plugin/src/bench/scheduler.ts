@@ -116,7 +116,12 @@ export function schedule(
   })
 }
 
-/** Whole-call critical section (spec D4). */
+/** Whole-call critical section (spec D4).
+ *
+ * NON-REENTRANT: a `withLock` body must never call `withLock` on the same
+ * mutex — the inner call queues behind the outer (still-running) one and both
+ * await each other forever (silent deadlock). Keep critical sections
+ * leaf-level: one lock per shared mutation site, never nested. */
 export class AsyncMutex {
   private tail: Promise<unknown> = Promise.resolve()
 

@@ -10,6 +10,44 @@ import { BenchError } from "../src/bench/util.ts"
 import type { AgentAuthMounts } from "../src/bench/agent-auth.ts"
 import { opencodeDriver } from "../src/bench/drivers/opencode.ts"
 import * as verifierReal from "../src/bench/verifier.ts"
+import * as resultsReal from "../src/bench/results.ts"
+import * as schedulerReal from "../src/bench/scheduler.ts"
+
+// Same pre-mock snapshot pattern as the verifier block above: capture the
+// REAL results.ts / scheduler.ts exports at module-eval time so the two
+// --parallel tests below can mock.module those out for their narrow critical
+// section and restore them afterward via these captured references (a plain
+// `const` captures the function VALUE, surviving later mock.module swaps of
+// the module's own export slots).
+const realResumeCarryForward = resultsReal.resumeCarryForward
+const realWriteRunResults = resultsReal.writeRunResults
+const realAggTotals = resultsReal.aggTotals
+function restoreResults(): void {
+  mock.module("../src/bench/results.ts", () => ({
+    resumeCarryForward: realResumeCarryForward,
+    writeRunResults: realWriteRunResults,
+    aggTotals: realAggTotals,
+  }))
+}
+const realSchedule = schedulerReal.schedule
+const realAsyncMutex = schedulerReal.AsyncMutex
+const realDefaultBudget = schedulerReal.DEFAULT_BUDGET
+function restoreScheduler(): void {
+  mock.module("../src/bench/scheduler.ts", () => ({
+    schedule: realSchedule,
+    AsyncMutex: realAsyncMutex,
+    DEFAULT_BUDGET: realDefaultBudget,
+  }))
+}
+
+/** Write task.toml files declaring an [environment] footprint (needed by
+ * --parallel, which packs against each task's declared cpus/memory). */
+function writeResourceTomls(tbRoot: string, tasks: string[], cpus = 1, memoryMb = 2048): void {
+  for (const t of tasks) {
+    fs.mkdirSync(path.join(tbRoot, t), { recursive: true })
+    fs.writeFileSync(path.join(tbRoot, t, "task.toml"), `[environment]\ncpus = ${cpus}\nmemory_mb = ${memoryMb}\n`)
+  }
+}
 
 // Snapshot the REAL verifier.ts exports at module-eval time (before any
 // test runs, hence before any mock.module call below) — copyTests/
@@ -1048,6 +1086,117 @@ test("cmdRun: --driver claude-code + an 'unknown' version probe dies before any 
   expect(ran).toBe(false)
 })
 
+// ── run --parallel: budget-packed scheduling (Task 6) ─────────────────────
+// The scheduler itself (canonical-order packing + AsyncMutex) is unit-tested
+// in bench-scheduler.test.ts; here we test cmd-run's INTEGRATION: concurrent
+// execution within budget, byte-identical aggregate results vs. serial, the
+// mutex guarding every shared write, and the serial path staying on its
+// existing for-loop (schedule() never touched).
+
+test("run --parallel: tasks execute concurrently within budget, results identical to serial", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeResourceTomls(tbRoot, ["a", "b", "c"], 1, 2048) // 3×(1cpu/2048MB) fits DEFAULT_BUDGET (3cpu/6144MB)
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const outcome = (t: string) => result({ reward: t === "b" ? 0 : 1, sessionId: `s-${t}`, turns: 2 })
+
+  // Gate: every task blocks until all 3 have STARTED, so all 3 are provably
+  // in flight at once — maxInFlight === 3 iff they truly overlap under budget.
+  let inFlight = 0
+  let maxInFlight = 0
+  let started = 0
+  let releaseAll!: () => void
+  const gate = new Promise<void>((r) => (releaseAll = r))
+  const parallelFake: RunOneTaskFn = async (_p, t) => {
+    inFlight++
+    maxInFlight = Math.max(maxInFlight, inFlight)
+    if (++started === 3) releaseAll()
+    await gate
+    inFlight--
+    return outcome(t)
+  }
+  const parResults = path.join(dir, "par.json")
+  let errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(
+      paths,
+      { tasks: ["a", "b", "c"], resultsFile: parResults, layers: "none", parallel: true, enforceResources: true },
+      parallelFake,
+      fakeExec,
+    )
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(maxInFlight).toBe(3)
+
+  // Serial run over the SAME per-task outcomes.
+  const serialFake: RunOneTaskFn = async (_p, t) => outcome(t)
+  const serResults = path.join(dir, "ser.json")
+  errSpy = spyOn(console, "error").mockImplementation(() => {})
+  logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a", "b", "c"], resultsFile: serResults, layers: "none" }, serialFake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+
+  const par = JSON.parse(fs.readFileSync(parResults, "utf-8"))
+  const ser = JSON.parse(fs.readFileSync(serResults, "utf-8"))
+  expect(par.tasks).toEqual(ser.tasks) // aggregate task_agg identical regardless of completion order
+  expect(par.n_pass).toBe(ser.n_pass)
+  expect(par.n_total).toBe(3)
+})
+
+test("run --parallel: store/results writes serialized via mutex (no interleave)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeResourceTomls(tbRoot, ["a", "b", "c"], 1, 2048)
+  const paths = fakeBenchPaths(dir, tbRoot)
+  const resultsFile = path.join(dir, "r.json")
+
+  // Fake writer that YIELDS mid-write (two microtasks): if two concurrent
+  // task pipelines entered writeRunResults without the mutex holding them
+  // apart, `active` would exceed 1 and `overlap` would flip. The mutex must
+  // keep every write leaf-serialized.
+  let active = 0
+  let overlap = false
+  let writes = 0
+  mock.module("../src/bench/results.ts", () => ({
+    resumeCarryForward: realResumeCarryForward,
+    aggTotals: realAggTotals,
+    writeRunResults: async () => {
+      writes++
+      active++
+      if (active > 1) overlap = true
+      await Promise.resolve()
+      await Promise.resolve()
+      active--
+    },
+  }))
+
+  const fake: RunOneTaskFn = async (_p, t) => result({ reward: 1, sessionId: `s-${t}`, turns: 2 })
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(
+      paths,
+      { tasks: ["a", "b", "c"], resultsFile, layers: "none", parallel: true, enforceResources: true },
+      fake,
+      fakeExec,
+    )
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreResults()
+  }
+  expect(writes).toBeGreaterThan(0)
+  expect(overlap).toBe(false)
+})
+
 test("cmdRun: default driver (opencode) + an 'unknown' version probe still proceeds (lenient, unchanged)", async () => {
   const dir = tmpDir()
   const tbRoot = path.join(dir, "tb-root")
@@ -1071,4 +1220,36 @@ test("cmdRun: default driver (opencode) + an 'unknown' version probe still proce
   }
   const final = JSON.parse(fs.readFileSync(resultsFile, "utf-8"))
   expect(final.status).toBe("complete")
+})
+
+// Placed LAST so its mock.module of scheduler.ts (restored in finally) can't
+// bleed into the real-schedule --parallel tests above even if a restore is
+// imperfect.
+test("serial path untouched: no --parallel → existing for-loop (spy: schedule() never called)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a", "b"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let scheduleCalls = 0
+  mock.module("../src/bench/scheduler.ts", () => ({
+    schedule: (...a: unknown[]) => {
+      scheduleCalls++
+      return (realSchedule as (...x: unknown[]) => unknown)(...a)
+    },
+    AsyncMutex: realAsyncMutex,
+    DEFAULT_BUDGET: realDefaultBudget,
+  }))
+
+  const fake: RunOneTaskFn = async () => result({ reward: 1 })
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a", "b"], layers: "none" }, fake, fakeExec)
+    expect(scheduleCalls).toBe(0)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreScheduler()
+  }
 })

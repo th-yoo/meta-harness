@@ -5,7 +5,7 @@
  * task brief's "Explicitly OUT of scope"); `prep`, `oracle`, `split`, and
  * `report-loop` exist today, no speculative flags for the others.
  */
-import { makeBenchPaths } from "./paths.ts"
+import { makeBenchPaths, requiredApiKeyVar } from "./paths.ts"
 import { cmdPrep } from "./cmd-prep.ts"
 import { cmdOracle } from "./cmd-oracle.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
@@ -40,6 +40,7 @@ commands:
               [--label NAME] [--max-agent-timeout SEC] [--max-verifier-timeout SEC]
               [--resume] [--agent NAME]
               [--pin LAYER=vN]... [--staging scripts|runtime] [--driver ID] [--enforce-resources]
+              [--parallel] [--cpu-budget N] [--mem-budget MB]
   ab          --layer L --candidate vN [--tasks TASK [TASK ...]] [--task-file PATH]
               [--all] [--split-file PATH] [--model ID] [--variant V] [--k N]
               [--layers global|account|project] [--agent NAME] [--alpha F]
@@ -247,6 +248,25 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
       i++
       continue
     }
+    if (a === "--parallel") {
+      out.parallel = true
+      i++
+      continue
+    }
+    if (a === "--cpu-budget") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.cpuBudget = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--mem-budget") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.memBudget = Number(v)
+      i += 2
+      continue
+    }
     if (a === "--no-harness") {
       out.noHarness = true
       i++
@@ -317,6 +337,35 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
     return null
   }
   return out
+}
+
+/** Shared `--parallel` gate (spec D3/D4), reused by both `run` and `ab`
+ * (Task 7). Enforced in the CLI — the universal guard covering ALL drivers,
+ * including ones whose prepareAuth ignores keyOnly (e.g. claude-code) whose
+ * no-key path mounts a shared credential dir rw (the concurrency race). Throws
+ * BenchError (→ rc 1) so the message reaches the operator; must run BEFORE any
+ * podman work. `model` is the already-defaulted model string. */
+export function validateParallel(
+  a: { parallel?: boolean; enforceResources?: boolean; cpuBudget?: number; memBudget?: number },
+  model: string,
+): void {
+  const budgetFlags = a.cpuBudget !== undefined || a.memBudget !== undefined
+  if (budgetFlags && !a.parallel) {
+    throw new BenchError("--cpu-budget/--mem-budget require --parallel")
+  }
+  if (!a.parallel) return
+  if (!a.enforceResources) {
+    throw new BenchError(
+      "--parallel requires --enforce-resources (budget packing needs each task's declared cpus/memory)",
+    )
+  }
+  const keyVar = requiredApiKeyVar(model)
+  if (!process.env[keyVar]) {
+    throw new BenchError(
+      `--parallel needs ${keyVar} in the environment: concurrent tasks can't share the ` +
+        `oauth credential mount safely — export ${keyVar} or drop --parallel`,
+    )
+  }
 }
 
 function parseAbArgs(argv: string[]): CmdAbArgs | null {
@@ -1149,6 +1198,10 @@ export async function main(argv: string[]): Promise<number> {
           printUsage()
           return 2
         }
+        // --parallel gate (before any podman work — matches cmdRun's own
+        // default model resolution so the required key var is derived from the
+        // effective model).
+        validateParallel(runArgs, runArgs.model || "anthropic/claude-sonnet-4-6")
         await cmdRun(paths, runArgs)
         return 0
       }
