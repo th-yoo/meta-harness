@@ -12,8 +12,22 @@ git-tracked (transfer); the **account store and personal memory are host-local
 | `split make --band 0.2,0.8 --sentinels 3 --folds 2` | ✅ `term-bench2/splits/loop1.json` — **14 band tasks** (2 folds ×7) + 3 sentinels |
 | store-writing band run (k2, feeds proposer) | ✅ 4 failure trajectories into `account-global` v0 |
 | **propose → account-global v1** | ✅ opus-4-8; playbook + diagnosis below |
-| `ab` v0 vs v1 (paired McNemar) | ⬜ **NEXT** — ~3–5 hr, resumable |
-| activate on accept | ⬜ |
+| `ab` v0 vs v1 (paired McNemar) | ✅ **DECISION: REJECT** (2026-07-16) — v1 76.5% vs v0 82.4% |
+| activate on accept | ✅ N/A — rejected; v0 stays active |
+
+## LOOP-1 OUTCOME (2026-07-16) — REJECT, and that PROVES #5
+
+`ab-verdict.json`: **decision=reject, winner=active v0.** candidateRate 0.7647 vs activeRate 0.8235 (v0 better ~6pp). held-in Δ=−0.071 (b=2,c=3,p=0.81); held-out Δ=−0.071 (b=0,c=1,p=1.0, **held-out-regression** flag); **sentinels Δ=0 (clean)**. Not statistically significant either way — the gate rejects because there is NO gain + a held-out regression + the non-regress margin isn't cleared.
+
+**#5 is proven.** The full loop ran end-to-end (baseline→split→store-write→propose→v1→ab→verdict); every mechanism fired; the gate **correctly declined a non-improving candidate** and kept v0. Monotone-or-halt confirmed: it halted, didn't degrade.
+
+**The killer empirical finding:** v1 **regressed on `large-scale-text-editing` — the exact task its rule targeted.** v0 [1,0]=1 pass; v1 [0,0]=0 pass. v1's "satisfy the literal spec, don't substitute" bullet **backfired** (made the agent grind on the required `:%normal! @a` and fail, where v0 substituted `:@a` and passed). A hand-curator would have SHIPPED that rule — it reads as obviously correct. **The gate caught it empirically.** This is the "regressed in 5 of 7 iterations" failure mode (external surveys) prevented by construction.
+
+## Lessons → LOOP-2 recipe
+1. **Thin diet caused it.** Loop-1's store-writing run was cut short → only **4 failure trajectories → 3 GENERIC bullets**, not sharply task-targeted. **Loop-2: run the store-writing band run to COMPLETION** (all 14 band × k≥3) for a richer, sharper proposer diet.
+2. **Plausible ≠ helpful.** The literal-spec bullet backfired on timeout-bound tasks. v1's `ab-verdict.json` (a reject) now lives in the store as **proposer evidence** — loop-2's propose sees it and should refine/avoid that rule (the loop's self-correction).
+3. **The gate works — trust it.** Don't hand-seed bullets that "sound right" (the OpenClaw failure mode); let propose→ab decide. Matches `[[external-practices-openclaw]]` + `[[ai-dev-automation-survey]]` (selector≠grader).
+4. Loop-2 = re-run store-write (full) → `/mh-propose account` (→ v2, sees v1's reject) → `ab` v0 vs v2.
 
 ## v1 content (preserved here — the candidate itself is host-local)
 

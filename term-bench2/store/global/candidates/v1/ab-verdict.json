@@ -1,0 +1,303 @@
+{
+  "schemaVersion": 2,
+  "layer": "account-global",
+  "candidate": "v1",
+  "baseline": "v0",
+  "activeFold": 0,
+  "splitHash": "6c7ec3ae08d1",
+  "decision": "reject",
+  "winner": "active",
+  "reasons": [
+    "held-in: delta=-0.071 p=0.813 (b=2,c=3,n=14)",
+    "held-out: delta=-0.071 p_active=0.500 (b=0,c=1,n=14)",
+    "held-out regression"
+  ],
+  "candidateRate": 0.7647,
+  "activeRate": 0.8235,
+  "nTasks": 17,
+  "k": 2,
+  "heldIn": {
+    "nTasks": 7,
+    "nPairs": 14,
+    "b": 2,
+    "c": 3,
+    "delta": -0.0714,
+    "mcnemarP": 0.8125,
+    "bootCI90": [
+      -0.2857,
+      0.1429
+    ]
+  },
+  "heldOut": {
+    "nTasks": 7,
+    "nPairs": 14,
+    "b": 0,
+    "c": 1,
+    "delta": -0.0714,
+    "mcnemarP": 1,
+    "bootCI90": [
+      -0.2143,
+      0
+    ]
+  },
+  "sentinels": {
+    "nTasks": 3,
+    "nPairs": 6,
+    "b": 0,
+    "c": 0,
+    "delta": 0,
+    "mcnemarP": 1,
+    "bootCI90": [
+      0,
+      0
+    ]
+  },
+  "earlyStopped": false,
+  "split": {
+    "file": "loop1.json",
+    "activeFold": 0,
+    "heldIn": [
+      "path-tracing",
+      "constraints-scheduling",
+      "tune-mjcf",
+      "distribution-search",
+      "db-wal-recovery",
+      "prove-plus-comm",
+      "openssl-selfsigned-cert"
+    ],
+    "heldOut": [
+      "extract-elf",
+      "llm-inference-batching-scheduler",
+      "sqlite-with-gcov",
+      "write-compressor",
+      "kv-store-grpc",
+      "merge-diff-arc-agi-task",
+      "large-scale-text-editing",
+      "log-summary-date-ranges",
+      "code-from-image",
+      "git-leak-recovery"
+    ],
+    "sentinels": [
+      "log-summary-date-ranges",
+      "code-from-image",
+      "git-leak-recovery"
+    ]
+  },
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "6ae0423",
+    "harnessHash": "490d41b5b4b02954",
+    "maxAgentTimeout": 600,
+    "provider": "anthropic",
+    "driver": "opencode"
+  },
+  "taskResults": {
+    "path-tracing": {
+      "candidate": [
+        0,
+        0
+      ],
+      "active": [
+        1,
+        0
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "constraints-scheduling": {
+      "candidate": [
+        1,
+        1
+      ],
+      "active": [
+        1,
+        1
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "tune-mjcf": {
+      "candidate": [
+        0,
+        1
+      ],
+      "active": [
+        0,
+        0
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "distribution-search": {
+      "candidate": [
+        0,
+        1
+      ],
+      "active": [
+        1,
+        1
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "db-wal-recovery": {
+      "candidate": [
+        1,
+        0
+      ],
+      "active": [
+        0,
+        1
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "prove-plus-comm": {
+      "candidate": [
+        1,
+        0
+      ],
+      "active": [
+        1,
+        0
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "openssl-selfsigned-cert": {
+      "candidate": [
+        0,
+        0
+      ],
+      "active": [
+        0,
+        0
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "extract-elf": {
+      "candidate": [
+        1,
+        1
+      ],
+      "active": [
+        1,
+        1
+      ],
+      "phase": "held-out",
+      "sentinel": false
+    },
+    "llm-inference-batching-scheduler": {
+      "candidate": [
+        1,
+        1
+      ],
+      "active": [
+        1,
+        1
+      ],
+      "phase": "held-out",
+      "sentinel": false
+    },
+    "sqlite-with-gcov": {
+      "candidate": [
+        1,
+        1
+      ],
+      "active": [
+        1,
+        1
+      ],
+      "phase": "held-out",
+      "sentinel": false
+    },
+    "write-compressor": {
+      "candidate": [
+        0,
+        0
+      ],
+      "active": [
+        0,
+        0
+      ],
+      "phase": "held-out",
+      "sentinel": false
+    },
+    "kv-store-grpc": {
+      "candidate": [
+        1,
+        1
+      ],
+      "active": [
+        1,
+        1
+      ],
+      "phase": "held-out",
+      "sentinel": false
+    },
+    "merge-diff-arc-agi-task": {
+      "candidate": [
+        1,
+        1
+      ],
+      "active": [
+        1,
+        1
+      ],
+      "phase": "held-out",
+      "sentinel": false
+    },
+    "large-scale-text-editing": {
+      "candidate": [
+        0,
+        0
+      ],
+      "active": [
+        1,
+        0
+      ],
+      "phase": "held-out",
+      "sentinel": false
+    },
+    "log-summary-date-ranges": {
+      "candidate": [
+        1,
+        1
+      ],
+      "active": [
+        1,
+        1
+      ],
+      "phase": "held-out",
+      "sentinel": true
+    },
+    "code-from-image": {
+      "candidate": [
+        1,
+        1
+      ],
+      "active": [
+        1,
+        1
+      ],
+      "phase": "held-out",
+      "sentinel": true
+    },
+    "git-leak-recovery": {
+      "candidate": [
+        1,
+        1
+      ],
+      "active": [
+        1,
+        1
+      ],
+      "phase": "held-out",
+      "sentinel": true
+    }
+  },
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "timestamp": "2026-07-14T22:59:10.980Z"
+}
