@@ -178,6 +178,12 @@ export function extractFinalPayload(events: unknown[]): string {
 export async function cmdRoleRun(
   args: {
     project: string
+    /** The CODE dir for this drive: `opencode run --dir` + the persona
+     * `mdPath` lookup. Defaults to `project`, so a caller that passes only
+     * `project` is byte-identical to before. When a squad-run develops in a
+     * throwaway git worktree (spec N1), this is that worktree; `project` then
+     * stays the runtimeRoot where the ledger (pending/checkpoint) lives (N1b). */
+    worktreeDir?: string
     role: string
     input: string
     model?: string
@@ -196,14 +202,15 @@ export async function cmdRoleRun(
   execFn: ExecFn = defaultExec,
 ): Promise<RoleRunResult> {
   const spec = roleSpec(args.role)
-  const mdPath = join(args.project, ".opencode", "agents", `${spec.agent}.md`)
+  const worktreeDir = args.worktreeDir ?? args.project
+  const mdPath = join(worktreeDir, ".opencode", "agents", `${spec.agent}.md`)
   if (!existsSync(mdPath)) die(`no rendered persona at ${mdPath} — run roles-render first`)
   const stamp = parseStamp(readFileSync(mdPath, "utf-8")) ?? undefined
 
   const model = args.model ?? spec.model
   const timeoutSec = args.timeoutSec ?? 600
   const argv = [
-    "opencode", "run", "--dir", args.project, "--agent", spec.agent,
+    "opencode", "run", "--dir", worktreeDir, "--agent", spec.agent,
     "--auto", "--format", "json", "--model", model, args.input,
   ]
   // Squad-spawned bash:allow roles (implementer/evaluator) run `opencode run`

@@ -156,4 +156,27 @@ describe("role-run", () => {
     await cmdRoleRun({ project, role: "analyzer", input: "x" }, execFn)
     expect(seenOpts?.env).toBeUndefined()
   })
+
+  test("worktreeDir routes --dir + persona lookup; project stays the ledger root (N1/N1b)", async () => {
+    const rt = mkdtempSync(join(tmpdir(), "mh-run-rt-"))   // runtimeRoot: NO persona rendered here
+    const wt = mkdtempSync(join(tmpdir(), "mh-run-wt-"))   // worktree: persona rendered here
+    renderRole(wt, "analyzer")                              // account store seeded by beforeEach's seedRenderedRole
+    let seenArgv: string[] = []
+    const execFn = async (argv: string[]) => { seenArgv = argv; return { stdout: multiTurn, rc: 0 } }
+    const res = await cmdRoleRun({ project: rt, worktreeDir: wt, role: "analyzer", input: "x" }, execFn)
+    const at = seenArgv.indexOf("--dir")
+    expect(seenArgv[at + 1]).toBe(wt)                       // code dir = worktree (proves mdPath used wt too — rt has no persona)
+    expect(readPending(rt, res.id).id).toBe(res.id)        // ledger under runtimeRoot
+    expect(listPending(wt)).toEqual([])                     // nothing under the worktree
+    rmSync(rt, { recursive: true, force: true })
+    rmSync(wt, { recursive: true, force: true })
+  })
+
+  test("no worktreeDir: --dir === project (byte-identical back-compat)", async () => {
+    let seenArgv: string[] = []
+    const execFn = async (argv: string[]) => { seenArgv = argv; return { stdout: multiTurn, rc: 0 } }
+    await cmdRoleRun({ project, role: "analyzer", input: "x" }, execFn)   // project seeded in beforeEach
+    const at = seenArgv.indexOf("--dir")
+    expect(seenArgv[at + 1]).toBe(project)
+  })
 })
