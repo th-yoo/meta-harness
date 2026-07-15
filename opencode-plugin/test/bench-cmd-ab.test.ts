@@ -419,6 +419,62 @@ test("cmdAb: default driver (opencode) + an 'unknown' version probe still procee
   expect((verdict["env"] as Record<string, unknown>)["driver"]).toBe("opencode")
 })
 
+// ── budget-identity provenance (Loop-3 T6) ─────────────────────────────────
+//
+// Hermetic MhConfig seam: redirect META_HARNESS_HOME to a throwaway dir for
+// the duration of the callback so readMhConfig()'s recordTimeouts read never
+// touches the developer's real ~/.config/meta-harness/config.json.
+async function withMetaHome<T>(recordTimeouts: boolean | undefined, fn: () => Promise<T>): Promise<T> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mh-cmd-ab-config-"))
+  if (recordTimeouts !== undefined) {
+    fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ recordTimeouts }))
+  }
+  const saved = process.env["META_HARNESS_HOME"]
+  process.env["META_HARNESS_HOME"] = dir
+  try {
+    return await fn()
+  } finally {
+    if (saved === undefined) delete process.env["META_HARNESS_HOME"]
+    else process.env["META_HARNESS_HOME"] = saved
+  }
+}
+
+test("cmdAb: verdict stamps top-level maxAgentTimeout + timeoutRecording=false (flag off)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeTaskTomls(tbRoot, ["t1"])
+  const root = setupCandidate(paths, "project-global", "v1")
+
+  await withMetaHome(false, () =>
+    quiet(() =>
+      cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, maxAgentTimeout: 900 }, async () => res(), fakeExec),
+    ),
+  )
+
+  const verdict = readAbVerdict(root, "v1")! as unknown as Record<string, unknown>
+  expect(verdict["maxAgentTimeout"]).toBe(900)
+  expect(verdict["timeoutRecording"]).toBe(false)
+})
+
+test("cmdAb: verdict stamps timeoutRecording=true when MhConfig.recordTimeouts is ON", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeTaskTomls(tbRoot, ["t1"])
+  const root = setupCandidate(paths, "project-global", "v1")
+
+  await withMetaHome(true, () =>
+    quiet(() =>
+      cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, maxAgentTimeout: 300 }, async () => res(), fakeExec),
+    ),
+  )
+
+  const verdict = readAbVerdict(root, "v1")! as unknown as Record<string, unknown>
+  expect(verdict["maxAgentTimeout"]).toBe(300)
+  expect(verdict["timeoutRecording"]).toBe(true)
+})
+
 // ── --resume ident-check must see a top-level driver (regression) ─────────
 
 test("cmdAb: partial written mid-run stamps a top-level driver matching runIdent, and --resume against it does not die on driver mismatch", async () => {

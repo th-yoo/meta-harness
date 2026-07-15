@@ -223,12 +223,85 @@ export interface AbVerdict {
   heldOut?: AbSetStats | null
   earlyStopped?: boolean
   split?: unknown
+  // Loop-3 T6 (additive-optional — old verdicts still parse): budget-identity
+  // provenance. `maxAgentTimeout`/`timeoutRecording` are stamped top-level by
+  // cmd-ab.ts's verdictDict; `env.resourceEnforcement` is sourced from the
+  // existing `env` block (envBlock() in record.ts) rather than duplicated —
+  // only the one field this gate cares about is typed here.
+  maxAgentTimeout?: number
+  timeoutRecording?: boolean
+  env?: { resourceEnforcement?: boolean; maxAgentTimeout?: number }
 }
 
 /** Accept a candidate iff the v2 decision says "accept"; fall back to the v1
  * winner field for pre-v2 verdicts. This is the single gate /mh-activate uses. */
 export function abAccepted(v: AbVerdict): boolean {
   return v.decision !== undefined ? v.decision === "accept" : v.winner === "candidate"
+}
+
+// ── Budget-identity guard (Loop-3 T6) ───────────────────────────────────────
+//
+// A verdict measured under a DIFFERENT budget than the layer's current active
+// baseline is a silent-Goodhart risk: a candidate can "win" an A/B purely
+// because it ran with a longer --max-agent-timeout, a different recordTimeouts
+// policy, or without the resource ceilings the baseline was scored under —
+// none of which is a genuine harness-rule improvement. The tuple compared is
+// {maxAgentTimeout, timeoutRecording, resourceEnforcement}. Pre-Loop-3
+// verdicts (maxAgentTimeout === undefined — the field didn't exist before T6)
+// are treated as compatible: there is no budget-identity CLAIM to violate, so
+// old verdicts keep activating exactly as before this feature.
+
+/** The budget-identity figures a layer's ACTIVE version was measured under —
+ * used as the comparison target for budgetIdentityMatches. Sourced from the
+ * active version's score.json sessions' env block (T3/T4's env.maxAgentTimeout
+ * / env.resourceEnforcement stamps — the most recent session with an env
+ * block wins) plus, for timeoutRecording (which lives on the VERDICT, not the
+ * per-session env block), the active version's own ab-verdict.json if it has
+ * one. An empty/no-sessions/no-verdict active version yields all-undefined —
+ * budgetIdentityMatches then only ever compares against undefined, which a
+ * verdict with defined figures will NOT match (a real mismatch, not silently
+ * waved through) unless the verdict is itself pre-Loop-3. */
+export function readActiveBudget(storeRoot: string): {
+  maxAgentTimeout?: number
+  timeoutRecording?: boolean
+  resourceEnforcement?: boolean
+} {
+  const version = activeVersion(storeRoot)
+  if (!version) return {}
+  const score = readScore(storeRoot, version)
+  let maxAgentTimeout: number | undefined
+  let resourceEnforcement: boolean | undefined
+  for (let i = score.sessions.length - 1; i >= 0; i--) {
+    const env = score.sessions[i]?.env as { maxAgentTimeout?: number; resourceEnforcement?: boolean } | undefined
+    if (!env) continue
+    if (maxAgentTimeout === undefined) maxAgentTimeout = env.maxAgentTimeout
+    if (resourceEnforcement === undefined) resourceEnforcement = env.resourceEnforcement
+    if (maxAgentTimeout !== undefined && resourceEnforcement !== undefined) break
+  }
+  const activeVerdict = readAbVerdict(storeRoot, version)
+  return { maxAgentTimeout, resourceEnforcement, timeoutRecording: activeVerdict?.timeoutRecording }
+}
+
+/**
+ * True iff `verdict`'s budget-identity tuple {maxAgentTimeout, timeoutRecording,
+ * resourceEnforcement} matches `activeBudget`'s — the gate /mh-activate uses
+ * (engine.ts) before activating an account-scope candidate. `timeoutRecording`
+ * and `resourceEnforcement` are `?? false`-coalesced on both sides (an absent
+ * key and an explicit `false` mean the same thing, matching the existing
+ * resourceEnforcement-coalescing convention elsewhere in this codebase — see
+ * cmd-ab.ts's --resume guard).
+ */
+export function budgetIdentityMatches(
+  verdict: AbVerdict,
+  activeBudget: { maxAgentTimeout?: number; timeoutRecording?: boolean; resourceEnforcement?: boolean },
+): boolean {
+  if (verdict.maxAgentTimeout === undefined) return true // pre-Loop-3 — no claim to violate
+  if (verdict.maxAgentTimeout !== activeBudget.maxAgentTimeout) return false
+  if ((verdict.timeoutRecording ?? false) !== (activeBudget.timeoutRecording ?? false)) return false
+  const verdictEnforcement = verdict.env?.resourceEnforcement ?? false
+  const activeEnforcement = activeBudget.resourceEnforcement ?? false
+  if (verdictEnforcement !== activeEnforcement) return false
+  return true
 }
 
 // ── Meta-harness config (proposer pin) ──────────────────────────────────────

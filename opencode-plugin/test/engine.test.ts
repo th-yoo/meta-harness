@@ -26,6 +26,10 @@ import {
   activeVersion,
   bootstrapStore,
   DEFAULT_SYSTEM_PROMPT,
+  createCandidate,
+  writeActive,
+  recordSession,
+  candidatePath,
 } from "../src/harness-store.ts"
 import { handleScoreCommand } from "../src/score.ts"
 import {
@@ -390,6 +394,154 @@ test("handleCommand /mh-propose with an unknown scope returns an error toast", a
   if (!(r.consumed && r.kind === "toast")) throw new Error("expected toast")
   expect(r.variant).toBe("error")
   expect(r.message).toContain(`unknown scope "bogus"`)
+})
+
+// ── /mh-activate budget-identity gate (Loop-3 T6) ─────────────────────────
+//
+// Seeds the account-global layer's ACTIVE version with a baseline session
+// carrying a budget-identity env stamp, plus a CANDIDATE version's
+// ab-verdict.json — hand-written (not driven through a real cmdAb) since
+// this suite exercises the ENGINE's activation gate, not cmd-ab.ts's verdict
+// stamping (covered separately in bench-cmd-ab.test.ts).
+
+function seedActiveBudget(
+  root: string,
+  version: string,
+  opts: { maxAgentTimeout?: number; resourceEnforcement?: boolean; timeoutRecording?: boolean },
+): void {
+  createCandidate(root, version, "active sys")
+  writeActive(root, version, "active sys")
+  recordSession(root, version, {
+    sessionID: `s-${version}`,
+    passed: true,
+    note: "",
+    turnCount: 3,
+    timestamp: new Date().toISOString(),
+    summary: "seed baseline session",
+    model: "m",
+    variant: "",
+    toolUsage: {},
+    env: { maxAgentTimeout: opts.maxAgentTimeout, resourceEnforcement: opts.resourceEnforcement ?? false },
+  })
+  // Only the ACTIVE version's own ab-verdict.json (if any) carries
+  // timeoutRecording — it's not part of the per-session env block (see
+  // readActiveBudget's doc in harness-store.ts).
+  if (opts.timeoutRecording !== undefined) {
+    fs.writeFileSync(
+      candidatePath(root, version, "ab-verdict.json"),
+      JSON.stringify({
+        winner: "candidate",
+        candidateRate: 1,
+        activeRate: 0,
+        nTasks: 1,
+        timestamp: new Date().toISOString(),
+        decision: "accept",
+        maxAgentTimeout: opts.maxAgentTimeout,
+        timeoutRecording: opts.timeoutRecording,
+        env: { resourceEnforcement: opts.resourceEnforcement ?? false },
+      }),
+    )
+  }
+}
+
+function seedCandidateVerdict(root: string, version: string, overrides: Record<string, unknown> = {}): void {
+  createCandidate(root, version, "candidate sys")
+  fs.writeFileSync(
+    candidatePath(root, version, "ab-verdict.json"),
+    JSON.stringify({
+      winner: "candidate",
+      candidateRate: 1,
+      activeRate: 0,
+      nTasks: 1,
+      timestamp: new Date().toISOString(),
+      decision: "accept",
+      ...overrides,
+    }),
+  )
+}
+
+test("handleCommand /mh-activate: refuses on maxAgentTimeout budget mismatch (no --force)", async () => {
+  const worktree = tmpWorktree()
+  const root = accountGlobalRoot()
+  seedActiveBudget(root, "v1", { maxAgentTimeout: 600, resourceEnforcement: false })
+  seedCandidateVerdict(root, "v2", { maxAgentTimeout: 900, timeoutRecording: false, env: { resourceEnforcement: false } })
+
+  const store = new InMemorySessionStateStore()
+  const { host } = fakeHost(worktree)
+  const engine = new EvolutionEngine(host, store)
+
+  const r = await engine.handleCommand("mh-activate", "account v2", "s")
+  if (!(r.consumed && r.kind === "toast")) throw new Error("expected toast")
+  expect(r.variant).toBe("error")
+  expect(r.message).toContain("maxAgentTimeout")
+  expect(r.message).toContain("600")
+  expect(r.message).toContain("900")
+  expect(activeVersion(root)).toBe("v1") // refused — not activated
+})
+
+test("handleCommand /mh-activate: refuses on resourceEnforcement mismatch (no --force)", async () => {
+  const worktree = tmpWorktree()
+  const root = accountGlobalRoot()
+  seedActiveBudget(root, "v1", { maxAgentTimeout: 600, resourceEnforcement: false })
+  seedCandidateVerdict(root, "v2", { maxAgentTimeout: 600, timeoutRecording: false, env: { resourceEnforcement: true } })
+
+  const store = new InMemorySessionStateStore()
+  const { host } = fakeHost(worktree)
+  const engine = new EvolutionEngine(host, store)
+
+  const r = await engine.handleCommand("mh-activate", "account v2", "s")
+  if (!(r.consumed && r.kind === "toast")) throw new Error("expected toast")
+  expect(r.variant).toBe("error")
+  expect(r.message).toContain("resourceEnforcement")
+  expect(activeVersion(root)).toBe("v1") // refused — not activated
+})
+
+test("handleCommand /mh-activate: --force overrides a budget-identity mismatch", async () => {
+  const worktree = tmpWorktree()
+  const root = accountGlobalRoot()
+  seedActiveBudget(root, "v1", { maxAgentTimeout: 600, resourceEnforcement: false })
+  seedCandidateVerdict(root, "v2", { maxAgentTimeout: 900, timeoutRecording: false, env: { resourceEnforcement: false } })
+
+  const store = new InMemorySessionStateStore()
+  const { host } = fakeHost(worktree)
+  const engine = new EvolutionEngine(host, store)
+
+  const r = await engine.handleCommand("mh-activate", "account v2 --force", "s")
+  if (!(r.consumed && r.kind === "toast")) throw new Error("expected toast")
+  expect(r.variant).toBe("success")
+  expect(activeVersion(root)).toBe("v2")
+})
+
+test("handleCommand /mh-activate: matching budget-identity (600/600, same flags) activates without --force", async () => {
+  const worktree = tmpWorktree()
+  const root = accountGlobalRoot()
+  seedActiveBudget(root, "v1", { maxAgentTimeout: 600, resourceEnforcement: false })
+  seedCandidateVerdict(root, "v2", { maxAgentTimeout: 600, timeoutRecording: false, env: { resourceEnforcement: false } })
+
+  const store = new InMemorySessionStateStore()
+  const { host } = fakeHost(worktree)
+  const engine = new EvolutionEngine(host, store)
+
+  const r = await engine.handleCommand("mh-activate", "account v2", "s")
+  if (!(r.consumed && r.kind === "toast")) throw new Error("expected toast")
+  expect(r.variant).toBe("success")
+  expect(activeVersion(root)).toBe("v2")
+})
+
+test("handleCommand /mh-activate: pre-Loop-3 verdict (no maxAgentTimeout field) still activates without --force (back-compat)", async () => {
+  const worktree = tmpWorktree()
+  const root = accountGlobalRoot()
+  seedActiveBudget(root, "v1", { maxAgentTimeout: 600, resourceEnforcement: false })
+  seedCandidateVerdict(root, "v2") // no maxAgentTimeout/timeoutRecording/env at all — pre-Loop-3 shape
+
+  const store = new InMemorySessionStateStore()
+  const { host } = fakeHost(worktree)
+  const engine = new EvolutionEngine(host, store)
+
+  const r = await engine.handleCommand("mh-activate", "account v2", "s")
+  if (!(r.consumed && r.kind === "toast")) throw new Error("expected toast")
+  expect(r.variant).toBe("success")
+  expect(activeVersion(root)).toBe("v2")
 })
 
 test("handleCommand returns consumed:false for a non-mh command", async () => {

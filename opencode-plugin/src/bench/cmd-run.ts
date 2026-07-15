@@ -541,6 +541,8 @@ export async function cmdRun(
             status: "in_progress",
             driver: driver.id,
             resourceEnforcement: args.enforceResources || undefined,
+            maxAgentTimeout,
+            timeoutRecording: recordTimeouts,
           })
         }
         return undefined
@@ -605,6 +607,8 @@ export async function cmdRun(
       status: "complete",
       driver: driver.id,
       resourceEnforcement: args.enforceResources || undefined,
+      maxAgentTimeout,
+      timeoutRecording: recordTimeouts,
     })
     const [np, nt] = aggTotals(taskAgg)
     log(nt ? `FINAL: ${np}/${nt} passed (${pyFixed((100 * np) / nt, 1)}%)` : "FINAL: no tasks")

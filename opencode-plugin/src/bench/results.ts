@@ -155,6 +155,16 @@ export interface RunResultsMeta {
    * via a `?? false` coalesce, so an absent key and an explicit `false`
    * mean the same thing on the read side. */
   resourceEnforcement?: boolean
+  /** Budget-identity provenance (Loop-3 T6) — the wall-clock agent-phase
+   * budget this run used (args.maxAgentTimeout ?? 0), mirroring the same
+   * field cmd-ab.ts stamps into ab-verdict.json. Always present (unlike
+   * resourceEnforcement above) — every call site already has a concrete
+   * number in scope, so there is no "omit when off" case to preserve. */
+  maxAgentTimeout: number
+  /** Whether a wall-clock agent-phase timeout was recorded as a genuine
+   * stored fail for this run (Loop-3 T3's recordTimeouts flag). Always
+   * present, same rationale as maxAgentTimeout above. */
+  timeoutRecording: boolean
 }
 
 /**
@@ -179,6 +189,8 @@ export function writeRunResults(resultsFile: string, meta: RunResultsMeta): void
     status: meta.status,
     driver: meta.driver,
     resourceEnforcement: meta.resourceEnforcement,
+    maxAgentTimeout: meta.maxAgentTimeout,
+    timeoutRecording: meta.timeoutRecording,
   })
   log(`Results written → ${resultsFile}`)
 }

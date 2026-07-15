@@ -198,6 +198,8 @@ function baseMeta(overrides: Partial<RunResultsMeta> = {}): RunResultsMeta {
     taskAgg: {},
     status: "complete",
     driver: "opencode",
+    maxAgentTimeout: 600,
+    timeoutRecording: false,
     ...overrides,
   }
 }
@@ -220,6 +222,18 @@ test("writeRunResults: resourceEnforcement=true -> present and true in the writt
 
   const parsed = JSON.parse(fs.readFileSync(resultsFile, "utf-8")) as Record<string, unknown>
   expect(parsed["resourceEnforcement"]).toBe(true)
+})
+
+// ── budget-identity provenance (Loop-3 T6) ────────────────────────────────
+
+test("writeRunResults: stamps maxAgentTimeout + timeoutRecording into the written JSON", () => {
+  const dir = tmpDir()
+  const resultsFile = path.join(dir, "run-results.json")
+  writeRunResults(resultsFile, baseMeta({ maxAgentTimeout: 900, timeoutRecording: true }))
+
+  const parsed = JSON.parse(fs.readFileSync(resultsFile, "utf-8")) as Record<string, unknown>
+  expect(parsed["maxAgentTimeout"]).toBe(900)
+  expect(parsed["timeoutRecording"]).toBe(true)
 })
 
 test("resumeCarryForward: 4th param omitted (legacy call site) defaults to flag-off — matches a pre-feature file", () => {

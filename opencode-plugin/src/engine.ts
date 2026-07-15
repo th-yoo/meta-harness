@@ -37,6 +37,8 @@ import {
   activateCandidate,
   readAbVerdict,
   abAccepted,
+  readActiveBudget,
+  budgetIdentityMatches,
   writeTrajectory,
   pruneTrajectories,
   type StoreLayer,
@@ -723,6 +725,33 @@ export class EvolutionEngine {
             ? `held-in delta=${hi.delta >= 0 ? "+" : ""}${hi.delta} p=${hi.mcnemarP} CI90=${JSON.stringify(hi.bootCI90)}`
             : `candidate ${fmtRate(verdict.candidateRate)} vs active ${fmtRate(verdict.activeRate)}, n=${verdict.nTasks}`
           return { consumed: true, kind: "toast", message: `${version} was not accepted by the ab gate (${dec}; ${detail}) — refusing; pass --force to override`, variant: "error" }
+        }
+        // Budget-identity gate (Loop-3 T6): refuse to activate a candidate
+        // measured under a DIFFERENT budget than the layer's active baseline
+        // — silent-Goodhart guard (see harness-store.ts's budgetIdentityMatches
+        // doc). A pre-Loop-3 verdict (no maxAgentTimeout field) is treated as
+        // compatible by budgetIdentityMatches itself, so it falls through here
+        // unchanged.
+        const activeBudget = readActiveBudget(layer.root)
+        if (!budgetIdentityMatches(verdict, activeBudget)) {
+          const mismatches: string[] = []
+          if (verdict.maxAgentTimeout !== activeBudget.maxAgentTimeout) {
+            mismatches.push(`maxAgentTimeout ${verdict.maxAgentTimeout}s (candidate) vs ${activeBudget.maxAgentTimeout}s (active)`)
+          }
+          if ((verdict.timeoutRecording ?? false) !== (activeBudget.timeoutRecording ?? false)) {
+            mismatches.push(`timeoutRecording ${verdict.timeoutRecording ?? false} (candidate) vs ${activeBudget.timeoutRecording ?? false} (active)`)
+          }
+          const verdictEnforcement = verdict.env?.resourceEnforcement ?? false
+          const activeEnforcement = activeBudget.resourceEnforcement ?? false
+          if (verdictEnforcement !== activeEnforcement) {
+            mismatches.push(`resourceEnforcement ${verdictEnforcement} (candidate) vs ${activeEnforcement} (active)`)
+          }
+          return {
+            consumed: true,
+            kind: "toast",
+            message: `${version} was measured under a different budget than ${layer.scope}'s active baseline (${mismatches.join("; ")}) — refusing to activate (re-baseline per T7, or pass --force to override)`,
+            variant: "error",
+          }
         }
       }
       const ok = activateCandidate(layer.root, version)

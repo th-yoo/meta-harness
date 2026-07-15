@@ -371,6 +371,18 @@ export async function cmdAb(
       activeFold,
       splitHash: runIdent["splitHash"],
       driver: runIdent["driver"],
+      // Budget-identity provenance (Loop-3 T6): the wall-clock budget and
+      // timeout-recording policy this verdict was MEASURED under. Read back
+      // by harness-store.ts's budgetIdentityMatches at /mh-activate time so
+      // a candidate scored under a different budget than the layer's active
+      // baseline is refused rather than silently activated (a candidate that
+      // "wins" only because it got a longer timeout — or a different
+      // recordTimeouts policy — isn't a fair A/B). resourceEnforcement is
+      // deliberately NOT duplicated top-level here — it's already stamped in
+      // `env.resourceEnforcement` below (envB), and budgetIdentityMatches
+      // sources it from there.
+      maxAgentTimeout,
+      timeoutRecording: recordTimeouts,
       decision,
       winner,
       reasons,
