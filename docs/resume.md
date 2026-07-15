@@ -195,7 +195,19 @@ forbids shared oauth mounts by design) — then flipping enforcement on is a
 re-baseline event, bundled with Loop-3's recordTimeouts flip. Deferred
 pre-first-sweep item: interior log-line prefixes under --parallel.
 
-⚠️ **OPEN — the oauth-race rationale behind the --parallel key requirement is
+✅ **RESOLVED 2026-07-16 (home session): the oauth-race rationale is CONFIRMED,
+not just assumed** — Anthropic's own tracker (claude-code #22600/#48786) + local
+`~/.claude` `expiresAt` ≈ 8h show the refresh token is single-use, rotated on
+refresh (~8h expiry, NOT per task), with no locking in CC or the harness → the
+`--parallel` shared-credential race is real. DECISION recorded in
+`docs/auth-delegation-design.md`: **surface, don't handle** — the `--parallel`
+guard rejects oauth+parallel up front, user chooses serial (safe) or a static key
+(keyOnly). The destructive live experiment is NOT needed (existence proven; a real
+refresh would rotate + invalidate the live token). Now TESTED (`46131ec`: ab-guard
+fires + keyOnly removes the race surface). The block below is the original OPEN
+framing, kept for context.
+
+⚠️ **(historical) the oauth-race rationale behind the --parallel key requirement was
 UNTESTED (user-flagged as a big issue 2026-07-16).** The whole D4 design (no
 oauth under --parallel; ANTHROPIC_API_KEY mandatory) rests on the pre-existing
 `agent-auth.ts:32-37` comment ("plugin rotates the refresh token on use;

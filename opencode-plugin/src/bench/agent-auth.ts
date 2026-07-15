@@ -30,11 +30,15 @@
  * then the whole temp root removed) by the returned `cleanup()`.
  *
  * Concurrency: every container mounts the SAME rw opencode-data dir
- * (auth.json lives there), and the plugin rotates the refresh token on use —
- * concurrent containers refreshing at the same time can race each other's
- * writes to that one file. Acceptable for sequential/small-k runs; the
- * durable fix is an API key (see paths.ts's `apiKeyEnv`), which coexists
- * with this oauth-mount path and sidesteps oauth/refresh entirely.
+ * (auth.json lives there), and the plugin rotates the refresh token on
+ * REFRESH — i.e. at the ~8h access-token expiry, NOT per request/task. The
+ * refresh token is single-use: one container's refresh invalidates every other
+ * holder's, and nothing locks the shared file (confirmed: Anthropic claude-code
+ * #22600 / #48786). So concurrent containers that cross a refresh boundary race
+ * each other; runs shorter than the token TTL never refresh and are safe.
+ * Policy (docs/auth-delegation-design.md): we do NOT coordinate — the --parallel
+ * guard SURFACES this and the user chooses serial or a static API key (see
+ * paths.ts's `apiKeyEnv` / keyOnly), which sidesteps oauth/refresh entirely.
  *
  * Testability: `platform` / `execFn` / `home` are all injectable so tests
  * never touch the real Keychain, spawn `security`, or read the real host
