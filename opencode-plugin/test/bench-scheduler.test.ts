@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test"
-import { schedule, AsyncMutex, DEFAULT_BUDGET, type Budget, type ScheduledItem } from "../src/bench/scheduler.ts"
+import { schedule, packPreview, AsyncMutex, DEFAULT_BUDGET, type Budget, type ScheduledItem } from "../src/bench/scheduler.ts"
 
 // ── test helpers ─────────────────────────────────────────────────────────
 
@@ -209,6 +209,63 @@ test("runFn rejection propagates after in-flight settle", async () => {
 
   await expect(result).rejects.toBe(boom)
   expect(settled).toBe(true)
+})
+
+// ── packPreview() ────────────────────────────────────────────────────────
+// Mirrors the schedule() scenarios above (same items/budgets), asserting
+// packPreview's static grouping agrees with what schedule() actually
+// launched together in each of those tests.
+
+test("packPreview: empty items → no groups", () => {
+  expect(packPreview([], DEFAULT_BUDGET)).toEqual([])
+})
+
+test("packPreview: 3 lights co-run under default budget → one group", () => {
+  const items = [item("0", 1), item("1", 1), item("2", 1)]
+  expect(packPreview(items, DEFAULT_BUDGET)).toEqual([["0", "1", "2"]])
+})
+
+test("packPreview: 2-cpu item packs with one 1-cpu, not two", () => {
+  const budget: Budget = { cpus: 3, memoryMb: 6144 }
+  const items = [item("a", 2), item("b", 1), item("c", 1)]
+  expect(packPreview(items, budget)).toEqual([["a", "b"], ["c"]])
+})
+
+test("packPreview: over-budget item drains pool then runs alone", () => {
+  const budget: Budget = { cpus: 3, memoryMb: 6144 }
+  const items = [item("x", 1), item("y", 4)] // y exceeds the total budget
+  expect(packPreview(items, budget)).toEqual([["x"], ["y"]])
+})
+
+test("packPreview: canonical order — no skip-ahead", () => {
+  const budget: Budget = { cpus: 3, memoryMb: 6144 }
+  // a=2 fits (remaining 1). b=2 does NOT fit remaining=1. c=1 WOULD fit
+  // remaining=1, but must not skip ahead of b.
+  const items = [item("a", 2), item("b", 2), item("c", 1)]
+  expect(packPreview(items, budget)).toEqual([["a"], ["b", "c"]])
+})
+
+test("packPreview: budget released on completion — a large solo item, then the rest together", () => {
+  const budget: Budget = { cpus: 3, memoryMb: 6144 }
+  const items = [item("0", 3), item("1", 1), item("2", 1), item("3", 1)]
+  expect(packPreview(items, budget)).toEqual([["0"], ["1", "2", "3"]])
+})
+
+test("packPreview: over-total item mid-list stops the current group without joining it", () => {
+  const budget: Budget = { cpus: 3, memoryMb: 6144 }
+  const items = [item("a", 1), item("huge", 10), item("b", 1)]
+  // "a" starts a group; "huge" exceeds total budget so it can't join and
+  // instead starts its own solo group; "b" starts a fresh group after that.
+  expect(packPreview(items, budget)).toEqual([["a"], ["huge"], ["b"]])
+})
+
+test("packPreview: respects memory as well as cpu", () => {
+  const budget: Budget = { cpus: 8, memoryMb: 4096 }
+  const items = [
+    { key: "a", cpus: 1, memoryMb: 3000 },
+    { key: "b", cpus: 1, memoryMb: 2000 }, // doesn't fit remaining 1096 MB
+  ]
+  expect(packPreview(items, budget)).toEqual([["a"], ["b"]])
 })
 
 // ── AsyncMutex ───────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import { cmdPrep } from "./cmd-prep.ts"
 import { cmdOracle } from "./cmd-oracle.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
 import { cmdRun, type CmdRunArgs } from "./cmd-run.ts"
+import { cmdTaskLoad, type CmdTaskLoadArgs } from "./cmd-task-load.ts"
 import { cmdAb, type CmdAbArgs } from "./cmd-ab.ts"
 import { cmdJudgeAudit, type JudgeAuditArgs } from "./judge-audit.ts"
 import { LAYER_CHOICES, type LayerName } from "./record.ts"
@@ -41,6 +42,9 @@ commands:
               [--resume] [--agent NAME]
               [--pin LAYER=vN]... [--staging scripts|runtime] [--driver ID] [--enforce-resources]
               [--parallel] [--cpu-budget N] [--mem-budget MB]
+  task-load   [--tasks TASK [TASK ...]] [--task-file PATH] [--all]
+              [--results-file PATH] [--cpu-budget N] [--mem-budget MB]
+              (read-only: declared footprint + timeouts + co-run preview)
   ab          --layer L --candidate vN [--tasks TASK [TASK ...]] [--task-file PATH]
               [--all] [--split-file PATH] [--model ID] [--variant V] [--k N]
               [--layers global|account|project] [--agent NAME] [--alpha F]
@@ -165,7 +169,8 @@ function parseOracleArgs(argv: string[]): OracleArgs | null {
 }
 
 /** Consume a `--tasks TASK [TASK...]` run, stopping at the next `--flag`.
- * Shared by parseRunArgs/parseAbArgs (both accept the same nargs="+" form). */
+ * Shared by parseRunArgs/parseAbArgs/parseTaskLoadArgs (all accept the same
+ * nargs="+" form). */
 function consumeTasksList(argv: string[], i: number): { vals: string[]; next: number } | null {
   const vals: string[] = []
   let j = i + 1
@@ -175,6 +180,56 @@ function consumeTasksList(argv: string[], i: number): { vals: string[]; next: nu
   }
   if (vals.length === 0) return null
   return { vals, next: j }
+}
+
+function parseTaskLoadArgs(argv: string[]): CmdTaskLoadArgs | null {
+  const out: CmdTaskLoadArgs = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--tasks") {
+      const r = consumeTasksList(argv, i)
+      if (r === null) return null
+      out.tasks = r.vals
+      i = r.next
+      continue
+    }
+    if (a === "--task-file") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.taskFile = v
+      i += 2
+      continue
+    }
+    if (a === "--all") {
+      out.all = true
+      i++
+      continue
+    }
+    if (a === "--results-file") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.resultsFile = v
+      i += 2
+      continue
+    }
+    if (a === "--cpu-budget") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.cpuBudget = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--mem-budget") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.memBudget = Number(v)
+      i += 2
+      continue
+    }
+    return null
+  }
+  return out
 }
 
 function parseRunArgs(argv: string[]): CmdRunArgs | null {
@@ -1223,6 +1278,15 @@ export async function main(argv: string[]): Promise<number> {
         // effective model).
         validateParallel(runArgs, runArgs.model || "anthropic/claude-sonnet-4-6")
         await cmdRun(paths, runArgs)
+        return 0
+      }
+      case "task-load": {
+        const taskLoadArgs = parseTaskLoadArgs(subArgs)
+        if (taskLoadArgs === null) {
+          printUsage()
+          return 2
+        }
+        cmdTaskLoad(paths, taskLoadArgs)
         return 0
       }
       case "ab": {

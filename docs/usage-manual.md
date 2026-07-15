@@ -421,6 +421,60 @@ Both auth paths require:
 
 These are set automatically by the runner; no manual configuration is needed.
 
+### Resource enforcement & concurrent packing (`--enforce-resources` / `--parallel`)
+
+By default `run`/`ab` execute tasks **serially and unconstrained** — each container gets
+whatever cpu/memory the host has free, one task at a time. Two flags change that:
+
+- **`--enforce-resources`** — `podman create` is given `--cpus`/`--memory` from each task's
+  declared `task.toml` `[environment]` footprint (`cpus`, `memory_mb`; falls back to 1 cpu /
+  2048 MB when the table is absent). A task declaring `gpus > 0` is refused outright (the VM
+  has none — running it unconstrained under enforcement would be silently wrong). Safe to use
+  alone, serially.
+- **`--parallel`** — packs multiple tasks' containers into concurrent execution under a shared
+  budget (`--cpu-budget`/`--mem-budget`, **default 3 cpu / 6144 MB**), using the greedy
+  canonical-order packer described below. `--parallel` has two **hard requirements**, both
+  checked before any podman work:
+  1. **`--enforce-resources` must also be on** — the packer needs each task's declared
+     footprint to know what fits.
+  2. **A provider API key must be set** for the model's provider — e.g. `ANTHROPIC_API_KEY`
+     for an `anthropic/...` model. Concurrent tasks can't safely share the oauth credential
+     mount (a live refresh-token write race), so `--parallel` refuses to run without a
+     durable, non-shared credential. Export the key, or drop `--parallel` and run serially
+     with oauth as usual.
+
+Missing either requirement is a hard `error:` before any container starts, not a silent
+fallback.
+
+**Packing semantics.** Tasks launch in canonical (submission) order, no skip-ahead — a task
+that doesn't currently fit blocks everything behind it until a running task completes and
+frees budget, even if a later, smaller task would fit right now. A task whose declared
+footprint exceeds the **total** budget (not just what's currently free) can never coexist with
+anything else: the pool drains completely, that task runs alone, then packing resumes from the
+next task.
+
+Inspect what a given task list/budget would do — declared footprint, timeouts, and (with a
+prior results file) mean elapsed time per task — with the read-only **`task-load`**
+subcommand:
+
+```bash
+bun term-bench2/runner.ts task-load --all --results-file term-bench2/results/last.json
+bun term-bench2/runner.ts task-load --tasks regex-log hello_world --cpu-budget 4 --mem-budget 8192
+```
+
+`task-load` never touches podman — it's safe to run any time, including before `prep --apply`.
+
+**Re-baseline warning.** Turning `--enforce-resources` on changes the measurement regime: a
+task that passed unconstrained can now fail (or time out) purely from a tighter cpu/memory
+ceiling, so scores from before and after the flip aren't directly comparable — don't mix them
+in one `ab` or trend line. This is the same category of cutover as Loop-3's `recordTimeouts`
+flag (wall-clock agent timeouts start counting as stored fails instead of being silently
+dropped — see `docs/resume.md`): each is a deliberate operator decision, not a default-on
+migration, and each wants a fresh baseline run before trusting new numbers against old ones.
+Since both flags independently change what counts as a pass, **flip them together and
+re-baseline once** — one clean cutover, one new `v0` — rather than staggering two separate
+re-baseline events.
+
 ### Runner subcommands — `bun term-bench2/runner.ts <sub>` (top-level `--tb-root PATH`)
 
 - **`prep`** `[--apply] [--uninstall] [--clean-mountpoints]` — host setup (mkdir + apt);
@@ -429,13 +483,20 @@ These are set automatically by the runner; no manual configuration is needed.
   `anthropic/claude-sonnet-4-6`), `--variant`, `--k` (1), `--layers {global,account,project,none}`
   (global), `--agent NAME`, `--pin LAYER=vN` (repeatable), `--driver ID` (opencode), `--no-store`, `--save-all-traj`,
   `--no-harness`, `--results-file P` (implies `--no-store`), `--label`, `--max-agent-timeout SEC`,
-  `--resume`.
+  `--resume`, `--enforce-resources`, `--parallel` (needs `--enforce-resources` + a provider API
+  key — see above), `--cpu-budget N` (3), `--mem-budget MB` (6144).
 - **`ab`** `--layer {account-global,project-global,account-role,project-role}` + `--candidate vN`
   (both required); split via `--split-file` (default `term-bench2/splits.json`) or legacy
   `--tasks/--task-file/--all` (never accepts); `--model` (sonnet-4-6), `--variant`, `--k` (2),
   `--layers {global,account,project}`, `--agent` (required for role layers), `--driver ID` (opencode), `--alpha` (0.05),
   `--nonregress-margin` (0.05), `--min-tasks-before-stop` (12), `--no-early-stop`,
-  `--max-agent-timeout`, `--resume`, `--no-store`, `--save-all-traj`, `--results-file`.
+  `--max-agent-timeout`, `--resume`, `--no-store`, `--save-all-traj`, `--results-file`,
+  `--enforce-resources`, `--parallel` (same two hard requirements as `run`), `--cpu-budget N`
+  (3), `--mem-budget MB` (6144).
+- **`task-load`** `--tasks T… | --task-file P | --all`, `--results-file P` (adds a mean-elapsed
+  column), `--cpu-budget N` (3), `--mem-budget MB` (6144) — read-only: prints each selected
+  task's declared cpu/memory/timeouts plus a co-run-groups preview under the active budget. No
+  podman work.
 - **`split`** `{make,rotate,show}` `--seed` (42) `--folds` (4) `--source` (`baseline-tasks.txt`) `--split-file`, `--results PATH` (repeatable, enables difficulty band), `--band LO,HI` (0.2,0.8), `--sentinels N` (3), `--sentinel-hi HI` (0.9).
 - **`oracle`** `[--tasks T…] [--results-file P]` — token-free pipeline validation via solution scripts.
 - **`report-loop`** `[--json] [--sink PATH …]` `[--no-flag]` `[--plateau-ab-k K]` `[--plateau-trial-k K]` — merged loop observability + plateau detection (Python 3.12+).
