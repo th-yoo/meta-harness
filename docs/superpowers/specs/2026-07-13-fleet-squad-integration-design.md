@@ -1,12 +1,15 @@
 # Fleet × meta-harness integration — design
 
-Status: all design decisions closed (D1–D7); self-review done. Pending:
+Status: all design decisions closed (D1–D9); self-review done. Pending:
 user review gate, then writing-plans.
 Decided: D1 node grammar, D2 prompt ownership (store is truth), D3 drive
 platform, D4 master contract + OpenClaw seat, D5 squad evolution + full
 event→score mapping + escalation taxonomy + communication grammar, D6
-store topology, D7 repo boundary; orchestration; squad flow; SquadDef
-schema.
+store topology, D7 repo boundary; **D8 master lifecycle & scaling (singleton
+authority + composite scheduling, multi-project namespace, two-axis lifetime;
+§9.4), D9 crash-consistency (atomic commit boundaries + restart reconciliation;
+§9.5)** — both prior-art validated (`ai-dev-automation-survey.md`);
+orchestration; squad flow; SquadDef schema.
 
 Companion: [improvement-loops.md](../../improvement-loops.md) — how the
 existing static & dynamic improvement loops work; this design plugs the fleet
@@ -637,6 +640,72 @@ Held last: weakest signal (subjective), highest blast radius (human trust +
 outward actions). Evolving the human interface before the loop proves itself
 on verifier-grounded roles = maximum risk, minimum evidence.
 
+### 9.4 Master lifecycle & scaling (DECIDED — D8)
+
+Formalizes the master↔node asymmetry §9.2 asserts, and how one master scales
+to many projects. **Prior-art validated** (2026-07-16 survey, `ai-dev-automation-survey.md`):
+persistent-supervisor + ephemeral-workers is the dominant production pattern
+(Fortune-500 supervisor-worker, Temporal durable-execution namespaces,
+OpenHands DAG, MS orchestrator-subagent); OpenClaw itself is one persistent
+Gateway daemon spawning ephemeral `claude -p` workers, resumed by stored
+session IDs — the exact shape of this seat.
+
+**Two orthogonal axes — separate them or the model gets muddled:**
+- **Authority** (permission, credential root, human-gateway, the must-never-self-widen part) vs **skill** (LLM domain work). Master carries authority + *deterministic* orchestration; skill lives in the LLM leaves. Master has no OOA/OOD of its own — it delegates decomposition to a Designer-node (self-hosting N4) and only schedules. Keep the master deterministic (no LLM planner) — that is what buys "predictable/debuggable/accountable" over autonomous swarms.
+- **Process-lifetime** (ephemeral ↔ daemon) vs **state-durability** (always durable/resumable). These are independent. State-durability is **universal** — every node is resumable (park & reopen) via the opencode/CC session store + the squad checkpoint; §9.1 exit-and-wait already rides it. Process-lifetime is a **per-node policy** (default *ephemeral*; master = *daemon*; a node is *promotable to daemon* for interactive-latency or an event-reactive "patrol"). Lifetime joins gate-policy + credential-scope as a per-node evolvable policy attribute.
+
+> Substrate verified from source (2026-07-16, `~/z2/opencode/packages/opencode/src/cli/cmd/run.ts`): headless `opencode run` **persists sessions by default** — its `session()` resolver's default path is `sdk.session.create(...)` (line ~519), producing a listable/gettable/forkable session. Resume: `--continue`/`-c` (most-recent root session, via `session.list().find(!parentID)`), `--session`/`-s <id>` (`session.get` — missing id → "Session not found" + `exit 1`), `--fork` (fork before continuing), `--replay` (replay history on resume). We already capture each drive's `ses_…` (`run.ts` `extractSessionId`). Today park/reopen re-drives from the **squad checkpoint** with a fresh session (correct-by-construction), NOT via opencode's own `-s` resume. Using `-s` to skip the re-drive is a *future cost optimization*, gated on: pass `--dir = worktreeDir` explicitly (opencode #28581 — `-s` can bind to the launch dir, not the session's stored dir) and clear `OPENCODE_SERVER_{PASSWORD,USERNAME}` (opencode #28407 — set by the desktop app, they break headless `run`'s in-process HTTP client → the same "Session not found"). So the *substrate* exists; we deliberately rely on our own checkpoint until that optimization is worth it.
+
+**D8 decisions:**
+
+| # | Decision | Rationale |
+|---|---|---|
+| D8.1 | **Master = persistent singleton *authority*** — a thin coordinator + durable log, NOT a busy executor. Skill in leaves; orchestration deterministic. | Singleton = one logical authority/namespace, not one process. Scaled by externalized state (§9.1 checkpoint, D6 store, self-hosting `runtimeRoot`), so it is restart-safe, not a throughput bottleneck. Matches OpenClaw's single Gateway hub. |
+| D8.2 | **Singleton authority + *composite* scheduling** — one master; sub-fleets = composites of nodes driven by *ephemeral sub-schedulers*, never persistent sub-masters. | Structure + orchestration recurse (the fractal); *authority* does not. Composite authority = N persistent daemons + N credential roots = fragmented durable state + a larger security surface, for no gain. |
+| D8.3 | **Multi-project under one master** via a **project namespace**: per-project isolation of store-slice / worktrees / integration-branch / credential-scope / gate-policy, plus **fair-share scheduling under one global resource cap** (shared LLM rate-limit / disk / API quota — the real noisy-neighbor risk). | OpenClaw runs many isolated agents on one Gateway (own workspace/agentDir/creds, "never share"); Temporal namespaces many workflows on one service. Project count does NOT force composite. |
+| D8.4 | **Lifetime = two axes** (above): state-durability universal; process-lifetime a per-node policy, default ephemeral. | Ephemeral process + durable state = the Temporal principle: resume-from-durable beats holding a live process (disk not RAM at scale; less retained state = lower security surface; restart-safe). |
+| D8.5 | **Composite / per-tenant sub-master DEFERRED** to a **trust-boundary** trigger — projects with a different owner/org/host/credential domain, or an availability SLA a restartable singleton can't meet. Multi-*tenant* triggers it; multi-*project* does not. | Register in `explicitly-not-now.md` (§2.15). Same-owner many-projects → singleton is correct + simpler. |
+
+**D8.3 does NOT reopen D6.** The "per-project store-slice" is the *existing*
+account/project store-layer boundary (the outer scope axis) — projects were
+always separate stores. D6 ("one store per role NAME across all depths,
+nodePath = provenance") governs *intra*-project pooling across squad depth and
+is untouched: within a project, all depth-N `implementer`s still share one
+role store. Project namespace = outer layer; D6 = inner pooling. No new
+store-splitting axis.
+
+### 9.5 Crash-consistency — ephemeral nodes vs system-down (DECIDED — D9)
+
+Ephemeral node processes are safe against a mid-run crash NOT because nothing
+is lost, but because **incomplete work is discarded, not consumed** — the
+system only ever advances past an **atomic commit boundary**. A crash costs
+the in-flight step's compute (re-run it, ≤ the concurrency cap), never a
+corrupt or half-merged artifact. This is the durable-execution guarantee
+(Temporal replays incomplete activities; Gas Town: Git-backed state, resume
+from last checkpoint; LangGraph durable-checkpoint/resume).
+
+**Atomic boundaries (already the design's shape):** worktree edits are real
+only after `git commit`; a node is done only after its checkpoint + score are
+written; a merge is real only after its merge commit exists. Anything before
+its boundary sits outside the durable record → thrown away on restart, never
+consumed. **git itself is the crash-consistent artifact store** (objects
+durable once written; ref update = lockfile+rename, atomic) — the integration
+branch's commits ARE the durable truth of completed nodes.
+
+**D9 requires (land with self-hosting N1b/N5a). Current atomicity is uneven (verified):**
+`saveCheckpoint` (`squad-cli.ts:83-88`) and the squad-def score channel
+(`squad-def.ts:348`) already use `writeJsonAtomic` (temp+rename,
+`bench/util.ts:68-74`); the **role-store `score.json`** (`harness-store.ts`
+`writeJson:476-479`, via `recordSession`/`createCandidate`) is a plain
+`writeFileSync` — **NOT atomic**. So:
+1. **Atomic durable-state writes.** Make the **role-store `score.json`** atomic, and write the **new N5a DAG-scheduler-state** via `writeJsonAtomic` from the start (a torn DAG-state file = an unrecoverable run). Checkpoint + squad-def score already comply. **Also fsync-harden**: `writeJsonAtomic` does temp+rename but **no `fsync`** — it survives a torn write / process crash but not a power-loss before the rename is flushed. Add `fsync(file)` + `fsync(dir)` to the shared writer for true system-down durability (currently absent everywhere).
+2. **Restart reconciliation** in the scheduler: on launch, reconcile persisted *intent* against *git truth* — abort any in-progress merge (`MERGE_HEAD` present), treat a node whose commit-SHA is on the integration branch as done, re-drive nodes that were live at crash, discard their partial worktrees. Idempotent (re-merging an applied commit = no-op).
+3. **Per-phase completion flag** in the checkpoint so resume re-runs only the in-flight phase, not completed ones.
+
+Crash blast radius is bounded to the nodes live at crash; completed nodes'
+commits + the DAG-state survive. This is another argument for the self-hosting
+**N1b** decision (durable ledger in `runtimeRoot`, never the throwaway worktree).
+
 ## 10. Prompt ownership (DECIDED — D2): the store is truth
 
 oc-test `doctrine/*.md` is imported ONCE (`roles-import` -> account-role v1);
@@ -691,5 +760,6 @@ Everything else flows one way:
 
 ## Open decisions (queue)
 
-None — all decisions (D1–D7) closed. Next: spec self-review, user review
-gate, then writing-plans.
+None — all decisions (D1–D9) closed (D8 master lifecycle & scaling, D9
+crash-consistency added 2026-07-16, §9.4/§9.5). Next: spec self-review, user
+review gate, then writing-plans.

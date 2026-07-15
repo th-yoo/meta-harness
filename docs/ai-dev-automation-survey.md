@@ -97,6 +97,19 @@ Second `deep-research` pass (Parallel MCP, 109 agents, 24/25 confirmed, 1 refute
 
 R4 sources: docs.devin.ai · github.blog (Copilot coding agent) · jules.google · docs.openhands.dev · code.claude.com/docs/worktrees · docs.langchain.com (LangGraph interrupts) · docs.openclaw.ai/gateway.
 
+## Master lifecycle & scaling validation (2026-07-16) → fleet D8/D9
+
+Search pass (Parallel MCP) validating the master's lifecycle/scaling design
+(feeds `2026-07-13-fleet-squad-integration-design.md §9.4/§9.5`, D8/D9):
+
+- **Persistent-supervisor + ephemeral-workers is the dominant production pattern**, not a niche choice. Supervisor-Worker (SVW) catalogued pattern (agentic-design.ai); "How Fortune 500s actually deploy" — supervisor decomposes→delegates→synthesizes, "**workers do NOT communicate directly**" (= our star topology), wins on "predictability, debuggability, accountability chain — what autonomous swarms cannot" (stackahead.ai); MS Learn "orchestrator + subagent / Russian-doll / magentic" names **vibe coding** as a use case; OpenHands "supervisor spawns/monitors/collects, **DAG not flat fan-out**." → validates our deterministic-orchestrator + star + no-peer-messaging.
+- **Durable execution = the infra-grade version** (Temporal: persistent workflow + ephemeral activities, run for days/weeks, exactly-once + auto state recovery; OpenAI/Salesforce/NVIDIA). Gas Town (Steve Yegge): Git-backed state, **GUPP**, resume-from-checkpoint, `design(crew)→implement(parallel=3)→review(gate=approval-required)` = our A→D→I→E DAG + human gate. **Benchmark 2026:** "persistence is becoming the default"; lists "persistent supervisors + short-lived workers"; ephemeral = **lower security surface**.
+- **Production supervisor guidance directly validates our finer calls** (markaicode): "**stateless supervisor**, reload from store" (= externalized state, D8.1); "centralized state store so pods survive restart" (= N1b `runtimeRoot`); "**hard-limit delegation depth to 3**" (= our bounded/deferred recursion); per-sub-agent timeout/retry (= R2/R3).
+- **OpenClaw = the exact seat, verbatim:** one persistent Gateway daemon (WS :18789, the "**sole hub**"), spawns ephemeral `claude -p` workers, resumes via stored session IDs `--resume` (Craddock/ClaudeClaw); **multi-agent = isolation/routing** (own workspace/agentDir/creds, "never share"), deterministic most-specific-wins bindings; **its own guidance: "multi-agent is overkill for single-user"** → confirms singleton-authority + composite-scheduling (D8.2), and multi-*project* handled by namespacing not nested authorities (D8.3). Per-node **device-token pairing** (not owner admin creds) validates the self-hosting N2 non-admin-scoped-credential.
+- **Two-axis lifetime** (state-durability universal via resumable sessions; process-lifetime a per-node policy — D8.4): opencode/CC persist sessions by default incl. headless; ClaudeClaw parks/reopens headless `claude -p` by session ID. **Divergence to hold:** MS Learn's *magentic* orchestrator-subagent is for open-ended "spray-and-pray," NOT strong hierarchical deps — our dep-DAG sits on the **deterministic durable-execution** side (Temporal/Gas Town), not the autonomous-magentic side.
+
+Sources: agentic-design.ai · stackahead.ai · learn.microsoft.com (orchestrator-subagent) · markaicode.com · aiagentlab.dev (OpenHands/Claude Flow) · temporal.io · torqsoftware (Gas Town) · computer-agents.com (persistent-vs-ephemeral benchmark) · docs.openclaw.ai/architecture · remoteopenclaw.com · dev.to (OpenClaw deep dives) · medium.com/@mcraddock (ClaudeClaw).
+
 ## Residual-gap survey (2026-07-16) — CrewAI + Cursor closed
 
 Third `deep-research` pass (101 agents). Closed two of the flagged gaps; the PR-bot cluster still resisted primary sourcing.

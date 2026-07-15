@@ -76,6 +76,31 @@ account layer). Ship the bounded version, not the general one:
   a human merges it. The gate and store code themselves are permanently outside
   every evolvable region.
 
+### 2.15 Composite / per-tenant sub-master (fleet spec D8.5)
+
+**What it would be.** A fleet where a squad-node can itself be a full sub-fleet
+with its OWN master — an authority that recurses, each sub-master holding its own
+credential scope, gateway, and durable-state slice. The opposite of the decided
+**singleton-authority + composite-scheduling** model (`2026-07-13-fleet-squad-integration-design.md §9.4`, D8).
+
+**Why not now.** Blast radius + scale (criteria *a*, *b*). One master already
+scales to many *projects* under one owner via a project namespace (per-project
+isolation + fair-share under a global cap, D8.3) — validated by OpenClaw (one
+Gateway, many isolated agents) and Temporal (one service, many namespaces).
+Composite *authority* = N persistent daemons + N credential roots → fragmented
+durable state and a multiplied security surface, for no gain until there is a
+real trust boundary to separate.
+
+**What it costs.** Nothing today (one owner, one host). The cost of the
+singleton is purely an availability ceiling — a master-process crash pauses all
+projects (recoverable: durable state resumes them, §9.5 D9).
+
+**Revisit trigger (a genuine *trust* boundary — multi-tenant, NOT multi-project).**
+Projects with a different **owner / org / host / credential domain**, OR an
+availability SLA a single restartable daemon cannot meet. Then build a
+per-tenant sub-master with its own credential scope. Project *count* alone never
+fires this.
+
 ### 2.2 DGM parent-sampling / Pareto candidate archives
 
 **What it would be.** Instead of single active-vs-candidate hill-climbing, keep an
