@@ -23,6 +23,23 @@ export interface ScheduledItem {
   memoryMb: number
 }
 
+/** The ONE fit rule (spec D3): does `it` fit within `remaining` budget right
+ * now? Equal-to-remaining counts as fitting. Shared by `schedule()` (against
+ * its live `remaining` pool) and `packPreview()` (against its simulated
+ * per-group remainder) so the two can never hand-roll diverging checks. */
+export function fitsBudget(it: ScheduledItem, remaining: Budget): boolean {
+  return it.cpus <= remaining.cpus && it.memoryMb <= remaining.memoryMb
+}
+
+/** Does `it`'s demand exceed the TOTAL budget (not just what's currently
+ * free)? Equal-to-budget does NOT exceed — such an item still fits alone.
+ * Items for which this is true can never coexist with anything else (spec
+ * D3: pool drains, item runs solo, packing resumes after). Shared by
+ * `schedule()` and `packPreview()` — see `fitsBudget`'s doc comment. */
+export function exceedsTotalBudget(it: ScheduledItem, budget: Budget): boolean {
+  return it.cpus > budget.cpus || it.memoryMb > budget.memoryMb
+}
+
 /** Greedy canonical-order packing (spec D3): launches items[i] when it fits the
  * remaining budget; over-total-budget items drain the pool and run alone.
  * runFn errors reject the whole schedule() after in-flight items settle. */
@@ -37,10 +54,6 @@ export function schedule(
     let inFlight = 0
     let hasFailure = false
     let failure: unknown
-
-    const fits = (it: ScheduledItem): boolean => it.cpus <= remaining.cpus && it.memoryMb <= remaining.memoryMb
-
-    const overTotalBudget = (it: ScheduledItem): boolean => it.cpus > budget.cpus || it.memoryMb > budget.memoryMb
 
     // Resolves/rejects the outer promise once nothing is left to do. Under a
     // failure, in-flight items still get to settle first (cursor may not
@@ -96,14 +109,14 @@ export function schedule(
       while (cursor < items.length) {
         const it = items[cursor]!
 
-        if (overTotalBudget(it)) {
+        if (exceedsTotalBudget(it, budget)) {
           if (inFlight > 0) return // drain the pool before running it alone
           cursor++
           launch(it, true)
           return // solo item consumes the whole budget conceptually — stop
         }
 
-        if (!fits(it)) return // canonical order: no skip-ahead
+        if (!fitsBudget(it, remaining)) return // canonical order: no skip-ahead
 
         cursor++
         launch(it, false)
@@ -141,7 +154,7 @@ export function packPreview(items: ScheduledItem[], budget: Budget): string[][] 
   let i = 0
   while (i < items.length) {
     const it = items[i]!
-    if (it.cpus > budget.cpus || it.memoryMb > budget.memoryMb) {
+    if (exceedsTotalBudget(it, budget)) {
       // Over-total-budget: drains the pool then runs alone (spec D3) — its
       // own solo group; nothing else can join it.
       groups.push([it.key])
@@ -149,15 +162,14 @@ export function packPreview(items: ScheduledItem[], budget: Budget): string[][] 
       continue
     }
     const group: string[] = []
-    let remCpus = budget.cpus
-    let remMemoryMb = budget.memoryMb
+    const remaining: Budget = { cpus: budget.cpus, memoryMb: budget.memoryMb }
     while (i < items.length) {
       const cur = items[i]!
-      if (cur.cpus > budget.cpus || cur.memoryMb > budget.memoryMb) break // over-total starts its own group
-      if (cur.cpus <= remCpus && cur.memoryMb <= remMemoryMb) {
+      if (exceedsTotalBudget(cur, budget)) break // over-total starts its own group
+      if (fitsBudget(cur, remaining)) {
         group.push(cur.key)
-        remCpus -= cur.cpus
-        remMemoryMb -= cur.memoryMb
+        remaining.cpus -= cur.cpus
+        remaining.memoryMb -= cur.memoryMb
         i++
       } else {
         break // canonical order: no skip-ahead

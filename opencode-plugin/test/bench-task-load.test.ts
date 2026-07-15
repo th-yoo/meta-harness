@@ -22,13 +22,14 @@ function fakeBenchPaths(termBenchDir: string, tbRoot?: string): BenchPaths {
 }
 
 /** Two fixture tasks: one with a declared [environment] footprint (2 cpu /
- * 4096 MB, custom timeouts), one with no [environment] table at all (falls
- * back to the modal 1 cpu / 2048 MB, declared=false, and default timeouts). */
+ * 4096 MB / 20480 storage_mb / 1 gpu, custom timeouts), one with no
+ * [environment] table at all (falls back to the modal 1 cpu / 2048 MB /
+ * 10240 storage_mb / 0 gpus, declared=false, and default timeouts). */
 function writeFixtureTasks(tbRoot: string): void {
   fs.mkdirSync(path.join(tbRoot, "task-declared"), { recursive: true })
   fs.writeFileSync(
     path.join(tbRoot, "task-declared", "task.toml"),
-    "[environment]\ncpus = 2\nmemory_mb = 4096\n\n[agent]\ntimeout_sec = 600\n\n[verifier]\ntimeout_sec = 120\n",
+    "[environment]\ncpus = 2\nmemory_mb = 4096\nstorage_mb = 20480\ngpus = 1\n\n[agent]\ntimeout_sec = 600\n\n[verifier]\ntimeout_sec = 120\n",
   )
   fs.mkdirSync(path.join(tbRoot, "task-fallback"), { recursive: true })
   fs.writeFileSync(path.join(tbRoot, "task-fallback", "task.toml"), "")
@@ -65,6 +66,12 @@ test("cmdTaskLoad: table has declared footprint + timeout columns + a co-run gro
   expect(out).toContain("task-fallback")
   expect(out).toMatch(/task-declared[^\n]*\b2\b[^\n]*\b4096\b[^\n]*yes/)
   expect(out).toMatch(/task-fallback[^\n]*\b1\b[^\n]*\b2048\b[^\n]*no/)
+
+  // Storage + GPU columns (spec D6/D7: declared, read-only, unenforced):
+  // task-declared's declared storage/gpu values, task-fallback's modal
+  // storage fallback (10240) and zero-gpu default.
+  expect(out).toMatch(/task-declared[^\n]*\b20480\b[^\n]*\b1\b[^\n]*yes/)
+  expect(out).toMatch(/task-fallback[^\n]*\b10240\b[^\n]*\b0\b[^\n]*no/)
 
   // Timeout columns: declared task's custom timeouts, fallback task's defaults.
   expect(out).toMatch(/task-declared[^\n]*\b600\b[^\n]*\b120\b/)

@@ -81,7 +81,16 @@ export function cmdTaskLoad(paths: BenchPaths, args: CmdTaskLoadArgs): void {
   console.log(`task-load: ${tasks.length} task(s), budget cpu=${budget.cpus} mem=${budget.memoryMb}MB`)
   console.log()
 
-  const headerCells = ["Task".padEnd(40), "CPU".padStart(4), "MemMB".padStart(7), "Decl".padStart(5), "AgentTO".padStart(8), "VerifTO".padStart(8)]
+  const headerCells = [
+    "Task".padEnd(40),
+    "CPU".padStart(4),
+    "MemMB".padStart(7),
+    "StorageMB".padStart(9),
+    "GPUs".padStart(4),
+    "Decl".padStart(5),
+    "AgentTO".padStart(8),
+    "VerifTO".padStart(8),
+  ]
   if (meanElapsed) headerCells.push("MeanElapsed".padStart(12))
   const header = headerCells.join("  ")
   console.log(header)
@@ -92,6 +101,8 @@ export function cmdTaskLoad(paths: BenchPaths, args: CmdTaskLoadArgs): void {
       r.task.slice(0, 39).padEnd(40),
       String(r.cpus).padStart(4),
       String(r.memoryMb).padStart(7),
+      String(r.storageMb).padStart(9),
+      String(r.gpus).padStart(4),
       (r.declared ? "yes" : "no").padStart(5),
       String(r.agentTimeout).padStart(8),
       String(r.verifierTimeout).padStart(8),

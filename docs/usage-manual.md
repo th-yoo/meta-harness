@@ -495,8 +495,9 @@ re-baseline events.
   (3), `--mem-budget MB` (6144).
 - **`task-load`** `--tasks T… | --task-file P | --all`, `--results-file P` (adds a mean-elapsed
   column), `--cpu-budget N` (3), `--mem-budget MB` (6144) — read-only: prints each selected
-  task's declared cpu/memory/timeouts plus a co-run-groups preview under the active budget. No
-  podman work.
+  task's declared cpu/memory/storage/gpus/timeouts plus a co-run-groups preview under the active
+  budget. Storage and gpus are shown but never enforced (`--enforce-resources` only constrains
+  cpu/memory). No podman work.
 - **`split`** `{make,rotate,show}` `--seed` (42) `--folds` (4) `--source` (`baseline-tasks.txt`) `--split-file`, `--results PATH` (repeatable, enables difficulty band), `--band LO,HI` (0.2,0.8), `--sentinels N` (3), `--sentinel-hi HI` (0.9).
 - **`oracle`** `[--tasks T…] [--results-file P]` — token-free pipeline validation via solution scripts.
 - **`report-loop`** `[--json] [--sink PATH …]` `[--no-flag]` `[--plateau-ab-k K]` `[--plateau-trial-k K]` — merged loop observability + plateau detection (Python 3.12+).

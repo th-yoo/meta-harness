@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test"
-import { schedule, packPreview, AsyncMutex, DEFAULT_BUDGET, type Budget, type ScheduledItem } from "../src/bench/scheduler.ts"
+import { schedule, packPreview, fitsBudget, exceedsTotalBudget, AsyncMutex, DEFAULT_BUDGET, type Budget, type ScheduledItem } from "../src/bench/scheduler.ts"
 
 // ── test helpers ─────────────────────────────────────────────────────────
 
@@ -266,6 +266,30 @@ test("packPreview: respects memory as well as cpu", () => {
     { key: "b", cpus: 1, memoryMb: 2000 }, // doesn't fit remaining 1096 MB
   ]
   expect(packPreview(items, budget)).toEqual([["a"], ["b"]])
+})
+
+// ── fitsBudget / exceedsTotalBudget ─────────────────────────────────────
+// schedule() and packPreview() must share these exact two predicates (single
+// source of truth by construction) rather than each hand-rolling its own fit
+// check that could drift. This pins their boundary behavior directly,
+// including the exact-equal-to-budget edge (equal counts as fitting/not
+// exceeding).
+
+test("fitsBudget/exceedsTotalBudget: boundary matrix incl. exact-equal-to-budget", () => {
+  const budget: Budget = { cpus: 3, memoryMb: 6144 }
+  const cases: Array<{ label: string; it: ScheduledItem; fits: boolean; exceeds: boolean }> = [
+    { label: "exactly equal to budget on both dims", it: item("eq", 3, 6144), fits: true, exceeds: false },
+    { label: "under budget on cpu, exact on mem", it: item("under-cpu", 2, 6144), fits: true, exceeds: false },
+    { label: "exact on cpu, under budget on mem", it: item("under-mem", 3, 6000), fits: true, exceeds: false },
+    { label: "cpu exceeds by 1", it: item("over-cpu", 4, 6144), fits: false, exceeds: true },
+    { label: "mem exceeds by 1", it: item("over-mem", 3, 6145), fits: false, exceeds: true },
+    { label: "both dims exceed", it: item("over-both", 4, 7000), fits: false, exceeds: true },
+    { label: "zero-demand item", it: item("zero", 0, 0), fits: true, exceeds: false },
+  ]
+  for (const c of cases) {
+    expect(fitsBudget(c.it, budget)).toBe(c.fits)
+    expect(exceedsTotalBudget(c.it, budget)).toBe(c.exceeds)
+  }
 })
 
 // ── AsyncMutex ───────────────────────────────────────────────────────────

@@ -151,13 +151,18 @@ export function taskTimeouts(
 export interface TaskResources {
   cpus: number
   memoryMb: number
+  /** Declared disk footprint, MB. Read-only — never enforced (spec
+   * Non-goals: podman storage quotas are storage-driver-dependent on
+   * applehv). Fallback = the modal TB2 corpus value (10240 MB / 10 GB). */
+  storageMb: number
   gpus: number
   /** false when task.toml was missing/unparseable OR had no [environment] table. */
   declared: boolean
 }
 
 /** Declared container footprint from task.toml [environment] (spec D1).
- * Fallback = the modal TB2 footprint (1 cpu / 2048 MB). Never throws. */
+ * Fallback = the modal TB2 footprint (1 cpu / 2048 MB / 10240 MB storage).
+ * Never throws. */
 export function taskResources(paths: BenchPaths, task: string): TaskResources {
   const tomlPath = join(paths.tbRoot, task, "task.toml")
   let env: Record<string, unknown> | undefined
@@ -173,6 +178,7 @@ export function taskResources(paths: BenchPaths, task: string): TaskResources {
   return {
     cpus: num(env?.["cpus"], 1),
     memoryMb: num(env?.["memory_mb"], 2048),
+    storageMb: num(env?.["storage_mb"], 10240),
     gpus: typeof env?.["gpus"] === "number" ? (env["gpus"] as number) : 0,
     declared: env !== undefined,
   }

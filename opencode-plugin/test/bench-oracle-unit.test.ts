@@ -226,7 +226,19 @@ test("taskResources: reads declared [environment] fields", () => {
     "[environment]\ncpus = 2\nmemory_mb = 4096\ngpus = 0\n",
   )
   const paths = fakeBenchPaths(dir, tbRoot)
-  expect(taskResources(paths, "fixture-task")).toEqual({ cpus: 2, memoryMb: 4096, gpus: 0, declared: true })
+  expect(taskResources(paths, "fixture-task")).toEqual({ cpus: 2, memoryMb: 4096, storageMb: 10240, gpus: 0, declared: true })
+})
+
+test("taskResources: reads declared storage_mb", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "storage-task"), { recursive: true })
+  fs.writeFileSync(
+    path.join(tbRoot, "storage-task", "task.toml"),
+    "[environment]\ncpus = 1\nmemory_mb = 2048\nstorage_mb = 20480\ngpus = 0\n",
+  )
+  const paths = fakeBenchPaths(dir, tbRoot)
+  expect(taskResources(paths, "storage-task")).toEqual({ cpus: 1, memoryMb: 2048, storageMb: 20480, gpus: 0, declared: true })
 })
 
 test("taskResources: missing task.toml falls back to modal footprint", () => {
@@ -234,7 +246,7 @@ test("taskResources: missing task.toml falls back to modal footprint", () => {
   const tbRoot = path.join(dir, "tb-root")
   fs.mkdirSync(tbRoot, { recursive: true })
   const paths = fakeBenchPaths(dir, tbRoot)
-  expect(taskResources(paths, "no-such-task")).toEqual({ cpus: 1, memoryMb: 2048, gpus: 0, declared: false })
+  expect(taskResources(paths, "no-such-task")).toEqual({ cpus: 1, memoryMb: 2048, storageMb: 10240, gpus: 0, declared: false })
 })
 
 test("taskResources: broken toml falls back", () => {
@@ -252,7 +264,7 @@ test("taskResources: partial fields — missing memory_mb takes fallback, cpus k
   fs.mkdirSync(path.join(tbRoot, "partial-task"), { recursive: true })
   fs.writeFileSync(path.join(tbRoot, "partial-task", "task.toml"), "[environment]\ncpus = 2\n")
   const paths = fakeBenchPaths(dir, tbRoot)
-  expect(taskResources(paths, "partial-task")).toEqual({ cpus: 2, memoryMb: 2048, gpus: 0, declared: true })
+  expect(taskResources(paths, "partial-task")).toEqual({ cpus: 2, memoryMb: 2048, storageMb: 10240, gpus: 0, declared: true })
 })
 
 // ── enforcedResources ────────────────────────────────────────────────────
