@@ -166,6 +166,16 @@ then start opencode + `/mh-propose account` (the `external_directory` grant is a
 - Account-scope propose needs `opencode.json` → `"permission": {"external_directory": "allow"}` (committed) — else the headless proposer hangs on a permission prompt.
 - `--results-file` forces `--no-store` (a run feeds the store OR writes results, never both); store-writing runs aren't resumable; `ab` is.
 
+## Landed 2026-07-16 evening (MacBook): bench resource-scheduler SHIPPED DARK
+`--enforce-resources` + `--parallel` (budget-packed, D5 verdict-equivalent) +
+`task-load` — all default-OFF, merged `d528ae5`. Spec/plan in docs/superpowers/
+{specs,plans}/2026-07-16-bench-resource-scheduler*. applehv cgroup caps VERIFIED
+live; serial enforce smoke green; parallel key-gate verified. **Flag-flip gate
+(NOT merge gate): the 3-concurrent smoke needs ANTHROPIC_API_KEY** (parallel
+forbids shared oauth mounts by design) — then flipping enforcement on is a
+re-baseline event, bundled with Loop-3's recordTimeouts flip. Deferred
+pre-first-sweep item: interior log-line prefixes under --parallel.
+
 ## Pending decisions (not started, need a go)
 - **Phase-0 re-run** (MacBook, overnight ~7h): strengthen `SELF_CHECK_INSTRUCTION`
   in `opencode-plugin/src/bench/self-score.ts` (force compliance + honest
