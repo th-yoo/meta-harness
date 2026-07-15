@@ -97,10 +97,18 @@ Second `deep-research` pass (Parallel MCP, 109 agents, 24/25 confirmed, 1 refute
 
 R4 sources: docs.devin.ai · github.blog (Copilot coding agent) · jules.google · docs.openhands.dev · code.claude.com/docs/worktrees · docs.langchain.com (LangGraph interrupts) · docs.openclaw.ai/gateway.
 
+## Residual-gap survey (2026-07-16) — CrewAI + Cursor closed
+
+Third `deep-research` pass (101 agents). Closed two of the flagged gaps; the PR-bot cluster still resisted primary sourcing.
+
+- **CrewAI** (primary: docs.crewai.com + `crew.py`): real **hierarchical process** — a **manager agent** (`manager_llm` or custom `manager_agent`, Pydantic-required) delegates to role workers (each `role`/`goal`/`backstory`, `allow_delegation` now defaults False), auto-equipped with `DelegateWorkTool` + `AskQuestionTool`; **Flows** (`@start`/`@listen`/`@router`) are an event-driven layer above crews. **Maps:** manager = OpenClaw master, workers = A→D→I→E, Flows = orchestration layer. **Adopt** the delegation-tool pattern as a reference for master→role hand-off. **BUT its manager "validation" is a soft LLM review, not a programmatic gate** → our McNemar A/B stays the differentiator (we go further).
+- **Cursor** (verify-b ✓, 2nd independent confirmation): local parallel agents isolated in **per-agent git worktrees** (own checkout + branch, main untouched); remote Background Agents in dedicated VMs creating branches/PRs; `/multitask` + "Build in Parallel" subagents. **PR Review is a human-review surface, not an autonomous merge-gate.** → reinforces Loop-B **[iv]** git-worktree isolation and **[iii]** no-auto-merge.
+- **Still no primary evidence:** Sweep, Codegen, Sourcegraph Amp, CodeSwarm, AgentForge (the PR-bot auto-merge question stays open — but the main R4 finding "no auto-merge to main, universally" already covers the safe default; a 3rd survey is low-value).
+
 ## Caveats & coverage gaps (honest)
 - **Version-sensitivity:** ChatDev 5/5/5 numbers are from an early preprint; AutoGen v0.4 moved to an event-driven actor model post-paper; LangGraph resume is node/super-step granularity (needs a persistent checkpointer).
 - **Inference boundaries:** DGM's frozen archive is an author scoping choice, not a stated permanent guarantee; extending "frozen archive/selection" to "frozen gate" is our inference.
-- **Under-covered (NO surviving confirmed claims):** CrewAI, CodeSwarm, AgentForge (R1/R2). **R4 is now covered** (dedicated follow-up survey, see the R4 section above — Devin/OpenHands/Copilot/Jules/LangGraph/OpenClaw, primary-sourced). Still thin: Cursor multi-agent "judge" (blog-level only) and Sweep/Codegen/Amp.
+- **Coverage now:** R1–R4 primary-sourced; **CrewAI + Cursor closed** (residual survey above). **Still thin (no primary evidence):** Sweep, Codegen, Sourcegraph Amp, CodeSwarm, AgentForge — the PR-bot auto-merge question specifically, though the R4 "no-auto-merge-to-main is universal" finding already covers the safe default, so a further pass is low-value.
 
 ## Open questions (carry into the Loop-B design)
 1. Does ANY system freeze the **scoring gate itself** (vs just the archive)? None found verbatim → we must decide + enforce gate-code immutability (decisions [i]/[v]).
