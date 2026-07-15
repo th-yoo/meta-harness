@@ -166,3 +166,31 @@ test("prepareAgentAuthMounts keyOnly: cleanup removes the temp config dir", () =
   auth.cleanup()
   expect(fs.existsSync(configHost)).toBe(false)
 })
+
+test("prepareAgentAuthMounts: keyOnly removes the shared rw auth.json mount serial oauth uses — the refresh-token-rotation race surface (D4)", () => {
+  // CONFIRMED (Anthropic claude-code #22600, #48786; local ~/.claude expiresAt
+  // ~8h): the oauth refresh token is SINGLE-USE — a refresh rotates it
+  // server-side and invalidates every other holder, and neither Claude Code nor
+  // this harness locks the shared credential file. Serial oauth mounts the SAME
+  // rw opencode-data dir (/root/.local/share/opencode, auth.json) into every
+  // container; under --parallel that shared rw mount is the EXACT surface two
+  // containers race on. keyOnly's job is to REMOVE it (auth comes from the API
+  // key env instead). This pins the discriminating contrast so a refactor can't
+  // silently re-introduce the shared rw credential mount under keyOnly.
+  const RACE_MOUNT = "/root/.local/share/opencode" // auth.json — the rotated-token file
+  const home = tmpDir()
+  fs.mkdirSync(path.join(home, ".claude"), { recursive: true })
+  fs.writeFileSync(path.join(home, ".claude", ".credentials.json"), '{"fake":"cred"}')
+
+  const serial = prepareAgentAuthMounts({ platform: "linux", home })
+  const serialRace = serial.mounts.find((m) => m.container === RACE_MOUNT)
+  expect(serialRace).toBeDefined()
+  expect(serialRace!.ro).toBe(false) // rw — the file the plugin writes the rotated token to
+  serial.cleanup()
+
+  const keyOnly = prepareAgentAuthMounts({ keyOnly: true, platform: "linux", home })
+  expect(keyOnly.mounts.find((m) => m.container === RACE_MOUNT)).toBeUndefined() // race surface GONE
+  expect(keyOnly.mounts).toHaveLength(1) // only the isolated per-run config dir remains
+  expect(keyOnly.mounts[0]!.container).toBe("/root/.config/opencode")
+  keyOnly.cleanup()
+})

@@ -90,3 +90,28 @@ test("cli main: ab --mem-budget -5 (non-positive) -> rc 2", async () => {
     await main(["ab", "--layer", "project-global", "--candidate", "v1", "--all", "--mem-budget", "-5"]),
   ).toBe(2)
 })
+
+test("cli main: ab --parallel without ANTHROPIC_API_KEY (anthropic model) dies naming the var — oauth refresh-token race guard (D4)", async () => {
+  // CONFIRMED hazard (Anthropic claude-code #22600, #48786): the oauth refresh
+  // token is SINGLE-USE — one container's refresh rotates it server-side at the
+  // ~8h access-token expiry and invalidates every other container sharing the rw
+  // credential mount. `ab --parallel` is the LONG-SWEEP path that will cross that
+  // expiry, so its key-gate must fire exactly like `run --parallel`'s. (Guard is
+  // validateParallel, cli.ts — shared by run+ab; only run's path was tested.)
+  const prev = process.env["ANTHROPIC_API_KEY"]
+  delete process.env["ANTHROPIC_API_KEY"]
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main([
+      "ab", "--layer", "project-global", "--candidate", "v1", "--all",
+      "--parallel", "--enforce-resources",
+    ])
+    expect(rc).toBe(1)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes("ANTHROPIC_API_KEY"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+    if (prev === undefined) delete process.env["ANTHROPIC_API_KEY"]
+    else process.env["ANTHROPIC_API_KEY"] = prev
+  }
+})
