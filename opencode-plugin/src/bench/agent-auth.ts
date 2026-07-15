@@ -227,7 +227,7 @@ export function prepareAgentAuthMounts(opts: PrepareAgentAuthMountsOpts = {}): A
  *    forwards it into the container create env; this function just needs to
  *    skip the Keychain/`.credentials.json` dance).
  *  - otherwise: linux mounts the real `~/.claude` dir RW at `/root/.claude`
- *    (CC rotates its oauth refresh token + writes settings on use — same
+ *    (CC rotates its oauth refresh token on refresh ~8h + writes settings on use — same
  *    "must be RW" rationale as opencode's data-dir mount above); darwin
  *    exports the Keychain item (`security find-generic-password -s "Claude
  *    Code-credentials" -w`) into a fresh 0700 temp dir / 0600 file and mounts
