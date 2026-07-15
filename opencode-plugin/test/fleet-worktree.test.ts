@@ -66,4 +66,14 @@ describe("worktree primitive", () => {
     expect(existsSync(b.dir)).toBe(true)
     removeWorktree(b)
   })
+
+  test("removeWorktree with keepBranch:true preserves the branch", () => {
+    const wt = createWorktree(repo, { branch: "fleet/keep" })
+    removeWorktree(wt, { keepBranch: true })
+    expect(existsSync(wt.dir)).toBe(false)                    // worktree torn down
+    const branches = execFileSync("git", ["-C", repo, "branch", "--list", "fleet/keep"], { encoding: "utf-8" })
+    expect(branches).toContain("fleet/keep")                  // branch preserved
+    // cleanup the preserved branch so the temp repo is tidy
+    execFileSync("git", ["-C", repo, "branch", "-D", "fleet/keep"], { encoding: "utf-8" })
+  })
 })

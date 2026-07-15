@@ -56,7 +56,12 @@ export function createWorktree(repo: string, opts: { branch: string; base?: stri
   // reconciliation job (T4), not this primitive's.
   git(repoAbs, ["worktree", "prune"])
   const dir = join(mkdtempSync(join(tmpdir(), "mh-fleet-wt-")), "wt")
-  git(repoAbs, ["worktree", "add", "-b", branch, dir, base])
+  try {
+    git(repoAbs, ["worktree", "add", "-b", branch, dir, base])
+  } catch (e) {
+    rmSync(dirname(dir), { recursive: true, force: true })   // clean the orphaned mkdtemp parent
+    throw e
+  }
   const repoNm = join(repoAbs, "node_modules")
   const wtNm = join(dir, "node_modules")
   if (existsSync(repoNm) && !existsSync(wtNm)) symlinkSync(repoNm, wtNm, "dir")
