@@ -378,3 +378,52 @@ test("cmdAb: default driver (opencode) + an 'unknown' version probe still procee
   const verdict = readAbVerdict(root, "v1")! as unknown as Record<string, unknown>
   expect((verdict["env"] as Record<string, unknown>)["driver"]).toBe("opencode")
 })
+
+// ── --resume ident-check must see a top-level driver (regression) ─────────
+
+test("cmdAb: partial written mid-run stamps a top-level driver matching runIdent, and --resume against it does not die on driver mismatch", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  const heldIn = ["hi0", "hi1"]
+  writeSplitsFile(paths, heldIn, ["ho1"])
+  const root = setupCandidate(paths, "project-global", "v1")
+  const partialPath = path.join(root, "candidates", "v1", "ab-verdict.partial.json")
+
+  // First run: complete hi0 normally, then blow up on hi1 (simulating a
+  // mid-run crash) so the process aborts leaving only hi0's partial on disk
+  // — never reaching the final-verdict write that deletes the partial.
+  const crashingFake: RunOneTaskFn = async (_p, task) => {
+    if (task === "hi1") throw new Error("simulated crash mid-run")
+    return res({ reward: 1, turns: 3 })
+  }
+
+  await expect(
+    quiet(() =>
+      cmdAb(paths, { layer: "project-global", candidate: "v1", k: 1, minTasksBeforeStop: 999 }, crashingFake, fakeExec),
+    ),
+  ).rejects.toThrow("simulated crash mid-run")
+
+  expect(fs.existsSync(partialPath)).toBe(true)
+  const partial = JSON.parse(fs.readFileSync(partialPath, "utf-8")) as Record<string, unknown>
+  // (a) the persisted partial must stamp a top-level `driver` matching the
+  // run's driver id — resumeIdentCheck compares every runIdent key
+  // (including `driver`) against this file's top-level fields.
+  expect(partial["driver"]).toBe("opencode")
+
+  // (b) --resume against this exact partial must NOT die on a driver
+  // mismatch — full write-then-resume round trip, completing the rest of
+  // the run (hi1 + held-out ho1).
+  const resumingFake: RunOneTaskFn = async () => res({ reward: 1, turns: 3 })
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", k: 1, minTasksBeforeStop: 999, resume: true },
+      resumingFake,
+      fakeExec,
+    ),
+  )
+
+  const verdict = readAbVerdict(root, "v1")
+  expect(verdict).not.toBeNull()
+})

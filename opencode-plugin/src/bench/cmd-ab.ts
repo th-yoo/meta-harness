@@ -277,6 +277,7 @@ export async function cmdAb(
       baseline,
       activeFold,
       splitHash: runIdent["splitHash"],
+      driver: runIdent["driver"],
       decision,
       winner,
       reasons,
