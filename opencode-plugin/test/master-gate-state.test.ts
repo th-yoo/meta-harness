@@ -29,7 +29,7 @@ describe("master/gate-state", () => {
     raiseGate(root, { project: "p", sliceId: "s1", kind: "gate1", payload: "spec…", raisedAt: "t0" })
     raiseGate(root, { project: "p", sliceId: "s1", kind: "gate1", payload: "spec…", raisedAt: "t0" }) // dup
     expect(pendingGates(root)).toHaveLength(1) // idempotent
-    resolveGate(root, "p", "s1", { inboundId: "u7", project: "p", sliceId: "s1", answer: "approve", processedAt: "t1" })
+    resolveGate(root, "p", "s1", "gate1", { inboundId: "u7", project: "p", sliceId: "s1", answer: "approve", processedAt: "t1" })
     expect(pendingGates(root)).toEqual([])
     expect(loadMasterLog(root).processed.map((r) => r.inboundId)).toEqual(["u7"])
   })
@@ -60,7 +60,7 @@ describe("master/gate-state", () => {
 
   test("resolveGate moves pending → processed, not duplicated", () => {
     raiseGate(root, { project: "p", sliceId: "s1", kind: "verdict", payload: "v", raisedAt: "t0" })
-    resolveGate(root, "p", "s1", { inboundId: "u1", project: "p", sliceId: "s1", answer: "approve", processedAt: "t1" })
+    resolveGate(root, "p", "s1", "verdict", { inboundId: "u1", project: "p", sliceId: "s1", answer: "approve", processedAt: "t1" })
     const log = loadMasterLog(root)
     expect(log.pending).toEqual([])
     expect(log.processed).toHaveLength(1)
@@ -78,10 +78,26 @@ describe("master/gate-state", () => {
 
   test("markRelayed sets relayRef on the matching pending gate", () => {
     raiseGate(root, { project: "p", sliceId: "s1", kind: "gate1", payload: "a", raisedAt: "t0" })
-    markRelayed(root, "p", "s1", "msg-123")
+    markRelayed(root, "p", "s1", "gate1", "msg-123")
     const pending = pendingGates(root)
     expect(pending).toHaveLength(1)
     expect(pending[0].relayRef).toBe("msg-123")
+  })
+
+  test("co-pending different-kind gates: resolveGate(..., \"gate1\", ...) leaves the escalation pending untouched", () => {
+    raiseGate(root, { project: "p", sliceId: "s1", kind: "gate1", payload: "spec…", raisedAt: "t0" })
+    raiseGate(root, { project: "p", sliceId: "s1", kind: "escalation", payload: "help…", raisedAt: "t0" })
+    expect(pendingGates(root)).toHaveLength(2)
+
+    resolveGate(root, "p", "s1", "gate1", { inboundId: "u9", project: "p", sliceId: "s1", answer: "approve", processedAt: "t1" })
+
+    const pending = pendingGates(root)
+    expect(pending).toHaveLength(1)
+    expect(pending[0].kind).toBe("escalation")
+
+    const log = loadMasterLog(root)
+    expect(log.processed).toHaveLength(1)
+    expect(log.processed[0]).toEqual({ inboundId: "u9", project: "p", sliceId: "s1", answer: "approve", processedAt: "t1" })
   })
 
   test("atomic/torn-write survival: a stray *.tmp sibling does not break loadMasterLog", () => {

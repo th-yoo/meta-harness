@@ -74,26 +74,40 @@ export function raiseGate(masterRoot: string, g: PendingGate): void {
 }
 
 /** Records the relay message id a pending gate was last relayed under (so a
- * re-poll can recognize an already-sent gate). No-op if no matching pending
+ * re-poll can recognize an already-sent gate). Matches on (project, sliceId,
+ * kind) — a sliceId can have multiple co-pending gates of different kinds,
+ * and only the matching one should be stamped. No-op if no matching pending
  * gate exists (the gate may have already been resolved). */
-export function markRelayed(masterRoot: string, project: string, sliceId: string, relayRef: string): void {
+export function markRelayed(
+  masterRoot: string,
+  project: string,
+  sliceId: string,
+  kind: GateKind,
+  relayRef: string,
+): void {
   const log = loadMasterLog(masterRoot)
   for (const p of log.pending) {
-    if (p.project === project && p.sliceId === sliceId) p.relayRef = relayRef
+    if (p.project === project && p.sliceId === sliceId && p.kind === kind) p.relayRef = relayRef
   }
   writeJsonAtomic(masterLogPath(masterRoot), log)
 }
 
-/** Moves every pending gate matching (project, sliceId) out of `pending` and
- * appends the given record to `processed` — never duplicated. */
+/** Moves the pending gate matching (project, sliceId, kind) out of `pending`
+ * and appends the given record to `processed` — never duplicated. Kind-aware
+ * so that a co-pending gate of a different kind for the same sliceId (e.g.
+ * an escalation raised alongside a gate1) is left untouched rather than
+ * silently dropped. */
 export function resolveGate(
   masterRoot: string,
   project: string,
   sliceId: string,
+  kind: GateKind,
   rec: ProcessedRecord,
 ): void {
   const log = loadMasterLog(masterRoot)
-  log.pending = log.pending.filter((p) => !(p.project === project && p.sliceId === sliceId))
+  log.pending = log.pending.filter(
+    (p) => !(p.project === project && p.sliceId === sliceId && p.kind === kind),
+  )
   log.processed.push(rec)
   writeJsonAtomic(masterLogPath(masterRoot), log)
 }
