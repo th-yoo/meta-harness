@@ -106,19 +106,30 @@ Run at the real budget.
 ```
 # 1. fresh token (the gate refuses if it can't outlive one task; re-login if stale)
 claude          # or: opencode auth login   (~8h TTL)
-# 2. run parallel on oauth, no key, loosened timeout:
+# 2. run parallel on oauth, no key — TB2-EXACT per-task timeouts (NO sub-TB2 cap):
+#    vN must be a REAL, NON-ACTIVE version (else cmd-ab.ts:184 "nothing to compare")
 bun term-bench2/runner.ts ab --layer account-global --candidate vN \
   --split-file term-bench2/splits/loop1.json --model anthropic/claude-haiku-4-5 \
-  --k 2 --parallel --enforce-resources --max-agent-timeout 1800 \
-  --max-verifier-timeout 300 --resume
+  --k 2 --parallel --enforce-resources --max-agent-timeout 3600 --resume
 ```
-- `--parallel` REQUIRES `--enforce-resources` AND an explicit `--max-agent-timeout` (bounds
-  per-task duration so the freshness math is exact).
+- **`taskTimeouts` (tasks.ts) ALREADY reads each task's exact TB2 `[agent]/[verifier] timeout_sec`**
+  from `<tbRoot>/<task>/task.toml`; a `--max-*-timeout` flag only ever LOWERS it, never raises.
+  So "take timeout from TB2" = set the agent cap AT OR ABOVE the split's per-task max, and OMIT
+  the verifier cap. (TB2 agent budgets across the 89 tasks: 48×900, 17×1800, 12×3600, 1×7200, 1×12000.)
+- `--parallel`+oauth REQUIRES an explicit `--max-agent-timeout` (freshness math). Set it to the
+  split's MAX real TB2 agent budget — loop1 = **3600** (distribution-search) — so NO task is
+  shortened below TB2; a ~8h token easily outlives 3600s. **Do NOT set it below TB2** — the old
+  `1800` halved distribution-search (3600→1800).
+- **No `--max-verifier-timeout`.** The verifier runs AFTER the agent and never touches the oauth
+  token, so it needs no cap. Omit it → each task's exact TB2 `[verifier] timeout_sec` (up to 3600)
+  is used. The old `300` STARVED nearly every verifier (TB2 verifiers are 900–3600s) — the real
+  false-timeout source on heavy tasks.
 - Self-limiting: as the token nears expiry the scheduler stops launching new tasks, lets
   in-flight finish, ends the chunk → re-login + `--resume` continues.
-- Loosening `--max-agent-timeout` (600→1800) is a **budget-identity change** → Loop-3 T6/T7
-  re-baseline it (re-score the active version at the new budget first).
-- With a static `ANTHROPIC_API_KEY` set, `--parallel` uses keyOnly instead (also fine).
+- Raising `--max-agent-timeout` (→3600) is a **budget-identity change** → Loop-3 T6/T7 re-baseline
+  it (re-score the active version at the new budget first).
+- With a static `ANTHROPIC_API_KEY` set, `--parallel` uses keyOnly (no token TTL → omit
+  `--max-agent-timeout` entirely for fully-exact TB2 timeouts).
 
 **VALIDATION (2026-07-16):** tune-mjcf + distribution-search (both loop-2 timeout-fails at
 600s) → **2/2 PASS** at loosened timeout, serial AND 2-concurrent oauth+parallel. Loop-2's
