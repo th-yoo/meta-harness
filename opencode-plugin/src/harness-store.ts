@@ -800,6 +800,8 @@ export interface PlaybookBullet {
   status: "active" | "pruned"
   createdAt: string
   updatedAt: string
+  generality?: "universal" | "vendor" | "model"
+  slice?: string
 }
 
 export interface Playbook {
@@ -809,8 +811,8 @@ export interface Playbook {
 }
 
 export type PlaybookOp =
-  | { op: "add"; text: string }
-  | { op: "update"; id: string; text: string }
+  | { op: "add"; text: string; generality?: "universal" | "vendor" | "model"; slice?: string }
+  | { op: "update"; id: string; text: string; generality?: "universal" | "vendor" | "model"; slice?: string }
   | { op: "delete"; id: string }
 
 export function readPlaybook(storeRoot: string, version?: string): Playbook | null {
@@ -849,13 +851,22 @@ export function applyPlaybookOps(base: Playbook, ops: PlaybookOp[]): Playbook {
   const now = new Date().toISOString()
   const bullets = base.bullets.map((b) => ({ ...b }))
   let nextId = base.nextId
+  const coerceGen = (x: unknown): "universal" | "vendor" | "model" | undefined =>
+    x === undefined ? undefined : (x === "universal" || x === "vendor" || x === "model" ? x : "universal")
+  const capSlice = (s: unknown): string | undefined =>
+    s === undefined ? undefined : String(s).slice(0, 64)
   for (const op of ops) {
     if (op.op === "add") {
       bullets.push({ id: `b${nextId++}`, text: op.text, helpful: 0, harmful: 0,
-        addedBy: "candidate", status: "active", createdAt: now, updatedAt: now })
+        addedBy: "candidate", status: "active", createdAt: now, updatedAt: now,
+        generality: coerceGen(op.generality), slice: capSlice(op.slice) })
     } else if (op.op === "update") {
       const b = bullets.find((x) => x.id === op.id)
-      if (b) { b.text = op.text; b.updatedAt = now }
+      if (b) {
+        b.text = op.text; b.updatedAt = now
+        if (op.generality !== undefined) b.generality = coerceGen(op.generality)
+        if (op.slice !== undefined) b.slice = capSlice(op.slice)
+      }
     } else if (op.op === "delete") {
       const b = bullets.find((x) => x.id === op.id)
       if (b) { b.status = "pruned"; b.updatedAt = now }

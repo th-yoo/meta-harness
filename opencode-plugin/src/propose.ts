@@ -241,6 +241,13 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
   // Build the candidate: ops mode edits the playbook; legacy/grace uses system.md.
   let system: string
   let newPlaybook: Playbook | undefined
+  // Tracks whether the playbook itself changed (I1 fix): the no-op guard below
+  // compares only rendered `system` text, which is blind to an `update` that
+  // changes ONLY generality/slice (text unchanged → identical render). Set
+  // inside the ops branch only — the legacy branch (newPlaybook undefined)
+  // never touches a playbook, so this stays false there and the guard behaves
+  // exactly as before.
+  let playbookChanged = false
   if (playbook && fs.existsSync(stagingOps)) {
     let ops: PlaybookOp[] = []
     try {
@@ -253,6 +260,13 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     const base = readPlaybook(layer.root) ?? playbook   // re-read after assessments
     newPlaybook = applyPlaybookOps(base, ops)
     system = renderPlaybook(newPlaybook)
+    // Strip createdAt/updatedAt before comparing — applyPlaybookOps bumps
+    // updatedAt on every touched bullet even when text/generality/slice end up
+    // unchanged (e.g. an update op that re-sends the same values), so an
+    // un-stripped compare would over-detect a change that isn't there.
+    const strip = (bs: typeof base.bullets) =>
+      bs.map((b) => ({ id: b.id, text: b.text, generality: b.generality, slice: b.slice, status: b.status }))
+    playbookChanged = !isDeepStrictEqual(strip(base.bullets), strip(newPlaybook.bullets))
   } else {
     system = fs.readFileSync(stagingSystem, "utf-8").trim()
     newPlaybook = undefined
@@ -317,7 +331,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
   const knobsUnchanged =
     isDeepStrictEqual(effAgentConfig, readAgentConfig(layer.root)) &&
     isDeepStrictEqual(effEnvPolicy, readEnvPolicy(layer.root))
-  if (contentUnchanged && knobsUnchanged) {
+  if (contentUnchanged && knobsUnchanged && !playbookChanged) {
     await host.log("info", `proposer ${layer.scope}: no-op proposal — identical to active ${activeVersion(layer.root)}; no candidate created, no trial`)
     await host.notify(`Proposer ${layer.scope}: no change proposed — nothing to trial`, "info", 8_000)
     return "applied"
@@ -334,6 +348,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     scope: layer.scope,
     kind: newPlaybook ? "propose-ops" : "propose",
     createdAt: new Date().toISOString(),
+    ...(newPlaybook ? { generalityRollup: rollupGenerality(newPlaybook) } : {}),
   })
   if (diagnosis) writeDiagnosis(layer.root, version, diagnosis)
 
@@ -555,7 +570,11 @@ Layout: \`active/{system.md,tools.md,.version}\` (current), and per candidate
 \`candidates/<vN>/\`: \`system.md\` + \`tools.md\` (the rules that ran), \`score.json\`
 (pass/fail + per-session records), \`traj/<sessionID>.ndjson\` (FULL execution
 traces — one JSON event per line), \`diagnosis.json\` (that generation's root-cause
-analysis), \`meta.json\` (which proposer produced it).
+analysis), \`meta.json\` (which proposer produced it, including a \`generalityRollup\`
+of the playbook's active bullets by generality when playbook.json is present).
+A playbook bullet may itself carry \`generality\` (\`universal\`|\`vendor\`|\`model\`) and
+\`slice\` (the vendor/model id it targets) — read prior bullets' tags before adding
+new ones so you do not re-derive a tag that already exists.
 
 Candidate index:
 ${lines.join("\n") || "(no candidates yet)"}${elided}
@@ -781,7 +800,7 @@ ENDOFENVPOLICY
     : ""
 
   const step2 = playbook
-    ? `STEP 2 — Edit the playbook. From the diagnosis, choose the SMALLEST set of edits (≤3) that would prevent the diagnosed root cause: \`add\` a new bullet, \`update\` an existing bullet by id, or \`delete\` (prune) a bullet that the trajectories show is unhelpful or harmful. Do not duplicate a rule already covered by a more-general layer. Bullets are SHORT behavioral rules (one sentence).`
+    ? `STEP 2 — Edit the playbook. From the diagnosis, choose the SMALLEST set of edits (≤3) that would prevent the diagnosed root cause: \`add\` a new bullet, \`update\` an existing bullet by id, or \`delete\` (prune) a bullet that the trajectories show is unhelpful or harmful. Do not duplicate a rule already covered by a more-general layer. Bullets are SHORT behavioral rules (one sentence). Tag each \`add\`/\`update\` with \`generality\`: which model-population the rule serves — \`universal\` (holds for any model), \`vendor\` (holds for one model vendor/family), or \`model\` (holds for one specific model id; set \`slice\` to that vendor or model id). Your evidence for this cycle is ONE model's runs, so a \`universal\` tag is a HYPOTHESIS, not a certified fact — it cannot be confirmed without a multi-model panel. Default to \`universal\` unless the failing trajectories show the rule is clearly tied to this specific vendor/model's quirks.`
     : `STEP 2 — Propose. From the diagnosis, identify the SINGLE most impactful behavioral gap in system.md — a rule that would prevent the diagnosed root cause, is not already covered by more-general layers, and is not a root cause already diagnosed for ${activeVer}. Both artifacts SHORT and behavioral: system.md under 20 lines, tools.md under 15.`
 
   // Rejection list (mined lesson L2): STEP 2 says "smallest set" but never
@@ -803,10 +822,10 @@ ENDOFENVPOLICY
     : `{"failures":[{"sessionID":"<id from a trajectory above>","taxonomy":"<one label from the list>","rootCause":"<2-5 sentences>","firstUnrecoverableStep":"<quote the offending event>"}]}`
 
   const writeMain = playbook
-    ? `**Required** — write your playbook edits (≤3 ops; each new/updated bullet should reflect a diagnosed root cause):
+    ? `**Required** — write your playbook edits (≤3 ops; each new/updated bullet should reflect a diagnosed root cause; include \`generality\` on \`add\`/\`update\` — \`universal\`|\`vendor\`|\`model\` — and \`slice\` when tagging \`vendor\` or \`model\`):
 \`\`\`bash
 cat > "${relOps}" << 'ENDOFOPS'
-{"ops":[{"op":"add","text":"<new behavioral rule>"},{"op":"update","id":"b2","text":"<revised rule>"},{"op":"delete","id":"b5"}]}
+{"ops":[{"op":"add","text":"<new behavioral rule>","generality":"universal"},{"op":"update","id":"b2","text":"<revised rule>","generality":"vendor","slice":"<vendor id>"},{"op":"delete","id":"b5"}]}
 ENDOFOPS
 \`\`\``
     : `**Required** — write the improved system.md (each new rule should cite the diagnosis it addresses):
@@ -1075,8 +1094,14 @@ async function applyCurateArtifact(host: HarnessHost, d: StagedArtifactDescripto
   // curation that nets to no change (nothing left to dedup/prune, or malformed
   // ops) renders identical to active → skip create+trial rather than mint an
   // identical candidate that burns TRIAL_MIN_SESSIONS. tools + knobs are read
-  // from active here, so only the playbook-rendered `system` can differ.
-  if (system.trim() === readActiveSystem(layer.root).trim()) {
+  // from active here, so only the playbook-rendered `system` can differ — EXCEPT
+  // an `update` that changes only generality/slice (I1 fix, same rationale as
+  // applyProposeArtifact): text is unchanged so the render is byte-identical,
+  // so also compare the stripped (id/text/generality/slice/status) bullet sets.
+  const strip = (bs: typeof playbook.bullets) =>
+    bs.map((b) => ({ id: b.id, text: b.text, generality: b.generality, slice: b.slice, status: b.status }))
+  const playbookChanged = !isDeepStrictEqual(strip(playbook.bullets), strip(newPlaybook.bullets))
+  if (system.trim() === readActiveSystem(layer.root).trim() && !playbookChanged) {
     await host.log("info", `curator ${layer.scope}: no-op curation — identical to active ${activeVersion(layer.root)}; no candidate created, no trial`)
     await host.notify(`Curator ${layer.scope}: no change — nothing to trial`, "info", 8_000)
     return "applied"
@@ -1087,6 +1112,7 @@ async function applyCurateArtifact(host: HarnessHost, d: StagedArtifactDescripto
   writeCandidateMeta(layer.root, version, {
     proposerModel: d.proposerModel, scope: layer.scope, kind: "curate",
     createdAt: new Date().toISOString(),
+    generalityRollup: rollupGenerality(newPlaybook),
   })
 
   if (isProject) {
@@ -1133,12 +1159,19 @@ Emit edit ops (add is NOT allowed — curation only merges and prunes):
 3. Keep the total ≤ ${CURATOR_BUDGET} active bullets. If still over budget, \`delete\` the lowest-value bullets (lowest helpful − harmful).
 Preserve every high-value rule. If nothing needs changing, emit an empty ops list.
 
+When merging near-duplicate bullets that carry DIFFERENT \`generality\` tags, the
+surviving \`update\` must carry the MORE-SPECIFIC of the two (\`model\` > \`vendor\` >
+\`universal\`) — never silently widen a vendor/model-tagged bullet to \`universal\` by
+merging it into a broader one. If both merged bullets already share a tag (or
+neither is tagged), keep it as-is; only set \`generality\`/\`slice\` on the surviving
+\`update\` when the merge would otherwise lose a more-specific tag.
+
 ## Write the results
 
 \`\`\`bash
 mkdir -p "${stagingDir}"
 cat > "${relOps}" << 'ENDOFOPS'
-{"ops":[{"op":"update","id":"b2","text":"<merged rule>"},{"op":"delete","id":"b7"}]}
+{"ops":[{"op":"update","id":"b2","text":"<merged rule>","generality":"vendor","slice":"<vendor id>"},{"op":"delete","id":"b7"}]}
 ENDOFOPS
 \`\`\`
 
@@ -1146,6 +1179,19 @@ After writing, briefly explain what you merged and pruned and why.`
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+/** Candidate-meta rollup (C): counts of ACTIVE bullets bucketed by
+ * generality, defaulting an untagged bullet to "universal" (matches
+ * applyPlaybookOps' own coercion default). Purely additive bookkeeping —
+ * does not gate or validate anything. */
+function rollupGenerality(pb: Playbook): { universal: number; vendor: number; model: number } {
+  const r = { universal: 0, vendor: 0, model: 0 }
+  for (const b of pb.bullets) {
+    if (b.status !== "active") continue
+    r[b.generality ?? "universal"]++
+  }
+  return r
+}
 
 export async function waitForFile(filePath: string, timeoutMs: number): Promise<boolean> {
   const interval = 5_000

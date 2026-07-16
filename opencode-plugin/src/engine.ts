@@ -836,9 +836,21 @@ export class EvolutionEngine {
         const ver = activeVersion(layer.root)
         const score = readScore(layer.root, ver)
         const rate = score.sessions.length > 0 ? `${score.nPass}/${score.sessions.length}` : "no sessions"
-        const bullets = activeBulletCount(readPlaybook(layer.root))
+        const playbook = readPlaybook(layer.root)
+        const bullets = activeBulletCount(playbook)
         const bulletInfo = bullets > 0 ? ` [${bullets} bullets${bullets > CURATOR_BUDGET ? " — over budget, /mh-curate" : ""}]` : ""
-        let line = `  ${layer.scope}: active=${ver} (${rate})${bulletInfo}`
+        let genInfo = ""
+        if (playbook) {
+          const gen = { universal: 0, vendor: 0, model: 0 }
+          for (const b of playbook.bullets) {
+            if (b.status !== "active") continue
+            gen[b.generality ?? "universal"]++
+          }
+          if (gen.vendor > 0 || gen.model > 0) {
+            genInfo = ` gen[u:${gen.universal} v:${gen.vendor} m:${gen.model}]`
+          }
+        }
+        let line = `  ${layer.scope}: active=${ver} (${rate})${bulletInfo}${genInfo}`
         const trial = readTrial(layer.root)
         if (trial) {
           const ts = readScore(layer.root, trial.trial)
