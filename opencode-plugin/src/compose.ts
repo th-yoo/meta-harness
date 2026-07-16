@@ -22,7 +22,15 @@
  * callers resolve their own ordered layer list and pass it in as
  * `LayerRef[]`.
  */
-import { readActiveSystem, readActiveTools, readCandidateSystem, readCandidateTools } from "./harness-store.ts"
+import {
+  readActiveSystem,
+  readActiveTools,
+  readCandidateSystem,
+  readCandidateTools,
+  readPlaybook,
+  renderPlaybook,
+  renderPlaybookRouted,
+} from "./harness-store.ts"
 
 /** One resolved layer to compose: a scope label + its store root. Callers
  * build this from harness-store's `layersFor` (live hook) or bench/record.ts's
@@ -48,10 +56,20 @@ export interface ComposedLayer {
  * set (bench's --pin support; the live hook never passes pins and always
  * reads active text).
  */
-export function composeHarness(layers: LayerRef[], pins: Record<string, string> = {}): ComposedLayer[] {
+export function composeHarness(
+  layers: LayerRef[],
+  pins: Record<string, string> = {},
+  model?: string,
+): ComposedLayer[] {
   return layers.map(({ scope, root }) => {
     const ver = pins[scope]
-    const system = ver ? readCandidateSystem(root, ver) : readActiveSystem(root)
+    const flat = ver ? readCandidateSystem(root, ver) : readActiveSystem(root)
+    const pb = model ? readPlaybook(root, ver) : null
+    // Route ONLY when the playbook faithfully renders the stored system.md, so a
+    // routed render can differ from `flat` only by dropping tag-mismatched bullets.
+    const system = pb && renderPlaybook(pb).trim() === flat.trim()
+      ? renderPlaybookRouted(pb, model!)
+      : flat
     const tools = ver ? readCandidateTools(root, ver) : readActiveTools(root)
     return { scope, root, system, tools }
   })

@@ -277,3 +277,44 @@ test("layersFor returns all 4 layers in the correct injection order", () => {
   expect(layers[2].higherRoots).toEqual([layers[0].root, layers[1].root])
   expect(layers[3].higherRoots).toEqual([layers[0].root, layers[1].root, layers[2].root])
 })
+
+// ── composeHarness(model?) — faithful-render guard + route ────────────────
+// (Task 2, generality-routing plan. fs/os/path already imported above as
+// namespaces — reused here via fs./os./path. instead of duplicating imports.)
+
+// helper: seed a layer store; `faithful` writes system.md == renderPlaybook(bullets),
+// else writes a deliberately-divergent system.md (simulating seedPlaybook's header case).
+function seedLayer(bs: Array<{ text: string; generality?: string; slice?: string }>, faithful = true): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mh-route-"))
+  fs.mkdirSync(path.join(root, "active"), { recursive: true })
+  const pb = { schemaVersion: 1, nextId: bs.length + 1,
+    bullets: bs.map((b, i) => ({ id: `b${i + 1}`, text: b.text, helpful: 0, harmful: 0,
+      addedBy: "t", status: "active", createdAt: "t", updatedAt: "t",
+      ...(b.generality ? { generality: b.generality } : {}), ...(b.slice ? { slice: b.slice } : {}) })) }
+  fs.writeFileSync(path.join(root, "active", "playbook.json"), JSON.stringify(pb))
+  fs.writeFileSync(path.join(root, "active", "system.md"),
+    faithful ? bs.map((b) => `- ${b.text}`).join("\n") + "\n" : "You are an assistant.\n- keep going\n")
+  return root
+}
+
+test("composeHarness routes a faithful playbook by model; no model → flat", () => {
+  const root = seedLayer([{ text: "U" }, { text: "VA", generality: "vendor", slice: "anthropic" }])
+  const L = [{ scope: "account-global", root }]
+  expect(composeHarness(L, {}, "openai/gpt-5")[0].system).toBe("- U")               // routed: anthropic bullet dropped
+  expect(composeHarness(L, {}, "anthropic/claude-haiku-4-5")[0].system).toBe("- U\n- VA")
+  expect(composeHarness(L, {})[0].system).toBe("- U\n- VA")                          // no model → flat
+})
+
+test("composeHarness does NOT route when playbook render != system.md (back-compat guard)", () => {
+  const root = seedLayer([{ text: "keep going", generality: "vendor", slice: "openai" }], /*faithful*/ false)
+  // system.md ("You are an assistant.\n- keep going") != renderPlaybook → guard fails → flat read, even with a model
+  expect(composeHarness([{ scope: "account-global", root }], {}, "anthropic/x")[0].system)
+    .toBe("You are an assistant.\n- keep going")
+})
+
+test("composeHarness legacy layer (no playbook.json) falls back to flat", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mh-route-legacy-"))
+  fs.mkdirSync(path.join(root, "active"), { recursive: true })
+  fs.writeFileSync(path.join(root, "active", "system.md"), "- legacy\n")
+  expect(composeHarness([{ scope: "account-global", root }], {}, "anthropic/x")[0].system).toBe("- legacy")
+})
