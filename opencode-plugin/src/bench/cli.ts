@@ -17,7 +17,7 @@ import { LAYER_CHOICES, type LayerName } from "./record.ts"
 import { cmdSplit, type SplitArgs } from "./splits.ts"
 import { cmdReportLoop, type ReportLoopArgs } from "./report-loop.ts"
 import { correlateSelfScores, type ResultsLike } from "./self-score-correlate.ts"
-import { BenchError, log } from "./util.ts"
+import { BenchError, log, die } from "./util.ts"
 import { DRIVER_IDS } from "./drivers/index.ts"
 import { readOauthExpiresAt, OAUTH_PARALLEL_MARGIN_MS } from "./agent-auth.ts"
 import { readFileSync } from "node:fs"
@@ -29,6 +29,9 @@ import { cmdRoleScore, FLEET_GATES, type FleetGate } from "../fleet/score.ts"
 import { cmdSquadRun } from "../fleet/squad-cli.ts"
 import { cmdSquadPropose } from "../fleet/squad-propose.ts"
 import { cmdSquadTrial } from "../fleet/squad-trial.ts"
+import { runMaster, acquireSingletonLock, type MasterDeps } from "../fleet/master/master.ts"
+import { fakeTransport } from "../fleet/master/transport.ts"
+import { loadRegistry } from "../fleet/master/namespace.ts"
 
 const USAGE = `usage: runner.ts [--tb-root PATH] <command> [options]
 
@@ -74,7 +77,10 @@ commands:
                 [--def-version vN] [--json]
   squad-propose [--squad-type T] [--model M] [--timeout-sec N]
   squad-trial   --project PATH --candidate vN [--squad-type T]
-                [--slice "text" | --slice-file F] [--n N]`
+                [--slice "text" | --slice-file F] [--n N]
+  master        --master-root PATH [--dry-run]
+                (singleton daemon: relay gates + schedule + reconcile;
+                 real transport is a later drop-in — --dry-run only for now)`
 
 function printUsage(): void {
   console.error(USAGE)
@@ -1409,6 +1415,39 @@ export function parseSquadTrialArgs(argv: string[]): SquadTrialCliArgs | null {
   return out as SquadTrialCliArgs
 }
 
+interface MasterCliArgs {
+  masterRoot: string
+  dryRun?: boolean
+}
+
+/** Mirrors the shape of `parseSquadRunArgs`: a flat positional-free flag
+ * scanner. The master takes only `--master-root PATH` (where its durable
+ * runtime + registry live) and an optional `--dry-run` (wire the in-memory
+ * fake transport for a one-shot reconcile smoke, since no real offset-acked
+ * transport is configured yet — R1). */
+function parseMasterArgs(argv: string[]): MasterCliArgs | null {
+  const out: Partial<MasterCliArgs> = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--master-root") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.masterRoot = v
+      i += 2
+      continue
+    }
+    if (a === "--dry-run") {
+      out.dryRun = true
+      i++
+      continue
+    }
+    return null
+  }
+  if (out.masterRoot === undefined) return null
+  return out as MasterCliArgs
+}
+
 export async function main(argv: string[]): Promise<number> {
   try {
     const global = extractTbRoot(argv)
@@ -1682,6 +1721,60 @@ export async function main(argv: string[]): Promise<number> {
           sliceFile: squadTrialArgs.sliceFile,
           n: squadTrialArgs.n,
         })
+        return 0
+      }
+      case "master": {
+        const masterArgs = parseMasterArgs(subArgs)
+        if (masterArgs === null) {
+          printUsage()
+          return 2
+        }
+        const registry = loadRegistry(masterArgs.masterRoot)
+        // resumeSquad binds the shipped `cmdSquadRun`, mapping the namespace
+        // project key to its runtimeRoot (`project = ns.runtimeRoot`) — the
+        // relay REUSES checkpoint/resume, never reimplements it.
+        const deps: MasterDeps = {
+          masterRoot: masterArgs.masterRoot,
+          transport: fakeTransport(),
+          resumeSquad: async (a) => {
+            const ns = registry.projects[a.project]
+            if (!ns) die(`master: unregistered project '${a.project}'`)
+            return cmdSquadRun({
+              project: ns.runtimeRoot,
+              sliceId: a.sliceId,
+              resume: true,
+              gateAnswer: a.gateAnswer,
+              gatePolicy: ns.gatePolicy,
+            })
+          },
+          registry,
+          // Real sub-scheduler (self-hosting fleet-dev), git probe, worktree
+          // removal and crash-intent assembly are later drop-ins behind these
+          // seams; the --dry-run smoke never exercises them (empty queue /
+          // empty intents).
+          sub: async () => die("master: no sub-scheduler configured (--dry-run)"),
+          git: {
+            hasMergeHead: () => false,
+            branchContains: () => false,
+            abortMerge: () => {},
+          },
+          removeWorktree: () => {},
+          loadIntents: () => [],
+        }
+        if (!masterArgs.dryRun) {
+          // Real Telegram/Slack (offset-acked, R1) transport is a later
+          // drop-in behind the Transport seam; refuse to serve without one.
+          die("master: no transport configured (--dry-run only)")
+        }
+        // --dry-run: singleton-lock + one reconcile pass, then stop
+        // immediately (until → true, no serving loop) — a hermetic smoke of
+        // the daemon wiring.
+        const release = acquireSingletonLock(masterArgs.masterRoot)
+        try {
+          await runMaster(deps, { until: () => true })
+        } finally {
+          release()
+        }
         return 0
       }
       default:
