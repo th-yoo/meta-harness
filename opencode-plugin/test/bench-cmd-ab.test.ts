@@ -5,6 +5,7 @@ import * as os from "node:os"
 import type { BenchPaths } from "../src/bench/paths.ts"
 import { cmdAb, type CmdAbArgs } from "../src/bench/cmd-ab.ts"
 import type { RunOneTaskFn, RunTaskResult } from "../src/bench/cmd-run.ts"
+import { loadMetaMetrics, plateauVerdict } from "../src/bench/report-loop.ts"
 import {
   readScore,
   readAbVerdict,
@@ -473,6 +474,107 @@ test("cmdAb: verdict stamps timeoutRecording=true when MhConfig.recordTimeouts i
   const verdict = readAbVerdict(root, "v1")! as unknown as Record<string, unknown>
   expect(verdict["maxAgentTimeout"]).toBe(300)
   expect(verdict["timeoutRecording"]).toBe(true)
+})
+
+// ── budget-identity PRODUCER wiring onto the emitted "ab" meta-metric event
+// (Loop-3 T7 gap fix) ───────────────────────────────────────────────────────
+//
+// T6 stamps maxAgentTimeout/timeoutRecording/env.resourceEnforcement into
+// ab-verdict.json; T7 (report-loop.ts) reads those same 3 fields off
+// MetaMetricEvent to segment the loop's trailing window by budget-identity.
+// But the "ab" meta-metric event this file appends (near cmdAb's final
+// verdict write) never carried them — so on a live meta-metrics.jsonl every
+// event looked "legacy" and the segmentation never fired. These tests prove
+// the emitted event now carries the run's actual values.
+//
+// NOTE: this file's shared `fakeBenchPaths(dir, tbRoot)` idiom treats `dir`
+// itself AS `termBenchDir`, so `metaRoot` (= dirname(termBenchDir)) resolves
+// to the shared OS tmp root, not a per-test directory — harmless for the
+// existing tests (they only ever read/overwrite whole JSON files), but fatal
+// for reading an APPEND-ONLY meta-metrics.jsonl, which would then accumulate
+// events across every test (and every prior run) ever executed against that
+// shared root. These new tests build a genuinely isolated BenchPaths instead
+// (metaRoot IS the fresh mkdtemp dir, matching paths.ts's real metaRoot ->
+// termBenchDir = metaRoot/term-bench2 relationship) so their sink is private.
+function isolatedBenchPaths(): BenchPaths {
+  const metaRoot = fs.mkdtempSync(path.join(os.tmpdir(), "mh-t7-cmdab-"))
+  const termBenchDir = path.join(metaRoot, "term-bench2")
+  const tbRoot = path.join(metaRoot, "tb-root")
+  return {
+    metaRoot,
+    termBenchDir,
+    tbRoot,
+    resultsDir: path.join(termBenchDir, "results"),
+    patchesDir: path.join(termBenchDir, "patches"),
+    baselineTasksFile: path.join(termBenchDir, "baseline-tasks.txt"),
+    splitsFile: path.join(termBenchDir, "splits.json"),
+  }
+}
+
+function readMetaMetricsLines(metaRoot: string): Record<string, unknown>[] {
+  const sink = path.join(metaRoot, ".meta-harness", "meta-metrics.jsonl")
+  return fs
+    .readFileSync(sink, "utf-8")
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l) as Record<string, unknown>)
+}
+
+test("cmdAb: emitted 'ab' meta-metric event carries the run's maxAgentTimeout/timeoutRecording/resourceEnforcement", async () => {
+  const paths = isolatedBenchPaths()
+  writeTaskTomls(paths.tbRoot, ["t1"])
+  setupCandidate(paths, "project-global", "v1")
+
+  await withMetaHome(true, () =>
+    quiet(() =>
+      cmdAb(
+        paths,
+        { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, maxAgentTimeout: 600, enforceResources: true },
+        async () => res(),
+        fakeExec,
+      ),
+    ),
+  )
+
+  const lines = readMetaMetricsLines(paths.metaRoot)
+  const abEvent = lines.find((e) => e["event"] === "ab")!
+  expect(abEvent).toBeDefined()
+  expect(abEvent["maxAgentTimeout"]).toBe(600)
+  expect(abEvent["timeoutRecording"]).toBe(true)
+  expect((abEvent["env"] as Record<string, unknown>)["resourceEnforcement"]).toBe(true)
+})
+
+test("Loop-3 T7 integration: two REAL cmdAb runs at different maxAgentTimeout are no longer treated as one comparable bench-layer window", async () => {
+  const paths = isolatedBenchPaths()
+  writeTaskTomls(paths.tbRoot, ["t1"])
+  setupCandidate(paths, "project-global", "v1")
+
+  // Pre-change: operator has been running at maxAgentTimeout=600.
+  await withMetaHome(false, () =>
+    quiet(() =>
+      cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, maxAgentTimeout: 600 }, async () => res(), fakeExec),
+    ),
+  )
+  // Post-change: operator bumps the wall to 900 (a real budget-identity change).
+  await withMetaHome(false, () =>
+    quiet(() =>
+      cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, maxAgentTimeout: 900 }, async () => res(), fakeExec),
+    ),
+  )
+
+  const sink = path.join(paths.metaRoot, ".meta-harness", "meta-metrics.jsonl")
+  const events = loadMetaMetrics([sink])
+  const abEvents = events.filter((e) => e.event === "ab")
+  expect(abEvents.length).toBe(2)
+  expect(abEvents[0]!["maxAgentTimeout"]).toBe(600)
+  expect(abEvents[1]!["maxAgentTimeout"]).toBe(900)
+
+  // abK=2: without producer-side stamping both events would count toward one
+  // window (n=2). With real budget-identity stamps, the 600s event is
+  // excluded — only the current (900s) identity's 1 event counts.
+  const verdict = plateauVerdict(events, 2)
+  expect(verdict.bench["project-global"]!.n).toBe(1)
+  expect(verdict.bench["project-global"]!.reason).toBe("insufficient data")
 })
 
 // ── --resume ident-check must see a top-level driver (regression) ─────────

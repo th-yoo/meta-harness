@@ -261,6 +261,25 @@ export function abAccepted(v: AbVerdict): boolean {
  * budgetIdentityMatches then only ever compares against undefined, which a
  * verdict with defined figures will NOT match (a real mismatch, not silently
  * waved through) unless the verdict is itself pre-Loop-3. */
+/** Scan `sessions` from the end for the most recent env block carrying
+ * maxAgentTimeout/resourceEnforcement (most-recent-with-an-env-block wins) —
+ * shared by `readActiveBudget` (a whole candidate version's sessions) and
+ * `resolveTrial` (Loop-3 T7: a trial's own just-measured session subset), so
+ * both derive the tuple via literally the same scan rather than two
+ * hand-rolled copies that could drift. */
+function budgetFromSessions(sessions: SessionRecord[]): { maxAgentTimeout?: number; resourceEnforcement?: boolean } {
+  let maxAgentTimeout: number | undefined
+  let resourceEnforcement: boolean | undefined
+  for (let i = sessions.length - 1; i >= 0; i--) {
+    const env = sessions[i]?.env as { maxAgentTimeout?: number; resourceEnforcement?: boolean } | undefined
+    if (!env) continue
+    if (maxAgentTimeout === undefined) maxAgentTimeout = env.maxAgentTimeout
+    if (resourceEnforcement === undefined) resourceEnforcement = env.resourceEnforcement
+    if (maxAgentTimeout !== undefined && resourceEnforcement !== undefined) break
+  }
+  return { maxAgentTimeout, resourceEnforcement }
+}
+
 export function readActiveBudget(storeRoot: string): {
   maxAgentTimeout?: number
   timeoutRecording?: boolean
@@ -269,15 +288,7 @@ export function readActiveBudget(storeRoot: string): {
   const version = activeVersion(storeRoot)
   if (!version) return {}
   const score = readScore(storeRoot, version)
-  let maxAgentTimeout: number | undefined
-  let resourceEnforcement: boolean | undefined
-  for (let i = score.sessions.length - 1; i >= 0; i--) {
-    const env = score.sessions[i]?.env as { maxAgentTimeout?: number; resourceEnforcement?: boolean } | undefined
-    if (!env) continue
-    if (maxAgentTimeout === undefined) maxAgentTimeout = env.maxAgentTimeout
-    if (resourceEnforcement === undefined) resourceEnforcement = env.resourceEnforcement
-    if (maxAgentTimeout !== undefined && resourceEnforcement !== undefined) break
-  }
+  const { maxAgentTimeout, resourceEnforcement } = budgetFromSessions(score.sessions)
   const activeVerdict = readAbVerdict(storeRoot, version)
   return { maxAgentTimeout, resourceEnforcement, timeoutRecording: activeVerdict?.timeoutRecording }
 }
@@ -1124,6 +1135,22 @@ export function resolveTrial(storeRoot: string): TrialResolution {
   const trialSessions = nonTrivial(trialScore.sessions)
   const baselineSessions = nonTrivial(baselineScore.sessions)
 
+  // Loop-3 T7 (producer wiring): the budget-identity tuple these TRIAL
+  // sessions were actually measured under — stamped onto every "trial" event
+  // emitted below so report-loop.ts's segmentByCurrentBudgetIdentity has a
+  // real signal (mirrors cmd-ab.ts's verdictDict stamp for "ab" events).
+  // maxAgentTimeout/resourceEnforcement come from the exact same scan
+  // readActiveBudget uses (budgetFromSessions) over the session SUBSET that
+  // produced trialRate in each branch below; timeoutRecording is the CURRENT
+  // MhConfig.recordTimeouts — there's no per-session/per-trial record of that
+  // policy flag (it's a runtime switch, not a session-scoped fact), so "what
+  // the policy is right now" is the only available source.
+  const { recordTimeouts: timeoutRecording } = readMhConfig()
+  function budgetStamp(sessions: SessionRecord[]) {
+    const { maxAgentTimeout, resourceEnforcement } = budgetFromSessions(sessions)
+    return { maxAgentTimeout, timeoutRecording, env: { resourceEnforcement } }
+  }
+
   // No baseline to compare against — nothing to stratify by; keep original path.
   if (baselineSessions.length === 0) {
     if (trialSessions.length < trial.minSessions) {
@@ -1131,7 +1158,10 @@ export function resolveTrial(storeRoot: string): TrialResolution {
     }
     clearTrial(storeRoot)
     const trialRate = rateOf(trialSessions)
-    appendMetaMetric(storeRoot, { event: "trial", action: "confirmed", trial: trial.trial, trialRate, baselineRate: null })
+    appendMetaMetric(storeRoot, {
+      event: "trial", action: "confirmed", trial: trial.trial, trialRate, baselineRate: null,
+      ...budgetStamp(trialSessions),
+    })
     return { action: "confirmed", trial: trial.trial, trialRate, baselineRate: null }
   }
 
@@ -1146,14 +1176,20 @@ export function resolveTrial(storeRoot: string): TrialResolution {
 
   if (trialRate >= baselineRate) {
     clearTrial(storeRoot)
-    appendMetaMetric(storeRoot, { event: "trial", action: "confirmed", trial: trial.trial, trialRate, baselineRate })
+    appendMetaMetric(storeRoot, {
+      event: "trial", action: "confirmed", trial: trial.trial, trialRate, baselineRate,
+      ...budgetStamp(trialSame),
+    })
     return { action: "confirmed", trial: trial.trial, trialRate, baselineRate }
   }
 
   writeActive(storeRoot, trial.baseline, trial.baselineSystem, trial.baselineTools,
     trial.baselinePlaybook ?? null, trial.baselineAgentConfig ?? null, trial.baselineEnvPolicy ?? null)
   clearTrial(storeRoot)
-  appendMetaMetric(storeRoot, { event: "trial", action: "reverted", trial: trial.trial, trialRate, baselineRate })
+  appendMetaMetric(storeRoot, {
+    event: "trial", action: "reverted", trial: trial.trial, trialRate, baselineRate,
+    ...budgetStamp(trialSame),
+  })
   return { action: "reverted", trial: trial.trial, baseline: trial.baseline, trialRate, baselineRate }
 }
 

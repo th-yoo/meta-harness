@@ -620,6 +620,7 @@ export async function cmdAb(
   writeJsonAtomic(verdictPath, final)
   const finalHeldIn = final["heldIn"] as AbSetStats
   const finalHeldOut = final["heldOut"] as AbSetStats | null
+  const finalEnv = final["env"] as { resourceEnforcement?: boolean } | undefined
   appendMetaMetric(join(paths.metaRoot, ".meta-harness"), {
     event: "ab",
     layer,
@@ -633,6 +634,14 @@ export async function cmdAb(
     splitFold: splitMeta ? splitMeta.activeFold : null,
     earlyStopped: final["earlyStopped"],
     model,
+    // Loop-3 T7 (producer wiring): stamp the SAME budget-identity tuple
+    // already written into the verdict (T6's maxAgentTimeout/timeoutRecording/
+    // env.resourceEnforcement) onto this meta-metric event too, so
+    // report-loop.ts's segmentByCurrentBudgetIdentity has a real signal to
+    // segment on instead of every event reading as pre-Loop-3 legacy.
+    maxAgentTimeout: final["maxAgentTimeout"],
+    timeoutRecording: final["timeoutRecording"],
+    env: { resourceEnforcement: finalEnv?.resourceEnforcement },
   })
   rmSync(partialPath, { force: true })
 
