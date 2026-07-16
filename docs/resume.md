@@ -22,6 +22,23 @@ MacBook session shipped today (details in sections below):
 3. Still pending a go (unchanged): Phase-0 SELF_CHECK_INSTRUCTION re-run;
    seed-corpus stays measure-first behind loop-1's ab.
 
+## HOME SESSION pt 2 (2026-07-16) — Loop-3 COMPLETE · oauth-parallel SHIPPED+VALIDATED · T3 built · master DAG
+
+Everything committed + pushed. HEAD `f37ec51` (see `git log`). Loop-2 stays inconclusive (v0 active). Recipe: the "oauth+parallel recipe" section above.
+
+**Shipped (all pushed):**
+1. **Loop-3 FUNCTIONALLY COMPLETE** (was T1-T5 dark) — T6 (`0c9f2be`, `/mh-activate` budget-identity gate) + T7 (`f598d08`, report-loop segmentation) + emission (`cc64dea`, ab+trial meta-metric events stamp the {maxAgentTimeout,timeoutRecording,resourceEnforcement} tuple → segmentation LIVE, proven by an integration test) + pre-flip (`da0e107`: per-task timeout-marker denominator via `SessionRecord.agentTimeout`, project-scope steer gate, clearer undefined-active toast). **`recordTimeouts` STILL default-OFF.** To flip: `config.json recordTimeouts=true` + re-baseline v0 (budget-identity change → T6/T7 handle it).
+2. **oauth-parallel freshness gate SHIPPED+VALIDATED** (`0a823bd`+`ec3b31f`+`aeabef1`) — run `--parallel` on oauth, **NO API KEY**, safe by construction (no task runs across the ~8h token refresh → no auth.json race). = pre-flight (token must outlive one task; oauth+parallel REQUIRES explicit `--max-agent-timeout`) + scheduler `canLaunch` launch-guard (stops launching near expiry, graceful resolve, `--resume` continues) + oauth mount under parallel (`useKeyOnlyForParallel`: keyOnly only if key present). Validated LIVE 2-concurrent.
+3. **`--min-cpus`/`--min-mem-mb` resource floor** (`f37ec51`) — generous per-task cgroup cap `max(declared,floor)` so `--enforce-resources` doesn't starve compute-heavy tasks. Default off = byte-identical.
+4. **VALIDATION (live runs):** tune-mjcf + distribution-search (both loop-2 timeout-fails @600s) → **2/2 PASS serial @1800s**. Parallel @1-cpu-cap → 1/2 (distribution-search STARVED: 1367s+fail vs 446s serial). Parallel GENEROUS (`--min-cpus 4`, 8-cpu machine) → distribution-search recovered (196s+pass partial at handoff; **CHECK `term-bench2/results/validate-parallel-generous.json` for the full result**). LESSON: artificial resource limits (time OR cpu) → false fails → weaker loop signal; loop wants the loosest envelope that fits the machine. Loop-2's "no improvement" was partly a **timeout mirage**. USER DECISION: parallel + generous footprints.
+5. **Self-hosting T3 BUILT** (`a39c1db`..`71216b0`) — `fleet/dag.ts` DagNode{id,task,deps[],files?,mutatesDeps?} + total validator + PLANNER_SQUAD + gate2-reuse. **DAG: T1+T3 built; T4/T5/T6sh/T2/T7sh/master planned.**
+6. **oauth-race fully resolved+documented** — `oauth-parallel-race-research.md` + `auth-delegation-design.md` (UPDATED: freshness gate SUPERSEDES the old "surface don't handle / key-or-serial" decision).
+7. **MASTER decomposed into a parallel task-DAG** (max-parallelism, expressed in the `fleet/dag.ts` TaskDag format = dogfood): **Wave0 (4∥):** gate-state · transport · frozen-gate · namespace. **Wave1 (3∥):** relay(gs,tr) · scheduler(ns) · reconcile(gs,ns). **Wave2:** daemon+CLI+E2E(all). Each node = a distinct `master/*.ts` file → no intra-wave conflict. Build-plan `docs/superpowers/plans/2026-07-16-master-build.md` (8 tasks), **4 open Qs** (masterRoot convention, inbound grammar, gateRoot provisioning, singleton-lock TTL) to settle before building.
+
+**NEXT:** (a) check the generous-validation result; (b) settle master's 4 open Qs → execute master DAG **wave-0 as 4 parallel subagents** (distinct files, no worktree needed); (c) OR flip Loop-3 `recordTimeouts` + re-baseline v0 + a real loop `ab` run (parallel+generous, `--min-cpus 4 --cpu-budget 8`). grok-build = xAI leaf-agent coding TUI (possible future `--driver`, not orchestration prior-art).
+
+---
+
 ## SESSION END 2026-07-16 (leaving office) — loop-2 CALLED · Loop-3 shipped DARK · T1 shipped
 
 **Everything is committed + pushed. `git status` clean, 0 unpushed. HEAD = `7e23797`.**
