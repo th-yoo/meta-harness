@@ -248,6 +248,59 @@ test("buildProposerContext: timedOut session renders a distinct TIMEOUT marker w
   expect(context).toContain("600")
 })
 
+// Loop-3 pre-flip fix #1: the TIMEOUT marker's denominator must be the REAL
+// per-task agent timeout (`session.agentTimeout`, taskTimeouts()'s resolved
+// per-task budget), NOT the run-level `env.maxAgentTimeout` cap — those two
+// diverge whenever a task.toml override sits below the run's --max-agent-
+// timeout (or the run cap sits above the 900s task.toml default). Rendering
+// the run-level cap in that case understates the wall the task actually hit,
+// undercutting the resource-limit diagnosis this marker exists for.
+test("buildProposerContext: timedOut session with per-task agentTimeout renders THAT budget, not the run-level env.maxAgentTimeout", () => {
+  const storeRoot = tmpDir("store-timeout-pertask")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  const dir = path.join(storeRoot, "candidates", "v1")
+  fs.mkdirSync(path.join(dir, "traj"), { recursive: true })
+  fs.writeFileSync(path.join(dir, "score.json"), JSON.stringify({
+    version: "v1", nPass: 0, nFail: 1,
+    sessions: [{
+      sessionID: "ses_timeout", passed: false, turnCount: 0, timedOut: true, elapsed: 290.1,
+      agentTimeout: 300, env: { maxAgentTimeout: 900 }, model: "m", variant: "", toolUsage: {}, summary: "timed out",
+      note: "", timestamp: "",
+    }],
+  }))
+
+  const context = buildProposerContext(storeRoot, [])
+
+  expect(context).toContain("TIMEOUT")
+  expect(context).toContain("290.1")
+  expect(context).toContain("300")
+  expect(context).not.toContain("900")
+})
+
+// Back-compat: a record with no `agentTimeout` field (every pre-fix record)
+// must still render — falling back to the run-level env.maxAgentTimeout,
+// exactly as before this fix.
+test("buildProposerContext: timedOut session with no agentTimeout falls back to env.maxAgentTimeout (back-compat)", () => {
+  const storeRoot = tmpDir("store-timeout-fallback")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  const dir = path.join(storeRoot, "candidates", "v1")
+  fs.mkdirSync(path.join(dir, "traj"), { recursive: true })
+  fs.writeFileSync(path.join(dir, "score.json"), JSON.stringify({
+    version: "v1", nPass: 0, nFail: 1,
+    sessions: [{
+      sessionID: "ses_timeout", passed: false, turnCount: 0, timedOut: true, elapsed: 638.4,
+      env: { maxAgentTimeout: 600 }, model: "m", variant: "", toolUsage: {}, summary: "timed out",
+      note: "", timestamp: "",
+    }],
+  }))
+
+  const context = buildProposerContext(storeRoot, [])
+
+  expect(context).toContain("TIMEOUT")
+  expect(context).toContain("638.4")
+  expect(context).toContain("600")
+})
+
 // Back-compat: a session with no `timedOut` field (every pre-Loop-3 record,
 // and any ordinary agent-loss fail) must render exactly as before — no
 // TIMEOUT marker leaking onto a non-timeout FAIL.
@@ -306,6 +359,69 @@ test("buildProposerPrompt: no timed-out sessions -> 'Timed-out sessions' note om
   )
 
   expect(prompt).not.toContain("Timed-out sessions")
+})
+
+// Loop-3 pre-flip fix #2: the timed-out steer note points at agent-config.json
+// / env-policy.json timeout-bump ops that are offered ONLY at PROJECT layers
+// (see agentConfigSection/envPolicySection — account layers don't stage those
+// ops files at all). At account-global/account-role scope the note misdirects
+// the proposer at ops it can't actually use here. Gate the note to
+// layer.scope.startsWith("project").
+function seedTimedOutStore(storeRoot: string): void {
+  writeActive(storeRoot, "v1", "- some rule", "")
+  const dir = path.join(storeRoot, "candidates", "v1")
+  fs.mkdirSync(path.join(dir, "traj"), { recursive: true })
+  fs.writeFileSync(path.join(dir, "score.json"), JSON.stringify({
+    version: "v1", nPass: 0, nFail: 1,
+    sessions: [{
+      sessionID: "ses_timeout", passed: false, turnCount: 0, timedOut: true, elapsed: 638.4,
+      env: { maxAgentTimeout: 600 }, model: "m", variant: "", toolUsage: {}, summary: "timed out",
+      note: "", timestamp: "",
+    }],
+  }))
+}
+
+test("buildProposerPrompt: account-global scope -> 'Timed-out sessions' note is OMITTED even with timed-out sessions", () => {
+  const worktree = tmpDir("worktree-to-acct")
+  const storeRoot = tmpDir("store-to-acct")
+  seedTimedOutStore(storeRoot)
+  const layer: StoreLayer = { root: storeRoot, scope: "account-global", higherRoots: [] }
+  const sp = stagingPaths(worktree, layer.scope, "v2")
+
+  const prompt = buildProposerPrompt(
+    layer, "v2", "", sp.system, sp.tools, sp.diagnosis, sp.ops, sp.agentConfig, sp.envPolicy, worktree, null,
+  )
+
+  expect(prompt).not.toContain("Timed-out sessions")
+})
+
+test("buildProposerPrompt: account-role scope -> 'Timed-out sessions' note is OMITTED even with timed-out sessions", () => {
+  const worktree = tmpDir("worktree-to-acct-role")
+  const storeRoot = tmpDir("store-to-acct-role")
+  seedTimedOutStore(storeRoot)
+  const layer: StoreLayer = { root: storeRoot, scope: "account-role", higherRoots: [] }
+  const sp = stagingPaths(worktree, layer.scope, "v2")
+
+  const prompt = buildProposerPrompt(
+    layer, "v2", "", sp.system, sp.tools, sp.diagnosis, sp.ops, sp.agentConfig, sp.envPolicy, worktree, null,
+  )
+
+  expect(prompt).not.toContain("Timed-out sessions")
+})
+
+test("buildProposerPrompt: project-global scope -> 'Timed-out sessions' note IS present (project layers keep it)", () => {
+  const worktree = tmpDir("worktree-to-proj")
+  const storeRoot = tmpDir("store-to-proj")
+  seedTimedOutStore(storeRoot)
+  const layer: StoreLayer = { root: storeRoot, scope: "project-global", higherRoots: [] }
+  const sp = stagingPaths(worktree, layer.scope, "v2")
+
+  const prompt = buildProposerPrompt(
+    layer, "v2", "", sp.system, sp.tools, sp.diagnosis, sp.ops, sp.agentConfig, sp.envPolicy, worktree, null,
+  )
+
+  expect(prompt).toContain("Timed-out sessions")
+  expect(prompt).toContain("resource-limit")
 })
 
 test("readMhConfig: proposerTimeoutMin defaults to 20, honors valid overrides, rejects junk, caps at 120", () => {

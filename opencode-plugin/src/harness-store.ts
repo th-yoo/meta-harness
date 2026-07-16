@@ -151,6 +151,17 @@ export interface SessionRecord {
    *  opted in via MhConfig.recordTimeouts (Loop-3 T3) — see record.ts's
    *  recordToStores guard. */
   timedOut?: boolean
+  /** The REAL per-task agent wall-clock budget (seconds) this session ran
+   *  under — `taskTimeouts()`'s resolved `agentTimeout` (the task.toml
+   *  `agent.timeout_sec` override, default 900, capped by the run's
+   *  --max-agent-timeout). Deliberately NOT the same value as
+   *  `env.maxAgentTimeout` (the RUN-LEVEL cap): the two diverge whenever a
+   *  task.toml override sits below the run cap, or the run cap sits above
+   *  900 — in exactly that case `env.maxAgentTimeout` understates the wall a
+   *  timed-out session actually hit. Optional so pre-fix records keep
+   *  parsing; absent ⇒ buildProposerContext's TIMEOUT marker falls back to
+   *  `env.maxAgentTimeout` (back-compat). Loop-3 pre-flip fix #1. */
+  agentTimeout?: number
 }
 
 export interface CandidateScore {
@@ -1469,12 +1480,21 @@ export function buildProposerContext(
       const toolSummary = s.toolUsage ? formatToolUsage(s.toolUsage) : ""
       // Loop-3 T4: a timedOut session (turnCount=0, events:[] — no trajectory
       // was ever captured) must NOT read as an ordinary FAIL. Render the wall
-      // it hit distinctly using the elapsed/env.maxAgentTimeout fields T3
-      // stamped onto the record, so the proposer can tell "agent ran out of
-      // budget" apart from every other failure mode at a glance. Back-compat:
-      // `s.timedOut` absent/false ⇒ this appends nothing, line is unchanged.
+      // it hit distinctly using the elapsed/budget fields T3 stamped onto the
+      // record, so the proposer can tell "agent ran out of budget" apart from
+      // every other failure mode at a glance. Back-compat: `s.timedOut`
+      // absent/false ⇒ this appends nothing, line is unchanged.
+      //
+      // Denominator (Loop-3 pre-flip fix #1): prefer `s.agentTimeout` — the
+      // REAL per-task budget the session ran under (taskTimeouts()'s resolved
+      // agentTimeout) — over `env.maxAgentTimeout` (the RUN-LEVEL cap). They
+      // diverge whenever a task.toml override sits below the run cap, or the
+      // run cap sits above the 900s default; rendering the run-level cap in
+      // that case understates the wall a genuine timeout hit. Fall back to
+      // env.maxAgentTimeout only when agentTimeout is absent (pre-fix records).
+      const budget = s.agentTimeout ?? (s.env as { maxAgentTimeout?: number } | undefined)?.maxAgentTimeout
       const timeoutMarker = s.timedOut
-        ? ` | TIMEOUT ${s.elapsed ?? "?"}s / ${(s.env as { maxAgentTimeout?: number } | undefined)?.maxAgentTimeout ?? "?"}s budget`
+        ? ` | TIMEOUT ${s.elapsed ?? "?"}s / ${budget ?? "?"}s budget`
         : ""
       return [
         `  - ${s.sessionID} | ${s.passed ? "PASS" : "FAIL"} | model=${modelStr} | turns=${s.turnCount}${timeoutMarker}${s.note ? ` | note="${s.note}"` : ""}`,

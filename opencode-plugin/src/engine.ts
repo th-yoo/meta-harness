@@ -734,6 +734,24 @@ export class EvolutionEngine {
         // unchanged.
         const activeBudget = readActiveBudget(layer.root)
         if (!budgetIdentityMatches(verdict, activeBudget)) {
+          // Loop-3 pre-flip fix #3: when the active baseline has NO recorded
+          // budget-identity at all (readActiveBudget found no env-carrying
+          // session for it — e.g. it predates budget-identity stamping),
+          // the generic per-field message below would render cryptically
+          // ("maxAgentTimeout 900s (candidate) vs undefined (active)"). Give
+          // this specific case its own actionable wording instead. Reachable
+          // here only when budgetIdentityMatches already returned false,
+          // which itself only happens once verdict.maxAgentTimeout is known
+          // defined (its own first check short-circuits pre-Loop-3 verdicts) —
+          // so `verdict.maxAgentTimeout` is safe to render as a number below.
+          if (activeBudget.maxAgentTimeout === undefined) {
+            return {
+              consumed: true,
+              kind: "toast",
+              message: `${version} was measured under a budget (maxAgentTimeout ${verdict.maxAgentTimeout}s) but ${layer.scope}'s active baseline has no recorded budget-identity — re-baseline it (re-score the active version at the current budget) or pass --force`,
+              variant: "error",
+            }
+          }
           const mismatches: string[] = []
           if (verdict.maxAgentTimeout !== activeBudget.maxAgentTimeout) {
             mismatches.push(`maxAgentTimeout ${verdict.maxAgentTimeout}s (candidate) vs ${activeBudget.maxAgentTimeout}s (active)`)

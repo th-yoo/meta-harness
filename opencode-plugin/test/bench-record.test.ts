@@ -490,6 +490,36 @@ test("sessionRecord: elapsed/timedOut stamped only when provided (matches platfo
   expect(withNeither.timedOut).toBeUndefined()
 })
 
+// Loop-3 pre-flip fix #1: `agentTimeout` (the REAL per-task budget, distinct
+// from env.maxAgentTimeout's run-level cap) is stamped only when provided —
+// same conditional-stamp idiom as elapsed/timedOut, additive-only.
+test("sessionRecord: agentTimeout stamped only when provided (real per-task budget, additive)", () => {
+  const withIt = sessionRecord("t", "s", false, 0, {}, "m", "", {}, 12.5, true, 300)
+  expect(withIt.agentTimeout).toBe(300)
+
+  const without = sessionRecord("t", "s", true, 3, {}, "m", "", {}, 12.5, true)
+  expect(without.agentTimeout).toBeUndefined()
+})
+
+test("recordToStores: agentTimeout threads through into the persisted SessionRecord", () => {
+  const metaRoot = tmpDir()
+  const root = projectGlobalRoot(metaRoot)
+  createCandidate(root, "v0", "sys")
+  const { writeActive } = require("../src/harness-store.ts") as typeof import("../src/harness-store.ts")
+  writeActive(root, "v0", "sys")
+
+  recordToStores(
+    "t", "sess-timeout", false, 0, {}, "m", "", "project", metaRoot, false,
+    "", {}, { maxAgentTimeout: 900 }, [], false,
+    /* timedOut */ true, /* recordTimeouts */ true, /* elapsed */ 290.1, /* agentTimeout */ 300,
+  )
+
+  const score = readScore(root, "v0")
+  expect(score.sessions).toHaveLength(1)
+  expect(score.sessions[0]!.agentTimeout).toBe(300)
+  expect(score.sessions[0]!.elapsed).toBe(290.1)
+})
+
 // ── Loop-3 T3: back-compat (pre-Loop-3 score.json still parses/renders) ──
 
 test("back-compat: a score.json with neither elapsed nor timedOut parses and renders via buildProposerContext", () => {

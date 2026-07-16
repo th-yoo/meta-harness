@@ -267,7 +267,14 @@ export async function envBlock(
  * `elapsed`/`timedOut` (Loop-3 T3) are two new optional trailing params,
  * stamped onto the record only when provided — same conditional-stamp idiom
  * as `platform` above — so every existing (8-arg) caller keeps compiling and
- * producing byte-identical records. */
+ * producing byte-identical records.
+ *
+ * `agentTimeout` (Loop-3 pre-flip fix #1) is a further optional trailing
+ * param: the REAL per-task agent wall-clock budget (taskTimeouts()'s
+ * resolved `agentTimeout`) this session ran under, as distinct from the
+ * RUN-LEVEL `env.maxAgentTimeout` cap the two can diverge from. Same
+ * conditional-stamp idiom; every existing caller (that doesn't pass it)
+ * keeps producing byte-identical records. */
 export function sessionRecord(
   task: string,
   sessionId: string,
@@ -279,6 +286,7 @@ export function sessionRecord(
   env: Record<string, unknown> = {},
   elapsed?: number,
   timedOut?: boolean,
+  agentTimeout?: number,
 ): SessionRecord {
   const driver = env["driver"]
   return {
@@ -295,6 +303,7 @@ export function sessionRecord(
     ...(typeof driver === "string" ? { platform: driver } : {}),
     ...(elapsed !== undefined ? { elapsed } : {}),
     ...(timedOut !== undefined ? { timedOut } : {}),
+    ...(agentTimeout !== undefined ? { agentTimeout } : {}),
   }
 }
 
@@ -312,6 +321,10 @@ export function sessionRecord(
  * (passed=false, turnCount=0, timedOut=true, elapsed set); an auth/transient
  * 0-turn (`timedOut` unset/false) is still dropped — that discriminator is
  * the whole point of carrying `timedOut` instead of just deleting the guard.
+ *
+ * `agentTimeout` (Loop-3 pre-flip fix #1) is a further optional trailing
+ * param threaded straight through to `sessionRecord` — the real per-task
+ * budget (see that function's doc), not the run-level `env.maxAgentTimeout`.
  */
 export function recordToStores(
   task: string,
@@ -332,6 +345,7 @@ export function recordToStores(
   timedOut = false,
   recordTimeouts = false,
   elapsed?: number,
+  agentTimeout?: number,
 ): void {
   if (noStore) return
   if (turnCount === 0 && !(timedOut && recordTimeouts)) {
@@ -339,7 +353,7 @@ export function recordToStores(
     return
   }
 
-  const record = sessionRecord(task, sessionId, passed, turnCount, toolUsage, model, variant, env, elapsed, timedOut)
+  const record = sessionRecord(task, sessionId, passed, turnCount, toolUsage, model, variant, env, elapsed, timedOut, agentTimeout)
   const saveTraj = events.length > 0 && (!passed || saveAllTraj)
 
   for (const [name, root] of layerStoreRoots(layers, agent, metaRoot)) {

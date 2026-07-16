@@ -500,6 +500,7 @@ export async function cmdAb(
             envB as unknown as Record<string, unknown>,
             resB.elapsed,
             resB.timedOut,
+            agentTimeout,
           )
           const score = recordSession(layerRoot, candidate, rec)
           if (resB.events.length > 0 && (resB.reward !== 1 || args.saveAllTraj)) {

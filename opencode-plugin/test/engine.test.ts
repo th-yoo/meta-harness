@@ -528,6 +528,31 @@ test("handleCommand /mh-activate: matching budget-identity (600/600, same flags)
   expect(activeVersion(root)).toBe("v2")
 })
 
+// Loop-3 pre-flip fix #3: when the ACTIVE baseline has no recorded budget at
+// all (readActiveBudget returns maxAgentTimeout: undefined — e.g. its
+// sessions predate any env-carrying record) but the CANDIDATE verdict does,
+// the generic per-field mismatch message renders cryptically ("... vs
+// undefined ..."). This case gets its own actionable wording instead.
+test("handleCommand /mh-activate: active baseline has NO recorded budget -> actionable toast, not 'vs undefined'", async () => {
+  const worktree = tmpWorktree()
+  const root = accountGlobalRoot()
+  seedActiveBudget(root, "v1", {}) // no maxAgentTimeout recorded on the active baseline at all
+  seedCandidateVerdict(root, "v2", { maxAgentTimeout: 900, timeoutRecording: false, env: { resourceEnforcement: false } })
+
+  const store = new InMemorySessionStateStore()
+  const { host } = fakeHost(worktree)
+  const engine = new EvolutionEngine(host, store)
+
+  const r = await engine.handleCommand("mh-activate", "account v2", "s")
+  if (!(r.consumed && r.kind === "toast")) throw new Error("expected toast")
+  expect(r.variant).toBe("error")
+  expect(r.message).not.toContain("undefined")
+  expect(r.message).toContain("no recorded budget-identity")
+  expect(r.message).toContain("re-baseline")
+  expect(r.message).toContain("--force")
+  expect(activeVersion(root)).toBe("v1") // refused — not activated
+})
+
 test("handleCommand /mh-activate: pre-Loop-3 verdict (no maxAgentTimeout field) still activates without --force (back-compat)", async () => {
   const worktree = tmpWorktree()
   const root = accountGlobalRoot()

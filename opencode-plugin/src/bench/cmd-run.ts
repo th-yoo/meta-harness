@@ -532,6 +532,7 @@ export async function cmdRun(
           res.timedOut,
           recordTimeouts,
           res.elapsed,
+          agentTimeout,
         ),
       )
 
