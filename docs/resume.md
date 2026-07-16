@@ -3,7 +3,41 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ➡️ MACBOOK HOME PICKUP (handoff 2026-07-16 evening) — DO THIS FIRST
+## ✅ MACBOOK PICKUP DONE (2026-07-17) — open work (a) COMPLETE, band hole FILLED
+
+Home steps 1–3 executed clean: suite **1250 pass / 0 fail** on macOS; store diff showed exactly the
+expected v0-re-baseline drift; surgically imported (no `--delete`) + activated v0 in **BOTH** local
+stores — `~/.config/meta-harness` AND the repo `.meta-harness` (which existed on the MacBook but was
+STALE: old v1, pre-rebaseline active, no config.json — the open-work recipes point `META_HARNESS_HOME`
+at it, so it had to be brought current too).
+
+**(a) write-compressor re-run — DONE, PASSED.** Serial (no `--parallel`, oauth-race dodged),
+reward=1 in 788.9s (turns=1, verifier clean). Store: **v0 = 12 PASS / 2 FAIL over 14 sessions
+(85.7%)** — the 13/14 band hole is filled; fails remain extract-elf + openssl-selfsigned-cert
+(genuine). Synced to `term-bench2/store/` (surgical) + mirrored to `~/.config/meta-harness`.
+Recipe fix: **`--cpu-budget`/`--mem-budget` are `--parallel`-only** — drop them for serial runs
+(the runner errors out otherwise).
+
+**FIRST resource profile written** (load-aware scheduler #1 live-proven on macOS/applehv):
+`<repo>/resource-profiles/x64-12c-intel-r-core-tm-i7-8850h-cpu-2-60ghz.json` → write-compressor
+`{avgCpu: 0.43, peakRssMb: 1217, wall: 788.9}`. Declared/floored 4 cpus vs measured 0.43 sustained
+cores = the over-declaration increment #2 will exploit. `resource-profiles/` is now GITIGNORED
+(host-local by design — `readResourceProfile` keys by the CURRENT host class, so profiles don't
+transfer meaningfully).
+
+**MacBook host notes:** podman = official installer at `/opt/podman/bin` (NOT on default PATH —
+prefix `PATH=/opt/podman/bin:$PATH`); machine applehv **4 CPUs / 8 GiB** → parallel budgets must be
+scaled down from the 8-core Linux recipes (a `--cpu-budget 8`/`--min-cpus 4` parallel run degenerates
+to width-1 here).
+
+**REMAINING OPEN WORK:** (b) first real loop `ab` — propose a NEW candidate ≠ v0, same
+budget-identity; (c) load-aware scheduler #2 (flip packer to measured `avgCpu` — profile data now
+exists, more accumulates with each run); (d) Axis-2 vendor content + panel. Details in the
+handoff block below.
+
+---
+
+## ➡️ MACBOOK HOME PICKUP (handoff 2026-07-16 evening) — DONE 2026-07-17, see block above
 
 **Everything is PUSHED — `git pull` fast-forwards to the latest `origin/main`.** Clean tree (only a stray untracked `oom` — ignore). Recent commits (newest last): `2a8fda5` v0 re-baseline snapshot · `e113f43` cgroup capture+memorize · `e0e6e7c` ab-path cgroup capture · then this handoff on top. (Don't assert an exact tip hash — this doc commits after the code, so the tip is always ≥ the hashes listed.)
 

@@ -1,6 +1,6 @@
 {
   "version": "v0",
-  "nPass": 11,
+  "nPass": 12,
   "nFail": 2,
   "sessions": [
     {
@@ -519,6 +519,49 @@
       "elapsed": 267.8,
       "timedOut": false,
       "agentTimeout": 900
+    },
+    {
+      "sessionID": "bench-write-compressor-1784215530-2a070c",
+      "passed": true,
+      "note": "bench:write-compressor",
+      "turnCount": 1,
+      "timestamp": "2026-07-16T15:38:41.252Z",
+      "summary": "write-compressor",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "read": {
+          "calls": 12,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 76,
+          "errors": 9
+        },
+        "write": {
+          "calls": 15,
+          "errors": 0
+        },
+        "edit": {
+          "calls": 7,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "8d47028",
+        "harnessHash": "25f13fca883fe563",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true
+      },
+      "platform": "opencode",
+      "elapsed": 788.9,
+      "timedOut": false,
+      "agentTimeout": 900,
+      "cpuSeconds": 336.7,
+      "peakRssMb": 1217
     }
   ]
 }
