@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { renderRole, parseStamp, harnessHashOf } from "../src/fleet/render.ts"
 import { writeSquadDefV1, STANDARD_SQUAD } from "../src/fleet/squad-def.ts"
-import { accountRoleRoot, createCandidate, writeActive } from "../src/harness-store.ts"
+import { accountGlobalRoot, accountRoleRoot, createCandidate, writeActive } from "../src/harness-store.ts"
 
 // seed analyzer account-role v1 whose body teaches the wire format (shared
 // across tests so the frontmatter-covering test below can recompute the
@@ -78,5 +78,34 @@ describe("renderRole", () => {
     expect(second.stamp.harnessHash).not.toBe(staleHash)
     const rewritten = readFileSync(path, "utf-8")
     expect(parseStamp(rewritten)?.harnessHash).toBe(stamp.harnessHash)
+  })
+
+  // ── generality-tag routing (Task 4, generality-routing plan) ─────────────
+  // ALL FLEET_ROLES use anthropic/* (fleet/roles.ts) — there is no non-anthropic
+  // role, so route by CONTRASTING two vendor bullets on ONE renderRole call
+  // instead of two roles. Seeds the GLOBAL (account) layer's active playbook
+  // — hermetic via this file's existing META_HARNESS_HOME redirect (beforeEach).
+  test("renderRole routes the persona by the role's fixed model", () => {
+    const root = accountGlobalRoot()
+    const pb = {
+      schemaVersion: 1 as const,
+      nextId: 4,
+      bullets: [
+        { id: "b1", text: "U", helpful: 0, harmful: 0, addedBy: "t", status: "active" as const, createdAt: "t", updatedAt: "t" },
+        { id: "b2", text: "VA", helpful: 0, harmful: 0, addedBy: "t", status: "active" as const, createdAt: "t", updatedAt: "t", generality: "vendor" as const, slice: "anthropic" },
+        { id: "b3", text: "VO", helpful: 0, harmful: 0, addedBy: "t", status: "active" as const, createdAt: "t", updatedAt: "t", generality: "vendor" as const, slice: "openai" },
+      ],
+    }
+    const flat = "- U\n- VA\n- VO\n"
+    createCandidate(root, "v1", flat, "", pb)
+    writeActive(root, "v1", flat, "", pb)
+
+    // analyzer's fixed model is anthropic/* (fleet/roles.ts) — its account-role
+    // layer (seeded in beforeEach) still teaches the wire headings, so no --force needed.
+    const { path } = renderRole(project, "analyzer")
+    const roleBody = readFileSync(path, "utf-8")
+    expect(roleBody).toContain("- VA")
+    expect(roleBody).toContain("- U")
+    expect(roleBody).not.toContain("- VO")
   })
 })

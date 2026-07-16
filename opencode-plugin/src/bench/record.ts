@@ -119,9 +119,10 @@ export function assembleAgentsMd(
   metaRoot: string,
   agent = "",
   pins: Record<string, string> = {},
+  model?: string,
 ): string {
   const layerRefs: LayerRef[] = layerStoreRoots(layers, agent, metaRoot).map(([name, root]) => ({ scope: name, root }))
-  return renderAgentsMd(composeHarness(layerRefs, pins), LAYER_LABELS, agent)
+  return renderAgentsMd(composeHarness(layerRefs, pins, model), LAYER_LABELS, agent)
 }
 
 /** Snapshot which store versions are active/pinned, for results provenance.

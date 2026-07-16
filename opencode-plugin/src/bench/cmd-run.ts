@@ -398,7 +398,7 @@ export async function cmdRun(
 
   let harnessMd = ""
   if (!(args.noHarness || layers === "none")) {
-    harnessMd = assembleAgentsMd(layers, paths.metaRoot, agent, pins)
+    harnessMd = assembleAgentsMd(layers, paths.metaRoot, agent, pins, model)
     if (harnessMd) log(`Harness assembled (${harnessMd.length} chars)`)
     else log("No active harness content found — running without AGENTS.md")
   }

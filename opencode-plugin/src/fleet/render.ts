@@ -92,7 +92,7 @@ export function renderRole(
   const pins = opts?.pins ?? {}
 
   const roots = layerStoreRoots("global", s.agent, project)
-  const body = assembleAgentsMd("global", project, s.agent, pins)
+  const body = assembleAgentsMd("global", project, s.agent, pins, s.model)
   const versions: Record<string, string> = {}
   for (const [name, root] of roots) {
     versions[name] = pins[name] || activeVersion(root)

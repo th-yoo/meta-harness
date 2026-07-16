@@ -226,8 +226,8 @@ export async function cmdAb(
   const sentinelOutTasks = heldOutTasks.filter((t) => sentinelSet.has(t))
 
   // Compose both arms once (they differ in exactly one layer by construction).
-  const harnessA = assembleAgentsMd(layers, paths.metaRoot, agent, {})
-  const harnessB = assembleAgentsMd(layers, paths.metaRoot, agent, { [layer]: candidate })
+  const harnessA = assembleAgentsMd(layers, paths.metaRoot, agent, {}, model)
+  const harnessB = assembleAgentsMd(layers, paths.metaRoot, agent, { [layer]: candidate }, model)
   const agentVersion = await inContainerAgentVersion(paths, driver, execFn)
   // Same non-default-driver-unknown-probe gate as cmd-run.ts's cmdRun
   // (final-review fix 3) — a claude-code (etc) probe coming back "unknown"

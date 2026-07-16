@@ -162,6 +162,33 @@ test("assembleAgentsMd: role layer heading substitutes {agent}", () => {
   expect(md).toContain("role rule")
 })
 
+// ── assembleAgentsMd: generality-tag routing (project-global, hermetic) ────
+// project-global is metaRoot-scoped (no real account-root writes), per this
+// file's header note and the plan's Task-4 hermeticity requirement.
+
+test("assembleAgentsMd routes project-global by model", () => {
+  const metaRoot = tmpDir()
+  const root = projectGlobalRoot(metaRoot)
+  const { writeActive } = require("../src/harness-store.ts") as typeof import("../src/harness-store.ts")
+  const pb = {
+    schemaVersion: 1 as const,
+    nextId: 3,
+    bullets: [
+      { id: "b1", text: "U", helpful: 0, harmful: 0, addedBy: "t", status: "active" as const, createdAt: "t", updatedAt: "t" },
+      { id: "b2", text: "VA", helpful: 0, harmful: 0, addedBy: "t", status: "active" as const, createdAt: "t", updatedAt: "t", generality: "vendor" as const, slice: "anthropic" },
+    ],
+  }
+  const flat = "- U\n- VA\n"
+  createCandidate(root, "v1", flat, "", pb)
+  writeActive(root, "v1", flat, "", pb)
+
+  const md = (model?: string) => assembleAgentsMd("project", metaRoot, "", {}, model)
+  expect(md("anthropic/claude-haiku-4-5")).toContain("- VA")
+  expect(md("openai/gpt-5")).not.toContain("- VA")
+  expect(md("openai/gpt-5")).toContain("- U")
+  expect(md()).toContain("- VA") // no model → flat (back-compat)
+})
+
 // ── harnessMeta ──────────────────────────────────────────────────────────
 
 test("harnessMeta: layers='none' shortcut not applicable here (cmd-run handles that); empty store -> 'none' actives", () => {
