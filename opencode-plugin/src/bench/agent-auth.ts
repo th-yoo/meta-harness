@@ -49,7 +49,7 @@
  * doc comment for the differences.
  */
 import { execFileSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync, chmodSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, chmodSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { BenchError } from "./util.ts"
@@ -211,6 +211,81 @@ export function prepareAgentAuthMounts(opts: PrepareAgentAuthMountsOpts = {}): A
   }
 
   return { mounts, cleanup }
+}
+
+// ── readOauthExpiresAt (oauth-parallel freshness gate, Task 1) ───────────
+
+/**
+ * The ~5-min refresh buffer: Claude Code / opencode-claude-auth refresh the
+ * oauth access token once it has under ~5 minutes left, not exactly at
+ * expiry. Shared by this task's pre-flight check (cli.ts's validateParallel)
+ * and the later scheduler launch-guard — see this module's header on WHY a
+ * refresh during --parallel is unsafe (shared rw auth.json mount, single-use
+ * refresh token, no file lock).
+ */
+export const OAUTH_PARALLEL_MARGIN_MS = 5 * 60 * 1000
+
+/** `.credentials.json` (real file on linux, Keychain export on darwin) is
+ * sometimes wrapped under `claudeAiOauth`, sometimes flat — handle both.
+ * Never throws; returns `undefined` on unparseable JSON or an absent field. */
+function parseOauthExpiresAt(raw: string): number | undefined {
+  try {
+    const json = JSON.parse(raw) as { claudeAiOauth?: { expiresAt?: number }; expiresAt?: number }
+    const exp = json.claudeAiOauth?.expiresAt ?? json.expiresAt
+    return typeof exp === "number" ? exp : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export interface ReadOauthExpiresAtOpts {
+  /** default: process.platform */
+  platform?: NodeJS.Platform
+  /** default: os.homedir() */
+  home?: string
+  /** default: a wrapper around node:child_process's execFileSync */
+  execFn?: SecurityExecFn
+}
+
+/**
+ * Reads the oauth access-token expiry (ms-epoch), or `null` if there's no
+ * oauth credential to read (missing file/Keychain entry, unparseable JSON,
+ * or the field is absent) — NEVER throws, so callers (validateParallel's
+ * pre-flight gate) can treat "no credential" and "can't tell" identically.
+ *
+ * Reuses this file's injectable platform/home/execFn machinery so tests
+ * never touch the real Keychain or `~/.claude`.
+ */
+export function readOauthExpiresAt(opts: ReadOauthExpiresAtOpts = {}): number | null {
+  const platform = opts.platform ?? process.platform
+  // process.env.HOME checked ahead of homedir(): matches POSIX $HOME-first
+  // semantics AND (unlike this file's other opts.home defaults) stays
+  // dynamically overridable in Bun, whose node:os homedir() binding does NOT
+  // re-read $HOME per call — only at process start. This function's default
+  // (no injected `home`) is the one path exercised through cli.ts's
+  // validateParallel default `readExpiry`, which test/bench-cli-*.test.ts's
+  // `main()` integration tests rely on being able to fake via process.env.HOME.
+  const home = opts.home ?? process.env["HOME"] ?? homedir()
+  const execFn = opts.execFn ?? defaultSecurityExec
+
+  if (platform === "darwin") {
+    try {
+      const raw = execFn(["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"])
+      return parseOauthExpiresAt(raw) ?? null
+    } catch {
+      return null
+    }
+  }
+
+  // linux (or any other non-darwin platform): the real file, same as
+  // prepareAgentAuthMounts's linux branch mounts directly (no export step).
+  const credsPath = join(home, ".claude", ".credentials.json")
+  if (!existsSync(credsPath)) return null
+  try {
+    return parseOauthExpiresAt(readFileSync(credsPath, "utf-8")) ?? null
+  } catch {
+    return null
+  }
 }
 
 // ── prepareClaudeCodeAuth ────────────────────────────────────────────────

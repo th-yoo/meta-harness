@@ -1,5 +1,8 @@
 import { test, expect, spyOn } from "bun:test"
 import { main } from "../src/bench/cli.ts"
+import * as fs from "node:fs"
+import * as path from "node:path"
+import * as os from "node:os"
 
 // cli.ts argv parsing for the P6c1 subcommands (run/judge-audit). These
 // never reach a real podman/opencode call: missing-required-flag cases
@@ -77,9 +80,16 @@ test("cli: run --parallel without --enforce-resources dies (rc 1)", async () => 
   }
 })
 
-test("cli: run --parallel without ANTHROPIC_API_KEY (anthropic model) dies naming the var", async () => {
+test("cli: run --parallel without ANTHROPIC_API_KEY (anthropic model) dies naming the var — genuinely no oauth credential either", async () => {
+  // validateParallel's oauth-parallel freshness gate (Task 1) falls through to
+  // reading the REAL host's oauth credential when no key is set — main() has
+  // no injection seam for that. Point HOME at a fixture with no `.claude` dir
+  // so this stays hermetic/deterministic (this dev box has real oauth creds
+  // in ~/.claude, which would otherwise let a fresh token through here).
   const prev = process.env["ANTHROPIC_API_KEY"]
   delete process.env["ANTHROPIC_API_KEY"]
+  const prevHome = process.env["HOME"]
+  process.env["HOME"] = fs.mkdtempSync(path.join(os.tmpdir(), "mh-cli-noauth-"))
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
     const rc = await main(["run", "--parallel", "--enforce-resources"])
@@ -88,6 +98,8 @@ test("cli: run --parallel without ANTHROPIC_API_KEY (anthropic model) dies namin
     expect(messages.some((m) => m.includes("ANTHROPIC_API_KEY"))).toBe(true)
   } finally {
     errSpy.mockRestore()
+    if (prevHome === undefined) delete process.env["HOME"]
+    else process.env["HOME"] = prevHome
     if (prev === undefined) delete process.env["ANTHROPIC_API_KEY"]
     else process.env["ANTHROPIC_API_KEY"] = prev
   }

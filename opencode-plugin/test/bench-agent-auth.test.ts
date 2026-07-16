@@ -2,7 +2,7 @@ import { test, expect } from "bun:test"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
-import { prepareAgentAuthMounts } from "../src/bench/agent-auth.ts"
+import { prepareAgentAuthMounts, readOauthExpiresAt } from "../src/bench/agent-auth.ts"
 import { BenchError } from "../src/bench/util.ts"
 
 function tmpDir(): string {
@@ -193,4 +193,73 @@ test("prepareAgentAuthMounts: keyOnly removes the shared rw auth.json mount seri
   expect(keyOnly.mounts).toHaveLength(1) // only the isolated per-run config dir remains
   expect(keyOnly.mounts[0]!.container).toBe("/root/.config/opencode")
   keyOnly.cleanup()
+})
+
+// ── readOauthExpiresAt (oauth-parallel freshness gate, Task 1) ────────────
+// Reads the oauth access-token expiry (ms-epoch) so validateParallel's
+// pre-flight gate (cli.ts) can decide whether a --parallel run started
+// without an API key will safely outlive the token's refresh boundary.
+// Never throws — null on any missing/unparseable credential.
+
+test("readOauthExpiresAt: linux — {claudeAiOauth:{expiresAt}} wrapped fixture returns the ms-epoch", () => {
+  const home = tmpDir()
+  fs.mkdirSync(path.join(home, ".claude"), { recursive: true })
+  fs.writeFileSync(
+    path.join(home, ".claude", ".credentials.json"),
+    JSON.stringify({ claudeAiOauth: { expiresAt: 1234567890123 } }),
+  )
+  expect(readOauthExpiresAt({ platform: "linux", home })).toBe(1234567890123)
+})
+
+test("readOauthExpiresAt: linux — flat {expiresAt} fixture returns the ms-epoch", () => {
+  const home = tmpDir()
+  fs.mkdirSync(path.join(home, ".claude"), { recursive: true })
+  fs.writeFileSync(path.join(home, ".claude", ".credentials.json"), JSON.stringify({ expiresAt: 999 }))
+  expect(readOauthExpiresAt({ platform: "linux", home })).toBe(999)
+})
+
+test("readOauthExpiresAt: linux — missing .credentials.json returns null", () => {
+  const home = tmpDir() // no .claude dir at all
+  expect(readOauthExpiresAt({ platform: "linux", home })).toBeNull()
+})
+
+test("readOauthExpiresAt: linux — unparseable JSON returns null", () => {
+  const home = tmpDir()
+  fs.mkdirSync(path.join(home, ".claude"), { recursive: true })
+  fs.writeFileSync(path.join(home, ".claude", ".credentials.json"), "{not json")
+  expect(readOauthExpiresAt({ platform: "linux", home })).toBeNull()
+})
+
+test("readOauthExpiresAt: linux — field absent from otherwise-valid JSON returns null", () => {
+  const home = tmpDir()
+  fs.mkdirSync(path.join(home, ".claude"), { recursive: true })
+  fs.writeFileSync(path.join(home, ".claude", ".credentials.json"), JSON.stringify({ somethingElse: true }))
+  expect(readOauthExpiresAt({ platform: "linux", home })).toBeNull()
+})
+
+test("readOauthExpiresAt: darwin — injected execFn returning wrapped JSON returns the ms-epoch", () => {
+  let seenArgv: string[] = []
+  const execFn = (argv: string[]) => {
+    seenArgv = argv
+    return JSON.stringify({ claudeAiOauth: { expiresAt: 555555 } })
+  }
+  expect(readOauthExpiresAt({ platform: "darwin", execFn })).toBe(555555)
+  expect(seenArgv).toEqual(["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"])
+})
+
+test("readOauthExpiresAt: darwin — flat {expiresAt} JSON returns the ms-epoch", () => {
+  const execFn = () => JSON.stringify({ expiresAt: 42 })
+  expect(readOauthExpiresAt({ platform: "darwin", execFn })).toBe(42)
+})
+
+test("readOauthExpiresAt: darwin — exec throws (no Keychain entry) returns null", () => {
+  const execFn = (): string => {
+    throw new Error("security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain.")
+  }
+  expect(readOauthExpiresAt({ platform: "darwin", execFn })).toBeNull()
+})
+
+test("readOauthExpiresAt: darwin — field absent from otherwise-valid JSON returns null", () => {
+  const execFn = () => JSON.stringify({ somethingElse: true })
+  expect(readOauthExpiresAt({ platform: "darwin", execFn })).toBeNull()
 })

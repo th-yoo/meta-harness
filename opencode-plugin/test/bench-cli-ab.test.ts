@@ -1,5 +1,8 @@
 import { test, expect, spyOn } from "bun:test"
 import { main } from "../src/bench/cli.ts"
+import * as fs from "node:fs"
+import * as path from "node:path"
+import * as os from "node:os"
 
 // cli.ts argv parsing for the P6c2 `ab` subcommand. Missing-required-flag
 // cases return rc 2 before cmdAb's body runs; the nonexistent-candidate
@@ -98,8 +101,16 @@ test("cli main: ab --parallel without ANTHROPIC_API_KEY (anthropic model) dies n
   // credential mount. `ab --parallel` is the LONG-SWEEP path that will cross that
   // expiry, so its key-gate must fire exactly like `run --parallel`'s. (Guard is
   // validateParallel, cli.ts — shared by run+ab; only run's path was tested.)
+  //
+  // validateParallel's oauth-parallel freshness gate (Task 1) falls through to
+  // the REAL host's oauth credential when no key is set — main() has no
+  // injection seam for that. Point HOME at a fixture with no `.claude` dir so
+  // this stays hermetic/deterministic regardless of the dev box's real oauth
+  // state (this scenario is "genuinely no auth at all").
   const prev = process.env["ANTHROPIC_API_KEY"]
   delete process.env["ANTHROPIC_API_KEY"]
+  const prevHome = process.env["HOME"]
+  process.env["HOME"] = fs.mkdtempSync(path.join(os.tmpdir(), "mh-cli-ab-noauth-"))
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   try {
     const rc = await main([
@@ -111,6 +122,8 @@ test("cli main: ab --parallel without ANTHROPIC_API_KEY (anthropic model) dies n
     expect(messages.some((m) => m.includes("ANTHROPIC_API_KEY"))).toBe(true)
   } finally {
     errSpy.mockRestore()
+    if (prevHome === undefined) delete process.env["HOME"]
+    else process.env["HOME"] = prevHome
     if (prev === undefined) delete process.env["ANTHROPIC_API_KEY"]
     else process.env["ANTHROPIC_API_KEY"] = prev
   }

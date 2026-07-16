@@ -19,6 +19,7 @@ import { cmdReportLoop, type ReportLoopArgs } from "./report-loop.ts"
 import { correlateSelfScores, type ResultsLike } from "./self-score-correlate.ts"
 import { BenchError, log } from "./util.ts"
 import { DRIVER_IDS } from "./drivers/index.ts"
+import { readOauthExpiresAt, OAUTH_PARALLEL_MARGIN_MS } from "./agent-auth.ts"
 import { readFileSync } from "node:fs"
 import { writeSquadDefV1, readActiveSquadDef, syncWireContracts, STANDARD_SQUAD } from "../fleet/squad-def.ts"
 import { cmdRolesRender } from "../fleet/render.ts"
@@ -418,15 +419,40 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
   return out
 }
 
+/** Per-task agent-timeout fallback (seconds) used ONLY for the oauth-parallel
+ * freshness calc below when `--max-agent-timeout` wasn't passed — mirrors
+ * tasks.ts's `taskTimeouts` default (a task.toml with no `agent.timeout_sec`
+ * gets 900s, and `--max-agent-timeout` 0/unset means "no cap", i.e. each
+ * task's own declared timeout applies). This gate runs before task selection
+ * so it can't see per-task declared timeouts; 900s is the conservative floor
+ * used elsewhere in this codebase for "no override given". */
+const DEFAULT_TASK_AGENT_TIMEOUT_SEC = 900
+
 /** Shared `--parallel` gate (spec D3/D4), reused by both `run` and `ab`
  * (Task 7). Enforced in the CLI — the universal guard covering ALL drivers,
  * including ones whose prepareAuth ignores keyOnly (e.g. claude-code) whose
  * no-key path mounts a shared credential dir rw (the concurrency race). Throws
  * BenchError (→ rc 1) so the message reaches the operator; must run BEFORE any
- * podman work. `model` is the already-defaulted model string. */
+ * podman work. `model` is the already-defaulted model string.
+ *
+ * oauth-parallel freshness gate (Task 1): a no-key `--parallel` run is no
+ * longer an automatic hard failure. The refresh-token race (agent-auth.ts's
+ * header) only fires if a container's oauth token actually REFRESHES during
+ * the parallel window (~8h access-token expiry) — a token that will outlive
+ * this run's max agent timeout plus a ~5min refresh buffer
+ * (OAUTH_PARALLEL_MARGIN_MS) never refreshes mid-run, so no shared write, no
+ * race. `readExpiry` is an injectable seam (default: the real oauth reader)
+ * so tests never touch the real ~/.claude/Keychain. */
 export function validateParallel(
-  a: { parallel?: boolean; enforceResources?: boolean; cpuBudget?: number; memBudget?: number },
+  a: {
+    parallel?: boolean
+    enforceResources?: boolean
+    cpuBudget?: number
+    memBudget?: number
+    maxAgentTimeout?: number
+  },
   model: string,
+  readExpiry: () => number | null = () => readOauthExpiresAt(),
 ): void {
   const budgetFlags = a.cpuBudget !== undefined || a.memBudget !== undefined
   if (budgetFlags && !a.parallel) {
@@ -439,12 +465,32 @@ export function validateParallel(
     )
   }
   const keyVar = requiredApiKeyVar(model)
-  if (!process.env[keyVar]) {
+  if (process.env[keyVar]) return // key present — allow, unchanged
+
+  const exp = readExpiry()
+  if (exp === null) {
+    // Genuinely no auth at all (no key, no oauth credential either) —
+    // unchanged behavior/message from before this task.
     throw new BenchError(
       `--parallel needs ${keyVar} in the environment: concurrent tasks can't share the ` +
         `oauth credential mount safely — export ${keyVar} or drop --parallel`,
     )
   }
+
+  const neededMs = (a.maxAgentTimeout || DEFAULT_TASK_AGENT_TIMEOUT_SEC) * 1000 + OAUTH_PARALLEL_MARGIN_MS
+  const remainingMs = exp - Date.now()
+  if (remainingMs < neededMs) {
+    const remainingMin = Math.max(0, Math.floor(remainingMs / 60_000))
+    const neededMin = Math.ceil(neededMs / 60_000)
+    throw new BenchError(
+      `--parallel: oauth token expires in ~${remainingMin}min, needs at least ${neededMin}min to safely ` +
+        `run a --parallel task (max-agent-timeout + ${OAUTH_PARALLEL_MARGIN_MS / 60_000}min refresh buffer) — ` +
+        `re-login (\`claude\` / \`opencode auth login\`) and retry, or export ${keyVar}`,
+    )
+  }
+  // else: token outlives this run's worst-case task — oauth+parallel allowed.
+  // A later task adds the scheduler launch-guard that re-checks this near
+  // the actual expiry boundary for long --parallel sweeps.
 }
 
 function parseAbArgs(argv: string[]): CmdAbArgs | null {
