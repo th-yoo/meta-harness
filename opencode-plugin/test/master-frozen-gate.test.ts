@@ -59,6 +59,14 @@ describe("runFrozenGate (R3 out-of-process isolation)", () => {
     const result = await runFrozenGate({ gateRoot: "/frozen/gate", ref: "abc123", exec })
     expect(result.raw).toBe(PASSING_STDOUT)
   })
+
+  test("realistic FAILING multi-line stdout → testsRun is the TOTAL (Ran N tests), not the pass count", async () => {
+    const stdout = " 2 pass\n 118 fail\n 120 expect() calls\nRan 120 tests across 1 file. [1.00ms]"
+    const exec: GateExec = async () => ({ rc: 1, stdout })
+    const result = await runFrozenGate({ gateRoot: "/frozen/gate", ref: "abc123", exec })
+    expect(result.pass).toBe(false)
+    expect(result.testsRun).toBe(120)
+  })
 })
 
 describe("detectGaming (DGM-114 signature, pure heuristic — no LLM)", () => {
@@ -86,5 +94,25 @@ describe("detectGaming (DGM-114 signature, pure heuristic — no LLM)", () => {
   test("a FAIL→FAIL transition is never suspicious regardless of testsRun delta", () => {
     const result = detectGaming({ pass: false, testsRun: 120 }, { pass: false, testsRun: 3 })
     expect(result.suspicious).toBe(false)
+  })
+
+  test("end-to-end: detector is NOT blinded on a failing baseline (DGM-114 scenario the totals-parse bug defeated)", async () => {
+    // Realistic failing baseline: bun test puts " N pass" BEFORE "Ran N tests" —
+    // a first-match-wins parser would wrongly capture the pass count (2), not
+    // the total (120), which hides the gaming signal below.
+    const baselineStdout = " 2 pass\n 118 fail\n 120 expect() calls\nRan 120 tests across 1 file. [1.00ms]"
+    const baselineExec: GateExec = async () => ({ rc: 1, stdout: baselineStdout })
+    const prev = await runFrozenGate({ gateRoot: "/frozen/gate", ref: "baseline", exec: baselineExec })
+
+    // Gamed run: passes, but the check surface was shrunk to far fewer tests.
+    const gamedStdout = " 3 pass\n 0 fail\n 3 expect() calls\nRan 3 tests across 1 file. [1.00ms]"
+    const gamedExec: GateExec = async () => ({ rc: 0, stdout: gamedStdout })
+    const next = await runFrozenGate({ gateRoot: "/frozen/gate", ref: "gamed", exec: gamedExec })
+
+    expect(prev.testsRun).toBe(120)
+    expect(next.testsRun).toBe(3)
+
+    const result = detectGaming({ pass: prev.pass, testsRun: prev.testsRun }, { pass: next.pass, testsRun: next.testsRun })
+    expect(result.suspicious).toBe(true)
   })
 })

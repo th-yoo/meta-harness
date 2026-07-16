@@ -37,13 +37,25 @@ export interface GamingSignal {
   reason?: string
 }
 
-const TEST_COUNT_RE = /(\d+)\s+(?:pass|tests)/i
+// Anchor on the authoritative "Ran N tests" summary line — this is the TOTAL
+// check surface (pass + fail), which is what the gaming monitor needs. A bare
+// "N pass" line is NOT a valid substitute: `bun test` prints ` N pass` BEFORE
+// `Ran N tests`, so a first-match-wins parse on a failing run (pass !== total)
+// would silently capture the pass count instead of the total — exactly the
+// failing baselines detectGaming's DGM-114 branch depends on (see module docs).
+const RAN_TESTS_RE = /Ran\s+(\d+)\s+tests?/i
+// Fallback for stdout that lacks the "Ran N tests" line: reconstruct the
+// total as pass + fail counts. Never falls back to a bare pass count alone.
+const PASS_COUNT_RE = /(\d+)\s+pass\b/i
+const FAIL_COUNT_RE = /(\d+)\s+fail\b/i
 
 /**
  * Run the frozen gate in `gateRoot` (an out-of-repo checkout of `ref` the
  * fleet cannot write to). Parses pass/fail from the exec's return code and a
- * test-count from stdout (the `bun test` summary line: `N pass` / `Ran N
- * tests`).
+ * test-count from stdout (the `bun test` summary: TOTAL tests run, i.e. the
+ * `Ran N tests` line, falling back to `N pass` + `N fail` if that line is
+ * absent). `testsRun` is always the check-surface TOTAL, never a bare pass
+ * count.
  */
 export async function runFrozenGate(deps: {
   gateRoot: string
@@ -52,8 +64,15 @@ export async function runFrozenGate(deps: {
 }): Promise<FrozenGateResult> {
   const { gateRoot, exec } = deps
   const { rc, stdout } = await exec(["bun", "test"], { cwd: gateRoot })
-  const match = stdout.match(TEST_COUNT_RE)
-  const testsRun = match ? Number(match[1]) : 0
+  const ranMatch = stdout.match(RAN_TESTS_RE)
+  let testsRun: number
+  if (ranMatch) {
+    testsRun = Number(ranMatch[1])
+  } else {
+    const passMatch = stdout.match(PASS_COUNT_RE)
+    const failMatch = stdout.match(FAIL_COUNT_RE)
+    testsRun = (passMatch ? Number(passMatch[1]) : 0) + (failMatch ? Number(failMatch[1]) : 0)
+  }
   return { pass: rc === 0, testsRun, raw: stdout }
 }
 
