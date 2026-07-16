@@ -3,6 +3,27 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## LINUX SESSION (2026-07-16 cont.) — MASTER SHIPPED · Axis-2 tag CAPTURE+ROUTING shipped · TB2-timeout fixed
+
+**HEAD `bbca3e4` on `main`. NOT PUSHED — 4 features merged LOCALLY this session; `git push origin main` when ready.** Tree clean (except a stray empty `oom` file, untracked — ignore).
+
+**Shipped to main (local) this session:**
+1. **MASTER BUILT + MERGED** — the 8-module deterministic boundary/orchestration layer under `opencode-plugin/src/fleet/master/` (gate-state · transport · frozen-gate · namespace · relay · scheduler · reconcile · master) + a `master` CLI case + hermetic E2E. Executed the master DAG as parallel subagent waves (wave0 4∥ · wave1 3∥ · wave2 1), TDD per task, per-task code-architect review + a final whole-branch review (merge-ready, 0 crit/imp). Review-driven fixes: T4 frozen-gate `testsRun` parse (was reading pass-count not `Ran N tests` → blinded the DGM-114 gaming detector); T1 gate-state made **kind-aware** (`resolveGate`/`markRelayed` take a `GateKind` — HUMAN-approved interface change, guards co-pending different-kind gates); T5 upsert test. The 4 open Qs settled in-build (masterRoot = injected param; grammar `approve|revise <project>/<sliceId>` + `status`; gateRoot injected; lock TTL deferred). Plan `docs/superpowers/plans/2026-07-16-master-build.md`. Suite 1214 pass.
+2. **TB2-timeout fix** — the loop `ab` recipe was capping tasks BELOW their real TB2 budgets: `--max-agent-timeout 1800` halved distribution-search (TB2 3600), `--max-verifier-timeout 300` starved nearly every verifier (TB2 verifiers 900–3600s). `taskTimeouts` (tasks.ts) ALREADY reads exact TB2 `task.toml` timeouts; a cap only LOWERS. Fix = agent cap **3600** (split max), **DROP** the verifier cap. The "oauth+parallel recipe" section below already reflects this; `/mnt/d/tmp/run-loop3-ab.sh` fixed too.
+3. **Axis-2 generality tag CAPTURE** (`ecc6874`) — per-bullet `generality?: "universal"|"vendor"|"model"` + `slice?` on `PlaybookBullet`; proposer emits it per op; `applyPlaybookOps` coerces invalid→universal + caps slice; no-op guard now playbook-aware (a pure re-tag is no longer silently dropped); `generalityRollup` in candidate meta + `/mh-status gen[u v m]`. `renderPlaybook` UNCHANGED → injection byte-identical. Promote left untouched (pre-existing playbook-null-on-activate, documented `explicitly-not-now §2.4.1`). Docs: `target-model-axis.md §7.0` + research fold `§0.1`.
+4. **Axis-2 generality tag ROUTING** (`4b13060..bbca3e4`) — a bullet tagged `vendor:anthropic` now INJECTS only for Anthropic sessions, via ONE shared `renderPlaybookRouted` + `composeHarness(model?)` with a **faithful-render guard** (`renderPlaybook(pb).trim()===flat.trim()` — absorbs `seedPlaybook`'s non-format-preserving migration → byte-identical by construction). Threaded through ALL 4 injection entry points: runtime `composeInjection` (session model), bench `cmd-ab`/`cmd-run` (`--model`), fleet `renderRole` (role's fixed model). Spec `2026-07-16-generality-routing-design.md` (SUPERSEDES `target-model-axis §4`'s separate-coordinate approach for delivery — the tag lives on the bullet, routing is a render filter); plan `2026-07-16-generality-routing.md`. 2 code-architect rounds to production-flawless. Suite 1233 pass.
+
+**Loop-2 timeout-mirage CONFIRMED live:** tune-mjcf + distribution-search both PASS at generous budgets (`--min-cpus 4`). Loop-2's "no lift" was compute/timeout starvation, not real regression.
+
+**STILL dark / deferred:**
+- **Loop-3 `recordTimeouts` STILL default-OFF** — not flipped this session. Flip = `config.json recordTimeouts=true` + re-baseline v0.
+- **No meaningful loop `ab` yet** — v6 is the ACTIVE account-global baseline; v0–v6 are all UNtagged + mostly timed-out under the OLD caps. A v5 run was launched then KILLED (old caps). `ab` compares candidate-vs-ACTIVE, so run with a candidate ≠ v6: `bash /mnt/d/tmp/run-loop3-ab.sh <vN≠v6>` (`META_HARNESS_HOME=<repo>/.meta-harness`, detached+logged).
+- **Axis-2 not fully APPLIED** — CAPTURE + ROUTING shipped, but (a) NO content is tagged vendor/model yet (a fresh propose emits tags, or hand-seed the documented Anthropic rules); (b) NO multi-model PANEL to VALIDATE a tag (needs a 2nd vendor model). Routing delivers the CLAIM, doesn't prove it. Deferred: `target-model-axis §6` (panel) + promote-playbook-preservation (`explicitly-not-now §2.4.1`).
+
+**NEXT:** (a) `git push origin main` (4 features waiting); (b) flip Loop-3 `recordTimeouts` + re-baseline v0 + a real `ab` run (recipe below, candidate ≠ v6); (c) seed/propose vendor content so routing does something; (d) the multi-model panel (needs a 2nd vendor model) to validate tags.
+
+---
+
 ## OFFICE PICKUP (2026-07-16 evening, MacBook session end)
 
 **Everything pushed, `git status` clean, HEAD = `ce54fd3`.** Discipline first:
