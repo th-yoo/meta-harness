@@ -829,6 +829,28 @@ export function renderPlaybook(pb: Playbook): string {
   return pb.bullets.filter((b) => b.status === "active").map((b) => `- ${b.text}`).join("\n")
 }
 
+/** Injection-time filter: keep a bullet iff its generality tag matches `model`.
+ * universal/untagged → always; vendor → providerID === slice; model → full
+ * "provider/model" or bare modelID === slice. Unparseable model → only universal. */
+export function matchesModel(b: PlaybookBullet, model: string): boolean {
+  const g = b.generality
+  if (g === undefined || g === "universal") return true
+  const spec = parseModelSpec(model)
+  if (!spec) return false
+  if (g === "vendor") return spec.providerID === b.slice
+  if (g === "model") return model === b.slice || spec.modelID === b.slice
+  return true
+}
+
+/** renderPlaybook restricted to matchesModel bullets. renderPlaybook itself
+ * (the full, model-less view for stored system.md + no-op guards) is UNCHANGED. */
+export function renderPlaybookRouted(pb: Playbook, model: string): string {
+  return pb.bullets
+    .filter((b) => b.status === "active" && matchesModel(b, model))
+    .map((b) => `- ${b.text}`)
+    .join("\n")
+}
+
 /** One-time migration of a store's active system.md into a playbook (counters 0).
  * Each non-empty line becomes a bullet; render(migrate(x)) is the normalized x. */
 export function migrateSystemToPlaybook(storeRoot: string): Playbook {
