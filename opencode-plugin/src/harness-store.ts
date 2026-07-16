@@ -282,6 +282,18 @@ export function readActiveBudget(storeRoot: string): {
   return { maxAgentTimeout, resourceEnforcement, timeoutRecording: activeVerdict?.timeoutRecording }
 }
 
+/** The budget-identity-bearing subset of fields `budgetIdentityMatches`'s
+ * `verdict` param actually reads — deliberately narrower than `AbVerdict` so
+ * other budget-stamped shapes (report-loop.ts's `MetaMetricEvent`, Loop-3 T7)
+ * can reuse this comparison without satisfying `AbVerdict`'s full shape
+ * (winner/candidateRate/... aren't needed here). `AbVerdict` is structurally
+ * assignable to this type, so existing callers (engine.ts) are unaffected. */
+export interface BudgetStamp {
+  maxAgentTimeout?: number
+  timeoutRecording?: boolean
+  env?: { resourceEnforcement?: boolean }
+}
+
 /**
  * True iff `verdict`'s budget-identity tuple {maxAgentTimeout, timeoutRecording,
  * resourceEnforcement} matches `activeBudget`'s — the gate /mh-activate uses
@@ -292,7 +304,7 @@ export function readActiveBudget(storeRoot: string): {
  * cmd-ab.ts's --resume guard).
  */
 export function budgetIdentityMatches(
-  verdict: AbVerdict,
+  verdict: BudgetStamp,
   activeBudget: { maxAgentTimeout?: number; timeoutRecording?: boolean; resourceEnforcement?: boolean },
 ): boolean {
   if (verdict.maxAgentTimeout === undefined) return true // pre-Loop-3 — no claim to violate

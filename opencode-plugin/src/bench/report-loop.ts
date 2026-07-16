@@ -21,7 +21,7 @@
 import { existsSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import type { BenchPaths } from "./paths.ts"
-import { accountMetaRoot } from "../harness-store.ts"
+import { accountMetaRoot, budgetIdentityMatches } from "../harness-store.ts"
 import { log, pySigned, writeJsonAtomic } from "./util.ts"
 
 // ── constants ────────────────────────────────────────────────────────────
@@ -64,7 +64,73 @@ export interface MetaMetricEvent {
   agreed?: boolean
   ts?: string
   _sink?: string
+  // Loop-3 T7: budget-identity provenance, mirroring T6's ab-verdict.json
+  // stamp (harness-store.ts's `BudgetStamp`/`budgetIdentityMatches`) so a
+  // trial/ab event fully identifies the {maxAgentTimeout, timeoutRecording,
+  // resourceEnforcement} tuple it was measured under. Optional — absent on
+  // every pre-Loop-3 event; `segmentByCurrentBudgetIdentity` below treats an
+  // absent `maxAgentTimeout` as "no claim to violate" (same convention as
+  // budgetIdentityMatches), so an all-legacy stream still computes a single
+  // window exactly as before this feature.
+  maxAgentTimeout?: number
+  timeoutRecording?: boolean
+  env?: { resourceEnforcement?: boolean }
   [k: string]: unknown
+}
+
+// ── budget-identity segmentation (Loop-3 T7) ────────────────────────────────
+//
+// A trialRate measured under one budget-identity (wall timeout / timeout-
+// recording policy / resource-enforcement ceilings) is not a comparable point
+// against a baselineRate — or another trialRate — measured under a DIFFERENT
+// one: a candidate can look like a "strict improvement" purely because it ran
+// with a longer wall or without the active baseline's resource ceilings, none
+// of which is a genuine harness-rule improvement (the silent-Goodhart trap
+// design §6.2 names). `plateauVerdict`/`benchLayerVerdict` must not let such a
+// pair share a trailing improvement/plateau window.
+//
+// Re-baseline itself stays a MANUAL operator step (T7 provides the mechanism,
+// not an auto-fire — see docs/loop-3-timeout-design.md §6.3): when the
+// operator bumps `--max-agent-timeout`, or flips `recordTimeouts` /
+// `--enforce-resources` ON, they re-score the active version at the new
+// identity and let the loop accumulate fresh same-identity events; this
+// segmentation is what makes that reset actually take effect on the window
+// instead of silently blending old- and new-identity points.
+
+/** The budget-identity tuple {maxAgentTimeout, timeoutRecording,
+ * resourceEnforcement} of the MOST RECENT event in `events` that carries one
+ * (scanned from the end — events are expected pre-sorted chronologically, as
+ * `loadMetaMetrics` does, but `plateauVerdict`'s own test callers also pass
+ * pre-ordered arrays directly). `{}` (all-undefined) if none does — the
+ * legacy-only case, under which `budgetIdentityMatches` trivially treats
+ * every event as compatible (its own `verdict.maxAgentTimeout === undefined`
+ * check), so an all-legacy stream still segments to itself (back-compat
+ * no-op). */
+function currentBudgetIdentity(
+  events: MetaMetricEvent[],
+): { maxAgentTimeout?: number; timeoutRecording?: boolean; resourceEnforcement?: boolean } {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!
+    if (e.maxAgentTimeout !== undefined) {
+      return {
+        maxAgentTimeout: e.maxAgentTimeout,
+        timeoutRecording: e.timeoutRecording,
+        resourceEnforcement: e.env?.resourceEnforcement,
+      }
+    }
+  }
+  return {}
+}
+
+/** Segment `events` down to only those sharing the CURRENT budget-identity —
+ * the tuple of the most recent stamped event in the same list (see
+ * `currentBudgetIdentity`). Reuses T6's `budgetIdentityMatches` (same tuple,
+ * same undefined-is-compatible convention for pre-Loop-3 events), so this is
+ * additive/back-compat: a stream with no budget-identity fields at all keeps
+ * computing one full window exactly as before this feature. */
+function segmentByCurrentBudgetIdentity(events: MetaMetricEvent[]): MetaMetricEvent[] {
+  const current = currentBudgetIdentity(events)
+  return events.filter((e) => budgetIdentityMatches(e, current))
 }
 
 // ── _slope ───────────────────────────────────────────────────────────────
@@ -95,11 +161,14 @@ export interface LayerVerdict {
 }
 
 /** One bench layer's report-only verdict. See plateauVerdict for the exact
- * semantics (heldInDelta trend, break-on-accept). */
+ * semantics (heldInDelta trend, break-on-accept). Segmented by budget-identity
+ * (Loop-3 T7) first — see `segmentByCurrentBudgetIdentity` — so a pre-change
+ * ab event doesn't get averaged into a post-change layer's window. */
 function benchLayerVerdict(layerEvents: MetaMetricEvent[], abK: number): LayerVerdict {
-  const n = layerEvents.length
+  const segmented = segmentByCurrentBudgetIdentity(layerEvents)
+  const n = segmented.length
   if (n < abK) return { plateaued: false, n, reason: "insufficient data" }
-  const window = layerEvents.slice(-abK)
+  const window = segmented.slice(-abK)
   const noAccept = window.every((e) => e.decision !== "accept")
   const heldIn = window
     .map((e) => e.heldInDelta)
@@ -181,12 +250,19 @@ export function plateauVerdict(
       (e.action === "confirmed" || e.action === "reverted") &&
       (projectSink === null || e._sink === projectSink),
   )
-  const n = resolved.length
+  // Loop-3 T7: segment by budget-identity BEFORE windowing — a resolved trial
+  // measured under a different {maxAgentTimeout, timeoutRecording,
+  // resourceEnforcement} tuple than the stream's current identity is dropped
+  // from both `n` and the trailing window, so its trialRate can never read as
+  // a strict improvement over a differently-budgeted baselineRate. See
+  // `segmentByCurrentBudgetIdentity`.
+  const segmentedResolved = segmentByCurrentBudgetIdentity(resolved)
+  const n = segmentedResolved.length
   let project: { plateaued: boolean; n: number; reason: string }
   if (n < trialK) {
     project = { plateaued: false, n, reason: "insufficient data" }
   } else {
-    const window = resolved.slice(-trialK)
+    const window = segmentedResolved.slice(-trialK)
     const plateaued = !window.some(isStrictImprovement)
     const reason = plateaued
       ? `no strict improvement in last ${trialK} resolved trials`

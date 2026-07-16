@@ -372,6 +372,67 @@ provenance**, not the internal accept/reject math. That split is what makes the
 fairness argument airtight: the thing that decides accept/reject is
 self-fair; the thing re-baseline protects is the longitudinal claim.
 
+### 6.3 Operator runbook: performing a manual re-baseline (T7)
+
+**Status: SHIPPED (T6 provenance/gate + T7 report-loop segmentation).** Both
+mechanisms are now built. What follows is settled — it answers open question 2
+below (§ "Open questions"): re-baseline is a **MANUAL operator step**, never an
+auto-fire.
+
+**What T7 built (the mechanism, not the trigger).** `report-loop.ts`'s
+`plateauVerdict`/`benchLayerVerdict` now segment their windows by the
+budget-identity tuple `{maxAgentTimeout, timeoutRecording, resourceEnforcement}`
+stamped on each `trial`/`ab` `MetaMetricEvent` (mirroring T6's `ab-verdict.json`
+stamp — `harness-store.ts`'s `budgetIdentityMatches`/`BudgetStamp`, reused
+as-is). A `trial`/`ab` event whose tuple differs from the stream's *current*
+identity (the most recent stamped event's tuple) is excluded from both `n` and
+the trailing window — so a post-change `trialRate` can never register as a
+"strict improvement" over a pre-change `baselineRate`, and a post-change
+`ab` run can never fill a pre-change layer's plateau window either. Events with
+no budget-identity fields at all (pre-Loop-3) are treated as compatible with
+everything (no claim to violate), so nothing here changes behavior until the
+fields start actually being stamped onto live `trial`/`ab` events. This makes
+the reset **automatic once the identity change happens** — the operator does
+not need to hand-edit or truncate the `meta-metrics.jsonl` ledger.
+
+**The operator step — do this whenever you bump `--max-agent-timeout`, flip
+`recordTimeouts` ON, or flip `--enforce-resources` ON** (any one of these is a
+budget-identity change; §6.2 item 2 — flipping `recordTimeouts` is itself one,
+independent of any wall change):
+
+1. **Decide and make the change once, deliberately.** If both a wall bump and
+   the `recordTimeouts` flip are due, do them together as ONE cutover (per
+   design §6.2 item 2 / the Loop-3 plan's "Notes" — don't re-baseline twice for
+   what is really one identity change).
+2. **Re-score the active version at the new identity** — run the bench harness
+   against the layer's currently-active text at the new budget (e.g.
+   `bun term-bench2/runner.ts run --all --layers <layer> --max-agent-timeout 900`,
+   plus `--enforce-resources` if that's flipping too, and/or the new
+   `recordTimeouts` config value in `<accountMetaRoot()>/config.json`). This is
+   the step design §6.2 calls "re-scores the active version at the new budget
+   … before trusting any cross-generation delta" — it refreshes the active
+   version's `score.json` `env.maxAgentTimeout`/`env.resourceEnforcement` (and,
+   for `timeoutRecording`, its own `ab-verdict.json` if it has one) so
+   `readActiveBudget` (T6, `harness-store.ts`) reports the NEW identity as the
+   layer's baseline.
+3. **Continue the propose→ab→activate loop as normal.** Because step 2 already
+   moved the active layer's budget-identity forward, a subsequent candidate's
+   `ab` at the new identity will match `readActiveBudget` and activate through
+   `/mh-activate`'s T6 gate WITHOUT needing `--force`. (If you skip step 2 and
+   activate a new-identity candidate straight away, the T6 gate refuses with a
+   budget-mismatch toast naming both budgets — you can `--force` through it as
+   the one deliberate cutover, but then the longitudinal ledger has no
+   same-identity history yet either way; re-scoring active first, per step 2,
+   is the cleaner path.)
+4. **Nothing further to do to the `report-loop` ledger itself.** T7's
+   segmentation means the first few post-change generations will correctly
+   read `project: ok (n=<k>, insufficient data)` (not a false plateau, not a
+   false improvement) until `PLATEAU_TRIAL_K` (default 4) same-identity
+   resolved trials accumulate — at which point `report-loop` resumes giving a
+   real verdict, now entirely on new-identity data. Old-identity events remain
+   on disk (never deleted) but are permanently excluded from the window once a
+   newer identity is stamped.
+
 ---
 
 ## 7. Risks / interactions
@@ -474,9 +535,13 @@ proposer-visible slice; T4/T5 make it actionable; T6/T7 keep it honest.
    proposed here) vs. into the composed `AGENTS.md` harness? The instruction
    keeps it a controlled constant; the harness would make it evolvable but risks
    asymmetry between arms. Confirm the instruction placement.
-2. **Re-baseline trigger authority.** Manual operator step vs. automatic on
-   detected budget-identity change? Automatic is safer against silent Goodhart
-   but spends compute without a human in the loop.
-3. **Timeout-recording rollout sequencing.** §4 (count timeouts as fails) is
-   itself a re-baseline trigger. Ship T3 and the first re-baseline together, or
-   land T3 behind a flag and re-baseline as a deliberate cutover?
+2. **Re-baseline trigger authority — SETTLED (T7, this doc's §6.3): MANUAL.**
+   The operator performs the re-score + continues the loop as a deliberate
+   step; `report-loop.ts`'s budget-identity segmentation is what makes that
+   step actually take effect on the ledger, but it never auto-fires a re-score
+   itself. Automatic re-baseline remains out of scope (see §9 "Auto-tuning the
+   wall", which explicitly depends on this machinery as a prerequisite).
+3. **Timeout-recording rollout sequencing — SETTLED: land T3 behind the
+   `recordTimeouts` flag (default OFF, done) and treat flipping it ON as one
+   deliberate cutover, sequenced together with the first manual re-baseline
+   (§6.3) — not a separate re-baseline per flip.**

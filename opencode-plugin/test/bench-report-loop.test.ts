@@ -73,6 +73,43 @@ function trial(action: string, tr: number | null, br: number | null, sink = PROJ
   return { event: "trial", action, trialRate: tr, baselineRate: br, ts: "2026-07-10T00:00:00Z", _sink: sink }
 }
 
+// Budget-identity tuple {maxAgentTimeout, timeoutRecording, resourceEnforcement}
+// (Loop-3 T7) — mirrors T6's ab-verdict.json stamp shape.
+interface Budget {
+  maxAgentTimeout?: number
+  timeoutRecording?: boolean
+  resourceEnforcement?: boolean
+}
+
+function trialB(action: string, tr: number | null, br: number | null, budget: Budget, sink = PROJECT_SINK): MetaMetricEvent {
+  return {
+    event: "trial",
+    action,
+    trialRate: tr,
+    baselineRate: br,
+    ts: "2026-07-10T00:00:00Z",
+    _sink: sink,
+    maxAgentTimeout: budget.maxAgentTimeout,
+    timeoutRecording: budget.timeoutRecording,
+    env: budget.resourceEnforcement !== undefined ? { resourceEnforcement: budget.resourceEnforcement } : undefined,
+  }
+}
+
+function abB(decision: string, hiDelta: number, budget: Budget, layer = "account-global"): MetaMetricEvent {
+  return {
+    event: "ab",
+    layer,
+    decision,
+    heldInDelta: hiDelta,
+    heldOutDelta: 0.0,
+    splitFold: 0,
+    ts: "2026-07-10T00:00:00Z",
+    maxAgentTimeout: budget.maxAgentTimeout,
+    timeoutRecording: budget.timeoutRecording,
+    env: budget.resourceEnforcement !== undefined ? { resourceEnforcement: budget.resourceEnforcement } : undefined,
+  }
+}
+
 test("plateauVerdict: bench is per-layer, report-only, never drives the flag", () => {
   const evs = [ab("reject", 0.0), ab("inconclusive", 0.0), ab("reject", -0.1)]
   const v = plateauVerdict(evs)
@@ -117,6 +154,94 @@ test("plateauVerdict: insufficient data", () => {
   const v = plateauVerdict([ab("reject", 0.0)])
   expect(v.bench["account-global"]!.plateaued).toBe(false)
   expect(v.plateaued).toBe(false)
+})
+
+// ── plateauVerdict: budget-identity segmentation (Loop-3 T7) ───────────────
+
+test("plateauVerdict: project excludes a cross-budget trialRate from counting as a strict improvement", () => {
+  // 2 pre-change (600s) ties, then 1 post-change (900s) event whose trialRate
+  // reads as an improvement over its OWN baselineRate figure — but that
+  // baselineRate was never re-scored at 900s (no manual re-baseline has
+  // happened yet). Naively `slice(-3)` would treat this as a strict
+  // improvement (0.95 > 0.7) within the trailing window; segmented by
+  // budget-identity, the 600s events are excluded and only 1 (900s) event
+  // remains — not enough to resolve any verdict at all, let alone "improved".
+  const events = [
+    trialB("confirmed", 0.7, 0.7, { maxAgentTimeout: 600 }),
+    trialB("confirmed", 0.7, 0.7, { maxAgentTimeout: 600 }),
+    trialB("confirmed", 0.95, 0.7, { maxAgentTimeout: 900 }),
+  ]
+  const v = plateauVerdict(events, undefined, 3, PROJECT_SINK)
+  expect(v.project.n).toBe(1) // only the 900s event counts toward the current-identity window
+  expect(v.project.reason).toBe("insufficient data")
+  expect(v.project.plateaued).toBe(false)
+})
+
+test("plateauVerdict: project resolves a fresh verdict from same-identity events after a budget change, ignoring pre-change history", () => {
+  // A single pre-change (600s) event, followed by 3 post-change (900s) ties.
+  // The pre-change event must NOT count toward `n` or the window — the
+  // post-change events alone (all non-improvements) should resolve to
+  // plateaued, proving segmentation resets the window rather than
+  // permanently blocking a legitimate verdict once fresh same-identity data
+  // accumulates.
+  const events = [
+    trialB("confirmed", 0.6, 0.6, { maxAgentTimeout: 600 }),
+    trialB("confirmed", 0.7, 0.7, { maxAgentTimeout: 900 }),
+    trialB("confirmed", 0.7, 0.7, { maxAgentTimeout: 900 }),
+    trialB("confirmed", 0.7, 0.7, { maxAgentTimeout: 900 }),
+  ]
+  const v = plateauVerdict(events, undefined, 3, PROJECT_SINK)
+  expect(v.project.n).toBe(3) // the 600s event is excluded
+  expect(v.project.plateaued).toBe(true)
+  expect(v.project.reason).toBe("no strict improvement in last 3 resolved trials")
+})
+
+test("plateauVerdict: project segmentation keys off the FULL tuple — timeoutRecording and resourceEnforcement flips also exclude", () => {
+  // Same maxAgentTimeout, but recordTimeouts flipped ON — a distinct
+  // budget-identity per design §6.2 item 2 (timeout-excluded vs
+  // timeout-included pass-rates aren't comparable).
+  const timeoutRecordingFlip = [
+    trialB("confirmed", 0.6, 0.6, { maxAgentTimeout: 600, timeoutRecording: false }),
+    trialB("confirmed", 0.6, 0.6, { maxAgentTimeout: 600, timeoutRecording: false }),
+    trialB("confirmed", 0.9, 0.6, { maxAgentTimeout: 600, timeoutRecording: true }),
+  ]
+  const v1 = plateauVerdict(timeoutRecordingFlip, undefined, 3, PROJECT_SINK)
+  expect(v1.project.n).toBe(1)
+  expect(v1.project.reason).toBe("insufficient data")
+
+  // Same maxAgentTimeout + timeoutRecording, but resourceEnforcement flipped
+  // ON (the load-aware scheduler's --enforce-resources).
+  const resourceEnforcementFlip = [
+    trialB("confirmed", 0.6, 0.6, { maxAgentTimeout: 600, resourceEnforcement: false }),
+    trialB("confirmed", 0.6, 0.6, { maxAgentTimeout: 600, resourceEnforcement: false }),
+    trialB("confirmed", 0.9, 0.6, { maxAgentTimeout: 600, resourceEnforcement: true }),
+  ]
+  const v2 = plateauVerdict(resourceEnforcementFlip, undefined, 3, PROJECT_SINK)
+  expect(v2.project.n).toBe(1)
+  expect(v2.project.reason).toBe("insufficient data")
+})
+
+test("plateauVerdict: a legacy (pre-Loop-3) event mixed with newly-stamped but consistent events still computes a full window", () => {
+  const events = [
+    trial("confirmed", 0.8, 0.8), // pre-Loop-3 — no budget-identity fields at all
+    trialB("confirmed", 0.8, 0.8, { maxAgentTimeout: 600 }),
+    trialB("confirmed", 0.8, 0.8, { maxAgentTimeout: 600 }),
+    trialB("reverted", 0.6, 0.8, { maxAgentTimeout: 600 }),
+  ]
+  const v = plateauVerdict(events, undefined, 4, PROJECT_SINK)
+  expect(v.project.n).toBe(4)
+  expect(v.project.plateaued).toBe(true)
+})
+
+test("plateauVerdict: bench layer plateau also segments by budget-identity", () => {
+  const events = [
+    abB("reject", 0.0, { maxAgentTimeout: 600 }),
+    abB("reject", 0.0, { maxAgentTimeout: 600 }),
+    abB("accept", 0.3, { maxAgentTimeout: 900 }), // cross-budget accept must not count toward this layer's window
+  ]
+  const v = plateauVerdict(events, 3)
+  expect(v.bench["account-global"]!.n).toBe(1)
+  expect(v.bench["account-global"]!.reason).toBe("insufficient data")
 })
 
 // ── loadMetaMetrics ──────────────────────────────────────────────────────
