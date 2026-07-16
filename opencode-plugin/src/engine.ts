@@ -340,7 +340,7 @@ export class EvolutionEngine {
     const agent = st.role ?? ""
 
     const layers = layersFor(this.worktree, agent)
-    const composed = composeHarness(layers.map((l) => ({ scope: l.scope, root: l.root })))
+    const composed = composeHarness(layers.map((l) => ({ scope: l.scope, root: l.root })), {}, st.model)
 
     // Env snapshot injects once per session (pushed last, if present).
     const wantsSnapshot = sessionId && !st.snapshotInjected

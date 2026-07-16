@@ -576,6 +576,42 @@ test("handleCommand returns consumed:false for a non-mh command", async () => {
   expect(await engine.handleCommand("some-other-command", "args", "s")).toEqual({ consumed: false })
 })
 
+// ── Task 3 (generality routing): composeInjection routes by st.model ──────
+//
+// Self-seeds a FAITHFUL account-global active store (playbook.json whose
+// renderPlaybook exactly equals system.md) so composeHarness's back-compat
+// guard (Task 2) actually fires the routed render instead of falling back
+// to the flat read. Does not rely on any other test's leftover state.
+test("composeInjection injects a vendor bullet only for the matching provider", async () => {
+  const worktree = tmpWorktree()
+  const store = new InMemorySessionStateStore()
+  const { host } = fakeHost(worktree)
+  const engine = new EvolutionEngine(host, store)
+
+  const root = accountGlobalRoot()
+  fs.mkdirSync(path.join(root, "active"), { recursive: true })
+  const pb = {
+    schemaVersion: 1,
+    nextId: 3,
+    bullets: [
+      { id: "b1", text: "U", helpful: 0, harmful: 0, addedBy: "t", status: "active", createdAt: "t", updatedAt: "t" },
+      { id: "b2", text: "VA", generality: "vendor", slice: "anthropic", helpful: 0, harmful: 0, addedBy: "t", status: "active", createdAt: "t", updatedAt: "t" },
+    ],
+  }
+  fs.writeFileSync(path.join(root, "active", "playbook.json"), JSON.stringify(pb))
+  fs.writeFileSync(path.join(root, "active", "system.md"), "- U\n- VA\n")
+
+  await engine.sessionMessage("gr-s1", { role: "mh-build", isPrimary: true, participates: true, model: "anthropic/claude-haiku-4-5" })
+  const anthropic = (await engine.composeInjection("gr-s1")).join("\n")
+
+  await engine.sessionMessage("gr-s2", { role: "mh-build", isPrimary: true, participates: true, model: "openai/gpt-5" })
+  const openai = (await engine.composeInjection("gr-s2")).join("\n")
+
+  expect(anthropic).toContain("- VA")
+  expect(openai).not.toContain("- VA")
+  expect(openai).toContain("- U")
+})
+
 test("cleanup resets transient state but preserves scoreCount and pausedToastShown", () => {
   const store = new InMemorySessionStateStore()
   const { host } = fakeHost("/wt")
