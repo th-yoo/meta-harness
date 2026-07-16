@@ -35,6 +35,23 @@ budget-identity; (c) load-aware scheduler #2 (flip packer to measured `avgCpu` �
 exists, more accumulates with each run); (d) Axis-2 vendor content + panel. Details in the
 handoff block below.
 
+**(b) recipe, MacBook-adapted** (the Linux `run-loop3-ab.sh` assumed 8 cores; this VM is 4c/8GiB):
+1. Propose off the fresh 14-session evidence: store-writing history is already in the loop store —
+   start opencode in the repo, `/mh-propose account` → emits a NEW candidate vN (with Axis-2
+   generality tags — first live capture data). Verify vN ≠ active: `ls .meta-harness/global/candidates/`.
+2. `ab`, detached + logged (`term-bench2/logs/`), oauth fine (freshness gate), fresh token first (`claude`, login, ctrl-D):
+   ```
+   META_HARNESS_HOME=<repo>/.meta-harness PATH=/opt/podman/bin:$PATH bun term-bench2/runner.ts ab \
+     --layer account-global --candidate vN --split-file term-bench2/splits/loop1.json \
+     --model anthropic/claude-haiku-4-5 --k 2 --parallel --enforce-resources \
+     --min-cpus 2 --cpu-budget 4 --mem-budget 7000 --max-agent-timeout 3600 --resume
+   ```
+   (`--min-cpus 2 --cpu-budget 4` = width-2 on the 4-cpu VM — the Linux `--min-cpus 4 --cpu-budget 8`
+   pins width-1 here. Serial alternative: drop `--parallel`/`--cpu-budget`/`--mem-budget`, keep the rest.
+   Same budget-identity either way: {3600, timeoutRecording:true, resourceEnforcement:true}.)
+3. Verdict `report-loop`; on accept `/mh-activate account vN` (T6 gate checks budget-identity), then
+   SURGICAL sync of `candidates/vN/` into `term-bench2/store/` + commit + push (never blind export).
+
 ---
 
 ## ➡️ MACBOOK HOME PICKUP (handoff 2026-07-16 evening) — DONE 2026-07-17, see block above
