@@ -15,6 +15,7 @@ import {
   writeActive,
 } from "../src/harness-store.ts"
 import { BenchError } from "../src/bench/util.ts"
+import { readResourceProfile, hostClass } from "../src/bench/resource-profile.ts"
 import * as schedulerReal from "../src/bench/scheduler.ts"
 
 // Snapshot the REAL scheduler.ts exports at module-eval time (before any
@@ -171,6 +172,48 @@ test("cmdAb: LEGACY explicit --tasks mode never records held-out (there is none)
   // held-in arm B (the only phase in legacy mode) IS recorded.
   const score = readScore(root, "v1")
   expect(score.sessions.length).toBe(2)
+})
+
+// NOTE these two use a NESTED termBenchDir (`<tmp>/tb`) so metaRoot =
+// dirname(termBenchDir) = <tmp> is UNIQUE per test. The other tests in this
+// file pass the tmpDir directly as termBenchDir → metaRoot = os.tmpdir()
+// (shared); they get away with it because createCandidate resets the score dir
+// each run, but the resource-profile store has no such reset and would leak
+// across tests + suite runs (n accumulates) — so profile tests MUST isolate.
+function isolatedPaths(tasks: string[]): BenchPaths {
+  const meta = tmpDir()
+  const termBenchDir = path.join(meta, "tb")
+  fs.mkdirSync(termBenchDir, { recursive: true })
+  const tbRoot = path.join(meta, "tb-root")
+  writeTaskTomls(tbRoot, tasks)
+  return fakeBenchPaths(termBenchDir, tbRoot) // metaRoot = dirname(<meta>/tb) = <meta>, unique
+}
+
+test("cmdAb: memorizes the measured cgroup footprint for BOTH arms into the resource profile", async () => {
+  const paths = isolatedPaths(["t1"])
+  setupCandidate(paths, "project-global", "v1")
+
+  // Both arms return a measured footprint (cpuSeconds=4.2 over wall=2.0 → 2.1).
+  const fake: RunOneTaskFn = async () => res({ cpuSeconds: 4.2, peakRssMb: 300, elapsed: 2.0 })
+  await quiet(() => cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1 }, fake, fakeExec))
+
+  const prof = readResourceProfile(paths.metaRoot, "t1", hostClass())
+  expect(prof).not.toBeNull()
+  expect(prof!.n).toBe(2) // active arm + candidate arm both memorized
+  expect(prof!.avgCpu).toBe(2.1) // median([4.2/2.0, 4.2/2.0])
+  expect(prof!.peakRssMb).toBe(300)
+})
+
+test("cmdAb: a 0-turn arm (no cgroup reading) is NOT memorized (skips auth/transient)", async () => {
+  const paths = isolatedPaths(["t1"])
+  setupCandidate(paths, "project-global", "v1")
+
+  // turns=0 + no cpuSeconds → the guard skips memorize (mirrors the store-record
+  // discriminator; avoids skewing avgCpu with idle-wait failures).
+  const fake: RunOneTaskFn = async () => res({ turns: 0, error: "agent_no_output" })
+  await quiet(() => cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1 }, fake, fakeExec))
+
+  expect(readResourceProfile(paths.metaRoot, "t1", hostClass())).toBeNull()
 })
 
 test("cmdAb --parallel: task-pair banner leads with \\n, THEN the [task] prefix (not prefix-then-\\n) — final-review fix", async () => {

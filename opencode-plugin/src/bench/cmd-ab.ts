@@ -29,6 +29,7 @@ import { runTaskOnce, inContainerAgentVersion, type RunOneTaskFn } from "./cmd-r
 import { getDriver } from "./drivers/index.ts"
 import { assembleAgentsMd, envBlock, sessionRecord } from "./record.ts"
 import { layerStoreRoots, type LayerName } from "./record.ts"
+import { updateResourceProfile } from "./resource-profile.ts"
 import { selectTasks, taskTimeouts, enforcedResources } from "./tasks.ts"
 import { schedule, DEFAULT_BUDGET, AsyncMutex, type Budget, type ScheduledItem } from "./scheduler.ts"
 import {
@@ -475,6 +476,23 @@ export async function cmdAb(
       tr.active.push(resA.reward)
       tr.candidate.push(resB.reward)
 
+      // Memorize BOTH arms' measured cgroup footprints (resource-profile.ts).
+      // A task's resource load is a task×host property, ~prompt-independent, so
+      // the active AND candidate arms are both valid samples of the same task.
+      // Gate on turns>0 + a cgroup reading (undefined skips setup-fail / auth-
+      // transient 0-turn, which are mostly idle wait and would skew avgCpu low).
+      // Own lock, SEQUENTIAL with the arm-B store record below — never nested,
+      // since AsyncMutex is non-reentrant. Independent of recordArmB/noStore/
+      // phase: a footprint is env telemetry, not prompt-candidate score data.
+      for (const r of [resA, resB]) {
+        if (r.cpuSeconds !== undefined && r.turns > 0) {
+          const cpuSeconds = r.cpuSeconds
+          const peakRssMb = r.peakRssMb ?? 0
+          const wall = r.elapsed
+          await withLock(() => updateResourceProfile(paths.metaRoot, task, { cpuSeconds, peakRssMb, wall }))
+        }
+      }
+
       // Record ONLY arm B, and ONLY for held-in (held-out stays invisible
       // to the proposer — evaluator outside the loop). The turns>0 check is
       // the same discriminator as record.ts's recordToStores guard
@@ -510,6 +528,8 @@ export async function cmdAb(
             resB.elapsed,
             resB.timedOut,
             agentTimeout,
+            resB.cpuSeconds,
+            resB.peakRssMb,
           )
           const score = recordSession(layerRoot, candidate, rec)
           if (resB.events.length > 0 && (resB.reward !== 1 || args.saveAllTraj)) {
