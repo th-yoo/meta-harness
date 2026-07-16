@@ -3,7 +3,27 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## LINUX SESSION (2026-07-16 cont.) — MASTER SHIPPED · Axis-2 tag CAPTURE+ROUTING shipped · TB2-timeout fixed
+## ➡️ MACBOOK HOME PICKUP (handoff 2026-07-16 evening) — DO THIS FIRST
+
+**Everything is PUSHED. `origin/main` HEAD = `e0e6e7c`.** Clean tree (only a stray untracked `oom` — ignore). Last 4 commits: `e0e6e7c` ab-path cgroup capture · `e113f43` cgroup capture+memorize · `2a8fda5` v0 re-baseline snapshot · `616b3f0` prior resume.
+
+**What did NOT transfer from the Linux box (git-only cross-host — [[tmp-dir-mnt-d]]):** the `.meta-harness` runtime store (active=v0 pointer + `config.json recordTimeouts=true`), the `/mnt/d/tmp/*.sh` scripts (rebaseline-v0 / -sync / run-loop3-ab — recreate from the procedures below), and `~/.claude` memories (their content is folded into THIS file). The v0 baseline itself IS in git (`term-bench2/store/global/candidates/v0/`).
+
+**Home steps, in order:**
+1. `git pull` → HEAD `e0e6e7c`.
+2. `cd opencode-plugin && bun test` → expect **1250 pass / 0 fail** (confirms the cgroup-capture code lands clean on macOS). NOTE: `readCgroupStats`/live bench needs Linux+podman cgroup v2 — macOS podman runs in a Linux VM so the container cgroup read still works; but the UNIT tests are pure/mocked and pass anywhere.
+3. **Store import — DIFF FIRST, never blind export** (the export-trap fired TWICE on the stale MacBook store — [[tmp-dir-mnt-d]]): `term-bench2/store-sync.sh diff`. Only if it shows the v0 re-baseline missing, surgically import (NO --delete): `rsync -a term-bench2/store/global/candidates/v0/ ~/.config/meta-harness/global/candidates/v0/` + `cp term-bench2/store/config.json ~/.config/meta-harness/config.json`, then ACTIVATE v0 (the active pointer is host-local, not in the snapshot).
+4. Pick up the open work below.
+
+**OPEN WORK (pick any):**
+- **(a) write-compressor re-run** — fill the 13/14 band hole. It dropped as an oauth-parallel-race 0-turn (auth/transient skip, not a timeout). Re-run SERIALLY (drop `--parallel`) or with a fresh token: `run --layers account --tasks write-compressor --model anthropic/claude-haiku-4-5 --enforce-resources --min-cpus 4 --cpu-budget 8 --max-agent-timeout 3600` under `META_HARNESS_HOME=<repo>/.meta-harness`. This also writes the FIRST resource profile.
+- **(b) first real loop `ab`** — propose a NEW candidate ≠ active(v0), same budget-identity → valid comparison. `ab` dies "nothing to compare" if candidate==active (`cmd-ab.ts`). Recipe: `/mnt/d/tmp/run-loop3-ab.sh <candidate>` (recreate — see LINUX block below).
+- **(c) load-aware scheduler increment #2** — flip the packer input from declared `cpus` int → measured `avgCpu` (`readResourceProfile`), declared int + `--min-cpus` kept only as cold-start prior. NEEDS profile data first → run the loop live (step a/b) to accumulate, THEN flip. See the Load-aware section in the LINUX block + [[load-aware-scheduler]].
+- **(d) Axis-2** — seed/propose vendor content so routing does something; multi-model panel needs a 2nd vendor model.
+
+---
+
+## LINUX SESSION (2026-07-16 cont.) — MASTER SHIPPED · Axis-2 tag CAPTURE+ROUTING shipped · TB2-timeout fixed · cgroup-capture shipped
 
 **HEAD `2a8fda5`, PUSHED to `origin/main` (`origin/main..HEAD` empty, `git ls-remote` confirms). Tree clean** (except a stray empty `oom` file, untracked — ignore). **Loop-3 v0 re-baseline DONE + synced — see the "Re-baseline v0" section at the end of this block.**
 
