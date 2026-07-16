@@ -41,7 +41,33 @@ Precise: the race fires **per refresh (~8h access-token expiry), NOT per task**.
 short parallel runs that finish within the token TTL are safe; only long / overnight
 sweeps cross the boundary and hit it.
 
-## DECISION: surface, don't handle
+## DECISION: surface, don't handle → SUPERSEDED by the freshness gate (2026-07-16)
+
+> **UPDATE 2026-07-16 — oauth+parallel is now SAFELY SUPPORTED, no API key needed.**
+> The original "surface, don't handle — user picks serial or key" decision below was
+> superseded by the **freshness gate** (commits `0a823bd` + `ec3b31f` + `aeabef1`;
+> validated live on a real 2-concurrent oauth run). Insight: the refresh-token race
+> only fires if a container's token *refreshes* mid-parallel-window (~8h access-token
+> expiry). So we don't coordinate the write — we GUARANTEE no task runs across the
+> refresh:
+> 1. **pre-flight** (`validateParallel`) refuses oauth+parallel only if the token can't
+>    outlive one task (`< maxAgentTimeout + 5min`); else allows;
+> 2. oauth+parallel **requires an explicit `--max-agent-timeout`** so per-task duration
+>    is bounded and the freshness math is exact;
+> 3. the scheduler's **`canLaunch` launch-guard** stops launching new tasks as the token
+>    nears expiry — in-flight ones finish before it → graceful stop → `--resume`
+>    continues (re-login if needed);
+> 4. under freshness-gated oauth+parallel the containers use the normal **oauth mount**
+>    (not keyOnly — `useKeyOnlyForParallel`, paths.ts): safe because `auth.json` is
+>    read-only throughout the window (no refresh → no write).
+>
+> This IS the "duration-gated" option the Rejected list below dismissed as fragile — but
+> made SOUND: it's a **per-launch freshness check, NOT a whole-run duration prediction**.
+> An oauth-only user now runs `--parallel` with no key, no race, self-limited to the
+> token TTL. The original serial/key path still applies when the token is stale
+> (re-login) or a key is set (keyOnly). Recipe: `resume.md`.
+
+--- original decision (historical, pre-freshness-gate) ---
 
 **We do NOT build handling** — no refresh coordinator, no file lock, no retry. That
 would re-implement the coordination the agents themselves lack (against the
@@ -66,8 +92,12 @@ Tested: `bench-cli-ab.test.ts` (the `ab --parallel` guard fires) +
   agent-side coordination; complexity for a narrow window. Surface-and-choose is
   simpler and keeps the harness out of the auth protocol.
 - **Duration-gated oauth+parallel** (allow when estimated run < token-remaining) —
-  rejected: run-duration prediction is fragile; the fail-safe blanket guard is
-  simpler and safe by construction.
+  initially rejected because predicting *whole-run* duration is fragile. **REVISITED +
+  BUILT 2026-07-16 (the freshness gate above):** the sound form doesn't predict total
+  duration — it's a **per-launch** check (never launch a task the token can't outlive)
+  plus a launch-guard that stops before expiry. Safe by construction, no key. So the
+  concern was real but only about the *whole-run* variant; the per-launch variant is
+  what shipped.
 
 ## Scope note
 

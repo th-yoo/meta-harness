@@ -75,6 +75,39 @@ current loop empirically produces NO task-pass lift yet — Loop-3 (honest signa
 frontier tasks) is the highest-leverage near-term fix; the self-hosting substrate is
 the bigger structural bet after that.
 
+## oauth+parallel recipe (2026-07-16 — NEW, no API key needed)
+
+The bench can now run `--parallel` on your subscription oauth (no `ANTHROPIC_API_KEY`),
+**safe by construction** — the freshness gate guarantees no task runs across the ~8h token
+refresh, so the shared `auth.json` is read-only during the parallel window (no race).
+Commits `0a823bd` + `ec3b31f` + `aeabef1`. **Validated live** (2 concurrent, oauth, 2/2 pass).
+
+Also loosen the agent timeout: the loop-2 **600s cap was artificially clipping** tasks below
+their declared budgets (tune-mjcf declares 900s, distribution-search 3600s) → false timeouts.
+Run at the real budget.
+
+```
+# 1. fresh token (the gate refuses if it can't outlive one task; re-login if stale)
+claude          # or: opencode auth login   (~8h TTL)
+# 2. run parallel on oauth, no key, loosened timeout:
+bun term-bench2/runner.ts ab --layer account-global --candidate vN \
+  --split-file term-bench2/splits/loop1.json --model anthropic/claude-haiku-4-5 \
+  --k 2 --parallel --enforce-resources --max-agent-timeout 1800 \
+  --max-verifier-timeout 300 --resume
+```
+- `--parallel` REQUIRES `--enforce-resources` AND an explicit `--max-agent-timeout` (bounds
+  per-task duration so the freshness math is exact).
+- Self-limiting: as the token nears expiry the scheduler stops launching new tasks, lets
+  in-flight finish, ends the chunk → re-login + `--resume` continues.
+- Loosening `--max-agent-timeout` (600→1800) is a **budget-identity change** → Loop-3 T6/T7
+  re-baseline it (re-score the active version at the new budget first).
+- With a static `ANTHROPIC_API_KEY` set, `--parallel` uses keyOnly instead (also fine).
+
+**VALIDATION (2026-07-16):** tune-mjcf + distribution-search (both loop-2 timeout-fails at
+600s) → **2/2 PASS** at loosened timeout, serial AND 2-concurrent oauth+parallel. Loop-2's
+"no improvement" was partly a **timeout mirage** (the artificial 600s cap), not harness
+quality — validates Loop-3's thesis.
+
 ---
 
 ## AT THE OFFICE (2026-07-16) — v1-into-git DONE ✅ (read the warning)
