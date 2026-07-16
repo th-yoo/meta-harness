@@ -145,6 +145,50 @@ test("cli: task-load --mem-budget -5 (non-positive) -> rc 2", async () => {
   expect(await main(["task-load", "--mem-budget", "-5", "--all"])).toBe(2)
 })
 
+// ── --min-cpus/--min-mem-mb (resource floor under --enforce-resources) ────
+// Same numeric-parse+validate pattern as --cpu-budget/--mem-budget above
+// (parseBudgetNum: rejects non-finite/non-positive values at parse time).
+
+test("cli: run --min-cpus 4 --min-mem-mb 8192 parses fine and falls through to normal flow (rc 1, no tasks)", async () => {
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main(["run", "--min-cpus", "4", "--min-mem-mb", "8192", "--layers", "none"])
+    expect(rc).toBe(1)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes("Specify --tasks"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("cli: run --min-cpus abc (non-numeric) -> rc 2", async () => {
+  expect(await main(["run", "--min-cpus", "abc", "--all"])).toBe(2)
+})
+
+test("cli: run --min-cpus -1 (non-positive) -> rc 2", async () => {
+  expect(await main(["run", "--min-cpus", "-1", "--all"])).toBe(2)
+})
+
+test("cli: run --min-cpus 0 (non-positive) -> rc 2", async () => {
+  expect(await main(["run", "--min-cpus", "0", "--all"])).toBe(2)
+})
+
+test("cli: run --min-mem-mb abc (non-numeric) -> rc 2", async () => {
+  expect(await main(["run", "--min-mem-mb", "abc", "--all"])).toBe(2)
+})
+
+test("cli: run --min-mem-mb -1 (non-positive) -> rc 2", async () => {
+  expect(await main(["run", "--min-mem-mb", "-1", "--all"])).toBe(2)
+})
+
+test("cli: run --min-mem-mb 0 (non-positive) -> rc 2", async () => {
+  expect(await main(["run", "--min-mem-mb", "0", "--all"])).toBe(2)
+})
+
+test("cli: run --min-mem-mb Infinity (non-finite) -> rc 2", async () => {
+  expect(await main(["run", "--min-mem-mb", "Infinity", "--all"])).toBe(2)
+})
+
 test("cli: run --parallel --enforce-resources with the key set parses, falls through to normal flow (rc 1, no tasks)", async () => {
   const prev = process.env["ANTHROPIC_API_KEY"]
   process.env["ANTHROPIC_API_KEY"] = "sk-test-parallel"

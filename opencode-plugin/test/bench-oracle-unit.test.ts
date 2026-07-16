@@ -309,6 +309,48 @@ test("enforcedResources: gpus > 0 throws BenchError naming the task and the gpu 
   expect(() => enforcedResources(paths, "gpu-task")).toThrow(/gpu-task.*gpus=1/)
 })
 
+// ── enforcedResources: per-task resource FLOOR (--min-cpus/--min-mem-mb) ──
+
+test("enforcedResources: floors raise a declared footprint below them", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "small-task"), { recursive: true })
+  fs.writeFileSync(
+    path.join(tbRoot, "small-task", "task.toml"),
+    "[environment]\ncpus = 1\nmemory_mb = 2048\ngpus = 0\n",
+  )
+  const paths = fakeBenchPaths(dir, tbRoot)
+  expect(enforcedResources(paths, "small-task", { minCpus: 4, minMemoryMb: 8192 })).toEqual({
+    cpus: 4,
+    memoryMb: 8192,
+  })
+})
+
+test("enforcedResources: floors below an already-generous declared footprint leave it unchanged", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "big-task"), { recursive: true })
+  fs.writeFileSync(
+    path.join(tbRoot, "big-task", "task.toml"),
+    "[environment]\ncpus = 6\nmemory_mb = 16384\ngpus = 0\n",
+  )
+  const paths = fakeBenchPaths(dir, tbRoot)
+  expect(enforcedResources(paths, "big-task", { minCpus: 4 })).toEqual({ cpus: 6, memoryMb: 16384 })
+})
+
+test("enforcedResources: no floors given returns the declared footprint unchanged (byte-identical to before floors existed)", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "fixture-task2"), { recursive: true })
+  fs.writeFileSync(
+    path.join(tbRoot, "fixture-task2", "task.toml"),
+    "[environment]\ncpus = 2\nmemory_mb = 4096\ngpus = 0\n",
+  )
+  const paths = fakeBenchPaths(dir, tbRoot)
+  expect(enforcedResources(paths, "fixture-task2")).toEqual({ cpus: 2, memoryMb: 4096 })
+  expect(enforcedResources(paths, "fixture-task2", {})).toEqual({ cpus: 2, memoryMb: 4096 })
+})
+
 // ── exec funnel: withTimeout + rc-124 mapping (no podman required — plain bash) ──
 
 test("withTimeout wraps a command with coreutils timeout -k 5", () => {

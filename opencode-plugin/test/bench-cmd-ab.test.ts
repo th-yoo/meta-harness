@@ -212,6 +212,77 @@ test("cmdAb --parallel: task-pair banner leads with \\n, THEN the [task] prefix 
   expect(banner).toBe("\n[t1] === ab t1 [held-in]: v1 vs active v0 ===")
 })
 
+// ── --min-cpus/--min-mem-mb resource floor (under --enforce-resources) ───
+
+test("cmdAb --enforce-resources ON + --min-cpus/--min-mem-mb: runOneTask receives the floored footprint", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["t1"]) // no [environment] -> modal 1cpu/2048MB
+  const paths = fakeBenchPaths(dir, tbRoot)
+  setupCandidate(paths, "project-global", "v1")
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    if (seenResources === "unset") seenResources = resources
+    return res({ reward: 1 })
+  }
+
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, enforceResources: true, minCpus: 4, minMemMb: 8192 },
+      fake,
+      fakeExec,
+    ),
+  )
+  expect(seenResources).toEqual({ cpus: 4, memoryMb: 8192 })
+})
+
+test("cmdAb --enforce-resources ON + floors below the declared footprint: declared footprint wins", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t1"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t1", "task.toml"), "[environment]\ncpus = 6\nmemory_mb = 16384\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  setupCandidate(paths, "project-global", "v1")
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    if (seenResources === "unset") seenResources = resources
+    return res({ reward: 1 })
+  }
+
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, enforceResources: true, minCpus: 4 },
+      fake,
+      fakeExec,
+    ),
+  )
+  expect(seenResources).toEqual({ cpus: 6, memoryMb: 16384 })
+})
+
+test("cmdAb --enforce-resources ON, no --min-cpus/--min-mem-mb: byte-identical to before floors existed", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t1"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t1", "task.toml"), "[environment]\ncpus = 2\nmemory_mb = 4096\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  setupCandidate(paths, "project-global", "v1")
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    if (seenResources === "unset") seenResources = resources
+    return res({ reward: 1 })
+  }
+
+  await quiet(() =>
+    cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, enforceResources: true }, fake, fakeExec),
+  )
+  expect(seenResources).toEqual({ cpus: 2, memoryMb: 4096 })
+})
+
 // ── split-based mode + the held-out-never-recorded invariant ─────────────
 
 function writeSplitsFile(paths: BenchPaths, heldIn: string[], heldOut: string[]): void {

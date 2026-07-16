@@ -42,7 +42,7 @@ commands:
               [--label NAME] [--max-agent-timeout SEC] [--max-verifier-timeout SEC]
               [--resume] [--agent NAME]
               [--pin LAYER=vN]... [--staging scripts|runtime] [--driver ID] [--enforce-resources]
-              [--parallel] [--cpu-budget N] [--mem-budget MB]
+              [--parallel] [--cpu-budget N] [--mem-budget MB] [--min-cpus N] [--min-mem-mb MB]
   task-load   [--tasks TASK [TASK ...]] [--task-file PATH] [--all]
               [--results-file PATH] [--cpu-budget N] [--mem-budget MB]
               (read-only: declared footprint + timeouts + co-run preview)
@@ -53,7 +53,7 @@ commands:
               [--max-agent-timeout SEC] [--max-verifier-timeout SEC] [--resume]
               [--no-store] [--save-all-traj]
               [--results-file PATH] [--staging scripts|runtime] [--driver ID] [--enforce-resources]
-              [--parallel] [--cpu-budget N] [--mem-budget MB]
+              [--parallel] [--cpu-budget N] [--mem-budget MB] [--min-cpus N] [--min-mem-mb MB]
   judge-audit --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
   split       make|rotate|show [--seed N] [--folds N] [--source FILE]
               [--split-file PATH] [--results PATH]... [--band LO,HI]
@@ -176,8 +176,11 @@ function parseOracleArgs(argv: string[]): OracleArgs | null {
  * anything and hangs forever, and `packPreview()`'s inner loop never
  * advances its cursor — an infinite loop (verified live). Shared by
  * parseRunArgs/parseAbArgs/parseTaskLoadArgs (all accept the same two
- * flags). Returns `null` on any invalid value — same "return null" style
- * every other invalid-value case in these parsers already uses. */
+ * flags), AND by parseRunArgs/parseAbArgs's `--min-cpus`/`--min-mem-mb`
+ * resource-floor flags (same positive-number contract — a floor of 0/NaN
+ * is as meaningless as a budget of 0/NaN). Returns `null` on any invalid
+ * value — same "return null" style every other invalid-value case in these
+ * parsers already uses. */
 function parseBudgetNum(v: string): number | null {
   const n = Number(v)
   if (!Number.isFinite(n) || n <= 0) return null
@@ -344,6 +347,24 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
       const n = parseBudgetNum(v)
       if (n === null) return null
       out.memBudget = n
+      i += 2
+      continue
+    }
+    if (a === "--min-cpus") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.minCpus = n
+      i += 2
+      continue
+    }
+    if (a === "--min-mem-mb") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.minMemMb = n
       i += 2
       continue
     }
@@ -739,6 +760,24 @@ function parseAbArgs(argv: string[]): CmdAbArgs | null {
       const n = parseBudgetNum(v)
       if (n === null) return null
       out.memBudget = n
+      i += 2
+      continue
+    }
+    if (a === "--min-cpus") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.minCpus = n
+      i += 2
+      continue
+    }
+    if (a === "--min-mem-mb") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.minMemMb = n
       i += 2
       continue
     }

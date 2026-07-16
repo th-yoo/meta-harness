@@ -186,8 +186,27 @@ export function taskResources(paths: BenchPaths, task: string): TaskResources {
 
 /** taskResources + spec-D1 warning + spec Non-goals GPU refusal. Call only
  * when --enforce-resources is on (undefined resources = unenforced elsewhere).
- * Consumed by cmd-run.ts's outer loop and cmd-oracle.ts's runOneOracleTask. */
-export function enforcedResources(paths: BenchPaths, task: string): { cpus: number; memoryMb: number } {
+ * Consumed by cmd-run.ts's outer loop and cmd-oracle.ts's runOneOracleTask.
+ *
+ * `floors` (--min-cpus/--min-mem-mb) is an optional per-task resource FLOOR:
+ * a GENEROUS minimum that raises (never lowers) the declared task.toml
+ * footprint via `Math.max`. Rationale: task.toml's [environment] is sized
+ * for the ORACLE's reference solution, not necessarily for a heavier agent
+ * approach — a --parallel run that packs/caps every task at its tight
+ * declared footprint can starve a compute-heavy task without ever editing
+ * the shared TB2 benchmark task.tomls. The floor applies to THIS function's
+ * returned value, which feeds BOTH the scheduler's budget-packing AND the
+ * container cgroup cap (both cmd-run.ts and cmd-ab.ts thread the same
+ * returned object into each), so a floored task packs-as and is-capped-at
+ * the same (floored) size — packing and the cap never disagree. Omitting
+ * `floors` (the default — no --min-cpus/--min-mem-mb) makes
+ * `Math.max(declared, 0)` equal `declared`, byte-identical to before floors
+ * existed. */
+export function enforcedResources(
+  paths: BenchPaths,
+  task: string,
+  floors?: { minCpus?: number; minMemoryMb?: number },
+): { cpus: number; memoryMb: number } {
   // taskResources.num()'s fallback also fires for an explicit 0/negative
   // cpus or memory_mb in task.toml (not just a missing key) — `declared`
   // stays true in that case, so this silently substitutes the modal
@@ -199,5 +218,8 @@ export function enforcedResources(paths: BenchPaths, task: string): { cpus: numb
     )
   }
   if (!r.declared) log(`  ${task}: no [environment] in task.toml — assuming 1 cpu / 2048 MB`)
-  return { cpus: r.cpus, memoryMb: r.memoryMb }
+  return {
+    cpus: Math.max(r.cpus, floors?.minCpus ?? 0),
+    memoryMb: Math.max(r.memoryMb, floors?.minMemoryMb ?? 0),
+  }
 }

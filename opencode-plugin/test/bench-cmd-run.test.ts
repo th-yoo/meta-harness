@@ -413,6 +413,111 @@ test("cmdRun --enforce-resources ON: runOneTask receives the task's declared cpu
   expect(seenResources).toEqual({ cpus: 2, memoryMb: 4096 })
 })
 
+test("cmdRun --enforce-resources ON + --min-cpus/--min-mem-mb: runOneTask receives the floored footprint", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a"])
+  fs.writeFileSync(path.join(tbRoot, "a", "task.toml"), "[environment]\ncpus = 1\nmemory_mb = 2048\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    seenResources = resources
+    return result({ reward: 1 })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(
+      paths,
+      { tasks: ["a"], layers: "none", enforceResources: true, minCpus: 4, minMemMb: 8192 },
+      fake,
+      fakeExec,
+    )
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(seenResources).toEqual({ cpus: 4, memoryMb: 8192 })
+})
+
+test("cmdRun --enforce-resources ON + floors below the declared footprint: declared footprint wins", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a"])
+  fs.writeFileSync(path.join(tbRoot, "a", "task.toml"), "[environment]\ncpus = 6\nmemory_mb = 16384\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    seenResources = resources
+    return result({ reward: 1 })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "none", enforceResources: true, minCpus: 4 }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(seenResources).toEqual({ cpus: 6, memoryMb: 16384 })
+})
+
+test("cmdRun --parallel + --enforce-resources + --min-cpus/--min-mem-mb: the floored footprint feeds both budget-packing and runOneTask", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeResourceTomls(tbRoot, ["a"], 1, 2048)
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    seenResources = resources
+    return result({ reward: 1 })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(
+      paths,
+      { tasks: ["a"], layers: "none", parallel: true, enforceResources: true, minCpus: 4, minMemMb: 8192 },
+      fake,
+      fakeExec,
+    )
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(seenResources).toEqual({ cpus: 4, memoryMb: 8192 })
+})
+
+test("cmdRun --enforce-resources ON, no --min-cpus/--min-mem-mb: byte-identical to before floors existed", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a"])
+  fs.writeFileSync(path.join(tbRoot, "a", "task.toml"), "[environment]\ncpus = 2\nmemory_mb = 4096\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    seenResources = resources
+    return result({ reward: 1 })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "none", enforceResources: true }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(seenResources).toEqual({ cpus: 2, memoryMb: 4096 })
+})
+
 test("cmdRun --enforce-resources ON: a gpus>0 task dies before spending any container lifecycle", async () => {
   const dir = tmpDir()
   const tbRoot = path.join(dir, "tb-root")

@@ -94,6 +94,54 @@ test("cli main: ab --mem-budget -5 (non-positive) -> rc 2", async () => {
   ).toBe(2)
 })
 
+// ── --min-cpus/--min-mem-mb (resource floor under --enforce-resources) ────
+// Same numeric-parse+validate pattern as --cpu-budget/--mem-budget above.
+
+test("cli main: ab --min-cpus 4 --min-mem-mb 8192 parses fine and falls through to normal flow (rc 1, nonexistent candidate)", async () => {
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main([
+      "ab",
+      "--layer",
+      "project-global",
+      "--candidate",
+      "v999999",
+      "--all",
+      "--min-cpus",
+      "4",
+      "--min-mem-mb",
+      "8192",
+    ])
+    expect(rc).toBe(1)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("cli main: ab --min-cpus abc (non-numeric) -> rc 2", async () => {
+  expect(
+    await main(["ab", "--layer", "project-global", "--candidate", "v1", "--all", "--min-cpus", "abc"]),
+  ).toBe(2)
+})
+
+test("cli main: ab --min-cpus -1 (non-positive) -> rc 2", async () => {
+  expect(
+    await main(["ab", "--layer", "project-global", "--candidate", "v1", "--all", "--min-cpus", "-1"]),
+  ).toBe(2)
+})
+
+test("cli main: ab --min-mem-mb 0 (non-positive) -> rc 2", async () => {
+  expect(
+    await main(["ab", "--layer", "project-global", "--candidate", "v1", "--all", "--min-mem-mb", "0"]),
+  ).toBe(2)
+})
+
+test("cli main: ab --min-mem-mb Infinity (non-finite) -> rc 2", async () => {
+  expect(
+    await main(["ab", "--layer", "project-global", "--candidate", "v1", "--all", "--min-mem-mb", "Infinity"]),
+  ).toBe(2)
+})
+
 test("cli main: ab --parallel without ANTHROPIC_API_KEY (anthropic model) dies naming the var — oauth refresh-token race guard (D4)", async () => {
   // CONFIRMED hazard (Anthropic claude-code #22600, #48786): the oauth refresh
   // token is SINGLE-USE — one container's refresh rotates it server-side at the

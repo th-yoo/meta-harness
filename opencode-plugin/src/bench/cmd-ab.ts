@@ -117,6 +117,15 @@ export interface CmdAbArgs {
    * DEFAULT_BUDGET (scheduler.ts). */
   cpuBudget?: number
   memBudget?: number
+  /** Per-task resource FLOOR (--min-cpus/--min-mem-mb): a generous minimum
+   * cgroup cap under --enforce-resources, raising (never lowering) each
+   * task's declared task.toml [environment] footprint via tasks.ts's
+   * enforcedResources — see cmd-run.ts's CmdRunArgs field doc for the full
+   * rationale (identical here). Only meaningful with --enforce-resources.
+   * Default undefined → floors undefined → the declared footprint
+   * unchanged, byte-identical to before these flags existed. */
+  minCpus?: number
+  minMemMb?: number
   /** Internal-only wiring — NOT a CLI flag, never parsed from argv (see
    * cli.ts's parseAbArgs, which has no `--` case setting it). The
    * oauth-parallel freshness gate's scheduler launch-guard (Task 2 of the
@@ -538,7 +547,9 @@ export async function cmdAb(
           log(`\n=== ab ${task} [${phase}] (skipped — already done) ===`)
           continue
         }
-        const resources = enforceRes ? enforcedResources(paths, task) : undefined
+        const resources = enforceRes
+          ? enforcedResources(paths, task, { minCpus: args.minCpus, minMemoryMb: args.minMemMb })
+          : undefined
         const tr = await runTaskPairs(task, phase, recordArmB, noopLock, resources, "")
         taskResults[task] = tr
         writeJsonAtomic(partialPath, verdictDict("in_progress"))
@@ -580,7 +591,7 @@ export async function cmdAb(
     // --enforce-resources' own guard. Reused for BOTH budget packing and the
     // per-container caps.
     const footprints = new Map<string, { cpus: number; memoryMb: number }>()
-    for (const t of pending) footprints.set(t, enforcedResources(paths, t))
+    for (const t of pending) footprints.set(t, enforcedResources(paths, t, { minCpus: args.minCpus, minMemoryMb: args.minMemMb }))
 
     let consumedIdx = 0
     let stopFired = false

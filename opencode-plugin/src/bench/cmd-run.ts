@@ -332,6 +332,16 @@ export interface CmdRunArgs {
    * DEFAULT_BUDGET (scheduler.ts). */
   cpuBudget?: number
   memBudget?: number
+  /** Per-task resource FLOOR (--min-cpus/--min-mem-mb): a generous minimum
+   * cgroup cap under --enforce-resources, raising (never lowering) each
+   * task's declared task.toml [environment] footprint via tasks.ts's
+   * enforcedResources — sized for the ORACLE, which can starve a heavier
+   * agent approach under --parallel's tight per-task cap. Only meaningful
+   * with --enforce-resources (a floor with no enforcement is a no-op, not
+   * an error). Default undefined → floors undefined → the declared
+   * footprint unchanged, byte-identical to before these flags existed. */
+  minCpus?: number
+  minMemMb?: number
   /** Internal-only wiring — NOT a CLI flag, never parsed from argv (see
    * cli.ts's parseRunArgs, which has no `--` case setting it). The
    * oauth-parallel freshness gate's scheduler launch-guard (Task 2 of the
@@ -474,7 +484,11 @@ export async function cmdRun(
     }
     log(`\n${prefix}=== Task: ${task} ===`)
     const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout)
-    const resources = resourcesOverride ?? (args.enforceResources ? enforcedResources(paths, task) : undefined)
+    const resources =
+      resourcesOverride ??
+      (args.enforceResources
+        ? enforcedResources(paths, task, { minCpus: args.minCpus, minMemoryMb: args.minMemMb })
+        : undefined)
 
     taskAgg[task] = { rewards: [], elapsed: [], turns: [], errors: [], ...(selfCheckOn ? { selfScores: [] } : {}) }
 
@@ -579,7 +593,7 @@ export async function cmdRun(
     // gpu-declaring task throws here (enforcedResources) and dies the run
     // before any container lifecycle, matching --enforce-resources' own guard.
     const footprints = new Map<string, { cpus: number; memoryMb: number }>()
-    for (const t of pending) footprints.set(t, enforcedResources(paths, t))
+    for (const t of pending) footprints.set(t, enforcedResources(paths, t, { minCpus: args.minCpus, minMemoryMb: args.minMemMb }))
     // Still surface the skip lines for already-done tasks (they're excluded
     // from scheduling, so the shared pipeline never logs them in this path).
     for (const t of tasks) if (doneTasks.has(t)) log(`\n=== Task: ${t} (skipped — already done) ===`)
