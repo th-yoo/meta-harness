@@ -1281,3 +1281,78 @@ test("serial path untouched: no --parallel → existing for-loop (spy: schedule(
     restoreScheduler()
   }
 })
+
+// ── oauth-parallel freshness gate, Task 2 part B: args.canLaunch → schedule()
+// ─────────────────────────────────────────────────────────────────────────
+// cli.ts's main() computes the launch-guard (buildOauthParallelCanLaunch) and
+// sets it as internal-only wiring on CmdRunArgs.canLaunch BEFORE calling
+// cmdRun — these tests pin that cmd-run.ts threads whatever is on
+// `args.canLaunch` straight through as schedule()'s 4th param, unchanged
+// (undefined by default — byte-identical to before this gate existed).
+
+test("run --parallel: args.canLaunch (when set) is threaded straight into schedule()'s 4th param", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeResourceTomls(tbRoot, ["a"], 1, 2048)
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let capturedCanLaunch: unknown
+  let scheduleCalls = 0
+  mock.module("../src/bench/scheduler.ts", () => ({
+    schedule: (...a: unknown[]) => {
+      scheduleCalls++
+      capturedCanLaunch = a[3]
+      return (realSchedule as (...x: unknown[]) => unknown)(...a)
+    },
+    AsyncMutex: realAsyncMutex,
+    DEFAULT_BUDGET: realDefaultBudget,
+  }))
+
+  const marker = () => true
+  const fake: RunOneTaskFn = async () => result({ reward: 1 })
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(
+      paths,
+      { tasks: ["a"], layers: "none", parallel: true, enforceResources: true, canLaunch: marker },
+      fake,
+      fakeExec,
+    )
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreScheduler()
+  }
+  expect(scheduleCalls).toBe(1)
+  expect(capturedCanLaunch).toBe(marker)
+})
+
+test("run --parallel: args.canLaunch absent by default — schedule() gets undefined (unbounded, byte-identical)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeResourceTomls(tbRoot, ["a"], 1, 2048)
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let capturedCanLaunch: unknown = "unset"
+  mock.module("../src/bench/scheduler.ts", () => ({
+    schedule: (...a: unknown[]) => {
+      capturedCanLaunch = a[3]
+      return (realSchedule as (...x: unknown[]) => unknown)(...a)
+    },
+    AsyncMutex: realAsyncMutex,
+    DEFAULT_BUDGET: realDefaultBudget,
+  }))
+
+  const fake: RunOneTaskFn = async () => result({ reward: 1 })
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "none", parallel: true, enforceResources: true }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreScheduler()
+  }
+  expect(capturedCanLaunch).toBeUndefined()
+})

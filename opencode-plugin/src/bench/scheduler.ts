@@ -59,11 +59,26 @@ function assertValidBudget(budget: Budget): void {
 
 /** Greedy canonical-order packing (spec D3): launches items[i] when it fits the
  * remaining budget; over-total-budget items drain the pool and run alone.
- * runFn errors reject the whole schedule() after in-flight items settle. */
+ * runFn errors reject the whole schedule() after in-flight items settle.
+ *
+ * `canLaunch` (oauth-parallel freshness gate, Task 2 part A): an optional
+ * launch-guard, checked at the top of every scan() — before the packing
+ * while-loop even looks at the next item. While it returns true, schedule()
+ * behaves exactly as before (this param didn't exist). The moment it returns
+ * false, scan() stops launching NEW items: whatever is already in flight is
+ * left to settle normally (their completion callbacks still fire, still
+ * free budget, still trigger a re-scan), but no further item is ever
+ * launched from that point on. Once nothing is left in flight, schedule()
+ * finishes GRACEFULLY — resolves, never rejects (this is not a failure) —
+ * even if items remain un-launched; the caller (cmd-run.ts/cmd-ab.ts's
+ * --resume) is expected to pick up whatever didn't run this chunk. Absent
+ * (undefined), the guard is skipped entirely — unbounded, byte-identical to
+ * every schedule() call site from before this param existed. */
 export function schedule(
   items: ScheduledItem[],
   budget: Budget,
   runFn: (item: ScheduledItem) => Promise<void>,
+  canLaunch?: () => boolean,
 ): Promise<void> {
   assertValidBudget(budget)
   return new Promise<void>((resolve, reject) => {
@@ -123,6 +138,26 @@ export function schedule(
     const scan = (): void => {
       if (finishIfDone()) return
       if (hasFailure) return // draining: let in-flight items settle, launch nothing new
+
+      if (canLaunch && !canLaunch()) {
+        // oauth-parallel freshness guard: the token is nearing expiry — stop
+        // launching NEW tasks so none runs across the refresh (the shared rw
+        // auth.json write race — see agent-auth.ts's header). Let whatever is
+        // already in flight settle normally, then finish GRACEFULLY.
+        //
+        // finishIfDone() above would NOT have resolved in this state (cursor
+        // hasn't reached items.length, and there's no failure) — so this is
+        // the ONLY path that can settle schedule() while items remain
+        // un-launched. Must not hang: the moment nothing is in flight,
+        // resolve explicitly right here. Promise resolution is idempotent
+        // (a no-op if already settled), so there is no race with any other
+        // path that might also reach a resolve/reject first.
+        if (inFlight === 0) {
+          resolve()
+          return
+        }
+        return // in-flight settle → their .then calls scan() again → eventually inFlight 0 → resolve above
+      }
 
       while (cursor < items.length) {
         const it = items[cursor]!

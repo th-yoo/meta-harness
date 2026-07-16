@@ -378,6 +378,120 @@ test("packPreview: over-budget item in FIRST position starts its own solo group"
   expect(packPreview(items, budget)).toEqual([["huge"], ["a"]])
 })
 
+// ── canLaunch (oauth-parallel freshness gate, Task 2 part A) ────────────────
+// scheduler.ts's 4th, optional `schedule()` param: a launch-guard checked at
+// the top of every scan(), BEFORE the packing while-loop. When it flips
+// false, schedule() must stop launching NEW items, let whatever is already
+// in flight settle normally, then finish GRACEFULLY — resolve (never
+// reject), and never hang, regardless of how many items are left unlaunched.
+// Absent (undefined), schedule() is byte-identical to before this param
+// existed (every test above this section passes no 4th arg).
+
+test("canLaunch: false from the very start with a non-empty item list — resolves immediately, runs nothing", async () => {
+  const launched: string[] = []
+  const items = [item("a", 1), item("b", 1), item("c", 1)]
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    launched.push(it.key)
+    return Promise.resolve()
+  }
+
+  const result = schedule(items, DEFAULT_BUDGET, runFn, () => false)
+
+  await result // must resolve, not hang
+  expect(launched).toEqual([])
+})
+
+test("canLaunch: true then flips false after N items — launches only the allowed items, lets in-flight settle, then RESOLVES (no hang, no reject)", async () => {
+  const launched: string[] = []
+  const deferreds = new Map<string, Deferred<void>>()
+  const budget: Budget = { cpus: 3, memoryMb: 6144 }
+  // a(1) and b(1) fit together and both launch in the FIRST scan() (canLaunch
+  // checked once at scan()'s entry, true at that point) — c must wait behind
+  // budget regardless (2 <= 3, so actually a+b+c would ALL fit at once... use
+  // cpus so only a+b fit, forcing c to wait for a completion-triggered scan()
+  // where canLaunch has since flipped false).
+  const items = [item("a", 2), item("b", 1), item("c", 1)]
+
+  let allowed = true
+  const canLaunch = () => allowed
+
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    launched.push(it.key)
+    const d = deferred<void>()
+    deferreds.set(it.key, d)
+    return d.promise
+  }
+
+  const result = schedule(items, budget, runFn, canLaunch)
+
+  // a(2) + b(1) = 3 fills the budget exactly in the first scan() — c must
+  // wait regardless of canLaunch.
+  expect(launched).toEqual(["a", "b"])
+
+  // Flip the gate false, then free the budget by completing "a". The
+  // resulting re-scan must see canLaunch()===false and refuse to launch "c".
+  allowed = false
+  deferreds.get("a")!.resolve()
+  await flush()
+
+  expect(launched).toEqual(["a", "b"]) // "c" never launched
+  expect(deferreds.has("c")).toBe(false)
+
+  let settled = false
+  result.then(() => (settled = true))
+  await flush()
+  // "b" is still in flight — schedule() must NOT resolve yet.
+  expect(settled).toBe(false)
+
+  deferreds.get("b")!.resolve()
+  await result // must resolve (not reject), and must not hang
+  expect(settled).toBe(true)
+  expect(launched).toEqual(["a", "b"])
+})
+
+test("canLaunch: flips false WHILE items are in-flight — in-flight complete, then resolve, no new launches", async () => {
+  const launched: string[] = []
+  const deferreds = new Map<string, Deferred<void>>()
+  const budget: Budget = { cpus: 1, memoryMb: 6144 } // strictly serializes: one at a time
+  const items = [item("a", 1), item("b", 1), item("c", 1)]
+
+  let allowed = true
+  const canLaunch = () => allowed
+
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    launched.push(it.key)
+    const d = deferred<void>()
+    deferreds.set(it.key, d)
+    return d.promise
+  }
+
+  const result = schedule(items, budget, runFn, canLaunch)
+  expect(launched).toEqual(["a"]) // only "a" fits the 1-cpu budget
+
+  // Flip false WHILE "a" is still in flight.
+  allowed = false
+
+  deferreds.get("a")!.resolve()
+  await flush()
+
+  // "b" must never launch — canLaunch was false by the time its scan() ran.
+  expect(launched).toEqual(["a"])
+  expect(deferreds.has("b")).toBe(false)
+
+  await result // nothing left in flight — must resolve, not hang
+})
+
+test("canLaunch: undefined (not passed) is byte-identical to today — unbounded, no gating", async () => {
+  const launched: string[] = []
+  const items = [item("a", 1), item("b", 1)]
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    launched.push(it.key)
+    return Promise.resolve()
+  }
+  await schedule(items, DEFAULT_BUDGET, runFn) // no 4th arg
+  expect(launched).toEqual(["a", "b"])
+})
+
 // ── invalid budget guard (final-review fix: NaN defeats fitsBudget/
 // exceedsTotalBudget silently — schedule() hangs forever, packPreview()
 // loops forever without advancing. Defense in depth: both throw immediately

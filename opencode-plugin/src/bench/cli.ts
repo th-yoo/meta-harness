@@ -488,9 +488,74 @@ export function validateParallel(
         `re-login (\`claude\` / \`opencode auth login\`) and retry, or export ${keyVar}`,
     )
   }
-  // else: token outlives this run's worst-case task — oauth+parallel allowed.
-  // A later task adds the scheduler launch-guard that re-checks this near
-  // the actual expiry boundary for long --parallel sweeps.
+
+  // Task 2 part C: the freshness math above (and the scheduler launch-guard
+  // it feeds, buildOauthParallelCanLaunch below) is only EXACT if every task
+  // is capped at a known duration. An unset/0 --max-agent-timeout means "no
+  // cap" (tasks.ts's taskTimeouts falls back to each task's own declared
+  // task.toml timeout, up to ~1800s) — which could exceed the 900s floor
+  // `neededMs` assumed above and cross the token's expiry mid-run. Require an
+  // EXPLICIT non-zero cap for oauth+parallel so the whole run has an exact
+  // bound; key-auth and serial are unaffected (this check is unreachable on
+  // both — key-auth returns above, serial returned at the top of this fn).
+  if (!a.maxAgentTimeout) {
+    throw new BenchError(
+      `--parallel with oauth needs an explicit --max-agent-timeout N (seconds) so we can guarantee no task runs ` +
+        `across your token's expiry — pass --max-agent-timeout, or export ${keyVar} instead`,
+    )
+  }
+  // else: token outlives this run's worst-case task, AND every task is capped
+  // at a known duration — oauth+parallel allowed. buildOauthParallelCanLaunch
+  // (below) builds the scheduler launch-guard that re-checks this near the
+  // actual expiry boundary for long --parallel sweeps (Task 2 parts A/B).
+}
+
+/**
+ * oauth-parallel freshness gate, PART 2 (Task 2 of the oauth-parallel
+ * design): builds the scheduler launch-guard (scheduler.ts's `schedule()`
+ * `canLaunch` param) that bounds the ENTIRE --parallel window to the oauth
+ * token's TTL, not just the run's start. validateParallel's pre-flight check
+ * (above) only runs once, before task 1 — a long --parallel sweep could
+ * still cross the token's expiry mid-run without this: this function's
+ * result gets re-checked by schedule() before EVERY launch, so no NEW task
+ * is ever started once the token can no longer outlive one more task +
+ * OAUTH_PARALLEL_MARGIN_MS.
+ *
+ * Returns `undefined` (unbounded launches, byte-identical to every path from
+ * before this gate existed) for every case validateParallel already treats
+ * as fine-as-is: serial, key-auth, and "no oauth credential either" (that
+ * last one is a hard refusal in validateParallel — this function is only
+ * ever reached in production AFTER validateParallel did NOT throw, so this
+ * branch means the CLI's own gate was bypassed; it stays a safe no-op rather
+ * than bounding on a `null` expiry).
+ *
+ * Must run AFTER validateParallel has NOT thrown (main() calls both, in that
+ * order, below): validateParallel's Task 2 part C addition REQUIRES an
+ * explicit non-zero --max-agent-timeout for oauth+parallel, so by the time
+ * this runs for a real oauth+parallel CLI invocation, `a.maxAgentTimeout` is
+ * guaranteed truthy — the `|| DEFAULT_TASK_AGENT_TIMEOUT_SEC` fallback below
+ * exists only so this function's OWN unit tests (which call it directly,
+ * bypassing validateParallel) exercise the identical formula
+ * validateParallel's own `neededMs` calc uses; production never needs it.
+ *
+ * `readExpiry` is the same injectable seam as validateParallel's own —
+ * default: the real oauth reader, so tests never touch the real
+ * ~/.claude/Keychain unless they explicitly ask to.
+ */
+export function buildOauthParallelCanLaunch(
+  a: { parallel?: boolean; maxAgentTimeout?: number },
+  model: string,
+  readExpiry: () => number | null = () => readOauthExpiresAt(),
+): (() => boolean) | undefined {
+  if (!a.parallel) return undefined
+  const keyVar = requiredApiKeyVar(model)
+  if (process.env[keyVar]) return undefined // key-auth: unbounded, unchanged
+
+  const exp = readExpiry()
+  if (exp === null) return undefined // no oauth credential either — nothing to bound against
+
+  const neededMs = (a.maxAgentTimeout || DEFAULT_TASK_AGENT_TIMEOUT_SEC) * 1000 + OAUTH_PARALLEL_MARGIN_MS
+  return () => Date.now() + neededMs <= exp
 }
 
 function parseAbArgs(argv: string[]): CmdAbArgs | null {
@@ -1349,7 +1414,15 @@ export async function main(argv: string[]): Promise<number> {
         // --parallel gate (before any podman work — matches cmdRun's own
         // default model resolution so the required key var is derived from the
         // effective model).
-        validateParallel(runArgs, runArgs.model || DEFAULT_BENCH_MODEL)
+        {
+          const runModel = runArgs.model || DEFAULT_BENCH_MODEL
+          validateParallel(runArgs, runModel)
+          // oauth-parallel freshness gate, part 2 (Task 2): the scheduler
+          // launch-guard, computed ONCE here (right after the pre-flight gate
+          // passed) and threaded through as internal-only wiring on
+          // CmdRunArgs — see cmd-run.ts's `canLaunch` field doc comment.
+          runArgs.canLaunch = buildOauthParallelCanLaunch(runArgs, runModel)
+        }
         await cmdRun(paths, runArgs)
         return 0
       }
@@ -1371,7 +1444,13 @@ export async function main(argv: string[]): Promise<number> {
         // Shared --parallel gate (spec D3/D4) — same guard `run` uses, before
         // any podman work; derives the required key var from the effective
         // model exactly as cmdAb's own default does.
-        validateParallel(abArgs, abArgs.model || DEFAULT_BENCH_MODEL)
+        {
+          const abModel = abArgs.model || DEFAULT_BENCH_MODEL
+          validateParallel(abArgs, abModel)
+          // oauth-parallel freshness gate, part 2 (Task 2): same scheduler
+          // launch-guard as `run`, above — see that case's comment.
+          abArgs.canLaunch = buildOauthParallelCanLaunch(abArgs, abModel)
+        }
         await cmdAb(paths, abArgs)
         return 0
       }

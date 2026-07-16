@@ -1,4 +1,4 @@
-import { test, expect, spyOn } from "bun:test"
+import { test, expect, spyOn, mock } from "bun:test"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
@@ -15,6 +15,22 @@ import {
   writeActive,
 } from "../src/harness-store.ts"
 import { BenchError } from "../src/bench/util.ts"
+import * as schedulerReal from "../src/bench/scheduler.ts"
+
+// Snapshot the REAL scheduler.ts exports at module-eval time (before any
+// mock.module call below) — same pattern as bench-cmd-run.test.ts's own
+// restoreScheduler: a plain `const` captures the function VALUE, surviving
+// later mock.module swaps of the module's own export slots.
+const realSchedule = schedulerReal.schedule
+const realAsyncMutex = schedulerReal.AsyncMutex
+const realDefaultBudget = schedulerReal.DEFAULT_BUDGET
+function restoreScheduler(): void {
+  mock.module("../src/bench/scheduler.ts", () => ({
+    schedule: realSchedule,
+    AsyncMutex: realAsyncMutex,
+    DEFAULT_BUDGET: realDefaultBudget,
+  }))
+}
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "mh-bench-cmd-ab-"))
@@ -990,4 +1006,104 @@ test("ab --parallel resume: earlyStopped partial with pending held-in tasks laun
   const serial = await runAb(false, {}, serialState)
   expect(countedKeys(resumedVerdict)).toEqual(countedKeys(serial))
   expect(countedKeys(resumedVerdict)).toEqual(["hi0", "hi1", "hi2", "hi3"])
+})
+
+// ── oauth-parallel freshness gate, Task 2 part B: args.canLaunch → schedule()
+// ─────────────────────────────────────────────────────────────────────────
+// cli.ts's main() computes the launch-guard (buildOauthParallelCanLaunch) and
+// sets it as internal-only wiring on CmdAbArgs.canLaunch BEFORE calling
+// cmdAb — this test pins that cmd-ab.ts threads whatever is on
+// `args.canLaunch` straight through as schedule()'s 4th param for BOTH phases
+// (held-in and held-out), unchanged (undefined by default — byte-identical
+// to before this gate existed). Placed LAST so its mock.module of
+// scheduler.ts (restored in finally) can't bleed into the real-schedule
+// --parallel tests above even if a restore is imperfect.
+test("ab --parallel: args.canLaunch (when set) is threaded into EVERY schedule() call (both phases); absent by default", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeSplitsFile(paths, ["hi0"], ["ho0"])
+  setupCandidate(paths, "project-global", "v1")
+
+  const capturedCanLaunches: unknown[] = []
+  mock.module("../src/bench/scheduler.ts", () => ({
+    schedule: (...a: unknown[]) => {
+      capturedCanLaunches.push(a[3])
+      return (realSchedule as (...x: unknown[]) => unknown)(...a)
+    },
+    AsyncMutex: realAsyncMutex,
+    DEFAULT_BUDGET: realDefaultBudget,
+  }))
+
+  const marker = () => true
+  const fake: RunOneTaskFn = async () => res({ reward: 1 })
+  try {
+    await quiet(() =>
+      cmdAb(
+        paths,
+        {
+          layer: "project-global",
+          candidate: "v1",
+          k: 1,
+          parallel: true,
+          enforceResources: true,
+          cpuBudget: 100,
+          memBudget: 1_000_000,
+          canLaunch: marker,
+        } as CmdAbArgs,
+        fake,
+        fakeExec,
+      ),
+    )
+  } finally {
+    restoreScheduler()
+  }
+
+  // Both phases (held-in + held-out) call schedule() — every call must get
+  // the exact same marker.
+  expect(capturedCanLaunches.length).toBeGreaterThanOrEqual(1)
+  for (const c of capturedCanLaunches) expect(c).toBe(marker)
+})
+
+test("ab --parallel: args.canLaunch absent by default — every schedule() call gets undefined (unbounded, byte-identical)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeSplitsFile(paths, ["hi0"], ["ho0"])
+  setupCandidate(paths, "project-global", "v1")
+
+  const capturedCanLaunches: unknown[] = []
+  mock.module("../src/bench/scheduler.ts", () => ({
+    schedule: (...a: unknown[]) => {
+      capturedCanLaunches.push(a[3])
+      return (realSchedule as (...x: unknown[]) => unknown)(...a)
+    },
+    AsyncMutex: realAsyncMutex,
+    DEFAULT_BUDGET: realDefaultBudget,
+  }))
+
+  const fake: RunOneTaskFn = async () => res({ reward: 1 })
+  try {
+    await quiet(() =>
+      cmdAb(
+        paths,
+        {
+          layer: "project-global",
+          candidate: "v1",
+          k: 1,
+          parallel: true,
+          enforceResources: true,
+          cpuBudget: 100,
+          memBudget: 1_000_000,
+        } as CmdAbArgs,
+        fake,
+        fakeExec,
+      ),
+    )
+  } finally {
+    restoreScheduler()
+  }
+
+  expect(capturedCanLaunches.length).toBeGreaterThanOrEqual(1)
+  for (const c of capturedCanLaunches) expect(c).toBeUndefined()
 })

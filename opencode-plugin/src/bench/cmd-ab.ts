@@ -117,6 +117,19 @@ export interface CmdAbArgs {
    * DEFAULT_BUDGET (scheduler.ts). */
   cpuBudget?: number
   memBudget?: number
+  /** Internal-only wiring — NOT a CLI flag, never parsed from argv (see
+   * cli.ts's parseAbArgs, which has no `--` case setting it). The
+   * oauth-parallel freshness gate's scheduler launch-guard (Task 2 of the
+   * oauth-parallel design, cli.ts's `buildOauthParallelCanLaunch`), threaded
+   * straight through into scheduler.ts's `schedule()` `canLaunch` param
+   * below — reused for BOTH phases (held-in and held-out), since it's
+   * computed once at run start in cli.ts's main() and captures the token's
+   * expiry, not per-phase state. cli.ts's main() sets this AFTER
+   * validateParallel (Task 1's pre-flight check) has already allowed the
+   * run. Every other caller (direct unit tests, or any caller that never
+   * sets it) leaves it undefined — unbounded scheduling, byte-identical to
+   * before this gate existed. */
+  canLaunch?: () => boolean
 }
 
 function round4(x: number): number {
@@ -596,21 +609,26 @@ export async function cmdAb(
     }
 
     const items: ScheduledItem[] = pending.map((t) => ({ key: t, ...footprints.get(t)! }))
-    await schedule(items, budget, async (it) => {
-      const tr = await runTaskPairs(
-        it.key,
-        phase,
-        recordArmB,
-        (fn) => mutex.withLock(fn),
-        footprints.get(it.key),
-        `[${it.key}] `,
-      )
-      await mutex.withLock(() => {
-        taskResults[it.key] = tr
-        consume()
-        writeJsonAtomic(partialPath, verdictDict("in_progress"))
-      })
-    })
+    await schedule(
+      items,
+      budget,
+      async (it) => {
+        const tr = await runTaskPairs(
+          it.key,
+          phase,
+          recordArmB,
+          (fn) => mutex.withLock(fn),
+          footprints.get(it.key),
+          `[${it.key}] `,
+        )
+        await mutex.withLock(() => {
+          taskResults[it.key] = tr
+          consume()
+          writeJsonAtomic(partialPath, verdictDict("in_progress"))
+        })
+      },
+      args.canLaunch,
+    )
   }
 
   await runPhase("held-in", heldInTasks, true)

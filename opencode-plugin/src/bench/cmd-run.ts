@@ -332,6 +332,17 @@ export interface CmdRunArgs {
    * DEFAULT_BUDGET (scheduler.ts). */
   cpuBudget?: number
   memBudget?: number
+  /** Internal-only wiring — NOT a CLI flag, never parsed from argv (see
+   * cli.ts's parseRunArgs, which has no `--` case setting it). The
+   * oauth-parallel freshness gate's scheduler launch-guard (Task 2 of the
+   * oauth-parallel design, cli.ts's `buildOauthParallelCanLaunch`), threaded
+   * straight through into scheduler.ts's `schedule()` `canLaunch` param
+   * below. cli.ts's main() sets this AFTER validateParallel (Task 1's
+   * pre-flight check) has already allowed the run. Every other caller
+   * (direct unit tests, or any caller that never sets it) leaves it
+   * undefined — unbounded scheduling, byte-identical to before this gate
+   * existed. */
+  canLaunch?: () => boolean
 }
 
 export async function cmdRun(
@@ -566,8 +577,11 @@ export async function cmdRun(
     // from scheduling, so the shared pipeline never logs them in this path).
     for (const t of tasks) if (doneTasks.has(t)) log(`\n=== Task: ${t} (skipped — already done) ===`)
     const items: ScheduledItem[] = pending.map((t) => ({ key: t, ...footprints.get(t)! }))
-    await schedule(items, budget, (it) =>
-      runOneTaskPipeline(it.key, `[${it.key}] `, (fn) => mutex.withLock(fn), footprints.get(it.key)),
+    await schedule(
+      items,
+      budget,
+      (it) => runOneTaskPipeline(it.key, `[${it.key}] `, (fn) => mutex.withLock(fn), footprints.get(it.key)),
+      args.canLaunch,
     )
   } else {
     // Serial: pass-through lock (runs fn immediately) + empty prefix →
