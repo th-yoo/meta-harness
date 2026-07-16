@@ -188,3 +188,120 @@ export function assertValidDag(dag: unknown): TaskDag {
   for (const w of v.warnings) log("task-DAG warning: " + w)
   return dag as TaskDag
 }
+
+// ── Wire codec — emit/parse the Designer's fenced dag block ────────────────
+//
+// Two representations, one type (T3 plan Global Constraints): the WIRE form
+// (a fenced ```dag block inside the Designer's markdown payload) and the
+// ARTIFACT form (a raw {nodes:[...]} JSON file — T4's --dag-file) both
+// resolve to the identical TaskDag; both funnel through assertValidDag. This
+// section owns the wire parse only.
+
+/** The fenced-block language tag the planner Designer emits under `## Task DAG`. */
+export const DAG_FENCE = "dag"
+export const DAG_HEADING = "## Task DAG"
+
+/** Canonical emit: the `## Task DAG` heading + a fenced dag JSON block (tag
+ * = DAG_FENCE). Used by the persona example, round-trip tests, and to author
+ * a T4 `--dag-file` (whose bare form is `JSON.stringify(dag, null, 2)`). */
+export function formatDagBlock(dag: TaskDag): string {
+  return `${DAG_HEADING}\n\`\`\`${DAG_FENCE}\n${JSON.stringify(dag, null, 2)}\n\`\`\`\n`
+}
+
+/** Extract the inner text of the first fenced block tagged `lang`, or
+ * undefined if none is found. */
+function extractFence(payload: string, lang: string): string | undefined {
+  const re = new RegExp("```" + lang + "\\s*\\n([\\s\\S]*?)```", "m")
+  const m = re.exec(payload)
+  return m ? m[1] : undefined
+}
+
+/** Shape-check only (field types) — delegates graph checks (cycle/dangling/
+ * dup) to `validateDag`/`assertValidDag`. */
+function checkTaskDagShape(v: unknown): v is TaskDag {
+  if (typeof v !== "object" || v === null) return false
+  const nodes = (v as Record<string, unknown>).nodes
+  if (!Array.isArray(nodes)) return false
+  return nodes.every((n) => {
+    if (typeof n !== "object" || n === null) return false
+    const rec = n as Record<string, unknown>
+    if (typeof rec.id !== "string" || typeof rec.task !== "string") return false
+    if (!Array.isArray(rec.deps) || !rec.deps.every((d) => typeof d === "string")) return false
+    if (rec.files !== undefined && (!Array.isArray(rec.files) || !rec.files.every((f) => typeof f === "string"))) {
+      return false
+    }
+    if (rec.mutatesDeps !== undefined && typeof rec.mutatesDeps !== "boolean") return false
+    return true
+  })
+}
+
+/** Extract + JSON-parse + SHAPE-check the DAG block out of a Designer role
+ * payload (prose may surround it). Prefers a fenced dag block; falls back to
+ * a fenced json block (proposer-drift leniency, mirrors parseVerdict's
+ * tolerance). Returns the shaped TaskDag or a parse/shape error — does NOT
+ * run graph validation (that is `dagFromApprovedPayload`/`assertValidDag`). */
+export function parseDagFromPayload(payload: string): { ok: true; dag: TaskDag } | { ok: false; error: string } {
+  const inner = extractFence(payload, DAG_FENCE) ?? extractFence(payload, "json")
+  if (inner === undefined) {
+    return { ok: false, error: `no fenced \`\`\`${DAG_FENCE}\` (or \`\`\`json) block found in payload` }
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(inner)
+  } catch (e) {
+    return { ok: false, error: `malformed JSON in dag block: ${(e as Error).message}` }
+  }
+  if (!checkTaskDagShape(parsed)) {
+    return { ok: false, error: "dag block does not match the {nodes:[{id,task,deps,files?,mutatesDeps?}]} shape" }
+  }
+  return { ok: true, dag: parsed }
+}
+
+/** Gate2 sink: parse the approved Designer payload AND fully validate it.
+ * `die`s on either a parse failure or an invalid DAG — nothing invalid ever
+ * reaches the scheduler. The T4 `--feature` glue calls this on approve. */
+export function dagFromApprovedPayload(payload: string): TaskDag {
+  const r = parseDagFromPayload(payload)
+  if (!r.ok) die("gate2: no valid task-DAG in the approved plan — " + r.error)
+  return assertValidDag(r.dag)
+}
+
+/** Verbatim wire-contract detail (block format + a literal example) that the
+ * planner Designer's contract.md must show — the generator must SEE the
+ * exact `{id,task,deps,files?,mutatesDeps?}` format, not infer it (spec
+ * §1.5 wire-visibility). Imported by squad-def.ts's renderWireContract in
+ * Task 3. */
+export function dagContractText(): string {
+  const example: TaskDag = {
+    nodes: [
+      { id: "a", task: "build worktree primitive", deps: [] },
+      { id: "b", task: "build dag schema", deps: [] },
+      { id: "c", task: "wire scheduler", deps: ["a", "b"], files: ["src/fleet/dag-scheduler.ts"], mutatesDeps: false },
+    ],
+  }
+  return [
+    "",
+    `## ${DAG_HEADING.replace(/^##\s*/, "")} — required block format`,
+    "",
+    `Emit the task-DAG as a \`${DAG_HEADING}\` heading followed by a fenced \`\`\`${DAG_FENCE}\` block`,
+    "containing JSON of shape `{nodes: DagNode[]}`, where each `DagNode` is:",
+    "",
+    "```",
+    "{ id: string, task: string, deps: string[], files?: string[], mutatesDeps?: boolean }",
+    "```",
+    "",
+    "- `id` — unique node id.",
+    "- `task` — one-line task description.",
+    "- `deps` — ids of nodes that must complete first (empty array if none).",
+    "- `files` — optional list of files this node is expected to touch (helps the",
+    "  scheduler and the human spot merge-conflict risk between concurrent nodes).",
+    "- `mutatesDeps` — optional boolean; set true if this node changes shared",
+    "  dependency files (e.g. package.json/bun.lock*) so the scheduler can",
+    "  serialize it against other dep-mutating nodes.",
+    "",
+    "Example:",
+    "",
+    formatDagBlock(example).trimEnd(),
+    "",
+  ].join("\n")
+}
