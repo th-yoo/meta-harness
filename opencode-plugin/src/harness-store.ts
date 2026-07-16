@@ -127,6 +127,16 @@ export interface SessionRecord {
    * (drivers/index.ts) for bench-recorded sessions — e.g. "claude-code".
    * Optional so every pre-L1 on-disk score.json keeps parsing. */
   platform?: string
+  /** Measured container-cgroup resource consumption for this session (bench
+   * resource-profile capture): `cpuSeconds` = cumulative CPU-seconds the whole
+   * container burned (cgroup v2 cpu.stat usage_usec / 1e6), `peakRssMb` = peak
+   * RSS (memory.peak). Read from the container's OWN cgroup just before teardown
+   * — a MEASURED footprint, distinct from the DECLARED task.toml `cpus`/mem the
+   * container was capped at. Feeds resource-profile.ts's memorized per-task/
+   * per-host profile so the scheduler packs on real load, not a static int.
+   * Optional so pre-capture records + non-podman callers keep parsing. */
+  cpuSeconds?: number
+  peakRssMb?: number
   /** Dense LLM judge verdict for this session (Phase 4 Part D), when the judge
    * ran — shadow mode never affects `passed`; prefill mode may pre-populate the
    * human /mh-score prompt. Optional so pre-D1 records keep parsing. */

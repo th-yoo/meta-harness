@@ -32,6 +32,8 @@ import { stageTaskRuntime } from "./staging.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
 import { copyTests, runVerifier } from "./verifier.ts"
 import { readSelfScore, SELF_CHECK_INSTRUCTION, SELF_CHECK_MARKER } from "./self-score.ts"
+import { readCgroupStats } from "./cgroup.ts"
+import { updateResourceProfile } from "./resource-profile.ts"
 import { runAgent } from "./agent-run.ts"
 import { getDriver } from "./drivers/index.ts"
 import { opencodeDriver } from "./drivers/opencode.ts"
@@ -62,6 +64,12 @@ export interface RunTaskResult {
    * controlled transport of a self-report, NOT verified — see self-score.ts).
    * null when self-check is off or the agent wrote no/invalid score.txt. */
   selfScore?: number | null
+  /** MEASURED container-cgroup footprint (cgroup.ts), read just before teardown
+   * — cumulative CPU-seconds + peak RSS (MiB) the whole container burned.
+   * undefined when the read failed or the run never reached the agent phase
+   * (setup/bring-up failure). Feeds the memorized resource profile. */
+  cpuSeconds?: number
+  peakRssMb?: number
 }
 
 export type RunOneTaskFn = (
@@ -266,6 +274,10 @@ export async function runTaskOnce(
     const selfScore = harnessMd.includes(SELF_CHECK_MARKER)
       ? await readSelfScore(name, execFn)
       : null
+    // Measured cgroup footprint — read here for the same reason as selfScore:
+    // the container must still be up (it's `podman rm`'d in the finally). Best-
+    // effort: null on any read failure, never blocks the result.
+    const cgroup = await readCgroupStats(name, execFn)
     const elapsed = (Date.now() - taskStart) / 1000
     log(`  reward=${reward}${selfScore !== null ? `  self=${round1(selfScore)}` : ""}  elapsed=${pyFixed(elapsed, 1)}s`)
     return {
@@ -278,6 +290,7 @@ export async function runTaskOnce(
       timedOut: timedOut ?? false,
       error: timedOut ? "timeout" : turnCount === 0 ? "agent_no_output" : "",
       selfScore,
+      ...(cgroup ? { cpuSeconds: cgroup.cpuSeconds, peakRssMb: cgroup.peakRssMb } : {}),
     }
   } finally {
     // auth?.cleanup() shreds the darwin Keychain-exported .credentials.json (a
@@ -547,8 +560,23 @@ export async function cmdRun(
           recordTimeouts,
           res.elapsed,
           agentTimeout,
+          res.cpuSeconds,
+          res.peakRssMb,
         ),
       )
+
+      // Memorize the measured footprint so the scheduler reuses it instead of
+      // re-measuring (resource-profile.ts). Independent of the prompt store
+      // (noStore only gates prompt-candidate scores; a footprint is env
+      // telemetry) — but only for a REAL run: turns>0 with a cgroup reading.
+      // A setup-fail / auth-transient 0-turn is mostly idle wait and would skew
+      // avgCpu low. Own lock (NOT nested in the store lock — AsyncMutex is
+      // non-reentrant) since parallel tasks share one host-profile file.
+      if (res.cpuSeconds !== undefined && res.turns > 0) {
+        const cpuSeconds = res.cpuSeconds
+        const peakRssMb = res.peakRssMb ?? 0
+        await withLock(() => updateResourceProfile(paths.metaRoot, task, { cpuSeconds, peakRssMb, wall: res.elapsed }))
+      }
 
       // Leaf-level lock #2 (results-file + task_agg): the agg pushes happen
       // synchronously first, then the file write reads that consistent

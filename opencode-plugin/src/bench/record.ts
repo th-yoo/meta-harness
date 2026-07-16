@@ -288,6 +288,8 @@ export function sessionRecord(
   elapsed?: number,
   timedOut?: boolean,
   agentTimeout?: number,
+  cpuSeconds?: number,
+  peakRssMb?: number,
 ): SessionRecord {
   const driver = env["driver"]
   return {
@@ -305,6 +307,8 @@ export function sessionRecord(
     ...(elapsed !== undefined ? { elapsed } : {}),
     ...(timedOut !== undefined ? { timedOut } : {}),
     ...(agentTimeout !== undefined ? { agentTimeout } : {}),
+    ...(cpuSeconds !== undefined ? { cpuSeconds } : {}),
+    ...(peakRssMb !== undefined ? { peakRssMb } : {}),
   }
 }
 
@@ -347,6 +351,8 @@ export function recordToStores(
   recordTimeouts = false,
   elapsed?: number,
   agentTimeout?: number,
+  cpuSeconds?: number,
+  peakRssMb?: number,
 ): void {
   if (noStore) return
   if (turnCount === 0 && !(timedOut && recordTimeouts)) {
@@ -354,7 +360,7 @@ export function recordToStores(
     return
   }
 
-  const record = sessionRecord(task, sessionId, passed, turnCount, toolUsage, model, variant, env, elapsed, timedOut, agentTimeout)
+  const record = sessionRecord(task, sessionId, passed, turnCount, toolUsage, model, variant, env, elapsed, timedOut, agentTimeout, cpuSeconds, peakRssMb)
   const saveTraj = events.length > 0 && (!passed || saveAllTraj)
 
   for (const [name, root] of layerStoreRoots(layers, agent, metaRoot)) {

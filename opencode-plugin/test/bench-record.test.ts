@@ -345,6 +345,17 @@ test("sessionRecord: no env.driver present -> platform stays undefined (no inven
   expect(rec.platform).toBeUndefined()
 })
 
+test("sessionRecord: cpuSeconds/peakRssMb stamped only when provided (conditional-stamp idiom)", () => {
+  // measured footprint present (trailing params after agentTimeout)
+  const measured = sessionRecord("t", "s", true, 1, {}, "m", "", {}, 12.3, false, 900, 42.5, 256)
+  expect(measured.cpuSeconds).toBe(42.5)
+  expect(measured.peakRssMb).toBe(256)
+  // omitted → keys absent (pre-capture records + non-podman callers keep parsing)
+  const bare = sessionRecord("t", "s", true, 1, {}, "m", "")
+  expect("cpuSeconds" in bare).toBe(false)
+  expect("peakRssMb" in bare).toBe(false)
+})
+
 // ── recordToStores ───────────────────────────────────────────────────────
 // Only ever exercises project-scoped layers under a fresh tmp metaRoot — no
 // account-global/account-role writes anywhere in this file (see file header).
