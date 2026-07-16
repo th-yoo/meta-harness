@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { accountMetaRoot, accountRoleRoot } from "../harness-store.ts"
 import { die, log, writeJsonAtomic, writeTextAtomic } from "../bench/util.ts"
+import { dagContractText, DAG_HEADING } from "./dag.ts"
 
 export type SlotBinding =
   | { kind: "agent"; role: string; platform: "opencode" | "claude-code"; model: string }
@@ -55,6 +56,26 @@ export const STANDARD_SQUAD: SquadDef = {
       "evaluator-verdict": [["VERDICT:"]],
     },
     verdictRe: "^VERDICT: (PASS|FAIL)(?: cause=(impl|design|intent))?(?: score=(\\d+)/(\\d+))?\\s*$",
+  },
+}
+
+/**
+ * The top-level planner squad (spec N4): reuses the 4 role slots + flow of
+ * STANDARD, but the Designer's wire output is the task-DAG, and gate2 is the
+ * human DAG-approval. Driven `gatePolicy:"auto"` so gate1 auto-approves and
+ * gate2 pauses on the DAG (squad-cli.ts's `cmdSquadRun`'s `gatePolicy`
+ * argument leaves a def's own `flow.gatePolicy` untouched unless it's the
+ * default "root-human", which forces BOTH gates to human — see squad-cli.ts).
+ * Analyzer/implementer/evaluator wire + verdictRe are reused verbatim from
+ * STANDARD (only the designer wire changes) — see the T3 plan's Interfaces.
+ */
+export const PLANNER_SQUAD: SquadDef = {
+  ...STANDARD_SQUAD,
+  type: "planner",
+  flow: { ...STANDARD_SQUAD.flow, gatePolicy: { gate1: "auto", gate2: "human" } },
+  wire: {
+    ...STANDARD_SQUAD.wire,
+    headings: { ...STANDARD_SQUAD.wire.headings, designer: [[DAG_HEADING]] },
   },
 }
 
@@ -146,6 +167,16 @@ function renderWireContract(def: SquadDef, role: string): string {
       "`VERDICT: FAIL cause=impl score=28/32`) — the fraction of checks that passed.",
       "It lets the harness rank multiple candidate implementations of the same task.",
     )
+  }
+
+  // Guarded designer DAG detail (T3/N4): fires ONLY when this def's designer
+  // wire teaches `## Task DAG` (PLANNER_SQUAD) — STANDARD's designer wire
+  // (`## Alternatives`/`## Recommended`) never matches, so its rendered
+  // contract.md stays byte-identical to before this addition (regression-
+  // tested in fleet-dag-planner.test.ts). Mirrors the evaluator special-case
+  // above: the generator must SEE the exact block format, not infer it.
+  if (role === "designer" && groups.some((g) => g.length === 1 && g[0] === DAG_HEADING)) {
+    lines.push("", dagContractText())
   }
 
   return lines.join("\n") + "\n"
