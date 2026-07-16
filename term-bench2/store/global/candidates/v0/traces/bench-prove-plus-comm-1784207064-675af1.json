@@ -1,0 +1,45 @@
+{
+  "sessionID": "bench-prove-plus-comm-1784207064-675af1",
+  "passed": true,
+  "note": "bench:prove-plus-comm",
+  "turnCount": 1,
+  "timestamp": "2026-07-16T13:05:51.450Z",
+  "summary": "prove-plus-comm",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "toolUsage": {
+    "read": {
+      "calls": 3,
+      "errors": 0
+    },
+    "glob": {
+      "calls": 1,
+      "errors": 0
+    },
+    "bash": {
+      "calls": 8,
+      "errors": 4
+    },
+    "write": {
+      "calls": 1,
+      "errors": 0
+    },
+    "edit": {
+      "calls": 6,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "616b3f0",
+    "harnessHash": "25f13fca883fe563",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "opencode",
+    "resourceEnforcement": true
+  },
+  "platform": "opencode",
+  "elapsed": 86.6,
+  "timedOut": false,
+  "agentTimeout": 900
+}
