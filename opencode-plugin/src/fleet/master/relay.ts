@@ -22,12 +22,11 @@
  * outward-action seam (self-hosting N2), which fires ONLY on a human approve
  * that terminated the squad (halt-on-approval, §9.3).
  */
-import { Transport, InboundMsg, OutboundMsg } from "./transport.ts"
+import { Transport } from "./transport.ts"
 import {
   pendingGates,
   raiseGate,
   resolveGate,
-  markRelayed,
   type PendingGate,
   type GateKind,
 } from "./gate-state.ts"
