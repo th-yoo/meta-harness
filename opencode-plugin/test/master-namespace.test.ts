@@ -52,11 +52,22 @@ describe("master/namespace", () => {
     expect(reg.projects.projB.project).toBe("projB")
   })
 
+  test("re-registering the same project upserts without self-collision", () => {
+    registerProject(root, ns({ project: "projX", gatePolicy: "root-human" }))
+    expect(() =>
+      registerProject(root, ns({ project: "projX", gatePolicy: "auto" })),
+    ).not.toThrow()
+    const reg = loadRegistry(root)
+    const projXKeys = Object.keys(reg.projects).filter((k) => k === "projX")
+    expect(projXKeys).toHaveLength(1)
+    expect(reg.projects.projX.gatePolicy).toBe("auto")
+  })
+
   test("lifetime defaults to 'ephemeral' when omitted", () => {
     const full = ns({ project: "projC" })
     // simulate omission by constructing without `lifetime`
     const { lifetime, ...rest } = full
-    registerProject(root, rest as ProjectNamespace)
+    registerProject(root, rest as Omit<ProjectNamespace, "lifetime">)
     const reg = loadRegistry(root)
     expect(reg.projects.projC.lifetime).toBe("ephemeral")
   })
