@@ -167,6 +167,20 @@ The seed corpus's 2 VENDOR + 3 MODEL bullets
 cost is bounded precisely *because* only one primary model runs today — it grows
 the moment a second does.
 
+**Status update (2026-07-16) — tag CAPTURE shipped, BUILD still deferred.** The
+first, smallest slice of this deferral has shipped: `PlaybookBullet` now
+carries optional `generality`/`slice` claim fields, the proposer emits them,
+and they roll up into candidate meta + `/mh-status`
+([target-model-axis.md §7.0](target-model-axis.md)). This is **capture only** —
+no new scope keys, no `layersFor(worktree, agent, model)` routing, no injection
+change (a tagged bullet renders byte-identical), no gate change. It does
+**not** satisfy this entry's revisit trigger below and does **not** reopen this
+deferral: the **12-coordinate routing** (§2/§4 of the spec) and the **N-model
+panel gate** remain fully deferred, gated on the same two preconditions. The
+distinction matters precisely because it is the kind of thing that could be
+mistaken for progress toward the BUILD trigger — it is not; it is a zero-cost,
+mechanically-inert precursor.
+
 **Revisit trigger (BOTH required for the build; either fires the reconsideration).**
 - **loop-1 `ab` accepted** — account-global v1 clears its verdict, proving the
   single-model loop produces an accepted candidate (Gall's-law precondition).
@@ -180,6 +194,37 @@ a single model cannot exercise a panel. Additive-only override forbiddance
 (§3.2 of the spec) reopens *only* on measured evidence that a real
 in-store contradiction cannot be handled by demote-the-universal — not
 speculatively.
+
+#### 2.4.1 Nested soft requirement — promote playbook-preservation (found 2026-07-16)
+
+**What it would be.** `promote`'s legacy/grace path (`propose.ts`'s
+`newPlaybook = undefined` branch) stages a raw `system.md` and skips writing a
+`playbook.json` for the candidate. When that candidate is later promoted and
+activated, `activateCandidate` reads the candidate's (absent) playbook as
+`null` and passes it through to `writeActive`'s playbook parameter, whose
+pre-existing tri-state contract (`harness-store.ts`: `undefined` = leave alone,
+object = write, `null` = remove) then **deletes** the active layer's
+`playbook.json`. The layer silently reverts from playbook-structured to legacy
+plain text, discarding every bullet's helpful/harmful counters — and now its
+`generality`/`slice` claim tags too — that were tracked on the playbook it
+replaces.
+
+**Current gap.** This is a **pre-existing** gap (the tri-state contract and the
+legacy/grace path both predate this axis) that the tag-capture increment above
+makes newly *costly*: before generality/slice existed, a promote-triggered
+revert-to-legacy only lost counters; now it can silently erase generality
+claims too, with nothing today surfacing the loss. The fix is for `promote` to
+migrate its own staged `system` text into a playbook (one bullet per line,
+counters/tags reset — the same shape `migrateSystemToPlaybook` already
+produces) instead of leaving `newPlaybook` undefined, so activation never hits
+the null case for a promote-originated candidate.
+
+**Reopen trigger.** When the tag feature makes lost tags **observable** — i.e.
+once something (a human reading `/mh-status`'s `gen[...]` rollup, or a future
+automated check) can actually notice a playbook's generality tags vanishing
+across a promote+activate. Not before: while generality/slice stays
+capture-only and unrouted (§7.0 of the spec), a reverted-to-legacy layer costs
+nothing observably different from before this axis existed.
 
 ---
 

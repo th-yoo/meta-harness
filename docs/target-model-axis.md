@@ -28,9 +28,68 @@ injected for every model the driver happens to run. The mining doc already
 tagged its 22-bullet seed corpus on a target-model axis (UNIVERSAL:17,
 VENDOR:2, MODEL:3) precisely because the store has nowhere to *put* that tag
 today. Without the axis, a candidate that is gated as helpful on the one model
-`ab` happens to run (`anthropic/claude-sonnet-4-6`, cmd-ab.ts:106) is injected
-blindly onto every other model — it can silently regress a model that was never
-in the evaluation. **This spec designs the missing dimension.**
+`ab` happens to run is injected blindly onto every other model — it can
+silently regress a model that was never in the evaluation. **This spec designs
+the missing dimension.**
+
+**Citation fix (2026-07-16 review).** An earlier draft of this section cited
+`cmd-ab.ts:106` for `ab`'s default model. That citation is **stale** — line 106
+is the `enforceResources` flag's doc comment, unrelated to model selection. The
+actual default is the shared constant `DEFAULT_BENCH_MODEL`
+(`anthropic/claude-sonnet-4-6`, `paths.ts:28`), consumed as
+`const model = args.model || DEFAULT_BENCH_MODEL` (`cmd-ab.ts:158`).
+
+**And that default isn't even what's running.** The loop-1 account-global run
+in progress today is on `anthropic/claude-haiku-4-5`, not the
+`claude-sonnet-4-6` default above (`docs/loop-1-state.md`, `docs/resume.md`).
+So today's account-global playbook output is honestly *model:haiku-measured but
+universal-ASSERTED* — every bullet `ab` clears on haiku is stamped universal and
+injected on every model the driver runs, without ever having been measured on
+any of them. That gap is not hypothetical; it is the exact honesty gap §6's
+multi-model panel is designed to close.
+
+## 0.1 External validation (2026-07-16 deep research)
+
+An adversarially-verified research pass external to this repo converges on the
+same design, source by source:
+
+- **Reflective/evolutionary optimizers are SOTA for prompt optimization** —
+  GEPA [2507.19457] beats MIPROv2 by >10% and beats RL-based prompt search
+  (GRPO) using up to 35× fewer rollouts. This is the family of technique this
+  axis's curator already belongs to (§5, `applyPlaybookOps`) — reflective/
+  evolutionary, not RL.
+- **"Model drifting" is a named, documented failure mode**: the optimal prompt
+  for one model is model-specific and degrades when carried to another model —
+  even within one vendor family — and an off-target prompt can actively
+  **regress** a model it was never tuned for (PromptBridge [2512.01420], GRACE
+  [2509.23387]). This is direct external evidence for §0's premise: a
+  universal-injected bullet gated helpful on one model is an unproven, and
+  sometimes false, generalization.
+- **Self-improvement gains transfer in DIRECTION, not MAGNITUDE** (Darwin-Gödel
+  Machine [2505.22954], ADAS [2408.08435]) — a change shown to help stays
+  plausible on another model, but its measured size does not carry over. This
+  is exactly why §6 requires every promotion to be re-validated per model on
+  its own panel run, not extrapolated from one model's `ab` verdict.
+- **Frontier labs already organize prompting guidance by model version** —
+  OpenAI's GPT-4.1/5.1 prompting guides, Anthropic's model-specific + XML-
+  structuring guidance, Gemini's thinking-level guidance. Vendor/model
+  specialization is not a hypothetical this spec invents; it is how the
+  frontier labs document their own models.
+- **OpenAI officially recommends an automated diagnostic → surgical-revision
+  "metaprompting" loop that explicitly preserves prior good behavior while
+  fixing a diagnosed failure** — the same gap-filling idiom this store's
+  curator already implements (helpful/harmful counters + demote-through-the-
+  gate, §3.3), independently arrived at.
+- **No shipped tool has layered vendor/model inheritance.** Industry prompt
+  registries (Bedrock, Vertex) bind a model as a versioned *property* of a
+  prompt (one prompt, one pinned model, no fallback/inheritance chain), but
+  none ships a `universal → vendor → model` additive layering. This axis is a
+  **novel** contribution here, not an off-the-shelf mechanism being reinvented.
+
+Net: nothing above changes a decision already made in this spec — §3.2
+(additive-only), §5 (one global budget), §6 (panel + worst-case non-regression)
+all stand as designed. The research corroborates the premise (§0) and the two
+hardest calls (§3.2, §6) from entirely outside this codebase.
 
 ## 1. Name and disambiguation
 
@@ -347,6 +406,45 @@ explicitly-not-now.md §2.4. Until it exists, any vendor/model bullet can only b
 gated on a single matching model (which `ab` *can* do today — pass that model as
 `--model`), and no candidate can be *proven* universal — it can only be *asserted*
 universal from a single-model pass, which is the honesty gap the panel closes.
+
+## 7.0 First increment SHIPPED (2026-07-16)
+
+The very first slice of this spec has shipped — and it is smaller than the
+vendor-build recommendation below. It is **tag capture only**, not build:
+
+- `PlaybookBullet` gained optional `generality?: "universal" | "vendor" |
+  "model"` and `slice?: string` fields (`harness-store.ts`), and `PlaybookOp`'s
+  `add`/`update` variants carry the same two fields so the proposer can stamp a
+  claim when it adds or edits a bullet.
+- The proposer's op-mode path threads them through unchanged (`propose.ts`),
+  and the candidate's rolled-up `meta.json` carries the tagged bullets.
+- `/mh-status` (`engine.ts`) surfaces the rollup per layer as
+  `gen[u:.. v:.. m:..]` whenever a layer has any non-universal-tagged bullet.
+
+**This is capture only. It does NOT build:**
+- the 12-coordinate **routing** of §2/§4 — no new scope keys, no
+  `layersFor(worktree, agent, model)`, no new root resolvers. A bullet's
+  `generality`/`slice` is metadata *on* a bullet that still lives, resolves,
+  and injects exactly where it always did (account-global, project-global,
+  account-role, or project-role);
+- any change to **injection** — `compose.ts`/`renderPlaybook` read `text`/
+  `status` only; a tagged bullet renders byte-identical to an untagged one;
+- any change to the **gate** — `ab`/the curator neither read nor act on
+  `generality`/`slice` yet; a bullet is measured and gated exactly as before.
+
+The eval-scope rule this feature will eventually need already exists and needs
+no re-deriving: **§3.3** (a harmful universal bullet is demoted through the
+gate, never overridden) and **§6** (an honest "universal" verdict needs the
+N-model panel + worst-case-nonregression policy, not a single-model `ab` pass)
+already say how a claimed coordinate gets *proven*, once routing exists to act
+on the claim.
+
+**Gall's-law point.** Capture-only is inert by construction — it changes what a
+bullet can *say about itself*, not what the store *does* with what it says. It
+therefore does **not** trip the deferral register's "axis BUILD + multi-model
+panel gate" reopen trigger (`explicitly-not-now.md` §2.4): no routing shipped,
+no injection changed, no gate changed. That trigger stays armed for the actual
+build.
 
 ## 7. Incremental build recommendation (simplest first)
 
