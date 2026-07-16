@@ -42,7 +42,7 @@ import {
 } from "./splits.ts"
 import { pairedRunStats, mcnemarExactOneSided, bootstrapTaskCi, futilityStop, type DecisionConfig, type PairStats } from "./ab-stats.ts"
 import { die, log, pyFixed, pySigned, writeJsonAtomic } from "./util.ts"
-import { DEFAULT_BENCH_MODEL, type BenchPaths } from "./paths.ts"
+import { DEFAULT_BENCH_MODEL, useKeyOnlyForParallel, type BenchPaths } from "./paths.ts"
 import {
   candidateExists,
   listVersions,
@@ -258,11 +258,18 @@ export async function cmdAb(
     cpus: args.cpuBudget ?? DEFAULT_BUDGET.cpus,
     memoryMb: args.memBudget ?? DEFAULT_BUDGET.memoryMb,
   }
-  // --parallel threads the driver's keyOnly auth prep (no shared rw credential
-  // mount — task-4-brief.md), the second half of the concurrency guard whose
-  // primary half is the CLI key gate (cli.ts's validateParallel). Serial runs
-  // pass undefined → the driver's default prepareAuth, byte-identical to before.
-  const parallelPrepareAuth = parallel ? () => driver.prepareAuth({ keyOnly: true }) : undefined
+  // --parallel auth mount: keyOnly (no shared rw credential mount) ONLY when an
+  // API key is present. With no key, the oauth path (enabled by the freshness
+  // gate — validateParallel pre-flight + scheduler canLaunch launch-guard) uses
+  // the DEFAULT oauth prepareAuth (the shared rw mount serial uses) — SAFE: the
+  // gate guarantees no task runs across the token refresh, so auth.json is
+  // read-only during the parallel window (no refresh-token race). Serial →
+  // undefined → default oauth. (Residual: a COLD opencode plugin-cache could see
+  // concurrent writes on a first-ever parallel fetch — benign/re-fetchable, and
+  // none on a warm cache; not isolated here.)
+  const parallelPrepareAuth = useKeyOnlyForParallel(parallel, model)
+    ? () => driver.prepareAuth({ keyOnly: true })
+    : undefined
 
   const verdictPath = candidatePath(layerRoot, candidate, "ab-verdict.json")
   const partialPath = candidatePath(layerRoot, candidate, "ab-verdict.partial.json")

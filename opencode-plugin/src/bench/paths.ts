@@ -114,6 +114,24 @@ export function requiredApiKeyVar(model: string): string {
   return `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`
 }
 
+/**
+ * keyOnly-vs-oauth mount decision under `--parallel`. Use keyOnly (no shared rw
+ * credential mount) ONLY when an API key is present. With NO key, the oauth path
+ * enabled by the freshness gate (validateParallel's pre-flight + the scheduler
+ * `canLaunch` launch-guard, agent-auth.ts's OAUTH_PARALLEL_MARGIN_MS) uses the
+ * DEFAULT oauth prepareAuth — the same shared rw mount serial uses. SAFE: the
+ * freshness gate guarantees no task runs across the ~8h token refresh, so
+ * `auth.json` is only READ during the parallel window, never written → no
+ * refresh-token race. Serial (`parallel=false`) short-circuits to false →
+ * default oauth, byte-identical to before this feature. */
+export function useKeyOnlyForParallel(
+  parallel: boolean,
+  model: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return parallel && Boolean(env[requiredApiKeyVar(model)])
+}
+
 const MAX_TASK_LEN = 40
 
 /**

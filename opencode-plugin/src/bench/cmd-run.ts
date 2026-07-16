@@ -25,7 +25,7 @@ import { join, parse as parsePath } from "node:path"
 import { podman } from "./exec.ts"
 import type { ExecFn } from "./staging.ts"
 import { buildCreateArgv, buildStartArgv, buildExecArgv, buildRmArgv } from "./sandbox.ts"
-import { BENCH_IMAGE, apiKeyEnv, containerName, DEFAULT_BENCH_MODEL, type BenchPaths } from "./paths.ts"
+import { BENCH_IMAGE, apiKeyEnv, containerName, DEFAULT_BENCH_MODEL, useKeyOnlyForParallel, type BenchPaths } from "./paths.ts"
 import type { AgentAuthMounts } from "./agent-auth.ts"
 import { selectTasks, taskTimeouts, enforcedResources } from "./tasks.ts"
 import { stageTaskRuntime } from "./staging.ts"
@@ -439,12 +439,18 @@ export async function cmdRun(
 
   const runStartTs = new Date().toISOString()
 
-  // --parallel threads the driver's keyOnly auth prep (no shared rw credential
-  // mount — task-4-brief.md), the additional half of the concurrency guard
-  // whose primary half is the CLI key gate (cli.ts's validateParallel, which
-  // covers drivers that ignore keyOnly). Serial runs pass undefined → the
-  // driver's default prepareAuth, byte-identical to before.
-  const parallelPrepareAuth: (() => AgentAuthMounts) | undefined = args.parallel
+  // --parallel auth mount: keyOnly (no shared rw credential mount) ONLY when an
+  // API key is present. With no key, the oauth path (enabled by the freshness
+  // gate — validateParallel pre-flight + scheduler canLaunch launch-guard) uses
+  // the DEFAULT oauth prepareAuth (the shared rw mount serial uses) — SAFE: the
+  // gate guarantees no task runs across the token refresh, so auth.json is
+  // read-only during the parallel window (no refresh-token race). Serial →
+  // undefined → default oauth. (Residual: cold plugin-cache concurrent write on
+  // a first-ever parallel fetch — benign; none on a warm cache.)
+  const parallelPrepareAuth: (() => AgentAuthMounts) | undefined = useKeyOnlyForParallel(
+    args.parallel ?? false,
+    model,
+  )
     ? () => driver.prepareAuth({ keyOnly: true })
     : undefined
 
