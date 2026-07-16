@@ -282,11 +282,15 @@ test("assembleAgentsMd routes project-global by model", () => {
 Append to `test/fleet-render.test.ts` (this file already redirects `META_HARNESS_HOME`; `renderRole` writes `<project>/.opencode/agents/mh-<role>.md`):
 ```ts
 test("renderRole routes the persona by the role's fixed model", () => {
-  // seed the global (account) layer active playbook with a vendor:anthropic bullet "VA" + universal "U"
-  // (faithful system.md). renderRole for a role whose roleSpec.model is anthropic/* should include VA;
-  // a role pinned to a non-anthropic model should not. Assert on the written mh-<role>.md body.
-  expect(anthropicRoleBody).toContain("- VA")
-  expect(nonAnthropicRoleBody).not.toContain("- VA")
+  // ALL FLEET_ROLES use anthropic/* (fleet/roles.ts:24-61) — there is no non-anthropic role, so
+  // route by CONTRASTING two vendor bullets on ONE renderRole call instead of two roles.
+  // Seed the global (account) layer active playbook (FAITHFUL system.md == renderPlaybook), bullets:
+  //   U  (universal), VA (vendor:anthropic), VO (vendor:openai)
+  // renderRole for any role (its fixed model is anthropic/*) → mh-<role>.md body includes U + VA, excludes VO.
+  // (mirror this file's existing META_HARNESS_HOME redirect + renderRole call; assert on the written body.)
+  expect(roleBody).toContain("- VA")
+  expect(roleBody).toContain("- U")
+  expect(roleBody).not.toContain("- VO")
 })
 ```
 
@@ -338,7 +342,8 @@ export function assembleAgentsMd(
 import { composeHarness, renderSystemBlocks } from "../src/compose.ts"
 import { assembleAgentsMd } from "../src/bench/record.ts"
 import { accountGlobalRoot } from "../src/harness-store.ts"
-import { mkdirSync, writeFileSync } from "node:fs"
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 test("parity + back-compat: runtime compose and bench path agree; all-universal is byte-identical", () => {
