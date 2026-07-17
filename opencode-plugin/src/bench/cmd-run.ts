@@ -27,7 +27,7 @@ import type { ExecFn } from "./staging.ts"
 import { buildCreateArgv, buildStartArgv, buildExecArgv, buildRmArgv } from "./sandbox.ts"
 import { BENCH_IMAGE, apiKeyEnv, containerName, DEFAULT_BENCH_MODEL, useKeyOnlyForParallel, type BenchPaths } from "./paths.ts"
 import type { AgentAuthMounts } from "./agent-auth.ts"
-import { selectTasks, taskTimeouts, enforcedResources } from "./tasks.ts"
+import { selectTasks, taskTimeouts, enforcedResources, packingFootprints } from "./tasks.ts"
 import { stageTaskRuntime } from "./staging.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
 import { copyTests, runVerifier } from "./verifier.ts"
@@ -622,18 +622,30 @@ export async function cmdRun(
     const mutex = new AsyncMutex()
     const pending = tasks.filter((t) => !doneTasks.has(t))
     // Compute each pending task's footprint ONCE, before scheduling: a
-    // gpu-declaring task throws here (enforcedResources) and dies the run
-    // before any container lifecycle, matching --enforce-resources' own guard.
-    const footprints = new Map<string, { cpus: number; memoryMb: number }>()
-    for (const t of pending) footprints.set(t, enforcedResources(paths, t, { minCpus: args.minCpus, minMemoryMb: args.minMemMb }))
+    // gpu-declaring task throws here (via enforcedResources, packingFootprints'
+    // first step) and dies the run before any container lifecycle, matching
+    // --enforce-resources' own guard. Each footprint carries TWO deliberately
+    // different objects (task-6 split): `pack` = the measured-or-prior packing
+    // weight the scheduler budgets against (measured once a profile is
+    // trustworthy, else the declared/floored prior); `cap` = the declared/
+    // floored container cgroup envelope, raised only by the measured memory lift
+    // (raiseCapMeasured) — never shrunk. --no-pack-measured collapses both back
+    // to the declared/floored value, byte-identical to pre-packing behavior.
+    const footprints = packingFootprints(paths, pending, { minCpus: args.minCpus, minMemoryMb: args.minMemMb }, !args.noPackMeasured)
     // Still surface the skip lines for already-done tasks (they're excluded
     // from scheduling, so the shared pipeline never logs them in this path).
     for (const t of tasks) if (doneTasks.has(t)) log(`\n=== Task: ${t} (skipped — already done) ===`)
-    const items: ScheduledItem[] = pending.map((t) => ({ key: t, ...footprints.get(t)! }))
+    // items pack against `pack`; the container gets `cap`. Built explicitly
+    // (not `...pack`) so PackWeight's `measured` flag never leaks into a
+    // ScheduledItem.
+    const items: ScheduledItem[] = pending.map((t) => {
+      const f = footprints.get(t)!
+      return { key: t, cpus: f.pack.cpus, memoryMb: f.pack.memoryMb }
+    })
     await schedule(
       items,
       budget,
-      (it) => runOneTaskPipeline(it.key, `[${it.key}] `, (fn) => mutex.withLock(fn), footprints.get(it.key)),
+      (it) => runOneTaskPipeline(it.key, `[${it.key}] `, (fn) => mutex.withLock(fn), footprints.get(it.key)!.cap),
       args.canLaunch,
     )
   } else {

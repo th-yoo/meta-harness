@@ -30,7 +30,7 @@ import { getDriver } from "./drivers/index.ts"
 import { assembleAgentsMd, envBlock, sessionRecord } from "./record.ts"
 import { layerStoreRoots, type LayerName } from "./record.ts"
 import { updateResourceProfile } from "./resource-profile.ts"
-import { selectTasks, taskTimeouts, enforcedResources } from "./tasks.ts"
+import { selectTasks, taskTimeouts, enforcedResources, packingFootprints } from "./tasks.ts"
 import { schedule, DEFAULT_BUDGET, AsyncMutex, type Budget, type ScheduledItem } from "./scheduler.ts"
 import {
   loadActiveSplit,
@@ -610,12 +610,17 @@ export async function cmdAb(
       if (taskResults[t]) log(`\n=== ab ${t} [${phase}] (skipped — already done) ===`)
     }
     const pending = taskList.filter((t) => !taskResults[t])
-    // Footprints computed ONCE per phase (before any container lifecycle):
-    // a gpu-declaring task throws here and dies the run, matching
-    // --enforce-resources' own guard. Reused for BOTH budget packing and the
-    // per-container caps.
-    const footprints = new Map<string, { cpus: number; memoryMb: number }>()
-    for (const t of pending) footprints.set(t, enforcedResources(paths, t, { minCpus: args.minCpus, minMemoryMb: args.minMemMb }))
+    // Footprints computed ONCE per phase (before any container lifecycle): a
+    // gpu-declaring task throws here (via enforcedResources, packingFootprints'
+    // first step) and dies the run, matching --enforce-resources' own guard.
+    // Split cap vs pack (task-6): `pack` = the measured-or-prior packing weight
+    // the scheduler budgets against; `cap` = the declared/floored container
+    // cgroup envelope (+ raise-only measured memory lift) — deliberately
+    // DIFFERENT objects (--no-pack-measured collapses both to declared/floored).
+    // Held-in completions of THIS run land in the profile store (runTaskPairs'
+    // updateResourceProfile) BEFORE the held-out phase builds its footprints, so
+    // held-out packs against fresher measurements — intended.
+    const footprints = packingFootprints(paths, pending, { minCpus: args.minCpus, minMemoryMb: args.minMemMb }, !args.noPackMeasured)
 
     let consumedIdx = 0
     let stopFired = false
@@ -651,7 +656,13 @@ export async function cmdAb(
       }
     }
 
-    const items: ScheduledItem[] = pending.map((t) => ({ key: t, ...footprints.get(t)! }))
+    // items pack against `pack`; each arm's container gets `cap`. Built
+    // explicitly (not `...pack`) so PackWeight's `measured` flag never leaks
+    // into a ScheduledItem.
+    const items: ScheduledItem[] = pending.map((t) => {
+      const f = footprints.get(t)!
+      return { key: t, cpus: f.pack.cpus, memoryMb: f.pack.memoryMb }
+    })
     await schedule(
       items,
       budget,
@@ -661,7 +672,7 @@ export async function cmdAb(
           phase,
           recordArmB,
           (fn) => mutex.withLock(fn),
-          footprints.get(it.key),
+          footprints.get(it.key)!.cap,
           `[${it.key}] `,
         )
         await mutex.withLock(() => {

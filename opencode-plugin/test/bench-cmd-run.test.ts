@@ -12,6 +12,7 @@ import { opencodeDriver } from "../src/bench/drivers/opencode.ts"
 import * as verifierReal from "../src/bench/verifier.ts"
 import * as resultsReal from "../src/bench/results.ts"
 import * as schedulerReal from "../src/bench/scheduler.ts"
+import { updateResourceProfile } from "../src/bench/resource-profile.ts"
 
 // Same pre-mock snapshot pattern as the verifier block above: capture the
 // REAL results.ts / scheduler.ts exports at module-eval time so the two
@@ -47,6 +48,20 @@ function writeResourceTomls(tbRoot: string, tasks: string[], cpus = 1, memoryMb 
     fs.mkdirSync(path.join(tbRoot, t), { recursive: true })
     fs.writeFileSync(path.join(tbRoot, t, "task.toml"), `[environment]\ncpus = ${cpus}\nmemory_mb = ${memoryMb}\n`)
   }
+}
+
+/** Nested termBenchDir (`<tmp>/tb`) so metaRoot = dirname(termBenchDir) = <tmp>
+ * is UNIQUE per test — mirrors isolatedPaths in test/bench-cmd-ab.test.ts.
+ * REQUIRED for profile-seeding tests: the resource-profile store has no per-run
+ * reset and would otherwise leak (n accumulates) across tests when metaRoot is
+ * the shared os.tmpdir(). */
+function isolatedPaths(tasks: string[]): BenchPaths {
+  const meta = tmpDir()
+  const termBenchDir = path.join(meta, "tb")
+  fs.mkdirSync(termBenchDir, { recursive: true })
+  const tbRoot = path.join(meta, "tb-root")
+  writeTaskTomls(tbRoot, tasks)
+  return fakeBenchPaths(termBenchDir, tbRoot) // metaRoot = dirname(<meta>/tb) = <meta>, unique
 }
 
 // Snapshot the REAL verifier.ts exports at module-eval time (before any
@@ -492,6 +507,123 @@ test("cmdRun --parallel + --enforce-resources + --min-cpus/--min-mem-mb: the flo
     logSpy.mockRestore()
   }
   expect(seenResources).toEqual({ cpus: 4, memoryMb: 8192 })
+})
+
+// ── task-6 cap/pack split: schedule() packs on MEASURED, container gets the
+// DECLARED/floored cap ──────────────────────────────────────────────────────
+
+test("cmdRun --parallel: seeded profile → schedule() items carry MEASURED pack weights while runOneTask gets the DECLARED/floored cap", async () => {
+  const paths = isolatedPaths(["a"])
+  // declared prior: 1 cpu / 2048 MB
+  writeResourceTomls(paths.tbRoot, ["a"], 1, 2048)
+  // Seed a trustworthy profile (n=3): avgCpu = median([3,3,3]) = 3, peakRss 4096.
+  // → pack = { cpus: max(3,0.5)=3, memoryMb: max(ceil(4096*1.2)=4916,256)=4916 }
+  // → cap  = { cpus: 1 (declared, never raised), memoryMb: max(2048, ceil(4096*1.5)=6144)=6144 }
+  for (let i = 0; i < 3; i++) updateResourceProfile(paths.metaRoot, "a", { cpuSeconds: 3, peakRssMb: 4096, wall: 1 })
+
+  let capturedItems: unknown = "unset"
+  mock.module("../src/bench/scheduler.ts", () => ({
+    schedule: (...a: unknown[]) => {
+      if (capturedItems === "unset") capturedItems = a[0]
+      return (realSchedule as (...x: unknown[]) => unknown)(...a)
+    },
+    AsyncMutex: realAsyncMutex,
+    DEFAULT_BUDGET: realDefaultBudget,
+  }))
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    if (seenResources === "unset") seenResources = resources
+    return result({ reward: 1 })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "none", parallel: true, enforceResources: true }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreScheduler()
+  }
+  // scheduler packs against the MEASURED weight...
+  expect(capturedItems).toEqual([{ key: "a", cpus: 3, memoryMb: 4916 }])
+  // ...while the container cap stays the generous declared/floored envelope
+  // (memory raised only by the measured lift; cpus never lowered/raised here).
+  expect(seenResources).toEqual({ cpus: 1, memoryMb: 6144 })
+})
+
+test("cmdRun --parallel: no profile store → schedule() items AND cap are the declared/floored footprint (cold-start parity)", async () => {
+  const paths = isolatedPaths(["a"])
+  writeResourceTomls(paths.tbRoot, ["a"], 2, 4096)
+
+  let capturedItems: unknown = "unset"
+  mock.module("../src/bench/scheduler.ts", () => ({
+    schedule: (...a: unknown[]) => {
+      if (capturedItems === "unset") capturedItems = a[0]
+      return (realSchedule as (...x: unknown[]) => unknown)(...a)
+    },
+    AsyncMutex: realAsyncMutex,
+    DEFAULT_BUDGET: realDefaultBudget,
+  }))
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    if (seenResources === "unset") seenResources = resources
+    return result({ reward: 1 })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "none", parallel: true, enforceResources: true }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreScheduler()
+  }
+  expect(capturedItems).toEqual([{ key: "a", cpus: 2, memoryMb: 4096 }])
+  expect(seenResources).toEqual({ cpus: 2, memoryMb: 4096 })
+})
+
+test("cmdRun --parallel + --no-pack-measured: seeded profile ignored → declared weights AND declared cap", async () => {
+  const paths = isolatedPaths(["a"])
+  writeResourceTomls(paths.tbRoot, ["a"], 1, 2048)
+  // Same hot profile as the invariant test — but --no-pack-measured must ignore it.
+  for (let i = 0; i < 3; i++) updateResourceProfile(paths.metaRoot, "a", { cpuSeconds: 3, peakRssMb: 4096, wall: 1 })
+
+  let capturedItems: unknown = "unset"
+  mock.module("../src/bench/scheduler.ts", () => ({
+    schedule: (...a: unknown[]) => {
+      if (capturedItems === "unset") capturedItems = a[0]
+      return (realSchedule as (...x: unknown[]) => unknown)(...a)
+    },
+    AsyncMutex: realAsyncMutex,
+    DEFAULT_BUDGET: realDefaultBudget,
+  }))
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    if (seenResources === "unset") seenResources = resources
+    return result({ reward: 1 })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(
+      paths,
+      { tasks: ["a"], layers: "none", parallel: true, enforceResources: true, noPackMeasured: true },
+      fake,
+      fakeExec,
+    )
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreScheduler()
+  }
+  expect(capturedItems).toEqual([{ key: "a", cpus: 1, memoryMb: 2048 }])
+  expect(seenResources).toEqual({ cpus: 1, memoryMb: 2048 })
 })
 
 test("cmdRun --enforce-resources ON, no --min-cpus/--min-mem-mb: byte-identical to before floors existed", async () => {

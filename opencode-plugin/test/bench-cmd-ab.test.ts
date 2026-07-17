@@ -15,7 +15,7 @@ import {
   writeActive,
 } from "../src/harness-store.ts"
 import { BenchError } from "../src/bench/util.ts"
-import { readResourceProfile, hostClass } from "../src/bench/resource-profile.ts"
+import { readResourceProfile, hostClass, updateResourceProfile } from "../src/bench/resource-profile.ts"
 import * as schedulerReal from "../src/bench/scheduler.ts"
 
 // Snapshot the REAL scheduler.ts exports at module-eval time (before any
@@ -336,6 +336,65 @@ function writeSplitsFile(paths: BenchPaths, heldIn: string[], heldOut: string[])
     JSON.stringify({ schemaVersion: 1, seed: 1, source: "x", folds: [heldOut, heldIn], activeFold: 0, rotatedAt: null }),
   )
 }
+
+test("cmdAb --parallel: seeded profile → held-in schedule() items carry MEASURED pack while runOneTask gets the DECLARED/floored cap", async () => {
+  // Nested termBenchDir so metaRoot is unique per test — the profile store has
+  // no per-run reset (mirrors isolatedPaths' rationale above).
+  const meta = tmpDir()
+  const termBenchDir = path.join(meta, "tb")
+  fs.mkdirSync(termBenchDir, { recursive: true })
+  const tbRoot = path.join(meta, "tb-root")
+  const paths = fakeBenchPaths(termBenchDir, tbRoot)
+  writeSplitsFile(paths, ["hi1"], ["ho1"]) // writes empty tomls (modal) + splits
+  // declared prior for hi1: 1 cpu / 2048 MB
+  fs.writeFileSync(path.join(tbRoot, "hi1", "task.toml"), "[environment]\ncpus = 1\nmemory_mb = 2048\n")
+  setupCandidate(paths, "project-global", "v1")
+  // Seed a trustworthy hi1 profile (n=3): avgCpu=3, peakRss 4096
+  // → pack = { cpus: 3, memoryMb: ceil(4096*1.2)=4916 }
+  // → cap  = { cpus: 1, memoryMb: max(2048, ceil(4096*1.5)=6144)=6144 }
+  for (let i = 0; i < 3; i++) updateResourceProfile(paths.metaRoot, "hi1", { cpuSeconds: 3, peakRssMb: 4096, wall: 1 })
+
+  let capturedItems: unknown = "unset"
+  mock.module("../src/bench/scheduler.ts", () => ({
+    schedule: (...a: unknown[]) => {
+      if (capturedItems === "unset") capturedItems = a[0] // first (held-in) phase
+      return (realSchedule as (...x: unknown[]) => unknown)(...a)
+    },
+    AsyncMutex: realAsyncMutex,
+    DEFAULT_BUDGET: realDefaultBudget,
+  }))
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    if (seenResources === "unset") seenResources = resources // first (held-in arm A) call
+    return res({ reward: 1 })
+  }
+
+  try {
+    await quiet(() =>
+      cmdAb(
+        paths,
+        {
+          layer: "project-global",
+          candidate: "v1",
+          k: 1,
+          parallel: true,
+          enforceResources: true,
+          cpuBudget: 100,
+          memBudget: 1_000_000,
+        } as CmdAbArgs,
+        fake,
+        fakeExec,
+      ),
+    )
+  } finally {
+    restoreScheduler()
+  }
+  // held-in scheduler packs against the MEASURED weight...
+  expect(capturedItems).toEqual([{ key: "hi1", cpus: 3, memoryMb: 4916 }])
+  // ...while the container cap stays the declared/floored envelope (+ measured lift).
+  expect(seenResources).toEqual({ cpus: 1, memoryMb: 6144 })
+})
 
 test("cmdAb (mandatory invariant): held-out arm-B sessions are NEVER recorded into score.json, even when they pass", async () => {
   const dir = tmpDir()
