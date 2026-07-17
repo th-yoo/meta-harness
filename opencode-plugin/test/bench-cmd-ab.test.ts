@@ -216,6 +216,43 @@ test("cmdAb: a 0-turn arm (no cgroup reading) is NOT memorized (skips auth/trans
   expect(readResourceProfile(paths.metaRoot, "t1", hostClass())).toBeNull()
 })
 
+// ── OOM-escalation retry (Task 7): arm-level, independent per arm ──────────
+
+test("cmdAb: an OOM-killed arm retries at 2× mem; verdict counts only the final result and the killed sample is NOT memorized", async () => {
+  const paths = isolatedPaths(["t1"])
+  fs.writeFileSync(path.join(paths.tbRoot, "t1", "task.toml"), "[environment]\ncpus = 1\nmemory_mb = 2048\n")
+  const root = setupCandidate(paths, "project-global", "v1")
+
+  const armAMem: number[] = []
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, harnessMd, _at, _vt, _s, _d, resources) => {
+    if (harnessMd.includes("candidate sys")) {
+      // arm B (candidate): clean pass.
+      return res({ reward: 1, oomKilled: false, cpuSeconds: 4, peakRssMb: 300, elapsed: 2.0 })
+    }
+    // arm A (active): first attempt OOM-killed fail, retry passes.
+    armAMem.push(resources!.memoryMb)
+    return armAMem.length === 1
+      ? res({ reward: 0, oomKilled: true, cpuSeconds: 9, peakRssMb: 9000, elapsed: 2.0 })
+      : res({ reward: 1, oomKilled: false, cpuSeconds: 4, peakRssMb: 300, elapsed: 2.0 })
+  }
+
+  await quiet(() =>
+    cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, enforceResources: true }, fake, fakeExec),
+  )
+
+  // arm A retried once at double memory (2048 → 4096).
+  expect(armAMem).toEqual([2048, 4096])
+  // Verdict sees only the FINAL results — the killed attempt's 0 never lands.
+  const verdict = readAbVerdict(root, "v1")!
+  expect(verdict.taskResults!["t1"]!.active).toEqual([1])
+  expect(verdict.taskResults!["t1"]!.candidate).toEqual([1])
+  // Profile: 2 clean samples (arm-A retry + arm-B); the killed 9000MB peak is
+  // never memorized.
+  const prof = readResourceProfile(paths.metaRoot, "t1", hostClass())!
+  expect(prof.n).toBe(2)
+  expect(prof.peakRssMb).toBe(300)
+})
+
 test("cmdAb --parallel: task-pair banner leads with \\n, THEN the [task] prefix (not prefix-then-\\n) — final-review fix", async () => {
   const dir = tmpDir()
   const tbRoot = path.join(dir, "tb-root")

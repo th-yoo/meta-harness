@@ -27,7 +27,7 @@ import type { ExecFn } from "./staging.ts"
 import { buildCreateArgv, buildStartArgv, buildExecArgv, buildRmArgv } from "./sandbox.ts"
 import { BENCH_IMAGE, apiKeyEnv, containerName, DEFAULT_BENCH_MODEL, useKeyOnlyForParallel, type BenchPaths } from "./paths.ts"
 import type { AgentAuthMounts } from "./agent-auth.ts"
-import { selectTasks, taskTimeouts, enforcedResources, packingFootprints } from "./tasks.ts"
+import { selectTasks, taskTimeouts, enforcedResources, packingFootprints, escalateResources } from "./tasks.ts"
 import { stageTaskRuntime } from "./staging.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
 import { copyTests, runVerifier } from "./verifier.ts"
@@ -70,6 +70,14 @@ export interface RunTaskResult {
    * (setup/bring-up failure). Feeds the memorized resource profile. */
   cpuSeconds?: number
   peakRssMb?: number
+  /** True iff the container's cumulative cgroup oom_kill counter was nonzero at
+   * teardown ((cgroup.oomKills ?? 0) > 0). CUMULATIVE over the container's
+   * lifetime — the in-container agent retry loop (agent-run.ts:189-230) can OOM
+   * once and recover — so nonzero does NOT mean the final attempt was killed.
+   * Callers MUST combine it with the run outcome (see runWithOomRetry).
+   * undefined-falsy when the cgroup read failed or the run never reached the
+   * agent phase. */
+  oomKilled?: boolean
 }
 
 export type RunOneTaskFn = (
@@ -290,6 +298,7 @@ export async function runTaskOnce(
       timedOut: timedOut ?? false,
       error: timedOut ? "timeout" : turnCount === 0 ? "agent_no_output" : "",
       selfScore,
+      oomKilled: (cgroup?.oomKills ?? 0) > 0,
       ...(cgroup ? { cpuSeconds: cgroup.cpuSeconds, peakRssMb: cgroup.peakRssMb } : {}),
     }
   } finally {
@@ -303,6 +312,57 @@ export async function runTaskOnce(
       auth?.cleanup()
     }
   }
+}
+
+// ── OOM-escalation retry ──────────────────────────────────────────────────
+
+/**
+ * Run one task attempt, retrying ONCE in a fresh container at double memory iff
+ * the attempt FAILED because it was OOM-killed. A killed run is infra noise, not
+ * a real signal, so its result is discarded and replaced by the escalated
+ * retry's. No third attempt ever; the killed attempt is never recorded (the
+ * caller records only the returned `result`).
+ *
+ * Retry fires ONLY when ALL hold: `result.oomKilled`, the attempt failed
+ * (`result.reward !== 1`), `resources !== undefined` (unenforced runs have no
+ * cap to raise), and `escalateResources(resources, ceilingMb)` returns non-null
+ * (there is headroom below the ceiling). Otherwise the first result + the
+ * original resources are returned unchanged.
+ *
+ * Design notes:
+ *  (a) The `reward !== 1` check exists because oomKills is CUMULATIVE over the
+ *      container lifetime (cgroup.ts): the in-container agent retry loop can OOM
+ *      once and still recover to a genuine PASS. We keep such a pass — only a
+ *      FAILED oomKilled attempt is retried.
+ *  (b) Residual accepted: a fail that is unrelated to an already-recovered
+ *      internal OOM still reads as `oomKilled` (cumulative counter) and can
+ *      trigger one unwarranted retry. Bounded by the single-retry cap — worst
+ *      case one extra container lifecycle, never a loop.
+ *  (c) The retry runs in-place inside the SAME schedule() slot that still holds
+ *      the original packing weight (there is no requeue primitive), so the
+ *      escalated container transiently overcommits vs. what the budget packed
+ *      for. Bounded (single retry) transient overcommit, accepted — see plan
+ *      risk 1b.
+ *  (d) In `ab`, an OOM'd arm reruns at 2× while the other arm ran at 1× — an
+ *      accepted asymmetry: OOM is infra noise, and recording the starved fail is
+ *      worse for the loop signal than the transient cap difference between arms.
+ */
+export async function runWithOomRetry(
+  attempt: (res: { cpus: number; memoryMb: number } | undefined) => Promise<RunTaskResult>,
+  resources: { cpus: number; memoryMb: number } | undefined,
+  ceilingMb: number | undefined,
+  logPrefix: string,
+): Promise<{ result: RunTaskResult; resources: typeof resources }> {
+  const result = await attempt(resources)
+  if (result.oomKilled && result.reward !== 1 && resources !== undefined) {
+    const escalated = escalateResources(resources, ceilingMb)
+    if (escalated !== null) {
+      log(`  [oom] ${logPrefix}OOM-killed at ${resources.memoryMb}MB — retrying once at ${escalated.memoryMb}MB`)
+      const retry = await attempt(escalated)
+      return { result: retry, resources: escalated }
+    }
+  }
+  return { result, resources }
 }
 
 // ── cmd_run ────────────────────────────────────────────────────────────
@@ -501,31 +561,48 @@ export async function cmdRun(
     }
     log(`\n${prefix}=== Task: ${task} ===`)
     const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout)
-    const resources =
+    // `let`: the OOM-retry wrapper carries an escalated cap forward across this
+    // task's remaining k-repeats (within-invocation carry-forward, below).
+    let resources =
       resourcesOverride ??
       (args.enforceResources
         ? enforcedResources(paths, task, { minCpus: args.minCpus, minMemoryMb: args.minMemMb })
         : undefined)
+    // OOM-escalation ceiling: only meaningful under --parallel (each task has a
+    // per-task cap packed against the budget). Derived from args/DEFAULT_BUDGET
+    // — NOT the `budget` local, which is scoped inside the `if (args.parallel)`
+    // branch below (out of scope here). Serial → undefined (no cap ceiling).
+    const oomCeilingMb = args.parallel ? (args.memBudget ?? DEFAULT_BUDGET.memoryMb) : undefined
 
     taskAgg[task] = { rewards: [], elapsed: [], turns: [], errors: [], ...(selfCheckOn ? { selfScores: [] } : {}) }
 
     for (let ki = 0; ki < k; ki++) {
       if (k > 1) log(`${prefix}  -- run ${ki + 1}/${k} --`)
 
-      const res = await runOneTask(
-        paths,
-        task,
-        model,
-        variant,
-        harnessMd,
-        agentTimeout,
-        verifierTimeout,
-        staging,
-        driver,
+      // OOM-killed fails retry ONCE at 2× memory in a fresh container; the
+      // killed attempt is discarded (never recorded below) and replaced by the
+      // retry. An escalated cap carries forward to this task's later repeats.
+      const { result: res, resources: nextResources } = await runWithOomRetry(
+        (r) =>
+          runOneTask(
+            paths,
+            task,
+            model,
+            variant,
+            harnessMd,
+            agentTimeout,
+            verifierTimeout,
+            staging,
+            driver,
+            r,
+            undefined,
+            parallelPrepareAuth,
+          ),
         resources,
-        undefined,
-        parallelPrepareAuth,
+        oomCeilingMb,
+        prefix,
       )
+      resources = nextResources
 
       if (res.error === "setup_failed") {
         await withLock(() => {
@@ -576,7 +653,12 @@ export async function cmdRun(
       // A setup-fail / auth-transient 0-turn is mostly idle wait and would skew
       // avgCpu low. Own lock (NOT nested in the store lock — AsyncMutex is
       // non-reentrant) since parallel tasks share one host-profile file.
-      if (res.cpuSeconds !== undefined && res.turns > 0) {
+      // Also skip any oomKilled sample: it's contaminated — a killed-and-replaced
+      // attempt has skewed avgCpu + a cap-clipped peak (dominated by the clean
+      // retry sample), and a kept pass whose container OOM'd-then-recovered
+      // internally accumulates killed+recovery cpuSeconds with a still cap-clipped
+      // peak. Neither is a faithful footprint sample.
+      if (res.cpuSeconds !== undefined && res.turns > 0 && !res.oomKilled) {
         const cpuSeconds = res.cpuSeconds
         const peakRssMb = res.peakRssMb ?? 0
         await withLock(() => updateResourceProfile(paths.metaRoot, task, { cpuSeconds, peakRssMb, wall: res.elapsed }))

@@ -3,7 +3,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
 import { DEFAULT_BENCH_MODEL, type BenchPaths } from "../src/bench/paths.ts"
-import { cmdRun, runTaskOnce, inContainerAgentVersion, type RunOneTaskFn, type RunTaskResult } from "../src/bench/cmd-run.ts"
+import { cmdRun, runTaskOnce, runWithOomRetry, inContainerAgentVersion, type RunOneTaskFn, type RunTaskResult } from "../src/bench/cmd-run.ts"
 import { runOneOracleTask } from "../src/bench/cmd-oracle.ts"
 import { readScore, projectGlobalRoot, createCandidate, writeActive } from "../src/harness-store.ts"
 import { BenchError } from "../src/bench/util.ts"
@@ -12,7 +12,7 @@ import { opencodeDriver } from "../src/bench/drivers/opencode.ts"
 import * as verifierReal from "../src/bench/verifier.ts"
 import * as resultsReal from "../src/bench/results.ts"
 import * as schedulerReal from "../src/bench/scheduler.ts"
-import { updateResourceProfile } from "../src/bench/resource-profile.ts"
+import { updateResourceProfile, readResourceProfile, hostClass } from "../src/bench/resource-profile.ts"
 
 // Same pre-mock snapshot pattern as the verifier block above: capture the
 // REAL results.ts / scheduler.ts exports at module-eval time so the two
@@ -1485,6 +1485,267 @@ test("cmdRun: default driver (opencode) + an 'unknown' version probe still proce
   }
   const final = JSON.parse(fs.readFileSync(resultsFile, "utf-8"))
   expect(final.status).toBe("complete")
+})
+
+// ── OOM-escalation retry (Task 7) ─────────────────────────────────────────
+// runTaskOnce surfaces oomKilled from the cgroup read; runWithOomRetry retries
+// a FAILED oomKilled attempt ONCE at 2× memory; the pipeline records only the
+// (possibly retried) final result and never memorizes an oomKilled sample.
+
+test("runTaskOnce: cgroup oom_kill 1 → RunTaskResult.oomKilled=true", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "do the thing")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      return { rc: 0, stdout: "", stderr: "", timedOut: false }
+    }
+    if (argv[1] === "exec" && argv.some((a) => a.includes("cpu.stat"))) {
+      return { rc: 0, stdout: "usage_usec 2000000\nPEAK 1048576\nOOMK 1\n", stderr: "", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  mock.module("../src/bench/verifier.ts", () => ({ copyTests: async () => {}, runVerifier: async () => 0 }))
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  let res: RunTaskResult
+  try {
+    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, undefined, execFn, fakeAuthMounts())
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreVerifier()
+  }
+  expect(res.oomKilled).toBe(true)
+})
+
+test("runTaskOnce: cgroup oom_kill 0 → RunTaskResult.oomKilled falsy", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "do the thing")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      return { rc: 0, stdout: "", stderr: "", timedOut: false }
+    }
+    if (argv[1] === "exec" && argv.some((a) => a.includes("cpu.stat"))) {
+      return { rc: 0, stdout: "usage_usec 2000000\nPEAK 1048576\nOOMK 0\n", stderr: "", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  mock.module("../src/bench/verifier.ts", () => ({ copyTests: async () => {}, runVerifier: async () => 0 }))
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  let res: RunTaskResult
+  try {
+    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, undefined, execFn, fakeAuthMounts())
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreVerifier()
+  }
+  expect(res.oomKilled).toBeFalsy()
+})
+
+// ── runWithOomRetry (unit) ────────────────────────────────────────────────
+
+test("runWithOomRetry: FAILED oomKilled attempt retries ONCE at 2× memory, returning the retry + escalated resources", async () => {
+  const seenMem: number[] = []
+  const attempt = async (r: { cpus: number; memoryMb: number } | undefined) => {
+    seenMem.push(r!.memoryMb)
+    return seenMem.length === 1
+      ? result({ reward: 0, oomKilled: true, sessionId: "killed" })
+      : result({ reward: 1, oomKilled: false, sessionId: "retry" })
+  }
+  const logSpy = spyOn(console, "error").mockImplementation(() => {})
+  let out: Awaited<ReturnType<typeof runWithOomRetry>>
+  try {
+    out = await runWithOomRetry(attempt, { cpus: 1, memoryMb: 2048 }, undefined, "")
+  } finally {
+    logSpy.mockRestore()
+  }
+  expect(seenMem).toEqual([2048, 4096])
+  expect(out.result.sessionId).toBe("retry")
+  expect(out.resources).toEqual({ cpus: 1, memoryMb: 4096 })
+})
+
+test("runWithOomRetry: oomKilled but PASSED (reward=1) → no retry (cumulative-counter guard)", async () => {
+  let calls = 0
+  const attempt = async () => {
+    calls++
+    return result({ reward: 1, oomKilled: true, sessionId: "passed" })
+  }
+  const out = await runWithOomRetry(attempt, { cpus: 1, memoryMb: 2048 }, undefined, "")
+  expect(calls).toBe(1)
+  expect(out.result.sessionId).toBe("passed")
+  expect(out.resources).toEqual({ cpus: 1, memoryMb: 2048 })
+})
+
+test("runWithOomRetry: resources undefined (unenforced) → no retry even on oomKilled fail", async () => {
+  let calls = 0
+  const attempt = async () => {
+    calls++
+    return result({ reward: 0, oomKilled: true })
+  }
+  const out = await runWithOomRetry(attempt, undefined, undefined, "")
+  expect(calls).toBe(1)
+  expect(out.resources).toBeUndefined()
+})
+
+test("runWithOomRetry: escalated retry ALSO OOMs → recorded once as fail, exactly 2 attempts (no third)", async () => {
+  let calls = 0
+  const attempt = async () => {
+    calls++
+    return result({ reward: 0, oomKilled: true, sessionId: `a${calls}` })
+  }
+  const logSpy = spyOn(console, "error").mockImplementation(() => {})
+  let out: Awaited<ReturnType<typeof runWithOomRetry>>
+  try {
+    out = await runWithOomRetry(attempt, { cpus: 1, memoryMb: 2048 }, undefined, "")
+  } finally {
+    logSpy.mockRestore()
+  }
+  expect(calls).toBe(2)
+  expect(out.result.sessionId).toBe("a2")
+  expect(out.result.reward).toBe(0)
+})
+
+test("runWithOomRetry: orig already at ceiling → escalateResources null → no retry", async () => {
+  let calls = 0
+  const attempt = async () => {
+    calls++
+    return result({ reward: 0, oomKilled: true })
+  }
+  const out = await runWithOomRetry(attempt, { cpus: 1, memoryMb: 2048 }, 2048, "")
+  expect(calls).toBe(1)
+  expect(out.resources).toEqual({ cpus: 1, memoryMb: 2048 })
+})
+
+// ── pipeline integration (fake RunOneTaskFn) ──────────────────────────────
+
+test("cmdRun: OOM-killed fail retries at 2× mem; ONLY the retry lands in results/store/profile", async () => {
+  const paths = isolatedPaths(["a"])
+  writeResourceTomls(paths.tbRoot, ["a"], 1, 2048)
+  const root = projectGlobalRoot(paths.metaRoot)
+  createCandidate(root, "v0", "sys")
+  writeActive(root, "v0", "sys")
+
+  let call = 0
+  const seenMem: number[] = []
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    call++
+    seenMem.push(resources!.memoryMb)
+    return call === 1
+      ? result({ reward: 0, oomKilled: true, cpuSeconds: 9, peakRssMb: 9000, turns: 3, sessionId: "killed" })
+      : result({ reward: 1, oomKilled: false, cpuSeconds: 4, peakRssMb: 1500, turns: 3, sessionId: "retry", elapsed: 2.0 })
+  }
+
+  // No resultsFile → store writes stay ENABLED (resultsFile would force noStore),
+  // so the store is the authoritative "only the retry landed" evidence.
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "project", enforceResources: true }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+
+  expect(call).toBe(2)
+  expect(seenMem).toEqual([2048, 4096]) // retry got double memory
+  const score = readScore(root, "v0")
+  expect(score.sessions.map((s) => s.sessionID)).toEqual(["retry"]) // killed attempt never stored, only the retry
+  const prof = readResourceProfile(paths.metaRoot, "a", hostClass())
+  expect(prof!.n).toBe(1) // exactly the final (retry) sample
+  expect(prof!.peakRssMb).toBe(1500) // the killed 9000 sample never memorized
+})
+
+test("cmdRun: oomKilled BUT passed → no retry, result recorded, profile NOT updated", async () => {
+  const paths = isolatedPaths(["a"])
+  writeResourceTomls(paths.tbRoot, ["a"], 1, 2048)
+  const root = projectGlobalRoot(paths.metaRoot)
+  createCandidate(root, "v0", "sys")
+  writeActive(root, "v0", "sys")
+
+  let call = 0
+  const fake: RunOneTaskFn = async () => {
+    call++
+    return result({ reward: 1, oomKilled: true, cpuSeconds: 5, peakRssMb: 2000, turns: 3, sessionId: "passed" })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "project", enforceResources: true }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(call).toBe(1)
+  const score = readScore(root, "v0")
+  expect(score.sessions.map((s) => s.sessionID)).toEqual(["passed"])
+  expect(readResourceProfile(paths.metaRoot, "a", hostClass())).toBeNull() // contaminated sample skipped
+})
+
+test("cmdRun --parallel: orig at mem ceiling → no OOM retry (no-headroom path through the wrapper)", async () => {
+  const paths = isolatedPaths(["a"])
+  writeResourceTomls(paths.tbRoot, ["a"], 1, 2048)
+
+  let call = 0
+  const fake: RunOneTaskFn = async () => {
+    call++
+    return result({ reward: 0, oomKilled: true, cpuSeconds: 5, peakRssMb: 2000, turns: 3 })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(
+      paths,
+      { tasks: ["a"], layers: "none", parallel: true, enforceResources: true, cpuBudget: 10, memBudget: 2048 },
+      fake,
+      fakeExec,
+    )
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(call).toBe(1) // escalate(2048, ceiling=2048) → null → no retry
+})
+
+test("cmdRun: k>1 carry-forward — an escalated cap persists into the next repeat's FIRST attempt", async () => {
+  const paths = isolatedPaths(["a"])
+  writeResourceTomls(paths.tbRoot, ["a"], 1, 2048)
+  const resultsFile = path.join(paths.metaRoot, "run-results.json")
+
+  const seenMem: number[] = []
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    seenMem.push(resources!.memoryMb)
+    // ki=0 attempt1 (2048) OOM-fails → retry (4096) passes; ki=1 must START at 4096.
+    return seenMem.length === 1
+      ? result({ reward: 0, oomKilled: true, turns: 3 })
+      : result({ reward: 1, oomKilled: false, turns: 3 })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], k: 2, layers: "none", enforceResources: true, resultsFile }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  // attempt1@2048 (kill) → retry@4096 (pass) → repeat2@4096 (pass) = 3 calls, no 2nd kill→retry cycle
+  expect(seenMem).toEqual([2048, 4096, 4096])
+  const final = JSON.parse(fs.readFileSync(resultsFile, "utf-8"))
+  expect(final.tasks.a.rewards).toEqual([1, 1])
 })
 
 // Placed LAST so its mock.module of scheduler.ts (restored in finally) can't

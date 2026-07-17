@@ -25,7 +25,7 @@ import { join } from "node:path"
 import type { StagingMode } from "./cmd-oracle.ts"
 import { podman } from "./exec.ts"
 import type { ExecFn } from "./staging.ts"
-import { runTaskOnce, inContainerAgentVersion, type RunOneTaskFn } from "./cmd-run.ts"
+import { runTaskOnce, inContainerAgentVersion, runWithOomRetry, type RunOneTaskFn } from "./cmd-run.ts"
 import { getDriver } from "./drivers/index.ts"
 import { assembleAgentsMd, envBlock, sessionRecord } from "./record.ts"
 import { layerStoreRoots, type LayerName } from "./record.ts"
@@ -460,17 +460,30 @@ export async function cmdAb(
     log(`\n${prefix}=== ab ${task} [${phase}]: ${candidate} vs active ${baseline} ===`)
     const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout)
     const tr: AbTaskResult = { candidate: [], active: [], phase, sentinel: sentinelSet.has(task) }
+    // OOM-escalation ceiling (same derivation as cmd-run): under --parallel each
+    // task has a per-task cap packed against the mem budget; serial has none.
+    const oomCeilingMb = parallel ? (args.memBudget ?? DEFAULT_BUDGET.memoryMb) : undefined
 
     for (let ki = 0; ki < k; ki++) {
       if (k > 1) log(`${prefix}  -- pair ${ki + 1}/${k} --`)
       log(`${prefix}  [arm A: active]`)
-      const resA = await runOneTask(
-        paths, task, model, variant, harnessA, agentTimeout, verifierTimeout, staging, driver, resources, undefined, parallelPrepareAuth,
+      // Each arm retries its OWN OOM-killed fail independently at 2× memory. The
+      // shared per-task `resources` carries an escalated cap forward across BOTH
+      // arms AND later repeats — an escalation in EITHER arm bumps both arms'
+      // subsequent runs, keeping the container cap identical across arms.
+      const armA = await runWithOomRetry(
+        (r) => runOneTask(paths, task, model, variant, harnessA, agentTimeout, verifierTimeout, staging, driver, r, undefined, parallelPrepareAuth),
+        resources, oomCeilingMb, `${prefix}arm A: `,
       )
+      resources = armA.resources
+      const resA = armA.result
       log(`${prefix}  [arm B: candidate]`)
-      const resB = await runOneTask(
-        paths, task, model, variant, harnessB, agentTimeout, verifierTimeout, staging, driver, resources, undefined, parallelPrepareAuth,
+      const armB = await runWithOomRetry(
+        (r) => runOneTask(paths, task, model, variant, harnessB, agentTimeout, verifierTimeout, staging, driver, r, undefined, parallelPrepareAuth),
+        resources, oomCeilingMb, `${prefix}arm B: `,
       )
+      resources = armB.resources
+      const resB = armB.result
 
       if (resA.error === "setup_failed" || resB.error === "setup_failed") {
         tr.error = "setup_failed"
@@ -488,8 +501,13 @@ export async function cmdAb(
       // Own lock, SEQUENTIAL with the arm-B store record below — never nested,
       // since AsyncMutex is non-reentrant. Independent of recordArmB/noStore/
       // phase: a footprint is env telemetry, not prompt-candidate score data.
+      // Skip any oomKilled sample — it's contaminated: a killed-and-replaced
+      // attempt has skewed avgCpu + a cap-clipped peak (dominated by the clean
+      // retry sample), and a kept pass whose container OOM'd-then-recovered
+      // internally accumulates killed+recovery cpuSeconds with a still cap-clipped
+      // peak. Neither is a faithful footprint sample.
       for (const r of [resA, resB]) {
-        if (r.cpuSeconds !== undefined && r.turns > 0) {
+        if (r.cpuSeconds !== undefined && r.turns > 0 && !r.oomKilled) {
           const cpuSeconds = r.cpuSeconds
           const peakRssMb = r.peakRssMb ?? 0
           const wall = r.elapsed
