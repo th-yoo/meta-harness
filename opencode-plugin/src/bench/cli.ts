@@ -46,6 +46,7 @@ commands:
               [--resume] [--agent NAME]
               [--pin LAYER=vN]... [--staging scripts|runtime] [--driver ID] [--enforce-resources]
               [--parallel] [--cpu-budget N] [--mem-budget MB] [--min-cpus N] [--min-mem-mb MB]
+              [--no-pack-measured]
   task-load   [--tasks TASK [TASK ...]] [--task-file PATH] [--all]
               [--results-file PATH] [--cpu-budget N] [--mem-budget MB]
               (read-only: declared footprint + timeouts + co-run preview)
@@ -57,6 +58,7 @@ commands:
               [--no-store] [--save-all-traj]
               [--results-file PATH] [--staging scripts|runtime] [--driver ID] [--enforce-resources]
               [--parallel] [--cpu-budget N] [--mem-budget MB] [--min-cpus N] [--min-mem-mb MB]
+              [--no-pack-measured]
   judge-audit --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
   split       make|rotate|show [--seed N] [--folds N] [--source FILE]
               [--split-file PATH] [--results PATH]... [--band LO,HI]
@@ -372,6 +374,11 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
       if (n === null) return null
       out.minMemMb = n
       i += 2
+      continue
+    }
+    if (a === "--no-pack-measured") {
+      out.noPackMeasured = true
+      i++
       continue
     }
     if (a === "--no-harness") {
@@ -785,6 +792,11 @@ function parseAbArgs(argv: string[]): CmdAbArgs | null {
       if (n === null) return null
       out.minMemMb = n
       i += 2
+      continue
+    }
+    if (a === "--no-pack-measured") {
+      out.noPackMeasured = true
+      i++
       continue
     }
     return null

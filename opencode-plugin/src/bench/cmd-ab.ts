@@ -127,6 +127,10 @@ export interface CmdAbArgs {
    * unchanged, byte-identical to before these flags existed. */
   minCpus?: number
   minMemMb?: number
+  /** Disable measured-informed resources: pack on declared/floored footprints
+   * and skip the measured cap raise (default: measured used when a
+   * trustworthy profile exists). */
+  noPackMeasured?: boolean
   /** Internal-only wiring — NOT a CLI flag, never parsed from argv (see
    * cli.ts's parseAbArgs, which has no `--` case setting it). The
    * oauth-parallel freshness gate's scheduler launch-guard (Task 2 of the

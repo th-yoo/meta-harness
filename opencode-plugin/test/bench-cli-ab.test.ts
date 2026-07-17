@@ -142,6 +142,42 @@ test("cli main: ab --min-mem-mb Infinity (non-finite) -> rc 2", async () => {
   ).toBe(2)
 })
 
+// ── --no-pack-measured (Task 3 of the load-aware bench scheduler design) ──
+// Escape hatch disabling ALL measured-informed resource decisions. Unlike
+// --cpu-budget/--mem-budget/--min-cpus/--min-mem-mb, it's legal WITHOUT
+// --parallel too (the cap-raise it disables also applies to serial
+// --enforce-resources runs) — deliberately no validateParallel rule for it.
+
+test("cli main: ab --no-pack-measured parses fine WITHOUT --parallel and falls through to normal flow (rc 1, nonexistent candidate)", async () => {
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main([
+      "ab", "--layer", "project-global", "--candidate", "v999999", "--all",
+      "--no-pack-measured",
+    ])
+    expect(rc).toBe(1)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("cli main: ab --no-pack-measured --parallel --enforce-resources with the key set parses, falls through to normal flow (rc 1, nonexistent candidate)", async () => {
+  const prev = process.env["ANTHROPIC_API_KEY"]
+  process.env["ANTHROPIC_API_KEY"] = "sk-test-parallel"
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main([
+      "ab", "--layer", "project-global", "--candidate", "v999999", "--all",
+      "--no-pack-measured", "--parallel", "--enforce-resources",
+    ])
+    expect(rc).toBe(1)
+  } finally {
+    errSpy.mockRestore()
+    if (prev === undefined) delete process.env["ANTHROPIC_API_KEY"]
+    else process.env["ANTHROPIC_API_KEY"] = prev
+  }
+})
+
 test("cli main: ab --parallel without ANTHROPIC_API_KEY (anthropic model) dies naming the var — oauth refresh-token race guard (D4)", async () => {
   // CONFIRMED hazard (Anthropic claude-code #22600, #48786): the oauth refresh
   // token is SINGLE-USE — one container's refresh rotates it server-side at the

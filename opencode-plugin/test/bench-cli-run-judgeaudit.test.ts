@@ -205,6 +205,40 @@ test("cli: run --parallel --enforce-resources with the key set parses, falls thr
   }
 })
 
+// ── --no-pack-measured (Task 3 of the load-aware bench scheduler design) ──
+// Escape hatch disabling ALL measured-informed resource decisions. Unlike
+// --cpu-budget/--mem-budget/--min-cpus/--min-mem-mb, it's legal WITHOUT
+// --parallel too (the cap-raise it disables also applies to serial
+// --enforce-resources runs) — deliberately no validateParallel rule for it.
+
+test("cli: run --no-pack-measured parses fine WITHOUT --parallel and falls through to normal flow (rc 1, no tasks)", async () => {
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main(["run", "--no-pack-measured", "--layers", "none"])
+    expect(rc).toBe(1)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes("Specify --tasks"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("cli: run --no-pack-measured --parallel --enforce-resources with the key set parses, falls through to normal flow (rc 1, no tasks)", async () => {
+  const prev = process.env["ANTHROPIC_API_KEY"]
+  process.env["ANTHROPIC_API_KEY"] = "sk-test-parallel"
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main(["run", "--no-pack-measured", "--parallel", "--enforce-resources", "--layers", "none"])
+    expect(rc).toBe(1)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes("Specify --tasks"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+    if (prev === undefined) delete process.env["ANTHROPIC_API_KEY"]
+    else process.env["ANTHROPIC_API_KEY"] = prev
+  }
+})
+
 test("cli main: judge-audit missing --layer/--candidate -> rc 2", async () => {
   expect(await main(["judge-audit"])).toBe(2)
   expect(await main(["judge-audit", "--layer", "project-global"])).toBe(2)
