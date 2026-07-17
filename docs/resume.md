@@ -3,6 +3,30 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ➡️ CURRENT STATE (2026-07-18)
+
+**Everything PUSHED — `git pull` fast-forwards.** Tip ≥ `dca27be` (this doc commits after code).
+Tree clean. Suite **1310 pass / 0 fail**, tsc clean. Loop store (MacBook: repo `.meta-harness`,
+mirrored to `~/.config/meta-harness`): **active = v0, 12 PASS / 2 FAIL / 14 sessions (85.7%)**,
+budget-identity `{maxAgentTimeout:3600, timeoutRecording:true, resourceEnforcement:true}`.
+
+Shipped since the 07-17 pickup: **load-aware scheduler increment #2** — measured packing
+default-ON + raise-only cap lift + OOM-escalation retry + cap provenance (full detail in the
+"LOAD-AWARE #2 SHIPPED" section below). NOT a budget-identity change → the v0 baseline stays valid.
+
+**OPEN WORK (pick any):**
+- **(b) first real loop `ab`** — the throughline, AND load-aware #2's first live validation
+  (fills n≥3 profiles for the whole band → packing goes measured automatically). Recipe: the
+  "(b) recipe, MacBook-adapted" steps below. Needs fresh oauth (`claude`, login, ctrl-D).
+- **(d) Axis-2** — seed/propose vendor content so routing does something; multi-model panel needs
+  a 2nd vendor model.
+- **load-aware #3** — online wall-clock back-pressure (burst-contention guard), CPU escalation,
+  scheduler-visible escalated footprints. Watch (b)'s sweeps for timeout upticks first.
+- Post-merge cleanup candidate: fold `capRaised` into `TaskFootprint` (dedupes the two
+  `capRaisedFor` closures in cmd-run/cmd-ab).
+
+---
+
 ## ✅ MACBOOK PICKUP DONE (2026-07-17) — open work (a) COMPLETE, band hole FILLED
 
 Home steps 1–3 executed clean: suite **1250 pass / 0 fail** on macOS; store diff showed exactly the
