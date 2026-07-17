@@ -4,6 +4,7 @@ import * as path from "node:path"
 import * as os from "node:os"
 import type { BenchPaths } from "../src/bench/paths.ts"
 import { cmdTaskLoad } from "../src/bench/cmd-task-load.ts"
+import { updateResourceProfile } from "../src/bench/resource-profile.ts"
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "mh-bench-task-load-"))
@@ -147,4 +148,95 @@ test("cmdTaskLoad: --all enumerates every tbRoot task with a task.toml", () => {
 
   expect(out).toContain("task-declared")
   expect(out).toContain("task-fallback")
+})
+
+// --- measured-packing preview (Task 5) --------------------------------------
+//
+// NOTE these tests use a NESTED termBenchDir (`<tmp>/tb`) so metaRoot =
+// dirname(termBenchDir) is UNIQUE per test — mirrors bench-cmd-ab.test.ts's
+// isolatedPaths (:177-190). The resource-profile store has no per-test reset
+// (unlike the score dir createCandidate resets), so profile-seeding tests
+// MUST isolate metaRoot or samples leak across tests/suite runs.
+function isolatedPaths(): BenchPaths {
+  const meta = tmpDir()
+  const termBenchDir = path.join(meta, "tb")
+  fs.mkdirSync(termBenchDir, { recursive: true })
+  const tbRoot = path.join(meta, "tb-root")
+  return fakeBenchPaths(termBenchDir, tbRoot) // metaRoot = dirname(<meta>/tb) = <meta>, unique
+}
+
+function writeTaskToml(tbRoot: string, task: string, cpus: number, memoryMb: number): void {
+  fs.mkdirSync(path.join(tbRoot, task), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, task, "task.toml"), `[environment]\ncpus = ${cpus}\nmemory_mb = ${memoryMb}\n`)
+}
+
+test("cmdTaskLoad: with a seeded n>=3 profile, MeasCPU/MeasMB/n show measured values and the measured co-run preview can differ from the declared one", () => {
+  const paths = isolatedPaths()
+  // task-big: declared 3 cpu / 4096 MB — alone it consumes the WHOLE default
+  // cpu budget (3), so under DECLARED weights it and task-small can never
+  // co-run (task-small needs 1 more cpu than the 0 left over).
+  writeTaskToml(paths.tbRoot, "task-big", 3, 4096)
+  // task-small: declared 1 cpu / 2048 MB, never profiled — stays declared.
+  writeTaskToml(paths.tbRoot, "task-small", 1, 2048)
+
+  // Seed task-big's profile (default host class) with 3 samples so n>=3 and
+  // avgCpu>0 → packingWeight uses the measured values, not the declared prior.
+  // avgCpu = median(4.0/4.0, 4.0/4.0, 4.0/4.0) = 1.0; peakRssMb=1000 →
+  // measured memoryMb = ceil(1000*1.2) = 1200. Both well under the declared
+  // 3 cpu / 4096 MB, so measured task-big + task-small (1 cpu/2048 MB) fit
+  // together under the default budget (3 cpu / 6144 MB) where the declared
+  // weights could not.
+  for (let i = 0; i < 3; i++) {
+    updateResourceProfile(paths.metaRoot, "task-big", { cpuSeconds: 4.0, peakRssMb: 1000, wall: 4.0 })
+  }
+
+  const lines = captureLog(() => {
+    cmdTaskLoad(paths, { tasks: ["task-big", "task-small"] })
+  })
+  const out = lines.join("\n")
+
+  // Measured columns: task-big shows measured cpus=1, memoryMb=1200, n=3.
+  expect(out).toMatch(/task-big[^\n]*\b1\b[^\n]*\b1200\b[^\n]*\b3\b/)
+  // task-small was never profiled — placeholder dashes, not measured values.
+  expect(out).toMatch(/task-small[^\n]*-[^\n]*-[^\n]*-/)
+
+  // Declared preview: task-big alone consumes the whole budget → its own
+  // solo group, distinct from task-small.
+  expect(out).toContain("[task-big]")
+  expect(out).toContain("[task-small]")
+
+  // Measured preview block is present and labeled, and packs both tasks into
+  // ONE group (measured task-big weight leaves enough budget for task-small)
+  // — differing from the declared preview above.
+  expect(out).toContain("co-run groups (measured packing — what run --parallel will pack):")
+  expect(out).toContain("[task-big, task-small]")
+})
+
+test("cmdTaskLoad: with no profiles, MeasCPU/MeasMB/n show placeholders and the measured preview block is present with identical grouping", () => {
+  const paths = isolatedPaths()
+  writeFixtureTasks(paths.tbRoot)
+
+  const lines = captureLog(() => {
+    cmdTaskLoad(paths, { tasks: ["task-declared", "task-fallback"] })
+  })
+  const out = lines.join("\n")
+
+  // Every row falls back to declared weights → placeholder dashes in the
+  // measured columns for both tasks.
+  expect(out).toMatch(/task-declared[^\n]*-[^\n]*-[^\n]*-/)
+  expect(out).toMatch(/task-fallback[^\n]*-[^\n]*-[^\n]*-/)
+
+  // Both preview blocks present...
+  expect(out).toContain("co-run groups (preview")
+  expect(out).toContain("co-run groups (measured packing — what run --parallel will pack):")
+
+  // ...and with no profiles the measured preview equals the declared one:
+  // extract the group lines following each header and compare.
+  const declaredIdx = out.indexOf("co-run groups (preview")
+  const measuredIdx = out.indexOf("co-run groups (measured packing")
+  const declaredBlock = out.slice(declaredIdx, measuredIdx)
+  const measuredBlock = out.slice(measuredIdx)
+  const groupLines = (block: string): string[] => block.split("\n").filter((l) => l.trim().startsWith("["))
+  expect(groupLines(declaredBlock)).toEqual(groupLines(measuredBlock))
+  expect(groupLines(declaredBlock).length).toBeGreaterThan(0)
 })

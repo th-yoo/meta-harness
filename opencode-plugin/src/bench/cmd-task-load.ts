@@ -15,6 +15,7 @@ import { readFileSync } from "node:fs"
 import type { BenchPaths } from "./paths.ts"
 import { selectTasks, taskResources, taskTimeouts } from "./tasks.ts"
 import { packPreview, DEFAULT_BUDGET, type Budget, type ScheduledItem } from "./scheduler.ts"
+import { readResourceProfile, packingWeight } from "./resource-profile.ts"
 import { log, pyFixed } from "./util.ts"
 
 export interface CmdTaskLoadArgs {
@@ -75,7 +76,15 @@ export function cmdTaskLoad(paths: BenchPaths, args: CmdTaskLoadArgs): void {
     // timeouts, uncapped — task-load is an inspection command, not a run,
     // so there is no --max-agent-timeout in scope to cap against.
     const { agentTimeout, verifierTimeout } = taskTimeouts(paths, t, 0, 0)
-    return { task: t, ...res, agentTimeout, verifierTimeout }
+    // task-load has no --min-cpus/--min-mem-mb floor flags (unlike
+    // `run --parallel`), so `res` here is the UNFLOORED declared prior — a
+    // pre-existing property of this command. packingWeight falls back to
+    // this prior verbatim until the profile is trustworthy (n >= PACK_MIN_
+    // SAMPLES), so a floored `run --parallel` can pack slightly differently
+    // than this preview for tasks that haven't been measured yet.
+    const profile = readResourceProfile(paths.metaRoot, t)
+    const pack = packingWeight({ cpus: res.cpus, memoryMb: res.memoryMb }, profile)
+    return { task: t, ...res, agentTimeout, verifierTimeout, profile, pack }
   })
 
   console.log(`task-load: ${tasks.length} task(s), budget cpu=${budget.cpus} mem=${budget.memoryMb}MB`)
@@ -90,6 +99,9 @@ export function cmdTaskLoad(paths: BenchPaths, args: CmdTaskLoadArgs): void {
     "Decl".padStart(5),
     "AgentTO".padStart(8),
     "VerifTO".padStart(8),
+    "MeasCPU".padStart(7),
+    "MeasMB".padStart(7),
+    "n".padStart(3),
   ]
   if (meanElapsed) headerCells.push("MeanElapsed".padStart(12))
   const header = headerCells.join("  ")
@@ -106,6 +118,9 @@ export function cmdTaskLoad(paths: BenchPaths, args: CmdTaskLoadArgs): void {
       (r.declared ? "yes" : "no").padStart(5),
       String(r.agentTimeout).padStart(8),
       String(r.verifierTimeout).padStart(8),
+      (r.pack.measured ? pyFixed(r.pack.cpus, 2) : NO_DATA).padStart(7),
+      (r.pack.measured ? String(r.pack.memoryMb) : NO_DATA).padStart(7),
+      (r.pack.measured ? String(r.profile!.n) : NO_DATA).padStart(3),
     ]
     if (meanElapsed) {
       const m = meanElapsed.get(r.task)
@@ -116,9 +131,24 @@ export function cmdTaskLoad(paths: BenchPaths, args: CmdTaskLoadArgs): void {
   console.log("-".repeat(header.length))
   console.log()
 
-  const items: ScheduledItem[] = rows.map((r) => ({ key: r.task, cpus: r.cpus, memoryMb: r.memoryMb }))
-  const groups = packPreview(items, budget)
+  const declaredItems: ScheduledItem[] = rows.map((r) => ({ key: r.task, cpus: r.cpus, memoryMb: r.memoryMb }))
+  const declaredGroups = packPreview(declaredItems, budget)
   console.log(`co-run groups (preview — see packPreview's doc comment for its wave-model caveat):`)
+  printGroups(declaredGroups)
+  console.log()
+
+  // Second preview: same packPreview fit rule, but items weighted by each
+  // task's `pack` (measured-or-prior — see the `pack` NOTE above) instead of
+  // the raw declared footprint. ALWAYS printed (deterministic output): with
+  // no profiles yet, pack === declared for every row, so this equals the
+  // declared preview above.
+  const measuredItems: ScheduledItem[] = rows.map((r) => ({ key: r.task, cpus: r.pack.cpus, memoryMb: r.pack.memoryMb }))
+  const measuredGroups = packPreview(measuredItems, budget)
+  console.log(`co-run groups (measured packing — what run --parallel will pack):`)
+  printGroups(measuredGroups)
+}
+
+function printGroups(groups: string[][]): void {
   if (groups.length === 0) {
     console.log("  (no tasks)")
   } else {
