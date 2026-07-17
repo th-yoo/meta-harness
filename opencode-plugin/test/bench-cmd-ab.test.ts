@@ -418,7 +418,7 @@ test("cmdAb --enforce-resources serial: recorded arm-B session carries capMemory
   await quiet(() =>
     cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, enforceResources: true }, fake, fakeExec),
   )
-  const rec = readScore(root, "v1").sessions[0]! as Record<string, unknown>
+  const rec = readScore(root, "v1").sessions[0]!
   expect(rec.capMemoryMb).toBe(6144)
   expect(rec.capRaised).toBe(true)
 })
@@ -430,7 +430,7 @@ test("cmdAb without --enforce-resources: recorded arm-B session omits capMemoryM
   const fake: RunOneTaskFn = async () => res({ reward: 1, turns: 3 })
 
   await quiet(() => cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1 }, fake, fakeExec))
-  const rec = readScore(root, "v1").sessions[0]! as Record<string, unknown>
+  const rec = readScore(root, "v1").sessions[0]!
   expect("capMemoryMb" in rec).toBe(false)
   expect("capRaised" in rec).toBe(false)
 })

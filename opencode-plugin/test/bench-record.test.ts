@@ -358,17 +358,11 @@ test("sessionRecord: cpuSeconds/peakRssMb stamped only when provided (conditiona
 
 test("sessionRecord: capMemoryMb/capRaised stamped only when provided (per-session cap provenance)", () => {
   // trailing cap-provenance params after cpuSeconds/peakRssMb
-  const withCap = sessionRecord("t", "s", true, 1, {}, "m", "", {}, 12.3, false, 900, 42.5, 256, 6144, true) as Record<
-    string,
-    unknown
-  >
+  const withCap = sessionRecord("t", "s", true, 1, {}, "m", "", {}, 12.3, false, 900, 42.5, 256, 6144, true)
   expect(withCap.capMemoryMb).toBe(6144)
   expect(withCap.capRaised).toBe(true)
   // capRaised:false is still stamped (present-but-false), distinct from omitted
-  const notRaised = sessionRecord("t", "s", true, 1, {}, "m", "", {}, 12.3, false, 900, 42.5, 256, 2048, false) as Record<
-    string,
-    unknown
-  >
+  const notRaised = sessionRecord("t", "s", true, 1, {}, "m", "", {}, 12.3, false, 900, 42.5, 256, 2048, false)
   expect(notRaised.capMemoryMb).toBe(2048)
   expect(notRaised.capRaised).toBe(false)
   // omitted → keys absent (unenforced runs never stamp them)
@@ -466,13 +460,13 @@ test("recordToStores: persists capMemoryMb/capRaised onto the session record whe
     6144,
     true,
   )
-  const withCap = readScore(root, "v0").sessions[0]! as Record<string, unknown>
+  const withCap = readScore(root, "v0").sessions[0]!
   expect(withCap.capMemoryMb).toBe(6144)
   expect(withCap.capRaised).toBe(true)
 
   // a second record with the params omitted → keys absent on that record
   recordToStores("t", "sess-nocap", true, 2, {}, "m", "", "project", metaRoot, false)
-  const bare = readScore(root, "v0").sessions.find((s) => s.sessionID === "sess-nocap")! as Record<string, unknown>
+  const bare = readScore(root, "v0").sessions.find((s) => s.sessionID === "sess-nocap")!
   expect("capMemoryMb" in bare).toBe(false)
   expect("capRaised" in bare).toBe(false)
 })

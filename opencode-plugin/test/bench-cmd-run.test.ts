@@ -716,7 +716,7 @@ test("cmdRun --enforce-resources serial: session record carries capMemoryMb (rai
     errSpy.mockRestore()
     logSpy.mockRestore()
   }
-  const rec = readScore(root, "v0").sessions[0]! as Record<string, unknown>
+  const rec = readScore(root, "v0").sessions[0]!
   expect(rec.capMemoryMb).toBe(6144)
   expect(rec.capRaised).toBe(true)
 })
@@ -737,7 +737,7 @@ test("cmdRun without --enforce-resources: session record omits capMemoryMb/capRa
     errSpy.mockRestore()
     logSpy.mockRestore()
   }
-  const rec = readScore(root, "v0").sessions[0]! as Record<string, unknown>
+  const rec = readScore(root, "v0").sessions[0]!
   expect("capMemoryMb" in rec).toBe(false)
   expect("capRaised" in rec).toBe(false)
 })
@@ -767,7 +767,7 @@ test("cmdRun --enforce-resources serial: after an OOM-escalated retry the record
   }
   const recs = readScore(root, "v0").sessions
   expect(recs.map((s) => s.sessionID)).toEqual(["retry"]) // only the retry landed
-  const rec = recs[0]! as Record<string, unknown>
+  const rec = recs[0]!
   expect(rec.capMemoryMb).toBe(4096) // 2048 escalated ×2 for the retry container
   expect(rec.capRaised).toBe(false) // the INITIAL cap was declared, not measured-raised
 })

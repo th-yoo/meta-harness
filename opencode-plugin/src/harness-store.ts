@@ -137,6 +137,16 @@ export interface SessionRecord {
    * Optional so pre-capture records + non-podman callers keep parsing. */
   cpuSeconds?: number
   peakRssMb?: number
+  /** Final memory cap (MB) the session's LAST container ran under, post
+   * measured-raise and post OOM-escalation. Only stamped by the run/ab
+   * callers under --enforce-resources; optional so pre-loadaware-B5 records
+   * and unenforced runs keep parsing. */
+  capMemoryMb?: number
+  /** True when raiseCapMeasured lifted the INITIAL container memory cap
+   * above the declared/floored task.toml value. Only stamped alongside
+   * `capMemoryMb` under --enforce-resources; optional so pre-loadaware-B5
+   * records and unenforced runs keep parsing. */
+  capRaised?: boolean
   /** Dense LLM judge verdict for this session (Phase 4 Part D), when the judge
    * ran — shadow mode never affects `passed`; prefill mode may pre-populate the
    * human /mh-score prompt. Optional so pre-D1 records keep parsing. */
