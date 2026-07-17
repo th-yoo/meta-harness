@@ -31,14 +31,26 @@ export interface CgroupStats {
   cpuSeconds: number
   /** Peak container RSS in MiB (memory.peak / 1024²); 0 when unavailable. */
   peakRssMb: number
+  /** Cumulative OOM-kill count from memory.events' `oom_kill` field.
+   * 0 when memory.events is absent (older kernel) — graceful degrade, same as
+   * peakRssMb. The counter is CUMULATIVE over the container's lifetime: the
+   * agent harness retries execs inside the same container, so nonzero means
+   * "an OOM kill happened at some point in this container", NOT "the final
+   * attempt was killed". Callers must combine it with the result outcome
+   * before acting. */
+  oomKills: number
 }
 
-/** One `podman exec` reads both files: cpu.stat verbatim, then a `PEAK <bytes>`
+/** One `podman exec` reads three files: cpu.stat verbatim, then a `PEAK <bytes>`
  * line appended for memory.peak (which is a bare number, so it needs a label to
- * disambiguate from cpu.stat's numbers). `2>/dev/null` + the `$()` fallback keep
- * a missing memory.peak (older kernel) from failing the whole read. */
-const READ_CMD =
-  "cat /sys/fs/cgroup/cpu.stat 2>/dev/null; printf 'PEAK %s\\n' \"$(cat /sys/fs/cgroup/memory.peak 2>/dev/null)\""
+ * disambiguate from cpu.stat's numbers), then an `OOMK <n>` line for the
+ * cumulative oom_kill counter from memory.events. `2>/dev/null` + the `$()`
+ * fallback keep a missing memory.peak/memory.events (older kernel) from
+ * failing the whole read. */
+export const READ_CMD =
+  "cat /sys/fs/cgroup/cpu.stat 2>/dev/null; " +
+  "printf 'PEAK %s\\n' \"$(cat /sys/fs/cgroup/memory.peak 2>/dev/null)\"; " +
+  "printf 'OOMK %s\\n' \"$(awk '$1==\"oom_kill\"{print $2}' /sys/fs/cgroup/memory.events 2>/dev/null)\""
 
 /** Read the container's cgroup accounting. Returns null on any failure (rc≠0 or
  * no parseable usage_usec) — the caller treats null as "unmeasured". Injectable
@@ -60,9 +72,11 @@ export function parseCgroupStats(stdout: string): CgroupStats | null {
   const usage = /(?:^|\n)usage_usec\s+(\d+)/.exec(stdout)
   if (!usage) return null
   const peak = /(?:^|\n)PEAK\s+(\d+)/.exec(stdout)
+  const oomk = /(?:^|\n)OOMK\s+(\d+)/.exec(stdout)
   return {
     cpuSeconds: round1(Number(usage[1]) / 1e6),
     peakRssMb: peak ? Math.round(Number(peak[1]) / (1024 * 1024)) : 0,
+    oomKills: oomk ? Number(oomk[1]) : 0,
   }
 }
 
