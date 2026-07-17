@@ -24,6 +24,13 @@ import { join } from "node:path"
 import { BenchError, die, log, pyFixed } from "./util.ts"
 import type { BenchPaths } from "./paths.ts"
 import type { Dirent } from "node:fs"
+import {
+  readResourceProfile,
+  packingWeight,
+  raiseCapMeasured,
+  PACK_MIN_SAMPLES,
+  type PackWeight,
+} from "./resource-profile.ts"
 
 // See exec.ts's header note on why Bun globals are declared locally instead
 // of depending on `bun-types` (no new deps).
@@ -186,7 +193,8 @@ export function taskResources(paths: BenchPaths, task: string): TaskResources {
 
 /** taskResources + spec-D1 warning + spec Non-goals GPU refusal. Call only
  * when --enforce-resources is on (undefined resources = unenforced elsewhere).
- * Consumed by cmd-run.ts's outer loop and cmd-oracle.ts's runOneOracleTask.
+ * Consumed by cmd-run.ts's outer loop and cmd-oracle.ts's runOneOracleTask,
+ * and — as the FIRST step (gpu-throw ordering) — by `packingFootprints`.
  *
  * `floors` (--min-cpus/--min-mem-mb) is an optional per-task resource FLOOR:
  * a GENEROUS minimum that raises (never lowers) the declared task.toml
@@ -194,14 +202,16 @@ export function taskResources(paths: BenchPaths, task: string): TaskResources {
  * for the ORACLE's reference solution, not necessarily for a heavier agent
  * approach — a --parallel run that packs/caps every task at its tight
  * declared footprint can starve a compute-heavy task without ever editing
- * the shared TB2 benchmark task.tomls. The floor applies to THIS function's
- * returned value, which feeds BOTH the scheduler's budget-packing AND the
- * container cgroup cap (both cmd-run.ts and cmd-ab.ts thread the same
- * returned object into each), so a floored task packs-as and is-capped-at
- * the same (floored) size — packing and the cap never disagree. Omitting
- * `floors` (the default — no --min-cpus/--min-mem-mb) makes
- * `Math.max(declared, 0)` equal `declared`, byte-identical to before floors
- * existed. */
+ * the shared TB2 benchmark task.tomls. Omitting `floors` (the default — no
+ * --min-cpus/--min-mem-mb) makes `Math.max(declared, 0)` equal `declared`,
+ * byte-identical to before floors existed.
+ *
+ * This function's returned value is now TWO things at once: the base of the
+ * container memory cap (before any measured raise — see `raiseCapMeasured`)
+ * AND the packing PRIOR/fallback used until a profile is trustworthy (see
+ * `packingWeight`). The two can diverge once a measured profile exists —
+ * `packingFootprints` is what resolves cap vs pack per task; this function
+ * alone no longer determines both. */
 export function enforcedResources(
   paths: BenchPaths,
   task: string,
@@ -222,4 +232,68 @@ export function enforcedResources(
     cpus: Math.max(r.cpus, floors?.minCpus ?? 0),
     memoryMb: Math.max(r.memoryMb, floors?.minMemoryMb ?? 0),
   }
+}
+
+/** A task's resolved footprint for one bench run: `cap` is what the container
+ * cgroup gets (podman --cpus/--memory) — the generous envelope, declared/
+ * floored and raised only by measurement (`raiseCapMeasured`). `pack` is what
+ * the scheduler packs against the parallel budget — honest demand, measured
+ * once a profile is trustworthy, else the declared prior (`packingWeight`).
+ * These are NOT claimed to satisfy "cap ≥ pack" as an invariant: a small
+ * declared cap can sit below `PACK_MIN_MEM_MB`; harmless, since cap alone
+ * governs the container and pack alone governs scheduling. */
+export interface TaskFootprint {
+  cap: { cpus: number; memoryMb: number }
+  pack: PackWeight
+}
+
+/**
+ * Per-task cap + pack resolution for a batch of tasks — the single map-builder
+ * both parallel call sites (cmd-run.ts, cmd-ab.ts) consume instead of calling
+ * `enforcedResources` directly. For each task, in order: resolve the declared/
+ * floored footprint FIRST (preserves the existing gpu-throw-before-any-
+ * container-lifecycle ordering), then — only when `packMeasured` — read the
+ * task's measured profile and let it raise the cap (`raiseCapMeasured`) and
+ * override the pack weight (`packingWeight`). When `packMeasured` is false,
+ * cap and pack are both the declared/floored value, byte-identical to
+ * pre-packing behavior.
+ */
+export function packingFootprints(
+  paths: BenchPaths,
+  tasks: string[],
+  floors: { minCpus?: number; minMemoryMb?: number },
+  packMeasured: boolean,
+): Map<string, TaskFootprint> {
+  const out = new Map<string, TaskFootprint>()
+  for (const t of tasks) {
+    const declared = enforcedResources(paths, t, floors)
+    const profile = packMeasured ? readResourceProfile(paths.metaRoot, t) : null
+    const cap = packMeasured ? raiseCapMeasured(declared, profile) : declared
+    const pack = packMeasured ? packingWeight(declared, profile) : { ...declared, measured: false }
+
+    if (pack.measured) {
+      log(`  [pack] ${t}: measured ${pack.cpus}c/${pack.memoryMb}MB (n=${profile!.n})`)
+    } else {
+      const reason = profile === null ? "no profile" : profile.n < PACK_MIN_SAMPLES ? `n=${profile.n}<${PACK_MIN_SAMPLES}` : "avgCpu=0"
+      log(`  [pack] ${t}: prior ${pack.cpus}c/${pack.memoryMb}MB (${reason})`)
+    }
+
+    out.set(t, { cap, pack })
+  }
+  return out
+}
+
+/**
+ * OOM-escalation policy: double memory, clamp to `ceilingMb`, single retry.
+ * Returns `null` when the doubled-then-clamped result would not exceed
+ * `orig.memoryMb` — i.e. already at/above the ceiling, no headroom, so the
+ * caller should not retry. `cpus` is never changed.
+ */
+export function escalateResources(
+  orig: { cpus: number; memoryMb: number },
+  ceilingMb?: number,
+): { cpus: number; memoryMb: number } | null {
+  const memoryMb = Math.min(orig.memoryMb * 2, ceilingMb ?? Infinity)
+  if (memoryMb <= orig.memoryMb) return null
+  return { cpus: orig.cpus, memoryMb }
 }

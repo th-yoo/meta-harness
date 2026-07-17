@@ -3,12 +3,20 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
 import type { BenchPaths } from "../src/bench/paths.ts"
-import { selectTasks, taskTimeouts, taskResources, enforcedResources } from "../src/bench/tasks.ts"
+import {
+  selectTasks,
+  taskTimeouts,
+  taskResources,
+  enforcedResources,
+  packingFootprints,
+  escalateResources,
+} from "../src/bench/tasks.ts"
 import { runHost, withTimeout } from "../src/bench/exec.ts"
 import { cmdOracle, runOneOracleTask, type RunOneOracleTask } from "../src/bench/cmd-oracle.ts"
 import { main } from "../src/bench/cli.ts"
 import { BenchError } from "../src/bench/util.ts"
 import type { ExecResult } from "../src/bench/exec.ts"
+import { hostClass, readResourceProfile, updateResourceProfile } from "../src/bench/resource-profile.ts"
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "mh-bench-oracle-unit-"))
@@ -349,6 +357,147 @@ test("enforcedResources: no floors given returns the declared footprint unchange
   const paths = fakeBenchPaths(dir, tbRoot)
   expect(enforcedResources(paths, "fixture-task2")).toEqual({ cpus: 2, memoryMb: 4096 })
   expect(enforcedResources(paths, "fixture-task2", {})).toEqual({ cpus: 2, memoryMb: 4096 })
+})
+
+// ── packingFootprints / escalateResources ─────────────────────────────────
+
+// NOTE: mirrors test/bench-cmd-ab.test.ts:177-190's isolatedPaths — a NESTED
+// termBenchDir (`<tmp>/tb`) so metaRoot = dirname(termBenchDir) is unique per
+// test. A shared os.tmpdir() metaRoot leaks profile `n` across tests and
+// suite runs (the resource-profile store has no per-test reset).
+function isolatedPaths(tasks: string[]): BenchPaths {
+  const meta = tmpDir()
+  const termBenchDir = path.join(meta, "tb")
+  fs.mkdirSync(termBenchDir, { recursive: true })
+  const tbRoot = path.join(meta, "tb-root")
+  writeTaskTomls(tbRoot, tasks)
+  return fakeBenchPaths(termBenchDir, tbRoot) // metaRoot = dirname(<meta>/tb) = <meta>, unique
+}
+
+test("packingFootprints: no profile → cap is always enforcedResources(floors)-based, pack falls back to declared", () => {
+  const paths = isolatedPaths(["fixture-task"])
+  fs.writeFileSync(
+    path.join(paths.tbRoot, "fixture-task", "task.toml"),
+    "[environment]\ncpus = 2\nmemory_mb = 4096\ngpus = 0\n",
+  )
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let m: Map<string, ReturnType<typeof packingFootprints> extends Map<string, infer V> ? V : never>
+  try {
+    m = packingFootprints(paths, ["fixture-task"], {}, true)
+  } finally {
+    errSpy.mockRestore()
+  }
+  const fp = m.get("fixture-task")!
+  expect(fp.cap).toEqual({ cpus: 2, memoryMb: 4096 })
+  expect(fp.pack).toEqual({ cpus: 2, memoryMb: 4096, measured: false })
+})
+
+test("packingFootprints: seeded n>=3 profile whose peakRss×1.5 exceeds declared → cap.memoryMb raised, cap.cpus unchanged, pack measured", () => {
+  const paths = isolatedPaths(["fixture-task"])
+  fs.writeFileSync(
+    path.join(paths.tbRoot, "fixture-task", "task.toml"),
+    "[environment]\ncpus = 2\nmemory_mb = 2048\ngpus = 0\n",
+  )
+  // 3 samples, each cpuSeconds=5/wall=10 -> per-sample avgCpu 0.5, median 0.5.
+  // peakRssMb=2000 -> cap headroom 2000*1.5=3000 > declared 2048.
+  for (let i = 0; i < 3; i++) {
+    updateResourceProfile(paths.metaRoot, "fixture-task", { cpuSeconds: 5, peakRssMb: 2000, wall: 10 })
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let m: Map<string, ReturnType<typeof packingFootprints> extends Map<string, infer V> ? V : never>
+  try {
+    m = packingFootprints(paths, ["fixture-task"], {}, true)
+  } finally {
+    errSpy.mockRestore()
+  }
+  const fp = m.get("fixture-task")!
+  expect(fp.cap).toEqual({ cpus: 2, memoryMb: 3000 })
+  expect(fp.pack).toEqual({ cpus: 0.5, memoryMb: 2400, measured: true })
+})
+
+test("packingFootprints: packMeasured=false → pack equals cap equals declared/floored, byte-parity with pre-change behavior, even with a seeded profile", () => {
+  const paths = isolatedPaths(["fixture-task"])
+  fs.writeFileSync(
+    path.join(paths.tbRoot, "fixture-task", "task.toml"),
+    "[environment]\ncpus = 2\nmemory_mb = 2048\ngpus = 0\n",
+  )
+  for (let i = 0; i < 3; i++) {
+    updateResourceProfile(paths.metaRoot, "fixture-task", { cpuSeconds: 5, peakRssMb: 2000, wall: 10 })
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let m: Map<string, ReturnType<typeof packingFootprints> extends Map<string, infer V> ? V : never>
+  try {
+    m = packingFootprints(paths, ["fixture-task"], {}, false)
+  } finally {
+    errSpy.mockRestore()
+  }
+  const fp = m.get("fixture-task")!
+  expect(fp.cap).toEqual({ cpus: 2, memoryMb: 2048 })
+  expect(fp.pack).toEqual({ cpus: 2, memoryMb: 2048, measured: false })
+})
+
+test("packingFootprints: seeded n=1 profile -> pack falls back to prior (measured:false)", () => {
+  const paths = isolatedPaths(["fixture-task"])
+  fs.writeFileSync(
+    path.join(paths.tbRoot, "fixture-task", "task.toml"),
+    "[environment]\ncpus = 2\nmemory_mb = 2048\ngpus = 0\n",
+  )
+  updateResourceProfile(paths.metaRoot, "fixture-task", { cpuSeconds: 5, peakRssMb: 2000, wall: 10 })
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let m: Map<string, ReturnType<typeof packingFootprints> extends Map<string, infer V> ? V : never>
+  try {
+    m = packingFootprints(paths, ["fixture-task"], {}, true)
+  } finally {
+    errSpy.mockRestore()
+  }
+  const fp = m.get("fixture-task")!
+  expect(fp.pack).toEqual({ cpus: 2, memoryMb: 2048, measured: false })
+})
+
+test("packingFootprints: gpu-declaring task still throws BenchError before returning", () => {
+  const paths = isolatedPaths(["gpu-task"])
+  fs.writeFileSync(path.join(paths.tbRoot, "gpu-task", "task.toml"), "[environment]\ngpus = 1\n")
+  expect(() => packingFootprints(paths, ["gpu-task"], {}, true)).toThrow(BenchError)
+})
+
+test("packingFootprints: logs one [pack] line per task — measured vs prior reasons", () => {
+  const paths = isolatedPaths(["measured-task", "no-profile-task", "immature-task"])
+  fs.writeFileSync(
+    path.join(paths.tbRoot, "measured-task", "task.toml"),
+    "[environment]\ncpus = 2\nmemory_mb = 2048\ngpus = 0\n",
+  )
+  for (let i = 0; i < 3; i++) {
+    updateResourceProfile(paths.metaRoot, "measured-task", { cpuSeconds: 5, peakRssMb: 2000, wall: 10 })
+  }
+  updateResourceProfile(paths.metaRoot, "immature-task", { cpuSeconds: 5, peakRssMb: 300, wall: 10 })
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let messages: unknown[]
+  try {
+    packingFootprints(paths, ["measured-task", "no-profile-task", "immature-task"], {}, true)
+    messages = errSpy.mock.calls.map((c) => c[0])
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(messages).toContain("  [pack] measured-task: measured 0.5c/2400MB (n=3)")
+  expect(messages).toContain("  [pack] no-profile-task: prior 1c/2048MB (no profile)")
+  expect(messages).toContain("  [pack] immature-task: prior 1c/2048MB (n=1<3)")
+})
+
+test("escalateResources: doubles memory, cpus unchanged", () => {
+  expect(escalateResources({ cpus: 2, memoryMb: 1024 })).toEqual({ cpus: 2, memoryMb: 2048 })
+})
+
+test("escalateResources: clamps to ceiling", () => {
+  expect(escalateResources({ cpus: 2, memoryMb: 4096 }, 6144)).toEqual({ cpus: 2, memoryMb: 6144 })
+})
+
+test("escalateResources: no headroom (already at ceiling) -> null", () => {
+  expect(escalateResources({ cpus: 2, memoryMb: 6144 }, 6144)).toBeNull()
+})
+
+test("escalateResources: no headroom (already above ceiling) -> null", () => {
+  expect(escalateResources({ cpus: 2, memoryMb: 8000 }, 6144)).toBeNull()
 })
 
 // ── exec funnel: withTimeout + rc-124 mapping (no podman required — plain bash) ──
