@@ -31,9 +31,44 @@ scaled down from the 8-core Linux recipes (a `--cpu-budget 8`/`--min-cpus 4` par
 to width-1 here).
 
 **REMAINING OPEN WORK:** (b) first real loop `ab` — propose a NEW candidate ≠ v0, same
-budget-identity; (c) load-aware scheduler #2 (flip packer to measured `avgCpu` — profile data now
-exists, more accumulates with each run); (d) Axis-2 vendor content + panel. Details in the
-handoff block below.
+budget-identity — now runs on the MEASURED packer (below) and fills profiles for all 14 band
+tasks; (d) Axis-2 vendor content + panel. Details in the handoff block below.
+
+## ✅ LOAD-AWARE #2 SHIPPED (2026-07-18) — measured packing DEFAULT-ON + OOM-escalation retry
+
+Open-work (c) is DONE and merged (branch `feat/loadaware-2`, 10 commits, suite **1310 pass / 0
+fail**). Built via parallel subagent waves (3∥ → 2∥ → serial ×3), per-task spec+quality reviews,
+final whole-branch review = MERGE-READY. Plan (3× architect-reviewed to FLAWLESS before build):
+`~/.claude/plans/plan-to-flip-2-tidy-aurora.md`.
+
+**What changed:**
+- **Packing weight = measured profile** (default-ON): `packingWeight` (resource-profile.ts) —
+  avgCpu (floor 0.5) / peakRssMb×1.2 (floor 256MB), gated `n≥3 && avgCpu>0`; declared/floored =
+  cold-start prior. `packingFootprints` (tasks.ts) splits `{cap, pack}` — containers ALWAYS get
+  the generous cap, the scheduler packs the honest weight. scheduler.ts itself unchanged.
+- **Cap raise-only lift**: `raiseCapMeasured` — cap.memoryMb = max(declared/floored, peak×1.5) at
+  n≥3, parallel AND serial enforce paths (cmd-oracle excluded, test-pinned). Closes the
+  chronic-OOM loop (measured demand > declared cap no longer kills every run).
+- **OOM-escalation retry**: cgroup `memory.events oom_kill` (cumulative-counter caveat → trigger
+  is `oomKilled && reward !== 1` — an OOM'd-then-recovered PASS is kept); single retry in a fresh
+  container at 2× memory (clamped to mem-budget under parallel); carry-forward across k-repeats
+  and both ab arms; killed attempt never recorded (infra noise, like the auth-skip); oomKilled
+  samples never memorized into profiles.
+- **Escape hatch**: `--no-pack-measured` (run+ab, legal with AND without `--parallel`) disables
+  ALL measured decisions. **Provenance**: per-session `capMemoryMb`/`capRaised` on SessionRecord
+  (threaded like cpuSeconds/peakRssMb). **task-load**: MeasCPU/MeasMB/n columns + a second
+  "measured packing" co-run preview block.
+- **NOT a budget-identity change** (packing width is verdict-equivalent; ab re-runs both arms
+  under identical caps) → no re-baseline needed.
+
+**Deferred to increment #3**: online wall-clock back-pressure (the real fix for burst-phase
+contention — avgCpu is a whole-run median; watch first live sweeps for timeout upticks), CPU
+escalation, scheduler-visible escalated footprints. Post-merge cleanup candidate (final-review
+minor): fold `capRaised` into `TaskFootprint` to delete the duplicated `capRaisedFor` closures.
+
+**First live validation** = the (b) loop `ab`: it accumulates n≥3 profiles for the whole band,
+after which packing goes measured automatically. On this 4-CPU VM expect width to rise from 1-2
+toward ~4 as profiles mature (mem-bounded).
 
 **(b) recipe, MacBook-adapted** (the Linux `run-loop3-ab.sh` assumed 8 cores; this VM is 4c/8GiB):
 1. Propose off the fresh 14-session evidence: store-writing history is already in the loop store —
