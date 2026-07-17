@@ -275,7 +275,18 @@ export async function envBlock(
  * resolved `agentTimeout`) this session ran under, as distinct from the
  * RUN-LEVEL `env.maxAgentTimeout` cap the two can diverge from. Same
  * conditional-stamp idiom; every existing caller (that doesn't pass it)
- * keeps producing byte-identical records. */
+ * keeps producing byte-identical records.
+ *
+ * `capMemoryMb`/`capRaised` (loadaware B5) are per-session cap provenance —
+ * two more optional trailing params, same conditional-stamp idiom.
+ * `capMemoryMb` is the final memory cap (MB) the session's LAST container ran
+ * under (post measured-raise, post OOM-escalation); `capRaised` is true when
+ * raiseCapMeasured lifted the INITIAL cap above the declared/floored value.
+ * Only stamped by the run/ab callers under --enforce-resources (cap growth
+ * over calendar time must be auditable); absent otherwise so every existing
+ * caller keeps producing byte-identical records. NOT placed in `env` — env is
+ * computed once per run and shared by every session, whereas these are
+ * per-session (they diverge once a task OOM-escalates mid-run). */
 export function sessionRecord(
   task: string,
   sessionId: string,
@@ -290,6 +301,8 @@ export function sessionRecord(
   agentTimeout?: number,
   cpuSeconds?: number,
   peakRssMb?: number,
+  capMemoryMb?: number,
+  capRaised?: boolean,
 ): SessionRecord {
   const driver = env["driver"]
   return {
@@ -309,6 +322,8 @@ export function sessionRecord(
     ...(agentTimeout !== undefined ? { agentTimeout } : {}),
     ...(cpuSeconds !== undefined ? { cpuSeconds } : {}),
     ...(peakRssMb !== undefined ? { peakRssMb } : {}),
+    ...(capMemoryMb !== undefined ? { capMemoryMb } : {}),
+    ...(capRaised !== undefined ? { capRaised } : {}),
   }
 }
 
@@ -330,6 +345,11 @@ export function sessionRecord(
  * `agentTimeout` (Loop-3 pre-flip fix #1) is a further optional trailing
  * param threaded straight through to `sessionRecord` — the real per-task
  * budget (see that function's doc), not the run-level `env.maxAgentTimeout`.
+ *
+ * `capMemoryMb`/`capRaised` (loadaware B5) are two more optional trailing
+ * params threaded straight through to `sessionRecord` — per-session cap
+ * provenance (see that function's doc). Only set by the run/ab callers under
+ * --enforce-resources.
  */
 export function recordToStores(
   task: string,
@@ -353,6 +373,8 @@ export function recordToStores(
   agentTimeout?: number,
   cpuSeconds?: number,
   peakRssMb?: number,
+  capMemoryMb?: number,
+  capRaised?: boolean,
 ): void {
   if (noStore) return
   if (turnCount === 0 && !(timedOut && recordTimeouts)) {
@@ -360,7 +382,7 @@ export function recordToStores(
     return
   }
 
-  const record = sessionRecord(task, sessionId, passed, turnCount, toolUsage, model, variant, env, elapsed, timedOut, agentTimeout, cpuSeconds, peakRssMb)
+  const record = sessionRecord(task, sessionId, passed, turnCount, toolUsage, model, variant, env, elapsed, timedOut, agentTimeout, cpuSeconds, peakRssMb, capMemoryMb, capRaised)
   const saveTraj = events.length > 0 && (!passed || saveAllTraj)
 
   for (const [name, root] of layerStoreRoots(layers, agent, metaRoot)) {

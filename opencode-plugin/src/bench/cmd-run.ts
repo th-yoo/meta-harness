@@ -33,7 +33,7 @@ import type { StagingMode } from "./cmd-oracle.ts"
 import { copyTests, runVerifier } from "./verifier.ts"
 import { readSelfScore, SELF_CHECK_INSTRUCTION, SELF_CHECK_MARKER } from "./self-score.ts"
 import { readCgroupStats } from "./cgroup.ts"
-import { updateResourceProfile } from "./resource-profile.ts"
+import { updateResourceProfile, readResourceProfile, raiseCapMeasured, PACK_MIN_SAMPLES } from "./resource-profile.ts"
 import { runAgent } from "./agent-run.ts"
 import { getDriver } from "./drivers/index.ts"
 import { opencodeDriver } from "./drivers/opencode.ts"
@@ -554,6 +554,7 @@ export async function cmdRun(
     prefix: string,
     withLock: <T>(fn: () => T | Promise<T>) => Promise<T>,
     resourcesOverride: { cpus: number; memoryMb: number } | undefined,
+    capRaisedOverride: boolean,
   ): Promise<void> => {
     if (doneTasks.has(task)) {
       log(`\n${prefix}=== Task: ${task} (skipped — already done) ===`)
@@ -563,11 +564,30 @@ export async function cmdRun(
     const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout)
     // `let`: the OOM-retry wrapper carries an escalated cap forward across this
     // task's remaining k-repeats (within-invocation carry-forward, below).
-    let resources =
-      resourcesOverride ??
-      (args.enforceResources
-        ? enforcedResources(paths, task, { minCpus: args.minCpus, minMemoryMb: args.minMemMb })
-        : undefined)
+    // B5: the SERIAL path (resourcesOverride undefined) applies the same
+    // raise-only measured memory lift the parallel path already gets inside
+    // packingFootprints (raiseCapMeasured) — without it a task whose true
+    // demand exceeds its declared cap OOM-kills every serial run. The escape
+    // hatch --no-pack-measured disables the raise, collapsing back to the
+    // declared/floored cap. `capRaised` records (telemetry only) whether the
+    // INITIAL cap was lifted above declared/floored; the parallel path computes
+    // it up-front (capRaisedOverride) since its cap is raised in packingFootprints.
+    let capRaised = false
+    let resources: { cpus: number; memoryMb: number } | undefined
+    if (resourcesOverride !== undefined) {
+      resources = resourcesOverride
+      capRaised = capRaisedOverride
+    } else if (args.enforceResources) {
+      const declared = enforcedResources(paths, task, { minCpus: args.minCpus, minMemoryMb: args.minMemMb })
+      if (args.noPackMeasured) {
+        resources = declared
+      } else {
+        resources = raiseCapMeasured(declared, readResourceProfile(paths.metaRoot, task))
+        capRaised = resources.memoryMb > declared.memoryMb
+      }
+    } else {
+      resources = undefined
+    }
     // OOM-escalation ceiling: only meaningful under --parallel (each task has a
     // per-task cap packed against the budget). Derived from args/DEFAULT_BUDGET
     // — NOT the `budget` local, which is scoped inside the `if (args.parallel)`
@@ -643,6 +663,13 @@ export async function cmdRun(
           agentTimeout,
           res.cpuSeconds,
           res.peakRssMb,
+          // Per-session cap provenance (B5): the FINAL applied cap (post
+          // OOM-escalation carry-forward via `resources`) + whether the initial
+          // cap was measured-raised. Only meaningful under --enforce-resources
+          // (in --parallel a footprint cap is applied even without it, but the
+          // provenance is the enforce-mode envelope) — undefined otherwise.
+          args.enforceResources ? resources?.memoryMb : undefined,
+          args.enforceResources ? capRaised : undefined,
         ),
       )
 
@@ -713,7 +740,19 @@ export async function cmdRun(
     // floored container cgroup envelope, raised only by the measured memory lift
     // (raiseCapMeasured) — never shrunk. --no-pack-measured collapses both back
     // to the declared/floored value, byte-identical to pre-packing behavior.
-    const footprints = packingFootprints(paths, pending, { minCpus: args.minCpus, minMemoryMb: args.minMemMb }, !args.noPackMeasured)
+    const floors = { minCpus: args.minCpus, minMemoryMb: args.minMemMb }
+    const footprints = packingFootprints(paths, pending, floors, !args.noPackMeasured)
+    // Whether packingFootprints' raiseCapMeasured actually lifted a task's cap
+    // above declared/floored (per-session cap provenance, B5). Gated on a
+    // trustworthy profile so we only re-derive declared (via enforcedResources)
+    // when a raise could have fired — declared tasks never re-log, and the
+    // common cold-start path skips the lookup entirely.
+    const capRaisedFor = (task: string, cap: { cpus: number; memoryMb: number }): boolean => {
+      if (args.noPackMeasured) return false
+      const profile = readResourceProfile(paths.metaRoot, task)
+      if (profile === null || profile.n < PACK_MIN_SAMPLES) return false
+      return cap.memoryMb > enforcedResources(paths, task, floors).memoryMb
+    }
     // Still surface the skip lines for already-done tasks (they're excluded
     // from scheduling, so the shared pipeline never logs them in this path).
     for (const t of tasks) if (doneTasks.has(t)) log(`\n=== Task: ${t} (skipped — already done) ===`)
@@ -727,7 +766,10 @@ export async function cmdRun(
     await schedule(
       items,
       budget,
-      (it) => runOneTaskPipeline(it.key, `[${it.key}] `, (fn) => mutex.withLock(fn), footprints.get(it.key)!.cap),
+      (it) => {
+        const cap = footprints.get(it.key)!.cap
+        return runOneTaskPipeline(it.key, `[${it.key}] `, (fn) => mutex.withLock(fn), cap, capRaisedFor(it.key, cap))
+      },
       args.canLaunch,
     )
   } else {
@@ -735,7 +777,9 @@ export async function cmdRun(
     // byte-identical to the original inline for-loop.
     const noopLock = <T>(fn: () => T | Promise<T>): Promise<T> => Promise.resolve().then(fn)
     for (const task of tasks) {
-      await runOneTaskPipeline(task, "", noopLock, undefined)
+      // Serial path: the pipeline itself resolves the (possibly raised) cap and
+      // capRaised from the task's declared footprint + measured profile.
+      await runOneTaskPipeline(task, "", noopLock, undefined, false)
     }
   }
 

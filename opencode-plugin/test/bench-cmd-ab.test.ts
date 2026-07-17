@@ -363,6 +363,78 @@ test("cmdAb --enforce-resources ON, no --min-cpus/--min-mem-mb: byte-identical t
   expect(seenResources).toEqual({ cpus: 2, memoryMb: 4096 })
 })
 
+// ── B5: serial cap raise (raiseCapMeasured) + per-session cap provenance ─────
+
+test("cmdAb --enforce-resources serial: seeded n≥3 profile raises the arm container memory cap (raiseCapMeasured)", async () => {
+  const paths = isolatedPaths(["t1"])
+  fs.writeFileSync(path.join(paths.tbRoot, "t1", "task.toml"), "[environment]\ncpus = 1\nmemory_mb = 2048\n")
+  setupCandidate(paths, "project-global", "v1")
+  // Seed a trustworthy profile (n=3): peakRss 4096 → cap raised to ceil(4096*1.5)=6144.
+  for (let i = 0; i < 3; i++) updateResourceProfile(paths.metaRoot, "t1", { cpuSeconds: 3, peakRssMb: 4096, wall: 1 })
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    if (seenResources === "unset") seenResources = resources
+    return res({ reward: 1 })
+  }
+
+  await quiet(() =>
+    cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, enforceResources: true }, fake, fakeExec),
+  )
+  expect(seenResources).toEqual({ cpus: 1, memoryMb: 6144 })
+})
+
+test("cmdAb --enforce-resources serial + --no-pack-measured: seeded profile ignored → declared cap", async () => {
+  const paths = isolatedPaths(["t1"])
+  fs.writeFileSync(path.join(paths.tbRoot, "t1", "task.toml"), "[environment]\ncpus = 1\nmemory_mb = 2048\n")
+  setupCandidate(paths, "project-global", "v1")
+  for (let i = 0; i < 3; i++) updateResourceProfile(paths.metaRoot, "t1", { cpuSeconds: 3, peakRssMb: 4096, wall: 1 })
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    if (seenResources === "unset") seenResources = resources
+    return res({ reward: 1 })
+  }
+
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, enforceResources: true, noPackMeasured: true } as CmdAbArgs,
+      fake,
+      fakeExec,
+    ),
+  )
+  expect(seenResources).toEqual({ cpus: 1, memoryMb: 2048 })
+})
+
+test("cmdAb --enforce-resources serial: recorded arm-B session carries capMemoryMb (raised) + capRaised=true; unenforced omits", async () => {
+  const paths = isolatedPaths(["t1"])
+  fs.writeFileSync(path.join(paths.tbRoot, "t1", "task.toml"), "[environment]\ncpus = 1\nmemory_mb = 2048\n")
+  const root = setupCandidate(paths, "project-global", "v1")
+  for (let i = 0; i < 3; i++) updateResourceProfile(paths.metaRoot, "t1", { cpuSeconds: 3, peakRssMb: 4096, wall: 1 })
+
+  const fake: RunOneTaskFn = async () => res({ reward: 1, turns: 3 })
+
+  await quiet(() =>
+    cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, enforceResources: true }, fake, fakeExec),
+  )
+  const rec = readScore(root, "v1").sessions[0]! as Record<string, unknown>
+  expect(rec.capMemoryMb).toBe(6144)
+  expect(rec.capRaised).toBe(true)
+})
+
+test("cmdAb without --enforce-resources: recorded arm-B session omits capMemoryMb/capRaised", async () => {
+  const paths = isolatedPaths(["t1"])
+  const root = setupCandidate(paths, "project-global", "v1")
+
+  const fake: RunOneTaskFn = async () => res({ reward: 1, turns: 3 })
+
+  await quiet(() => cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1 }, fake, fakeExec))
+  const rec = readScore(root, "v1").sessions[0]! as Record<string, unknown>
+  expect("capMemoryMb" in rec).toBe(false)
+  expect("capRaised" in rec).toBe(false)
+})
+
 // ── split-based mode + the held-out-never-recorded invariant ─────────────
 
 function writeSplitsFile(paths: BenchPaths, heldIn: string[], heldOut: string[]): void {

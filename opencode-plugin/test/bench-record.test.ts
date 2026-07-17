@@ -356,6 +356,27 @@ test("sessionRecord: cpuSeconds/peakRssMb stamped only when provided (conditiona
   expect("peakRssMb" in bare).toBe(false)
 })
 
+test("sessionRecord: capMemoryMb/capRaised stamped only when provided (per-session cap provenance)", () => {
+  // trailing cap-provenance params after cpuSeconds/peakRssMb
+  const withCap = sessionRecord("t", "s", true, 1, {}, "m", "", {}, 12.3, false, 900, 42.5, 256, 6144, true) as Record<
+    string,
+    unknown
+  >
+  expect(withCap.capMemoryMb).toBe(6144)
+  expect(withCap.capRaised).toBe(true)
+  // capRaised:false is still stamped (present-but-false), distinct from omitted
+  const notRaised = sessionRecord("t", "s", true, 1, {}, "m", "", {}, 12.3, false, 900, 42.5, 256, 2048, false) as Record<
+    string,
+    unknown
+  >
+  expect(notRaised.capMemoryMb).toBe(2048)
+  expect(notRaised.capRaised).toBe(false)
+  // omitted → keys absent (unenforced runs never stamp them)
+  const bare = sessionRecord("t", "s", true, 1, {}, "m", "")
+  expect("capMemoryMb" in bare).toBe(false)
+  expect("capRaised" in bare).toBe(false)
+})
+
 // ── recordToStores ───────────────────────────────────────────────────────
 // Only ever exercises project-scoped layers under a fresh tmp metaRoot — no
 // account-global/account-role writes anywhere in this file (see file header).
@@ -410,6 +431,50 @@ test("recordToStores: persisted record.platform equals the driver id carried in 
 
   const score = readScore(root, "v0")
   expect(score.sessions[0]!.platform).toBe("claude-code")
+})
+
+test("recordToStores: persists capMemoryMb/capRaised onto the session record when provided (and omits them when not)", () => {
+  const metaRoot = tmpDir()
+  const root = projectGlobalRoot(metaRoot)
+  createCandidate(root, "v0", "sys")
+  const { writeActive } = require("../src/harness-store.ts") as typeof import("../src/harness-store.ts")
+  writeActive(root, "v0", "sys")
+
+  // trailing capMemoryMb/capRaised after cpuSeconds/peakRssMb
+  recordToStores(
+    "t",
+    "sess-cap",
+    true,
+    2,
+    {},
+    "m",
+    "",
+    "project",
+    metaRoot,
+    false,
+    "",
+    {},
+    {},
+    [],
+    false,
+    false,
+    false,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    6144,
+    true,
+  )
+  const withCap = readScore(root, "v0").sessions[0]! as Record<string, unknown>
+  expect(withCap.capMemoryMb).toBe(6144)
+  expect(withCap.capRaised).toBe(true)
+
+  // a second record with the params omitted → keys absent on that record
+  recordToStores("t", "sess-nocap", true, 2, {}, "m", "", "project", metaRoot, false)
+  const bare = readScore(root, "v0").sessions.find((s) => s.sessionID === "sess-nocap")! as Record<string, unknown>
+  expect("capMemoryMb" in bare).toBe(false)
+  expect("capRaised" in bare).toBe(false)
 })
 
 test("recordToStores: pinned layer records into the PINNED candidate, not the active one", () => {

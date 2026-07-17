@@ -650,6 +650,128 @@ test("cmdRun --enforce-resources ON, no --min-cpus/--min-mem-mb: byte-identical 
   expect(seenResources).toEqual({ cpus: 2, memoryMb: 4096 })
 })
 
+// ── B5: serial cap raise (raiseCapMeasured) + per-session cap provenance ─────
+
+test("cmdRun --enforce-resources serial: seeded n≥3 profile raises the container memory cap (raiseCapMeasured)", async () => {
+  const paths = isolatedPaths(["a"])
+  writeResourceTomls(paths.tbRoot, ["a"], 1, 2048) // declared prior 1c/2048MB
+  // Seed a trustworthy profile (n=3): peakRss 4096 → cap raised to ceil(4096*1.5)=6144.
+  for (let i = 0; i < 3; i++) updateResourceProfile(paths.metaRoot, "a", { cpuSeconds: 3, peakRssMb: 4096, wall: 1 })
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    if (seenResources === "unset") seenResources = resources
+    return result({ reward: 1 })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "none", enforceResources: true }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  // cpus never raised; memory lifted above declared by the measured profile.
+  expect(seenResources).toEqual({ cpus: 1, memoryMb: 6144 })
+})
+
+test("cmdRun --enforce-resources serial + --no-pack-measured: seeded profile ignored → declared cap", async () => {
+  const paths = isolatedPaths(["a"])
+  writeResourceTomls(paths.tbRoot, ["a"], 1, 2048)
+  for (let i = 0; i < 3; i++) updateResourceProfile(paths.metaRoot, "a", { cpuSeconds: 3, peakRssMb: 4096, wall: 1 })
+
+  let seenResources: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, _at, _vt, _staging, _driver, resources) => {
+    if (seenResources === "unset") seenResources = resources
+    return result({ reward: 1 })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "none", enforceResources: true, noPackMeasured: true }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(seenResources).toEqual({ cpus: 1, memoryMb: 2048 })
+})
+
+test("cmdRun --enforce-resources serial: session record carries capMemoryMb (raised) + capRaised=true", async () => {
+  const paths = isolatedPaths(["a"])
+  writeResourceTomls(paths.tbRoot, ["a"], 1, 2048)
+  const root = projectGlobalRoot(paths.metaRoot)
+  createCandidate(root, "v0", "sys")
+  writeActive(root, "v0", "sys")
+  for (let i = 0; i < 3; i++) updateResourceProfile(paths.metaRoot, "a", { cpuSeconds: 3, peakRssMb: 4096, wall: 1 })
+
+  const fake: RunOneTaskFn = async () => result({ reward: 1, sessionId: "s1", turns: 3 })
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "project", enforceResources: true }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  const rec = readScore(root, "v0").sessions[0]! as Record<string, unknown>
+  expect(rec.capMemoryMb).toBe(6144)
+  expect(rec.capRaised).toBe(true)
+})
+
+test("cmdRun without --enforce-resources: session record omits capMemoryMb/capRaised", async () => {
+  const paths = isolatedPaths(["a"])
+  const root = projectGlobalRoot(paths.metaRoot)
+  createCandidate(root, "v0", "sys")
+  writeActive(root, "v0", "sys")
+
+  const fake: RunOneTaskFn = async () => result({ reward: 1, sessionId: "s1", turns: 3 })
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "project" }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  const rec = readScore(root, "v0").sessions[0]! as Record<string, unknown>
+  expect("capMemoryMb" in rec).toBe(false)
+  expect("capRaised" in rec).toBe(false)
+})
+
+test("cmdRun --enforce-resources serial: after an OOM-escalated retry the recorded capMemoryMb is the ESCALATED value", async () => {
+  const paths = isolatedPaths(["a"])
+  writeResourceTomls(paths.tbRoot, ["a"], 1, 2048) // declared 2048, NO profile → initial cap not raised
+  const root = projectGlobalRoot(paths.metaRoot)
+  createCandidate(root, "v0", "sys")
+  writeActive(root, "v0", "sys")
+
+  let call = 0
+  const fake: RunOneTaskFn = async () => {
+    call++
+    return call === 1
+      ? result({ reward: 0, oomKilled: true, turns: 3, sessionId: "killed" })
+      : result({ reward: 1, oomKilled: false, turns: 3, sessionId: "retry" })
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "project", enforceResources: true }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  const recs = readScore(root, "v0").sessions
+  expect(recs.map((s) => s.sessionID)).toEqual(["retry"]) // only the retry landed
+  const rec = recs[0]! as Record<string, unknown>
+  expect(rec.capMemoryMb).toBe(4096) // 2048 escalated ×2 for the retry container
+  expect(rec.capRaised).toBe(false) // the INITIAL cap was declared, not measured-raised
+})
+
 test("cmdRun --enforce-resources ON: a gpus>0 task dies before spending any container lifecycle", async () => {
   const dir = tmpDir()
   const tbRoot = path.join(dir, "tb-root")

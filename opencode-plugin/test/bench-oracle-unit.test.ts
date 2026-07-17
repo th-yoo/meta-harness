@@ -16,7 +16,7 @@ import { cmdOracle, runOneOracleTask, type RunOneOracleTask } from "../src/bench
 import { main } from "../src/bench/cli.ts"
 import { BenchError } from "../src/bench/util.ts"
 import type { ExecResult } from "../src/bench/exec.ts"
-import { hostClass, readResourceProfile, updateResourceProfile } from "../src/bench/resource-profile.ts"
+import { hostClass, readResourceProfile, updateResourceProfile, raiseCapMeasured } from "../src/bench/resource-profile.ts"
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "mh-bench-oracle-unit-"))
@@ -315,6 +315,36 @@ test("enforcedResources: gpus > 0 throws BenchError naming the task and the gpu 
   const paths = fakeBenchPaths(dir, tbRoot)
   expect(() => enforcedResources(paths, "gpu-task")).toThrow(BenchError)
   expect(() => enforcedResources(paths, "gpu-task")).toThrow(/gpu-task.*gpus=1/)
+})
+
+// B5: the oracle cap path (cmd-oracle.ts's default closure →
+// `enforcedResources(p, t)`) is DELIBERATELY out of scope for the serial
+// measured cap-raise — oracle = reference-solution calibration, not
+// loop-scored sessions. Prove it stays byte-identical under a hot profile
+// that WOULD raise the cap if raiseCapMeasured were applied (as it is on the
+// run/ab serial+parallel paths).
+test("oracle cap path is byte-identical under a seeded hot profile (uses enforcedResources, never raiseCapMeasured)", () => {
+  const dir = tmpDir()
+  const termBenchDir = path.join(dir, "tb")
+  fs.mkdirSync(termBenchDir, { recursive: true })
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "a"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "a", "task.toml"), "[environment]\ncpus = 1\nmemory_mb = 2048\n")
+  const paths = fakeBenchPaths(termBenchDir, tbRoot) // metaRoot = dir, unique per test
+
+  // Seed a trustworthy profile (n=3): peakRss 4096 → the raise path WOULD lift
+  // memory to ceil(4096*1.5)=6144.
+  for (let i = 0; i < 3; i++) updateResourceProfile(paths.metaRoot, "a", { cpuSeconds: 3, peakRssMb: 4096, wall: 1 })
+
+  // What the oracle's default closure passes to the container: the DECLARED cap,
+  // unaffected by the profile.
+  const oracleCap = enforcedResources(paths, "a")
+  expect(oracleCap).toEqual({ cpus: 1, memoryMb: 2048 })
+
+  // And the profile really is hot enough to raise — so the oracle's byte-identity
+  // is a deliberate choice of enforcedResources, not an inert no-profile no-op.
+  const raised = raiseCapMeasured(oracleCap, readResourceProfile(paths.metaRoot, "a"))
+  expect(raised.memoryMb).toBe(6144)
 })
 
 // ── enforcedResources: per-task resource FLOOR (--min-cpus/--min-mem-mb) ──

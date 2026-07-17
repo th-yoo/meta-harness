@@ -29,7 +29,7 @@ import { runTaskOnce, inContainerAgentVersion, runWithOomRetry, type RunOneTaskF
 import { getDriver } from "./drivers/index.ts"
 import { assembleAgentsMd, envBlock, sessionRecord } from "./record.ts"
 import { layerStoreRoots, type LayerName } from "./record.ts"
-import { updateResourceProfile } from "./resource-profile.ts"
+import { updateResourceProfile, readResourceProfile, raiseCapMeasured, PACK_MIN_SAMPLES } from "./resource-profile.ts"
 import { selectTasks, taskTimeouts, enforcedResources, packingFootprints } from "./tasks.ts"
 import { schedule, DEFAULT_BUDGET, AsyncMutex, type Budget, type ScheduledItem } from "./scheduler.ts"
 import {
@@ -456,6 +456,10 @@ export async function cmdAb(
     withLock: <T>(fn: () => T | Promise<T>) => Promise<T>,
     resources: { cpus: number; memoryMb: number } | undefined,
     prefix: string,
+    // B5 per-session cap provenance: whether the INITIAL `resources` cap was
+    // measured-raised above declared/floored (raiseCapMeasured). Only stamped
+    // on the recorded arm-B session under --enforce-resources.
+    capRaised: boolean,
   ): Promise<AbTaskResult> {
     log(`\n${prefix}=== ab ${task} [${phase}]: ${candidate} vs active ${baseline} ===`)
     const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout)
@@ -552,6 +556,14 @@ export async function cmdAb(
             agentTimeout,
             resB.cpuSeconds,
             resB.peakRssMb,
+            // Per-session cap provenance (B5): the FINAL applied cap (post
+            // OOM-escalation carry-forward via `resources`) + whether the
+            // initial cap was measured-raised. Only meaningful under
+            // --enforce-resources — undefined otherwise (in --parallel a
+            // footprint cap is applied even without it, but the provenance is
+            // the enforce-mode envelope).
+            enforceRes ? resources?.memoryMb : undefined,
+            enforceRes ? capRaised : undefined,
           )
           const score = recordSession(layerRoot, candidate, rec)
           if (resB.events.length > 0 && (resB.reward !== 1 || args.saveAllTraj)) {
@@ -589,10 +601,22 @@ export async function cmdAb(
           log(`\n=== ab ${task} [${phase}] (skipped — already done) ===`)
           continue
         }
-        const resources = enforceRes
-          ? enforcedResources(paths, task, { minCpus: args.minCpus, minMemoryMb: args.minMemMb })
-          : undefined
-        const tr = await runTaskPairs(task, phase, recordArmB, noopLock, resources, "")
+        // B5: the SERIAL path applies the same raise-only measured memory lift
+        // (raiseCapMeasured) the parallel path gets in packingFootprints —
+        // without it a task whose true demand exceeds its declared cap OOM-kills
+        // every serial run. --no-pack-measured disables the raise (escape hatch).
+        let resources: { cpus: number; memoryMb: number } | undefined
+        let capRaised = false
+        if (enforceRes) {
+          const declared = enforcedResources(paths, task, { minCpus: args.minCpus, minMemoryMb: args.minMemMb })
+          if (args.noPackMeasured) {
+            resources = declared
+          } else {
+            resources = raiseCapMeasured(declared, readResourceProfile(paths.metaRoot, task))
+            capRaised = resources.memoryMb > declared.memoryMb
+          }
+        }
+        const tr = await runTaskPairs(task, phase, recordArmB, noopLock, resources, "", capRaised)
         taskResults[task] = tr
         writeJsonAtomic(partialPath, verdictDict("in_progress"))
         if (phase === "held-in" && earlyStop) {
@@ -638,7 +662,18 @@ export async function cmdAb(
     // Held-in completions of THIS run land in the profile store (runTaskPairs'
     // updateResourceProfile) BEFORE the held-out phase builds its footprints, so
     // held-out packs against fresher measurements — intended.
-    const footprints = packingFootprints(paths, pending, { minCpus: args.minCpus, minMemoryMb: args.minMemMb }, !args.noPackMeasured)
+    const floors = { minCpus: args.minCpus, minMemoryMb: args.minMemMb }
+    const footprints = packingFootprints(paths, pending, floors, !args.noPackMeasured)
+    // Whether packingFootprints' raiseCapMeasured lifted a task's cap above
+    // declared/floored (per-session cap provenance, B5). Gated on a trustworthy
+    // profile so declared is only re-derived (via enforcedResources) when a
+    // raise could have fired — declared tasks never re-log.
+    const capRaisedFor = (task: string, cap: { cpus: number; memoryMb: number }): boolean => {
+      if (args.noPackMeasured) return false
+      const profile = readResourceProfile(paths.metaRoot, task)
+      if (profile === null || profile.n < PACK_MIN_SAMPLES) return false
+      return cap.memoryMb > enforcedResources(paths, task, floors).memoryMb
+    }
 
     let consumedIdx = 0
     let stopFired = false
@@ -685,13 +720,15 @@ export async function cmdAb(
       items,
       budget,
       async (it) => {
+        const cap = footprints.get(it.key)!.cap
         const tr = await runTaskPairs(
           it.key,
           phase,
           recordArmB,
           (fn) => mutex.withLock(fn),
-          footprints.get(it.key)!.cap,
+          cap,
           `[${it.key}] `,
+          capRaisedFor(it.key, cap),
         )
         await mutex.withLock(() => {
           taskResults[it.key] = tr
