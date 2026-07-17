@@ -9,6 +9,14 @@ import {
   readResourceProfile,
   updateResourceProfile,
   PROFILE_WINDOW,
+  packingWeight,
+  raiseCapMeasured,
+  PACK_MIN_SAMPLES,
+  PACK_MIN_CPUS,
+  PACK_MIN_MEM_MB,
+  PACK_MEM_HEADROOM,
+  CAP_MEM_HEADROOM,
+  type TaskProfile,
 } from "../src/bench/resource-profile.ts"
 
 let meta: string
@@ -85,4 +93,77 @@ test("updateResourceProfile: wall=0 contributes 0 to avgCpu (no divide-by-zero)"
   const p = updateResourceProfile(meta, "t", { cpuSeconds: 50, peakRssMb: 10, wall: 0 }, HC)
   expect(p.avgCpu).toBe(0)
   expect(Number.isFinite(p.avgCpu)).toBe(true)
+})
+
+// --- packingWeight / raiseCapMeasured -------------------------------------
+
+/** Pure helpers only read n/avgCpu/peakRssMb — samples content is irrelevant. */
+function mkProfile(n: number, avgCpu: number, peakRssMb: number): TaskProfile {
+  return { samples: [], avgCpu, peakRssMb, n }
+}
+
+test("packingWeight: null profile → prior verbatim, measured:false", () => {
+  const prior = { cpus: 2, memoryMb: 1024 }
+  expect(packingWeight(prior, null)).toEqual({ ...prior, measured: false })
+})
+
+test("packingWeight: n below PACK_MIN_SAMPLES (n=1, n=2) → prior verbatim, measured:false", () => {
+  const prior = { cpus: 2, memoryMb: 1024 }
+  expect(packingWeight(prior, mkProfile(1, 1, 512))).toEqual({ ...prior, measured: false })
+  expect(packingWeight(prior, mkProfile(2, 1, 512))).toEqual({ ...prior, measured: false })
+  expect(PACK_MIN_SAMPLES).toBe(3)
+})
+
+test("packingWeight: n>=3 → measured, cpus from avgCpu, mem = ceil(peak*PACK_MEM_HEADROOM)", () => {
+  const prior = { cpus: 2, memoryMb: 1024 }
+  const w = packingWeight(prior, mkProfile(3, 1.5, 700))
+  expect(w).toEqual({ cpus: 1.5, memoryMb: Math.ceil(700 * PACK_MEM_HEADROOM), measured: true })
+})
+
+test("packingWeight: floors — avgCpu 0.05 -> PACK_MIN_CPUS, peakRssMb 100 -> max(120,256)=256", () => {
+  const prior = { cpus: 2, memoryMb: 1024 }
+  const w = packingWeight(prior, mkProfile(3, 0.05, 100))
+  expect(w.cpus).toBe(PACK_MIN_CPUS)
+  expect(w.memoryMb).toBe(PACK_MIN_MEM_MB)
+  expect(w.measured).toBe(true)
+})
+
+test("packingWeight: avgCpu <= 0 -> prior verbatim, measured:false", () => {
+  const prior = { cpus: 2, memoryMb: 1024 }
+  expect(packingWeight(prior, mkProfile(5, 0, 500))).toEqual({ ...prior, measured: false })
+  expect(packingWeight(prior, mkProfile(5, -1, 500))).toEqual({ ...prior, measured: false })
+})
+
+test("packingWeight: measured hotter than prior is NOT clamped (avgCpu 6 vs prior cpus 2 -> 6)", () => {
+  const prior = { cpus: 2, memoryMb: 1024 }
+  const w = packingWeight(prior, mkProfile(3, 6, 100))
+  expect(w.cpus).toBe(6)
+  expect(w.measured).toBe(true)
+})
+
+test("raiseCapMeasured: peak above cap -> raised to ceil(peak*CAP_MEM_HEADROOM)", () => {
+  const cap = { cpus: 4, memoryMb: 1000 }
+  const c = raiseCapMeasured(cap, mkProfile(3, 1, 800)) // 800*1.5 = 1200 > 1000
+  expect(c.memoryMb).toBe(Math.ceil(800 * CAP_MEM_HEADROOM))
+  expect(c.cpus).toBe(4)
+})
+
+test("raiseCapMeasured: peak*headroom below cap -> cap unchanged", () => {
+  const cap = { cpus: 4, memoryMb: 5000 }
+  const c = raiseCapMeasured(cap, mkProfile(3, 1, 800)) // 800*1.5 = 1200 < 5000
+  expect(c.memoryMb).toBe(5000)
+  expect(c.cpus).toBe(4)
+})
+
+test("raiseCapMeasured: null profile or n<PACK_MIN_SAMPLES -> cap verbatim", () => {
+  const cap = { cpus: 4, memoryMb: 1000 }
+  expect(raiseCapMeasured(cap, null)).toEqual(cap)
+  expect(raiseCapMeasured(cap, mkProfile(1, 1, 9999))).toEqual(cap)
+  expect(raiseCapMeasured(cap, mkProfile(2, 1, 9999))).toEqual(cap)
+})
+
+test("raiseCapMeasured: cpus never touched in any case", () => {
+  const cap = { cpus: 4, memoryMb: 1000 }
+  expect(raiseCapMeasured(cap, mkProfile(3, 1, 9999)).cpus).toBe(4)
+  expect(raiseCapMeasured(cap, null).cpus).toBe(4)
 })

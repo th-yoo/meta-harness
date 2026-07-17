@@ -18,10 +18,12 @@
  * on average over its wall-clock can pack 16-wide even if one verify phase
  * briefly spikes to 4.
  *
- * This module only CAPTURES + PERSISTS the profile (and exposes a reader). It
- * does NOT yet change how the scheduler packs — that flip (declared int →
- * measured avgCpu, with the declared value kept only as a cold-start prior) is a
- * deliberate follow-up so this increment is behavior-neutral.
+ * This module CAPTURES + PERSISTS the profile (and exposes a reader), and also
+ * exposes the pure decision helpers (`packingWeight`, `raiseCapMeasured`) the
+ * scheduler consumes to flip from the declared int to a measured profile once
+ * one exists. The declared task.toml value remains the cold-start prior (used
+ * until a profile is trustworthy) and the base of the container memory cap,
+ * which these helpers only ever raise, never shrink.
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs"
 import { join, dirname } from "node:path"
@@ -139,4 +141,83 @@ export function updateResourceProfile(
   mkdirSync(dirname(p), { recursive: true })
   writeFileSync(p, JSON.stringify(all, null, 2) + "\n")
   return prof
+}
+
+// --- packing / cap decision helpers ----------------------------------------
+//
+// Pure functions the scheduler consumes to go from "declared task.toml prior"
+// to "measured profile" once one exists and is trustworthy. Kept in this file
+// (rather than the scheduler) because they're the direct consumers of
+// `TaskProfile`'s shape and thresholds.
+
+/** A profile is used for packing/cap decisions only once it has this many
+ * folded samples — matches `TaskProfile.n`'s own doc: "n=1 is a guess, n≥3 is
+ * trustworthy". Below this, callers fall back to the declared prior. */
+export const PACK_MIN_SAMPLES = 3
+
+/** Floor on the measured CPU packing weight. `avgCpu` is a whole-run median
+ * and underestimates burst phases — simultaneous verifier bursts on an
+ * overpacked host risk contention timeouts, which recordTimeouts would record
+ * as genuine fails. 0.5 halves worst-case overpack vs a 0.25 floor while still
+ * packing far wider than the typical declared int. */
+export const PACK_MIN_CPUS = 0.5
+
+/** Floor on the measured memory packing weight, in MiB. */
+export const PACK_MIN_MEM_MB = 256
+
+/** Headroom multiplier applied to `peakRssMb` for the packing weight.
+ * `peakRssMb` is already a max-over-window statistic; ×1.2 covers
+ * window-to-window variance on top of that. */
+export const PACK_MEM_HEADROOM = 1.2
+
+/** Headroom multiplier applied to `peakRssMb` for the raise-only container
+ * memory cap lift (see `raiseCapMeasured`). */
+export const CAP_MEM_HEADROOM = 1.5
+
+/** What the scheduler packs a task as: measured when trustworthy, else the
+ * declared task.toml prior verbatim. */
+export interface PackWeight {
+  cpus: number
+  memoryMb: number
+  /** false when this is the declared prior (no/immature/zero profile). */
+  measured: boolean
+}
+
+/**
+ * The packing weight the parallel scheduler should use for one task: the
+ * measured profile once it's trustworthy (`n >= PACK_MIN_SAMPLES` and
+ * `avgCpu > 0`), else the declared prior verbatim.
+ *
+ * Deliberately NOT clamped at the declared prior — a task measured hotter
+ * than declared packs bigger (an honest signal); the scheduler's existing
+ * exceedsTotalBudget solo-run path handles items that don't fit even alone.
+ */
+export function packingWeight(
+  prior: { cpus: number; memoryMb: number },
+  profile: TaskProfile | null,
+): PackWeight {
+  const measured = profile !== null && profile.n >= PACK_MIN_SAMPLES && profile.avgCpu > 0
+  if (!measured) return { ...prior, measured: false }
+  return {
+    cpus: Math.max(profile!.avgCpu, PACK_MIN_CPUS),
+    memoryMb: Math.max(Math.ceil(profile!.peakRssMb * PACK_MEM_HEADROOM), PACK_MIN_MEM_MB),
+    measured: true,
+  }
+}
+
+/**
+ * Raise a container's memory cap when a measured profile proves the declared
+ * cap too small. Without this, a task whose true memory demand exceeds its
+ * declared cap OOM-kills every run forever; this closes that loop.
+ *
+ * Raise-only, memory only: `cpus` never changes, and `memoryMb` can only grow
+ * above whatever was passed in (declared/floored) — never shrink. No/immature
+ * profile → cap returned verbatim.
+ */
+export function raiseCapMeasured(
+  cap: { cpus: number; memoryMb: number },
+  profile: TaskProfile | null,
+): { cpus: number; memoryMb: number } {
+  if (profile === null || profile.n < PACK_MIN_SAMPLES) return cap
+  return { cpus: cap.cpus, memoryMb: Math.max(cap.memoryMb, Math.ceil(profile.peakRssMb * CAP_MEM_HEADROOM)) }
 }
