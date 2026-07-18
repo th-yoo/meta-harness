@@ -1,6 +1,6 @@
 # Load-aware scheduler increment #3 — host-pressure launch gate (Signal-A-only)
 
-Status: SPEC (not started). Scope TRIMMED 2026-07-18 (user decision: solo-dev lightweight — see
+Status: SHIPPED 2026-07-18 (feat/loadaware-3 — sensor + transient pauseGate + --host-pressure observe|on, dark by default; live-smoked: real-spike pause/resume cycle PASS). Scope TRIMMED 2026-07-18 (user decision: solo-dev lightweight — see
 "Explicitly deferred" for what was cut and why). Prereqs shipped: #1 capture+memorize
 (`e113f43`), #2 measured packing + cap raise + OOM retry (`dca27be`), `--min-agent-timeout`
 floor (`248fe8f`+`d22ecb0`).

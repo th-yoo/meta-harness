@@ -49,13 +49,19 @@ default-ON + raise-only cap lift + OOM-escalation retry + cap provenance (full d
   "(b) recipe, MacBook-adapted" steps below. Needs fresh oauth (`claude`, login, ctrl-D).
 - **(d) Axis-2** — seed/propose vendor content so routing does something; multi-model panel needs
   a 2nd vendor model.
-- **load-aware #3 — SPEC WRITTEN + TRIMMED to Signal-A-only** (user decision: solo-dev
-  lightweight): host-pressure launch gate (loadavg/core + mem pressure, hysteresis,
-  `--host-pressure observe|on`, fail-safe) via the existing `canLaunch` seam — ~150 lines, NOT
-  a budget-identity change. Wall-clock lag + live admission + fleet-style machinery explicitly
-  DEFERRED with rationale in the spec. Prior-art researched (Borg/Autopilot/Trimaran/PSI —
-  refs in spec). Motivated by the live loadavg-149 episode.
-  `docs/superpowers/specs/2026-07-18-load-aware-3-host-pressure.md`
+- **load-aware #3 — SHIPPED (2026-07-18)**: `--host-pressure observe|on` (default OFF =
+  byte-identical). Sensor `bench/host-pressure.ts` (per-signal hysteresis: load/core 2.0/1.2 +
+  darwin memory_pressure / linux PSI w/ MemAvailable fallback, 20s cache, tick=sample,
+  fail-safe never-throws); TRANSIENT `pauseGate`+`pausePollMs` on `schedule()` (checked AFTER
+  the terminal oauth gate; timer only when inFlight=0, keep-alive — NO unref, that was a
+  final-review BLOCKER with subprocess regression test; timer-clear at both settle points);
+  `buildPressureGate` (one sensor/command, shared across ab phases). Suite 1367/0.
+  **LIVE-SMOKED on this Mac**: real 34-spinner spike → `[pressure] paused launches (load/core
+  8.9…)` → 0 leaked launches → decay+dwell 190s → `[pressure] resumed` → all tasks ran, exit 0.
+  Observe-mode caveat CONFIRMED live: with sparse scans (2 long tasks) a mid-run spike is
+  invisible — sampling rides scan events by design. NOT a budget-identity change. Follow-ups
+  deferred: sensor stale-cache-after-error coherence nit; threshold calibration via observe
+  mode on real sweeps. Spec: `docs/superpowers/specs/2026-07-18-load-aware-3-host-pressure.md`
 - Post-merge cleanup candidate: fold `capRaised` into `TaskFootprint` (dedupes the two
   `capRaisedFor` closures in cmd-run/cmd-ab).
 
