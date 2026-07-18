@@ -42,7 +42,16 @@ import {
   type SplitMeta,
   type PhaseTaggedTaskResults,
 } from "./splits.ts"
-import { pairedRunStats, mcnemarExactOneSided, bootstrapTaskCi, futilityStop, type DecisionConfig, type PairStats } from "./ab-stats.ts"
+import {
+  pairedRunStats,
+  mcnemarExactOneSided,
+  bootstrapTaskCi,
+  futilityStop,
+  pairedSpeedStats,
+  type DecisionConfig,
+  type PairStats,
+  type SpeedStats,
+} from "./ab-stats.ts"
 import { die, log, pyFixed, pySigned, writeJsonAtomic } from "./util.ts"
 import { DEFAULT_BENCH_MODEL, useKeyOnlyForParallel, type BenchPaths } from "./paths.ts"
 import {
@@ -56,6 +65,7 @@ import {
   appendMetaMetric,
   readMhConfig,
   type AbSetStats,
+  type AbSpeedStats,
 } from "../harness-store.ts"
 
 interface AbTaskResult {
@@ -64,6 +74,13 @@ interface AbTaskResult {
   phase: "held-in" | "held-out"
   sentinel: boolean
   error?: string
+  /** W1a (time-to-resolve): per-run agent-phase elapsed seconds, index-
+   * aligned with candidate/active (parallel arrays, pushed alongside the
+   * reward arrays in runTaskPairs). Absent = unknown — a pre-W1a --resume
+   * partial's entries simply lack these keys and drop out of
+   * pairedSpeedStats, never crashing or backfilling. */
+  candidateElapsed?: number[]
+  activeElapsed?: number[]
   /** --parallel canonical-order early-stop tag (spec D5): set on tasks that
    * completed AFTER the futility stop rule fired in canonical order — i.e.
    * tasks the equivalent SERIAL run would never have launched. Excluded from
@@ -418,6 +435,21 @@ export async function cmdAb(
     }
   }
 
+  // W1a (time-to-resolve, report-only): mirrors statsBlock above but for
+  // pairedSpeedStats' SpeedStats shape.
+  function speedStatsBlock(ss: SpeedStats): AbSpeedStats {
+    return {
+      nTasks: ss.nTasks,
+      nPairs: ss.nPairs,
+      medianCandidate: round4(ss.medianCandidate),
+      medianActive: round4(ss.medianActive),
+      medianRatio: round4(ss.medianRatio),
+      fasterB: ss.fasterB,
+      slowerC: ss.slowerC,
+      signTestP: round4(ss.signTestP),
+    }
+  }
+
   function verdictDict(status: string): Record<string, unknown> {
     // ONE shared postStop-aware view (spec D5): every derived field — the
     // paired-stats pipeline AND nTasks/candidateRate/activeRate below — draws
@@ -436,6 +468,15 @@ export async function cmdAb(
       sentinelOutTasks,
     )
     const winner = decision === "accept" ? "candidate" : decision === "reject" ? "active" : "tie"
+    // W1a (time-to-resolve, report-only): drawn from the SAME postStop/error-
+    // excluded `counted` view as hi/ho above, so a parallel early-stop
+    // verdict's speed block is byte-identical to the serial one too. held-out
+    // is fold-only (sentinel=false), matching `ho`'s own filter.
+    const speedHi = pairedSpeedStats(filterTaskResults(counted as PhaseTaggedTaskResults, "held-in"))
+    const speedHo =
+      foldOutTasks.length > 0
+        ? pairedSpeedStats(filterTaskResults(counted as PhaseTaggedTaskResults, "held-out", false))
+        : null
     const included = includedEntries
     const nAll = included.length
     const candPass = included.filter(([, tr]) => tr.candidate.length > 0 && Math.max(...tr.candidate) === 1).length
@@ -475,6 +516,9 @@ export async function cmdAb(
       heldIn: statsBlock(hi),
       heldOut: ho ? statsBlock(ho) : null,
       sentinels: hoSentinel ? statsBlock(hoSentinel) : null,
+      // W1a (time-to-resolve, report-only in this phase — a later phase wires
+      // it as a decision tiebreaker on both-pass pairs only).
+      speed: { heldIn: speedHi ? speedStatsBlock(speedHi) : null, heldOut: speedHo ? speedStatsBlock(speedHo) : null },
       earlyStopped,
       split: splitMeta,
       env: envB,
@@ -511,7 +555,14 @@ export async function cmdAb(
   ): Promise<AbTaskResult> {
     log(`\n${prefix}=== ab ${task} [${phase}]: ${candidate} vs active ${baseline} ===`)
     const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout, minAgentTimeout)
-    const tr: AbTaskResult = { candidate: [], active: [], phase, sentinel: sentinelSet.has(task) }
+    const tr: AbTaskResult = {
+      candidate: [],
+      active: [],
+      candidateElapsed: [],
+      activeElapsed: [],
+      phase,
+      sentinel: sentinelSet.has(task),
+    }
     // OOM-escalation ceiling (same derivation as cmd-run): under --parallel each
     // task has a per-task cap packed against the mem budget; serial has none.
     const oomCeilingMb = parallel ? (args.memBudget ?? DEFAULT_BUDGET.memoryMb) : undefined
@@ -544,6 +595,12 @@ export async function cmdAb(
       }
       tr.active.push(resA.reward)
       tr.candidate.push(resB.reward)
+      // W1a: agentElapsedSec-preferred (agent phase only — candidate-
+      // independent infra noise from the full lifecycle `elapsed` would
+      // dilute the speed signal); falls back to `elapsed` only when the
+      // agent phase never returned one (e.g. an auth-fail fast-return).
+      tr.activeElapsed!.push(resA.agentElapsedSec ?? resA.elapsed)
+      tr.candidateElapsed!.push(resB.agentElapsedSec ?? resB.elapsed)
 
       // Memorize BOTH arms' measured cgroup footprints (resource-profile.ts).
       // A task's resource load is a task×host property, ~prompt-independent, so
@@ -802,6 +859,7 @@ export async function cmdAb(
   const finalHeldIn = final["heldIn"] as AbSetStats
   const finalHeldOut = final["heldOut"] as AbSetStats | null
   const finalEnv = final["env"] as { resourceEnforcement?: boolean } | undefined
+  const finalSpeed = final["speed"] as { heldIn: AbSpeedStats | null; heldOut: AbSpeedStats | null } | undefined
   appendMetaMetric(join(paths.metaRoot, ".meta-harness"), {
     event: "ab",
     layer,
@@ -824,6 +882,12 @@ export async function cmdAb(
     minAgentTimeout: final["minAgentTimeout"],
     timeoutRecording: final["timeoutRecording"],
     env: { resourceEnforcement: finalEnv?.resourceEnforcement },
+    // W1a (time-to-resolve, report-only): held-in speed, mirroring
+    // heldInDelta/heldInP/nPairs above. null/0 when there were no
+    // qualifying (both-pass, elapsed-present) run-pairs.
+    speedMedianRatio: finalSpeed?.heldIn ? finalSpeed.heldIn.medianRatio : null,
+    speedP: finalSpeed?.heldIn ? finalSpeed.heldIn.signTestP : null,
+    speedNPairs: finalSpeed?.heldIn ? finalSpeed.heldIn.nPairs : 0,
   })
   rmSync(partialPath, { force: true })
 
@@ -861,6 +925,13 @@ export async function cmdAb(
   const sentBlock = final["sentinels"] as AbSetStats | null
   if (sentBlock) {
     console.log(`  sentinels: delta=${pySigned(sentBlock.delta, 3)} (n=${sentBlock.nPairs} pairs)`)
+  }
+  // W1a (time-to-resolve, report-only): one summary line, held-in only.
+  if (finalSpeed?.heldIn) {
+    console.log(
+      `  speed   : medianRatio=${pyFixed(finalSpeed.heldIn.medianRatio, 3)} (candidate/active) ` +
+        `signP=${pyFixed(finalSpeed.heldIn.signTestP, 3)} (n=${finalSpeed.heldIn.nPairs} pairs)`,
+    )
   }
   for (const r of final["reasons"] as string[]) {
     console.log(`  · ${r}`)

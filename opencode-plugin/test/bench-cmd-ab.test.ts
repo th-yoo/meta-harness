@@ -18,6 +18,7 @@ import { BenchError } from "../src/bench/util.ts"
 import { readResourceProfile, hostClass, updateResourceProfile } from "../src/bench/resource-profile.ts"
 import * as schedulerReal from "../src/bench/scheduler.ts"
 import { PRESSURE_POLL_SEC } from "../src/bench/host-pressure.ts"
+import { mcnemarExactOneSided } from "../src/bench/ab-stats.ts"
 
 // Snapshot the REAL scheduler.ts exports at module-eval time (before any
 // mock.module call below) — same pattern as bench-cmd-run.test.ts's own
@@ -1538,4 +1539,194 @@ test("ab --parallel: args.pressureGate + PRESSURE_POLL_SEC*1000 reach EVERY sche
   expect(capturedPauseGates.length).toBeGreaterThanOrEqual(1)
   for (const g of capturedPauseGates) expect(g).toBe(gate)
   for (const ms of capturedPausePollMs) expect(ms).toBe(PRESSURE_POLL_SEC * 1000)
+})
+
+// ── W1a: time-to-resolve — verdict speed block, agentElapsedSec preference,
+// postStop exclusion, and old-shape --resume compatibility ─────────────────
+
+test("cmdAb: verdict speed block reports paired agent-phase elapsed stats over held-in AND held-out", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeSplitsFile(paths, ["t1", "t2"], ["h1"])
+  const root = setupCandidate(paths, "project-global", "v1")
+
+  // t1: candidate faster (10 < 20). t2: candidate slower (30 > 10). h1 (held-
+  // out): a tie (5 == 5). Both arms always pass, so every run-pair qualifies.
+  const elapsedByTaskArm: Record<string, { candidate: number; active: number }> = {
+    t1: { candidate: 10, active: 20 },
+    t2: { candidate: 30, active: 10 },
+    h1: { candidate: 5, active: 5 },
+  }
+  const fake: RunOneTaskFn = async (_p, task, _m, _v, harnessMd) => {
+    const isCandidateArm = harnessMd.includes("candidate sys")
+    const e = elapsedByTaskArm[task]!
+    return res({ reward: 1, agentElapsedSec: isCandidateArm ? e.candidate : e.active })
+  }
+
+  await quiet(() => cmdAb(paths, { layer: "project-global", candidate: "v1", k: 1 }, fake, fakeExec))
+
+  const verdict = readAbVerdict(root, "v1")!
+  const speedHi = verdict.speed!.heldIn!
+  expect(speedHi.nPairs).toBe(2)
+  expect(speedHi.nTasks).toBe(2)
+  expect(speedHi.medianCandidate).toBe(20) // median([10,30])
+  expect(speedHi.medianActive).toBe(15) // median([20,10])
+  expect(speedHi.medianRatio).toBeCloseTo(20 / 15, 4)
+  expect(speedHi.fasterB).toBe(1) // t1: candidate faster
+  expect(speedHi.slowerC).toBe(1) // t2: active faster
+  expect(speedHi.signTestP).toBeCloseTo(mcnemarExactOneSided(1, 1), 9)
+
+  const speedHo = verdict.speed!.heldOut!
+  expect(speedHo.nPairs).toBe(1)
+  expect(speedHo.medianRatio).toBeCloseTo(1.0, 9) // tie
+})
+
+test("cmdAb: candidateElapsed/activeElapsed prefer agentElapsedSec over elapsed when both are present", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["t1"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+  const root = setupCandidate(paths, "project-global", "v1")
+
+  // Both arms return a large, easily-distinguished elapsed AND agentElapsedSec
+  // — the pushed value must be the agentElapsedSec one, never the full-
+  // lifecycle elapsed (which would dilute the signal with infra noise).
+  const fake: RunOneTaskFn = async () => res({ reward: 1, agentElapsedSec: 7, elapsed: 999 })
+
+  await quiet(() => cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1 }, fake, fakeExec))
+
+  const verdict = readAbVerdict(root, "v1")! as unknown as Record<string, unknown>
+  const tr = verdict["taskResults"] as Record<string, { candidateElapsed?: number[]; activeElapsed?: number[] }>
+  expect(tr["t1"]!.candidateElapsed).toEqual([7])
+  expect(tr["t1"]!.activeElapsed).toEqual([7])
+})
+
+test("cmdAb --parallel: postStop entries excluded from the speed block too (not just reward counts)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeSplitsFile(paths, HELD_IN_7, ["ho0"])
+  const root = setupCandidate(paths, "project-global", "v1")
+
+  // hi4/hi5/hi6 (the postStop-tagged tasks under this exact shuffle — see
+  // SHUFFLE_DELAYS/CAND_LOSES's header comment above) get BOTH arms passing
+  // with a real, distinguishable elapsed pair — they WOULD contribute a
+  // speed pair if counted. hi0-hi3 keep the candidate-always-loses reward
+  // pattern that drives the futility stop (already excluded from speed via
+  // the reward rule, independent of postStop).
+  const postStopTasks = new Set(["hi4", "hi5", "hi6"])
+  const outcome = (t: string, isCand: boolean): number => (postStopTasks.has(t) ? 1 : isCand ? 0 : 1)
+  const elapsedFor = (t: string, isCand: boolean): number | undefined =>
+    postStopTasks.has(t) ? (isCand ? 5 : 10) : undefined
+
+  const state = freshState()
+  const started = new Set<string>()
+  let inflight = 0
+  const fake: RunOneTaskFn = async (_p, task, _m, _v, harnessMd) => {
+    if (!started.has(task)) {
+      started.add(task)
+      state.launched.push(task)
+    }
+    state.seen.push(task)
+    inflight++
+    state.maxConcurrent = Math.max(state.maxConcurrent, inflight)
+    try {
+      const d = SHUFFLE_DELAYS[task] ?? 0
+      if (d > 0) await new Promise((r) => setTimeout(r, d))
+      const isCandidate = harnessMd.includes("candidate sys")
+      const overrides: Partial<RunTaskResult> = { reward: outcome(task, isCandidate), turns: 3 }
+      const e = elapsedFor(task, isCandidate)
+      if (e !== undefined) overrides.agentElapsedSec = e
+      return res(overrides)
+    } finally {
+      inflight--
+    }
+  }
+
+  await quiet(() =>
+    cmdAb(
+      paths,
+      {
+        layer: "project-global",
+        candidate: "v1",
+        k: 1,
+        minTasksBeforeStop: 4,
+        parallel: true,
+        enforceResources: true,
+        cpuBudget: 100,
+        memBudget: 1_000_000,
+      } as CmdAbArgs,
+      fake,
+      fakeExec,
+    ),
+  )
+
+  const verdict = readAbVerdict(root, "v1")! as unknown as Record<string, unknown>
+  const tr = verdict["taskResults"] as Record<string, { postStop?: boolean }>
+  for (const t of ["hi4", "hi5", "hi6"]) expect(tr[t]!.postStop).toBe(true)
+  // If hi4-hi6 had been counted, they'd form 3 real pairs — instead the
+  // speed block sees none (byte-identical to the reward exclusion).
+  expect(verdict["speed"]).toEqual({ heldIn: null, heldOut: null })
+})
+
+test("cmdAb --resume: old-shape partial entries (no elapsed arrays) simply drop out of speed stats", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeSplitsFile(paths, ["hi0", "hi1"], ["ho1"])
+  const root = setupCandidate(paths, "project-global", "v1")
+  const partialPath = path.join(root, "candidates", "v1", "ab-verdict.partial.json")
+
+  // First run: complete hi0 (both pass, real elapsed pair), then crash on
+  // hi1 — leaves a NEW-shape partial (candidateElapsed/activeElapsed present)
+  // for hi0 only, matching the driver-mismatch resume test's crash technique.
+  const crashingFake: RunOneTaskFn = async (_p, task, _m, _v, harnessMd) => {
+    if (task === "hi1") throw new Error("simulated crash mid-run")
+    const isCandidateArm = harnessMd.includes("candidate sys")
+    return res({ reward: 1, turns: 3, agentElapsedSec: isCandidateArm ? 5 : 10 })
+  }
+  await expect(
+    quiet(() =>
+      cmdAb(paths, { layer: "project-global", candidate: "v1", k: 1, minTasksBeforeStop: 999 }, crashingFake, fakeExec),
+    ),
+  ).rejects.toThrow("simulated crash mid-run")
+  expect(fs.existsSync(partialPath)).toBe(true)
+
+  // Downgrade hi0's entry to the PRE-W1a shape by stripping the elapsed
+  // arrays cmd-ab.ts just wrote — simulating a partial produced before this
+  // feature existed, which --resume must still tolerate.
+  const partial = JSON.parse(fs.readFileSync(partialPath, "utf-8")) as Record<string, unknown>
+  const tr = partial["taskResults"] as Record<string, Record<string, unknown>>
+  expect(tr["hi0"]!["candidateElapsed"]).toBeDefined() // sanity: our own code did write it
+  delete tr["hi0"]!["candidateElapsed"]
+  delete tr["hi0"]!["activeElapsed"]
+  fs.writeFileSync(partialPath, JSON.stringify(partial))
+
+  // Resume: complete hi1 (both pass, its OWN real elapsed pair) + held-out.
+  const resumingFake: RunOneTaskFn = async (_p, task, _m, _v, harnessMd) => {
+    const isCandidateArm = harnessMd.includes("candidate sys")
+    return res({ reward: 1, turns: 3, agentElapsedSec: isCandidateArm ? 7 : 14 })
+  }
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", k: 1, minTasksBeforeStop: 999, resume: true },
+      resumingFake,
+      fakeExec,
+    ),
+  )
+
+  const verdict = readAbVerdict(root, "v1")! as unknown as Record<string, unknown>
+  const finalTr = verdict["taskResults"] as Record<string, { candidateElapsed?: number[] }>
+  // hi0's stripped-old-shape entry survived --resume verbatim — no crash, no
+  // backfill — and stays elapsed-less.
+  expect(finalTr["hi0"]!.candidateElapsed).toBeUndefined()
+  // hi1 (freshly run post-resume) DOES carry a real pair.
+  expect(finalTr["hi1"]!.candidateElapsed).toEqual([7])
+  // Speed stats reflect ONLY the elapsed-having pair (hi1) — hi0 dropped out.
+  const speed = verdict["speed"] as { heldIn: { nPairs: number; nTasks: number } | null }
+  expect(speed.heldIn).not.toBeNull()
+  expect(speed.heldIn!.nPairs).toBe(1)
+  expect(speed.heldIn!.nTasks).toBe(1)
 })

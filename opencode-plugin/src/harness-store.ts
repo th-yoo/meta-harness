@@ -238,6 +238,23 @@ export interface AbSetStats {
   bootCI90: [number, number]
 }
 
+/** Per-set paired time-to-resolve stats block (W1a) — mirrors AbSetStats but
+ * for agent-phase elapsed seconds instead of reward pass/fail. Report-only
+ * in this phase (a later phase wires it as a decision tiebreaker). Mirrors
+ * ab-stats.ts's SpeedStats field-for-field (kept independent, not imported,
+ * matching this file's existing AbSetStats/PairStats split — see that type's
+ * neighbors). */
+export interface AbSpeedStats {
+  nTasks: number
+  nPairs: number
+  medianCandidate: number
+  medianActive: number
+  medianRatio: number
+  fasterB: number
+  slowerC: number
+  signTestP: number
+}
+
 /** Verdict written by the Python `ab` runner into candidates/<vN>/ab-verdict.json.
  * v1 fields (winner/rates) are always present; v2 adds the statistical decision. */
 export interface AbVerdict {
@@ -267,6 +284,12 @@ export interface AbVerdict {
   minAgentTimeout?: number
   timeoutRecording?: boolean
   env?: { resourceEnforcement?: boolean; maxAgentTimeout?: number }
+  /** W1a (time-to-resolve, report-only in this phase): paired agent-phase
+   * elapsed-seconds stats over both-pass run-pairs, mirroring heldIn/heldOut
+   * above but for speed instead of reward. null iff there were no qualifying
+   * pairs (cmd-ab.ts's ab-stats.ts pairedSpeedStats). Absent entirely on
+   * pre-W1a verdicts. */
+  speed?: { heldIn: AbSpeedStats | null; heldOut: AbSpeedStats | null }
 }
 
 /** Accept a candidate iff the v2 decision says "accept"; fall back to the v1
