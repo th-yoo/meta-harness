@@ -696,10 +696,13 @@ Diagnose these with taxonomy label \`resource-limit\`. This is the BENCH AGENT's
   })()
 
   // W1b: slow-pass visibility — surface passes burning >= 0.5 of their budget
-  // as near-timeouts for diagnosis. Unlike timedOutSection, NOT gated to project
-  // layers: slow-pass diagnosis is relevant at all scopes, and no ops are
-  // conditional on scope. Collect top-5 slowest passes across all versions,
-  // sorted by elapsed descending, to focus on the most time-consuming sessions.
+  // as near-timeouts for diagnosis. Unlike timedOutSection, the SECTION is NOT
+  // gated to project layers: slow-pass diagnosis is relevant at all scopes.
+  // Only the agent-config/env-policy ops POINTER inside it is project-gated
+  // (those op sections are offered only at project layers — pointing an
+  // account-scope proposer at them would be the exact misdirection the
+  // timedOutSection gate above exists to avoid). Collect top-5 slowest passes
+  // across all versions, sorted by elapsed descending.
   const slowPassSection = (() => {
     const slowPasses = listVersions(layer.root)
       .flatMap((v) => readScore(layer.root, v).sessions)
@@ -714,9 +717,12 @@ Diagnose these with taxonomy label \`resource-limit\`. This is the BENCH AGENT's
       const budget = s.agentTimeout ?? (s.env as { maxAgentTimeout?: number } | undefined)?.maxAgentTimeout
       return `- ${s.sessionID}: elapsed ${s.elapsed ?? "?"}s vs budget ${budget ?? "?"}s`
     }).join("\n")
+    const opsHint = layer.scope.startsWith("project")
+      ? ` If a diagnosed time sink is a slow tool call or an expensive env probe, tune the EXISTING agent-config.json / env-policy.json ops offered below — do not invent a new mechanism.`
+      : ""
     return `## Slow-pass sessions — a pass burning most of its budget is a near-timeout
 
-${slowPasses.length} session(s) above passed but consumed >= 50% of their budget (shown as near-timeout). These runs succeeded despite resource pressure — diagnose what burned time. If the diagnosed pattern recurs (e.g. heavy tool usage, complex reasoning), "resolve-faster" becomes an improvement target: either optimize that component, or update the task budget if the time cost is inherent and acceptable. Do NOT invent a new mechanism; tune the existing agent-config.json and env-policy.json ops below.
+${slowPasses.length} passing session(s) consumed >= 50% of their wall-clock budget. These are near-timeouts: the same behavior under slightly more load becomes a timeout FAIL. Diagnose what burned the time (redundant exploration, retry loops, slow tool choices, over-verification) and treat "resolve faster" as an improvement target — propose rules that eliminate the diagnosed time sink. Do NOT respond by asking for more budget: nothing you emit controls task budgets, and a slower agent under a bigger budget is not an improvement.${opsHint}
 
 ${lines}
 

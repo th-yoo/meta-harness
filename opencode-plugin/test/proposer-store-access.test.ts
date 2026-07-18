@@ -540,16 +540,22 @@ test("buildProposerPrompt: slow-pass sessions present -> 'Slow-pass sessions' se
   const dir = path.join(storeRoot, "candidates", "v1")
   fs.mkdirSync(path.join(dir, "traj"), { recursive: true })
 
-  // Create 3 slow-pass sessions: one just at 0.5 threshold, one above, one well above
+  // Six slow-pass sessions (all >= 0.5 * 600s budget), seeded in SHUFFLED
+  // order so the section must actually sort by elapsed descending. The
+  // slowest five must render in order; the sixth-slowest must be cut by the
+  // .slice(0, 5) cap.
   const sessions = [
-    { sessionID: "ses1", passed: true, turnCount: 5, elapsed: 300.5, agentTimeout: 600, env: { maxAgentTimeout: 600 } },
-    { sessionID: "ses2", passed: true, turnCount: 5, elapsed: 450.5, agentTimeout: 600, env: { maxAgentTimeout: 600 } },
-    { sessionID: "ses3", passed: true, turnCount: 5, elapsed: 550.5, agentTimeout: 600, env: { maxAgentTimeout: 600 } },
+    { sessionID: "ses_sp_d", passed: true, turnCount: 5, elapsed: 440.5, agentTimeout: 600, env: { maxAgentTimeout: 600 } },
+    { sessionID: "ses_sp_a", passed: true, turnCount: 5, elapsed: 590.5, agentTimeout: 600, env: { maxAgentTimeout: 600 } },
+    { sessionID: "ses_sp_f", passed: true, turnCount: 5, elapsed: 320.5, agentTimeout: 600, env: { maxAgentTimeout: 600 } }, // 6th-slowest — must be cut
+    { sessionID: "ses_sp_b", passed: true, turnCount: 5, elapsed: 550.5, agentTimeout: 600, env: { maxAgentTimeout: 600 } },
+    { sessionID: "ses_sp_e", passed: true, turnCount: 5, elapsed: 380.5, agentTimeout: 600, env: { maxAgentTimeout: 600 } },
+    { sessionID: "ses_sp_c", passed: true, turnCount: 5, elapsed: 500.5, agentTimeout: 600, env: { maxAgentTimeout: 600 } },
   ]
   fs.writeFileSync(
     path.join(dir, "score.json"),
     JSON.stringify({
-      version: "v1", nPass: 3, nFail: 0,
+      version: "v1", nPass: 6, nFail: 0,
       sessions: sessions.map((s) => ({
         ...s,
         model: "m", variant: "", toolUsage: {}, summary: "slow pass",
@@ -566,8 +572,20 @@ test("buildProposerPrompt: slow-pass sessions present -> 'Slow-pass sessions' se
   )
 
   expect(prompt).toContain("Slow-pass sessions")
-  expect(prompt).toContain("ses3") // highest elapsed
-  expect(prompt).toContain("550.5")
+  // Relative order: elapsed descending (a=590.5 > b=550.5 > c=500.5 > d=440.5 > e=380.5)
+  const iA = prompt.indexOf("ses_sp_a")
+  const iB = prompt.indexOf("ses_sp_b")
+  const iC = prompt.indexOf("ses_sp_c")
+  const iD = prompt.indexOf("ses_sp_d")
+  const iE = prompt.indexOf("ses_sp_e")
+  expect(iA).toBeGreaterThan(-1)
+  expect(iB).toBeGreaterThan(iA)
+  expect(iC).toBeGreaterThan(iB)
+  expect(iD).toBeGreaterThan(iC)
+  expect(iE).toBeGreaterThan(iD)
+  expect(prompt).toContain("590.5")
+  // Top-5 cap: the 6th-slowest session must be absent
+  expect(prompt).not.toContain("ses_sp_f")
 })
 
 // Negative case: no slow-pass sessions → section must be absent entirely
@@ -585,4 +603,36 @@ test("buildProposerPrompt: no slow-pass sessions -> 'Slow-pass sessions' section
   )
 
   expect(prompt).not.toContain("Slow-pass sessions")
+})
+
+// The section itself is NOT project-gated, but the agent-config/env-policy ops
+// pointer inside it IS — those op sections are offered only at project layers,
+// so at account scope the sentence would dangle at ops the proposer can't use
+// (the same misdirection timedOutSection's project gate exists to avoid).
+test("buildProposerPrompt: slow-pass section at account scope renders WITHOUT the agent-config/env-policy ops pointer", () => {
+  const worktree = tmpDir("worktree-slowpass-acct")
+  const storeRoot = tmpDir("store-slowpass-acct")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  const dir = path.join(storeRoot, "candidates", "v1")
+  fs.mkdirSync(path.join(dir, "traj"), { recursive: true })
+  fs.writeFileSync(path.join(dir, "score.json"), JSON.stringify({
+    version: "v1", nPass: 1, nFail: 0,
+    sessions: [{
+      sessionID: "ses_sp_acct", passed: true, turnCount: 5, elapsed: 550.5,
+      agentTimeout: 600, env: { maxAgentTimeout: 600 }, model: "m", variant: "", toolUsage: {}, summary: "slow pass",
+      note: "", timestamp: "",
+    }],
+  }))
+
+  const layer: StoreLayer = { root: storeRoot, scope: "account-role", higherRoots: [] }
+  const sp = stagingPaths(worktree, layer.scope, "v2")
+
+  const prompt = buildProposerPrompt(
+    layer, "v2", "", sp.system, sp.tools, sp.diagnosis, sp.ops, sp.agentConfig, sp.envPolicy, worktree, null,
+  )
+
+  expect(prompt).toContain("Slow-pass sessions") // section not gated
+  expect(prompt).toContain("ses_sp_acct")
+  expect(prompt).not.toContain("agent-config.json") // ops pointer gated off
+  expect(prompt).not.toContain("env-policy.json")
 })
