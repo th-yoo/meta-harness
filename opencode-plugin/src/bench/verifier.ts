@@ -31,7 +31,7 @@ import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { podman, withTimeout } from "./exec.ts"
 import { buildExecArgv, buildCpToArgv } from "./sandbox.ts"
-import { log, pyFixed } from "./util.ts"
+import { BenchError, log, pyFixed } from "./util.ts"
 import type { BenchPaths } from "./paths.ts"
 import type { ExecFn } from "./staging.ts"
 
@@ -50,6 +50,16 @@ import type { ExecFn } from "./staging.ts"
  * concatenation — NOT `join()`, which normalizes the trailing `/.` away) so
  * its contents MERGE into /tests instead of nesting under a `<task>/`
  * subdirectory.
+ *
+ * rc discipline (reviewer fix, mirrors stageTaskRuntime's rc-check +
+ * BenchError pattern): the /tests reset, the tests cp, and the patches
+ * overlay cp are all FATAL on nonzero exit — a transient copy failure must
+ * not silently degrade to runVerifier's "no test.sh found -> reward 0",
+ * which is indistinguishable from a genuine task fail and corrupts the
+ * scoring signal. Callers catch the BenchError and surface it as an infra
+ * error (setup_failed), never a reward. ONLY the __pycache__/*.pyc cleanup
+ * stays best-effort (its failure cannot lose test content — worst case a
+ * stale .pyc survives into a tree pytest re-compiles anyway).
  */
 export async function copyTests(
   paths: BenchPaths,
@@ -57,19 +67,35 @@ export async function copyTests(
   task: string,
   execFn: ExecFn = podman,
 ): Promise<void> {
-  await execFn(buildExecArgv(name, ["rm", "-rf", "/tests"]))
-  await execFn(buildCpToArgv(name, join(paths.tbRoot, task, "tests"), "/tests"))
-  await execFn(
+  const fail = (step: string, r: { rc: number; stderr: string }): never => {
+    throw new BenchError(
+      `copyTests(${task}): ${step} failed: exit ${r.rc}` +
+        (r.stderr.trim() ? ` — ${r.stderr.trim()}` : ""),
+    )
+  }
+
+  const rmResult = await execFn(buildExecArgv(name, ["rm", "-rf", "/tests"]))
+  if (rmResult.rc !== 0) fail("rm -rf /tests reset", rmResult)
+
+  const cpResult = await execFn(buildCpToArgv(name, join(paths.tbRoot, task, "tests"), "/tests"))
+  if (cpResult.rc !== 0) fail("podman cp tests -> /tests", cpResult)
+
+  // Best-effort (see the doc comment): log-and-continue on failure.
+  const cleanupResult = await execFn(
     buildExecArgv(name, [
       "bash",
       "-c",
       `find /tests -name __pycache__ -type d -prune -exec rm -rf {} + ; find /tests -name "*.pyc" -delete`,
     ]),
   )
+  if (cleanupResult.rc !== 0) {
+    log(`  copyTests(${task}): pycache cleanup failed (non-fatal, best-effort): exit ${cleanupResult.rc}`)
+  }
 
   const patchDir = join(paths.patchesDir, task)
   if (existsSync(patchDir)) {
-    await execFn(buildCpToArgv(name, `${patchDir}/.`, "/tests"))
+    const patchResult = await execFn(buildCpToArgv(name, `${patchDir}/.`, "/tests"))
+    if (patchResult.rc !== 0) fail("podman cp patches overlay -> /tests", patchResult)
     log(`  patch applied: ${task}`)
   }
 }

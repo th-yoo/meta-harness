@@ -13,6 +13,7 @@ import * as os from "node:os"
 import type { BenchPaths } from "../src/bench/paths.ts"
 import { copyTests } from "../src/bench/verifier.ts"
 import { buildExecArgv, buildCpToArgv } from "../src/bench/sandbox.ts"
+import { BenchError } from "../src/bench/util.ts"
 import type { ExecResult } from "../src/bench/exec.ts"
 
 function tmpDir(): string {
@@ -103,6 +104,102 @@ test("copyTests: no patches dir on disk -> no patch-overlay cp call at all", asy
 
   expect(recordedArgvs.length).toBe(3) // rm, cp(tests), pycache-cleanup — no 4th cp
   expect(recordedArgvs.every((a) => a[1] !== "cp" || a[2] !== `${path.join(paths.patchesDir, "sometask")}/.`)).toBe(true)
+})
+
+// ── rc checks: a transient copy failure must NOT silently degrade to
+// "no test.sh -> reward=0" (indistinguishable from a genuine task fail —
+// corrupted scoring signal). Mirrors stageTaskRuntime's rc-check + BenchError
+// pattern: the /tests reset, the tests cp, and the patches-overlay cp all
+// throw a distinguishable BenchError on nonzero exit; ONLY the pycache
+// cleanup stays best-effort (its failure cannot lose test content).
+
+test("copyTests: a failing tests podman cp THROWS BenchError naming the step (not silent reward-0 degradation)", async () => {
+  const dir = tmpDir()
+  const termBenchDir = path.join(dir, "tb")
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(termBenchDir, tbRoot)
+
+  const execFn = async (argv: string[]): Promise<ExecResult> =>
+    argv[1] === "cp"
+      ? { rc: 125, stdout: "", stderr: "cp boom", timedOut: false }
+      : { rc: 0, stdout: "", stderr: "", timedOut: false }
+
+  await expect(copyTests(paths, "container-1", "sometask", execFn)).rejects.toThrow(BenchError)
+  try {
+    await copyTests(paths, "container-1", "sometask", execFn)
+    throw new Error("unreachable")
+  } catch (e) {
+    expect((e as BenchError).message).toContain("copyTests(sometask)")
+    expect((e as BenchError).message).toContain("tests")
+    expect((e as BenchError).message).toContain("cp boom")
+  }
+})
+
+test("copyTests: a failing `rm -rf /tests` reset THROWS BenchError (stale tests must never be scored)", async () => {
+  const dir = tmpDir()
+  const termBenchDir = path.join(dir, "tb")
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(termBenchDir, tbRoot)
+
+  const execFn = async (argv: string[]): Promise<ExecResult> =>
+    argv[1] === "exec" && argv.includes("rm")
+      ? { rc: 1, stdout: "", stderr: "rm boom", timedOut: false }
+      : { rc: 0, stdout: "", stderr: "", timedOut: false }
+
+  await expect(copyTests(paths, "container-1", "sometask", execFn)).rejects.toThrow(BenchError)
+})
+
+test("copyTests: a failing patches-overlay podman cp THROWS BenchError (a silently-unpatched test suite must not score)", async () => {
+  const dir = tmpDir()
+  const termBenchDir = path.join(dir, "tb")
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(termBenchDir, tbRoot)
+  const patchDir = path.join(paths.patchesDir, "sometask")
+  fs.mkdirSync(patchDir, { recursive: true })
+  fs.writeFileSync(path.join(patchDir, "test_override.py"), "# patched")
+
+  const execFn = async (argv: string[]): Promise<ExecResult> =>
+    argv[1] === "cp" && argv[2] === `${patchDir}/.`
+      ? { rc: 125, stdout: "", stderr: "patch cp boom", timedOut: false }
+      : { rc: 0, stdout: "", stderr: "", timedOut: false }
+
+  await expect(copyTests(paths, "container-1", "sometask", execFn)).rejects.toThrow(BenchError)
+  try {
+    await copyTests(paths, "container-1", "sometask", execFn)
+    throw new Error("unreachable")
+  } catch (e) {
+    expect((e as BenchError).message).toContain("copyTests(sometask)")
+    expect((e as BenchError).message).toContain("patch")
+    expect((e as BenchError).message).toContain("patch cp boom")
+  }
+})
+
+test("copyTests: a failing pycache-cleanup exec is NON-FATAL (best-effort — cannot lose test content)", async () => {
+  const dir = tmpDir()
+  const termBenchDir = path.join(dir, "tb")
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(termBenchDir, tbRoot)
+  const patchDir = path.join(paths.patchesDir, "sometask")
+  fs.mkdirSync(patchDir, { recursive: true })
+  fs.writeFileSync(path.join(patchDir, "test_override.py"), "# patched")
+
+  const recordedArgvs: string[][] = []
+  const execFn = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    // only the pycache-cleanup bash -c exec fails; rm reset, tests cp, and
+    // patches cp all succeed.
+    if (argv[1] === "exec" && argv.some((a) => a.includes("__pycache__"))) {
+      return { rc: 1, stdout: "", stderr: "find boom", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  await expect(copyTests(paths, "container-1", "sometask", execFn)).resolves.toBeUndefined()
+  // execution continued past the failing cleanup: the patches overlay cp
+  // (the LAST call) still ran.
+  expect(recordedArgvs[recordedArgvs.length - 1]).toEqual(
+    buildCpToArgv("container-1", `${patchDir}/.`, "/tests"),
+  )
 })
 
 test("copyTests: execFn defaults to the real exec.ts podman funnel when omitted (signature-level check, never invoked here)", () => {

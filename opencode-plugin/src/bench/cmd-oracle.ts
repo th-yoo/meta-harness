@@ -151,7 +151,16 @@ export async function runOneOracleTask(
       }
     }
 
-    await copyTests(paths, name, task, execFn)
+    // copyTests throws BenchError on a failed /tests reset / tests cp /
+    // patches-overlay cp (see verifier.ts's rc-discipline note) — surface it
+    // as an INFRA failure (setup_failed), never a silent reward=0.
+    try {
+      await copyTests(paths, name, task, execFn)
+    } catch (e) {
+      const msg = e instanceof BenchError ? e.message : (e as Error).message
+      log(`  copy-tests failed: ${msg}`)
+      return { reward: 0, elapsed: 0.0, error: "setup_failed" }
+    }
     const reward = await runVerifier(paths, name, task, verifierTimeout)
     const elapsed = Math.round(((Date.now() - taskStart) / 1000) * 10) / 10
     return { reward, elapsed, error: "" }

@@ -338,7 +338,18 @@ export async function runTaskOnce(
       execFn,
     )
 
-    await copyTests(paths, name, task, execFn)
+    // copyTests throws BenchError on a failed /tests reset / tests cp /
+    // patches-overlay cp (see verifier.ts's rc-discipline note) — surface it
+    // as an INFRA failure (setup_failed), never let it degrade to a silent
+    // reward=0 (indistinguishable from a genuine task fail), and never let
+    // it crash the whole multi-task invocation.
+    try {
+      await copyTests(paths, name, task, execFn)
+    } catch (e) {
+      const msg = e instanceof BenchError ? e.message : (e as Error).message
+      log(`  copy-tests failed: ${msg}`)
+      return failResult("setup_failed")
+    }
     const reward = await runVerifier(paths, name, task, verifierTimeout)
     // Phase-0 self-check: only when the harness carries the instruction (else
     // zero overhead + byte-identical behavior). Read BEFORE the container is
