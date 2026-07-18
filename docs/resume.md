@@ -3,7 +3,57 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ➡️ CURRENT STATE (2026-07-18 pt 4, OFFICE END) — (b) ab LIVE, 4/7 held-in banked · resume at home
+## ➡️ CURRENT STATE (2026-07-18 pt 5, EVENING) — VELOCITY LEVERS MERGED · ENV SOFTNESS FOUND · v2 screen NEGATIVE
+
+**Everything MERGED + PUSHED to main (tip ≥ `69b4ff0`). Suite 1486/0/1 skip, both tscs clean.**
+Built via subagent-driven dev off the 3×-architect-reviewed plan
+(`~/.claude/plans/plan-to-follow-your-purrfect-diffie.md`); every phase task-reviewed to
+Approved; final whole-branch review MERGE-READY. Ledger: `.superpowers/sdd/progress.md`.
+
+**Shipped (all default-off / additive; NOT budget-identity changes):**
+1. **Time-to-resolve metric** — agent-phase elapsed (agentElapsedSec on every completion
+   path) → ab `candidateElapsed/activeElapsed` arrays → `speed` block in verdict/meta-metrics/
+   report-loop (`pairedSpeedStats`: both-pass pairs only, median of per-pair ratios, exact
+   sign test). SLOW-PASS proposer marker + section. **`--speed-tiebreak`**: guarded
+   inconclusive→accept upgrade (structural: ho!==null excl. legacy, !earlyStopped, delta≥0,
+   nPairs≥8/p≤.05/ratio≤.8); part of the standard k=5 recipe going forward.
+2. **`bench screen`** — k=1 candidate tournament (layer-scoped outDir + provenance stamp,
+   passing-only elapsed tiebreak, parallel+floor threading, error isolation). Winner → k=5 ab.
+3. **Leaderboard tooling** — `term-bench2/leaderboard/pull-leaderboard.ts` (all-76 sweep,
+   atomic resumable cache) + pure `src/bench/leaderboard.ts` curation (harnessVariance,
+   minSubs=4 floor) + curate-band driver. NOTE: committed matrix.json is a 2-sub placeholder;
+   the full sweep was RUNNING in background at session end — on completion run
+   `bun pull-leaderboard.ts --merge` + commit matrix/submissions.
+4. **traj-replay helper** (`extractShellCommands`, truncation-flagged, newline-safe) +
+   **external-evidence seam** (`evidence/tb2-leaderboard/`, MhConfig.externalEvidenceDir +
+   activeSplitFile, LIVE held-out contamination guard, index-only UNTRUSTED injection after
+   the L1 guard, cwd-independent path resolution). Distill procedure: docs/tb2-evidence-mining.md.
+
+**🚨 ENV-FIDELITY VERDICT (docs/env-fidelity-spotcheck.md): `untrusted` — the bench is SOFT.**
+Our db-wal-recovery + path-tracing passes are ENVIRONMENT LEAKAGE, proven by official-image
+replays (both failed): (1) `cmd-run.ts:212` mounts the whole task source RO at `/tb` — agents
+read fixtures/answer material; (2) `staging.ts` drops `rm`-only RUN lines, so answer-key
+deletions (e.g. path-tracing `rm /app/orig.c`) never happen. **Consequences: v0's 12/14
+baseline is partially inflated; leaderboard-fail band picks gated untrusted; loop2/Phase-6
+curation BLOCKED. USER DECISION needed: fix the two bugs (small, localized) → re-baseline v0
+(measurement-regime change) → then loop2.**
+
+**v2 k=2 SCREEN — FINAL (test-grade, k=2): inconclusive-NEGATIVE.** Full held-in 7 tasks:
+b=0/c=3 all favoring v0 (v2 lost prove-plus-comm 0/2, tune-mjcf 1/2 — tune-mjcf REVERSED vs
+the earlier discarded chunk; haiku variance is huge = the k=5 argument). Held-out never ran
+(freshness gate). Speed signal consistent: v2 much faster on tie pairs (e.g. tune-mjcf 485s vs
+2536s). **k=5-confirm condition ("screen favors v2") UNMET — do NOT k=5 v2.** Recommended:
+`/mh-propose` v3 off this evidence (proposer now sees SLOW-PASS + rejected verdicts; env
+evidence optional via the new seam), then `bench screen` v2-vs-v3(-vs-v4), winner → k=5
+`--speed-tiebreak` ab — AFTER the env fix + re-baseline above.
+
+**Deferred/open:** env-bug fix + re-baseline (USER DECISION, blocks loop2) · full-sweep
+--merge + commit · Phase-6 loop2 split (blocked) · trajectory distillation (manual,
+docs/tb2-evidence-mining.md) · host-sharded abs · Axis-2 vendor leg (openrouter =
+oauth-TTL-free too) · pressure-threshold default-flip · capture-cap raise for replayability
+(300-char args made write/edit trajectories unreplayable).
+
+## CURRENT STATE (2026-07-18 pt 4 — HISTORICAL; ab finished as k=2 screen, see pt 5) — (b) ab LIVE, 4/7 held-in banked · resume at home
 
 **The (b) ab (v2 vs v0) is MID-FLIGHT.** Ran at the office in two chunks (05:35–06:52 and
 07:06–08:40 UTC), stopped cleanly for the commute. State =
