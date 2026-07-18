@@ -206,7 +206,9 @@ test("runAgent: transient classification retries with backoff 5,10,15 (cap 30), 
   }
   expect(calls).toBe(4)
   expect(sleeps).toEqual([5, 10, 15])
-  expect(result).toEqual(FAKE_RESULT) // still returns driver.parseOutput after exhausting attempts
+  // still returns driver.parseOutput after exhausting attempts, now with
+  // agentElapsedSec populated (W1a: every completion path, not just timeout).
+  expect(result).toEqual({ ...FAKE_RESULT, agentElapsedSec: expect.any(Number) })
 })
 
 // ── 4. done on first attempt + workspace-file harness delivery ─────────
@@ -231,7 +233,7 @@ test("runAgent: done on first attempt returns parseOutput result; workspace-file
     errSpy.mockRestore()
   }
 
-  expect(result).toEqual(FAKE_RESULT)
+  expect(result).toEqual({ ...FAKE_RESULT, agentElapsedSec: expect.any(Number) })
   const cpCall = seenArgv.find((a) => a[1] === "cp")
   expect(cpCall).toEqual(["podman", "cp", capturedHostFile!, "my-container:/app/HARNESS.md"])
   expect(fs.existsSync(capturedHostFile!)).toBe(false) // scratch cleaned up after use
@@ -267,13 +269,39 @@ test("runAgent: argv-flags harness delivery appends buildFlags(harnessMd) to arg
     errSpy.mockRestore()
   }
 
-  expect(result).toEqual(FAKE_RESULT)
+  expect(result).toEqual({ ...FAKE_RESULT, agentElapsedSec: expect.any(Number) })
   expect(seenArgv.some((a) => a[1] === "cp")).toBe(false)
   const execCall = seenArgv.find((a) => a[1] === "exec")!
   expect(execCall).toContain("--harness-inline")
   expect(execCall).toContain("the harness md")
   expect(execCall).toContain("--variant")
   expect(execCall).toContain("myvariant")
+})
+
+// ── 5b. agentElapsedSec on the normal completion path (W1a) ─────────────
+//
+// Before this feature, agentElapsedSec was populated ONLY on the timeout
+// branch — the success return discarded the locally-computed elapsedSec and
+// returned driver.parseOutput(output) verbatim. Since a passing run is the
+// only kind speed-stats pairs on, that meant time-to-resolve had no signal
+// on the runs that matter. Every completion path (done-first-attempt,
+// transient-exhausted, timeout) must now carry it.
+
+test("runAgent: agentElapsedSec is populated on a normal non-timeout pass, not just the timeout branch", async () => {
+  const paths = setupTask()
+  const driver = makeFakeDriver()
+  const execFn = async (): Promise<ExecResult> => ok("done")
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let result: AgentRunOutput
+  try {
+    result = await runAgent(driver, paths, "c1", "t", "m", "", 30, "", execFn)
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(result.timedOut).toBeUndefined()
+  expect(typeof result.agentElapsedSec).toBe("number")
+  expect(result.agentElapsedSec as number).toBeGreaterThanOrEqual(0)
 })
 
 // ── 6. timedOut discriminator (Loop-3 T1) ───────────────────────────────

@@ -21,8 +21,11 @@ export interface AgentRunOutput {
    *  result from auth-fail/transient-exhaustion 0-turn results, which stay
    *  unset — Loop-3's proposer-visibility work depends on this. */
   timedOut?: boolean
-  /** Agent-phase wall-clock seconds. Optional; only set alongside timedOut
-   *  today (agent-run.ts's elapsedSec on the timeout branch). */
+  /** Agent-phase wall-clock seconds (agent-run.ts's elapsedSec). Populated on
+   *  every completion path — timeout, and normal/transient-exhausted returns
+   *  (W1a: time-to-resolve) — EXCEPT the auth-fail fast-return, which yields
+   *  a zero result before elapsedSec is ever attached (not real agent work,
+   *  see agent-run.ts's auth branch comment). Absent there, not merely 0. */
   agentElapsedSec?: number
 }
 

@@ -232,5 +232,9 @@ export async function runAgent(
   const output = result?.stdout || ""
   const parsed = driver.parseOutput(output)
   log(`  ${driver.id} done in ${pyFixed(elapsedSec, 1)}s, turns=${parsed.turnCount}`)
-  return parsed
+  // W1a (time-to-resolve): populate agentElapsedSec on EVERY completion path,
+  // not just the timeout branch above — a passing run (the only kind
+  // speed-stats pairs on) always falls through to here, so leaving this
+  // unset would mean time-to-resolve had no signal on the runs that matter.
+  return { ...parsed, agentElapsedSec: elapsedSec }
 }

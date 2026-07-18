@@ -232,7 +232,9 @@ for (const id of DRIVER_IDS) {
     }
     expect(calls).toBe(4)
     expect(sleeps).toEqual([5, 10, 15])
-    expect(result).toEqual(expectedResult)
+    // W1a: transient-exhausted still falls through to the success return, now
+    // carrying agentElapsedSec alongside driver.parseOutput's fields.
+    expect(result).toEqual({ ...expectedResult, agentElapsedSec: expect.any(Number) })
   })
 
   // ── 5. timeout -> {0,{},[]} + TIMEOUT_MARK, no retry ───────────────────
