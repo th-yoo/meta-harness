@@ -444,3 +444,145 @@ test("readMhConfig: proposerTimeoutMin defaults to 20, honors valid overrides, r
   fs.writeFileSync(path.join(huge, "config.json"), JSON.stringify({ proposerTimeoutMin: 999 }))
   expect(readMhConfig(huge).proposerTimeoutMin).toBe(120)
 })
+
+// ── W1b: slow-pass visibility — SLOW-PASS marker on trace lines ──────────────
+
+test("buildProposerContext: passing session with elapsed >= 0.5 * budget renders SLOW-PASS marker", () => {
+  const storeRoot = tmpDir("store-slowpass")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  const dir = path.join(storeRoot, "candidates", "v1")
+  fs.mkdirSync(path.join(dir, "traj"), { recursive: true })
+  fs.writeFileSync(path.join(dir, "score.json"), JSON.stringify({
+    version: "v1", nPass: 1, nFail: 0,
+    sessions: [{
+      sessionID: "ses_slowpass", passed: true, turnCount: 5, elapsed: 350.5,
+      agentTimeout: 600, env: { maxAgentTimeout: 600 }, model: "m", variant: "", toolUsage: {}, summary: "slow pass",
+      note: "", timestamp: "",
+    }],
+  }))
+
+  const context = buildProposerContext(storeRoot, [])
+
+  expect(context).toContain("SLOW-PASS")
+  expect(context).toContain("350.5")
+  expect(context).toContain("600")
+})
+
+// Negative case: passed but elapsed < 0.5 * budget → no SLOW-PASS marker
+test("buildProposerContext: passing session with elapsed < 0.5 * budget renders unchanged, no SLOW-PASS marker", () => {
+  const storeRoot = tmpDir("store-no-slowpass")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  const dir = path.join(storeRoot, "candidates", "v1")
+  fs.mkdirSync(path.join(dir, "traj"), { recursive: true })
+  fs.writeFileSync(path.join(dir, "score.json"), JSON.stringify({
+    version: "v1", nPass: 1, nFail: 0,
+    sessions: [{
+      sessionID: "ses_quickpass", passed: true, turnCount: 3, elapsed: 100.0,
+      agentTimeout: 600, env: { maxAgentTimeout: 600 }, model: "m", variant: "", toolUsage: {}, summary: "quick pass",
+      note: "", timestamp: "",
+    }],
+  }))
+
+  const context = buildProposerContext(storeRoot, [])
+
+  expect(context).not.toContain("SLOW-PASS")
+})
+
+// Back-compat: passed session with no elapsed field → no SLOW-PASS marker (graceful fallback)
+test("buildProposerContext: passing session with no elapsed field renders unchanged, no SLOW-PASS marker", () => {
+  const storeRoot = tmpDir("store-no-elapsed")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  const dir = path.join(storeRoot, "candidates", "v1")
+  fs.mkdirSync(path.join(dir, "traj"), { recursive: true })
+  fs.writeFileSync(path.join(dir, "score.json"), JSON.stringify({
+    version: "v1", nPass: 1, nFail: 0,
+    sessions: [{
+      sessionID: "ses_no_elapsed", passed: true, turnCount: 3,
+      agentTimeout: 600, env: { maxAgentTimeout: 600 }, model: "m", variant: "", toolUsage: {}, summary: "no elapsed",
+      note: "", timestamp: "",
+    }],
+  }))
+
+  const context = buildProposerContext(storeRoot, [])
+
+  expect(context).not.toContain("SLOW-PASS")
+})
+
+// Loop-3 pre-flip fix #1 (extended to SLOW-PASS): SLOW-PASS marker's denominator must be the REAL per-task agent timeout (agentTimeout), not run-level env.maxAgentTimeout
+test("buildProposerContext: SLOW-PASS marker with per-task agentTimeout renders THAT budget, not the run-level env.maxAgentTimeout", () => {
+  const storeRoot = tmpDir("store-slowpass-pertask")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  const dir = path.join(storeRoot, "candidates", "v1")
+  fs.mkdirSync(path.join(dir, "traj"), { recursive: true })
+  fs.writeFileSync(path.join(dir, "score.json"), JSON.stringify({
+    version: "v1", nPass: 1, nFail: 0,
+    sessions: [{
+      sessionID: "ses_slowpass", passed: true, turnCount: 5, elapsed: 180.5,
+      agentTimeout: 300, env: { maxAgentTimeout: 900 }, model: "m", variant: "", toolUsage: {}, summary: "slow pass",
+      note: "", timestamp: "",
+    }],
+  }))
+
+  const context = buildProposerContext(storeRoot, [])
+
+  expect(context).toContain("SLOW-PASS")
+  expect(context).toContain("180.5")
+  expect(context).toContain("300")
+  expect(context).not.toContain("900")
+})
+
+// ── W1b: slow-pass visibility — slowPassSection in proposer prompt ──────────
+
+test("buildProposerPrompt: slow-pass sessions present -> 'Slow-pass sessions' section with top-5 sorted by elapsed", () => {
+  const worktree = tmpDir("worktree-slowpass")
+  const storeRoot = tmpDir("store-slowpass-section")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  const dir = path.join(storeRoot, "candidates", "v1")
+  fs.mkdirSync(path.join(dir, "traj"), { recursive: true })
+
+  // Create 3 slow-pass sessions: one just at 0.5 threshold, one above, one well above
+  const sessions = [
+    { sessionID: "ses1", passed: true, turnCount: 5, elapsed: 300.5, agentTimeout: 600, env: { maxAgentTimeout: 600 } },
+    { sessionID: "ses2", passed: true, turnCount: 5, elapsed: 450.5, agentTimeout: 600, env: { maxAgentTimeout: 600 } },
+    { sessionID: "ses3", passed: true, turnCount: 5, elapsed: 550.5, agentTimeout: 600, env: { maxAgentTimeout: 600 } },
+  ]
+  fs.writeFileSync(
+    path.join(dir, "score.json"),
+    JSON.stringify({
+      version: "v1", nPass: 3, nFail: 0,
+      sessions: sessions.map((s) => ({
+        ...s,
+        model: "m", variant: "", toolUsage: {}, summary: "slow pass",
+        note: "", timestamp: "",
+      })),
+    }),
+  )
+
+  const layer: StoreLayer = { root: storeRoot, scope: "project-role", higherRoots: [] }
+  const sp = stagingPaths(worktree, layer.scope, "v2")
+
+  const prompt = buildProposerPrompt(
+    layer, "v2", "", sp.system, sp.tools, sp.diagnosis, sp.ops, sp.agentConfig, sp.envPolicy, worktree, null,
+  )
+
+  expect(prompt).toContain("Slow-pass sessions")
+  expect(prompt).toContain("ses3") // highest elapsed
+  expect(prompt).toContain("550.5")
+})
+
+// Negative case: no slow-pass sessions → section must be absent entirely
+test("buildProposerPrompt: no slow-pass sessions -> 'Slow-pass sessions' section omitted", () => {
+  const worktree = tmpDir("worktree-noslowpass")
+  const storeRoot = tmpDir("store-noslowpass")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  seedCandidate(storeRoot, "v1", { nPass: 1, nFail: 1, trajFiles: 1 })
+
+  const layer: StoreLayer = { root: storeRoot, scope: "project-role", higherRoots: [] }
+  const sp = stagingPaths(worktree, layer.scope, "v2")
+
+  const prompt = buildProposerPrompt(
+    layer, "v2", "", sp.system, sp.tools, sp.diagnosis, sp.ops, sp.agentConfig, sp.envPolicy, worktree, null,
+  )
+
+  expect(prompt).not.toContain("Slow-pass sessions")
+})

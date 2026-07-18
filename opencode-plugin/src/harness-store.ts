@@ -1597,8 +1597,14 @@ export function buildProposerContext(
       const timeoutMarker = s.timedOut
         ? ` | TIMEOUT ${s.elapsed ?? "?"}s / ${budget ?? "?"}s budget`
         : ""
+      // W1b: slow-pass visibility — mark passes burning >= 0.5 of their budget
+      // as near-timeouts, so the proposer can diagnose what burned time.
+      // Uses existing full-`elapsed`/budget convention like TIMEOUT marker.
+      const slowPassMarker = s.passed && typeof s.elapsed === "number" && typeof budget === "number" && s.elapsed >= 0.5 * budget
+        ? ` | SLOW-PASS ${s.elapsed}s / ${budget}s budget`
+        : ""
       return [
-        `  - ${s.sessionID} | ${s.passed ? "PASS" : "FAIL"} | model=${modelStr} | turns=${s.turnCount}${timeoutMarker}${s.note ? ` | note="${s.note}"` : ""}`,
+        `  - ${s.sessionID} | ${s.passed ? "PASS" : "FAIL"} | model=${modelStr} | turns=${s.turnCount}${timeoutMarker}${slowPassMarker}${s.note ? ` | note="${s.note}"` : ""}`,
         toolSummary ? `    tools: ${toolSummary}` : null,
         `    summary: ${s.summary.slice(0, 200)}`,
       ].filter(Boolean).join("\n")

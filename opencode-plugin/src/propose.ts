@@ -695,6 +695,34 @@ Diagnose these with taxonomy label \`resource-limit\`. This is the BENCH AGENT's
 `
   })()
 
+  // W1b: slow-pass visibility — surface passes burning >= 0.5 of their budget
+  // as near-timeouts for diagnosis. Unlike timedOutSection, NOT gated to project
+  // layers: slow-pass diagnosis is relevant at all scopes, and no ops are
+  // conditional on scope. Collect top-5 slowest passes across all versions,
+  // sorted by elapsed descending, to focus on the most time-consuming sessions.
+  const slowPassSection = (() => {
+    const slowPasses = listVersions(layer.root)
+      .flatMap((v) => readScore(layer.root, v).sessions)
+      .filter((s) => {
+        const budget = s.agentTimeout ?? (s.env as { maxAgentTimeout?: number } | undefined)?.maxAgentTimeout
+        return s.passed && typeof s.elapsed === "number" && typeof budget === "number" && s.elapsed >= 0.5 * budget
+      })
+      .sort((a, b) => (b.elapsed ?? 0) - (a.elapsed ?? 0))
+      .slice(0, 5)
+    if (slowPasses.length === 0) return ""
+    const lines = slowPasses.map((s) => {
+      const budget = s.agentTimeout ?? (s.env as { maxAgentTimeout?: number } | undefined)?.maxAgentTimeout
+      return `- ${s.sessionID}: elapsed ${s.elapsed ?? "?"}s vs budget ${budget ?? "?"}s`
+    }).join("\n")
+    return `## Slow-pass sessions — a pass burning most of its budget is a near-timeout
+
+${slowPasses.length} session(s) above passed but consumed >= 50% of their budget (shown as near-timeout). These runs succeeded despite resource pressure — diagnose what burned time. If the diagnosed pattern recurs (e.g. heavy tool usage, complex reasoning), "resolve-faster" becomes an improvement target: either optimize that component, or update the task budget if the time cost is inherent and acceptable. Do NOT invent a new mechanism; tune the existing agent-config.json and env-policy.json ops below.
+
+${lines}
+
+`
+  })()
+
   const priorDx = readDiagnosis<Record<string, unknown>>(layer.root, activeVer)
   const priorSection = priorDx
     ? `## Root causes already diagnosed for ${activeVer} — do NOT re-propose the same fix\n\n\`\`\`json\n${JSON.stringify(priorDx, null, 2).slice(0, 2000)}\n\`\`\`\n`
@@ -851,7 +879,7 @@ ${untrustedSection}${storeAccessSection}
 
 ${failingSection}
 
-${timedOutSection}${priorSection}${rejectedSection}## Your task — DIAGNOSE, then edit
+${timedOutSection}${slowPassSection}${priorSection}${rejectedSection}## Your task — DIAGNOSE, then edit
 
 STEP 1 — Diagnose the failures. For each failing trajectory above (up to 3), find the FIRST unrecoverable step and the root cause. Classify each with exactly ONE taxonomy label from:
 ${FAILURE_TAXONOMY.map((t) => `  - ${t}`).join("\n")}
