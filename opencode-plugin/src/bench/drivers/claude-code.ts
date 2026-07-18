@@ -46,7 +46,13 @@ import type { AgentDriver, AgentRunOutput, AttemptClass } from "./types.ts"
 export const EXECUTION_TOOLS = new Set(["Bash", "Task"])
 
 const MAX_EVENTS = 400
-const MAX_ARGS_CHARS = 300
+/** Exported for bench/traj-replay.ts's truncation guard — the SAME cap
+ * opencode.ts hardcodes inline at its `args.slice(0, 300)` call site
+ * (drivers/opencode.ts:63). Both drivers apply this cap at capture time and
+ * `--save-all-traj` does not bypass it, so a captured `args` string at
+ * EXACTLY this length is ambiguous (could be a genuine 300-char command or
+ * a longer one silently cut) and must be treated as non-replayable. */
+export const MAX_ARGS_CHARS = 300
 const MAX_TEXT_CHARS = 800
 
 type Json = Record<string, unknown>
