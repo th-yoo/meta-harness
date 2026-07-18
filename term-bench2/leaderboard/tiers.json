@@ -1,0 +1,13 @@
+{
+  "_comment": "Hand-maintained capability-tier map for tierVariance (opencode-plugin/src/bench/leaderboard.ts). Keys are HF leaderboard submission ids (agent__model, matching matrix.json's per-task sub keys); values are 'frontier' | 'mid' | 'small'. Only the 10 submissions we already have a reference matrix for (matrix-10agent.json) are mapped so far -- extend this as the full 76-submission sweep lands more subs into matrix.json. No 'small' entries yet among the known 10 (that tier is for smaller open-weight models like the qwen3.x-9b / minimax-m2 class submissions visible in the raw HF tree but not yet pulled) -- tierVariance simply treats an unmapped sub as excluded from tier grouping, so leaving it sparse is safe.",
+  "NexAU-AHE__gpt-5.5": "frontier",
+  "LemonHarness_GPT-5.3-CodeX": "mid",
+  "Capy__GPT-5.5": "frontier",
+  "Droid__Claude-Opus-4.6": "frontier",
+  "Terminus2__Claude-Opus-4.6": "frontier",
+  "copilot-cli__claude-opus-4.6": "frontier",
+  "Gemini_CLI__Gemini-3.1-Pro-Preview": "frontier",
+  "Terminus2__GLM-5": "mid",
+  "OpenCode__Claude-Opus-4.5": "mid",
+  "Terminus2__Kimi-k2.5": "mid"
+}

@@ -10,3 +10,4 @@ uv.lock
 data/
 logs/
 .playwright-mcp/
+term-bench2/leaderboard/cache/
