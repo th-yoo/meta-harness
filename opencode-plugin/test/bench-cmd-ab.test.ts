@@ -1062,6 +1062,35 @@ test("cmdAb resume: minAgentTimeout is an informational env stamp (NOT a runIden
   expect(readAbVerdict(root, "v1")).not.toBeNull()
 })
 
+test("cmdAb: --min-agent-timeout floor is APPLIED to task execution (raises a task's LOW declared agent timeout up to the floor)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  fs.mkdirSync(path.join(tbRoot, "t1"), { recursive: true })
+  // task declares a LOW agent timeout (900s) — below the 3600s floor.
+  fs.writeFileSync(path.join(tbRoot, "t1", "task.toml"), "[agent]\ntimeout_sec = 900\n")
+  setupCandidate(paths, "project-global", "v1")
+
+  // Capture the agentTimeout (6th positional arg) that actually reaches the run
+  // — this is the value that would have stayed 900 under the item-1 bug (floor
+  // stamped into budget-identity but never threaded into taskTimeouts).
+  let seenAgentTimeout: unknown = "unset"
+  const fake: RunOneTaskFn = async (_p, _t, _m, _v, _h, agentTimeout) => {
+    if (seenAgentTimeout === "unset") seenAgentTimeout = agentTimeout
+    return res({ reward: 1 })
+  }
+
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, minAgentTimeout: 3600 } as CmdAbArgs,
+      fake,
+      fakeExec,
+    ),
+  )
+  expect(seenAgentTimeout).toBe(3600)
+})
+
 // ── --parallel: canonical-order early-stop + postStop (task-7-brief.md) ─────
 
 interface FakeState {

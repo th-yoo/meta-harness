@@ -603,6 +603,9 @@ export function buildOauthParallelCanLaunch(
   const exp = readExpiry()
   if (exp === null) return undefined // no oauth credential either — nothing to bound against
 
+  // --min-agent-timeout floor note: this freshness math keys on maxAgentTimeout
+  // (the cap) and stays correct — effective per-task time = min(max(declared,
+  // floor), cap) ≤ cap, so the floor can never push a task past the cap.
   const neededMs = (a.maxAgentTimeout || DEFAULT_TASK_AGENT_TIMEOUT_SEC) * 1000 + OAUTH_PARALLEL_MARGIN_MS
   return () => Date.now() + neededMs <= exp
 }

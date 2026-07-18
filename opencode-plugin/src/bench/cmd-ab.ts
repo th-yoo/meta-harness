@@ -494,7 +494,7 @@ export async function cmdAb(
     capRaised: boolean,
   ): Promise<AbTaskResult> {
     log(`\n${prefix}=== ab ${task} [${phase}]: ${candidate} vs active ${baseline} ===`)
-    const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout)
+    const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout, minAgentTimeout)
     const tr: AbTaskResult = { candidate: [], active: [], phase, sentinel: sentinelSet.has(task) }
     // OOM-escalation ceiling (same derivation as cmd-run): under --parallel each
     // task has a per-task cap packed against the mem budget; serial has none.
