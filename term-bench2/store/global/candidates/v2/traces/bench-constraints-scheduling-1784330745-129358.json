@@ -1,0 +1,41 @@
+{
+  "sessionID": "bench-constraints-scheduling-1784330745-129358",
+  "passed": true,
+  "note": "bench:constraints-scheduling",
+  "turnCount": 1,
+  "timestamp": "2026-07-17T23:33:27.045Z",
+  "summary": "constraints-scheduling",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "toolUsage": {
+    "read": {
+      "calls": 4,
+      "errors": 0
+    },
+    "bash": {
+      "calls": 1,
+      "errors": 0
+    },
+    "write": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "d114cc0",
+    "harnessHash": "298d1b00138964bf",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "opencode",
+    "resourceEnforcement": true
+  },
+  "platform": "opencode",
+  "elapsed": 456.5,
+  "timedOut": false,
+  "agentTimeout": 1200,
+  "cpuSeconds": 405.9,
+  "peakRssMb": 870,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

@@ -3,7 +3,61 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ➡️ CURRENT STATE (2026-07-18 pt 2) — TIMEOUT FLOOR shipped, re-baseline #2 IN FLIGHT
+## ➡️ CURRENT STATE (2026-07-18 pt 3, SESSION END) — #3 SHIPPED · v0 baseline KEPT · next = the (b) ab
+
+**Everything PUSHED — tip ≥ `969f418`, tree clean** (this block commits after). Suite **1367 / 0
+fail**. No background runs; no orphan containers; podman machine still up.
+
+**Session outcomes since pt 2:**
+1. **v0 re-baseline SKIPPED — USER RULING**: no session in v0's baseline was time-clipped
+   (max elapsed 789s vs 900s budget; both fails genuine completions), so a 1h floor changes
+   nothing → the 14-session Linux baseline is outcome-equivalent and KEPT. Consequence: v0's
+   stamps are floor-absent while new runs stamp `minAgentTimeout:3600` → **`/mh-activate` will
+   flag identity mismatch — use `--force`** with this rationale.
+2. **Load-aware #3 SHIPPED + MERGED** (`26fb293..969f418`): `--host-pressure observe|on` — see
+   the pt-2.5 block below for full detail. LIVE-SMOKED: real-spike pause/resume cycle PASS.
+   Final review caught 1 BLOCKER pre-merge (unref'd pause timer → silent process exit;
+   fixed + subprocess regression test).
+3. **First (b) ab attempt #2 ABORTED for host load** (loadavg 149 — the episode that motivated
+   #3). Partial evidence before abort: 4 pairs consumed, **candidate v2 led c=1/b=0** (won the
+   path-tracing discordant pair; tune-mjcf F/F both-arm timeouts under the OLD no-floor
+   envelope). Aborted partial set aside as
+   `candidates/v2/ab-verdict.partial.superseded-no-floor.json` — do NOT resume it (identity
+   mismatch, correctly rejected).
+4. **v2 candidate synced into the git snapshot** (`term-bench2/store/global/candidates/v2/`,
+   surgical) — v2 = v0 + 2 proposer bullets targeting the spec-misread fails (derive
+   under-specified formats from task text; verify against stated criteria, not self-checks).
+
+**NEXT SESSION = run the (b) ab, updated recipe (this Mac):**
+```
+# fresh oauth first: claude, login, ctrl-D (freshness gate needs token > 1 task)
+META_HARNESS_HOME=<repo>/.meta-harness PATH=/opt/podman/bin:$PATH bun term-bench2/runner.ts ab \
+  --layer account-global --candidate v2 --split-file term-bench2/splits/loop1.json \
+  --model anthropic/claude-haiku-4-5 --k 2 --parallel --enforce-resources \
+  --min-cpus 2 --cpu-budget 4 --mem-budget 7000 \
+  --min-agent-timeout 3600 --max-agent-timeout 3600 \
+  --host-pressure on --resume
+```
+- `--min-agent-timeout 3600` = the 1h/task floor (user's loosest-envelope ruling — budget-identity
+  `{max:3600, min:3600, timeoutRecording:true, resourceEnforcement:true}`).
+- `--host-pressure on` = the new gate; the run coexists with laptop use (launches pause under
+  real host pressure, resume on recovery). First real run doubles as threshold calibration —
+  watch `[pressure]` lines for false pauses. Daytime alternative: `--cpu-budget 2`; or run
+  overnight / on the office box (v2 is in the git snapshot now; office would cold-start
+  profiles + floor matters less there).
+- Profiles are warm on this Mac (cs n=4, pt n≥3 → measured packing + raised caps kick in at
+  start — expect the `[pack] measured` lines and possibly width-3).
+- On accept: `/mh-activate account v2 --force` (identity mismatch is adjudicated — see #1),
+  then SURGICAL sync of v2 (incl. new score/verdict) into `term-bench2/store/` + push.
+- Also new since pt 2: **on-host sensor sanity** `cd opencode-plugin && bun -e
+  'import {createHostPressure} from "./src/bench/host-pressure.ts"; const
+  hp=createHostPressure({}); console.log(hp.underPressure(), hp.state())'`.
+
+**Deferred/open (unchanged):** (d) Axis-2 vendor content + panel; host-class stamping of score
+sessions (cross-host mixing); sensor stale-cache-after-error nit; `--host-pressure` threshold
+calibration then default-flip; `capRaised`-into-TaskFootprint cleanup.
+
+## CURRENT STATE (2026-07-18 pt 2 — HISTORICAL; re-baseline was SKIPPED per ruling above) — TIMEOUT FLOOR shipped
 
 **USER CORRECTION (recorded as feedback memory):** the standing decision is **1 hour per task**
 (loosest envelope; load-aware scheduling compensates) — NOT TB2-exact budgets. The code's

@@ -1,0 +1,22 @@
+{
+  "failures": [
+    {
+      "sessionID": "bench-extract-elf-1784206315-56b94b",
+      "taxonomy": "spec-misread",
+      "rootCause": "The task required a precise definition of which 'memory values' to extract and in what output format, but the agent never derived it from an authoritative source. It invented a heuristic (overlapping 8-byte and 4-byte reads of every non-zero region in LOAD segments) yielding 143 nonsense entries, including reading the .interp path string '/lib64/ld-...' as the integer 7795506888185572000. It then repeatedly 'verified' the output only against its own invented format checks ('keys are addresses', 'values are integers') rather than against ground truth, so the self-checks always passed while the answer was wrong.",
+      "firstUnrecoverableStep": "TOOL write extract.js implementing the invented scheme: 'reads 8-byte and 4-byte integer values from PROGBITS sections that are in LOAD segments' with no basis in the task's actual definition of the required values."
+    },
+    {
+      "sessionID": "bench-openssl-selfsigned-cert-1784206959-643039",
+      "taxonomy": "spec-misread",
+      "rootCause": "The agent guessed the certificate subject fields (O='DevOps Team', CN='dev-internal.company.local'), the validity-date format, and the exact layout/labels of verification.txt instead of confirming the task's required exact strings and format. Its check_cert.py 'Certificate verification successful' validated the agent's own output rather than the required spec, so a green self-check masked a value/format mismatch with what the grader expected.",
+      "firstUnrecoverableStep": "TOOL bash openssl req -new -x509 ... -subj \"/O=DevOps Team/CN=dev-internal.company.local\" — committing invented subject values without confirming them against the task's exact requirements."
+    }
+  ],
+  "bulletAssessments": [
+    {
+      "id": "b2",
+      "verdict": "harmful"
+    }
+  ]
+}
