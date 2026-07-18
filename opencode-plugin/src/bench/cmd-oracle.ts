@@ -151,7 +151,7 @@ export async function runOneOracleTask(
       }
     }
 
-    await copyTests(paths, name, task)
+    await copyTests(paths, name, task, execFn)
     const reward = await runVerifier(paths, name, task, verifierTimeout)
     const elapsed = Math.round(((Date.now() - taskStart) / 1000) * 10) / 10
     return { reward, elapsed, error: "" }

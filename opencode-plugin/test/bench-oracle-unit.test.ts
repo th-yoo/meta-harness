@@ -757,6 +757,41 @@ test("runOneOracleTask: a failing `podman start` (rc 125) is setup_failed, namin
   expect(result).toEqual({ reward: 0, elapsed: 0.0, error: "setup_failed" })
 })
 
+// ── env-fidelity fix: cmd-oracle.ts's create argv is UNCHANGED — pinned ──
+// docs/env-fidelity-spotcheck.md: agent (run/ab) containers lost their /tb
+// and /mh mounts entirely (bench-cmd-run.test.ts pins that side). Oracle's
+// OWN container keeps both — it legitimately needs live access
+// (solution/solve.sh, scripts-mode setup_deps.sh) and is not agent-facing.
+// This test locks that in so a future refactor can't accidentally regress it.
+
+test("runOneOracleTask: create argv STILL has /tb and /mh mounts (both ro) — unchanged by the env-fidelity fix", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["sometask"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let createArgv: string[] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    if (argv[1] === "create") createArgv = argv
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      return { rc: 1, stdout: "", stderr: "boom", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runOneOracleTask(paths, "sometask", "scripts", fakeExec)
+  } finally {
+    errSpy.mockRestore()
+  }
+
+  expect(createArgv.length).toBeGreaterThan(0)
+  expect(createArgv).toContain("-v")
+  expect(createArgv).toContain(`${paths.tbRoot}:/tb:ro`)
+  expect(createArgv).toContain(`${paths.termBenchDir}:/mh:ro`)
+})
+
 // ── --enforce-resources threading (default OFF) ───────────────────────────
 
 test("runOneOracleTask: resources param appends --cpus/--memory to podman create argv", async () => {

@@ -19,12 +19,20 @@
  *     this same commit).
  *  2. An agent phase (runAgent, bound to the selected AgentDriver — task-
  *     B3-brief.md) runs between staging and copy-tests.
+ *  3. NO /tb or /mh mount, ever (env-fidelity fix, docs/env-fidelity-
+ *     spotcheck.md) — unlike cmd-oracle.ts's own container, which keeps
+ *     both. An agent container must not get whole-lifetime read access to
+ *     the task-source repo (answer keys, other tasks' fixtures) or
+ *     termBenchDir (results/logs/store snapshot/patches). Everything a
+ *     pipeline step needs from either tree arrives via `podman cp` instead:
+ *     staging.ts's stageTaskRuntime (runtime mode), this file's own
+ *     scripts-mode staging block, and verifier.ts's copyTests.
  */
 import { randomBytes } from "node:crypto"
 import { join, parse as parsePath } from "node:path"
 import { podman } from "./exec.ts"
 import type { ExecFn } from "./staging.ts"
-import { buildCreateArgv, buildStartArgv, buildExecArgv, buildRmArgv } from "./sandbox.ts"
+import { buildCreateArgv, buildStartArgv, buildExecArgv, buildRmArgv, buildCpToArgv } from "./sandbox.ts"
 import { BENCH_IMAGE, apiKeyEnv, containerName, DEFAULT_BENCH_MODEL, useKeyOnlyForParallel, type BenchPaths } from "./paths.ts"
 import type { AgentAuthMounts } from "./agent-auth.ts"
 import { selectTasks, taskTimeouts, enforcedResources, packingFootprints, escalateResources } from "./tasks.ts"
@@ -208,11 +216,17 @@ export async function runTaskOnce(
         buildCreateArgv({
           image: BENCH_IMAGE,
           name,
-          mounts: [
-            { host: paths.tbRoot, container: "/tb", ro: true },
-            { host: paths.termBenchDir, container: "/mh", ro: true },
-            ...auth.mounts,
-          ],
+          // Env-fidelity fix (docs/env-fidelity-spotcheck.md): NO /tb, NO
+          // /mh mount here — agent containers must not get whole-lifetime
+          // read access to the task-source repo (answer keys, other tasks'
+          // fixtures) or termBenchDir (results/logs/store snapshot/patches).
+          // cmd-oracle.ts's OWN container keeps both mounts, unchanged — it
+          // legitimately needs live access (solution/solve.sh, scripts-mode
+          // setup_deps.sh) and is test-pinned. Everything an agent-container
+          // pipeline step needs from either tree now arrives via `podman cp`
+          // (staging.ts's stageTaskRuntime, this file's own scripts-mode
+          // staging below, verifier.ts's copyTests) instead of a mount.
+          mounts: [...auth.mounts],
           // Provider API key passthrough (additive to auth.json — see
           // paths.ts's apiKeyEnv doc comment), THEN the driver's own auth env
           // (task-B3-brief.md — e.g. a claude-code driver's ANTHROPIC_API_KEY
@@ -248,18 +262,57 @@ export async function runTaskOnce(
 
     if (staging === "scripts") {
       log(`  setup_deps.sh (${task})...`)
+      // Env-fidelity fix: no /tb or /mh mount on this container (see the
+      // create-argv comment above), so setup_deps.sh's own inputs — itself,
+      // setup_base.sh (its SCRIPT_DIR/../../setup_base.sh lookup), and the
+      // task's environment/ fixtures it `cp`s from $TB_ROOT — are staged in
+      // via `podman cp` under SCRIPTS_STAGE_DIR, mirroring the SAME relative
+      // layout the real termBenchDir checkout has (tasks/<task>/setup_deps.sh
+      // two levels under termBenchDir, so the script's own SCRIPT_DIR-
+      // relative BASE_SCRIPT resolution keeps working unmodified), then
+      // purged as the final step — see staging.ts's stageTaskRuntime for the
+      // same stage-then-purge pattern applied to runtime-mode staging.
+      const stageDir = "/.mh-stage"
+      await execFn(buildExecArgv(name, ["mkdir", "-p", `${stageDir}/tasks`, `${stageDir}/${task}`]))
+      const stageCopies: [string, string][] = [
+        [join(paths.termBenchDir, "tasks", task), `${stageDir}/tasks/${task}`],
+        [join(paths.termBenchDir, "setup_base.sh"), `${stageDir}/setup_base.sh`],
+        [join(paths.tbRoot, task, "environment"), `${stageDir}/${task}/environment`],
+      ]
+      let stageCpFailed = false
+      for (const [hostPath, containerPath] of stageCopies) {
+        const cpResult = await execFn(buildCpToArgv(name, hostPath, containerPath))
+        if (cpResult.rc !== 0) {
+          log(`  scripts-mode staging failed: podman cp ${hostPath} -> ${containerPath}: exit ${cpResult.rc}`)
+          stageCpFailed = true
+          break
+        }
+      }
+      if (stageCpFailed) return failResult("setup_failed")
+
       const setupResult = await execFn(
-        buildExecArgv(name, ["bash", `/mh/tasks/${task}/setup_deps.sh`], {
+        buildExecArgv(name, ["bash", `${stageDir}/tasks/${task}/setup_deps.sh`], {
           // no SKIP_APT (Option A, 2026-07-11): podman containers have real
           // root + network, so setup_deps.sh's own SKIP_APT-guarded apt
           // section now genuinely runs (see term-bench2/Containerfile's
           // header for the retired bwrap-era apt-shim rationale).
-          env: { TB_ROOT: "/tb", WORKDIR: "/app", EXTRAS_ROOT: "" },
+          env: { TB_ROOT: stageDir, WORKDIR: "/app", EXTRAS_ROOT: "" },
           workdir: "/app",
         }),
       )
       if (setupResult.rc !== 0) {
         log(`  setup_deps.sh failed (exit ${setupResult.rc})`)
+        return failResult("setup_failed")
+      }
+      // Purge the staged copy as the FINAL staging action — the agent must
+      // not find a pristine copy of the task's fixtures (or termBenchDir's
+      // tasks/ tree) sitting at stageDir either (env-fidelity fix). Fatal on
+      // failure, matching staging.ts's stageTaskRuntime's own STAGE_DIR
+      // purge: this is our own security boundary, not an upstream Dockerfile
+      // line whose target might legitimately already be gone.
+      const rmResult = await execFn(buildExecArgv(name, ["rm", "-rf", stageDir]))
+      if (rmResult.rc !== 0) {
+        log(`  scripts-mode staging: failed to remove ${stageDir}: exit ${rmResult.rc}`)
         return failResult("setup_failed")
       }
     } else {
@@ -285,7 +338,7 @@ export async function runTaskOnce(
       execFn,
     )
 
-    await copyTests(paths, name, task)
+    await copyTests(paths, name, task, execFn)
     const reward = await runVerifier(paths, name, task, verifierTimeout)
     // Phase-0 self-check: only when the harness carries the instruction (else
     // zero overhead + byte-identical behavior). Read BEFORE the container is

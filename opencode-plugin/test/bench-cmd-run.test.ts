@@ -1039,6 +1039,134 @@ test("runTaskOnce: genuine 0-turn no-output (not a timeout) -> timedOut=false, e
   expect(res.error).toBe("agent_no_output")
 })
 
+// ── env-fidelity fix: agent containers get NO /tb, NO /mh mount, ever ────
+// docs/env-fidelity-spotcheck.md: the whole TB2 task-source repo used to be
+// mounted RO at /tb for the agent container's WHOLE lifetime (answer keys,
+// other tasks' fixtures readable at any time), and termBenchDir was mounted
+// RO at /mh (results/logs/store snapshot/patches). Neither mount belongs on
+// an agent container — cmd-oracle.ts's OWN container keeps both, unchanged
+// (pinned separately in bench-oracle-unit.test.ts).
+
+test("runTaskOnce: agent-container create argv has NO /tb mount, NO /mh mount, and NO TB_ROOT=/tb env (runtime staging)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let createArgv: string[] = []
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "create") createArgv = argv
+    // fail the staging cp so this stops right after container bring-up,
+    // before verifier.ts's hardcoded real podman funnel would ever be
+    // reached (same "must never drive past copyTests/runVerifier" scoping
+    // as this file's other unit tests).
+    if (argv[1] === "cp") return { rc: 1, stdout: "", stderr: "boom", timedOut: false }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let res: RunTaskResult
+  try {
+    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "runtime", opencodeDriver, undefined, execFn, fakeAuthMounts())
+  } finally {
+    errSpy.mockRestore()
+  }
+
+  expect(res.error).toBe("setup_failed") // sanity: this test really exercised staging
+  expect(createArgv.length).toBeGreaterThan(0)
+  expect(createArgv.join(" ")).not.toContain(":/tb")
+  expect(createArgv.join(" ")).not.toContain(":/mh")
+  expect(createArgv.some((a) => a === "TB_ROOT=/tb")).toBe(false)
+  expect(createArgv.some((a) => typeof a === "string" && a.startsWith(`${tbRoot}:`))).toBe(false)
+  expect(createArgv.some((a) => typeof a === "string" && a.startsWith(`${dir}:`) && a.includes(":/mh"))).toBe(false)
+})
+
+test("runTaskOnce: scripts-mode staging stages via podman cp (mkdir, 3x cp, exec setup_deps.sh) — no /tb or /mh mount needed", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t", "environment"), { recursive: true })
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const recordedArgvs: string[][] = []
+  const execFn = async (argv: string[]) => {
+    recordedArgvs.push(argv)
+    if (argv[1] === "exec" && argv.some((a) => a.includes("setup_deps.sh"))) {
+      // stop right after setup_deps.sh exec (before copyTests/runVerifier)
+      return { rc: 1, stdout: "", stderr: "boom", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, undefined, execFn, fakeAuthMounts())
+  } finally {
+    errSpy.mockRestore()
+  }
+
+  // create argv has neither mount (same claim as the runtime-mode test above)
+  const createArgv = recordedArgvs.find((a) => a[1] === "create")!
+  expect(createArgv.join(" ")).not.toContain(":/tb")
+  expect(createArgv.join(" ")).not.toContain(":/mh")
+
+  // mkdir -p the two stage subdirs
+  const mkdirArgv = recordedArgvs.find((a) => a.includes("mkdir") && a.some((x) => x.includes(".mh-stage/tasks")))
+  expect(mkdirArgv).toBeDefined()
+  expect(mkdirArgv).toContain("/.mh-stage/tasks")
+  expect(mkdirArgv).toContain("/.mh-stage/t")
+
+  // three podman cp calls: tasks/<task>, setup_base.sh, environment/ — the
+  // container name is randomized (containerName()), so these assertions
+  // match on the host source path + the destination's trailing container path.
+  const cpArgvs = recordedArgvs.filter((a) => a[1] === "cp")
+  expect(cpArgvs.length).toBe(3)
+  expect(cpArgvs.some((a) => a[2] === path.join(paths.termBenchDir, "tasks", "t") && a[3]!.endsWith(":/.mh-stage/tasks/t"))).toBe(true)
+  expect(cpArgvs.some((a) => a[2] === path.join(paths.termBenchDir, "setup_base.sh") && a[3]!.endsWith(":/.mh-stage/setup_base.sh"))).toBe(true)
+  expect(cpArgvs.some((a) => a[2] === path.join(tbRoot, "t", "environment") && a[3]!.endsWith(":/.mh-stage/t/environment"))).toBe(true)
+
+  // setup_deps.sh is exec'd from the STAGED path with TB_ROOT pointing at the
+  // staged root, not /tb
+  const setupArgv = recordedArgvs.find((a) => a.some((x) => x.includes("setup_deps.sh")))!
+  expect(setupArgv).toContain("/.mh-stage/tasks/t/setup_deps.sh")
+  expect(setupArgv).toContain("TB_ROOT=/.mh-stage")
+  expect(setupArgv.some((a) => a === "TB_ROOT=/tb")).toBe(false)
+})
+
+test("runTaskOnce: scripts-mode staging removes the staged copy (rm -rf /.mh-stage) as its FINAL action once setup_deps.sh succeeds", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t", "environment"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "do the thing")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const recordedArgvs: string[][] = []
+  const execFn = async (argv: string[]) => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  // setup_deps.sh now succeeds, so staging proceeds past it into the agent
+  // phase and copyTests/runVerifier — stub the latter (verifier.ts hardcodes
+  // the real podman funnel with no injectable execFn — see this file's
+  // header) so this test never spawns real podman.
+  mock.module("../src/bench/verifier.ts", () => ({ copyTests: async () => {}, runVerifier: async () => 0 }))
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, undefined, execFn, fakeAuthMounts())
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreVerifier()
+  }
+
+  // the LAST exec before the agent phase's own execs is the stage purge —
+  // find it by content rather than assuming a fixed index (the agent phase
+  // itself issues execs too).
+  const rmStageArgv = recordedArgvs.find(
+    (a) => a[1] === "exec" && a.includes("rm") && a.includes("-rf") && a.includes("/.mh-stage"),
+  )
+  expect(rmStageArgv).toBeDefined()
+})
+
 // ── CC-oauth mounts (agent-auth.ts's prepareAgentAuthMounts) ──────────────
 // The mounts/cleanup themselves are unit-tested against a real filesystem in
 // bench-agent-auth.test.ts; here we only verify cmd-run.ts's WIRING: the
@@ -1149,8 +1277,10 @@ test("runTaskOnce: scripts-mode setup_deps.sh exec has no SKIP_APT in its env (O
   expect(setupArgv.length).toBeGreaterThan(0)
   expect(setupArgv).not.toContain("SKIP_APT=1")
   expect(setupArgv.some((a) => a.startsWith("SKIP_APT"))).toBe(false)
-  // the other setup env vars are still present, unaffected
-  expect(setupArgv).toContain("TB_ROOT=/tb")
+  // the other setup env vars are still present, unaffected — TB_ROOT now
+  // points at the podman-cp staged copy, NOT a persistent /tb mount
+  // (env-fidelity fix, see cmd-run.ts's scripts-mode staging block).
+  expect(setupArgv).toContain("TB_ROOT=/.mh-stage")
   expect(setupArgv).toContain("WORKDIR=/app")
 })
 

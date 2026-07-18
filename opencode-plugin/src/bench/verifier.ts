@@ -5,13 +5,24 @@
  * Mirrors term-bench2/runner.py's copy_tests/_copy_test_entry (:1208-1244)
  * and run_verifier (:1245-1264), reshaped for the podman one-container design
  * (see sandbox.ts's header): instead of copying files on the host into a
- * bwrap-mounted ~/bench/tests, everything happens via `podman exec` against
- * the container's own /tests, using the read-only /tb and /mh mounts set up
- * by cmd-oracle.ts's container-create step.
+ * bwrap-mounted ~/bench/tests, everything happens via `podman cp` straight
+ * from the host filesystem into the container's own /tests.
+ *
+ * Env-fidelity fix (docs/env-fidelity-spotcheck.md): `copyTests` used to
+ * `podman exec cp -r` against a persistent, read-only /tb + /mh mount set up
+ * by the container-create step. Agent (run/ab) containers no longer get
+ * those mounts at all (cmd-run.ts's header), and this step's own timing
+ * makes the mount unnecessary anyway — copyTests always runs AFTER the agent
+ * phase, so switching it to `podman cp` (buildCpToArgv, host -> container,
+ * no mount involved) is timing-safe and applies identically to BOTH the
+ * agent path and cmd-oracle.ts (whose own container still keeps its /tb+/mh
+ * mount for other steps — solve.sh, scripts-mode staging — unaffected here).
+ * `execFn` is injectable (tests inject a fake to capture the cp argv without
+ * spawning podman) — defaults to the real exec.ts funnel.
  *
  * Deliberate simplification vs. Python's per-file `_copy_test_entry` +
  * per-file "patch applied: <name>" log line: the container design copies the
- * whole tests/ and patches/<task>/ trees in one `cp -r` exec each (no need to
+ * whole tests/ and patches/<task>/ trees in one `podman cp` each (no need to
  * enumerate files across an exec boundary), so the patch-applied log is
  * logged once per task (naming the task), not once per patched file — this
  * is the shape the task brief's design section specifies for this step.
@@ -19,28 +30,46 @@
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { podman, withTimeout } from "./exec.ts"
-import { buildExecArgv } from "./sandbox.ts"
+import { buildExecArgv, buildCpToArgv } from "./sandbox.ts"
 import { log, pyFixed } from "./util.ts"
 import type { BenchPaths } from "./paths.ts"
+import type { ExecFn } from "./staging.ts"
 
 /**
- * Copy tests/ (from /tb/<task>/tests, the read-only tbRoot mount) into
- * /tests, then overlay patches/<task>/ (from /mh/patches/<task>, the
- * read-only termBenchDir mount) on top if it exists on the host.
+ * Copy tests/ (from `<tbRoot>/<task>/tests` on the HOST, via `podman cp` —
+ * no /tb mount involved) into /tests, then overlay `<patchesDir>/<task>/`
+ * (also host-side, via `podman cp`) on top if it exists.
+ *
+ * The container's own /tests is pre-created empty by the caller's earlier
+ * `mkdir -p` (cmd-run.ts/cmd-oracle.ts) — `podman cp` nests the source INSIDE
+ * an already-existing destination directory rather than copying its contents
+ * into it, so /tests is explicitly removed first, letting the first `podman
+ * cp` create it fresh (contents copied in directly, verified podman cp
+ * semantics). The patches overlay then targets that now-populated /tests
+ * with a trailing-`/.` source (`<patchDir>/.`, built via string
+ * concatenation — NOT `join()`, which normalizes the trailing `/.` away) so
+ * its contents MERGE into /tests instead of nesting under a `<task>/`
+ * subdirectory.
  */
-export async function copyTests(paths: BenchPaths, name: string, task: string): Promise<void> {
-  const copyCmd = [
-    "bash",
-    "-c",
-    `rm -rf /tests && mkdir -p /tests && cp -r /tb/${task}/tests/. /tests/ && ` +
-      `find /tests -name __pycache__ -type d -prune -exec rm -rf {} + ; ` +
-      `find /tests -name "*.pyc" -delete`,
-  ]
-  await podman(buildExecArgv(name, copyCmd))
+export async function copyTests(
+  paths: BenchPaths,
+  name: string,
+  task: string,
+  execFn: ExecFn = podman,
+): Promise<void> {
+  await execFn(buildExecArgv(name, ["rm", "-rf", "/tests"]))
+  await execFn(buildCpToArgv(name, join(paths.tbRoot, task, "tests"), "/tests"))
+  await execFn(
+    buildExecArgv(name, [
+      "bash",
+      "-c",
+      `find /tests -name __pycache__ -type d -prune -exec rm -rf {} + ; find /tests -name "*.pyc" -delete`,
+    ]),
+  )
 
   const patchDir = join(paths.patchesDir, task)
   if (existsSync(patchDir)) {
-    await podman(buildExecArgv(name, ["bash", "-c", `cp -r /mh/patches/${task}/. /tests/`]))
+    await execFn(buildCpToArgv(name, `${patchDir}/.`, "/tests"))
     log(`  patch applied: ${task}`)
   }
 }
