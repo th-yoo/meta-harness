@@ -165,9 +165,25 @@ export interface CmdScreenArgs {
   canLaunch?: () => boolean
   pressureGate?: () => boolean
   /** Where each candidate's `<vN>.json` results file (and the swept
-   * `ranking.json`) lands. Default: `<termBenchDir>/results/screens`
-   * (paths.ts's makeBenchPaths layout). Overridable for tests. */
+   * `ranking.json` + `screen-meta.json`) lands. Default:
+   * `<termBenchDir>/results/screens/<layer>` (or `<layer>-<agent>` for role
+   * layers) — LAYER-SCOPED because vN names are only unique per layer store:
+   * an unscoped shared dir would let layer B's screen silently skip-resume
+   * off layer A's complete `v1.json` (review CRITICAL). Overridable for
+   * tests / operators; the screen-meta.json stamp below still guards a
+   * hand-shared dir. */
   outDir?: string
+}
+
+/** The `<outDir>/screen-meta.json` provenance stamp — which (layer, agent)
+ * identity the per-candidate results files in this directory belong to.
+ * Written at sweep start; checked before any skip-if-complete reuse, so
+ * even an explicitly shared outDir across layers can never silently rank
+ * another layer's data (defense-in-depth behind the layer-scoped default
+ * path above). `agent` is "" for global layers. */
+interface ScreenMeta {
+  layer: string
+  agent: string
 }
 
 /** Read a candidate's results file iff it is BOTH parseable AND stamped
@@ -186,6 +202,15 @@ function readCompleteResults(file: string): ScreenResultsLike | undefined {
   }
 }
 
+/**
+ * Interruption/resume granularity note (reviewer sign-off): skip-if-complete
+ * is WHOLE-CANDIDATE granularity by design (per the task brief) — a screen
+ * interrupted mid-candidate leaves that candidate's results file stamped
+ * `in_progress` (or absent), so the next invocation re-runs that ENTIRE
+ * candidate from scratch. Intentional: a k=1 sweep per candidate is the
+ * cheap unit here, and per-task resume-within-a-candidate would need
+ * --resume threading through cmdRun for marginal savings.
+ */
 export async function cmdScreen(
   paths: BenchPaths,
   args: CmdScreenArgs,
@@ -207,7 +232,37 @@ export async function cmdScreen(
   // Same 3600s floor as the follow-up ab's own --min-agent-timeout default
   // usage, so screen ordering isn't budget-confounded (task-7-brief.md).
   const minAgentTimeout = args.minAgentTimeout ?? 3600
-  const outDir = args.outDir ?? join(paths.termBenchDir, "results", "screens")
+  const agent = args.agent ?? ""
+  // LAYER-SCOPED default (review CRITICAL): vN names are only unique per
+  // layer store, so an unscoped shared dir would let a later layer's screen
+  // silently skip-resume off an earlier layer's complete <vN>.json.
+  const outDir = args.outDir ?? join(paths.termBenchDir, "results", "screens", agent ? `${layer}-${agent}` : layer)
+
+  // screen-meta.json provenance guard (defense-in-depth behind the scoped
+  // default path — covers an explicitly shared --out-dir too): reuse of a
+  // pre-existing complete results file is allowed ONLY when the directory's
+  // stamp matches this sweep's (layer, agent) identity. A mismatched or
+  // absent stamp disables reuse for the whole sweep (cmdRun simply
+  // overwrites the stale files) — never silently ranks another layer's data.
+  const metaFile = join(outDir, "screen-meta.json")
+  let reuseAllowed = false
+  if (existsSync(metaFile)) {
+    try {
+      const prev = JSON.parse(readFileSync(metaFile, "utf-8")) as Partial<ScreenMeta>
+      if (prev.layer === layer && (prev.agent ?? "") === agent) {
+        reuseAllowed = true
+      } else {
+        log(
+          `screen: ${metaFile} says layer=${prev.layer}${prev.agent ? ` agent=${prev.agent}` : ""} but this sweep is ` +
+            `layer=${layer}${agent ? ` agent=${agent}` : ""} — existing results files belong to a DIFFERENT identity, ` +
+            `re-running every candidate (no reuse)`,
+        )
+      }
+    } catch {
+      log(`screen: ${metaFile} unreadable — re-running every candidate (no reuse)`)
+    }
+  }
+  writeJsonAtomic(metaFile, { layer, agent } satisfies ScreenMeta)
 
   log(
     `screen: ${layer} — ${candidates.length} candidate(s): ${candidates.join(", ")}  min-agent-timeout=${minAgentTimeout}s`,
@@ -216,7 +271,7 @@ export async function cmdScreen(
   const entries: ScreenEntry[] = []
   for (const candidate of candidates) {
     const resultsFile = join(outDir, `${candidate}.json`)
-    const existing = readCompleteResults(resultsFile)
+    const existing = reuseAllowed ? readCompleteResults(resultsFile) : undefined
     if (existing) {
       log(`screen: ${candidate} — already complete at ${resultsFile}, skipping (free resume)`)
       entries.push({ candidate, results: existing })

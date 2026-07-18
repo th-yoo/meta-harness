@@ -197,7 +197,7 @@ test("cmdScreen: one candidate's BenchError doesn't abort the sweep — recorded
   expect(calls.length).toBe(3)
 
   const ranking = JSON.parse(
-    fs.readFileSync(path.join(paths.termBenchDir, "results", "screens", "ranking.json"), "utf-8"),
+    fs.readFileSync(path.join(paths.termBenchDir, "results", "screens", "project-global", "ranking.json"), "utf-8"),
   ) as { ranking: { candidate: string; error?: string }[] }
   const v2 = ranking.ranking.find((r) => r.candidate === "v2")
   expect(v2?.error).toContain("simulated podman create failure")
@@ -224,11 +224,14 @@ test("cmdScreen: a non-BenchError from runFn propagates (not swallowed)", async 
 test("cmdScreen: a candidate with a pre-existing status:complete results file is skipped (free resume) and its data still ranks", async () => {
   const dir = tmpDir()
   const paths = fakeBenchPaths(path.join(dir, "tb"), path.join(dir, "tb-root"))
-  const outDir = path.join(paths.termBenchDir, "results", "screens")
+  const outDir = path.join(paths.termBenchDir, "results", "screens", "project-global")
+  // Simulate a prior sweep of the SAME identity: results file + the
+  // screen-meta.json stamp that sweep would have written (reuse requires it).
   writeResultsFile(
     path.join(outDir, "v1.json"),
     completeResults({ n_pass: 5, n_total: 5, tasks: { t1: { rewards: [1], elapsed: [3], turns: [2], errors: [""] } } }),
   )
+  fs.writeFileSync(path.join(outDir, "screen-meta.json"), JSON.stringify({ layer: "project-global", agent: "" }))
 
   const calls: string[] = []
   const runFn = async (_p: BenchPaths, args: CmdRunArgs): Promise<void> => {
@@ -256,7 +259,11 @@ test("cmdScreen: a candidate with a pre-existing status:complete results file is
 test("cmdScreen: a results file NOT stamped status:complete (crashed partial) is NOT treated as resumable — the candidate is re-run", async () => {
   const dir = tmpDir()
   const paths = fakeBenchPaths(path.join(dir, "tb"), path.join(dir, "tb-root"))
-  const outDir = path.join(paths.termBenchDir, "results", "screens")
+  const outDir = path.join(paths.termBenchDir, "results", "screens", "project-global")
+  // Matching meta stamp — so the re-run is forced by the in_progress status
+  // alone, not by an identity mismatch.
+  fs.mkdirSync(outDir, { recursive: true })
+  fs.writeFileSync(path.join(outDir, "screen-meta.json"), JSON.stringify({ layer: "project-global", agent: "" }))
   writeResultsFile(path.join(outDir, "v1.json"), { n_pass: 1, n_total: 5, tasks: {}, status: "in_progress" })
 
   let ran = false
@@ -317,7 +324,7 @@ test("cmdScreen: threads --parallel/--enforce-resources/--min-cpus/--cpu-budget/
     expect(a.canLaunch).toBe(canLaunch)
     expect(a.pressureGate).toBe(pressureGate)
     expect(a.minAgentTimeout).toBe(1800)
-    expect(a.resultsFile).toBe(path.join(paths.termBenchDir, "results", "screens", `${candidate}.json`))
+    expect(a.resultsFile).toBe(path.join(paths.termBenchDir, "results", "screens", "project-global", `${candidate}.json`))
   }
 })
 
@@ -333,7 +340,7 @@ test("cmdScreen: --min-agent-timeout defaults to 3600 and is stamped into rankin
 
   expect(captured[0]!.minAgentTimeout).toBe(3600)
   const ranking = JSON.parse(
-    fs.readFileSync(path.join(paths.termBenchDir, "results", "screens", "ranking.json"), "utf-8"),
+    fs.readFileSync(path.join(paths.termBenchDir, "results", "screens", "project-global", "ranking.json"), "utf-8"),
   ) as { minAgentTimeout: number }
   expect(ranking.minAgentTimeout).toBe(3600)
 })
@@ -407,6 +414,93 @@ test("cmdScreen: no candidates dies", async () => {
       cmdScreen(paths, { layer: "project-global", candidates: [], all: true } as CmdScreenArgs, async () => {}),
     ),
   ).rejects.toThrow(BenchError)
+})
+
+// ── cross-layer collision (review CRITICAL): vN names are per-layer, not
+// globally unique — screening layer A then layer B in the same termBenchDir
+// must never silently reuse A's v1.json as B's result ──────────────────────
+
+test("cmdScreen: default outDir is layer-scoped — screening the same vN under two layers uses two different results files (no reuse)", async () => {
+  const dir = tmpDir()
+  const paths = fakeBenchPaths(path.join(dir, "tb"), path.join(dir, "tb-root"))
+
+  const calls: { pin: string; resultsFile: string }[] = []
+  const runFn = async (_p: BenchPaths, args: CmdRunArgs): Promise<void> => {
+    calls.push({ pin: args.pin![0]!, resultsFile: args.resultsFile! })
+    writeResultsFile(args.resultsFile!, completeResults({ n_pass: 1, n_total: 1, tasks: {} }))
+  }
+
+  await quiet(() => cmdScreen(paths, { layer: "project-global", candidates: ["v1"], all: true } as CmdScreenArgs, runFn))
+  await quiet(() => cmdScreen(paths, { layer: "account-global", candidates: ["v1"], all: true } as CmdScreenArgs, runFn))
+
+  // The second screen must have RUN its own cmdRun (not skip-resumed off the
+  // first layer's complete v1.json), into a different, layer-scoped file.
+  expect(calls.length).toBe(2)
+  expect(calls[0]!.resultsFile).toBe(path.join(paths.termBenchDir, "results", "screens", "project-global", "v1.json"))
+  expect(calls[1]!.resultsFile).toBe(path.join(paths.termBenchDir, "results", "screens", "account-global", "v1.json"))
+})
+
+test("cmdScreen: default outDir for a role layer is scoped by layer AND agent", async () => {
+  const dir = tmpDir()
+  const paths = fakeBenchPaths(path.join(dir, "tb"), path.join(dir, "tb-root"))
+  const captured: string[] = []
+  const runFn = async (_p: BenchPaths, args: CmdRunArgs): Promise<void> => {
+    captured.push(args.resultsFile!)
+    writeResultsFile(args.resultsFile!, completeResults({ n_pass: 1, n_total: 1, tasks: {} }))
+  }
+  await quiet(() =>
+    cmdScreen(
+      paths,
+      { layer: "project-role", agent: "implementer", candidates: ["v1"], all: true } as CmdScreenArgs,
+      runFn,
+    ),
+  )
+  expect(captured[0]).toBe(
+    path.join(paths.termBenchDir, "results", "screens", "project-role-implementer", "v1.json"),
+  )
+})
+
+test("cmdScreen: an EXPLICIT shared outDir across two layers still never reuses — the screen-meta.json layer/agent stamp mismatches and the candidate is re-run", async () => {
+  const dir = tmpDir()
+  const paths = fakeBenchPaths(path.join(dir, "tb"), path.join(dir, "tb-root"))
+  const outDir = path.join(dir, "shared-screens")
+
+  const calls: string[] = []
+  const runFn = async (_p: BenchPaths, args: CmdRunArgs): Promise<void> => {
+    calls.push(args.pin![0]!)
+    writeResultsFile(args.resultsFile!, completeResults({ n_pass: 1, n_total: 1, tasks: {} }))
+  }
+
+  await quiet(() =>
+    cmdScreen(paths, { layer: "project-global", candidates: ["v1"], all: true, outDir } as CmdScreenArgs, runFn),
+  )
+  // Same explicit outDir, DIFFERENT layer: the pre-existing complete v1.json
+  // belongs to project-global (screen-meta.json says so) — account-global
+  // must re-run v1, not silently rank another layer's data.
+  await quiet(() =>
+    cmdScreen(paths, { layer: "account-global", candidates: ["v1"], all: true, outDir } as CmdScreenArgs, runFn),
+  )
+
+  expect(calls).toEqual(["project-global=v1", "account-global=v1"])
+})
+
+test("cmdScreen: same layer + same explicit outDir DOES still skip-resume (the meta stamp matches)", async () => {
+  const dir = tmpDir()
+  const paths = fakeBenchPaths(path.join(dir, "tb"), path.join(dir, "tb-root"))
+  const outDir = path.join(dir, "shared-screens")
+  const calls: string[] = []
+  const runFn = async (_p: BenchPaths, args: CmdRunArgs): Promise<void> => {
+    calls.push(args.pin![0]!)
+    writeResultsFile(args.resultsFile!, completeResults({ n_pass: 1, n_total: 1, tasks: {} }))
+  }
+  await quiet(() =>
+    cmdScreen(paths, { layer: "project-global", candidates: ["v1"], all: true, outDir } as CmdScreenArgs, runFn),
+  )
+  await quiet(() =>
+    cmdScreen(paths, { layer: "project-global", candidates: ["v1"], all: true, outDir } as CmdScreenArgs, runFn),
+  )
+  // Second invocation resumed off the complete file — only ONE real run.
+  expect(calls).toEqual(["project-global=v1"])
 })
 
 // ── cli.ts: parseScreenArgs / `screen` dispatch ──────────────────────────
