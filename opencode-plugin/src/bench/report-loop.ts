@@ -22,12 +22,13 @@ import { existsSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import type { BenchPaths } from "./paths.ts"
 import { accountMetaRoot, budgetIdentityMatches } from "../harness-store.ts"
-import { log, pySigned, writeJsonAtomic } from "./util.ts"
+import { log, pyFixed, pySigned, writeJsonAtomic } from "./util.ts"
 
 // ── constants ────────────────────────────────────────────────────────────
 
 export const PLATEAU_AB_K = 3 // last K ab events (per layer) all non-accept
 export const PLATEAU_TRIAL_K = 4 // last K resolved project trials without strict improvement
+export const SPEED_RATIO_PRINT_K = 5 // W1a: last K held-in speed ratios printed by report-loop's text summary
 
 /** The three loop-observability sinks, in write-order precedence: bench
  * (Python appender), project (TS appender, this repo's store), account (TS
@@ -78,6 +79,13 @@ export interface MetaMetricEvent {
   minAgentTimeout?: number
   timeoutRecording?: boolean
   env?: { resourceEnforcement?: boolean }
+  // W1a (time-to-resolve, report-only): mirrors ab-verdict.json's
+  // speed.heldIn block (cmd-ab.ts's producer wiring). Absent on every
+  // pre-W1a event; null on a W1a event whose held-in speed had no
+  // qualifying (both-pass, elapsed-present) run-pairs.
+  speedMedianRatio?: number | null
+  speedP?: number | null
+  speedNPairs?: number
   [k: string]: unknown
 }
 
@@ -341,6 +349,11 @@ export interface LoopSummary {
   abDecisions: Record<string, number>
   trialActions: Record<string, number>
   heldOutDeltas: [string | undefined, number | undefined, number][]
+  // W1a (time-to-resolve, report-only): held-in speed medianRatio per ab
+  // event that carries one — mirrors heldOutDeltas' shape (ts, ratio), minus
+  // splitFold (speed isn't split-scoped). Skips events with no ratio (either
+  // a pre-W1a legacy event, or a W1a event whose held-in speed was null).
+  speedRatios: [string | undefined, number][]
   judgeAgreement: { n: number; rate: number } | null
   plateau: PlateauVerdict
 }
@@ -351,6 +364,7 @@ export function summarizeLoop(events: MetaMetricEvent[]): LoopSummary {
   const abDecisions: Record<string, number> = {}
   const trialActions: Record<string, number> = {}
   const heldOutDeltas: [string | undefined, number | undefined, number][] = []
+  const speedRatios: [string | undefined, number][] = []
   let judgeN = 0
   let judgeAgreed = 0
 
@@ -362,6 +376,10 @@ export function summarizeLoop(events: MetaMetricEvent[]): LoopSummary {
       const delta = e.heldOutDelta
       if (delta !== undefined && delta !== null) {
         heldOutDeltas.push([e.ts, e.splitFold, delta])
+      }
+      const ratio = e.speedMedianRatio
+      if (ratio !== undefined && ratio !== null) {
+        speedRatios.push([e.ts, ratio])
       }
     } else if (e.event === "trial") {
       if (e.action !== undefined && e.action !== null) {
@@ -379,6 +397,7 @@ export function summarizeLoop(events: MetaMetricEvent[]): LoopSummary {
     abDecisions,
     trialActions,
     heldOutDeltas,
+    speedRatios,
     judgeAgreement,
     plateau: plateauVerdict(events),
   }
@@ -469,6 +488,19 @@ export function cmdReportLoop(paths: BenchPaths, args: ReportLoopArgs): void {
   if (summary.heldOutDeltas.length) {
     for (const [ts, fold, delta] of summary.heldOutDeltas) {
       console.log(`  ${ts}  fold=${fold}  delta=${pySigned(delta, 4)}`)
+    }
+  } else {
+    console.log("  (none)")
+  }
+  console.log()
+
+  // W1a (time-to-resolve, report-only): last SPEED_RATIO_PRINT_K held-in
+  // medianRatio points (candidate/active agent-phase elapsed; <1 = faster).
+  console.log(`Speed — held-in candidate/active median ratio (last ${SPEED_RATIO_PRINT_K}):`)
+  const lastRatios = summary.speedRatios.slice(-SPEED_RATIO_PRINT_K)
+  if (lastRatios.length) {
+    for (const [ts, ratio] of lastRatios) {
+      console.log(`  ${ts}  ratio=${pyFixed(ratio, 3)}`)
     }
   } else {
     console.log("  (none)")

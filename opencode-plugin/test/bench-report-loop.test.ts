@@ -60,6 +60,27 @@ test("summarizeLoop([]) still has a plateau key", () => {
   expect(s.plateau.plateaued).toBe(false)
 })
 
+// ── W1a: time-to-resolve — optional fields parse into speedRatios ────────
+
+test("summarizeLoop: tracks speedMedianRatio per ab event into speedRatios, skipping events without it", () => {
+  const events: MetaMetricEvent[] = [
+    { ts: "2026-07-09T01:00:00Z", event: "ab", decision: "inconclusive", speedMedianRatio: 0.8, speedP: 0.1, speedNPairs: 5 },
+    { ts: "2026-07-09T02:00:00Z", event: "ab", decision: "accept", speedMedianRatio: null }, // no qualifying pairs
+    { ts: "2026-07-09T03:00:00Z", event: "ab", decision: "accept" }, // pre-W1a legacy event — field absent entirely
+    { ts: "2026-07-09T04:00:00Z", event: "ab", decision: "accept", speedMedianRatio: 1.2 },
+  ]
+  const s = summarizeLoop(events)
+  expect(s.speedRatios).toEqual([
+    ["2026-07-09T01:00:00Z", 0.8],
+    ["2026-07-09T04:00:00Z", 1.2],
+  ])
+})
+
+test("summarizeLoop([]) has an empty speedRatios array, not undefined", () => {
+  const s = summarizeLoop([])
+  expect(s.speedRatios).toEqual([])
+})
+
 // ── plateauVerdict ───────────────────────────────────────────────────────
 
 const PROJECT_SINK = "/repo/.meta-harness/meta-metrics.jsonl" // passed explicitly as projectSink
