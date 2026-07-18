@@ -205,6 +205,13 @@ export interface EnvBlock {
    * kill --resume of every pre-feature partial file even with flags off,
    * the exact ac0cd18 bug class this task fixes. */
   resourceEnforcement: boolean
+  /** Loosest-envelope agent-timeout FLOOR (--min-agent-timeout) this run used,
+   * seconds. OMITTED (not 0) when no floor was set — so a flag-off run's env
+   * block is byte-identical to every pre-feature record, and the budget-identity
+   * comparisons that read this stamp (harness-store.ts's budgetFromSessions/
+   * budgetIdentityMatches, cmd-ab.ts's --resume guard) coalesce an absent key
+   * and an explicit 0 to the same "no floor" via `?? 0`. */
+  minAgentTimeout?: number
 }
 
 /**
@@ -230,6 +237,12 @@ export interface EnvBlock {
  * `resourceEnforcement` (task-3-brief.md) is provenance for whether
  * --enforce-resources was on; defaults to false so every pre-existing
  * caller (direct/unit-test callers that never pass it) is unaffected.
+ *
+ * `minAgentTimeout` (loosest-envelope floor, --min-agent-timeout) is a further
+ * optional trailing param — the per-task agent-timeout FLOOR this run used.
+ * Stamped ONLY when truthy (a real floor); omitted otherwise so a flag-off
+ * run's env block is byte-identical to every pre-feature record. Every existing
+ * caller (that never passes it) is unaffected.
  */
 export async function envBlock(
   harnessMd: string,
@@ -240,6 +253,7 @@ export async function envBlock(
   agentVersionOverride?: string,
   driverId = "opencode",
   resourceEnforcement = false,
+  minAgentTimeout?: number,
 ): Promise<EnvBlock> {
   const [ver, sha] = await Promise.all([
     agentVersionOverride !== undefined ? Promise.resolve(agentVersionOverride) : opencodeVersion(execFn),
@@ -254,6 +268,7 @@ export async function envBlock(
     provider,
     driver: driverId,
     resourceEnforcement,
+    ...(minAgentTimeout ? { minAgentTimeout } : {}),
   }
 }
 

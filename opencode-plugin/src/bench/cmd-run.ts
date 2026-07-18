@@ -415,6 +415,12 @@ export interface CmdRunArgs {
    * footprint unchanged, byte-identical to before these flags existed. */
   minCpus?: number
   minMemMb?: number
+  /** loosest-envelope floor — raises per-task agent time above the TB2-declared
+   * budget; the load-aware scheduler compensates. The time-domain mirror of
+   * --min-cpus/--min-mem-mb (tasks.ts's taskTimeouts): effective agent timeout
+   * = min(max(TB2-declared, floor), --max-agent-timeout). Default undefined →
+   * no floor, byte-identical to before this flag existed. */
+  minAgentTimeout?: number
   /** Disable measured-informed resources: pack on declared/floored footprints
    * and skip the measured cap raise (default: measured used when a
    * trustworthy profile exists). */
@@ -452,6 +458,9 @@ export async function cmdRun(
   const staging = args.staging ?? "runtime"
   const maxAgentTimeout = args.maxAgentTimeout ?? 0
   const maxVerifierTimeout = args.maxVerifierTimeout ?? 0
+  // Loosest-envelope floor (--min-agent-timeout): undefined when unset → no
+  // floor (taskTimeouts leaves the declared timeout alone), byte-identical.
+  const minAgentTimeout = args.minAgentTimeout
   const driver = getDriver(args.driver ?? "opencode")
 
   if (args.pin && args.pin.length > 0 && (args.noHarness || layers === "none")) {
@@ -509,6 +518,7 @@ export async function cmdRun(
     agentVersion,
     driver.id,
     args.enforceResources ?? false,
+    minAgentTimeout,
   )
 
   const { taskAgg, doneTasks } = resumeCarryForward(
@@ -561,7 +571,7 @@ export async function cmdRun(
       return
     }
     log(`\n${prefix}=== Task: ${task} ===`)
-    const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout)
+    const { agentTimeout, verifierTimeout } = taskTimeouts(paths, task, maxAgentTimeout, maxVerifierTimeout, minAgentTimeout)
     // `let`: the OOM-retry wrapper carries an escalated cap forward across this
     // task's remaining k-repeats (within-invocation carry-forward, below).
     // B5: the SERIAL path (resourcesOverride undefined) applies the same
@@ -715,6 +725,7 @@ export async function cmdRun(
             driver: driver.id,
             resourceEnforcement: args.enforceResources || undefined,
             maxAgentTimeout,
+            minAgentTimeout,
             timeoutRecording: recordTimeouts,
           })
         }
@@ -813,6 +824,7 @@ export async function cmdRun(
       driver: driver.id,
       resourceEnforcement: args.enforceResources || undefined,
       maxAgentTimeout,
+      minAgentTimeout,
       timeoutRecording: recordTimeouts,
     })
     const [np, nt] = aggTotals(taskAgg)

@@ -127,6 +127,14 @@ export interface CmdAbArgs {
    * unchanged, byte-identical to before these flags existed. */
   minCpus?: number
   minMemMb?: number
+  /** loosest-envelope floor — raises per-task agent time above the TB2-declared
+   * budget; the load-aware scheduler compensates. The time-domain mirror of
+   * --min-cpus/--min-mem-mb (tasks.ts's taskTimeouts): effective agent timeout
+   * = min(max(TB2-declared, floor), --max-agent-timeout). Part of the verdict's
+   * budget-identity (env stamp + top-level), so a candidate scored under a
+   * different floor than the active baseline is refused at /mh-activate.
+   * Default undefined → no floor, byte-identical to before this flag existed. */
+  minAgentTimeout?: number
   /** Disable measured-informed resources: pack on declared/floored footprints
    * and skip the measured cap raise (default: measured used when a
    * trustworthy profile exists). */
@@ -167,6 +175,9 @@ export async function cmdAb(
   const staging = args.staging ?? "runtime"
   const maxAgentTimeout = args.maxAgentTimeout ?? 0
   const maxVerifierTimeout = args.maxVerifierTimeout ?? 0
+  // Loosest-envelope floor (--min-agent-timeout): undefined when unset → no
+  // floor (taskTimeouts leaves the declared timeout alone), byte-identical.
+  const minAgentTimeout = args.minAgentTimeout
   const driver = getDriver(args.driver ?? "opencode")
 
   if (!/^v\d+$/.test(candidate)) die(`--candidate must look like vN, got '${candidate}'`)
@@ -251,6 +262,7 @@ export async function cmdAb(
     agentVersion,
     driver.id,
     args.enforceResources ?? false,
+    minAgentTimeout,
   )
   // Loop-3 T3: whether a wall-clock agent-phase timeout on arm B gets
   // recorded as a genuine stored fail (default OFF). Read once for the
@@ -338,13 +350,28 @@ export async function cmdAb(
     // reads the informational `env.resourceEnforcement` stamp instead, with
     // both sides `?? false`-coalesced so an absent key (pre-feature
     // partial) means the same thing as an explicit `false`.
-    const prevEnv = prev["env"] as { resourceEnforcement?: boolean } | undefined
+    const prevEnv = prev["env"] as { resourceEnforcement?: boolean; minAgentTimeout?: number } | undefined
     const prevResourceEnforcement = prevEnv?.resourceEnforcement ?? false
     const expectedResourceEnforcement = args.enforceResources ?? false
     if (prevResourceEnforcement !== expectedResourceEnforcement) {
       die(
         `--resume: ${partialPath} was produced with resourceEnforcement=${prevResourceEnforcement}, this run uses ` +
           `${expectedResourceEnforcement} — refusing to mix measurement regimes in one results file.`,
+      )
+    }
+    // Same distinct-machinery-beside-runIdent guard for the loosest-envelope
+    // floor (--min-agent-timeout): it's an informational env.minAgentTimeout
+    // stamp, NOT a runIdent key (folding it in would kill --resume of every
+    // pre-feature partial the instant the flag existed — the ac0cd18 class).
+    // Both sides `?? 0`-coalesced so an absent key (pre-feature partial) means
+    // the same as an explicit 0 / no floor; a real floor mismatch REJECTS
+    // resume, since the effective per-task envelope differs.
+    const prevMinAgentTimeout = prevEnv?.minAgentTimeout ?? 0
+    const expectedMinAgentTimeout = args.minAgentTimeout ?? 0
+    if (prevMinAgentTimeout !== expectedMinAgentTimeout) {
+      die(
+        `--resume: ${partialPath} was produced with minAgentTimeout=${prevMinAgentTimeout}s, this run uses ` +
+          `${expectedMinAgentTimeout}s — refusing to mix measurement regimes in one results file.`,
       )
     }
     earlyStopped = Boolean(prev["earlyStopped"])
@@ -416,6 +443,11 @@ export async function cmdAb(
       // `env.resourceEnforcement` below (envB), and budgetIdentityMatches
       // sources it from there.
       maxAgentTimeout,
+      // Loosest-envelope floor (--min-agent-timeout): stamped alongside
+      // maxAgentTimeout as part of the budget-identity tuple. undefined when no
+      // floor → omitted from the written JSON (budgetIdentityMatches coalesces
+      // an absent key to 0), so a flag-off verdict is byte-identical.
+      minAgentTimeout,
       timeoutRecording: recordTimeouts,
       decision,
       winner,
@@ -767,6 +799,7 @@ export async function cmdAb(
     // report-loop.ts's segmentByCurrentBudgetIdentity has a real signal to
     // segment on instead of every event reading as pre-Loop-3 legacy.
     maxAgentTimeout: final["maxAgentTimeout"],
+    minAgentTimeout: final["minAgentTimeout"],
     timeoutRecording: final["timeoutRecording"],
     env: { resourceEnforcement: finalEnv?.resourceEnforcement },
   })

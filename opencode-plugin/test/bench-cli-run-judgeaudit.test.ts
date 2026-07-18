@@ -205,6 +205,53 @@ test("cli: run --parallel --enforce-resources with the key set parses, falls thr
   }
 })
 
+// ── --min-agent-timeout (loosest-envelope per-task agent-time FLOOR) ───────
+// Same numeric-parse+validate pattern as --min-cpus/--min-mem-mb (parseBudgetNum:
+// rejects non-finite/non-positive). Legal WITH and WITHOUT --parallel — no
+// validateParallel rule for it (it's a per-task timeout floor, not a budget).
+
+test("cli: run --min-agent-timeout 3600 parses fine WITHOUT --parallel and falls through to normal flow (rc 1, no tasks)", async () => {
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main(["run", "--min-agent-timeout", "3600", "--layers", "none"])
+    expect(rc).toBe(1)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes("Specify --tasks"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("cli: run --min-agent-timeout 3600 --parallel --enforce-resources with the key set parses (rc 1, no tasks)", async () => {
+  const prev = process.env["ANTHROPIC_API_KEY"]
+  process.env["ANTHROPIC_API_KEY"] = "sk-test-parallel"
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main([
+      "run", "--min-agent-timeout", "3600", "--parallel", "--enforce-resources", "--layers", "none",
+    ])
+    expect(rc).toBe(1)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes("Specify --tasks"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+    if (prev === undefined) delete process.env["ANTHROPIC_API_KEY"]
+    else process.env["ANTHROPIC_API_KEY"] = prev
+  }
+})
+
+test("cli: run --min-agent-timeout abc (non-numeric) -> rc 2", async () => {
+  expect(await main(["run", "--min-agent-timeout", "abc", "--all"])).toBe(2)
+})
+
+test("cli: run --min-agent-timeout 0 (non-positive) -> rc 2", async () => {
+  expect(await main(["run", "--min-agent-timeout", "0", "--all"])).toBe(2)
+})
+
+test("cli: run --min-agent-timeout Infinity (non-finite) -> rc 2", async () => {
+  expect(await main(["run", "--min-agent-timeout", "Infinity", "--all"])).toBe(2)
+})
+
 // ── --no-pack-measured (Task 3 of the load-aware bench scheduler design) ──
 // Escape hatch disabling ALL measured-informed resource decisions. Unlike
 // --cpu-budget/--mem-budget/--min-cpus/--min-mem-mb, it's legal WITHOUT

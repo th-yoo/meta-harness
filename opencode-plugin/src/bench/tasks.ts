@@ -120,15 +120,30 @@ export function selectTasks(
  * matching Python's `read_toml_value(...) or <default>` falsy-fallback
  * (runner.py:1452,1456), including the edge case of an explicit `0` value
  * also falling back to the default (rare, but that's Python's behavior too).
- * When maxAgentTimeout is truthy and agentTimeout exceeds it, the agent
- * timeout is capped and a Python-parity log line is emitted
- * (runner.py:1454).
+ *
+ * The agent timeout resolves to `min(max(declared, minAgentTimeout), maxAgentTimeout)`:
+ *  - `minAgentTimeout` (--min-agent-timeout) is the loosest-envelope FLOOR: a
+ *    generous per-task minimum that RAISES a declared timeout below it (never
+ *    lowers), the exact time-domain mirror of enforcedResources' --min-cpus/
+ *    --min-mem-mb resource floor. Rationale: a slow host turns TB2's declared
+ *    task.toml budget into an artificial limit → false-timeout fails that
+ *    corrupt the loop signal; the load-aware scheduler compensates for the
+ *    generosity. When set and `declared < floor`, the timeout is raised and a
+ *    log line (mirroring the capping line's style) is emitted. Omitting it
+ *    (default) is byte-identical to before this parameter existed.
+ *  - `maxAgentTimeout` (the existing cap) then applies UNCHANGED and only ever
+ *    LOWERS, with the Python-parity capping log line (runner.py:1454). Because
+ *    the cap is applied AFTER the floor, the cap always wins when floor > cap.
+ *
+ * `minAgentTimeout` never touches the verifier timeout (the verifier runs
+ * after the agent, no oauth interaction — TB2-exact stays correct there).
  */
 export function taskTimeouts(
   paths: BenchPaths,
   task: string,
   maxAgentTimeout: number,
   maxVerifierTimeout = 0,
+  minAgentTimeout?: number,
 ): { agentTimeout: number; verifierTimeout: number } {
   const tomlPath = join(paths.tbRoot, task, "task.toml")
   let doc: TaskToml | undefined
@@ -144,6 +159,10 @@ export function taskTimeouts(
   let agentTimeout = typeof agentRaw === "number" && agentRaw ? agentRaw : 900
   let verifierTimeout = typeof verifierRaw === "number" && verifierRaw ? verifierRaw : 300
 
+  if (minAgentTimeout && agentTimeout < minAgentTimeout) {
+    log(`  raising agent timeout ${pyFixed(agentTimeout, 0)}s → ${pyFixed(minAgentTimeout, 0)}s (--min-agent-timeout)`)
+    agentTimeout = minAgentTimeout
+  }
   if (maxAgentTimeout && agentTimeout > maxAgentTimeout) {
     log(`  capping agent timeout ${pyFixed(agentTimeout, 0)}s → ${pyFixed(maxAgentTimeout, 0)}s`)
     agentTimeout = maxAgentTimeout

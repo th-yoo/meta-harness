@@ -73,6 +73,9 @@ export interface MetaMetricEvent {
   // budgetIdentityMatches), so an all-legacy stream still computes a single
   // window exactly as before this feature.
   maxAgentTimeout?: number
+  /** Loosest-envelope agent-timeout FLOOR (--min-agent-timeout) — part of the
+   * budget-identity tuple alongside maxAgentTimeout. Absent = no floor. */
+  minAgentTimeout?: number
   timeoutRecording?: boolean
   env?: { resourceEnforcement?: boolean }
   [k: string]: unknown
@@ -108,12 +111,13 @@ export interface MetaMetricEvent {
  * no-op). */
 function currentBudgetIdentity(
   events: MetaMetricEvent[],
-): { maxAgentTimeout?: number; timeoutRecording?: boolean; resourceEnforcement?: boolean } {
+): { maxAgentTimeout?: number; minAgentTimeout?: number; timeoutRecording?: boolean; resourceEnforcement?: boolean } {
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]!
     if (e.maxAgentTimeout !== undefined) {
       return {
         maxAgentTimeout: e.maxAgentTimeout,
+        minAgentTimeout: e.minAgentTimeout,
         timeoutRecording: e.timeoutRecording,
         resourceEnforcement: e.env?.resourceEnforcement,
       }

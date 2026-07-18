@@ -995,6 +995,73 @@ test("cmdAb resume: resourceEnforcement is NOT a runIdent field (resumeIdentChec
   expect(readAbVerdict(root, "v1")).not.toBeNull()
 })
 
+// ── --min-agent-timeout floor: env stamp + resume-ident (mirrors the ─────────
+// resourceEnforcement guard above — the loosest-envelope floor is part of the
+// budget-identity, so a resume under a DIFFERENT floor must be refused) ───────
+
+test("cmdAb resume: minAgentTimeout is an informational env stamp (NOT a runIdent key); resuming under a different floor dies via the coalescing guard", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  const heldIn = ["hi0", "hi1"]
+  writeSplitsFile(paths, heldIn, ["ho1"])
+  const root = setupCandidate(paths, "project-global", "v1")
+  const partialPath = path.join(root, "candidates", "v1", "ab-verdict.partial.json")
+
+  // Crash mid-run WITH a floor set (3600s) → a real on-disk partial whose env
+  // block carries minAgentTimeout=3600 (env-stamp-carries-floor coverage).
+  const crashingFake: RunOneTaskFn = async (_p, task) => {
+    if (task === "hi1") throw new Error("simulated crash mid-run")
+    return res({ reward: 1, turns: 3 })
+  }
+
+  await expect(
+    quiet(() =>
+      cmdAb(
+        paths,
+        { layer: "project-global", candidate: "v1", k: 1, minTasksBeforeStop: 999, minAgentTimeout: 3600 } as CmdAbArgs,
+        crashingFake,
+        fakeExec,
+      ),
+    ),
+  ).rejects.toThrow("simulated crash mid-run")
+
+  const partial = JSON.parse(fs.readFileSync(partialPath, "utf-8")) as Record<string, unknown>
+  // (a) Present top-level in the verdict provenance (the budget-identity stamp,
+  // alongside maxAgentTimeout) — budgetIdentityMatches reads it there — AND in
+  // the env block. Crucially it is NOT a runIdent key (runIdent = layer/
+  // candidate/baseline/model/k/activeFold/splitHash/driver): resumeIdentCheck's
+  // strict per-key compare never sees it, so a pre-feature partial (no floor)
+  // doesn't die on the missing key — the ac0cd18 class the separate guard below
+  // avoids. Same top-level-in-verdict-but-not-runIdent shape maxAgentTimeout has.
+  expect(partial["minAgentTimeout"]).toBe(3600)
+  expect((partial["env"] as Record<string, unknown>)["minAgentTimeout"]).toBe(3600)
+
+  // Resuming under a DIFFERENT floor (none) must die via the separate
+  // coalescing guard's own "measurement regimes" message.
+  await expect(
+    quiet(() =>
+      cmdAb(
+        paths,
+        { layer: "project-global", candidate: "v1", k: 1, minTasksBeforeStop: 999, resume: true } as CmdAbArgs,
+        async () => res({ reward: 1, turns: 3 }),
+        fakeExec,
+      ),
+    ),
+  ).rejects.toThrow(/minAgentTimeout|measurement regimes/i)
+
+  // Resuming under the SAME floor (3600) completes normally.
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", k: 1, minTasksBeforeStop: 999, resume: true, minAgentTimeout: 3600 } as CmdAbArgs,
+      async () => res({ reward: 1, turns: 3 }),
+      fakeExec,
+    ),
+  )
+  expect(readAbVerdict(root, "v1")).not.toBeNull()
+})
+
 // ── --parallel: canonical-order early-stop + postStop (task-7-brief.md) ─────
 
 interface FakeState {

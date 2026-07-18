@@ -260,6 +260,11 @@ export interface AbVerdict {
   // existing `env` block (envBlock() in record.ts) rather than duplicated —
   // only the one field this gate cares about is typed here.
   maxAgentTimeout?: number
+  /** Loosest-envelope agent-timeout FLOOR (--min-agent-timeout) this verdict
+   * was measured under. Part of the budget-identity tuple alongside
+   * maxAgentTimeout — absent = no floor (pre-feature verdicts stay compatible,
+   * coalesced to 0 by budgetIdentityMatches). */
+  minAgentTimeout?: number
   timeoutRecording?: boolean
   env?: { resourceEnforcement?: boolean; maxAgentTimeout?: number }
 }
@@ -298,30 +303,44 @@ export function abAccepted(v: AbVerdict): boolean {
  * `resolveTrial` (Loop-3 T7: a trial's own just-measured session subset), so
  * both derive the tuple via literally the same scan rather than two
  * hand-rolled copies that could drift. */
-function budgetFromSessions(sessions: SessionRecord[]): { maxAgentTimeout?: number; resourceEnforcement?: boolean } {
+function budgetFromSessions(
+  sessions: SessionRecord[],
+): { maxAgentTimeout?: number; minAgentTimeout?: number; resourceEnforcement?: boolean } {
   let maxAgentTimeout: number | undefined
+  let minAgentTimeout: number | undefined
   let resourceEnforcement: boolean | undefined
   for (let i = sessions.length - 1; i >= 0; i--) {
-    const env = sessions[i]?.env as { maxAgentTimeout?: number; resourceEnforcement?: boolean } | undefined
+    const env = sessions[i]?.env as
+      | { maxAgentTimeout?: number; minAgentTimeout?: number; resourceEnforcement?: boolean }
+      | undefined
     if (!env) continue
-    if (maxAgentTimeout === undefined) maxAgentTimeout = env.maxAgentTimeout
+    // maxAgentTimeout is the sentinel field an env-carrying session always has
+    // (record.ts stamps it as `|| 0`); once it's found, this is the winning
+    // env block, so read minAgentTimeout (which is OMITTED when no floor — an
+    // absent key legitimately means "no floor", not "keep scanning") from the
+    // SAME block rather than continuing to hunt for a later floor.
+    if (maxAgentTimeout === undefined) {
+      maxAgentTimeout = env.maxAgentTimeout
+      minAgentTimeout = env.minAgentTimeout
+    }
     if (resourceEnforcement === undefined) resourceEnforcement = env.resourceEnforcement
     if (maxAgentTimeout !== undefined && resourceEnforcement !== undefined) break
   }
-  return { maxAgentTimeout, resourceEnforcement }
+  return { maxAgentTimeout, minAgentTimeout, resourceEnforcement }
 }
 
 export function readActiveBudget(storeRoot: string): {
   maxAgentTimeout?: number
+  minAgentTimeout?: number
   timeoutRecording?: boolean
   resourceEnforcement?: boolean
 } {
   const version = activeVersion(storeRoot)
   if (!version) return {}
   const score = readScore(storeRoot, version)
-  const { maxAgentTimeout, resourceEnforcement } = budgetFromSessions(score.sessions)
+  const { maxAgentTimeout, minAgentTimeout, resourceEnforcement } = budgetFromSessions(score.sessions)
   const activeVerdict = readAbVerdict(storeRoot, version)
-  return { maxAgentTimeout, resourceEnforcement, timeoutRecording: activeVerdict?.timeoutRecording }
+  return { maxAgentTimeout, minAgentTimeout, resourceEnforcement, timeoutRecording: activeVerdict?.timeoutRecording }
 }
 
 /** The budget-identity-bearing subset of fields `budgetIdentityMatches`'s
@@ -332,6 +351,7 @@ export function readActiveBudget(storeRoot: string): {
  * assignable to this type, so existing callers (engine.ts) are unaffected. */
 export interface BudgetStamp {
   maxAgentTimeout?: number
+  minAgentTimeout?: number
   timeoutRecording?: boolean
   env?: { resourceEnforcement?: boolean }
 }
@@ -347,10 +367,15 @@ export interface BudgetStamp {
  */
 export function budgetIdentityMatches(
   verdict: BudgetStamp,
-  activeBudget: { maxAgentTimeout?: number; timeoutRecording?: boolean; resourceEnforcement?: boolean },
+  activeBudget: { maxAgentTimeout?: number; minAgentTimeout?: number; timeoutRecording?: boolean; resourceEnforcement?: boolean },
 ): boolean {
   if (verdict.maxAgentTimeout === undefined) return true // pre-Loop-3 — no claim to violate
   if (verdict.maxAgentTimeout !== activeBudget.maxAgentTimeout) return false
+  // Loosest-envelope floor (--min-agent-timeout): part of the identity tuple.
+  // An absent key and an explicit 0 both mean "no floor" (`?? 0`), so a verdict
+  // measured before the floor feature existed matches an also-floor-less active
+  // baseline — back-compat preserved — while a real floor mismatch rejects.
+  if ((verdict.minAgentTimeout ?? 0) !== (activeBudget.minAgentTimeout ?? 0)) return false
   if ((verdict.timeoutRecording ?? false) !== (activeBudget.timeoutRecording ?? false)) return false
   const verdictEnforcement = verdict.env?.resourceEnforcement ?? false
   const activeEnforcement = activeBudget.resourceEnforcement ?? false
@@ -1211,8 +1236,8 @@ export function resolveTrial(storeRoot: string): TrialResolution {
   // the policy is right now" is the only available source.
   const { recordTimeouts: timeoutRecording } = readMhConfig()
   function budgetStamp(sessions: SessionRecord[]) {
-    const { maxAgentTimeout, resourceEnforcement } = budgetFromSessions(sessions)
-    return { maxAgentTimeout, timeoutRecording, env: { resourceEnforcement } }
+    const { maxAgentTimeout, minAgentTimeout, resourceEnforcement } = budgetFromSessions(sessions)
+    return { maxAgentTimeout, minAgentTimeout, timeoutRecording, env: { resourceEnforcement } }
   }
 
   // No baseline to compare against — nothing to stratify by; keep original path.

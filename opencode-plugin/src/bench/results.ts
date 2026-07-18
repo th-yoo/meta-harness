@@ -161,6 +161,11 @@ export interface RunResultsMeta {
    * resourceEnforcement above) — every call site already has a concrete
    * number in scope, so there is no "omit when off" case to preserve. */
   maxAgentTimeout: number
+  /** Loosest-envelope agent-timeout FLOOR (--min-agent-timeout) this run used.
+   * OMITTED (not 0) when no floor — mirrors resourceEnforcement's "omit when
+   * off" so a flag-off results file is byte-identical to every pre-feature
+   * file (JSON.stringify drops the undefined key). */
+  minAgentTimeout?: number
   /** Whether a wall-clock agent-phase timeout was recorded as a genuine
    * stored fail for this run (Loop-3 T3's recordTimeouts flag). Always
    * present, same rationale as maxAgentTimeout above. */
@@ -190,6 +195,7 @@ export function writeRunResults(resultsFile: string, meta: RunResultsMeta): void
     driver: meta.driver,
     resourceEnforcement: meta.resourceEnforcement,
     maxAgentTimeout: meta.maxAgentTimeout,
+    minAgentTimeout: meta.minAgentTimeout,
     timeoutRecording: meta.timeoutRecording,
   })
   log(`Results written → ${resultsFile}`)

@@ -756,6 +756,9 @@ export class EvolutionEngine {
           if (verdict.maxAgentTimeout !== activeBudget.maxAgentTimeout) {
             mismatches.push(`maxAgentTimeout ${verdict.maxAgentTimeout}s (candidate) vs ${activeBudget.maxAgentTimeout}s (active)`)
           }
+          if ((verdict.minAgentTimeout ?? 0) !== (activeBudget.minAgentTimeout ?? 0)) {
+            mismatches.push(`minAgentTimeout ${verdict.minAgentTimeout ?? 0}s (candidate) vs ${activeBudget.minAgentTimeout ?? 0}s (active)`)
+          }
           if ((verdict.timeoutRecording ?? false) !== (activeBudget.timeoutRecording ?? false)) {
             mismatches.push(`timeoutRecording ${verdict.timeoutRecording ?? false} (candidate) vs ${activeBudget.timeoutRecording ?? false} (active)`)
           }

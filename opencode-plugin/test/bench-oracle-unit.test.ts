@@ -223,6 +223,100 @@ test("taskTimeouts: maxAgentTimeout of 0 means uncapped", () => {
   expect(taskTimeouts(paths, "uncapped", 0)).toEqual({ agentTimeout: 1200, verifierTimeout: 300 })
 })
 
+// ── --min-agent-timeout floor (loosest-envelope timeouts) ─────────────────
+// Effective agent timeout = min(max(declared, floor), cap). The floor RAISES
+// a declared timeout below it (never lowers), then the existing cap applies
+// unchanged; the verifier timeout is never touched.
+
+test("taskTimeouts: floor raises a declared timeout below it and logs the raising message", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "floored"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "floored", "task.toml"), "[agent]\ntimeout_sec = 900\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    // cap 3600, floor 3600: 900 → raised to 3600, cap does not lower it.
+    const result = taskTimeouts(paths, "floored", 3600, 0, 3600)
+    expect(result).toEqual({ agentTimeout: 3600, verifierTimeout: 300 })
+    const messages = errSpy.mock.calls.map((c) => c[0])
+    expect(messages).toContain("  raising agent timeout 900s → 3600s (--min-agent-timeout)")
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("taskTimeouts: cap still wins when the floor exceeds the cap (floor 3600, cap 1800 → 1800)", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "floorcap"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "floorcap", "task.toml"), "[agent]\ntimeout_sec = 900\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    // 900 raised to 3600 by the floor, then capped back down to 1800.
+    const result = taskTimeouts(paths, "floorcap", 1800, 0, 3600)
+    expect(result).toEqual({ agentTimeout: 1800, verifierTimeout: 300 })
+    const messages = errSpy.mock.calls.map((c) => c[0])
+    expect(messages).toContain("  raising agent timeout 900s → 3600s (--min-agent-timeout)")
+    expect(messages).toContain("  capping agent timeout 3600s → 1800s")
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("taskTimeouts: no floor (undefined) leaves the declared timeout unchanged", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "nofloor"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "nofloor", "task.toml"), "[agent]\ntimeout_sec = 900\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    expect(taskTimeouts(paths, "nofloor", 3600)).toEqual({ agentTimeout: 900, verifierTimeout: 300 })
+    const messages = errSpy.mock.calls.map((c) => c[0])
+    expect(messages.some((m) => typeof m === "string" && m.includes("raising agent timeout"))).toBe(false)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("taskTimeouts: declared already at/above the floor is left unchanged (no raise log)", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "atfloor"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "atfloor", "task.toml"), "[agent]\ntimeout_sec = 1200\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    // declared 1200 ≥ floor 900, cap 3600 does not lower it → unchanged.
+    const result = taskTimeouts(paths, "atfloor", 3600, 0, 900)
+    expect(result).toEqual({ agentTimeout: 1200, verifierTimeout: 300 })
+    const messages = errSpy.mock.calls.map((c) => c[0])
+    expect(messages.some((m) => typeof m === "string" && m.includes("raising agent timeout"))).toBe(false)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("taskTimeouts: floor never affects the verifier timeout", () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "vfloor"), { recursive: true })
+  fs.writeFileSync(
+    path.join(tbRoot, "vfloor", "task.toml"),
+    "[agent]\ntimeout_sec = 300\n\n[verifier]\ntimeout_sec = 120\n",
+  )
+  const paths = fakeBenchPaths(dir, tbRoot)
+  // floor 3600 raises the agent timeout to 3600 but the verifier stays 120.
+  const result = taskTimeouts(paths, "vfloor", 0, 0, 3600)
+  expect(result).toEqual({ agentTimeout: 3600, verifierTimeout: 120 })
+})
+
 // ── taskResources ────────────────────────────────────────────────────────
 
 test("taskResources: reads declared [environment] fields", () => {

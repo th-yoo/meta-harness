@@ -281,6 +281,16 @@ test("envBlock: resourceEnforcement defaults to false, but is carried through ve
   expect(on.resourceEnforcement).toBe(true)
 })
 
+test("envBlock: minAgentTimeout is omitted when no floor, stamped verbatim when set", async () => {
+  const execFn = async (): Promise<ExecResult> => ({ rc: 0, stdout: "v1\n", stderr: "", timedOut: false })
+  // No floor (undefined / falsy) -> key absent, byte-identical env shape.
+  const off = await envBlock("h", 600, "anthropic/claude-x", "/repo", execFn)
+  expect(Object.prototype.hasOwnProperty.call(off, "minAgentTimeout")).toBe(false)
+  // Floor set -> carried through verbatim (trailing param after resourceEnforcement).
+  const on = await envBlock("h", 600, "anthropic/claude-x", "/repo", execFn, "some-version", "opencode", true, 3600)
+  expect(on.minAgentTimeout).toBe(3600)
+})
+
 test("envBlock: driverId param defaults to 'opencode' but is carried through verbatim when supplied", async () => {
   const execFn = async (): Promise<ExecResult> => ({ rc: 0, stdout: "v1\n", stderr: "", timedOut: false })
   const env = await envBlock("h", 0, "anthropic/claude-x", "/repo", execFn, "some-version", "fake-driver")

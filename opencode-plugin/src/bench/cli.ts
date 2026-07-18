@@ -43,7 +43,7 @@ commands:
               [--model ID] [--variant V] [--k N] [--layers global|account|project|none]
               [--no-store] [--save-all-traj] [--self-check] [--no-harness] [--results-file PATH]
               [--label NAME] [--max-agent-timeout SEC] [--max-verifier-timeout SEC]
-              [--resume] [--agent NAME]
+              [--min-agent-timeout SEC] [--resume] [--agent NAME]
               [--pin LAYER=vN]... [--staging scripts|runtime] [--driver ID] [--enforce-resources]
               [--parallel] [--cpu-budget N] [--mem-budget MB] [--min-cpus N] [--min-mem-mb MB]
               [--no-pack-measured]
@@ -54,7 +54,7 @@ commands:
               [--all] [--split-file PATH] [--model ID] [--variant V] [--k N]
               [--layers global|account|project] [--agent NAME] [--alpha F]
               [--nonregress-margin F] [--min-tasks-before-stop N] [--no-early-stop]
-              [--max-agent-timeout SEC] [--max-verifier-timeout SEC] [--resume]
+              [--max-agent-timeout SEC] [--max-verifier-timeout SEC] [--min-agent-timeout SEC] [--resume]
               [--no-store] [--save-all-traj]
               [--results-file PATH] [--staging scripts|runtime] [--driver ID] [--enforce-resources]
               [--parallel] [--cpu-budget N] [--mem-budget MB] [--min-cpus N] [--min-mem-mb MB]
@@ -376,6 +376,15 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
       i += 2
       continue
     }
+    if (a === "--min-agent-timeout") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.minAgentTimeout = n
+      i += 2
+      continue
+    }
     if (a === "--no-pack-measured") {
       out.noPackMeasured = true
       i++
@@ -511,6 +520,12 @@ export function validateParallel(
     )
   }
 
+  // --min-agent-timeout floor note: the worst-case task duration this gate
+  // bounds against is `maxAgentTimeout` (the cap). The floor only RAISES a
+  // task's declared timeout UP TO the floor, after which the cap still applies
+  // (tasks.ts's taskTimeouts: effective = min(max(declared, floor), cap) ≤
+  // cap). So the floor can never push the worst case above the cap → this
+  // freshness math stays correct unchanged, no `minAgentTimeout` term needed.
   const neededMs = (a.maxAgentTimeout || DEFAULT_TASK_AGENT_TIMEOUT_SEC) * 1000 + OAUTH_PARALLEL_MARGIN_MS
   const remainingMs = exp - Date.now()
   if (remainingMs < neededMs) {
@@ -791,6 +806,15 @@ function parseAbArgs(argv: string[]): CmdAbArgs | null {
       const n = parseBudgetNum(v)
       if (n === null) return null
       out.minMemMb = n
+      i += 2
+      continue
+    }
+    if (a === "--min-agent-timeout") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.minAgentTimeout = n
       i += 2
       continue
     }
