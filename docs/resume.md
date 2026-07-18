@@ -3,7 +3,36 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ➡️ CURRENT STATE (2026-07-18)
+## ➡️ CURRENT STATE (2026-07-18 pt 2) — TIMEOUT FLOOR shipped, re-baseline #2 IN FLIGHT
+
+**USER CORRECTION (recorded as feedback memory):** the standing decision is **1 hour per task**
+(loosest envelope; load-aware scheduling compensates) — NOT TB2-exact budgets. The code's
+cap-only-lowers semantics (`min(TB2, --max-agent-timeout)`) was a design misreading: on this
+3×-slower 4-CPU VM, TB2 budgets are artificial limits → live-observed tune-mjcf 0-for-4 timeouts
+at 900s (Linux passed in 267s) during the first (b) `ab` attempt.
+
+**Shipped: `--min-agent-timeout` floor** (`248fe8f` + fix `d22ecb0`, suite 1327/0): effective
+per-task agent time = `min(max(TB2, floor), cap)` — time-domain mirror of `--min-cpus`. Floor
+threaded through ALL budget-identity sites (env stamp, ab verdict + resume-ident, T6/T7 tuple,
+/mh-activate gate); absent=0 keeps old records comparable. Verifier stays TB2-exact. Review
+caught a CRITICAL before merge: cmd-ab never passed the floor to taskTimeouts (stamped-but-inert
+on the ab path) — fixed + execution-tested.
+
+**Budget-identity is now `{maxAgentTimeout:3600, minAgentTimeout:3600, timeoutRecording:true,
+resourceEnforcement:true}`** → the Linux v0 baseline (floor-absent, and host-mismatched anyway) is
+superseded. **Re-baseline #2 runs ON THIS MacBook** (v0 score reset per the established
+procedure; old baseline preserved in git history): 14-task band, k=1, parallel,
+`--min-agent-timeout 3600 --max-agent-timeout 3600 --enforce-resources --min-cpus 2 --cpu-budget 4
+--mem-budget 7000`. This also warms the resource-profile store → measured packing kicks in for
+the subsequent ab re-run (v2 vs re-baselined v0).
+
+**Aborted first (b) ab attempt (partial evidence, superseded):** 4 pairs consumed, candidate v2
+led c=1/b=0 (won the path-tracing discordant pair; the rest ties incl. tune-mjcf F/F both-arm
+timeouts). v2 = v0 + 2 proposer bullets targeting the spec-misread fails (derive under-specified
+formats from authoritative sources; verify against stated criteria, not self-checks). v2 stays a
+candidate; ab re-runs after the re-baseline.
+
+## CURRENT STATE (2026-07-18 pt 1 — superseded above where they conflict)
 
 **Everything PUSHED — `git pull` fast-forwards.** Tip ≥ `dca27be` (this doc commits after code).
 Tree clean. Suite **1310 pass / 0 fail**, tsc clean. Loop store (MacBook: repo `.meta-harness`,
