@@ -27,6 +27,9 @@ import {
 } from "../../opencode-plugin/src/bench/leaderboard.ts"
 import { taskPassRates } from "../../opencode-plugin/src/bench/splits.ts"
 import { makeBenchPaths } from "../../opencode-plugin/src/bench/paths.ts"
+// tmp+rename writes — a crash mid-write must never leave a torn band-v2.txt/
+// shortlist.txt/curation-report.md for the Phase 6 consumer to read.
+import { writeTextAtomic } from "../../opencode-plugin/src/bench/util.ts"
 
 const HERE = new URL(".", import.meta.url).pathname
 const MATRIX_PATH = join(HERE, "matrix.json")
@@ -201,8 +204,8 @@ async function main(): Promise<void> {
     minSubs: args.minSubs,
   })
 
-  await Bun.write(BAND_OUT, result.band.length ? result.band.join("\n") + "\n" : "")
-  await Bun.write(SHORTLIST_OUT, result.shortlist.length ? result.shortlist.join("\n") + "\n" : "")
+  writeTextAtomic(BAND_OUT, result.band.length ? result.band.join("\n") + "\n" : "")
+  writeTextAtomic(SHORTLIST_OUT, result.shortlist.length ? result.shortlist.join("\n") + "\n" : "")
 
   const subsInMatrix = new Set<string>()
   for (const row of Object.values(matrix)) for (const s of Object.keys(row)) subsInMatrix.add(s)
@@ -260,7 +263,7 @@ async function main(): Promise<void> {
   for (const t of result.excludedNonLocal) lines.push(`- ${t}`)
   lines.push("")
 
-  await Bun.write(REPORT_OUT, lines.join("\n"))
+  writeTextAtomic(REPORT_OUT, lines.join("\n"))
 
   console.log(
     `curate-band: band=${result.band.length} shortlist=${result.shortlist.length} ` +

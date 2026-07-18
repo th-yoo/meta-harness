@@ -1,0 +1,22 @@
+{
+  // Typecheck config for the two leaderboard driver scripts — the repo's
+  // first cross-package importers of opencode-plugin/src/bench. The plugin's
+  // own tsconfig includes only its src/, so without this the drivers would
+  // never be type-checked. Run (uses the plugin's pinned typescript):
+  //   cd opencode-plugin && bunx tsc --noEmit -p ../term-bench2/leaderboard
+  // (`bunx tsc --noEmit -p term-bench2/leaderboard` from the repo root also
+  // works, but resolves tsc from bun's cache instead of the pinned dep).
+  // Deliberately a separate project rather than widening the plugin's
+  // include — the plugin tsconfig stays a pure src/ check.
+  "extends": "../../opencode-plugin/tsconfig.json",
+  "compilerOptions": {
+    // The drivers use node:fs/node:path + setTimeout; @types/node lives in
+    // opencode-plugin's node_modules, which the default typeRoots walk-up
+    // from this directory can't find.
+    "typeRoots": ["../../opencode-plugin/node_modules/@types"],
+    "types": ["node"]
+  },
+  // Root files: just the drivers. The opencode-plugin/src files they import
+  // are pulled into the program (and re-checked) automatically.
+  "include": ["*.ts"]
+}

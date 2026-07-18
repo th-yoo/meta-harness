@@ -1,34 +1,34 @@
 {
- "little-coder__qwen3.5-9b": {
-  "sub": "little-coder__qwen3.5-9b",
-  "agentSlug": "little-coder",
-  "modelSlug": "qwen3.5-9b",
-  "models": [
-   {
-    "name": "Qwen/Qwen3.5-9B",
-    "provider": "llamacpp",
-    "displayName": "Qwen3.5-9B",
-    "org": "Qwen"
-   }
-  ],
-  "agentUrl": "https://github.com/itayinbarr/little-coder",
-  "agentDisplayName": "little-coder",
-  "agentOrg": "Itay Inbar"
- },
- "spoox-o-m__GPT-5-Nano": {
-  "sub": "spoox-o-m__GPT-5-Nano",
-  "agentSlug": "spoox-o-m",
-  "modelSlug": "GPT-5-Nano",
-  "models": [
-   {
-    "name": "gpt-5-nano",
-    "provider": "openai",
-    "displayName": "GPT-5-Nano",
-    "org": "OpenAI"
-   }
-  ],
-  "agentUrl": "https://github.com/plaume8/spoox",
-  "agentDisplayName": "spoox-o-m",
-  "agentOrg": "TUM"
- }
+  "little-coder__qwen3.5-9b": {
+    "sub": "little-coder__qwen3.5-9b",
+    "agentSlug": "little-coder",
+    "modelSlug": "qwen3.5-9b",
+    "models": [
+      {
+        "name": "Qwen/Qwen3.5-9B",
+        "provider": "llamacpp",
+        "displayName": "Qwen3.5-9B",
+        "org": "Qwen"
+      }
+    ],
+    "agentUrl": "https://github.com/itayinbarr/little-coder",
+    "agentDisplayName": "little-coder",
+    "agentOrg": "Itay Inbar"
+  },
+  "spoox-o-m__GPT-5-Nano": {
+    "sub": "spoox-o-m__GPT-5-Nano",
+    "agentSlug": "spoox-o-m",
+    "modelSlug": "GPT-5-Nano",
+    "models": [
+      {
+        "name": "gpt-5-nano",
+        "provider": "openai",
+        "displayName": "GPT-5-Nano",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://github.com/plaume8/spoox",
+    "agentDisplayName": "spoox-o-m",
+    "agentOrg": "TUM"
+  }
 }

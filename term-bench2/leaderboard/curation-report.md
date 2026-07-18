@@ -1,6 +1,6 @@
 # Leaderboard band curation report
 
-Generated 2026-07-18T12:59:51.437Z by term-bench2/leaderboard/curate-band.ts
+Generated 2026-07-18T13:12:57.457Z by term-bench2/leaderboard/curate-band.ts
 
 ## Inputs
 - matrix.json: 43 tasks (post-fail-filter), 2 submissions

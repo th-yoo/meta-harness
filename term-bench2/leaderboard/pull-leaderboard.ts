@@ -43,8 +43,15 @@
  * This is a lightweight hand-rolled YAML reader for the one flat shape HF
  * leaderboard metadata.yaml files actually use — not a general YAML parser.
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync } from "node:fs"
 import { join } from "node:path"
+// All persistent outputs (cache/agg-*.json, matrix.json, submissions.json)
+// go through tmp+rename so a kill mid-write can never leave a torn file that
+// poisons the resumable cache / a concurrent reader. Reuses the codebase's
+// atomic writer rather than hand-rolling a second one.
+import { writeJsonAtomic } from "../../opencode-plugin/src/bench/util.ts"
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 const HERE = new URL(".", import.meta.url).pathname
 const CACHE_DIR = join(HERE, "cache")
@@ -62,11 +69,11 @@ async function j(url: string, tries = 4): Promise<any> {
   for (let a = 0; a < tries; a++) {
     try {
       const r = await fetch(url)
-      if (r.status === 429) { await Bun.sleep(3000 * (a + 1)); continue }
-      if (!r.ok) { await Bun.sleep(1000); continue }
+      if (r.status === 429) { await sleep(3000 * (a + 1)); continue }
+      if (!r.ok) { await sleep(1000); continue }
       const v = await r.json()
       if (Array.isArray(v) || typeof v === "object") return v
-    } catch { await Bun.sleep(1000) }
+    } catch { await sleep(1000) }
   }
   return null
 }
@@ -75,11 +82,11 @@ async function text(url: string, tries = 4): Promise<string | null> {
   for (let a = 0; a < tries; a++) {
     try {
       const r = await fetch(url)
-      if (r.status === 429) { await Bun.sleep(3000 * (a + 1)); continue }
+      if (r.status === 429) { await sleep(3000 * (a + 1)); continue }
       if (r.status === 404) return null
-      if (!r.ok) { await Bun.sleep(1000); continue }
+      if (!r.ok) { await sleep(1000); continue }
       return await r.text()
-    } catch { await Bun.sleep(1000) }
+    } catch { await sleep(1000) }
   }
   return null
 }
@@ -113,8 +120,17 @@ function summarize(agg: Record<string, number[]>): FetchSummary {
 async function fetchSubmission(sub: string): Promise<{ summary: FetchSummary; fromCache: boolean } | null> {
   const cachePath = join(CACHE_DIR, `agg-${sub}.json`)
   if (existsSync(cachePath)) {
-    const agg = JSON.parse(readFileSync(cachePath, "utf-8"))
-    return { summary: summarize(agg), fromCache: true }
+    // Corrupt/truncated cache entry (e.g. hand-edited, disk hiccup — the
+    // atomic write below makes a torn write from THIS script impossible, but
+    // the cache dir isn't only ever touched by this script) => treat as a
+    // cache miss: delete and fall through to a fresh network fetch.
+    try {
+      const agg = JSON.parse(readFileSync(cachePath, "utf-8"))
+      return { summary: summarize(agg), fromCache: true }
+    } catch {
+      console.error(`${sub}: corrupt cache entry ${cachePath} — deleting and re-fetching`)
+      unlinkSync(cachePath)
+    }
   }
   const base = `${SUBMISSIONS_BASE}/${sub}`
   const top = await j(API + base)
@@ -138,7 +154,7 @@ async function fetchSubmission(sub: string): Promise<{ summary: FetchSummary; fr
     }
   }
   await Promise.all(Array.from({ length: 12 }, worker))
-  await Bun.write(cachePath, JSON.stringify(agg))
+  writeJsonAtomic(cachePath, agg)
   return { summary: summarize(agg), fromCache: false }
 }
 
@@ -227,7 +243,7 @@ async function writeSubmissionsJson(subs: string[]): Promise<void> {
     if (out[sub]) continue // metadata already recorded — no network call
     out[sub] = await fetchMetadata(sub)
   }
-  await Bun.write(SUBMISSIONS_PATH, JSON.stringify(out, null, 1) + "\n")
+  writeJsonAtomic(SUBMISSIONS_PATH, out)
 }
 
 // ── merge cache/agg-*.json -> matrix.json ───────────────────────────────
@@ -239,8 +255,19 @@ function mergeMatrix(): { matrix: Record<string, Record<string, number>>; subs: 
   const subs: string[] = []
   for (const f of files) {
     const sub = f.slice("agg-".length, -".json".length)
+    const p = join(CACHE_DIR, f)
+    let agg: Record<string, number[]>
+    try {
+      agg = JSON.parse(readFileSync(p, "utf-8")) as Record<string, number[]>
+    } catch {
+      // Corrupt/truncated cache entry => cache miss: delete it (so the next
+      // --all / single-sub run re-fetches this submission) and merge without
+      // it rather than crashing the whole merge.
+      console.error(`merge: corrupt cache entry ${p} — deleting; re-run the fetch for ${sub}`)
+      unlinkSync(p)
+      continue
+    }
     subs.push(sub)
-    const agg = JSON.parse(readFileSync(join(CACHE_DIR, f), "utf-8")) as Record<string, number[]>
     for (const [task, rewards] of Object.entries(agg)) {
       const rate = rewards.length ? rewards.reduce((a, b) => a + b, 0) / rewards.length : 0
       ;(matrix[task] ??= {})[sub] = rate
@@ -250,7 +277,7 @@ function mergeMatrix(): { matrix: Record<string, Record<string, number>>; subs: 
   return { matrix, subs }
 }
 
-async function writeMatrix(matrix: Record<string, Record<string, number>>): Promise<void> {
+function writeMatrix(matrix: Record<string, Record<string, number>>): void {
   // deterministic key order (sorted task names, sorted sub names per task)
   const ordered: Record<string, Record<string, number>> = {}
   for (const task of Object.keys(matrix).sort()) {
@@ -259,7 +286,7 @@ async function writeMatrix(matrix: Record<string, Record<string, number>>): Prom
     for (const sub of Object.keys(row).sort()) orderedRow[sub] = row[sub]!
     ordered[task] = orderedRow
   }
-  await Bun.write(MATRIX_PATH, JSON.stringify(ordered, null, 1) + "\n")
+  writeJsonAtomic(MATRIX_PATH, ordered)
 }
 
 // ── main ──────────────────────────────────────────────────────────────────
@@ -270,7 +297,7 @@ async function main(): Promise<void> {
 
   if (args[0] === "--merge") {
     const { matrix, subs } = mergeMatrix()
-    await writeMatrix(matrix)
+    writeMatrix(matrix)
     console.log(`merge: wrote ${MATRIX_PATH} (${Object.keys(matrix).length} tasks, ${subs.length} cached subs)`)
     return
   }
@@ -289,7 +316,7 @@ async function main(): Promise<void> {
     }
     const { matrix, subs: cachedSubs } = mergeMatrix()
     await writeSubmissionsJson(cachedSubs)
-    await writeMatrix(matrix)
+    writeMatrix(matrix)
     console.log(
       `--all: wrote ${MATRIX_PATH} (${Object.keys(matrix).length} tasks, ${cachedSubs.length} subs) ` +
         `+ ${SUBMISSIONS_PATH}`,
@@ -308,7 +335,7 @@ async function main(): Promise<void> {
   console.log(`${sub}: ${fromCache ? "[cached] " : ""}${summary.tasks} tasks, ${summary.trials} trials, ${summary.passPct.toFixed(1)}%`)
   const { matrix, subs } = mergeMatrix()
   await writeSubmissionsJson(subs)
-  await writeMatrix(matrix)
+  writeMatrix(matrix)
   console.log(`merge: wrote ${MATRIX_PATH} (${Object.keys(matrix).length} tasks, ${subs.length} cached subs) + ${SUBMISSIONS_PATH}`)
 }
 
