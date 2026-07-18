@@ -12,6 +12,7 @@ import type { StagingMode } from "./cmd-oracle.ts"
 import { cmdRun, type CmdRunArgs } from "./cmd-run.ts"
 import { cmdTaskLoad, type CmdTaskLoadArgs } from "./cmd-task-load.ts"
 import { cmdAb, type CmdAbArgs } from "./cmd-ab.ts"
+import { cmdScreen, type CmdScreenArgs } from "./cmd-screen.ts"
 import { cmdJudgeAudit, type JudgeAuditArgs } from "./judge-audit.ts"
 import { LAYER_CHOICES, type LayerName } from "./record.ts"
 import { cmdSplit, type SplitArgs } from "./splits.ts"
@@ -60,6 +61,15 @@ commands:
               [--results-file PATH] [--staging scripts|runtime] [--driver ID] [--enforce-resources]
               [--parallel] [--cpu-budget N] [--mem-budget MB] [--min-cpus N] [--min-mem-mb MB]
               [--no-pack-measured] [--host-pressure observe|on] [--speed-tiebreak]
+  screen      --layer L --candidates vN[,vN...] [--agent NAME]
+              [--tasks TASK [TASK ...]] [--task-file PATH] [--all]
+              [--model ID] [--variant V] [--layers global|account|project|none]
+              [--staging scripts|runtime] [--driver ID]
+              [--max-agent-timeout SEC] [--max-verifier-timeout SEC] [--min-agent-timeout SEC]
+              [--enforce-resources] [--parallel] [--cpu-budget N] [--mem-budget MB]
+              [--min-cpus N] [--min-mem-mb MB] [--no-pack-measured] [--host-pressure observe|on]
+              (k=1 candidate tournament — cheap ranking pre-pass; a screen never
+               writes the store or emits a verdict, only an ADVANCE hint for ab)
   judge-audit --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
   split       make|rotate|show [--seed N] [--folds N] [--source FILE]
               [--split-file PATH] [--results PATH]... [--band LO,HI]
@@ -895,6 +905,182 @@ function parseAbArgs(argv: string[]): CmdAbArgs | null {
   return out as CmdAbArgs
 }
 
+/** `--candidates v3,v5,v7` — comma-separated (unlike --tasks' nargs="+"
+ * form), since a screen's candidate list is always short vN literals with
+ * no risk of colliding with a following `--flag`. */
+function parseCandidatesList(v: string): string[] | null {
+  const vals = v.split(",").map((s) => s.trim()).filter((s) => s.length > 0)
+  return vals.length === 0 ? null : vals
+}
+
+function parseScreenArgs(argv: string[]): CmdScreenArgs | null {
+  const out: Partial<CmdScreenArgs> = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--layer") {
+      const v = argv[i + 1]
+      if (v === undefined || !(LAYER_CHOICES as string[]).includes(v)) return null
+      out.layer = v as LayerName
+      i += 2
+      continue
+    }
+    if (a === "--candidates") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      const vals = parseCandidatesList(v)
+      if (vals === null) return null
+      out.candidates = vals
+      i += 2
+      continue
+    }
+    if (a === "--agent") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.agent = v
+      i += 2
+      continue
+    }
+    if (a === "--tasks") {
+      const r = consumeTasksList(argv, i)
+      if (r === null) return null
+      out.tasks = r.vals
+      i = r.next
+      continue
+    }
+    if (a === "--task-file") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.taskFile = v
+      i += 2
+      continue
+    }
+    if (a === "--all") {
+      out.all = true
+      i++
+      continue
+    }
+    if (a === "--model") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.model = v
+      i += 2
+      continue
+    }
+    if (a === "--variant") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.variant = v
+      i += 2
+      continue
+    }
+    if (a === "--layers") {
+      const v = argv[i + 1]
+      if (v !== "global" && v !== "account" && v !== "project" && v !== "none") return null
+      out.layers = v
+      i += 2
+      continue
+    }
+    if (a === "--staging") {
+      const v = argv[i + 1]
+      if (v !== "scripts" && v !== "runtime") return null
+      out.staging = v
+      i += 2
+      continue
+    }
+    if (a === "--driver") {
+      const v = argv[i + 1]
+      if (v === undefined || !(DRIVER_IDS as readonly string[]).includes(v)) return null
+      out.driver = v
+      i += 2
+      continue
+    }
+    if (a === "--max-agent-timeout") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.maxAgentTimeout = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--max-verifier-timeout") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.maxVerifierTimeout = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--min-agent-timeout") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.minAgentTimeout = n
+      i += 2
+      continue
+    }
+    if (a === "--enforce-resources") {
+      out.enforceResources = true
+      i++
+      continue
+    }
+    if (a === "--parallel") {
+      out.parallel = true
+      i++
+      continue
+    }
+    if (a === "--cpu-budget") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.cpuBudget = n
+      i += 2
+      continue
+    }
+    if (a === "--mem-budget") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.memBudget = n
+      i += 2
+      continue
+    }
+    if (a === "--min-cpus") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.minCpus = n
+      i += 2
+      continue
+    }
+    if (a === "--min-mem-mb") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.minMemMb = n
+      i += 2
+      continue
+    }
+    if (a === "--no-pack-measured") {
+      out.noPackMeasured = true
+      i++
+      continue
+    }
+    if (a === "--host-pressure") {
+      const v = argv[i + 1]
+      if (v !== "observe" && v !== "on") return null
+      out.hostPressure = v
+      i += 2
+      continue
+    }
+    return null
+  }
+  if (out.layer === undefined || out.candidates === undefined) return null
+  return out as CmdScreenArgs
+}
 
 function parseJudgeAuditArgs(argv: string[]): JudgeAuditArgs | null {
   const out: Partial<JudgeAuditArgs> = {}
@@ -1640,6 +1826,30 @@ export async function main(argv: string[]): Promise<number> {
           abArgs.pressureGate = buildPressureGate(abArgs)
         }
         await cmdAb(paths, abArgs)
+        return 0
+      }
+      case "screen": {
+        const screenArgs = parseScreenArgs(subArgs)
+        if (screenArgs === null) {
+          printUsage()
+          return 2
+        }
+        // Same shared --parallel gate as `run`/`ab` (spec D3/D4) — before any
+        // podman work; derives the required key var from the effective model
+        // exactly as cmdScreen's own default does.
+        {
+          const screenModel = screenArgs.model || DEFAULT_BENCH_MODEL
+          validateParallel(screenArgs, screenModel)
+          // oauth-parallel freshness gate, part 2 (Task 2): same scheduler
+          // launch-guard as `run`/`ab` — see those cases' comments. cmdScreen
+          // reuses ONE gate closure across every candidate's cmdRun call.
+          screenArgs.canLaunch = buildOauthParallelCanLaunch(screenArgs, screenModel)
+          // host-pressure launch gate (plan S3): same builder as `run`/`ab` —
+          // one shared per-command sensor closure, reused across every
+          // candidate in the sweep.
+          screenArgs.pressureGate = buildPressureGate(screenArgs)
+        }
+        await cmdScreen(paths, screenArgs)
         return 0
       }
       case "judge-audit": {
