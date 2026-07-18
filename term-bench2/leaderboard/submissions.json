@@ -30,5 +30,1139 @@
     "agentUrl": "https://github.com/plaume8/spoox",
     "agentDisplayName": "spoox-o-m",
     "agentOrg": "TUM"
+  },
+  "0error-Ledger__Claude-Opus-4.7": {
+    "sub": "0error-Ledger__Claude-Opus-4.7",
+    "agentSlug": "0error-Ledger",
+    "modelSlug": "Claude-Opus-4.7",
+    "models": [
+      {
+        "name": "anthropic/claude-opus-4-7",
+        "provider": "openrouter",
+        "displayName": "Claude Opus 4.7",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://github.com/0error-ob/terminal-bench-21-scaffold",
+    "agentDisplayName": "0error Ledger",
+    "agentOrg": "0error"
+  },
+  "Ante__Gemini-3-Pro-Preview": {
+    "sub": "Ante__Gemini-3-Pro-Preview",
+    "agentSlug": "Ante",
+    "modelSlug": "Gemini-3-Pro-Preview",
+    "models": [
+      {
+        "name": "gemini-3-pro-preview",
+        "provider": "Google",
+        "displayName": "Gemini 3 Pro",
+        "org": "Google"
+      }
+    ],
+    "agentUrl": "https://antigma.ai",
+    "agentDisplayName": "Ante",
+    "agentOrg": "Antigma Labs"
+  },
+  "Ante__Gemini-3.1-Pro-Preview": {
+    "sub": "Ante__Gemini-3.1-Pro-Preview",
+    "agentSlug": "Ante",
+    "modelSlug": "Gemini-3.1-Pro-Preview",
+    "models": [
+      {
+        "name": "gemini-3-pro-preview",
+        "provider": "Google",
+        "displayName": "Gemini 3.1 Pro",
+        "org": "Google"
+      }
+    ],
+    "agentUrl": "https://antigma.ai",
+    "agentDisplayName": "Ante",
+    "agentOrg": "Antigma Labs"
+  },
+  "BashAgent__TermiGen-32B": {
+    "sub": "BashAgent__TermiGen-32B",
+    "agentSlug": "BashAgent",
+    "modelSlug": "TermiGen-32B",
+    "models": [
+      {
+        "name": "UCSB-SURFI/TermiGen-32B",
+        "provider": "UCSB-SURFI",
+        "displayName": "TermiGen-32B",
+        "org": "Qwen"
+      }
+    ],
+    "agentUrl": "https://huggingface.co/UCSB-SURFI/TermiGen-32B",
+    "agentDisplayName": "Bash Agent",
+    "agentOrg": "UCSB-SURFI"
+  },
+  "Capy__Claude-Opus-4.6": {
+    "sub": "Capy__Claude-Opus-4.6",
+    "agentSlug": "Capy",
+    "modelSlug": "Claude-Opus-4.6",
+    "models": [
+      {
+        "name": "claude-opus-4-6",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.6",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://capy.ai",
+    "agentDisplayName": "Capy",
+    "agentOrg": "Capy"
+  },
+  "Capy__GPT-5.5": {
+    "sub": "Capy__GPT-5.5",
+    "agentSlug": "Capy",
+    "modelSlug": "GPT-5.5",
+    "models": [
+      {
+        "name": "gpt-5.5",
+        "provider": "openai",
+        "displayName": "GPT-5.5",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://capy.ai",
+    "agentDisplayName": "Capy",
+    "agentOrg": "Capy"
+  },
+  "ClaudeCode__GLM-4.7": {
+    "sub": "ClaudeCode__GLM-4.7",
+    "agentSlug": "ClaudeCode",
+    "modelSlug": "GLM-4.7",
+    "models": [
+      {
+        "name": "GLM-4.7",
+        "provider": "z-ai",
+        "displayName": "GLM 4.7",
+        "org": "Z-AI"
+      }
+    ],
+    "agentUrl": "https://claude.com/product/claude-code",
+    "agentDisplayName": "Claude Code",
+    "agentOrg": "Anthropic"
+  },
+  "CodeBrain-1.5__GPT-5.3-Codex": {
+    "sub": "CodeBrain-1.5__GPT-5.3-Codex",
+    "agentSlug": "CodeBrain-1.5",
+    "modelSlug": "GPT-5.3-Codex",
+    "models": [
+      {
+        "name": "gpt-5.3-codex",
+        "provider": "OpenAI",
+        "displayName": "GPT-5.3-Codex",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://feeling-ai.com",
+    "agentDisplayName": "CodeBrain-1.5",
+    "agentOrg": "Feeling AI"
+  },
+  "CodeBrain-1__GPT-5.3-Codex": {
+    "sub": "CodeBrain-1__GPT-5.3-Codex",
+    "agentSlug": "CodeBrain-1",
+    "modelSlug": "GPT-5.3-Codex",
+    "models": [
+      {
+        "name": "gpt-5.3-codex",
+        "provider": "OpenAI",
+        "displayName": "GPT-5.3-Codex",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://feeling-ai.com",
+    "agentDisplayName": "CodeBrain-1",
+    "agentOrg": "Feeling AI"
+  },
+  "CodeBrain-1__Gemini-3-Pro-Preview": {
+    "sub": "CodeBrain-1__Gemini-3-Pro-Preview",
+    "agentSlug": "CodeBrain-1",
+    "modelSlug": "Gemini-3-Pro-Preview",
+    "models": [
+      {
+        "name": "gemini-3-pro-preview",
+        "provider": "Google",
+        "displayName": "Gemini 3 Pro",
+        "org": "Google"
+      }
+    ],
+    "agentUrl": "https://feeling-ai.com",
+    "agentDisplayName": "CodeBrain-1",
+    "agentOrg": "Feeling AI"
+  },
+  "Codelia__GPT-5.3-Codex": {
+    "sub": "Codelia__GPT-5.3-Codex",
+    "agentSlug": "Codelia",
+    "modelSlug": "GPT-5.3-Codex",
+    "models": [
+      {
+        "name": "gpt-5.3-codex",
+        "provider": "openai",
+        "displayName": "gpt-5.3-codex",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://github.com/kousw/codelia",
+    "agentDisplayName": "Codelia",
+    "agentOrg": "kousw"
+  },
+  "Crux__Claude-Opus-4.6": {
+    "sub": "Crux__Claude-Opus-4.6",
+    "agentSlug": "Crux",
+    "modelSlug": "Claude-Opus-4.6",
+    "models": [],
+    "agentUrl": "https://github.com/0xDarkMatter/crux-agent",
+    "agentDisplayName": "Crux",
+    "agentOrg": "Roam"
+  },
+  "Deep-Agents__GPT-5.2-Codex": {
+    "sub": "Deep-Agents__GPT-5.2-Codex",
+    "agentSlug": "Deep-Agents",
+    "modelSlug": "GPT-5.2-Codex",
+    "models": [
+      {
+        "name": "gpt-5.2-codex",
+        "provider": "openai",
+        "displayName": "GPT-5.2-Codex",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://github.com/langchain-ai/deepagents",
+    "agentDisplayName": "Deep Agents",
+    "agentOrg": "LangChain"
+  },
+  "Dirac__Gemini-3-Flash-Preview": {
+    "sub": "Dirac__Gemini-3-Flash-Preview",
+    "agentSlug": "Dirac",
+    "modelSlug": "Gemini-3-Flash-Preview",
+    "models": [
+      {
+        "name": "gemini-3-flash-preview",
+        "provider": "google",
+        "displayName": "Gemini 3 Flash",
+        "org": "Google"
+      }
+    ],
+    "agentUrl": "https://github.com/dirac-run/dirac",
+    "agentDisplayName": "Dirac",
+    "agentOrg": "Dirac Delta"
+  },
+  "Droid__Claude-Opus-4.6": {
+    "sub": "Droid__Claude-Opus-4.6",
+    "agentSlug": "Droid",
+    "modelSlug": "Claude-Opus-4.6",
+    "models": [
+      {
+        "name": "claude-opus-4-6",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.6",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://factory.ai/",
+    "agentDisplayName": "Droid",
+    "agentOrg": "Factory"
+  },
+  "Droid__GPT-5.3-Codex": {
+    "sub": "Droid__GPT-5.3-Codex",
+    "agentSlug": "Droid",
+    "modelSlug": "GPT-5.3-Codex",
+    "models": [
+      {
+        "name": "gpt-5.3-codex",
+        "provider": "openai",
+        "displayName": "GPT-5.3-Codex",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://factory.ai/",
+    "agentDisplayName": "Droid",
+    "agentOrg": "Factory"
+  },
+  "Forge__GPT-5.4": {
+    "sub": "Forge__GPT-5.4",
+    "agentSlug": "Forge",
+    "modelSlug": "GPT-5.4",
+    "models": [
+      {
+        "name": "gpt-5.4",
+        "provider": "OpenAI",
+        "displayName": "GPT-5.4",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://forgecode.dev",
+    "agentDisplayName": "ForgeCode",
+    "agentOrg": "ForgeCode"
+  },
+  "Forge__Gemini-3.1-Pro-Preview": {
+    "sub": "Forge__Gemini-3.1-Pro-Preview",
+    "agentSlug": "Forge",
+    "modelSlug": "Gemini-3.1-Pro-Preview",
+    "models": [
+      {
+        "name": "gemini-3.1-pro-preview",
+        "provider": "Google",
+        "displayName": "Gemini 3.1 Pro",
+        "org": "Google"
+      }
+    ],
+    "agentUrl": "https://forgecode.dev",
+    "agentDisplayName": "Forge Code",
+    "agentOrg": "Forge Code"
+  },
+  "Forge__Opus-4.6": {
+    "sub": "Forge__Opus-4.6",
+    "agentSlug": "Forge",
+    "modelSlug": "Opus-4.6",
+    "models": [
+      {
+        "name": "claude-opus-4-6",
+        "provider": "Anthropic",
+        "displayName": "Claude Opus 4.6",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://forgecode.dev",
+    "agentDisplayName": "ForgeCode",
+    "agentOrg": "ForgeCode"
+  },
+  "Gemini_CLI__Gemini-3-Flash-Preview": {
+    "sub": "Gemini_CLI__Gemini-3-Flash-Preview",
+    "agentSlug": "Gemini_CLI",
+    "modelSlug": "Gemini-3-Flash-Preview",
+    "models": [
+      {
+        "name": "gemini-3-flash-preview",
+        "provider": "Google",
+        "displayName": "Gemini 3 Flash",
+        "org": "Google"
+      }
+    ],
+    "agentUrl": "https://github.com/google-gemini/gemini-cli",
+    "agentDisplayName": "Gemini CLI",
+    "agentOrg": "Google"
+  },
+  "Gemini_CLI__Gemini-3.1-Pro-Preview": {
+    "sub": "Gemini_CLI__Gemini-3.1-Pro-Preview",
+    "agentSlug": "Gemini_CLI",
+    "modelSlug": "Gemini-3.1-Pro-Preview",
+    "models": [
+      {
+        "name": "gemini-3.1-pro-preview",
+        "provider": "Google",
+        "displayName": "Gemini 3.1 Pro",
+        "org": "Google"
+      }
+    ],
+    "agentUrl": "https://github.com/google-gemini/gemini-cli",
+    "agentDisplayName": "Gemini CLI",
+    "agentOrg": "Google"
+  },
+  "IndusAGICodingAgent__MiniMax-M2.7": {
+    "sub": "IndusAGICodingAgent__MiniMax-M2.7",
+    "agentSlug": "IndusAGICodingAgent",
+    "modelSlug": "MiniMax-M2.7",
+    "models": [
+      {
+        "name": "minimax/MiniMax-M2.7",
+        "provider": "Minimax",
+        "displayName": "MiniMax M2.7",
+        "org": "Minimax"
+      }
+    ],
+    "agentUrl": "https://github.com/varun-israni/indusagi-coding-agent",
+    "agentDisplayName": "IndusAGI Coding Agent",
+    "agentOrg": "Varun Israni (SoloVpx)"
+  },
+  "IndusAGICodingAgent__gpt-5.3-codex": {
+    "sub": "IndusAGICodingAgent__gpt-5.3-codex",
+    "agentSlug": "IndusAGICodingAgent",
+    "modelSlug": "gpt-5.3-codex",
+    "models": [
+      {
+        "name": "gpt-5.3-codex",
+        "provider": "openai",
+        "displayName": "GPT-5.3 Codex",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://www.indusagi.com",
+    "agentDisplayName": "IndusAGI Coding Agent",
+    "agentOrg": "Varun Israni (SoloVpx)"
+  },
+  "JJAgent__Multiple": {
+    "sub": "JJAgent__Multiple",
+    "agentSlug": "JJAgent",
+    "modelSlug": "Multiple",
+    "models": [
+      {
+        "name": "multiple",
+        "provider": "multiple",
+        "displayName": "Multiple",
+        "org": "Multiple"
+      }
+    ],
+    "agentUrl": "https://github.com/bddppq",
+    "agentDisplayName": "JJAgent",
+    "agentOrg": "JJ"
+  },
+  "Judy__Claude-Opus-4.6": {
+    "sub": "Judy__Claude-Opus-4.6",
+    "agentSlug": "Judy",
+    "modelSlug": "Claude-Opus-4.6",
+    "models": [
+      {
+        "name": "claude-opus-4.6",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.6",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://www.bigai.ai/",
+    "agentDisplayName": "Judy",
+    "agentOrg": "Bigai"
+  },
+  "Judy__Gemini-3.1-Pro-Preview": {
+    "sub": "Judy__Gemini-3.1-Pro-Preview",
+    "agentSlug": "Judy",
+    "modelSlug": "Gemini-3.1-Pro-Preview",
+    "models": [
+      {
+        "name": "gemini-3.1-pro-preview",
+        "provider": "Google",
+        "displayName": "Gemini 3.1 Pro",
+        "org": "Google"
+      }
+    ],
+    "agentUrl": "https://www.bigai.ai/",
+    "agentDisplayName": "TongAgents",
+    "agentOrg": "BIGAI"
+  },
+  "Junie_CLI__Gemini-3-Flash-Preview-Gemini-3.1-Pro-Preview-Claude-Opus-4.6-GPT-5.3-Codex": {
+    "sub": "Junie_CLI__Gemini-3-Flash-Preview-Gemini-3.1-Pro-Preview-Claude-Opus-4.6-GPT-5.3-Codex",
+    "agentSlug": "Junie_CLI",
+    "modelSlug": "Gemini-3-Flash-Preview-Gemini-3.1-Pro-Preview-Claude-Opus-4.6-GPT-5.3-Codex",
+    "models": [
+      {
+        "name": "gemini-3-flash-preview",
+        "provider": "Google",
+        "displayName": "Gemini 3 Flash",
+        "org": "Google"
+      },
+      {
+        "name": "gemini-3.1-pro-preview",
+        "provider": "Google",
+        "displayName": "Gemini 3.1 Pro",
+        "org": "Google"
+      },
+      {
+        "name": "claude-opus-4-6",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.6",
+        "org": "Anthropic"
+      },
+      {
+        "name": "gpt-5.3-codex",
+        "provider": "OpenAI",
+        "displayName": "GPT-5.3-Codex",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://junie.jetbrains.com",
+    "agentDisplayName": "Junie CLI",
+    "agentOrg": "JetBrains"
+  },
+  "LemonCode__GPT-5.3-Codex": {
+    "sub": "LemonCode__GPT-5.3-Codex",
+    "agentSlug": "LemonCode",
+    "modelSlug": "GPT-5.3-Codex",
+    "models": [
+      {
+        "name": "gpt-3.5-codex",
+        "provider": "openai",
+        "displayName": "GPT-5.3 Codex",
+        "org": "OpenAI"
+      },
+      {
+        "name": "gemini-3.1-pro-preview",
+        "provider": "google",
+        "displayName": "Gemini 3.1 Pro Preview",
+        "org": "Google"
+      }
+    ],
+    "agentUrl": "https://github.com/Open-Lemon/LemonAgent",
+    "agentDisplayName": "Lemon Code",
+    "agentOrg": "LR AILab of Lenovo CTO Org"
+  },
+  "LemonHarness_GPT-5.3-CodeX": {
+    "sub": "LemonHarness_GPT-5.3-CodeX",
+    "agentSlug": "LemonHarness_GPT-5.3-CodeX",
+    "modelSlug": "",
+    "models": [
+      {
+        "name": "gpt-5.3-codex",
+        "provider": "openai",
+        "displayName": "GPT-5.3-Codex",
+        "org": "OpenAI"
+      },
+      {
+        "name": "gemini-3.1-pro-preview",
+        "provider": "google",
+        "displayName": "Gemini 3.1 Pro Preview",
+        "org": "Google"
+      }
+    ],
+    "agentUrl": "https://github.com/Open-Lemon/LemonAgent",
+    "agentDisplayName": "LemonHarness",
+    "agentOrg": "LR AILab of Lenovo CTO Org"
+  },
+  "MAYA__Claude-4.5-sonnet": {
+    "sub": "MAYA__Claude-4.5-sonnet",
+    "agentSlug": "MAYA",
+    "modelSlug": "Claude-4.5-sonnet",
+    "models": [
+      {
+        "name": "claude-4.5-sonnet",
+        "provider": "anthropic",
+        "displayName": "Claude 4.5 Sonnet",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://adya.ai/maya",
+    "agentDisplayName": "MAYA",
+    "agentOrg": "ADYA"
+  },
+  "MAYA__Claude-4.6-opus": {
+    "sub": "MAYA__Claude-4.6-opus",
+    "agentSlug": "MAYA",
+    "modelSlug": "Claude-4.6-opus",
+    "models": [
+      {
+        "name": "claude-4.6-opus",
+        "provider": "anthropic",
+        "displayName": "Claude 4.6 Opus",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://adya.ai/maya",
+    "agentDisplayName": "MAYA-V2",
+    "agentOrg": "ADYA"
+  },
+  "Meta-Harness__Claude-Opus-4.6": {
+    "sub": "Meta-Harness__Claude-Opus-4.6",
+    "agentSlug": "Meta-Harness",
+    "modelSlug": "Claude-Opus-4.6",
+    "models": [
+      {
+        "name": "claude-opus-4-6",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.6",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://github.com/stanford-iris-lab/meta-harness-tbench2-artifact",
+    "agentDisplayName": "Meta-Harness",
+    "agentOrg": "Stanford IRIS"
+  },
+  "Mux__Claude-Opus-4.5": {
+    "sub": "Mux__Claude-Opus-4.5",
+    "agentSlug": "Mux",
+    "modelSlug": "Claude-Opus-4.5",
+    "models": [
+      {
+        "name": "claude-opus-4-5",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.5",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://github.com/coder/mux",
+    "agentDisplayName": "Mux",
+    "agentOrg": "Coder"
+  },
+  "Mux__Claude-Opus-4.6": {
+    "sub": "Mux__Claude-Opus-4.6",
+    "agentSlug": "Mux",
+    "modelSlug": "Claude-Opus-4.6",
+    "models": [
+      {
+        "name": "claude-opus-4-6",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.6",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://github.com/coder/mux",
+    "agentDisplayName": "Mux",
+    "agentOrg": "Coder"
+  },
+  "Mux__GPT-5.2": {
+    "sub": "Mux__GPT-5.2",
+    "agentSlug": "Mux",
+    "modelSlug": "GPT-5.2",
+    "models": [
+      {
+        "name": "gpt-5.2",
+        "provider": "openai",
+        "displayName": "GPT-5.2",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://github.com/coder/mux",
+    "agentDisplayName": "Mux",
+    "agentOrg": "Coder"
+  },
+  "Mux__GPT-5.3-Codex": {
+    "sub": "Mux__GPT-5.3-Codex",
+    "agentSlug": "Mux",
+    "modelSlug": "GPT-5.3-Codex",
+    "models": [
+      {
+        "name": "gpt-5.3-codex",
+        "provider": "openai",
+        "displayName": "GPT-5.3 Codex",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://github.com/coder/mux",
+    "agentDisplayName": "Mux",
+    "agentOrg": "Coder"
+  },
+  "NexAU-AHE__gpt-5.5": {
+    "sub": "NexAU-AHE__gpt-5.5",
+    "agentSlug": "NexAU-AHE",
+    "modelSlug": "gpt-5.5",
+    "models": [
+      {
+        "name": "gpt-5.5",
+        "provider": "openai",
+        "displayName": "GPT-5.5",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://github.com/china-qijizhifeng/agentic-harness-engineering.git",
+    "agentDisplayName": "NexAU-AHE",
+    "agentOrg": "china-qijizhifeng"
+  },
+  "OB-1_GPT-5.3-Codex-Claude-Opus-4.5-Claude-Opus-4.6": {
+    "sub": "OB-1_GPT-5.3-Codex-Claude-Opus-4.5-Claude-Opus-4.6",
+    "agentSlug": "OB-1_GPT-5.3-Codex-Claude-Opus-4.5-Claude-Opus-4.6",
+    "modelSlug": "",
+    "models": [
+      {
+        "name": "gpt-5.3-codex",
+        "provider": "openai",
+        "displayName": "GPT-5.3 Codex",
+        "org": "OpenAI"
+      },
+      {
+        "name": "claude-opus-4-6",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.6",
+        "org": "Anthropic"
+      },
+      {
+        "name": "claude-opus-4-5",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.5",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://www.openblocklabs.com/",
+    "agentDisplayName": "OB-1",
+    "agentOrg": "OpenBlock Labs"
+  },
+  "OB-1_GPT-5.4-GPT-5.3-Codex-Claude-Opus-4.5-Claude-Opus-4.6": {
+    "sub": "OB-1_GPT-5.4-GPT-5.3-Codex-Claude-Opus-4.5-Claude-Opus-4.6",
+    "agentSlug": "OB-1_GPT-5.4-GPT-5.3-Codex-Claude-Opus-4.5-Claude-Opus-4.6",
+    "modelSlug": "",
+    "models": [
+      {
+        "name": "gpt-5.4",
+        "provider": "openai",
+        "displayName": "GPT-5.4",
+        "org": "OpenAI"
+      },
+      {
+        "name": "gpt-5.3-codex",
+        "provider": "openai",
+        "displayName": "GPT-5.3 Codex",
+        "org": "OpenAI"
+      },
+      {
+        "name": "claude-opus-4-6",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.6",
+        "org": "Anthropic"
+      },
+      {
+        "name": "claude-opus-4-5",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.5",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://www.openblocklabs.com/",
+    "agentDisplayName": "OB-1",
+    "agentOrg": "OpenBlock Labs"
+  },
+  "OpenCode__Claude-Opus-4.5": {
+    "sub": "OpenCode__Claude-Opus-4.5",
+    "agentSlug": "OpenCode",
+    "modelSlug": "Claude-Opus-4.5",
+    "models": [
+      {
+        "name": "claude-opus-4-5",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.5",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://opencode.ai",
+    "agentDisplayName": "OpenCode",
+    "agentOrg": "Anomaly Innovations"
+  },
+  "OpenSage__GPT-5.3-Codex": {
+    "sub": "OpenSage__GPT-5.3-Codex",
+    "agentSlug": "OpenSage",
+    "modelSlug": "GPT-5.3-Codex",
+    "models": [
+      {
+        "name": "gpt-5.3-codex",
+        "provider": "OpenAI",
+        "displayName": "GPT-5.3-Codex",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://github.com/opensage-agent",
+    "agentDisplayName": "SageAgent",
+    "agentOrg": "OpenSage"
+  },
+  "OpenSage__Gemini-3-Pro-Preview": {
+    "sub": "OpenSage__Gemini-3-Pro-Preview",
+    "agentSlug": "OpenSage",
+    "modelSlug": "Gemini-3-Pro-Preview",
+    "models": [
+      {
+        "name": "gemini-3-pro-preview",
+        "provider": "Google",
+        "displayName": "Gemini 3 Pro",
+        "org": "Google"
+      }
+    ],
+    "agentUrl": "https://github.com/opensage-agent",
+    "agentDisplayName": "SageAgent",
+    "agentOrg": "OpenSage"
+  },
+  "Polaris__Claude-Opus-4.7-GPT-5.5-Gemini-3.1-Pro": {
+    "sub": "Polaris__Claude-Opus-4.7-GPT-5.5-Gemini-3.1-Pro",
+    "agentSlug": "Polaris",
+    "modelSlug": "Claude-Opus-4.7-GPT-5.5-Gemini-3.1-Pro",
+    "models": [
+      {
+        "name": "claude-opus-4-7",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.7",
+        "org": "Anthropic"
+      },
+      {
+        "name": "gpt-5.5",
+        "provider": "openai",
+        "displayName": "GPT-5.5",
+        "org": "OpenAI"
+      },
+      {
+        "name": "gemini-3.1-pro-preview",
+        "provider": "google",
+        "displayName": "Gemini 3.1 Pro Preview",
+        "org": "Google"
+      }
+    ],
+    "agentUrl": "https://polarops.ai",
+    "agentDisplayName": "Polaris",
+    "agentOrg": "PolarisOps"
+  },
+  "Simplai-Agent__Claude-Sonnet-4.6": {
+    "sub": "Simplai-Agent__Claude-Sonnet-4.6",
+    "agentSlug": "Simplai-Agent",
+    "modelSlug": "Claude-Sonnet-4.6",
+    "models": [
+      {
+        "name": "claude-sonnet-4-6",
+        "provider": "anthropic",
+        "displayName": "Claude Sonnet 4.6",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://simplai.ai",
+    "agentDisplayName": "Simplai Agent",
+    "agentOrg": "SimplAI"
+  },
+  "Simple-Codex__GPT-5.3-Codex": {
+    "sub": "Simple-Codex__GPT-5.3-Codex",
+    "agentSlug": "Simple-Codex",
+    "modelSlug": "GPT-5.3-Codex",
+    "models": [
+      {
+        "name": "gpt-5.3-codex",
+        "provider": "openai",
+        "displayName": "GPT-5.3-Codex",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://openai.com/codex",
+    "agentDisplayName": "Simple Codex",
+    "agentOrg": "OpenAI"
+  },
+  "Terminus-KIRA__Claude-Opus-4.6": {
+    "sub": "Terminus-KIRA__Claude-Opus-4.6",
+    "agentSlug": "Terminus-KIRA",
+    "modelSlug": "Claude-Opus-4.6"
+  },
+  "Terminus-KIRA__Gemini-3.1-Pro-Preview": {
+    "sub": "Terminus-KIRA__Gemini-3.1-Pro-Preview",
+    "agentSlug": "Terminus-KIRA",
+    "modelSlug": "Gemini-3.1-Pro-Preview"
+  },
+  "Terminus2__Claude-Opus-4.6": {
+    "sub": "Terminus2__Claude-Opus-4.6",
+    "agentSlug": "Terminus2",
+    "modelSlug": "Claude-Opus-4.6"
+  },
+  "Terminus2__DeepSeek-V3.2": {
+    "sub": "Terminus2__DeepSeek-V3.2",
+    "agentSlug": "Terminus2",
+    "modelSlug": "DeepSeek-V3.2"
+  },
+  "Terminus2__GLM-4.7": {
+    "sub": "Terminus2__GLM-4.7",
+    "agentSlug": "Terminus2",
+    "modelSlug": "GLM-4.7"
+  },
+  "Terminus2__GLM-5": {
+    "sub": "Terminus2__GLM-5",
+    "agentSlug": "Terminus2",
+    "modelSlug": "GLM-5"
+  },
+  "Terminus2__GPT-5.3-Codex": {
+    "sub": "Terminus2__GPT-5.3-Codex",
+    "agentSlug": "Terminus2",
+    "modelSlug": "GPT-5.3-Codex"
+  },
+  "Terminus2__Kimi-k2.5": {
+    "sub": "Terminus2__Kimi-k2.5",
+    "agentSlug": "Terminus2",
+    "modelSlug": "Kimi-k2.5",
+    "models": [
+      {
+        "name": "kimi-k2.5",
+        "provider": "kimi",
+        "displayName": "Kimi k2.5",
+        "org": "Kimi"
+      }
+    ],
+    "agentUrl": "https://www.tbench.ai/terminus",
+    "agentDisplayName": "Terminus 2",
+    "agentOrg": "Terminal Bench"
+  },
+  "Terminus2__Minimax-m2.5": {
+    "sub": "Terminus2__Minimax-m2.5",
+    "agentSlug": "Terminus2",
+    "modelSlug": "Minimax-m2.5",
+    "models": [
+      {
+        "name": "minimax-m2.5",
+        "provider": "Minimax",
+        "displayName": "Minimax m2.5",
+        "org": "Minimax"
+      }
+    ],
+    "agentUrl": "https://www.tbench.ai/terminus",
+    "agentDisplayName": "Terminus 2",
+    "agentOrg": "Terminal Bench"
+  },
+  "WOZCODE__Claude-Opus-4-7": {
+    "sub": "WOZCODE__Claude-Opus-4-7",
+    "agentSlug": "WOZCODE",
+    "modelSlug": "Claude-Opus-4-7",
+    "models": [
+      {
+        "name": "claude-opus-4-7",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.7",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://github.com/WithWoz/wozcode-plugin",
+    "agentDisplayName": "WOZCODE",
+    "agentOrg": "WOZCODE"
+  },
+  "Wecode__GPT-5.5": {
+    "sub": "Wecode__GPT-5.5",
+    "agentSlug": "Wecode",
+    "modelSlug": "GPT-5.5",
+    "models": [
+      {
+        "name": "gpt-5.5",
+        "provider": "openai",
+        "displayName": "GPT-5.5",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://pixboostai.com/",
+    "agentDisplayName": "Wecode",
+    "agentOrg": "Gradence"
+  },
+  "WozCode__Claude-Opus-4.6": {
+    "sub": "WozCode__Claude-Opus-4.6",
+    "agentSlug": "WozCode",
+    "modelSlug": "Claude-Opus-4.6",
+    "models": [
+      {
+        "name": "claude-opus-4-6",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.6",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://github.com/WithWoz/WozCode",
+    "agentDisplayName": "WozCode",
+    "agentOrg": "Woz"
+  },
+  "cchuter__minimax-m2.5": {
+    "sub": "cchuter__minimax-m2.5",
+    "agentSlug": "cchuter",
+    "modelSlug": "minimax-m2.5",
+    "models": [
+      {
+        "name": "minimax-m2.5",
+        "provider": "minimax",
+        "displayName": "minimax-m2.5",
+        "org": "minimax"
+      }
+    ],
+    "agentUrl": "https://github.com/cchuter/blobfish",
+    "agentDisplayName": "cchuter",
+    "agentOrg": "teamblobfish.com"
+  },
+  "clnkr__GPT-5.5": {
+    "sub": "clnkr__GPT-5.5",
+    "agentSlug": "clnkr",
+    "modelSlug": "GPT-5.5",
+    "models": [
+      {
+        "name": "gpt-5.5",
+        "provider": "openai",
+        "displayName": "GPT-5.5",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://github.com/clnkr-ai/clnkr",
+    "agentDisplayName": "clnkr",
+    "agentOrg": "clnkr"
+  },
+  "copilot-cli__claude-opus-4.6": {
+    "sub": "copilot-cli__claude-opus-4.6",
+    "agentSlug": "copilot-cli",
+    "modelSlug": "claude-opus-4.6",
+    "models": [
+      {
+        "name": "claude-opus-4.6",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.6",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://docs.github.com/en/copilot/how-tos/copilot-cli",
+    "agentDisplayName": "Copilot CLI",
+    "agentOrg": "GitHub"
+  },
+  "dakou__qwen3-coder-480b": {
+    "sub": "dakou__qwen3-coder-480b",
+    "agentSlug": "dakou",
+    "modelSlug": "qwen3-coder-480b",
+    "models": [
+      {
+        "name": "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+        "provider": "modelscope",
+        "displayName": "Qwen 3 Coder 480B",
+        "org": "Qwen"
+      }
+    ],
+    "agentUrl": "https://dakou.iflow.cn/",
+    "agentDisplayName": "Dakou Agent",
+    "agentOrg": "iflow"
+  },
+  "grok-cli__grok-4.20-0309-reasoning": {
+    "sub": "grok-cli__grok-4.20-0309-reasoning",
+    "agentSlug": "grok-cli",
+    "modelSlug": "grok-4.20-0309-reasoning",
+    "models": [
+      {
+        "name": "grok-4.20-0309-reasoning",
+        "provider": "xai",
+        "displayName": "Grok 4.20 Reasoning",
+        "org": "xAI"
+      }
+    ],
+    "agentUrl": "https://github.com/superagent-ai/grok-cli",
+    "agentDisplayName": "Grok CLI",
+    "agentOrg": "Superagent"
+  },
+  "harness-agent__minimax-m2-7-highspeed": {
+    "sub": "harness-agent__minimax-m2-7-highspeed",
+    "agentSlug": "harness-agent",
+    "modelSlug": "minimax-m2-7-highspeed",
+    "models": [
+      {
+        "name": "MiniMax-M2.7-highspeed",
+        "provider": "minimax",
+        "displayName": "MiniMax M2.7 Highspeed",
+        "org": "MiniMax"
+      }
+    ],
+    "agentUrl": "https://github.com/lazyFrogLOL/Harness_Engineering",
+    "agentDisplayName": "Harness Agent",
+    "agentOrg": "lazyFrogLOL"
+  },
+  "hookele__gpt5.1-codex-mini": {
+    "sub": "hookele__gpt5.1-codex-mini",
+    "agentSlug": "hookele",
+    "modelSlug": "gpt5.1-codex-mini",
+    "models": [
+      {
+        "name": "gpt-5.1-codex-mini",
+        "provider": "openai",
+        "displayName": "GPT-5.1 Codex mini",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://github.com/sady4850/hookele_coding_agent",
+    "agentDisplayName": "hookele",
+    "agentOrg": "Dmitry Barakhov"
+  },
+  "just-another-coding-agent__GLM-5": {
+    "sub": "just-another-coding-agent__GLM-5",
+    "agentSlug": "just-another-coding-agent",
+    "modelSlug": "GLM-5",
+    "models": [
+      {
+        "name": "glm-5",
+        "provider": "zhipu",
+        "displayName": "GLM 5",
+        "org": "Zhipu"
+      }
+    ],
+    "agentUrl": "https://github.com/SahilDahiya/just-another-coding-agent",
+    "agentDisplayName": "just-another-coding-agent",
+    "agentOrg": "Sahil Dahiya"
+  },
+  "little-coder__qwen3.6-35b-a3b": {
+    "sub": "little-coder__qwen3.6-35b-a3b",
+    "agentSlug": "little-coder",
+    "modelSlug": "qwen3.6-35b-a3b",
+    "models": [
+      {
+        "name": "Qwen/Qwen3.6-35B-A3B",
+        "provider": "llamacpp",
+        "displayName": "Qwen3.6-35B-A3B",
+        "org": "Qwen"
+      }
+    ],
+    "agentUrl": "https://github.com/itayinbarr/little-coder",
+    "agentDisplayName": "little-coder",
+    "agentOrg": "Itay Inbar"
+  },
+  "logos-latest__claude-opus-4.7": {
+    "sub": "logos-latest__claude-opus-4.7",
+    "agentSlug": "logos-latest",
+    "modelSlug": "claude-opus-4.7"
+  },
+  "logos-ts__claude-opus-4.7": {
+    "sub": "logos-ts__claude-opus-4.7",
+    "agentSlug": "logos-ts",
+    "modelSlug": "claude-opus-4.7"
+  },
+  "logos__claude-opus-4.6": {
+    "sub": "logos__claude-opus-4.6",
+    "agentSlug": "logos",
+    "modelSlug": "claude-opus-4.6",
+    "models": [
+      {
+        "name": "claude-opus-4.6",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.6",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://github.com/tommy0103/kairos-bench",
+    "agentDisplayName": "LogosAgent",
+    "agentOrg": "kairos-plan9"
+  },
+  "pilot-real__claude-opus-4-6": {
+    "sub": "pilot-real__claude-opus-4-6",
+    "agentSlug": "pilot-real",
+    "modelSlug": "claude-opus-4-6",
+    "models": [
+      {
+        "name": "claude-opus-4-6",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.6",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://github.com/alekspetrov/pilot",
+    "agentDisplayName": "Pilot",
+    "agentOrg": "QuantFlow"
+  },
+  "spoox-o-m__GPT-5.3-Codex": {
+    "sub": "spoox-o-m__GPT-5.3-Codex",
+    "agentSlug": "spoox-o-m",
+    "modelSlug": "GPT-5.3-Codex",
+    "models": [
+      {
+        "name": "gpt-5.3-codex",
+        "provider": "openai",
+        "displayName": "GPT-5.3-Codex",
+        "org": "OpenAI"
+      }
+    ],
+    "agentUrl": "https://github.com/plaume8/spoox",
+    "agentDisplayName": "spoox-o-m",
+    "agentOrg": "TUM"
+  },
+  "terminus-2__AfterQuery-GPT-OSS-20B": {
+    "sub": "terminus-2__AfterQuery-GPT-OSS-20B",
+    "agentSlug": "terminus-2",
+    "modelSlug": "AfterQuery-GPT-OSS-20B",
+    "models": [
+      {
+        "name": "gpt-oss-20b-rl",
+        "provider": "afterquery",
+        "displayName": "AfterQuery-GPT-OSS-20B",
+        "org": "AfterQuery"
+      }
+    ],
+    "agentUrl": "https://www.tbench.ai/terminus",
+    "agentDisplayName": "Terminus 2",
+    "agentOrg": "AfterQuery"
+  },
+  "vix__claude-opus-4-7": {
+    "sub": "vix__claude-opus-4-7",
+    "agentSlug": "vix",
+    "modelSlug": "claude-opus-4-7",
+    "models": [
+      {
+        "name": "claude-opus-4-7",
+        "provider": "anthropic",
+        "displayName": "Claude Opus 4.7",
+        "org": "Anthropic"
+      }
+    ],
+    "agentUrl": "https://github.com/kirby88/vix-releases",
+    "agentDisplayName": "vix",
+    "agentOrg": "vix"
   }
 }
