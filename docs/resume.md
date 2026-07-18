@@ -3,6 +3,32 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ➡️ CURRENT STATE (2026-07-19) — ENV FIXED · v0 RE-BASELINED HONEST 8/14 · loop unblocked
+
+**Merged + pushed, tip ≥ `1f77f11`. Suite 1503/0/1 skip.**
+1. **Env-leakage FIXED** (`dfb2f4b..9440391`): agent containers get NO `/tb`/`/mh` mounts and
+   no `TB_ROOT`; staging + verifier tests + patches via rc-checked `podman cp` (stage-then-
+   purge); `rm`/`find -delete` Dockerfile lines now EXECUTE (best-effort; apt-cache cleanup
+   still dropped). Oracle path unchanged + test-pinned. Live-verified: oracle path-tracing
+   PASS ×2; container probe /tb absent, orig.c deleted. copyTests failures now surface as
+   setup_failed (never silent reward=0).
+2. **v0 RE-BASELINED on the honest env: 8/14 (57.1%)** — was 12/14 (85.7%) inflated. Leakage
+   predictions CONFIRMED: db-wal-recovery FAIL(442s), path-tracing FAIL(1832s). Other deltas
+   (k=1 noise vs real): write-compressor TIMEOUT(3658), large-scale-text-editing
+   TIMEOUT(4264), llm-inference-batching-scheduler FAIL(1360) — all former passes;
+   extract-elf FLIPPED TO PASS(741s); openssl-selfsigned-cert FAIL (consistent). Old
+   baseline backed up: `.meta-harness/backups/v0-pre-envfix-20260719/` + git history.
+   Store synced+pushed (`1f77f11`). NOTE: post-envfix sessions distinguishable by env
+   pluginSha stamp; pre-envfix data must not mix into rates.
+3. **NEXT (loop unblocked, honest instruments):** (a) `/mh-propose` v3 — proposer now sees
+   6 honest fails incl. the two ex-leakage tasks + SLOW-PASS evidence; (b) `bench screen`
+   v2-vs-v3 tournament on the band (k=1); (c) winner → k=5 `--speed-tiebreak` ab (verdict
+   grade); (d) Phase-6 loop2 curation now legal — full 75-sub matrix is in git; curate with
+   the NEW honest ourRates (screen-band probe per plan Phase 6). v2's old k=2 screen verdict
+   (inconclusive-negative) predates the env fix — treat as historical.
+
+(pt-5 and older blocks below.)
+
 ## ➡️ CURRENT STATE (2026-07-18 pt 5, EVENING) — VELOCITY LEVERS MERGED · ENV SOFTNESS FOUND · v2 screen NEGATIVE
 
 **Everything MERGED + PUSHED to main (tip ≥ `69b4ff0`). Suite 1486/0/1 skip, both tscs clean.**
