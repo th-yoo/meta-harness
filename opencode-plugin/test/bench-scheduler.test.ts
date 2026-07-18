@@ -24,6 +24,15 @@ async function flush(times = 5): Promise<void> {
   for (let i = 0; i < times; i++) await Promise.resolve()
 }
 
+/** A tiny REAL wait — long enough to let a scheduler re-scan timer armed at
+ * pausePollMs≈1ms actually fire. This is NOT clock mocking and NOT a
+ * wall-clock synchronization against production's 20s cadence: the pauseGate
+ * tests inject pausePollMs≈1ms precisely so the transient re-scan is
+ * observable in a few real milliseconds. */
+function realSleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
 function item(key: string, cpus: number, memoryMb = 1024): ScheduledItem {
   return { key, cpus, memoryMb }
 }
@@ -490,6 +499,212 @@ test("canLaunch: undefined (not passed) is byte-identical to today — unbounded
   }
   await schedule(items, DEFAULT_BUDGET, runFn) // no 4th arg
   expect(launched).toEqual(["a", "b"])
+})
+
+// ── pauseGate (transient host-pressure gate, plan S2) ──────────────────────
+// scheduler.ts's 5th+6th optional schedule() params: pauseGate() +
+// pausePollMs. Contrast with canLaunch: canLaunch is TERMINAL (drain then
+// resolve, abandoning un-launched items — oauth expiry). pauseGate is
+// TRANSIENT: while it returns true and work remains, hold launches and re-arm
+// a re-scan timer — it NEVER resolves-with-work-abandoned. Consulted only
+// AFTER finishIfDone() and canLaunch, immediately before the launch loop, so
+// the terminal oauth-drain path always dominates. Absent (undefined),
+// schedule() is byte-identical to before these params existed.
+
+test("pauseGate: true holds launches while in-flight settle, nothing dropped; the pausePollMs re-scan timer resumes launching when the flag flips back", async () => {
+  const launched: string[] = []
+  const deferreds = new Map<string, Deferred<void>>()
+  const budget: Budget = { cpus: 1, memoryMb: 6144 } // serialize: one at a time
+  const items = [item("a", 1), item("b", 1), item("c", 1)]
+
+  let paused = false
+  const pauseGate = () => paused
+
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    launched.push(it.key)
+    const d = deferred<void>()
+    deferreds.set(it.key, d)
+    return d.promise
+  }
+
+  const result = schedule(items, budget, runFn, undefined, pauseGate, 1)
+  expect(launched).toEqual(["a"]) // only "a" fits the 1-cpu budget
+
+  // Pause, then complete "a". The completion-triggered re-scan sees pause
+  // true with inFlight===0 and must arm a re-scan timer instead of launching
+  // "b" — nothing dropped.
+  paused = true
+  deferreds.get("a")!.resolve()
+  await flush()
+  expect(launched).toEqual(["a"]) // "b" held by pause, NOT dropped
+  expect(deferreds.has("b")).toBe(false)
+
+  // Flip the flag back. The armed ~1ms re-scan timer must fire and resume
+  // launching "b" — no completion event occurs here; only the timer can.
+  paused = false
+  await realSleep(20)
+  expect(launched).toEqual(["a", "b"]) // resumed purely by the timer re-scan
+
+  // Drain the rest normally — everything runs, nothing was dropped.
+  deferreds.get("b")!.resolve()
+  await flush()
+  expect(launched).toEqual(["a", "b", "c"])
+  deferreds.get("c")!.resolve()
+  await result // resolves, all three ran
+  expect(launched).toEqual(["a", "b", "c"])
+})
+
+test("pauseGate: true but no work remains — resolves via finishIfDone (the gate is never even consulted)", async () => {
+  let consulted = false
+  const pauseGate = () => {
+    consulted = true
+    return true
+  }
+  // Empty item list: finishIfDone() at scan()'s top sees cursor >= length &&
+  // inFlight === 0 and resolves BEFORE any gate runs — so a resolve branch in
+  // the pauseGate arm would be dead code.
+  await schedule([], DEFAULT_BUDGET, async () => {}, undefined, pauseGate, 1)
+  expect(consulted).toBe(false)
+})
+
+test("pauseGate: undefined (not passed) is byte-identical to today — no gating", async () => {
+  const launched: string[] = []
+  const items = [item("a", 1), item("b", 1)]
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    launched.push(it.key)
+    return Promise.resolve()
+  }
+  await schedule(items, DEFAULT_BUDGET, runFn) // no 5th/6th arg
+  expect(launched).toEqual(["a", "b"])
+})
+
+test("pauseGate: COMPOSITION — canLaunch false AND pauseGate true simultaneously still resolves (terminal drain dominates, no hang)", async () => {
+  const launched: string[] = []
+  const items = [item("a", 1), item("b", 1)]
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    launched.push(it.key)
+    return Promise.resolve()
+  }
+
+  let pauseConsulted = false
+  const pauseGate = () => {
+    pauseConsulted = true
+    return true
+  }
+
+  // canLaunch false from the start + pauseGate true: the ordering rule says
+  // the canLaunch (terminal) block runs FIRST and resolves — the run must
+  // still settle for --resume; pause-first would re-arm the timer forever.
+  await schedule(items, DEFAULT_BUDGET, runFn, () => false, pauseGate, 1)
+  expect(launched).toEqual([]) // canLaunch false → nothing launched
+  expect(pauseConsulted).toBe(false) // canLaunch block returned before pauseGate
+})
+
+test("pauseGate: pressure pause ALONE never resolves with work abandoned — schedule() stays pending while paused with items unlaunched", async () => {
+  const launched: string[] = []
+  const deferreds = new Map<string, Deferred<void>>()
+  const budget: Budget = { cpus: 1, memoryMb: 6144 }
+  const items = [item("a", 1), item("b", 1)]
+
+  let paused = false
+  const pauseGate = () => paused
+
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    launched.push(it.key)
+    const d = deferred<void>()
+    deferreds.set(it.key, d)
+    return d.promise
+  }
+
+  const result = schedule(items, budget, runFn, undefined, pauseGate, 1)
+  expect(launched).toEqual(["a"])
+
+  paused = true
+  deferreds.get("a")!.resolve()
+  await flush()
+
+  let settled = false
+  result.then(
+    () => (settled = true),
+    () => (settled = true),
+  )
+
+  // Even after the ~1ms re-scan timer has fired many times, still paused with
+  // "b" unlaunched → schedule() must NOT resolve (would be abandoning work).
+  await realSleep(20)
+  expect(settled).toBe(false)
+  expect(launched).toEqual(["a"])
+
+  // Unpause so the run can finish cleanly (no dangling promise/timer).
+  paused = false
+  await realSleep(20)
+  deferreds.get("b")!.resolve()
+  await result
+  expect(launched).toEqual(["a", "b"])
+})
+
+test("pauseGate: a THROWING gate fails OPEN on the sync scan path — launches proceed, logged once, no unhandled rejection", async () => {
+  const launched: string[] = []
+  const items = [item("a", 1), item("b", 1)]
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    launched.push(it.key)
+    return Promise.resolve()
+  }
+  const pauseGate = () => {
+    throw new Error("sensor boom (sync)")
+  }
+
+  const errs: unknown[][] = []
+  const orig = console.error
+  console.error = (...a: unknown[]) => {
+    errs.push(a)
+  }
+  try {
+    await schedule(items, DEFAULT_BUDGET, runFn, undefined, pauseGate, 1)
+  } finally {
+    console.error = orig
+  }
+
+  expect(launched).toEqual(["a", "b"]) // failed OPEN — everything launched
+  expect(errs.length).toBe(1) // logged exactly once despite two scan()s throwing
+})
+
+test("pauseGate: a THROWING gate fails OPEN on the setTimeout re-scan path — launches proceed, logged once, no unhandled rejection", async () => {
+  const launched: string[] = []
+  const budget: Budget = { cpus: 1, memoryMb: 6144 }
+  const items = [item("a", 1), item("b", 1)]
+  const runFn = (it: ScheduledItem): Promise<void> => {
+    launched.push(it.key)
+    return Promise.resolve()
+  }
+
+  // First consult pauses (inFlight===0 → arms the re-scan timer, nothing
+  // launched yet); every subsequent consult throws. The throw therefore
+  // FIRST reaches scheduler code from inside the setTimeout re-scan — an
+  // uncaught exception outside the Promise machinery if not caught.
+  let calls = 0
+  const pauseGate = () => {
+    calls++
+    if (calls === 1) return true
+    throw new Error("sensor boom (re-scan)")
+  }
+
+  const errs: unknown[][] = []
+  const orig = console.error
+  console.error = (...a: unknown[]) => {
+    errs.push(a)
+  }
+  try {
+    const result = schedule(items, budget, runFn, undefined, pauseGate, 1)
+    expect(launched).toEqual([]) // first scan paused → nothing launched yet
+    await realSleep(20) // timer fires → gate throws → fail open → launches
+    await result
+  } finally {
+    console.error = orig
+  }
+
+  expect(launched).toEqual(["a", "b"]) // failed OPEN from the timer path onward
+  expect(errs.length).toBe(1) // logged once total, not once per throwing consult
 })
 
 // ── invalid budget guard (final-review fix: NaN defeats fitsBudget/

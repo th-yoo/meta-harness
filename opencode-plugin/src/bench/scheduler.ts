@@ -73,12 +73,28 @@ function assertValidBudget(budget: Budget): void {
  * even if items remain un-launched; the caller (cmd-run.ts/cmd-ab.ts's
  * --resume) is expected to pick up whatever didn't run this chunk. Absent
  * (undefined), the guard is skipped entirely — unbounded, byte-identical to
- * every schedule() call site from before this param existed. */
+ * every schedule() call site from before this param existed.
+ *
+ * `pauseGate` (transient host-pressure gate, plan S2) — CONTRAST with
+ * `canLaunch`, which they superficially resemble:
+ *   - `canLaunch` is TERMINAL: false + nothing in flight ⇒ schedule() RESOLVES
+ *     and abandons un-launched items (oauth expiry: end the chunk, `--resume`).
+ *   - `pauseGate` is TRANSIENT: true ⇒ HOLD launches and re-check later on a
+ *     timer; it NEVER resolves-with-work-abandoned. Used for a passing host-
+ *     pressure spike — width shrinks by attrition and recovers when pressure
+ *     clears. It is consulted only AFTER finishIfDone() and canLaunch, so the
+ *     terminal oauth-drain path always dominates (see scan()).
+ * `pausePollMs` is the injected re-scan cadence (the caller passes the sensor's
+ * poll interval; kept as a param, NOT imported, so this generic scheduler does
+ * not couple to the host-pressure sensor module). Tests inject ~1ms so the
+ * transient re-scan is observable without clock mocking or wall-clock waits. */
 export function schedule(
   items: ScheduledItem[],
   budget: Budget,
   runFn: (item: ScheduledItem) => Promise<void>,
   canLaunch?: () => boolean,
+  pauseGate?: () => boolean,
+  pausePollMs = 20_000,
 ): Promise<void> {
   assertValidBudget(budget)
   return new Promise<void>((resolve, reject) => {
@@ -88,6 +104,18 @@ export function schedule(
     let hasFailure = false
     let failure: unknown
 
+    // Single re-scan timer handle for the transient pauseGate. Doubles as the
+    // dedup guard: while non-null a timer is already pending, so we never
+    // stack a second one.
+    let pauseTimer: ReturnType<typeof setTimeout> | null = null
+    let pauseGateFailOpenLogged = false
+    const clearPauseTimer = (): void => {
+      if (pauseTimer !== null) {
+        clearTimeout(pauseTimer)
+        pauseTimer = null
+      }
+    }
+
     // Resolves/rejects the outer promise once nothing is left to do. Under a
     // failure, in-flight items still get to settle first (cursor may not
     // have reached the end — we stop launching new items, but wait for the
@@ -95,10 +123,16 @@ export function schedule(
     const finishIfDone = (): boolean => {
       if (inFlight !== 0) return false
       if (hasFailure) {
+        // Clear any armed pauseGate re-scan timer before settling: with the
+        // shared per-command sensor (S3), a stale timer from ab phase 1
+        // firing during phase 2 would emit a spurious [pressure] log against
+        // the live sensor. Covers finishIfDone()'s 3 callers.
+        clearPauseTimer()
         reject(failure)
         return true
       }
       if (cursor >= items.length) {
+        clearPauseTimer()
         resolve()
         return true
       }
@@ -153,10 +187,61 @@ export function schedule(
         // (a no-op if already settled), so there is no race with any other
         // path that might also reach a resolve/reject first.
         if (inFlight === 0) {
+          // This direct resolve() bypasses finishIfDone(), so it must clear
+          // the pauseGate re-scan timer here too (same stale-timer / spurious
+          // [pressure]-log rationale as finishIfDone's clear).
+          clearPauseTimer()
           resolve()
           return
         }
         return // in-flight settle → their .then calls scan() again → eventually inFlight 0 → resolve above
+      }
+
+      // Transient host-pressure gate (plan S2). Ordering is correctness-
+      // critical: this runs ONLY after finishIfDone() and the canLaunch block
+      // above. If oauth is expiring (canLaunch false) WHILE the host is under
+      // pressure, the run must still terminal-drain and resolve for --resume;
+      // consulting pauseGate first would re-arm the timer forever and hang
+      // schedule(). So pauseGate can only hold launches, never block the drain.
+      if (pauseGate) {
+        let paused: boolean
+        try {
+          paused = pauseGate()
+        } catch (err) {
+          // Fail-OPEN: a sensor fault must NEVER pause or propagate. Same
+          // defense-in-depth stance as assertValidBudget above — but here the
+          // stakes are sharper: scan() runs from a setTimeout re-scan (an
+          // uncaught exception there escapes the Promise machinery entirely)
+          // and from completion handlers (an unhandled rejection that leaves
+          // schedule() hanging). Swallow it, treat the host as NOT paused, and
+          // log once (the gate can be consulted on every scan — don't spam).
+          paused = false
+          if (!pauseGateFailOpenLogged) {
+            pauseGateFailOpenLogged = true
+            console.error("  [scheduler] pauseGate threw — failing open, launches proceed:", err)
+          }
+        }
+        if (paused) {
+          // NO resolve branch: finishIfDone() at scan()'s top already owns the
+          // fully-drained state (cursor >= items.length && inFlight === 0), so
+          // a resolve here would be dead code. pauseGate is TRANSIENT — hold,
+          // never abandon work.
+          if (inFlight === 0) {
+            // The sole state with no in-flight completion left to re-trigger
+            // scan(). Arm exactly ONE re-scan timer (dedup via the handle);
+            // unref so a paused gate can't keep the process alive.
+            if (pauseTimer === null) {
+              pauseTimer = setTimeout(() => {
+                pauseTimer = null
+                scan()
+              }, pausePollMs)
+              pauseTimer.unref?.()
+            }
+          }
+          // inFlight > 0: a completion (below, at the runFn .then handlers)
+          // re-invokes scan() and re-checks the gate naturally — no timer.
+          return
+        }
       }
 
       while (cursor < items.length) {
