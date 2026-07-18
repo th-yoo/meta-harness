@@ -20,16 +20,38 @@ does NOT transfer; this file + the repo are the source of truth.)
    baseline backed up: `.meta-harness/backups/v0-pre-envfix-20260719/` + git history.
    Store synced+pushed (`1f77f11`). NOTE: post-envfix sessions distinguishable by env
    pluginSha stamp; pre-envfix data must not mix into rates.
-3. **NEXT (loop unblocked, honest instruments):** (a) `/mh-propose` v3 — proposer now sees
-   6 honest fails incl. the two ex-leakage tasks + SLOW-PASS evidence; (b) `bench screen`
-   v2-vs-v3 tournament on the band (k=1); (c) winner → k=5 `--speed-tiebreak` ab (verdict
-   grade); (d) Phase-6 loop2 curation now legal — full 75-sub matrix is in git; curate with
-   the NEW honest ourRates (screen-band probe per plan Phase 6). v2's old k=2 screen verdict
-   (inconclusive-negative) predates the env fix — treat as historical.
+3. **NEXT (loop unblocked, honest instruments) — exact recipes, this Mac:**
+   (a) **Propose v3**: fresh traj evidence is thin post-reset (score has 14 new sessions but
+   traj pruning applies) — proposer reads score + traj under `.meta-harness`; start opencode
+   in the repo, `/mh-propose account` → verify a NEW vN ≠ v0 in
+   `.meta-harness/global/candidates/`. Proposer now sees the 6 honest fails (incl.
+   ex-leakage db-wal/path-tracing), SLOW-PASS markers, and v1/v2's rejected history.
+   Optional: enable the external-evidence seam first (config `externalEvidenceDir:
+   "evidence/tb2-leaderboard"` + distill per docs/tb2-evidence-mining.md — held-in only).
+   (b) **Screen tournament (k=1, cheap)**:
+   `META_HARNESS_HOME=<repo>/.meta-harness PATH=/opt/podman/bin:$PATH bun term-bench2/runner.ts \
+    screen --layer account-global --candidates v2,v3 --task-file term-bench2/splits/loop1-band.txt \
+    --model anthropic/claude-haiku-4-5 --parallel --enforce-resources --min-cpus 2 \
+    --cpu-budget 4 --mem-budget 7000 --host-pressure on`
+   (floor defaults to 3600; prints ADVANCE line; store never written).
+   (c) **Winner → k=5 verdict ab** (needs fresh oauth; freshness gate is task-item-level —
+   see pt-4 learnings; prefer starting on a fresh ~8h token):
+   `... runner.ts ab --layer account-global --candidate <winner> --split-file
+    term-bench2/splits/loop1.json --model anthropic/claude-haiku-4-5 --k 5 --parallel
+    --enforce-resources --min-cpus 2 --cpu-budget 4 --mem-budget 7000
+    --min-agent-timeout 3600 --max-agent-timeout 3600 --host-pressure on --speed-tiebreak --resume`
+   (~24-40h on this Mac — chunk across days via --resume, or office box when available.)
+   (d) **Phase-6 loop2 curation now legal**: full 75-sub matrix in git
+   (`term-bench2/leaderboard/matrix.json`); follow plan Phase 6 (band probe with the NEW
+   honest rates → curate-band → `split make ... --split-file term-bench2/splits/loop2.json
+   --sentinels 3`; set MhConfig.activeSplitFile when loop2 goes live).
+   Caveats: v2's old k=2 screen verdict (inconclusive-negative) AND all pre-envfix evidence
+   are old-regime — never mix into rates; k=5 remains the only verdict grade
+   (memory `k5-verdict-standard`).
 
-(pt-5 and older blocks below.)
+(pt-5 and older blocks below are HISTORICAL.)
 
-## ➡️ CURRENT STATE (2026-07-18 pt 5, EVENING) — VELOCITY LEVERS MERGED · ENV SOFTNESS FOUND · v2 screen NEGATIVE
+## CURRENT STATE (2026-07-18 pt 5 — HISTORICAL; env since FIXED + re-baselined, see 07-19 block) — VELOCITY LEVERS MERGED · ENV SOFTNESS FOUND · v2 screen NEGATIVE
 
 **Everything MERGED + PUSHED to main (tip ≥ `69b4ff0`). Suite 1486/0/1 skip, both tscs clean.**
 Built via subagent-driven dev off the 3×-architect-reviewed plan
