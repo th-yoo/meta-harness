@@ -5,6 +5,21 @@
  * upstream checkout at run time instead of executing a vendored, committed
  * `setup_deps.sh` (see cmd-oracle.ts's `--staging scripts|runtime`).
  *
+ * Env-fidelity fix (docs/env-fidelity-spotcheck.md): `stageTaskRuntime` no
+ * longer reads a task's `environment/` directory through a persistent `/tb`
+ * bind mount (agent containers no longer get one at all — cmd-run.ts's own
+ * header covers the container-create side of this). Instead it `podman cp`s
+ * just `<tbRoot>/<task>/environment` into a throwaway in-container path
+ * (`STAGE_DIR`, `/.mh-stage`) BEFORE replaying any step, resolves every COPY
+ * source against that staged copy instead of `/tb/<task>/environment`, and
+ * `rm -rf`s `STAGE_DIR` as the FINAL action once every step has run — so an
+ * agent that inspects the filesystem after staging finds neither the host
+ * mount nor a lingering pristine copy of the task's fixtures. cmd-oracle.ts's
+ * own container still keeps a persistent `/tb` mount (it legitimately needs
+ * live access for `solution/solve.sh`), but calls this SAME function, so its
+ * staging step gets the identical stage-then-purge treatment — harmless
+ * there since the mount remains available for what oracle still needs.
+ *
  * Porting notes (see the task brief for the full rationale):
  *  - FROM: base image is recorded for logging only — never pulled/built. The
  *    shared bench image (term-bench2/Containerfile) is a deliberate
@@ -91,10 +106,22 @@
  *    `uv run ...` lines and any other unclassified RUN
  *    line become verbatim "run" steps, executed with the WORKDIR-tracked cwd
  *    active at that line (default /app — see the WORKDIR porting note
- *    above). Lines that
- *    are pure cleanup (`rm ...`, `find ... -delete`, `apt-get
- *    clean`/`autoremove`) are dropped outright, matching the generator. A
- *    RUN line that still mentions `apt`/`apt-get` as a whole word but has no
+ *    above). Cleanup RUN lines split into two buckets (env-fidelity fix,
+ *    docs/env-fidelity-spotcheck.md's path-tracing finding: dropping a file-
+ *    deleting cleanup line left an answer-key file — `orig.c` — present at
+ *    agent time even though the official Dockerfile deletes it):
+ *      - `rm ...` / `find ... -delete` are EXECUTED, not dropped — kept as a
+ *        normal "run" step but flagged `bestEffort` (StagingStep.bestEffort)
+ *        so stageTaskRuntime treats a nonzero exit as non-fatal (logged, not
+ *        thrown): if the target is already absent in our union environment
+ *        the failure is a no-op (the end state — file absent — is already
+ *        correct); if present, the deletion is fidelity-critical and now
+ *        actually happens.
+ *      - `apt-get clean` / `apt-get autoremove` are still DROPPED outright —
+ *        pure package-cache-size noise with zero fidelity impact (Option A
+ *        already runs its own fresh `apt-get install` per task; there is no
+ *        shared cache for these to matter to).
+ *    A RUN line that still mentions `apt`/`apt-get` as a whole word but has no
  *    `install` (e.g. a bare `apt-get update`) is *also* dropped outright
  *    here: it installs nothing by itself, and if the same Dockerfile also
  *    has a real install line, this port's own apt step already runs its own
@@ -116,7 +143,7 @@
 import { readFileSync, statSync } from "node:fs"
 import { join, posix as posixPath } from "node:path"
 import { podman, type ExecResult } from "./exec.ts"
-import { buildExecArgv } from "./sandbox.ts"
+import { buildExecArgv, buildCpToArgv } from "./sandbox.ts"
 import type { BenchPaths } from "./paths.ts"
 import { BenchError, die, log } from "./util.ts"
 
@@ -162,6 +189,12 @@ export interface StagingStep {
    * later bare-`python3` step (including the task's own solve.sh, run outside
    * staging) can see them. See the module header's pip porting note. */
   systemWide?: boolean
+  /** run: true for a file-deleting cleanup line (`rm ...` / `find ...
+   * -delete`) that stageTaskRuntime executes BEST-EFFORT — a nonzero exit is
+   * logged, not thrown (see the module header's env-fidelity fix note and
+   * FILE_DELETE_RE). Undefined/false for every other run step (unchanged
+   * fail-loud behavior). */
+  bestEffort?: boolean
 }
 
 export interface TaskStaging {
@@ -216,6 +249,15 @@ const DEFAULT_CWD = "/app"
  * image — see the Containerfile's `RUN mkdir -p /app /tests /logs/verifier`
  * and stock Ubuntu's own /opt). */
 const PIP_VENV = "/opt/.venv"
+
+/** Where `stageTaskRuntime` `podman cp`s a task's `environment/` directory
+ * BEFORE replaying any COPY step, and `rm -rf`s as the FINAL staging action
+ * (env-fidelity fix — see the module header). Replaces the old
+ * `/tb/<task>/environment` mount-relative path: every COPY source now
+ * resolves against this throwaway in-container copy instead of a persistent
+ * host bind mount, so neither the mount nor a lingering pristine copy is
+ * present once staging completes. */
+const STAGE_DIR = "/.mh-stage"
 
 /** Resolve one WORKDIR directive's body against the previous cwd — Docker
  * semantics: an absolute value replaces the cwd outright; a relative value
@@ -388,14 +430,20 @@ function extractPipPackages(body: string): string[] {
   return packages
 }
 
-const CLEANUP_ONLY_RE = /^(rm\s|find\s.*-delete|apt-get clean|apt-get autoremove)/
+// File-deleting cleanup lines: EXECUTED (best-effort — see the module
+// header's env-fidelity fix note). Package-cache cleanup lines: still
+// DROPPED outright (zero fidelity impact).
+const FILE_DELETE_RE = /^(rm\s|find\s.*-delete)/
+const APT_CACHE_CLEANUP_RE = /^(apt-get clean|apt-get autoremove)/
 const APT_WORD_RE = /\bapt(?:-get)?\b/
 
 /** One raw RUN line kept verbatim, tagged with the WORKDIR-tracked cwd active
- * when it was encountered (see A2 porting note). */
+ * when it was encountered (see A2 porting note), and whether it's a
+ * best-effort file-deleting cleanup line (see FILE_DELETE_RE). */
 interface RawRun {
   cmd: string
   cwd: string
+  bestEffort?: boolean
 }
 
 /** Classify one RUN body, mutating the accumulators — port of gen_setup_deps.py's
@@ -443,8 +491,16 @@ function classifyRun(
   }
 
   if (!classified) {
-    if (CLEANUP_ONLY_RE.test(body.trim())) {
-      return // pure cleanup line — dropped, matches the generator exactly
+    const trimmed = body.trim()
+    if (APT_CACHE_CLEANUP_RE.test(trimmed)) {
+      return // package-cache cleanup only — dropped, zero fidelity impact
+    }
+    if (FILE_DELETE_RE.test(trimmed)) {
+      // Fidelity-critical (env-fidelity fix): kept as a run step, EXECUTED,
+      // flagged bestEffort so stageTaskRuntime treats a nonzero exit as
+      // non-fatal — see the module header's env-fidelity fix note.
+      rawRunLines.push({ cmd: body, cwd, bestEffort: true })
+      return
     }
     if (APT_WORD_RE.test(body)) {
       // A bare apt/apt-get reference with no "install" (e.g. `apt-get
@@ -621,7 +677,12 @@ export function parseTaskDockerfile(paths: BenchPaths, task: string): TaskStagin
     })
   }
   for (const rr of rawRunLines) {
-    steps.push({ kind: "run", cmd: rr.cmd, cwd: rr.cwd === DEFAULT_CWD ? undefined : rr.cwd })
+    steps.push({
+      kind: "run",
+      cmd: rr.cmd,
+      cwd: rr.cwd === DEFAULT_CWD ? undefined : rr.cwd,
+      bestEffort: rr.bestEffort,
+    })
   }
 
   return { steps, envs, baseImage, aptPackages }
@@ -697,8 +758,23 @@ export async function stageTaskRuntime(
     log(`  staging (runtime): ${task} base image is ${staging.baseImage} (approximated by the shared bench image)`)
   }
 
+  // Env-fidelity fix: stage the task's environment/ directory into the
+  // container via `podman cp` BEFORE replaying any step — no persistent /tb
+  // mount involved (see the module header). The container's STAGE_DIR does
+  // not exist yet at this point (fresh container / first use), so podman cp
+  // creates it and copies the SOURCE DIRECTORY'S CONTENTS directly into it
+  // (verified podman cp semantics: dest-does-not-exist -> contents-copied-in,
+  // matching the old `/tb/<task>/environment` mount's directory shape).
+  const cpResult = await execFn(buildCpToArgv(name, join(paths.tbRoot, task, "environment"), STAGE_DIR))
+  if (cpResult.rc !== 0) {
+    throw new BenchError(
+      `stageTaskRuntime(${task}): podman cp environment -> ${STAGE_DIR} failed: exit ${cpResult.rc}` +
+        (cpResult.stderr.trim() ? ` — ${cpResult.stderr.trim()}` : ""),
+    )
+  }
+
   const prelude = envPrelude(staging.envs)
-  const envDir = `/tb/${task}/environment`
+  const envDir = STAGE_DIR
 
   // Whole-script `set -euo pipefail`, mirroring SETUP_DEPS_TEMPLATE's line
   // 325 (module header) — applied uniformly ahead of the env prelude for
@@ -761,10 +837,36 @@ export async function stageTaskRuntime(
     const argv = buildExecArgv(name, ["bash", "-c", script])
     const result = await execFn(argv)
     if (result.rc !== 0) {
+      if (step.kind === "run" && step.bestEffort) {
+        // File-deleting cleanup line (env-fidelity fix — see module header
+        // and FILE_DELETE_RE): non-fatal. A failure here means the target is
+        // most likely already absent in our union environment, so the end
+        // state (file absent) is already correct — log and move on rather
+        // than aborting the whole task's staging over it.
+        log(
+          `  staging (runtime): ${task} — cleanup step failed (non-fatal, best-effort): ${describeStep(step)}: exit ${result.rc}` +
+            (result.stderr.trim() ? ` — ${result.stderr.trim()}` : ""),
+        )
+        continue
+      }
       throw new BenchError(
         `stageTaskRuntime(${task}): step failed (${describeStep(step)}): exit ${result.rc}` +
           (result.stderr.trim() ? ` — ${result.stderr.trim()}` : ""),
       )
     }
+  }
+
+  // Env-fidelity fix: purge the staged copy as the FINAL staging action — an
+  // agent that inspects the filesystem after staging must not find a
+  // lingering pristine copy of the task's environment/ fixtures (see module
+  // header). Fatal on failure (unlike the best-effort Dockerfile cleanup
+  // lines above): this is OUR OWN security boundary, not an upstream line
+  // whose target might legitimately already be gone.
+  const rmResult = await execFn(buildExecArgv(name, ["rm", "-rf", STAGE_DIR]))
+  if (rmResult.rc !== 0) {
+    throw new BenchError(
+      `stageTaskRuntime(${task}): failed to remove staging dir ${STAGE_DIR}: exit ${rmResult.rc}` +
+        (rmResult.stderr.trim() ? ` — ${rmResult.stderr.trim()}` : ""),
+    )
   }
 }

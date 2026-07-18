@@ -16,14 +16,14 @@
  *  - Everything else (execution order, flag plumbing) is injected/fake —
  *    no podman is ever spawned by this file.
  */
-import { test, expect } from "bun:test"
+import { test, expect, spyOn } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
 import { makeBenchPaths } from "../src/bench/paths.ts"
 import type { BenchPaths } from "../src/bench/paths.ts"
 import { parseTaskDockerfile, stageTaskRuntime, type StagingStep } from "../src/bench/staging.ts"
-import { buildExecArgv } from "../src/bench/sandbox.ts"
+import { buildExecArgv, buildCpToArgv } from "../src/bench/sandbox.ts"
 import { cmdOracle, type RunOneOracleTask } from "../src/bench/cmd-oracle.ts"
 import { main } from "../src/bench/cli.ts"
 import { BenchError } from "../src/bench/util.ts"
@@ -46,6 +46,20 @@ function fakeBenchPaths(tbRoot: string): BenchPaths {
     baselineTasksFile: path.join(tbRoot, "baseline-unused.txt"),
     splitsFile: path.join(tbRoot, "splits-unused.json"),
   }
+}
+
+// Env-fidelity fix: every stageTaskRuntime call now brackets its step execs
+// with a `podman cp <tbRoot>/<task>/environment -> /.mh-stage` FIRST call and
+// a `rm -rf /.mh-stage` LAST call (see staging.ts's module header / STAGE_DIR).
+// Asserts both bracket calls and returns the MIDDLE (actual staging step)
+// argvs, so existing per-step assertions below can index into them unchanged.
+function expectStageBracketAndUnwrap(recordedArgvs: string[][], containerName: string, fakePaths: BenchPaths, task: string): string[][] {
+  expect(recordedArgvs.length).toBeGreaterThanOrEqual(2)
+  expect(recordedArgvs[0]).toEqual(
+    buildCpToArgv(containerName, path.join(fakePaths.tbRoot, task, "environment"), "/.mh-stage"),
+  )
+  expect(recordedArgvs[recordedArgvs.length - 1]).toEqual(buildExecArgv(containerName, ["rm", "-rf", "/.mh-stage"]))
+  return recordedArgvs.slice(1, -1)
 }
 
 // ── pure parse: 5 representative tasks against the real checkout ─────────
@@ -153,10 +167,11 @@ test.skipIf(!tbRootExists)("parseTaskDockerfile: build-pmars (apt extraction —
 // term-bench2/tasks/feal-linear-cryptanalysis/setup_deps.sh:29-49 — a
 // directory COPY (task-deps/ -> /app/, contents-copy since both dst ends in
 // "/" AND the source is a real directory on disk), one pip package, and
-// three verbatim raw RUN steps. The two `RUN rm ...` cleanup lines
-// (Dockerfile's final two RUN lines) must NOT surface as steps at all —
-// they are dropped exactly like the generated script drops them (absent
-// from its raw section).
+// three verbatim raw RUN steps. The Dockerfile's final two RUN lines (`RUN rm
+// orig_plaintexts.txt` / `RUN rm gen.py`) are file-deleting cleanup lines —
+// env-fidelity fix (docs/env-fidelity-spotcheck.md): these now surface as
+// their own best-effort "run" steps (EXECUTED, not dropped) rather than being
+// discarded the way gen_setup_deps.py's generator drops them.
 test.skipIf(!tbRootExists)("parseTaskDockerfile: feal-linear-cryptanalysis (dir COPY + pip + raw runs)", () => {
   const staging = parseTaskDockerfile(paths, "feal-linear-cryptanalysis")
   expect(staging.baseImage).toBe("python:3.13-slim-bookworm")
@@ -167,6 +182,8 @@ test.skipIf(!tbRootExists)("parseTaskDockerfile: feal-linear-cryptanalysis (dir 
     { kind: "run", cmd: "gcc -O3 -o feal feal.c" },
     { kind: "run", cmd: "gcc -O3 -o decrypt decrypt.c" },
     { kind: "run", cmd: "python3 gen.py" },
+    { kind: "run", cmd: "rm orig_plaintexts.txt", bestEffort: true },
+    { kind: "run", cmd: "rm gen.py", bestEffort: true },
   ])
 })
 
@@ -333,8 +350,9 @@ test("stageTaskRuntime: ARG-with-default's export lands in the RUN step's prelud
     return { rc: 0, stdout: "", stderr: "", timedOut: false }
   }
   await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
-  expect(recordedArgvs.length).toBe(1)
-  const script = recordedArgvs[0]![recordedArgvs[0]!.length - 1]!
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
+  expect(steps.length).toBe(1)
+  const script = steps[0]![steps[0]!.length - 1]!
   expect(script).toContain('export BN_URL="https://example.com/x.csv"')
   expect(script).toContain('curl -fsSL "${BN_URL}" -o x.csv')
 })
@@ -423,8 +441,9 @@ test("stageTaskRuntime: a non-default cwd RUN step mkdir -p's and cd's into the 
     return { rc: 0, stdout: "", stderr: "", timedOut: false }
   }
   await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
-  expect(recordedArgvs.length).toBe(1)
-  const script = recordedArgvs[0]![recordedArgvs[0]!.length - 1]!
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
+  expect(steps.length).toBe(1)
+  const script = steps[0]![steps[0]!.length - 1]!
   expect(script).toContain('mkdir -p "/app/john/src"')
   expect(script).toContain('cd "/app/john/src"')
   expect(script).toContain("./configure")
@@ -442,7 +461,8 @@ test("stageTaskRuntime: default cwd (/app, no WORKDIR) emits no extra mkdir/cd w
     return { rc: 0, stdout: "", stderr: "", timedOut: false }
   }
   await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
-  const script = recordedArgvs[0]![recordedArgvs[0]!.length - 1]!
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
+  const script = steps[0]![steps[0]!.length - 1]!
   expect(script).not.toContain("mkdir -p")
   expect(script).not.toContain("cd \"")
 })
@@ -542,18 +562,20 @@ test("stageTaskRuntime: executes copy -> pip -> run in that fixed phase order, o
   // one exec call per non-env step, in fixed phase order: copy, then the
   // ONE combined pip step, then each raw run (its own step, in Dockerfile
   // encounter order) — env is folded into every script's export prelude,
-  // never its own exec call.
-  expect(recordedArgvs.length).toBe(4)
-  for (const argv of recordedArgvs) {
+  // never its own exec call. Bracketed by a `podman cp` (environment ->
+  // /.mh-stage) first and a `rm -rf /.mh-stage` last (env-fidelity fix).
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
+  expect(steps.length).toBe(4)
+  for (const argv of steps) {
     expect(argv[0]).toBe("podman")
     expect(argv).toContain("container-1")
   }
 
-  const scripts = recordedArgvs.map((argv) => argv[argv.length - 1]!)
+  const scripts = steps.map((argv) => argv[argv.length - 1]!)
   // step 1: the COPY
   expect(scripts[0]).toContain('export FOO="bar"')
   expect(scripts[0]).toContain("mkdir -p")
-  expect(scripts[0]).toContain(`/tb/${task}/environment/adir/.`)
+  expect(scripts[0]).toContain(`/.mh-stage/adir/.`)
   expect(scripts[0]).toContain('"/app/"')
   // step 2: the combined pip install
   expect(scripts[1]).toContain('export FOO="bar"')
@@ -568,7 +590,7 @@ test("stageTaskRuntime: executes copy -> pip -> run in that fixed phase order, o
   expect(scripts[3]).not.toContain("echo first-raw")
 
   // every exec uses the same argv shape as sandbox.ts's buildExecArgv
-  expect(recordedArgvs[0]).toEqual(buildExecArgv("container-1", ["bash", "-c", scripts[0]!]))
+  expect(steps[0]).toEqual(buildExecArgv("container-1", ["bash", "-c", scripts[0]!]))
 })
 
 test("stageTaskRuntime: apt install runs FIRST, ahead of copy/pip/run, when the Dockerfile has an apt-get install line", async () => {
@@ -598,8 +620,9 @@ test("stageTaskRuntime: apt install runs FIRST, ahead of copy/pip/run, when the 
   await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
 
   // apt install, then copy, then the combined pip install, then the raw run.
-  expect(recordedArgvs.length).toBe(4)
-  const scripts = recordedArgvs.map((argv) => argv[argv.length - 1]!)
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
+  expect(steps.length).toBe(4)
+  const scripts = steps.map((argv) => argv[argv.length - 1]!)
   expect(scripts[0]).toContain("apt-get update && apt-get install -y --no-install-recommends")
   // deduped + sorted + Ubuntu-24.04-renamed (libgl1-mesa-glx -> libgl1),
   // same rules as manifest.json's build-cython-ext "apt" field.
@@ -630,8 +653,9 @@ test("stageTaskRuntime: empty apt list — no apt exec at all", async () => {
   await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
 
   // exactly one exec (the raw "echo hello" run) — no apt-get anywhere.
-  expect(recordedArgvs.length).toBe(1)
-  expect(recordedArgvs[0]![recordedArgvs[0]!.length - 1]).not.toContain("apt-get")
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
+  expect(steps.length).toBe(1)
+  expect(steps[0]![steps[0]!.length - 1]).not.toContain("apt-get")
 })
 
 test("stageTaskRuntime: a nonzero apt install exit throws BenchError naming it as an apt install failure", async () => {
@@ -643,7 +667,11 @@ test("stageTaskRuntime: a nonzero apt install exit throws BenchError naming it a
     ["FROM ubuntu:24.04", "RUN apt-get update && apt-get install -y gcc"].join("\n"),
   )
   const fakePaths = fakeBenchPaths(dir)
-  const fakeExec = async (): Promise<ExecResult> => ({ rc: 100, stdout: "", stderr: "boom", timedOut: false })
+  // The initial `podman cp` (environment -> /.mh-stage) must succeed so
+  // execution actually reaches the apt install step under test — only the
+  // apt exec itself fails.
+  const fakeExec = async (argv: string[]): Promise<ExecResult> =>
+    argv[1] === "cp" ? { rc: 0, stdout: "", stderr: "", timedOut: false } : { rc: 100, stdout: "", stderr: "boom", timedOut: false }
 
   await expect(stageTaskRuntime(fakePaths, "container-1", task, fakeExec)).rejects.toThrow(BenchError)
   try {
@@ -663,7 +691,10 @@ test("stageTaskRuntime: a nonzero step exit throws BenchError naming the step", 
   writeFileSync(path.join(dir, task, "environment", "Dockerfile"), "FROM ubuntu:24.04\nRUN exit-with-failure\n")
   const fakePaths = fakeBenchPaths(dir)
 
-  const fakeExec = async (): Promise<ExecResult> => ({ rc: 1, stdout: "", stderr: "boom", timedOut: false })
+  // The initial `podman cp` must succeed so execution reaches the run step
+  // under test — only the run exec itself fails.
+  const fakeExec = async (argv: string[]): Promise<ExecResult> =>
+    argv[1] === "cp" ? { rc: 0, stdout: "", stderr: "", timedOut: false } : { rc: 1, stdout: "", stderr: "boom", timedOut: false }
 
   await expect(stageTaskRuntime(fakePaths, "container-1", task, fakeExec)).rejects.toThrow(BenchError)
   try {
@@ -676,18 +707,21 @@ test("stageTaskRuntime: a nonzero step exit throws BenchError naming the step", 
   }
 })
 
-test("stageTaskRuntime: no podman spawned when execFn is injected (never touches real exec.ts's podman)", async () => {
+test("stageTaskRuntime: no REAL podman spawned when execFn is injected (never touches real exec.ts's podman) — only the cp/rm stage bracket for a bare FROM-only Dockerfile", async () => {
   const dir = tmpDir()
   const task = "noop-task"
   mkdirSync(path.join(dir, task, "environment"), { recursive: true })
   writeFileSync(path.join(dir, task, "environment", "Dockerfile"), "FROM ubuntu:24.04\n")
   const fakePaths = fakeBenchPaths(dir)
-  let calls = 0
-  await stageTaskRuntime(fakePaths, "c1", task, async () => {
-    calls++
+  const recordedArgvs: string[][] = []
+  await stageTaskRuntime(fakePaths, "c1", task, async (argv) => {
+    recordedArgvs.push(argv)
     return { rc: 0, stdout: "", stderr: "", timedOut: false }
   })
-  expect(calls).toBe(0) // no steps at all for a bare FROM-only Dockerfile
+  // no staging STEPS at all for a bare FROM-only Dockerfile, but the
+  // env-fidelity stage/purge bracket (podman cp + rm -rf) always runs.
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "c1", fakePaths, task)
+  expect(steps.length).toBe(0)
 })
 
 test("stageTaskRuntime: every step's script (copy, pip, run) starts with `set -euo pipefail` — a `;`-joined RUN body can't silently swallow a mid-command failure", async () => {
@@ -710,9 +744,12 @@ test("stageTaskRuntime: every step's script (copy, pip, run) starts with `set -e
 
   await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
 
-  // copy, the combined pip install, and the raw run — one exec call each.
-  expect(recordedArgvs.length).toBe(3)
-  const scripts = recordedArgvs.map((argv) => argv[argv.length - 1]!)
+  // copy, the combined pip install, and the raw run — one exec call each
+  // (the bracketing `podman cp`/`rm -rf` calls are not "scripts" — see
+  // expectStageBracketAndUnwrap).
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
+  expect(steps.length).toBe(3)
+  const scripts = steps.map((argv) => argv[argv.length - 1]!)
   for (const script of scripts) {
     expect(script.startsWith("set -euo pipefail\n")).toBe(true)
   }
@@ -754,8 +791,9 @@ test("stageTaskRuntime: a run step sources /opt/.venv if a plain pip step alread
   // one combined venv pip step, then the raw run — the run step's script must
   // source the venv (guarded so a Dockerfile with NO pip step at all, the
   // common case, doesn't fail on a missing /opt/.venv under set -e).
-  expect(recordedArgvs.length).toBe(2)
-  const scripts = recordedArgvs.map((argv) => argv[argv.length - 1]!)
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
+  expect(steps.length).toBe(2)
+  const scripts = steps.map((argv) => argv[argv.length - 1]!)
   expect(scripts[0]).toContain("uv pip install")
   expect(scripts[0]).toContain('"somelib==1.0.0"')
   expect(scripts[1]).toContain('if [ -f "/opt/.venv/bin/activate" ]; then source "/opt/.venv/bin/activate"; fi')
@@ -798,8 +836,9 @@ test("stageTaskRuntime: the pip step's venv lives at /opt/.venv, not /app/.venv 
   // fixed phase order still runs pip before run (unchanged — see A2/B2
   // tests); what changed is WHERE the venv lands, so it never collides with
   // a later (in this fixed order) run step's own use of /app.
-  expect(recordedArgvs.length).toBe(2)
-  const scripts = recordedArgvs.map((argv) => argv[argv.length - 1]!)
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
+  expect(steps.length).toBe(2)
+  const scripts = steps.map((argv) => argv[argv.length - 1]!)
   expect(scripts[0]).toContain('uv venv --python python3 "/opt/.venv"')
   expect(scripts[0]).not.toContain('"/app/.venv"')
   expect(scripts[1]).toContain("git clone")
@@ -817,7 +856,8 @@ test("stageTaskRuntime: the venv-source guard is present even with no pip step a
     return { rc: 0, stdout: "", stderr: "", timedOut: false }
   }
   await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
-  const script = recordedArgvs[0]![recordedArgvs[0]!.length - 1]!
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
+  const script = steps[0]![steps[0]!.length - 1]!
   expect(script).toContain('if [ -f "/opt/.venv/bin/activate" ]; then source "/opt/.venv/bin/activate"; fi')
   expect(script).toContain("echo hi")
 })
@@ -885,8 +925,9 @@ test("stageTaskRuntime: a systemWide pip step runs `pip3 install --break-system-
     return { rc: 0, stdout: "", stderr: "", timedOut: false }
   }
   await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
-  expect(recordedArgvs.length).toBe(2)
-  const scripts = recordedArgvs.map((argv) => argv[argv.length - 1]!)
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
+  expect(steps.length).toBe(2)
+  const scripts = steps.map((argv) => argv[argv.length - 1]!)
   // system-wide install: plain pip3 with the flag, NO uv venv creation/source
   expect(scripts[0]).toContain("pip3 install --break-system-packages")
   expect(scripts[0]).toContain('"pillow==11.2.1"')
@@ -894,6 +935,143 @@ test("stageTaskRuntime: a systemWide pip step runs `pip3 install --break-system-
   expect(scripts[0]).not.toContain("/opt/.venv")
   // the later run step still runs (bare python3 will now see system pillow)
   expect(scripts[1]).toContain("python3 make.py")
+})
+
+// ── env-fidelity fix, Bug B: file-deleting cleanup lines are EXECUTED ────
+// docs/env-fidelity-spotcheck.md's path-tracing finding: the official
+// Dockerfile's `RUN rm /app/orig.c` deletes the answer-key reference
+// renderer source after it's used to render the fixture image — dropping
+// that line (the old CLEANUP_ONLY_RE behavior) left orig.c present at agent
+// time. `apt-get clean`/`apt-get autoremove` remain dropped (zero fidelity
+// impact — see the module header's split).
+
+test("parseTaskDockerfile: path-tracing shape — `RUN rm /app/orig.c` after COPY+gcc+run yields a bestEffort run step, not a dropped one", () => {
+  const dir = tmpDir()
+  const task = "path-tracing-shape-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(path.join(dir, task, "environment", "orig.c"), "int main(){return 0;}")
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    [
+      "FROM ubuntu:24.04",
+      "WORKDIR /app",
+      "COPY orig.c /app",
+      "RUN gcc -o orig /app/orig.c -lm",
+      "RUN ./orig",
+      "RUN rm /app/orig.c",
+    ].join("\n"),
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const staging = parseTaskDockerfile(fakePaths, task)
+  expect(staging.steps).toEqual([
+    { kind: "copy", src: "orig.c", dst: "/app", srcIsDir: false, dirTarget: true, contentsOnly: false },
+    { kind: "run", cmd: "gcc -o orig /app/orig.c -lm" },
+    { kind: "run", cmd: "./orig" },
+    { kind: "run", cmd: "rm /app/orig.c", bestEffort: true },
+  ])
+})
+
+test("stageTaskRuntime: a `RUN rm ...` cleanup line IS executed (appears in the exec'd script) — not silently dropped", async () => {
+  const dir = tmpDir()
+  const task = "rm-executed-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(path.join(dir, task, "environment", "Dockerfile"), "FROM ubuntu:24.04\nRUN rm /app/orig.c\n")
+  const fakePaths = fakeBenchPaths(dir)
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
+  expect(steps.length).toBe(1)
+  expect(steps[0]![steps[0]!.length - 1]).toContain("rm /app/orig.c")
+})
+
+test("stageTaskRuntime: `find ... -delete` cleanup lines are also EXECUTED (not dropped)", async () => {
+  const dir = tmpDir()
+  const task = "find-delete-executed-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    "FROM ubuntu:24.04\nRUN find /app -name '*.tmp' -delete\n",
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
+  expect(steps.length).toBe(1)
+  expect(steps[0]![steps[0]!.length - 1]).toContain("find /app -name '*.tmp' -delete")
+})
+
+test("stageTaskRuntime: `apt-get clean` / `apt-get autoremove` lines are STILL dropped (zero fidelity impact)", async () => {
+  const dir = tmpDir()
+  const task = "apt-cache-cleanup-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    ["FROM ubuntu:24.04", "RUN apt-get clean", "RUN apt-get autoremove", "RUN echo done"].join("\n"),
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
+  // only the "echo done" raw run — the two cache-cleanup lines never surface
+  expect(steps.length).toBe(1)
+  expect(steps[0]![steps[0]!.length - 1]).toContain("echo done")
+})
+
+test("stageTaskRuntime: a failing bestEffort `rm` cleanup step is NON-FATAL — staging continues and completes (logged, not thrown)", async () => {
+  const dir = tmpDir()
+  const task = "rm-nonfatal-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    ["FROM ubuntu:24.04", "RUN rm /app/already-gone.txt", "RUN echo after-cleanup"].join("\n"),
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    // the `rm` step's own exec fails (target already absent, e.g.); every
+    // other exec (cp, the later "echo" run, the final rm -rf /.mh-stage)
+    // succeeds.
+    if (argv[1] === "exec" && argv.some((a) => typeof a === "string" && a.includes("rm /app/already-gone.txt"))) {
+      return { rc: 1, stdout: "", stderr: "No such file or directory", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await expect(stageTaskRuntime(fakePaths, "container-1", task, fakeExec)).resolves.toBeUndefined()
+  } finally {
+    logSpy.mockRestore()
+  }
+  const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
+  expect(steps.length).toBe(2)
+  expect(steps[0]![steps[0]!.length - 1]).toContain("rm /app/already-gone.txt")
+  // the SECOND step (a normal, non-bestEffort run) still ran despite the
+  // first step's failure — non-fatal really means execution continues.
+  expect(steps[1]![steps[1]!.length - 1]).toContain("echo after-cleanup")
+})
+
+test("stageTaskRuntime: a failing NON-bestEffort run step still throws fatally (unchanged — only file-delete cleanup lines are best-effort)", async () => {
+  const dir = tmpDir()
+  const task = "non-besteffort-fail-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(path.join(dir, task, "environment", "Dockerfile"), "FROM ubuntu:24.04\nRUN gcc -o orig orig.c\n")
+  const fakePaths = fakeBenchPaths(dir)
+  const fakeExec = async (argv: string[]): Promise<ExecResult> =>
+    argv[1] === "cp" ? { rc: 0, stdout: "", stderr: "", timedOut: false } : { rc: 1, stdout: "", stderr: "compile error", timedOut: false }
+  await expect(stageTaskRuntime(fakePaths, "container-1", task, fakeExec)).rejects.toThrow(BenchError)
 })
 
 // ── flag plumbing: --staging scripts still routes to the old path ────────
