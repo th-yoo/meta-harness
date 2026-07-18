@@ -3,7 +3,65 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ➡️ CURRENT STATE (2026-07-18 pt 3, SESSION END) — #3 SHIPPED · v0 baseline KEPT · next = the (b) ab
+## ➡️ CURRENT STATE (2026-07-18 pt 4, OFFICE END) — (b) ab LIVE, 4/7 held-in banked · resume at home
+
+**The (b) ab (v2 vs v0) is MID-FLIGHT.** Ran at the office in two chunks (05:35–06:52 and
+07:06–08:40 UTC), stopped cleanly for the commute. State =
+`.meta-harness/global/candidates/v2/ab-verdict.partial.json` (status `in_progress`, ident
+`minAgentTimeout:3600` + `env.resourceEnforcement:true` — resume-compatible with the recipe
+below by construction). Doc-only commit; code tree unchanged from pt 3, suite untouched.
+
+**Banked (4/7 held-in, k=2):** constraints-scheduling A[1,1]/B[1,1] · path-tracing A[1,1]/B[1,1]
+· distribution-search A[1,0]/B[1,0] (pair-2 both-arm genuine fails) · db-wal-recovery
+A[1,1]/B[1,1]. All ties so far in banked data.
+
+**Headline (in DISCARDED work):** tune-mjcf pair 1 = **v0 FAIL(1197s) / v2 PASS(2867.6s)** —
+a discordant c=1 for v2, now **2-for-2 across attempts** (the aborted no-floor run also had v2
+winning its only discordant). The pass took 2868s — impossible under the old 900s TB2 cap;
+the 1h floor bought it. The task was mid-pair-2 at the departure stop → whole task re-rolls
+(task-level resume granularity keeps only all-k-pairs-complete tasks). If real, it reproduces.
+
+**RESUME AT HOME:** exact pt-3 recipe below + `--resume` (skips the 4 banked tasks). Token
+fresh until **15:02 UTC** (midnight KST) — NO login needed tonight. Remaining: tune-mjcf,
+prove-plus-comm, openssl-selfsigned-cert (held-in), then held-out ×10. Re-arm the monitors
+(completion + pressure watchers, resource sampler). See memory `ab-v2-chunk-state`.
+
+**Live validation of this week's shipped features (all confirmed on real runs):**
+- **Measured packing → width-3** on the 4-CPU VM from the first scan (pt 0.86c + cs 0.88c +
+  cold 2c = 3.74/4 packed; declared-int would have pinned width-2). `[pack] measured` lines live.
+- **1h floor changed outcomes**: pt arm A passed at 1810.5s (past its 1800s TB2 cap) and the
+  tune-mjcf 2868s pass above. Also the first HONEST recorded timeout: tune-mjcf v0-arm
+  3600s/reward=0 in chunk 1 (then a 1197s genuine fail on the re-roll — haiku variance).
+- **`--host-pressure on`: ZERO false pauses** across observed load 0.3–3.4/core (sampler CSV
+  `term-bench2/logs/loop1-ab-v2.resources.log`). First calibration point for the default-flip.
+- Profile store warmed further (ds/db-wal/tune-mjcf samples added) — packing gets more measured
+  next run.
+
+**Discoveries / follow-ups (new):**
+- **`canLaunch` freshness gate is task-ITEM-level** (`scheduler.ts` — checked per scan for NEW
+  items only): a k=2 ab task = up to 4 sequential sessions, so in-flight tasks STRADDLE token
+  expiry. Tonight's mitigation = kill the chunk before the ~5-min pre-expiry refresh window
+  (a straddling container's plugin could race the host refresh with the copied refresh token).
+  FOLLOW-UP: per-arm/per-session canLaunch check.
+- **"No locking in CC" is STALE**: the reconstructed CC source (github
+  yasasbanukaofficial/claude-code) shows host CC refresh uses a proper-lockfile on `~/.claude`
+  + post-lock re-read + race recovery. Host-side concurrent sessions are SAFE; the real
+  remaining race is container-copy divergence (darwin Keychain export can't write back).
+  Correct `agent-auth.ts` header + `auth-delegation-design.md` when convenient. Also: refresh
+  fires only within ~5 min of expiry (`isOAuthTokenExpired` buffer) — any active session
+  rotates it automatically at that point; a Keychain `expiresAt` watcher is a clean launch
+  trigger (used tonight, worked).
+- ab-verdict gap noted: an all-4-transient-retries or gate-slipped auth 0-turn session pushes
+  reward 0 into the VERDICT (store self-protects, verdict doesn't; only `setup_failed`
+  excludes). Remedy = delete the task from `taskResults` in the partial + `--resume`.
+  `retry-provider.ts` wrapper exists for sustained provider outage (tonight ran unwrapped).
+
+**Deferred/open (unchanged from pt 3):** (d) Axis-2 vendor content + panel — note a keyed
+openrouter/xai/etc. leg would ALSO kill the whole oauth-TTL fragility class (needs its own
+model re-baseline first); host-class stamping; sensor stale-cache nit; pressure-threshold
+default-flip; capRaised-into-TaskFootprint; per-arm canLaunch (above).
+
+## CURRENT STATE (2026-07-18 pt 3 — HISTORICAL; the (b) ab is now LIVE, see pt 4) — #3 SHIPPED · v0 baseline KEPT · next = the (b) ab
 
 **Everything PUSHED — tip ≥ `969f418`, tree clean** (this block commits after). Suite **1367 / 0
 fail**. No background runs; no orphan containers; podman machine still up.
