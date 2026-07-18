@@ -9,6 +9,8 @@ import {
   LOAD_LO,
   MEMFREE_HI_PCT,
   MEMFREE_LO_PCT,
+  PSI_HI,
+  PSI_LO,
 } from "../src/bench/host-pressure.ts"
 
 const POLL_MS = PRESSURE_POLL_SEC * 1000
@@ -317,6 +319,85 @@ test("exact log line: resumed includes only load/core", () => {
   expect(lines).toEqual([
     "  [pressure] paused launches (load/core 2.4, mem 8% free)",
     "  [pressure] resumed (load/core 1.1)",
+  ])
+})
+
+// ── linux PSI state machine + PSI→MemAvailable fallback selection ───────────
+
+test("linux PSI: avg10 >= PSI_HI enters pressure after dwell, <= PSI_LO exits after dwell; log line uses 'mem psi' wording", () => {
+  const clock = mkClock()
+  const { log, lines } = mkLog()
+  let avg10 = PSI_HI // 25, at the enter threshold
+  const sensor = createHostPressure({
+    platform: "linux",
+    ncpus: 1,
+    loadavg: () => [0.1], // CPU signal stays calm throughout — isolates PSI
+    readFile: (path: string) => {
+      if (path === "/proc/pressure/memory") {
+        return `some avg10=${avg10.toFixed(2)} avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n`
+      }
+      // MemAvailable fallback must never be read when PSI parses cleanly.
+      throw new Error(`unexpected read: ${path}`)
+    },
+    now: clock.now,
+    log,
+  })
+
+  expect(sensor.underPressure()).toBe(false) // sample 1: tick 1, not yet committed
+  clock.advance()
+  expect(sensor.underPressure()).toBe(true) // sample 2: tick 2 → commits
+  expect(lines).toEqual(["  [pressure] paused launches (load/core 0.1, mem psi 25.0%)"])
+
+  // Dead zone: between PSI_LO(10) and PSI_HI(25), stays pressured.
+  avg10 = 15
+  clock.advance()
+  expect(sensor.underPressure()).toBe(true)
+
+  // Exit requires <= PSI_LO held for MIN_STATE_TICKS.
+  avg10 = PSI_LO
+  clock.advance()
+  expect(sensor.underPressure()).toBe(true) // tick 1 of exit, not yet
+  clock.advance()
+  expect(sensor.underPressure()).toBe(false) // tick 2 → commits exit
+  expect(lines).toEqual([
+    "  [pressure] paused launches (load/core 0.1, mem psi 25.0%)",
+    "  [pressure] resumed (load/core 0.1)",
+  ])
+})
+
+test("linux PSI unreadable → falls back to MemAvailable%: low MemAvailable drives pressure via the fallback, log line uses free% wording (not psi)", () => {
+  const clock = mkClock()
+  const { log, lines } = mkLog()
+  let availKb = 1_600_000 // 1.6M / 16M = 10% = MEMFREE_HI_PCT, at the enter threshold
+  const sensor = createHostPressure({
+    platform: "linux",
+    ncpus: 1,
+    loadavg: () => [0.1], // CPU signal stays calm throughout — isolates memory
+    readFile: (path: string) => {
+      if (path === "/proc/pressure/memory") throw new Error("EACCES: no cgroup2 PSI support")
+      if (path === "/proc/meminfo") return `MemTotal:       16000000 kB\nMemAvailable:    ${availKb} kB\n`
+      throw new Error(`unexpected read: ${path}`)
+    },
+    now: clock.now,
+    log,
+  })
+
+  expect(sensor.underPressure()).toBe(false) // sample 1: tick 1, not yet committed
+  clock.advance()
+  expect(sensor.underPressure()).toBe(true) // sample 2: tick 2 → commits via MemAvailable fallback
+  expect(lines).toEqual(["  [pressure] paused launches (load/core 0.1, mem 10% free)"])
+  expect(lines[0]).not.toContain("psi")
+
+  // Exit requires MemAvailable% >= MEMFREE_LO_PCT (a HIGHER number — inverted
+  // direction, same as the darwin free% signal) held for MIN_STATE_TICKS.
+  availKb = 3_200_000 // 20% = MEMFREE_LO_PCT
+  clock.advance()
+  expect(sensor.underPressure()).toBe(true) // tick 1 of exit
+  clock.advance()
+  expect(sensor.underPressure()).toBe(false) // tick 2 → commits exit
+  expect(lines).toEqual([
+    "  [pressure] paused launches (load/core 0.1, mem 10% free)",
+    "  [pressure] resumed (load/core 0.1)",
   ])
 })
 
