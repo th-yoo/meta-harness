@@ -211,6 +211,10 @@ export interface PhaseTaggedResult {
   candidate?: number[]
   active?: number[]
   error?: string
+  // W1a (time-to-resolve, type-only widening — see ab-stats.ts's TaskResults
+  // for the same fields): per-run agent-phase elapsed seconds.
+  candidateElapsed?: number[]
+  activeElapsed?: number[]
 }
 export type PhaseTaggedTaskResults = Record<string, PhaseTaggedResult>
 

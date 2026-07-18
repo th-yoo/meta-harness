@@ -5,8 +5,10 @@ import {
   bootstrapTaskCi,
   futilityStop,
   decide,
+  pairedSpeedStats,
   DEFAULT_DECISION_CONFIG,
   type PairStats,
+  type TaskResults,
 } from "../src/bench/ab-stats.ts"
 
 // Ported from term-bench2/test_ab_stats.py — see that file for the original
@@ -164,4 +166,113 @@ test("decide: reasons formatting locks pySigned/pyFixed integration", () => {
   const { reasons } = decide(ps(6, 0, 0.2), null, DEFAULT_DECISION_CONFIG)
   // 1/64 = 0.015625 -> ".3f" = 0.016
   expect(reasons[0]).toBe("held-in: delta=+0.200 p=0.016 (b=6,c=0,n=6)")
+})
+
+// ── pairedSpeedStats (W1a: time-to-resolve) ──────────────────────────────
+
+test("pairedSpeedStats: pairs only both-pass run-pairs, never compares fail times", () => {
+  const taskResults: TaskResults = {
+    t1: { candidate: [1, 1], active: [1, 0], candidateElapsed: [10, 8], activeElapsed: [20, 3] },
+    // pair0: both pass, candidate faster (10 < 20) -> counted.
+    // pair1: candidate passed, active FAILED -> excluded even though both elapsed values exist.
+    t2: { candidate: [0], active: [1], candidateElapsed: [1], activeElapsed: [50] }, // both fail-side (candidate failed) -> excluded
+  }
+  const s = pairedSpeedStats(taskResults)
+  expect(s).not.toBeNull()
+  expect(s!.nPairs).toBe(1)
+  expect(s!.nTasks).toBe(1)
+  expect(s!.medianCandidate).toBe(10)
+  expect(s!.medianActive).toBe(20)
+})
+
+test("pairedSpeedStats: excludes pairs missing elapsed data even when both rewards are 1", () => {
+  const taskResults: TaskResults = {
+    t1: { candidate: [1], active: [1] }, // no elapsed arrays at all (old-shape/back-compat)
+    t2: { candidate: [1], active: [1], candidateElapsed: [0], activeElapsed: [5] }, // zero elapsed excluded (present>0 required)
+  }
+  expect(pairedSpeedStats(taskResults)).toBeNull()
+})
+
+test("pairedSpeedStats: excludes errored tasks", () => {
+  const taskResults: TaskResults = {
+    t1: {
+      candidate: [1],
+      active: [1],
+      candidateElapsed: [5],
+      activeElapsed: [10],
+      error: "setup_failed",
+    },
+  }
+  expect(pairedSpeedStats(taskResults)).toBeNull()
+})
+
+test("pairedSpeedStats: median odd count picks the middle value", () => {
+  const taskResults: TaskResults = {
+    t1: {
+      candidate: [1, 1, 1],
+      active: [1, 1, 1],
+      candidateElapsed: [10, 30, 20],
+      activeElapsed: [5, 5, 5],
+    },
+  }
+  const s = pairedSpeedStats(taskResults)!
+  expect(s.medianCandidate).toBe(20) // sorted [10,20,30] -> middle
+  expect(s.medianActive).toBe(5)
+})
+
+test("pairedSpeedStats: median even count averages the two middle values", () => {
+  const taskResults: TaskResults = {
+    t1: {
+      candidate: [1, 1],
+      active: [1, 1],
+      candidateElapsed: [10, 30],
+      activeElapsed: [5, 15],
+    },
+  }
+  const s = pairedSpeedStats(taskResults)!
+  expect(s.medianCandidate).toBe(20) // (10+30)/2
+  expect(s.medianActive).toBe(10) // (5+15)/2
+})
+
+test("pairedSpeedStats: medianRatio < 1 when candidate is faster, > 1 when slower", () => {
+  const faster: TaskResults = {
+    t1: { candidate: [1], active: [1], candidateElapsed: [5], activeElapsed: [10] },
+  }
+  const slower: TaskResults = {
+    t1: { candidate: [1], active: [1], candidateElapsed: [20], activeElapsed: [10] },
+  }
+  expect(pairedSpeedStats(faster)!.medianRatio).toBeCloseTo(0.5, 9)
+  expect(pairedSpeedStats(slower)!.medianRatio).toBeCloseTo(2.0, 9)
+})
+
+test("pairedSpeedStats: fasterB/slowerC mirror mcnemar's b/c and signTestP reuses mcnemarExactOneSided", () => {
+  const taskResults: TaskResults = {
+    // 5 pairs where candidate is faster, 1 where active is faster -> b=5,c=1 (matches the
+    // "mcnemar: b=5,c=1 -> 7/64" hand-case above).
+    t1: {
+      candidate: [1, 1, 1, 1, 1, 1],
+      active: [1, 1, 1, 1, 1, 1],
+      candidateElapsed: [1, 1, 1, 1, 1, 20],
+      activeElapsed: [10, 10, 10, 10, 10, 10],
+    },
+  }
+  const s = pairedSpeedStats(taskResults)!
+  expect(s.fasterB).toBe(5)
+  expect(s.slowerC).toBe(1)
+  expect(s.signTestP).toBeCloseTo(mcnemarExactOneSided(5, 1), 12)
+  expect(s.signTestP).toBeCloseTo(7 / 64, 9)
+})
+
+test("pairedSpeedStats: ties (equal elapsed) count toward nPairs but not fasterB/slowerC", () => {
+  const taskResults: TaskResults = {
+    t1: { candidate: [1], active: [1], candidateElapsed: [10], activeElapsed: [10] },
+  }
+  const s = pairedSpeedStats(taskResults)!
+  expect(s.nPairs).toBe(1)
+  expect(s.fasterB).toBe(0)
+  expect(s.slowerC).toBe(0)
+})
+
+test("pairedSpeedStats: null on empty input", () => {
+  expect(pairedSpeedStats({})).toBeNull()
 })

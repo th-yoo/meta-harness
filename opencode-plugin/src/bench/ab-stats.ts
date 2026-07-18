@@ -48,7 +48,17 @@ export const DEFAULT_DECISION_CONFIG: DecisionConfig = {
 
 export type TaskResults = Record<
   string,
-  { candidate?: number[]; active?: number[]; error?: string }
+  {
+    candidate?: number[]
+    active?: number[]
+    error?: string
+    // W1a (time-to-resolve): per-run agent-phase elapsed seconds, index-
+    // aligned with candidate/active. Optional — absent on pre-feature
+    // entries, which simply drop out of pairedSpeedStats (see its doc
+    // comment).
+    candidateElapsed?: number[]
+    activeElapsed?: number[]
+  }
 >
 
 /**
@@ -187,6 +197,74 @@ export function bootstrapTaskCi(
 
 function round4(x: number): number {
   return Math.round(x * 10_000) / 10_000
+}
+
+export interface SpeedStats {
+  nPairs: number
+  nTasks: number
+  medianCandidate: number // median agent-phase elapsed seconds, candidate arm
+  medianActive: number // median agent-phase elapsed seconds, active arm
+  medianRatio: number // medianCandidate / medianActive; <1 = candidate faster
+  fasterB: number // pairs where candidate's elapsed < active's (mirrors pairedRunStats' b)
+  slowerC: number // pairs where active's elapsed < candidate's (mirrors pairedRunStats' c)
+  signTestP: number // mcnemarExactOneSided(fasterB, slowerC) — one-sided exact sign test
+}
+
+/**
+ * Paired time-to-resolve stats (report-only in this phase — a later phase
+ * wires it as a decision tiebreaker). A run-pair counts iff BOTH candidate
+ * and active rewards are exactly 1 at that index AND both elapsed values are
+ * present and >0 — a fast failure is never a meaningful speed signal, so
+ * fail times are never compared. Reuses mcnemarExactOneSided as an exact
+ * one-sided sign test on which arm was faster, mirroring pairedRunStats' b/c
+ * discordant-pair convention (fasterB/slowerC here, not win/loss counts).
+ * Returns null when there are no qualifying pairs.
+ */
+export function pairedSpeedStats(taskResults: TaskResults): SpeedStats | null {
+  const candidates: number[] = []
+  const actives: number[] = []
+  let fasterB = 0
+  let slowerC = 0
+  let nTasks = 0
+
+  for (const tr of Object.values(taskResults)) {
+    if (tr.error) continue
+    const cand = tr.candidate ?? []
+    const act = tr.active ?? []
+    const candElapsed = tr.candidateElapsed ?? []
+    const actElapsed = tr.activeElapsed ?? []
+    const m = Math.min(cand.length, act.length, candElapsed.length, actElapsed.length)
+    let taskHasPair = false
+    for (let i = 0; i < m; i++) {
+      if (cand[i] !== 1 || act[i] !== 1) continue
+      const ce = candElapsed[i]!
+      const ae = actElapsed[i]!
+      if (!(ce > 0) || !(ae > 0)) continue
+      candidates.push(ce)
+      actives.push(ae)
+      taskHasPair = true
+      if (ce < ae) fasterB += 1
+      else if (ce > ae) slowerC += 1
+    }
+    if (taskHasPair) nTasks += 1
+  }
+
+  const nPairs = candidates.length
+  if (nPairs === 0) return null
+
+  const medianCandidate = median(candidates)
+  const medianActive = median(actives)
+  const medianRatio = medianActive !== 0 ? medianCandidate / medianActive : 0
+  const signTestP = mcnemarExactOneSided(fasterB, slowerC)
+
+  return { nPairs, nTasks, medianCandidate, medianActive, medianRatio, fasterB, slowerC, signTestP }
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b)
+  const n = sorted.length
+  const mid = Math.floor(n / 2)
+  return n % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!
 }
 
 /**
