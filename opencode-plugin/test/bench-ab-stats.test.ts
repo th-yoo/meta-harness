@@ -245,6 +245,18 @@ test("pairedSpeedStats: medianRatio < 1 when candidate is faster, > 1 when slowe
   expect(pairedSpeedStats(slower)!.medianRatio).toBeCloseTo(2.0, 9)
 })
 
+test("pairedSpeedStats: medianRatio is the median over PER-PAIR ratios, never the ratio of pooled medians", () => {
+  // Pairs 10/20 (ratio 0.5) and 30/10 (ratio 3.0): per-pair median = 1.75.
+  // The wrong construction — medianCandidate/medianActive = 20/15 ≈ 1.333 —
+  // must NOT be produced; this fixture discriminates the two formulas.
+  const taskResults: TaskResults = {
+    t1: { candidate: [1, 1], active: [1, 1], candidateElapsed: [10, 30], activeElapsed: [20, 10] },
+  }
+  const s = pairedSpeedStats(taskResults)!
+  expect(s.medianRatio).toBeCloseTo(1.75, 9)
+  expect(s.medianRatio).not.toBeCloseTo(s.medianCandidate / s.medianActive, 2)
+})
+
 test("pairedSpeedStats: fasterB/slowerC mirror mcnemar's b/c and signTestP reuses mcnemarExactOneSided", () => {
   const taskResults: TaskResults = {
     // 5 pairs where candidate is faster, 1 where active is faster -> b=5,c=1 (matches the

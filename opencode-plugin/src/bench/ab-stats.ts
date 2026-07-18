@@ -204,7 +204,7 @@ export interface SpeedStats {
   nTasks: number
   medianCandidate: number // median agent-phase elapsed seconds, candidate arm
   medianActive: number // median agent-phase elapsed seconds, active arm
-  medianRatio: number // medianCandidate / medianActive; <1 = candidate faster
+  medianRatio: number // median over PER-PAIR candidate/active ratios; <1 = candidate faster
   fasterB: number // pairs where candidate's elapsed < active's (mirrors pairedRunStats' b)
   slowerC: number // pairs where active's elapsed < candidate's (mirrors pairedRunStats' c)
   signTestP: number // mcnemarExactOneSided(fasterB, slowerC) — one-sided exact sign test
@@ -218,11 +218,16 @@ export interface SpeedStats {
  * fail times are never compared. Reuses mcnemarExactOneSided as an exact
  * one-sided sign test on which arm was faster, mirroring pairedRunStats' b/c
  * discordant-pair convention (fasterB/slowerC here, not win/loss counts).
- * Returns null when there are no qualifying pairs.
+ * medianRatio is the median over PER-PAIR candidate/active ratios — NOT the
+ * ratio of the pooled medians, which weights arms independently and can
+ * disagree with the paired construction (e.g. pairs 10/20 + 30/10: per-pair
+ * median 1.75 vs 20/15 ≈ 1.33). Returns null when there are no qualifying
+ * pairs.
  */
 export function pairedSpeedStats(taskResults: TaskResults): SpeedStats | null {
   const candidates: number[] = []
   const actives: number[] = []
+  const ratios: number[] = []
   let fasterB = 0
   let slowerC = 0
   let nTasks = 0
@@ -242,6 +247,7 @@ export function pairedSpeedStats(taskResults: TaskResults): SpeedStats | null {
       if (!(ce > 0) || !(ae > 0)) continue
       candidates.push(ce)
       actives.push(ae)
+      ratios.push(ce / ae)
       taskHasPair = true
       if (ce < ae) fasterB += 1
       else if (ce > ae) slowerC += 1
@@ -254,7 +260,7 @@ export function pairedSpeedStats(taskResults: TaskResults): SpeedStats | null {
 
   const medianCandidate = median(candidates)
   const medianActive = median(actives)
-  const medianRatio = medianActive !== 0 ? medianCandidate / medianActive : 0
+  const medianRatio = median(ratios)
   const signTestP = mcnemarExactOneSided(fasterB, slowerC)
 
   return { nPairs, nTasks, medianCandidate, medianActive, medianRatio, fasterB, slowerC, signTestP }

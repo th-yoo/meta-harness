@@ -1572,7 +1572,9 @@ test("cmdAb: verdict speed block reports paired agent-phase elapsed stats over h
   expect(speedHi.nTasks).toBe(2)
   expect(speedHi.medianCandidate).toBe(20) // median([10,30])
   expect(speedHi.medianActive).toBe(15) // median([20,10])
-  expect(speedHi.medianRatio).toBeCloseTo(20 / 15, 4)
+  // median over PER-PAIR ratios ([10/20, 30/10] → 1.75) — deliberately NOT
+  // the ratio of pooled medians (20/15 ≈ 1.333); this fixture discriminates.
+  expect(speedHi.medianRatio).toBeCloseTo(1.75, 4)
   expect(speedHi.fasterB).toBe(1) // t1: candidate faster
   expect(speedHi.slowerC).toBe(1) // t2: active faster
   expect(speedHi.signTestP).toBeCloseTo(mcnemarExactOneSided(1, 1), 9)
