@@ -273,6 +273,21 @@ test("cli main: ab --no-pack-measured --parallel --enforce-resources with the ke
   }
 })
 
+// ── --speed-tiebreak (task-3-brief.md, Phase 3 W1c) ──────────────────────
+
+test("cli main: ab --speed-tiebreak parses fine and falls through to normal flow (rc 1, nonexistent candidate)", async () => {
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main([
+      "ab", "--layer", "project-global", "--candidate", "v999999", "--all",
+      "--speed-tiebreak",
+    ])
+    expect(rc).toBe(1)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
 test("cli main: ab --parallel without ANTHROPIC_API_KEY (anthropic model) dies naming the var — oauth refresh-token race guard (D4)", async () => {
   // CONFIRMED hazard (Anthropic claude-code #22600, #48786): the oauth refresh
   // token is SINGLE-USE — one container's refresh rotates it server-side at the

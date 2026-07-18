@@ -1732,3 +1732,49 @@ test("cmdAb --resume: old-shape partial entries (no elapsed arrays) simply drop 
   expect(speed.heldIn!.nPairs).toBe(1)
   expect(speed.heldIn!.nTasks).toBe(1)
 })
+
+// ── W1c: --speed-tiebreak (task-3-brief.md, Phase 3) ────────────────────
+
+// 8 held-in tasks, both arms always pass (reward-concordant -> decide()
+// alone says "inconclusive: held-in win not significant"), candidate
+// uniformly faster (5s vs 10s -> ratio 0.5, b=8/c=0 -> signTestP=1/256):
+// qualifies every speed-tiebreak threshold. 1 held-out task, tie pass (no
+// regression) so `ho !== null` and the fold gate stays clean.
+const SPEED_HELD_IN = Array.from({ length: 8 }, (_, i) => `hi${i}`)
+const speedTiebreakFake: RunOneTaskFn = async (_p, task, _m, _v, harnessMd) => {
+  const isCandidateArm = harnessMd.includes("candidate sys")
+  if (task === "ho0") return res({ reward: 1, agentElapsedSec: 5 }) // tie, no regression
+  return res({ reward: 1, agentElapsedSec: isCandidateArm ? 5 : 10 })
+}
+
+test("cmdAb --speed-tiebreak: upgrades an inconclusive reward verdict to accept + stamps provenance", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeSplitsFile(paths, SPEED_HELD_IN, ["ho0"])
+  const root = setupCandidate(paths, "project-global", "v1")
+
+  await quiet(() =>
+    cmdAb(paths, { layer: "project-global", candidate: "v1", k: 1, speedTiebreak: true }, speedTiebreakFake, fakeExec),
+  )
+
+  const verdict = readAbVerdict(root, "v1")! as unknown as Record<string, unknown>
+  expect(verdict["decision"]).toBe("accept")
+  expect(verdict["speedTiebreak"]).toBe(true)
+  expect((verdict["reasons"] as string[]).some((r) => r.includes("speed tiebreak"))).toBe(true)
+})
+
+test("cmdAb WITHOUT --speed-tiebreak: same fixture stays inconclusive, verdict omits the speedTiebreak key entirely", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeSplitsFile(paths, SPEED_HELD_IN, ["ho0"])
+  const root = setupCandidate(paths, "project-global", "v1")
+
+  await quiet(() => cmdAb(paths, { layer: "project-global", candidate: "v1", k: 1 }, speedTiebreakFake, fakeExec))
+
+  const verdict = readAbVerdict(root, "v1")! as unknown as Record<string, unknown>
+  expect(verdict["decision"]).toBe("inconclusive")
+  expect("speedTiebreak" in verdict).toBe(false) // omitted, not just falsy -> byte-identical to before the flag existed
+  expect((verdict["reasons"] as string[]).some((r) => r.includes("speed tiebreak"))).toBe(false)
+})

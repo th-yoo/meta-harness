@@ -48,6 +48,7 @@ import {
   bootstrapTaskCi,
   futilityStop,
   pairedSpeedStats,
+  DEFAULT_SPEED_TIEBREAK_CONFIG,
   type DecisionConfig,
   type PairStats,
   type SpeedStats,
@@ -185,6 +186,16 @@ export interface CmdAbArgs {
    * the machine over wall-clock time). Undefined by default — no pause gate,
    * byte-identical. Mirrors `canLaunch`'s internal-wiring stance. */
   pressureGate?: () => boolean
+  /** `--speed-tiebreak` (task-3-brief.md, Phase 3 W1c): opt-in guarded
+   * tiebreaker — an `inconclusive` reward verdict may be upgraded to
+   * `accept` when the candidate is significantly faster on held-in both-pass
+   * pairs, behind splits.ts's abDecision structural guards (ho !== null,
+   * held-in delta >= 0, !earlyStopped, speed thresholds). Default OFF ->
+   * cfg.speedTiebreak stays undefined -> abDecision's tiebreak block never
+   * runs, byte-identical decisions to before this flag existed. When on,
+   * stamped `speedTiebreak: true` top-level in the verdict for provenance
+   * (a gate-policy change, NOT part of budget-identity or resume-ident). */
+  speedTiebreak?: boolean
 }
 
 function round4(x: number): number {
@@ -306,6 +317,10 @@ export async function cmdAb(
     alpha: args.alpha ?? 0.05,
     nonregressMargin: args.nonregressMargin ?? 0.05,
     hoGuardAlpha: 0.05,
+    // --speed-tiebreak (task-3-brief.md, Phase 3 W1c): undefined unless the
+    // flag is set -> abDecision's speed-tiebreak block never runs, byte-
+    // identical to before this flag existed.
+    speedTiebreak: args.speedTiebreak ? DEFAULT_SPEED_TIEBREAK_CONFIG : undefined,
   }
   const earlyStop = !args.noEarlyStop
   const minTasks = args.minTasksBeforeStop ?? 12
@@ -509,6 +524,14 @@ export async function cmdAb(
       decision,
       winner,
       reasons,
+      // Phase 3 W1c provenance: stamped ONLY when --speed-tiebreak was
+      // passed (a gate-policy change, NOT part of budget-identity or
+      // resume-ident — deliberately absent from `runIdent` above and from
+      // harness-store.ts's budgetIdentityMatches tuple). undefined when off
+      // -> omitted from the written JSON (JSON.stringify drops undefined
+      // keys), so a flag-off verdict is byte-identical to before this flag
+      // existed.
+      speedTiebreak: args.speedTiebreak ? true : undefined,
       candidateRate: nAll ? round4(candPass / nAll) : 0.0,
       activeRate: nAll ? round4(actPass / nAll) : 0.0,
       nTasks: nAll,

@@ -38,12 +38,34 @@ export interface DecisionConfig {
   alpha: number // held-in significance threshold
   nonregressMargin: number // tolerated held-out point drop
   hoGuardAlpha: number // held-out "significantly worse" guard
+  // Phase 3 W1c (speed tiebreaker): opt-in, absent/undefined = off (the
+  // pre-existing reward-only gate, byte-identical). When present, splits.ts's
+  // abDecision may upgrade an `inconclusive` verdict to `accept` — see that
+  // function's doc comment for the full structural-guard list (ho !== null,
+  // held-in delta >= 0, !earlyStopped, plus these thresholds on
+  // pairedSpeedStats(heldIn)).
+  speedTiebreak?: SpeedTiebreakConfig
+}
+
+export interface SpeedTiebreakConfig {
+  alpha: number // one-sided sign-test significance threshold on the speed pairs
+  maxMedianRatio: number // medianRatio (candidate/active) must be <= this to count as "significantly faster"
+  minBothPassPairs: number // pairedSpeedStats(heldIn).nPairs must be >= this
 }
 
 export const DEFAULT_DECISION_CONFIG: DecisionConfig = {
   alpha: 0.05,
   nonregressMargin: 0.05,
   hoGuardAlpha: 0.05,
+}
+
+// Phase 3 W1c defaults — cmd-ab.ts wires this in when `--speed-tiebreak` is
+// passed; DEFAULT_DECISION_CONFIG above deliberately omits speedTiebreak so
+// every OTHER caller (existing tests, flag-off runs) stays byte-identical.
+export const DEFAULT_SPEED_TIEBREAK_CONFIG: SpeedTiebreakConfig = {
+  alpha: 0.05,
+  maxMedianRatio: 0.8,
+  minBothPassPairs: 8,
 }
 
 export type TaskResults = Record<

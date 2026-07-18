@@ -27,8 +27,8 @@ import { basename, join } from "node:path"
 import { createHash } from "node:crypto"
 import { appendMetaMetric } from "../harness-store.ts"
 import type { BenchPaths } from "./paths.ts"
-import { die, log, mulberry32, writeJsonAtomic } from "./util.ts"
-import { decide, pairedRunStats, type DecisionConfig, type PairStats } from "./ab-stats.ts"
+import { die, log, mulberry32, pyFixed, writeJsonAtomic } from "./util.ts"
+import { decide, pairedRunStats, pairedSpeedStats, type DecisionConfig, type PairStats } from "./ab-stats.ts"
 
 // ── task_pass_rates ──────────────────────────────────────────────────────
 
@@ -277,6 +277,27 @@ export function sentinelRegressionReject(
  * Returns [decision, reasons, heldIn, heldOut, heldOutSentinel] where the
  * last two are PairStats or null — null iff there were no fold / sentinel
  * held-out tasks in this split respectively.
+ *
+ * Phase 3 W1c (speed tiebreaker, opt-in via `cfg.speedTiebreak`): after
+ * decide() but before the earlyStopped/sentinel overrides below, an
+ * `inconclusive` verdict may be upgraded to `accept` when the candidate is
+ * significantly faster on held-in both-pass pairs — behind STRUCTURAL guards
+ * only (no parsing of `reasons` strings, which are display text, not a
+ * contract):
+ *   1. decision === "inconclusive" && !earlyStopped;
+ *   2. ho !== null — the held-out PairStats computed above. This structurally
+ *      excludes LEGACY mode (--tasks/--task-file/--all => no held-out split
+ *      => decide() can never accept, cmd-ab.ts's explicit-mode branch) — the
+ *      speed tiebreak must never manufacture an accept that reward-mode
+ *      itself could not reach;
+ *   3. hi.delta >= 0 — decide() can say "inconclusive" with a (non-
+ *      significantly) negative held-in delta too; the tiebreak must not
+ *      upgrade a candidate that's behind on reward, even a little;
+ *   4. pairedSpeedStats(held-in) meets nPairs >= minBothPassPairs &&
+ *      signTestP <= alpha && medianRatio <= maxMedianRatio.
+ * The earlyStopped-forced-reject and sentinelRegressionReject overrides below
+ * still run AFTER this block and can override an accept the tiebreak just
+ * produced — sentinel-regression reject always has the last word.
  */
 export function abDecision(
   taskResults: PhaseTaggedTaskResults,
@@ -293,6 +314,24 @@ export function abDecision(
   const decided = decide(hi, ho, cfg)
   let decision: string = decided.decision
   let reasons: string[] = decided.reasons
+
+  if (cfg.speedTiebreak && decision === "inconclusive" && !earlyStopped && ho !== null && hi.delta >= 0) {
+    const speedHi = pairedSpeedStats(filterTaskResults(taskResults, "held-in"))
+    if (
+      speedHi !== null &&
+      speedHi.nPairs >= cfg.speedTiebreak.minBothPassPairs &&
+      speedHi.signTestP <= cfg.speedTiebreak.alpha &&
+      speedHi.medianRatio <= cfg.speedTiebreak.maxMedianRatio
+    ) {
+      decision = "accept"
+      reasons = [
+        ...reasons,
+        `speed tiebreak: candidate significantly faster on held-in ` +
+          `(medianRatio=${pyFixed(speedHi.medianRatio, 3)} p=${pyFixed(speedHi.signTestP, 3)} n=${speedHi.nPairs})`,
+      ]
+    }
+  }
+
   if (earlyStopped && decision !== "reject") {
     decision = "reject"
     reasons = [...reasons, "early-stopped on futility"]

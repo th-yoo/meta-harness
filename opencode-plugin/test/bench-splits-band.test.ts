@@ -16,7 +16,15 @@ import {
   cmdSplit,
   type PhaseTaggedTaskResults,
 } from "../src/bench/splits.ts"
-import { DEFAULT_DECISION_CONFIG, decide, pairedRunStats, type PairStats } from "../src/bench/ab-stats.ts"
+import {
+  DEFAULT_DECISION_CONFIG,
+  DEFAULT_SPEED_TIEBREAK_CONFIG,
+  decide,
+  pairedRunStats,
+  mcnemarExactOneSided,
+  type DecisionConfig,
+  type PairStats,
+} from "../src/bench/ab-stats.ts"
 import { BenchError } from "../src/bench/util.ts"
 
 // Ported from term-bench2/test_splits_band.py — see that file for the
@@ -363,6 +371,170 @@ test("abDecision: early-stopped forces reject over would-be accept", () => {
   expect(decision).toBe("reject") // early-stop override wins
   expect(reasons).toContain("early-stopped on futility")
   expect(hoSentinel).toBeNull()
+})
+
+// ── abDecision speed tiebreak (task-3-brief.md, Phase 3 W1c) ────────────
+//
+// Shared fixture shape: held-in is a set of concordant both-pass pairs
+// (candidate == active reward) so decide() always lands on "inconclusive:
+// held-in win not significant" (delta=0, b=c=0) — the ONLY decision the
+// tiebreak is allowed to touch. `fastHeldIn` attaches elapsed data so
+// pairedSpeedStats has real both-pass pairs to score; `foldResults` is a
+// clean (non-regressing) held-out fold so `ho !== null` and no held-out
+// regression fires first.
+
+function fastHeldIn(n: number, candMs: number, actMs: number, prefix = "fast"): PhaseTaggedTaskResults {
+  const out: PhaseTaggedTaskResults = {}
+  for (let i = 0; i < n; i++) {
+    out[`${prefix}${i}`] = {
+      phase: "held-in",
+      sentinel: false,
+      candidate: [1],
+      active: [1],
+      candidateElapsed: [candMs],
+      activeElapsed: [actMs],
+    }
+  }
+  return out
+}
+
+const cleanFold: PhaseTaggedTaskResults = {
+  fold_a: { phase: "held-out", sentinel: false, candidate: [1, 1], active: [1, 1] },
+  fold_b: { phase: "held-out", sentinel: false, candidate: [1, 1], active: [1, 1] },
+}
+
+const speedCfg: DecisionConfig = { ...DEFAULT_DECISION_CONFIG, speedTiebreak: DEFAULT_SPEED_TIEBREAK_CONFIG }
+
+test("abDecision: speed tiebreak upgrades inconclusive -> accept when all guards + thresholds hold", () => {
+  // 8 held-in pairs, candidate uniformly faster (5 vs 10 -> ratio 0.5,
+  // fasterB=8/slowerC=0 -> signTestP = 1/256), reward-concordant so decide()
+  // alone would say "inconclusive".
+  const taskResults: PhaseTaggedTaskResults = { ...fastHeldIn(8, 5, 10), ...cleanFold }
+
+  const withoutTiebreak = abDecision(taskResults, DEFAULT_DECISION_CONFIG, false, Object.keys(cleanFold), [])
+  expect(withoutTiebreak[0]).toBe("inconclusive") // sanity: decide() alone never accepts this fixture
+
+  const [decision, reasons] = abDecision(taskResults, speedCfg, false, Object.keys(cleanFold), [])
+  expect(decision).toBe("accept")
+  expect(reasons.some((r) => r.includes("speed tiebreak"))).toBe(true)
+})
+
+test("abDecision: speed tiebreak never fires on a decision other than inconclusive (accept/reject untouched)", () => {
+  // Held-in significant WIN (decide() itself says accept) — speed tiebreak
+  // guard 1 (decision === 'inconclusive') must be a no-op here; the ordinary
+  // accept path (not the tiebreak reason) is what fires.
+  const heldInWin: PhaseTaggedTaskResults = {}
+  for (let i = 0; i < 6; i++) {
+    heldInWin[`hi${i}`] = { phase: "held-in", sentinel: false, candidate: [1], active: [0] }
+  }
+  const acceptResults: PhaseTaggedTaskResults = { ...heldInWin, ...cleanFold }
+  const [acceptDecision, acceptReasons] = abDecision(acceptResults, speedCfg, false, Object.keys(cleanFold), [])
+  expect(acceptDecision).toBe("accept")
+  expect(acceptReasons.some((r) => r.includes("speed tiebreak"))).toBe(false)
+
+  // Held-in significant LOSS (decide() itself says reject) — must stay reject.
+  const heldInLoss: PhaseTaggedTaskResults = {}
+  for (let i = 0; i < 6; i++) {
+    heldInLoss[`hi${i}`] = { phase: "held-in", sentinel: false, candidate: [0], active: [1] }
+  }
+  const rejectResults: PhaseTaggedTaskResults = { ...heldInLoss, ...cleanFold }
+  const [rejectDecision, rejectReasons] = abDecision(rejectResults, speedCfg, false, Object.keys(cleanFold), [])
+  expect(rejectDecision).toBe("reject")
+  expect(rejectReasons.some((r) => r.includes("speed tiebreak"))).toBe(false)
+})
+
+test("abDecision: speed tiebreak guard — blocked when earlyStopped, even with qualifying speed", () => {
+  const taskResults: PhaseTaggedTaskResults = { ...fastHeldIn(8, 5, 10), ...cleanFold }
+  const [decision, reasons] = abDecision(taskResults, speedCfg, true, Object.keys(cleanFold), [])
+  expect(decision).toBe("reject") // early-stop override wins, never "accept"
+  expect(reasons).toContain("early-stopped on futility")
+  expect(reasons.some((r) => r.includes("speed tiebreak"))).toBe(false)
+})
+
+test("abDecision: speed tiebreak guard — blocked in LEGACY mode (ho === null), structural, never manufactures an accept", () => {
+  // No held-out tasks at all -> foldOutTasks=[] -> abDecision's own `ho` is
+  // null (mirrors cmd-ab.ts's explicit-mode --tasks/--task-file/--all path).
+  const taskResults: PhaseTaggedTaskResults = fastHeldIn(8, 5, 10)
+  const [decision, reasons, , ho] = abDecision(taskResults, speedCfg, false, [], [])
+  expect(ho).toBeNull()
+  expect(decision).toBe("inconclusive") // never "accept" — decide() itself already forces this, tiebreak must agree
+  expect(reasons.some((r) => r.includes("speed tiebreak"))).toBe(false)
+})
+
+test("abDecision: speed tiebreak guard — blocked when held-in delta < 0, even with qualifying speed", () => {
+  // One discordant pair favouring active (not significant: mcnemarExactOneSided(1,0)=0.5),
+  // so decide() still lands on "inconclusive" but hi.delta = (2-3)/3 < 0.
+  const heldIn: PhaseTaggedTaskResults = {
+    lose: { phase: "held-in", sentinel: false, candidate: [0], active: [1] },
+  }
+  const taskResults: PhaseTaggedTaskResults = { ...heldIn, ...fastHeldIn(8, 5, 10), ...cleanFold }
+  const [decision, reasons, hi] = abDecision(taskResults, speedCfg, false, Object.keys(cleanFold), [])
+  expect(hi.delta).toBeLessThan(0)
+  expect(decision).toBe("inconclusive")
+  expect(reasons.some((r) => r.includes("speed tiebreak"))).toBe(false)
+})
+
+test("abDecision: speed tiebreak guard — blocked when nPairs < minBothPassPairs", () => {
+  const taskResults: PhaseTaggedTaskResults = { ...fastHeldIn(7, 5, 10), ...cleanFold } // 7 < 8
+  const [decision, reasons] = abDecision(taskResults, speedCfg, false, Object.keys(cleanFold), [])
+  expect(decision).toBe("inconclusive")
+  expect(reasons.some((r) => r.includes("speed tiebreak"))).toBe(false)
+})
+
+test("abDecision: speed tiebreak guard — blocked when signTestP > alpha (medianRatio would otherwise qualify)", () => {
+  // 5 fast (ratio 0.5) + 3 slow (ratio 1.5) -> b=5,c=3 -> signTestP =
+  // mcnemarExactOneSided(5,3) (well above 0.05); medianRatio (4th/5th of 8
+  // sorted) = 0.5, which alone WOULD qualify -- isolates the p condition.
+  const taskResults: PhaseTaggedTaskResults = {
+    ...fastHeldIn(5, 5, 10, "fast"), // ratio 0.5, faster
+    ...fastHeldIn(3, 15, 10, "slow"), // ratio 1.5, slower
+    ...cleanFold,
+  }
+  const p = mcnemarExactOneSided(5, 3)
+  expect(p).toBeGreaterThan(speedCfg.speedTiebreak!.alpha)
+  const [decision, reasons] = abDecision(taskResults, speedCfg, false, Object.keys(cleanFold), [])
+  expect(decision).toBe("inconclusive")
+  expect(reasons.some((r) => r.includes("speed tiebreak"))).toBe(false)
+})
+
+test("abDecision: speed tiebreak guard — blocked when medianRatio > maxMedianRatio (signTestP would otherwise qualify)", () => {
+  // All 8 pairs faster (b=8,c=0 -> signTestP = 1/256, well under 0.05) but
+  // only marginally (ratio 0.9 > 0.8 threshold) -- isolates the ratio condition.
+  const taskResults: PhaseTaggedTaskResults = { ...fastHeldIn(8, 9, 10), ...cleanFold }
+  const [decision, reasons] = abDecision(taskResults, speedCfg, false, Object.keys(cleanFold), [])
+  expect(decision).toBe("inconclusive")
+  expect(reasons.some((r) => r.includes("speed tiebreak"))).toBe(false)
+})
+
+test("abDecision: speed tiebreak — sentinel-regression reject still runs last and can override a tiebreak accept", () => {
+  const sentinelResults: PhaseTaggedTaskResults = {}
+  for (const x of ["a", "b", "c"]) {
+    sentinelResults[`sent_${x}`] = { phase: "held-out", sentinel: true, candidate: [0], active: [1] }
+  }
+  const taskResults: PhaseTaggedTaskResults = { ...fastHeldIn(8, 5, 10), ...cleanFold, ...sentinelResults }
+  const [decision, reasons] = abDecision(
+    taskResults,
+    speedCfg,
+    false,
+    Object.keys(cleanFold),
+    Object.keys(sentinelResults),
+  )
+  expect(reasons.some((r) => r.includes("speed tiebreak"))).toBe(true) // tiebreak DID fire
+  expect(decision).toBe("reject") // but sentinel regression has the last word
+  expect(reasons).toContain("sentinel regression")
+})
+
+test("abDecision: --speed-tiebreak flag OFF (cfg.speedTiebreak undefined) is byte-identical to pre-feature decide()-only decisions", () => {
+  const taskResults: PhaseTaggedTaskResults = { ...fastHeldIn(8, 5, 10), ...cleanFold }
+  const withFlagOff = abDecision(taskResults, DEFAULT_DECISION_CONFIG, false, Object.keys(cleanFold), [])
+  const decideOnly = decide(
+    pairedRunStats(filterTaskResults(taskResults, "held-in")),
+    pairedRunStats(filterTaskResults(taskResults, "held-out", false)),
+    DEFAULT_DECISION_CONFIG,
+  )
+  expect(withFlagOff[0]).toBe(decideOnly.decision)
+  expect(withFlagOff[1]).toEqual(decideOnly.reasons) // no speed-tiebreak reason appended
+  expect(withFlagOff[0]).toBe("inconclusive") // sanity: same fixture upgrades under speedCfg above
 })
 
 // ── --resume split fingerprint (splitHash) ──────────────────────────────

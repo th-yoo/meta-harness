@@ -59,7 +59,7 @@ commands:
               [--no-store] [--save-all-traj]
               [--results-file PATH] [--staging scripts|runtime] [--driver ID] [--enforce-resources]
               [--parallel] [--cpu-budget N] [--mem-budget MB] [--min-cpus N] [--min-mem-mb MB]
-              [--no-pack-measured] [--host-pressure observe|on]
+              [--no-pack-measured] [--host-pressure observe|on] [--speed-tiebreak]
   judge-audit --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
   split       make|rotate|show [--seed N] [--folds N] [--source FILE]
               [--split-file PATH] [--results PATH]... [--band LO,HI]
@@ -881,6 +881,11 @@ function parseAbArgs(argv: string[]): CmdAbArgs | null {
     }
     if (a === "--no-pack-measured") {
       out.noPackMeasured = true
+      i++
+      continue
+    }
+    if (a === "--speed-tiebreak") {
+      out.speedTiebreak = true
       i++
       continue
     }
