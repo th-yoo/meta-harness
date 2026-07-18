@@ -110,6 +110,21 @@ export async function applyStagedArtifact(host: HarnessHost, d: StagedArtifactDe
 // ── Public API ─────────────────────────────────────────────────────────────
 
 /**
+ * PURE. Resolve a config-supplied path against a deterministic root: a
+ * non-absolute value joins onto `root` (in practice makeBenchPaths()'s
+ * metaRoot — import.meta.url-derived precisely so cwd never matters); an
+ * absolute value passes through; "" stays "" (disabled must stay disabled,
+ * never accidentally resolve to the root itself). Exported for direct
+ * testing — MhConfig.externalEvidenceDir / activeSplitFile are DOCUMENTED
+ * as repo-relative, so consuming them cwd-relative would silently no-op
+ * the feature whenever the host session's cwd isn't the repo root.
+ */
+export function resolveConfigPath(value: string, root: string): string {
+  if (!value || path.isAbsolute(value)) return value
+  return path.join(root, value)
+}
+
+/**
  * Trigger a proposer session for one store layer.
  * `layer.higherRoots` supplies the gap-filling "already covered" context.
  * The proposer writes to a staging file inside the worktree; the plugin
@@ -157,11 +172,19 @@ export async function triggerPropose(
     // guard wiring. `evidenceDir` starts as the configured dir ("" =
     // disabled) and is force-disabled (never left enabled with a stale/
     // unchecked heldOut) if the resolved split file can't be read — "never
-    // show unchecked evidence" (round-3 architect MAJOR).
+    // show unchecked evidence" (round-3 architect MAJOR). Both config paths
+    // are documented as repo-relative ("evidence/tb2-leaderboard",
+    // "term-bench2/splits/loop2.json") so non-absolute values resolve
+    // against makeBenchPaths().metaRoot via resolveConfigPath — NEVER
+    // process.cwd(), which is whatever directory the host session happens
+    // to run in (review fix: a cwd-relative read silently no-oped the
+    // whole feature outside a repo-root cwd).
     let evidenceDir = cfg.externalEvidenceDir
     let heldOut: string[] = []
     if (evidenceDir) {
-      const splitsPath = cfg.activeSplitFile || makeBenchPaths().splitsFile
+      const benchPaths = makeBenchPaths()
+      evidenceDir = resolveConfigPath(evidenceDir, benchPaths.metaRoot)
+      const splitsPath = resolveConfigPath(cfg.activeSplitFile, benchPaths.metaRoot) || benchPaths.splitsFile
       if (!fs.existsSync(splitsPath)) {
         await host.log(
           "warn",
@@ -178,6 +201,17 @@ export async function triggerPropose(
           )
           evidenceDir = ""
         }
+      }
+      // Typo'd/missing evidence dir: the section would just render empty
+      // ("" from buildExternalEvidenceSection) with zero operator signal —
+      // warn, mirroring the split-file-missing warning above. Checked AFTER
+      // the split fail-safe so a doubly-broken config still logs the more
+      // safety-relevant split warning first.
+      if (evidenceDir && !fs.existsSync(evidenceDir)) {
+        await host.log(
+          "warn",
+          `external-evidence: evidence dir not found at ${evidenceDir} — check externalEvidenceDir in config.json`,
+        )
       }
     }
 

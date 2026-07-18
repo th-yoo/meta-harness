@@ -162,7 +162,16 @@ live, set it to `term-bench2/splits/loop2.json`, matching whatever
 `--split-file` value that run's `ab`/`split` invocations use. `""` (default)
 resolves to `makeBenchPaths().splitsFile` at prompt-build time.
 
+Both values may be relative, as in the examples above: a non-absolute path
+resolves against the REPO ROOT (`makeBenchPaths().metaRoot`, itself
+`import.meta.url`-derived — see `resolveConfigPath`, `opencode-plugin/src/
+propose.ts`), never against the process's cwd, so a proposer cycle
+triggered from any working directory reads the same files. Absolute paths
+pass through unchanged.
+
 **Fail-safe:** if the resolved split file doesn't exist on disk when a
 propose cycle runs, `triggerPropose` logs a warning and disables the
 external-evidence section entirely for that cycle — the harness never shows
-evidence it couldn't freshly re-validate against the current split.
+evidence it couldn't freshly re-validate against the current split. A set-
+but-missing `externalEvidenceDir` (e.g. a typo) also logs a warning, so a
+misconfigured seam is visible rather than silently empty.

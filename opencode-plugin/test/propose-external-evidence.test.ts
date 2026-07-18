@@ -2,7 +2,7 @@ import { test, expect, beforeEach, afterEach, spyOn } from "bun:test"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
-import { buildProposerPrompt, triggerPropose } from "../src/propose.ts"
+import { buildProposerPrompt, resolveConfigPath, triggerPropose } from "../src/propose.ts"
 import {
   writeActive,
   bootstrapStore,
@@ -262,4 +262,103 @@ test("triggerPropose: externalEvidenceDir set but the resolved split file is MIS
   expect(rec.prompt).toBeDefined()
   expect(rec.prompt).not.toContain("External strategy evidence")
   expect(rec.logs.some((l) => l.includes("split file not found"))).toBe(true)
+})
+
+// ── resolveConfigPath: cwd-independence (review fix, Important) ──────────
+// cfg.externalEvidenceDir / cfg.activeSplitFile are DOCUMENTED as relative
+// ("evidence/tb2-leaderboard", "term-bench2/splits/loop2.json") but were
+// consumed cwd-relative — outside a repo-root cwd the feature silently
+// no-oped. Non-absolute values must resolve against a DETERMINISTIC root
+// (makeBenchPaths().metaRoot — itself import.meta.url-derived precisely to
+// avoid cwd bugs), never process.cwd(). Pure helper, tested directly (no
+// chdir flakiness).
+
+test("resolveConfigPath: relative value joins onto the given root (cwd never consulted)", () => {
+  expect(resolveConfigPath("evidence/tb2-leaderboard", "/repo/root"))
+    .toBe(path.join("/repo/root", "evidence/tb2-leaderboard"))
+  expect(resolveConfigPath("term-bench2/splits/loop2.json", "/repo/root"))
+    .toBe(path.join("/repo/root", "term-bench2/splits/loop2.json"))
+})
+
+test("resolveConfigPath: absolute value passes through unchanged", () => {
+  expect(resolveConfigPath("/abs/evidence", "/repo/root")).toBe("/abs/evidence")
+})
+
+test("resolveConfigPath: empty value stays empty (disabled stays disabled, never resolved to the root itself)", () => {
+  expect(resolveConfigPath("", "/repo/root")).toBe("")
+})
+
+test("triggerPropose: RELATIVE activeSplitFile resolves against the repo metaRoot, not cwd (warning names the resolved absolute path)", async () => {
+  const root = path.join(home, "stores", "relsplit")
+  bootstrapStore(root, "- baseline")
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const evidenceDir = path.join(home, "evidence")
+  seedEvidenceFile(evidenceDir, "task-x", "agentA", "some lesson")
+
+  // Relative split path that exists NEITHER under the repo root NOR under
+  // any plausible cwd — the fail-safe warning must name it RESOLVED under
+  // the repo metaRoot (proving deterministic-root resolution happened),
+  // regardless of what process.cwd() is while the suite runs.
+  const relSplit = "term-bench2/does-not-exist-anywhere-splits.json"
+  fs.writeFileSync(path.join(home, "config.json"), JSON.stringify({
+    externalEvidenceDir: evidenceDir,
+    activeSplitFile: relSplit,
+  }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  await triggerPropose(fakeHost(rec), worktree, layer)
+
+  const repoRoot = path.resolve(import.meta.dir, "..", "..")
+  expect(rec.prompt).toBeDefined()
+  expect(rec.prompt).not.toContain("External strategy evidence")
+  expect(rec.logs.some((l) => l.includes(path.join(repoRoot, relSplit)))).toBe(true)
+})
+
+// ── Missing evidence dir warns (review fix, Minor) ───────────────────────
+// A typo'd externalEvidenceDir used to give ZERO signal (the section just
+// silently rendered empty). Mirror the split-file-missing warning.
+
+test("triggerPropose: externalEvidenceDir SET but the resolved dir does not exist -> warning logged (typo'd config gives signal)", async () => {
+  const root = path.join(home, "stores", "noevdir")
+  bootstrapStore(root, "- baseline")
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const splitsPath = path.join(home, "splits.json")
+  writeSplits(splitsPath, ["task-live-out"])
+
+  const missingEvidenceDir = path.join(home, "no-such-evidence-dir")
+  fs.writeFileSync(path.join(home, "config.json"), JSON.stringify({
+    externalEvidenceDir: missingEvidenceDir,
+    activeSplitFile: splitsPath,
+  }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  await triggerPropose(fakeHost(rec), worktree, layer)
+
+  expect(rec.prompt).toBeDefined()
+  expect(rec.prompt).not.toContain("External strategy evidence")
+  expect(rec.logs.some((l) => l.includes("evidence dir not found") && l.includes(missingEvidenceDir))).toBe(true)
+})
+
+test("triggerPropose: RELATIVE externalEvidenceDir resolves against the repo metaRoot (missing-dir warning names the resolved absolute path)", async () => {
+  const root = path.join(home, "stores", "relev")
+  bootstrapStore(root, "- baseline")
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const splitsPath = path.join(home, "splits.json")
+  writeSplits(splitsPath, ["task-live-out"])
+
+  const relEvidence = "evidence/does-not-exist-anywhere"
+  fs.writeFileSync(path.join(home, "config.json"), JSON.stringify({
+    externalEvidenceDir: relEvidence,
+    activeSplitFile: splitsPath,
+  }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  await triggerPropose(fakeHost(rec), worktree, layer)
+
+  const repoRoot = path.resolve(import.meta.dir, "..", "..")
+  expect(rec.prompt).toBeDefined()
+  expect(rec.logs.some((l) => l.includes(path.join(repoRoot, relEvidence)))).toBe(true)
 })
