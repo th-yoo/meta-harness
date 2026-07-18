@@ -78,6 +78,56 @@ test("cli main: ab --enforce-resources parses fine and falls through to normal f
   }
 })
 
+// ── --host-pressure (plan S3) ─────────────────────────────────────────────
+
+test("cli main: ab --host-pressure observe parses fine and falls through to normal flow (rc 1, nonexistent candidate)", async () => {
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main([
+      "ab",
+      "--layer",
+      "project-global",
+      "--candidate",
+      "v999999",
+      "--all",
+      "--host-pressure",
+      "observe",
+    ])
+    expect(rc).toBe(1)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("cli main: ab --host-pressure on parses fine and falls through to normal flow (rc 1, nonexistent candidate)", async () => {
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main([
+      "ab",
+      "--layer",
+      "project-global",
+      "--candidate",
+      "v999999",
+      "--all",
+      "--host-pressure",
+      "on",
+    ])
+    expect(rc).toBe(1)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("cli main: ab --host-pressure with an invalid value -> rc 2", async () => {
+  expect(
+    await main(["ab", "--layer", "project-global", "--candidate", "v1", "--all", "--host-pressure", "bogus"]),
+  ).toBe(2)
+})
+
+test("cli main: ab --host-pressure with no value -> rc 2", async () => {
+  expect(await main(["ab", "--layer", "project-global", "--candidate", "v1", "--all", "--host-pressure"])).toBe(2)
+})
+
 // ── --cpu-budget/--mem-budget validation (final-review fix: NaN defeats the
 // scheduler's fit checks and hangs schedule()/packPreview() forever — reject
 // non-finite/non-positive values at parse time, before any of that runs) ───

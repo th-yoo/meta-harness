@@ -12,6 +12,7 @@ import { opencodeDriver } from "../src/bench/drivers/opencode.ts"
 import * as verifierReal from "../src/bench/verifier.ts"
 import * as resultsReal from "../src/bench/results.ts"
 import * as schedulerReal from "../src/bench/scheduler.ts"
+import { PRESSURE_POLL_SEC } from "../src/bench/host-pressure.ts"
 import { updateResourceProfile, readResourceProfile, hostClass } from "../src/bench/resource-profile.ts"
 
 // Same pre-mock snapshot pattern as the verifier block above: capture the
@@ -1946,6 +1947,87 @@ test("run --parallel: args.canLaunch (when set) is threaded straight into schedu
   }
   expect(scheduleCalls).toBe(1)
   expect(capturedCanLaunch).toBe(marker)
+})
+
+// ── host-pressure gate, plan S3: args.pressureGate → schedule()'s 5th arg AND
+// PRESSURE_POLL_SEC * 1000 → schedule()'s 6th arg (pausePollMs) ──────────────
+// cli.ts's main() builds the pressure gate (buildPressureGate) and sets it on
+// CmdRunArgs.pressureGate BEFORE calling cmdRun; this pins that cmd-run.ts
+// threads it as schedule()'s 5th param AND passes the sensor's poll cadence
+// (PRESSURE_POLL_SEC * 1000, imported here from host-pressure.ts — NOT the
+// scheduler's own decoupled local default) as the 6th param.
+
+test("run --parallel: args.pressureGate + PRESSURE_POLL_SEC*1000 reach schedule() as the 5th and 6th args", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeResourceTomls(tbRoot, ["a"], 1, 2048)
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let capturedPauseGate: unknown
+  let capturedPausePollMs: unknown
+  let scheduleCalls = 0
+  mock.module("../src/bench/scheduler.ts", () => ({
+    schedule: (...a: unknown[]) => {
+      scheduleCalls++
+      capturedPauseGate = a[4]
+      capturedPausePollMs = a[5]
+      return (realSchedule as (...x: unknown[]) => unknown)(...a)
+    },
+    AsyncMutex: realAsyncMutex,
+    DEFAULT_BUDGET: realDefaultBudget,
+  }))
+
+  const gate = () => false
+  const fake: RunOneTaskFn = async () => result({ reward: 1 })
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(
+      paths,
+      { tasks: ["a"], layers: "none", parallel: true, enforceResources: true, pressureGate: gate },
+      fake,
+      fakeExec,
+    )
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreScheduler()
+  }
+  expect(scheduleCalls).toBe(1)
+  expect(capturedPauseGate).toBe(gate)
+  expect(capturedPausePollMs).toBe(PRESSURE_POLL_SEC * 1000)
+})
+
+test("run --parallel: args.pressureGate absent — schedule() gets undefined 5th arg (still receives the 6th poll cadence)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeResourceTomls(tbRoot, ["a"], 1, 2048)
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  let capturedPauseGate: unknown = "unset"
+  let capturedPausePollMs: unknown
+  mock.module("../src/bench/scheduler.ts", () => ({
+    schedule: (...a: unknown[]) => {
+      capturedPauseGate = a[4]
+      capturedPausePollMs = a[5]
+      return (realSchedule as (...x: unknown[]) => unknown)(...a)
+    },
+    AsyncMutex: realAsyncMutex,
+    DEFAULT_BUDGET: realDefaultBudget,
+  }))
+
+  const fake: RunOneTaskFn = async () => result({ reward: 1 })
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "none", parallel: true, enforceResources: true }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreScheduler()
+  }
+  expect(capturedPauseGate).toBeUndefined()
+  expect(capturedPausePollMs).toBe(PRESSURE_POLL_SEC * 1000)
 })
 
 test("run --parallel: args.canLaunch absent by default — schedule() gets undefined (unbounded, byte-identical)", async () => {

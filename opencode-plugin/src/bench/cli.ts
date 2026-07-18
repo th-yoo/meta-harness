@@ -20,6 +20,7 @@ import { correlateSelfScores, type ResultsLike } from "./self-score-correlate.ts
 import { BenchError, log, die } from "./util.ts"
 import { DRIVER_IDS } from "./drivers/index.ts"
 import { readOauthExpiresAt, OAUTH_PARALLEL_MARGIN_MS } from "./agent-auth.ts"
+import { createHostPressure, type CreateHostPressureOpts, type HostPressure } from "./host-pressure.ts"
 import { readFileSync } from "node:fs"
 import { writeSquadDefV1, readActiveSquadDef, syncWireContracts, STANDARD_SQUAD } from "../fleet/squad-def.ts"
 import { cmdRolesRender } from "../fleet/render.ts"
@@ -46,7 +47,7 @@ commands:
               [--min-agent-timeout SEC] [--resume] [--agent NAME]
               [--pin LAYER=vN]... [--staging scripts|runtime] [--driver ID] [--enforce-resources]
               [--parallel] [--cpu-budget N] [--mem-budget MB] [--min-cpus N] [--min-mem-mb MB]
-              [--no-pack-measured]
+              [--no-pack-measured] [--host-pressure observe|on]
   task-load   [--tasks TASK [TASK ...]] [--task-file PATH] [--all]
               [--results-file PATH] [--cpu-budget N] [--mem-budget MB]
               (read-only: declared footprint + timeouts + co-run preview)
@@ -58,7 +59,7 @@ commands:
               [--no-store] [--save-all-traj]
               [--results-file PATH] [--staging scripts|runtime] [--driver ID] [--enforce-resources]
               [--parallel] [--cpu-budget N] [--mem-budget MB] [--min-cpus N] [--min-mem-mb MB]
-              [--no-pack-measured]
+              [--no-pack-measured] [--host-pressure observe|on]
   judge-audit --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
   split       make|rotate|show [--seed N] [--folds N] [--source FILE]
               [--split-file PATH] [--results PATH]... [--band LO,HI]
@@ -450,6 +451,13 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
       i += 2
       continue
     }
+    if (a === "--host-pressure") {
+      const v = argv[i + 1]
+      if (v !== "observe" && v !== "on") return null
+      out.hostPressure = v
+      i += 2
+      continue
+    }
     if (a === "--driver") {
       const v = argv[i + 1]
       if (v === undefined || !(DRIVER_IDS as readonly string[]).includes(v)) return null
@@ -610,6 +618,49 @@ export function buildOauthParallelCanLaunch(
   return () => Date.now() + neededMs <= exp
 }
 
+/**
+ * Host-pressure launch-gate builder (plan S3) — the transient companion to
+ * buildOauthParallelCanLaunch above, and shaped the same way: main() calls it
+ * once at the canLaunch assignment site and assigns the result to
+ * CmdRunArgs/CmdAbArgs's internal-only `pressureGate` field, which cmd-run.ts/
+ * cmd-ab.ts thread straight into scheduler.ts's `schedule()` `pauseGate` param.
+ *
+ * Returns `undefined` when `--host-pressure` is absent (no sensor created,
+ * schedule()'s pauseGate stays unset — byte-identical to before this flag
+ * existed). Otherwise creates exactly ONE `createHostPressure` per command
+ * invocation and closes over it:
+ *   - `on`: the gate IS the live sensor — pauses launches while the host is
+ *     under pressure.
+ *   - `observe`: the gate still SAMPLES the sensor every call (so state-change
+ *     logging happens through the same hysteresis state machine) but ALWAYS
+ *     returns false — it never pauses. Calibration-only; the point is to
+ *     eyeball thresholds over a run before `on` gates anything.
+ * The single sensor is shared across every call of the returned gate, which
+ * for `ab` means across BOTH phases (fresh scheduler per phase, same gate
+ * closure) — correct: pressure hysteresis is a property of the machine over
+ * wall-clock time, not per-phase state.
+ *
+ * Only the --parallel paths ever consult the returned gate (schedule() isn't
+ * called on the serial path — a serial run is width-1 by construction), so a
+ * serial `--host-pressure` is legal and simply inert.
+ *
+ * `createSensor` is the injectable test seam (default `createHostPressure`) so
+ * unit tests exercise the wiring without sampling the real host.
+ */
+export function buildPressureGate(
+  a: { hostPressure?: "observe" | "on" },
+  createSensor: (opts: CreateHostPressureOpts) => HostPressure = createHostPressure,
+): (() => boolean) | undefined {
+  if (a.hostPressure === undefined) return undefined
+  const sensor = createSensor({ log })
+  if (a.hostPressure === "on") return () => sensor.underPressure()
+  // observe: sample (state-change logging runs inside underPressure) but never pause.
+  return () => {
+    sensor.underPressure()
+    return false
+  }
+}
+
 function parseAbArgs(argv: string[]): CmdAbArgs | null {
   const out: Partial<CmdAbArgs> = {}
   let i = 0
@@ -756,6 +807,13 @@ function parseAbArgs(argv: string[]): CmdAbArgs | null {
       const v = argv[i + 1]
       if (v !== "scripts" && v !== "runtime") return null
       out.staging = v
+      i += 2
+      continue
+    }
+    if (a === "--host-pressure") {
+      const v = argv[i + 1]
+      if (v !== "observe" && v !== "on") return null
+      out.hostPressure = v
       i += 2
       continue
     }
@@ -1539,6 +1597,11 @@ export async function main(argv: string[]): Promise<number> {
           // passed) and threaded through as internal-only wiring on
           // CmdRunArgs — see cmd-run.ts's `canLaunch` field doc comment.
           runArgs.canLaunch = buildOauthParallelCanLaunch(runArgs, runModel)
+          // host-pressure launch gate (plan S3): build ONE sensor per command
+          // invocation and set the transient pause gate as internal-only
+          // wiring on CmdRunArgs — undefined (no gate) unless --host-pressure
+          // was passed. Threaded into schedule()'s pauseGate by cmd-run.ts.
+          runArgs.pressureGate = buildPressureGate(runArgs)
         }
         await cmdRun(paths, runArgs)
         return 0
@@ -1567,6 +1630,9 @@ export async function main(argv: string[]): Promise<number> {
           // oauth-parallel freshness gate, part 2 (Task 2): same scheduler
           // launch-guard as `run`, above — see that case's comment.
           abArgs.canLaunch = buildOauthParallelCanLaunch(abArgs, abModel)
+          // host-pressure launch gate (plan S3): same builder as `run` — one
+          // shared per-command sensor closure, reused across BOTH ab phases.
+          abArgs.pressureGate = buildPressureGate(abArgs)
         }
         await cmdAb(paths, abArgs)
         return 0

@@ -17,6 +17,7 @@ import {
 import { BenchError } from "../src/bench/util.ts"
 import { readResourceProfile, hostClass, updateResourceProfile } from "../src/bench/resource-profile.ts"
 import * as schedulerReal from "../src/bench/scheduler.ts"
+import { PRESSURE_POLL_SEC } from "../src/bench/host-pressure.ts"
 
 // Snapshot the REAL scheduler.ts exports at module-eval time (before any
 // mock.module call below) — same pattern as bench-cmd-run.test.ts's own
@@ -1484,4 +1485,57 @@ test("ab --parallel: args.canLaunch absent by default — every schedule() call 
 
   expect(capturedCanLaunches.length).toBeGreaterThanOrEqual(1)
   for (const c of capturedCanLaunches) expect(c).toBeUndefined()
+})
+
+// ── host-pressure gate, plan S3: args.pressureGate → schedule()'s 5th arg AND
+// PRESSURE_POLL_SEC * 1000 → schedule()'s 6th arg (pausePollMs), for BOTH
+// phases. The gate closure is ONE shared per-command sensor (cli.ts's
+// buildPressureGate builds it once), so every schedule() call gets the exact
+// same gate reference and the same poll cadence. ────────────────────────────
+test("ab --parallel: args.pressureGate + PRESSURE_POLL_SEC*1000 reach EVERY schedule() call as the 5th and 6th args", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  writeSplitsFile(paths, ["hi0"], ["ho0"])
+  setupCandidate(paths, "project-global", "v1")
+
+  const capturedPauseGates: unknown[] = []
+  const capturedPausePollMs: unknown[] = []
+  mock.module("../src/bench/scheduler.ts", () => ({
+    schedule: (...a: unknown[]) => {
+      capturedPauseGates.push(a[4])
+      capturedPausePollMs.push(a[5])
+      return (realSchedule as (...x: unknown[]) => unknown)(...a)
+    },
+    AsyncMutex: realAsyncMutex,
+    DEFAULT_BUDGET: realDefaultBudget,
+  }))
+
+  const gate = () => false
+  const fake: RunOneTaskFn = async () => res({ reward: 1 })
+  try {
+    await quiet(() =>
+      cmdAb(
+        paths,
+        {
+          layer: "project-global",
+          candidate: "v1",
+          k: 1,
+          parallel: true,
+          enforceResources: true,
+          cpuBudget: 100,
+          memBudget: 1_000_000,
+          pressureGate: gate,
+        } as CmdAbArgs,
+        fake,
+        fakeExec,
+      ),
+    )
+  } finally {
+    restoreScheduler()
+  }
+
+  expect(capturedPauseGates.length).toBeGreaterThanOrEqual(1)
+  for (const g of capturedPauseGates) expect(g).toBe(gate)
+  for (const ms of capturedPausePollMs) expect(ms).toBe(PRESSURE_POLL_SEC * 1000)
 })

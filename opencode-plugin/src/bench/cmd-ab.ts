@@ -32,6 +32,7 @@ import { layerStoreRoots, type LayerName } from "./record.ts"
 import { updateResourceProfile, readResourceProfile, raiseCapMeasured, PACK_MIN_SAMPLES } from "./resource-profile.ts"
 import { selectTasks, taskTimeouts, enforcedResources, packingFootprints } from "./tasks.ts"
 import { schedule, DEFAULT_BUDGET, AsyncMutex, type Budget, type ScheduledItem } from "./scheduler.ts"
+import { PRESSURE_POLL_SEC } from "./host-pressure.ts"
 import {
   loadActiveSplit,
   splitHash,
@@ -152,6 +153,21 @@ export interface CmdAbArgs {
    * sets it) leaves it undefined — unbounded scheduling, byte-identical to
    * before this gate existed. */
   canLaunch?: () => boolean
+  /** `--host-pressure observe|on` (plan S3): the load-aware launch gate — see
+   * cmd-run.ts's CmdRunArgs field doc for the full rationale (identical here).
+   * `on` pauses NEW task launches while the host is under pressure; `observe`
+   * samples + logs for calibration but never pauses. Default (undefined) =
+   * off, byte-identical. Only the parallel path's schedule() consults it. */
+  hostPressure?: "observe" | "on"
+  /** Internal-only wiring — NOT a CLI flag (see cli.ts's parseAbArgs). The
+   * host-pressure launch gate cli.ts's main() builds (`buildPressureGate`)
+   * from `hostPressure` above, threaded straight into scheduler.ts's
+   * `schedule()` `pauseGate` param below — reused for BOTH phases (held-in and
+   * held-out) via the ONE shared per-command sensor closure, so pressure
+   * hysteresis state carries across phases (correct: pressure is a property of
+   * the machine over wall-clock time). Undefined by default — no pause gate,
+   * byte-identical. Mirrors `canLaunch`'s internal-wiring stance. */
+  pressureGate?: () => boolean
 }
 
 function round4(x: number): number {
@@ -769,6 +785,12 @@ export async function cmdAb(
         })
       },
       args.canLaunch,
+      // Transient host-pressure gate (plan S3). Same gate closure for both
+      // phases (one shared per-command sensor); PRESSURE_POLL_SEC*1000 passed
+      // explicitly as the re-scan cadence (the scheduler's local default is
+      // deliberately decoupled from the sensor module).
+      args.pressureGate,
+      PRESSURE_POLL_SEC * 1000,
     )
   }
 

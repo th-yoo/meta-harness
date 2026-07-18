@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test"
-import { validateParallel, buildOauthParallelCanLaunch } from "../src/bench/cli.ts"
+import { validateParallel, buildOauthParallelCanLaunch, buildPressureGate } from "../src/bench/cli.ts"
+import type { HostPressure, CreateHostPressureOpts } from "../src/bench/host-pressure.ts"
 
 // Direct unit tests of validateParallel's oauth-parallel freshness gate
 // (Task 1 of the oauth-parallel design). These inject `readExpiry` (the
@@ -229,4 +230,83 @@ test("buildOauthParallelCanLaunch: maxAgentTimeout unset — falls back to the s
     const canLaunch2 = buildOauthParallelCanLaunch({ parallel: true }, MODEL, () => justOver)
     expect(canLaunch2!()).toBe(true)
   })
+})
+
+// ── buildPressureGate (plan S3: the host-pressure launch-gate builder cli.ts's
+// main() wires into CmdRunArgs/CmdAbArgs's internal-only `pressureGate` field,
+// threaded straight into scheduler.ts's `schedule()` pauseGate param) ─────────
+// Hermetic via an injected sensor factory (the same builder-test stance as
+// buildOauthParallelCanLaunch's `readExpiry` seam) — these never create a real
+// createHostPressure and so never sample the actual host.
+
+/** A fake HostPressure whose `underPressure()` returns `val` and counts its
+ * own calls — the injectable sensor for buildPressureGate's tests. */
+function fakeSensor(val: boolean): HostPressure & { calls: number } {
+  const s = {
+    calls: 0,
+    underPressure(): boolean {
+      s.calls++
+      return val
+    },
+    state(): string {
+      return val ? "pressured" : "normal"
+    },
+  }
+  return s
+}
+
+test("buildPressureGate: --host-pressure absent — returns undefined, never creates a sensor", () => {
+  let created = 0
+  const gate = buildPressureGate({}, () => {
+    created++
+    return fakeSensor(false)
+  })
+  expect(gate).toBeUndefined()
+  expect(created).toBe(0)
+})
+
+test("buildPressureGate: `on` — returns a gate that calls the sensor and can return true", () => {
+  const sensor = fakeSensor(true)
+  let created = 0
+  const gate = buildPressureGate({ hostPressure: "on" }, (_opts: CreateHostPressureOpts) => {
+    created++
+    return sensor
+  })
+  expect(created).toBe(1) // ONE sensor per command invocation
+  expect(gate).toBeInstanceOf(Function)
+  expect(gate!()).toBe(true) // pressured → gate pauses
+  expect(sensor.calls).toBe(1)
+  expect(gate!()).toBe(true)
+  expect(sensor.calls).toBe(2)
+})
+
+test("buildPressureGate: `on` — a calm sensor gates false (launches proceed)", () => {
+  const sensor = fakeSensor(false)
+  const gate = buildPressureGate({ hostPressure: "on" }, () => sensor)
+  expect(gate!()).toBe(false)
+  expect(sensor.calls).toBe(1)
+})
+
+test("buildPressureGate: `observe` — samples the sensor (for logging) but the gate is ALWAYS false", () => {
+  const sensor = fakeSensor(true) // host IS under pressure...
+  const gate = buildPressureGate({ hostPressure: "observe" }, () => sensor)
+  expect(gate).toBeInstanceOf(Function)
+  expect(gate!()).toBe(false) // ...but observe never pauses
+  expect(sensor.calls).toBe(1) // it still sampled (state-change logging happens inside underPressure)
+  expect(gate!()).toBe(false)
+  expect(sensor.calls).toBe(2)
+})
+
+test("buildPressureGate: ONE sensor is shared across every call of the returned gate (ab's two phases)", () => {
+  let created = 0
+  const sensor = fakeSensor(true)
+  const gate = buildPressureGate({ hostPressure: "on" }, () => {
+    created++
+    return sensor
+  })
+  gate!()
+  gate!()
+  gate!()
+  expect(created).toBe(1) // the sensor is built once, not per gate call
+  expect(sensor.calls).toBe(3)
 })

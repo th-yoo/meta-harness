@@ -62,6 +62,40 @@ test("cli main: run --enforce-resources parses fine and falls through to normal 
   }
 })
 
+// ── --host-pressure (plan S3) ─────────────────────────────────────────────
+
+test("cli main: run --host-pressure observe parses fine and falls through to normal flow (rc 1, no tasks)", async () => {
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main(["run", "--host-pressure", "observe", "--layers", "none"])
+    expect(rc).toBe(1)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes("Specify --tasks"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("cli main: run --host-pressure on parses fine and falls through to normal flow (rc 1, no tasks)", async () => {
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    const rc = await main(["run", "--host-pressure", "on", "--layers", "none"])
+    expect(rc).toBe(1)
+    const messages = errSpy.mock.calls.map((c) => String(c[0]))
+    expect(messages.some((m) => m.includes("Specify --tasks"))).toBe(true)
+  } finally {
+    errSpy.mockRestore()
+  }
+})
+
+test("cli main: run --host-pressure with an invalid value -> rc 2", async () => {
+  expect(await main(["run", "--host-pressure", "bogus", "--all"])).toBe(2)
+})
+
+test("cli main: run --host-pressure with no value -> rc 2", async () => {
+  expect(await main(["run", "--host-pressure"])).toBe(2)
+})
+
 // ── --parallel gate (Task 6, cli.ts's validateParallel) ───────────────────
 
 test("cli: run --parallel without --enforce-resources dies (rc 1)", async () => {

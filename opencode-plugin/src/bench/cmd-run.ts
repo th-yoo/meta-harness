@@ -41,6 +41,7 @@ import type { AgentDriver } from "./drivers/types.ts"
 import { assembleAgentsMd, envBlock, harnessMeta, parsePins, recordToStores } from "./record.ts"
 import { resumeCarryForward, writeRunResults, aggTotals } from "./results.ts"
 import { schedule, DEFAULT_BUDGET, AsyncMutex, type Budget, type ScheduledItem } from "./scheduler.ts"
+import { PRESSURE_POLL_SEC } from "./host-pressure.ts"
 import { BenchError, die, log, pyFixed } from "./util.ts"
 import { readMhConfig, type ToolUsage, type TrajEvent } from "../harness-store.ts"
 
@@ -436,6 +437,23 @@ export interface CmdRunArgs {
    * undefined — unbounded scheduling, byte-identical to before this gate
    * existed. */
   canLaunch?: () => boolean
+  /** `--host-pressure observe|on` (plan S3): the load-aware launch gate.
+   * `on` pauses NEW task launches while the host is under CPU/memory pressure
+   * (width shrinks by attrition, recovers when pressure clears);
+   * `observe` samples + logs pressure state changes for threshold calibration
+   * but never pauses. Default (undefined) = off, byte-identical to before this
+   * flag existed. Legal serial or parallel, but only the parallel path's
+   * schedule() consults it (a serial run is width-1 by construction). */
+  hostPressure?: "observe" | "on"
+  /** Internal-only wiring — NOT a CLI flag, never parsed from argv (see
+   * cli.ts's parseRunArgs). The host-pressure launch gate cli.ts's main()
+   * builds (`buildPressureGate`) from `hostPressure` above and sets AFTER
+   * validateParallel, threaded straight through as scheduler.ts's `schedule()`
+   * `pauseGate` param below — the transient companion to `canLaunch`. Every
+   * other caller (direct unit tests, or any that never sets it) leaves it
+   * undefined — no pause gate, byte-identical to before this flag existed.
+   * Mirrors `canLaunch`'s internal-wiring stance. */
+  pressureGate?: () => boolean
 }
 
 export async function cmdRun(
@@ -782,6 +800,12 @@ export async function cmdRun(
         return runOneTaskPipeline(it.key, `[${it.key}] `, (fn) => mutex.withLock(fn), cap, capRaisedFor(it.key, cap))
       },
       args.canLaunch,
+      // Transient host-pressure gate (plan S3). PRESSURE_POLL_SEC*1000 is
+      // passed explicitly as the re-scan cadence — the scheduler's own local
+      // default is deliberately decoupled from the sensor module, so this
+      // threading is what keeps the re-scan aligned with the sensor's sampling.
+      args.pressureGate,
+      PRESSURE_POLL_SEC * 1000,
     )
   } else {
     // Serial: pass-through lock (runs fn immediately) + empty prefix →
