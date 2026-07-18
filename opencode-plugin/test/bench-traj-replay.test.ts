@@ -104,6 +104,52 @@ test("extractShellCommands: truncated indices are into the ORIGINAL events array
   expect(result.commands[1]!.startsWith("#")).toBe(true)
 })
 
+// ── comment lines must be newline-safe (review fix 1) ───────────────────
+// opencode bash args are raw unescaped strings — a multi-line command
+// (heredoc etc.) interpolated into a `#`-prefixed line would embed literal
+// newlines, so in an sh replay only the first physical line stays commented
+// and the rest executes live. Every comment entry must contain NO raw
+// newline (newlines rendered as escaped "\n" text instead).
+
+test("extractShellCommands: multi-line bash args at exact cap — the truncated-comment entry contains no raw newline", () => {
+  const body = "cat <<EOF > /tmp/x\nrm -rf /important\nEOF\n"
+  const cappedMultiline = body + "z".repeat(MAX_ARGS_CHARS - body.length)
+  expect(cappedMultiline.length).toBe(MAX_ARGS_CHARS)
+  const events: TrajEvent[] = [{ t: "tool", tool: "bash", args: cappedMultiline, output: "", error: false }]
+  const result = extractShellCommands(events)
+  expect(result.truncated).toEqual([0])
+  expect(result.commands).toHaveLength(1)
+  const entry = result.commands[0]!
+  expect(entry.startsWith("#")).toBe(true)
+  // the core guarantee: no raw newline anywhere in the comment entry, so
+  // splitting a replay script on real newlines can never surface an
+  // uncommented executable fragment of it.
+  expect(entry.includes("\n")).toBe(false)
+  expect(entry.includes("\r")).toBe(false)
+})
+
+test("extractShellCommands: multi-line args on a NON-shell tool — the annotation comment contains no raw newline", () => {
+  const events: TrajEvent[] = [
+    { t: "tool", tool: "write", args: "/tmp/f.txt\nline two\nline three", output: "", error: false },
+  ]
+  const result = extractShellCommands(events)
+  expect(result.commands).toHaveLength(1)
+  const entry = result.commands[0]!
+  expect(entry.startsWith("# write:")).toBe(true)
+  expect(entry.includes("\n")).toBe(false)
+})
+
+// ── non-shell tool at exact cap (review fix 2) ──────────────────────────
+
+test("extractShellCommands: a NON-shell tool at exactly MAX_ARGS_CHARS is flagged truncated but still rendered as a '# <tool>: ...' comment", () => {
+  const cappedArgs = "p".repeat(MAX_ARGS_CHARS)
+  const events: TrajEvent[] = [{ t: "tool", tool: "read", args: cappedArgs, output: "", error: false }]
+  const result = extractShellCommands(events)
+  expect(result.truncated).toEqual([0])
+  expect(result.commands).toHaveLength(1)
+  expect(result.commands[0]!.startsWith("# read:")).toBe(true)
+})
+
 // ── empty events -> empty result ────────────────────────────────────────
 
 test("extractShellCommands: empty events array returns empty commands and truncated arrays", () => {

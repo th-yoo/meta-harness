@@ -77,6 +77,18 @@ export const SHELL_TOOLS = new Set(["bash", "Bash"])
  * if `args` parses as JSON with a string `.command` field (claude-code's
  * shape), use that; otherwise treat `args` itself as the command text
  * (opencode's shape — plain, non-JSON already). */
+/** Render text for interpolation into a `#`-prefixed comment line. opencode
+ * bash args are raw unescaped strings — a multi-line command (heredoc etc.)
+ * embedded verbatim would carry literal newlines, so in an sh replay only
+ * the first physical line stays commented and the REST EXECUTES LIVE,
+ * breaking the never-executable guarantee. Newlines (and stray CRs) are
+ * rendered as the two-character escape `\n` so every comment entry is
+ * exactly one physical line. Applied to EVERY comment path (truncated
+ * shell commands AND non-shell annotations), never to executable lines. */
+function commentSafe(text: string): string {
+  return text.replace(/\r?\n|\r/g, "\\n")
+}
+
 function shellCommandText(args: string): string {
   try {
     const parsed = JSON.parse(args) as unknown
@@ -119,13 +131,13 @@ export function extractShellCommands(events: TrajEvent[]): ExtractedCommands {
     if (SHELL_TOOLS.has(tool)) {
       if (isCapped) {
         commands.push(
-          `# TRUNCATED ${tool} (args hit the ${MAX_ARGS_CHARS}-char capture cap — non-replayable, reconstruct manually): ${args}`,
+          `# TRUNCATED ${tool} (args hit the ${MAX_ARGS_CHARS}-char capture cap — non-replayable, reconstruct manually): ${commentSafe(args)}`,
         )
       } else {
         commands.push(shellCommandText(args))
       }
     } else {
-      commands.push(`# ${tool}: ${args}`)
+      commands.push(`# ${tool}: ${commentSafe(args)}`)
     }
   })
 
