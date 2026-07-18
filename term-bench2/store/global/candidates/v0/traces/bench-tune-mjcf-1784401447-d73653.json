@@ -1,0 +1,46 @@
+{
+  "sessionID": "bench-tune-mjcf-1784401447-d73653",
+  "passed": true,
+  "note": "bench:tune-mjcf",
+  "turnCount": 1,
+  "timestamp": "2026-07-18T19:27:59.393Z",
+  "summary": "tune-mjcf",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "toolUsage": {
+    "read": {
+      "calls": 5,
+      "errors": 0
+    },
+    "todowrite": {
+      "calls": 3,
+      "errors": 0
+    },
+    "bash": {
+      "calls": 36,
+      "errors": 14
+    },
+    "write": {
+      "calls": 14,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "9440391",
+    "harnessHash": "25f13fca883fe563",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "opencode",
+    "resourceEnforcement": true,
+    "minAgentTimeout": 3600
+  },
+  "platform": "opencode",
+  "elapsed": 1425.6,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 1139.4,
+  "peakRssMb": 1101,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}
