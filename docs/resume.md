@@ -49,8 +49,12 @@ default-ON + raise-only cap lift + OOM-escalation retry + cap provenance (full d
   "(b) recipe, MacBook-adapted" steps below. Needs fresh oauth (`claude`, login, ctrl-D).
 - **(d) Axis-2** — seed/propose vendor content so routing does something; multi-model panel needs
   a 2nd vendor model.
-- **load-aware #3** — online wall-clock back-pressure (burst-contention guard), CPU escalation,
-  scheduler-visible escalated footprints. Watch (b)'s sweeps for timeout upticks first.
+- **load-aware #3 — SPEC WRITTEN** (`docs/superpowers/specs/2026-07-18-load-aware-3-host-pressure.md`):
+  host-pressure sensing (loadavg/core + mem pressure, hysteresis) + wall-clock lag (elapsed vs
+  profile avgWall) composed into the existing `canLaunch` seam — width by attrition, no
+  preemption, NOT a budget-identity change. Motivated by the live loadavg-149 episode (measured
+  packing filled the VM budget correctly and flattened the 16GB host anyway — demand measured,
+  supply assumed). Observe-only calibration mode is an open question; build when ready.
 - Post-merge cleanup candidate: fold `capRaised` into `TaskFootprint` (dedupes the two
   `capRaisedFor` closures in cmd-run/cmd-ab).
 
