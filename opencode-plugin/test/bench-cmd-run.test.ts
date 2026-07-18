@@ -877,6 +877,54 @@ test("runTaskOnce: podman create failure -> setup_failed, no crash", async () =>
   expect(res.reward).toBe(0)
 })
 
+// ── runTaskOnce: agentElapsedSec threading (W1a: time-to-resolve) ────────
+
+test("runTaskOnce: agentElapsedSec threads through from the agent phase on a normal completion", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "do the thing")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const execFn = async () => ({ rc: 0, stdout: "", stderr: "", timedOut: false })
+
+  mock.module("../src/bench/verifier.ts", () => ({ copyTests: async () => {}, runVerifier: async () => 0 }))
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  let res: RunTaskResult
+  try {
+    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "scripts", opencodeDriver, undefined, execFn, fakeAuthMounts())
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreVerifier()
+  }
+  expect(typeof res.agentElapsedSec).toBe("number")
+  expect(res.agentElapsedSec as number).toBeGreaterThanOrEqual(0)
+})
+
+test("runTaskOnce: agentElapsedSec absent (not merely 0) on setup_failed — the agent phase is never reached", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "create") return { rc: 125, stdout: "", stderr: "boom", timedOut: false }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  let res: RunTaskResult
+  try {
+    res = await runTaskOnce(paths, "t", "m", "", "", 30, 30, "runtime", opencodeDriver, undefined, execFn, fakeAuthMounts())
+  } finally {
+    errSpy.mockRestore()
+  }
+  expect(res.error).toBe("setup_failed")
+  expect(res.agentElapsedSec).toBeUndefined()
+})
+
 test("runTaskOnce: rm is always called, even when an earlier step throws", async () => {
   const dir = tmpDir()
   const tbRoot = path.join(dir, "tb-root")

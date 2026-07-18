@@ -79,6 +79,16 @@ export interface RunTaskResult {
    * undefined-falsy when the cgroup read failed or the run never reached the
    * agent phase. */
   oomKilled?: boolean
+  /** Agent-phase wall-clock seconds (AgentRunOutput.agentElapsedSec, agent-
+   * run.ts's runAgent — W1a: time-to-resolve). Candidate-independent except
+   * for the agent phase itself, unlike the full-lifecycle `elapsed` above
+   * (container create + staging + agent + verifier + cgroup read), which
+   * dilutes the speed signal with infra noise — this is the preferred field
+   * for pairing run-pair speed. undefined when the agent phase never ran
+   * (setup_failed) or returned no elapsed reading (e.g. an auth-fail
+   * fast-return — see AgentRunOutput's doc comment); callers fall back to
+   * `elapsed` as a safety net for exotic drivers. */
+  agentElapsedSec?: number
 }
 
 export type RunOneTaskFn = (
@@ -263,7 +273,7 @@ export async function runTaskOnce(
       }
     }
 
-    const { turnCount, toolUsage, events, timedOut } = await runAgent(
+    const { turnCount, toolUsage, events, timedOut, agentElapsedSec } = await runAgent(
       driver,
       paths,
       name,
@@ -301,6 +311,7 @@ export async function runTaskOnce(
       selfScore,
       oomKilled: (cgroup?.oomKills ?? 0) > 0,
       ...(cgroup ? { cpuSeconds: cgroup.cpuSeconds, peakRssMb: cgroup.peakRssMb } : {}),
+      ...(agentElapsedSec !== undefined ? { agentElapsedSec } : {}),
     }
   } finally {
     // auth?.cleanup() shreds the darwin Keychain-exported .credentials.json (a
