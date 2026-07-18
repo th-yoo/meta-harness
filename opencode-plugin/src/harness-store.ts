@@ -439,6 +439,20 @@ export interface MhConfig {
    * (proposer/AB sees a new failure mode). See record.ts's recordToStores
    * guard, the single place this flag is consulted for the skip decision. */
   recordTimeouts: boolean
+  /** Directory of externally-mined TB2-leaderboard strategy evidence (Phase 8
+   * / W4b — see docs/tb2-evidence-mining.md), e.g. "evidence/tb2-leaderboard"
+   * at the repo root. "" (default) means the proposer-prompt external-
+   * evidence section (propose.ts's buildExternalEvidenceSection, src/
+   * evidence.ts) is DISABLED — config-gated, off by default. */
+  externalEvidenceDir: string
+  /** Which splits.json the LIVE contamination guard reads to decide which
+   * externalEvidenceDir tasks are presently held-out. "" (default) resolves
+   * to makeBenchPaths().splitsFile; set to e.g. "term-bench2/splits/
+   * loop2.json" when a non-default split (Phase 6 loop2) is the active one.
+   * Fail-safe (propose.ts's triggerPropose): if the resolved file doesn't
+   * exist, the external-evidence section is disabled entirely for that
+   * propose cycle — never show unchecked evidence. */
+  activeSplitFile: string
 }
 
 const DEFAULT_PROPOSER_MODEL = "anthropic/claude-opus-4-8"
@@ -463,6 +477,8 @@ export function readMhConfig(configDir: string = accountMetaRoot()): MhConfig {
     judgeMinAgreement: raw.judgeMinAgreement ?? DEFAULT_JUDGE_MIN_AGREEMENT,
     proposerTimeoutMin,
     recordTimeouts: raw.recordTimeouts ?? false,
+    externalEvidenceDir: raw.externalEvidenceDir ?? "",
+    activeSplitFile: raw.activeSplitFile ?? "",
   }
 }
 
