@@ -1,4 +1,7 @@
 import { test, expect } from "bun:test"
+import { mkdtemp, writeFile, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { schedule, packPreview, fitsBudget, exceedsTotalBudget, AsyncMutex, DEFAULT_BUDGET, type Budget, type ScheduledItem } from "../src/bench/scheduler.ts"
 
 // ── test helpers ─────────────────────────────────────────────────────────
@@ -706,6 +709,71 @@ test("pauseGate: a THROWING gate fails OPEN on the setTimeout re-scan path — l
   expect(launched).toEqual(["a", "b"]) // failed OPEN from the timer path onward
   expect(errs.length).toBe(1) // logged once total, not once per throwing consult
 })
+
+// ── pauseGate keep-alive: PROCESS-EXIT regression (blocking-finding fix) ─────
+// The re-scan timer must NOT be unref'd. When pauseGate holds every launch at
+// a zero-inflight moment (e.g. right at startup, before anything has run), that
+// timer is the ONLY thing that can advance the run — so it must be the handle
+// that keeps the process alive until pressure clears. If it were unref'd, a run
+// whose liveness rests on that timer would have the runtime exit 0 with
+// schedule() unresolved and the remaining tasks silently abandoned.
+//
+// This cannot be observed from inside bun:test — the runner keeps its own event
+// loop alive, so an unref'd timer would still fire here. It ALSO cannot be
+// observed by a child that `await`s schedule() at top level: a pending
+// top-level await independently keeps Bun alive, which masks the unref entirely
+// (verified: `process.exit(await main())` around a paused schedule() runs fine
+// even WITH unref). The faithful reproduction is therefore a child `bun`
+// process that FIRE-AND-FORGETS schedule() — nothing else pending — so its
+// internal re-scan timer is the SOLE event-loop handle. With the fix, the timer
+// keeps the process alive across the paused window, both items run, and it
+// exits 0 having printed both. Restoring `pauseTimer.unref?.()` makes this test
+// fail: the child's sync body finishes, the unref'd timer no longer holds the
+// loop, and Bun exits 0 immediately with EMPTY stdout (nothing ever launched).
+test("pauseGate: re-scan timer alone keeps a real process alive across a paused-with-zero-inflight window (subprocess exit semantics)", async () => {
+  const schedulerPath = join(import.meta.dir, "..", "src", "bench", "scheduler.ts")
+  // pauseGate returns true for the first ~50ms (time-based closure), so the
+  // VERY FIRST scan() pauses with inFlight === 0 and nothing launched — the
+  // window the fix protects. budget cpus:1 serializes the two items so each
+  // launch is its own scan()/settle cycle. schedule() is NOT awaited: its
+  // re-scan timer is deliberately left as the only handle keeping the process
+  // alive, which is precisely the keep-alive property under test.
+  const script = `
+import { schedule } from ${JSON.stringify(schedulerPath)}
+const items = [
+  { key: "a", cpus: 1, memoryMb: 1024 },
+  { key: "b", cpus: 1, memoryMb: 1024 },
+]
+const budget = { cpus: 1, memoryMb: 6144 }
+const start = Date.now()
+const pauseGate = () => Date.now() - start < 50
+const runFn = async (it) => {
+  process.stdout.write("launch:" + it.key + "\\n")
+}
+// Fire-and-forget on purpose (see the test's header comment): no top-level
+// await, so schedule()'s internal re-scan timer is the SOLE liveness handle.
+schedule(items, budget, runFn, undefined, pauseGate, 10).then(() => {
+  process.stdout.write("done\\n")
+})
+`
+  const dir = await mkdtemp(join(tmpdir(), "sched-keepalive-"))
+  const scriptPath = join(dir, "keepalive.ts")
+  try {
+    await writeFile(scriptPath, script)
+    const proc = Bun.spawn(["bun", "run", scriptPath], { stdout: "pipe", stderr: "pipe" })
+    const [stdout, exitCode] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
+
+    // The process must have survived the paused window and run BOTH items,
+    // then exited cleanly. With unref restored, stdout would be empty (the
+    // process exits 0 before the timer ever re-scans) — these assertions fail.
+    expect(stdout).toContain("launch:a")
+    expect(stdout).toContain("launch:b")
+    expect(stdout).toContain("done")
+    expect(exitCode).toBe(0)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}, 5000)
 
 // ── invalid budget guard (final-review fix: NaN defeats fitsBudget/
 // exceedsTotalBudget silently — schedule() hangs forever, packPreview()

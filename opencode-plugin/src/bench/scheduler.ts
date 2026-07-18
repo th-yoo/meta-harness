@@ -228,14 +228,24 @@ export function schedule(
           // never abandon work.
           if (inFlight === 0) {
             // The sole state with no in-flight completion left to re-trigger
-            // scan(). Arm exactly ONE re-scan timer (dedup via the handle);
-            // unref so a paused gate can't keep the process alive.
+            // scan(). Arm exactly ONE re-scan timer (dedup via the handle).
+            //
+            // This timer MUST keep the process alive. While un-launched work
+            // remains under pause, with inFlight === 0 this timer is the ONLY
+            // live event-loop handle — do NOT unref() it. If it were unref'd, a
+            // real CLI run whose pauseGate holds all launches at a zero-inflight
+            // moment would have no ref'd handle left, so the runtime (Bun/Node)
+            // would exit 0 with schedule() unresolved and the remaining tasks
+            // silently abandoned. It is intentionally the handle that keeps the
+            // process alive until pressure clears. Leak-safety without unref is
+            // already guaranteed: every settle path clears it (finishIfDone's
+            // reject/resolve, and canLaunch's drain-resolve), so it can never
+            // outlive schedule().
             if (pauseTimer === null) {
               pauseTimer = setTimeout(() => {
                 pauseTimer = null
                 scan()
               }, pausePollMs)
-              pauseTimer.unref?.()
             }
           }
           // inFlight > 0: a completion (below, at the runFn .then handlers)
