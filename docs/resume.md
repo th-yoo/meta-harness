@@ -3,7 +3,27 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ➡️ K=5 AB LAUNCHED (2026-07-19 evening) — three-way settled: NO v3 regression; ab v3-vs-v0 IN FLIGHT
+## ➡️ K=5 AB PAUSED MID-FLIGHT (2026-07-19 ~22:00 KST) — RESUME HERE
+
+**The v3-vs-v0 k=5 `--speed-tiebreak` ab ran 19:20–~22:00 KST 07-19, then was STOPPED
+(user); orphaned containers reaped; partial is resume-compatible.** State =
+`candidates/v3/ab-verdict.partial.json` (status in_progress).
+**Banked: constraints-scheduling 5/5 pairs — BOTH arms 5/5 pass** (pass-tie; v3 slightly
+faster on most pairs — speed-tiebreak fodder). In-flight pairs were lost to task-level
+resume granularity (db-wal was at pair 5/5, distribution-search mid, path-tracing +
+tune-mjcf grinding 1h-timeout pairs — those two are the wall-clock bottleneck: several
+quiet-machine hours for held-in, more for held-out ×10).
+**RESUME (exact, this Mac):**
+`META_HARNESS_HOME=<repo>/.meta-harness PATH=/opt/podman/bin:$PATH bun term-bench2/runner.ts ab \
+ --layer account-global --candidate v3 --split-file term-bench2/splits/loop1.json \
+ --model anthropic/claude-haiku-4-5 --k 5 --parallel --enforce-resources --min-cpus 2 \
+ --cpu-budget 4 --mem-budget 7000 --min-agent-timeout 3600 --max-agent-timeout 3600 \
+ --host-pressure on --speed-tiebreak --resume --no-oauth-gate`
+(idle machine preferred — shared 1.4GB opencode.db makes bootstrap load-sensitive;
+casualty discipline per memory `no-token-expiry-engineering`: rotation-straddling
+containers 0-turn — re-roll them, never build prevention.)
+
+## K=5 AB LAUNCH CONTEXT (2026-07-19 evening) — three-way settled: NO v3 regression
 
 **Three-way k=1 reference (same-day, all-real-attempts, after casualty re-runs): v3 5/14
 (passElapsed 2231s) > v0-TODAY 4/14 (1963s) > v2 3/14 (2401s).** Yesterday's v0 8/14 was
