@@ -48,7 +48,7 @@ commands:
               [--min-agent-timeout SEC] [--resume] [--agent NAME]
               [--pin LAYER=vN]... [--staging scripts|runtime] [--driver ID] [--enforce-resources]
               [--parallel] [--cpu-budget N] [--mem-budget MB] [--min-cpus N] [--min-mem-mb MB]
-              [--no-pack-measured] [--host-pressure observe|on]
+              [--no-pack-measured] [--host-pressure observe|on] [--no-oauth-gate]
   task-load   [--tasks TASK [TASK ...]] [--task-file PATH] [--all]
               [--results-file PATH] [--cpu-budget N] [--mem-budget MB]
               (read-only: declared footprint + timeouts + co-run preview)
@@ -60,7 +60,7 @@ commands:
               [--no-store] [--save-all-traj]
               [--results-file PATH] [--staging scripts|runtime] [--driver ID] [--enforce-resources]
               [--parallel] [--cpu-budget N] [--mem-budget MB] [--min-cpus N] [--min-mem-mb MB]
-              [--no-pack-measured] [--host-pressure observe|on] [--speed-tiebreak]
+              [--no-pack-measured] [--host-pressure observe|on] [--speed-tiebreak] [--no-oauth-gate]
   screen      --layer L --candidates vN[,vN...] [--agent NAME]
               [--tasks TASK [TASK ...]] [--task-file PATH] [--all]
               [--model ID] [--variant V] [--layers global|account|project|none]
@@ -68,6 +68,7 @@ commands:
               [--max-agent-timeout SEC] [--max-verifier-timeout SEC] [--min-agent-timeout SEC]
               [--enforce-resources] [--parallel] [--cpu-budget N] [--mem-budget MB]
               [--min-cpus N] [--min-mem-mb MB] [--no-pack-measured] [--host-pressure observe|on]
+              [--no-oauth-gate]
               (k=1 candidate tournament — cheap ranking pre-pass; a screen never
                writes the store or emits a verdict, only an ADVANCE hint for ab)
   judge-audit --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
@@ -401,6 +402,11 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
       i++
       continue
     }
+    if (a === "--no-oauth-gate") {
+      out.noOauthGate = true
+      i++
+      continue
+    }
     if (a === "--no-harness") {
       out.noHarness = true
       i++
@@ -511,6 +517,7 @@ export function validateParallel(
     cpuBudget?: number
     memBudget?: number
     maxAgentTimeout?: number
+    noOauthGate?: boolean
   },
   model: string,
   readExpiry: () => number | null = () => readOauthExpiresAt(),
@@ -537,6 +544,15 @@ export function validateParallel(
         `oauth credential mount safely — export ${keyVar} or drop --parallel`,
     )
   }
+
+  // --no-oauth-gate (operator escape hatch): the host rotates the oauth token
+  // automatically during active CC/opencode use (within ~5min of expiry, under
+  // a proper-lockfile on ~/.claude — see docs/oauth-parallel-race-research.md),
+  // so an operator keeping a session active can assert freshness themselves.
+  // Skip the freshness reject and the part-C cap requirement below — oauth
+  // gates like key-auth. Placed AFTER the exp===null reject: no credential at
+  // all still refuses (nothing could auth, gate or no gate).
+  if (a.noOauthGate) return
 
   // --min-agent-timeout floor note: the worst-case task duration this gate
   // bounds against is `maxAgentTimeout` (the cap). The floor only RAISES a
@@ -610,11 +626,14 @@ export function validateParallel(
  * ~/.claude/Keychain unless they explicitly ask to.
  */
 export function buildOauthParallelCanLaunch(
-  a: { parallel?: boolean; maxAgentTimeout?: number },
+  a: { parallel?: boolean; maxAgentTimeout?: number; noOauthGate?: boolean },
   model: string,
   readExpiry: () => number | null = () => readOauthExpiresAt(),
 ): (() => boolean) | undefined {
   if (!a.parallel) return undefined
+  // --no-oauth-gate: operator asserts host-side auto-rotation keeps the token
+  // fresh — unbounded launches, same as key-auth (see validateParallel).
+  if (a.noOauthGate) return undefined
   const keyVar = requiredApiKeyVar(model)
   if (process.env[keyVar]) return undefined // key-auth: unbounded, unchanged
 
@@ -894,6 +913,11 @@ function parseAbArgs(argv: string[]): CmdAbArgs | null {
       i++
       continue
     }
+    if (a === "--no-oauth-gate") {
+      out.noOauthGate = true
+      i++
+      continue
+    }
     if (a === "--speed-tiebreak") {
       out.speedTiebreak = true
       i++
@@ -1066,6 +1090,11 @@ function parseScreenArgs(argv: string[]): CmdScreenArgs | null {
     }
     if (a === "--no-pack-measured") {
       out.noPackMeasured = true
+      i++
+      continue
+    }
+    if (a === "--no-oauth-gate") {
+      out.noOauthGate = true
       i++
       continue
     }

@@ -162,6 +162,67 @@ test("validateParallel: serial (no --parallel) + no --max-agent-timeout — unaf
   })
 })
 
+// ── --no-oauth-gate (operator escape hatch): the host rotates the oauth token
+// automatically during active CC/opencode use (within ~5min of expiry, under a
+// proper-lockfile on ~/.claude), so an operator who keeps a session active can
+// assert freshness themselves. The flag makes oauth behave like key-auth for
+// GATING only (no freshness reject, no part-C cap requirement, no launch
+// guard); the no-credential-at-all reject stays — nothing could auth anyway. ──
+
+test("validateParallel: no key + STALE token + noOauthGate — allows (freshness reject skipped)", () => {
+  withoutKey(() => {
+    const stale = Date.now() + 2 * 60 * 1000
+    expect(() =>
+      validateParallel(
+        { parallel: true, enforceResources: true, maxAgentTimeout: 600, noOauthGate: true },
+        MODEL,
+        () => stale,
+      ),
+    ).not.toThrow()
+  })
+})
+
+test("validateParallel: no key + fresh token + NO --max-agent-timeout + noOauthGate — allows (part C skipped)", () => {
+  withoutKey(() => {
+    const fresh = Date.now() + 10 * 60 * 60 * 1000
+    expect(() =>
+      validateParallel({ parallel: true, enforceResources: true, noOauthGate: true }, MODEL, () => fresh),
+    ).not.toThrow()
+  })
+})
+
+test("validateParallel: no key + NO oauth credential + noOauthGate — still throws (nothing could auth)", () => {
+  withoutKey(() => {
+    expect(() =>
+      validateParallel({ parallel: true, enforceResources: true, noOauthGate: true }, MODEL, () => null),
+    ).toThrow(/ANTHROPIC_API_KEY/)
+  })
+})
+
+test("validateParallel: noOauthGate still requires --enforce-resources under --parallel", () => {
+  withoutKey(() => {
+    expect(() => validateParallel({ parallel: true, noOauthGate: true }, MODEL, () => null)).toThrow(
+      /--enforce-resources/,
+    )
+  })
+})
+
+test("buildOauthParallelCanLaunch: noOauthGate — returns undefined (unbounded launches), never calls readExpiry", () => {
+  withoutKey(() => {
+    let called = false
+    const canLaunch = buildOauthParallelCanLaunch(
+      { parallel: true, maxAgentTimeout: 600, noOauthGate: true },
+      MODEL,
+      () => {
+        called = true
+        return Date.now() + 1000
+      },
+    )
+    expect(canLaunch).toBeUndefined()
+    expect(called).toBe(false)
+  })
+})
+
 // ── buildOauthParallelCanLaunch (Task 2 part B: the scheduler launch-guard's
 // predicate construction) ───────────────────────────────────────────────────
 // Pure unit tests of the predicate-BUILDING logic cli.ts's main() wires into

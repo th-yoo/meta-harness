@@ -501,6 +501,11 @@ export interface CmdRunArgs {
    * and skip the measured cap raise (default: measured used when a
    * trustworthy profile exists). */
   noPackMeasured?: boolean
+  /** Operator assertion that the host keeps the oauth token fresh (active
+   * CC/opencode sessions auto-rotate it near expiry): skip the oauth+parallel
+   * freshness pre-flight and launch-guard entirely — oauth gates like
+   * key-auth. The container-copy divergence risk is accepted by the operator. */
+  noOauthGate?: boolean
   /** Internal-only wiring — NOT a CLI flag, never parsed from argv (see
    * cli.ts's parseRunArgs, which has no `--` case setting it). The
    * oauth-parallel freshness gate's scheduler launch-guard (Task 2 of the

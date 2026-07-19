@@ -158,6 +158,10 @@ export interface CmdScreenArgs {
   cpuBudget?: number
   memBudget?: number
   noPackMeasured?: boolean
+  /** Same contract as cmd-run.ts's CmdRunArgs.noOauthGate: operator asserts
+   * the host keeps the oauth token fresh — skip the oauth+parallel freshness
+   * pre-flight and launch-guard. */
+  noOauthGate?: boolean
   hostPressure?: "observe" | "on"
   /** Internal-only wiring, mirroring cmd-run.ts's CmdRunArgs — never parsed
    * from argv directly; cli.ts builds these the same way it does for

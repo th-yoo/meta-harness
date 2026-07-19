@@ -32,8 +32,14 @@ does NOT transfer; this file + the repo are the source of truth.)
    `META_HARNESS_HOME=<repo>/.meta-harness PATH=/opt/podman/bin:$PATH bun term-bench2/runner.ts \
     screen --layer account-global --candidates v2,v3 --task-file term-bench2/splits/loop1-band.txt \
     --model anthropic/claude-haiku-4-5 --parallel --enforce-resources --min-cpus 2 \
-    --cpu-budget 4 --mem-budget 7000 --host-pressure on`
-   (floor defaults to 3600; prints ADVANCE line; store never written).
+    --cpu-budget 4 --mem-budget 7000 --host-pressure on \
+    --min-agent-timeout 3600 --max-agent-timeout 3600`
+   (explicit timeout envelope REQUIRED — oauth+parallel pre-flight errors without
+   `--max-agent-timeout`, and hard-rejects if the token has < max-agent-timeout+5min left.
+   USER RULING 2026-07-19: add `--no-oauth-gate` — the host auto-rotates the token during
+   active CC/opencode use, so the freshness gate is over-strict; the flag skips the
+   pre-flight + launch-guard (oauth gates like key-auth). Prints ADVANCE line; store
+   never written.)
    (c) **Winner → k=5 verdict ab** (needs fresh oauth; freshness gate is task-item-level —
    see pt-4 learnings; prefer starting on a fresh ~8h token):
    `... runner.ts ab --layer account-global --candidate <winner> --split-file
