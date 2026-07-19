@@ -3,7 +3,24 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ➡️ CURRENT STATE (2026-07-19) — ENV FIXED · v0 RE-BASELINED HONEST 8/14 · loop unblocked
+## ➡️ SCREEN VERDICT (2026-07-19 afternoon) — v3 ADVANCES (5/14 vs v2 3/14, clean)
+
+**(a)+(b) DONE.** v3 proposed (opus, off honest evidence: dropped v2's 2 bullets as harmful,
+added read-the-on-disk-spec + never-declare-done-with-unmet-criteria; synced to store
+snapshot). Screen tournament v2-vs-v3 (k=1, loop1 band, `--no-oauth-gate`) FINAL after
+infra-noise re-runs (6 tasks re-run: 5×v2 + 1×v3 — morning casualties from a CC-token
+rotation race killing pre-rotation containers + load-100+ starvation 0-turns; all patched
+into `results/screens/account-global/*.json` [gitignored] with rerunNote):
+**v3 5/14 (passElapsed 2231s) > v2 3/14 (2401s)** — v3 wins pass count AND speed.
+v3 passes: sqlite-with-gcov 158s · merge-diff 188s · constraints-scheduling 164s ·
+**large-scale-text-editing 521s (v0 TIMEOUTs this at 4264s!)** · distribution-search 1200s.
+Screen ≠ verdict (k=1): absolute rates not comparable to v0's 8/14.
+**NEXT = (c): k=5 `--speed-tiebreak` ab for v3** (recipe below; add `--no-oauth-gate`;
+run on an IDLE machine — the 1.4GB shared opencode.db makes container bootstrap
+load-sensitive: ~1min quiet vs ~10min under load; USER RULING: no token-expiry
+engineering, opencode handles refresh; re-run casualties instead).
+
+## CURRENT STATE (2026-07-19) — ENV FIXED · v0 RE-BASELINED HONEST 8/14 · loop unblocked
 
 **Merged + pushed, tip ≥ `1f77f11`. Suite 1503/0/1 skip.**
 1. **Env-leakage FIXED** (`dfb2f4b..9440391`): agent containers get NO `/tb`/`/mh` mounts and
