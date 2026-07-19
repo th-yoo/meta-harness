@@ -3,7 +3,20 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ➡️ SCREEN VERDICT (2026-07-19 afternoon) — v3 ADVANCES (5/14 vs v2 3/14, clean)
+## ➡️ K=5 AB LAUNCHED (2026-07-19 evening) — three-way settled: NO v3 regression; ab v3-vs-v0 IN FLIGHT
+
+**Three-way k=1 reference (same-day, all-real-attempts, after casualty re-runs): v3 5/14
+(passElapsed 2231s) > v0-TODAY 4/14 (1963s) > v2 3/14 (2401s).** Yesterday's v0 8/14 was
+day-variance (v0 itself dropped to 4/14 today) — NO v3 regression; v3 also uniquely passes
+large-scale-text-editing (521s; v0's real attempt today failed at 2138s). Screen-favor
+condition MET → **k=5 `--speed-tiebreak` ab LAUNCHED** (log
+`term-bench2/logs/ab-v3-k5-20260719.log`, partial in `candidates/v3/ab-verdict.partial.json`,
+chunk via `--resume`; recipe = (c) below + `--no-oauth-gate`). Casualty discipline:
+rotation-straddling containers 0-turn — just re-run them (memory
+`no-token-expiry-engineering`). tune-mjcf note: 0-turned/timed-out for ALL versions today —
+watch it in the ab.
+
+## SCREEN VERDICT (2026-07-19 afternoon) — v3 ADVANCES (5/14 vs v2 3/14, clean)
 
 **(a)+(b) DONE.** v3 proposed (opus, off honest evidence: dropped v2's 2 bullets as harmful,
 added read-the-on-disk-spec + never-declare-done-with-unmet-criteria; synced to store
