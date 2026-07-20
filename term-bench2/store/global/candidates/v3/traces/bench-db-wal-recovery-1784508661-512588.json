@@ -1,0 +1,42 @@
+{
+  "sessionID": "bench-db-wal-recovery-1784508661-512588",
+  "passed": false,
+  "note": "bench:db-wal-recovery",
+  "turnCount": 1,
+  "timestamp": "2026-07-20T01:00:43.409Z",
+  "summary": "db-wal-recovery",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "toolUsage": {
+    "bash": {
+      "calls": 52,
+      "errors": 2
+    },
+    "read": {
+      "calls": 3,
+      "errors": 0
+    },
+    "edit": {
+      "calls": 2,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "bb51445",
+    "harnessHash": "2b1f26bf04d2d1e3",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "opencode",
+    "resourceEnforcement": true,
+    "minAgentTimeout": 3600
+  },
+  "platform": "opencode",
+  "elapsed": 581.3,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 187.5,
+  "peakRssMb": 1027,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

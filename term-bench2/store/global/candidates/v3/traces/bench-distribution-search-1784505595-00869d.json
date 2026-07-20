@@ -1,0 +1,29 @@
+{
+  "sessionID": "bench-distribution-search-1784505595-00869d",
+  "passed": false,
+  "note": "bench:distribution-search",
+  "turnCount": 0,
+  "timestamp": "2026-07-20T01:06:51.961Z",
+  "summary": "distribution-search",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "toolUsage": {},
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "bb51445",
+    "harnessHash": "2b1f26bf04d2d1e3",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "opencode",
+    "resourceEnforcement": true,
+    "minAgentTimeout": 3600
+  },
+  "platform": "opencode",
+  "elapsed": 4015.9,
+  "timedOut": true,
+  "agentTimeout": 3600,
+  "cpuSeconds": 3110.6,
+  "peakRssMb": 1478,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}
