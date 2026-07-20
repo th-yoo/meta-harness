@@ -146,6 +146,53 @@ import { podman, type ExecResult } from "./exec.ts"
 import { buildExecArgv, buildCpToArgv } from "./sandbox.ts"
 import type { BenchPaths } from "./paths.ts"
 import { BenchError, die, log } from "./util.ts"
+import { defaultSleep, type SleepFn } from "./agent-run.ts"
+
+/** Transient network-fetch failures from a staging apt/pip step — the signals
+ * apt (`Failed to fetch … Could not connect … Network is unreachable / connection
+ * timed out`) and pip (`Temporary failure resolving … Failed to establish a new
+ * connection … Read timed out`) emit when a mirror is momentarily unreachable.
+ * Deliberately NARROWER than agent-run.ts's provider TRANSIENT_RE: a genuine dep
+ * error (`Unable to locate package …`, a build failure) must NOT match, so it
+ * fails fast instead of wasting retries. */
+export const STAGING_NET_RE =
+  /Network is unreachable|Could not connect|Cannot initiate the connection|connection timed out|Connection timed out|Temporary failure resolving|Could not resolve host|Failed to fetch|Connection reset|Connection refused|Failed to establish a new connection|Could not fetch URL|Read timed out|Name or service not known/i
+
+/** Total attempts (1 initial + retries) for a network-fallible staging step. */
+export const STAGING_MAX_ATTEMPTS = 3
+
+/**
+ * Run a network-fallible staging step (apt/pip) with bounded retry on
+ * TRANSIENT-NETWORK failures only. A transient blip (db-wal-recovery's live
+ * `apt install → Network is unreachable`) previously fail-fasted the whole task
+ * to setup_failed, dropping it from the ab verdict — the agent phase already
+ * retries (agent-run.ts's attempt loop), staging did not. Mirrors that idiom.
+ *
+ * Only failures matching STAGING_NET_RE are retried; a genuine dep error returns
+ * on the first attempt so the caller throws without delay. apt-get/pip installs
+ * are idempotent, so re-running the same step is safe. Injectable sleepFn for
+ * tests. Returns the final ExecResult — the caller still decides whether rc≠0
+ * throws (so an exhausted-retry failure surfaces exactly as before). */
+export async function execNetStep(
+  execFn: ExecFn,
+  argv: string[],
+  label: string,
+  sleepFn: SleepFn = defaultSleep,
+  maxAttempts: number = STAGING_MAX_ATTEMPTS,
+): Promise<ExecResult> {
+  let res = await execFn(argv)
+  for (
+    let attempt = 1;
+    attempt < maxAttempts && res.rc !== 0 && STAGING_NET_RE.test(`${res.stderr}\n${res.stdout}`);
+    attempt++
+  ) {
+    const backoff = Math.min(30, 5 * attempt)
+    log(`  staging ${label}: transient network failure (exit ${res.rc}) — retry ${attempt}/${maxAttempts - 1} in ${backoff}s`)
+    await sleepFn(backoff)
+    res = await execFn(argv)
+  }
+  return res
+}
 
 /**
  * One resolved, executable (or informational, for "env") unit of task
@@ -752,6 +799,7 @@ export async function stageTaskRuntime(
   name: string,
   task: string,
   execFn: ExecFn = podman,
+  sleepFn: SleepFn = defaultSleep,
 ): Promise<void> {
   const staging = parseTaskDockerfile(paths, task)
   if (staging.baseImage && staging.baseImage !== "ubuntu:24.04") {
@@ -791,7 +839,7 @@ export async function stageTaskRuntime(
   if (staging.aptPackages.length > 0) {
     const aptScript = `${setE}apt-get update && apt-get install -y --no-install-recommends ${staging.aptPackages.join(" ")}`
     const aptArgv = buildExecArgv(name, ["bash", "-c", aptScript])
-    const aptResult = await execFn(aptArgv)
+    const aptResult = await execNetStep(execFn, aptArgv, `apt install ${staging.aptPackages.join(" ")}`, sleepFn)
     if (aptResult.rc !== 0) {
       throw new BenchError(
         `stageTaskRuntime(${task}): step failed (apt install ${staging.aptPackages.join(" ")}): exit ${aptResult.rc}` +
@@ -835,7 +883,11 @@ export async function stageTaskRuntime(
     }
 
     const argv = buildExecArgv(name, ["bash", "-c", script])
-    const result = await execFn(argv)
+    // Retry ONLY pip steps on transient network — they fetch from an index and
+    // are idempotent. copy is local; a `run` step is arbitrary/possibly non-
+    // idempotent, so it stays fail-fast (a re-run could double-apply).
+    const result =
+      step.kind === "pip" ? await execNetStep(execFn, argv, describeStep(step), sleepFn) : await execFn(argv)
     if (result.rc !== 0) {
       if (step.kind === "run" && step.bestEffort) {
         // File-deleting cleanup line (env-fidelity fix — see module header

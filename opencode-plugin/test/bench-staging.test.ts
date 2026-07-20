@@ -22,7 +22,7 @@ import * as path from "node:path"
 import * as os from "node:os"
 import { makeBenchPaths } from "../src/bench/paths.ts"
 import type { BenchPaths } from "../src/bench/paths.ts"
-import { parseTaskDockerfile, stageTaskRuntime, type StagingStep } from "../src/bench/staging.ts"
+import { parseTaskDockerfile, stageTaskRuntime, execNetStep, STAGING_MAX_ATTEMPTS, type StagingStep } from "../src/bench/staging.ts"
 import { buildExecArgv, buildCpToArgv } from "../src/bench/sandbox.ts"
 import { cmdOracle, type RunOneOracleTask } from "../src/bench/cmd-oracle.ts"
 import { main } from "../src/bench/cli.ts"
@@ -1120,4 +1120,61 @@ test("cli main: --staging with an invalid value is a usage error (rc 2)", async 
 test("cli main: --staging with no value is a usage error (rc 2)", async () => {
   const rc = await main(["oracle", "--staging"])
   expect(rc).toBe(2)
+})
+
+// ── execNetStep: bounded retry on transient-network staging failures ──────
+// Motivated live: db-wal-recovery's `apt install` hit "Network is unreachable"
+// on one pair → setup_failed → task dropped from the ab verdict, with no retry
+// (staging was fail-fast, unlike the agent phase's attempt loop).
+
+const noSleep = async (_s: number): Promise<void> => {}
+
+test("execNetStep: success on first try — one exec, no retry", async () => {
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    return { rc: 0, stdout: "installed", stderr: "", timedOut: false }
+  }
+  const res = await execNetStep(execFn, ["bash", "-c", "apt"], "apt install x", noSleep)
+  expect(res.rc).toBe(0)
+  expect(calls).toBe(1)
+})
+
+test("execNetStep: transient network failure then success — retries, sleeps, returns rc 0", async () => {
+  let calls = 0
+  let slept = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    if (calls === 1)
+      return { rc: 100, stdout: "", stderr: "Failed to fetch ... Could not connect to archive.ubuntu.com:80 — Network is unreachable", timedOut: false }
+    return { rc: 0, stdout: "installed", stderr: "", timedOut: false }
+  }
+  const res = await execNetStep(execFn, ["bash", "-c", "apt"], "apt install x", async () => {
+    slept++
+  })
+  expect(res.rc).toBe(0)
+  expect(calls).toBe(2)
+  expect(slept).toBe(1)
+})
+
+test("execNetStep: persistent transient failure — exhausts attempts, returns last failure", async () => {
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    return { rc: 100, stdout: "", stderr: "connection timed out", timedOut: false }
+  }
+  const res = await execNetStep(execFn, ["bash", "-c", "apt"], "apt install x", noSleep)
+  expect(res.rc).toBe(100)
+  expect(calls).toBe(STAGING_MAX_ATTEMPTS) // 1 initial + (MAX-1) retries
+})
+
+test("execNetStep: non-transient failure (real dep error) — NO retry, returns immediately", async () => {
+  let calls = 0
+  const execFn = async (): Promise<ExecResult> => {
+    calls++
+    return { rc: 100, stdout: "", stderr: "E: Unable to locate package nonexistent-pkg", timedOut: false }
+  }
+  const res = await execNetStep(execFn, ["bash", "-c", "apt"], "apt install nonexistent-pkg", noSleep)
+  expect(res.rc).toBe(100)
+  expect(calls).toBe(1) // a genuine dep error must not waste retries
 })
