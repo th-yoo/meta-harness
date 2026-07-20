@@ -78,6 +78,82 @@ not-regressing** (correctly plateau), NOT monotonic pass gains. The validated **
 machinery is the reusable asset** — point it at a surface with real mass (workflow, or a
 headroom target), not at feathers (a playbook on an already-good agent).
 
+## Literature backing (deep-research 2026-07-20, 24/25 claims confirmed, peer-reviewed)
+The 2023–2026 literature strongly supports this pivot. Three convergent conclusions:
+
+**1. A failure-taxonomy step is buildable — but do MODE classification, NOT step-attribution.**
+- **MAST** (Multi-Agent System Failure Taxonomy, arXiv 2503.13657, Berkeley/Stanford): 14
+  modes / 3 categories; ships an LLM-as-judge annotator at **94% accuracy, κ=0.77** vs
+  experts → trace-level MODE labeling is reliable without human labels. (Caveat: its
+  inter-agent category ~37% is inapplicable to a single agent.)
+- **TRAIL** (arXiv 2505.08638, Patronus): 3-tier schema (reasoning / execution / planning);
+  its reasoning + output-generation leaves — incl. **instruction-noncompliance,
+  output-formatting** — directly seed our "spec-precision" leaf.
+- **ATLAS** (github multi-agent-systems-failure-taxonomy/ATLAS): *induces* a system-specific
+  taxonomy (15–30 codes) from the agent's OWN traces — best fit for our loop (learn the
+  taxonomy from our trajectories, don't impose one). Also: AgentErrorTaxonomy (memory/
+  reflection/planning/action/system).
+- **BUT step-level "who/when/where" attribution is UNSOLVED**: Who&When (ICML 2025) best
+  = **53.5% agent / 14.2% step**; TRAIL best (Gemini-2.5-Pro) = **~11% joint**; frontier
+  reasoners (o1, R1) near-random at step-pinpointing. Specialized AgenTracer-8B hits 69%
+  agent-level but is multi-agent + unreplicated. → **classify the failure MODE + rely on
+  the executable verifier for ground truth; do not ask an LLM to pinpoint the decisive step.**
+
+**2. On a FIXED model, WORKFLOW structure beats prompt-tuning — directly explains our plateau.**
+- **Agentless** (arXiv 2407.01489, FSE 2025): a deliberately *non-agentic* fixed 3-phase
+  pipeline (localize → repair → validate) beat **all** open-source agents at publication —
+  32.0% SWE-Lite / 38.8% SWE-Verified, ~$0.70/instance.
+- **DirectSolve** (arXiv 2505.08120): CoT-decomposition + code-restatement took Gemini-1.5-Pro
+  **9% → 32%** pass@1; removing the CoT step alone collapsed it back to 9% — a **23-point
+  structural lever**, not a playbook tweak.
+- **best-of-N patch selection via self-generated reproduction tests** = the single biggest
+  ablated component in Agentless: majority-vote 77 → +regression-tests 81 → **+reproduction-
+  tests 96 fixes (+15)**. → structural/workflow choices, not a supplementary prompt layer,
+  own the large pass-rate movements. This is our redundant-veneer plateau, named.
+
+**3. The "looks-done" verification gap is a NAMED result — our diagnosis is exactly right.**
+- **Huang et al., "LLMs Cannot Self-Correct Reasoning Yet"** (arXiv 2310.01798, ICLR 2024,
+  DeepMind): *intrinsic* self-correction (no external signal) **degrades** accuracy (GPT-4
+  GSM8K 95.5% → 91.5%); the prior +8.4 "gain" came entirely from an **oracle stop-signal** —
+  remove it and the improvement goes negative.
+- **Kamoi et al.** (TACL 2024, arXiv 2406.01297): the bottleneck is **feedback generation,
+  not refinement** — models fix errors *given* reliable feedback but can't reliably generate
+  it on their own output. Self-correction works only with **external/executable** feedback
+  (interpreter, environment). → an agent self-verifying against its own interpretation is
+  the literature's exact failure; **gate on external ground truth.**
+- **Reflexion** (NeurIPS 2023, arXiv 2303.11366): verbal-reinforcement over episodic memory
+  + execution feedback → **HumanEval pass@1 91% (+11)** on a frozen model. BUT self-generated
+  verifiers are **gameable — 16.3% false-positive on MBPP** (submission passes all its own
+  tests yet fails the hidden test). R2E-Gym (COLM 2025) + "Verification Horizon" (proxy
+  divergence widens under optimization pressure) confirm: **keep ground-truth acceptance
+  separate from the agent's own tests; prefer executable verifiers; watch reward-hacking.**
+
+**Gap:** Part 3 (DGM/ADAS/AlphaEvolve/GEPA/DSPy — do gains come from workflow vs prompt
+search, do they plateau on a strong base?) yielded **no verified claim** — the DGM search
+result asserts "gains come from workflow/tools, not weights" (DGM freezes the model,
+self-modifies its agent *code*) but it didn't survive the top-25 verify cut. Needs a
+dedicated follow-up.
+
+## Sharpened plan (research-informed)
+1. **Failure-taxonomy step = trace-level MODE classification** (MAST-style LLM-judge, ~94%
+   feasible), seeded with TRAIL's single-agent leaves + a dedicated **spec-precision** leaf
+   ("dropped literal spec value / self-verified against own interpretation"). Optionally
+   ATLAS-style: induce the taxonomy from our own `traj/*.ndjson`. **Not** step-pinpointing.
+2. **Loop optimizes WORKFLOW, not the playbook.** The same validated ab-gate + budget-identity
+   machinery can gate workflow variants (retry policy, decomposition, verifier config,
+   best-of-N k) exactly as it gates prompt candidates — the high-leverage reuse of what we built.
+3. **Give the agent a LEGITIMATE feedback channel** (the env-fidelity fix removed the answer
+   key — correctly). Options, in leverage order: **best-of-N with self-generated reproduction
+   tests** (biggest ablated lever) → **requirement/checklist extraction + literal self-check**
+   → **execution/tool feedback** (Reflexion-style). Keep the harness's hidden verifier as the
+   SEPARATE ground-truth gate; never let the agent's own tests be the acceptance signal.
+4. **Cheapest confirmation first:** no-injection vs v0 diagnostic.
+
+Sources (primary): arXiv 2503.13657 (MAST), 2505.08638 (TRAIL), 2505.00212 / PMLR v267
+(Who&When), 2509.03312 (AgenTracer), 2407.01489 (Agentless), 2505.08120 (DirectSolve),
+2310.01798 (Huang/ICLR24), 2406.01297 (Kamoi/TACL24), 2303.11366 (Reflexion), 2504.07164
+(R2E-Gym), ATLAS (github).
+
 ## Status at time of writing
 - v3 ab killed after held-in (not accepted; active stays v0). Held-in result checkpointed
   to git (`71b3cf5`). All code pushed; podman reboot-fix permanent (`events_logger=file`).
