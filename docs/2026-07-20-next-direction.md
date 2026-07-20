@@ -79,6 +79,8 @@ machinery is the reusable asset** — point it at a surface with real mass (work
 headroom target), not at feathers (a playbook on an already-good agent).
 
 ## Literature backing (deep-research 2026-07-20, 24/25 claims confirmed, peer-reviewed)
+**Full cited report: [`2026-07-20-deep-research-failure-analysis-workflow.md`](2026-07-20-deep-research-failure-analysis-workflow.md)** (all 7 findings + evidence + sources + caveats + open questions). Condensed here:
+
 The 2023–2026 literature strongly supports this pivot. Three convergent conclusions:
 
 **1. A failure-taxonomy step is buildable — but do MODE classification, NOT step-attribution.**

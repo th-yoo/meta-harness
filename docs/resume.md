@@ -5,7 +5,8 @@ does NOT transfer; this file + the repo are the source of truth.)
 
 ## ➡️ NEXT DIRECTION (2026-07-20) — READ THIS FIRST: pivot to failure-analysis + workflow
 
-**Full doc: [`docs/2026-07-20-next-direction.md`](2026-07-20-next-direction.md).**
+**Full doc: [`docs/2026-07-20-next-direction.md`](2026-07-20-next-direction.md)** ·
+**deep-research report (24/25 confirmed, peer-reviewed): [`docs/2026-07-20-deep-research-failure-analysis-workflow.md`](2026-07-20-deep-research-failure-analysis-workflow.md)** — validates the pivot: failure-taxonomy as MODE classification (MAST 94%, not step-attribution ~14%); workflow>prompt on a fixed model (Agentless, DirectSolve CoT 9→32%, best-of-N +15); the looks-done gap is named (Huang ICLR24 intrinsic self-correct degrades; gate on executable ground truth).
 
 The loop is **validated** (correctly rejects — v3 killed after held-in: 2 pass-regressions,
 0 improvement, speed-only win on a tie → negative delta blocked the tiebreak; active stays
