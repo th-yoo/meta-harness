@@ -3,6 +3,47 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ⏸ SESSION END 2026-07-20 — prototypes run, RESUME HERE
+
+**All committed + pushed (HEAD `fd128f0`; tree clean except stray `oom`). Box idle, orphans reaped.**
+Flow this session: loop-plateau diagnosed → deep-research (workflow>prompt, gate on executable
+ground truth) → **AHE prior-art** (`china-qijizhifeng/agentic-harness-engineering`, #3 on TB2, our
+exact problem) → **PIVOT** (see NEXT DIRECTION block below + `docs/2026-07-20-{ahe-prior-art,next-direction}.md`):
+**base agent haiku → Opus 4.8**, **first evolvable component → memory (boundary-case lessons) +
+risk-hints middleware** (NOT verify-retry — AHE's `ralph_loop` lost; NOT prompt — regressed). Our
+**statistical gate stays the edge** (= AHE's #1 unsolved limit: regression-blindness 11% recall).
+Plan A (failure-taxonomy) written+committed: `docs/superpowers/plans/2026-07-20-failure-taxonomy.md`.
+Spec: `docs/superpowers/specs/2026-07-20-workflow-loop-design.md` (Component-1 valid; Component-2
+verify-retry DEFERRED). Reference prompts: `docs/2026-07-20-reference-prompts-cc-grok.md`.
+
+**Two prototypes run (throwaway scripts in HOST-LOCAL `/tmp` — recreate from recipes below):**
+1. **DETECTION = WORKS.** AHE root-cause taxonomy (opus-4.8 judge via oauth, `runJudgeOpencode`) on
+   3 real v0 failing traj: openssl→`looks_done`, path-tracing→`other` (time-mgmt/incomplete), db-wal→
+   `looks_done`. Root causes accurate; **`general_mechanism` field = ready-made memory lessons** (the
+   pivot's Component 2). Refinement: add an `incomplete`/time-management mode to the seed schema.
+2. **IMPROVEMENT (haiku) = NO LIFT.** openssl on haiku, baseline vs +lesson (lesson = the taxonomy's
+   own `general_mechanism` "re-read every produced file vs every literal requirement"), k=2 each →
+   **baseline 0/2, +lesson 0/2, no change** (all turns=1 — haiku one-shots + ignores the lesson).
+   Evidence FOR the opus pivot: a distilled lesson doesn't lift a capability-bound one-shot model.
+
+**⏭ NEXT (resume here) — USER DECISION: run the improvement test on BOTH models, same openssl-class task.**
+haiku done (no lift). **OPUS improvement test = PENDING** (does the lesson lift transfer to a strong
+model? AHE: frozen harness +5–10pp cross-model). **Caveat:** opus may PASS openssl outright (no
+failure → no signal) → if so, the faithful test needs opus's OWN failures = an **opus re-baseline** of
+the band first (find opus failures → taxonomy → distill lesson → inject → measure lift).
+
+**Prototype recipes (recreate the host-local scripts):**
+- *Detection:* bun script importing `readTrajectory` + `renderJudgeAuditEvents` (bench/judge-audit.ts,
+  both exported) + `runJudgeOpencode` (bench/opencode-run.ts); build the taxonomy prompt (Plan A Task 1
+  in the failure-taxonomy plan); judge=`anthropic/claude-opus-4-8`; run on `.meta-harness/global`
+  candidates/v0 failing traj/*.ndjson.
+- *Improvement:* bun script importing `runTaskOnce` (bench/cmd-run.ts) + `makeBenchPaths` (bench/paths.ts,
+  `{tbRoot:"~/z2/terminal-bench-2"}`) + `assembleAgentsMd` (bench/record.ts) + `taskTimeouts` (bench/tasks.ts).
+  baseline harness = `assembleAgentsMd("account", paths.metaRoot, "", {}, model)`; +lesson = baseline +
+  the `general_mechanism` text. `runTaskOnce(paths, task, model, "", harness, agentTimeout, verifierTimeout)`;
+  model=`anthropic/claude-opus-4-8`; k≥2; compare `.reward`. `META_HARNESS_HOME=<repo>/.meta-harness`;
+  needs oauth (`claude` login) + podman; reap `mh-*` orphans between; Bash-tool 2min cap → run detached (setsid+log).
+
 ## ➡️ NEXT DIRECTION (2026-07-20) — READ THIS FIRST: harness-evolution, Opus 4.8 base, memory/risk-hints first
 
 **⚠️ 2026-07-20 PIVOT (AHE prior-art — [`docs/2026-07-20-ahe-prior-art.md`](2026-07-20-ahe-prior-art.md), our exact problem, #3 on TB2):**
