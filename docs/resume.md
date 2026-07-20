@@ -3,7 +3,34 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ➡️ K=5 AB PAUSED MID-FLIGHT (2026-07-19 ~22:00 KST) — RESUME HERE
+## ➡️ NEXT DIRECTION (2026-07-20) — READ THIS FIRST: pivot to failure-analysis + workflow
+
+**Full doc: [`docs/2026-07-20-next-direction.md`](2026-07-20-next-direction.md).**
+
+The loop is **validated** (correctly rejects — v3 killed after held-in: 2 pass-regressions,
+0 improvement, speed-only win on a tie → negative delta blocked the tiebreak; active stays
+**v0**). But the **target has no headroom**: bench = **opencode+haiku, minimal config, NO
+MCP, NO CC** (verified live) → our playbook is a thin veneer on an already-capable agent →
+v0–v3 = **0 pass-lift.** Stop tuning prompt-bullets.
+
+**Pivot (concrete, in the doc):**
+1. **Failure taxonomy — no new runs.** Read `candidates/vN/traj/*.ndjson`; classify each
+   failing task: spec-precision / capability / comprehension. VERIFIED example:
+   openssl-selfsigned-cert = **spec-precision, workflow-fixable** (haiku had the required
+   values in `instruction.md`, dropped them, self-verified against its own interpretation;
+   a passive prompt bullet didn't fix it — advice ≠ enforcement).
+2. **Optimize WORKFLOW, not playbook** — enforced verify-retry loop / extract-spec
+   checklist / tool-feedback / best-of-k. Structure changes outcomes; bullets don't.
+3. **OR change target for headroom** — raw model / stronger model (haiku→sonnet) / routing.
+4. **Cheapest gate before v4:** no-injection vs v0 diagnostic (if equal, the playbook does ≈0).
+
+Reframe: on a near-ceiling target the loop's honest output = convergence + speed +
+not-regressing, NOT pass-lift. The validated **machinery is the asset** — point it at real
+mass, not feathers.
+
+---
+
+## ➡️ K=5 AB PAUSED MID-FLIGHT (2026-07-19 ~22:00 KST) — RESUME HERE (SUPERSEDED — v3 rejected, ab killed 07-20; see NEXT DIRECTION above)
 
 **The v3-vs-v0 k=5 `--speed-tiebreak` ab ran 19:20–~22:00 KST 07-19, then was STOPPED
 (user); orphaned containers reaped; partial is resume-compatible.** State =
