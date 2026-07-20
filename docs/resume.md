@@ -14,21 +14,33 @@ MacBook, then user-stopped for the commute; orphan containers reaped, machine cl
 - chess-best-move 3/3 · configure-git-webserver 3/3 → 4.8 aces them, drop out (leaderboard pool was 4.5)
 - break-filter-js-from-html 0/3 → hard even for 4.8 (capability-watch)
 - count-dataset-tokens [1] partial (trial 1 pass, incomplete — re-rolls on resume)
-**RESUME AT OFFICE:** `git pull`, then copy the partial back to the live (gitignored) path:
+**RESUME AT OFFICE (REVISED PLAN 2026-07-21 — speed review):** `git pull`, copy the partial back
+to the live (gitignored) path:
 `cp term-bench2/rebaseline/opus-A-20260721.partial.json term-bench2/results/opus-rebaseline-A-20260721.json`
-then the launch command + `--resume` (office/linux: no `PATH=/opt/podman/bin` prefix, widen to
-8-core budgets; fresh oauth; `--no-oauth-gate` per standing ruling):
+then launch (office/linux: no `PATH=/opt/podman/bin` prefix; fresh oauth; `--no-oauth-gate` per
+standing ruling). **Changes vs original: (a) width 2→4** (`--min-cpus 2 --cpu-budget 12` — trials
+are LLM-latency-bound per cgroup data; ~3hr→~1.5hr), **(b) on-thesis-first task ordering**
+(`opus-candidates-A-ordered.txt` — count-dataset re-roll + db-wal/path-tracing×2/openssl first) so
+first failures land ~30min in → **start taxonomy DURING the screen** (pipeline overlap = the real
+cadence win):
 ```
 META_HARNESS_HOME=<repo>/.meta-harness bun term-bench2/runner.ts run --layers account \
-  --task-file term-bench2/splits/opus-candidates-A.txt --model anthropic/claude-opus-4-8 \
-  --k 3 --parallel --enforce-resources --min-cpus 4 --cpu-budget 8 --mem-budget 16000 \
+  --task-file term-bench2/splits/opus-candidates-A-ordered.txt --model anthropic/claude-opus-4-8 \
+  --k 3 --parallel --enforce-resources --min-cpus 2 --cpu-budget 12 --mem-budget 16000 \
   --min-agent-timeout 3600 --max-agent-timeout 3600 --host-pressure on --no-oauth-gate \
   --results-file term-bench2/results/opus-rebaseline-A-20260721.json --resume
 ```
-(detach + log per host caveat; ~21 tasks ≈ 63 trials left, several hours at width-4.
+**Speed-review verdicts (don't relitigate):** width 6 = HOLD (build-heavy tasks can contend on
+8-core WSL2; resource-starved trial = FAKE band member → polluted band costs a whole loop
+iteration; check measured cgroup load after this width-4 run first). Adaptive-k screen = SKIP
+(real saving ~15% not ~half — 1/1 pass is worthless ace evidence, needs confirm trial anyway).
+SPRT/sequential McNemar for the recurring GATE stage = YES but needs a small pre-registered-
+boundaries spec + tests first (ad-hoc peeking inflates alpha = torches our one claimed edge);
+spec it while screens run. Two-host split = reserve. "Overnight" premise was WRONG: 62 trials ≈
+3hr at width 2 (MacBook measured 15 trials/hr).
 AFTER the run: keep `0<pass<1` tasks = evolvable band → failure-taxonomy → memory/risk-hints
-lesson → inject → McNemar + held-out gate. Copy the completed results back into
-`term-bench2/rebaseline/` + commit so they transfer across hosts.)
+lesson → inject → McNemar + held-out gate (band k≥5; screen k=3 is provisional). Copy completed
+results back into `term-bench2/rebaseline/` + commit so they transfer across hosts.
 
 ## SESSION END 2026-07-20 (PM) — opus test done + leaderboard pivot (context for the run above)
 
