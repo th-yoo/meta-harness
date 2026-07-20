@@ -28,8 +28,27 @@ META_HARNESS_HOME=<repo>/.meta-harness bun term-bench2/runner.ts run --layers ac
   --task-file term-bench2/splits/opus-candidates-A-ordered.txt --model anthropic/claude-opus-4-8 \
   --k 3 --parallel --enforce-resources --min-cpus 2 --cpu-budget 12 --mem-budget 16000 \
   --min-agent-timeout 3600 --max-agent-timeout 3600 --host-pressure on --no-oauth-gate \
+  --no-pack-measured \
   --results-file term-bench2/results/opus-rebaseline-A-20260721.json --resume
 ```
+
+**⚠ CODE-ARCHITECT REVIEW (2026-07-21, applied — GO-WITH-CHANGES):**
+- **B1 (BLOCKER, fixed):** `--resume` marks a task done on ANY non-empty rewards (`results.ts`
+  resumeCarryForward) — partial tasks are FROZEN, never topped up. The earlier "re-rolls on
+  resume" claim was FALSE. Fix applied: stripped `count-dataset-tokens` (1/3) from the live
+  results copy → clean fresh k=3. If pausing mid-run again: strip ALL partial tasks on resume.
+- **R1 (fixed via `--no-pack-measured`):** host resource-profile
+  (`resource-profiles/x64-8c-…-i5-14400.json`) is POISONED — 8 tasks with impossible avgCpu
+  (openssl 98, extract-elf 127, sqlite-with-gcov 235 "cores"; all peakRssMb=0) from a
+  WSL2/rootless-podman shared-cgroup read bug. Without the flag, packer runs those tasks SOLO
+  (width 1). Cross-cutting: load-aware-scheduler's captured data on this host = garbage until the
+  cgroup read is fixed; packer-flip increment blocked on that.
+- **R2 (post-run audit, DO IT before computing the band):** auth-race trial = silent reward=0
+  with `error:"agent_no_output"`, indistinguishable in results.json. Grep run log for
+  `authentication error` (AUTH_FAIL_MARK) + flag any `turns:0` with anomalously LOW elapsed
+  (genuine 0-turn burns retries/timeout; auth-fail returns instantly). Manually re-roll matches.
+- **Methodology note:** k=3 screen false-excludes a p≈0.5 task 25% of the time (3/3 or 0/3 by
+  variance) and it's never revisited — accepted bounded blind spot, traded for speed.
 **Speed-review verdicts (don't relitigate):** width 6 = HOLD (build-heavy tasks can contend on
 8-core WSL2; resource-starved trial = FAKE band member → polluted band costs a whole loop
 iteration; check measured cgroup load after this width-4 run first). Adaptive-k screen = SKIP
