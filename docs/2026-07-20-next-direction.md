@@ -1,5 +1,22 @@
 # Next Direction — from prompt-tuning to failure-analysis + workflow (2026-07-20)
 
+## ⚠️ 2026-07-20 PIVOT (after AHE prior-art review) — read this first
+The AHE deep-dive (`docs/2026-07-20-ahe-prior-art.md`, our exact problem, #3 on TB2) reshaped
+the plan on hard evidence. **Two decisions:**
+1. **Base agent → Opus 4.8** (was haiku). haiku's failures were capability-bound (no
+   harness-fixable headroom); AHE's gains came on a strong model (GPT-5.4) where failures are
+   scaffolding-fixable. TB2 stays hard enough for signal. **Re-baseline v0 on opus.**
+2. **First evolvable component → memory (boundary-case lessons) + risk-hints middleware**
+   (AHE's ablation winners: memory +5.6pp, middleware +2.2pp), **NOT verify-retry** (AHE
+   shipped it as `ralph_loop.py` and evolution rejected it — self-graded tests are proxies)
+   and **NOT the prompt** (regressed −2.3pp).
+The workflow-loop spec (`docs/superpowers/specs/2026-07-20-workflow-loop-design.md`) keeps its
+**Component 1 (taxonomy)** + all the store/gate/budget-identity machinery; its **Component 2
+(verify-retry) is DEFERRED** and re-specced as memory/risk-hints. Our **statistical gate stays
+the edge** — it's exactly the regression-blindness (11% recall) AHE names as its #1 limitation.
+Adopt from AHE: the four-field predict-and-falsify contract (as gate-power + calibration input),
+one-component-per-edit, k≥2 rollouts, the Agent-Debugger root-cause taxonomy method.
+
 ## TL;DR
 The improvement loop is **validated** (it correctly rejects non-improvements) but the
 **target has no headroom**: we've been tuning a thin playbook on an already-capable

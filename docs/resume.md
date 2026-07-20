@@ -3,7 +3,12 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ➡️ NEXT DIRECTION (2026-07-20) — READ THIS FIRST: pivot to failure-analysis + workflow
+## ➡️ NEXT DIRECTION (2026-07-20) — READ THIS FIRST: harness-evolution, Opus 4.8 base, memory/risk-hints first
+
+**⚠️ 2026-07-20 PIVOT (AHE prior-art — [`docs/2026-07-20-ahe-prior-art.md`](2026-07-20-ahe-prior-art.md), our exact problem, #3 on TB2):**
+(1) **base agent haiku → Opus 4.8** (haiku capability-bound = no harness headroom; AHE's gains came on a strong model → re-baseline v0 on opus);
+(2) **first evolvable component → memory (boundary-case lessons) + risk-hints middleware** (AHE ablation winners; NOT verify-retry — AHE's `ralph_loop` lost — NOT prompt — regressed −2.3pp).
+Our **statistical gate stays the edge** (it's the regression-blindness AHE names as its #1 limit). Adopt: four-field predict-and-falsify contract (as gate-power/calibration input), one-component-per-edit, k≥2, AHE's Agent-Debugger root-cause taxonomy. Workflow-loop spec's Component-1 (taxonomy) + machinery still valid; Component-2 verify-retry DEFERRED. Next: Plan A (taxonomy, AHE method) → re-baseline on opus → spec+build the memory/risk-hints component.
 
 **Full doc: [`docs/2026-07-20-next-direction.md`](2026-07-20-next-direction.md)** ·
 **deep-research report (24/25 confirmed, peer-reviewed): [`docs/2026-07-20-deep-research-failure-analysis-workflow.md`](2026-07-20-deep-research-failure-analysis-workflow.md)** — validates the pivot: failure-taxonomy as MODE classification (MAST 94%, not step-attribution ~14%); workflow>prompt on a fixed model (Agentless, DirectSolve CoT 9→32%, best-of-N +15); the looks-done gap is named (Huang ICLR24 intrinsic self-correct degrades; gate on executable ground truth).

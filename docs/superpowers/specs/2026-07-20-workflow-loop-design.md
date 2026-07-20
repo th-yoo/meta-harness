@@ -1,5 +1,17 @@
 # Workflow-Improvement Loop — Design Spec (2026-07-20)
 
+> **⚠️ PARTIALLY SUPERSEDED 2026-07-20 (AHE prior-art pivot — `docs/2026-07-20-ahe-prior-art.md`).**
+> **Component 2's first primitive changed from `verify-retry` → `memory + risk-hints`** (AHE's
+> ablation: memory/middleware won, prompt regressed, and a self-graded verify-retry lost). The
+> base agent changes haiku → **Opus 4.8**. **Still valid from this spec:** Component 1
+> (failure-taxonomy, now upgraded to AHE's Agent-Debugger root-cause method), and ALL the
+> machinery — wrap-`runTaskOnce`, `workflow.json`-style candidate axis, `readWorkflowConfig`
+> threading, budget-identity extension + traps, ab-gate reuse, the `/logs/.mh` leakage
+> boundary, and the two-plan split. **Deferred:** the verify-retry / adversarial-verifier
+> engine (§ Component 2's primitive) — revisit only if the taxonomy shows a spec-precision
+> fraction memory/risk-hints don't cover. Component 2 is re-specced separately as the
+> memory/risk-hints component.
+
 ## Overview
 Pivot the self-improvement loop from tuning a supplementary prompt **playbook** to
 optimizing an **enforced agent workflow**. This spec covers two subsystems, together:
