@@ -1,0 +1,127 @@
+{
+  "label": "opus-rebaseline-A-20260721",
+  "model": "anthropic/claude-opus-4-8",
+  "variant": "",
+  "harness": {
+    "layers": "account",
+    "account_active": "v0",
+    "project_active": "v0",
+    "agent": "",
+    "pins": {}
+  },
+  "k": 3,
+  "timestamp": "2026-07-20T15:27:04.473Z",
+  "n_pass": 5,
+  "n_total": 6,
+  "pass_rate": 0.8333,
+  "tasks": {
+    "break-filter-js-from-html": {
+      "rewards": [
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        486.7,
+        337,
+        600.9
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "build-pmars": {
+      "rewards": [
+        0,
+        0,
+        1
+      ],
+      "elapsed": [
+        407.5,
+        395.4,
+        327.6
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "cancel-async-tasks": {
+      "rewards": [
+        0,
+        1,
+        0
+      ],
+      "elapsed": [
+        400.4,
+        401.5,
+        199.1
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "chess-best-move": {
+      "rewards": [
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        360,
+        397.1,
+        221.3
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "configure-git-webserver": {
+      "rewards": [
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        268.6,
+        309.1,
+        184.9
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "count-dataset-tokens": {
+      "rewards": [
+        1
+      ],
+      "elapsed": [
+        386.7
+      ],
+      "turns": [
+        1
+      ],
+      "errors": []
+    }
+  },
+  "status": "in_progress",
+  "driver": "opencode",
+  "resourceEnforcement": true,
+  "maxAgentTimeout": 3600,
+  "minAgentTimeout": 3600,
+  "timeoutRecording": true
+}

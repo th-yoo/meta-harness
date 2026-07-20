@@ -3,7 +3,34 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-20 (PM) — opus test done + leaderboard pivot, RESUME HERE
+## ⏸ OPUS-4.8 CAT-A RE-BASELINE STARTED, PAUSED FOR COMMUTE (2026-07-21 ~01:20 KST, MacBook) — RESUME HERE
+
+**The Cat-A re-baseline (26 tasks × k=3, opus-4-8, MY harness) RAN 00:20–01:20 KST on the
+MacBook, then user-stopped for the commute; orphan containers reaped, machine clean.**
+15/78 trials banked. **Partial results are COMMITTED (results/ is gitignored) at
+`term-bench2/rebaseline/opus-A-20260721.partial.json`** (+ .log beside it).
+**Banked (5 tasks complete):**
+- **build-pmars 1/3 · cancel-async-tasks 1/3 → the evolvable band is REAL** (0<pass<1 on 4.8)
+- chess-best-move 3/3 · configure-git-webserver 3/3 → 4.8 aces them, drop out (leaderboard pool was 4.5)
+- break-filter-js-from-html 0/3 → hard even for 4.8 (capability-watch)
+- count-dataset-tokens [1] partial (trial 1 pass, incomplete — re-rolls on resume)
+**RESUME AT OFFICE:** `git pull`, then copy the partial back to the live (gitignored) path:
+`cp term-bench2/rebaseline/opus-A-20260721.partial.json term-bench2/results/opus-rebaseline-A-20260721.json`
+then the launch command + `--resume` (office/linux: no `PATH=/opt/podman/bin` prefix, widen to
+8-core budgets; fresh oauth; `--no-oauth-gate` per standing ruling):
+```
+META_HARNESS_HOME=<repo>/.meta-harness bun term-bench2/runner.ts run --layers account \
+  --task-file term-bench2/splits/opus-candidates-A.txt --model anthropic/claude-opus-4-8 \
+  --k 3 --parallel --enforce-resources --min-cpus 4 --cpu-budget 8 --mem-budget 16000 \
+  --min-agent-timeout 3600 --max-agent-timeout 3600 --host-pressure on --no-oauth-gate \
+  --results-file term-bench2/results/opus-rebaseline-A-20260721.json --resume
+```
+(detach + log per host caveat; ~21 tasks ≈ 63 trials left, several hours at width-4.
+AFTER the run: keep `0<pass<1` tasks = evolvable band → failure-taxonomy → memory/risk-hints
+lesson → inject → McNemar + held-out gate. Copy the completed results back into
+`term-bench2/rebaseline/` + commit so they transfer across hosts.)
+
+## SESSION END 2026-07-20 (PM) — opus test done + leaderboard pivot (context for the run above)
 
 **Prior AM session context preserved below (AHE pivot, Plan A, detection+haiku prototypes).**
 This PM session: ran the pending **opus improvement test**, then a **course-correction** off the TB2
