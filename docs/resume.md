@@ -3,20 +3,46 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-20 — prototypes run, RESUME HERE
+## ⏸ SESSION END 2026-07-20 (PM) — opus test done + leaderboard pivot, RESUME HERE
 
-**All committed + pushed (HEAD `fd128f0`; tree clean except stray `oom`). Box idle, orphans reaped.**
-Flow this session: loop-plateau diagnosed → deep-research (workflow>prompt, gate on executable
-ground truth) → **AHE prior-art** (`china-qijizhifeng/agentic-harness-engineering`, #3 on TB2, our
-exact problem) → **PIVOT** (see NEXT DIRECTION block below + `docs/2026-07-20-{ahe-prior-art,next-direction}.md`):
-**base agent haiku → Opus 4.8**, **first evolvable component → memory (boundary-case lessons) +
-risk-hints middleware** (NOT verify-retry — AHE's `ralph_loop` lost; NOT prompt — regressed). Our
-**statistical gate stays the edge** (= AHE's #1 unsolved limit: regression-blindness 11% recall).
-Plan A (failure-taxonomy) written+committed: `docs/superpowers/plans/2026-07-20-failure-taxonomy.md`.
-Spec: `docs/superpowers/specs/2026-07-20-workflow-loop-design.md` (Component-1 valid; Component-2
-verify-retry DEFERRED). Reference prompts: `docs/2026-07-20-reference-prompts-cc-grok.md`.
+**Prior AM session context preserved below (AHE pivot, Plan A, detection+haiku prototypes).**
+This PM session: ran the pending **opus improvement test**, then a **course-correction** off the TB2
+leaderboard (user pushed for playwright ground truth). Net: **openssl is a bad target; the real
+target is a leaderboard-derived candidate band.** New artifacts committed under repo.
 
-**Two prototypes run (throwaway scripts in HOST-LOCAL `/tmp` — recreate from recipes below):**
+**1. OPUS improvement test (openssl, k=2) = DIRECTIONAL LIFT but discarded as artifact.**
+`baseline 0/2 → +lesson 1/2` (all turns=1; opus one-shots too). Contrast haiku 0/2→0/2. Looked like
+the pivot's cross-model win — BUT n=2, and then the leaderboard showed it's a **harness-deficiency
+artifact**, not a strong-model lift. Did NOT scale k (killed the k=10 run mid-flight). Log:
+`/mnt/d/tmp/opus-improve-20260720.log`.
+
+**2. LEADERBOARD PIVOT (`docs/2026-07-20-opus-candidate-tasks.md` — READ IT).** Scraped 2 TB2 2.0
+entries via playwright (WebFetch summary was WRONG on several tasks — use playwright):
+- **OpenCode / Opus-4.5 / 51.7% / 1-trial** = my-harness family (driver=opencode). openssl = **0/1 FAIL**.
+- **WOZCODE / Opus-4.7 / 80.2% / 5-trial** = strong-harness ref. openssl = **5/5 PASS**.
+- **Headline: opencode 51.7% vs wozcode 80.2% = same model class, ~28pp gap ≈ ALL harness/workflow.
+  THAT gap is the research target.** openssl = 1 of 26 such tasks (workflow-fixable, not capability).
+- **Candidate band** (opencode-FAIL ∩ wozcode-rate): **Cat A = 26 tasks** (wozcode ≥80%, HIGH
+  headroom) → `term-bench2/splits/opus-candidates-A.txt`; **Cat B = 9** (wozcode 20-60%, partial) →
+  `opus-candidates-B.txt`; **SKIP = 8** (wozcode <20%, capability-bound = the haiku trap).
+  Detection-proto's 3 tasks (openssl, db-wal-recovery, path-tracing) all ∈ A = validates.
+
+**⏭ NEXT (resume here) — OPUS-4.8 RE-BASELINE of Category A (user was about to approve/trim).**
+Run opus-4.8 across the 26 Cat-A tasks (k≥3-5) in MY harness → **keep tasks landing `0 < pass < 1` =
+the evolvable band** (opus-4-8 > 4.5 → some A may now pass unprompted; 1-trial leaderboard = noisy
+POOL, not final band). Then: failure-taxonomy → distilled lesson (memory/risk-hints) → inject →
+**McNemar + held-out gate** (our edge). Open question user raised: trim A to ~12 (drop crypto/build-
+heavy) vs run all 26 (~2hr detached). Recipe below.
+
+**Re-baseline command (detached, per CLAUDE.md host-local caveat):**
+```
+META_HARNESS_HOME=<repo>/.meta-harness bun term-bench2/runner.ts run --layers account \
+  --task-file term-bench2/splits/opus-candidates-A.txt --model anthropic/claude-opus-4-8 \
+  --k 3 --parallel --enforce-resources --min-cpus 2 --max-agent-timeout 3600 --results-file <out.json>
+```
+(or reuse the throwaway `runTaskOnce` harness from the improvement recipe below, looping the A list.)
+
+**Prior prototypes (AM, throwaway in HOST-LOCAL `/tmp` — recreate from recipes below):**
 1. **DETECTION = WORKS.** AHE root-cause taxonomy (opus-4.8 judge via oauth, `runJudgeOpencode`) on
    3 real v0 failing traj: openssl→`looks_done`, path-tracing→`other` (time-mgmt/incomplete), db-wal→
    `looks_done`. Root causes accurate; **`general_mechanism` field = ready-made memory lessons** (the
@@ -25,12 +51,7 @@ verify-retry DEFERRED). Reference prompts: `docs/2026-07-20-reference-prompts-cc
    own `general_mechanism` "re-read every produced file vs every literal requirement"), k=2 each →
    **baseline 0/2, +lesson 0/2, no change** (all turns=1 — haiku one-shots + ignores the lesson).
    Evidence FOR the opus pivot: a distilled lesson doesn't lift a capability-bound one-shot model.
-
-**⏭ NEXT (resume here) — USER DECISION: run the improvement test on BOTH models, same openssl-class task.**
-haiku done (no lift). **OPUS improvement test = PENDING** (does the lesson lift transfer to a strong
-model? AHE: frozen harness +5–10pp cross-model). **Caveat:** opus may PASS openssl outright (no
-failure → no signal) → if so, the faithful test needs opus's OWN failures = an **opus re-baseline** of
-the band first (find opus failures → taxonomy → distill lesson → inject → measure lift).
+   (Superseded framing: opus 0/2→1/2 later shown to be harness artifact — see #1/#2 above.)
 
 **Prototype recipes (recreate the host-local scripts):**
 - *Detection:* bun script importing `readTrajectory` + `renderJudgeAuditEvents` (bench/judge-audit.ts,
