@@ -201,7 +201,14 @@ generalization claim. **Status: v9 = strong-directional-lift candidate, NOT adop
 v7 re-activated pending guards** (ace k=3 regression check) **+ ideally a v7 re-run
 at k=10 on THIS host to kill the host confound — both queued, token-budget-gated.**
 
-**What loop-2 proved beyond the number:** the loop's edge is real — verifier desk-check
+**07-22 CERTIFICATION UPDATE (v7 same-host re-run, k=10, MacBook, forensics clean):**
+v7 = **1/10** on this host → same-host comparison v7 1/10 vs v9 7/10 **Fisher two-sided
+p = 0.020** (pooled v7 4/20 vs v9 7/10: p = 0.015; host check office-v7 3/10 vs mac-v7
+1/10: p = 0.58, no host effect — this host trends HARDER). Both honest limits (a) and (b)
+above are now discharged: **the lift is statistically certified at α=0.05 on same-host
+data — the first certified self-improvement in project history.** Remaining before
+adoption: guards (ace k=3) only. Limit (c) stands: held-in single task; generalization
+is loop-4's question (resume.md queue). the loop's edge is real — verifier desk-check
 (free) found the right fix-class after both proposer input modes missed it; the gate +
 rollback discipline caught loop-1's wrong lesson; the same machinery then produced the
 first measured lift. Also caught live on this host: naive `createCandidate(v0-system.md,

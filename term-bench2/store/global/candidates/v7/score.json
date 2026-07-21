@@ -1,0 +1,431 @@
+{
+  "version": "v7",
+  "nPass": 1,
+  "nFail": 9,
+  "sessions": [
+    {
+      "sessionID": "bench-sparql-university-1784671694-0c577c",
+      "passed": false,
+      "note": "bench:sparql-university",
+      "turnCount": 1,
+      "timestamp": "2026-07-21T22:11:25.466Z",
+      "summary": "sparql-university",
+      "model": "anthropic/claude-opus-4-8",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 5,
+          "errors": 0
+        },
+        "read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "todowrite": {
+          "calls": 2,
+          "errors": 0
+        },
+        "write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "7aa0284",
+        "harnessHash": "25f13fca883fe563",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 187,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 95.3,
+      "peakRssMb": 901,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sparql-university-1784671885-295eda",
+      "passed": false,
+      "note": "bench:sparql-university",
+      "turnCount": 1,
+      "timestamp": "2026-07-21T22:15:49.470Z",
+      "summary": "sparql-university",
+      "model": "anthropic/claude-opus-4-8",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 9,
+          "errors": 1
+        },
+        "read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "7aa0284",
+        "harnessHash": "25f13fca883fe563",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 258.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 127.7,
+      "peakRssMb": 904,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sparql-university-1784672149-493b0e",
+      "passed": false,
+      "note": "bench:sparql-university",
+      "turnCount": 1,
+      "timestamp": "2026-07-21T22:21:58.844Z",
+      "summary": "sparql-university",
+      "model": "anthropic/claude-opus-4-8",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 5,
+          "errors": 0
+        },
+        "read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "7aa0284",
+        "harnessHash": "25f13fca883fe563",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 363.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 342.1,
+      "peakRssMb": 899,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sparql-university-1784672518-41af28",
+      "passed": false,
+      "note": "bench:sparql-university",
+      "turnCount": 1,
+      "timestamp": "2026-07-21T22:26:23.586Z",
+      "summary": "sparql-university",
+      "model": "anthropic/claude-opus-4-8",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 6,
+          "errors": 0
+        },
+        "read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "7aa0284",
+        "harnessHash": "25f13fca883fe563",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 256.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 201,
+      "peakRssMb": 896,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sparql-university-1784672783-6fce25",
+      "passed": false,
+      "note": "bench:sparql-university",
+      "turnCount": 1,
+      "timestamp": "2026-07-21T22:30:16.708Z",
+      "summary": "sparql-university",
+      "model": "anthropic/claude-opus-4-8",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 8,
+          "errors": 0
+        },
+        "read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "7aa0284",
+        "harnessHash": "25f13fca883fe563",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 229.2,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 158.5,
+      "peakRssMb": 897,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sparql-university-1784673016-75fd24",
+      "passed": false,
+      "note": "bench:sparql-university",
+      "turnCount": 1,
+      "timestamp": "2026-07-21T22:33:17.311Z",
+      "summary": "sparql-university",
+      "model": "anthropic/claude-opus-4-8",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 8,
+          "errors": 0
+        },
+        "read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "7aa0284",
+        "harnessHash": "25f13fca883fe563",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 176.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 106,
+      "peakRssMb": 895,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sparql-university-1784673197-851015",
+      "passed": false,
+      "note": "bench:sparql-university",
+      "turnCount": 1,
+      "timestamp": "2026-07-21T22:35:57.954Z",
+      "summary": "sparql-university",
+      "model": "anthropic/claude-opus-4-8",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 5,
+          "errors": 0
+        },
+        "read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "7aa0284",
+        "harnessHash": "25f13fca883fe563",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 148.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 93.3,
+      "peakRssMb": 898,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sparql-university-1784673362-a78ca4",
+      "passed": false,
+      "note": "bench:sparql-university",
+      "turnCount": 1,
+      "timestamp": "2026-07-21T22:40:46.414Z",
+      "summary": "sparql-university",
+      "model": "anthropic/claude-opus-4-8",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 5,
+          "errors": 1
+        },
+        "read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "7aa0284",
+        "harnessHash": "25f13fca883fe563",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 280,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 217,
+      "peakRssMb": 897,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sparql-university-1784673646-2015b7",
+      "passed": false,
+      "note": "bench:sparql-university",
+      "turnCount": 1,
+      "timestamp": "2026-07-21T22:43:55.923Z",
+      "summary": "sparql-university",
+      "model": "anthropic/claude-opus-4-8",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 6,
+          "errors": 0
+        },
+        "read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "7aa0284",
+        "harnessHash": "25f13fca883fe563",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 184,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 123.2,
+      "peakRssMb": 900,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sparql-university-1784673836-830414",
+      "passed": true,
+      "note": "bench:sparql-university",
+      "turnCount": 1,
+      "timestamp": "2026-07-21T22:48:41.089Z",
+      "summary": "sparql-university",
+      "model": "anthropic/claude-opus-4-8",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 7,
+          "errors": 0
+        },
+        "read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "write": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "7aa0284",
+        "harnessHash": "25f13fca883fe563",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 282,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 95.7,
+      "peakRssMb": 894,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    }
+  ]
+}

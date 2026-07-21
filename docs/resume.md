@@ -3,7 +3,7 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-22 (MacBook) — LOOP-2 RAN: v9 7/10 vs v7 3/10 LIFT (directional, p=0.18) — RESUME HERE
+## ⏸ SESSION END 2026-07-22 (MacBook) — LOOP-2 CERTIFIED: v9 7/10 vs v7 1/10 same-host, p=0.020 — GUARDS = ONLY step before adoption — RESUME HERE
 
 **Read [`docs/reboot.md`](reboot.md) LOOP-2 VERDICT section (bottom) first. MacBook box
 clean: no tmux, no containers, active=v7 (v9 NOT adopted — guards + certification pending).
@@ -14,17 +14,20 @@ score.json). ⚠ TOKEN WEEKLY LIMIT NEAR.**
 bullet b7) **7/10 vs v7's 3/10** (office, 07-21). Forensics clean (0 auth, all turns=1,
 no artifacts). All 3 v9 failures show explicit lesson engagement in traj — the advisory
 actuator GRIPPED this lesson (vs loop-1's ignored 7/8): grip is content-dependent, "prose
-never grips" falsified. Honest limits: Fisher two-sided p=0.18 (k=10/arm can't certify
-40pp at α=0.05), arms on different hosts, held-in single task.
+never grips" falsified. ~~Honest limits: p=0.18 cross-host~~ **SUPERSEDED same session:
+the v7 same-host re-run (1/10) certified the lift — see phase A below. Remaining limit:
+held-in single task (loop-4's question).**
 
 **⏭ NEXT (in order, token-budget-gated; one manipulated variable per loop — the 07-22
 discussion pruned loop-3 scope creep into the loop-3/loop-4 split below):**
 
 **A. Certify/kill v9 first (decides every later baseline):**
-1. **v7 re-run k=10 on the MacBook** — kills the host confound; if v7 repeats ~3/10 the
-   combined evidence is strong (and pooling toward k=20/arm approaches certification).
-2. **Guards** (ace k=3: configure-git-webserver, count-dataset-tokens) before any adoption.
-   → adopt v9 (new baseline) or reject (baseline stays v7).
+1. ~~v7 re-run k=10 on the MacBook~~ **DONE 07-22: v7 = 1/10 same-host, forensics clean →
+   v9 lift CERTIFIED (Fisher two-sided p=0.020 same-host; p=0.015 pooled 4/20 vs 7/10;
+   host effect none, p=0.58 — MacBook trends harder). Log `loop2-v7-sparql.log`; v7
+   MacBook score.json synced to `term-bench2/store/global/candidates/v7/`.**
+2. **Guards** (ace k=3: configure-git-webserver, count-dataset-tokens) — the ONLY
+   remaining step before adoption. → adopt v9 (new baseline) or reject (stays v7).
 
 **B. Wire the proposer (code work, no trials — fresh-budget session):**
 wire the enhanced prompt (proposer-lesson-prompt.md, incl. the new Verifier-contract input
