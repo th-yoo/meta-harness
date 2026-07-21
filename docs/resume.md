@@ -39,6 +39,18 @@ proposer-lesson-prompt.md's empirical section; VERBATIM for cross-host:
 **Queued AFTER v9 verdict only:** pass-side trajectory persistence + taxonomy-v2 divergence;
 wire enhanced proposer prompt into propose.ts; binding-actuator build (if v9 nulls).
 
+**⚠ OFFICE-BOX CHECK (next time it's reachable, BEFORE building the binding actuator):**
+`grep "Harness assembled" <loop-1 v8-arm log>` (host-local, term-bench2/logs/ or /mnt/d/tmp/).
+**~394 chars → loop-1's v8 harness never contained the lesson** (composeHarness falls back to
+flat system.md when it doesn't faithfully render from the playbook — exactly the bug caught on
+the MacBook 07-22, where naive createCandidate(v0 system.md + playbook-with-bullet) silently
+dropped b7) **→ the "lesson ignored 7/8 = actuator weakness" finding is VOID** (confounded).
+**~680+ chars → lesson rode, finding stands.** Repo evidence leans "stands": the "+290 bytes
+only delta" matches a system.md-appended lesson line (playbook.json-only delta would be
+~+460; bad-v9-style would be 0), and propose.ts:337/:1215 render system.md from the playbook
+at write time — but the log line is the direct proof. The binding-actuator decision rests on
+this finding, so confirm before investing.
+
 **Env notes:** v7/v8 stores host-local (office box); v7 taxonomy synced to
 `term-bench2/store/global/candidates/v7-taxonomy.json`. tmux-only detach rule stands.
 `META_HARNESS_HOME=<repo>/.meta-harness` required for ALL store-touching commands (missing
