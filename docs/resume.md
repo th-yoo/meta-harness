@@ -3,7 +3,76 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ OPUS-4.8 CAT-A RE-BASELINE STARTED, PAUSED FOR COMMUTE (2026-07-21 ~01:20 KST, MacBook) — RESUME HERE
+## ⏸ SESSION END 2026-07-21 (office/linux) — SCREEN COMPLETE, PLAN A MERGED, K-BOOST PENDING — RESUME HERE
+
+**All pushed (HEAD `eda3dae`). Office box: tmux sessions closed after screen finished, orphans
+reaped.** Two standing rules distilled with user this session (memory is host-local → restated
+here): **(1) "I only value self improvable agent"** — every task must advance the
+self-improvement loop or be deferred; **(2) distance-to-verdict rule** — tooling freeze until
+loop-1 reaches a gated verdict (SPRT spec already deferred to `explicitly-not-now.md §7.5`).
+
+**DONE this session:**
+1. **Plan A SHIPPED + MERGED** (`e648a04`): `bench failure-taxonomy` subcommand (TDD, opus-reviewed
+   per task, final review mergeable). Judge via `--model anthropic/claude-opus-4-8` (oauth). Field
+   is `modeCounts` (renamed from plan's modeFractions — counts, divide by nClassified). Haiku
+   v0/v3 taxonomies in `term-bench2/store/global/candidates/{v0,v3}/taxonomy.json`: **v3 n=19 =
+   incomplete 13 / looks_done 4** — but HAIKU modes; opus fails differently (fast confident
+   one-shots + long grinds), so **don't pre-commit the lesson — the v7 opus taxonomy decides**.
+2. **Cat-A screen COMPLETE** (26 tasks × k=3, opus-4-8, width ~6 tmux, 78 trials, R2-audited
+   clean): **BAND=10** → `term-bench2/splits/opus-band.txt` (build-pmars 1/3, cancel-async 1/3,
+   path-tracing-reverse 2/3, mailman 2/3, headless-terminal 1/3, sanitize-git-repo 2/3,
+   query-optimize 2/3, financial-document-processor 2/3, sparql-university 1/3, polyglot-rust-c
+   1/3); **ACE=6 (guards)**: chess-best-move, configure-git-webserver, count-dataset-tokens,
+   path-tracing(!), write-compressor, feal-linear-cryptanalysis; **FAIL=8** (0/3, incl 3 genuine
+   3600s timeouts); **EXCLUDED=2 env-artifacts**: qemu-startup (apt `netcat` no candidate on newer
+   base — qemu itself PROVEN working via TCG smoke test) + pytorch-model-recovery (opencode exits
+   0.6-1.1s turns=0 ×3, agent never engaged, cause undiagnosed). Final snapshot committed:
+   `term-bench2/rebaseline/opus-A-20260721.final.json`.
+3. **v7 created + activated** on the OFFICE box store (content byte-identical to v0) = clean
+   provenance for the opus baseline. **⚠ HOST-LOCAL — MacBook must recreate it** (recipe below).
+
+**⏭ NEXT — K-BOOST (awaiting user go; the step that closes the loop):** store-writing run
+(NO --results-file → sessions+trajectories land in the store under active v7), 10 band tasks ×
+k=5 = 50 trials, est 3-6 hr (band tasks grind 30-60 min sometimes). Then: opus taxonomy on v7 →
+ONE lesson → v8 candidate → **McNemar+held-out gated A/B (fixed-k; SPRT deferred) = loop-1
+self-improvement verdict**. Power caveat (be honest in the writeup): 50 pairs/arm detects
+~20pp+ lift; smaller real effects will read null — null is still provable knowledge (the edge).
+
+**MacBook continuation recipe (cross-host: git + this file ONLY; store/scripts are host-local):**
+1. `git pull`. Verify oauth (`claude` login) + podman.
+2. Recreate v7 on the MacBook store (its .meta-harness has its own v0):
+```
+cd <repo> && export META_HARNESS_HOME=$PWD/.meta-harness && bun -e '
+import { createCandidate, activateCandidate, activeVersion } from "./opencode-plugin/src/harness-store.ts"
+const fs=require("fs"); const root=process.env.META_HARNESS_HOME+"/global"
+const sys=fs.readFileSync(root+"/candidates/v0/system.md","utf8")
+const pb=JSON.parse(fs.readFileSync(root+"/candidates/v0/playbook.json","utf8"))
+createCandidate(root,"v7",sys,"",pb); activateCandidate(root,"v7")
+console.log("active:",activeVersion(root))'
+```
+3. Launch k-boost **inside tmux** (NEVER setsid — silent-kill incident, see warning below):
+```
+tmux new-session -d -s kboost 'cd <repo> && export META_HARNESS_HOME=$PWD/.meta-harness && \
+  bun term-bench2/runner.ts run --layers account \
+  --task-file term-bench2/splits/opus-band.txt --model anthropic/claude-opus-4-8 \
+  --k 5 --parallel --enforce-resources --min-cpus 2 --cpu-budget 12 --mem-budget 16000 \
+  --min-agent-timeout 3600 --max-agent-timeout 3600 --host-pressure on --no-oauth-gate \
+  --no-pack-measured >> <logpath> 2>&1; echo DONE_EXIT=$? >> <logpath>'
+```
+   (MacBook: add `PATH=/opt/podman/bin:$PATH` if needed; store-writing runs are NOT resumable —
+   plan for the full run. `--no-pack-measured` mandatory: poisoned resource profiles.)
+4. After: `bun term-bench2/runner.ts failure-taxonomy --layer account-global --candidate v7
+   --limit 20 --model anthropic/claude-opus-4-8` (in tmux; ~90s/failure). Eyeball `modeCounts` +
+   `general_mechanism` fields → distill ONE lesson → v8 = v7 + lesson bullet → ab v8-vs-v7 on
+   held-in/held-out band split + ace guards. Surgical-sync v7 taxonomy.json into
+   `term-bench2/store/` + commit (cross-host rule).
+5. **Post-run audit before ANY band/gate math** (r2-audit is host-local — steps): grep log for
+   `authentication error`; flag turns:0 trials — elapsed≈0 = setup/env artifact (EXCLUDE task),
+   elapsed <60s = suspected auth-race (strip + re-roll), elapsed ≈3600s = genuine timeout (keep).
+   Also check errors[] for setup_failed; results-file errors[] does NOT record agent_no_output
+   (known gap).
+
+## PREVIOUS (2026-07-21 early AM): CAT-A RE-BASELINE START (MacBook) — superseded by the block above
 
 **The Cat-A re-baseline (26 tasks × k=3, opus-4-8, MY harness) RAN 00:20–01:20 KST on the
 MacBook, then user-stopped for the commute; orphan containers reaped, machine clean.**
