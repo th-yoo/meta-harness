@@ -36,6 +36,10 @@ root_cause, general_mechanism}}
 ## Previously REJECTED lessons (gate said no — do NOT re-derive these)
 {ab-verdict history: bullet text + verdict + observed outcome}
 
+## Divergence evidence (band tasks: PASSING vs FAILING rollouts of the SAME task)
+{when available: per-task divergence summaries — where the passing rollout's
+strategy departed from the failing one's}
+
 ## Guards (currently-passing tasks your lesson must not break)
 {ace task list}
 
@@ -58,9 +62,16 @@ root_cause, general_mechanism}}
 6. Cite evidence: list ≥2 supporting entries (sessionIDs) whose root_cause your
    bullet addresses. Prefer synthesizing the entries' general_mechanism fields
    over inventing a new fix.
-7. Check against the current playbook, higher layers, AND the rejected list: if
+7. When divergence evidence exists for a targeted task, PREFER a bullet that
+   makes the PASSING rollout's observed strategy the default behavior — a
+   demonstrated-working strategy beats an inferred fix.
+8. Check against the current playbook, higher layers, AND the rejected list: if
    your best candidate is a near-duplicate of any of them, ABSTAIN and say which.
-8. Predict and expose yourself to falsification:
+9. ACTUATOR-LEVEL check: if the SAME mode was already targeted by a lesson in
+   ≥2 prior iterations (adopted or rejected) and still dominates, do NOT propose
+   another lesson — ABSTAIN with recommendation "switch actuator" (a persistent
+   mode at one component level means the level is wrong, not the wording).
+10. Predict and expose yourself to falsification:
    - expect_improve: which failing tasks/mode should flip, and why.
    - expect_unchanged_guards: confirm each guard task and why the bullet is
      irrelevant or harmless to it.
@@ -72,12 +83,17 @@ root_cause, general_mechanism}}
 Reply with a short analysis, then EXACTLY ONE JSON object on its own line:
 {"action":"propose"|"abstain",
  "reason":"<one sentence>",
+ "actuator":"memory",
+ "why_this_actuator":"<one sentence — why a context lesson fits this mode
+                      (vs config/workflow/tool); required so a future
+                      multi-actuator loop can audit the choice>",
  "bullet":{"text":"<the rule, ≤60 words>","mode":"<mode key targeted>",
            "evidence":["<sessionID>", ...]},
  "predictions":{"expect_improve":["<task>", ...],
                 "expect_unchanged_guards":["<task>", ...],
                 "falsify_if":"<observable refuting outcome>"}}
-(For abstain: omit bullet/predictions.)
+(For abstain: omit bullet/predictions; keep reason — and if abstaining under
+rule 9, set "reason" to the recommended actuator switch.)
 ```
 
 ---
@@ -96,18 +112,20 @@ Reply with a short analysis, then EXACTLY ONE JSON object on its own line:
 | Rejected-lesson ingestion | Loop-1 blind spot (v2 re-derived v1's REJECTED rule) — the documented propose.ts gap, now an input contract |
 | Predict-and-falsify block | AHE `evolve_prompt.md` four-field contract + their Fig-4 proposer-calibration set-intersection; feeds our gate-power/calibration |
 | Untrusted-data clause first | Mirrors judge-prompt + buildProposerPrompt ordering rule (guard BEFORE evidence, review 2026-07-16) |
+| Divergence-evidence input + rule 7 | AHE paper §3.2/B.2 (verified 2026-07-21): "partial-pass tasks are the most valuable... find the divergence point, make the successful strategy the reliable default" — band tasks at k≥2 have both rollouts free |
+| Actuator-level check (rule 9) | AHE B.2 anti-pattern verbatim: same failure class persisting 2+ iterations at one component level ⇒ wrong level, not wrong wording |
+| `actuator`/`why_this_actuator` fields | AHE manifest schema (`constraint_level`, `why_this_component`) — audit trail for a future multi-actuator loop |
 
 ## Open questions (decide at wiring time, not before)
 1. Does the proposer also pick held-in/held-out split, or does the harness? (Lean: harness — proposer shouldn't choose its own exam.)
 2. Should `falsify_if` be auto-checked post-A/B and fed back as calibration (AHE-style set-intersection)? (Lean: yes, cheap.)
 3. Model for the proposer call: same strong model as judge, or cross-family to dampen self-preference? (Unmeasured; loop-3+ question.)
 
-## 2026-07-21 paper-read addendum (arXiv 2604.25850 Appx B.2 verbatim now available)
-- ADD at wiring time: (a) divergence-point evidence — for band tasks feed the judge/proposer
-  BOTH a passing and failing rollout of the same task ("find the divergence point, make the
-  successful strategy the reliable default" — their debugger's core move; our taxonomy currently
-  reads failures only); (b) their anti-pattern rule: same mode persists 2+ loops despite lessons
-  → the component level is wrong, switch actuator (feeds our tech queue); (c) their
-  constraint_level/why_this_component manifest fields when we have >1 actuator.
-- CAUTION imported: "LLM Config Hands-Off Rule" — config edits caused broad hard-to-diagnose
-  regressions for them; raises the evidence bar for our AgentConfig queue item.
+## 2026-07-21 paper-read addendum (arXiv 2604.25850 Appx B.2)
+INTEGRATED into the prompt above (divergence-evidence input + rule 7; actuator-level check
+rule 9; actuator/why_this_actuator output fields). Remaining wiring dependency: the divergence
+input needs taxonomy-v2 to emit per-band-task pass-vs-fail divergence summaries (taxonomy
+currently reads failures only) — until then the section arrives empty and rule 7 is dormant.
+- CAUTION imported (tech queue, not this prompt): "LLM Config Hands-Off Rule" — config edits
+  caused broad hard-to-diagnose regressions for them; raises the evidence bar for our
+  AgentConfig queue item.
