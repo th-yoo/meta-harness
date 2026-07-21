@@ -3,7 +3,39 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-21 (office/linux) — SCREEN COMPLETE, PLAN A MERGED, K-BOOST PENDING — RESUME HERE
+## ⏸ SESSION END 2026-07-21 (evening) — LOOP-1 VERDICT DELIVERED: PROVABLE NULL — RESUME HERE
+
+**Read [`docs/reboot.md`](reboot.md) FIRST (Gall's-law restart = ACTIVE PLAN + LOOP-1 VERDICT
+section at bottom), then [`docs/proposer-lesson-prompt.md`](proposer-lesson-prompt.md) (empirical
+A/B + enhanced contract). All pushed (HEAD `83c7c42`). Box clean: tmux sessions killed, orphans
+reaped, active=v7 (v8 rolled back).**
+
+**LOOP-1 (sparql-university, user-scoped single-task):** v7 3/10 vs v8(=v7+lesson b7) 2/10 =
+NULL; lesson IGNORED in 7/8 failing trajectories (actuator weakness — advisory prose doesn't
+grip opus one-shots; AHE's system-prompt −2.3pp reproduced); the 1 compliant trial still failed
+(ORDER-BY diagnosis uncertain). First gated verdict in project history. Full diagnostics +
+loop-2 implications ranked in reboot.md's verdict section.
+
+**LOOP-2 NEXT (in order):**
+1. **Desk-check A's ORDER-BY theory free:** read sparql-university's verifier in
+   ~/z2/terminal-bench-2/sparql-university/ (zero trials, settles the diagnosis).
+2. **Persist PASS-side trajectories** for band tasks + taxonomy-v2 divergence analysis
+   (storage change + judge upgrade) — divergence input DOUBLY proven load-bearing
+   (agentic run found the deep cause with it; enhanced prompt without it missed twice).
+3. **Actuator escalation** (evidence-backed by rule-9 firing): next candidate = BINDING
+   actuator — middleware/finish-hook forcing a contract check (AHE middleware cleared ALL
+   Easy) or verify-workflow — NOT another prose lesson.
+4. Wire enhanced proposer prompt (docs/proposer-lesson-prompt.md) into propose.ts when
+   automating; it abstains correctly on empty evidence + emits bullet_assessments
+   (b5 followed_harmful — converged across two independent prompt designs).
+
+**Env notes:** token weekly limit NEAR — budget trials carefully next session. v7/v8 stores
+host-local (office box); v7 taxonomy synced to term-bench2/store/global/candidates/
+v7-taxonomy.json. tmux-only detach rule stands. META_HARNESS_HOME=<repo>/.meta-harness
+required for ALL store-touching commands (a missing export silently reads ~/.config store —
+bit us today).
+
+## PREVIOUS: SESSION END 2026-07-21 (office/linux) — SCREEN COMPLETE, PLAN A MERGED, K-BOOST PENDING — RESUME HERE
 
 **All pushed (HEAD `eda3dae`). Office box: tmux sessions closed after screen finished, orphans
 reaped.** Two standing rules distilled with user this session (memory is host-local → restated
