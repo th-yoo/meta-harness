@@ -14,6 +14,7 @@ import { cmdTaskLoad, type CmdTaskLoadArgs } from "./cmd-task-load.ts"
 import { cmdAb, type CmdAbArgs } from "./cmd-ab.ts"
 import { cmdScreen, type CmdScreenArgs } from "./cmd-screen.ts"
 import { cmdJudgeAudit, type JudgeAuditArgs } from "./judge-audit.ts"
+import { cmdFailureTaxonomy, type FailureTaxonomyArgs } from "./cmd-failure-taxonomy.ts"
 import { LAYER_CHOICES, type LayerName } from "./record.ts"
 import { cmdSplit, type SplitArgs } from "./splits.ts"
 import { cmdReportLoop, type ReportLoopArgs } from "./report-loop.ts"
@@ -72,6 +73,7 @@ commands:
               (k=1 candidate tournament — cheap ranking pre-pass; a screen never
                writes the store or emits a verdict, only an ADVANCE hint for ab)
   judge-audit --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
+  failure-taxonomy --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
   split       make|rotate|show [--seed N] [--folds N] [--source FILE]
               [--split-file PATH] [--results PATH]... [--band LO,HI]
               [--sentinels N] [--sentinel-hi F]
@@ -1157,6 +1159,52 @@ function parseJudgeAuditArgs(argv: string[]): JudgeAuditArgs | null {
   return out as JudgeAuditArgs
 }
 
+function parseFailureTaxonomyArgs(argv: string[]): FailureTaxonomyArgs | null {
+  const out: Partial<FailureTaxonomyArgs> = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--layer") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.layer = v
+      i += 2
+      continue
+    }
+    if (a === "--candidate") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.candidate = v
+      i += 2
+      continue
+    }
+    if (a === "--agent") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.agent = v
+      i += 2
+      continue
+    }
+    if (a === "--model") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.model = v
+      i += 2
+      continue
+    }
+    if (a === "--limit") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.limit = Number(v)
+      i += 2
+      continue
+    }
+    return null
+  }
+  if (out.layer === undefined || out.candidate === undefined) return null
+  return out as FailureTaxonomyArgs
+}
+
 function parseSplitArgs(argv: string[]): SplitArgs | null {
   if (argv.length === 0) return null
   const splitCmd = argv[0]
@@ -1888,6 +1936,14 @@ export async function main(argv: string[]): Promise<number> {
           return 2
         }
         return await cmdJudgeAudit(paths, judgeArgs)
+      }
+      case "failure-taxonomy": {
+        const taxArgs = parseFailureTaxonomyArgs(subArgs)
+        if (taxArgs === null) {
+          printUsage()
+          return 2
+        }
+        return await cmdFailureTaxonomy(paths, taxArgs)
       }
       case "split": {
         const splitArgs = parseSplitArgs(subArgs)

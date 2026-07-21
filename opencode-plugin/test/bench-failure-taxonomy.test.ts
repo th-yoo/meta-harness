@@ -21,6 +21,7 @@ import type { TrajEvent } from "../src/harness-store.ts"
 import { cmdFailureTaxonomy, type FailureTaxonomyArgs } from "../src/bench/cmd-failure-taxonomy.ts"
 import { sessionRecord } from "../src/bench/record.ts"
 import type { BenchPaths } from "../src/bench/paths.ts"
+import { main } from "../src/bench/cli.ts"
 
 const EVENTS: TrajEvent[] = [
   { t: "text", text: "I'll create the cert" },
@@ -126,4 +127,12 @@ test("cmdFailureTaxonomy: no failing trajectories → rc 2, no file", async () =
   expect(rc).toBe(2)
   expect(fs.existsSync(path.join(root, "candidates", "v0", "taxonomy.json"))).toBe(false)
   fs.rmSync(dir, { recursive: true, force: true })
+})
+
+test("cli: failure-taxonomy with bad --candidate is a usage error (die → nonzero)", async () => {
+  // die() throws a BenchError (cmdFailureTaxonomy's --candidate regex check)
+  // that main() rescues to rc 1 — NOT rc 2 (that would mean the subcommand
+  // never routed at all). Pinning rc 1 catches both failure modes.
+  const rc = await main(["failure-taxonomy", "--layer", "project-global", "--candidate", "bogus"])
+  expect(rc).toBe(1)
 })
