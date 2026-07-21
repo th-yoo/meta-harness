@@ -7,8 +7,20 @@ import {
   buildTaxonomyPrompt,
   parseTaxonomyEntry,
 } from "../src/bench/failure-taxonomy.ts"
-import { writeTaxonomy, readTaxonomy, candidatePath, type Taxonomy } from "../src/harness-store.ts"
+import {
+  writeTaxonomy,
+  readTaxonomy,
+  candidatePath,
+  recordSession,
+  projectGlobalRoot,
+  createCandidate,
+  writeTrajectory,
+  type Taxonomy,
+} from "../src/harness-store.ts"
 import type { TrajEvent } from "../src/harness-store.ts"
+import { cmdFailureTaxonomy, type FailureTaxonomyArgs } from "../src/bench/cmd-failure-taxonomy.ts"
+import { sessionRecord } from "../src/bench/record.ts"
+import type { BenchPaths } from "../src/bench/paths.ts"
 
 const EVENTS: TrajEvent[] = [
   { t: "text", text: "I'll create the cert" },
@@ -73,4 +85,44 @@ test("writeTaxonomy/readTaxonomy: roundtrip to candidates/vN/taxonomy.json; abse
   expect(fs.existsSync(path.join(candidatePath(root, "v0"), "taxonomy.json"))).toBe(true)
   expect(readTaxonomy(root, "v0")).toEqual(tax)
   fs.rmSync(root, { recursive: true, force: true })
+})
+
+function taxPaths(dir: string): BenchPaths {
+  return {
+    metaRoot: dir, termBenchDir: path.join(dir, "tb"), tbRoot: path.join(dir, "tbroot"),
+    resultsDir: path.join(dir, "r"), patchesDir: path.join(dir, "p"),
+    baselineTasksFile: path.join(dir, "b.txt"), splitsFile: path.join(dir, "s.json"),
+  }
+}
+
+test("cmdFailureTaxonomy: classifies failing sessions, writes taxonomy.json with mode-fractions", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mh-cmdtax-"))
+  const root = projectGlobalRoot(dir)
+  createCandidate(root, "v0", "sys")
+  // one failing session with a trajectory + a passing one (ignored)
+  fs.mkdirSync(path.join(dir, "tbroot", "openssl-selfsigned-cert"), { recursive: true })
+  fs.writeFileSync(path.join(dir, "tbroot", "openssl-selfsigned-cert", "instruction.md"), "Create a cert.")
+  recordSession(root, "v0", sessionRecord("openssl-selfsigned-cert", "s-fail", false, 3, {}, "m", ""))
+  writeTrajectory(root, "v0", "s-fail", [{ t: "text", text: "did stuff" }] as any)
+  recordSession(root, "v0", sessionRecord("other-task", "s-pass", true, 2, {}, "m", ""))
+
+  const runJudge = async () =>
+    `analysis\n{"mode":"spec_precision","failure_point":"subject","root_cause":"dropped O","general_mechanism":"extract literals"}`
+  const rc = await cmdFailureTaxonomy(taxPaths(dir), { layer: "project-global", candidate: "v0" }, runJudge)
+  expect(rc).toBe(0)
+  const tax = JSON.parse(fs.readFileSync(path.join(root, "candidates", "v0", "taxonomy.json"), "utf8"))
+  expect(tax.nClassified).toBe(1) // only the failing session
+  expect(tax.modeFractions.spec_precision).toBe(1)
+  expect(tax.byTask["openssl-selfsigned-cert"]).toEqual(["spec_precision"])
+  fs.rmSync(dir, { recursive: true, force: true })
+})
+
+test("cmdFailureTaxonomy: no failing trajectories → rc 2, no file", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mh-cmdtax2-"))
+  const root = projectGlobalRoot(dir)
+  createCandidate(root, "v0", "sys")
+  recordSession(root, "v0", sessionRecord("t", "s-pass", true, 2, {}, "m", ""))
+  const rc = await cmdFailureTaxonomy(taxPaths(dir), { layer: "project-global", candidate: "v0" }, async () => "{}")
+  expect(rc).toBe(2)
+  fs.rmSync(dir, { recursive: true, force: true })
 })
