@@ -124,5 +124,6 @@ test("cmdFailureTaxonomy: no failing trajectories → rc 2, no file", async () =
   recordSession(root, "v0", sessionRecord("t", "s-pass", true, 2, {}, "m", ""))
   const rc = await cmdFailureTaxonomy(taxPaths(dir), { layer: "project-global", candidate: "v0" }, async () => "{}")
   expect(rc).toBe(2)
+  expect(fs.existsSync(path.join(root, "candidates", "v0", "taxonomy.json"))).toBe(false)
   fs.rmSync(dir, { recursive: true, force: true })
 })
