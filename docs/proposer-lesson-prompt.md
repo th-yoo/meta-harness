@@ -4,7 +4,9 @@
 lesson" (the loop-2+ proposer upgrade — loop-1 performs this step manually, deliberately). It
 replaces the vibes-era diagnosis input (raw failing excerpts) with the taxonomy's measured
 output. Every constraint traces to an evidence line (table at bottom). Wire into `propose.ts`
-only AFTER the loop-1 gated verdict (distance-to-verdict rule).
+only AFTER the loop-1 gated verdict (distance-to-verdict rule). **2026-07-22: that gate is
+satisfied** (loop-1 null + loop-2 lift, reboot.md) — wiring is unblocked, sequenced in
+resume.md's queue behind the v7 same-host re-run + guards.
 
 ---
 
@@ -36,6 +38,12 @@ root_cause, general_mechanism}}
 ## Previously REJECTED lessons (gate said no — do NOT re-derive these)
 {ab-verdict history: bullet text + verdict + observed outcome}
 
+## Verifier contract (per targeted task: what the grader ACTUALLY accepts)
+{per-task summary from the verifier source: held-out vs dev data? order-sensitive
+or set-compare? exact-match vs semantic? contractual names/formats? partial
+credit? — REQUIRED input; the verifier ships with every task, no wiring
+dependency}
+
 ## Divergence evidence (band tasks: PASSING vs FAILING rollouts of the SAME task)
 {when available: per-task divergence summaries — where the passing rollout's
 strategy departed from the failing one's}
@@ -66,7 +74,16 @@ strategy departed from the failing one's}
    over inventing a new fix.
 7. When divergence evidence exists for a targeted task, PREFER a bullet that
    makes the PASSING rollout's observed strategy the default behavior — a
-   demonstrated-working strategy beats an inferred fix.
+   demonstrated-working strategy beats an inferred fix. CAVEAT: first check the
+   strategy against the Verifier contract — a divergence-derived strategy can be
+   a DEV-DATA artifact (empirical 2026-07-21: "add ORDER BY" looked load-bearing
+   from rollout comparison, but the grader was order-insensitive and evaluated
+   on held-out data; the confounded lesson gated null).
+7b. Your bullet's fix-class MUST be consistent with the Verifier contract. If
+   the contract section is empty or you cannot tell what the grader accepts,
+   say so in "reason" and lower confidence — do not infer the acceptance
+   criteria from dev data alone (that is how a self-validated wrong
+   interpretation passes locally and fails the held-out grader).
 8. Check against the current playbook, higher layers, AND the rejected list: if
    your best candidate is a near-duplicate of any of them, ABSTAIN and say which.
 9. ACTUATOR-LEVEL check: if the SAME mode was already targeted by a lesson in
@@ -128,6 +145,7 @@ optional in both cases.)
 | Predict-and-falsify block | AHE `evolve_prompt.md` four-field contract + their Fig-4 proposer-calibration set-intersection; feeds our gate-power/calibration |
 | Untrusted-data clause first | Mirrors judge-prompt + buildProposerPrompt ordering rule (guard BEFORE evidence, review 2026-07-16) |
 | Divergence-evidence input + rule 7 | AHE paper §3.2/B.2 (verified 2026-07-21): "partial-pass tasks are the most valuable... find the divergence point, make the successful strategy the reliable default" — band tasks at k≥2 have both rollouts free |
+| Verifier-contract input + rule 7b + rule-7 caveat | Loop-1 post-mortem (2026-07-21): free verifier desk-check reversed BOTH input modes' diagnosis (held-out graph, order ignored); loop-2 (2026-07-22) measured the desk-check-derived fix-class at v9 7/10 vs v7 3/10 — the doc's strongest evidence line |
 | Actuator-level check (rule 9) | AHE B.2 anti-pattern verbatim: same failure class persisting 2+ iterations at one component level ⇒ wrong level, not wrong wording |
 | `actuator`/`why_this_actuator` fields | AHE manifest schema (`constraint_level`, `why_this_component`) — audit trail for a future multi-actuator loop |
 
@@ -163,10 +181,10 @@ Fisher two-sided p=0.18 — directional, k=10 underpowered for certification; ho
 noted in reboot.md). Net standing conclusions: **neither input mode dominates** (divergence
 evidence remains desirable but carries dev-data confound risk — rule 7's "demonstrated-working
 strategy" can be an artifact of what the DEV data rewards); **the verifier desk-check (free)
-beat both input modes and is a REQUIRED input, not an enhancement** → at wiring time, add a
-`## Verifier contract` evidence section (what the grader actually accepts: held-out data?
-order-sensitivity? exact-match vs semantic? contractual names?) — it has no wiring dependency,
-the verifier source ships with each task.
+beat both input modes and is a REQUIRED input, not an enhancement**. INTEGRATED into the
+prompt above (2026-07-22, post loop-2 verdict): new `## Verifier contract` input section +
+rule 7 dev-data-confound caveat + rule 7b (fix-class must match the verifier contract; never
+infer acceptance criteria from dev data alone).
 
 ## 2026-07-21 paper-read addendum (arXiv 2604.25850 Appx B.2)
 INTEGRATED into the prompt above (divergence-evidence input + rule 7; actuator-level check
