@@ -22,6 +22,7 @@ import { cmdFailureTaxonomy, type FailureTaxonomyArgs } from "../src/bench/cmd-f
 import { sessionRecord } from "../src/bench/record.ts"
 import type { BenchPaths } from "../src/bench/paths.ts"
 import { main } from "../src/bench/cli.ts"
+import { BenchError } from "../src/bench/util.ts"
 
 const EVENTS: TrajEvent[] = [
   { t: "text", text: "I'll create the cert" },
@@ -78,7 +79,7 @@ test("writeTaxonomy/readTaxonomy: roundtrip to candidates/vN/taxonomy.json; abse
   expect(readTaxonomy(root, "v0")).toBeNull()
   const tax: Taxonomy = {
     version: "v0", model: "m", nClassified: 1,
-    modeFractions: { spec_precision: 1 },
+    modeCounts: { spec_precision: 1 },
     entries: [{ sessionID: "s1", task: "t", mode: "spec_precision", failurePoint: "x", rootCause: "y", generalMechanism: "z" }],
     byTask: { t: ["spec_precision"] },
   }
@@ -113,8 +114,18 @@ test("cmdFailureTaxonomy: classifies failing sessions, writes taxonomy.json with
   expect(rc).toBe(0)
   const tax = JSON.parse(fs.readFileSync(path.join(root, "candidates", "v0", "taxonomy.json"), "utf8"))
   expect(tax.nClassified).toBe(1) // only the failing session
-  expect(tax.modeFractions.spec_precision).toBe(1)
+  expect(tax.modeCounts.spec_precision).toBe(1)
   expect(tax.byTask["openssl-selfsigned-cert"]).toEqual(["spec_precision"])
+  fs.rmSync(dir, { recursive: true, force: true })
+})
+
+test("cmdFailureTaxonomy: nonexistent candidate dies (BenchError)", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mh-cmdtax3-"))
+  const root = projectGlobalRoot(dir)
+  createCandidate(root, "v0", "sys")
+  await expect(
+    cmdFailureTaxonomy(taxPaths(dir), { layer: "project-global", candidate: "v9" }, async () => "{}"),
+  ).rejects.toThrow(BenchError)
   fs.rmSync(dir, { recursive: true, force: true })
 })
 

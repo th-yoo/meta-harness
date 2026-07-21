@@ -13,7 +13,7 @@ import { die, log } from "./util.ts"
 import { runJudgeOpencode } from "./opencode-run.ts"
 import { DEFAULT_JUDGE_MODEL, type RunJudgeFn } from "./judge-audit.ts"
 import { layerStoreRoots, type LayerName } from "./record.ts"
-import { readScore, readTrajectory, writeTaxonomy, type Taxonomy } from "../harness-store.ts"
+import { candidateExists, listVersions, readScore, readTrajectory, writeTaxonomy, type Taxonomy } from "../harness-store.ts"
 import { buildTaxonomyPrompt, parseTaxonomyEntry } from "./failure-taxonomy.ts"
 
 export interface FailureTaxonomyArgs {
@@ -36,6 +36,11 @@ export async function cmdFailureTaxonomy(
   const roots = new Map(layerStoreRoots("global", args.agent || "", paths.metaRoot))
   const layerRoot = roots.get(args.layer as LayerName)
   if (!layerRoot) die(`--layer ${args.layer} requires --agent (role layers need --agent)`)
+
+  if (!candidateExists(layerRoot, candidate)) {
+    const have = listVersions(layerRoot).join(", ") || "none"
+    die(`failure-taxonomy: no such candidate '${candidate}' under ${layerRoot} (have: ${have})`)
+  }
 
   const score = readScore(layerRoot, candidate)
   // FAILING sessions with a (non-pruned) trajectory; most-recent-first, capped.
@@ -62,15 +67,15 @@ export async function cmdFailureTaxonomy(
     log(`  ${task} [${sid}] → ${mode}`)
   }
 
-  const modeFractions: Record<string, number> = {}
+  const modeCounts: Record<string, number> = {}
   const byTask: Record<string, string[]> = {}
   for (const e of entries) {
-    modeFractions[e.mode] = (modeFractions[e.mode] ?? 0) + 1
+    modeCounts[e.mode] = (modeCounts[e.mode] ?? 0) + 1
     ;(byTask[e.task] ??= []).push(e.mode)
   }
-  const tax: Taxonomy = { version: candidate, model, nClassified: entries.length, modeFractions, entries, byTask }
+  const tax: Taxonomy = { version: candidate, model, nClassified: entries.length, modeCounts, entries, byTask }
   writeTaxonomy(layerRoot, candidate, tax)
-  log(`taxonomy: ${entries.length} classified → ${Object.entries(modeFractions).map(([k, v]) => `${k}=${v}`).join(" ")}`)
+  log(`taxonomy: ${entries.length} classified → ${Object.entries(modeCounts).map(([k, v]) => `${k}=${v}`).join(" ")}`)
   log(`(recency-capped at ${limit} — a biased sample, not the full failure set)`)
   return 0
 }

@@ -206,5 +206,5 @@ opus-4.8 via oauth (`--model`), run on the existing HAIKU stores. Results (surgi
 (k=5 ab stacking); judge divergence observed (db-wal: proto=looks_done, now=comprehension —
 single-judge label noise is real, mode-FRACTIONS more stable than per-traj labels); these are
 HAIKU failures — the opus Cat-A screen (running) feeds the taxonomy that actually grounds Plan B.
-NOTE: `modeFractions` field holds COUNTS (divide by nClassified); NaN `--limit` unguarded
-(inherited parser idiom) — both flagged at final review.
+NOTE: the field is `modeCounts` (renamed post-review; it holds COUNTS, divide by nClassified for
+fractions); NaN `--limit` unguarded (inherited parser idiom) — both flagged at final review.

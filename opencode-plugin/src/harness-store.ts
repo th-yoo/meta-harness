@@ -36,8 +36,6 @@
 import * as fs from "fs"
 import * as os from "os"
 import * as path from "path"
-import { existsSync, readFileSync } from "fs"
-import { join } from "path"
 import { writeJsonAtomic } from "./bench/util.ts"
 // Function-level cycle (failure-retrieval imports store readers back) — safe:
 // every cross-reference resolves at call time, not import time.
@@ -841,25 +839,25 @@ export function readScore(storeRoot: string, version: string): CandidateScore {
 }
 
 /** A version's failure taxonomy (bench failure-taxonomy). `entries` = per-trajectory
- * classification; `modeFractions` = mode → count; `byTask` = task → its modes. */
+ * classification; `modeCounts` = mode → count; `byTask` = task → its modes. */
 export interface Taxonomy {
   version: string
   model: string
   nClassified: number
-  modeFractions: Record<string, number>
+  modeCounts: Record<string, number>
   entries: { sessionID: string; task: string; mode: string; failurePoint: string; rootCause: string; generalMechanism: string }[]
   byTask: Record<string, string[]>
 }
 
 export function writeTaxonomy(storeRoot: string, version: string, t: Taxonomy): void {
-  writeJsonAtomic(join(candidatePath(storeRoot, version), "taxonomy.json"), t)
+  writeJsonAtomic(candidatePath(storeRoot, version, "taxonomy.json"), t)
 }
 
 export function readTaxonomy(storeRoot: string, version: string): Taxonomy | null {
-  const p = join(candidatePath(storeRoot, version), "taxonomy.json")
-  if (!existsSync(p)) return null
+  const p = candidatePath(storeRoot, version, "taxonomy.json")
+  if (!fs.existsSync(p)) return null
   try {
-    return JSON.parse(readFileSync(p, "utf8")) as Taxonomy
+    return JSON.parse(fs.readFileSync(p, "utf8")) as Taxonomy
   } catch {
     return null
   }

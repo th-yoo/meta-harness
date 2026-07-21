@@ -215,7 +215,7 @@ test("writeTaxonomy/readTaxonomy: roundtrip to candidates/vN/taxonomy.json; abse
   expect(readTaxonomy(root, "v0")).toBeNull()
   const tax: Taxonomy = {
     version: "v0", model: "m", nClassified: 1,
-    modeFractions: { spec_precision: 1 },
+    modeCounts: { spec_precision: 1 },
     entries: [{ sessionID: "s1", task: "t", mode: "spec_precision", failurePoint: "x", rootCause: "y", generalMechanism: "z" }],
     byTask: { t: ["spec_precision"] },
   }
@@ -233,12 +233,12 @@ Run: `cd opencode-plugin && bun test test/bench-failure-taxonomy.test.ts`
 
 ```typescript
 /** A version's failure taxonomy (bench failure-taxonomy). `entries` = per-trajectory
- * classification; `modeFractions` = mode → count; `byTask` = task → its modes. */
+ * classification; `modeCounts` = mode → count; `byTask` = task → its modes. */
 export interface Taxonomy {
   version: string
   model: string
   nClassified: number
-  modeFractions: Record<string, number>
+  modeCounts: Record<string, number>
   entries: { sessionID: string; task: string; mode: string; failurePoint: string; rootCause: string; generalMechanism: string }[]
   byTask: Record<string, string[]>
 }
@@ -280,7 +280,7 @@ git commit -m "feat(bench): taxonomy.json store I/O (read/writeTaxonomy)"
 - Produces: `FailureTaxonomyArgs { layer: string; candidate: string; agent?: string; model?: string; limit?: number }`; `cmdFailureTaxonomy(paths: BenchPaths, args: FailureTaxonomyArgs, runJudge?: RunJudgeFn): Promise<number>`.
 - Consumes: `layerStoreRoots` (record.ts), `readScore`/`readTrajectory`/`writeTaxonomy` (harness-store.ts), `runJudgeOpencode` + `RunJudgeFn` (judge-audit.ts / opencode-run.ts), `DEFAULT_JUDGE_MODEL` (judge-audit.ts), `die` (util.ts), `BenchPaths` (paths.ts). Instruction read from `join(paths.tbRoot, task, "instruction.md")`.
 
-Behavior: collect FAILING sessions (`passed === false`) that have a non-empty trajectory; cap at `limit` (default 20), most-recent-first (score.json sessions are append-order → take the LAST `limit`); for each, read `instruction.md` (task = `session.summary || session.note`), `buildTaxonomyPrompt`, `runJudge`, `parseTaxonomyEntry`; aggregate `modeFractions` + `byTask`; `writeTaxonomy`; print a summary + return 0 (0 = wrote; 2 = nothing to classify).
+Behavior: collect FAILING sessions (`passed === false`) that have a non-empty trajectory; cap at `limit` (default 20), most-recent-first (score.json sessions are append-order → take the LAST `limit`); for each, read `instruction.md` (task = `session.summary || session.note`), `buildTaxonomyPrompt`, `runJudge`, `parseTaxonomyEntry`; aggregate `modeCounts` + `byTask`; `writeTaxonomy`; print a summary + return 0 (0 = wrote; 2 = nothing to classify).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -314,7 +314,7 @@ test("cmdFailureTaxonomy: classifies failing sessions, writes taxonomy.json with
   expect(rc).toBe(0)
   const tax = JSON.parse(fs.readFileSync(path.join(root, "candidates", "v0", "taxonomy.json"), "utf8"))
   expect(tax.nClassified).toBe(1) // only the failing session
-  expect(tax.modeFractions.spec_precision).toBe(1)
+  expect(tax.modeCounts.spec_precision).toBe(1)
   expect(tax.byTask["openssl-selfsigned-cert"]).toEqual(["spec_precision"])
   fs.rmSync(dir, { recursive: true, force: true })
 })
@@ -399,15 +399,15 @@ export async function cmdFailureTaxonomy(
     log(`  ${task} [${sid}] → ${mode}`)
   }
 
-  const modeFractions: Record<string, number> = {}
+  const modeCounts: Record<string, number> = {}
   const byTask: Record<string, string[]> = {}
   for (const e of entries) {
-    modeFractions[e.mode] = (modeFractions[e.mode] ?? 0) + 1
+    modeCounts[e.mode] = (modeCounts[e.mode] ?? 0) + 1
     ;(byTask[e.task] ??= []).push(e.mode)
   }
-  const tax: Taxonomy = { version: candidate, model, nClassified: entries.length, modeFractions, entries, byTask }
+  const tax: Taxonomy = { version: candidate, model, nClassified: entries.length, modeCounts, entries, byTask }
   writeTaxonomy(layerRoot, candidate, tax)
-  log(`taxonomy: ${entries.length} classified → ${Object.entries(modeFractions).map(([k, v]) => `${k}=${v}`).join(" ")}`)
+  log(`taxonomy: ${entries.length} classified → ${Object.entries(modeCounts).map(([k, v]) => `${k}=${v}`).join(" ")}`)
   log(`(recency-capped at ${limit} — a biased sample, not the full failure set)`)
   return 0
 }
@@ -492,12 +492,12 @@ cd /home/th-yoo/z2/meta-harness
 META_HARNESS_HOME="$PWD/.meta-harness" bun term-bench2/runner.ts failure-taxonomy \
   --layer account-global --candidate v0 --limit 20
 ```
-Expected: prints per-task `→ mode` lines + a `modeFractions` summary; writes `.meta-harness/global/candidates/v0/taxonomy.json`.
+Expected: prints per-task `→ mode` lines + a `modeCounts` summary; writes `.meta-harness/global/candidates/v0/taxonomy.json`.
 
 - [ ] **Step 2: Eyeball the result**
 
 ```bash
-python3 -c "import json;d=json.load(open('.meta-harness/global/candidates/v0/taxonomy.json'));print('n=%d'%d['nClassified']);print(d['modeFractions']);[print(' ',e['task'],'→',e['mode'],'|',e['rootCause'][:70]) for e in d['entries']]"
+python3 -c "import json;d=json.load(open('.meta-harness/global/candidates/v0/taxonomy.json'));print('n=%d'%d['nClassified']);print(d['modeCounts']);[print(' ',e['task'],'→',e['mode'],'|',e['rootCause'][:70]) for e in d['entries']]"
 ```
 Confirm: openssl-selfsigned-cert classifies as `spec_precision` or `looks_done` (validates the method against our hand-analysis); note the overall spec-precision/looks_done fraction — **this is the datum that decides whether the memory/risk-hints component targets a material failure class.**
 

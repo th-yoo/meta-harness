@@ -2,7 +2,7 @@
   "version": "v0",
   "model": "anthropic/claude-opus-4-8",
   "nClassified": 4,
-  "modeFractions": {
+  "modeCounts": {
     "comprehension": 1,
     "looks_done": 1,
     "incomplete": 2
