@@ -384,6 +384,23 @@ heuristic shows up as a root cause in trajectory diagnoses.
 
 ---
 
+## 7.5 SPRT / sequential McNemar gate (deferred 2026-07-21, distance-to-verdict rule)
+
+Sequential-stopping version of the statistical gate (pre-registered SPRT boundaries
+on paired discordants; stop early on significance OR futility; ~half the trials of
+fixed-k on average). Deliberately deferred: **loop-1 gates fine with fixed-k
+McNemar** (existing machinery), and the rule distilled with the user 2026-07-21 is
+a hard tooling freeze until the first opus loop reaches a gated verdict — every
+task must shorten distance-to-verdict or land here. Ad-hoc peeking without a
+pre-registered spec is NOT an interim option (alpha inflation destroys the gate's
+credibility — the project's one claimed edge).
+
+**Revisit trigger:** loop-1 gated verdict delivered AND a second loop iteration is
+being planned (the spec pays for itself across recurring gates), OR gate-trial cost
+becomes the binding constraint on loop cadence.
+
+---
+
 ## 8. Reading this doc in six months
 
 Ask, per entry: did the trigger fire? If yes, the entry graduates into the next
