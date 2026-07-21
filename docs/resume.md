@@ -40,13 +40,15 @@ self-improvement verdict**. Power caveat (be honest in the writeup): 50 pairs/ar
 
 **MacBook continuation recipe (cross-host: git + this file ONLY; store/scripts are host-local):**
 1. `git pull`. Verify oauth (`claude` login) + podman.
-2. Recreate v7 on the MacBook store (its .meta-harness has its own v0):
+2. Recreate v7 from the COMMITTED snapshot (deterministic — do NOT read the host-local store's
+   v0, which may have drifted):
 ```
 cd <repo> && export META_HARNESS_HOME=$PWD/.meta-harness && bun -e '
 import { createCandidate, activateCandidate, activeVersion } from "./opencode-plugin/src/harness-store.ts"
 const fs=require("fs"); const root=process.env.META_HARNESS_HOME+"/global"
-const sys=fs.readFileSync(root+"/candidates/v0/system.md","utf8")
-const pb=JSON.parse(fs.readFileSync(root+"/candidates/v0/playbook.json","utf8"))
+const snap="term-bench2/store/global/candidates/v0"
+const sys=fs.readFileSync(snap+"/system.md","utf8")
+const pb=JSON.parse(fs.readFileSync(snap+"/playbook.json","utf8"))
 createCandidate(root,"v7",sys,"",pb); activateCandidate(root,"v7")
 console.log("active:",activeVersion(root))'
 ```
