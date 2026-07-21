@@ -17,15 +17,41 @@ actuator GRIPPED this lesson (vs loop-1's ignored 7/8): grip is content-dependen
 never grips" falsified. Honest limits: Fisher two-sided p=0.18 (k=10/arm can't certify
 40pp at α=0.05), arms on different hosts, held-in single task.
 
-**⏭ NEXT (in order, token-budget-gated):**
+**⏭ NEXT (in order, token-budget-gated; one manipulated variable per loop — the 07-22
+discussion pruned loop-3 scope creep into the loop-3/loop-4 split below):**
+
+**A. Certify/kill v9 first (decides every later baseline):**
 1. **v7 re-run k=10 on the MacBook** — kills the host confound; if v7 repeats ~3/10 the
    combined evidence is strong (and pooling toward k=20/arm approaches certification).
 2. **Guards** (ace k=3: configure-git-webserver, count-dataset-tokens) before any adoption.
-3. Then the post-verdict queue: pass-side traj persistence + taxonomy-v2 divergence;
-   verifier-contract input for the proposer (see proposer-lesson-prompt.md reversal note);
-   wire enhanced prompt into propose.ts; binding actuator now DEPRIORITIZED (its premise —
-   advisory prose can't grip — is falsified for content-matched lessons; office-box v8
-   harness-size check below still worth running to settle loop-1's record).
+   → adopt v9 (new baseline) or reject (baseline stays v7).
+
+**B. Wire the proposer (code work, no trials — fresh-budget session):**
+wire the enhanced prompt (proposer-lesson-prompt.md, incl. the new Verifier-contract input
+extraction) into propose.ts, TDD. Prereq for loop-3, zero system effect until loop-3 calls it.
+
+**C. LOOP-3 — ONE question: does the AUTOMATED pipeline produce a SECOND gated lift?**
+- Zero-trial pre-checks (attribution firewalls, NOT experiments): (a) wired-vs-manual
+  proposer desk-compare on the SAME evidence — clears automation quality before any trial
+  can confound it; (b) verifier desk-check of whatever task the new lesson targets
+  (standing rule since loop-1).
+- The experiment: candidate = baseline + ONE new bullet from the WIRED proposer, targeting
+  the fresh taxonomy's dominant mode; held-IN gate on that mode's tasks + guards. Delta =
+  one bullet, same structure as loop-2. Composition (two bullets coexisting) is NOT a
+  separate variable — the guards catch interference; that is what they are for.
+- Free bookkeeping after verdict: score the proposer's falsify_if against the outcome
+  (first calibration data point — doc open-question 2).
+
+**D. LOOP-4 — ONE question: does the accumulated playbook GENERALIZE?**
+Held-OUT reserved set (build-pmars, cancel-async-tasks, polyglot-rust-c) — the playbook
+that won two held-in gates vs baseline, nothing else changed. Property of the accumulated
+playbook, not of any single lesson; deliberately NOT mixed into loop-3 (would make a null
+unattributable across lesson-quality / mode-difficulty / held-out-difficulty).
+
+**Supporting queue (slot between loops as budget allows):** pass-side traj persistence +
+taxonomy-v2 divergence (feeds loop-3's proposer input); office-box v8 harness-size check
+(settles loop-1's record); binding actuator DEPRIORITIZED (its premise — advisory prose
+can't grip — is falsified for content-matched lessons).
 
 **Setup trap caught this session (recipe fix):** naive `createCandidate(v0-system.md,
 playbook+bullet)` SILENTLY DROPS the bullet from the assembled harness (composeHarness
