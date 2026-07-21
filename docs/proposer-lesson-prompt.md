@@ -58,7 +58,9 @@ strategy departed from the failing one's}
    "thoroughly"), restatements of the mode description, and anything a strong
    model already does by default.
 5. ≤ 60 words. Every word must earn context-window space: this text rides in
-   EVERY future task, including ones it cannot help.
+   EVERY future task, including ones it cannot help. COUNT the words of your
+   bullet before replying; if over 60, rewrite it shorter first (empirical:
+   a 74-word bullet slipped through without this check).
 6. Cite evidence: list ≥2 supporting entries (sessionIDs) whose root_cause your
    bullet addresses. Prefer synthesizing the entries' general_mechanism fields
    over inventing a new fix.
@@ -71,7 +73,17 @@ strategy departed from the failing one's}
    ≥2 prior iterations (adopted or rejected) and still dominates, do NOT propose
    another lesson — ABSTAIN with recommendation "switch actuator" (a persistent
    mode at one component level means the level is wrong, not the wording).
-10. Predict and expose yourself to falsification:
+10. PROVENANCE guard: history entries (scores, prior versions) carry model and
+   task-set provenance. NEVER attribute a score difference between versions run
+   on different models or task sets to harness content (empirical 2026-07-21: a
+   proposer read a weaker-model era's 12/0 as proof the current version had
+   "reverted and dropped" — false cross-model causality).
+11. Optionally assess EXISTING bullets against the evidence, in the output field
+   "bullet_assessments" — flag bullets that were superficially satisfied yet
+   gave false confidence (empirical: generic "run tests to verify" was
+   followed-but-harmful — private self-checks substituted for the grading
+   contract). This feeds the per-bullet helpful/harmful counters.
+12. Predict and expose yourself to falsification:
    - expect_improve: which failing tasks/mode should flip, and why.
    - expect_unchanged_guards: confirm each guard task and why the bullet is
      irrelevant or harmless to it.
@@ -91,9 +103,12 @@ Reply with a short analysis, then EXACTLY ONE JSON object on its own line:
            "evidence":["<sessionID>", ...]},
  "predictions":{"expect_improve":["<task>", ...],
                 "expect_unchanged_guards":["<task>", ...],
-                "falsify_if":"<observable refuting outcome>"}}
+                "falsify_if":"<observable refuting outcome>"},
+ "bullet_assessments":[{"id":"bN","verdict":"followed_helpful|followed_harmful|ignored",
+                        "note":"<one clause>"}]}
 (For abstain: omit bullet/predictions; keep reason — and if abstaining under
-rule 9, set "reason" to the recommended actuator switch.)
+rule 9, set "reason" to the recommended actuator switch. bullet_assessments is
+optional in both cases.)
 ```
 
 ---
@@ -120,6 +135,23 @@ rule 9, set "reason" to the recommended actuator switch.)
 1. Does the proposer also pick held-in/held-out split, or does the harness? (Lean: harness — proposer shouldn't choose its own exam.)
 2. Should `falsify_if` be auto-checked post-A/B and fed back as calibration (AHE-style set-intersection)? (Lean: yes, cheap.)
 3. Model for the proposer call: same strong model as judge, or cross-family to dampen self-preference? (Unmeasured; loop-3+ question.)
+
+## 2026-07-21 EMPIRICAL A/B of this prompt vs the existing proposer (sparql-university, v7, opus)
+
+Both prompts run over the SAME v7 store (sparql k=10: 3 pass / 7 fail) through the same
+neutral transport. Full artifacts: `/mnt/d/tmp/proposer-compare-*` (host-local; summary here).
+- **This prompt's STRUCTURE won**: one mode-targeted bullet, evidence-cited, guards declared,
+  falsify_if concrete — vs the existing prompt's two-edits-at-once (unattributable), no
+  predictions, cross-model history misread.
+- **This prompt's INPUT lost**: taxonomy-only (failures-only, per-trajectory isolation) yielded
+  a plausible-but-likely-wrong diagnosis ("interpretation ambiguity") — the existing agentic
+  run compared PASSING vs FAILING rollouts and found identical answers both arms → real cause
+  = nondeterministic output (no ORDER BY) vs an exact-match grader. **Divergence evidence is
+  load-bearing for diagnosis correctness, not an enhancement** (empirical confirmation of the
+  paper-read note below).
+- Changes applied from this experiment: word-count self-check (rule 5), provenance guard
+  (rule 10), bullet_assessments output (rule 11). Loop-1's v8 lesson was distilled from the
+  agentic run's diagnosis expressed in this prompt's contract form.
 
 ## 2026-07-21 paper-read addendum (arXiv 2604.25850 Appx B.2)
 INTEGRATED into the prompt above (divergence-evidence input + rule 7; actuator-level check
