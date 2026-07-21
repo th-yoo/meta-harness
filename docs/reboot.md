@@ -158,3 +158,21 @@ v7 re-activated (rollback). Falsify_if fired as pre-registered.
 Bought: first gated verdict in project history, actuator-grip instrumentation, divergence-input
 proof, credit-assignment convergence on b5. The lab works; the first arm swung and missed;
 the miss is measured, attributed, and rolled back. That IS the self-improvement loop operating.
+
+## LOOP-1 POST-MORTEM DESK-CHECK (2026-07-21 late) — diagnosis REVERSED, next test defined
+
+Verifier read (tests/test_outputs.py): (1) result ORDER IGNORED (set-compare, countries sorted)
+— the ORDER-BY theory is DEAD; (2) **the query is evaluated on a HELD-OUT graph**
+(tests/university_graph_test.ttl, different professors than dev data) — real failure mechanism =
+interpretation-overfit self-validated on dev data; (3) SELECT variable names contractual.
+**The taxonomy-fed lesson (interpretation-enumeration + discriminating checks) was the correct
+fix-class all along; the agentic run's divergence analysis chased a dev-data confound.** The
+"taxonomy shallow / divergence load-bearing" conclusion from the proposer A/B is OVERTURNED for
+this case — isolated-failure judging beat raw-trajectory exploration here. Both records stand in
+proposer-lesson-prompt.md; net: neither input mode dominates, divergence still desirable but not
+sufficient — the verifier desk-check (free) beat both.
+
+**LOOP-2 = ONE test:** v9 = v7 + the B/enhanced interpretation-enumeration bullet (never
+injected), same actuator, sparql k=10 vs v7's 3/10. Lift → lesson content was the variable.
+Null + lesson-ignored trajectories → actuator falsified WITH a correct lesson → binding
+actuator (middleware) next, unambiguous. ~10 trials. NOTHING else runs before this.
