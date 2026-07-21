@@ -1,0 +1,78 @@
+{
+  "version": "v7",
+  "model": "anthropic/claude-opus-4-8",
+  "nClassified": 7,
+  "modeCounts": {
+    "looks_done": 5,
+    "spec_precision": 2
+  },
+  "entries": [
+    {
+      "sessionID": "bench-sparql-university-1784622756-81aa20",
+      "task": "sparql-university",
+      "mode": "looks_done",
+      "failurePoint": "Self-validation step where agent confirmed 3 professors by re-deriving results from its own manual reasoning and heuristic role-matching instead of the true acceptance criteria",
+      "rootCause": "The query relied on fragile interpretations (STRSTARTS 'Professor of' for 'full professor', and department student counts whose temporal 'currently enrolled' filter may not match the required semantics), and the agent validated against its own logic rather than an independent ground truth, so a mismatch with the verifier went undetected",
+      "generalMechanism": "For semantic-classification tasks, agents should enumerate and cross-check edge cases against the raw data (list every role string, every department count with the exact temporal filter) and seek independent confirmation rather than treating a query that agrees with its own hand-derived expectation as proof of correctness"
+    },
+    {
+      "sessionID": "bench-sparql-university-1784622664-90bd78",
+      "task": "sparql-university",
+      "mode": "spec_precision",
+      "failurePoint": "Query construction — the ?country binding was scoped to the EU-country FILTER, so GROUP_CONCAT only aggregates EU countries instead of all countries where the professor works",
+      "rootCause": "The agent conflated the qualification criterion (works in an EU country) with the output projection (list ALL countries the professor currently works in), dropping non-EU countries like US from the ?countries result, and self-verified against its own interpretation",
+      "generalMechanism": "Separate filter/selection logic from projection/output logic: explicitly re-derive each SELECTed variable's binding directly from its literal spec definition rather than reusing variables introduced for filtering, and cross-check output columns against the exact wording of what each should contain"
+    },
+    {
+      "sessionID": "bench-sparql-university-1784622581-da7735",
+      "task": "sparql-university",
+      "mode": "looks_done",
+      "failurePoint": "Self-verification step where the agent re-ran its own query and confirmed the 3-professor result against its own reasoning about 'full professor' (string-prefix heuristic) and 'currently enrolled' semantics",
+      "rootCause": "The agent resolved underspecified terms ('full professor', 'currently enrolled') by assumption and then validated the query against those same assumptions rather than any independent ground truth, so a divergence from the gold definition went undetected",
+      "generalMechanism": "When acceptance depends on ambiguous semantic mappings not literally fixed by the prompt, avoid circular self-validation: enumerate candidate interpretations, cross-check edge cases against the raw data explicitly, and prefer conservative literal matches over inferred heuristics before declaring success"
+    },
+    {
+      "sessionID": "bench-sparql-university-1784622272-46b9fb",
+      "task": "sparql-university",
+      "mode": "looks_done",
+      "failurePoint": "Final query result validation — agent verified output via its own diagnostic sub-queries and accepted the 3-professor result as correct",
+      "rootCause": "The agent self-validated against its own interpretation of ambiguous criteria (e.g. how 'currently enrolled' filters graduations, how 'Professor of' role-matching selects full professors, and per-department >10 counting) rather than an authoritative expected result, so its interpretation diverged from the verifier's expected answer set",
+      "generalMechanism": "For data-transformation/query tasks with ambiguous semantics, cross-check the result against multiple independent derivations and enumerate expected edge cases explicitly, treating self-run proxy queries as insufficient confirmation of correctness against unstated acceptance criteria"
+    },
+    {
+      "sessionID": "bench-sparql-university-1784622181-a9c93f",
+      "task": "sparql-university",
+      "mode": "spec_precision",
+      "failurePoint": "Constructing the ?country binding and the 'full professor'/'currently enrolled' filters based on self-chosen interpretations rather than exact spec semantics",
+      "rootCause": "The task said ?countries lists 'all countries where the professor currently works in,' but the agent restricted it to EU countries only (dropping US/Sloan_MIT for Orfeas Menis); combined with self-defined interpretations of 'full professor' and 'currently enrolled' that it validated against its own reasoning rather than an independent oracle",
+      "generalMechanism": "When a spec's output columns/filters are ambiguous, treat literal wording of each returned field as binding, avoid narrowing it via inferred constraints, and cross-check each interpretation against an independent/expected-output source instead of confirming the query merely runs and matches self-reasoning"
+    },
+    {
+      "sessionID": "bench-sparql-university-1784621992-9d7d71",
+      "task": "sparql-university",
+      "mode": "looks_done",
+      "failurePoint": "Final validation: the agent ran its query and confirmed output matched its OWN manual analysis, then declared success.",
+      "rootCause": "It self-verified against its own hand-derived expected answer (its EU-set / role-filter / enrollment-count interpretation) rather than any independent ground truth; a subtle mismodeling (e.g. full-professor role matching, current-enrollment date semantics, or the >10-students-per-department count) diverged from the true criteria, but the circular check masked it.",
+      "generalMechanism": "When the only oracle is the agent's own interpretation, require independent cross-checks: enumerate edge cases against the literal spec, test alternative filter formulations to see if results change, and flag ambiguous predicates (role strings, date boundaries, counting scope) instead of collapsing them into a single self-confirming expected set."
+    },
+    {
+      "sessionID": "bench-sparql-university-1784621902-2240b6",
+      "task": "sparql-university",
+      "mode": "looks_done",
+      "failurePoint": "Self-verification step where rdflib output matched the agent's own manual analysis",
+      "rootCause": "The agent validated its query against its own interpretation of ambiguous criteria (esp. 'currently enrolled' date logic and 'full professor' role semantics); the matching output was circular confirmation, not evidence of correctness against the verifier's ground truth.",
+      "generalMechanism": "When acceptance criteria are ambiguous, avoid circular self-verification: enumerate alternative interpretations of each vague term, test edge cases that discriminate between them, and cross-check against independent signals in the data rather than confirming the query reproduces one's own manual prediction."
+    }
+  ],
+  "byTask": {
+    "sparql-university": [
+      "looks_done",
+      "spec_precision",
+      "looks_done",
+      "looks_done",
+      "spec_precision",
+      "looks_done",
+      "looks_done"
+    ]
+  }
+}

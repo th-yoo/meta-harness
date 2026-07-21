@@ -123,3 +123,38 @@ a provable "no large effect", which is still the differentiating claim (AHE cann
 
 Each iteration: same protocol, next tech, one component, gated. Complexity only ever enters
 through a passed gate — Gall's law with statistics.
+
+## LOOP-1 VERDICT (2026-07-21, sparql-university only per user scope-cut) — PROVABLE NULL, rich diagnostics
+
+**Arms:** v7 (baseline) 3/10 · v8 (= v7 + lesson bullet b7, +290 bytes, only delta) **2/10**.
+No lift; guards aborted as moot (null → no adoption → nothing to protect; token budget).
+v7 re-activated (rollback). Falsify_if fired as pre-registered.
+
+**Decisive instrumentation findings (why this null is worth its cost):**
+1. **Actuator weakness proven:** 7/8 v8 failing trajectories never used ORDER BY and carried
+   zero lesson language — the advisory context bullet was largely IGNORED by opus one-shots.
+   AHE's "system-prompt prose doesn't transfer (−2.3pp)" reproduced in miniature under OUR gate.
+2. **Diagnosis uncertainty:** the single lesson-compliant trial (added ORDER BY) still failed —
+   ORDER-BY may be necessary-but-insufficient or wrong.
+3. **Proposer A/B (same v7 data, both prompts, neutral transport):** existing-agentic found the
+   deep candidate cause (nondeterministic output vs exact-match grader) via UNPROMPTED pass-vs-
+   fail divergence comparison; candidate-taxonomy prompt produced a disciplined but shallower
+   lesson; ENHANCED candidate prompt on the same starved input STILL missed it → **divergence
+   evidence is load-bearing for diagnosis, doubly proven**. Enhanced prompt also abstained
+   correctly on empty evidence and independently flagged bullet b5 as followed_harmful
+   (converging with the agentic run — credible credit-assignment signal).
+
+**Loop-2 implications (ranked):**
+1. Persist PASS-side trajectories for band tasks + taxonomy-v2 divergence analysis (storage
+   change + judge upgrade) — the diagnosis bottleneck.
+2. Actuator escalation is now evidence-backed: advisory prose gripped 1/8 — next candidates =
+   binding actuators (middleware/finish-hook forcing the contract check — AHE's middleware
+   cleared ALL Easy; or verify-workflow), NOT more prose lessons. Rule-9/actuator-switch
+   fires: looks_done mode + lesson attempt + null → switch component level.
+3. Verify A's ORDER-BY theory cheaply before any next candidate: read the grader
+   (term-bench-2 sparql-university verifier) — desk check, zero trials.
+
+**Cost of loop-1:** ~26 opus trials (10+10+6 aborted guards/partials) + ~12 judge/proposer calls.
+Bought: first gated verdict in project history, actuator-grip instrumentation, divergence-input
+proof, credit-assignment convergence on b5. The lab works; the first arm swung and missed;
+the miss is measured, attributed, and rolled back. That IS the self-improvement loop operating.
