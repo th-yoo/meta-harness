@@ -121,7 +121,12 @@ META_HARNESS_HOME=<repo>/.meta-harness bun term-bench2/runner.ts run --layers ac
   baseline harness = `assembleAgentsMd("account", paths.metaRoot, "", {}, model)`; +lesson = baseline +
   the `general_mechanism` text. `runTaskOnce(paths, task, model, "", harness, agentTimeout, verifierTimeout)`;
   model=`anthropic/claude-opus-4-8`; k≥2; compare `.reward`. `META_HARNESS_HOME=<repo>/.meta-harness`;
-  needs oauth (`claude` login) + podman; reap `mh-*` orphans between; Bash-tool 2min cap → run detached (setsid+log).
+  needs oauth (`claude` login) + podman; reap `mh-*` orphans between; Bash-tool 2min cap → run detached.
+  **⚠ DETACH = tmux ONLY (2026-07-21):** setsid-detached runners get SILENTLY KILLED mid-flight
+  (screen died ~35min in, taxonomy judge ~5min in; no OOM, no API error; orphan containers mask it
+  as "slow trials"). Launch long runs as `tmux new-session -d -s <name> "<cmd> >> <log> 2>&1"`.
+  After any mid-run death: strip partial (rewards.length<k) AND empty-array tasks from the live
+  results file before `--resume` (B1 freeze trap).
 
 ## ➡️ NEXT DIRECTION (2026-07-20) — READ THIS FIRST: harness-evolution, Opus 4.8 base, memory/risk-hints first
 
