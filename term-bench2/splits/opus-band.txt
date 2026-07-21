@@ -1,0 +1,10 @@
+build-pmars
+cancel-async-tasks
+path-tracing-reverse
+mailman
+headless-terminal
+sanitize-git-repo
+query-optimize
+financial-document-processor
+sparql-university
+polyglot-rust-c

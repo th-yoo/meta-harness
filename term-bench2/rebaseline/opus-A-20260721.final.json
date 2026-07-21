@@ -1,0 +1,497 @@
+{
+  "label": "opus-rebaseline-A-20260721",
+  "model": "anthropic/claude-opus-4-8",
+  "variant": "",
+  "harness": {
+    "layers": "account",
+    "account_active": "v0",
+    "project_active": "v0",
+    "agent": "",
+    "pins": {}
+  },
+  "k": 3,
+  "timestamp": "2026-07-21T00:55:57.487Z",
+  "n_pass": 16,
+  "n_total": 26,
+  "pass_rate": 0.6154,
+  "tasks": {
+    "break-filter-js-from-html": {
+      "rewards": [
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        486.7,
+        337,
+        600.9
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "build-pmars": {
+      "rewards": [
+        0,
+        0,
+        1
+      ],
+      "elapsed": [
+        407.5,
+        395.4,
+        327.6
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "cancel-async-tasks": {
+      "rewards": [
+        0,
+        1,
+        0
+      ],
+      "elapsed": [
+        400.4,
+        401.5,
+        199.1
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "chess-best-move": {
+      "rewards": [
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        360,
+        397.1,
+        221.3
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "configure-git-webserver": {
+      "rewards": [
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        268.6,
+        309.1,
+        184.9
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "count-dataset-tokens": {
+      "rewards": [
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        169.5,
+        125.1,
+        122.9
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "db-wal-recovery": {
+      "rewards": [
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        265.3,
+        384.5,
+        291.7
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "path-tracing": {
+      "rewards": [
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        1383.5,
+        2140.7,
+        2615.4
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "path-tracing-reverse": {
+      "rewards": [
+        1,
+        1,
+        0
+      ],
+      "elapsed": [
+        672.6,
+        875,
+        3623.4
+      ],
+      "turns": [
+        1,
+        1,
+        0
+      ],
+      "errors": []
+    },
+    "openssl-selfsigned-cert": {
+      "rewards": [
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        98.5,
+        85.4,
+        79.8
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "mailman": {
+      "rewards": [
+        1,
+        0,
+        1
+      ],
+      "elapsed": [
+        370.4,
+        3642.7,
+        440.6
+      ],
+      "turns": [
+        1,
+        0,
+        1
+      ],
+      "errors": []
+    },
+    "headless-terminal": {
+      "rewards": [
+        0,
+        0,
+        1
+      ],
+      "elapsed": [
+        117.4,
+        161.2,
+        158.1
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "sanitize-git-repo": {
+      "rewards": [
+        0,
+        1,
+        1
+      ],
+      "elapsed": [
+        128.8,
+        171.4,
+        142.5
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "query-optimize": {
+      "rewards": [
+        0,
+        1,
+        1
+      ],
+      "elapsed": [
+        819.6,
+        583.5,
+        709
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "qemu-startup": {
+      "rewards": [
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        0,
+        0,
+        0
+      ],
+      "turns": [
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        "setup_failed",
+        "setup_failed",
+        "setup_failed"
+      ]
+    },
+    "financial-document-processor": {
+      "rewards": [
+        1,
+        0,
+        1
+      ],
+      "elapsed": [
+        108.2,
+        121.5,
+        119.6
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "sparql-university": {
+      "rewards": [
+        0,
+        1,
+        0
+      ],
+      "elapsed": [
+        100.5,
+        87.5,
+        83.3
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "write-compressor": {
+      "rewards": [
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        441.1,
+        1081.7,
+        293.3
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "extract-elf": {
+      "rewards": [
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        112.4,
+        91.1,
+        102.3
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "winning-avg-corewars": {
+      "rewards": [
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        3248.5,
+        2728,
+        3619.1
+      ],
+      "turns": [
+        1,
+        1,
+        0
+      ],
+      "errors": []
+    },
+    "polyglot-c-py": {
+      "rewards": [
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        130.3,
+        121.4,
+        167.3
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "polyglot-rust-c": {
+      "rewards": [
+        1,
+        0,
+        0
+      ],
+      "elapsed": [
+        355.6,
+        427.1,
+        619.6
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "feal-linear-cryptanalysis": {
+      "rewards": [
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        172.5,
+        337.9,
+        273.7
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "make-mips-interpreter": {
+      "rewards": [
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        588.1,
+        868.7,
+        726.6
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    },
+    "pytorch-model-recovery": {
+      "rewards": [
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        124.5,
+        112.1,
+        130.1
+      ],
+      "turns": [
+        0,
+        0,
+        0
+      ],
+      "errors": []
+    },
+    "torch-pipeline-parallelism": {
+      "rewards": [
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        517.2,
+        329,
+        265.9
+      ],
+      "turns": [
+        1,
+        1,
+        1
+      ],
+      "errors": []
+    }
+  },
+  "status": "complete",
+  "driver": "opencode",
+  "resourceEnforcement": true,
+  "maxAgentTimeout": 3600,
+  "minAgentTimeout": 3600,
+  "timeoutRecording": true
+}
