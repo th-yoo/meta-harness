@@ -176,3 +176,35 @@ sufficient — the verifier desk-check (free) beat both.
 injected), same actuator, sparql k=10 vs v7's 3/10. Lift → lesson content was the variable.
 Null + lesson-ignored trajectories → actuator falsified WITH a correct lesson → binding
 actuator (middleware) next, unambiguous. ~10 trials. NOTHING else runs before this.
+
+## LOOP-2 VERDICT (2026-07-22, MacBook) — LIFT: v9 7/10 vs v7 3/10 (sparql, k=10) — lesson CONTENT was the variable
+
+**Arms:** v7 (office box, 07-21) 3/10 · **v9 (= v7 + interpretation-enumeration bullet b7,
+one appended system.md line, only delta) 7/10.** Forensics clean: 0 auth errors, 10/10
+trials turns=1, no setup failures/retries, elapsed 216–773s (no turns=0 artifacts, no
+timeouts). Store-writing run, `term-bench2/logs/loop2-v9-sparql.log`.
+
+**Attribution:** all 3 failing trajectories carry explicit lesson engagement (one verbatim:
+"This is the ambiguity flagged in AGENTS.md — I should pick the interpretation matching the
+spec's literal wording") — the advisory actuator GRIPPED this lesson, unlike loop-1's b7
+(ignored 7/8). Same actuator, same task, same model, opposite grip + opposite direction ⇒
+**lesson content (right fix-class from the verifier desk-check) was the variable, doubly
+confirmed** — and "prose lessons don't grip" is falsified as a general claim; grip appears
+to be content-dependent (a lesson matching the task's actual felt difficulty gets used).
+
+**Honest limits (pre-registration said "certified win" — the data says slightly less):**
+(a) Fisher exact on 3/10 vs 7/10: two-sided p=0.18, one-sided p=0.09 — a 40pp observed
+lift that k=10/arm cannot certify at α=0.05 (needs ~k=20/arm or the effect repeating);
+(b) arms ran on DIFFERENT HOSTS (v7 office/WSL2, v9 MacBook/applehv) — same task image,
+model, harness path, but host is a formal confound; (c) held-in single task — no
+generalization claim. **Status: v9 = strong-directional-lift candidate, NOT adopted;
+v7 re-activated pending guards** (ace k=3 regression check) **+ ideally a v7 re-run
+at k=10 on THIS host to kill the host confound — both queued, token-budget-gated.**
+
+**What loop-2 proved beyond the number:** the loop's edge is real — verifier desk-check
+(free) found the right fix-class after both proposer input modes missed it; the gate +
+rollback discipline caught loop-1's wrong lesson; the same machinery then produced the
+first measured lift. Also caught live on this host: naive `createCandidate(v0-system.md,
+playbook+bullet)` silently drops the bullet from the harness (composeHarness faithful-render
+fallback) — the aborted first launch is in `loop2-v9-sparql.aborted-badharness.log`; the
+office-box v8 harness-size check (resume.md) decides whether loop-1 hit the same bug.

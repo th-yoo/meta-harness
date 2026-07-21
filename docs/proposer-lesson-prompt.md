@@ -153,6 +153,21 @@ neutral transport. Full artifacts: `/mnt/d/tmp/proposer-compare-*` (host-local; 
   (rule 10), bullet_assessments output (rule 11). Loop-1's v8 lesson was distilled from the
   agentic run's diagnosis expressed in this prompt's contract form.
 
+**⚠ 2026-07-21/22 REVERSAL of the input verdict above (read before trusting it):** the loop-1
+post-mortem verifier desk-check (reboot.md) showed the sparql grader ignores result order and
+evaluates on a HELD-OUT graph — so the divergence-derived ORDER-BY diagnosis was a dev-data
+confound, and this prompt's "plausible-but-likely-wrong" taxonomy-fed diagnosis
+(interpretation ambiguity) was the RIGHT fix-class. Loop-2 then measured it: **v9 = v7 + this
+prompt's interpretation-enumeration bullet → 7/10 vs v7's 3/10** (sparql k=10, MacBook;
+Fisher two-sided p=0.18 — directional, k=10 underpowered for certification; host confound
+noted in reboot.md). Net standing conclusions: **neither input mode dominates** (divergence
+evidence remains desirable but carries dev-data confound risk — rule 7's "demonstrated-working
+strategy" can be an artifact of what the DEV data rewards); **the verifier desk-check (free)
+beat both input modes and is a REQUIRED input, not an enhancement** → at wiring time, add a
+`## Verifier contract` evidence section (what the grader actually accepts: held-out data?
+order-sensitivity? exact-match vs semantic? contractual names?) — it has no wiring dependency,
+the verifier source ships with each task.
+
 ## 2026-07-21 paper-read addendum (arXiv 2604.25850 Appx B.2)
 INTEGRATED into the prompt above (divergence-evidence input + rule 7; actuator-level check
 rule 9; actuator/why_this_actuator output fields). Remaining wiring dependency: the divergence

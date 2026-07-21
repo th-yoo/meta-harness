@@ -3,7 +3,39 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-21 (night) — LOOP-1 NULL + POST-MORTEM REVERSAL; LOOP-2 = ONE TEST (v9) — RESUME HERE
+## ⏸ SESSION END 2026-07-22 (MacBook) — LOOP-2 RAN: v9 7/10 vs v7 3/10 LIFT (directional, p=0.18) — RESUME HERE
+
+**Read [`docs/reboot.md`](reboot.md) LOOP-2 VERDICT section (bottom) first. MacBook box
+clean: no tmux, no containers, active=v7 (v9 NOT adopted — guards + certification pending).
+v9 snapshot committed to `term-bench2/store/global/candidates/v9/` (system.md, playbook.json,
+score.json). ⚠ TOKEN WEEKLY LIMIT NEAR.**
+
+**LOOP-2 RESULT (sparql-university k=10, MacBook):** v9 (= v7 + interpretation-enumeration
+bullet b7) **7/10 vs v7's 3/10** (office, 07-21). Forensics clean (0 auth, all turns=1,
+no artifacts). All 3 v9 failures show explicit lesson engagement in traj — the advisory
+actuator GRIPPED this lesson (vs loop-1's ignored 7/8): grip is content-dependent, "prose
+never grips" falsified. Honest limits: Fisher two-sided p=0.18 (k=10/arm can't certify
+40pp at α=0.05), arms on different hosts, held-in single task.
+
+**⏭ NEXT (in order, token-budget-gated):**
+1. **v7 re-run k=10 on the MacBook** — kills the host confound; if v7 repeats ~3/10 the
+   combined evidence is strong (and pooling toward k=20/arm approaches certification).
+2. **Guards** (ace k=3: configure-git-webserver, count-dataset-tokens) before any adoption.
+3. Then the post-verdict queue: pass-side traj persistence + taxonomy-v2 divergence;
+   verifier-contract input for the proposer (see proposer-lesson-prompt.md reversal note);
+   wire enhanced prompt into propose.ts; binding actuator now DEPRIORITIZED (its premise —
+   advisory prose can't grip — is falsified for content-matched lessons; office-box v8
+   harness-size check below still worth running to settle loop-1's record).
+
+**Setup trap caught this session (recipe fix):** naive `createCandidate(v0-system.md,
+playbook+bullet)` SILENTLY DROPS the bullet from the assembled harness (composeHarness
+faithful-render fallback → flat system.md). Correct recipe: candidate system.md must
+CONTAIN the lesson line (v9 = v0 flat text + "\n- " + lesson → same flat path as baseline
+arm, delta = exactly one line). Check "Harness assembled (N chars)" at launch: v0/v7=394,
+v9=717. First launch was aborted for this (`loop2-v9-sparql.aborted-badharness.log`);
+bad harness burned ~1 trial-minute, no store residue.
+
+## PREVIOUS: SESSION END 2026-07-21 (night) — LOOP-1 NULL + POST-MORTEM REVERSAL; LOOP-2 = ONE TEST (v9)
 
 **Read [`docs/reboot.md`](reboot.md) FIRST (ACTIVE PLAN + LOOP-1 VERDICT + POST-MORTEM sections
 at bottom), then [`docs/proposer-lesson-prompt.md`](proposer-lesson-prompt.md). All pushed
