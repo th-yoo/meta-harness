@@ -3,37 +3,47 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-21 (evening) — LOOP-1 VERDICT DELIVERED: PROVABLE NULL — RESUME HERE
+## ⏸ SESSION END 2026-07-21 (night) — LOOP-1 NULL + POST-MORTEM REVERSAL; LOOP-2 = ONE TEST (v9) — RESUME HERE
 
-**Read [`docs/reboot.md`](reboot.md) FIRST (Gall's-law restart = ACTIVE PLAN + LOOP-1 VERDICT
-section at bottom), then [`docs/proposer-lesson-prompt.md`](proposer-lesson-prompt.md) (empirical
-A/B + enhanced contract). All pushed (HEAD `83c7c42`). Box clean: tmux sessions killed, orphans
-reaped, active=v7 (v8 rolled back).**
+**Read [`docs/reboot.md`](reboot.md) FIRST (ACTIVE PLAN + LOOP-1 VERDICT + POST-MORTEM sections
+at bottom), then [`docs/proposer-lesson-prompt.md`](proposer-lesson-prompt.md). All pushed
+(HEAD `95c3e8c`). Box clean: no tmux, no containers, active=v7 (v8 rolled back).
+⚠ TOKEN WEEKLY LIMIT NEAR at close — loop-2 is deliberately ONE cheap test.**
 
-**LOOP-1 (sparql-university, user-scoped single-task):** v7 3/10 vs v8(=v7+lesson b7) 2/10 =
-NULL; lesson IGNORED in 7/8 failing trajectories (actuator weakness — advisory prose doesn't
-grip opus one-shots; AHE's system-prompt −2.3pp reproduced); the 1 compliant trial still failed
-(ORDER-BY diagnosis uncertain). First gated verdict in project history. Full diagnostics +
-loop-2 implications ranked in reboot.md's verdict section.
+**LOOP-1 RESULT (sparql-university, user-scoped single-task):** v7 3/10 vs v8 (=v7 + ORDER-BY/
+determinism lesson b7) 2/10 = **PROVABLE NULL**, rolled back. Lesson ignored in 7/8 failing
+trajectories. First gated verdict in project history.
 
-**LOOP-2 NEXT (in order):**
-1. **Desk-check A's ORDER-BY theory free:** read sparql-university's verifier in
-   ~/z2/terminal-bench-2/sparql-university/ (zero trials, settles the diagnosis).
-2. **Persist PASS-side trajectories** for band tasks + taxonomy-v2 divergence analysis
-   (storage change + judge upgrade) — divergence input DOUBLY proven load-bearing
-   (agentic run found the deep cause with it; enhanced prompt without it missed twice).
-3. **Actuator escalation** (evidence-backed by rule-9 firing): next candidate = BINDING
-   actuator — middleware/finish-hook forcing a contract check (AHE middleware cleared ALL
-   Easy) or verify-workflow — NOT another prose lesson.
-4. Wire enhanced proposer prompt (docs/proposer-lesson-prompt.md) into propose.ts when
-   automating; it abstains correctly on empty evidence + emits bullet_assessments
-   (b5 followed_harmful — converged across two independent prompt designs).
+**POST-MORTEM DESK-CHECK REVERSED THE DIAGNOSIS** (read reboot.md post-mortem section):
+sparql verifier compares results as a SET (order IGNORED — ORDER-BY theory dead) and runs the
+agent's query on a **HELD-OUT graph** with different expected answers → real failure mechanism =
+**interpretation-overfit self-validated on dev data**. The taxonomy-fed lesson (interpretation-
+enumeration + discriminating checks) was the RIGHT fix-class all along; the agentic run's
+divergence analysis chased a dev-data confound. Meta-lesson recorded: neither proposer input
+mode dominates; the free verifier desk-check beat both — **desk-check the verifier BEFORE
+distilling any lesson from now on**.
 
-**Env notes:** token weekly limit NEAR — budget trials carefully next session. v7/v8 stores
-host-local (office box); v7 taxonomy synced to term-bench2/store/global/candidates/
-v7-taxonomy.json. tmux-only detach rule stands. META_HARNESS_HOME=<repo>/.meta-harness
-required for ALL store-touching commands (a missing export silently reads ~/.config store —
-bit us today).
+**LOOP-2 = EXACTLY ONE TEST (nothing else runs first):**
+Create **v9 = v7 + the interpretation-enumeration bullet** (text = the enhanced-prompt run's
+proposal, saved at `/mnt/d/tmp/proposer-enhanced.json` on office box; text also quoted in
+proposer-lesson-prompt.md's empirical section; VERBATIM for cross-host:
+> "When acceptance depends on a term the prompt leaves ambiguous, do not treat your query reproducing your own predicted answer as confirmation. List the plausible interpretations, run checks against the raw data that would give different results under each, and pick the interpretation matching the spec's literal wording."
+) → sparql k=10 under v9 (store-writing, tmux,
+`META_HARNESS_HOME=$PWD/.meta-harness`, `--no-pack-measured`) → compare vs v7's 3/10.
+- LIFT → lesson content was the variable; first certified win; then guards before adopting.
+- NULL + lesson-ignored trajectories (grep traj for lesson language) → actuator falsified
+  WITH a correct lesson → next tech = BINDING actuator (middleware/finish-hook, AHE's winner);
+  prose lessons retired as an actuator.
+~10 trials ≈ 20 min. Judge/proposer calls NOT needed (lesson text already exists).
+
+**Queued AFTER v9 verdict only:** pass-side trajectory persistence + taxonomy-v2 divergence;
+wire enhanced proposer prompt into propose.ts; binding-actuator build (if v9 nulls).
+
+**Env notes:** v7/v8 stores host-local (office box); v7 taxonomy synced to
+`term-bench2/store/global/candidates/v7-taxonomy.json`. tmux-only detach rule stands.
+`META_HARNESS_HOME=<repo>/.meta-harness` required for ALL store-touching commands (missing
+export silently reads the ~/.config default store — bit us twice today). Guards on null
+verdicts = moot, kill early (nothing to protect when not adopting).
 
 ## PREVIOUS: SESSION END 2026-07-21 (office/linux) — SCREEN COMPLETE, PLAN A MERGED, K-BOOST PENDING — RESUME HERE
 
