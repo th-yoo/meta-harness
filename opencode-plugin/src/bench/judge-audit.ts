@@ -117,25 +117,31 @@ placeholders in place. This is a headless one-shot run — your final message IS
 the answer, so it must be ONLY that JSON object.`
 }
 
-// ── parse_judge_reply ────────────────────────────────────────────────────
+// ── extract_last_json_object ─────────────────────────────────────────────
 
 /**
- * PURE. Extract the LAST JSON object in `text` that parses AND carries the
- * verdict shape (passed/confidence/reasoning keys, a SUPERSET check — extra
- * keys, e.g. "trivial", pass through unfiltered and untyped) — a judge model
- * may think out loud before its final verdict, or restate/correct itself, so
- * we want the last valid verdict-shaped object, not the first `{...}` found.
- * Returns null if no such object exists (garbage/missing reply).
+ * PURE. Low-level shared scanner: extract the LAST JSON object in `text`
+ * that parses AND (if `accept` is given) passes `accept` — a model may think
+ * out loud before its final verdict, or restate/correct itself, so callers
+ * generally want the last valid shaped object, not the first `{...}` found.
+ * Returns null if no such object exists (garbage/missing reply, or nothing
+ * satisfies `accept`).
  *
  * Ports Python's `json.JSONDecoder().raw_decode(text, i)` scan (try decoding
  * a JSON value starting at every `{`, keep the last one whose keys match) via
  * a string/escape-aware brace-matcher instead — JS has no raw_decode
  * equivalent, but for the "find a `{`, find its matching `}`, JSON.parse the
- * span" case (the only one these verdict payloads exercise) the two produce
+ * span" case (the only one these payloads exercise) the two produce
  * identical results, including a nested `{` inside an already-matched object
- * still being considered separately.
+ * still being considered separately. Shared by parseJudgeReply (verdict
+ * shape) and failure-taxonomy.ts's parseTaxonomyEntry (taxonomy shape) —
+ * the scan algorithm itself is shape-agnostic; only the `accept` predicate
+ * differs per caller.
  */
-export function parseJudgeReply(text: string): Record<string, unknown> | null {
+export function extractLastJsonObject(
+  text: string,
+  accept?: (obj: Record<string, unknown>) => boolean,
+): Record<string, unknown> | null {
   let last: Record<string, unknown> | null = null
   for (let i = 0; i < text.length; i++) {
     if (text[i] !== "{") continue
@@ -170,21 +176,32 @@ export function parseJudgeReply(text: string): Record<string, unknown> | null {
     if (end === -1) continue
     try {
       const obj: unknown = JSON.parse(text.slice(i, end + 1))
-      if (
-        obj !== null &&
-        typeof obj === "object" &&
-        !Array.isArray(obj) &&
-        "passed" in obj &&
-        "confidence" in obj &&
-        "reasoning" in obj
-      ) {
-        last = obj as Record<string, unknown>
+      if (obj !== null && typeof obj === "object" && !Array.isArray(obj)) {
+        const rec = obj as Record<string, unknown>
+        if (!accept || accept(rec)) last = rec
       }
     } catch {
       /* not valid JSON here — keep scanning */
     }
   }
   return last
+}
+
+// ── parse_judge_reply ────────────────────────────────────────────────────
+
+/**
+ * PURE. Extract the LAST JSON object in `text` that parses AND carries the
+ * verdict shape (passed/confidence/reasoning keys, a SUPERSET check — extra
+ * keys, e.g. "trivial", pass through unfiltered and untyped). Thin wrapper
+ * over the shared extractLastJsonObject scanner (see that function's doc for
+ * the scan/parity rationale); this function only supplies the verdict-shape
+ * predicate.
+ */
+export function parseJudgeReply(text: string): Record<string, unknown> | null {
+  return extractLastJsonObject(
+    text,
+    (obj) => "passed" in obj && "confidence" in obj && "reasoning" in obj,
+  )
 }
 
 // ── _judge_reply_text ────────────────────────────────────────────────────

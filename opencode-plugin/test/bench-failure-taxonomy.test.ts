@@ -44,3 +44,13 @@ test("parseTaxonomyEntry: unknown mode → coerced to 'other'; no JSON → null"
   expect(parseTaxonomyEntry(`{"mode":"banana","failure_point":"x","root_cause":"y","general_mechanism":"z"}`)!.mode).toBe("other")
   expect(parseTaxonomyEntry("no json here")).toBeNull()
 })
+
+test("parseTaxonomyEntry: an early decoy taxonomy-shaped JSON object in the analysis is ignored — the FINAL one wins (last-match, not first-match)", () => {
+  const reply = `Initial hunch while reading the trajectory: {"mode":"comprehension","failure_point":"early guess","root_cause":"draft","general_mechanism":"draft"}\n` +
+    `On closer inspection that was wrong — the agent actually hit an unresolved build error, so revising the verdict.\n` +
+    `{"mode":"errored","failure_point":"build step","root_cause":"unresolved compiler error","general_mechanism":"retry with clarified env"}`
+  const e = parseTaxonomyEntry(reply)
+  expect(e).not.toBeNull()
+  expect(e!.mode).toBe("errored")
+  expect(e!.failurePoint).toBe("build step")
+})

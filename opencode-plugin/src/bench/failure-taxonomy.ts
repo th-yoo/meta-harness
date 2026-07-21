@@ -7,7 +7,7 @@
  * cmd-failure-taxonomy.ts. The trajectory is UNTRUSTED DATA, not instructions.
  */
 import type { TrajEvent } from "../harness-store.ts"
-import { parseJudgeReply, renderJudgeAuditEvents } from "./judge-audit.ts"
+import { extractLastJsonObject, renderJudgeAuditEvents } from "./judge-audit.ts"
 
 /** Seed schema (spec Component 1 + TRAIL/AHE): the judge picks the MOST specific
  * mode. `spec_precision` is a sub-case of `looks_done` — prefer it when the failure
@@ -62,56 +62,12 @@ Reply with a short analysis, then EXACTLY ONE JSON object on its own line:
 {"mode":"<one key from the menu>","failure_point":"<the step where it went wrong>","root_cause":"<why it failed, not just what>","general_mechanism":"<structural fix for this class>"}`
 }
 
-/** Extract JSON object from text using brace-matching logic (similar to judge-audit's approach).
- * Returns the first valid JSON object found, or null if none. */
-function extractJsonObject(text: string): Record<string, unknown> | null {
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] !== "{") continue
-    let depth = 0
-    let inStr = false
-    let esc = false
-    let end = -1
-    for (let j = i; j < text.length; j++) {
-      const c = text[j]
-      if (esc) {
-        esc = false
-        continue
-      }
-      if (c === "\\") {
-        esc = true
-        continue
-      }
-      if (c === '"') {
-        inStr = !inStr
-        continue
-      }
-      if (inStr) continue
-      if (c === "{") depth++
-      else if (c === "}") {
-        depth--
-        if (depth === 0) {
-          end = j
-          break
-        }
-      }
-    }
-    if (end === -1) continue
-    try {
-      const obj: unknown = JSON.parse(text.slice(i, end + 1))
-      if (obj !== null && typeof obj === "object" && !Array.isArray(obj)) {
-        return obj as Record<string, unknown>
-      }
-    } catch {
-      /* not valid JSON here — keep scanning */
-    }
-  }
-  return null
-}
-
-/** Parse the judge reply into a structured entry. Reuses brace-matching JSON extraction
- * logic similar to judge-audit. Unknown mode → "other"; missing JSON → null. */
+/** Parse the judge reply into a structured entry. Reuses judge-audit.ts's shared
+ * extractLastJsonObject scanner (LAST balanced `{...}` that parses AND is
+ * taxonomy-shaped — a `"mode"` string key — guarding against stray decoy JSON
+ * earlier in the analysis text). Unknown mode → "other"; missing JSON → null. */
 export function parseTaxonomyEntry(text: string): TaxonomyEntry | null {
-  const obj = extractJsonObject(text)
+  const obj = extractLastJsonObject(text, (o) => typeof o["mode"] === "string")
   if (!obj) return null
   const rawMode = typeof obj["mode"] === "string" ? (obj["mode"] as string) : ""
   return {
