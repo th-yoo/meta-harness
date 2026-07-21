@@ -101,3 +101,13 @@ Reply with a short analysis, then EXACTLY ONE JSON object on its own line:
 1. Does the proposer also pick held-in/held-out split, or does the harness? (Lean: harness — proposer shouldn't choose its own exam.)
 2. Should `falsify_if` be auto-checked post-A/B and fed back as calibration (AHE-style set-intersection)? (Lean: yes, cheap.)
 3. Model for the proposer call: same strong model as judge, or cross-family to dampen self-preference? (Unmeasured; loop-3+ question.)
+
+## 2026-07-21 paper-read addendum (arXiv 2604.25850 Appx B.2 verbatim now available)
+- ADD at wiring time: (a) divergence-point evidence — for band tasks feed the judge/proposer
+  BOTH a passing and failing rollout of the same task ("find the divergence point, make the
+  successful strategy the reliable default" — their debugger's core move; our taxonomy currently
+  reads failures only); (b) their anti-pattern rule: same mode persists 2+ loops despite lessons
+  → the component level is wrong, switch actuator (feeds our tech queue); (c) their
+  constraint_level/why_this_component manifest fields when we have >1 actuator.
+- CAUTION imported: "LLM Config Hands-Off Rule" — config edits caused broad hard-to-diagnose
+  regressions for them; raises the evidence bar for our AgentConfig queue item.

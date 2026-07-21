@@ -90,3 +90,27 @@ against EACH OTHER on held-out, not just each against baseline.**
 `agents/evolve_agent/evolve_prompt.md` · `change-manifest-schema.json` ·
 `agents/evolve_agent/middleware/ralph_loop.py` (the rejected verify-retry) ·
 `experiments/evolved_harness/{systemprompt.md, LongTermMEMORY.md, middleware/execution_risk_hints.py}`.
+
+## 2026-07-21 ADDENDUM — paper read (arXiv 2604.25850v4, 18 May 2026), repo-doc verified
+
+All numbers in this doc confirmed against the paper. NEW decision-relevant findings:
+1. **Debugger compares pass-vs-fail rollouts of the SAME task** ("partial-pass tasks are the most
+   valuable... find the divergence point"). Our taxonomy reads failures only → taxonomy-v2 upgrade:
+   divergence-point analysis on band tasks (we have both sides at k≥2).
+2. **Memory lessons HURT Easy tasks** (superfluous re-verification; components non-additive:
+   single-component sum +11.1pp vs full +7.3pp) → ace guards are load-bearing, not decoration.
+3. **Evolve prompt verbatim (Appx B.2)** + manifest schema {failure_pattern, predicted_fixes,
+   risk_tasks, constraint_level, why_this_component}; safety rules incl. "do NOT reverse-engineer
+   test cases from trajectories" and **"LLM Config Hands-Off Rule"** (config changes cause broad
+   hard-to-diagnose regressions — tempers our AgentConfig queue item).
+4. **Cross-benchmark transfer weak** (SWE-bench +0.4pp, tokens −12%); cross-model strong
+   (+5.1..+10.1pp, larger further from saturation).
+5. **No statistical testing anywhere** (k=2, mean pass@1) — the gate gap is real. Fig 4:
+   fix-precision 33.7%/recall 51.4% vs regression-precision 11.8%/recall 11.1%.
+6. Anti-pattern rule for the proposer: same failure class persists 2+ iterations at one component
+   level → rollback + re-approach from a DIFFERENT component level.
+7. Their case study trajectory #1 = db-wal-recovery (our 0/3 fail) — §C.1.1 directly readable for loop-2.
+8. Name-twin located: "Meta-harness: End-to-end optimization of model harnesses" (Lee…Khattab,
+   Finn), arXiv 2603.28052 (their ref [16]).
+Setup parity notes: k=2 rollouts, 1hr per-task timeout, timeouts-count-as-failures, minimal seed
+to protect attribution — all match our conventions independently.
