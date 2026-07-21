@@ -1,0 +1,58 @@
+{
+  "version": "v0",
+  "model": "anthropic/claude-opus-4-8",
+  "nClassified": 4,
+  "modeFractions": {
+    "comprehension": 1,
+    "looks_done": 1,
+    "incomplete": 2
+  },
+  "entries": [
+    {
+      "sessionID": "bench-db-wal-recovery-1784402879-3ef8b3",
+      "task": "db-wal-recovery",
+      "mode": "comprehension",
+      "failurePoint": "After finding the 17K WAL file, agent ran PRAGMA/INSERT commands on the live DB that triggered auto-checkpoint, destroying the WAL; then tried to 'recreate the scenario' by guessing record values instead of recovering the actual WAL data",
+      "rootCause": "Agent misunderstood the task as recreating a WAL scenario rather than recovering specific unknown data from a corrupted WAL binary; it destroyed the source artifact via write operations and never produced recovered.json, so any output would be invented data failing the specific-data test",
+      "generalMechanism": "For forensic/recovery tasks, immediately back up all source artifacts read-only before any operation, and treat the task's data as unknown-to-be-extracted rather than reconstructable from the prompt's examples"
+    },
+    {
+      "sessionID": "bench-openssl-selfsigned-cert-1784402973-bf2460",
+      "task": "openssl-selfsigned-cert",
+      "mode": "looks_done",
+      "failurePoint": "Writing verification.txt / final self-validation — agent tested only its own Python script and never confirmed verification.txt content matched the verifier's expected fields/format",
+      "rootCause": "Agent self-validated against its own interpretation (its script printed success) rather than the stated acceptance criteria; verification.txt content (likely truncated fingerprint or date/subject format) probably didn't match what the external checker parsed for",
+      "generalMechanism": "After producing output files, re-read each generated file and cross-check its exact contents against every literal requirement in the spec, rather than trusting a self-authored proxy script's success message"
+    },
+    {
+      "sessionID": "bench-path-tracing-1784401134-c6451b",
+      "task": "path-tracing",
+      "mode": "incomplete",
+      "failurePoint": "Trajectory ends during image analysis phase; agent never wrote image.c, compiled it, or generated reconstructed.ppm",
+      "rootCause": "The attempt was truncated/ran out of runway while still exploring the reference image's structure. The write, compile, and similarity-verification todos all remained pending, so no candidate solution ever existed to be scored — an empty deliverable guarantees FAIL.",
+      "generalMechanism": "Enforce a runway/turn budget that reserves time to produce and test a minimal viable artifact before deep analysis; front-load a working end-to-end skeleton (write+compile+run a trivial image.c) early, then iteratively improve, so any truncation still leaves a scoreable deliverable."
+    },
+    {
+      "sessionID": "bench-llm-inference-batching-scheduler-1784396458-bf79a2",
+      "task": "llm-inference-batching-scheduler",
+      "mode": "incomplete",
+      "failurePoint": "Trajectory ends mid-analysis while describing scheduler design; no implementation, no output files (plan_b1.jsonl/plan_b2.jsonl) written, no cost-model verification run.",
+      "rootCause": "The agent exhausted its runway (or was cut off) after only exploration and planning; it never reached the core deliverable of generating and validating the two batching plans against the required thresholds.",
+      "generalMechanism": "Enforce milestone-based progress tracking that prioritizes producing a minimal end-to-end deliverable early (write plans, run cost_model to check thresholds) before extended analysis, so budget is spent on verifiable artifacts rather than narration."
+    }
+  ],
+  "byTask": {
+    "db-wal-recovery": [
+      "comprehension"
+    ],
+    "openssl-selfsigned-cert": [
+      "looks_done"
+    ],
+    "path-tracing": [
+      "incomplete"
+    ],
+    "llm-inference-batching-scheduler": [
+      "incomplete"
+    ]
+  }
+}

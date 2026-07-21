@@ -176,3 +176,35 @@ Sources (primary): arXiv 2503.13657 (MAST), 2505.08638 (TRAIL), 2505.00212 / PML
 ## Status at time of writing
 - v3 ab killed after held-in (not accepted; active stays v0). Held-in result checkpointed
   to git (`71b3cf5`). All code pushed; podman reboot-fix permanent (`events_logger=file`).
+
+## 2026-07-21 UPDATE — failure-taxonomy tool SHIPPED + first real mode-fractions (Plan A Task 5)
+
+`bench failure-taxonomy` built (branch `failure-taxonomy`, TDD, opus-reviewed per task). Judge =
+opus-4.8 via oauth (`--model`), run on the existing HAIKU stores. Results (surgical-synced to
+`term-bench2/store/global/candidates/{v0,v3}/taxonomy.json`):
+
+| store | n | incomplete | looks_done | comprehension | errored | spec_precision |
+|---|---|---|---|---|---|---|
+| v0 | 4 | 2 | 1 | 1 | 0 | 0 |
+| v3 | 19 | **13 (68%)** | 4 (21%) | 0 | 1 | 1 |
+
+**The decision datum for the memory/risk-hints component (Plan B):**
+1. **`incomplete` (time-management/ran-out-of-runway) DOMINATES** — 15/23 combined. This was the
+   invisible class (Loop-3 blind spot: 0-turn timeouts skipped; tune-mjcf = 5/5 incomplete
+   confirms Loop-2's timeout diagnosis). The seed-schema amendment (adding `incomplete`) is
+   validated — without it these landed in `other`.
+2. **`looks_done` second (5/23)** — proxy-validation instead of literal acceptance criteria.
+3. `spec_precision` rare as PRIMARY label (1/23), but looks_done root-causes carry spec-flavored
+   mechanisms ("re-read each generated file vs every literal requirement").
+4. **Converged lesson candidates** (taxonomy's own general_mechanism fields, near-verbatim):
+   - (incomplete) "front-load a minimal end-to-end artifact before deep analysis; reserve runway
+     to produce+test a skeleton first"
+   - (looks_done) "after producing outputs, re-read each generated file and cross-check its exact
+     contents against every literal requirement"
+
+**Caveats:** recency-biased sample (pruneTrajectories ≤20); v3 sample = only 4 distinct tasks
+(k=5 ab stacking); judge divergence observed (db-wal: proto=looks_done, now=comprehension —
+single-judge label noise is real, mode-FRACTIONS more stable than per-traj labels); these are
+HAIKU failures — the opus Cat-A screen (running) feeds the taxonomy that actually grounds Plan B.
+NOTE: `modeFractions` field holds COUNTS (divide by nClassified); NaN `--limit` unguarded
+(inherited parser idiom) — both flagged at final review.

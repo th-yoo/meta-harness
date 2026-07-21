@@ -1,0 +1,194 @@
+{
+  "version": "v3",
+  "model": "anthropic/claude-opus-4-8",
+  "nClassified": 19,
+  "modeFractions": {
+    "incomplete": 13,
+    "looks_done": 4,
+    "errored": 1,
+    "spec_precision": 1
+  },
+  "entries": [
+    {
+      "sessionID": "bench-tune-mjcf-1784535072-ad1ea4",
+      "task": "tune-mjcf",
+      "mode": "incomplete",
+      "failurePoint": "After two timestep tweaks (0.0033, 0.0025) both failed the correctness tolerance, the trajectory stops mid-iteration with no passing model.xml produced",
+      "rootCause": "The agent fixated on increasing timestep as the sole speedup lever, which inherently alters integration and violates the strict atol=1e-5 state-match; it never converged on a valid config nor pivoted to speed levers that preserve exact dynamics before the trajectory ended",
+      "generalMechanism": "When one tuning lever creates a hard tradeoff against an acceptance constraint, enumerate the full option space up front and validate each against ALL criteria; budget iterations and pivot strategies rather than repeatedly nudging a single parameter that provably cannot satisfy both goals"
+    },
+    {
+      "sessionID": "bench-tune-mjcf-1784531242-c212e1",
+      "task": "tune-mjcf",
+      "mode": "incomplete",
+      "failurePoint": "After analyzing default model options (timestep, iterations), before producing any tuned model.xml or re-running eval.py to confirm speed+correctness",
+      "rootCause": "Trajectory ends mid-analysis; the agent never applied optimizations (e.g. larger timestep, fewer solver iterations), so model.xml remained a copy of the reference and still failed at 99% time pctg — no tuning was ever completed or verified",
+      "generalMechanism": "Enforce a completion gate: the agent must run the provided verifier (eval.py) to a passing result before terminating, and budget runway so iterative tuning tasks reach at least one validated candidate rather than stopping at analysis"
+    },
+    {
+      "sessionID": "bench-path-tracing-1784532138-e51302",
+      "task": "path-tracing",
+      "mode": "looks_done",
+      "failurePoint": "Wrote image.c with a guessed gradient+noise model and compiled it, but never computed the actual L2 similarity against /app/image.ppm before ending",
+      "rootCause": "The agent inferred a plausible procedural algorithm from sparse samples but had no mechanism matching the true generator; the noise-region reconstruction would not reach 0.99 similarity, and it never validated against the stated acceptance metric",
+      "generalMechanism": "When a numeric acceptance threshold is given, build the exact verification (compute the actual similarity metric on the produced output vs. target) and iterate until it passes, rather than trusting that a plausible-looking generative model reproduces the target"
+    },
+    {
+      "sessionID": "bench-path-tracing-1784528096-1b21f3",
+      "task": "path-tracing",
+      "mode": "incomplete",
+      "failurePoint": "Trajectory ends during pixel-sampling/analysis phase; no image.c was ever written, compiled, or run to produce reconstructed.ppm",
+      "rootCause": "The agent spent its entire runway exploring/characterizing the image structure and never transitioned to producing the required deliverable — the algorithmic C program and verified output — leaving the task visibly unfinished",
+      "generalMechanism": "Enforce a milestone/time budget that reserves runway for producing and self-verifying the actual deliverable early (write-compile-run a minimal end-to-end solution first, then iterate), rather than open-ended analysis that consumes the whole budget"
+    },
+    {
+      "sessionID": "bench-path-tracing-1784526298-4ee657",
+      "task": "path-tracing",
+      "mode": "incomplete",
+      "failurePoint": "After discovering the image's true complex structure (225 colors, distinct regions), the agent was still sampling/analyzing and the trajectory ends before writing a correct algorithmic image.c",
+      "rootCause": "The task requires reverse-engineering a path-traced scene into a compact procedural C program hitting 0.99 similarity — a hard, multi-step reconstruction. The agent's only committed program was a trivial gradient that matched merely the top region; it ran out of runway mid-analysis without producing a real solution.",
+      "generalMechanism": "For open-ended reconstruction tasks, budget for iterative fit-and-measure loops: implement a quantitative similarity check early against the real target and keep refining the model until the acceptance metric is met, rather than exhausting time on manual sampling before committing a full solution."
+    },
+    {
+      "sessionID": "bench-tune-mjcf-1784525772-e06b13",
+      "task": "tune-mjcf",
+      "mode": "incomplete",
+      "failurePoint": "After writing model.xml with timestep 0.004, the final eval.py test was cut off before any passing result was observed",
+      "rootCause": "The trajectory ends mid-attempt with only a single naive optimization (doubling timestep) untested; no run confirmed both speed pctg<=60% and correctness within atol=1e-5, so no valid solution was ever produced",
+      "generalMechanism": "Ensure the agent budgets runway to iterate to a verified acceptance-criteria pass and to confirm the final artifact via the provided eval script before terminating, rather than stopping right after an unverified edit"
+    },
+    {
+      "sessionID": "bench-openssl-selfsigned-cert-1784526156-bfdb9b",
+      "task": "openssl-selfsigned-cert",
+      "mode": "incomplete",
+      "failurePoint": "After creating verification.txt; the trajectory stops mid-todo-update before /app/check_cert.py (step 6) was ever created",
+      "rootCause": "The session ended before completing the required Python script deliverable and final verification; the last two todos (check_cert.py and verify-all) were never executed, leaving a mandatory acceptance-criteria file absent",
+      "generalMechanism": "Enforce a completion checklist that maps each explicit deliverable in the prompt to a verified tool result before terminating; refuse to end while any required output file has not been confirmed created"
+    },
+    {
+      "sessionID": "bench-openssl-selfsigned-cert-1784525986-bc460c",
+      "task": "openssl-selfsigned-cert",
+      "mode": "looks_done",
+      "failurePoint": "After writing verification.txt, before/without completing and verifying check_cert.py and final file-format checks",
+      "rootCause": "The agent marked todos complete step-by-step and trusted its own construction of output files rather than running each output against the concrete acceptance checks (e.g., executing check_cert.py to confirm it loads the cert and prints exact required strings, confirming verification.txt format). Trajectory ends with required steps unverified.",
+      "generalMechanism": "Require an explicit end-to-end acceptance pass: enumerate every literal deliverable from the prompt, then execute/inspect each produced artifact against the exact stated criteria (run the script, cat the files, check formats/permissions) before declaring completion, instead of self-marking todos done."
+    },
+    {
+      "sessionID": "bench-openssl-selfsigned-cert-1784525830-0bdb59",
+      "task": "openssl-selfsigned-cert",
+      "mode": "looks_done",
+      "failurePoint": "Final self-verification via check_cert.py and verification.txt — agent trusted its own passing script instead of the grader's exact checks",
+      "rootCause": "The agent validated success against its own custom Python script and self-formatted verification.txt rather than the stated acceptance criteria; a subtle format/content mismatch (e.g., verification.txt subject rendering 'O = DevOps Team, CN = ...' or expected field layout) fails the external verifier while the agent's proxy checks pass",
+      "generalMechanism": "Prefer verifying against the literal acceptance criteria and expected output formats rather than a self-authored proxy checker; enumerate each stated requirement and confirm the exact string/format the grader would parse, not just that a homemade script prints success"
+    },
+    {
+      "sessionID": "bench-openssl-selfsigned-cert-1784525657-7e0f92",
+      "task": "openssl-selfsigned-cert",
+      "mode": "incomplete",
+      "failurePoint": "Writing verification.txt (truncated) and never creating /app/check_cert.py — the final required deliverable",
+      "rootCause": "The session stopped partway through execution; the last todo (Python check script) was never started and verification.txt write was cut off, leaving required acceptance artifacts missing.",
+      "generalMechanism": "Ensure adequate turn/time budget and add an end-of-run completeness gate that re-checks every required deliverable against the acceptance list before terminating, flagging unfinished items rather than stopping mid-step."
+    },
+    {
+      "sessionID": "bench-openssl-selfsigned-cert-1784525445-1797bf",
+      "task": "openssl-selfsigned-cert",
+      "mode": "incomplete",
+      "failurePoint": "After writing verification.txt, the trajectory ends while check_cert.py (requirement 6) was still pending and never created.",
+      "rootCause": "The session ran out of runway before completing all six deliverables; the required /app/check_cert.py Python verification script was never written and no final validation of all files occurred.",
+      "generalMechanism": "Track remaining acceptance-criteria items against a checklist and reserve budget to complete and verify every required deliverable before ending the session, rather than stopping mid-task."
+    },
+    {
+      "sessionID": "bench-tune-mjcf-1784515000-a5d323",
+      "task": "tune-mjcf",
+      "mode": "incomplete",
+      "failurePoint": "Trajectory ends right after re-reading model_ref.xml, before writing any tuned /app/model.xml or running eval on it",
+      "rootCause": "The agent exhausted its runway during the exploration/planning phase; it only established baseline timing and identified candidate parameters, but never produced or validated a tuned model that met the 60%-time and correctness criteria",
+      "generalMechanism": "Budget-aware pacing: front-load the concrete deliverable (write a candidate solution early, then iterate) instead of extended exploration, and checkpoint progress so an unfinished run still leaves a testable artifact rather than nothing"
+    },
+    {
+      "sessionID": "bench-prove-plus-comm-1784514988-1b0f3c",
+      "task": "prove-plus-comm",
+      "mode": "incomplete",
+      "failurePoint": "Final edit to add reflexivity to base case; trajectory cuts off before a successful coqc run or verified plus_comm.vo",
+      "rootCause": "Agent was still iterating through Coq compilation errors (unification, syntax, deprecation) and the session ended mid-debug-loop without ever producing a confirmed passing compile of plus_comm.vo",
+      "generalMechanism": "Enforce a terminal verification gate: the agent must show a clean final acceptance-criteria check (successful coqc run + .vo existence) before ending; harness should not truncate/allocate insufficient runway for the iterative fix loop to converge"
+    },
+    {
+      "sessionID": "bench-path-tracing-1784513325-e9f70f",
+      "task": "path-tracing",
+      "mode": "incomplete",
+      "failurePoint": "Session ends during image-structure analysis; agent never wrote image.c, compiled, or produced reconstructed.ppm",
+      "rootCause": "The agent spent its entire budget reverse-engineering the rendered scene via repeated Python sampling and never transitioned from analysis to producing the required C program, so no deliverable existed to satisfy any acceptance criterion",
+      "generalMechanism": "Enforce time-boxed exploration with an explicit checkpoint that reserves budget for producing and self-testing the actual deliverable (write code, run gcc/./image, compute similarity) before runway is exhausted"
+    },
+    {
+      "sessionID": "bench-prove-plus-comm-1784513962-97172e",
+      "task": "prove-plus-comm",
+      "mode": "looks_done",
+      "failurePoint": "Compiling in /workspace and leaving plus_comm.vo there, while the verifier likely checked /app (per AGENTS.md/CWD expectations)",
+      "rootCause": "The agent validated via successful local coqc output but the artifact landed in /workspace whereas the verifier's expected acceptance location differed; proxy 'compiles + .vo exists' check didn't match the verifier's actual path/criteria",
+      "generalMechanism": "After producing an artifact, reconcile its location against the task's canonical path (and hints like AGENTS.md/CWD); place/copy outputs where the stated criteria expect rather than trusting the first writable directory found"
+    },
+    {
+      "sessionID": "bench-tune-mjcf-1784511639-4fa159",
+      "task": "tune-mjcf",
+      "mode": "incomplete",
+      "failurePoint": "After establishing baseline and identifying levers, the trajectory ends right as the agent says it will try increasing the timestep — no tuned model.xml was ever produced (it remains a copy of the reference).",
+      "rootCause": "The agent ran out of runway/was truncated before making any actual optimization edit; model.xml stayed identical to model_ref.xml and thus fails the ≤60% time criterion.",
+      "generalMechanism": "Budget/turn management: front-load the concrete deliverable early (apply a candidate change and re-run eval) rather than spending the entire budget on read-only baseline setup and API introspection, so that at least one verified iteration exists before runway exhausts."
+    },
+    {
+      "sessionID": "bench-prove-plus-comm-1784512863-dd972e",
+      "task": "prove-plus-comm",
+      "mode": "errored",
+      "failurePoint": "Repeated coqc compilations failed with syntax and 'Unable to unify' errors; agent kept re-editing (redefining plus_n_O, changing tactics) without ever achieving a clean compile or producing plus_comm.vo.",
+      "rootCause": "The agent misunderstood the direction/signature of Coq's standard lemmas (plus_n_O: n = n+0, plus_n_Sm) and used wrong tactics (exact with args after simpl, symmetry orientation), then thrashed through fixes without correctly diagnosing the goal state, never reaching a compiling proof.",
+      "generalMechanism": "When a formal-proof compile fails, inspect the actual goal state (e.g. print/Check the lemma type, Show the goal) to ground each tactic against real hypotheses instead of guessing lemma orientations; require the final acceptance artifact (successful coqc + .vo) before declaring done."
+    },
+    {
+      "sessionID": "bench-prove-plus-comm-1784512059-0e85b3",
+      "task": "prove-plus-comm",
+      "mode": "spec_precision",
+      "failurePoint": "Located plus_comm.v via a filesystem-wide find and worked in /workspace, while the task/AGENTS.md context pointed at /app; the .vo landed where the verifier didn't look",
+      "rootCause": "The agent produced a correct, compiling proof but in the wrong directory — it never reconciled the expected deliverable location, grabbing the first find hit instead of confirming the canonical path",
+      "generalMechanism": "Before writing deliverables, resolve and verify the exact target path against the task's stated/working directory (and any project config like AGENTS.md); when multiple candidate locations exist, confirm which one the acceptance criteria reference rather than defaulting to the first match"
+    },
+    {
+      "sessionID": "bench-path-tracing-1784510018-bc2bab",
+      "task": "path-tracing",
+      "mode": "incomplete",
+      "failurePoint": "The final write of image.c is truncated and there is no subsequent compile (gcc -static), run (./image), or L2-similarity verification—the attempt stops mid-solution.",
+      "rootCause": "The agent never closed the loop: it committed to a Mandelbrot hypothesis (likely wrong—the scene is a path-traced 3D render with floor checkerboard, sky gradient, and a central object) and began writing code, but the trajectory ends before the program was finished, built, executed, or checked against the 0.99 acceptance threshold.",
+      "generalMechanism": "Enforce a closed verification loop before terminating: the agent must compile, run, and self-score against the stated acceptance metric (compute the actual L2 similarity vs the target) and iterate until it passes, rather than stopping after emitting untested code based on an unvalidated hypothesis."
+    }
+  ],
+  "byTask": {
+    "tune-mjcf": [
+      "incomplete",
+      "incomplete",
+      "incomplete",
+      "incomplete",
+      "incomplete"
+    ],
+    "path-tracing": [
+      "looks_done",
+      "incomplete",
+      "incomplete",
+      "incomplete",
+      "incomplete"
+    ],
+    "openssl-selfsigned-cert": [
+      "incomplete",
+      "looks_done",
+      "looks_done",
+      "incomplete",
+      "incomplete"
+    ],
+    "prove-plus-comm": [
+      "incomplete",
+      "looks_done",
+      "errored",
+      "spec_precision"
+    ]
+  }
+}
