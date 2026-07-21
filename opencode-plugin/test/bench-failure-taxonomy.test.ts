@@ -1,9 +1,13 @@
+import * as fs from "node:fs"
+import * as os from "node:os"
+import * as path from "node:path"
 import { test, expect } from "bun:test"
 import {
   TAXONOMY_MODES,
   buildTaxonomyPrompt,
   parseTaxonomyEntry,
 } from "../src/bench/failure-taxonomy.ts"
+import { writeTaxonomy, readTaxonomy, candidatePath, type Taxonomy } from "../src/harness-store.ts"
 import type { TrajEvent } from "../src/harness-store.ts"
 
 const EVENTS: TrajEvent[] = [
@@ -53,4 +57,20 @@ test("parseTaxonomyEntry: an early decoy taxonomy-shaped JSON object in the anal
   expect(e).not.toBeNull()
   expect(e!.mode).toBe("errored")
   expect(e!.failurePoint).toBe("build step")
+})
+
+test("writeTaxonomy/readTaxonomy: roundtrip to candidates/vN/taxonomy.json; absent → null", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mh-tax-"))
+  fs.mkdirSync(candidatePath(root, "v0"), { recursive: true })
+  expect(readTaxonomy(root, "v0")).toBeNull()
+  const tax: Taxonomy = {
+    version: "v0", model: "m", nClassified: 1,
+    modeFractions: { spec_precision: 1 },
+    entries: [{ sessionID: "s1", task: "t", mode: "spec_precision", failurePoint: "x", rootCause: "y", generalMechanism: "z" }],
+    byTask: { t: ["spec_precision"] },
+  }
+  writeTaxonomy(root, "v0", tax)
+  expect(fs.existsSync(path.join(candidatePath(root, "v0"), "taxonomy.json"))).toBe(true)
+  expect(readTaxonomy(root, "v0")).toEqual(tax)
+  fs.rmSync(root, { recursive: true, force: true })
 })
