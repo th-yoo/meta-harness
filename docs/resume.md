@@ -5,7 +5,8 @@ does NOT transfer; this file + the repo are the source of truth.)
 
 ## ⏸ SESSION END 2026-07-22 (MacBook) — LOOP-2 COMPLETE: v9 lift CERTIFIED (p=0.020) but GUARD-REJECTED (spec-overtrust regression) — active=v7 — RESUME HERE
 
-**Read [`docs/reboot.md`](reboot.md) LOOP-2 VERDICT section (bottom) first. MacBook box
+**Forward plan + flowchart: [`docs/loop-roadmap.md`](loop-roadmap.md) (canonical roadmap).
+Read [`docs/reboot.md`](reboot.md) LOOP-2 VERDICT section (bottom) first. MacBook box
 clean: no tmux, no containers, active=v7 (v9 NOT adopted — guards + certification pending).
 v9 snapshot committed to `term-bench2/store/global/candidates/v9/` (system.md, playbook.json,
 score.json). ⚠ TOKEN WEEKLY LIMIT NEAR.**
