@@ -232,3 +232,33 @@ guard-rejected candidate — the loop's brake worked exactly as designed. Loop-3
 scope b7's trigger (ambiguous TERMS ≠ explicit environment promises; never skip verifying
 env assumptions the grader may test) → v10 through the same gate. Log
 `loop2-v9-guards.log`; v9 snapshot score.json updated with guard sessions.
+
+## LOOP-3 TRACK-1 VERDICT (2026-07-22, MacBook) — v10 REJECTED: partial both arms, poison clause survives counterweighting
+
+**v10 = v7 + b7 + appended scoping sentence (hand-authored). Sparql k=10: 5/10** (v7
+same-host 1/10, p=0.14 directional-uncertified; vs v9 7/10 p=0.65 unresolved). **Guards:
+count-dataset-tokens 3/3 · configure-git-webserver 1/3 REAL** (one turns=0 provider-error
+void trial stripped + re-rolled per protocol; forensics otherwise clean both arms).
+Guard rule fired again → v10 NOT adopted, v7 re-activated.
+
+**Mechanism (trajectory-proven, sharper than loop-2's):** scoping FIXED the sshd blindness
+— v10 cgw agents built ssh ("I need to ensure a user account exists and sshd is running")
+— but failed on a SECOND hidden trap: instruction says `git clone user@server:...`, the
+verifier logs in as `git`@localhost password "password". The retained "match the spec's
+literal wording" clause steered agents to the literal username `user`; the grader's
+hidden `git` contract failed them. configure-git-webserver is a DOUBLE-trap task:
+env-promise (loop-2's finding) + username-mismatch (this loop's). The poison clause bites
+at layer 2 even counterweighted; sparql simultaneously paid ~2 trials for the scoping.
+
+**LOOP-3 TRACK-2 (factory) — COMPLETE, validated:** `bench propose-lesson` wired (TDD,
+20 tests). Live desk-compare: round-1 ABSTAIN exposed missing rule-8 re-scoping exception
+(fixed, one judge call); round-2 produced a 53-word scoped bullet, equivalence-class match
+with hand v10, both guards defended, falsify_if covering both arms — and it DROPPED the
+literal-wording clause entirely instead of counterweighting it. **Track-1's failure
+mechanism retroactively validates the factory's sharper surgery: v11 = factory's
+clause-dropped variant is the pre-diagnosed next candidate.** Factory also re-derived
+b5=followed_harmful (third convergence).
+
+**Ledger:** the loop now has lift-certification (v9), guard-rejection with mechanism (v9,
+v10), factory-authored candidate waiting (v11), and a prompt bug found+fixed for one judge
+call. Next: v11 through the same gate (sparql k=10 + both guards k=3), then loop-4.
