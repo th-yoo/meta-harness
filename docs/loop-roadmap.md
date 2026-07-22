@@ -20,37 +20,58 @@ block) · verdict history: [`reboot.md`](reboot.md) (bottom sections) · propose
 
 ## Forward plan
 
+**Loop-3 is DECOMPOSED into two parallel single-variable tracks (2026-07-22 revision:
+the bundled author→sparql→guard design multiplied three failure odds and made a null
+three-way ambiguous — violated standing rule 1):**
+
 ```mermaid
 flowchart TD
-    A[NOW: loop-2 closed<br/>active=v7, v9 guard-rejected, all pushed] --> B[PHASE B — next fresh-budget session<br/>wire enhanced proposer prompt into propose.ts<br/>TDD; code work only, no trials]
-    B --> C{LOOP-3 pre-checks — zero trials<br/>attribution firewalls, not experiments}
-    C --> C1[Wired-vs-manual proposer desk-compare<br/>same evidence in, same bullet class out?]
-    C --> C2[Verifier desk-check of the task<br/>the new lesson targets - standing rule]
-    C1 --> D[LOOP-3 — ONE question:<br/>does the AUTOMATED pipeline produce<br/>a second gated lift?<br/>candidate v10 = scoped b7, authored by wired proposer]
-    C2 --> D
-    D --> E{Gate: sparql k=10<br/>+ BOTH guards k=3<br/>adoption needs lift AND guards}
-    E -->|lift holds AND guards hold| F[ADOPT v10 — first fully-automated<br/>certified self-improvement]
-    E -->|sparql lift lost| G[Scoping killed the fix — too narrow<br/>rewrite trigger, baseline stays v7]
-    E -->|guard fails again| H[Trigger still too broad<br/>escalate: routing / per-task memory<br/>instead of one global playbook]
-    F --> I[LOOP-4 — ONE question:<br/>does the accumulated playbook GENERALIZE?<br/>held-out set: build-pmars,<br/>cancel-async-tasks, polyglot-rust-c]
-    I -->|travels| J[Real self-improvement claim<br/>held-out, certified, guarded]
-    I -->|null| K[Lessons are task-local<br/>routing or per-task-class memory next]
+    A[NOW: loop-2 closed<br/>active=v7, v9 guard-rejected, all pushed] --> T1
+    A --> T2
 
-    S[Side quests — slot between loops]:::side
-    S --> S1[Office box reachable:<br/>grep loop-1 v8 log 'Harness assembled'<br/>settles actuator-weakness record]:::side
-    S --> S2[Pass-side trajectory persistence<br/>+ taxonomy-v2 divergence summaries]:::side
-    S --> S3[Rule-12 upgrade: proposer must predict<br/>guard outcomes - would have flagged<br/>v9 at proposal time, zero trials]:::side
+    subgraph T1 [TRACK 1 — CONTENT. trials, no factory involved]
+        T1a[Hand-write v10 = scoped b7:<br/>ambiguous terms → enumerate;<br/>explicit env promises → verify anyway] --> T1b[ONE run, one task-file:<br/>sparql k=10 + both guards k=3<br/>parallel width]
+        T1b --> T1c{lift kept AND guard recovered?}
+    end
+
+    subgraph T2 [TRACK 2 — FACTORY. zero trials, code + desk work]
+        T2a[Wire enhanced prompt into propose.ts<br/>TDD] --> T2b[Desk-compare: wired vs manual<br/>same evidence in → same output?<br/>divergence = transport bug]
+        T2b --> T2c[Factory authors its own bullet from<br/>loop-2 evidence: taxonomy + v9<br/>guard-rejection + verifier contracts]
+        T2c --> T2d{factory bullet ≈ hand v10<br/>same fix-class + scoping?}
+    end
+
+    T1c -->|yes| I1
+    T2d -->|yes| I1
+    I1[INTEGRATE: adopt v10.<br/>Factory certified by EQUIVALENCE —<br/>no extra trials needed] --> L4
+
+    T1c -->|sparql lift lost| G[Scoping cut the working mechanism<br/>→ mechanism re-read, rewrite, stay v7]
+    T1c -->|guard fails again| H[Wording cannot fix it →<br/>escalate: routing / per-task-class memory]
+    T2d -->|no| I2[Content verdict stands from track 1;<br/>iterate PROMPT until output matches<br/>proven-good class — trials reused, not respent]
+
+    L4[LOOP-4 — held-out generalization:<br/>build-pmars, cancel-async-tasks, polyglot-rust-c] -->|travels| J[Real self-improvement claim]
+    L4 -->|null| K[Lessons task-local →<br/>routing / per-task-class memory]
+
+    S[Side quests — slot anywhere]:::side
+    S --> S1[Office box: grep v8 log harness size]:::side
+    S --> S2[Pass-side traj + taxonomy-v2 divergence]:::side
+    S --> S3[Rule-12: proposer predicts guard outcomes<br/>would have flagged v9 pre-trial]:::side
 
     classDef side fill:#eeeeee,stroke:#999999,color:#333333
 ```
 
-## Branch logic (why three outcomes at the loop-3 gate)
+## Track outcomes
 
-| Outcome | Reading | Next move |
-|---|---|---|
-| Lift + guards hold | Scoped trigger is "just right"; factory (wired proposer) validated | Adopt v10; proceed to loop-4 |
-| Sparql lift lost | Scoping cut too deep — the fix needed the broad trigger | Rewrite trigger wording; another candidate through the same gate; v7 stays |
-| Guard fails again | Trigger scoping insufficient — one global playbook line cannot serve opposed graders | Stop rewording; escalate to routing (per-task-class bullets) or per-task memory |
+| Track | Outcome | Reading | Next move |
+|---|---|---|---|
+| 1 (content) | Lift kept + guard recovered | Scoped trigger "just right" | Ready to adopt (pending track-2 or as hand-authored v10) |
+| 1 | Sparql lift lost | Scoping cut the working mechanism — trigger and mechanism were entangled | Trajectory re-read, rewrite, baseline stays v7 |
+| 1 | Guard fails again | Wording cannot serve opposed graders | Stop rewording; escalate to routing / per-task-class memory |
+| 2 (factory) | Wired ≈ manual, factory bullet ≈ hand v10 | Factory validated by equivalence — zero factory trials spent | Adoption doubles as first automated-pipeline certification |
+| 2 | Factory bullet diverges | Authoring gap, not content gap (content verdict independent from track 1) | Iterate the prompt against the proven-good target; trials reused |
+
+**Integration rule: adoption decision comes ONLY from track 1; factory certification comes
+ONLY from track-2 equivalence. Neither blocks the other; a null in either stays
+single-variable attributable.**
 
 ## Standing rules (accumulated, all evidence-backed)
 
