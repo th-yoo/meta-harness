@@ -3,14 +3,39 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-22 late (MacBook) — LOOP-3 RAN BOTH TRACKS: v10 rejected (cgw double-trap 1/3, sparql 5/10 uncertified); FACTORY WIRED+VALIDATED; NEXT = v11 (factory's clause-dropped bullet) through same gate — active=v7 — RESUME HERE
+## ⏸ SESSION END 2026-07-22/23 (MacBook) — LOOP-3 COMPLETE — active=v7 — RESUME HERE
 
-**Loop-3 detail in reboot.md (bottom): track-2 factory = `bench propose-lesson` wired (TDD,
-20 tests, rule-8 re-scoping exception found via live abstention), equivalence-class match,
-factory variant DROPS the literal-wording poison clause — v11 candidate text is in
-`factory-proposal-2.json` content quoted in reboot.md + proposer doc. v10/v9/v7 snapshots
-all in `term-bench2/store/global/candidates/`. Gate for v11: sparql k=10 + BOTH guards k=3;
-cgw mechanism now known = double-trap (env promise + `user`-vs-`git` username mismatch).**
+**MISSION (was):** two parallel single-variable tracks. Track 1: v10 = hand-scoped b7 →
+sparql k=10 + guards k=3. Track 2: wire the proposer as `bench propose-lesson`, validate
+by desk-compare, zero trials.
+
+**RESULT:** Track 1 FAILED — v10 rejected (sparql 5/10, p=0.14 uncertified; guard
+configure-git-webserver 1/3 real vs 3/3 baseline; one turns=0 provider-error void trial
+stripped + re-rolled). Track 2 SUCCEEDED — factory wired (TDD, 20 tests), validated by
+equivalence; round-1 abstention exposed missing rule-8 re-scoping exception, fixed for
+one judge call.
+
+**ANALYSIS:** v10's scoping FIXED the sshd-blindness (trajectory-proven) but cgw is a
+DOUBLE-trap: instruction says `user@server`, verifier logs in as `git`@localhost password
+"password" — the retained "literal wording" clause steered agents to username `user`.
+Counterweighting the poison clause is falsified; removal required. The factory dropped
+that exact clause unprompted — track-1's failure retroactively validates the factory's
+surgery. **Command error recorded: the `git`@localhost evidence was in hand since loop-2's
+desk-check and was not used when predicting cgw recovery — evidence-possession ≠
+evidence-use; rule 7b binds the human too.**
+
+**STATE:** active=v7 (no adoption yet in project history; v8/v9/v10 all rejected with
+mechanism). Snapshots v7/v9/v10 + `v11-factory-proposal.json` committed under
+`term-bench2/store/global/candidates/`. Box clean. All pushed.
+
+**NEXT (awaiting go): run v11 = the factory's own bullet through the unchanged gate**
+(sparql k=10 + both guards k=3; create candidate from v11-factory-proposal.json bullet
+text via the standing recipe — system.md MUST contain the bullet line, verify "Harness
+assembled" chars > 394 at launch). Single variable vs v10: clause removed vs
+counterweighted. Pass → FIRST adoption ever, authored end-to-end by the automated
+pipeline; then score its falsify_if (first calibration data point) and proceed to loop-4
+(held-out generalization). Fail on cgw with sshd built AND username correct → cgw is
+triple-trapped → review its fitness as a guard (it punishes every interpretation policy).
 
 ## PREVIOUS: SESSION END 2026-07-22 — LOOP-2: v9 CERTIFIED (p=0.020) then GUARD-REJECTED — active=v7
 
@@ -46,21 +71,14 @@ discussion pruned loop-3 scope creep into the loop-3/loop-4 split below):**
    explicit env promises still get verified — "trust but verify what the grader can
    test"). Both sparql lift AND guard must pass for adoption this time.
 
-**B. Wire the proposer (code work, no trials — fresh-budget session):**
-wire the enhanced prompt (proposer-lesson-prompt.md, incl. the new Verifier-contract input
-extraction) into propose.ts, TDD. Prereq for loop-3, zero system effect until loop-3 calls it.
+**B. ~~Wire the proposer~~ DONE 07-22 late:** `bench propose-lesson` shipped (TDD, 20
+tests, commits `1602227`+`4a008e4`) — evidence auto-gathered (taxonomy + playbook +
+`--rejected-file` + verifier sources from tbRoot + `--guards`), `--create vN` stages
+INACTIVE candidates, hard 60-word/evidence≥2/falsify_if enforcement in the parser.
 
-**C. LOOP-3 — ONE question: does the AUTOMATED pipeline produce a SECOND gated lift?**
-- Zero-trial pre-checks (attribution firewalls, NOT experiments): (a) wired-vs-manual
-  proposer desk-compare on the SAME evidence — clears automation quality before any trial
-  can confound it; (b) verifier desk-check of whatever task the new lesson targets
-  (standing rule since loop-1).
-- The experiment: candidate = baseline + ONE new bullet from the WIRED proposer, targeting
-  the fresh taxonomy's dominant mode; held-IN gate on that mode's tasks + guards. Delta =
-  one bullet, same structure as loop-2. Composition (two bullets coexisting) is NOT a
-  separate variable — the guards catch interference; that is what they are for.
-- Free bookkeeping after verdict: score the proposer's falsify_if against the outcome
-  (first calibration data point — doc open-question 2).
+**C. ~~LOOP-3~~ DONE 07-22/23 (decomposed into parallel tracks per user order — see
+session-end block above):** track 1 v10 REJECTED, track 2 factory VALIDATED. Verdicts in
+reboot.md. Next candidate = v11 (factory-authored, clause-dropped).
 
 **D. LOOP-4 — ONE question: does the accumulated playbook GENERALIZE?**
 Held-OUT reserved set (build-pmars, cancel-async-tasks, polyglot-rust-c) — the playbook
