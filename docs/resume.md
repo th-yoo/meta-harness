@@ -3,7 +3,7 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-22 (MacBook) — LOOP-2 CERTIFIED: v9 7/10 vs v7 1/10 same-host, p=0.020 — GUARDS = ONLY step before adoption — RESUME HERE
+## ⏸ SESSION END 2026-07-22 (MacBook) — LOOP-2 COMPLETE: v9 lift CERTIFIED (p=0.020) but GUARD-REJECTED (spec-overtrust regression) — active=v7 — RESUME HERE
 
 **Read [`docs/reboot.md`](reboot.md) LOOP-2 VERDICT section (bottom) first. MacBook box
 clean: no tmux, no containers, active=v7 (v9 NOT adopted — guards + certification pending).
@@ -26,8 +26,15 @@ discussion pruned loop-3 scope creep into the loop-3/loop-4 split below):**
    v9 lift CERTIFIED (Fisher two-sided p=0.020 same-host; p=0.015 pooled 4/20 vs 7/10;
    host effect none, p=0.58 — MacBook trends harder). Log `loop2-v7-sparql.log`; v7
    MacBook score.json synced to `term-bench2/store/global/candidates/v7/`.**
-2. **Guards** (ace k=3: configure-git-webserver, count-dataset-tokens) — the ONLY
-   remaining step before adoption. → adopt v9 (new baseline) or reject (stays v7).
+2. ~~Guards~~ **DONE 07-22: v9 adoption REJECTED — configure-git-webserver 0/3 (office
+   v0 ace 3/3), count-dataset-tokens 3/3 held. Trajectory-proven lesson cost: b7's
+   "literal wording" made agents TRUST the task's false "I'll setup login" promise →
+   skipped sshd the verifier secretly requires. b7 trades interpretation-overfit for
+   spec-overtrust; no universal interpretation policy across graders. v7 stays active;
+   v9 = certified-on-sparql, guard-rejected. See reboot.md GUARDS VERDICT.**
+   → **Loop-3 target sharpened: v10 = scoped b7** (trigger on ambiguous TERMS only;
+   explicit env promises still get verified — "trust but verify what the grader can
+   test"). Both sparql lift AND guard must pass for adoption this time.
 
 **B. Wire the proposer (code work, no trials — fresh-budget session):**
 wire the enhanced prompt (proposer-lesson-prompt.md, incl. the new Verifier-contract input

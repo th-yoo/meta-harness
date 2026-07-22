@@ -215,3 +215,20 @@ first measured lift. Also caught live on this host: naive `createCandidate(v0-sy
 playbook+bullet)` silently drops the bullet from the harness (composeHarness faithful-render
 fallback) — the aborted first launch is in `loop2-v9-sparql.aborted-badharness.log`; the
 office-box v8 harness-size check (resume.md) decides whether loop-1 hit the same bug.
+
+**07-22 GUARDS VERDICT — v9 adoption REJECTED (pre-registered guard rule fired):**
+count-dataset-tokens 3/3 HELD · **configure-git-webserver 0/3 REGRESSED** (office v0 ace:
+3/3). Forensics clean. Mechanism (trajectory-proven, not host): the task's instruction
+FALSELY promises "I'll setup login... you don't have to worry" while the verifier requires
+agent-built sshd + `git` user + password "password" (Dockerfile ships neither — desk-check).
+v0 agents distrusted the spec and built sshd anyway; v9 agents followed b7's "match the
+spec's literal wording" and TRUSTED the promise — 2/3 skipped sshd entirely (trial-2 traj
+verbatim: "`server` resolves via the user's own network/SSH config, which they said they'd
+handle"), 1/3 built sshd but missed the password contract. **Lesson cost measured: b7
+trades interpretation-overfit (sparql class) for spec-overtrust (env-promise class). No
+universal interpretation policy exists across graders — sparql's grader rewards literalism,
+this one punishes it.** Status: v7 active (rolled back); v9 = certified-on-sparql,
+guard-rejected candidate — the loop's brake worked exactly as designed. Loop-3 material:
+scope b7's trigger (ambiguous TERMS ≠ explicit environment promises; never skip verifying
+env assumptions the grader may test) → v10 through the same gate. Log
+`loop2-v9-guards.log`; v9 snapshot score.json updated with guard sessions.
