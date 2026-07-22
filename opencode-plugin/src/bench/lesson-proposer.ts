@@ -138,6 +138,11 @@ ${guardsSection}
    (a lesson was gate-rejected for exactly that overreach).
 8. Check against the current playbook, higher layers, AND the rejected list: if
    your best candidate is a near-duplicate of any of them, ABSTAIN and say which.
+   EXCEPTION: when a rejected entry's recorded outcome explicitly attributes the
+   rejection to trigger overreach (guard regression) while certifying the core
+   mechanism, a NARROWER-scoped variant of that lesson is not a duplicate — it
+   is the indicated fix. Propose it with the scoping stated in the trigger, and
+   defend every guard against the recorded overreach in expect_unchanged_guards.
 9. ACTUATOR-LEVEL check: if the SAME mode was already targeted by a lesson in
    >=2 prior iterations (adopted or rejected) and still dominates, do NOT propose
    another lesson — ABSTAIN with recommendation "switch actuator" (a persistent

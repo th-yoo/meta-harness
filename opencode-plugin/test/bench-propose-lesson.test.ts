@@ -242,3 +242,9 @@ test("cli: propose-lesson with missing required args prints usage (rc 2)", async
   const rc = await main(["propose-lesson"])
   expect(rc).toBe(2)
 })
+
+test("prompt rule 8 carves out re-scoping: a scoping-rejected lesson invites a narrower variant, not abstention", () => {
+  const p = buildLessonProposerPrompt(makeEvidence())
+  expect(p).toContain("trigger overreach")
+  expect(p.toLowerCase()).toContain("narrower")
+})

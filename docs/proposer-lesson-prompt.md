@@ -86,6 +86,11 @@ strategy departed from the failing one's}
    interpretation passes locally and fails the held-out grader).
 8. Check against the current playbook, higher layers, AND the rejected list: if
    your best candidate is a near-duplicate of any of them, ABSTAIN and say which.
+   EXCEPTION: when a rejected entry's recorded outcome explicitly attributes the
+   rejection to trigger overreach (guard regression) while certifying the core
+   mechanism, a NARROWER-scoped variant of that lesson is not a duplicate — it
+   is the indicated fix. Propose it with the scoping stated in the trigger, and
+   defend every guard against the recorded overreach in expect_unchanged_guards.
 9. ACTUATOR-LEVEL check: if the SAME mode was already targeted by a lesson in
    ≥2 prior iterations (adopted or rejected) and still dominates, do NOT propose
    another lesson — ABSTAIN with recommendation "switch actuator" (a persistent
@@ -194,3 +199,24 @@ currently reads failures only) — until then the section arrives empty and rule
 - CAUTION imported (tech queue, not this prompt): "LLM Config Hands-Off Rule" — config edits
   caused broad hard-to-diagnose regressions for them; raises the evidence bar for our
   AgentConfig queue item.
+
+## 2026-07-22 WIRED + first live desk-compare (loop-3 track 2)
+
+Wired as `bench propose-lesson` (`opencode-plugin/src/bench/lesson-proposer.ts` +
+`cmd-propose-lesson.ts`; TDD, 20 tests). Evidence inputs: taxonomy + playbook + rejected
+history (`--rejected-file`) + per-task verifier sources (auto-read from tbRoot tests/) +
+guards CSV. `--create vN` stages an INACTIVE candidate via faithful renderPlaybook.
+
+**Live desk-compare vs the hand-authored v10 (same loop-2 evidence, opus judge):**
+- Round 1: factory ABSTAINED — rule 8 (no near-duplicates of rejected) had no carve-out
+  for scoping-rejections, so the guard-rejected-for-overreach b7 blocked its own scoped
+  fix. Correct rule-following; wrong rule. Found for the cost of one judge call.
+- Rule-8 EXCEPTION added (above, + wired prompt): overreach-rejection + certified core
+  mechanism → narrower-scoped variant is the indicated fix, not a duplicate.
+- Round 2: factory PROPOSED a 53-word scoped bullet, mode looks_done, 4 real sessionID
+  citations, both guards defended, falsify_if covering BOTH no-lift and guard-regression.
+  **Equivalence-class MATCH with hand v10** (same mechanism, same scoping intent) with one
+  genuine divergence: factory DROPPED the "pick the spec's literal wording" clause (the
+  proven overtrust vector) instead of counterweighting it — arguably the sharper surgery.
+  If hand v10 fails its guard arm, the factory variant is the pre-diagnosed next candidate.
+- Factory also independently re-derived b5 = followed_harmful (third convergence).
