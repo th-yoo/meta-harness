@@ -1,6 +1,6 @@
 # Techniques employed — inventory + evidence status
 
-*Written 2026-07-21 (post Plan-A merge, Cat-A screen complete, k-boost pending). Two purposes:
+*Written 2026-07-21; Part 2 re-audited 2026-07-23 (post loops 1–3). Two purposes:
 (1) a map of every technique the project employs and where it came from; (2) an honest audit of
 which are **proven by our own evidence**, which are **disproven**, and which remain **unproven** —
 so nobody (including us) mistakes built-and-runs for validated. Companion docs:
@@ -46,7 +46,7 @@ can be believed.
 | Evolvable component = memory / boundary-case lessons | AHE's ablation winner. NOT prompt rewriting (regressed −2.3pp in AHE; our v1–v6 haiku prompt candidates all failed too), NOT verify-retry (AHE's ralph_loop lost). |
 | One-component-per-edit | Single lesson per candidate → attributable credit, clean gate verdict. |
 | Versioned candidate store | v0…vN with active pointer, per-version score/trajectories = provenance, rollback, and baseline identity (baseline/candidate/production share the model). |
-| propose → ab → activate machinery | The automated crank. Loop-1 runs it manually once; automation exists and is validated on its reject path. |
+| propose → ab → activate machinery | The automated crank. Loops 1–3 ran it manually; the lesson FACTORY (`bench propose-lesson`, wired 2026-07-22, TDD 20 tests) automates the distill step — its first bullet (v11) is the pending gate candidate. |
 
 ### D. Validity engineering
 
@@ -115,40 +115,44 @@ unaffected).
 
 ---
 
-## Part 2 — Evidence status (audited 2026-07-21)
+## Part 2 — Evidence status (audited 2026-07-23, post loops 1–3)
 
 ### PROVEN — direct empirical evidence, ours
 
 | Technique | Evidence |
 |---|---|
-| Gate's REJECT side | v3 killed after held-in with 2 pass-regressions caught (loop-2). The gate stops bad candidates. |
-| Failure-mode detection | Twice: prototype (3 hand-checked trajectories, accurate root causes) + shipped tool (v3: tune-mjcf 5/5 `incomplete` matches the independent timeout diagnosis; openssl → looks_done matches hand analysis). |
-| Band methodology substrate | A 10-task band exists on opus-4.8 at k=3 — the measurable middle ground is real. |
-| Bench infrastructure | 200+ trials survived: podman isolation, parallel width ~6, timeout recording, atomic writes, resume (post-B1-fix), tmux daemonization. |
-| Env-artifact forensics | Caught 2 fake labels live (qemu apt, pytorch instant-death); distinguished timeout vs artifact vs auth signatures. |
-| Prototype-before-build | Haiku no-lift proto killed a wrong path for pennies; openssl artifact caught before a k=10 spend. |
-| Review-gated process | Architect pre-flight caught B1 (partial-freeze) + R1 (poisoned packer) before spend; SDD reviews caught real defects (scanner duplication, fake test-RED) pre-merge. |
+| **Lesson injection lifts a strong model (held-in)** | **v9 (interpretation-enumeration bullet): sparql 7/10 vs v7 1/10 same-host, p=0.020 — first statistically certified capability lift in project history.** Grip is CONTENT-dependent: loop-1's lesson ignored 7/8 trajectories; v9's engaged in every one. |
+| **The gate, BOTH directions** | Certifies real lift (v9 p=0.020) AND rejects with mechanism: null (v8), guard-regression (v9 cgw), uncertified+regression (v10). The anti-AHE regression-blindness claim is exercised, not asserted. |
+| **Guard non-regression as adoption filter** | v9 certified on held-in yet REJECTED on a guard (cgw 1/3 vs 3/3) — exactly the collateral AHE's loop cannot see (their regression-recall 11.1%). AHE's memory-hurts-easy prediction reproduced live. |
+| **Verifier desk-check** | Decisive twice, free both times: reversed loop-1's diagnosis (held-out graph, order-insensitive grader); exposed cgw's double-trap (`git`@localhost vs instruction's `user@server`). Now a standing pre-distill step. |
+| Taxonomy diagnosis → certifying fix-class | v9's winning lesson = the taxonomy-fed class; the "deeper" raw-trajectory analysis produced the confounded ORDER-BY lesson that gated null. |
+| Lesson factory (`bench propose-lesson`) | Wired (TDD, 20 tests), validated by desk-equivalence; its unprompted clause-removal surgery retroactively validated by v10's failure. Its bullet (v11) = the pending candidate. |
+| Judge injection-resistance | Live accidental adversarial test: `mh-judge` refused two full role-hijack prompts (44KB and 12KB) and held its verdict schema. |
+| Gate's REJECT side (haiku era) | v3 killed after held-in with 2 pass-regressions caught (old loop-2). |
+| Failure-mode detection | Prototype (3 hand-checked traj) + shipped tool (haiku v3: tune-mjcf 5/5 `incomplete` matches independent timeout diagnosis; opus v7: looks_done 5/7 → the class that certified as v9). |
+| Band methodology substrate | 10-task opus band at k=3; sparql's screen estimate (1/3) reproduced at k=10 (3/10). |
+| Bench infrastructure | 300+ trials survived: podman isolation, width ~6, timeout recording, atomic writes, resume (post-B1), tmux daemonization, cross-host store recipes. |
+| Env-artifact forensics | 2 fake labels caught in the screen (7.7%); a turns=0 provider-error void trial caught + re-rolled in loop-3. |
+| Prototype-before-build · Review-gated process | Unchanged from 07-21 audit (haiku proto, openssl artifact, B1/R1 pre-spend catches, SDD review catches). |
 
-### DISPROVEN — negative results, also ours, also valuable
+### DISPROVEN — negative results, ours, valuable
 
-- **Prompt-rule evolution on haiku**: v1–v6 all rejected or inconclusive (AHE independently: prompt evolution regressed).
-- **Lesson injection into a capability-bound model**: haiku 0/2 → 0/2; one-shots and ignores the lesson.
-- **Single-task, small-n improvement signals**: openssl 0/2 → 1/2 was a harness-deficiency artifact. n=2 anecdotes are worthless.
-- **Phase-0 self-scoring as a gate input**: undersized, no signal.
-- **Declared-cpus scheduling + cgroup capture on WSL2**: measured profiles are garbage on this host (shared-cgroup reads; avgCpu up to 235 "cores").
-- **Leaderboard labels as band predictions**: 1-trial opencode+4.5 labels were stale for 4.8 — 6 of 26 "fails" turned out to be aces. Pool ≠ band; only the re-baseline measures.
+- **"Advisory prose never grips a strong model"** (loop-1's inference): falsified by v9 — grip is content-dependent, not channel-impossible.
+- **Divergence-derived strategies as automatically trustworthy**: "add ORDER BY" looked load-bearing from pass-vs-fail comparison; grader was order-insensitive on held-out data — dev-data confound, gated null (v8). Verifier contract must vet divergence lessons (prompt rule 7 caveat).
+- **Counterweighting a poison clause** (v10): retaining a harmful clause plus a counterweight lost to removing it — the factory's surgery was right, the hand-scoped edit wrong.
+- **Prompt-rule evolution on haiku** (v1–v6) · **lesson injection into a capability-bound model** (haiku 0/2→0/2) · **single-task small-n signals** (openssl artifact) · **Phase-0 self-scoring** · **WSL2 cgroup capture** · **leaderboard labels as band predictions** — all as per 07-21 audit.
 
-### UNPROVEN — concentrated exactly where it should be
+### UNPROVEN — the live frontier
 
-- **A distilled lesson lifting a strong model** — zero evidence either way. THE experiment.
-- **The gate's ACCEPT path** — has never fired in project history.
-- **Held-out generalization of a lesson** — never reached.
-- **The autonomous crank end-to-end with a win** — machinery exists, never completed one.
-- (Minor: judge self-preference bias unmeasured; prompt-injection defense untested adversarially.)
+- **NET improvement (lift with zero collateral) — i.e., a single ADOPTION**: v8/v9/v10 all rejected; active = v7, byte-identical to start. **v11 (factory-authored) is the pending test.**
+- **Held-out generalization of a lesson** — loop-4's question; reserved band tasks untouched.
+- **The autonomous crank end-to-end with a win** — factory authored v11; gate hasn't judged it.
+- **cgw's fitness as a guard** — double-trapped task may punish every interpretation policy (flagged for review if v11 fails there with sshd+username correct).
+- (Minor: judge self-preference bias unmeasured; SPRT deferred.)
 
-### Scoreboard, one sentence
+### Scoreboard, one sentence (2026-07-23)
 
-We have a **proven laboratory** — it measures honestly, rejects reliably, and catches its own
-contamination — and **zero proven improvement**; all remaining uncertainty is concentrated in the
-single pending experiment (k-boost → opus taxonomy → one lesson → gated A/B), which either
-converts the thesis to proven or to a provable null. Both are results.
+Every organ is now individually proven — diagnosis finds certifying fix-classes, the actuator
+can move a strong model (p=0.020), the gate certifies and rejects truthfully in both directions —
+but **no lesson has yet passed the whole body** (lift + no collateral = zero adoptions); v11,
+the first candidate authored end-to-end by the machine, is the pending test of exactly that.
