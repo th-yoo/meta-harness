@@ -5,6 +5,14 @@ does NOT transfer; this file + the repo are the source of truth.)
 
 ## ⏸ SESSION END 2026-07-22/23 (MacBook) — LOOP-3 COMPLETE — active=v7 — RESUME HERE
 
+**2026-07-23 office-box session addendum (docs-only, all pushed HEAD `5a286d1`):**
+techs.md Part-2 re-audited post loops 1–3 (lesson-lift PROVEN v9 p=0.020; gate both
+directions; zero adoptions = the frontier) + NEW [`minimal-loop-ood.md`](minimal-loop-ood.md)
+(7-element kernel, domain objects, 5 invariants, policy-seat roadmap — read alongside
+reboot.md). No trials run this session. v11 gate run still the single pending action;
+office box env (oauth/podman) unverified since 07-21 — check before launch.
+
+
 **MISSION (was):** two parallel single-variable tracks. Track 1: v10 = hand-scoped b7 →
 sparql k=10 + guards k=3. Track 2: wire the proposer as `bench propose-lesson`, validate
 by desk-compare, zero trials.
