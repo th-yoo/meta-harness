@@ -15,6 +15,7 @@ import { cmdAb, type CmdAbArgs } from "./cmd-ab.ts"
 import { cmdScreen, type CmdScreenArgs } from "./cmd-screen.ts"
 import { cmdJudgeAudit, type JudgeAuditArgs } from "./judge-audit.ts"
 import { cmdFailureTaxonomy, type FailureTaxonomyArgs } from "./cmd-failure-taxonomy.ts"
+import { cmdProposeLesson, type ProposeLessonArgs } from "./cmd-propose-lesson.ts"
 import { LAYER_CHOICES, type LayerName } from "./record.ts"
 import { cmdSplit, type SplitArgs } from "./splits.ts"
 import { cmdReportLoop, type ReportLoopArgs } from "./report-loop.ts"
@@ -74,6 +75,7 @@ commands:
                writes the store or emits a verdict, only an ADVANCE hint for ab)
   judge-audit --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
   failure-taxonomy --layer L --candidate vN [--agent NAME] [--model ID] [--limit N]
+  propose-lesson --layer L --candidate vN [--agent NAME] [--model ID] [--guards CSV] [--rejected-file F] [--out F] [--create vM]
   split       make|rotate|show [--seed N] [--folds N] [--source FILE]
               [--split-file PATH] [--results PATH]... [--band LO,HI]
               [--sentinels N] [--sentinel-hi F]
@@ -1205,6 +1207,31 @@ function parseFailureTaxonomyArgs(argv: string[]): FailureTaxonomyArgs | null {
   return out as FailureTaxonomyArgs
 }
 
+function parseProposeLessonArgs(argv: string[]): ProposeLessonArgs | null {
+  const out: Partial<ProposeLessonArgs> = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    const v = argv[i + 1]
+    if (a === "--layer" || a === "--candidate" || a === "--agent" || a === "--model" || a === "--guards" || a === "--out" || a === "--create") {
+      if (v === undefined) return null
+      const key = a.slice(2) as "layer" | "candidate" | "agent" | "model" | "guards" | "out" | "create"
+      out[key] = v
+      i += 2
+      continue
+    }
+    if (a === "--rejected-file") {
+      if (v === undefined) return null
+      out.rejectedFile = v
+      i += 2
+      continue
+    }
+    return null
+  }
+  if (out.layer === undefined || out.candidate === undefined) return null
+  return out as ProposeLessonArgs
+}
+
 function parseSplitArgs(argv: string[]): SplitArgs | null {
   if (argv.length === 0) return null
   const splitCmd = argv[0]
@@ -1944,6 +1971,14 @@ export async function main(argv: string[]): Promise<number> {
           return 2
         }
         return await cmdFailureTaxonomy(paths, taxArgs)
+      }
+      case "propose-lesson": {
+        const plArgs = parseProposeLessonArgs(subArgs)
+        if (plArgs === null) {
+          printUsage()
+          return 2
+        }
+        return await cmdProposeLesson(paths, plArgs)
       }
       case "split": {
         const splitArgs = parseSplitArgs(subArgs)
