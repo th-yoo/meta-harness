@@ -1,0 +1,34 @@
+{
+  "action": "propose",
+  "reason": "Top mode looks_done (5) is circular self-validation of ambiguous semantic terms; a narrower-scoped variant of the guard-rejected lesson (mechanism certified, overreach clause dropped) is the indicated fix.",
+  "actuator": "memory",
+  "whyThisActuator": "A behavioral rule biasing agents away from self-confirmation toward discriminating data checks is context-injectable and checkable in a trajectory.",
+  "bulletAssessments": [
+    {
+      "id": "b5",
+      "verdict": "followed_harmful",
+      "note": "agents ran own proxy queries as verification, producing circular self-confirmation and false confidence"
+    }
+  ],
+  "bullet": {
+    "text": "When acceptance depends on an ambiguous term whose value is computed from the queried data (not an environment/setup claim), do not treat your query reproducing your own predicted answer as proof. Enumerate the plausible interpretations, and run separate probes against the raw data that would return different rows under each before choosing one.",
+    "mode": "looks_done",
+    "evidence": [
+      "bench-sparql-university-1784622756-81aa20",
+      "bench-sparql-university-1784622581-da7735",
+      "bench-sparql-university-1784621992-9d7d71",
+      "bench-sparql-university-1784621902-2240b6"
+    ]
+  },
+  "predictions": {
+    "expectImprove": [
+      "sparql-university"
+    ],
+    "expectUnchangedGuards": [
+      "configure-git-webserver",
+      "count-dataset-tokens"
+    ],
+    "falsifyIf": "A/B shows no lift on sparql-university (looks_done persists) OR configure-git-webserver regresses below its passing baseline."
+  },
+  "wordCount": 53
+}

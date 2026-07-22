@@ -3,7 +3,16 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-22 (MacBook) — LOOP-2 COMPLETE: v9 lift CERTIFIED (p=0.020) but GUARD-REJECTED (spec-overtrust regression) — active=v7 — RESUME HERE
+## ⏸ SESSION END 2026-07-22 late (MacBook) — LOOP-3 RAN BOTH TRACKS: v10 rejected (cgw double-trap 1/3, sparql 5/10 uncertified); FACTORY WIRED+VALIDATED; NEXT = v11 (factory's clause-dropped bullet) through same gate — active=v7 — RESUME HERE
+
+**Loop-3 detail in reboot.md (bottom): track-2 factory = `bench propose-lesson` wired (TDD,
+20 tests, rule-8 re-scoping exception found via live abstention), equivalence-class match,
+factory variant DROPS the literal-wording poison clause — v11 candidate text is in
+`factory-proposal-2.json` content quoted in reboot.md + proposer doc. v10/v9/v7 snapshots
+all in `term-bench2/store/global/candidates/`. Gate for v11: sparql k=10 + BOTH guards k=3;
+cgw mechanism now known = double-trap (env promise + `user`-vs-`git` username mismatch).**
+
+## PREVIOUS: SESSION END 2026-07-22 — LOOP-2: v9 CERTIFIED (p=0.020) then GUARD-REJECTED — active=v7
 
 **Forward plan + flowchart: [`docs/loop-roadmap.md`](loop-roadmap.md) (canonical roadmap).
 Read [`docs/reboot.md`](reboot.md) LOOP-2 VERDICT section (bottom) first. MacBook box
