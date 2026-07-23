@@ -1,0 +1,17 @@
+[
+  {
+    "rejectedAt": "2026-07-23",
+    "task": "sparql-university",
+    "candidate": "harness/candidate-2026-07-23T06-46-02-181Z.md",
+    "sha256": "28688ed0249f13b2",
+    "bullet": "When a task's answer depends on counting, thresholding, or date filtering over data you can read, compute the qualifying set with a script rather than eyeballing, and confirm your query derives the same set through general logic (filters/aggregates), not hardcoded results, before finalizing.",
+    "experiment": {
+      "baseline": { "record": "results/sparql-university-2026-07-23T06-50-28-126Z.json", "rewards": [1,0,0,0,1,0,1,1,0,0], "passRate": 0.4 },
+      "candidate": { "record": "results/sparql-university-2026-07-23T07-21-50-362Z.json", "rewards": [1,1,0,0,1,1,0,1,0,0], "passRate": 0.5 },
+      "fisherTwoSidedP": 1.0,
+      "host": "yoo-dev", "model": "anthropic/claude-opus-4-8", "driver": "opencode", "k": 10
+    },
+    "verdict": "REJECT — null. The bullet's own falsify_if fired: 'A/B on this task shows no pass-rate lift (or a drop), indicating the dominant failure was not eyeball-miscounting/logic error but something script-verify-plus-general-logic does not address.' Pre-registered refutation observed exactly (4/10 vs 5/10, p=1.0).",
+    "mechanismNote": "Diagnosis was drawn from ONE failing trajectory (thin evidence, proposer self-flagged low confidence). Winners already scripted logic in both arms; the bullet mandated behavior the model mostly does anyway = no delta. Next proposer run must ingest this rejection (invariant 5) and needs a richer failure sample: 6 baseline fails now exist vs 1 before."
+  }
+]
