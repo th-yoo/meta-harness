@@ -1,0 +1,15 @@
+{
+  "task": "hello-fs",
+  "model": "claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-dev",
+  "startedAt": "2026-07-23T00:26:04.981Z",
+  "elapsedSec": 0.53,
+  "agentExitCode": 1,
+  "timedOut": false,
+  "turns": 0,
+  "reward": 0,
+  "resultText": "",
+  "trajFile": "hello-fs-2026-07-23T00-26-04-981Z.traj.ndjson",
+  "agentStderr": "Claude configuration file not found at: /root/.claude.json\nA backup file exists at: /root/.claude/backups/.claude.json.backup.1784766175447\nYou can manually restore it by running: cp \"/root/.claude/backups/.claude.json.backup.1784766175447\" \"/root/.claude.json\"\n\n\nClaude configuration file not found at: /root/.claude.json\nA backup file exists at: /root/.claude/backups/.claude.json.backup.1784766175"
+}

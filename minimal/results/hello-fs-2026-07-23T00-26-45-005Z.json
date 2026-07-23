@@ -1,0 +1,15 @@
+{
+  "task": "hello-fs",
+  "model": "claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-dev",
+  "startedAt": "2026-07-23T00:26:45.005Z",
+  "elapsedSec": 6.12,
+  "agentExitCode": 0,
+  "timedOut": false,
+  "turns": 3,
+  "reward": 1,
+  "resultText": "Done. `/app/greeting.txt` contains exactly the single line `hello kernel`.",
+  "trajFile": "hello-fs-2026-07-23T00-26-45-005Z.traj.ndjson",
+  "agentStderr": ""
+}
