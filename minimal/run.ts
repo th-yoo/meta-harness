@@ -165,7 +165,7 @@ try {
   }
   writeFileSync(resultFile, JSON.stringify(trial, null, 2) + "\n")
   console.log(JSON.stringify(trial, null, 2))
-  console.log(`\nresult:     ${resultFile}\ntrajectory: ${trajFile}`)
+  console.log(`\nresult:     ${resultFile}\ntrajectory: ${trajFile}\nview:       bun minimal/traj.ts ${trajFile}`)
 } finally {
   await podman(["rm", "-f", name])
 }
