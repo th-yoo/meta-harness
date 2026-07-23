@@ -1,0 +1,31 @@
+{
+  "task": "cancel-async-tasks",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-mac.local",
+  "startedAt": "2026-07-23T14:47:22.333Z",
+  "k": 1,
+  "parallel": 1,
+  "sampling": null,
+  "system": null,
+  "harness": null,
+  "rewards": [
+    0
+  ],
+  "passRate": 0,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 0,
+      "turns": 1,
+      "elapsedSec": 105.85,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Done. Created `/app/run.py` with `run_tasks`, importable via `from run import run_tasks`.\n\nKey behaviors:\n- **Bounded concurrency**: uses an `asyncio.Semaphore(max_concurrent)` so at most `max_concurrent` tasks run at once (verified peak = 3 in test).\n- **Cleanup on interrupt** (`run.py:34`): when the run is cancelled — which is what happens when a `KeyboardInterrupt` propagates through `asyncio.r",
+      "trajFile": "cancel-async-tasks-2026-07-23T14-47-22-333Z-a1.traj.ndjson",
+      "agentStderr": ""
+    }
+  ]
+}

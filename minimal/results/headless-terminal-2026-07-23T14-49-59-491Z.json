@@ -1,0 +1,31 @@
+{
+  "task": "headless-terminal",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-mac.local",
+  "startedAt": "2026-07-23T14:49:59.491Z",
+  "k": 1,
+  "parallel": 1,
+  "sampling": null,
+  "system": null,
+  "harness": null,
+  "rewards": [
+    1
+  ],
+  "passRate": 1,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 173.8,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Done. I implemented `HeadlessTerminal(BaseTerminal)` in `/app/headless_terminal.py`.\n\n## How it works\n\n- **Real pty + interactive bash**: Uses `pty.fork()` and execs `bash -i -l`, so the process is a genuine interactive login shell that sources startup files (`/etc/profile`, `~/.bashrc`). Verified in test 2.\n- **Terminal emulation**: A `pyte` `Screen`/`ByteStream` consumes the shell's output on a ",
+      "trajFile": "headless-terminal-2026-07-23T14-49-59-491Z-a1.traj.ndjson",
+      "agentStderr": ""
+    }
+  ]
+}
