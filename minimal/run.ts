@@ -167,6 +167,9 @@ options:
   --model <id>       model in the driver's dialect (defaults:
                      claude-code=${DRIVERS["claude-code"].defaultModel}, opencode=${DRIVERS.opencode.defaultModel})
   --timeout <sec>    per-attempt agent timeout (default: ${DEFAULT_TIMEOUT_SEC})
+  --temperature <f>  sampling temperature (opencode driver only; recorded in
+                     the run record — a provenance dimension, arms must match)
+  --top-p <f>        nucleus sampling top-p (opencode only, ditto)
   -h, --help         this text
 
 output: minimal/results/<task>-<startedAt>.json (run record with rewards[] +
@@ -186,6 +189,14 @@ let k = 1
 let parallelMax = 1
 let harnessArg: string | undefined
 let driverId: DriverId = "opencode"
+let temperature: number | undefined
+let topP: number | undefined
+function parseFloatFlag(flag: string, raw: string | undefined): number {
+  if (raw === undefined) die(`${flag} needs a value`)
+  const v = Number(raw)
+  if (!Number.isFinite(v)) die(`${flag} not a number: ${raw}`)
+  return v
+}
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i]!
   if (a === "--model") modelArg = argv[++i] ?? die("--model needs a value")
@@ -193,6 +204,8 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === "--k") k = Number(argv[++i] ?? die("--k needs a value")) || die("--k not a number")
   else if (a === "--parallel") parallelMax = Number(argv[++i] ?? die("--parallel needs a value")) || die("--parallel not a number")
   else if (a === "--harness") harnessArg = argv[++i] ?? die("--harness needs a value")
+  else if (a === "--temperature") temperature = parseFloatFlag("--temperature", argv[++i])
+  else if (a === "--top-p") topP = parseFloatFlag("--top-p", argv[++i])
   else if (a === "--driver") {
     const d = argv[++i] ?? die("--driver needs a value")
     if (!(d in DRIVERS)) die(`--driver must be one of: ${Object.keys(DRIVERS).join(", ")}`)
@@ -204,6 +217,11 @@ if (k < 1 || !Number.isInteger(k)) die(`--k must be a positive integer, got ${k}
 if (parallelMax < 1 || !Number.isInteger(parallelMax)) die(`--parallel must be a positive integer, got ${parallelMax}`)
 const driver = DRIVERS[driverId]
 const model = modelArg ?? driver.defaultModel
+// Sampling knobs ride opencode's per-agent config (agent.build in the temp
+// opencode.json); the claude CLI exposes no equivalent — fail loud rather
+// than silently ignore a knob the user thinks is applied.
+if ((temperature !== undefined || topP !== undefined) && driverId !== "opencode")
+  die(`--temperature/--top-p are opencode-only (driver ${driverId} has no sampling flags)`)
 
 // --- Task (user paths resolve against CWD, like any CLI; only the built-in
 // default lives relative to this script) ---
@@ -277,10 +295,21 @@ if (driverId === "claude-code") {
 } else {
   const configDir = join(authTmp, "config")
   mkdirSync(configDir, { recursive: true })
-  writeFileSync(
-    join(configDir, "opencode.json"),
-    JSON.stringify({ $schema: "https://opencode.ai/config.json", plugin: ["opencode-claude-auth@latest"] }) + "\n",
-  )
+  const ocConfig: Record<string, unknown> = {
+    $schema: "https://opencode.ai/config.json",
+    plugin: ["opencode-claude-auth@latest"],
+  }
+  if (temperature !== undefined || topP !== undefined) {
+    // "build" is `opencode run`'s default agent; config agent entries accept
+    // temperature/top_p (opencode agent.ts merge).
+    ocConfig["agent"] = {
+      build: {
+        ...(temperature !== undefined ? { temperature } : {}),
+        ...(topP !== undefined ? { top_p: topP } : {}),
+      },
+    }
+  }
+  writeFileSync(join(configDir, "opencode.json"), JSON.stringify(ocConfig) + "\n")
   containerArgs.push(
     "-v", `${configDir}:/root/.config/opencode:rw`,
     "-v", `${join(home, ".claude")}:/root/.claude:ro`,
@@ -456,6 +485,7 @@ const run = {
   startedAt,
   k,
   parallel: parallelMax,
+  sampling: temperature !== undefined || topP !== undefined ? { temperature, topP } : null,
   harness,
   rewards,
   passRate: rewards.reduce((a, b) => a + b, 0) / k,
