@@ -47,8 +47,32 @@ async function podmanOrDie(args: string[], what: string): Promise<string> {
   return r.out
 }
 
+const USAGE = `minimal kernel runner (docs/minimal-loop-ood.md, iterations 1+2)
+
+usage: bun minimal/run.ts [taskDir] [options]
+
+  taskDir            task directory relative to minimal/ (default: tasks/hello-fs)
+                     must contain instruction.md + verify.sh; optional fixtures/
+                     is copied to /app before the attempt
+
+options:
+  --k N              attempts, each in a fresh container (default: 1)
+  --harness <file>   context file copied to /app/CLAUDE.md (the evolvable
+                     harness; sha256 recorded in the run record)
+  --model <id>       claude model (default: ${DEFAULT_MODEL})
+  --timeout <sec>    per-attempt agent timeout (default: ${DEFAULT_TIMEOUT_SEC})
+  -h, --help         this text
+
+output: minimal/results/<task>-<startedAt>.json (run record with rewards[] +
+passRate) and one <task>-<startedAt>-aN.traj.ndjson per attempt.
+View a trajectory:  bun minimal/traj.ts <traj.ndjson> [--full]`
+
 // --- args ---
 const argv = process.argv.slice(2)
+if (argv.includes("--help") || argv.includes("-h")) {
+  console.log(USAGE)
+  process.exit(0)
+}
 let taskDirArg = "tasks/hello-fs"
 let model = DEFAULT_MODEL
 let timeoutSec = DEFAULT_TIMEOUT_SEC
