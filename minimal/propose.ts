@@ -23,7 +23,11 @@ import { basename, dirname, join, resolve } from "node:path"
 
 const HERE = import.meta.dir
 const DEFAULT_MODEL = "claude-opus-4-8"
-const TRAJ_CHAR_CAP = 30_000
+// Per-traj budget. Real opus sparql trajs run 45-60k chars; at n=1 task x k=10
+// the full set (~0.5MB ~ 130k tokens) fits opus context, so the cap only
+// guards pathological runs. When it does bite, keep head AND tail — the tail
+// holds the final answer + self-checks, the most diagnosis-critical part.
+const TRAJ_CHAR_CAP = 80_000
 
 function die(msg: string): never {
   console.error(`minimal/propose.ts: ${msg}`)
@@ -73,7 +77,11 @@ for (const p of recordPaths) {
   const dir = dirname(p)
   for (const t of rec.trials ?? []) {
     const trajPath = join(dir, t.trajFile)
-    const traj = existsSync(trajPath) ? readFileSync(trajPath, "utf-8").slice(0, TRAJ_CHAR_CAP) : "(traj missing)"
+    let traj = existsSync(trajPath) ? readFileSync(trajPath, "utf-8") : "(traj missing)"
+    if (traj.length > TRAJ_CHAR_CAP) {
+      const half = TRAJ_CHAR_CAP / 2
+      traj = `${traj.slice(0, half)}\n...[${traj.length - TRAJ_CHAR_CAP} chars elided]...\n${traj.slice(-half)}`
+    }
     evidence.push({ attempt: `${basename(p)}#a${t.attempt}`, reward: t.reward, suspect: t.suspect ?? false, traj })
   }
 }
