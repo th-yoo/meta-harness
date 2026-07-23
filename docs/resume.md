@@ -44,14 +44,34 @@ grok goal templates + 2 measured failure classes; reviewed by external Fable + r
 loop (5 fixes) + code-architect subagent (8 fixes — incl. the prompt's own
 looks_done-shaped escape hatch)). Plus `harness/seed-v0.md` (2 DoD bullets, AGENTS.md).
 
+**ASSESSMENT OF THE LIFT (calibrated, 2026-07-23 end-of-session):** the on-task effect
+is real — p=0.001 pooled + p=0.02 unbiased replication kills "did nothing"; protocol
+clean (fresh paired same-host arms, sha-pinned). What it does NOT yet establish, in
+descending concern: (1) **scope** — n=1 task, and the prompt was FIT to this task's
+failure classes then measured on fresh trials of the same task; "lifts sparql" is
+certified, "improves the agent" is not (transfer to interpretation-heavy tasks est.
+60-70%); (2) **guards zero** — AHE's −2.3pp system-prompt prior says the DoD-procedure
+tax can hurt easy tasks; their aggregate-vs-our-single-task difference is why both can
+be true; (3) **mechanism assumed** — candidate attempts ~30% slower is consistent with
+the DoD procedure executing, but nobody has read the flipped trajectories; the lift
+could partly be REMOVAL of anthropic.txt's 8KB rather than our content; (4) composite —
+system-v0 vs seed-v0 split unmeasured. Holding "the agent improved" at ~60% until
+guards + one held-out task land.
+
 **NEXT (in order):**
-1. **Guard screening + guard arms** — pick 1-2 build-free TB2 tasks the bare agent aces
+1. **FREE FIRST — trajectory forensics on the system-gate arms**: read candidate wins
+   (did the emitted DoD procedure actually catch misreads?) + the 3 candidate fails +
+   verify procedure-compliance rate. Sharpens attribution before any further spend.
+2. **Guard screening + guard arms** — pick 1-2 build-free TB2 tasks the bare agent aces
    (screen k=1-3), run candidate k=3 each; no regression → FIRST ADOPTION (minimal).
-2. Decomposition (optional): system-v0-only arm vs assembly — attribute the 55pp.
-3. Round-2 bullet gate (scope-leak candidate) ON TOP of adopted base if 1 passes.
-4. Remaining kernel: Store (versioned ledger) + Gate-as-code; question-tool disable in
+3. **Held-out generalization** — 1-2 interpretation-heavy TB2 tasks the prompt was NOT
+   fit to, paired k=10; converts "lifts sparql" toward "improves the agent".
+4. Decomposition (optional): system-v0-only arm vs assembly — attribute the 55pp
+   (and test the anthropic.txt-removal hypothesis from forensics).
+5. Round-2 bullet gate (scope-leak candidate) ON TOP of adopted base if 2 passes.
+6. Remaining kernel: Store (versioned ledger) + Gate-as-code; question-tool disable in
    run.ts config (architect flag: prompt-only suppression = hang risk).
-5. TB2 v11 gate run (previous block) still pending — untouched this session.
+7. TB2 v11 gate run (previous block) still pending — untouched this session.
 
 **RULES REAFFIRMED THIS SESSION:** explicit go before ANY token spend (violated once,
 called out, memorized); questions ≠ authorization; baseline = bare fresh k=10, proposer
