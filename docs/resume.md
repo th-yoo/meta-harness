@@ -79,8 +79,17 @@ guards + one held-out task land.
      content. Decomposition (item 4) still worth it if cheap.
    - Bare arms: 6 wins show zero enumeration → bare passes look like lucky-correct
      interpretation draws, consistent with ~30% base rate.
-2. **Guard screening + guard arms** — pick 1-2 build-free TB2 tasks the bare agent aces
-   (screen k=1-3), run candidate k=3 each; no regression → FIRST ADOPTION (minimal).
+2. ~~Guard screening + guard arms~~ **DONE 07-23 (MacBook) — ADOPTED. FIRST ADOPTION IN
+   PROJECT HISTORY, decided by `minimal/gate.ts` (Gate-as-code, built this session: TDD
+   17 tests; forensics + Fisher lift + guard non-regression + guard-less-adoption-
+   forbidden encoded; reproduces both historical p-values from committed records).**
+   Screens bare k=1: count-dataset-tokens PASS, chess-best-move PASS. Candidate arms
+   k=3: **3/3 + 3/3 HOLD, zero voids** → `decision: ADOPT`
+   (`minimal/results/adoption-1-verdict.json`). DoD-tax hypothesis not confirmed on
+   these guards. **ACTIVE BASE for minimal from now on: system-v0.md + seed-v0.md.**
+   Also: darwin auth ported to run.ts (Keychain export, `ab38dc7`). Caveats standing:
+   n=1 target task; held-out = next item; lift arms office-host, guards MacBook
+   (each internally same-host).
 3. **Held-out generalization** — 1-2 interpretation-heavy TB2 tasks the prompt was NOT
    fit to, paired k=10; converts "lifts sparql" toward "improves the agent".
 4. Decomposition (optional): system-v0-only arm vs assembly — attribute the 55pp
