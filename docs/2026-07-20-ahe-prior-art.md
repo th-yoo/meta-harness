@@ -114,3 +114,16 @@ All numbers in this doc confirmed against the paper. NEW decision-relevant findi
    Finn), arXiv 2603.28052 (their ref [16]).
 Setup parity notes: k=2 rollouts, 1hr per-task timeout, timeouts-count-as-failures, minimal seed
 to protect attribution — all match our conventions independently.
+
+## 2026-07-23 ADDENDUM — Appendix A Table 4 (hyperparameters; HTML-only, PDF has no appendices)
+
+Config snapshot of the reference run (all agents GPT-5.4): Code Agent = reasoning high,
+**temperature 0.7, top-p 0.95**, 200k ctx, 32k/turn, 300 turns. Evolve Agent = xhigh, temp 0.7,
+500 turns, 3 skill packages, compaction 0.75. Debugger = 16 concurrent, 600s/task, 3 retries.
+Explore = xhigh, 60min, 10 web + 1 code source. Outer loop = 10 iterations, k=2 rollouts,
+96 concurrent, E2B sandbox 3600s lifetime, TB2 89 tasks.
+
+Temperature IS explicitly set (0.7) as a human-chosen fixed operating point — the Evolve Agent
+just can't EDIT it (read-only LLM config, §3.3). Their per-rollout stochasticity at temp 0.7 with
+only k=2 is all the signal their (statistics-free) loop gets. Fetch recipe: appendices exist only
+in the HTML render (`arxiv.org/html/2604.25850v4`); the arXiv PDF is main-text-only (10 pages).
