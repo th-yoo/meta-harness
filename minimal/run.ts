@@ -146,7 +146,8 @@ usage: bun minimal/run.ts [taskDir] [options]
 
   taskDir            task directory relative to minimal/ (default: tasks/hello-fs)
                      must contain instruction.md + verify.sh; optional fixtures/
-                     is copied to /app before the attempt
+                     is copied to /app before the attempt; optional tests/ is
+                     copied to /tests only at scoring time (held-out data)
 
 options:
   --k N              attempts, each in a fresh container (default: 1)
@@ -210,6 +211,7 @@ if (!existsSync(instructionPath)) die(`no instruction.md in ${taskDir}`)
 if (!existsSync(verifierPath)) die(`no verify.sh in ${taskDir}`)
 const instruction = readFileSync(instructionPath, "utf-8").trim()
 const fixturesDir = join(taskDir, "fixtures")
+const testsDir = join(taskDir, "tests")
 
 // --- Harness (the evolvable context; identity = content hash for provenance) ---
 const harnessPath = harnessArg ? resolve(HERE, harnessArg) : undefined
@@ -321,8 +323,13 @@ async function attempt(i: number): Promise<Trial> {
     writeFileSync(trajFile, agent.out)
     const { turns, resultText } = driver.parse(agent.out)
 
-    // --- Scorer, injected only now ---
+    // --- Scorer, injected only now (verify.sh + optional tests/ dir with
+    // held-out data — both are Scorer material the Agent must never see) ---
     await podmanOrDie(["cp", verifierPath, `${name}:/verify.sh`], "verifier copy")
+    if (existsSync(testsDir)) {
+      await podmanOrDie(["exec", name, "mkdir", "-p", "/tests"], "tests dir prep")
+      await podmanOrDie(["cp", `${testsDir}/.`, `${name}:/tests/`], "tests copy")
+    }
     const verdict = await podman(["exec", name, "sh", "/verify.sh"])
 
     return {
