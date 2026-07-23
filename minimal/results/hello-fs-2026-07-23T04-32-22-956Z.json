@@ -1,0 +1,68 @@
+{
+  "task": "hello-fs",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-dev",
+  "startedAt": "2026-07-23T04:32:22.956Z",
+  "k": 4,
+  "parallel": 3,
+  "harness": null,
+  "rewards": [
+    1,
+    1,
+    0,
+    1
+  ],
+  "passRate": 0.75,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 519.04,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Done.",
+      "trajFile": "hello-fs-2026-07-23T04-32-22-956Z-a1.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 2,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 393.8,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Done.",
+      "trajFile": "hello-fs-2026-07-23T04-32-22-956Z-a2.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 3,
+      "reward": 0,
+      "turns": 0,
+      "elapsedSec": 600.15,
+      "agentExitCode": 124,
+      "timedOut": true,
+      "suspect": true,
+      "resultText": "",
+      "trajFile": "hello-fs-2026-07-23T04-32-22-956Z-a3.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 4,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 140.09,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Done. Created `/app/greeting.txt` with the single line `hello kernel`.",
+      "trajFile": "hello-fs-2026-07-23T04-32-22-956Z-a4.traj.ndjson",
+      "agentStderr": ""
+    }
+  ]
+}

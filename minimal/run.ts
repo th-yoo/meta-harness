@@ -30,6 +30,14 @@ const HERE = import.meta.dir
 const IMAGE = "localhost/mh-bench:latest"
 const DEFAULT_TIMEOUT_SEC = 600
 
+// Adaptive-width admission thresholds (--parallel). Host-level /proc reads on
+// purpose: per-container cgroup stats are known-poisoned on the WSL2 box
+// (shared/non-reset cgroup under rootless podman — see the load-aware
+// scheduler notes), host aggregates are not.
+const LOAD_HI = 0.85 // hold new launches while cpu busy-fraction >= this
+const MEM_FLOOR_MB = 1024 // ... or MemAvailable below this
+const HOLD_POLL_MS = 3000
+
 /** Per-driver mechanics, mirroring the TB2 drivers (drivers/claude-code.ts,
  * drivers/opencode.ts + agent-auth.ts). harnessFile = the workspace file the
  * agent auto-loads as project memory; defaultModel = that driver's model-id
@@ -90,6 +98,27 @@ function* ndjson(text: string): Generator<any> {
   }
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** Instant whole-host cpu busy fraction: /proc/stat "cpu" line sampled twice. */
+async function cpuBusyFrac(sampleMs = 500): Promise<number> {
+  const read = () => {
+    const f = readFileSync("/proc/stat", "utf-8").split("\n")[0]!.trim().split(/\s+/).slice(1).map(Number)
+    const total = f.reduce((a, b) => a + b, 0)
+    return { total, idle: (f[3] ?? 0) + (f[4] ?? 0) } // idle + iowait
+  }
+  const a = read()
+  await sleep(sampleMs)
+  const b = read()
+  const dt = b.total - a.total
+  return dt > 0 ? 1 - (b.idle - a.idle) / dt : 0
+}
+
+function memAvailableMb(): number {
+  const m = /MemAvailable:\s+(\d+) kB/.exec(readFileSync("/proc/meminfo", "utf-8"))
+  return m ? Math.round(Number(m[1]) / 1024) : Infinity
+}
+
 function die(msg: string): never {
   console.error(`minimal/run.ts: ${msg}`)
   process.exit(1)
@@ -121,6 +150,11 @@ usage: bun minimal/run.ts [taskDir] [options]
 
 options:
   --k N              attempts, each in a fresh container (default: 1)
+  --parallel M       max attempts in flight (default: 1 = sequential).
+                     Effective width ADAPTS to live host load: a new attempt
+                     launches only while cpu busy < ${Math.round(LOAD_HI * 100)}% and MemAvailable
+                     > ${MEM_FLOOR_MB}MB (host /proc, sampled per admission; one attempt
+                     is always allowed to run)
   --harness <file>   context file copied to the driver's project-memory file
                      in /app (CLAUDE.md / AGENTS.md — the evolvable harness;
                      sha256 recorded in the run record)
@@ -145,6 +179,7 @@ let taskDirArg = "tasks/hello-fs"
 let modelArg: string | undefined
 let timeoutSec = DEFAULT_TIMEOUT_SEC
 let k = 1
+let parallelMax = 1
 let harnessArg: string | undefined
 let driverId: DriverId = "opencode"
 for (let i = 0; i < argv.length; i++) {
@@ -152,6 +187,7 @@ for (let i = 0; i < argv.length; i++) {
   if (a === "--model") modelArg = argv[++i] ?? die("--model needs a value")
   else if (a === "--timeout") timeoutSec = Number(argv[++i] ?? die("--timeout needs a value")) || die("--timeout not a number")
   else if (a === "--k") k = Number(argv[++i] ?? die("--k needs a value")) || die("--k not a number")
+  else if (a === "--parallel") parallelMax = Number(argv[++i] ?? die("--parallel needs a value")) || die("--parallel not a number")
   else if (a === "--harness") harnessArg = argv[++i] ?? die("--harness needs a value")
   else if (a === "--driver") {
     const d = argv[++i] ?? die("--driver needs a value")
@@ -161,6 +197,7 @@ for (let i = 0; i < argv.length; i++) {
   else taskDirArg = a
 }
 if (k < 1 || !Number.isInteger(k)) die(`--k must be a positive integer, got ${k}`)
+if (parallelMax < 1 || !Number.isInteger(parallelMax)) die(`--parallel must be a positive integer, got ${parallelMax}`)
 const driver = DRIVERS[driverId]
 const model = modelArg ?? driver.defaultModel
 
@@ -228,10 +265,10 @@ if (driverId === "claude-code") {
 const stale = (await podman(["ps", "-aq", "--filter", "label=minimal.kernel=1"])).out.trim()
 if (stale) await podman(["rm", "-f", ...stale.split("\n")])
 
-let currentContainer: string | undefined
+const liveContainers = new Set<string>()
 for (const sig of ["SIGINT", "SIGTERM"] as const)
   process.on(sig, () => {
-    if (currentContainer) Bun.spawnSync(["podman", "rm", "-f", currentContainer])
+    for (const c of liveContainers) Bun.spawnSync(["podman", "rm", "-f", c])
     process.exit(130)
   })
 
@@ -248,6 +285,10 @@ interface Trial {
   elapsedSec: number
   agentExitCode: number
   timedOut: boolean
+  /** true = 0-turn agent failure (the parallel auth-race signature from TB2:
+   * silent zeros that poison pass-rate math) — inspect the traj before
+   * trusting this trial. */
+  suspect: boolean
   resultText: string
   trajFile: string
   agentStderr: string
@@ -255,7 +296,7 @@ interface Trial {
 
 async function attempt(i: number): Promise<Trial> {
   const name = `minimal-${taskId}-${Date.now()}-a${i}`
-  currentContainer = name
+  liveContainers.add(name)
   await podmanOrDie(
     [
       "run", "-d", "--name", name,
@@ -291,23 +332,57 @@ async function attempt(i: number): Promise<Trial> {
       elapsedSec,
       agentExitCode: agent.code,
       timedOut: agent.code === 124,
+      suspect: turns === 0 && agent.code !== 0,
       resultText,
       trajFile: basename(trajFile),
       agentStderr: agent.err.trim().slice(0, 400),
     }
   } finally {
     await podman(["rm", "-f", name])
-    currentContainer = undefined
+    liveContainers.delete(name)
   }
 }
 
-// --- k attempts, fresh sandbox each ---
-const trials: Trial[] = []
-for (let i = 1; i <= k; i++) {
-  const t = await attempt(i)
-  trials.push(t)
-  console.log(`attempt ${i}/${k}: reward=${t.reward} turns=${t.turns} ${t.elapsedSec}s${t.timedOut ? " TIMEOUT" : ""}`)
+// --- k attempts, fresh sandbox each; up to --parallel M in flight, width
+// adapting to live host load (admission serialized through a promise chain so
+// checks never race and launches stagger naturally) ---
+let running = 0
+let admitChain: Promise<void> = Promise.resolve()
+function admit(): Promise<void> {
+  const p = admitChain.then(async () => {
+    while (running > 0) {
+      const busy = await cpuBusyFrac()
+      const memMb = memAvailableMb()
+      if (busy < LOAD_HI && memMb > MEM_FLOOR_MB) break
+      console.log(`hold: cpu ${(busy * 100).toFixed(0)}% / mem ${memMb}MB (width ${running})`)
+      await sleep(HOLD_POLL_MS)
+    }
+    running++
+  })
+  admitChain = p.catch(() => {})
+  return p
 }
+
+const trials: Trial[] = []
+let nextAttempt = 1
+async function worker(): Promise<void> {
+  while (nextAttempt <= k) {
+    const i = nextAttempt++
+    await admit()
+    try {
+      const t = await attempt(i)
+      trials.push(t)
+      console.log(
+        `attempt ${i}/${k}: reward=${t.reward} turns=${t.turns} ${t.elapsedSec}s` +
+          `${t.timedOut ? " TIMEOUT" : ""}${t.suspect ? " SUSPECT(0-turn)" : ""} [width ${running}]`,
+      )
+    } finally {
+      running--
+    }
+  }
+}
+await Promise.all(Array.from({ length: Math.min(parallelMax, k) }, () => worker()))
+trials.sort((a, b) => a.attempt - b.attempt)
 
 // --- Run record ---
 const rewards = trials.map((t) => t.reward)
@@ -319,6 +394,7 @@ const run = {
   host: hostname(),
   startedAt,
   k,
+  parallel: parallelMax,
   harness,
   rewards,
   passRate: rewards.reduce((a, b) => a + b, 0) / k,
@@ -326,4 +402,7 @@ const run = {
 }
 writeFileSync(resultFile, JSON.stringify(run, null, 2) + "\n")
 console.log(`\n${JSON.stringify({ ...run, trials: undefined }, null, 2)}`)
+const nSuspect = trials.filter((t) => t.suspect).length
+if (nSuspect > 0)
+  console.log(`\n⚠ ${nSuspect}/${k} SUSPECT trial(s) (0-turn agent failure) — inspect trajs before trusting passRate`)
 console.log(`\nresult:     ${resultFile}\nview traj:  bun minimal/traj.ts ${join(resultsDir, `${taskId}-${stamp}-a1.traj.ndjson`)}`)

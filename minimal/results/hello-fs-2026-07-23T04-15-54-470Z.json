@@ -1,0 +1,27 @@
+{
+  "task": "hello-fs",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-dev",
+  "startedAt": "2026-07-23T04:15:54.470Z",
+  "k": 1,
+  "harness": null,
+  "rewards": [
+    1
+  ],
+  "passRate": 1,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 120.1,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "resultText": "Done. Created `/app/greeting.txt` containing the single line `hello kernel`.",
+      "trajFile": "hello-fs-2026-07-23T04-15-54-470Z-a1.traj.ndjson",
+      "agentStderr": ""
+    }
+  ]
+}
