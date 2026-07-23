@@ -1,0 +1,29 @@
+{
+  "task": "sparql-university",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-dev",
+  "startedAt": "2026-07-23T05:11:55.345Z",
+  "k": 1,
+  "parallel": 1,
+  "harness": null,
+  "rewards": [
+    0
+  ],
+  "passRate": 0,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 0,
+      "turns": 1,
+      "elapsedSec": 222.06,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "The solution is saved at `/app/solution.sparql` and validated. It returns:\n\n```\nOrfeas Menis   || GR\nPepe Attanasio || PT, GR\nAristotle Tympas || GR\n```\n\n**Query logic:**\n\n1. **Full professors** — `FILTER(STRSTARTS(?role, \"Professor of\"))` excludes Assistant/Associate Professors (Voulodimos, Mueller).\n2. **EU-country departments** — university's `locatedInCountry` must be in the list of 27 EU memb",
+      "trajFile": "sparql-university-2026-07-23T05-11-55-345Z-a1.traj.ndjson",
+      "agentStderr": ""
+    }
+  ]
+}

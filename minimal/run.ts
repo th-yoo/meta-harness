@@ -145,9 +145,11 @@ const USAGE = `minimal kernel runner (docs/minimal-loop-ood.md, iterations 1+2)
 usage: bun minimal/run.ts [taskDir] [options]
 
   taskDir            task directory relative to minimal/ (default: tasks/hello-fs)
-                     must contain instruction.md + verify.sh; optional fixtures/
-                     is copied to /app before the attempt; optional tests/ is
-                     copied to /tests only at scoring time (held-out data)
+                     must contain instruction.md plus a scorer: verify.sh
+                     (exit code = reward) OR an unmodified upstream
+                     terminal-bench tests/ dir (test.sh + reward.txt
+                     protocol). Optional fixtures/ is copied to /app before
+                     the attempt; tests/ reaches /tests only at scoring time
 
 options:
   --k N              attempts, each in a fresh container (default: 1)
@@ -208,7 +210,13 @@ const taskId = basename(taskDir)
 const instructionPath = join(taskDir, "instruction.md")
 const verifierPath = join(taskDir, "verify.sh")
 if (!existsSync(instructionPath)) die(`no instruction.md in ${taskDir}`)
-if (!existsSync(verifierPath)) die(`no verify.sh in ${taskDir}`)
+// Two scorer modes: minimal-native verify.sh (exit code = reward), or an
+// unmodified upstream terminal-bench tests/ dir whose test.sh writes
+// /logs/verifier/reward.txt (the TB2 verifier.ts protocol) — the latter lets
+// TB2 tasks import with zero verifier rewrite.
+const hasVerifySh = existsSync(verifierPath)
+const hasTestSh = existsSync(join(taskDir, "tests", "test.sh"))
+if (!hasVerifySh && !hasTestSh) die(`no verify.sh or tests/test.sh in ${taskDir}`)
 const instruction = readFileSync(instructionPath, "utf-8").trim()
 const fixturesDir = join(taskDir, "fixtures")
 const testsDir = join(taskDir, "tests")
@@ -263,9 +271,21 @@ if (driverId === "claude-code") {
 
 // Reap leftovers from interrupted runs first (a mid-flight SIGKILL skips the
 // per-attempt cleanup below — observed live: escape during a run leaked a
-// container in "Stopping" state with the agent process still inside).
-const stale = (await podman(["ps", "-aq", "--filter", "label=minimal.kernel=1"])).out.trim()
-if (stale) await podman(["rm", "-f", ...stale.split("\n")])
+// container in "Stopping" state with the agent process still inside). Each
+// container is labeled with its runner's PID, and only containers whose
+// runner is DEAD are reaped — a blanket label reap killed a concurrent run's
+// live container mid-attempt (observed live, 2026-07-23).
+const staleLines = (
+  await podman(["ps", "-a", "--filter", "label=minimal.kernel=1", "--format", '{{.ID}} {{.Label "minimal.pid"}}'])
+).out
+  .trim()
+  .split("\n")
+  .filter(Boolean)
+const dead = staleLines
+  .map((l) => l.split(" "))
+  .filter(([, pid]) => !pid || !existsSync(`/proc/${pid}`))
+  .map(([id]) => id!)
+if (dead.length) await podman(["rm", "-f", ...dead])
 
 const liveContainers = new Set<string>()
 for (const sig of ["SIGINT", "SIGTERM"] as const)
@@ -297,12 +317,15 @@ interface Trial {
 }
 
 async function attempt(i: number): Promise<Trial> {
-  const name = `minimal-${taskId}-${Date.now()}-a${i}`
+  // PID in the name: two concurrent runs hit the same Date.now() ms and
+  // collided on container create (observed live, 2026-07-23).
+  const name = `minimal-${taskId}-${process.pid}-${Date.now()}-a${i}`
   liveContainers.add(name)
   await podmanOrDie(
     [
       "run", "-d", "--name", name,
       "--label", "minimal.kernel=1",
+      "--label", `minimal.pid=${process.pid}`,
       ...containerArgs,
       "-w", "/app",
       IMAGE, "sleep", "infinity",
@@ -323,18 +346,30 @@ async function attempt(i: number): Promise<Trial> {
     writeFileSync(trajFile, agent.out)
     const { turns, resultText } = driver.parse(agent.out)
 
-    // --- Scorer, injected only now (verify.sh + optional tests/ dir with
-    // held-out data — both are Scorer material the Agent must never see) ---
-    await podmanOrDie(["cp", verifierPath, `${name}:/verify.sh`], "verifier copy")
+    // --- Scorer, injected only now (verify.sh / tests/ dir with held-out
+    // data — all Scorer material the Agent must never see) ---
     if (existsSync(testsDir)) {
       await podmanOrDie(["exec", name, "mkdir", "-p", "/tests"], "tests dir prep")
       await podmanOrDie(["cp", `${testsDir}/.`, `${name}:/tests/`], "tests copy")
     }
-    const verdict = await podman(["exec", name, "sh", "/verify.sh"])
+    let reward: 0 | 1
+    if (hasVerifySh) {
+      await podmanOrDie(["cp", verifierPath, `${name}:/verify.sh`], "verifier copy")
+      reward = (await podman(["exec", name, "sh", "/verify.sh"])).code === 0 ? 1 : 0
+    } else {
+      // TB2 protocol: test.sh exits 0 either way and writes the verdict to
+      // /logs/verifier/reward.txt. A missing/garbled reward file is an infra
+      // failure (scorer broken ≠ task failed) — die loud, never score it.
+      await podmanOrDie(["exec", name, "mkdir", "-p", "/logs/verifier"], "verifier logs dir")
+      await podman(["exec", name, "bash", "/tests/test.sh"])
+      const rewardTxt = (await podman(["exec", name, "cat", "/logs/verifier/reward.txt"])).out.trim()
+      if (rewardTxt !== "0" && rewardTxt !== "1") die(`scorer failure: /logs/verifier/reward.txt = "${rewardTxt}"`)
+      reward = rewardTxt === "1" ? 1 : 0
+    }
 
     return {
       attempt: i,
-      reward: verdict.code === 0 ? 1 : 0,
+      reward,
       turns,
       elapsedSec,
       agentExitCode: agent.code,
