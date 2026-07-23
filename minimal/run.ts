@@ -168,8 +168,12 @@ options:
                      claude-code=${DRIVERS["claude-code"].defaultModel}, opencode=${DRIVERS.opencode.defaultModel})
   --timeout <sec>    per-attempt agent timeout (default: ${DEFAULT_TIMEOUT_SEC})
   --temperature <f>  sampling temperature (opencode driver only; recorded in
-                     the run record — a provenance dimension, arms must match)
-  --top-p <f>        nucleus sampling top-p (opencode only, ditto)
+                     the run record — a provenance dimension, arms must match).
+                     CAVEAT: current Anthropic flagships (opus-4.8/4.7,
+                     fable-5) REMOVED sampling params from the API — opencode
+                     capability-gates them off for such models, so the flag is
+                     silently inert there (llm.ts capabilities.temperature)
+  --top-p <f>        nucleus sampling top-p (opencode only, same caveat)
   -h, --help         this text
 
 output: minimal/results/<task>-<startedAt>.json (run record with rewards[] +
