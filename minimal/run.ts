@@ -22,7 +22,7 @@
  *         (+ one <task>-<startedAt>-aN.traj.ndjson per attempt)
  */
 import { createHash } from "node:crypto"
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { hostname, tmpdir } from "node:os"
 import { basename, join, resolve } from "node:path"
 
@@ -303,15 +303,34 @@ const harness = harnessPath
 // ~/.claude RO (the auth plugin only reads the credential), and the real
 // ~/.local/share/opencode RW.
 const home = process.env["HOME"] ?? die("no $HOME")
-if (!existsSync(join(home, ".claude", ".credentials.json")))
-  die(`~/.claude/.credentials.json not found — run \`claude /login\` on the host first`)
 const authTmp = mkdtempSync(join(tmpdir(), "minimal-auth-"))
+// Credential source dir mounted as /root/.claude. linux: the real ~/.claude
+// (.credentials.json on disk). darwin: no file — CC stores oauth in the
+// Keychain; export it into a throwaway 700/600 dir (same recipe as TB2's
+// prepareAgentAuthMounts, opencode-plugin/src/bench/agent-auth.ts).
+let claudeHost = join(home, ".claude")
+if (!existsSync(join(claudeHost, ".credentials.json"))) {
+  if (process.platform !== "darwin")
+    die(`~/.claude/.credentials.json not found — run \`claude /login\` on the host first`)
+  const { execFileSync } = await import("node:child_process")
+  let creds = ""
+  try {
+    creds = execFileSync("security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], { encoding: "utf-8" }).trim()
+  } catch { /* fall through to die below */ }
+  if (!creds) die(`no ~/.claude/.credentials.json and Keychain export failed — run \`claude /login\` on the host first`)
+  const claudeDir = join(authTmp, "claude")
+  mkdirSync(claudeDir, { recursive: true })
+  chmodSync(claudeDir, 0o700)
+  writeFileSync(join(claudeDir, ".credentials.json"), creds + "\n")
+  chmodSync(join(claudeDir, ".credentials.json"), 0o600)
+  claudeHost = claudeDir
+}
 const containerArgs: string[] = []
 if (driverId === "claude-code") {
   const onboardingPath = join(authTmp, "claude.json")
   writeFileSync(onboardingPath, JSON.stringify({ hasCompletedOnboarding: true }) + "\n")
   containerArgs.push(
-    "-v", `${join(home, ".claude")}:/root/.claude:rw`,
+    "-v", `${claudeHost}:/root/.claude:rw`,
     "-v", `${onboardingPath}:/root/.claude.json:ro`,
     "-e", "IS_SANDBOX=1",
   )
@@ -333,7 +352,7 @@ if (driverId === "claude-code") {
   writeFileSync(join(configDir, "opencode.json"), JSON.stringify(ocConfig) + "\n")
   containerArgs.push(
     "-v", `${configDir}:/root/.config/opencode:rw`,
-    "-v", `${join(home, ".claude")}:/root/.claude:ro`,
+    "-v", `${claudeHost}:/root/.claude:ro`,
     "-v", `${join(home, ".local", "share", "opencode")}:/root/.local/share/opencode:rw`,
   )
 }
