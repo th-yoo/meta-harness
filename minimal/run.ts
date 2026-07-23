@@ -162,6 +162,10 @@ options:
   --harness <file>   context file copied to the driver's project-memory file
                      in /app (CLAUDE.md / AGENTS.md — the evolvable harness;
                      sha256 recorded in the run record)
+  --system <file>    REPLACE opencode's built-in base system prompt
+                     (session/prompt/anthropic.txt for claude models) with
+                     this file, via config agent.build.prompt. opencode-only.
+                     sha256 recorded in the run record
   --driver <id>      opencode | claude-code (default: opencode, the TB2
                      production Agent)
   --model <id>       model in the driver's dialect (defaults:
@@ -192,6 +196,7 @@ let timeoutSec = DEFAULT_TIMEOUT_SEC
 let k = 1
 let parallelMax = 1
 let harnessArg: string | undefined
+let systemArg: string | undefined
 let driverId: DriverId = "opencode"
 let temperature: number | undefined
 let topP: number | undefined
@@ -208,6 +213,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === "--k") k = Number(argv[++i] ?? die("--k needs a value")) || die("--k not a number")
   else if (a === "--parallel") parallelMax = Number(argv[++i] ?? die("--parallel needs a value")) || die("--parallel not a number")
   else if (a === "--harness") harnessArg = argv[++i] ?? die("--harness needs a value")
+  else if (a === "--system") systemArg = argv[++i] ?? die("--system needs a value")
   else if (a === "--temperature") temperature = parseFloatFlag("--temperature", argv[++i])
   else if (a === "--top-p") topP = parseFloatFlag("--top-p", argv[++i])
   else if (a === "--driver") {
@@ -226,6 +232,19 @@ const model = modelArg ?? driver.defaultModel
 // than silently ignore a knob the user thinks is applied.
 if ((temperature !== undefined || topP !== undefined) && driverId !== "opencode")
   die(`--temperature/--top-p are opencode-only (driver ${driverId} has no sampling flags)`)
+// --system REPLACES opencode's built-in per-provider base prompt (anthropic.txt
+// for claude models) via config agent.build.prompt — opencode request.ts:
+// `agent.prompt ? [agent.prompt] : SystemPrompt.provider(model)`. The <env>
+// block and tool schemas are assembled separately and survive the swap.
+if (systemArg && driverId !== "opencode") die(`--system is opencode-only (agent.prompt config)`)
+const systemPath = systemArg ? resolve(systemArg) : undefined
+if (systemPath && !existsSync(systemPath)) die(`system prompt file not found: ${systemPath}`)
+const system = systemPath
+  ? {
+      file: systemArg!,
+      sha256: createHash("sha256").update(readFileSync(systemPath)).digest("hex").slice(0, 16),
+    }
+  : null
 
 // --- Task (user paths resolve against CWD, like any CLI; only the built-in
 // default lives relative to this script) ---
@@ -303,16 +322,14 @@ if (driverId === "claude-code") {
     $schema: "https://opencode.ai/config.json",
     plugin: ["opencode-claude-auth@latest"],
   }
-  if (temperature !== undefined || topP !== undefined) {
-    // "build" is `opencode run`'s default agent; config agent entries accept
-    // temperature/top_p (opencode agent.ts merge).
-    ocConfig["agent"] = {
-      build: {
-        ...(temperature !== undefined ? { temperature } : {}),
-        ...(topP !== undefined ? { top_p: topP } : {}),
-      },
-    }
+  const buildAgent: Record<string, unknown> = {
+    ...(temperature !== undefined ? { temperature } : {}),
+    ...(topP !== undefined ? { top_p: topP } : {}),
+    ...(systemPath ? { prompt: readFileSync(systemPath, "utf-8") } : {}),
   }
+  // "build" is `opencode run`'s default agent; config agent entries accept
+  // temperature/top_p/prompt (opencode agent.ts merge).
+  if (Object.keys(buildAgent).length > 0) ocConfig["agent"] = { build: buildAgent }
   writeFileSync(join(configDir, "opencode.json"), JSON.stringify(ocConfig) + "\n")
   containerArgs.push(
     "-v", `${configDir}:/root/.config/opencode:rw`,
@@ -490,6 +507,7 @@ const run = {
   k,
   parallel: parallelMax,
   sampling: temperature !== undefined || topP !== undefined ? { temperature, topP } : null,
+  system,
   harness,
   rewards,
   passRate: rewards.reduce((a, b) => a + b, 0) / k,
