@@ -1,0 +1,32 @@
+{
+  "task": "sparql-university",
+  "model": "claude-opus-4-8",
+  "records": [
+    "sparql-university-2026-07-23T04-59-48-444Z.json",
+    "sparql-university-2026-07-23T05-11-55-345Z.json",
+    "sparql-university-2026-07-23T05-40-11-423Z.json"
+  ],
+  "evidence": {
+    "fails": 1,
+    "passes": 2,
+    "suspectDropped": 0
+  },
+  "analysis": "# Analysis\n\n**Contract read:** Grader runs the SPARQL against `/tests/university_graph_test.ttl` (HELD-OUT), not the readable `/app/university_graph.ttl` (dev). `REFERENCE_RESULTS` names (Giorgos Stamou, Alex Dimakis…) don't exist in dev data → query must encode **general selection logic** (filters/counts/date-compares), never hardcoded dev answers. Order-insensitive, set-equality, country-string normalized.\n\n**Divergence (visible portions):**\n- FAIL a1: read full ttl → re-read enrollment rows (278–305) → truncated mid re-read. Was **eyeball-counting** enrollment/dates.\n- PASS 04:59: read → todo incl \"Verify query logic against data\" → **python script** to count students/dept.\n- PASS 05:40: read → explicit criteria derivation (reference date 2025-08-16, EU set, currently-enrolled = grad absent OR > ref, >10 threshold, course→dept join, Bio10 typo edge) → about to script.\n\nDominant pattern: winners **scripted the aggregation/threshold/date logic**; loser eyeballed tabular rows (26 enrollments + date filters + course→dept joins = error-prone). Correct counting logic transfers to held-out; hardcoded dev results do not.\n\n**Caveats:** one failing attempt, truncated before its query → lower confidence. Bullet guarded against the overfit trap (verify *logic*, not hardcode) to stay contract-consistent.\n\nGuard `hello-fs`: no data-filtering/threshold logic → trigger never fires.\n\n{\"action\":\"propose\",\"reason\":\"Both winners scripted the count/threshold/date logic while the loser eyeballed tabular rows; contract's held-out grader forces general logic, so script-verify catches transferable logic bugs without overfitting (lower confidence: one truncated fail).\",\"bullet\":{\"text\":\"When a task's answer depends on counting, thresholding, or date filtering over data you can read, compute the qualifying set with a script rather than eyeballing, and confirm your query derives the same set through general logic (filters/aggregates), not hardcoded results, before finalizing.\",\"evidence\":[\"sparql-university-2026-07-23T05-11-55-345Z.json#a1\",\"sparql-university-2026-07-23T04-59-48-444Z.json#a1\",\"sparql-university-2026-07-23T05-40-11-423Z.json#a1\"]},\"predictions\":{\"expect_improve\":\"Attempts that manually eyeball rows and misjudge counts/thresholds instead script the aggregation, catching logic errors (date-compare direction, > vs >=, including assistant-tier, wrong category set) and emitting correct general query logic that survives held-out data.\",\"expect_unchanged_guards\":\"hello-fs has no data-filtering/counting/threshold logic, so the trigger situation never arises and behavior is unchanged.\",\"falsify_if\":\"A/B on this task shows no pass-rate lift (or a drop), indicating the dominant failure was not eyeball-miscounting/logic error but something script-verify-plus-general-logic does not address.\"}}",
+  "proposal": {
+    "action": "propose",
+    "reason": "Both winners scripted the count/threshold/date logic while the loser eyeballed tabular rows; contract's held-out grader forces general logic, so script-verify catches transferable logic bugs without overfitting (lower confidence: one truncated fail).",
+    "bullet": {
+      "text": "When a task's answer depends on counting, thresholding, or date filtering over data you can read, compute the qualifying set with a script rather than eyeballing, and confirm your query derives the same set through general logic (filters/aggregates), not hardcoded results, before finalizing.",
+      "evidence": [
+        "sparql-university-2026-07-23T05-11-55-345Z.json#a1",
+        "sparql-university-2026-07-23T04-59-48-444Z.json#a1",
+        "sparql-university-2026-07-23T05-40-11-423Z.json#a1"
+      ]
+    },
+    "predictions": {
+      "expect_improve": "Attempts that manually eyeball rows and misjudge counts/thresholds instead script the aggregation, catching logic errors (date-compare direction, > vs >=, including assistant-tier, wrong category set) and emitting correct general query logic that survives held-out data.",
+      "expect_unchanged_guards": "hello-fs has no data-filtering/counting/threshold logic, so the trigger situation never arises and behavior is unchanged.",
+      "falsify_if": "A/B on this task shows no pass-rate lift (or a drop), indicating the dominant failure was not eyeball-miscounting/logic error but something script-verify-plus-general-logic does not address."
+    }
+  }
+}
