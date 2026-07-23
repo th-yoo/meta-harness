@@ -22,7 +22,7 @@
  *         (+ one <task>-<startedAt>-aN.traj.ndjson per attempt)
  */
 import { createHash } from "node:crypto"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { hostname, tmpdir } from "node:os"
 import { basename, join, resolve } from "node:path"
 
@@ -144,7 +144,8 @@ const USAGE = `minimal kernel runner (docs/minimal-loop-ood.md, iterations 1+2)
 
 usage: bun minimal/run.ts [taskDir] [options]
 
-  taskDir            task directory relative to minimal/ (default: tasks/hello-fs)
+  taskDir            task directory, resolved against the current working
+                     directory (default: minimal/tasks/hello-fs)
                      must contain instruction.md plus a scorer: verify.sh
                      (exit code = reward) OR an unmodified upstream
                      terminal-bench tests/ dir (test.sh + reward.txt
@@ -178,7 +179,7 @@ if (argv.includes("--help") || argv.includes("-h")) {
   console.log(USAGE)
   process.exit(0)
 }
-let taskDirArg = "tasks/hello-fs"
+let taskDirArg: string | undefined
 let modelArg: string | undefined
 let timeoutSec = DEFAULT_TIMEOUT_SEC
 let k = 1
@@ -204,8 +205,9 @@ if (parallelMax < 1 || !Number.isInteger(parallelMax)) die(`--parallel must be a
 const driver = DRIVERS[driverId]
 const model = modelArg ?? driver.defaultModel
 
-// --- Task ---
-const taskDir = resolve(HERE, taskDirArg)
+// --- Task (user paths resolve against CWD, like any CLI; only the built-in
+// default lives relative to this script) ---
+const taskDir = taskDirArg ? resolve(taskDirArg) : join(HERE, "tasks/hello-fs")
 const taskId = basename(taskDir)
 const instructionPath = join(taskDir, "instruction.md")
 const verifierPath = join(taskDir, "verify.sh")
@@ -218,11 +220,28 @@ const hasVerifySh = existsSync(verifierPath)
 const hasTestSh = existsSync(join(taskDir, "tests", "test.sh"))
 if (!hasVerifySh && !hasTestSh) die(`no verify.sh or tests/test.sh in ${taskDir}`)
 const instruction = readFileSync(instructionPath, "utf-8").trim()
-const fixturesDir = join(taskDir, "fixtures")
 const testsDir = join(taskDir, "tests")
 
+// Fixture source: minimal-native fixtures/, or an upstream terminal-bench
+// checkout's environment/ (its data files ARE the fixtures; the Dockerfile is
+// build machinery, staged out via a temp copy). Lets a task run straight from
+// the checkout: bun minimal/run.ts ../../terminal-bench-2/<task>.
+// Only covers tasks whose environment needs no build step (no apt/pip/RUN) —
+// anything else needs the TB2 staging pipeline or a real conversion.
+let fixturesDir = join(taskDir, "fixtures")
+const envDir = join(taskDir, "environment")
+if (!existsSync(fixturesDir) && existsSync(envDir)) {
+  const staged = join(mkdtempSync(join(tmpdir(), "minimal-fixtures-")), "fixtures")
+  mkdirSync(staged)
+  for (const entry of readdirSync(envDir)) {
+    if (entry === "Dockerfile") continue
+    cpSync(join(envDir, entry), join(staged, entry), { recursive: true })
+  }
+  fixturesDir = staged
+}
+
 // --- Harness (the evolvable context; identity = content hash for provenance) ---
-const harnessPath = harnessArg ? resolve(HERE, harnessArg) : undefined
+const harnessPath = harnessArg ? resolve(harnessArg) : undefined
 if (harnessPath && !existsSync(harnessPath)) die(`harness file not found: ${harnessPath}`)
 const harness = harnessPath
   ? {
@@ -275,16 +294,16 @@ if (driverId === "claude-code") {
 // container is labeled with its runner's PID, and only containers whose
 // runner is DEAD are reaped — a blanket label reap killed a concurrent run's
 // live container mid-attempt (observed live, 2026-07-23).
-const staleLines = (
-  await podman(["ps", "-a", "--filter", "label=minimal.kernel=1", "--format", '{{.ID}} {{.Label "minimal.pid"}}'])
-).out
-  .trim()
-  .split("\n")
-  .filter(Boolean)
-const dead = staleLines
-  .map((l) => l.split(" "))
-  .filter(([, pid]) => !pid || !existsSync(`/proc/${pid}`))
-  .map(([id]) => id!)
+// NOTE: label reads go through `podman inspect` — `podman ps --format` has no
+// .Label field (exit 125, observed live; the resulting empty pid made every
+// live container look dead and the reap killed a concurrent run mid-attempt).
+const staleIds = (await podman(["ps", "-aq", "--filter", "label=minimal.kernel=1"])).out.trim().split("\n").filter(Boolean)
+const dead: string[] = []
+for (const id of staleIds) {
+  const r = await podman(["inspect", "--format", '{{index .Config.Labels "minimal.pid"}}', id])
+  const pid = r.code === 0 ? r.out.trim() : ""
+  if (!pid || !existsSync(`/proc/${pid}`)) dead.push(id)
+}
 if (dead.length) await podman(["rm", "-f", ...dead])
 
 const liveContainers = new Set<string>()

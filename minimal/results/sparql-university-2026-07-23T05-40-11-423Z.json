@@ -1,0 +1,29 @@
+{
+  "task": "sparql-university",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-dev",
+  "startedAt": "2026-07-23T05:40:11.423Z",
+  "k": 1,
+  "parallel": 1,
+  "harness": null,
+  "rewards": [
+    1
+  ],
+  "passRate": 1,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 233.36,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "The query executes correctly and returns exactly the expected results:\n\n- **Orfeas Menis** => GR, US\n- **Pepe Attanasio** => PT, GR\n- **Aristotle Tympas** => GR\n\nThis matches my manual analysis. The solution has been saved to `/app/solution.sparql`.\n\n## Summary\n\nThe query in `/app/solution.sparql` retrieves full professors meeting all three criteria:\n\n1. **Full professors only** — `FILTER(STRSTART",
+      "trajFile": "sparql-university-2026-07-23T05-40-11-423Z-a1.traj.ndjson",
+      "agentStderr": ""
+    }
+  ]
+}
