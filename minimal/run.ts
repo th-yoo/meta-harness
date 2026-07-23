@@ -100,8 +100,14 @@ function* ndjson(text: string): Generator<any> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-/** Instant whole-host cpu busy fraction: /proc/stat "cpu" line sampled twice. */
+/** Instant whole-host cpu busy fraction: /proc/stat "cpu" line sampled twice.
+ * darwin has no /proc — fall back to 1-min loadavg / core count (coarser but
+ * the same admission semantics). */
 async function cpuBusyFrac(sampleMs = 500): Promise<number> {
+  if (!existsSync("/proc/stat")) {
+    const { loadavg, cpus } = await import("node:os")
+    return Math.min(1, loadavg()[0]! / Math.max(1, cpus().length))
+  }
   const read = () => {
     const f = readFileSync("/proc/stat", "utf-8").split("\n")[0]!.trim().split(/\s+/).slice(1).map(Number)
     const total = f.reduce((a, b) => a + b, 0)
@@ -115,6 +121,10 @@ async function cpuBusyFrac(sampleMs = 500): Promise<number> {
 }
 
 function memAvailableMb(): number {
+  // darwin: no /proc/meminfo, and os.freemem() undercounts (excludes
+  // reclaimable cache) — it would falsely block admission. Skip the mem gate
+  // there; the cpu gate still paces launches.
+  if (!existsSync("/proc/meminfo")) return Infinity
   const m = /MemAvailable:\s+(\d+) kB/.exec(readFileSync("/proc/meminfo", "utf-8"))
   return m ? Math.round(Number(m[1]) / 1024) : Infinity
 }
