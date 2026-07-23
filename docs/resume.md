@@ -3,7 +3,54 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-23 (office box) — minimal/ BUILT + FIRST BAND-CERTIFIED LIFT — RESUME HERE
+## ⏸ SESSION END 2026-07-23/24 (MacBook) — FIRST ADOPTION (gate.ts-decided) + HELD-OUT DIRECTIONAL — RESUME HERE
+
+**MISSION (user-ordered, sequential gos):** run the office block's NEXT queue — forensics,
+guards, Gate-as-code, held-out.
+
+**RESULT (all DONE, all pushed through `0119619`):**
+1. **Forensics (free):** 17/20 candidate trials emit DoD procedure vs 0/20 bare;
+   verbatim mid-flight scope-leak catch; 3 candidate fails all complied (residual =
+   held-out-only discriminators); anthropic.txt-removal hypothesis weakened. Detail in
+   item-1 strikeout below.
+2. **Gate-as-code BUILT** (`minimal/gate.ts`, `f3db54a`): forensics void-classification +
+   Fisher lift + guard non-regression + combined verdict; TDD 17 tests (in
+   `opencode-plugin/test/minimal-gate.test.ts`, runs with the main suite); reproduces
+   both historical p-values from committed records; **guard-less adoption structurally
+   forbidden** (hole found on first E2E run — it said ADOPT with zero guards).
+3. **ADOPTED — FIRST ADOPTION IN PROJECT HISTORY** (`4fc9d68`,
+   `minimal/results/adoption-1-verdict.json`, decided by gate.ts): lift 17/20 vs 6/20
+   p=0.00106 certified + guards count-dataset-tokens 3/3 AND chess-best-move 3/3 HOLD,
+   zero voids. **ACTIVE BASE for minimal = system-v0.md + seed-v0.md.**
+4. **Held-out generalization (`0119619`):** first picks (financial-document-processor,
+   sanitize-git-repo) DEAD for minimal — run.ts stages no Dockerfile RUN steps
+   (run.ts:270); swapped to cancel-async-tasks + headless-terminal (screened).
+   **cancel-async bare 3/10 vs adopted 5/10 (p=0.65) · headless bare 7/11 vs adopted
+   7/8 (p=0.34) — BOTH positive, NEITHER certified per-task; informal cross-task pool
+   10/30 vs 13/18 p=0.016** (gate.ts refuses cross-task pooling by design — context,
+   not verdict). Guards re-held in both verdicts. 3 void trials auto-excluded.
+
+**DARWIN PATCHES (run.ts, both E2E-verified + pushed):** `ab38dc7` auth — Keychain
+export of CC oauth into throwaway 700/600 dir when `.credentials.json` absent;
+`f118454` --parallel — /proc/stat//proc/meminfo fallbacks (loadavg/cores; mem gate
+skipped on darwin). Ops trap logged: appended logs make `grep DONE`-style watchers fire
+on STALE markers — rotate logs per launch or count markers.
+
+**CONFIDENCE:** "improves the agent, not just sparql" ~85% (was 60% at office close).
+Basis: certified target lift + mechanism read + 6/6 guards + 2/2 held-out direction.
+Missing for full claim: per-task held-out certification (k=20/arm) or more tasks.
+
+**⏭ NEXT (user decides, in queue order):**
+1. Round-2 bullet gate (scope-leak candidate `harness/candidate-2026-07-23T08-39-05-972Z.md`)
+   ON TOP of adopted base — gate.ts, sparql k=10 + guards.
+2. Decomposition: system-v0-only arm — attribute assembly vs pieces (+ removal test).
+3. k-boost a held-out task toward per-task certification (cancel-async +10/arm ≈ 1 hr).
+4. Store (versioned ledger) — last unbuilt kernel seat; gate.ts JSON verdict line is
+   the ledger surface, wire adoption state into it.
+5. TB2 v11 gate run (2 blocks down) — still pending, untouched on MacBook side too.
+6. Office box: v8 harness-size grep (old TB2 record question, cheap).
+
+## PREVIOUS: SESSION END 2026-07-23 (office box) — minimal/ BUILT + FIRST BAND-CERTIFIED LIFT
 
 **MISSION (pivoted mid-session by user):** build `minimal/` — a standalone code
 extraction of the [`minimal-loop-ood.md`](minimal-loop-ood.md) kernel — and run its loop.
