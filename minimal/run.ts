@@ -11,9 +11,10 @@
  * recorded as sha256) + k-repeat (--k N, a FRESH container per attempt) with
  * an aggregated run record. Still no Store/Gate/Proposer — later iterations.
  *
- * Drivers (--driver): "claude-code" (default, `claude -p`, harness file
- * CLAUDE.md) or "opencode" (`opencode run`, harness file AGENTS.md) — both
- * mirror the TB2 drivers' invocation + auth recipes exactly.
+ * Drivers (--driver): "opencode" (default — the TB2 production Agent;
+ * `opencode run`, harness file AGENTS.md) or "claude-code" (`claude -p`,
+ * harness file CLAUDE.md) — both mirror the TB2 drivers' invocation + auth
+ * recipes exactly.
  *
  * Usage:  bun minimal/run.ts [taskDir] [--k N] [--harness <file>]
  *                            [--driver <id>] [--model <id>] [--timeout <sec>]
@@ -123,7 +124,8 @@ options:
   --harness <file>   context file copied to the driver's project-memory file
                      in /app (CLAUDE.md / AGENTS.md — the evolvable harness;
                      sha256 recorded in the run record)
-  --driver <id>      claude-code | opencode (default: claude-code)
+  --driver <id>      opencode | claude-code (default: opencode, the TB2
+                     production Agent)
   --model <id>       model in the driver's dialect (defaults:
                      claude-code=${DRIVERS["claude-code"].defaultModel}, opencode=${DRIVERS.opencode.defaultModel})
   --timeout <sec>    per-attempt agent timeout (default: ${DEFAULT_TIMEOUT_SEC})
@@ -144,7 +146,7 @@ let modelArg: string | undefined
 let timeoutSec = DEFAULT_TIMEOUT_SEC
 let k = 1
 let harnessArg: string | undefined
-let driverId: DriverId = "claude-code"
+let driverId: DriverId = "opencode"
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i]!
   if (a === "--model") modelArg = argv[++i] ?? die("--model needs a value")
