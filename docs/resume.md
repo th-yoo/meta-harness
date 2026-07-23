@@ -3,7 +3,61 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-22/23 (MacBook) — LOOP-3 COMPLETE — active=v7 — RESUME HERE
+## ⏸ SESSION END 2026-07-23 (office box) — minimal/ BUILT + FIRST BAND-CERTIFIED LIFT — RESUME HERE
+
+**MISSION (pivoted mid-session by user):** build `minimal/` — a standalone code
+extraction of the [`minimal-loop-ood.md`](minimal-loop-ood.md) kernel — and run its loop.
+The pending v11 TB2 gate run was NOT executed (still pending, see previous block).
+
+**BUILT (all committed, `minimal/`):** `run.ts` (podman mh-bench sandbox; drivers
+opencode(default)/claude-code mirroring TB2 recipes; `--k` fresh-container repeats;
+`--parallel M` with load-adaptive width via host /proc admission; `--harness` →
+/app/AGENTS.md; `--system` → REPLACES opencode's base prompt via config agent.build.prompt
+(anthropic.txt at opencode `session/prompt/`, override at `request.ts:60`); TB2-task import
+= zero-rewrite (upstream tests/ + reward.txt protocol; environment/ staged as fixtures;
+runs straight from `../terminal-bench-2/<task>`); suspect-trial flag (0-turn);
+PID-labeled reap + PID-in-name (podman ps has NO .Label format — use podman inspect;
+two live cross-kill incidents)). `traj.ts` (readable traj renderer, both drivers).
+`propose.ts` (Proposer seat: one opus `claude -p` call over run-record trajs pass+fail +
+scorer SOURCE + rejected ledger + guards; prompt via stdin — 537k chars blew argv E2BIG;
+stages candidate; gate commands printed). `rejected.json` (invariant-5 ledger).
+
+**LOOP RESULTS (sparql-university, opus/opencode, office box, all same-host paired):**
+- Round 1 (machine bullet, thin 1-fail evidence): bare 4/10 vs bullet 5/10, p=1.0 —
+  NULL; own falsify_if fired (first calibration point); rejected + ledgered.
+- Round 2 proposer (10-traj evidence + ledger): scope-leak bullet (qualification filter
+  leaking into output projection) — CONVERGED with independent human desk-check of the
+  a2 fail (spec misread: EU filter on aggregated ?country; grader wants ALL countries).
+  Staged `harness/candidate-2026-07-23T08-39-05-972Z.md`, NEVER GATED yet.
+- **SYSTEM GATE (the headline): bare 6/20 (30%) vs [system-v0 + seed-v0] 17/20 (85%),
+  pooled Fisher p=0.00106; unbiased replication batch alone 3/10 vs 9/10 p=0.0198.**
+  Largest lift in project history. Committed f9ac50e + 87fc658. **NOT ADOPTED — zero
+  guard tasks measured (v9 lesson). Composite candidate: attribution = assembly, not
+  either piece.**
+
+**THE CANDIDATE:** `minimal/harness/system-v0.md` (72-line replacement system prompt:
+autonomous-mode overlay + observation/honesty + task discipline incl. unconditional
+requirement-reading statement + scope-separation + DoD as REQUIRED EMITTED PROCEDURE;
+lineage: opencode anthropic.txt essentials + CC prompts.ts ant-gated capy-v8
+counterweights (verbatim source cloned at `~/z2/cc-clone`, grok at `~/z2/grok-clone`) +
+grok goal templates + 2 measured failure classes; reviewed by external Fable + ralph
+loop (5 fixes) + code-architect subagent (8 fixes — incl. the prompt's own
+looks_done-shaped escape hatch)). Plus `harness/seed-v0.md` (2 DoD bullets, AGENTS.md).
+
+**NEXT (in order):**
+1. **Guard screening + guard arms** — pick 1-2 build-free TB2 tasks the bare agent aces
+   (screen k=1-3), run candidate k=3 each; no regression → FIRST ADOPTION (minimal).
+2. Decomposition (optional): system-v0-only arm vs assembly — attribute the 55pp.
+3. Round-2 bullet gate (scope-leak candidate) ON TOP of adopted base if 1 passes.
+4. Remaining kernel: Store (versioned ledger) + Gate-as-code; question-tool disable in
+   run.ts config (architect flag: prompt-only suppression = hang risk).
+5. TB2 v11 gate run (previous block) still pending — untouched this session.
+
+**RULES REAFFIRMED THIS SESSION:** explicit go before ANY token spend (violated once,
+called out, memorized); questions ≠ authorization; baseline = bare fresh k=10, proposer
+never feeds it; evidence-fit data can't judge its own bullet (fresh arms for verdicts).
+
+## PREVIOUS: ⏸ SESSION END 2026-07-22/23 (MacBook) — LOOP-3 COMPLETE — active=v7 (TB2)
 
 **2026-07-23 office-box session addendum (docs-only, all pushed HEAD `5a286d1`):**
 techs.md Part-2 re-audited post loops 1–3 (lesson-lift PROVEN v9 p=0.020; gate both
