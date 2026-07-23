@@ -59,9 +59,26 @@ system-v0 vs seed-v0 split unmeasured. Holding "the agent improved" at ~60% unti
 guards + one held-out task land.
 
 **NEXT (in order):**
-1. **FREE FIRST — trajectory forensics on the system-gate arms**: read candidate wins
-   (did the emitted DoD procedure actually catch misreads?) + the 3 candidate fails +
-   verify procedure-compliance rate. Sharpens attribution before any further spend.
+1. ~~FREE FIRST — trajectory forensics on the system-gate arms~~ **DONE 07-23 (MacBook,
+   zero trials). Findings:**
+   - **Compliance: 17/20 candidate trials emit the numbered-requirements procedure vs
+     0/20 bare** — emission is cleanly prompt-caused, not opus default.
+   - **Catch event verbatim** (10-50 a2): agent found its own scope-leak DURING the
+     requirement-vs-artifact check — "?country is bound with the EU filter. This is a
+     bug — I must separate the condition from the output" → fixed → passed. The DoD
+     procedure operates as designed, not just as upfront bias; in most other wins the
+     condition/output separation appears already internalized at query-writing time.
+   - **The 3 candidate fails ALL complied**: procedure executed, hand-computation
+     matched dev data, still reward=0 → residual failure class = interpretation
+     variants only the HELD-OUT graph discriminates (same class as TB2-v9's residual
+     3/10). Procedure is necessary-not-sufficient; a held-out-thinking lesson (b7's
+     core) is the matching next content, NOT more procedure.
+   - **anthropic.txt-removal hypothesis WEAKENED**: 2 candidate passes without
+     enumeration keep it alive as a minor term, but 17/20 emission + a verbatim
+     mechanism-matched catch + bare arms' 0/20 attribute the lift primarily to added
+     content. Decomposition (item 4) still worth it if cheap.
+   - Bare arms: 6 wins show zero enumeration → bare passes look like lucky-correct
+     interpretation draws, consistent with ~30% base rate.
 2. **Guard screening + guard arms** — pick 1-2 build-free TB2 tasks the bare agent aces
    (screen k=1-3), run candidate k=3 each; no regression → FIRST ADOPTION (minimal).
 3. **Held-out generalization** — 1-2 interpretation-heavy TB2 tasks the prompt was NOT
