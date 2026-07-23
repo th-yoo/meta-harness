@@ -1,0 +1,30 @@
+{
+  "task": "hello-fs",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-dev",
+  "startedAt": "2026-07-23T01:51:17.251Z",
+  "k": 1,
+  "harness": {
+    "file": "harness/example.md",
+    "sha256": "509a7d91f22b50e2"
+  },
+  "rewards": [
+    1
+  ],
+  "passRate": 1,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 115.11,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "resultText": "Done. Created `/app/greeting.txt` with the exact content `hello kernel`, and `/app/harness-ack.txt` containing `ok`.",
+      "trajFile": "hello-fs-2026-07-23T01-51-17-251Z-a1.traj.ndjson",
+      "agentStderr": ""
+    }
+  ]
+}

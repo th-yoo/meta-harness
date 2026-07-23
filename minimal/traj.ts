@@ -82,6 +82,39 @@ for (const line of readFileSync(file, "utf-8").split("\n")) {
       break
     }
 
+    // --- opencode `run --format json` events (drivers/opencode.ts format) ---
+    case "tool_use": {
+      const part = ev.part ?? {}
+      const state = part.state ?? {}
+      const rawArgs = "input" in state ? state.input : (part.input ?? "")
+      const args = typeof rawArgs === "string" ? rawArgs : JSON.stringify(rawArgs)
+      const rawOut = state.output ?? ""
+      const out = typeof rawOut === "string" ? rawOut : JSON.stringify(rawOut)
+      const failed = state.status === "error" || (state.metadata?.exit ?? 0) !== 0
+      console.log(`  ⚒ ${part.tool ?? "unknown"}(${clip(args)})`)
+      console.log(`  ${failed ? "✗ tool error" : "→ tool result"}:${out.trim() ? "\n" + indent(clip(out)) : " (empty)"}`)
+      break
+    }
+    case "text": {
+      const txt = ev.text ?? ev.part?.text ?? ""
+      if (typeof txt === "string" && txt.trim()) console.log(indent(clip(txt), "  "))
+      break
+    }
+    case "error": {
+      const e = ev.error
+      const msg = e && typeof e === "object" ? (e.data?.message ?? e.name ?? JSON.stringify(e)) : String(e)
+      console.log(`  ✗ error: ${clip(String(msg))}`)
+      break
+    }
+    case "step_finish":
+      if (ev.reason === "stop" || ev.part?.reason === "stop") {
+        turn++
+        console.log(`\n▶ turn ${turn} done`)
+      }
+      break
+    case "step_start":
+      break
+
     default:
       console.log(`── ${ev.type ?? "?"}`)
   }

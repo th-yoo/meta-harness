@@ -11,8 +11,12 @@
  * recorded as sha256) + k-repeat (--k N, a FRESH container per attempt) with
  * an aggregated run record. Still no Store/Gate/Proposer — later iterations.
  *
+ * Drivers (--driver): "claude-code" (default, `claude -p`, harness file
+ * CLAUDE.md) or "opencode" (`opencode run`, harness file AGENTS.md) — both
+ * mirror the TB2 drivers' invocation + auth recipes exactly.
+ *
  * Usage:  bun minimal/run.ts [taskDir] [--k N] [--harness <file>]
- *                            [--model <claude-model>] [--timeout <sec>]
+ *                            [--driver <id>] [--model <id>] [--timeout <sec>]
  * Result: minimal/results/<task>-<startedAt>.json
  *         (+ one <task>-<startedAt>-aN.traj.ndjson per attempt)
  */
@@ -23,8 +27,67 @@ import { basename, join, resolve } from "node:path"
 
 const HERE = import.meta.dir
 const IMAGE = "localhost/mh-bench:latest"
-const DEFAULT_MODEL = "claude-opus-4-8"
 const DEFAULT_TIMEOUT_SEC = 600
+
+/** Per-driver mechanics, mirroring the TB2 drivers (drivers/claude-code.ts,
+ * drivers/opencode.ts + agent-auth.ts). harnessFile = the workspace file the
+ * agent auto-loads as project memory; defaultModel = that driver's model-id
+ * dialect (opencode wants the provider-prefixed canonical form). */
+const DRIVERS = {
+  "claude-code": {
+    harnessFile: "CLAUDE.md",
+    defaultModel: "claude-opus-4-8",
+    argv: (model: string, instruction: string) => [
+      "claude", "-p", instruction,
+      "--output-format", "stream-json", "--verbose",
+      "--model", model,
+      "--dangerously-skip-permissions",
+    ],
+    parse: (out: string) => {
+      let turns = 0
+      let resultText = ""
+      for (const ev of ndjson(out)) {
+        if (ev.type === "assistant") turns++
+        if (ev.type === "result") resultText = String(ev.result ?? "").slice(0, 400)
+      }
+      return { turns, resultText }
+    },
+  },
+  opencode: {
+    harnessFile: "AGENTS.md",
+    defaultModel: "anthropic/claude-opus-4-8",
+    argv: (model: string, instruction: string) => [
+      "opencode", "run", "--dir", "/app", "--auto", "--format", "json", "--model", model, instruction,
+    ],
+    parse: (out: string) => {
+      // turn = step_finish with reason "stop"; resultText = last text event
+      // (same accounting as TB2's opencode parseOutput/normalizeEvents).
+      let turns = 0
+      let resultText = ""
+      for (const ev of ndjson(out)) {
+        if (ev.type === "step_finish" && (ev.reason === "stop" || ev.part?.reason === "stop")) turns++
+        if (ev.type === "text") {
+          const txt = String(ev.text ?? ev.part?.text ?? "")
+          if (txt.trim()) resultText = txt.slice(0, 400)
+        }
+      }
+      return { turns, resultText }
+    },
+  },
+} as const
+type DriverId = keyof typeof DRIVERS
+
+function* ndjson(text: string): Generator<any> {
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim()
+    if (!line.startsWith("{")) continue
+    try {
+      yield JSON.parse(line)
+    } catch {
+      /* non-JSON noise line */
+    }
+  }
+}
 
 function die(msg: string): never {
   console.error(`minimal/run.ts: ${msg}`)
@@ -57,9 +120,12 @@ usage: bun minimal/run.ts [taskDir] [options]
 
 options:
   --k N              attempts, each in a fresh container (default: 1)
-  --harness <file>   context file copied to /app/CLAUDE.md (the evolvable
-                     harness; sha256 recorded in the run record)
-  --model <id>       claude model (default: ${DEFAULT_MODEL})
+  --harness <file>   context file copied to the driver's project-memory file
+                     in /app (CLAUDE.md / AGENTS.md — the evolvable harness;
+                     sha256 recorded in the run record)
+  --driver <id>      claude-code | opencode (default: claude-code)
+  --model <id>       model in the driver's dialect (defaults:
+                     claude-code=${DRIVERS["claude-code"].defaultModel}, opencode=${DRIVERS.opencode.defaultModel})
   --timeout <sec>    per-attempt agent timeout (default: ${DEFAULT_TIMEOUT_SEC})
   -h, --help         this text
 
@@ -74,20 +140,27 @@ if (argv.includes("--help") || argv.includes("-h")) {
   process.exit(0)
 }
 let taskDirArg = "tasks/hello-fs"
-let model = DEFAULT_MODEL
+let modelArg: string | undefined
 let timeoutSec = DEFAULT_TIMEOUT_SEC
 let k = 1
 let harnessArg: string | undefined
+let driverId: DriverId = "claude-code"
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i]!
-  if (a === "--model") model = argv[++i] ?? die("--model needs a value")
+  if (a === "--model") modelArg = argv[++i] ?? die("--model needs a value")
   else if (a === "--timeout") timeoutSec = Number(argv[++i] ?? die("--timeout needs a value")) || die("--timeout not a number")
   else if (a === "--k") k = Number(argv[++i] ?? die("--k needs a value")) || die("--k not a number")
   else if (a === "--harness") harnessArg = argv[++i] ?? die("--harness needs a value")
-  else if (a.startsWith("--")) die(`unknown flag ${a}`)
+  else if (a === "--driver") {
+    const d = argv[++i] ?? die("--driver needs a value")
+    if (!(d in DRIVERS)) die(`--driver must be one of: ${Object.keys(DRIVERS).join(", ")}`)
+    driverId = d as DriverId
+  } else if (a.startsWith("--")) die(`unknown flag ${a}`)
   else taskDirArg = a
 }
 if (k < 1 || !Number.isInteger(k)) die(`--k must be a positive integer, got ${k}`)
+const driver = DRIVERS[driverId]
+const model = modelArg ?? driver.defaultModel
 
 // --- Task ---
 const taskDir = resolve(HERE, taskDirArg)
@@ -109,17 +182,43 @@ const harness = harnessPath
     }
   : null
 
-// --- auth (linux host; same recipe as TB2 agent-auth.ts prepareClaudeCodeAuth) ---
-// ~/.claude mounts RW (CC rotates its oauth refresh token + writes settings on
-// use); /root/.claude.json is CC's headless first-run onboarding gate — without
-// it CC exits before ever reaching the model; IS_SANDBOX=1 is required for CC
-// to accept --dangerously-skip-permissions while running as container root.
+// --- auth (linux host; same recipes as TB2 agent-auth.ts) ---
+// claude-code (prepareClaudeCodeAuth): ~/.claude mounts RW (CC rotates its
+// oauth refresh token + writes settings on use); /root/.claude.json is CC's
+// headless first-run onboarding gate — without it CC exits before ever
+// reaching the model; IS_SANDBOX=1 is required for CC to accept
+// --dangerously-skip-permissions while running as container root.
+// opencode (prepareAgentAuthMounts): a temp config dir with the
+// opencode-claude-auth plugin mounts RW at /root/.config/opencode (opencode
+// writes a .gitignore + plugin cache there at startup — ro = 0-turn exit),
+// ~/.claude RO (the auth plugin only reads the credential), and the real
+// ~/.local/share/opencode RW.
 const home = process.env["HOME"] ?? die("no $HOME")
 if (!existsSync(join(home, ".claude", ".credentials.json")))
   die(`~/.claude/.credentials.json not found — run \`claude /login\` on the host first`)
-const authTmp = mkdtempSync(join(tmpdir(), "minimal-cc-auth-"))
-const onboardingPath = join(authTmp, "claude.json")
-writeFileSync(onboardingPath, JSON.stringify({ hasCompletedOnboarding: true }) + "\n")
+const authTmp = mkdtempSync(join(tmpdir(), "minimal-auth-"))
+const containerArgs: string[] = []
+if (driverId === "claude-code") {
+  const onboardingPath = join(authTmp, "claude.json")
+  writeFileSync(onboardingPath, JSON.stringify({ hasCompletedOnboarding: true }) + "\n")
+  containerArgs.push(
+    "-v", `${join(home, ".claude")}:/root/.claude:rw`,
+    "-v", `${onboardingPath}:/root/.claude.json:ro`,
+    "-e", "IS_SANDBOX=1",
+  )
+} else {
+  const configDir = join(authTmp, "config")
+  mkdirSync(configDir, { recursive: true })
+  writeFileSync(
+    join(configDir, "opencode.json"),
+    JSON.stringify({ $schema: "https://opencode.ai/config.json", plugin: ["opencode-claude-auth@latest"] }) + "\n",
+  )
+  containerArgs.push(
+    "-v", `${configDir}:/root/.config/opencode:rw`,
+    "-v", `${join(home, ".claude")}:/root/.claude:ro`,
+    "-v", `${join(home, ".local", "share", "opencode")}:/root/.local/share/opencode:rw`,
+  )
+}
 
 // Reap leftovers from interrupted runs first (a mid-flight SIGKILL skips the
 // per-attempt cleanup below — observed live: escape during a run leaked a
@@ -159,9 +258,7 @@ async function attempt(i: number): Promise<Trial> {
     [
       "run", "-d", "--name", name,
       "--label", "minimal.kernel=1",
-      "-v", `${join(home, ".claude")}:/root/.claude:rw`,
-      "-v", `${onboardingPath}:/root/.claude.json:ro`,
-      "-e", "IS_SANDBOX=1",
+      ...containerArgs,
       "-w", "/app",
       IMAGE, "sleep", "infinity",
     ],
@@ -171,34 +268,15 @@ async function attempt(i: number): Promise<Trial> {
     await podmanOrDie(["exec", name, "mkdir", "-p", "/app"], "workdir prep")
     if (existsSync(fixturesDir)) await podmanOrDie(["cp", `${fixturesDir}/.`, `${name}:/app/`], "fixture copy")
     // Harness injected AFTER fixtures so a fixture can never mask the rule file.
-    if (harnessPath) await podmanOrDie(["cp", harnessPath, `${name}:/app/CLAUDE.md`], "harness copy")
+    if (harnessPath) await podmanOrDie(["cp", harnessPath, `${name}:/app/${driver.harnessFile}`], "harness copy")
 
     // --- Agent attempt (the verifier is NOT in the container yet) ---
     const t0 = Date.now()
-    const agent = await podman([
-      "exec", name,
-      "timeout", String(timeoutSec),
-      "claude", "-p", instruction,
-      "--output-format", "stream-json", "--verbose",
-      "--model", model,
-      "--dangerously-skip-permissions",
-    ])
+    const agent = await podman(["exec", name, "timeout", String(timeoutSec), ...driver.argv(model, instruction)])
     const elapsedSec = Math.round((Date.now() - t0) / 10) / 100
     const trajFile = join(resultsDir, `${taskId}-${stamp}-a${i}.traj.ndjson`)
     writeFileSync(trajFile, agent.out)
-
-    let turns = 0
-    let resultText = ""
-    for (const line of agent.out.split("\n")) {
-      if (!line.trim()) continue
-      try {
-        const ev = JSON.parse(line)
-        if (ev.type === "assistant") turns++
-        if (ev.type === "result") resultText = (ev.result ?? "").slice(0, 400)
-      } catch {
-        /* non-JSON noise line */
-      }
-    }
+    const { turns, resultText } = driver.parse(agent.out)
 
     // --- Scorer, injected only now ---
     await podmanOrDie(["cp", verifierPath, `${name}:/verify.sh`], "verifier copy")
@@ -233,6 +311,7 @@ for (let i = 1; i <= k; i++) {
 const rewards = trials.map((t) => t.reward)
 const run = {
   task: taskId,
+  driver: driverId,
   model,
   image: IMAGE,
   host: hostname(),
