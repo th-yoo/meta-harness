@@ -1,0 +1,32 @@
+{
+  "task": "sparql-university",
+  "model": "claude-opus-4-8",
+  "records": [
+    "sparql-university-2026-07-23T06-50-28-126Z.json"
+  ],
+  "evidence": {
+    "fails": 6,
+    "passes": 4,
+    "suspectDropped": 0
+  },
+  "analysis": "Analyze:\n\nContract shows held-out test data (different names) but reveals key rule: reference `(\"Alex Dimakis\", \"US, ES, CH\")` and `(\"Giorgos Stamou\", \"GR, US\")` — output countries include **non-EU** (US, CH). So `?countries` = ALL countries prof works in, NOT EU-filtered.\n\nDivergence, unanimous:\n- **All 6 fails** (a2,a3,a4,a6,a9,a10): put `FILTER(?country IN EU...)` on the projected `?country` binding → output \"GR\" only (dropped US).\n- **All 4 pass** (a1,a5,a7,a8): kept projected `?country` free, enforced EU only via `FILTER EXISTS`/subquery gate → output \"GR, US\".\n\nLosers conflated a QUALIFYING filter (membership test) with the OUTPUT projection. Over-restricted reported attribute by the gating condition. Dev data can't distinguish reliably → both \"verified\" but got different answers.\n\nStructural class: applying a membership-qualifying condition to the projected/output attribute, pruning legit values. Contract-grounded (7b ok). Different mechanism from rejected script-verify lesson. Clean 6-vs-4 split = strong signal.\n\n{\"action\":\"propose\",\"reason\":\"6/6 failures filtered the projected attribute by the qualifying condition while 4/4 passes gated membership separately, and the verifier contract confirms output must include values the condition excludes.\",\"bullet\":{\"text\":\"When a task selects items qualifying by a condition on some attribute yet must output that attribute's values, enforce the condition as a membership gate via a separate existence check—do not filter the projected/output attribute by it, or you drop legitimate values the criterion never restricted.\",\"evidence\":[\"sparql-university-2026-07-23T06-50-28-126Z.json#a2\",\"sparql-university-2026-07-23T06-50-28-126Z.json#a3\",\"sparql-university-2026-07-23T06-50-28-126Z.json#a6\",\"sparql-university-2026-07-23T06-50-28-126Z.json#a9\",\"sparql-university-2026-07-23T06-50-28-126Z.json#a10\"]},\"predictions\":{\"expect_improve\":\"Failing attempts that EU-filtered the output country binding will instead gate EU via EXISTS and project all countries, yielding the multi-country outputs (e.g. non-EU codes retained) the held-out reference requires.\",\"expect_unchanged_guards\":\"No guards listed; bullet only changes projection-vs-gate discipline, not unrelated task behavior.\",\"falsify_if\":\"A/B on this task shows no pass-rate lift, meaning the dominant failure was not projected-attribute over-filtering or the model already gates separately by default.\"}}",
+  "proposal": {
+    "action": "propose",
+    "reason": "6/6 failures filtered the projected attribute by the qualifying condition while 4/4 passes gated membership separately, and the verifier contract confirms output must include values the condition excludes.",
+    "bullet": {
+      "text": "When a task selects items qualifying by a condition on some attribute yet must output that attribute's values, enforce the condition as a membership gate via a separate existence check—do not filter the projected/output attribute by it, or you drop legitimate values the criterion never restricted.",
+      "evidence": [
+        "sparql-university-2026-07-23T06-50-28-126Z.json#a2",
+        "sparql-university-2026-07-23T06-50-28-126Z.json#a3",
+        "sparql-university-2026-07-23T06-50-28-126Z.json#a6",
+        "sparql-university-2026-07-23T06-50-28-126Z.json#a9",
+        "sparql-university-2026-07-23T06-50-28-126Z.json#a10"
+      ]
+    },
+    "predictions": {
+      "expect_improve": "Failing attempts that EU-filtered the output country binding will instead gate EU via EXISTS and project all countries, yielding the multi-country outputs (e.g. non-EU codes retained) the held-out reference requires.",
+      "expect_unchanged_guards": "No guards listed; bullet only changes projection-vs-gate discipline, not unrelated task behavior.",
+      "falsify_if": "A/B on this task shows no pass-rate lift, meaning the dominant failure was not projected-attribute over-filtering or the model already gates separately by default."
+    }
+  }
+}

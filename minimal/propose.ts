@@ -199,7 +199,10 @@ if (dryRun) {
 
 // --- one proposer call (host-side claude CLI; design-time, no sandbox) ---
 console.error(`proposer: ${model}, ${fails.length} fail + ${passes.length} pass trajs, prompt ${prompt.length} chars`)
-const proc = Bun.spawnSync(["claude", "-p", prompt, "--model", model, "--output-format", "json"], {
+// Prompt rides stdin: a 10-traj prompt (>0.5MB) blows Linux's ~128KB
+// per-argv-string limit (E2BIG, observed live at round 2).
+const proc = Bun.spawnSync(["claude", "-p", "--model", model, "--output-format", "json"], {
+  stdin: new TextEncoder().encode(prompt),
   maxBuffer: 32 * 1024 * 1024,
 })
 if (proc.exitCode !== 0) die(`claude call failed (exit ${proc.exitCode}): ${proc.stderr.toString().slice(0, 400)}`)
