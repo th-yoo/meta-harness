@@ -1,15 +1,22 @@
 #!/usr/bin/env bun
 /**
- * minimal/ — iteration 1 of the kernel in docs/minimal-loop-ood.md.
+ * minimal/ — iterations 1+2 of the kernel in docs/minimal-loop-ood.md.
  *
- * Scope: Sandbox (podman) + Task (dir) + Agent (real model via `claude -p`)
- * + Scorer (verify.sh, injected only after the attempt) + Trial dump (JSON +
- * trajectory ndjson). No Store, no Gate, no Harness versioning yet — those
- * are later iterations.
+ * Iteration 1: Sandbox (podman) + Task (dir) + Agent (real model via
+ * `claude -p`) + Scorer (verify.sh, injected only after the attempt) + Trial
+ * dump (JSON + trajectory ndjson).
  *
- * Usage:  bun minimal/run.ts [taskDir] [--model <claude-model>] [--timeout <sec>]
- * Result: minimal/results/<task>-<startedAt>.json (+ .traj.ndjson beside it)
+ * Iteration 2: Harness slot (--harness <file> podman-cp'd to /app/CLAUDE.md,
+ * Claude Code's auto-loaded project memory — the evolvable context, identity
+ * recorded as sha256) + k-repeat (--k N, a FRESH container per attempt) with
+ * an aggregated run record. Still no Store/Gate/Proposer — later iterations.
+ *
+ * Usage:  bun minimal/run.ts [taskDir] [--k N] [--harness <file>]
+ *                            [--model <claude-model>] [--timeout <sec>]
+ * Result: minimal/results/<task>-<startedAt>.json
+ *         (+ one <task>-<startedAt>-aN.traj.ndjson per attempt)
  */
+import { createHash } from "node:crypto"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { hostname, tmpdir } from "node:os"
 import { basename, join, resolve } from "node:path"
@@ -24,12 +31,8 @@ function die(msg: string): never {
   process.exit(1)
 }
 
-async function podman(args: string[], opts: { stdin?: string } = {}): Promise<{ code: number; out: string; err: string }> {
-  const proc = Bun.spawn(["podman", ...args], {
-    stdin: opts.stdin !== undefined ? new TextEncoder().encode(opts.stdin) : undefined,
-    stdout: "pipe",
-    stderr: "pipe",
-  })
+async function podman(args: string[]): Promise<{ code: number; out: string; err: string }> {
+  const proc = Bun.spawn(["podman", ...args], { stdout: "pipe", stderr: "pipe" })
   const [out, err, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
@@ -49,13 +52,18 @@ const argv = process.argv.slice(2)
 let taskDirArg = "tasks/hello-fs"
 let model = DEFAULT_MODEL
 let timeoutSec = DEFAULT_TIMEOUT_SEC
+let k = 1
+let harnessArg: string | undefined
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i]!
   if (a === "--model") model = argv[++i] ?? die("--model needs a value")
   else if (a === "--timeout") timeoutSec = Number(argv[++i] ?? die("--timeout needs a value")) || die("--timeout not a number")
+  else if (a === "--k") k = Number(argv[++i] ?? die("--k needs a value")) || die("--k not a number")
+  else if (a === "--harness") harnessArg = argv[++i] ?? die("--harness needs a value")
   else if (a.startsWith("--")) die(`unknown flag ${a}`)
   else taskDirArg = a
 }
+if (k < 1 || !Number.isInteger(k)) die(`--k must be a positive integer, got ${k}`)
 
 // --- Task ---
 const taskDir = resolve(HERE, taskDirArg)
@@ -65,6 +73,17 @@ const verifierPath = join(taskDir, "verify.sh")
 if (!existsSync(instructionPath)) die(`no instruction.md in ${taskDir}`)
 if (!existsSync(verifierPath)) die(`no verify.sh in ${taskDir}`)
 const instruction = readFileSync(instructionPath, "utf-8").trim()
+const fixturesDir = join(taskDir, "fixtures")
+
+// --- Harness (the evolvable context; identity = content hash for provenance) ---
+const harnessPath = harnessArg ? resolve(HERE, harnessArg) : undefined
+if (harnessPath && !existsSync(harnessPath)) die(`harness file not found: ${harnessPath}`)
+const harness = harnessPath
+  ? {
+      file: harnessArg!,
+      sha256: createHash("sha256").update(readFileSync(harnessPath)).digest("hex").slice(0, 16),
+    }
+  : null
 
 // --- auth (linux host; same recipe as TB2 agent-auth.ts prepareClaudeCodeAuth) ---
 // ~/.claude mounts RW (CC rotates its oauth refresh token + writes settings on
@@ -78,94 +97,128 @@ const authTmp = mkdtempSync(join(tmpdir(), "minimal-cc-auth-"))
 const onboardingPath = join(authTmp, "claude.json")
 writeFileSync(onboardingPath, JSON.stringify({ hasCompletedOnboarding: true }) + "\n")
 
-// --- Sandbox up ---
 // Reap leftovers from interrupted runs first (a mid-flight SIGKILL skips the
-// finally-block below — observed live: escape during the first run leaked a
+// per-attempt cleanup below — observed live: escape during a run leaked a
 // container in "Stopping" state with the agent process still inside).
 const stale = (await podman(["ps", "-aq", "--filter", "label=minimal.kernel=1"])).out.trim()
 if (stale) await podman(["rm", "-f", ...stale.split("\n")])
 
-const startedAt = new Date().toISOString()
-const name = `minimal-${taskId}-${Date.now()}`
+let currentContainer: string | undefined
 for (const sig of ["SIGINT", "SIGTERM"] as const)
   process.on(sig, () => {
-    Bun.spawnSync(["podman", "rm", "-f", name])
+    if (currentContainer) Bun.spawnSync(["podman", "rm", "-f", currentContainer])
     process.exit(130)
   })
-await podmanOrDie(
-  [
-    "run", "-d", "--name", name,
-    "--label", "minimal.kernel=1",
-    "-v", `${join(home, ".claude")}:/root/.claude:rw`,
-    "-v", `${onboardingPath}:/root/.claude.json:ro`,
-    "-e", "IS_SANDBOX=1",
-    "-w", "/app",
-    IMAGE, "sleep", "infinity",
-  ],
-  "sandbox start",
-)
-await podmanOrDie(["exec", name, "mkdir", "-p", "/app"], "workdir prep")
-const fixturesDir = join(taskDir, "fixtures")
-if (existsSync(fixturesDir)) await podmanOrDie(["cp", `${fixturesDir}/.`, `${name}:/app/`], "fixture copy")
 
 const resultsDir = join(HERE, "results")
 mkdirSync(resultsDir, { recursive: true })
+const startedAt = new Date().toISOString()
 const stamp = startedAt.replace(/[:.]/g, "-")
-const trajFile = join(resultsDir, `${taskId}-${stamp}.traj.ndjson`)
 const resultFile = join(resultsDir, `${taskId}-${stamp}.json`)
 
-try {
-  // --- Agent attempt (the verifier is NOT in the container yet) ---
-  const t0 = Date.now()
-  const agent = await podman([
-    "exec", name,
-    "timeout", String(timeoutSec),
-    "claude", "-p", instruction,
-    "--output-format", "stream-json", "--verbose",
-    "--model", model,
-    "--dangerously-skip-permissions",
-  ])
-  const elapsedSec = Math.round((Date.now() - t0) / 10) / 100
-  writeFileSync(trajFile, agent.out)
-
-  let turns = 0
-  let resultText = ""
-  for (const line of agent.out.split("\n")) {
-    if (!line.trim()) continue
-    try {
-      const ev = JSON.parse(line)
-      if (ev.type === "assistant") turns++
-      if (ev.type === "result") resultText = (ev.result ?? "").slice(0, 400)
-    } catch {
-      /* non-JSON noise line */
-    }
-  }
-  const timedOut = agent.code === 124
-
-  // --- Scorer, injected only now ---
-  await podmanOrDie(["cp", verifierPath, `${name}:/verify.sh`], "verifier copy")
-  const verdict = await podman(["exec", name, "sh", "/verify.sh"])
-  const reward = verdict.code === 0 ? 1 : 0
-
-  // --- Trial dump ---
-  const trial = {
-    task: taskId,
-    model,
-    image: IMAGE,
-    host: hostname(),
-    startedAt,
-    elapsedSec,
-    agentExitCode: agent.code,
-    timedOut,
-    turns,
-    reward,
-    resultText,
-    trajFile: basename(trajFile),
-    agentStderr: agent.err.trim().slice(0, 400),
-  }
-  writeFileSync(resultFile, JSON.stringify(trial, null, 2) + "\n")
-  console.log(JSON.stringify(trial, null, 2))
-  console.log(`\nresult:     ${resultFile}\ntrajectory: ${trajFile}\nview:       bun minimal/traj.ts ${trajFile}`)
-} finally {
-  await podman(["rm", "-f", name])
+interface Trial {
+  attempt: number
+  reward: 0 | 1
+  turns: number
+  elapsedSec: number
+  agentExitCode: number
+  timedOut: boolean
+  resultText: string
+  trajFile: string
+  agentStderr: string
 }
+
+async function attempt(i: number): Promise<Trial> {
+  const name = `minimal-${taskId}-${Date.now()}-a${i}`
+  currentContainer = name
+  await podmanOrDie(
+    [
+      "run", "-d", "--name", name,
+      "--label", "minimal.kernel=1",
+      "-v", `${join(home, ".claude")}:/root/.claude:rw`,
+      "-v", `${onboardingPath}:/root/.claude.json:ro`,
+      "-e", "IS_SANDBOX=1",
+      "-w", "/app",
+      IMAGE, "sleep", "infinity",
+    ],
+    "sandbox start",
+  )
+  try {
+    await podmanOrDie(["exec", name, "mkdir", "-p", "/app"], "workdir prep")
+    if (existsSync(fixturesDir)) await podmanOrDie(["cp", `${fixturesDir}/.`, `${name}:/app/`], "fixture copy")
+    // Harness injected AFTER fixtures so a fixture can never mask the rule file.
+    if (harnessPath) await podmanOrDie(["cp", harnessPath, `${name}:/app/CLAUDE.md`], "harness copy")
+
+    // --- Agent attempt (the verifier is NOT in the container yet) ---
+    const t0 = Date.now()
+    const agent = await podman([
+      "exec", name,
+      "timeout", String(timeoutSec),
+      "claude", "-p", instruction,
+      "--output-format", "stream-json", "--verbose",
+      "--model", model,
+      "--dangerously-skip-permissions",
+    ])
+    const elapsedSec = Math.round((Date.now() - t0) / 10) / 100
+    const trajFile = join(resultsDir, `${taskId}-${stamp}-a${i}.traj.ndjson`)
+    writeFileSync(trajFile, agent.out)
+
+    let turns = 0
+    let resultText = ""
+    for (const line of agent.out.split("\n")) {
+      if (!line.trim()) continue
+      try {
+        const ev = JSON.parse(line)
+        if (ev.type === "assistant") turns++
+        if (ev.type === "result") resultText = (ev.result ?? "").slice(0, 400)
+      } catch {
+        /* non-JSON noise line */
+      }
+    }
+
+    // --- Scorer, injected only now ---
+    await podmanOrDie(["cp", verifierPath, `${name}:/verify.sh`], "verifier copy")
+    const verdict = await podman(["exec", name, "sh", "/verify.sh"])
+
+    return {
+      attempt: i,
+      reward: verdict.code === 0 ? 1 : 0,
+      turns,
+      elapsedSec,
+      agentExitCode: agent.code,
+      timedOut: agent.code === 124,
+      resultText,
+      trajFile: basename(trajFile),
+      agentStderr: agent.err.trim().slice(0, 400),
+    }
+  } finally {
+    await podman(["rm", "-f", name])
+    currentContainer = undefined
+  }
+}
+
+// --- k attempts, fresh sandbox each ---
+const trials: Trial[] = []
+for (let i = 1; i <= k; i++) {
+  const t = await attempt(i)
+  trials.push(t)
+  console.log(`attempt ${i}/${k}: reward=${t.reward} turns=${t.turns} ${t.elapsedSec}s${t.timedOut ? " TIMEOUT" : ""}`)
+}
+
+// --- Run record ---
+const rewards = trials.map((t) => t.reward)
+const run = {
+  task: taskId,
+  model,
+  image: IMAGE,
+  host: hostname(),
+  startedAt,
+  k,
+  harness,
+  rewards,
+  passRate: rewards.reduce((a, b) => a + b, 0) / k,
+  trials,
+}
+writeFileSync(resultFile, JSON.stringify(run, null, 2) + "\n")
+console.log(`\n${JSON.stringify({ ...run, trials: undefined }, null, 2)}`)
+console.log(`\nresult:     ${resultFile}\nview traj:  bun minimal/traj.ts ${join(resultsDir, `${taskId}-${stamp}-a1.traj.ndjson`)}`)

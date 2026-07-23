@@ -1,0 +1,38 @@
+{
+  "task": "hello-fs",
+  "model": "claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-dev",
+  "startedAt": "2026-07-23T01:40:39.568Z",
+  "k": 2,
+  "harness": null,
+  "rewards": [
+    1,
+    1
+  ],
+  "passRate": 1,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 1,
+      "turns": 3,
+      "elapsedSec": 5.75,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "resultText": "Done. `/app/greeting.txt` contains the single line `hello kernel`.",
+      "trajFile": "hello-fs-2026-07-23T01-40-39-568Z-a1.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 2,
+      "reward": 1,
+      "turns": 3,
+      "elapsedSec": 5.63,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "resultText": "Done. `/app/greeting.txt` contains the single line `hello kernel`.",
+      "trajFile": "hello-fs-2026-07-23T01-40-39-568Z-a2.traj.ndjson",
+      "agentStderr": ""
+    }
+  ]
+}
