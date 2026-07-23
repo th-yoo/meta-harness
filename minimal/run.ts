@@ -28,7 +28,7 @@ import { basename, join, resolve } from "node:path"
 
 const HERE = import.meta.dir
 const IMAGE = "localhost/mh-bench:latest"
-const DEFAULT_TIMEOUT_SEC = 600
+const DEFAULT_TIMEOUT_SEC = 3600
 
 // Adaptive-width admission thresholds (--parallel). Host-level /proc reads on
 // purpose: per-container cgroup stats are known-poisoned on the WSL2 box
