@@ -14,15 +14,22 @@
  *
  * Usage:  bun minimal/propose.ts <run-record.json> [more-records...]
  *              [--harness <file>] [--rejected <file>] [--guards t1,t2]
- *              [--model <id>] [--dry-run]
+ *              [--driver claude-code|opencode] [--model <id>] [--dry-run]
  * Output: minimal/proposals/<task>-<ts>.json (+ candidate harness file when
  *         the proposer proposes)
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { basename, dirname, join, resolve } from "node:path"
 
 const HERE = import.meta.dir
-const DEFAULT_MODEL = "claude-opus-4-8"
+// Proposer-seat drivers. Model ids follow each CLI's dialect (opencode wants
+// the provider-prefixed canonical form), same as minimal/run.ts DRIVERS.
+const PROPOSER_DRIVERS = {
+  "claude-code": { defaultModel: "claude-opus-4-8" },
+  opencode: { defaultModel: "anthropic/claude-opus-4-8" },
+} as const
+type ProposerDriverId = keyof typeof PROPOSER_DRIVERS
 // Per-traj budget. Real opus sparql trajs run 45-60k chars; at n=1 task x k=10
 // the full set (~0.5MB ~ 130k tokens) fits opus context, so the cap only
 // guards pathological runs. When it does bite, keep head AND tail — the tail
@@ -40,23 +47,29 @@ const recordPaths: string[] = []
 let harnessArg: string | undefined
 let rejectedArg: string | undefined
 let guardsArg: string | undefined
-let model = DEFAULT_MODEL
+let driverId: ProposerDriverId = "claude-code"
+let modelArg: string | undefined
 let dryRun = false
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i]!
   if (a === "--harness") harnessArg = argv[++i] ?? die("--harness needs a value")
   else if (a === "--rejected") rejectedArg = argv[++i] ?? die("--rejected needs a value")
   else if (a === "--guards") guardsArg = argv[++i] ?? die("--guards needs a value")
-  else if (a === "--model") model = argv[++i] ?? die("--model needs a value")
+  else if (a === "--driver") {
+    const d = argv[++i] ?? die("--driver needs a value")
+    if (!(d in PROPOSER_DRIVERS)) die(`unknown driver ${d} (want: ${Object.keys(PROPOSER_DRIVERS).join(" | ")})`)
+    driverId = d as ProposerDriverId
+  } else if (a === "--model") modelArg = argv[++i] ?? die("--model needs a value")
   else if (a === "--dry-run") dryRun = true
   else if (a === "-h" || a === "--help") {
     console.log(
-      "usage: bun minimal/propose.ts <run-record.json>... [--harness f] [--rejected f] [--guards t1,t2] [--model id] [--dry-run]",
+      "usage: bun minimal/propose.ts <run-record.json>... [--harness f] [--rejected f] [--guards t1,t2] [--driver claude-code|opencode] [--model id] [--dry-run]",
     )
     process.exit(0)
   } else if (a.startsWith("--")) die(`unknown flag ${a}`)
   else recordPaths.push(resolve(a))
 }
+const model = modelArg ?? PROPOSER_DRIVERS[driverId].defaultModel
 if (recordPaths.length === 0) die("need at least one run-record JSON (from minimal/run.ts)")
 
 // --- load Trials + Trajectories ---
@@ -197,16 +210,81 @@ if (dryRun) {
   process.exit(0)
 }
 
-// --- one proposer call (host-side claude CLI; design-time, no sandbox) ---
-console.error(`proposer: ${model}, ${fails.length} fail + ${passes.length} pass trajs, prompt ${prompt.length} chars`)
-// Prompt rides stdin: a 10-traj prompt (>0.5MB) blows Linux's ~128KB
-// per-argv-string limit (E2BIG, observed live at round 2).
-const proc = Bun.spawnSync(["claude", "-p", "--model", model, "--output-format", "json"], {
-  stdin: new TextEncoder().encode(prompt),
-  maxBuffer: 32 * 1024 * 1024,
-})
-if (proc.exitCode !== 0) die(`claude call failed (exit ${proc.exitCode}): ${proc.stderr.toString().slice(0, 400)}`)
-const replyText: string = JSON.parse(proc.stdout.toString()).result ?? ""
+// --- one proposer call (host-side CLI; design-time, no sandbox) ---
+// Prompt rides stdin on BOTH drivers: a 10-traj prompt (>0.5MB) blows Linux's
+// ~128KB per-argv-string limit (E2BIG, observed live at round 2). opencode run
+// appends piped stdin to the message (cli/cmd/run.ts resolveRunInput).
+console.error(
+  `proposer: ${driverId}/${model}, ${fails.length} fail + ${passes.length} pass trajs, prompt ${prompt.length} chars`,
+)
+let replyText = ""
+if (driverId === "claude-code") {
+  const proc = Bun.spawnSync(["claude", "-p", "--model", model, "--output-format", "json"], {
+    stdin: new TextEncoder().encode(prompt),
+    maxBuffer: 32 * 1024 * 1024,
+  })
+  if (proc.exitCode !== 0) die(`claude call failed (exit ${proc.exitCode}): ${proc.stderr.toString().slice(0, 400)}`)
+  replyText = JSON.parse(proc.stdout.toString()).result ?? ""
+} else {
+  // opencode, host-side. Isolation mirrors run.ts's container recipe:
+  // - XDG_CONFIG_HOME → temp config with ONLY the CC-oauth auth plugin
+  //   (skips the user's global config: MCP servers etc.); the plugin is
+  //   resolved from opencode's own cache (~/.cache/opencode), untouched.
+  // - --dir → empty temp dir; the repo's AGENTS.md is the harness under test
+  //   and must not leak into the design-time proposer context.
+  // - NO --auto: non-interactive permission requests auto-REJECT, so the
+  //   proposer stays a text-only reasoning call — no tool execution on host.
+  const scratch = mkdtempSync(join(tmpdir(), "minimal-propose-"))
+  const workDir = join(scratch, "work")
+  const configDir = join(scratch, "config", "opencode")
+  mkdirSync(workDir, { recursive: true })
+  mkdirSync(configDir, { recursive: true })
+  // agent.build.prompt REPLACES opencode's built-in coding-agent system prompt
+  // (anthropic.txt) — request.ts: agent.prompt ?? SystemPrompt.provider(model).
+  // The proposer prompt stays in the user slot (same placement as the
+  // claude-code driver); the system slot gets a neutral reasoning frame so the
+  // coding-agent prompt's tool-use push + output-brevity bias don't leak into
+  // the proposer seat.
+  writeFileSync(
+    join(configDir, "opencode.json"),
+    JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      plugin: ["opencode-claude-auth@latest"],
+      agent: {
+        build: {
+          prompt:
+            "You are a careful reasoning assistant. Answer directly in plain text in this conversation. Do not use tools, read or modify files, or run commands.",
+        },
+      },
+    }) + "\n",
+  )
+  const proc = Bun.spawnSync(["opencode", "run", "--dir", workDir, "--format", "json", "--model", model], {
+    stdin: new TextEncoder().encode(prompt),
+    maxBuffer: 32 * 1024 * 1024,
+    env: { ...process.env, XDG_CONFIG_HOME: join(scratch, "config") },
+  })
+  if (proc.exitCode !== 0) die(`opencode call failed (exit ${proc.exitCode}): ${proc.stderr.toString().slice(0, 400)}`)
+  // --format json = ndjson events; a "text" event fires once per COMPLETED
+  // text part (part.time.end gate) carrying the part's full text. Keyed by
+  // part.id in case a completed part is re-emitted on a later message update.
+  const parts = new Map<string, string>()
+  const errors: string[] = []
+  for (const line of proc.stdout.toString().split("\n")) {
+    const t = line.trim()
+    if (!t.startsWith("{")) continue
+    let ev: any
+    try {
+      ev = JSON.parse(t)
+    } catch {
+      continue
+    }
+    if (ev.type === "text" && ev.part?.text) parts.set(String(ev.part.id ?? parts.size), String(ev.part.text))
+    if (ev.type === "error") errors.push(JSON.stringify(ev.error).slice(0, 400))
+  }
+  if (parts.size === 0)
+    die(`opencode returned no text${errors.length ? ` — errors: ${errors.join("; ")}` : ` (stderr: ${proc.stderr.toString().slice(0, 400)})`}`)
+  replyText = [...parts.values()].join("\n")
+}
 
 // last JSON object line = the contract
 const jsonLine = replyText
@@ -227,6 +305,7 @@ mkdirSync(proposalsDir, { recursive: true })
 const stamp = new Date().toISOString().replace(/[:.]/g, "-")
 const out = {
   task: taskId,
+  driver: driverId,
   model,
   records: recordPaths.map((p) => basename(p)),
   evidence: { fails: fails.length, passes: passes.length, suspectDropped: evidence.length - usable.length },

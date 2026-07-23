@@ -1,0 +1,31 @@
+{
+  "task": "sparql-university",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "records": [
+    "sparql-university-2026-07-23T06-50-28-126Z.json"
+  ],
+  "evidence": {
+    "fails": 6,
+    "passes": 4,
+    "suspectDropped": 0
+  },
+  "analysis": "Analyzing the divergence: the verifier's `test_sparql_query_results` compares `?countries` as a set after normalizing (splitting on comma, sorting). The KEY difference between PASS and FAIL:\n\n- **PASS trajectories**: `?countries` includes ALL countries where the professor works, including non-EU (Orfeas Menis => \"GR, US\").\n- **FAIL trajectories**: `?countries` restricted to EU-only countries (Orfeas Menis => \"GR\"), because they put the EU `FILTER` on the same `?country` variable that feeds `GROUP_CONCAT`.\n\nThe reference expects \"Alex Dimakis\" => \"US, ES, CH\" — countries include US and CH (non-EU). So the EU membership is a filter *criterion* but the *output* must list all work countries unrestricted.\n\nThe dominant failure: agents conflated a variable used for a filtering criterion with the variable used for output aggregation, applying the criterion's restriction to the reported values. This is structural: when a filter condition and an output projection share a variable, the restriction leaks into the output.\n\nHowever — I cannot infer acceptance criteria from trajectories alone (rule 7b). But here the REFERENCE_RESULTS in the verifier contract are visible: \"Alex Dimakis\", \"US, ES, CH\" confirms non-EU codes appear in output. This grounds the fix in the contract, not divergence-artifact.\n\nThe structural lesson: keep the criterion-checking (existence/membership) separate from the value being projected/aggregated, so restrictions used only to qualify a row don't shrink the reported set.\n\n{\"action\":\"propose\",\"reason\":\"Failing runs leaked a qualifying filter's restriction into the aggregated output variable, contradicting the verifier's reference which lists values excluded by that filter.\",\"bullet\":{\"text\":\"When a condition restricts rows for qualification (membership/threshold/existence) but an output field should report a broader set, enforce the condition on a separate variable inside an EXISTS/subquery, never on the same variable feeding the output projection or aggregation. Verify projected values include ones the qualifying filter would exclude.\",\"evidence\":[\"sparql-university-2026-07-23T06-50-28-126Z.json#a2\",\"sparql-university-2026-07-23T06-50-28-126Z.json#a3\",\"sparql-university-2026-07-23T06-50-28-126Z.json#a9\"]},\"predictions\":{\"expect_improve\":\"Runs will stop applying the EU filter to the countries projection, so output includes non-EU work countries, matching the reference set (e.g., entries containing US/CH).\",\"expect_unchanged_guards\":\"No guards listed; the rule only separates filter-variables from projection-variables, which cannot break unrelated tasks.\",\"falsify_if\":\"A/B shows no pass-rate lift, indicating the dominant failure was elsewhere (e.g., role/date logic) rather than filter-leak into the projected output.\"}}",
+  "proposal": {
+    "action": "propose",
+    "reason": "Failing runs leaked a qualifying filter's restriction into the aggregated output variable, contradicting the verifier's reference which lists values excluded by that filter.",
+    "bullet": {
+      "text": "When a condition restricts rows for qualification (membership/threshold/existence) but an output field should report a broader set, enforce the condition on a separate variable inside an EXISTS/subquery, never on the same variable feeding the output projection or aggregation. Verify projected values include ones the qualifying filter would exclude.",
+      "evidence": [
+        "sparql-university-2026-07-23T06-50-28-126Z.json#a2",
+        "sparql-university-2026-07-23T06-50-28-126Z.json#a3",
+        "sparql-university-2026-07-23T06-50-28-126Z.json#a9"
+      ]
+    },
+    "predictions": {
+      "expect_improve": "Runs will stop applying the EU filter to the countries projection, so output includes non-EU work countries, matching the reference set (e.g., entries containing US/CH).",
+      "expect_unchanged_guards": "No guards listed; the rule only separates filter-variables from projection-variables, which cannot break unrelated tasks.",
+      "falsify_if": "A/B shows no pass-rate lift, indicating the dominant failure was elsewhere (e.g., role/date logic) rather than filter-leak into the projected output."
+    }
+  }
+}
