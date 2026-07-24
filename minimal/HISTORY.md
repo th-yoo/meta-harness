@@ -21,6 +21,8 @@ mutator of the active base; `rejected.json` is the machine-form rejection ledger
 | R4 | 2026-07-24 | asyncio-cancellation bullet (iteration 1) | killed at ~6 attempts (4/4 pre-kill) | — | — | REJECT scope-veto, never gated (rule 3b born here) |
 | R5 | 2026-07-24 | iteration 2 rerun (rule 3b + Reviewer live) | no arms — proposer ABSTAINED | — | — | **ABSTAIN: prose-bullet actuator exhausted on this residual** |
 | R6 | 2026-07-24 | iteration-0 rerun, agent-translated vocabulary | no arms — Reviewer caught R3-duplicate, reviser conceded | — | — | ABSTAIN via review loop — **Reviewer seat's first live catch** |
+| R7 | 2026-07-24 | R3 bullet in SYSTEM slot (placement) | killed at 8/10: 3/8 vs 6/10 base | — | — | channel hypothesis REFUTED (rule harmful in both channels) |
+| R8 | 2026-07-24 | scenario-coverage bullet (from R7 trajs) | arm aborted by design judgment | — | — | staged, NOT gated — prose channel dead; escalate to binding actuator |
 
 ---
 
