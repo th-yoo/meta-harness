@@ -6,7 +6,8 @@ mutator of the active base; `rejected.json` is the machine-form rejection ledger
 (invariant 5 — permanent proposer input). This file is the human-readable lineage.
 
 **Active base:** `harness/system-v0.md` (`--system`) + `harness/seed-v0.md` (`--harness`)
-— since adoption-1 (2026-07-23, commit `4fc9d68`). Unchanged by round 2.
+— since adoption-1 (2026-07-23, commit `4fc9d68`). Unchanged through round 3
+(R2 and R3 both rejected; every post-adoption bullet so far has been null).
 
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
