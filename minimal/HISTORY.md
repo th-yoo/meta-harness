@@ -19,6 +19,7 @@ mutator of the active base; `rejected.json` is the machine-form rejection ledger
 | HO2 | 2026-07-24 | adopted base, cancel-async office pair | bare 2/10 vs adopted 6/10 (k=10) | 0.17 | — | directional, uncertified |
 | R3 | 2026-07-24 | signal-verification bullet ON adopted base | cancel-async 6/10 vs 3/10 | 0.37 | cdt 3/3, chess 3/3, sparql-info 3/3 | REJECT null (negative direction) |
 | R4 | 2026-07-24 | asyncio-cancellation bullet (iteration 1) | killed at ~6 attempts (4/4 pre-kill) | — | — | REJECT scope-veto, never gated (rule 3b born here) |
+| R5 | 2026-07-24 | iteration 2 rerun (rule 3b + Reviewer live) | no arms — proposer ABSTAINED | — | — | **ABSTAIN: prose-bullet actuator exhausted on this residual** |
 
 ---
 
@@ -129,3 +130,23 @@ One auto-chained run (user-approved single go): harvest → proposer → gate.
   that the residual is this mechanism and is context-reachable. Wanted next:
   behavior-level reform (verification-design / completion-criteria) or an
   honest domain-only ABSTAIN, which escalates toward a binding actuator.
+
+## R5 — iteration 2 rerun under rule 3b + Reviewer (2026-07-24, office) — ABSTAIN
+
+- **Setup:** same evidence as iteration 1 (adopted 6P/4F arm + R3-bullet 3P/7F
+  arm, 1.19M-char prompt), ledger now 4 entries incl. R4's scope-veto with the
+  live diagnosis. Reviewer seat armed (first live availability; never invoked —
+  abstain produces no bullet to review). One 31s call, zero experiment spend.
+- **Verdict (proposer's own words, ledger-cited):** the dominant failure is
+  only addressable by the R3-rejected reproduce-the-trigger bullet (A/B
+  negative) or the R4-vetoed asyncio mechanics (fails domain-swap); *"no new
+  behavior-level domain-neutral lever remains."*
+- **Meaning: the machine seat declared prose-bullet actuator exhaustion on
+  this residual** — the same conclusion TB2 loop-1 reached by human forensics
+  (lesson IGNORED 7/8 → binding actuator), now derived mechanically with
+  rejection-ledger reasoning. Invariant 5 + rule 3b behaved exactly as
+  designed: no re-derivation, no laundering, honest stop.
+- **Escalation indicated:** this residual's fix class lives beyond context
+  prose — binding actuator route (middleware/enforced procedure) per the
+  loop-2 verdict, or park cancel-async and move the band to a task whose
+  residual is still prose-reachable.
