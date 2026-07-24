@@ -1,0 +1,52 @@
+attempt 2/10: reward=1 turns=1 1254.23s [width 2]
+attempt 3/10: reward=1 turns=1 462.36s [width 2]
+attempt 1/10: reward=1 turns=3 2208.08s [width 2]
+attempt 4/10: reward=1 turns=1 602.72s [width 2]
+attempt 6/10: reward=1 turns=2 879.58s [width 2]
+attempt 7/10: reward=1 turns=1 551.92s [width 2]
+attempt 5/10: reward=1 turns=2 1768.96s [width 2]
+attempt 9/10: reward=1 turns=1 327.2s [width 2]
+attempt 8/10: reward=1 turns=2 1079.8s [width 2]
+attempt 10/10: reward=1 turns=2 850.06s [width 1]
+
+{
+  "task": "cancel-async-tasks",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-mac.local",
+  "startedAt": "2026-07-24T09:56:59.732Z",
+  "k": 10,
+  "parallel": 2,
+  "sampling": null,
+  "system": {
+    "file": "minimal/harness/system-v0.md",
+    "sha256": "3b65fb7d6573fe4b"
+  },
+  "harness": {
+    "file": "minimal/harness/seed-v0.md",
+    "sha256": "e72331a29823cfb4"
+  },
+  "completeGate": {
+    "artifact": "/app/run.py",
+    "rounds": 2,
+    "mutants": 4
+  },
+  "rewards": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+  ],
+  "passRate": 1
+}
+
+result:     /Users/yoo/z2/meta-harness/minimal/results/cancel-async-tasks-2026-07-24T09-56-59-732Z.json
+view traj:  bun minimal/traj.ts /Users/yoo/z2/meta-harness/minimal/results/cancel-async-tasks-2026-07-24T09-56-59-732Z-a1.traj.ndjson
+R10_DONE
