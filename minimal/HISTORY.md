@@ -6,9 +6,11 @@ mutator of the active base; `rejected.json` is the machine-form rejection ledger
 (invariant 5 — permanent proposer input). This file is the human-readable lineage.
 
 **Active base:** `harness/system-v0.md` (`--system`) + `harness/seed-v0.md` (`--harness`)
-— since adoption-1 (2026-07-23, commit `4fc9d68`). Unchanged through R9:
+— since adoption-1 (2026-07-23, commit `4fc9d68`). Unchanged through R10:
 every post-adoption prose candidate was rejected, abstained, or vetoed; the
-completion-gate MECHANISM (R9) is the first candidate of a new actuator class.
+completion-gate MECHANISM (R9→R10) is the first candidate of a new actuator
+class — **lift-certified 10/10 vs 3/10 (R10, p=0.0031), adoption pending
+gate-ON guards + held-out transfer.**
 
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
@@ -24,7 +26,9 @@ completion-gate MECHANISM (R9) is the first candidate of a new actuator class.
 | R6 | 2026-07-24 | iteration-0 rerun, agent-translated vocabulary | no arms — Reviewer caught R3-duplicate, reviser conceded | — | — | ABSTAIN via review loop — **Reviewer seat's first live catch** |
 | R7 | 2026-07-24 | R3 bullet in SYSTEM slot (placement) | killed at 8/10: 3/8 vs 6/10 base | — | — | channel hypothesis REFUTED (rule harmful in both channels) |
 | R8 | 2026-07-24 | scenario-coverage bullet (from R7 trajs) | arm aborted by design judgment | — | — | staged, NOT gated — prose channel dead; escalate to binding actuator |
-| R9 | 2026-07-24 | completion gate + adequacy probe (MECHANISM) | killed 5/10 by host shutdown: 4/5, all turns=3 | — | never ran | partial-directional; guards+verdict pending; overfit caveat standing |
+| R9 | 2026-07-24 | completion gate + adequacy probe (MECHANISM) | killed 5/10 by host shutdown: 4/5, all turns=3 | — | never ran | partial-directional; superseded by R9F+R10 |
+| R9F | 2026-07-24 | (forensics, zero trials, MacBook) | office a1–a5 traj read | — | — | **GATE BUG root-caused: docstring mutant unkillable — every attempt exhausted both rounds; 4/5 was nudge-text effect, not mechanism. mutate.ts fixed (codeLineSet)** |
+| R10 | 2026-07-24 | FIXED completion gate (cancel-async k=10, MacBook) | bare 3/10 vs gate 10/10 | **0.0031** | gate-ON guards PENDING | **lift-certified — first perfect arm on this task; adoption blocked on gate-ON guards + held-out** |
 
 ---
 
@@ -227,3 +231,57 @@ One auto-chained run (user-approved single go): harvest → proposer → gate.
   task-class-fitted; ~6 sequential interventions on one task = spent
   statistics. Any R9 verdict is "directional on the design task, transfer
   untested" — the real test is gate HELD-OUT arms on tasks the gate never saw.
+
+## R9F — R9 forensics (2026-07-24, MacBook, zero trials) — GATE BUG FOUND + FIXED
+
+- **turns=3-everywhere mystery solved:** office a1–a5 trajs show the mutation
+  probe's `swap-and-or` first site landed in run.py's DOCSTRING ("and"→"or"
+  in prose) — a semantic no-op NO verify.sh can catch. Probe unsatisfiable →
+  every attempt burned both rounds regardless of suite quality (a1 verbatim:
+  "genuinely a no-op for runtime behavior"). Also: `gate_reinject` traj
+  events carried no payload (salvage lost stdout), but the per-trial `gate`
+  field in run records was intact code — only the office salvage lacked it.
+- **Implication:** R9's 4/5 was NOT the adequacy mechanism — it was the
+  contract line + reinject NUDGE TEXT (which names combined-boundary
+  scenarios) + forced extra grind. Mechanism had never actually functioned.
+- **Fix (`84a244f`, TDD +3 tests):** `codeLineSet` — comment lines +
+  triple-quote blocks excluded from every operator's sites; real code lines
+  still mutated.
+- **Session also shipped (user-ordered, same day):** scheduler reservation
+  layer (`schedule.ts` `c493799`: clampParallel from podman-VM capacity — the
+  measurement-only admission loop is commitment-blind at large --parallel;
+  per-container `-m 2048m`; `pidAlive` replacing existsSync(/proc) whose
+  darwin failure made the stale-reap kill concurrent LIVE runs' containers).
+  Nudge-arm decomposition attempt launched then user-killed in favor of
+  direct R10 (partial nudge arm abandoned unrecorded, ~3 attempts).
+
+## R10 — FIXED gate arm (2026-07-24, MacBook) — 10/10, LIFT-CERTIFIED
+
+- **Arms (same-host, gate.ts verdict):** bare baseline 3/10 (07-23) vs
+  [adopted base + fixed completion gate] **10/10** — Fisher two-sided
+  **p = 0.0031**, lift-certified. First perfect arm on cancel-async ever
+  (prior best 6/10; five prose rounds R2–R8 could not move it).
+- **Loop health — mechanism now demonstrably functioning:** all 10 attempts
+  gate-ACCEPTED (5× round-0, 4× after one reinject, 1× after two; zero
+  exhaustion give-ups — office pathology gone). Turn/gate fields recorded
+  per-trial this time.
+- **Specimen a6 (mechanism transmitting task knowledge):** probe's
+  swap-and-or on a REAL code line reproduced the exact double-cancel defect
+  class R7's ground-truth forensics identified (re-cancel mid-cleanup aborts
+  async cleanup); agent's suite missed it; the diff-bearing reinject taught
+  it; accepted round 1. A task-blind operator transmitted what five rounds of
+  prose could not.
+- **Placement validated externally (searched):** industry Stop-hook tier =
+  deterministic gate vs probabilistic prompt; measured context-rot data
+  (CLAUDE.md compliance degrades sharply past ~50% context) confirms
+  contract-at-task + enforcement-in-code over system-prompt placement. CC's
+  own Stop hook bounds at 8 consecutive blocks (ours: 2 — tuning knob noted).
+- **NOT adopted yet — two opens:** (1) guards must re-run GATE-ON (prior
+  guard holds were gate-OFF; the gate rides every task if adopted —
+  spurious-refusal tax unmeasured; artifacts cdt=/app/answer.txt
+  chess=/app/move.txt); (2) held-out transfer (user's standing overfit
+  caveat) — gate arms on tasks the gate was never designed from.
+- Committed: fix `84a244f`, scheduler `c493799`, results `b9c7e3f`.
+  Port-to-plugin scheduled: resume queue item 4 (finish-hook via
+  session.idle, store-versioned gate.json, interactive round-bound +
+  human-preemption rules).
