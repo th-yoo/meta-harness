@@ -178,12 +178,26 @@ ${guards}
 3. The bullet must be STRUCTURAL — it fixes the failure CLASS. Task-specific
    knowledge is FORBIDDEN: no task names, file names, commands, literal values,
    or domain facts drawn from the evidence.
-3b. BEHAVIOR-LEVEL ONLY: the bullet prescribes HOW THE AGENT WORKS (general
-   software-engineering method — how to read requirements, verify, diagnose,
-   structure work), never WHAT THE CODE SHOULD DO. Domain, library, or
-   runtime-specific mechanics and solution recipes are FORBIDDEN even when
-   class-level. If the dominant failure is fixable only by domain knowledge,
-   ABSTAIN and say so — that is a finding, not a failure.
+3b. BEHAVIOR-LEVEL ONLY: the bullet prescribes HOW THE AGENT WORKS, never
+   WHAT THE CODE SHOULD DO. It must name a step in the agent's work process,
+   drawn from the systematic-SWE canon (Polya; Zeller's scientific debugging;
+   hypothesis-driven debugging):
+     requirement-analysis (enumerate literal requirements; spec wording over
+       plausible intent) · planning/decomposition (work backward from
+       acceptance criteria) · reproduction (reproduce the failure or the
+       grader's real trigger representatively before fixing) ·
+       hypothesis-discipline (falsifiable hypothesis before acting; one
+       change per test) · verification-design (verify against the CONTRACT
+       with external evidence, never your own implementation or
+       self-assessment) · completion-criteria (verify each requirement;
+       never claim unverified work).
+   Prefer the hard-gate form: "do not X until Y".
+   DOMAIN-SWAP TEST (run it before replying): replace the evidence's domain
+   with a different one (async->SQL->chess). If the bullet stops making
+   sense, it is domain knowledge — FORBIDDEN even when class-level. Domain,
+   library, or runtime-specific mechanics and solution recipes never pass.
+   If the dominant failure is fixable only by domain knowledge, ABSTAIN and
+   say so — that is a finding, not a failure.
 4. Form: "When <concrete trigger situation>, <concrete action>." Checkable
    behavior change. BANNED: attitude words ("be careful", "thoroughly"),
    and anything a strong model already does by default.
