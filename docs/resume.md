@@ -41,10 +41,19 @@ field in trajs/record: was it no-verify→fix (healthy) or probe-never-satisfied
    ~6 sequential interventions on one task = spent statistics. Any R9 verdict is
    "directional on design task, transfer untested". **Real test = gate held-out arms**
    (headless-terminal + fresh band picks the gate never saw).
-4. Proposer backlog (review-loop design doc §7): actuator-aware check-spec proposals now
+4. **SCHEDULED (user, 2026-07-24): port the completion gate into opencode-plugin** —
+   the production plugin has NO gate/reinject today (verified: input-side
+   system-transform + session.idle scoring only). Design agreed: finish/stop-boundary
+   hook (session.idle at index.ts:181 = anchor candidate) runs a check command +
+   optional mutation probe, reinjects evidence into the SAME session via client API,
+   bounded rounds; **gate spec = store-versioned `gate.json` per candidate** (rides
+   lineage like playbook.json; reinject TEMPLATES stay in plugin code — deterministic).
+   Real-repo mapping: verify.sh→test suite, probe→mutation tool on diff. PREREQ: R10
+   verdict + gate-ON guards + (item 3) held-out transfer. ~1 day TDD when unblocked.
+5. Proposer backlog (review-loop design doc §7): actuator-aware check-spec proposals now
    unblocked by the gate; timeout blindness; trail feedforward; reviewer model diversity.
-5. Futility stopping (SPRT-lite) — R7 was dead at 2/6; formalize the manual kill.
-6. Three-gate naming cleanup in docs: completion gate (attempt) / review gate (proposal) /
+6. Futility stopping (SPRT-lite) — R7 was dead at 2/6; formalize the manual kill.
+7. Three-gate naming cleanup in docs: completion gate (attempt) / review gate (proposal) /
    adoption gate (gate.ts, base).
 
 **RULES IN FORCE:** explicit go before ANY token spend; one variable per test; gate.ts sole
