@@ -25,8 +25,24 @@ import { createHash } from "node:crypto"
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { hostname, tmpdir } from "node:os"
 import { basename, join, resolve } from "node:path"
+import { runCompletionGate } from "./complete-gate.ts"
 
 const HERE = import.meta.dir
+
+/** sessionID rides every opencode --format json event. */
+function extractSessionId(out: string): string | undefined {
+  for (const line of out.split("\n")) {
+    const t = line.trim()
+    if (!t.startsWith("{")) continue
+    try {
+      const sid = JSON.parse(t).sessionID
+      if (typeof sid === "string" && sid) return sid
+    } catch {
+      /* noise */
+    }
+  }
+  return undefined
+}
 const IMAGE = "localhost/mh-bench:latest"
 const DEFAULT_TIMEOUT_SEC = 3600
 
@@ -188,6 +204,16 @@ options:
                      capability-gates them off for such models, so the flag is
                      silently inert there (llm.ts capabilities.temperature)
   --top-p <f>        nucleus sampling top-p (opencode only, same caveat)
+  --complete-gate <artifact-path-in-container>
+                     COMPLETION GATE (binding actuator, docs/2026-07-24-
+                     completion-gate-design.md): after the agent exits, the
+                     harness requires /app/verify.sh, runs it, and probes its
+                     adequacy with crude mutants of the named artifact (e.g.
+                     /app/run.py); failures reinject "not done" + evidence
+                     into the SAME session, bounded. opencode-only. The
+                     one-paragraph contract is appended to the instruction.
+  --gate-rounds N    max reinjection rounds per attempt (default: 2)
+  --gate-mutants N   max mutants per adequacy probe (default: 4)
   -h, --help         this text
 
 output: minimal/results/<task>-<startedAt>.json (run record with rewards[] +
@@ -210,6 +236,9 @@ let systemArg: string | undefined
 let driverId: DriverId = "opencode"
 let temperature: number | undefined
 let topP: number | undefined
+let gateArtifact: string | undefined
+let gateRounds = 2
+let gateMutants = 4
 function parseFloatFlag(flag: string, raw: string | undefined): number {
   if (raw === undefined) die(`${flag} needs a value`)
   const v = Number(raw)
@@ -226,6 +255,9 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === "--system") systemArg = argv[++i] ?? die("--system needs a value")
   else if (a === "--temperature") temperature = parseFloatFlag("--temperature", argv[++i])
   else if (a === "--top-p") topP = parseFloatFlag("--top-p", argv[++i])
+  else if (a === "--complete-gate") gateArtifact = argv[++i] ?? die("--complete-gate needs the artifact path in the container")
+  else if (a === "--gate-rounds") gateRounds = Number(argv[++i] ?? die("--gate-rounds needs a value")) || die("--gate-rounds not a number")
+  else if (a === "--gate-mutants") gateMutants = Number(argv[++i] ?? die("--gate-mutants needs a value")) || die("--gate-mutants not a number")
   else if (a === "--driver") {
     const d = argv[++i] ?? die("--driver needs a value")
     if (!(d in DRIVERS)) die(`--driver must be one of: ${Object.keys(DRIVERS).join(", ")}`)
@@ -247,6 +279,9 @@ if ((temperature !== undefined || topP !== undefined) && driverId !== "opencode"
 // `agent.prompt ? [agent.prompt] : SystemPrompt.provider(model)`. The <env>
 // block and tool schemas are assembled separately and survive the swap.
 if (systemArg && driverId !== "opencode") die(`--system is opencode-only (agent.prompt config)`)
+// Completion gate needs session continuation (opencode run --session) for the
+// reinjection path — claude -p has no equivalent here.
+if (gateArtifact && driverId !== "opencode") die(`--complete-gate is opencode-only (session reinjection)`)
 const systemPath = systemArg ? resolve(systemArg) : undefined
 if (systemPath && !existsSync(systemPath)) die(`system prompt file not found: ${systemPath}`)
 const system = systemPath
@@ -270,7 +305,13 @@ if (!existsSync(instructionPath)) die(`no instruction.md in ${taskDir}`)
 const hasVerifySh = existsSync(verifierPath)
 const hasTestSh = existsSync(join(taskDir, "tests", "test.sh"))
 if (!hasVerifySh && !hasTestSh) die(`no verify.sh or tests/test.sh in ${taskDir}`)
-const instruction = readFileSync(instructionPath, "utf-8").trim()
+// With the completion gate on, the one-paragraph contract rides the
+// INSTRUCTION (not system-v0 / the harness file) so mechanism A/Bs stay
+// one-variable: arms differ by the gate + its contract, not by base content.
+const GATE_CONTRACT = `
+
+Before you finish: leave a runnable verification script at /app/verify.sh (exit 0 = verified) that exercises each promised behavior of your artifact, including scenarios that combine boundary conditions. The harness will run it, and may inject faults into your artifact to check that your script detects them. You are done only when the harness accepts.`
+const instruction = readFileSync(instructionPath, "utf-8").trim() + (gateArtifact ? GATE_CONTRACT : "")
 const testsDir = join(taskDir, "tests")
 
 // Fixture source: minimal-native fixtures/, or an upstream terminal-bench
@@ -439,10 +480,62 @@ async function attempt(i: number): Promise<Trial> {
     // --- Agent attempt (the verifier is NOT in the container yet) ---
     const t0 = Date.now()
     const agent = await podman(["exec", name, "timeout", String(timeoutSec), ...driver.argv(model, instruction)])
+    let agentOut = agent.out
+
+    // --- Completion gate (binding actuator; the task grader is still NOT in
+    // the container — the probe uses only the agent's own verify.sh + crude
+    // mutants of the required artifact, invariant 1 intact) ---
+    let gate: import("./complete-gate.ts").GateResult | null = null
+    if (gateArtifact) {
+      const sessionId = extractSessionId(agentOut)
+      let original: string | undefined
+      const gateIO: import("./complete-gate.ts").GateIO = {
+        verifyExists: async () => (await podman(["exec", name, "test", "-f", "/app/verify.sh"])).code === 0,
+        runVerify: async () => {
+          const r = await podman(["exec", name, "timeout", "120", "bash", "-c", "cd /app && bash ./verify.sh"])
+          return { code: r.code, out: (r.out + "\n" + r.err).trim() }
+        },
+        readArtifact: async () => {
+          const r = await podman(["exec", name, "cat", gateArtifact!])
+          if (r.code !== 0) return undefined
+          original = r.out
+          return r.out
+        },
+        writeArtifact: async (content: string) => {
+          const tmp = join(tmpdir(), `minimal-mutant-${process.pid}-${i}.py`)
+          writeFileSync(tmp, content)
+          return (await podman(["cp", tmp, `${name}:${gateArtifact}`])).code === 0
+        },
+        restoreArtifact: async () => {
+          if (original === undefined) return false
+          const tmp = join(tmpdir(), `minimal-orig-${process.pid}-${i}.py`)
+          writeFileSync(tmp, original)
+          return (await podman(["cp", tmp, `${name}:${gateArtifact}`])).code === 0
+        },
+        syntaxOk: (mutated: string) => {
+          if (!gateArtifact!.endsWith(".py")) return true
+          const tmp = join(tmpdir(), `minimal-syn-${process.pid}-${i}.py`)
+          writeFileSync(tmp, mutated)
+          return Bun.spawnSync(["python3", "-m", "py_compile", tmp]).exitCode === 0
+        },
+        reinject: async (message: string) => {
+          if (!sessionId) return false
+          const r = await podman([
+            "exec", name, "timeout", String(timeoutSec),
+            "opencode", "run", "--dir", "/app", "--auto", "--format", "json",
+            "--model", model, "--session", sessionId, message,
+          ])
+          agentOut += `\n{"type":"gate_reinject"}\n` + r.out
+          return r.code === 0 || r.code === 124
+        },
+      }
+      gate = await runCompletionGate(gateIO, { rounds: gateRounds, mutants: gateMutants })
+    }
+
     const elapsedSec = Math.round((Date.now() - t0) / 10) / 100
     const trajFile = join(resultsDir, `${taskId}-${stamp}-a${i}.traj.ndjson`)
-    writeFileSync(trajFile, agent.out)
-    const { turns, resultText } = driver.parse(agent.out)
+    writeFileSync(trajFile, agentOut)
+    const { turns, resultText } = driver.parse(agentOut)
 
     // --- Scorer, injected only now (verify.sh / tests/ dir with held-out
     // data — all Scorer material the Agent must never see) ---
@@ -476,6 +569,15 @@ async function attempt(i: number): Promise<Trial> {
       resultText,
       trajFile: basename(trajFile),
       agentStderr: agent.err.trim().slice(0, 400),
+      ...(gate
+        ? {
+            gate: {
+              accepted: gate.accepted,
+              exhausted: gate.gateExhausted,
+              rounds: gate.rounds.map((r) => ({ outcome: r.outcome, tried: r.mutantsTried, survived: r.mutantsSurvived })),
+            },
+          }
+        : {}),
     }
   } finally {
     await podman(["rm", "-f", name])
@@ -538,6 +640,7 @@ const run = {
   sampling: temperature !== undefined || topP !== undefined ? { temperature, topP } : null,
   system,
   harness,
+  completeGate: gateArtifact ? { artifact: gateArtifact, rounds: gateRounds, mutants: gateMutants } : null,
   rewards,
   passRate: rewards.reduce((a, b) => a + b, 0) / k,
   trials,
