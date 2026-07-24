@@ -1,0 +1,63 @@
+{
+  "task": "chess-best-move",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-dev",
+  "startedAt": "2026-07-24T00:43:04.949Z",
+  "k": 3,
+  "parallel": 3,
+  "sampling": null,
+  "system": {
+    "file": "minimal/harness/system-v0.md",
+    "sha256": "3b65fb7d6573fe4b"
+  },
+  "harness": {
+    "file": "minimal/harness/candidate-r2-scope-leak.md",
+    "sha256": "1e93189412739dd0"
+  },
+  "rewards": [
+    1,
+    1,
+    1
+  ],
+  "passRate": 1,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 87.49,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "## Verification — definition of done\n\n**Requirements (quoting operative wording):**\n\n1. *\"Write the best move for white to play to /app/move.txt in the form [src][dst], for example, e2e4\"* — Output must be the best move, in `[src][dst]` UCI format, at `/app/move.txt`.\n2. *\"If there are multiple winning moves, print them all, one per line.\"* — All winning moves, one per line.\n\n**Checks against the ",
+      "trajFile": "chess-best-move-2026-07-24T00-43-04-949Z-a1.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 2,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 71.82,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "## Verification — Definition of Done\n\n**Note on the artifact:** `chess_board.png` did not exist on disk. The board's ground-truth position is defined by the FEN in `/app/make.py` (the script that generates that image): `r1bq1r2/1p3pp1/p1n1p3/3nPkbP/8/P1N5/1P2QPP1/R1B1K2R w KQ - 0 16`. I could not render the PNG (PIL is not installed), so I worked from the FEN that produces the image. I validated t",
+      "trajFile": "chess-best-move-2026-07-24T00-43-04-949Z-a2.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 3,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 79.62,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "## Verification — definition of done\n\n**Requirements (quoting operative wording):**\n\n1. *\"The file chess_board.png has an image of a chess board... write the best move for white\"* — I derived the position from its source. The image file did not exist on disk (`ls /app` showed only `AGENTS.md` and `make.py`; `PIL` was not installed so it could not be generated). However, `make.py` contains the exac",
+      "trajFile": "chess-best-move-2026-07-24T00-43-04-949Z-a3.traj.ndjson",
+      "agentStderr": ""
+    }
+  ]
+}

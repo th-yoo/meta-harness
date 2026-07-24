@@ -6,12 +6,99 @@
     "sha256": "28688ed0249f13b2",
     "bullet": "When a task's answer depends on counting, thresholding, or date filtering over data you can read, compute the qualifying set with a script rather than eyeballing, and confirm your query derives the same set through general logic (filters/aggregates), not hardcoded results, before finalizing.",
     "experiment": {
-      "baseline": { "record": "results/sparql-university-2026-07-23T06-50-28-126Z.json", "rewards": [1,0,0,0,1,0,1,1,0,0], "passRate": 0.4 },
-      "candidate": { "record": "results/sparql-university-2026-07-23T07-21-50-362Z.json", "rewards": [1,1,0,0,1,1,0,1,0,0], "passRate": 0.5 },
+      "baseline": {
+        "record": "results/sparql-university-2026-07-23T06-50-28-126Z.json",
+        "rewards": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          1,
+          1,
+          0,
+          0
+        ],
+        "passRate": 0.4
+      },
+      "candidate": {
+        "record": "results/sparql-university-2026-07-23T07-21-50-362Z.json",
+        "rewards": [
+          1,
+          1,
+          0,
+          0,
+          1,
+          1,
+          0,
+          1,
+          0,
+          0
+        ],
+        "passRate": 0.5
+      },
       "fisherTwoSidedP": 1.0,
-      "host": "yoo-dev", "model": "anthropic/claude-opus-4-8", "driver": "opencode", "k": 10
+      "host": "yoo-dev",
+      "model": "anthropic/claude-opus-4-8",
+      "driver": "opencode",
+      "k": 10
     },
     "verdict": "REJECT — null. The bullet's own falsify_if fired: 'A/B on this task shows no pass-rate lift (or a drop), indicating the dominant failure was not eyeball-miscounting/logic error but something script-verify-plus-general-logic does not address.' Pre-registered refutation observed exactly (4/10 vs 5/10, p=1.0).",
     "mechanismNote": "Diagnosis was drawn from ONE failing trajectory (thin evidence, proposer self-flagged low confidence). Winners already scripted logic in both arms; the bullet mandated behavior the model mostly does anyway = no delta. Next proposer run must ingest this rejection (invariant 5) and needs a richer failure sample: 6 baseline fails now exist vs 1 before."
+  },
+  {
+    "rejectedAt": "2026-07-24",
+    "task": "sparql-university",
+    "candidate": "harness/candidate-r2-scope-leak.md",
+    "sha256": "1e93189412739dd0",
+    "bullet": "When a task selects items qualifying by a condition on some attribute yet must output that attribute's values, enforce the condition as a membership gate via a separate existence check—do not filter the projected/output attribute by it, or you drop legitimate values the criterion never restricted.",
+    "experiment": {
+      "baseOn": "ADOPTED base (system-v0 + seed-v0) — first stacking test post adoption-1",
+      "baseline": {
+        "record": "results/sparql-university-2026-07-24T00-19-12-714Z.json",
+        "rewards": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          0
+        ],
+        "passRate": 0.9
+      },
+      "candidate": {
+        "record": "results/sparql-university-2026-07-24T00-27-22-705Z.json",
+        "rewards": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "passRate": 1.0
+      },
+      "fisherTwoSidedP": 1.0,
+      "guards": {
+        "count-dataset-tokens": "3/3 hold",
+        "chess-best-move": "3/3 hold"
+      },
+      "host": "yoo-dev",
+      "model": "anthropic/claude-opus-4-8",
+      "driver": "opencode",
+      "k": 10,
+      "gateVerdict": "results/r2-gate-verdict.json"
+    },
+    "verdict": "REJECT — null on adopted base (9/10 vs 10/10, p=1.0), decided by gate.ts. The bullet's own falsify_if fired: 'no pass-rate lift → dominant failure was not projected-attribute over-filtering or the model already gates separately by default.' Guards 6/6 — no collateral harm.",
+    "mechanismNote": "Diagnosis was CORRECT (triple-confirmed: CC proposer, opencode proposer replay, human desk-check) but the adopted base already covers the scope-leak class — system-v0's DoD procedure caught it mid-flight in forensics (10-50 a2 verbatim). Baseline at 9/10 leaves no headroom at k=10; certification would need ~5/10 vs 10/10. Lesson: propose against the ACTIVE base's residual failures, not against evidence gathered on a weaker base — this bullet's evidence records were bare-arm trials from before adoption."
   }
 ]

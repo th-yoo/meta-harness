@@ -1,0 +1,31 @@
+{
+  "task": "chess-best-move",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-dev",
+  "startedAt": "2026-07-24T00:38:24.101Z",
+  "k": 1,
+  "parallel": 1,
+  "sampling": null,
+  "system": null,
+  "harness": null,
+  "rewards": [
+    1
+  ],
+  "passRate": 1,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 56.24,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Done. The position (FEN `r1bq1r2/1p3pp1/p1n1p3/3nPkbP/8/P1N5/1P2QPP1/R1B1K2R w KQ - 0 16`) has the black king exposed on f5. There are two winning moves, both **checkmate in one**:\n\n- **e2e4** — Qxe4#\n- **g2g4** — g4#\n\nBoth delivered by attacking the f5 king with support cutting off all escape squares. Both have been written to `/app/move.txt`.",
+      "trajFile": "chess-best-move-2026-07-24T00-38-24-101Z-a1.traj.ndjson",
+      "agentStderr": ""
+    }
+  ]
+}
