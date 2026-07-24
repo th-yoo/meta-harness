@@ -6,7 +6,7 @@ does NOT transfer; this file + the repo are the source of truth.)
 ## ⏸ SESSION END 2026-07-24 (office box, host POWERED OFF mid-R9) — RESUME HERE
 
 **WHERE:** minimal loop R2–R9 in one day. Active base UNCHANGED (system-v0+seed-v0).
-Read `minimal/HISTORY.md` (rows R2–R8 + sections) FIRST, then
+Read `minimal/HISTORY.md` (rows + sections R1–R9, current) FIRST, then
 `docs/2026-07-24-completion-gate-design.md` + `docs/2026-07-24-proposer-review-loop.md`.
 
 **BUILT today (all committed):** proposer opencode driver (default) + parity-proven;

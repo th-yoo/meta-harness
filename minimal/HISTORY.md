@@ -6,8 +6,9 @@ mutator of the active base; `rejected.json` is the machine-form rejection ledger
 (invariant 5 — permanent proposer input). This file is the human-readable lineage.
 
 **Active base:** `harness/system-v0.md` (`--system`) + `harness/seed-v0.md` (`--harness`)
-— since adoption-1 (2026-07-23, commit `4fc9d68`). Unchanged through round 3
-(R2 and R3 both rejected; every post-adoption bullet so far has been null).
+— since adoption-1 (2026-07-23, commit `4fc9d68`). Unchanged through R9:
+every post-adoption prose candidate was rejected, abstained, or vetoed; the
+completion-gate MECHANISM (R9) is the first candidate of a new actuator class.
 
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
@@ -23,6 +24,7 @@ mutator of the active base; `rejected.json` is the machine-form rejection ledger
 | R6 | 2026-07-24 | iteration-0 rerun, agent-translated vocabulary | no arms — Reviewer caught R3-duplicate, reviser conceded | — | — | ABSTAIN via review loop — **Reviewer seat's first live catch** |
 | R7 | 2026-07-24 | R3 bullet in SYSTEM slot (placement) | killed at 8/10: 3/8 vs 6/10 base | — | — | channel hypothesis REFUTED (rule harmful in both channels) |
 | R8 | 2026-07-24 | scenario-coverage bullet (from R7 trajs) | arm aborted by design judgment | — | — | staged, NOT gated — prose channel dead; escalate to binding actuator |
+| R9 | 2026-07-24 | completion gate + adequacy probe (MECHANISM) | killed 5/10 by host shutdown: 4/5, all turns=3 | — | never ran | partial-directional; guards+verdict pending; overfit caveat standing |
 
 ---
 
@@ -175,3 +177,53 @@ One auto-chained run (user-approved single go): harvest → proposer → gate.
   paths** (R5 self-abstain; R6 propose→catch→concede). Escalation stands:
   binding actuator (completion gate in run.ts — the industry's Stop Hook
   pattern) or move the band task.
+
+## R7 — placement experiment + GROUND-TRUTH forensics (2026-07-24, office)
+
+- **Experiment:** R3's bullet VERBATIM moved to the SYSTEM slot
+  (`candidate-r7-system-slot.md`) — content constant, channel the one
+  variable. Killed at 8/10: 3/8 vs 6/10 baseline — **channel hypothesis
+  REFUTED**; the rule is harmful in both channels (AGENTS.md arm was 3/10).
+- **Forensics (free, ground-truth):** extracted all 5 failing implementations
+  from their trajectories and ran the grader's own shapes against them
+  locally. All 5 pass everything EXCEPT one shape — SIGINT with a task queued
+  above max_concurrent (grader T5, n3/m2): cleaned 0/2. a3's own
+  `test_queued.py` covered that shape but with SYNCHRONOUS cleanup — so the
+  defect fires only at the **CONJUNCTION queued-task × awaiting-cleanup**,
+  and every fail tested each dimension separately, never jointly. a2 passed
+  because its diagnostic test combined both. Classic pairwise-coverage
+  failure, now verified, not inferred.
+- **Bimodal signature:** rule-obeying deep grinds pass (a1 463s, a2 660s
+  incl. an 11-min diagnose-bisect-fix session that independently found and
+  fixed the double-cancel defect); compliant-but-gentle attempts fail fast.
+
+## R8 — scenario-coverage bullet (2026-07-24, office) — staged, NOT gated
+
+- Proposer (fed R7's 8 trajs via a synthesized partial record) independently
+  derived the coverage diagnosis; Reviewer PASSED it (first live round-0
+  pass). Arm launched, killed at 1 attempt by design judgment (user call,
+  vindicated by forensics): the bullet prescribes per-variant checks — which
+  a3 already did — not JOINT coverage; predictable null. Ledger-status:
+  staged candidate `candidate-r8-20260724T141220.md`, never gated.
+- Verdict distilled: prose channel dead on this residual regardless of
+  wording; the fix class is mechanism-level.
+
+## R9 — completion gate + mutation adequacy probe (2026-07-24, office) — KILLED 5/10, pending
+
+- **The binding actuator built and A/B'd** (design
+  `docs/2026-07-24-completion-gate-design.md`, impl `complete-gate.ts` +
+  `mutate.ts` + run.ts `--complete-gate`, TDD, suite 1591 green): harness
+  refuses "done" until /app/verify.sh exists, passes, and survives a crude
+  mutation probe; failures reinject evidence into the same session (bounded
+  2 rounds). Industry grounding: Stop-hook ~100% vs prompt 70–90% compliance;
+  MutGen — test suites improve ONLY with mutation feedback (53%→89.5%).
+- **Partial arm (host shutdown at 5/10):** 4/5 pass vs baseline 6/10 —
+  best cancel-async arm rate yet; EVERY attempt turns=3 (both gate rounds
+  consumed; healthy-fix vs gate-exhausted UNKNOWN — first resume job).
+  `results/r9-gate-arm-partial.json` + trajs a1–a5. Guards, sparql info,
+  adoption-gate verdict never ran.
+- **Standing caveat (user-raised): overfitting** — the gate was designed FROM
+  this task's forensics and measured ON it; `drop-cancel-call` operator is
+  task-class-fitted; ~6 sequential interventions on one task = spent
+  statistics. Any R9 verdict is "directional on the design task, transfer
+  untested" — the real test is gate HELD-OUT arms on tasks the gate never saw.
