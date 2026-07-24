@@ -18,6 +18,7 @@ mutator of the active base; `rejected.json` is the machine-form rejection ledger
 | R2 | 2026-07-24 | scope-leak bullet ON adopted base | 9/10 vs 10/10 | 1.0 | cdt 3/3, chess 3/3 | REJECT null |
 | HO2 | 2026-07-24 | adopted base, cancel-async office pair | bare 2/10 vs adopted 6/10 (k=10) | 0.17 | — | directional, uncertified |
 | R3 | 2026-07-24 | signal-verification bullet ON adopted base | cancel-async 6/10 vs 3/10 | 0.37 | cdt 3/3, chess 3/3, sparql-info 3/3 | REJECT null (negative direction) |
+| R4 | 2026-07-24 | asyncio-cancellation bullet (iteration 1) | killed at ~6 attempts (4/4 pre-kill) | — | — | REJECT scope-veto, never gated (rule 3b born here) |
 
 ---
 
@@ -103,3 +104,28 @@ One auto-chained run (user-approved single go): harvest → proposer → gate.
   from divergence forensics on the flipped trajectories (what the 6 baseline
   passes did at the signal step that the 4 fails did not), not another
   procedure bullet.
+
+## R4 — iteration 1, asyncio bullet (2026-07-24, office) — REJECT scope-veto, never gated
+
+- **Iteration 1 = R3's full result fed back:** evidence = adopted arm (6P/4F) +
+  R3's rejected-bullet arm (3P/7F), ledger 3 entries. Proposer executed the
+  divergence read and found the mechanism: failers truncate cleanup by
+  re-cancelling children already unwinding — but emitted it as an asyncio
+  solution recipe (shield/absorb during cancellation).
+- **User design rule born here** (mid-arm, run killed at ~6 attempts, 4/4
+  observed pre-kill): *the proposer guides systematic problem-solving and
+  general SWE method, never domain knowledge or specific manuals.* Encoded as
+  propose.ts rule 3b (`0e65a2a`), research-grounded rev (`1715c68`: process
+  categories, hard-gate form, domain-swap litmus). Ledgered as entry 4
+  (scope-veto; no gate verdict; partial arm not comparable).
+- **Structural finding:** guards are domain-irrelevant, so they hold trivially
+  under a domain bullet — the stats gate structurally cannot catch scope
+  bloat. Scope control = proposer rule + Reviewer seat + human veto.
+- **Reviewer seat built in response** (`b738624`, design `bfd0371`): layer-1
+  deterministic checks + evidence-forced rubric, code-conjuncted verdict,
+  bounded revise loop with frozen diagnosis. Retroactive: layer 1 kills R4's
+  bullet for free (task-id fragment leak); R3's passes to the rubric.
+- **Diagnosis stays live** — the 4/4 pre-kill hot start weakly corroborates
+  that the residual is this mechanism and is context-reachable. Wanted next:
+  behavior-level reform (verification-design / completion-criteria) or an
+  honest domain-only ABSTAIN, which escalates toward a binding actuator.

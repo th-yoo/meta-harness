@@ -155,5 +155,42 @@
     },
     "verdict": "REJECT — null with NEGATIVE direction (6/10 vs 3/10, p=0.37), decided by gate.ts. The bullet's own falsify_if fired: 'no lift → failers' dominant fault was a genuinely unreachable interrupt bug rather than dismissing/mis-reproducing the grader's trigger.' Guards 6/6 + sparql 3/3 — no cross-task harm.",
     "mechanismNote": "Proposer round on active-base residuals (opencode driver, 4 fail + 6 pass evidence, 623k-char prompt). Diagnosis (self-test proxies unrepresentative of grader's signal delivery) plausible but the bullet did not move the class; 3/10 vs 6/10 raises a directional-harm hint — 'distrust your self-test' framing may burn attempts on re-verification without fixing the interpretation gap (same DoD-tax family AHE flagged). cancel-async residual now 2x proposer-resistant; next content should come from reading the FLIPPED trajectories (what did the 6 baseline passes do at the signal-delivery step that the 4 fails did not), not another procedure bullet."
+  },
+  {
+    "rejectedAt": "2026-07-24",
+    "task": "cancel-async-tasks",
+    "candidate": "harness/candidate-r4-20260724T121906.md",
+    "sha256": "79ce473b6ceed248",
+    "bullet": "When cancelling in-flight async tasks whose cleanup itself awaits, cancel each pending task at most once, then await completion; never issue a second cancellation to a task already unwinding, and don't let the enclosing cancelled scope's re-raised cancellation interrupt that await—shield or absorb it until every task's cleanup finishes.",
+    "experiment": {
+      "baseOn": "ADOPTED base; iteration-1 (fed R3's rejected arm as divergence evidence)",
+      "baseline": {
+        "record": "results/cancel-async-tasks-2026-07-24T01-43-48-351Z.json",
+        "rewards": [
+          0,
+          1,
+          1,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          0
+        ],
+        "passRate": 0.6
+      },
+      "candidate": {
+        "record": null,
+        "partialObserved": "4/4 passes (a1-a4) before user kill — NO record JSON, arm never completed, NOT gate-comparable",
+        "trajs": "results/cancel-async-tasks-2026-07-24T03-19-06-986Z-a*.traj.ndjson"
+      },
+      "host": "yoo-dev",
+      "model": "anthropic/claude-opus-4-8",
+      "driver": "opencode",
+      "k": "10 planned, killed at ~6"
+    },
+    "verdict": "REJECT — SCOPE VETO, never gated. User design rule (2026-07-24, propose.ts rule 3b): proposer bullets must be behavior-level general-SWE method, never domain knowledge or solution recipes. This bullet teaches asyncio cancellation mechanics (WHAT THE CODE SHOULD DO). A domain bullet passing the stats gate would still not be adoptable — guards are domain-irrelevant and structurally cannot catch scope bloat.",
+    "mechanismNote": "The DIAGNOSIS stays live and is the entry's real payload: failers truncate cleanup by re-cancelling children already unwinding; the 4/4 pre-kill hot start weakly corroborates that the residual IS this mechanism and IS context-reachable. What is wanted: the same fix expressed at behavior level (verification-design / completion-criteria form, e.g. tracing teardown ordering against the spec before declaring done) — or an honest ABSTAIN 'domain-only fixable', which escalates to a binding-actuator route. Retroactive check: review.ts layer-1 kills this bullet for free (task-id fragments 'cancel','async')."
   }
 ]

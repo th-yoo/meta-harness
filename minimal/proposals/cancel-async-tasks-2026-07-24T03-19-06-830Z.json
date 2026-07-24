@@ -1,0 +1,32 @@
+{
+  "task": "cancel-async-tasks",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "records": [
+    "cancel-async-tasks-2026-07-24T01-43-48-351Z.json",
+    "cancel-async-tasks-2026-07-24T02-10-44-117Z.json"
+  ],
+  "evidence": {
+    "fails": 11,
+    "passes": 9,
+    "suspectDropped": 0
+  },
+  "analysis": "Analyzing the divergence between passing and failing trajectories at the acceptance-critical step.\n\n**Verifier contract**: The grader sends real SIGINT via `proc.send_signal(signal.SIGINT)` to a subprocess and asserts `stdout.count(\"Cleaned up.\") == 2`. The task's coroutine has `finally: await asyncio.sleep(1)` — cleanup that **itself awaits**. Tests cover cancel below/at/above max_concurrent.\n\n**Dominant failure pattern**: Every FAIL used the pattern: catch cancellation → `for fut: fut.cancel()` (re-cancel) → `await gather(...)`. This re-cancellation lands a *second* CancelledError inside the child's already-running `finally: await`, aborting async cleanup. The PASSES diagnosed and fixed exactly this: winners discovered that `asyncio.gather` already cancels children once, so a second explicit `.cancel()` destroys in-progress async cleanup (a2, a6, a7 all traced `finally-enter` without `finally-done`). Fixes: `asyncio.wait` (doesn't propagate), `task.cancelling()==0` guard, or not re-cancelling.\n\n**Root cause**: agents treated \"cancel then await\" as sufficient without accounting for cancellation *re-delivery* interrupting cleanup that awaits.\n\nThis is structural: whenever cleanup/teardown code performs its own `await` after a cancellation, issuing a second cancellation (or letting the enclosing cancelled scope re-raise at each await) truncates that cleanup.\n\nWord count check on bullet: ~52 words.\n\nFalsification: if failers' cleanup was actually truncated by something other than double-cancellation (e.g., they never awaited children at all), the bullet won't lift.\n\n{\"action\":\"propose\",\"reason\":\"All failers truncate async cleanup by re-cancelling children whose finally-await was already unwinding, exactly the defect every passing trajectory diagnosed and fixed.\",\"bullet\":{\"text\":\"When cancelling in-flight async tasks whose cleanup itself awaits, cancel each pending task at most once, then await completion; never issue a second cancellation to a task already unwinding, and don't let the enclosing cancelled scope's re-raised cancellation interrupt that await—shield or absorb it until every task's cleanup finishes.\",\"evidence\":[\"cancel-async-tasks-2026-07-24T01-43-48-351Z.json#a1\",\"cancel-async-tasks-2026-07-24T01-43-48-351Z.json#a4\",\"cancel-async-tasks-2026-07-24T02-10-44-117Z.json#a1\"]},\"predictions\":{\"expect_improve\":\"Failers currently double-cancel (gather auto-cancels children, then explicit .cancel() re-hits their awaiting finally), truncating 'Cleaned up.' output; awaiting-once + absorbing re-cancellation makes async cleanup complete, flipping the SIGINT tests.\",\"expect_unchanged_guards\":\"Guards (token-counting, chess) involve no asyncio cancellation, so a rule about async cleanup re-cancellation cannot alter their behavior.\",\"falsify_if\":\"A/B shows no pass-rate lift, indicating failers' cleanup truncation stemmed from not awaiting children at all (or SIGINT never reaching the coroutine) rather than second-cancellation interrupting awaiting finally blocks.\"}}",
+  "proposal": {
+    "action": "propose",
+    "reason": "All failers truncate async cleanup by re-cancelling children whose finally-await was already unwinding, exactly the defect every passing trajectory diagnosed and fixed.",
+    "bullet": {
+      "text": "When cancelling in-flight async tasks whose cleanup itself awaits, cancel each pending task at most once, then await completion; never issue a second cancellation to a task already unwinding, and don't let the enclosing cancelled scope's re-raised cancellation interrupt that await—shield or absorb it until every task's cleanup finishes.",
+      "evidence": [
+        "cancel-async-tasks-2026-07-24T01-43-48-351Z.json#a1",
+        "cancel-async-tasks-2026-07-24T01-43-48-351Z.json#a4",
+        "cancel-async-tasks-2026-07-24T02-10-44-117Z.json#a1"
+      ]
+    },
+    "predictions": {
+      "expect_improve": "Failers currently double-cancel (gather auto-cancels children, then explicit .cancel() re-hits their awaiting finally), truncating 'Cleaned up.' output; awaiting-once + absorbing re-cancellation makes async cleanup complete, flipping the SIGINT tests.",
+      "expect_unchanged_guards": "Guards (token-counting, chess) involve no asyncio cancellation, so a rule about async cleanup re-cancellation cannot alter their behavior.",
+      "falsify_if": "A/B shows no pass-rate lift, indicating failers' cleanup truncation stemmed from not awaiting children at all (or SIGINT never reaching the coroutine) rather than second-cancellation interrupting awaiting finally blocks."
+    }
+  }
+}
