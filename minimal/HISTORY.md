@@ -20,6 +20,7 @@ mutator of the active base; `rejected.json` is the machine-form rejection ledger
 | R3 | 2026-07-24 | signal-verification bullet ON adopted base | cancel-async 6/10 vs 3/10 | 0.37 | cdt 3/3, chess 3/3, sparql-info 3/3 | REJECT null (negative direction) |
 | R4 | 2026-07-24 | asyncio-cancellation bullet (iteration 1) | killed at ~6 attempts (4/4 pre-kill) | — | — | REJECT scope-veto, never gated (rule 3b born here) |
 | R5 | 2026-07-24 | iteration 2 rerun (rule 3b + Reviewer live) | no arms — proposer ABSTAINED | — | — | **ABSTAIN: prose-bullet actuator exhausted on this residual** |
+| R6 | 2026-07-24 | iteration-0 rerun, agent-translated vocabulary | no arms — Reviewer caught R3-duplicate, reviser conceded | — | — | ABSTAIN via review loop — **Reviewer seat's first live catch** |
 
 ---
 
@@ -150,3 +151,25 @@ One auto-chained run (user-approved single go): harvest → proposer → gate.
   prose — binding actuator route (middleware/enforced procedure) per the
   loop-2 verdict, or park cancel-async and move the band to a task whose
   residual is still prose-reachable.
+
+## R6 — iteration-0 rerun, agent-translated vocabulary (2026-07-24, office) — ABSTAIN via review loop
+
+- **Setup:** iteration-0 evidence only (adopted arm 6P/4F), rule 3b in
+  agent-translated form (`ee0708b`: 7 categories defined by LLM failure modes,
+  new iteration-discipline), Reviewer + revise loop live. 76s, 3 small calls,
+  zero experiment spend.
+- **Full loop exercised end-to-end for the first time:** proposer PROPOSED
+  (hard-gate rewording of the reproduction fix: "do not accept a passing
+  self-test until it reproduces the grader's mechanism") → **Reviewer FAILED
+  it on the duplicate check, quoting R3's ledger entry as the match** →
+  reviser (diagnosis frozen) conceded: every behavior-level expression of
+  this diagnosis is the reproduction class, certified null-negative on this
+  task; rewording cannot lift a refuted class → abstain.
+- **Reviewer seat's first live catch** (kill-criterion metric ticks): without
+  it, a laundered duplicate of an A/B-refuted rule goes to a ~50-min
+  experiment. Invariant 5 now has an automated enforcement point in front of
+  spend, not only inside the proposer's own judgment.
+- **Prose exhaustion on cancel-async now confirmed by two independent
+  paths** (R5 self-abstain; R6 propose→catch→concede). Escalation stands:
+  binding actuator (completion gate in run.ts — the industry's Stop Hook
+  pattern) or move the band task.
