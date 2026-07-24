@@ -1,0 +1,70 @@
+{
+  "task": "cancel-async-tasks",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "review": {
+    "driver": "opencode",
+    "model": "anthropic/claude-opus-4-8",
+    "maxRounds": 1,
+    "trail": [
+      {
+        "round": 0,
+        "bullet": "When the acceptance contract specifies behaviors the artifact must exhibit under a condition (e.g. what must still happen during teardown), build a separate check for EACH specified behavior variant taken from the contract's wording—not one convenient case—before declaring done; a single green self-test covering one shape is insufficient.",
+        "review": {
+          "verdict": "pass",
+          "violations": [],
+          "layer1": {
+            "pass": true,
+            "violations": []
+          },
+          "checks": {
+            "category": {
+              "pass": true,
+              "category": "completion-criteria",
+              "quote": "build a separate check for EACH specified behavior variant taken from the contract's wording—not one convenient case—before declaring done"
+            },
+            "domain_swap": {
+              "pass": true,
+              "swapped_bullet": "When the spec lists several qualifying conditions a query result must satisfy (e.g. multiple WHERE clauses or edge-case rows), write a separate test case for EACH condition variant named in the spec—not one convenient row—before declaring done; a single passing query over one shape is insufficient."
+            },
+            "behavior_level": {
+              "pass": true,
+              "restatement": "The agent enumerates every behavior variant named in the acceptance contract and builds a distinct verification for each, instead of accepting one self-authored green test covering a single shape, before declaring done."
+            },
+            "duplicate": {
+              "pass": true,
+              "match": "none"
+            }
+          },
+          "confidence": 0.68
+        }
+      }
+    ]
+  },
+  "records": [
+    "cancel-async-tasks-2026-07-24T04-47-51-748Z.json"
+  ],
+  "evidence": {
+    "fails": 5,
+    "passes": 3,
+    "suspectDropped": 0
+  },
+  "analysis": "Analyzing the divergence between passing and failing trajectories:\n\n**Failing trajectories (a3, a5, a6, a7, a8):** All wrote a `run.py`, then ran ONE self-invented interrupt test (SIGINT via `os.kill`/`raise_signal`), saw it pass, and declared done. Their self-test used `try/finally` cleanup that the naive `except CancelledError: cancel-again` implementation happened to survive — but the grader's `task()` uses `finally: await asyncio.sleep(1)` and their double-cancel truncates it. Their self-test proxy did not exercise the grader's actual cleanup-with-await shape.\n\n**Passing trajectories (a1, a2, a4):** All ran their FIRST interrupt test, observed a discrepancy (cleanup didn't run / async cleanup empty), and instead of accepting the single green self-test, iterated — building multiple distinct cleanup shapes (awaiting-in-finally, awaiting-in-except, multi-step) until the real behavior matched. The winners distrusted a single passing self-test and varied the cleanup shape to match the contract's `finally: await ...`.\n\nThe dominant failure is **verification-design**: the failers' single self-test agreed with their implementation because both authors assumed the same cleanup shape; they never varied the oracle to match the contract's cleanup semantics. This is behavior-level (vary your test oracle to cover the contract's actual shapes), passes domain-swap (applies to any \"verify against contract behaviors, not one convenient case\"), and is distinct from prior rejected bullets which taught asyncio mechanics (R4) or \"distrust self-test / reproduce trigger\" (R3).\n\nR3's rejected bullet was about reproducing the grader's *trigger/invocation*; this is different — the failers DID reproduce SIGINT correctly, but their test's *cleanup fixture* was too simple. The gap is oracle coverage of contract behaviors, not trigger fidelity.\n\nFalsification risk: if the failers' fault is really the double-cancel code bug (unreachable by any test-design nudge), a coverage bullet won't move it — same directional-null risk as R3/R4.\n\nThe contract (test.py) reveals `task()` has `finally: await asyncio.sleep(1)` — cleanup that awaits. A bullet directing the agent to derive test fixtures from the contract's specified behaviors (not a convenient stand-in) targets exactly the winners' edge.\n\n{\"action\":\"propose\",\"reason\":\"Failers accepted a single self-authored interrupt test whose cleanup fixture was simpler than the contract specifies; winners varied cleanup shapes until real behavior matched the contract.\",\"bullet\":{\"text\":\"When the acceptance contract specifies behaviors the artifact must exhibit under a condition (e.g. what must still happen during teardown), build a separate check for EACH specified behavior variant taken from the contract's wording—not one convenient case—before declaring done; a single green self-test covering one shape is insufficient.\",\"evidence\":[\"cancel-async-tasks-2026-07-24T04-47-51-748Z.json#a3\",\"cancel-async-tasks-2026-07-24T04-47-51-748Z.json#a7\",\"cancel-async-tasks-2026-07-24T04-47-51-748Z.json#a8\"]},\"predictions\":{\"expect_improve\":\"Failers who stop at one simple-fixture interrupt test will instead enumerate contract-specified teardown behaviors (cleanup that awaits) and test each, surfacing the double-cancel truncation before declaring done—flipping some 0s to 1s.\",\"expect_unchanged_guards\":\"count-dataset-tokens and chess-best-move have single deterministic outputs with no multi-behavior teardown contract, so the multi-variant instruction adds no wasted work and cannot break them.\",\"falsify_if\":\"A/B shows no pass-rate lift (or a drop), indicating the failers' fault is an unreachable code bug rather than under-covered test oracle, or the extra checks burn attempts without changing the implementation.\"}}",
+  "proposal": {
+    "action": "propose",
+    "reason": "Failers accepted a single self-authored interrupt test whose cleanup fixture was simpler than the contract specifies; winners varied cleanup shapes until real behavior matched the contract.",
+    "bullet": {
+      "text": "When the acceptance contract specifies behaviors the artifact must exhibit under a condition (e.g. what must still happen during teardown), build a separate check for EACH specified behavior variant taken from the contract's wording—not one convenient case—before declaring done; a single green self-test covering one shape is insufficient.",
+      "evidence": [
+        "cancel-async-tasks-2026-07-24T04-47-51-748Z.json#a3",
+        "cancel-async-tasks-2026-07-24T04-47-51-748Z.json#a7",
+        "cancel-async-tasks-2026-07-24T04-47-51-748Z.json#a8"
+      ]
+    },
+    "predictions": {
+      "expect_improve": "Failers who stop at one simple-fixture interrupt test will instead enumerate contract-specified teardown behaviors (cleanup that awaits) and test each, surfacing the double-cancel truncation before declaring done—flipping some 0s to 1s.",
+      "expect_unchanged_guards": "count-dataset-tokens and chess-best-move have single deterministic outputs with no multi-behavior teardown contract, so the multi-variant instruction adds no wasted work and cannot break them.",
+      "falsify_if": "A/B shows no pass-rate lift (or a drop), indicating the failers' fault is an unreachable code bug rather than under-covered test oracle, or the extra checks burn attempts without changing the implementation."
+    }
+  }
+}
