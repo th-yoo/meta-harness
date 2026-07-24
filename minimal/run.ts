@@ -26,6 +26,7 @@ import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rea
 import { hostname, tmpdir } from "node:os"
 import { basename, join, resolve } from "node:path"
 import { runCompletionGate } from "./complete-gate.ts"
+import { clampParallel, pidAlive } from "./schedule.ts"
 
 const HERE = import.meta.dir
 
@@ -53,6 +54,14 @@ const DEFAULT_TIMEOUT_SEC = 3600
 const LOAD_HI = 0.85 // hold new launches while cpu busy-fraction >= this
 const MEM_FLOOR_MB = 1024 // ... or MemAvailable below this
 const HOLD_POLL_MS = 3000
+
+// Reservation layer (schedule.ts): static capacity bound applied BEFORE the
+// measurement loop above — measurement alone is commitment-blind (an
+// admitted container ramps to full cost after the check passes).
+const RESERVE_POLICY = { minCpusPer: 2, reserveMbPer: 800, memFloorMb: MEM_FLOOR_MB }
+// Hard per-container runaway cap (podman -m). Observed agent peak ~614MB;
+// 2g leaves headroom without letting one attempt eat the machine.
+const CONTAINER_MEM_CAP = "2048m"
 
 /** Per-driver mechanics, mirroring the TB2 drivers (drivers/claude-code.ts,
  * drivers/opencode.ts + agent-auth.ts). harnessFile = the workspace file the
@@ -422,9 +431,28 @@ const dead: string[] = []
 for (const id of staleIds) {
   const r = await podman(["inspect", "--format", '{{index .Config.Labels "minimal.pid"}}', id])
   const pid = r.code === 0 ? r.out.trim() : ""
-  if (!pid || !existsSync(`/proc/${pid}`)) dead.push(id)
+  // pidAlive, not /proc: darwin has no /proc, which made every runner look
+  // dead here and reaped a CONCURRENT LIVE run's containers (schedule.ts).
+  if (!pid || !pidAlive(Number(pid))) dead.push(id)
 }
 if (dead.length) await podman(["rm", "-f", ...dead])
+
+// Reservation clamp: capacity of the machine that RUNS the containers — on
+// darwin that's the podman VM, not the mac (host /proc reads would be the
+// wrong machine entirely).
+if (parallelMax > 1) {
+  const info = await podman(["info", "--format", "{{.Host.CPUs}} {{.Host.MemTotal}}"])
+  if (info.code === 0) {
+    const [c, m] = info.out.trim().split(/\s+/)
+    const clamp = clampParallel(
+      parallelMax,
+      { cpus: Number(c) || 1, memTotalMb: Math.round(Number(m) / 1048576) || 1024 },
+      RESERVE_POLICY,
+    )
+    if (clamp.reason) console.log(`parallel clamped ${parallelMax} -> ${clamp.effective}: ${clamp.reason}`)
+    parallelMax = clamp.effective
+  }
+}
 
 const liveContainers = new Set<string>()
 for (const sig of ["SIGINT", "SIGTERM"] as const)
@@ -463,6 +491,7 @@ async function attempt(i: number): Promise<Trial> {
   await podmanOrDie(
     [
       "run", "-d", "--name", name,
+      "-m", CONTAINER_MEM_CAP,
       "--label", "minimal.kernel=1",
       "--label", `minimal.pid=${process.pid}`,
       ...containerArgs,
