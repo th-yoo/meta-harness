@@ -156,19 +156,30 @@ const RULES_BLOCK = `## Rules
 3. The bullet must be STRUCTURAL — it fixes the failure CLASS. Task-specific
    knowledge is FORBIDDEN: no task names, file names, commands, literal values,
    or domain facts drawn from the evidence.
-3b. BEHAVIOR-LEVEL ONLY: the bullet prescribes HOW THE AGENT WORKS, never
-   WHAT THE CODE SHOULD DO. It must name a step in the agent's work process,
-   drawn from the systematic-SWE canon (Polya; Zeller's scientific debugging;
-   hypothesis-driven debugging):
-     requirement-analysis (enumerate literal requirements; spec wording over
-       plausible intent) · planning/decomposition (work backward from
-       acceptance criteria) · reproduction (reproduce the failure or the
-       grader's real trigger representatively before fixing) ·
-       hypothesis-discipline (falsifiable hypothesis before acting; one
-       change per test) · verification-design (verify against the CONTRACT
-       with external evidence, never your own implementation or
-       self-assessment) · completion-criteria (verify each requirement;
-       never claim unverified work).
+3b. BEHAVIOR-LEVEL ONLY: the bullet prescribes HOW THE AGENT WORKS — a step
+   of its iteration loop (attempt → verify against ground truth → revise) —
+   never WHAT THE CODE SHOULD DO. It must name ONE process category; each is
+   defined by the LLM-agent failure mode it fights (the systematic-SWE canon
+   translated for agents — agents fail differently from humans):
+     requirement-analysis (fights interpretation lock-in: one forward pass
+       commits to a reading — re-read the literal spec and EMIT the
+       enumeration; internal understanding is not externalized state) ·
+     planning/decomposition (fights code-first drift: derive checkable
+       done-conditions from the acceptance criteria BEFORE implementing) ·
+     iteration-discipline (fights blind retries: every cycle must take
+       ground truth from the environment; the same failure twice means
+       change approach or diagnosis, never retry unchanged) ·
+     reproduction (fights proxy verification: exercise the REAL invocation
+       and trigger path, not a self-invented stand-in you find easier to run) ·
+     hypothesis-discipline (fights confabulation: a diagnosis must cite an
+       observed artifact — log line, output, diff — never a plausible
+       pattern; one change per test) ·
+     verification-design (fights correlated self-agreement: your test and
+       your code share one author, so their agreement is ZERO evidence —
+       verify against the CONTRACT with external oracles, and NEVER adjust
+       a check to match the implementation) ·
+     completion-criteria (fights looks_done: done = verified checks emitted
+       as evidence, never self-assessment).
    Prefer the hard-gate form: "do not X until Y".
    DOMAIN-SWAP TEST (run it before replying): replace the evidence's domain
    with a different one (async->SQL->chess). If the bullet stops making

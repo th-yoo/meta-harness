@@ -152,9 +152,11 @@ ${a.harness}
 ${a.rejected}
 
 ## Checks — fill EVERY one with its artifact; artifacts are mandatory
-1. category — does the rule name a step of the agent's WORK PROCESS, one of:
-   requirement-analysis · planning/decomposition · reproduction ·
-   hypothesis-discipline · verification-design · completion-criteria?
+1. category — does the rule name a step of the agent's WORK PROCESS (its
+   iteration loop: attempt → verify against ground truth → revise), one of:
+   requirement-analysis · planning/decomposition · iteration-discipline ·
+   reproduction · hypothesis-discipline · verification-design ·
+   completion-criteria?
    Artifact: the category plus the exact rule fragment that matches it.
 2. domain_swap — REWRITE the rule for a completely different domain (e.g. if
    the flavor is async/concurrency, rewrite for SQL or chess). If the rewrite
