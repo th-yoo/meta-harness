@@ -73,3 +73,36 @@ test("unifiedDiff shows the changed line with - and + markers", () => {
   expect(d).toContain("+")
   expect(d.split("\n").some((l) => l.startsWith("-"))).toBe(true)
 })
+
+// R9 forensics bug: swap-and-or hit a DOCSTRING ("and"->"or" in prose) —
+// semantic no-op, unkillable mutant, gate unsatisfiable (all 5 office
+// attempts burned both rounds on it). Operators must skip non-code lines.
+const DOCSTRING_SRC = `def run(tasks, max_concurrent):
+    """Run tasks with cancellation and cleanup semantics.
+
+    Cancels children and waits for cleanup before returning.
+    """
+    # cancel and drain
+    done = a and b
+    return done
+`
+
+test("operators skip docstring lines (triple-quoted blocks)", () => {
+  const ms = generateMutants(DOCSTRING_SRC, 10, () => true)
+  for (const m of ms) {
+    expect(m.line).not.toBe(2) // "cancellation and cleanup" docstring line
+    expect(m.line).not.toBe(4) // "Cancels children and waits" docstring line
+  }
+})
+
+test("operators skip comment lines", () => {
+  const ms = generateMutants(DOCSTRING_SRC, 10, () => true)
+  for (const m of ms) expect(m.line).not.toBe(6) // "# cancel and drain"
+})
+
+test("operators still hit real code lines with and/or", () => {
+  const ms = generateMutants(DOCSTRING_SRC, 10, () => true)
+  const ao = ms.find((m) => m.op === "swap-and-or")
+  expect(ao).toBeDefined()
+  expect(ao!.line).toBe(7) // "done = a and b"
+})

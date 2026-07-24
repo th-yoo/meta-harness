@@ -24,6 +24,32 @@ type Operator = { op: string; sites: (src: string) => Site[] }
 function lines(src: string): string[] {
   return src.split("\n")
 }
+
+/** 1-based line numbers that are real code — excludes # comment lines and
+ * lines inside (or opening/closing) triple-quoted blocks. R9 forensics: the
+ * probe once mutated "and"→"or" inside a docstring — a semantic no-op the
+ * agent can never kill, which exhausted the gate on every attempt. Crude
+ * scanner (no lexer): good enough for the artifact classes we probe. */
+function codeLineSet(src: string): Set<number> {
+  const ok = new Set<number>()
+  let inTriple = false
+  lines(src).forEach((raw, i) => {
+    const l = raw.trim()
+    const quotes = (raw.match(/"""|'''/g) ?? []).length
+    if (inTriple) {
+      if (quotes % 2 === 1) inTriple = false
+      return // inside or closing a docstring block
+    }
+    if (quotes % 2 === 1) {
+      inTriple = true
+      return // opening line
+    }
+    if (quotes >= 2) return // one-line docstring
+    if (l.startsWith("#") || l === "") return
+    ok.add(i + 1)
+  })
+  return ok
+}
 function withLine(src: string, i: number, newLine: string): string {
   const ls = lines(src)
   ls[i] = newLine
@@ -102,7 +128,8 @@ export function generateMutants(
   maxK: number,
   syntaxOk: (mutated: string) => boolean,
 ): Mutant[] {
-  const perOp = OPERATORS.map((o) => ({ op: o.op, sites: o.sites(src) }))
+  const code = codeLineSet(src)
+  const perOp = OPERATORS.map((o) => ({ op: o.op, sites: o.sites(src).filter((s) => code.has(s.line)) }))
   const out: Mutant[] = []
   const seen = new Set<string>()
   for (let round = 0; out.length < maxK; round++) {
