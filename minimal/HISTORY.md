@@ -15,6 +15,8 @@ mutator of the active base; `rejected.json` is the machine-form rejection ledger
 | A1 | 2026-07-23 | system-v0 + seed-v0 (guard arms) | (lift from SG) | 0.00106 | cdt 3/3, chess 3/3 | **ADOPT** — first in project history |
 | HO | 2026-07-23 | adopted base, held-out tasks | cancel-async 3/10→5/10; headless 7/11→7/8 | 0.65 / 0.34 | re-held | directional, uncertified (context only) |
 | R2 | 2026-07-24 | scope-leak bullet ON adopted base | 9/10 vs 10/10 | 1.0 | cdt 3/3, chess 3/3 | REJECT null |
+| HO2 | 2026-07-24 | adopted base, cancel-async office pair | bare 2/10 vs adopted 6/10 (k=10) | 0.17 | — | directional, uncertified |
+| R3 | 2026-07-24 | signal-verification bullet ON adopted base | cancel-async 6/10 vs 3/10 | 0.37 | cdt 3/3, chess 3/3, sparql-info 3/3 | REJECT null (negative direction) |
 
 ---
 
@@ -76,3 +78,27 @@ mutator of the active base; `rejected.json` is the machine-form rejection ledger
   weaker base proposes fixes the base already has.
 - **Side result:** adopted base re-confirmed 19/20 pooled on fresh office arms
   (third host-day replication).
+
+## HO2 + R3 — cancel-async chain (2026-07-24, office) — directional + REJECT
+
+One auto-chained run (user-approved single go): harvest → proposer → gate.
+
+- **HO2 (certification leg):** fresh office pair, cancel-async bare 2/10 vs
+  adopted 6/10, Fisher p=0.17 — directional, uncertified (needed 8/10).
+  Second same-sign host-day for cancel-async (MacBook 3/10→5/10). Pass/fail
+  duration signature strong: passes grind (up to 19 min), fails bail fast.
+- **R3 (first ACTIVE-base-residual proposal — R2's process fix applied):**
+  proposer (opencode driver, parser hardened `a642db1` after a pretty-printed
+  JSON contract killed the first call post-spend) diagnosed: fails self-verify
+  with in-process signal proxies unrepresentative of the grader's real
+  signal-to-subprocess delivery, then dismiss the mismatch. Bullet: reproduce
+  the grader's actual trigger before declaring done.
+- **Arms:** adopted 6/10 vs +bullet 3/10, p=0.37 — REJECT null, negative
+  direction. Guards cdt 3/3 + chess 3/3 hold; sparql informational 3/3.
+  falsify_if fired (third calibration point). `results/r3-gate-verdict.json`.
+- **Mechanism (ledgered, entry 3):** cancel-async residual now 2x
+  proposer-resistant; the negative hint suggests "distrust your self-test"
+  buys re-verification churn, not interpretation fixes. Next content must come
+  from divergence forensics on the flipped trajectories (what the 6 baseline
+  passes did at the signal step that the 4 fails did not), not another
+  procedure bullet.

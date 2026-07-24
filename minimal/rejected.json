@@ -100,5 +100,60 @@
     },
     "verdict": "REJECT — null on adopted base (9/10 vs 10/10, p=1.0), decided by gate.ts. The bullet's own falsify_if fired: 'no pass-rate lift → dominant failure was not projected-attribute over-filtering or the model already gates separately by default.' Guards 6/6 — no collateral harm.",
     "mechanismNote": "Diagnosis was CORRECT (triple-confirmed: CC proposer, opencode proposer replay, human desk-check) but the adopted base already covers the scope-leak class — system-v0's DoD procedure caught it mid-flight in forensics (10-50 a2 verbatim). Baseline at 9/10 leaves no headroom at k=10; certification would need ~5/10 vs 10/10. Lesson: propose against the ACTIVE base's residual failures, not against evidence gathered on a weaker base — this bullet's evidence records were bare-arm trials from before adoption."
+  },
+  {
+    "rejectedAt": "2026-07-24",
+    "task": "cancel-async-tasks",
+    "candidate": "harness/candidate-r3-20260724T111044.md",
+    "sha256": "976ba00fdcc55467",
+    "bullet": "When a self-test observation contradicts your expectation, do not dismiss it as a harness artifact; first reproduce the grader's actual invocation and trigger mechanism (how it launches, signals, or calls the artifact). If the real path still misbehaves, treat it as a defect and fix it before declaring done.",
+    "experiment": {
+      "baseOn": "ADOPTED base (system-v0 + seed-v0); first proposal derived from ACTIVE-base residuals (post-R2 process fix)",
+      "baseline": {
+        "record": "results/cancel-async-tasks-2026-07-24T01-43-48-351Z.json",
+        "rewards": [
+          0,
+          1,
+          1,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          0
+        ],
+        "passRate": 0.6
+      },
+      "candidate": {
+        "record": "results/cancel-async-tasks-2026-07-24T02-10-44-117Z.json",
+        "rewards": [
+          0,
+          1,
+          0,
+          0,
+          0,
+          1,
+          1,
+          0,
+          0,
+          0
+        ],
+        "passRate": 0.3
+      },
+      "fisherTwoSidedP": 0.3698,
+      "guards": {
+        "count-dataset-tokens": "3/3 hold",
+        "chess-best-move": "3/3 hold",
+        "sparql-informational": "3/3"
+      },
+      "host": "yoo-dev",
+      "model": "anthropic/claude-opus-4-8",
+      "driver": "opencode",
+      "k": 10,
+      "gateVerdict": "results/r3-gate-verdict.json"
+    },
+    "verdict": "REJECT — null with NEGATIVE direction (6/10 vs 3/10, p=0.37), decided by gate.ts. The bullet's own falsify_if fired: 'no lift → failers' dominant fault was a genuinely unreachable interrupt bug rather than dismissing/mis-reproducing the grader's trigger.' Guards 6/6 + sparql 3/3 — no cross-task harm.",
+    "mechanismNote": "Proposer round on active-base residuals (opencode driver, 4 fail + 6 pass evidence, 623k-char prompt). Diagnosis (self-test proxies unrepresentative of grader's signal delivery) plausible but the bullet did not move the class; 3/10 vs 6/10 raises a directional-harm hint — 'distrust your self-test' framing may burn attempts on re-verification without fixing the interpretation gap (same DoD-tax family AHE flagged). cancel-async residual now 2x proposer-resistant; next content should come from reading the FLIPPED trajectories (what did the 6 baseline passes do at the signal-delivery step that the 4 fails did not), not another procedure bullet."
   }
 ]

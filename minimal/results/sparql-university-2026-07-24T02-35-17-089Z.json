@@ -1,0 +1,63 @@
+{
+  "task": "sparql-university",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-dev",
+  "startedAt": "2026-07-24T02:35:17.089Z",
+  "k": 3,
+  "parallel": 3,
+  "sampling": null,
+  "system": {
+    "file": "minimal/harness/system-v0.md",
+    "sha256": "3b65fb7d6573fe4b"
+  },
+  "harness": {
+    "file": "minimal/harness/candidate-r3-20260724T111044.md",
+    "sha256": "976ba00fdcc55467"
+  },
+  "rewards": [
+    1,
+    1,
+    1
+  ],
+  "passRate": 1,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 106.65,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "The task is complete. I created `/app/solution.sparql` containing a SPARQL query that retrieves all full professors who (1) hold a full professor role, (2) work in at least one department of a university in an EU member state (as of 2025-08-16), and (3) work in at least one department with more than 10 students currently enrolled (as of the reference date 2025-08-16) in classes taught there.\n\n**Ke",
+      "trajFile": "sparql-university-2026-07-24T02-35-17-089Z-a1.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 2,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 92.96,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "The query is saved at `/app/solution.sparql`. No throwaway scripts were left behind (verification scripts were run inline via `python3 -c`).\n\n## Summary\n\nI created a SPARQL query at `/app/solution.sparql` that retrieves all full professors who (1) hold a full \"Professor\" role, (2) work in at least one department of a university in an EU member state, and (3) work in at least one department having ",
+      "trajFile": "sparql-university-2026-07-24T02-35-17-089Z-a2.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 3,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 86.72,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "## Verification — Definition of Done\n\nI saved the query to `/app/solution.sparql` and executed it against the real graph via rdflib. Results: **Orfeas Menis → GR, US**; **Pepe Attanasio → PT, GR**; **Aristotle Tympas → GR**.\n\nChecking each stated requirement against the actual query output:\n\n1. **\"They are full professors.\"** — The filter `STRSTARTS(?role, \"Professor\")` selects roles beginning wit",
+      "trajFile": "sparql-university-2026-07-24T02-35-17-089Z-a3.traj.ndjson",
+      "agentStderr": ""
+    }
+  ]
+}

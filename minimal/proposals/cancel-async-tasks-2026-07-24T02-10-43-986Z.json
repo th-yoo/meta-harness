@@ -1,0 +1,31 @@
+{
+  "task": "cancel-async-tasks",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "records": [
+    "cancel-async-tasks-2026-07-24T01-43-48-351Z.json"
+  ],
+  "evidence": {
+    "fails": 4,
+    "passes": 6,
+    "suspectDropped": 0
+  },
+  "analysis": "Analyzing the failing vs passing trajectories for the dominant pattern.\n\n**Verifier contract**: Tests send real SIGINT via `proc.send_signal(signal.SIGINT)` on a subprocess (`Popen`) and assert cleanup (\"Cleaned up.\") ran for started tasks. Critically, tests use `subprocess.Popen` — the child inherits the default SIGINT handling from a non-terminal-controlling parent.\n\n**Failing attempts (a1, a4, a5, a10):** All wrote a plausible implementation, then declared done. a1/a4/a5 verified cleanup ONLY via in-loop `runner.cancel()` (CancelledError injection) or `os.kill(os.getpid(), SIGINT)` — never reproducing the verifier's actual `Popen`+`send_signal` path. a10 tried `kill -INT` on a backgrounded shell job, saw tasks run to full duration (no interrupt), but rationalized it as a \"test-harness artifact\" and shipped without ever reproducing the grader's delivery mechanism.\n\n**Passing attempts (a2, a3, a6, a7, a8, a9):** Every one hit a real failure during verification (cleanup empty, `_GatheringFuture` warning, `START 2` after interrupt, hang) and iterated the implementation until the observed behavior matched. They discovered bugs (re-cancel aborting cleanup, semaphore-acquire race) precisely because their test actually exercised the interrupt path and they *believed the failing observation* rather than explaining it away.\n\n**Dominant pattern:** Failers either never reproduced the grader's actual invocation/trigger mechanism, or observed a contradicting result and dismissed it as a harness artifact instead of reproducing the real path. Winners treated the anomalous observation as a real defect and iterated.\n\nThe structural lesson: when a verification observation contradicts your expectation, reproduce the grader's actual invocation before dismissing it — don't rationalize it away.\n\na10 is the clearest (\"harness artifact\" hand-wave); a1/a4/a5 share the weaker form (verified via a proxy trigger, not the contract's mechanism). This is structural and consistent with the contract.\n\n{\"action\":\"propose\",\"reason\":\"Failers dismissed contradicting verification observations as harness artifacts or verified via a proxy trigger instead of the grader's actual invocation mechanism; winners reproduced the real path and fixed the exposed bug.\",\"bullet\":{\"text\":\"When a self-test observation contradicts your expectation, do not dismiss it as a harness artifact; first reproduce the grader's actual invocation and trigger mechanism (how it launches, signals, or calls the artifact). If the real path still misbehaves, treat it as a defect and fix it before declaring done.\",\"evidence\":[\"cancel-async-tasks-2026-07-24T01-43-48-351Z.json#a10\",\"cancel-async-tasks-2026-07-24T01-43-48-351Z.json#a5\",\"cancel-async-tasks-2026-07-24T01-43-48-351Z.json#a1\"]},\"predictions\":{\"expect_improve\":\"Attempts that saw tasks run uninterrupted or cleanup skipped will reproduce the grader's Popen+SIGINT path, expose the real cancellation/cleanup bug, and iterate to a passing implementation instead of shipping a rationalized artifact.\",\"expect_unchanged_guards\":\"Guards (count-dataset-tokens, chess-best-move) have deterministic single-shot verification with no signal/subprocess trigger to mis-reproduce, so the bullet adds no behavior change there.\",\"falsify_if\":\"A/B shows no pass-rate lift, indicating failers' dominant fault was a genuinely unreachable interrupt bug rather than dismissing/mis-reproducing the grader's trigger.\"}}",
+  "proposal": {
+    "action": "propose",
+    "reason": "Failers dismissed contradicting verification observations as harness artifacts or verified via a proxy trigger instead of the grader's actual invocation mechanism; winners reproduced the real path and fixed the exposed bug.",
+    "bullet": {
+      "text": "When a self-test observation contradicts your expectation, do not dismiss it as a harness artifact; first reproduce the grader's actual invocation and trigger mechanism (how it launches, signals, or calls the artifact). If the real path still misbehaves, treat it as a defect and fix it before declaring done.",
+      "evidence": [
+        "cancel-async-tasks-2026-07-24T01-43-48-351Z.json#a10",
+        "cancel-async-tasks-2026-07-24T01-43-48-351Z.json#a5",
+        "cancel-async-tasks-2026-07-24T01-43-48-351Z.json#a1"
+      ]
+    },
+    "predictions": {
+      "expect_improve": "Attempts that saw tasks run uninterrupted or cleanup skipped will reproduce the grader's Popen+SIGINT path, expose the real cancellation/cleanup bug, and iterate to a passing implementation instead of shipping a rationalized artifact.",
+      "expect_unchanged_guards": "Guards (count-dataset-tokens, chess-best-move) have deterministic single-shot verification with no signal/subprocess trigger to mis-reproduce, so the bullet adds no behavior change there.",
+      "falsify_if": "A/B shows no pass-rate lift, indicating failers' dominant fault was a genuinely unreachable interrupt bug rather than dismissing/mis-reproducing the grader's trigger."
+    }
+  }
+}

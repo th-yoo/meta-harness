@@ -1,0 +1,31 @@
+{
+  "task": "chess-best-move",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-dev",
+  "startedAt": "2026-07-24T02:28:36.027Z",
+  "k": 1,
+  "parallel": 1,
+  "sampling": null,
+  "system": null,
+  "harness": null,
+  "rewards": [
+    1
+  ],
+  "passRate": 1,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 45.55,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "The position (from the FEN in `make.py`: `r1bq1r2/1p3pp1/p1n1p3/3nPkbP/8/P1N5/1P2QPP1/R1B1K2R w`) has the black king dangerously exposed on **f5**.\n\nThere are two winning moves, both **checkmate in 1**:\n\n- **e2e4** — Queen to e4 delivers mate.\n- **g2g4** — Pawn to g4 delivers mate.\n\nBoth have been written to `/app/move.txt`, one per line.",
+      "trajFile": "chess-best-move-2026-07-24T02-28-36-027Z-a1.traj.ndjson",
+      "agentStderr": ""
+    }
+  ]
+}

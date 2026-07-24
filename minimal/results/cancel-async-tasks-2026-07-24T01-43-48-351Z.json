@@ -1,0 +1,154 @@
+{
+  "task": "cancel-async-tasks",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-dev",
+  "startedAt": "2026-07-24T01:43:48.351Z",
+  "k": 10,
+  "parallel": 3,
+  "sampling": null,
+  "system": {
+    "file": "minimal/harness/system-v0.md",
+    "sha256": "3b65fb7d6573fe4b"
+  },
+  "harness": {
+    "file": "minimal/harness/seed-v0.md",
+    "sha256": "e72331a29823cfb4"
+  },
+  "rewards": [
+    0,
+    1,
+    1,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    0
+  ],
+  "passRate": 0.6,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 0,
+      "turns": 1,
+      "elapsedSec": 88.94,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Throwaway files removed; only `run.py` remains in `/app` (plus its `__pycache__`).\n\n## Verification against stated requirements\n\n1. **\"Create a Python function called `async run_tasks(tasks: list[Callable[[], Awaitable[None]]], max_concurrent: int) -> None`\"**\n   Verified via `inspect`: the function is a coroutine function (`iscoroutinefunction: True`) with signature `(tasks: list[Callable[[], Awa",
+      "trajFile": "cancel-async-tasks-2026-07-24T01-43-48-351Z-a1.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 2,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 453.64,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Now the final verification procedure against each stated requirement.\n\n## Verification — definition of done\n\n**Requirement 1:** *\"Create a Python function called `async run_tasks(tasks: list[Callable[[], Awaitable[None]]], max_concurrent: int) -> None`\"*\n- Verified via `inspect`: signature is `(tasks: list[collections.abc.Callable[[], collections.abc.Awaitable[None]]], max_concurrent: int) -> None",
+      "trajFile": "cancel-async-tasks-2026-07-24T01-43-48-351Z-a2.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 3,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 125.87,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "## Verification against literal requirements\n\n1. **\"Create a Python function called `async run_tasks(tasks: list[Callable[[], Awaitable[None]]], max_concurrent: int) -> None`\"**\n   - Verified: `inspect.signature` output was `(tasks: list[typing.Callable[[], typing.Awaitable[NoneType]]], max_concurrent: int) -> None` and `inspect.iscoroutinefunction(run_tasks)` returned `True`. Signature and async-",
+      "trajFile": "cancel-async-tasks-2026-07-24T01-43-48-351Z-a3.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 4,
+      "reward": 0,
+      "turns": 1,
+      "elapsedSec": 58.48,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "## Verification against stated requirements\n\n**1. `async run_tasks(tasks: list[Callable[[], Awaitable[None]]], max_concurrent: int) -> None`** — The function in `/app/run.py` is declared `async def run_tasks(tasks: list[Callable[[], Awaitable[None]]], max_concurrent: int) -> None` with exactly that signature and type hints. `inspect.iscoroutinefunction` returned `True`.\n\n**2. \"each task is an asyn",
+      "trajFile": "cancel-async-tasks-2026-07-24T01-43-48-351Z-a4.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 5,
+      "reward": 0,
+      "turns": 1,
+      "elapsedSec": 78.56,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Throwaway scripts removed; `/app/run.py` is the only shipped artifact.\n\n## Verification — definition of done\n\n**Requirement 1**: *\"Create a Python function called `async run_tasks(tasks: list[Callable[[], Awaitable[None]]], max_concurrent: int) -> None`\"*\n- Checked via `inspect`: it is a coroutine function (`is coroutine fn: True`) named `run_tasks` with signature `(tasks: list[Callable[[], Awaita",
+      "trajFile": "cancel-async-tasks-2026-07-24T01-43-48-351Z-a5.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 6,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 230.29,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "All checks pass and workspace is clean. Here is the verification against the task's literal requirements.\n\n## Requirements & verification\n\n1. **\"a Python function called `async run_tasks(tasks: list[Callable[[], Awaitable[None]]], max_concurrent: int) -> None`\"**\n   Verified: `inspect.signature` reported exactly `(tasks: ...Callable[[], ...Awaitable[None]]], max_concurrent: int) -> None` and `insp",
+      "trajFile": "cancel-async-tasks-2026-07-24T01-43-48-351Z-a6.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 7,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 1139.46,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "I have completed the task. Here is my faithful verification against each stated requirement:\n\n### Requirements (quoting operative wording)\n\n**1. \"Create a Python function called `async run_tasks(tasks: list[Callable[[], Awaitable[None]]], max_concurrent: int) -> None`\"**\n✅ Verified. `inspect.signature` returned exactly `(tasks: list[typing.Callable[[], typing.Awaitable[NoneType]]], max_concurrent:",
+      "trajFile": "cancel-async-tasks-2026-07-24T01-43-48-351Z-a7.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 8,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 819,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "The implementation is complete and verified. Here is the final verification against each literal requirement.\n\n## Verification — Definition of Done\n\n**Requirement 1:** *\"Create a Python function called `async run_tasks(tasks: list[Callable[[], Awaitable[None]]], max_concurrent: int) -> None`\"*\n- Verified by `inspect`: `run_tasks` is a coroutine function; signature is exactly `(tasks: list[Callable",
+      "trajFile": "cancel-async-tasks-2026-07-24T01-43-48-351Z-a8.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 9,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 282.64,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Everything is clean (throwaway scripts removed; only `run.py` and its bytecode cache remain in `/app`).\n\n## Verification against the task's literal requirements\n\n**1. \"Create a Python function called `async run_tasks(tasks: list[Callable[[], Awaitable[None]]], max_concurrent: int) -> None`\"**\nThe function in `/app/run.py` has exactly this signature (lines 6–8), including the `async` keyword, the `",
+      "trajFile": "cancel-async-tasks-2026-07-24T01-43-48-351Z-a9.traj.ndjson",
+      "agentStderr": ""
+    },
+    {
+      "attempt": 10,
+      "reward": 0,
+      "turns": 1,
+      "elapsedSec": 226.3,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "## Verification against stated requirements\n\n1. **\"Create a Python function called `async run_tasks(tasks: list[Callable[[], Awaitable[None]]], max_concurrent: int) -> None`\"**\n   Verified: `inspect.signature` reported `(tasks: list[Callable[[], Awaitable[NoneType]]], max_concurrent: int) -> None` and `iscoroutinefunction` is `True` — matches the wording exactly.\n\n2. **\"each task is an async job t",
+      "trajFile": "cancel-async-tasks-2026-07-24T01-43-48-351Z-a10.traj.ndjson",
+      "agentStderr": ""
+    }
+  ]
+}
