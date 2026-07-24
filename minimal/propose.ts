@@ -178,6 +178,12 @@ ${guards}
 3. The bullet must be STRUCTURAL — it fixes the failure CLASS. Task-specific
    knowledge is FORBIDDEN: no task names, file names, commands, literal values,
    or domain facts drawn from the evidence.
+3b. BEHAVIOR-LEVEL ONLY: the bullet prescribes HOW THE AGENT WORKS (general
+   software-engineering method — how to read requirements, verify, diagnose,
+   structure work), never WHAT THE CODE SHOULD DO. Domain, library, or
+   runtime-specific mechanics and solution recipes are FORBIDDEN even when
+   class-level. If the dominant failure is fixable only by domain knowledge,
+   ABSTAIN and say so — that is a finding, not a failure.
 4. Form: "When <concrete trigger situation>, <concrete action>." Checkable
    behavior change. BANNED: attitude words ("be careful", "thoroughly"),
    and anything a strong model already does by default.
