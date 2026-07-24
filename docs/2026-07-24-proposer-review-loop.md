@@ -108,7 +108,24 @@ Borderline flip-flops (same bullet passing/failing across runs) → 3-vote
 unanimous-on-domain-swap, adversarial-verify style. Only if measured need; kernel
 minimalism — the seat starts as one call.
 
-## 7. Tests (TDD, with the main suite)
+## 7. Proposer backlog (scheduled 2026-07-24, ranked; do after the placement verdict)
+
+1. ~~Placement power~~ — IN FLIGHT as R7: R3's bullet verbatim in the SYSTEM
+   slot (content held constant, channel = the one variable). Decides whether
+   "prose exhausted" was about content or channel.
+2. Actuator-aware proposals — proposer emits completion-gate CHECK SPECS
+   ("done requires: X ran and passed") once the binding actuator exists;
+   immune to instruction decay. Blocked on the actuator build.
+3. Timeout/void blindness — suspect/0-turn trials are dropped from evidence;
+   proposer cannot diagnose timeout classes (ledgered blind spot).
+4. Review-trail feedforward — feed past rounds' review trails (not just final
+   ledger verdicts) into the initial propose call; preempts round-0 duplicates.
+5. True reviewer diversity — different model FAMILY for the reviewer (both
+   seats are opus today; correlated weights = correlated blindness).
+6. Deferred until a residual is prose-reachable again: best-of-N + judge
+   panel, traj-cap tuning, calibration formalization.
+
+## 8. Tests (TDD, with the main suite)
 
 `opencode-plugin/test/minimal-review.test.ts`: layer-1 checks (length/form/leakage);
 verdict-conjunction (model says pass, code says fail); revision-loop control with an
