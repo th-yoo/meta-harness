@@ -14,7 +14,7 @@
  *
  * Usage:  bun minimal/propose.ts <run-record.json> [more-records...]
  *              [--harness <file>] [--rejected <file>] [--guards t1,t2]
- *              [--driver claude-code|opencode] [--model <id>] [--dry-run]
+ *              [--driver opencode|claude-code] [--model <id>] [--dry-run]
  * Output: minimal/proposals/<task>-<ts>.json (+ candidate harness file when
  *         the proposer proposes)
  */
@@ -47,7 +47,7 @@ const recordPaths: string[] = []
 let harnessArg: string | undefined
 let rejectedArg: string | undefined
 let guardsArg: string | undefined
-let driverId: ProposerDriverId = "claude-code"
+let driverId: ProposerDriverId = "opencode"
 let modelArg: string | undefined
 let dryRun = false
 for (let i = 0; i < argv.length; i++) {
@@ -63,7 +63,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === "--dry-run") dryRun = true
   else if (a === "-h" || a === "--help") {
     console.log(
-      "usage: bun minimal/propose.ts <run-record.json>... [--harness f] [--rejected f] [--guards t1,t2] [--driver claude-code|opencode] [--model id] [--dry-run]",
+      "usage: bun minimal/propose.ts <run-record.json>... [--harness f] [--rejected f] [--guards t1,t2] [--driver opencode|claude-code (default opencode)] [--model id] [--dry-run]",
     )
     process.exit(0)
   } else if (a.startsWith("--")) die(`unknown flag ${a}`)
