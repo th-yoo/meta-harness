@@ -3,6 +3,54 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ⏸ SESSION END 2026-07-24 (office box, host POWERED OFF mid-R9) — RESUME HERE
+
+**WHERE:** minimal loop R2–R9 in one day. Active base UNCHANGED (system-v0+seed-v0).
+Read `minimal/HISTORY.md` (rows R2–R8 + sections) FIRST, then
+`docs/2026-07-24-completion-gate-design.md` + `docs/2026-07-24-proposer-review-loop.md`.
+
+**BUILT today (all committed):** proposer opencode driver (default) + parity-proven;
+balanced-brace extraction; rule 3b (behavior-level, agent-translated categories, domain-swap);
+Reviewer seat + bounded revise loop (first live catch = R6); completion gate + mutation
+adequacy probe (`minimal/complete-gate.ts`, `mutate.ts`, run.ts `--complete-gate`) — all TDD,
+suite 1591 green.
+
+**VERDICTS today:** R2 null · R3 null-negative (falsify fired) · R4 scope-veto (rule 3b born)
+· R5+R6 ABSTAIN (prose exhausted, 2 independent paths) · R7 channel refuted (system-slot =
+AGENTS.md, rule harmful both) · R8 staged-not-gated (wrong target: per-variant ≠ JOINT
+coverage) · **R7 GROUND-TRUTH forensics: all 5 fails die ONLY on queued×awaiting-cleanup
+CONJUNCTION (grader T5 n3/m2); each dimension tested separately by every fail (a3 verbatim);
+verified by running grader shapes against extracted implementations.**
+
+**R9 (completion-gate A/B) KILLED at 5/10 by host shutdown:** gate arm 4/5 pass
+(a2 only fail), EVERY attempt turns=3 (both gate rounds consumed — check per-trial gate
+field in trajs/record: was it no-verify→fix (healthy) or probe-never-satisfied
+(gateExhausted bug)? UNKNOWN — first resume job). Partial record
+`minimal/results/r9-gate-arm-partial.json` + trajs a1–a5 committed. Baseline = adopted arm
+6/10 (`cancel-async-tasks-2026-07-24T01-43-48-351Z.json`). Guards/sparql/gate.ts NEVER RAN.
+
+**⏭ NEXT (in order):**
+1. **R9 forensics (FREE):** read a1–a5 trajs' gate_reinject blocks + gate outcomes —
+   healthy rounds or exhaustion? What did mutants catch? Did verify.sh get gamed?
+2. **Finish R9:** fresh candidate arm k=10 (do NOT --resume the partial) + guards k=3
+   gate-ON (artifacts: cdt=/app/answer.txt chess=/app/move.txt sparql=/app/solution.sparql)
+   + gate.ts vs the 6/10 baseline. Script: `/mnt/d/tmp/r3-chain/run-r9-gate.sh` (HOST-LOCAL,
+   office box only — recreate from design doc §4 elsewhere).
+3. **OVERFITTING CAVEAT (user-raised, standing):** gate designed FROM cancel-async
+   forensics, measured ON cancel-async; `drop-cancel-call` operator is task-class-fitted;
+   ~6 sequential interventions on one task = spent statistics. Any R9 verdict is
+   "directional on design task, transfer untested". **Real test = gate held-out arms**
+   (headless-terminal + fresh band picks the gate never saw).
+4. Proposer backlog (review-loop design doc §7): actuator-aware check-spec proposals now
+   unblocked by the gate; timeout blindness; trail feedforward; reviewer model diversity.
+5. Futility stopping (SPRT-lite) — R7 was dead at 2/6; formalize the manual kill.
+6. Three-gate naming cleanup in docs: completion gate (attempt) / review gate (proposal) /
+   adoption gate (gate.ts, base).
+
+**RULES IN FORCE:** explicit go before ANY token spend; one variable per test; gate.ts sole
+adopter; rejected → rejected.json (5 entries) fed to proposer; behavior-level bullets only
+(rule 3b); tmux + rotated logs; --resume freezes partial tasks (never top-up).
+
 ## ⏸ SESSION END 2026-07-23/24 (MacBook) — FIRST ADOPTION (gate.ts-decided) + HELD-OUT DIRECTIONAL — RESUME HERE
 
 **MISSION (user-ordered, sequential gos):** run the office block's NEXT queue — forensics,

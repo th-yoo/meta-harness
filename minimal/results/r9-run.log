@@ -1,0 +1,6 @@
+=== R9 candidate arm k=10 (completion gate) 2026-07-24T14:49:26+09:00
+attempt 1/10: reward=1 turns=3 617.49s [width 3]
+attempt 2/10: reward=0 turns=3 770.09s [width 3]
+attempt 4/10: reward=1 turns=3 781.04s [width 3]
+attempt 5/10: reward=1 turns=3 1065.08s [width 3]
+attempt 3/10: reward=1 turns=3 1968.63s [width 3]

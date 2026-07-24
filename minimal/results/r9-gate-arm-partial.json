@@ -1,0 +1,74 @@
+{
+ "task": "cancel-async-tasks",
+ "driver": "opencode",
+ "model": "anthropic/claude-opus-4-8",
+ "image": "localhost/mh-bench:latest",
+ "host": "yoo-dev",
+ "startedAt": "2026-07-24T05:49:26Z",
+ "k": 10,
+ "parallel": 3,
+ "sampling": null,
+ "system": "minimal/harness/system-v0.md",
+ "harness": "minimal/harness/seed-v0.md",
+ "completeGate": {
+  "artifact": "/app/run.py",
+  "rounds": 2,
+  "mutants": 4
+ },
+ "note": "SYNTHESIZED PARTIAL \u2014 R9 completion-gate arm killed at 5/10 completed (host shutdown). 4/5 pass, every attempt turns=3 (both gate rounds used). NOT gate-comparable; forensics + resume evidence only.",
+ "rewards": [
+  1,
+  0,
+  1,
+  1,
+  1
+ ],
+ "passRate": 0.8,
+ "trials": [
+  {
+   "attempt": 1,
+   "reward": 1,
+   "turns": 3,
+   "elapsedSec": 617.49,
+   "timedOut": false,
+   "suspect": false,
+   "trajFile": "cancel-async-tasks-2026-07-24T05-49-26-894Z-a1.traj.ndjson"
+  },
+  {
+   "attempt": 2,
+   "reward": 0,
+   "turns": 3,
+   "elapsedSec": 770.09,
+   "timedOut": false,
+   "suspect": false,
+   "trajFile": "cancel-async-tasks-2026-07-24T05-49-26-894Z-a2.traj.ndjson"
+  },
+  {
+   "attempt": 3,
+   "reward": 1,
+   "turns": 3,
+   "elapsedSec": 1968.63,
+   "timedOut": false,
+   "suspect": false,
+   "trajFile": "cancel-async-tasks-2026-07-24T05-49-26-894Z-a3.traj.ndjson"
+  },
+  {
+   "attempt": 4,
+   "reward": 1,
+   "turns": 3,
+   "elapsedSec": 781.04,
+   "timedOut": false,
+   "suspect": false,
+   "trajFile": "cancel-async-tasks-2026-07-24T05-49-26-894Z-a4.traj.ndjson"
+  },
+  {
+   "attempt": 5,
+   "reward": 1,
+   "turns": 3,
+   "elapsedSec": 1065.08,
+   "timedOut": false,
+   "suspect": false,
+   "trajFile": "cancel-async-tasks-2026-07-24T05-49-26-894Z-a5.traj.ndjson"
+  }
+ ]
+}
