@@ -286,18 +286,44 @@ if (driverId === "claude-code") {
   replyText = [...parts.values()].join("\n")
 }
 
-// last JSON object line = the contract
-const jsonLine = replyText
-  .split("\n")
-  .reverse()
-  .find((l: string) => l.trim().startsWith("{"))
-if (!jsonLine) die(`no JSON line in proposer reply:\n${replyText.slice(0, 800)}`)
-let proposal: any
-try {
-  proposal = JSON.parse(jsonLine)
-} catch (e) {
-  die(`unparseable proposal JSON: ${jsonLine.slice(0, 400)}`)
+// The contract object = last {"action"...} in the reply. Models sometimes
+// pretty-print it across lines (observed live: opencode round-3 — the old
+// last-line-starting-with-{ extraction truncated it and killed the call), so
+// scan from the last "action" key with a string-aware balanced-brace walk.
+function extractProposal(text: string): any | undefined {
+  const starts: number[] = []
+  const re = /\{\s*"action"/g
+  for (let m = re.exec(text); m; m = re.exec(text)) starts.push(m.index)
+  for (const start of starts.reverse()) {
+    let depth = 0
+    let inStr = false
+    let esc = false
+    for (let i = start; i < text.length; i++) {
+      const c = text[i]!
+      if (esc) { esc = false; continue }
+      if (inStr) {
+        if (c === "\\") esc = true
+        else if (c === '"') inStr = false
+        continue
+      }
+      if (c === '"') inStr = true
+      else if (c === "{") depth++
+      else if (c === "}") {
+        depth--
+        if (depth === 0) {
+          try {
+            return JSON.parse(text.slice(start, i + 1))
+          } catch {
+            break // malformed at this start — try an earlier candidate
+          }
+        }
+      }
+    }
+  }
+  return undefined
 }
+const proposal: any = extractProposal(replyText)
+if (!proposal) die(`no parseable {"action"...} object in proposer reply:\n${replyText.slice(0, 800)}`)
 
 // --- persist proposal + stage candidate harness ---
 const proposalsDir = join(HERE, "proposals")
