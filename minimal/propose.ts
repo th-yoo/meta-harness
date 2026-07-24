@@ -320,7 +320,7 @@ ${OUTPUT_BLOCK}
         call: (p) => llmCall(reviewDriver, reviewModel, p),
       }),
     revise: async (p, r) => {
-      console.error(`reviser: ${driverId}/${model} — reforming rule (diagnosis frozen)`)
+      console.error(`proposer (revision): ${driverId}/${model} — reforming rule, diagnosis frozen`)
       const reply = llmCall(driverId, model, revisionPrompt(p, r))
       return (extractJsonObject(reply, PROPOSAL_KEY) as ProposalLike) ?? { action: "abstain", reason: "revision reply unparseable" }
     },
