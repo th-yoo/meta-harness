@@ -113,8 +113,9 @@ field in trajs/record: was it no-verify→fix (healthy) or probe-never-satisfied
    (user-accepted 07-25): logic + design-check die = tested; MID-ARM stop wiring =
    review-only, first live exercise rides the next real --stop-futile arm (C1) —
    check its log line + stoppedFutile record field on first use.**
-7. Three-gate naming cleanup in docs: completion gate (attempt) / review gate (proposal) /
-   adoption gate (gate.ts, base).
+7. ~~Three-gate naming cleanup~~ **DONE 07-25: canonical glossary table at the top of
+   `minimal/HISTORY.md`** (completion / review / adoption gates + modifiers +
+   non-gates futility/scorer; rule: no bare "gate" in new docs).
 
 **RULES IN FORCE:** explicit go before ANY token spend; one variable per test; gate.ts sole
 adopter; rejected → rejected.json (5 entries) fed to proposer; behavior-level bullets only

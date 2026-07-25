@@ -1,9 +1,23 @@
 # minimal/ evolution history
 
 Append-only round log for the minimal loop (kernel: [`docs/minimal-loop-ood.md`](../docs/minimal-loop-ood.md)).
-One entry per gate verdict. The Gate (`gate.ts` since adoption-1) is the sole
-mutator of the active base; `rejected.json` is the machine-form rejection ledger
-(invariant 5 — permanent proposer input). This file is the human-readable lineage.
+One entry per adoption-gate verdict. `rejected.json` is the machine-form rejection
+ledger (invariant 5 — permanent proposer input). This file is the human-readable
+lineage.
+
+## The three gates — canonical names (do not say bare "gate" in new docs)
+
+| Name | Level | Decides | Seat | Code |
+|---|---|---|---|---|
+| **Completion gate** | one attempt, at "done" | is this attempt's work verified? (verify.sh + mutation probe; reinjects evidence, bounded rounds) | code | `complete-gate.ts` + `mutate.ts`, run.ts `--complete-gate` |
+| **Review gate** | one proposal, pre-spend | is this candidate bullet fit to test? (dup/scope/leak checks + rubric; bounded revise loop) | LLM + deterministic layer-1 | propose.ts Reviewer seat |
+| **Adoption gate** | the active base | does this candidate replace the base? (Fisher lift + guard non-regression + forensics void-exclusion) | code, sole base-mutator | `gate.ts` |
+
+Modifiers: "gate-ON/OFF arm" = completion gate armed/not; "gate reinjection" =
+one completion-gate evidence message; A1/A2 = adoption-gate ADOPT verdicts.
+Related but distinct: futility stopping (`futility.ts`) curtails ARMS, decides
+nothing about candidates; the task grader/scorer is the benchmark's own verifier,
+not one of our gates.
 
 **Active base:** `harness/system-v0.md` (`--system`) + `harness/seed-v0.md` (`--harness`)
 **+ completion gate (`--complete-gate <artifact>`, adoption A2 2026-07-25)** —
