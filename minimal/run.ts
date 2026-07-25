@@ -27,6 +27,7 @@ import { hostname, tmpdir } from "node:os"
 import { basename, join, resolve } from "node:path"
 import { runCompletionGate } from "./complete-gate.ts"
 import { clampParallel, pidAlive } from "./schedule.ts"
+import { clockPreflight } from "./clock.ts"
 
 const HERE = import.meta.dir
 
@@ -452,6 +453,30 @@ if (parallelMax > 1) {
     if (clamp.reason) console.log(`parallel clamped ${parallelMax} -> ${clamp.effective}: ${clamp.reason}`)
     parallelMax = clamp.effective
   }
+}
+
+// Clock-skew preflight (clock.ts): after a mac sleep the podman VM clock ran
+// ~17h behind the host — containers failed TLS ("certificate is not yet
+// valid") and agents died 0-turn. Assess host↔VM skew, resync once, block if
+// it persists. vmEpoch fails open on linux / no machine (no VM = no skew).
+{
+  const clock = await clockPreflight({
+    hostEpoch: () => Math.floor(Date.now() / 1000),
+    vmEpoch: async () => {
+      const r = await podman(["machine", "ssh", "date", "+%s"])
+      const n = Number(r.out.trim())
+      return r.code === 0 && Number.isFinite(n) ? n : null
+    },
+    resync: async () => {
+      // Last resort sets the VM clock to the HOST's epoch, read at call time.
+      const cmd = `sudo systemctl restart systemd-timesyncd || sudo chronyc -a makestep || sudo date -u -s @${Math.floor(Date.now() / 1000)}`
+      return (await podman(["machine", "ssh", cmd])).code === 0
+    },
+  })
+  if (clock.action === "blocked")
+    die(`podman VM clock skewed ${clock.skewSec}s vs host and resync failed — containers will fail TLS ("certificate is not yet valid"). Try: podman machine stop && podman machine start`)
+  if (clock.action === "resynced")
+    console.log(`clock preflight: corrected ${clock.skewSec}s VM clock skew`)
 }
 
 const liveContainers = new Set<string>()
