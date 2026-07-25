@@ -50,6 +50,15 @@ field in trajs/record: was it no-verify→fix (healthy) or probe-never-satisfied
    lineage like playbook.json; reinject TEMPLATES stay in plugin code — deterministic).
    Real-repo mapping: verify.sh→test suite, probe→mutation tool on diff. PREREQ: R10
    verdict + gate-ON guards + (item 3) held-out transfer. ~1 day TDD when unblocked.
+   **SESSION-HYGIENE DESIGN (user-raised C2 gap, 2026-07-25):**
+   [`2026-07-25-gate-session-hygiene.md`](2026-07-25-gate-session-hygiene.md) — two
+   transfer channels (C1 generator = held-out arms test it; C2 = reinject evidence
+   persisting across tasks IN one session, invisible to the one-task bench); mitigation
+   trio (request-time filter / acceptance marker / compaction steering); C2 experiment
+   spec (multi-task session arms via --session continuation, B-alone vs A→B raw vs
+   A→B marker, vocabulary-contamination forensics). Held-out C1 arms PAUSED mid-run
+   by user 2026-07-25 (salvage: headless a2 = pass, one healthy gate round; a1/a3
+   killed unrecorded) — resume after C2 protocol decision.
    **PLACEMENT DECIDED (user-forced, 2026-07-25): contract text does NOT enter the
    system prompt.** Grounds: R7 measured system-slot placement worse (3/8); contract in
    an always-on prompt lies during ungated sessions (unenforced threats decay + teach
