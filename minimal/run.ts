@@ -28,6 +28,7 @@ import { basename, join, resolve } from "node:path"
 import { runCompletionGate } from "./complete-gate.ts"
 import { clampParallel, pidAlive } from "./schedule.ts"
 import { clockPreflight } from "./clock.ts"
+import { HYGIENE_MARKER, bInstruction, mergeThen, type ThenResult } from "./session2.ts"
 
 const HERE = import.meta.dir
 
@@ -224,6 +225,17 @@ options:
                      one-paragraph contract is appended to the instruction.
   --gate-rounds N    max reinjection rounds per attempt (default: 2)
   --gate-mutants N   max mutants per adequacy probe (default: 4)
+  --then <taskDirB>  MULTI-TASK SESSION (C2 experiment, docs/2026-07-25-gate-
+                     session-hygiene.md §3): after task A fully completes
+                     (gate + scoring), stage task B's fixtures into the SAME
+                     container ON TOP of A's leftovers and run B's
+                     instruction as a continuation of the SAME opencode
+                     session; then score B with B's own scorer (rewardB).
+                     Trial gains thenB {rewardB,turnsB,elapsedSecB,
+                     markerUsed}. opencode-only
+  --marker           with --then: inject one hygiene countermand message into
+                     the session between A and B ("previous gate closed;
+                     evidence obsolete — do not apply")
   -h, --help         this text
 
 output: minimal/results/<task>-<startedAt>.json (run record with rewards[] +
@@ -249,6 +261,8 @@ let topP: number | undefined
 let gateArtifact: string | undefined
 let gateRounds = 2
 let gateMutants = 4
+let thenArg: string | undefined
+let markerFlag = false
 function parseFloatFlag(flag: string, raw: string | undefined): number {
   if (raw === undefined) die(`${flag} needs a value`)
   const v = Number(raw)
@@ -268,6 +282,8 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === "--complete-gate") gateArtifact = argv[++i] ?? die("--complete-gate needs the artifact path in the container")
   else if (a === "--gate-rounds") gateRounds = Number(argv[++i] ?? die("--gate-rounds needs a value")) || die("--gate-rounds not a number")
   else if (a === "--gate-mutants") gateMutants = Number(argv[++i] ?? die("--gate-mutants needs a value")) || die("--gate-mutants not a number")
+  else if (a === "--then") thenArg = argv[++i] ?? die("--then needs a task directory")
+  else if (a === "--marker") markerFlag = true
   else if (a === "--driver") {
     const d = argv[++i] ?? die("--driver needs a value")
     if (!(d in DRIVERS)) die(`--driver must be one of: ${Object.keys(DRIVERS).join(", ")}`)
@@ -292,6 +308,10 @@ if (systemArg && driverId !== "opencode") die(`--system is opencode-only (agent.
 // Completion gate needs session continuation (opencode run --session) for the
 // reinjection path — claude -p has no equivalent here.
 if (gateArtifact && driverId !== "opencode") die(`--complete-gate is opencode-only (session reinjection)`)
+// Multi-task session chains task B via `opencode run --session` — the same
+// continuation mechanism the gate's reinjection uses; claude -p has none.
+if (thenArg && driverId !== "opencode") die(`--then is opencode-only (session continuation)`)
+if (markerFlag && !thenArg) die(`--marker only makes sense with --then`)
 const systemPath = systemArg ? resolve(systemArg) : undefined
 if (systemPath && !existsSync(systemPath)) die(`system prompt file not found: ${systemPath}`)
 const system = systemPath
@@ -330,16 +350,40 @@ const testsDir = join(taskDir, "tests")
 // the checkout: bun minimal/run.ts ../../terminal-bench-2/<task>.
 // Only covers tasks whose environment needs no build step (no apt/pip/RUN) —
 // anything else needs the TB2 staging pipeline or a real conversion.
-let fixturesDir = join(taskDir, "fixtures")
-const envDir = join(taskDir, "environment")
-if (!existsSync(fixturesDir) && existsSync(envDir)) {
+function resolveFixtures(dir: string): string {
+  const fx = join(dir, "fixtures")
+  const env = join(dir, "environment")
+  if (existsSync(fx) || !existsSync(env)) return fx
   const staged = join(mkdtempSync(join(tmpdir(), "minimal-fixtures-")), "fixtures")
   mkdirSync(staged)
-  for (const entry of readdirSync(envDir)) {
+  for (const entry of readdirSync(env)) {
     if (entry === "Dockerfile") continue
-    cpSync(join(envDir, entry), join(staged, entry), { recursive: true })
+    cpSync(join(env, entry), join(staged, entry), { recursive: true })
   }
-  fixturesDir = staged
+  return staged
+}
+const fixturesDir = resolveFixtures(taskDir)
+
+// --- Task B (--then): the multi-task-session chain target. Same layout
+// rules as task A (instruction.md + verify.sh OR tests/test.sh; optional
+// fixtures/ or buildless environment/). Its instruction rides VERBATIM —
+// the gate contract applies to task A only (session2.bInstruction). ---
+const thenDir = thenArg ? resolve(thenArg) : undefined
+const thenTask = thenDir ? basename(thenDir) : null
+let instructionB = ""
+let fixturesDirB = ""
+let testsDirB = ""
+let verifierPathB = ""
+let hasVerifyShB = false
+if (thenDir) {
+  const instructionPathB = join(thenDir, "instruction.md")
+  if (!existsSync(instructionPathB)) die(`--then: no instruction.md in ${thenDir}`)
+  verifierPathB = join(thenDir, "verify.sh")
+  hasVerifyShB = existsSync(verifierPathB)
+  testsDirB = join(thenDir, "tests")
+  if (!hasVerifyShB && !existsSync(join(testsDirB, "test.sh"))) die(`--then: no verify.sh or tests/test.sh in ${thenDir}`)
+  instructionB = bInstruction(readFileSync(instructionPathB, "utf-8").trim())
+  fixturesDirB = resolveFixtures(thenDir)
 }
 
 // --- Harness (the evolvable context; identity = content hash for provenance) ---
@@ -506,6 +550,9 @@ interface Trial {
   resultText: string
   trajFile: string
   agentStderr: string
+  /** --then only: task B chained into A's session. null = A left no session
+   * id (0-turn death) so B was skipped entirely (suspect trial anyway). */
+  thenB?: ThenResult | null
 }
 
 async function attempt(i: number): Promise<Trial> {
@@ -588,6 +635,8 @@ async function attempt(i: number): Promise<Trial> {
 
     const elapsedSec = Math.round((Date.now() - t0) / 10) / 100
     const trajFile = join(resultsDir, `${taskId}-${stamp}-a${i}.traj.ndjson`)
+    // Written now so a scorer die() still leaves the trajectory on disk;
+    // rewritten after the --then chain appends B's continuation output.
     writeFileSync(trajFile, agentOut)
     const { turns, resultText } = driver.parse(agentOut)
 
@@ -612,7 +661,59 @@ async function attempt(i: number): Promise<Trial> {
       reward = rewardTxt === "1" ? 1 : 0
     }
 
-    return {
+    // --- Task B (--then): chained into A's opencode session AFTER A fully
+    // completes (post-gate, post-scoring) — the C2 session-carryover
+    // experiment (docs/2026-07-25-gate-session-hygiene.md §3). /app is NOT
+    // cleaned between tasks (realistic session accumulation). ---
+    let thenB: ThenResult | null | undefined
+    if (thenDir) {
+      const sessionId = extractSessionId(agentOut)
+      if (!sessionId) {
+        // A died 0-turn — no session to continue. Skip B (suspect trial).
+        thenB = null
+      } else {
+        // B fixtures staged ON TOP of A's leftovers.
+        if (existsSync(fixturesDirB)) await podmanOrDie(["cp", `${fixturesDirB}/.`, `${name}:/app/`], "B fixture copy")
+        if (markerFlag) {
+          const m = await podman([
+            "exec", name, "timeout", String(timeoutSec),
+            "opencode", "run", "--dir", "/app", "--auto", "--format", "json",
+            "--model", model, "--session", sessionId, HYGIENE_MARKER,
+          ])
+          agentOut += `\n{"type":"then_marker"}\n` + m.out
+        }
+        const tB0 = Date.now()
+        const agentB = await podman([
+          "exec", name, "timeout", String(timeoutSec),
+          "opencode", "run", "--dir", "/app", "--auto", "--format", "json",
+          "--model", model, "--session", sessionId, instructionB,
+        ])
+        const elapsedSecB = Math.round((Date.now() - tB0) / 10) / 100
+        agentOut += `\n{"type":"then_b"}\n` + agentB.out
+        const { turns: turnsB } = driver.parse(agentB.out)
+
+        // B scoring: /tests REPLACED by B's tests; same reward protocol as A.
+        let rewardB: 0 | 1
+        if (hasVerifyShB) {
+          await podmanOrDie(["cp", verifierPathB, `${name}:/verify.sh`], "B verifier copy")
+          rewardB = (await podman(["exec", name, "sh", "/verify.sh"])).code === 0 ? 1 : 0
+        } else {
+          await podmanOrDie(["exec", name, "rm", "-rf", "/tests"], "B tests reset")
+          await podmanOrDie(["exec", name, "mkdir", "-p", "/tests"], "B tests dir prep")
+          await podmanOrDie(["cp", `${testsDirB}/.`, `${name}:/tests/`], "B tests copy")
+          await podmanOrDie(["exec", name, "mkdir", "-p", "/logs/verifier"], "B verifier logs dir")
+          await podmanOrDie(["exec", name, "rm", "-f", "/logs/verifier/reward.txt"], "B stale reward reset")
+          await podman(["exec", name, "bash", "/tests/test.sh"])
+          const rtB = (await podman(["exec", name, "cat", "/logs/verifier/reward.txt"])).out.trim()
+          if (rtB !== "0" && rtB !== "1") die(`B scorer failure: /logs/verifier/reward.txt = "${rtB}"`)
+          rewardB = rtB === "1" ? 1 : 0
+        }
+        thenB = { rewardB, turnsB, elapsedSecB, markerUsed: markerFlag }
+      }
+    }
+
+    writeFileSync(trajFile, agentOut)
+    const trial: Trial = {
       attempt: i,
       reward,
       turns,
@@ -633,6 +734,9 @@ async function attempt(i: number): Promise<Trial> {
           }
         : {}),
     }
+    if (thenB === undefined) return trial
+    if (thenB === null) return { ...trial, thenB: null }
+    return mergeThen(trial as unknown as Record<string, unknown>, thenB) as unknown as Trial
   } finally {
     await podman(["rm", "-f", name])
     liveContainers.delete(name)
@@ -668,9 +772,11 @@ async function worker(): Promise<void> {
     try {
       const t = await attempt(i)
       trials.push(t)
+      const thenNote =
+        t.thenB === null ? " B:SKIPPED(no-session)" : t.thenB ? ` B:reward=${t.thenB.rewardB} turns=${t.thenB.turnsB}` : ""
       console.log(
         `attempt ${i}/${k}: reward=${t.reward} turns=${t.turns} ${t.elapsedSec}s` +
-          `${t.timedOut ? " TIMEOUT" : ""}${t.suspect ? " SUSPECT(0-turn)" : ""} [width ${running}]`,
+          `${t.timedOut ? " TIMEOUT" : ""}${t.suspect ? " SUSPECT(0-turn)" : ""}${thenNote} [width ${running}]`,
       )
     } finally {
       running--
@@ -695,6 +801,8 @@ const run = {
   system,
   harness,
   completeGate: gateArtifact ? { artifact: gateArtifact, rounds: gateRounds, mutants: gateMutants } : null,
+  thenTask,
+  marker: markerFlag,
   rewards,
   passRate: rewards.reduce((a, b) => a + b, 0) / k,
   trials,
