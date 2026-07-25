@@ -3,6 +3,34 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ⏸ SESSION END 2026-07-25 (MacBook, cut short — user time limit) — A2 ADOPTED; C2 ARMS BUILT + DEFERRED — RESUME HERE
+
+**TODAY'S VERDICTS (all pushed through `4530631`, HISTORY.md current):**
+- **A2: completion gate ADOPTED** (gate.ts: R10 lift + gate-ON guards cdt 2/2 + chess
+  3/3). Active minimal config = system-v0 + seed-v0 + `--complete-gate`.
+  **Attribution corrected (user-caught): gate-only increment = 5/10→10/10 p=0.0325**
+  (3/10→10/10 p=0.0031 = full stack vs bare).
+- **Decisions locked:** contract NOT in system prompt (R7 + truthfulness + arm
+  integrity; falsifier registered) · port scope = held-out-validated gate + CACHE
+  PRESERVED, no context editing ever, marker-only hygiene · filter dead (break-even
+  ~130 turns) · **C2 before C1** (user order).
+- **Infra shipped:** clock-skew preflight (`dc24972`, saved same-day rerolls);
+  `--then`/`--marker` multi-task session mode (`4530631`, subagent-built, suite 1612).
+- **Drift assessment on record:** measurement layer self-standing; PROPOSING layer =
+  human/session (gate bypassed proposer pipeline). Open fork: route next mechanism
+  through machine seat vs rename mission.
+
+**⏭ DEFERRED TO NEXT SESSION (user: "defer it at home") — C2 arms, ready to fire:**
+```
+tmux new-session -d -s c2 "PATH=/opt/podman/bin:\$PATH bun minimal/run.ts ../terminal-bench-2/cancel-async-tasks --k 10 --parallel 2 --system minimal/harness/system-v0.md --harness minimal/harness/seed-v0.md --complete-gate /app/run.py --then ../terminal-bench-2/count-dataset-tokens >> minimal/logs-c2.log 2>&1; echo C2RAW_DONE >> minimal/logs-c2.log; <same + --marker> >> minimal/logs-c2.log 2>&1; echo C2MARKER_DONE >> minimal/logs-c2.log"
+```
+(one aborted launch 07-25, ~2 min, no records — clean). B-alone baseline already
+paid: 07-25 gate-ON cdt records, 5 valid passes. Verify per
+`docs/2026-07-25-gate-session-hygiene.md` §3: gate.ts B-alone vs raw vs marker +
+vocabulary-contamination grep (cancel/cleanup/mutant terms in B trajs). THEN: C1
+held-out arms (paused; salvaged headless a2 pass) → THEN plugin port (item 4,
+scoped). Queue discipline: close one item before opening new.
+
 ## ⏸ SESSION END 2026-07-24 (office box, host POWERED OFF mid-R9) — RESUME HERE
 
 **WHERE:** minimal loop R2–R9 in one day. Active base UNCHANGED (system-v0+seed-v0).
