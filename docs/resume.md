@@ -90,40 +90,18 @@ field in trajs/record: was it no-verify→fix (healthy) or probe-never-satisfied
    ~6 sequential interventions on one task = spent statistics. Any R9 verdict is
    "directional on design task, transfer untested". **Real test = gate held-out arms**
    (headless-terminal + fresh band picks the gate never saw).
-4. **SCHEDULED (user, 2026-07-24): port the completion gate into opencode-plugin** —
-   the production plugin has NO gate/reinject today (verified: input-side
-   system-transform + session.idle scoring only). Design agreed: finish/stop-boundary
-   hook (session.idle at index.ts:181 = anchor candidate) runs a check command +
-   optional mutation probe, reinjects evidence into the SAME session via client API,
-   bounded rounds; **gate spec = store-versioned `gate.json` per candidate** (rides
-   lineage like playbook.json; reinject TEMPLATES stay in plugin code — deterministic).
-   Real-repo mapping: verify.sh→test suite, probe→mutation tool on diff. PREREQ: R10
-   verdict + gate-ON guards + (item 3) held-out transfer. ~1 day TDD when unblocked.
-   **PORT SCOPE FIXED (user decision 2026-07-25): daily-usage port = held-out-validated
-   gate + CACHE PRESERVED — no context editing ever (filter excluded from port scope,
-   not merely deferred); hygiene = /clear guidance + acceptance marker + compaction
-   rule only. SCHEDULED, NOT NOW — prereq: C1 held-out arms (paused, to resume)
-   certify transfer first.**
-   **SESSION-HYGIENE DESIGN (user-raised C2 gap, 2026-07-25):**
-   [`2026-07-25-gate-session-hygiene.md`](2026-07-25-gate-session-hygiene.md) — two
-   transfer channels (C1 generator = held-out arms test it; C2 = reinject evidence
-   persisting across tasks IN one session, invisible to the one-task bench); mitigation
-   trio (request-time filter / acceptance marker / compaction steering); C2 experiment
-   spec (multi-task session arms via --session continuation, B-alone vs A→B raw vs
-   A→B marker, vocabulary-contamination forensics). Held-out C1 arms PAUSED mid-run
-   by user 2026-07-25 (salvage: headless a2 = pass, one healthy gate round; a1/a3
-   killed unrecorded) — resume after C2 protocol decision.
-   **PLACEMENT DECIDED (user-forced, 2026-07-25): contract text does NOT enter the
-   system prompt.** Grounds: R7 measured system-slot placement worse (3/8); contract in
-   an always-on prompt lies during ungated sessions (unenforced threats decay + teach
-   distrust); base arms would be contaminated (one-variable integrity); enforcement
-   self-refreshes salience (reinject re-delivers at done-time) so placement decay is
-   moot. Division: HABIT (DoD procedure) = system prompt, unconditional; PROTOCOL
-   (contract) = travels with enforcement only, store-versioned in gate.json, arm-identity
-   field in gate.ts. Falsifier: held-out exhaustion clusters showing contract disbelief
-   the reinject cannot recover → placement re-examined.
-5. Proposer backlog (review-loop design doc §7): actuator-aware check-spec proposals now
-   unblocked by the gate; timeout blindness; trail feedforward; reviewer model diversity.
+4. **Minimal gate plugin (was: port into opencode-plugin)** — design + build stages now
+   in [`2026-07-25-daily-evolution-loop.md`](2026-07-25-daily-evolution-loop.md) §4.1.
+   Decisions locked: standalone engine-free plugin first (Gall; full-plugin integration
+   evidence-gated later) · contract NOT in system prompt (R7; falsifier registered) ·
+   cache preserved, no context editing ever · marker-only hygiene · PREREQ C1 held-out
+   certification. Older capsule text superseded by the design doc.
+5. **Proposer = core engine (user-settled 07-25): invest path chosen.** Build stages
+   2–4 of [`2026-07-25-daily-evolution-loop.md`](2026-07-25-daily-evolution-loop.md):
+   review gate + rejected ledger into engine propose path; trial mode re-based on
+   gate outcomes (the daily grader); mechanism-class proposals (gate.json deltas
+   through review + adoption gates). Older backlog list (timeout blindness, trail
+   feedforward, reviewer diversity) still valid, folded behind those.
 6. ~~Futility stopping~~ **DONE 07-25 (`2803893`): deterministic curtailment —
    `--stop-futile <basePass>/<baseN>` (design check refuses under-powered arms
    pre-spend; mid-arm stop halts new admissions, in-flight recorded) + guardFutility
