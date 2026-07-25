@@ -18,27 +18,30 @@ C2 risk shape: stale task-A evidence primes or misleads task B ("double-cancel"
 diffs haunting a CSS refactor); could also help (verification priming). Sign and
 size unknown — that is the experiment.
 
-## 2. Mitigation mechanisms (ranked)
+## 2. Mitigation mechanisms (REVISED 2026-07-25 after cache-economics check)
 
-1. **Request-time filtering** (plugin layer, cleanest): context is rebuilt into a
-   request every turn; the plugin already transforms the system prompt per request.
-   Same pattern for messages: exclude turns tagged as expired gate evidence when
-   building the request. Stored history untouched. PREREQ: verify opencode exposes a
-   message-level transform (system-level confirmed; message-level = check at port
-   time). COST: mid-context exclusion breaks the prompt-cache prefix → repay
-   uncached tokens on later turns. Prefer applying at task boundaries where the
-   cache breaks anyway.
-2. **Additive countermand marker** (works today, all harnesses, cache-friendly): on
-   gate ACCEPTANCE, append one message — "gate for task <id> closed; its
-   fault-injection evidence is obsolete; do not apply it to later tasks." Advisory,
-   but counters residue (not an active instruction), so advisory likely suffices.
-   Zero API needs; CC-compatible.
-3. **Compaction steering** (passive backstop): compaction instruction "drop
-   completed tasks' gate/verification transcripts, keep outcomes." Free; fires only
-   when compaction does.
+0. **Task-boundary session reset** (mitigation zero — industry standard already):
+   `/clear` between unrelated tasks is Claude Code's own best-practice guidance;
+   a fresh session per task makes C2 nonexistent. Costs nothing. C2 machinery
+   below only matters for sessions the human does NOT clear.
+1. **Additive countermand marker** (THE default): on gate ACCEPTANCE, append one
+   message — "gate for task <id> closed; its fault-injection evidence is obsolete;
+   do not apply it to later tasks." Advisory, but counters residue (not an active
+   instruction). Zero API needs, cache-neutral, CC-compatible.
+2. **Compaction steering** (passive backstop): "drop completed tasks'
+   gate/verification transcripts, keep outcomes." Free; fires only at compaction.
+3. **Request-time filtering — DEMOTED to evidence-gated last resort.** Cache
+   economics (user-challenged, recomputed): removing a mid-context message
+   invalidates the prefix from the EARLIEST removed turn — e.g. first reinject at
+   30k of a 100k context → ~70k tokens repaid ONCE (~$1 at opus rates; the draft's
+   "every subsequent turn repays" was wrong — the prefix re-establishes on the
+   next request). Benefit side: stale gate messages (~2–5k tokens) ride at cache-
+   HIT price ≈ $0.0075/turn → break-even ≈ 130+ turns. Net-negative in nearly all
+   real sessions. Build ONLY if §3 shows marker-resistant contamination with
+   material reward cost. Not in default port scope.
 
-Default posture for the port: **marker at acceptance + filter at task boundaries +
-compaction rule** — measured before mandated (§3).
+Default posture for the port: **recommend /clear at task boundaries; marker at
+acceptance; compaction rule. No filter unless the C2 experiment forces it.**
 
 ## 3. Experiment spec — C2 arms (multi-task sessions on the bench)
 
@@ -73,9 +76,9 @@ rewards hold (the leading indicator). Marker halves contamination mentions.
 - Reinject messages carry a machine-readable scope tag (task id) so filters/markers
   can target them.
 - On acceptance, emit the closing marker (mechanism 2) — default ON.
-- gate.json: `hygiene: { marker: bool, filter: "off" | "task-boundary" }`.
-- Check at port time: opencode message-transform hook availability (decides whether
-  mechanism 1 is buildable).
+- gate.json: `hygiene: { marker: bool }` (filter knob deferred with mechanism 3).
+- Check at port time: opencode message-transform hook availability (only relevant
+  if mechanism 3 is ever evidence-forced).
 
 ## 5. Standing decisions this design inherits
 
