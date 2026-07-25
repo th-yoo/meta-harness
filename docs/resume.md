@@ -109,7 +109,10 @@ field in trajs/record: was it no-verify→fix (healthy) or probe-never-satisfied
    first-fail rule in futility.ts. History-replay tests pin R7 (futile at launch,
    p=0.0867) / R10 / loop-2 values. USE on C1 held-out arms (single-task, baseline
    known). NOT for C2 arms — curtailment watches task A's reward; C2's verdict
-   variable is B's (inert there, harmless but pointless).
+   variable is B's (inert there, harmless but pointless). **Live-test status
+   (user-accepted 07-25): logic + design-check die = tested; MID-ARM stop wiring =
+   review-only, first live exercise rides the next real --stop-futile arm (C1) —
+   check its log line + stoppedFutile record field on first use.**
 7. Three-gate naming cleanup in docs: completion gate (attempt) / review gate (proposal) /
    adoption gate (gate.ts, base).
 
