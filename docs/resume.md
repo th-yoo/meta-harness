@@ -50,6 +50,11 @@ field in trajs/record: was it no-verify→fix (healthy) or probe-never-satisfied
    lineage like playbook.json; reinject TEMPLATES stay in plugin code — deterministic).
    Real-repo mapping: verify.sh→test suite, probe→mutation tool on diff. PREREQ: R10
    verdict + gate-ON guards + (item 3) held-out transfer. ~1 day TDD when unblocked.
+   **PORT SCOPE FIXED (user decision 2026-07-25): daily-usage port = held-out-validated
+   gate + CACHE PRESERVED — no context editing ever (filter excluded from port scope,
+   not merely deferred); hygiene = /clear guidance + acceptance marker + compaction
+   rule only. SCHEDULED, NOT NOW — prereq: C1 held-out arms (paused, to resume)
+   certify transfer first.**
    **SESSION-HYGIENE DESIGN (user-raised C2 gap, 2026-07-25):**
    [`2026-07-25-gate-session-hygiene.md`](2026-07-25-gate-session-hygiene.md) — two
    transfer channels (C1 generator = held-out arms test it; C2 = reinject evidence
