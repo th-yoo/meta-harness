@@ -6,11 +6,37 @@ mutator of the active base; `rejected.json` is the machine-form rejection ledger
 (invariant 5 — permanent proposer input). This file is the human-readable lineage.
 
 **Active base:** `harness/system-v0.md` (`--system`) + `harness/seed-v0.md` (`--harness`)
-— since adoption-1 (2026-07-23, commit `4fc9d68`). Unchanged through R10:
-every post-adoption prose candidate was rejected, abstained, or vetoed; the
-completion-gate MECHANISM (R9→R10) is the first candidate of a new actuator
-class — **lift-certified 10/10 vs 3/10 (R10, p=0.0031), adoption pending
-gate-ON guards + held-out transfer.**
+**+ completion gate (`--complete-gate <artifact>`, adoption A2 2026-07-25)** —
+context layer since adoption-1 (`4fc9d68`); mechanism layer since A2
+(`adoption-2-gate-verdict.json`: R10 lift p=0.0031 + cdt 2/2 + chess 3/3
+gate-ON holds). Every post-adoption PROSE candidate was rejected/abstained/
+vetoed — the playbook's text hasn't grown since A1; the loop's second
+adopted trait is a mechanism. **Standing open: held-out gate transfer
+(overfit caveat) — gate designed from cancel-async forensics.**
+
+## A2 — completion-gate adoption (2026-07-25, MacBook) — ADOPT
+
+- **gate.ts combined verdict:** R10 lift (10/10 vs 3/10, p=0.0031) + guards
+  gate-ON: count-dataset-tokens 2/2 valid (2 VM-clock-skew voids stripped +
+  rerolled clean under the new preflight; valid pass a3 turns=2 — gate
+  exercised and satisfied on a non-code artifact) + chess-best-move 3/3 all
+  turns=1 (zero gate friction). One-variable guard pairs: [adopted base,
+  gate-OFF] 3/3 baselines vs [adopted base, gate-ON] — delta = gate only.
+- **Tax verdict: none measurable at k=3** — no spurious refusals, no wrong
+  answers induced, time comparable (chess 198–345s).
+- **Session infra shipped en route:** clock-skew preflight (`dc24972`,
+  clock.ts — podman VM ~17h behind after mac sleep = TLS cert-not-yet-valid
+  0-turn deaths, 2 trials lost then rerolled; subagent-built TDD);
+  scheduler reservation layer + darwin reap fix earlier (`c493799`).
+- **Meaning:** first mechanism-class trait through the full discipline —
+  designed (R9) → falsified-in-part by forensics (R9F: nudge, not mechanism)
+  → fixed → certified (R10) → guard-held → adopted. The actuator-escalation
+  thesis (loop-2 TB2 → R5/R6 prose exhaustion → binding actuator) is now
+  carried to adoption, entirely under gate-as-code.
+- **NOT claimed:** transfer. The gate has never run on a task it wasn't
+  designed from. Held-out arms (headless-terminal + build-free fresh pick,
+  or staging-gap fix to unlock build-pmars/polyglot-rust-c) = next gate
+  experiment before any generalization language.
 
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
@@ -29,6 +55,7 @@ gate-ON guards + held-out transfer.**
 | R9 | 2026-07-24 | completion gate + adequacy probe (MECHANISM) | killed 5/10 by host shutdown: 4/5, all turns=3 | — | never ran | partial-directional; superseded by R9F+R10 |
 | R9F | 2026-07-24 | (forensics, zero trials, MacBook) | office a1–a5 traj read | — | — | **GATE BUG root-caused: docstring mutant unkillable — every attempt exhausted both rounds; 4/5 was nudge-text effect, not mechanism. mutate.ts fixed (codeLineSet)** |
 | R10 | 2026-07-24 | FIXED completion gate (cancel-async k=10, MacBook) | bare 3/10 vs gate 10/10 | **0.0031** | gate-ON guards PENDING | **lift-certified — first perfect arm on this task; adoption blocked on gate-ON guards + held-out** |
+| **A2** | 2026-07-25 | completion gate ADOPTION (gate-ON guards) | (lift from R10) | 0.0031 | cdt 2/2 valid (2 skew-voids rerolled), chess 3/3 all turns=1 | **ADOPT — first MECHANISM-class adoption; gate joins active config; held-out transfer = standing open** |
 
 ---
 

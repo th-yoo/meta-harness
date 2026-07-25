@@ -1,0 +1,49 @@
+hold: cpu 100% / mem InfinityMB (width 1)
+hold: cpu 100% / mem InfinityMB (width 1)
+hold: cpu 100% / mem InfinityMB (width 1)
+hold: cpu 100% / mem InfinityMB (width 1)
+hold: cpu 100% / mem InfinityMB (width 1)
+hold: cpu 100% / mem InfinityMB (width 1)
+hold: cpu 100% / mem InfinityMB (width 1)
+hold: cpu 100% / mem InfinityMB (width 1)
+hold: cpu 98% / mem InfinityMB (width 1)
+hold: cpu 93% / mem InfinityMB (width 1)
+hold: cpu 93% / mem InfinityMB (width 1)
+hold: cpu 90% / mem InfinityMB (width 1)
+hold: cpu 90% / mem InfinityMB (width 1)
+attempt 1/2: reward=1 turns=1 892.27s [width 2]
+attempt 2/2: reward=1 turns=1 909.22s [width 1]
+
+{
+  "task": "count-dataset-tokens",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-mac.local",
+  "startedAt": "2026-07-25T05:33:15.159Z",
+  "k": 2,
+  "parallel": 2,
+  "sampling": null,
+  "system": {
+    "file": "minimal/harness/system-v0.md",
+    "sha256": "3b65fb7d6573fe4b"
+  },
+  "harness": {
+    "file": "minimal/harness/seed-v0.md",
+    "sha256": "e72331a29823cfb4"
+  },
+  "completeGate": {
+    "artifact": "/app/answer.txt",
+    "rounds": 2,
+    "mutants": 4
+  },
+  "rewards": [
+    1,
+    1
+  ],
+  "passRate": 1
+}
+
+result:     /Users/yoo/z2/meta-harness/minimal/results/count-dataset-tokens-2026-07-25T05-33-15-159Z.json
+view traj:  bun minimal/traj.ts /Users/yoo/z2/meta-harness/minimal/results/count-dataset-tokens-2026-07-25T05-33-15-159Z-a1.traj.ndjson
+RR_DONE

@@ -1,0 +1,101 @@
+{
+  "task": "chess-best-move",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-mac.local",
+  "startedAt": "2026-07-25T05:22:30.827Z",
+  "k": 3,
+  "parallel": 2,
+  "sampling": null,
+  "system": {
+    "file": "minimal/harness/system-v0.md",
+    "sha256": "3b65fb7d6573fe4b"
+  },
+  "harness": {
+    "file": "minimal/harness/seed-v0.md",
+    "sha256": "e72331a29823cfb4"
+  },
+  "completeGate": {
+    "artifact": "/app/move.txt",
+    "rounds": 2,
+    "mutants": 4
+  },
+  "rewards": [
+    1,
+    1,
+    1
+  ],
+  "passRate": 1,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 344.99,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Both artifacts are in place. Let me do the final verification procedure against the task's literal requirements.\n\n## Verification — Definition of Done\n\n**Task requirements (quoting operative wording):**\n\n1. **\"chess_board.png has an image of a chess board... currently white to move\"** — The image file didn't exist; the board is defined by the FEN in `make.py` (the generator), which is `r1bq1r2/1p3",
+      "trajFile": "chess-best-move-2026-07-25T05-22-30-827Z-a1.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "accepted",
+            "tried": 0,
+            "survived": 0
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 2,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 292.39,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "No stray throwaway files remain (my temp files are in /tmp). Now the definition-of-done procedure.\n\n## Verification against task requirements\n\n**Requirement 1:** *\"The file chess_board.png has an image of a chess board... write the best move for white.\"*\n- The PNG did not exist on disk, but `make.py` deterministically generates it from an embedded FEN: `r1bq1r2/1p3pp1/p1n1p3/3nPkbP/8/P1N5/1P2QPP1/",
+      "trajFile": "chess-best-move-2026-07-25T05-22-30-827Z-a2.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "accepted",
+            "tried": 0,
+            "survived": 0
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 3,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 198.24,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Everything is in place. Let me perform the final verification procedure against the task's stated requirements.\n\n## Verification — Definition of Done\n\n**Requirement 1:** *\"Write the best move for white to play to /app/move.txt in the form [src][dst]\"*\n- The `chess_board.png` is generated from the FEN embedded in `make.py`: `r1bq1r2/1p3pp1/p1n1p3/3nPkbP/8/P1N5/1P2QPP1/R1B1K2R w KQ - 0 16`. The imag",
+      "trajFile": "chess-best-move-2026-07-25T05-22-30-827Z-a3.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "accepted",
+            "tried": 0,
+            "survived": 0
+          }
+        ]
+      }
+    }
+  ]
+}
