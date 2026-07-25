@@ -3,7 +3,13 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-25 FINAL (MacBook desk, HEAD `672360d`) — A2 ADOPTED · C2 READY · STRATEGY SETTLED — HOME SESSION STARTS HERE
+## ⏸ SESSION END 2026-07-25 FINAL (MacBook desk) — PROJECT NAMED **kkamak** · A2 ADOPTED · C2 READY — HOME SESSION STARTS HERE
+
+**NAMED (sealed at close): the project is `kkamak` (까막)** — see
+[`docs/NAME.md`](NAME.md) (Ojakgyo bridge of crows-and-magpies = borrowed
+components composed into a crossing; "crow flies, pear falls" = the
+attribution fallacy our gates kill; collision-clean). Repo/CLI renames = a
+future housekeeping item, NOT urgent — name travels in docs first.
 
 **READ ORDER AT HOME:** this block → `minimal/HISTORY.md` (three-gate glossary at
 top; rows through A2) → `docs/2026-07-25-gate-session-hygiene.md` §3 (C2 protocol)
