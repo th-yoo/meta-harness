@@ -103,7 +103,13 @@ field in trajs/record: was it no-verify→fix (healthy) or probe-never-satisfied
    the reinject cannot recover → placement re-examined.
 5. Proposer backlog (review-loop design doc §7): actuator-aware check-spec proposals now
    unblocked by the gate; timeout blindness; trail feedforward; reviewer model diversity.
-6. Futility stopping (SPRT-lite) — R7 was dead at 2/6; formalize the manual kill.
+6. ~~Futility stopping~~ **DONE 07-25 (`2803893`): deterministic curtailment —
+   `--stop-futile <basePass>/<baseN>` (design check refuses under-powered arms
+   pre-spend; mid-arm stop halts new admissions, in-flight recorded) + guardFutility
+   first-fail rule in futility.ts. History-replay tests pin R7 (futile at launch,
+   p=0.0867) / R10 / loop-2 values. USE on C1 held-out arms (single-task, baseline
+   known). NOT for C2 arms — curtailment watches task A's reward; C2's verdict
+   variable is B's (inert there, harmless but pointless).
 7. Three-gate naming cleanup in docs: completion gate (attempt) / review gate (proposal) /
    adoption gate (gate.ts, base).
 
