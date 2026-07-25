@@ -50,6 +50,15 @@ field in trajs/record: was it no-verify→fix (healthy) or probe-never-satisfied
    lineage like playbook.json; reinject TEMPLATES stay in plugin code — deterministic).
    Real-repo mapping: verify.sh→test suite, probe→mutation tool on diff. PREREQ: R10
    verdict + gate-ON guards + (item 3) held-out transfer. ~1 day TDD when unblocked.
+   **PLACEMENT DECIDED (user-forced, 2026-07-25): contract text does NOT enter the
+   system prompt.** Grounds: R7 measured system-slot placement worse (3/8); contract in
+   an always-on prompt lies during ungated sessions (unenforced threats decay + teach
+   distrust); base arms would be contaminated (one-variable integrity); enforcement
+   self-refreshes salience (reinject re-delivers at done-time) so placement decay is
+   moot. Division: HABIT (DoD procedure) = system prompt, unconditional; PROTOCOL
+   (contract) = travels with enforcement only, store-versioned in gate.json, arm-identity
+   field in gate.ts. Falsifier: held-out exhaustion clusters showing contract disbelief
+   the reinject cannot recover → placement re-examined.
 5. Proposer backlog (review-loop design doc §7): actuator-aware check-spec proposals now
    unblocked by the gate; timeout blindness; trail feedforward; reviewer model diversity.
 6. Futility stopping (SPRT-lite) — R7 was dead at 2/6; formalize the manual kill.
