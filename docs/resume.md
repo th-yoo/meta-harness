@@ -3,33 +3,54 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-25 (MacBook, cut short — user time limit) — A2 ADOPTED; C2 ARMS BUILT + DEFERRED — RESUME HERE
+## ⏸ SESSION END 2026-07-25 FINAL (MacBook desk, HEAD `2859452`) — A2 ADOPTED · C2 READY · FUTILITY + GLOSSARY SHIPPED — HOME SESSION STARTS HERE
 
-**TODAY'S VERDICTS (all pushed through `4530631`, HISTORY.md current):**
-- **A2: completion gate ADOPTED** (gate.ts: R10 lift + gate-ON guards cdt 2/2 + chess
-  3/3). Active minimal config = system-v0 + seed-v0 + `--complete-gate`.
-  **Attribution corrected (user-caught): gate-only increment = 5/10→10/10 p=0.0325**
-  (3/10→10/10 p=0.0031 = full stack vs bare).
-- **Decisions locked:** contract NOT in system prompt (R7 + truthfulness + arm
-  integrity; falsifier registered) · port scope = held-out-validated gate + CACHE
-  PRESERVED, no context editing ever, marker-only hygiene · filter dead (break-even
-  ~130 turns) · **C2 before C1** (user order).
-- **Infra shipped:** clock-skew preflight (`dc24972`, saved same-day rerolls);
-  `--then`/`--marker` multi-task session mode (`4530631`, subagent-built, suite 1612).
-- **Drift assessment on record:** measurement layer self-standing; PROPOSING layer =
-  human/session (gate bypassed proposer pipeline). Open fork: route next mechanism
-  through machine seat vs rename mission.
+**READ ORDER AT HOME:** this block → `minimal/HISTORY.md` (three-gate glossary now at
+top; rows through A2) → `docs/2026-07-25-gate-session-hygiene.md` §3 (C2 protocol).
 
-**⏭ DEFERRED TO NEXT SESSION (user: "defer it at home") — C2 arms, ready to fire:**
+**STATE:** active minimal config = system-v0 + seed-v0 + `--complete-gate` (A2,
+first mechanism-class adoption; gate-only increment 5/10→10/10 p=0.0325
+user-corrected from the 3/10→10/10 full-stack headline). Suite 1621 green. Box
+left clean: no tmux, no containers, tree clean.
+
+**TODAY'S VERDICTS + DECISIONS (detail in HISTORY.md / hygiene doc):**
+- A2 ADOPT (adoption gate: R10 lift + gate-ON guard holds cdt 2/2, chess 3/3).
+- Locked: contract NOT in system prompt (falsifier registered) · port = cache
+  preserved, no context editing, marker-only hygiene · filter dead (~130-turn
+  break-even) · **C2 before C1** · futility mid-arm wiring = review-only,
+  first-use check on C1.
+- Drift fork OPEN: next mechanism through machine seat vs mission rename.
+
+**INFRA SHIPPED TODAY (all TDD, subagent-built, reviewed):** clock-skew preflight
+(`dc24972`) · `--then`/`--marker` C2 mode (`4530631`) · futility stopping
+`--stop-futile basePass/baseN` + designCheck (`2803893`) · three-gate glossary
+(`2859452`).
+
+**⏭ HOME SESSION PLAYBOOK (in order):**
+1. **Fire C2 arms** (~3 hr, mostly unattended). Two commands, run as one tmux chain:
 ```
-tmux new-session -d -s c2 "PATH=/opt/podman/bin:\$PATH bun minimal/run.ts ../terminal-bench-2/cancel-async-tasks --k 10 --parallel 2 --system minimal/harness/system-v0.md --harness minimal/harness/seed-v0.md --complete-gate /app/run.py --then ../terminal-bench-2/count-dataset-tokens >> minimal/logs-c2.log 2>&1; echo C2RAW_DONE >> minimal/logs-c2.log; <same + --marker> >> minimal/logs-c2.log 2>&1; echo C2MARKER_DONE >> minimal/logs-c2.log"
+cd ~/z2/meta-harness
+tmux new-session -d -s c2 "PATH=/opt/podman/bin:\$PATH bun minimal/run.ts ../terminal-bench-2/cancel-async-tasks --k 10 --parallel 2 --system minimal/harness/system-v0.md --harness minimal/harness/seed-v0.md --complete-gate /app/run.py --then ../terminal-bench-2/count-dataset-tokens >> minimal/logs-c2.log 2>&1; echo C2RAW_DONE >> minimal/logs-c2.log; PATH=/opt/podman/bin:\$PATH bun minimal/run.ts ../terminal-bench-2/cancel-async-tasks --k 10 --parallel 2 --system minimal/harness/system-v0.md --harness minimal/harness/seed-v0.md --complete-gate /app/run.py --then ../terminal-bench-2/count-dataset-tokens --marker >> minimal/logs-c2.log 2>&1; echo C2MARKER_DONE >> minimal/logs-c2.log"
 ```
-(one aborted launch 07-25, ~2 min, no records — clean). B-alone baseline already
-paid: 07-25 gate-ON cdt records, 5 valid passes. Verify per
-`docs/2026-07-25-gate-session-hygiene.md` §3: gate.ts B-alone vs raw vs marker +
-vocabulary-contamination grep (cancel/cleanup/mutant terms in B trajs). THEN: C1
-held-out arms (paused; salvaged headless a2 pass) → THEN plugin port (item 4,
-scoped). Queue discipline: close one item before opening new.
+   Notes: NO --stop-futile here (curtailment watches A's reward; C2's verdict
+   variable is B's). Clock preflight runs automatically (if the box slept, it
+   resyncs or refuses with instructions). One aborted 07-25 launch left no records.
+2. **C2 verdicts:** forensics first (voids, turnsB=0 = B-side skew class), then
+   gate.ts: B-alone baseline = 07-25 gate-ON cdt records
+   (`count-dataset-tokens-2026-07-25T05-02*` 1 valid + `T05-33*` 2/2 — 3 valid
+   passes; screens 07-23 for the gateGuard baseline arg) vs raw-arm B rewards vs
+   marker-arm B rewards. Plus vocabulary-contamination grep over B trajs:
+   `grep -ciE "cancel|cleanup|mutant|asyncio" <traj after the then_b marker>` —
+   leading indicator, independent of rewards. Expectations pre-registered in
+   hygiene doc §3 (small/null reward effect; contamination detectable; marker
+   halves it).
+3. **C1 held-out arms** (headless-terminal + sparql k=10 gate-ON, ~2 hr) — WITH
+   `--stop-futile 7/8` (headless) / `--stop-futile 17/20` (sparql) — first live
+   exercise of mid-arm curtailment: verify the futility log line + stoppedFutile
+   record field behave. Baselines on disk (07-23 adopted gate-OFF records).
+   Salvaged partial: headless a2 pass (one healthy gate round) — context only.
+4. **Then:** plugin port (item 4, fully scoped) or the drift fork decision.
+   Queue discipline: close one before opening new.
 
 ## ⏸ SESSION END 2026-07-24 (office box, host POWERED OFF mid-R9) — RESUME HERE
 
