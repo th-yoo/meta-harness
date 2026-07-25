@@ -1,0 +1,10 @@
+{"type":"error","timestamp":1784984455708,"sessionID":"ses_066a31e9fffe52XP0wnssQRE46","error":{"name":"UnknownError","data":{"message":"Claude Code credentials are unavailable or expired. Run `claude` to refresh them."}}}
+
+{"type":"gate_reinject"}
+{"type":"error","timestamp":1784984487759,"sessionID":"ses_066a31e9fffe52XP0wnssQRE46","error":{"name":"UnknownError","data":{"message":"Claude Code credentials are unavailable or expired. Run `claude` to refresh them."}}}
+
+{"type":"then_marker"}
+{"type":"error","timestamp":1784984548866,"sessionID":"ses_066a31e9fffe52XP0wnssQRE46","error":{"name":"UnknownError","data":{"message":"Claude Code credentials are unavailable or expired. Run `claude` to refresh them."}}}
+
+{"type":"then_b"}
+{"type":"error","timestamp":1784984576562,"sessionID":"ses_066a31e9fffe52XP0wnssQRE46","error":{"name":"UnknownError","data":{"message":"Claude Code credentials are unavailable or expired. Run `claude` to refresh them."}}}

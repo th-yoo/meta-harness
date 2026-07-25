@@ -61,6 +61,36 @@ adopted trait is a mechanism. **Standing open: held-out gate transfer
   A2 ADOPT stands on the gate-only comparison; the 0.0031 belongs to the
   stack-vs-bare claim, not to the gate.
 
+## C2 — session-carryover arms (2026-07-25, MacBook) — NULL reward effect, contamination seen, marker arm SHORT
+
+Hygiene measurement (spec: `docs/2026-07-25-gate-session-hygiene.md` §3), NOT an
+adoption-gate verdict — gate.ts run in measurement mode, its REJECT line is
+adoption semantics and does not apply.
+
+- **Arms:** cancel-async (completion gate ON, active config) `--then`
+  count-dataset-tokens, same session. Raw k=10 + marker k=10. No futility
+  stopping (curtailment watches A's reward; C2's variable is B's).
+- **B rewards (verdict variable):** B-alone baseline 3/3 (07-25 gate-ON cdt
+  records, voids stripped) vs raw-B **10/10** (all turnsB=1, zero voids) vs
+  marker-B **5/5 valid**. Fisher null both comparisons (p=1.0). Pre-registered
+  "small-negative or null" **confirmed** — carryover does not damage B rewards
+  at k=10.
+- **Contamination (leading indicator):** vocabulary grep over B segments —
+  raw 1/10 (a10: B read `/app/test.py`, task-A asyncio fixture, via filesystem
+  channel; B still passed), marker 0/5. Detectable ✓; "marker halves it"
+  directionally consistent but **underpowered** (1 event total).
+- **Marker arm SHORT: 5/10 voided by OAuth revocation** mid-arm (a5/a7 B-side,
+  a8–a10 both sides; `OAuth access token has been revoked` 401 then CC
+  credentials-expired). Infra-noise class — standing rule: re-run, don't
+  engineer. Top-up decision open.
+- **A-side flags (NOT verdict variable):** every A fail both arms =
+  completion-gate ACCEPTED + grader failed (false-accept class, healthy
+  rounds, no exhaustion). Raw A 7/10 vs R10's 10/10 same config — day drift
+  or false-accept rate watch-item. Marker-valid A 2/7 — marker text touches
+  A's session, possible A-side perturbation; underpowered, watch only.
+- **Records:** `cancel-async-tasks-2026-07-25T10-17-29-752Z.json` (raw),
+  `…T11-55-25-064Z.json` (marker); synthetic B-extractions job-local only.
+
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
 | R1 | 2026-07-23 | machine bullet (script-verify) on bare | bare 4/10 vs 5/10 | 1.0 | — | REJECT null |
@@ -79,6 +109,7 @@ adopted trait is a mechanism. **Standing open: held-out gate transfer
 | R9F | 2026-07-24 | (forensics, zero trials, MacBook) | office a1–a5 traj read | — | — | **GATE BUG root-caused: docstring mutant unkillable — every attempt exhausted both rounds; 4/5 was nudge-text effect, not mechanism. mutate.ts fixed (codeLineSet)** |
 | R10 | 2026-07-24 | FIXED completion gate (cancel-async k=10, MacBook) | bare 3/10 vs gate 10/10 | **0.0031** | gate-ON guards PENDING | **lift-certified — first perfect arm on this task; adoption blocked on gate-ON guards + held-out** |
 | **A2** | 2026-07-25 | completion gate ADOPTION (gate-ON guards) | (lift from R10) | 0.0031 | cdt 2/2 valid (2 skew-voids rerolled), chess 3/3 all turns=1 | **ADOPT — first MECHANISM-class adoption; gate joins active config; held-out transfer = standing open** |
+| C2 | 2026-07-25 | session-carryover hygiene arms (cancel-async `--then` cdt, MacBook) | B: alone 3/3 vs raw 10/10 vs marker 5/5-valid | 1.0 | — (measurement) | **NULL reward effect (pre-registered ✓); contamination 1/10 raw vs 0/5 marker (underpowered); marker arm 5/10 OAuth-voided — top-up open** |
 
 ---
 
