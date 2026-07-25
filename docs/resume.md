@@ -20,6 +20,19 @@ engine, investment path chosen (stages: gate plugin sensor → review gate + led
 into engine → trial mode on gate outcomes → mechanism-class proposals). The week
 was phase 1 executing, not a detour. C1+C2 arms = the last phase-1 exit criteria.
 
+**ORIGINALITY LEDGER (user-questioned at close, honest record):** borrowed by
+design — AHE method, Stop-hook/MutGen patterns, system-v0's curated sources,
+classical stats, the forked scaffold. Genuinely ours — (1) empirical findings:
+no-universal-interpretation-policy-across-graders (b7 ±), grip-is-content-
+dependent, docstring-mutant probe failure mode, C1/C2 transfer-channel split;
+(2) the integrated verdict discipline (machine adoption + guard-less-forbidden +
+provenance refusal + rejection ledger + review gate + futility linting operating
+TOGETHER — AHE ran no stats); (3) the specific loop: bench-forged seed →
+gate-outcomes-as-daily-grader → daily evolution. Watch-items: proposer outputs
+remain derivative; mechanism DESIGNS are borrowed — their CERTIFICATION is the
+original part. Evolution is copying with selection; our originality lives in the
+selection pressure and the verified record.
+
 **STATE:** active minimal config = system-v0 + seed-v0 + `--complete-gate` (A2,
 first mechanism-class adoption; gate-only increment 5/10→10/10 p=0.0325
 user-corrected from the 3/10→10/10 full-stack headline). Suite 1621 green. Box
