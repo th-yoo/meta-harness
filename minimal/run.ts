@@ -28,6 +28,7 @@ import { basename, join, resolve } from "node:path"
 import { runCompletionGate } from "./complete-gate.ts"
 import { clampParallel, pidAlive } from "./schedule.ts"
 import { clockPreflight } from "./clock.ts"
+import { designCheck, liftFutility } from "./futility.ts"
 import { HYGIENE_MARKER, bInstruction, mergeThen, type ThenResult } from "./session2.ts"
 
 const HERE = import.meta.dir
@@ -236,6 +237,15 @@ options:
   --marker           with --then: inject one hygiene countermand message into
                      the session between A and B ("previous gate closed;
                      evidence obsolete — do not apply")
+  --stop-futile <basePass>/<baseN>
+                     deterministic curtailment (futility.ts, Alling 1963):
+                     give the baseline arm's result (e.g. 3/10) and the run
+                     stops the moment remaining attempts CANNOT change the
+                     lift verdict. Dies at startup if the design is futile
+                     before any spend (the R7 case); mid-run it stops
+                     admitting new attempts (in-flight ones finish and are
+                     recorded). Zero false-stop probability
+  --alpha <f>        significance threshold for --stop-futile (default: 0.05)
   -h, --help         this text
 
 output: minimal/results/<task>-<startedAt>.json (run record with rewards[] +
@@ -263,6 +273,8 @@ let gateRounds = 2
 let gateMutants = 4
 let thenArg: string | undefined
 let markerFlag = false
+let stopFutileArg: string | undefined
+let alpha = 0.05
 function parseFloatFlag(flag: string, raw: string | undefined): number {
   if (raw === undefined) die(`${flag} needs a value`)
   const v = Number(raw)
@@ -284,6 +296,8 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === "--gate-mutants") gateMutants = Number(argv[++i] ?? die("--gate-mutants needs a value")) || die("--gate-mutants not a number")
   else if (a === "--then") thenArg = argv[++i] ?? die("--then needs a task directory")
   else if (a === "--marker") markerFlag = true
+  else if (a === "--stop-futile") stopFutileArg = argv[++i] ?? die("--stop-futile needs <basePass>/<baseN> (e.g. 3/10)")
+  else if (a === "--alpha") alpha = parseFloatFlag("--alpha", argv[++i])
   else if (a === "--driver") {
     const d = argv[++i] ?? die("--driver needs a value")
     if (!(d in DRIVERS)) die(`--driver must be one of: ${Object.keys(DRIVERS).join(", ")}`)
@@ -312,6 +326,20 @@ if (gateArtifact && driverId !== "opencode") die(`--complete-gate is opencode-on
 // continuation mechanism the gate's reinjection uses; claude -p has none.
 if (thenArg && driverId !== "opencode") die(`--then is opencode-only (session continuation)`)
 if (markerFlag && !thenArg) die(`--marker only makes sense with --then`)
+// Deterministic curtailment (futility.ts): parse the baseline and run the
+// design check NOW — an under-powered design must die before any spend
+// (before auth, before the first podman call). The R7 lesson.
+let futilityBase: { basePass: number; baseN: number } | null = null
+if (stopFutileArg) {
+  const m = /^(\d+)\/(\d+)$/.exec(stopFutileArg)
+  if (!m) die(`--stop-futile must be <basePass>/<baseN> (e.g. 3/10), got "${stopFutileArg}"`)
+  const basePass = Number(m[1])
+  const baseN = Number(m[2])
+  if (baseN < 1 || basePass > baseN) die(`--stop-futile: impossible baseline ${basePass}/${baseN}`)
+  futilityBase = { basePass, baseN }
+  const design = designCheck(k, basePass, baseN, alpha)
+  if (design.futile) die(`design check (futility): ${design.reason}`)
+}
 const systemPath = systemArg ? resolve(systemArg) : undefined
 if (systemPath && !existsSync(systemPath)) die(`system prompt file not found: ${systemPath}`)
 const system = systemPath
@@ -765,8 +793,14 @@ function admit(): Promise<void> {
 
 const trials: Trial[] = []
 let nextAttempt = 1
+// Curtailment state: running pass/fail over VALID (non-suspect) completed
+// attempts. Once futileStop is set, workers stop admitting new attempts —
+// in-flight ones finish and are recorded (no kills, no lost data).
+let futileStop: { atAttempt: number; bestCaseP: number; reason: string } | null = null
+let validPass = 0
+let validFail = 0
 async function worker(): Promise<void> {
-  while (nextAttempt <= k) {
+  while (nextAttempt <= k && futileStop === null) {
     const i = nextAttempt++
     await admit()
     try {
@@ -778,6 +812,15 @@ async function worker(): Promise<void> {
         `attempt ${i}/${k}: reward=${t.reward} turns=${t.turns} ${t.elapsedSec}s` +
           `${t.timedOut ? " TIMEOUT" : ""}${t.suspect ? " SUSPECT(0-turn)" : ""}${thenNote} [width ${running}]`,
       )
+      if (futilityBase && !t.suspect) {
+        if (t.reward === 1) validPass++
+        else validFail++
+        const v = liftFutility({ pass: validPass, fail: validFail, k }, futilityBase.basePass, futilityBase.baseN, alpha)
+        if (v.futile && futileStop === null) {
+          futileStop = { atAttempt: i, bestCaseP: v.bestCaseP, reason: v.reason! }
+          console.log(`futility stop after attempt ${i}: ${v.reason} — no new attempts launched`)
+        }
+      }
     } finally {
       running--
     }
@@ -803,8 +846,11 @@ const run = {
   completeGate: gateArtifact ? { artifact: gateArtifact, rounds: gateRounds, mutants: gateMutants } : null,
   thenTask,
   marker: markerFlag,
+  stopFutile: futilityBase,
+  stoppedFutile: futileStop,
   rewards,
-  passRate: rewards.reduce((a, b) => a + b, 0) / k,
+  // Over recorded trials, not k: a futility stop records fewer than k.
+  passRate: rewards.reduce((a, b) => a + b, 0) / Math.max(rewards.length, 1),
   trials,
 }
 writeFileSync(resultFile, JSON.stringify(run, null, 2) + "\n")
