@@ -37,6 +37,15 @@ adopted trait is a mechanism. **Standing open: held-out gate transfer
   designed from. Held-out arms (headless-terminal + build-free fresh pick,
   or staging-gap fix to unlock build-pmars/polyglot-rust-c) = next gate
   experiment before any generalization language.
+- **ATTRIBUTION CORRECTION (user-caught, 2026-07-25):** the headline
+  "3/10 → 10/10, p=0.0031" compares BARE vs the FULL STACK
+  (system+seed+gate) — three components, not the gate alone. Honest
+  decomposition, all same-host MacBook: bare 3/10 → adopted base 5/10
+  (p=0.65, base's held-out contribution here uncertified) → adopted+gate
+  10/10. **Gate's own increment = 5/10 → 10/10, Fisher p=0.0325 — still
+  independently certified at α=0.05** (day skew 07-23 vs 07-24 noted). The
+  A2 ADOPT stands on the gate-only comparison; the 0.0031 belongs to the
+  stack-vs-bare claim, not to the gate.
 
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
