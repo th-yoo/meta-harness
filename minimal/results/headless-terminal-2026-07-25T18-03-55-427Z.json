@@ -1,0 +1,353 @@
+{
+  "task": "headless-terminal",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-mac.local",
+  "startedAt": "2026-07-25T18:03:55.427Z",
+  "k": 10,
+  "parallel": 2,
+  "sampling": null,
+  "system": {
+    "file": "minimal/harness/system-v0.md",
+    "sha256": "3b65fb7d6573fe4b"
+  },
+  "harness": {
+    "file": "minimal/harness/seed-v0.md",
+    "sha256": "e72331a29823cfb4"
+  },
+  "completeGate": {
+    "artifact": "/app/headless_terminal.py",
+    "rounds": 2,
+    "mutants": 4
+  },
+  "thenTask": null,
+  "marker": false,
+  "stopFutile": null,
+  "stoppedFutile": null,
+  "rewards": [
+    0,
+    1,
+    0,
+    1,
+    1,
+    1,
+    0,
+    1,
+    1,
+    1
+  ],
+  "passRate": 0.7,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 0,
+      "turns": 3,
+      "elapsedSec": 1043.21,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Everything is clean. \n\n## Summary\n\n**Root cause of the missed fault:** The injected fault inverted the `pty.fork()` branch (`if pid == 0` → `if not (pid == 0)`), which makes the **parent** process `execvpe(\"bash\", ...)` — i.e., constructing a `HeadlessTerminal` **replaces the caller's process with an interactive bash**. My previous verify.sh had a structural blind spot: it ran assertions inside a ",
+      "trajFile": "headless-terminal-2026-07-25T18-03-55-427Z-a1.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": true,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 3
+          },
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 2
+          },
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 1
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 2,
+      "reward": 1,
+      "turns": 3,
+      "elapsedSec": 1124.98,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Done.\n\n## The injected fault\nThe harness changed line 127 of `send_keystrokes` from `if wait_sec > 0:` to `if wait_sec >= 0:`. The two guards differ at exactly one value — the **default `wait_sec=0.0`**:\n- **Correct** (`> 0`): at `0.0`, skips the wait entirely — returns immediately.\n- **Faulted** (`>= 0`): at `0.0`, calls `time.sleep(0.0)`, which in CPython yields to the OS scheduler (~120µs per c",
+      "trajFile": "headless-terminal-2026-07-25T18-03-55-427Z-a2.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": true,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 3
+          },
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 2
+          },
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 1
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 3,
+      "reward": 0,
+      "turns": 3,
+      "elapsedSec": 1555.01,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "All 21 checks pass and `verify.sh` exits 0.\n\n## Summary\n\nThe reviewer identified that an injected fault inverting the guard in `close()` (`if not (getattr(self, \"_pid\", None) is None): return`) went undetected. That fault turns `close()` into a no-op: when `_pid` is a valid PID, it early-returns without killing the child or closing the fd — leaking the shell process and PTY, and never clearing `_p",
+      "trajFile": "headless-terminal-2026-07-25T18-03-55-427Z-a3.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 2
+          },
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 1
+          },
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 0
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 4,
+      "reward": 1,
+      "turns": 3,
+      "elapsedSec": 1271.15,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Clean. Final report.\n\n## What the harness caught and how I fixed it\n\nThe injected fault at line 70 changed `if not r:` → `if not (not r):` (i.e. `if r:`) inside `_read_available`. This inverts the select-ready test so the reader **breaks out of its loop whenever data IS available**, making `_read_available` return empty every time there is something to read. My previous scenarios all used generous",
+      "trajFile": "headless-terminal-2026-07-25T18-03-55-427Z-a4.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": true,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 3
+          },
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 2
+          },
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 1
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 5,
+      "reward": 1,
+      "turns": 3,
+      "elapsedSec": 3325.53,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Everything is clean. Let me provide the final report.\n\n## Verification — Definition of Done\n\n**The reported problem:** The injected fault `while time.time() < deadline:` → `while time.time() <= deadline:` in `_final_flush` was not detected. \n\n**Root cause I diagnosed:** That comparison was a **floating-point wall-clock deadline** governing the drain loop. `<` vs `<=` differs only when `time.time()",
+      "trajFile": "headless-terminal-2026-07-25T18-03-55-427Z-a5.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": true,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 3,
+            "survived": 1
+          },
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 1
+          },
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 1
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 6,
+      "reward": 1,
+      "turns": 3,
+      "elapsedSec": 4987.18,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Done. Here is the summary of how I addressed the reviewer's finding.\n\n## The injected fault\nLine 108 in `close()`: `if self._fd is not None:` was inverted to `if not (self._fd is not None):`. On a live terminal this makes `close()` **never call `os.close()`** and **never clear `self._fd`** — the PTY master file descriptor **leaks**, one per terminal created and closed.\n\n## Why my previous verify.s",
+      "trajFile": "headless-terminal-2026-07-25T18-03-55-427Z-a6.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": true,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 3
+          },
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 2
+          },
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 1
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 7,
+      "reward": 0,
+      "turns": 0,
+      "elapsedSec": 28.25,
+      "agentExitCode": 1,
+      "timedOut": false,
+      "suspect": true,
+      "resultText": "",
+      "trajFile": "headless-terminal-2026-07-25T18-03-55-427Z-a7.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": true,
+        "rounds": [
+          {
+            "outcome": "no-verify",
+            "tried": 0,
+            "survived": 0
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 8,
+      "reward": 1,
+      "turns": 3,
+      "elapsedSec": 1389.78,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "No stray reader processes remain (only the self-match of the pgrep command itself). Final verify run passes (exit 0). Everything is clean and stable.\n\n## Verification — definition of done\n\n**The specific injected fault reported (`>=` → `>` at line 103 in `_drain`) is now DETECTED.** Evidence: with the fault injected, verify.sh exits 1 with `[FAIL] drain-loop exits at deadline boundary (now == dead",
+      "trajFile": "headless-terminal-2026-07-25T18-03-55-427Z-a8.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 2
+          },
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 1
+          },
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 0
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 9,
+      "reward": 1,
+      "turns": 2,
+      "elapsedSec": 2736.99,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "All 17 checks pass. Now let me confirm these new capacity checks have **teeth** — they must FAIL on wrong behavior. Let me test against broken variants:\n1. `_drain` reads only a single chunk (loses large output).\n2. `send_keystrokes` writes only first chunk (drops oversized input tail).\n3. `_output` overwrites instead of accumulates.",
+      "trajFile": "headless-terminal-2026-07-25T18-03-55-427Z-a9.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": true,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 3
+          },
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 3
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 10,
+      "reward": 1,
+      "turns": 2,
+      "elapsedSec": 2360.75,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "The Phase-1 sweep fault is caught by the zero-wait boundary check. \n\nNow let me summarize the fault-detection status honestly:\n\n**CAUGHT (behaviorally observable faults):** branch-swap, no-winsize, drop-input, strip-ctrl, non-interactive, drop-newline, no-feed(phase2), no-feed(available-sweep), skip-phase-1-drain, no-budget-reset(deadline-extension).\n\n**MISSED (provably behaviorally inert mutation",
+      "trajFile": "headless-terminal-2026-07-25T18-03-55-427Z-a10.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": true,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 2
+          },
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 1
+          }
+        ]
+      }
+    }
+  ]
+}

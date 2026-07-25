@@ -91,6 +91,43 @@ adoption semantics and does not apply.
 - **Records:** `cancel-async-tasks-2026-07-25T10-17-29-752Z.json` (raw),
   `…T11-55-25-064Z.json` (marker); synthetic B-extractions job-local only.
 
+## C1 — held-out completion-gate transfer arms (2026-07-25/26, MacBook) — HOLDS on rewards; grip SPLITS by artifact
+
+Transfer measurement (A2's standing open), NOT an adoption verdict. Gate-ON
+k=10 on two tasks the completion gate was never designed from, vs adopted-base
+gate-OFF baselines. `--stop-futile 7/8` / `17/20` as playbook-prescribed was
+REFUSED pre-spend by futility designCheck (even 10/10 can't certify lift vs
+those baselines at k=10 — p=0.44/0.53): the pre-arm layer's first live
+exercise caught an incoherent design, zero tokens spent. C1 is non-regression,
+not lift — arms rerun without the flag. Mid-arm curtailment layer still
+unexercised (needs a future lift-certifiable arm).
+
+- **headless-terminal (CERTIFIED, same-host):** gate-ON 7/9 valid vs gate-OFF
+  7/8 (07-23 T16-06), Fisher p=1.0 null — **non-regression holds.** But
+  forensics: **7/9 valid trials EXHAUSTED the gate** (every round
+  mutant-survived, never accepted; only a3/a8 accepted). Mutation probe does
+  not grip `/app/headless_terminal.py` — grip-is-content-dependent, R9F-
+  adjacent. Rewards unharmed (exhaustion doesn't block scoring) but **time
+  tax severe: 1000–5000s/attempt vs baseline 110–180s.** Void: a7 0-turn
+  (`Unexpected server error` after gate_reinject).
+- **sparql-university (DIRECTIONAL ONLY, provenance-refused):** gate-ON 8/9
+  valid (a2 0-turn infra void; a4 real fail = gate-accepted-grader-failed,
+  same false-accept class as C2). Gate shape HEALTHY here: every valid trial
+  = one mutant-survived fix round then accepted, zero exhaustion — probe
+  grips `/app/solution.sparql`. But ALL adopted gate-OFF sparql baselines are
+  office-box (`yoo-dev`); gate.ts provenance check refused cross-host
+  certification (loop-2 same-host rule). Office 07-23 pooled 17/20 / 07-24
+  19/20 — directionally consistent, uncertified. MacBook gate-OFF baseline
+  arm = the missing piece.
+- **Transfer picture:** the completion gate transfers as a no-harm mechanism
+  (rewards hold both tasks) but its VALUE channel splits by artifact class:
+  healthy verify-fix cycles on sparql, pure exhaustion tax on headless
+  python-class artifact. Generalization language stays forbidden; next
+  mechanism work should target probe grip (mutate.ts operators) before any
+  claim.
+- **Records:** `headless-terminal-2026-07-25T18-03-55-427Z.json`,
+  `sparql-university-2026-07-25T20-54-25-477Z.json`.
+
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
 | R1 | 2026-07-23 | machine bullet (script-verify) on bare | bare 4/10 vs 5/10 | 1.0 | — | REJECT null |
@@ -110,6 +147,7 @@ adoption semantics and does not apply.
 | R10 | 2026-07-24 | FIXED completion gate (cancel-async k=10, MacBook) | bare 3/10 vs gate 10/10 | **0.0031** | gate-ON guards PENDING | **lift-certified — first perfect arm on this task; adoption blocked on gate-ON guards + held-out** |
 | **A2** | 2026-07-25 | completion gate ADOPTION (gate-ON guards) | (lift from R10) | 0.0031 | cdt 2/2 valid (2 skew-voids rerolled), chess 3/3 all turns=1 | **ADOPT — first MECHANISM-class adoption; gate joins active config; held-out transfer = standing open** |
 | C2 | 2026-07-25 | session-carryover hygiene arms (cancel-async `--then` cdt, MacBook) | B: alone 3/3 vs raw 10/10 vs marker 5/5-valid | 1.0 | — (measurement) | **NULL reward effect (pre-registered ✓); contamination 1/10 raw vs 0/5 marker (underpowered); marker arm 5/10 OAuth-voided — top-up open** |
+| C1 | 2026-07-25/26 | held-out completion-gate transfer (headless + sparql gate-ON k=10, MacBook) | headless 7/9 vs 7/8 OFF; sparql 8/9 vs office 17/20 | 1.0 / — | — (measurement) | **headless HOLDS certified but 7/9 gate-EXHAUSTED (no grip, 6–30x time tax); sparql healthy gate shape, provenance-refused (no same-host baseline) — MacBook gate-OFF arm missing; designCheck killed --stop-futile pre-spend (correct)** |
 
 ---
 

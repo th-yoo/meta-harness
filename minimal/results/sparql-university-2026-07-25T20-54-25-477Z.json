@@ -1,0 +1,318 @@
+{
+  "task": "sparql-university",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-mac.local",
+  "startedAt": "2026-07-25T20:54:25.477Z",
+  "k": 10,
+  "parallel": 2,
+  "sampling": null,
+  "system": {
+    "file": "minimal/harness/system-v0.md",
+    "sha256": "3b65fb7d6573fe4b"
+  },
+  "harness": {
+    "file": "minimal/harness/seed-v0.md",
+    "sha256": "e72331a29823cfb4"
+  },
+  "completeGate": {
+    "artifact": "/app/solution.sparql",
+    "rounds": 2,
+    "mutants": 4
+  },
+  "thenTask": null,
+  "marker": false,
+  "stopFutile": null,
+  "stoppedFutile": null,
+  "rewards": [
+    1,
+    0,
+    1,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+  ],
+  "passRate": 0.8,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 1,
+      "turns": 2,
+      "elapsedSec": 467.31,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Cleaned up. Final verification summary.\n\n## Verification — definition of done\n\n**The injected fault (`< 2025-08-16` → `<= 2025-08-16`)** is now detected. Root cause of the earlier miss: the real dataset has no student graduating exactly on the reference date, so `<` and `<=` yield identical results on it. The boundary was uncovered.\n\n**Fix:** I strengthened `/app/verify.sh` to run the *real* query",
+      "trajFile": "sparql-university-2026-07-25T20-54-25-477Z-a1.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 2
+          },
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 0
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 2,
+      "reward": 0,
+      "turns": 0,
+      "elapsedSec": 3.17,
+      "agentExitCode": 1,
+      "timedOut": false,
+      "suspect": true,
+      "resultText": "",
+      "trajFile": "sparql-university-2026-07-25T20-54-25-477Z-a2.traj.ndjson",
+      "agentStderr": "\u001b[91m\u001b[1mError: \u001b[0mUnexpected error\n\ndatabase is locked",
+      "gate": {
+        "accepted": true,
+        "exhausted": true,
+        "rounds": [
+          {
+            "outcome": "no-verify",
+            "tried": 0,
+            "survived": 0
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 3,
+      "reward": 1,
+      "turns": 2,
+      "elapsedSec": 1014.07,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Confirmed. The exact injected fault from the feedback (line 40: `>` → `>=`) is now **detected** (exit 1), and the real clean artifact **passes** (exit 0, no `>=` present).\n\n## Summary\n\n**Root cause of the miss:** My original graduation-date probes (4c/4d) placed the ref-date-graduation student in scenarios of 8 or 12 current students — never at the count-threshold boundary. Since the `>` vs `>=` g",
+      "trajFile": "sparql-university-2026-07-25T20-54-25-477Z-a3.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 1
+          },
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 0
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 4,
+      "reward": 0,
+      "turns": 2,
+      "elapsedSec": 368.06,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Fixed. Here's what was wrong and how I addressed it.\n\n## Root cause\nMy original `verify.sh` only ran the query against the **base graph**, where every enrollment date is in 2024 — nothing sat exactly on the reference date `2025-08-16`. So `<=` vs `<` (and `>` vs `>=`) produced identical results on that data, and the injected `<=`→`<` fault was invisible.\n\n## Fix\nI added boundary-augmentation stage",
+      "trajFile": "sparql-university-2026-07-25T20-54-25-477Z-a4.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 2
+          },
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 0
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 5,
+      "reward": 1,
+      "turns": 2,
+      "elapsedSec": 411.56,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "All faults detected, clean artifact passes.\n\n## Summary\n\nThe reported gap was that my verification under-covered the **inclusive date boundary** of \"currently enrolled.\" The query correctly uses `enrollmentDate <= 2025-08-16` and `graduationDate >= 2025-08-16` (both inclusive of the reference date), but no scenario forced qualification to hinge on a student sitting *exactly on* those boundaries — ",
+      "trajFile": "sparql-university-2026-07-25T20-54-25-477Z-a5.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 2
+          },
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 0
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 6,
+      "reward": 1,
+      "turns": 2,
+      "elapsedSec": 414.7,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Done. Here's the summary of what I fixed.\n\n## Root cause\nThe injected fault changed the reference-date cutoff from `?grad > \"2025-08-16\"` to `?grad >= \"2025-08-16\"`. Semantically, a student graduating *exactly on* the reference date has graduated and is **not** currently enrolled, so `>` is correct. My original verify.sh only checked output against the fixed dataset — which has no student graduati",
+      "trajFile": "sparql-university-2026-07-25T20-54-25-477Z-a6.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 2
+          },
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 0
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 7,
+      "reward": 1,
+      "turns": 2,
+      "elapsedSec": 389.73,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Fixed. The gap was that my verification never exercised the **exact reference-date boundary** for the enrollment (`<=`) and graduation (`>`) filters — the shipped dataset has no dates equal to 2025-08-16, so `<` and `<=` produced identical results and the fault slipped through.\n\n**What I added to `/app/verify.sh`** — boundary-combination probes that build an isolated EU department sitting exactly ",
+      "trajFile": "sparql-university-2026-07-25T20-54-25-477Z-a7.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 2
+          },
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 0
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 8,
+      "reward": 1,
+      "turns": 2,
+      "elapsedSec": 397.85,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "All faults detected; real solution passes with exit 0.\n\n## Summary\n\n**Root cause of the miss:** The static instance data never places a student's enrollment (or graduation) date exactly on the reference date `2025-08-16`, so the `<=` vs `<` boundary was output-equivalent on that data — my original ground-truth comparison couldn't distinguish them.\n\n**Fix:** I strengthened `/app/verify.sh` with 7 s",
+      "trajFile": "sparql-university-2026-07-25T20-54-25-477Z-a8.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 2
+          },
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 0
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 9,
+      "reward": 1,
+      "turns": 2,
+      "elapsedSec": 353.35,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "## Summary\n\n**Root cause of the miss:** My original `verify.sh` only checked the query's output against the fixed `university_graph.ttl`. The injected fault (`?grad > \"2025-08-16\"` → `?grad >= \"2025-08-16\"`) is *latent* on that dataset because no student has a graduation date exactly equal to the reference date — so the correct answer set is unchanged, and an output-only check can't see the fault.",
+      "trajFile": "sparql-university-2026-07-25T20-54-25-477Z-a9.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 2
+          },
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 0
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 10,
+      "reward": 1,
+      "turns": 2,
+      "elapsedSec": 340.3,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Fixed and verified.\n\n## What was wrong\nThe injected fault flipped the enrollment-date comparison `<=` → `<`. My original verify.sh relied on comparing the shipped query's output against a ground-truth computed from the base dataset — but that dataset contains **no student enrolled exactly on 2025-08-16**, so the mutation was behaviorally invisible and slipped through.\n\n## The fix\nI added a **bound",
+      "trajFile": "sparql-university-2026-07-25T20-54-25-477Z-a10.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "mutant-survived",
+            "tried": 4,
+            "survived": 2
+          },
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 0
+          }
+        ]
+      }
+    }
+  ]
+}
