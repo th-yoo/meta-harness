@@ -3,10 +3,22 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-25 FINAL (MacBook desk, HEAD `2859452`) — A2 ADOPTED · C2 READY · FUTILITY + GLOSSARY SHIPPED — HOME SESSION STARTS HERE
+## ⏸ SESSION END 2026-07-25 FINAL (MacBook desk, HEAD `672360d`) — A2 ADOPTED · C2 READY · STRATEGY SETTLED — HOME SESSION STARTS HERE
 
-**READ ORDER AT HOME:** this block → `minimal/HISTORY.md` (three-gate glossary now at
-top; rows through A2) → `docs/2026-07-25-gate-session-hygiene.md` §3 (C2 protocol).
+**READ ORDER AT HOME:** this block → `minimal/HISTORY.md` (three-gate glossary at
+top; rows through A2) → `docs/2026-07-25-gate-session-hygiene.md` §3 (C2 protocol)
+→ `docs/2026-07-25-daily-evolution-loop.md` (the phase-2 plan, read once).
+
+**MISSION FRAME RE-ANCHORED (user, end of session):** the original two-phase idea
+is the map — **Phase 1: forge the SEED system prompt on the benchmark (provable
+graders) = DONE-pending-transfer** (seed-v0 + system-v0 certified 30%→85%, plus a
+certified mechanism — the completion gate — and the verdict machinery as durable
+byproduct). **Phase 2: daily usage evolves the harness from that seed** — design
+now written (`2026-07-25-daily-evolution-loop.md`): gate outcomes = the objective
+daily grader that the first (pre-reboot) phase-2 attempt lacked; proposer = core
+engine, investment path chosen (stages: gate plugin sensor → review gate + ledger
+into engine → trial mode on gate outcomes → mechanism-class proposals). The week
+was phase 1 executing, not a detour. C1+C2 arms = the last phase-1 exit criteria.
 
 **STATE:** active minimal config = system-v0 + seed-v0 + `--complete-gate` (A2,
 first mechanism-class adoption; gate-only increment 5/10→10/10 p=0.0325
