@@ -35,9 +35,8 @@ host-local, ignorable) + stray `.agents/`/`.roo/` (not ours, untouched). No
 tmux (squad gateway only), no containers. Everything pushed.
 
 **⏭ OFFICE PLAYBOOK (in order):**
-1. `git pull` then `cd gate-plugin && bun install` (node_modules not committed;
-   needed before typecheck/tests there). Verify: `bun test` in gate-plugin (26)
-   and opencode-plugin (1640 pass/1 skip).
+1. ~~git pull + installs + suite verify~~ **DONE 2026-07-27 office (`yoo-dev`):
+   gate-plugin 26/26, opencode-plugin 1641 ran 0 fail. Pull through `7d37a3a`.**
 2. **Live smoke-test of the gate plugin** (the one unverified assumption:
    chat.message echo timing vs client.session.prompt resolution — test-faked
    only). Drop a `gate.json` ({"check": "<cheap real check>"}) into a scratch
