@@ -110,15 +110,18 @@ unexercised (needs a future lift-certifiable arm).
   adjacent. Rewards unharmed (exhaustion doesn't block scoring) but **time
   tax severe: 1000–5000s/attempt vs baseline 110–180s.** Void: a7 0-turn
   (`Unexpected server error` after gate_reinject).
-- **sparql-university (DIRECTIONAL ONLY, provenance-refused):** gate-ON 8/9
-  valid (a2 0-turn infra void; a4 real fail = gate-accepted-grader-failed,
-  same false-accept class as C2). Gate shape HEALTHY here: every valid trial
-  = one mutant-survived fix round then accepted, zero exhaustion — probe
-  grips `/app/solution.sparql`. But ALL adopted gate-OFF sparql baselines are
-  office-box (`yoo-dev`); gate.ts provenance check refused cross-host
-  certification (loop-2 same-host rule). Office 07-23 pooled 17/20 / 07-24
-  19/20 — directionally consistent, uncertified. MacBook gate-OFF baseline
-  arm = the missing piece.
+- **sparql-university (CERTIFIED, same-host after baseline top-up):** first
+  attempt at certification was provenance-REFUSED by gate.ts — all adopted
+  gate-OFF sparql baselines were office-box (`yoo-dev`), cand MacBook
+  (loop-2 same-host rule, machine-enforced). Fresh MacBook gate-OFF baseline
+  run 07-26: **10/10, all turns=1, 117–286s**
+  (`sparql-university-2026-07-25T23-55-14-698Z.json`). Same-host verdict:
+  gate-ON **8/9 valid vs 10/10, Fisher p=0.47 null — non-regression holds.**
+  Gate shape HEALTHY: every valid trial = one mutant-survived fix round then
+  accepted, zero exhaustion — probe grips `/app/solution.sparql`. Honest
+  direction note: gate-ON lost one real trial (a4, gate-accepted-grader-
+  failed = same false-accept class as C2) + ~2x time tax (340–1014s vs
+  117–286s); a2 = 0-turn infra void.
 - **Transfer picture:** the completion gate transfers as a no-harm mechanism
   (rewards hold both tasks) but its VALUE channel splits by artifact class:
   healthy verify-fix cycles on sparql, pure exhaustion tax on headless
@@ -147,7 +150,7 @@ unexercised (needs a future lift-certifiable arm).
 | R10 | 2026-07-24 | FIXED completion gate (cancel-async k=10, MacBook) | bare 3/10 vs gate 10/10 | **0.0031** | gate-ON guards PENDING | **lift-certified — first perfect arm on this task; adoption blocked on gate-ON guards + held-out** |
 | **A2** | 2026-07-25 | completion gate ADOPTION (gate-ON guards) | (lift from R10) | 0.0031 | cdt 2/2 valid (2 skew-voids rerolled), chess 3/3 all turns=1 | **ADOPT — first MECHANISM-class adoption; gate joins active config; held-out transfer = standing open** |
 | C2 | 2026-07-25 | session-carryover hygiene arms (cancel-async `--then` cdt, MacBook) | B: alone 3/3 vs raw 10/10 vs marker 5/5-valid | 1.0 | — (measurement) | **NULL reward effect (pre-registered ✓); contamination 1/10 raw vs 0/5 marker (underpowered); marker arm 5/10 OAuth-voided — top-up open** |
-| C1 | 2026-07-25/26 | held-out completion-gate transfer (headless + sparql gate-ON k=10, MacBook) | headless 7/9 vs 7/8 OFF; sparql 8/9 vs office 17/20 | 1.0 / — | — (measurement) | **headless HOLDS certified but 7/9 gate-EXHAUSTED (no grip, 6–30x time tax); sparql healthy gate shape, provenance-refused (no same-host baseline) — MacBook gate-OFF arm missing; designCheck killed --stop-futile pre-spend (correct)** |
+| C1 | 2026-07-25/26 | held-out completion-gate transfer (headless + sparql gate-ON k=10, MacBook) | headless 7/9 vs 7/8 OFF; sparql 8/9 vs 10/10 OFF (same-host baseline rerun) | 1.0 / 0.47 | — (measurement) | **BOTH HOLD certified (null): headless 7/9 gate-EXHAUSTED (no grip, 6–30x time tax); sparql healthy gate shape, ~2x tax, 1 false-accept fail; designCheck killed --stop-futile pre-spend (correct); provenance refusal forced same-host baseline** |
 
 ---
 

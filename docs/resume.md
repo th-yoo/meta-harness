@@ -3,6 +3,30 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ UPDATE 2026-07-26 (MacBook home, bg session) — C2 + C1 EXECUTED, PHASE-1 EXIT CRITERIA MET
+
+Playbook steps 1–3 below DONE (verdicts sealed in `minimal/HISTORY.md` C2 + C1
+sections, commits `62f3602` + `ca1462f` + this one):
+- **C2:** NULL reward effect (B-alone 3/3 vs raw-B 10/10 vs marker-B 5/5-valid,
+  p=1.0, pre-registered ✓); contamination 1 event (raw a10 B read A's
+  `/app/test.py`, filesystem channel, B still passed) vs marker 0/5 —
+  underpowered; **marker arm 5/10 OAuth-voided — top-up k=5 OPEN (user deferred)**.
+- **C1:** BOTH held-out tasks certified non-regression HOLDS. headless 7/9 vs
+  7/8 (p=1.0) but **gate exhausted 7/9 valid trials** — probe no-grip on python
+  artifact, 6–30x time tax. sparql 8/9 vs fresh same-host gate-OFF baseline
+  10/10 (p=0.47), healthy gate shape, ~2x tax. gate.ts provenance check
+  refused the office-box baselines (correct) — MacBook baseline rerun closed it.
+- **Futility wiring first live exercise = pre-arm designCheck REFUSED playbook's
+  --stop-futile** (even 10/10 can't certify vs 7/8 or 17/20 at k=10) — C1 ran
+  without it; **mid-arm curtailment layer still unexercised**.
+- **False-accept watch-item:** every real A-side fail across C2+C1 = completion
+  gate ACCEPTED, grader failed. Next mechanism target: probe grip (mutate.ts
+  operators).
+
+**NEXT (queue discipline):** marker top-up k=5 (optional, honest-completeness) ·
+minimal gate plugin port (`2026-07-25-daily-evolution-loop.md` §4.1) or drift
+fork (§4.2-4.4) — user decision open.
+
 ## ⏸ SESSION END 2026-07-25 FINAL (MacBook desk) — PROJECT NAMED **kkamak** · A2 ADOPTED · C2 READY — HOME SESSION STARTS HERE
 
 **NAMED (sealed at close): the project is `kkamak` (까막)** — Aesop's
