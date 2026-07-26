@@ -10,7 +10,7 @@ sections, commits `62f3602` + `ca1462f` + this one):
 - **C2:** NULL reward effect (B-alone 3/3 vs raw-B 10/10 vs marker-B 5/5-valid,
   p=1.0, pre-registered ✓); contamination 1 event (raw a10 B read A's
   `/app/test.py`, filesystem channel, B still passed) vs marker 0/5 —
-  underpowered; **marker arm 5/10 OAuth-voided — top-up k=5 OPEN (user deferred)**.
+  underpowered; **marker arm closed by 07-26 top-up: B pooled 10/10 null confirmed; marker A-side 4/12 vs 7/10 p=0.198 — port ships marker default OFF**.
 - **C1:** BOTH held-out tasks certified non-regression HOLDS. headless 7/9 vs
   7/8 (p=1.0) but **gate exhausted 7/9 valid trials** — probe no-grip on python
   artifact, 6–30x time tax. sparql 8/9 vs fresh same-host gate-OFF baseline

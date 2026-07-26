@@ -82,7 +82,21 @@ adoption semantics and does not apply.
 - **Marker arm SHORT: 5/10 voided by OAuth revocation** mid-arm (a5/a7 B-side,
   a8–a10 both sides; `OAuth access token has been revoked` 401 then CC
   credentials-expired). Infra-noise class — standing rule: re-run, don't
-  engineer. Top-up decision open.
+  engineer. **TOP-UP RUN 07-26 (k=5, zero voids,
+  `cancel-async-tasks-2026-07-26T00-49-22-598Z.json`): B 5/5 pass —
+  marker-B pooled 10/10 valid, pre-registered k=10 reached, reward-null
+  CONFIRMED. Vocab grep top-up: one hit = FALSE POSITIVE (`import asyncio`
+  in a HuggingFace datasets stack trace, B's own tooling) — contamination
+  stays raw 1/10 vs marker 0/10 valid.**
+- **MARKER A-SIDE GUARD CHECK (the top-up's real question — plugin port
+  ships marker default ON per hygiene doc §4):** pooled marker A 4/12 valid
+  vs raw A 7/10, gate.ts Fisher **p=0.198 → null, not certified harmful —
+  but direction depressed (33% vs 70%) and stayed depressed through the
+  top-up (2/5).** All marker A fails = gate-accepted-grader-failed
+  (false-accept class). By guard-less-forbidden discipline the port should
+  ship **marker default OFF (opt-in via gate.json)** until daily sensor
+  data certifies it harmless to the host task; hygiene benefit is anyway
+  unmeasurable at bench scale (1 contamination event).
 - **A-side flags (NOT verdict variable):** every A fail both arms =
   completion-gate ACCEPTED + grader failed (false-accept class, healthy
   rounds, no exhaustion). Raw A 7/10 vs R10's 10/10 same config — day drift
@@ -149,7 +163,7 @@ unexercised (needs a future lift-certifiable arm).
 | R9F | 2026-07-24 | (forensics, zero trials, MacBook) | office a1–a5 traj read | — | — | **GATE BUG root-caused: docstring mutant unkillable — every attempt exhausted both rounds; 4/5 was nudge-text effect, not mechanism. mutate.ts fixed (codeLineSet)** |
 | R10 | 2026-07-24 | FIXED completion gate (cancel-async k=10, MacBook) | bare 3/10 vs gate 10/10 | **0.0031** | gate-ON guards PENDING | **lift-certified — first perfect arm on this task; adoption blocked on gate-ON guards + held-out** |
 | **A2** | 2026-07-25 | completion gate ADOPTION (gate-ON guards) | (lift from R10) | 0.0031 | cdt 2/2 valid (2 skew-voids rerolled), chess 3/3 all turns=1 | **ADOPT — first MECHANISM-class adoption; gate joins active config; held-out transfer = standing open** |
-| C2 | 2026-07-25 | session-carryover hygiene arms (cancel-async `--then` cdt, MacBook) | B: alone 3/3 vs raw 10/10 vs marker 5/5-valid | 1.0 | — (measurement) | **NULL reward effect (pre-registered ✓); contamination 1/10 raw vs 0/5 marker (underpowered); marker arm 5/10 OAuth-voided — top-up open** |
+| C2 | 2026-07-25 | session-carryover hygiene arms (cancel-async `--then` cdt, MacBook) | B: alone 3/3 vs raw 10/10 vs marker 5/5-valid | 1.0 | — (measurement) | **NULL reward effect (pre-registered ✓); contamination 1/10 raw vs 0/10 marker-valid (top-up 07-26 closed the arm); marker A-side depressed 4/12 vs 7/10 p=0.198 null — port recommendation: marker default OFF** |
 | C1 | 2026-07-25/26 | held-out completion-gate transfer (headless + sparql gate-ON k=10, MacBook) | headless 7/9 vs 7/8 OFF; sparql 8/9 vs 10/10 OFF (same-host baseline rerun) | 1.0 / 0.47 | — (measurement) | **BOTH HOLD certified (null): headless 7/9 gate-EXHAUSTED (no grip, 6–30x time tax); sparql healthy gate shape, ~2x tax, 1 false-accept fail; designCheck killed --stop-futile pre-spend (correct); provenance refusal forced same-host baseline** |
 
 ---
