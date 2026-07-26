@@ -937,6 +937,25 @@ ${blocks.join("\n\n")}
 `
   })()
 
+  // Feed the PERMANENT review-gate rejected ledger (R4/R6 port, RG3's
+  // applyProposeArtifact wiring appends here on review-fail — see
+  // harness-store.ts readRejectedLedger/rejected.json). Distinct from
+  // rejectedSection above: that section surfaces ab-verdict rejections
+  // (candidates that spent a trial and lost); this one surfaces bullets the
+  // review gate rejected BEFORE any trial ever ran. Both are permanent
+  // do-not-re-derive input, so this section is emitted immediately adjacent
+  // to rejectedSection, still before "## Your task — DIAGNOSE".
+  const ledgerSection = (() => {
+    const ledger = readRejectedLedger(layer.root)
+    if (ledger.length === 0) return ""
+    const lines = ledger.map((e) => `- [${e.rejectedAt} ${e.version}] ${e.bullet}\n  violations: ${e.violations.join("; ")}`)
+    return `## Bullets the review gate REJECTED before any experiment — do NOT re-derive or rephrase
+
+${lines.join("\n")}
+
+`
+  })()
+
   const relSystem = path.relative(worktree, stagingSystem)
   const relTools  = path.relative(worktree, stagingTools)
   const relDiag   = path.relative(worktree, stagingDiagnosis)
@@ -1056,7 +1075,7 @@ ${untrustedSection}${externalEvidenceSection}${storeAccessSection}
 
 ${failingSection}
 
-${timedOutSection}${slowPassSection}${priorSection}${rejectedSection}## Your task — DIAGNOSE, then edit
+${timedOutSection}${slowPassSection}${priorSection}${rejectedSection}${ledgerSection}## Your task — DIAGNOSE, then edit
 
 STEP 1 — Diagnose the failures. For each failing trajectory above (up to 3), find the FIRST unrecoverable step and the root cause. Classify each with exactly ONE taxonomy label from:
 ${FAILURE_TAXONOMY.map((t) => `  - ${t}`).join("\n")}
