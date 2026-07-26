@@ -51,6 +51,7 @@ function fakeDeps(overrides: Partial<GateDeps> = {}): GateDeps & { state: FakeSt
       state.sensor.push(line)
     },
     now: () => 1000,
+    isExcludedSession: async () => false,
     ...overrides,
   }
   return deps
@@ -200,9 +201,17 @@ test("re-entrancy: concurrent sessionIdle calls for a gating session run check o
   const pending = new Promise<{ code: number; out: string }>((res) => {
     resolveCheck = res
   })
+  // Signaled once runCheck is actually reached — sessionIdle now awaits
+  // deps.isExcludedSession() (Fix I1) before getting there, which costs a few
+  // extra microtask ticks beyond the synchronous `gating.add` claim, so the
+  // test must wait for this rather than assume runCheck ran by the time `p2`
+  // (issued immediately after `p1`, while p1 is still in-flight) settles.
+  let resolveEntered: () => void
+  const entered = new Promise<void>((res) => { resolveEntered = res })
   const deps = fakeDeps({
     runCheck: async (cmd: string) => {
       deps.state.checks.push(cmd)
+      resolveEntered()
       return pending
     },
   })
@@ -210,8 +219,9 @@ test("re-entrancy: concurrent sessionIdle calls for a gating session run check o
   hooks.toolExecuteAfter("edit", "s1")
 
   const p1 = hooks.sessionIdle("s1")
-  const p2 = hooks.sessionIdle("s1") // should return immediately, no-op
+  const p2 = hooks.sessionIdle("s1") // should return immediately, no-op — gating already claimed synchronously by p1
   await p2
+  await entered
   expect(deps.state.checks.length).toBe(1)
   resolveCheck!({ code: 0, out: "ok" })
   await p1
@@ -330,4 +340,147 @@ test("runCheck receives cfg.check verbatim", async () => {
   hooks.toolExecuteAfter("edit", "s1")
   await hooks.sessionIdle("s1")
   expect(deps.state.checks).toEqual(["make verify --strict"])
+})
+
+// ---------------------------------------------------------------------------
+// Fix C1: self-inject guard — promptSession (client.session.prompt) causes
+// opencode to fire chat.message for the prompt WE just sent. All four tests
+// below give fakeDeps a promptSession override that synchronously calls
+// hooks.chatMessage(sid), mirroring test 11a's echo pattern for
+// toolExecuteAfter (the reinjected agent's mid-gate edit).
+// ---------------------------------------------------------------------------
+
+// 13a. fail-then-pass with the self-echo active: must NOT read as an interrupt.
+test("self-inject guard: fail-then-pass gate with promptSession echoing chat.message → interrupted:false, 2 rounds", async () => {
+  let hooks: ReturnType<typeof makeGateHooks>
+  let call = 0
+  const deps = fakeDeps({
+    runCheck: async (cmd: string) => {
+      deps.state.checks.push(cmd)
+      call++
+      return call === 1 ? { code: 1, out: "boom" } : { code: 0, out: "ok" }
+    },
+    promptSession: async (sid: string, text: string) => {
+      deps.state.prompts.push({ sid, text })
+      hooks.chatMessage(sid) // simulate opencode firing chat.message for our own injected prompt
+      return true
+    },
+  })
+  hooks = makeGateHooks(deps)
+  hooks.toolExecuteAfter("edit", "s1")
+  await hooks.sessionIdle("s1")
+
+  expect(deps.state.checks.length).toBe(2)
+  expect(deps.state.prompts.length).toBe(1)
+  const rec = JSON.parse(deps.state.sensor[0]!)
+  expect(rec.accepted).toBe(true)
+  expect(rec.gateExhausted).toBe(false)
+  expect(rec.interrupted).toBe(false)
+  expect(rec.rounds.length).toBe(2)
+})
+
+// 13b. rounds:2, always fails, self-echo active on every reinject: BOTH
+// reinjects must still be attempted (the echo must never trip `interrupted`
+// and refuse the second reinject) — the exact regression this fix closes.
+test("self-inject guard: rounds:2 always-fail gate with echo → both reinjects attempted, gateExhausted:true", async () => {
+  let hooks: ReturnType<typeof makeGateHooks>
+  const deps = fakeDeps({
+    readGateConfig: () => '{"check":"bun test","rounds":2}',
+    runCheck: async (cmd: string) => {
+      deps.state.checks.push(cmd)
+      return { code: 1, out: "still broken" }
+    },
+    promptSession: async (sid: string, text: string) => {
+      deps.state.prompts.push({ sid, text })
+      hooks.chatMessage(sid)
+      return true
+    },
+  })
+  hooks = makeGateHooks(deps)
+  hooks.toolExecuteAfter("edit", "s1")
+  await hooks.sessionIdle("s1")
+
+  expect(deps.state.prompts.length).toBe(2) // both reinjects attempted, no marker prompt
+  const rec = JSON.parse(deps.state.sensor[0]!)
+  expect(rec.gateExhausted).toBe(true)
+  expect(rec.interrupted).toBe(false)
+})
+
+// 13c. a REAL human chatMessage — one NOT preceded by our own promptSession
+// call — must still be treated as an interrupt and refuse the NEXT reinject,
+// even while the self-echo guard is active and consuming our own echoes
+// elsewhere in the same gate run.
+test("self-inject guard: a real human chatMessage between echoed self-prompts still interrupts and refuses the next reinject", async () => {
+  let hooks: ReturnType<typeof makeGateHooks>
+  let call = 0
+  const deps = fakeDeps({
+    readGateConfig: () => '{"check":"bun test","rounds":2}',
+    runCheck: async (cmd: string) => {
+      deps.state.checks.push(cmd)
+      call++
+      if (call === 2) {
+        // a real human types mid-gate, after round 1's reinject echo already consumed
+        hooks.chatMessage("s1")
+      }
+      return { code: 1, out: "still failing" }
+    },
+    promptSession: async (sid: string, text: string) => {
+      deps.state.prompts.push({ sid, text })
+      hooks.chatMessage(sid) // self-echo from our own injected prompt
+      return true
+    },
+  })
+  hooks = makeGateHooks(deps)
+  hooks.toolExecuteAfter("edit", "s1")
+  await hooks.sessionIdle("s1")
+
+  // round 1: check fails, reinject sent (echoed + consumed, no interrupt)
+  // round 2: check fails, then a REAL human chatMessage fires → interrupted=true → 2nd reinject refused
+  expect(deps.state.checks.length).toBe(2)
+  expect(deps.state.prompts.length).toBe(1)
+  const rec = JSON.parse(deps.state.sensor[0]!)
+  expect(rec.interrupted).toBe(true)
+  expect(rec.gateExhausted).toBe(true)
+})
+
+// 13d. the marker prompt's echo must also be consumed (guard covers BOTH
+// promptSession call sites, not just reinject).
+test("self-inject guard: marker prompt's chat.message echo is also consumed (not just reinject's)", async () => {
+  let hooks: ReturnType<typeof makeGateHooks>
+  const deps = fakeDeps({
+    readGateConfig: () => '{"check":"bun test","marker":true}',
+    promptSession: async (sid: string, text: string) => {
+      deps.state.prompts.push({ sid, text })
+      hooks.chatMessage(sid)
+      return true
+    },
+  })
+  hooks = makeGateHooks(deps)
+  hooks.toolExecuteAfter("edit", "s1")
+  await hooks.sessionIdle("s1")
+
+  expect(deps.state.prompts.length).toBe(1)
+  expect(deps.state.prompts[0]!.text).toBe(HYGIENE_MARKER)
+  const rec = JSON.parse(deps.state.sensor[0]!)
+  expect(rec.interrupted).toBe(false)
+})
+
+// ---------------------------------------------------------------------------
+// Fix I1: exclude [meta-harness] child sessions from gating
+// ---------------------------------------------------------------------------
+
+test("sessionIdle: excluded session ([meta-harness] child) skips gating entirely and clears its edited mark", async () => {
+  let excluded = true
+  const deps = fakeDeps({ isExcludedSession: async () => excluded })
+  const hooks = makeGateHooks(deps)
+  hooks.toolExecuteAfter("edit", "s1")
+  await hooks.sessionIdle("s1")
+  expect(deps.state.checks.length).toBe(0)
+  expect(deps.state.sensor.length).toBe(0)
+
+  // edited mark was cleared by the excluded pass: even once isExcludedSession
+  // flips false, a sessionIdle with no NEW edit since then is still a no-op.
+  excluded = false
+  await hooks.sessionIdle("s1")
+  expect(deps.state.checks.length).toBe(0)
 })

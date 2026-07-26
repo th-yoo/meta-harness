@@ -7,6 +7,7 @@ import { join, dirname } from "node:path"
 import { makeGateHooks } from "./core.ts"
 
 const gatePlugin: Plugin = async ({ client, $, worktree }) => {
+  const excludedCache = new Map<string, boolean>() // sessionID -> is [meta-harness] child
   const hooks = makeGateHooks({
     readGateConfig: () => {
       const p = join(worktree, "gate.json")
@@ -32,6 +33,19 @@ const gatePlugin: Plugin = async ({ client, $, worktree }) => {
       appendFileSync(p, line + "\n")
     },
     now: () => Date.now(),
+    isExcludedSession: async (sessionID) => {
+      const cached = excludedCache.get(sessionID)
+      if (cached !== undefined) return cached
+      let excluded = false
+      try {
+        const res = await client.session.get({ path: { id: sessionID } })
+        excluded = !!res.data?.title?.startsWith("[meta-harness]")
+      } catch {
+        excluded = false // fail-open: better to gate a child than skip a real session
+      }
+      excludedCache.set(sessionID, excluded)
+      return excluded
+    },
   })
   return {
     "tool.execute.after": async (toolInput) => {
