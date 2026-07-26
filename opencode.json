@@ -1,5 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["./opencode-plugin/src/index.ts"],
+  "plugin": ["./opencode-plugin/src/index.ts", "./gate-plugin/src/index.ts"],
   "permission": { "external_directory": "allow" }
 }
