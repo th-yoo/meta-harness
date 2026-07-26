@@ -3,6 +3,69 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ⏸ SESSION END 2026-07-27 (MacBook home, bg session) — PHASE 1 CLOSED · §4.1+§4.2 SHIPPED — OFFICE SESSION STARTS HERE
+
+**READ ORDER AT OFFICE:** this block → `minimal/HISTORY.md` C2 + C1 sections
+(both new) → the "UPDATE later same session" block under the 07-26 update below
+(build detail) → `docs/2026-07-25-daily-evolution-loop.md` §4 (stages 3-4 = the
+remaining queue).
+
+**WHAT CLOSED THIS SESSION (all pushed through `c7811af`):**
+1. **PHASE 1 EXIT CRITERIA MET.** C2 sealed: carryover reward-null confirmed at
+   pre-registered k=10 both arms (B-alone 3/3 vs raw-B 10/10 vs marker-B pooled
+   10/10, p=1.0); one real contamination event (raw a10, filesystem channel);
+   marker A-side 4/12 vs raw 7/10 p=0.198 null-but-depressed → **marker ships
+   default OFF**. C1 sealed: completion gate holds non-regression CERTIFIED on
+   both held-out tasks (headless 7/9 vs 7/8 p=1.0; sparql 8/9 vs fresh same-host
+   baseline 10/10 p=0.47) — but grip SPLITS: healthy verify-fix on sparql (~2x
+   time tax) vs pure exhaustion on headless python artifact (no probe grip,
+   6-30x tax). Futility designCheck made first live catch (refused playbook's
+   --stop-futile as uncertifiable — mid-arm curtailment layer STILL unexercised).
+   False-accept class (gate accepted, grader failed) recurred across C2+C1 —
+   standing watch-item.
+2. **DRIFT FORK RESOLVED: machine-seat path chosen (user).** §4.1 + §4.2 built
+   same session via subagent-driven TDD (13 commits ec41938..c7811af, final
+   whole-branch review READY after C1/I1 seam fixes; suites 1640+26 green).
+   Build detail in the 07-26 update block below.
+3. HISTORY.md now has the C2 + C1 sections + rows; two implementation plans in
+   `docs/superpowers/plans/2026-07-26-*.md`.
+
+**BOX STATE (MacBook):** tree clean except untracked logs (logs-c1/c2 etc,
+host-local, ignorable) + stray `.agents/`/`.roo/` (not ours, untouched). No
+tmux (squad gateway only), no containers. Everything pushed.
+
+**⏭ OFFICE PLAYBOOK (in order):**
+1. `git pull` then `cd gate-plugin && bun install` (node_modules not committed;
+   needed before typecheck/tests there). Verify: `bun test` in gate-plugin (26)
+   and opencode-plugin (1640 pass/1 skip).
+2. **Live smoke-test of the gate plugin** (the one unverified assumption:
+   chat.message echo timing vs client.session.prompt resolution — test-faked
+   only). Drop a `gate.json` ({"check": "<cheap real check>"}) into a scratch
+   project, run one real opencode session that edits a file, let it idle: check
+   `.meta-harness/gate-outcomes.ndjson` line appears, `interrupted:false` on an
+   uninterrupted run, rounds behave, engine double-score interaction tolerable
+   (documented-accepted). If echo timing is wrong live → selfPrompt guard needs
+   a counter or timing rework (final-fix-report has the design).
+3. **§4.3: trial mode re-based on gate outcomes** (daily-evolution doc stage 3)
+   — provisional candidates scored by gate-outcome deltas (round counts,
+   exhaustion rate) instead of human score rate. Design first, then TDD.
+4. **mutate.ts grip operators** — C1's headless no-grip finding is the first
+   mechanism target. PREFER routing it through the machine seat once §4.4
+   (mechanism-class proposals) exists; hand-design only if §4.4 stalls.
+5. Backlog (record-only minors from final review, in `.superpowers/sdd/progress.md`
+   host-local — key ones): ledger unbounded in prompts (render last-N later);
+   reviewer duplicate check doesn't see ab-rejected candidates (stage-3
+   deferral); runCheck has no timeout (loosest-envelope philosophy, accepted).
+
+**PROVENANCE REMINDER at office:** office box = `yoo-dev`; all 07-25/26 arms are
+`yoo-mac.local`. Any new comparison arms at office need OFFICE baselines
+(gate.ts provenance check enforces — it refused cross-host once this session,
+correctly).
+
+**Rules in force unchanged:** explicit go before token spend · one variable per
+test · gate.ts sole adopter · forensics before verdict math · tmux + rotated
+logs · no bare "gate" in new docs · SITREP report style.
+
 ## ✅ UPDATE 2026-07-26 (MacBook home, bg session) — C2 + C1 EXECUTED, PHASE-1 EXIT CRITERIA MET
 
 Playbook steps 1–3 below DONE (verdicts sealed in `minimal/HISTORY.md` C2 + C1
