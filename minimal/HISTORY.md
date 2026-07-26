@@ -9,8 +9,8 @@ lineage.
 
 | Name | Level | Decides | Seat | Code |
 |---|---|---|---|---|
-| **Completion gate** | one attempt, at "done" | is this attempt's work verified? (verify.sh + mutation probe; reinjects evidence, bounded rounds) | code | `complete-gate.ts` + `mutate.ts`, run.ts `--complete-gate` |
-| **Review gate** | one proposal, pre-spend | is this candidate bullet fit to test? (dup/scope/leak checks + rubric; bounded revise loop) | LLM + deterministic layer-1 | propose.ts Reviewer seat |
+| **Completion gate** | one attempt, at "done" | is this attempt's work verified? (verify.sh + mutation probe; reinjects evidence, bounded rounds) | code | `complete-gate.ts` + `mutate.ts`, run.ts `--complete-gate`; daily deployment `gate-plugin/` (2026-07-26, mutants=0 v1, marker default OFF) |
+| **Review gate** | one proposal, pre-spend | is this candidate bullet fit to test? (dup/scope/leak checks + rubric; bounded revise loop) | LLM + deterministic layer-1 | minimal: propose.ts Reviewer seat (`review.ts`); production: `opencode-plugin/src/review-gate.ts` + per-layer `rejected.json` (ported 2026-07-26) |
 | **Adoption gate** | the active base | does this candidate replace the base? (Fisher lift + guard non-regression + forensics void-exclusion) | code, sole base-mutator | `gate.ts` |
 
 Modifiers: "gate-ON/OFF arm" = completion gate armed/not; "gate reinjection" =
@@ -420,4 +420,6 @@ One auto-chained run (user-approved single go): harvest → proposer → gate.
 - Committed: fix `84a244f`, scheduler `c493799`, results `b9c7e3f`.
   Port-to-plugin scheduled: resume queue item 4 (finish-hook via
   session.idle, store-versioned gate.json, interactive round-bound +
-  human-preemption rules).
+  human-preemption rules). **DONE 2026-07-26: `gate-plugin/` shipped
+  (commits ec41938..6f39449) after C1/C2 verdicts — marker default OFF per
+  C2, mutation probe deferred to v2, sensor ndjson = daily grader input.**
