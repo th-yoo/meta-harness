@@ -1709,3 +1709,32 @@ You are an AI coding assistant. Before starting any task, orient yourself:
 - Prefer editing existing files over creating new ones
 - Run tests or type-checks after making changes to verify correctness
 - Do not leave debug code, TODOs, or placeholder comments in the output`
+
+// ── rejected ledger (review-gate rejections; permanent proposer input) ──────
+
+export interface RejectedEntry {
+  rejectedAt: string
+  scope: string
+  version: string
+  bullet: string
+  violations: string[]
+  source: "review-gate"
+}
+
+export function readRejectedLedger(root: string): RejectedEntry[] {
+  const p = path.join(root, "rejected.json")
+  try {
+    const j = JSON.parse(fs.readFileSync(p, "utf-8"))
+    return Array.isArray(j) ? j : []
+  } catch {
+    return []
+  }
+}
+
+export function appendRejectedLedger(root: string, e: RejectedEntry): void {
+  const p = path.join(root, "rejected.json")
+  const cur = readRejectedLedger(root)
+  cur.push(e)
+  fs.mkdirSync(root, { recursive: true })
+  fs.writeFileSync(p, JSON.stringify(cur, null, 2) + "\n")
+}
