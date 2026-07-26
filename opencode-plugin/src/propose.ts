@@ -280,25 +280,6 @@ export async function triggerPropose(
  * Behavior is byte-identical to the original inline block: opencode reaches here
  * after waitForFile; Claude Code reaches here from applyPendingArtifacts.
  */
-/**
- * Derive a short frozen-diagnosis string for the review gate from the parsed
- * diagnosis.json. There is no single "summary" field in the diagnosis shape
- * (see diagShape ~L950-952: `{"failures":[{sessionID,taxonomy,rootCause,
- * firstUnrecoverableStep}], "bulletAssessments":[...]}`) — this concatenates
- * each failure's taxonomy + rootCause, which is exactly the context the
- * reviewer needs to judge scope without re-litigating the diagnosis (review
- * itself treats this as read-only context, never re-validated). Diagnosis
- * absent/malformed/no failures → "" (the reviewer still runs; an empty
- * diagnosis reason is harmless context, not a gate condition).
- */
-function diagnosisReasonFrom(diagnosis: Record<string, unknown> | null): string {
-  const failures = (diagnosis?.["failures"] as { taxonomy?: string; rootCause?: string }[] | undefined) ?? []
-  if (!Array.isArray(failures) || failures.length === 0) return ""
-  return failures
-    .map((f) => `[${f?.taxonomy ?? "untriaged"}] ${f?.rootCause ?? ""}`.trim())
-    .join(" ")
-}
-
 async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescriptor): Promise<ApplyResult> {
   const { layer, version, worktree } = d
   const isProject = layer.scope === "project-global" || layer.scope === "project-role"
@@ -523,6 +504,25 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     await host.log("info", `Candidate ${layer.scope} ${version} created (inactive, awaiting ab-verdict)`)
   }
   return "applied"
+}
+
+/**
+ * Derive a short frozen-diagnosis string for the review gate from the parsed
+ * diagnosis.json. There is no single "summary" field in the diagnosis shape
+ * (see diagShape ~L950-952: `{"failures":[{sessionID,taxonomy,rootCause,
+ * firstUnrecoverableStep}], "bulletAssessments":[...]}`) — this concatenates
+ * each failure's taxonomy + rootCause, which is exactly the context the
+ * reviewer needs to judge scope without re-litigating the diagnosis (review
+ * itself treats this as read-only context, never re-validated). Diagnosis
+ * absent/malformed/no failures → "" (the reviewer still runs; an empty
+ * diagnosis reason is harmless context, not a gate condition).
+ */
+function diagnosisReasonFrom(diagnosis: Record<string, unknown> | null): string {
+  const failures = (diagnosis?.["failures"] as { taxonomy?: string; rootCause?: string }[] | undefined) ?? []
+  if (!Array.isArray(failures) || failures.length === 0) return ""
+  return failures
+    .map((f) => `[${f?.taxonomy ?? "untriaged"}] ${f?.rootCause ?? ""}`.trim())
+    .join(" ")
 }
 
 /**

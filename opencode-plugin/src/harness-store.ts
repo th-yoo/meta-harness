@@ -1722,19 +1722,13 @@ export interface RejectedEntry {
 }
 
 export function readRejectedLedger(root: string): RejectedEntry[] {
-  const p = path.join(root, "rejected.json")
-  try {
-    const j = JSON.parse(fs.readFileSync(p, "utf-8"))
-    return Array.isArray(j) ? j : []
-  } catch {
-    return []
-  }
+  const j = readJson<unknown>(path.join(root, "rejected.json"), [])
+  return Array.isArray(j) ? (j as RejectedEntry[]) : []
 }
 
 export function appendRejectedLedger(root: string, e: RejectedEntry): void {
   const p = path.join(root, "rejected.json")
   const cur = readRejectedLedger(root)
   cur.push(e)
-  fs.mkdirSync(root, { recursive: true })
-  fs.writeFileSync(p, JSON.stringify(cur, null, 2) + "\n")
+  writeJsonAtomic(p, cur) // pretty (2-space) + trailing newline — same format as the writeFileSync it replaces
 }
