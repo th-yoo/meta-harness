@@ -69,6 +69,11 @@ daily mh-sessions (gate armed via minimal gate plugin)
      separate plugin sidesteps it); toastAndSwallow = round-notice surface.
    - PREREQ: C1 held-out transfer certified (gate that ships = the validated
      one). Optional runtime scope-guard: gate.json `validatedFor` task classes.
+   - **Known interaction (accepted 2026-07-26):** on mh-scored sessions, gate
+     reinject turns re-fire the engine's session.idle pipeline — the human may
+     see an extra score prompt per gate round; score once, at the end.
+     Engine-side suppression deferred until the sensor proves the gate's daily
+     value.
 2. **Review gate + rejected ledger into the production proposer path**
    (engine.ts propose flow gains what minimal's R4/R6 proved: layer-1
    deterministic checks, rubric review, bounded revise, permanent rejection

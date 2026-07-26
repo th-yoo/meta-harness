@@ -442,6 +442,7 @@ export class EvolutionEngine {
    *   "skipped-degenerate"  — the degenerate-session filter.
    *   "recorded"            — the full happy path completed.
    */
+  // NOTE: gate-plugin reinject turns can re-enter this pipeline — see docs/2026-07-25-daily-evolution-loop.md §4.1 known-interaction note.
   async sessionIdle(sessionId: string): Promise<SessionIdleOutcome> {
     const st0 = this.state.get(sessionId)
     const agent = st0?.role ?? ""
