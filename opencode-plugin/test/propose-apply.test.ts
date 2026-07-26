@@ -14,9 +14,25 @@ import {
   listVersions,
   readTrial,
   candidatePath,
+  readRejectedLedger,
   type StoreLayer,
 } from "../src/harness-store.ts"
 import type { HarnessHost, StagedArtifactDescriptor } from "../src/host.ts"
+
+// ── review-gate (RG3) fixtures — PASS_CHECKS style copied from
+// test/review-gate.test.ts, since applyProposeArtifact now runs added
+// bullets through reviewAddedBullets() before createCandidate. ─────────────
+const REVIEW_PASS = `ok
+{"checks":{"category":{"pass":true,"category":"iteration-discipline","quote":"…"},
+"domain_swap":{"pass":true,"swapped_bullet":"When a SQL migration fails twice, change the diagnosis."},
+"behavior_level":{"pass":true,"restatement":"Agent changes approach after repeated failure."},
+"duplicate":{"pass":true,"match":"none"}},"confidence":0.8}`
+
+const REVIEW_FAIL = `not quite
+{"checks":{"category":{"pass":false,"category":"","quote":""},
+"domain_swap":{"pass":true,"swapped_bullet":"When a SQL migration fails twice, change the diagnosis."},
+"behavior_level":{"pass":true,"restatement":"Agent changes approach after repeated failure."},
+"duplicate":{"pass":true,"match":"none"}},"confidence":0.4}`
 
 // Hermetic: no real claude, no opencode. We seed staging files by hand (as a
 // finished child would) and drive the EXTRACTED apply body directly, plus the
@@ -52,6 +68,30 @@ function fakeHost(rec: Rec, over: Partial<HarnessHost> = {}): HarnessHost {
     exec: async () => ({ stdout: "", exitCode: 0 }),
     ...over,
   } as HarnessHost
+}
+
+/** Always answers runTextAgent with a passing rubric reply — for tests whose
+ * added bullets must clear the review gate to reach the old assertions. */
+function reviewPassHost(rec: Rec): HarnessHost {
+  return fakeHost(rec, { runTextAgent: async () => REVIEW_PASS })
+}
+
+/** Scripted runTextAgent reply queue (review-gate.test.ts's fakeHost pattern). */
+function scriptedHost(rec: Rec, replies: (string | null)[]): HarnessHost {
+  return fakeHost(rec, {
+    runTextAgent: async () => {
+      if (replies.length === 0) throw new Error("scriptedHost: no more scripted replies")
+      return replies.shift()!
+    },
+  })
+}
+
+/** Fails loudly if the review gate calls runTextAgent at all — for the
+ * legacy/no-added-bullet/no-op paths, which must skip review entirely. */
+function noLlmHost(rec: Rec): HarnessHost {
+  return fakeHost(rec, {
+    runTextAgent: async () => { throw new Error("runTextAgent must NOT be called on this path") },
+  })
 }
 
 function stagingBase(): string {
@@ -146,12 +186,17 @@ test("applyProposeArtifact: playbook ops.json → candidate with edited playbook
   const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
 
   const b = stagingBase()
+  // RG3 adaptation: added bullet must clear the review gate now, so its text
+  // must satisfy layer1's trigger-form check ("When …, …") — the bare
+  // "new behavioral rule" text used pre-RG3 would layer1-free-fail and block
+  // candidate creation entirely. Kept the "new behavioral rule" substring so
+  // the existing assertion below still targets the same content.
   fs.writeFileSync(path.join(b, "project-role-v2-ops.json"),
-    JSON.stringify({ ops: [{ op: "add", text: "new behavioral rule" }] }))
+    JSON.stringify({ ops: [{ op: "add", text: "When behavior changes, apply the new behavioral rule." }] }))
   fs.writeFileSync(path.join(b, "project-role-v2-diagnosis.json"), JSON.stringify({ failures: [] }))
 
   const rec: Rec = { notes: [], logs: [] }
-  const res = await applyStagedArtifact(fakeHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
+  const res = await applyStagedArtifact(reviewPassHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
 
   expect(res).toBe("applied")
   expect(listVersions(root)).toContain("v2")
@@ -170,15 +215,19 @@ test("applyProposeArtifact: tagged add op → candidate bullet carries generalit
   const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
 
   const b = stagingBase()
+  // RG3 adaptation: renamed to a layer1-passing trigger-form bullet (was the
+  // bare "vendor-tagged rule", which layer1 rejects for lacking a "When …"
+  // trigger) so this add op clears the review gate; assertion below updated
+  // to the same new exact text.
   fs.writeFileSync(path.join(b, "project-role-v2-ops.json"),
-    JSON.stringify({ ops: [{ op: "add", text: "vendor-tagged rule", generality: "vendor", slice: "anthropic" }] }))
+    JSON.stringify({ ops: [{ op: "add", text: "When a vendor quirk appears, use vendor-tagged handling.", generality: "vendor", slice: "anthropic" }] }))
 
   const rec: Rec = { notes: [], logs: [] }
-  const res = await applyStagedArtifact(fakeHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
+  const res = await applyStagedArtifact(reviewPassHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
 
   expect(res).toBe("applied")
   const pb = JSON.parse(fs.readFileSync(candidatePath(root, "v2", "playbook.json"), "utf-8"))
-  const bullet = pb.bullets.find((x) => x.text === "vendor-tagged rule")
+  const bullet = pb.bullets.find((x) => x.text === "When a vendor quirk appears, use vendor-tagged handling.")
   expect(bullet.generality).toBe("vendor")
   expect(bullet.slice).toBe("anthropic")
 })
@@ -195,21 +244,28 @@ test("applyProposeArtifact: untagged add op → generality absent, render byte-i
   const layerTagged: StoreLayer = { root: rootTagged, scope: "project-role", higherRoots: [] }
   const rec: Rec = { notes: [], logs: [] }
 
+  // RG3 adaptation: "shared rule text" alone fails layer1's trigger-form
+  // check — renamed to a When-form bullet that still carries the substring
+  // "shared rule text" so both the exact-match assertion and the byte-
+  // identical-render comparison below keep the same intent. Both applies use
+  // reviewPassHost so the add clears the gate identically either way.
+  const SHARED_TEXT = "When a shared situation occurs, apply shared rule text."
+
   const b1 = stagingBase()
   fs.writeFileSync(path.join(b1, "project-role-v2-ops.json"),
-    JSON.stringify({ ops: [{ op: "add", text: "shared rule text" }] }))
-  const resUntagged = await applyStagedArtifact(fakeHost(rec), descriptor({ layer: layerUntagged, version: "v2", playbookMode: true }))
+    JSON.stringify({ ops: [{ op: "add", text: SHARED_TEXT }] }))
+  const resUntagged = await applyStagedArtifact(reviewPassHost(rec), descriptor({ layer: layerUntagged, version: "v2", playbookMode: true }))
 
   const b2 = stagingBase()
   fs.writeFileSync(path.join(b2, "project-role-v2-ops.json"),
-    JSON.stringify({ ops: [{ op: "add", text: "shared rule text", generality: "vendor", slice: "anthropic" }] }))
-  const resTagged = await applyStagedArtifact(fakeHost(rec), descriptor({ layer: layerTagged, version: "v2", playbookMode: true }))
+    JSON.stringify({ ops: [{ op: "add", text: SHARED_TEXT, generality: "vendor", slice: "anthropic" }] }))
+  const resTagged = await applyStagedArtifact(reviewPassHost(rec), descriptor({ layer: layerTagged, version: "v2", playbookMode: true }))
 
   expect(resUntagged).toBe("applied")
   expect(resTagged).toBe("applied")
 
   const pbUntagged = JSON.parse(fs.readFileSync(candidatePath(rootUntagged, "v2", "playbook.json"), "utf-8"))
-  const untaggedBullet = pbUntagged.bullets.find((x) => x.text === "shared rule text")
+  const untaggedBullet = pbUntagged.bullets.find((x) => x.text === SHARED_TEXT)
   expect(untaggedBullet.generality).toBeUndefined()
 
   // renderPlaybook ignores generality/slice entirely — tagged and untagged
@@ -227,20 +283,23 @@ test("applyProposeArtifact: invalid generality coerces to universal, oversized s
   const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
 
   const b = stagingBase()
+  // RG3 adaptation: renamed both bullets to layer1-passing trigger-form text
+  // (bare "bogus-tag rule"/"long-slice rule" fail the trigger-form check);
+  // assertions below match the same renamed exact text.
   fs.writeFileSync(path.join(b, "project-role-v2-ops.json"),
     JSON.stringify({ ops: [
-      { op: "add", text: "bogus-tag rule", generality: "bogus" },
-      { op: "add", text: "long-slice rule", slice: "x".repeat(100) },
+      { op: "add", text: "When a bogus tag appears, apply the bogus-tag rule.", generality: "bogus" },
+      { op: "add", text: "When a long slice appears, apply the long-slice rule.", slice: "x".repeat(100) },
     ] }))
 
   const rec: Rec = { notes: [], logs: [] }
-  const res = await applyStagedArtifact(fakeHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
+  const res = await applyStagedArtifact(reviewPassHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
 
   expect(res).toBe("applied")
   const pb = JSON.parse(fs.readFileSync(candidatePath(root, "v2", "playbook.json"), "utf-8"))
-  const bogus = pb.bullets.find((x) => x.text === "bogus-tag rule")
+  const bogus = pb.bullets.find((x) => x.text === "When a bogus tag appears, apply the bogus-tag rule.")
   expect(bogus.generality).toBe("universal")
-  const longSlice = pb.bullets.find((x) => x.text === "long-slice rule")
+  const longSlice = pb.bullets.find((x) => x.text === "When a long slice appears, apply the long-slice rule.")
   expect(longSlice.slice.length).toBe(64)
 })
 
@@ -255,14 +314,17 @@ test("applyProposeArtifact: candidate meta.json generalityRollup matches active 
   const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
 
   const b = stagingBase()
+  // RG3 adaptation: renamed to layer1-passing trigger-form text (bare
+  // "new universal rule"/"new vendor rule" fail the trigger-form check); no
+  // assertion below depends on the exact bullet text, so any When-form works.
   fs.writeFileSync(path.join(b, "project-role-v2-ops.json"),
     JSON.stringify({ ops: [
-      { op: "add", text: "new universal rule", generality: "universal" },
-      { op: "add", text: "new vendor rule", generality: "vendor" },
+      { op: "add", text: "When a universal case appears, apply the new universal rule.", generality: "universal" },
+      { op: "add", text: "When a vendor case appears, apply the new vendor rule.", generality: "vendor" },
     ] }))
 
   const rec: Rec = { notes: [], logs: [] }
-  const res = await applyStagedArtifact(fakeHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
+  const res = await applyStagedArtifact(reviewPassHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
 
   expect(res).toBe("applied")
   const meta = JSON.parse(fs.readFileSync(candidatePath(root, "v2", "meta.json"), "utf-8"))
@@ -510,13 +572,16 @@ test("triggerPropose (opencode path): no stageArtifactApply → waits inline, ap
 
   // seedPlaybook auto-seeds playbook mode from the baseline, so the proposer's
   // primary artifact is ops.json. Pre-seed it so inline waitForFile returns at once.
+  // RG3 adaptation: renamed to a layer1-passing trigger-form bullet (bare
+  // "inline-applied rule" fails the trigger-form check); no assertion below
+  // depends on the exact text.
   const b = stagingBase()
   fs.writeFileSync(path.join(b, "project-role-v1-ops.json"),
-    JSON.stringify({ ops: [{ op: "add", text: "inline-applied rule" }] }))
+    JSON.stringify({ ops: [{ op: "add", text: "When an inline apply happens, apply the inline-applied rule." }] }))
 
   const rec: Rec = { notes: [], logs: [] }
   // Host WITHOUT stageArtifactApply/proposerInFlight → opencode inline path.
-  await triggerPropose(fakeHost(rec), worktree, layer)
+  await triggerPropose(reviewPassHost(rec), worktree, layer)
 
   expect(listVersions(root)).toContain("v1")
   expect(readTrial(root)).not.toBeNull()
@@ -565,4 +630,147 @@ test("triggerPropose: proposerInFlight true → skips (cross-process double-fire
 
   expect(spawned).toBe(0)
   expect(rec.logs.some((l) => l.includes("already has a session in flight"))).toBe(true)
+})
+
+// ── applyProposeArtifact: review gate (RG3) ─────────────────────────────────
+// Behavior contract from .superpowers/sdd/rg3-brief.md — one test per bullet.
+
+test("review gate 1: all added bullets pass review → candidate + trial created exactly as before", async () => {
+  const root = path.join(home, "stores", "rg-pass")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "project-role-v2-ops.json"),
+    JSON.stringify({ ops: [{ op: "add", text: "When a review passes, stage the reviewed rule." }] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(reviewPassHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).toContain("v2")
+  expect(readTrial(root)).not.toBeNull() // project layer → trial as before
+  const pb = JSON.parse(fs.readFileSync(candidatePath(root, "v2", "playbook.json"), "utf-8"))
+  expect(pb.bullets.some((x: { text: string }) => x.text === "When a review passes, stage the reviewed rule.")).toBe(true)
+})
+
+test("review gate 2: added bullet final-fails → NO candidate, NO trial, ledger entry, notify contains review-rejected", async () => {
+  const root = path.join(home, "stores", "rg-reject")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const b = stagingBase()
+  // No "When …"/"Do not … until …" trigger form → layer1 free-fails without
+  // any LLM call, so this reaches "final-fail" deterministically (no revision
+  // is attempted for a layer1 fail — review-gate.ts's revise() abstains
+  // immediately on a layer1 violation).
+  fs.writeFileSync(path.join(b, "project-role-v2-ops.json"),
+    JSON.stringify({ ops: [{ op: "add", text: "generic rule with no trigger form" }] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(noLlmHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).not.toContain("v2")
+  expect(readTrial(root)).toBeNull()
+  const ledger = readRejectedLedger(root)
+  expect(ledger.length).toBe(1)
+  expect(ledger[0]!.bullet).toBe("generic rule with no trigger form")
+  expect(ledger[0]!.source).toBe("review-gate")
+  expect(ledger[0]!.scope).toBe("project-role")
+  expect(ledger[0]!.violations.length).toBeGreaterThan(0)
+  expect(rec.notes.some((n) => n.includes("review-rejected"))).toBe(true)
+})
+
+test("review gate 3: a bullet revised by review replaces the original text in the staged playbook", async () => {
+  const root = path.join(home, "stores", "rg-revise")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const ORIGINAL = "When a flaky test fails once, retry it before reporting failure."
+  const REVISED = "When a flaky test fails once, retry it and log the retry before reporting failure."
+  const REVISE_REPLY = `{"action":"propose","reason":"tightened wording","bullet":{"text":"${REVISED}"}}`
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "project-role-v2-ops.json"),
+    JSON.stringify({ ops: [{ op: "add", text: ORIGINAL }] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  // rubric fail on round 0 → revise (layer1 passed, so an LLM revision call
+  // happens) → rubric pass on the revised text.
+  const res = await applyStagedArtifact(
+    scriptedHost(rec, [REVIEW_FAIL, REVISE_REPLY, REVIEW_PASS]),
+    descriptor({ layer, version: "v2", playbookMode: true }),
+  )
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).toContain("v2")
+  const pb = JSON.parse(fs.readFileSync(candidatePath(root, "v2", "playbook.json"), "utf-8"))
+  expect(pb.bullets.some((x: { text: string }) => x.text === REVISED)).toBe(true)
+  expect(pb.bullets.some((x: { text: string }) => x.text === ORIGINAL)).toBe(false)
+  const sys = fs.readFileSync(candidatePath(root, "v2", "system.md"), "utf-8")
+  expect(sys).toContain(REVISED)
+  expect(sys).not.toContain(ORIGINAL)
+})
+
+test("review gate 4: legacy (non-playbook) proposal → review skipped, log contains skipped (legacy mode)", async () => {
+  const root = path.join(home, "stores", "rg-legacy")
+  writeActive(root, "v1", "- baseline rule", "")
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "project-role-v2-system.md"), "- improved rule\n")
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(noLlmHost(rec), descriptor({ layer, version: "v2" })) // playbookMode: false (default)
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).toContain("v2")
+  expect(readTrial(root)).not.toBeNull() // behavior otherwise unchanged
+  expect(rec.logs.some((l) => l.includes("review-gate") && l.includes("skipped (legacy mode)"))).toBe(true)
+})
+
+test("review gate 5: proposal with only non-add ops → review skipped (no added bullets)", async () => {
+  const root = path.join(home, "stores", "rg-noadd")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "project-role-v2-ops.json"),
+    JSON.stringify({ ops: [{ op: "update", id: "b1", text: "b1 rule", generality: "vendor", slice: "acme" }] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(noLlmHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).toContain("v2") // update-only op still applies as before
+  expect(rec.logs.some((l) => l.includes("review-gate") && l.includes("skipped (no added bullets)"))).toBe(true)
+})
+
+test("review gate 6: no-op proposal → review runs AFTER the no-op guard, zero runTextAgent calls", async () => {
+  const root = path.join(home, "stores", "rg-noop")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "project-role-v2-ops.json"), JSON.stringify({ ops: [] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  // noLlmHost throws if runTextAgent is ever invoked — the no-op guard must
+  // return before the review gate is reached, so this must not throw.
+  const res = await applyStagedArtifact(noLlmHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).not.toContain("v2")
+  expect(rec.logs.some((l) => l.includes("no-op proposal"))).toBe(true)
 })

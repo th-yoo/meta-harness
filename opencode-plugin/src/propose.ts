@@ -50,6 +50,8 @@ import {
   validateAgentConfig,
   readEnvPolicy,
   validateEnvPolicy,
+  readRejectedLedger,
+  appendRejectedLedger,
   type StoreLayer,
   type Playbook,
   type PlaybookOp,
@@ -58,6 +60,7 @@ import {
 } from "./harness-store.ts"
 import { proposerSessions } from "./session-state.ts"
 import type { HarnessHost, StagedArtifactDescriptor } from "./host.ts"
+import { reviewAddedBullets } from "./review-gate.ts"
 // Phase 8 / W4b: the external-evidence live contamination guard needs the
 // CURRENT held-out split — propose.ts's first import from src/bench/*
 // (precedent: src/fleet/* already imports ../bench/*, see e.g. fleet/dag.ts).
@@ -277,6 +280,25 @@ export async function triggerPropose(
  * Behavior is byte-identical to the original inline block: opencode reaches here
  * after waitForFile; Claude Code reaches here from applyPendingArtifacts.
  */
+/**
+ * Derive a short frozen-diagnosis string for the review gate from the parsed
+ * diagnosis.json. There is no single "summary" field in the diagnosis shape
+ * (see diagShape ~L950-952: `{"failures":[{sessionID,taxonomy,rootCause,
+ * firstUnrecoverableStep}], "bulletAssessments":[...]}`) — this concatenates
+ * each failure's taxonomy + rootCause, which is exactly the context the
+ * reviewer needs to judge scope without re-litigating the diagnosis (review
+ * itself treats this as read-only context, never re-validated). Diagnosis
+ * absent/malformed/no failures → "" (the reviewer still runs; an empty
+ * diagnosis reason is harmless context, not a gate condition).
+ */
+function diagnosisReasonFrom(diagnosis: Record<string, unknown> | null): string {
+  const failures = (diagnosis?.["failures"] as { taxonomy?: string; rootCause?: string }[] | undefined) ?? []
+  if (!Array.isArray(failures) || failures.length === 0) return ""
+  return failures
+    .map((f) => `[${f?.taxonomy ?? "untriaged"}] ${f?.rootCause ?? ""}`.trim())
+    .join(" ")
+}
+
 async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescriptor): Promise<ApplyResult> {
   const { layer, version, worktree } = d
   const isProject = layer.scope === "project-global" || layer.scope === "project-role"
@@ -323,8 +345,13 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
   // never touches a playbook, so this stays false there and the guard behaves
   // exactly as before.
   let playbookChanged = false
+  // Hoisted out of the ops-branch (was block-scoped) so the review-gate
+  // insertion point below (after the no-op guard) can re-apply `ops` to
+  // `opsBase` once a bullet's text has been revised by review — reusing
+  // applyPlaybookOps keeps that re-derivation byte-identical to this pass.
+  let ops: PlaybookOp[] = []
+  let opsBase: Playbook | undefined
   if (playbook && fs.existsSync(stagingOps)) {
-    let ops: PlaybookOp[] = []
     try {
       const parsed = JSON.parse(fs.readFileSync(stagingOps, "utf-8"))
       if (Array.isArray(parsed?.ops)) ops = parsed.ops
@@ -333,6 +360,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     const assessments = (diagnosis?.["bulletAssessments"] as { id: string; verdict: "helpful" | "harmful" }[]) || []
     if (assessments.length) applyBulletAssessments(layer.root, assessments)
     const base = readPlaybook(layer.root) ?? playbook   // re-read after assessments
+    opsBase = base
     newPlaybook = applyPlaybookOps(base, ops)
     system = renderPlaybook(newPlaybook)
     // Strip createdAt/updatedAt before comparing — applyPlaybookOps bumps
@@ -410,6 +438,53 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     await host.log("info", `proposer ${layer.scope}: no-op proposal — identical to active ${activeVersion(layer.root)}; no candidate created, no trial`)
     await host.notify(`Proposer ${layer.scope}: no change proposed — nothing to trial`, "info", 8_000)
     return "applied"
+  }
+
+  // ── review gate (R4/R6 port): added bullets must pass review BEFORE spend ──
+  // Playbook-mode only (v1): legacy whole-system.md proposals and non-add ops
+  // (update/delete) pass through un-reviewed, scope-fenced with a log line —
+  // never silent. Runs AFTER the no-op guard above: a no-op proposal never
+  // reaches here, so it triggers zero runTextAgent calls.
+  if (newPlaybook) {
+    const addedOps = ops.filter((o): o is Extract<PlaybookOp, { op: "add" }> => o.op === "add")
+    if (addedOps.length > 0) {
+      const ledger = readRejectedLedger(layer.root)
+      const outcomes = await reviewAddedBullets({
+        host,
+        bullets: addedOps.map((o) => o.text),
+        diagnosisReason: diagnosisReasonFrom(diagnosis),
+        activeSystem: readActiveSystem(layer.root),
+        ledger,
+        scope: layer.scope,
+      })
+      const failed = outcomes.filter((o) => !o.staged)
+      if (failed.length > 0) {
+        for (const f of failed) {
+          appendRejectedLedger(layer.root, {
+            rejectedAt: new Date().toISOString().slice(0, 10),
+            scope: layer.scope,
+            version,
+            bullet: f.bullet,
+            violations: f.violations,
+            source: "review-gate",
+          })
+        }
+        await host.log("info", `review-gate ${layer.scope}: REJECTED ${failed.length}/${outcomes.length} added bullet(s) — no candidate, no trial`)
+        await host.notify(`Proposer ${layer.scope}: review-rejected (${failed[0]!.violations[0] ?? "violations"}) — recorded in ledger`, "warning", 10_000)
+        return "applied"
+      }
+      // staged (possibly revised): write revised texts back into the ops,
+      // then RE-DERIVE the playbook from opsBase (same base applyPlaybookOps
+      // used above) so the staged content — playbook.json AND system.md —
+      // carries the revised text, all BEFORE createCandidate.
+      addedOps.forEach((o, i) => { o.text = outcomes[i]!.bullet })
+      newPlaybook = applyPlaybookOps(opsBase!, ops)
+      system = renderPlaybook(newPlaybook)
+    } else {
+      await host.log("info", `review-gate ${layer.scope}: skipped (no added bullets)`)
+    }
+  } else {
+    await host.log("info", `review-gate ${layer.scope}: skipped (legacy mode)`)
   }
 
   createCandidate(layer.root, version, system, tools, newPlaybook, effAgentConfig ?? undefined, effEnvPolicy ?? undefined)
