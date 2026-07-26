@@ -1,0 +1,7 @@
+{
+  "name": "meta-harness-gate-plugin",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "devDependencies": { "@opencode-ai/plugin": "^1.17.14", "typescript": "^5" }
+}
