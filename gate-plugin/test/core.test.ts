@@ -111,7 +111,7 @@ test("happy path: edited + check passes → accepted, sensor line, success toast
     accepted: true,
     gateExhausted: false,
   })
-  expect(Array.isArray(rec.rounds)).toBe(true)
+  expect(rec.rounds).toEqual(["accepted"])
   expect(typeof rec.durationMs).toBe("number")
   expect(deps.state.toasts.some((t) => t.variant === "success")).toBe(true)
 })
@@ -261,41 +261,66 @@ test("human interrupt: chatMessage during gating refuses next reinject; sensor s
   expect(rec.gateExhausted).toBe(true)
 })
 
-test("chatMessage when idle just re-arms (clears gated flag)", async () => {
+// 11a. mid-gate edit (from the reinjected agent) is wiped by the unconditional
+// edited.delete at gate completion — that delete is what actually prevents an
+// infinite re-gate loop now that toolExecuteAfter has no `gating` guard. This
+// test MUST fail if that unconditional `edited.delete(sessionID)` is removed
+// or made conditional (verified by temporarily deleting that line locally:
+// the second sessionIdle then runs a 3rd check and the assertion below fails).
+test("mid-gate edit from reinjected agent does not survive gate completion (no infinite re-gate)", async () => {
+  let hooks: ReturnType<typeof makeGateHooks>
+  let call = 0
+  const deps = fakeDeps({
+    runCheck: async (cmd: string) => {
+      deps.state.checks.push(cmd)
+      call++
+      return call === 1 ? { code: 1, out: "boom" } : { code: 0, out: "ok" }
+    },
+    promptSession: async (sid: string, text: string) => {
+      deps.state.prompts.push({ sid, text })
+      hooks.toolExecuteAfter("edit", sid) // simulate the reinjected agent editing mid-gate
+      return true
+    },
+  })
+  hooks = makeGateHooks(deps)
+  hooks.toolExecuteAfter("edit", "s1")
+  await hooks.sessionIdle("s1")
+  expect(deps.state.checks.length).toBe(2) // fail, reinject (mid-gate edit happens here), pass
+  expect(deps.state.prompts.length).toBe(1)
+
+  await hooks.sessionIdle("s1") // the mid-gate edit must have been wiped at completion → no-op
+  expect(deps.state.checks.length).toBe(2)
+})
+
+// 11b. a human chatMessage after a gate completes does not itself re-arm; only
+// a subsequent edit does.
+test("chatMessage after gate completion does not re-arm; a later edit does", async () => {
   const deps = fakeDeps()
   const hooks = makeGateHooks(deps)
   hooks.toolExecuteAfter("edit", "s1")
   await hooks.sessionIdle("s1")
   expect(deps.state.checks.length).toBe(1)
 
-  hooks.chatMessage("s1") // idle interrupt clears "gated" without a new edit
+  hooks.chatMessage("s1") // idle human message, no gate in progress
   await hooks.sessionIdle("s1")
-  // gated cleared but edited was also cleared by acceptance and never re-set,
-  // so this should still be a no-op (no edits since last gate)
-  expect(deps.state.checks.length).toBe(1)
+  expect(deps.state.checks.length).toBe(1) // no new edit since last gate → still no-op
+
+  hooks.toolExecuteAfter("edit", "s1") // re-arm
+  await hooks.sessionIdle("s1")
+  expect(deps.state.checks.length).toBe(2)
 })
 
-// 11. edits during gating do not mark session edited
-test("edits performed during gating do not mark session edited (no infinite re-gate)", async () => {
-  let hooks: ReturnType<typeof makeGateHooks>
-  let injectedEditOnce = false
-  const deps = fakeDeps({
-    runCheck: async (cmd: string) => {
-      deps.state.checks.push(cmd)
-      if (!injectedEditOnce) {
-        injectedEditOnce = true
-        hooks.toolExecuteAfter("edit", "s1") // simulate reinjected agent editing mid-gate
-      }
-      return { code: 0, out: "ok" }
-    },
-  })
-  hooks = makeGateHooks(deps)
-  hooks.toolExecuteAfter("edit", "s1")
+// multi-session isolation: only the edited session gates
+test("multi-session isolation: only the edited session's sessionIdle runs a check", async () => {
+  const deps = fakeDeps()
+  const hooks = makeGateHooks(deps)
+  hooks.toolExecuteAfter("edit", "s1") // s2 never edited
+  await hooks.sessionIdle("s2")
+  expect(deps.state.checks.length).toBe(0)
   await hooks.sessionIdle("s1")
   expect(deps.state.checks.length).toBe(1)
-
-  await hooks.sessionIdle("s1") // should be no-op: the mid-gate edit must not have armed it
-  expect(deps.state.checks.length).toBe(1)
+  expect(deps.state.sensor.length).toBe(1)
+  expect(JSON.parse(deps.state.sensor[0]!).sessionID).toBe("s1")
 })
 
 // 12. runCheck receives cfg.check verbatim

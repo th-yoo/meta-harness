@@ -52,23 +52,22 @@ export function makeGateHooks(deps: GateDeps): {
 } {
   const edited = new Set<string>() // sessions with un-gated edits
   const gating = new Set<string>() // gate loop currently running
-  const gated = new Set<string>() // gated since last human turn/edit
   const interrupted = new Set<string>() // human typed while gating
 
   return {
     toolExecuteAfter(tool: string, sessionID: string): void {
-      if (gating.has(sessionID)) return // contract 11: edits made by the reinjected agent don't re-arm
-      if (EDIT_TOOLS.has(tool)) {
-        edited.add(sessionID)
-        gated.delete(sessionID)
-      }
+      // Edits made by the reinjected agent during gating DO mark `edited`
+      // here (no gating guard) — but the unconditional `edited.delete`
+      // below at gate completion wipes them again, so a mid-gate edit can
+      // never by itself trigger a second gate run (contract 11). That
+      // unconditional delete is the actual no-infinite-re-gate mechanism.
+      if (EDIT_TOOLS.has(tool)) edited.add(sessionID)
     },
     chatMessage(sessionID: string): void {
       if (gating.has(sessionID)) interrupted.add(sessionID) // contract 10
-      gated.delete(sessionID)
     },
     async sessionIdle(sessionID: string): Promise<void> {
-      if (gating.has(sessionID) || gated.has(sessionID)) return
+      if (gating.has(sessionID)) return
       if (!edited.has(sessionID)) return
       const raw = deps.readGateConfig()
       if (!raw) return
@@ -88,6 +87,11 @@ export function makeGateHooks(deps: GateDeps): {
           reinject: async (message: string) => {
             if (interrupted.has(sessionID)) return false
             await deps.toast(`gate: check failed — reinjecting evidence`, "warning")
+            // Defensive cap on the reinject prompt size: complete-gate already
+            // tails failing verify output to OUT_TAIL (600) chars, but the
+            // surrounding explanatory text is unbounded, so cap the whole
+            // message (4000 chars of context + the 600-char tail budget) to
+            // keep a single reinject prompt from ballooning the session.
             return deps.promptSession(sessionID, message.slice(0, 4000 + OUT_TAIL))
           },
         }
@@ -109,7 +113,10 @@ export function makeGateHooks(deps: GateDeps): {
         if (result.gateExhausted) await deps.toast(`gate: rounds exhausted — accepting anyway`, "warning")
         else await deps.toast(`gate: check passed`, "success")
         if (cfg.marker && result.accepted && !result.gateExhausted) await deps.promptSession(sessionID, HYGIENE_MARKER)
-        gated.add(sessionID)
+        // Unconditional: clears both the pre-gate edit that armed this run
+        // AND any edits the reinjected agent made mid-gate (toolExecuteAfter
+        // no longer special-cases `gating`). This IS the no-infinite-re-gate
+        // mechanism — see the comment on toolExecuteAfter above.
         edited.delete(sessionID)
       } finally {
         gating.delete(sessionID)
