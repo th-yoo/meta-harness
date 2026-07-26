@@ -27,6 +27,29 @@ sections, commits `62f3602` + `ca1462f` + this one):
 minimal gate plugin port (`2026-07-25-daily-evolution-loop.md` §4.1) or drift
 fork (§4.2-4.4) — user decision open.
 
+**UPDATE later same session: BOTH BUILT (user chose machine-seat path + plugin
+port in parallel; commits ec41938..6f39449, all pushed, suites 1640+26 green):**
+- **§4.1 gate plugin SHIPPED:** standalone `gate-plugin/` (2nd entry in
+  opencode.json), session.idle completion-gate loop reusing
+  `minimal/complete-gate.ts` (mutants=0 v1), `gate.json` opt-in
+  ({check, rounds:2, marker:false, sensor}), ndjson sensor at
+  `.meta-harness/gate-outcomes.ndjson`, **marker default OFF (C2 verdict
+  amendment over hygiene doc §4)**, self-inject echo guard + `[meta-harness]`
+  child-session exclusion (final-review C1/I1 catches).
+- **§4.2 review gate + ledger PORTED:** `rejected.json` per layer.root
+  (harness-store API, atomic IO), `review-gate.ts` over `minimal/review.ts`
+  (layer-1 free-fail incl. revise short-circuit, bounded revise 1, fail-closed),
+  wired in `applyProposeArtifact` pre-createCandidate (both transports,
+  whole-proposal reject), ledger feeds `buildProposerPrompt`.
+- **Known interaction (accepted, documented in daily-evolution doc §4.1 note):**
+  gate reinject turns can re-fire engine scoring on mh-sessions; score once at
+  end; suppression deferred.
+- **Before first daily use:** live smoke-test the chat.message echo-timing
+  assumption (gate a real session once, check sensor line + no interrupted:true
+  false positive). Then §4.3 (trial mode on gate outcomes) is next queue item;
+  mutate.ts grip operators (C1 headless no-grip finding) = first mechanism
+  target, ideally THROUGH the machine seat once §4.4 lands.
+
 ## ⏸ SESSION END 2026-07-25 FINAL (MacBook desk) — PROJECT NAMED **kkamak** · A2 ADOPTED · C2 READY — HOME SESSION STARTS HERE
 
 **NAMED (sealed at close): the project is `kkamak` (까막)** — Aesop's
