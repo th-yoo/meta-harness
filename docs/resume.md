@@ -3,6 +3,44 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ⏸ SESSION END 2026-07-27 ~16:20 (office `yoo-dev`) — §6.3 ARMS PARTIAL: headless-ON DONE (pooled), control+sparql HANDED TO MACBOOK
+
+**WHAT RAN (probes built + merge-ready earlier today, commits a61b08b..eb2ac11 +
+4f9b46a; see the queue block below):** §6.3 headless probes-ON k=10 executed as
+TWO pooled office runs (pre-registered void rule covers the pooling):
+- run 1 (`headless-terminal-2026-07-27T05-54-08-764Z`): **6 valid, ALL
+  reward=1, zero false-accepts, zero exhaustion**; a2 turns=3 = live probe
+  verify-fix loop; a7/a8 VOID (auth-race at 15:42 oauth expiry — traj error
+  "Claude Code credentials are unavailable or expired"; runner self-flagged
+  SUSPECT(0-turn)). No results.json (run killed) — evidence = the 8 committed
+  traj files + `...-run1-authrace.log` (attempt lines) in minimal/results/.
+- run 2: false start (full k=10 relaunch, killed ~5 min per user — 2 in-flight
+  partials wasted, nothing recorded).
+- run 3 top-up k=4 (`headless-terminal-2026-07-27T06-5*`): auto-committed by
+  the fa-finish script (this commit) — results.json + trajs.
+**Headless-ON pooled verdict inputs = run-1's 6 valids + run-3's 4 attempts.**
+Auto-finish script killed the chain after the top-up (user call: control+sparql
+NOT run at office).
+
+**⚠️ PROVENANCE TRAP FOR MACBOOK (read before running the control arm):** the
+§6.3 comparison is ON-vs-control SAME HOST. ON arm is office (`yoo-dev`).
+Running control k=10 on MacBook against office ON = the exact cross-host
+confound gate.ts refuses. Options: (a) run control+sparql at office next
+session (cleanest, ~90 min); (b) rerun BOTH arms on MacBook (expensive); (c)
+MacBook does sparql k=5 only (single-arm shape check, no cross-host math) and
+control waits for office. Recommend (c) tonight + (a) next office session.
+Control task dir recipe: copy `minimal/tasks/headless-terminal` MINUS
+`requirements.json`, `relations/`, `oracle/` to a scratch dir (probes are
+fail-open → same binary, one variable); office copy was
+`/mnt/d/tmp/mh-control-headless`.
+
+**Verdict math when both arms exist:** primary = false-accept count (gate
+accepted ∧ grader failed) ON vs control; reference G1 2/5. Guards: exhaustion
+0, median elapsed < 2x G1 (400s), `probes:` header present in ON records /
+null in control. Forensics first: void 0-turn/auth-race before counting
+(§6.3, grip-fix design doc). Watch-items: wrapper-style verify.sh exhaustion
+trigger; relation timing under load.
+
 ## ⏸ SESSION END 2026-07-27 (MacBook home, bg session) — PHASE 1 CLOSED · §4.1+§4.2 SHIPPED — OFFICE SESSION STARTS HERE
 
 **READ ORDER AT OFFICE:** this block → `minimal/HISTORY.md` C2 + C1 sections

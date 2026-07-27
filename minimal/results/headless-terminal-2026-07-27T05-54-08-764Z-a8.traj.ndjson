@@ -1,0 +1,4 @@
+{"type":"error","timestamp":1785134787120,"sessionID":"ses_05daead0fffeQS582u2cIZPg4W","error":{"name":"UnknownError","data":{"message":"Claude Code credentials are unavailable or expired. Run `claude` to refresh them."}}}
+
+{"type":"gate_reinject"}
+{"type":"error","timestamp":1785134946366,"sessionID":"ses_05daead0fffeQS582u2cIZPg4W","error":{"name":"UnknownError","data":{"message":"Claude Code credentials are unavailable or expired. Run `claude` to refresh them."}}}
