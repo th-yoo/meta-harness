@@ -1,5 +1,15 @@
 # Adequacy-probe grip fix — design note (2026-07-27, office)
 
+**STATUS UPDATE (same day): S1+S2+S3 IMPLEMENTED via TDD** — `mutate.ts`
+(`__main__`-block exclusion, `allowedLines` filter), new `minimal/cover.ts`
+(zero-dep sitecustomize trace hook + parser, tested against a real python3
+subprocess), `complete-gate.ts` (`coveredLines` GateIO dep, coverage
+provenance field, ≥1-kill round rule, static fallback on vacuity), `run.ts`
+traced-verify wiring. Suites 1656+26 green (15 new tests, red-first).
+Timeout-as-kill confirmed already de-facto (run.ts `timeout 120` wrapper →
+non-zero exit on mutant = kill; now documented at the kill site). S4 (new
+operators) + verification arm (§6) still open.
+
 Fix design for C1's headless finding (HISTORY.md C1 section): the completion
 gate's mutation adequacy probe has no grip on big python-class artifacts —
 7/9 valid headless trials exhausted the completion gate (every round

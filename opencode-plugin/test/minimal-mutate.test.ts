@@ -106,3 +106,59 @@ test("operators still hit real code lines with and/or", () => {
   expect(ao).toBeDefined()
   expect(ao!.line).toBe(7) // "done = a and b"
 })
+
+// C1 headless finding (docs/2026-07-27-probe-grip-fix-design.md S2): the
+// `if __name__ == '__main__':` guard + block never execute when verify.sh
+// imports the module — a guaranteed dead zone; negating the guard itself
+// fires main() at import time (spurious kill/hang). Both excluded statically.
+const MAIN_SRC = `def check(a, b):
+    return a < b
+
+if __name__ == '__main__':
+    x = 1 < 2
+    if x and True:
+        check(1, 2)
+`
+
+test("operators skip the __main__ guard line and its block", () => {
+  const ms = generateMutants(MAIN_SRC, 10, () => true)
+  for (const m of ms) {
+    expect(m.line).not.toBe(4) // the guard line (negate-if would match it)
+    expect(m.line).not.toBe(5) // x = 1 < 2
+    expect(m.line).not.toBe(6) // if x and True:
+    expect(m.line).not.toBe(7) // check(1, 2)
+  }
+  expect(ms.some((m) => m.line === 2)).toBe(true) // real code still mutated
+})
+
+test('double-quoted __main__ guard is excluded too', () => {
+  const src = 'def f(a, b):\n    return a < b\n\nif __name__ == "__main__":\n    f(1 < 2, 3)\n'
+  const ms = generateMutants(src, 10, () => true)
+  for (const m of ms) expect(m.line).toBeLessThanOrEqual(2)
+})
+
+test("code after a dedented line following the __main__ block is mutable again", () => {
+  // guard block ends at the first non-empty line at <= guard indent
+  const src = "class C:\n    def m(self):\n        if __name__ == '__main__':\n            x = 1 < 2\n        return self.a < self.b\n"
+  const ms = generateMutants(src, 10, () => true)
+  expect(ms.some((m) => m.line === 5)).toBe(true) // return line mutable
+  for (const m of ms) expect(m.line).not.toBe(4) // block line not
+})
+
+// S1: coverage-guided site filter — only lines the agent's verification
+// actually executed are mutation-eligible.
+test("allowedLines restricts mutation sites to covered lines", () => {
+  const ms = generateMutants(SRC, 10, okSyntax, new Set([16]))
+  expect(ms.length).toBeGreaterThan(0)
+  for (const m of ms) expect(m.line).toBe(16) // "if a < b and b >= 0:"
+})
+
+test("empty allowedLines yields no mutants", () => {
+  expect(generateMutants(SRC, 10, okSyntax, new Set<number>())).toEqual([])
+})
+
+test("omitted allowedLines keeps the full site set", () => {
+  const a = generateMutants(SRC, 10, okSyntax)
+  const b = generateMutants(SRC, 10, okSyntax, undefined)
+  expect(b.map((m) => m.mutated)).toEqual(a.map((m) => m.mutated))
+})

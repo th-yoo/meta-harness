@@ -121,3 +121,72 @@ test("artifact with no mutable sites passes the probe vacuously", async () => {
   expect(r.accepted).toBe(true)
   expect(r.rounds[0]!.mutantsTried).toBe(0)
 })
+
+// --- grip-fix design S3 (docs/2026-07-27-probe-grip-fix-design.md): the
+// round passes when >=1 mutant is killed — equivalent/unreachable stragglers
+// no longer poison it; only a zero-kill probe (junk verification) fails. ---
+
+test("accepts when at least one mutant is killed even if another survives", async () => {
+  let mutantCall = 0
+  const io = fakeIO({
+    runVerify: (onMutant?: boolean) => {
+      if (!onMutant) return { code: 0, out: "ok" }
+      return mutantCall++ === 0 ? { code: 1, out: "caught" } : { code: 0, out: "still green" }
+    },
+  })
+  const r = await runCompletionGate(io, { rounds: 2, mutants: 2 })
+  expect(r.accepted).toBe(true)
+  expect(r.gateExhausted).toBe(false)
+  expect(r.rounds.length).toBe(1)
+  expect(r.rounds[0]!.outcome).toBe("accepted")
+  expect(r.rounds[0]!.mutantsKilled).toBe(1)
+  expect(r.rounds[0]!.mutantsSurvived).toBe(1)
+})
+
+test("zero kills still fails the round and reports the kill count", async () => {
+  const io = fakeIO({
+    runVerify: (onMutant?: boolean) => ({ code: 0, out: onMutant ? "still green" : "ok" }),
+  })
+  const r = await runCompletionGate(io, { rounds: 1, mutants: 2 })
+  expect(r.rounds[0]!.outcome).toBe("mutant-survived")
+  expect(r.rounds[0]!.mutantsKilled).toBe(0)
+  expect(io.log.find((l) => l.startsWith("reinject:"))).toContain("@@")
+})
+
+// --- S1 in the round: coveredLines (optional, fail-open) restricts sites. ---
+
+test("coveredLines filters mutation sites to executed lines", async () => {
+  const io = fakeIO({
+    coveredLines: () => new Set([3]), // only "await g()" executed
+    runVerify: (onMutant?: boolean) => (onMutant ? { code: 1, out: "caught" } : { code: 0, out: "ok" }),
+  })
+  const r = await runCompletionGate(io, { rounds: 1, mutants: 4 })
+  expect(r.rounds[0]!.coverage).toBe("filtered")
+  expect(r.rounds[0]!.mutantsTried).toBe(1) // remove-await only; line-2 sites excluded
+  expect(r.accepted).toBe(true)
+})
+
+test("falls back to static sites when coverage empties the site list", async () => {
+  const io = fakeIO({
+    coveredLines: () => new Set([99]), // nothing the operators can hit
+    runVerify: (onMutant?: boolean) => (onMutant ? { code: 1, out: "caught" } : { code: 0, out: "ok" }),
+  })
+  const r = await runCompletionGate(io, { rounds: 1, mutants: 4 })
+  expect(r.rounds[0]!.coverage).toBe("fallback-static")
+  expect(r.rounds[0]!.mutantsTried).toBeGreaterThan(0)
+})
+
+test("coverage is off when coveredLines is absent or returns undefined", async () => {
+  const absent = fakeIO({
+    runVerify: (onMutant?: boolean) => (onMutant ? { code: 1, out: "caught" } : { code: 0, out: "ok" }),
+  })
+  const ra = await runCompletionGate(absent, { rounds: 1, mutants: 2 })
+  expect(ra.rounds[0]!.coverage).toBe("off")
+  const failedTrace = fakeIO({
+    coveredLines: () => undefined, // tracing unavailable — fail-open
+    runVerify: (onMutant?: boolean) => (onMutant ? { code: 1, out: "caught" } : { code: 0, out: "ok" }),
+  })
+  const rf = await runCompletionGate(failedTrace, { rounds: 1, mutants: 2 })
+  expect(rf.rounds[0]!.coverage).toBe("off")
+  expect(rf.rounds[0]!.mutantsTried).toBeGreaterThan(0)
+})

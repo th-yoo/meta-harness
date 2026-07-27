@@ -26,6 +26,7 @@ import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rea
 import { hostname, tmpdir } from "node:os"
 import { basename, join, resolve } from "node:path"
 import { runCompletionGate } from "./complete-gate.ts"
+import { COVERAGE_HOOK_PY, parseCoveredLines } from "./cover.ts"
 import { clampParallel, pidAlive } from "./schedule.ts"
 import { clockPreflight } from "./clock.ts"
 import { designCheck, liftFutility } from "./futility.ts"
@@ -656,6 +657,27 @@ async function attempt(i: number): Promise<Trial> {
           ])
           agentOut += `\n{"type":"gate_reinject"}\n` + r.out
           return r.code === 0 || r.code === 124
+        },
+        coveredLines: async () => {
+          // S1 (grip-fix design): one traced verify run — the sitecustomize
+          // hook on PYTHONPATH records which artifact lines execute across
+          // every python process the verification spawns. Fail-open
+          // (undefined) on any capture error; an EMPTY line set is real data
+          // (verification never executes the artifact) and flows through so
+          // the probe's static fallback + zero-kill rule report it.
+          const hookTmp = join(tmpdir(), `minimal-covhook-${process.pid}-${i}.py`)
+          writeFileSync(hookTmp, COVERAGE_HOOK_PY)
+          if ((await podman(["exec", name, "mkdir", "-p", "/tmp/covhook"])).code !== 0) return undefined
+          if ((await podman(["cp", hookTmp, `${name}:/tmp/covhook/sitecustomize.py`])).code !== 0) return undefined
+          await podman(["exec", name, "rm", "-f", "/tmp/cov.lines"])
+          const r = await podman([
+            "exec", name, "timeout", "120", "bash", "-c",
+            `cd /app && PYTHONPATH=/tmp/covhook COV_TARGET=${gateArtifact} COV_OUT=/tmp/cov.lines bash ./verify.sh`,
+          ])
+          if (r.code !== 0) return undefined
+          const cat = await podman(["exec", name, "cat", "/tmp/cov.lines"])
+          if (cat.code !== 0) return undefined
+          return parseCoveredLines(cat.out)
         },
       }
       gate = await runCompletionGate(gateIO, { rounds: gateRounds, mutants: gateMutants })

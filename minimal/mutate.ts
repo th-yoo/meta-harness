@@ -25,16 +25,26 @@ function lines(src: string): string[] {
   return src.split("\n")
 }
 
-/** 1-based line numbers that are real code — excludes # comment lines and
- * lines inside (or opening/closing) triple-quoted blocks. R9 forensics: the
- * probe once mutated "and"→"or" inside a docstring — a semantic no-op the
- * agent can never kill, which exhausted the gate on every attempt. Crude
- * scanner (no lexer): good enough for the artifact classes we probe. */
+/** 1-based line numbers that are real code — excludes # comment lines, lines
+ * inside (or opening/closing) triple-quoted blocks, and the
+ * `if __name__ == '__main__':` guard + its block. R9 forensics: the probe
+ * once mutated "and"→"or" inside a docstring — a semantic no-op the agent
+ * can never kill, which exhausted the gate on every attempt. C1 headless
+ * (grip-fix design S2): the __main__ block never executes when verification
+ * imports the module — same unkillable class — and negating the guard line
+ * itself fires main() at import time. Crude scanner (no lexer): good enough
+ * for the artifact classes we probe. */
 function codeLineSet(src: string): Set<number> {
   const ok = new Set<number>()
   let inTriple = false
+  let mainGuardIndent: number | undefined // inside __main__ block while set
   lines(src).forEach((raw, i) => {
     const l = raw.trim()
+    if (mainGuardIndent !== undefined) {
+      const indent = raw.length - raw.trimStart().length
+      if (l !== "" && indent <= mainGuardIndent) mainGuardIndent = undefined
+      else return // guard block line (or blank inside it)
+    }
     const quotes = (raw.match(/"""|'''/g) ?? []).length
     if (inTriple) {
       if (quotes % 2 === 1) inTriple = false
@@ -45,6 +55,10 @@ function codeLineSet(src: string): Set<number> {
       return // opening line
     }
     if (quotes >= 2) return // one-line docstring
+    if (/^if __name__\s*==\s*['"]__main__['"]\s*:/.test(l)) {
+      mainGuardIndent = raw.length - raw.trimStart().length
+      return // the guard line itself
+    }
     if (l.startsWith("#") || l === "") return
     ok.add(i + 1)
   })
@@ -122,14 +136,20 @@ const OPERATORS: Operator[] = [
 ]
 
 /** Up to maxK distinct, syntax-valid mutants: first site of each operator in
- * order, then second sites, and so on (deterministic). */
+ * order, then second sites, and so on (deterministic). `allowedLines`
+ * (grip-fix design S1) further restricts sites to lines the agent's
+ * verification actually executed — omitted/undefined = no coverage filter. */
 export function generateMutants(
   src: string,
   maxK: number,
   syntaxOk: (mutated: string) => boolean,
+  allowedLines?: Set<number>,
 ): Mutant[] {
   const code = codeLineSet(src)
-  const perOp = OPERATORS.map((o) => ({ op: o.op, sites: o.sites(src).filter((s) => code.has(s.line)) }))
+  const perOp = OPERATORS.map((o) => ({
+    op: o.op,
+    sites: o.sites(src).filter((s) => code.has(s.line) && (allowedLines === undefined || allowedLines.has(s.line))),
+  }))
   const out: Mutant[] = []
   const seen = new Set<string>()
   for (let round = 0; out.length < maxK; round++) {

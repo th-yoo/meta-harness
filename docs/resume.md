@@ -53,6 +53,10 @@ tmux (squad gateway only), no containers. Everything pushed.
    (mechanism-class proposals) exists; hand-design only if §4.4 stalls.
    **Design note written 07-27 office: `docs/2026-07-27-probe-grip-fix-design.md`**
    (root cause, field-grounded fix set S1–S5, outcome buckets, threat notes).
+   **S1+S2+S3 IMPLEMENTED same day (TDD, suites 1656+26 green): coverage-guided
+   sites (new `minimal/cover.ts` trace hook), `__main__` exclusion, ≥1-kill
+   rule + coverage provenance in round results. OPEN: S4 operators (machine
+   seat), headless re-arm verification (spend-gated).**
 5. Backlog (record-only minors from final review, in `.superpowers/sdd/progress.md`
    host-local — key ones): ledger unbounded in prompts (render last-N later);
    reviewer duplicate check doesn't see ab-rejected candidates (stage-3
