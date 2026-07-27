@@ -8,6 +8,7 @@ rc = os.path.expanduser("~/.bashrc")
 marker = "export MH_RC_MARK=mh_rc_ok  # mh-relation-probe\n"
 with open(rc, "a") as f:
     f.write(marker)
+ok = False
 try:
     from headless_terminal import HeadlessTerminal  # constructed AFTER the marker exists
     t = HeadlessTerminal()

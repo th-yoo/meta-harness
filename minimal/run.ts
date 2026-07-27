@@ -398,7 +398,9 @@ const fixturesDir = resolveFixtures(taskDir)
 // frozen per-task requirement list + instruction-derived relation scripts.
 // Both optional — tasks without them get the unchanged completion gate.
 const reqPath = join(taskDir, "requirements.json")
-const gateRequirements = existsSync(reqPath) ? parseRequirements(readFileSync(reqPath, "utf-8")) : undefined
+const gateRequirements = existsSync(reqPath)
+  ? (parseRequirements(readFileSync(reqPath, "utf-8")) ?? die(`malformed requirements.json in ${taskDir} — refusing to run with the spec probe silently OFF`))
+  : undefined
 const relationsDir = join(taskDir, "relations")
 const gateRelations: import("./complete-gate.ts").Relation[] = existsSync(relationsDir)
   ? readdirSync(relationsDir)
@@ -908,6 +910,7 @@ const run = {
   system,
   harness,
   completeGate: gateArtifact ? { artifact: gateArtifact, rounds: gateRounds, mutants: gateMutants } : null,
+  probes: gateArtifact ? { requirements: gateRequirements?.length ?? 0, relations: gateRelations.length } : null,
   thenTask,
   marker: markerFlag,
   stopFutile: futilityBase,

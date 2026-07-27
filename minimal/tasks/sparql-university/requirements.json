@@ -13,7 +13,7 @@
     {
       "id": "R-enrollment-threshold",
       "text": "Among all departments they work in, at least one has more than 10 students currently enrolled in classes taught in that department",
-      "markers": ["10", "enroll"]
+      "markers": ["> 10", "enroll"]
     },
     {
       "id": "R-result-shape",

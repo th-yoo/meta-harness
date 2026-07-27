@@ -23,7 +23,7 @@
     {
       "id": "R-class-contract",
       "text": "Call your implementation HeadlessTerminal(BaseTerminal) in /app/headless_terminal.py, importable as from headless_terminal import HeadlessTerminal",
-      "markers": ["import headlessterminal", "from headless_terminal"]
+      "markers": ["import headlessterminal", "from headless_terminal", "headless_terminal"]
     }
   ]
 }

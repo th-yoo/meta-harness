@@ -9,10 +9,21 @@ import { join } from "node:path"
 
 const TASKS = join(import.meta.dir, "../../minimal/tasks")
 
+// Overriding HOME (below) isolates ~/.bashrc + the tmux socket from the real
+// host, but it also changes where Python resolves user-site packages (e.g.
+// rdflib lives under the real $HOME/.local/...). Capture the real, unmodified
+// sys.path once and force it via PYTHONPATH so module resolution is unaffected
+// by the HOME override.
+const PY_SITE_PATH = Bun.spawnSync(["python3", "-c", "import sys,os; print(os.pathsep.join(p for p in sys.path if p))"], {
+  timeout: 10_000,
+})
+  .stdout.toString()
+  .trim()
+
 function runRelation(scriptPath: string, appdir: string, artifact: string): { code: number; out: string } {
   const r = Bun.spawnSync(["python3", scriptPath], {
     cwd: appdir,
-    env: { ...process.env, APPDIR: appdir, ARTIFACT: artifact },
+    env: { ...process.env, APPDIR: appdir, ARTIFACT: artifact, HOME: appdir, TMUX_TMPDIR: appdir, PYTHONPATH: PY_SITE_PATH },
     timeout: 60_000,
   })
   return { code: r.exitCode ?? 1, out: r.stdout.toString() + r.stderr.toString() }
@@ -23,6 +34,14 @@ function headlessAppdir(artifactSource: string): { appdir: string; artifact: str
   cpSync(join(TASKS, "headless-terminal/fixtures/base_terminal.py"), join(dir, "base_terminal.py"))
   const artifact = join(dir, "headless_terminal.py")
   writeFileSync(artifact, artifactSource)
+  // tmux spawns the pane shell as a login shell (argv0 "-bash"), which reads
+  // ~/.profile (not ~/.bashrc directly) when no ~/.bash_profile/~/.bash_login
+  // exists — mirror the real host's Debian-skel ~/.profile so the isolated
+  // appdir still exercises "does an interactive shell source ~/.bashrc".
+  writeFileSync(
+    join(dir, ".profile"),
+    'if [ -n "$BASH_VERSION" ]; then\n  if [ -f "$HOME/.bashrc" ]; then\n    . "$HOME/.bashrc"\n  fi\nfi\n',
+  )
   return { appdir: dir, artifact }
 }
 
@@ -35,6 +54,7 @@ test("headless: every relation PASSES on the oracle artifact", () => {
     const r = runRelation(join(RELDIR, f), appdir, artifact)
     expect({ relation: f, code: r.code, out: r.out.slice(-300) }).toEqual({ relation: f, code: 0, out: r.out.slice(-300) })
   }
+  Bun.spawnSync(["tmux", "kill-server"], { env: { ...process.env, TMUX_TMPDIR: appdir } })
 }, 120_000)
 
 test("headless: degraded artifact (drops modifier keys) violates at least one relation", () => {
@@ -49,6 +69,7 @@ test("headless: degraded artifact (drops modifier keys) violates at least one re
     .filter((f) => f.endsWith(".py"))
     .map((f) => runRelation(join(RELDIR, f), appdir, artifact).code)
   expect(codes.some((c) => c !== 0)).toBe(true)
+  Bun.spawnSync(["tmux", "kill-server"], { env: { ...process.env, TMUX_TMPDIR: appdir } })
 }, 120_000)
 
 function sparqlAppdir(query: string): { appdir: string; artifact: string } {
