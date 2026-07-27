@@ -23,7 +23,7 @@ export function parseRequirements(raw: string): Requirement[] | undefined {
     const out: Requirement[] = []
     for (const r of j.requirements) {
       if (typeof r.id !== "string" || typeof r.text !== "string" || !Array.isArray(r.markers)) return undefined
-      if (!r.markers.every((m: unknown) => typeof m === "string") || r.markers.length === 0) return undefined
+      if (!r.markers.every((m: unknown) => typeof m === "string" && m.length > 0) || r.markers.length === 0) return undefined
       out.push({ id: r.id, text: r.text, markers: r.markers })
     }
     return out

@@ -19,6 +19,9 @@ test("parseRequirements rejects malformed input", () => {
   expect(parseRequirements("not json")).toBeUndefined()
   expect(parseRequirements("{}")).toBeUndefined()
   expect(parseRequirements(JSON.stringify({ requirements: [{ id: "x" }] }))).toBeUndefined()
+  expect(parseRequirements(JSON.stringify({ requirements: [{ id: "x", text: "t", markers: [] }] }))).toBeUndefined()
+  expect(parseRequirements(JSON.stringify({ requirements: [{ id: "x", text: "t", markers: [""] }] }))).toBeUndefined()
+  expect(parseRequirements(JSON.stringify({ requirements: [{ id: "x", text: "t", markers: [123] }] }))).toBeUndefined()
 })
 
 test("stripBashComments drops comment tails but keeps quoted hashes", () => {
