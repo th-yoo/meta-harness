@@ -779,7 +779,13 @@ async function attempt(i: number): Promise<Trial> {
             gate: {
               accepted: gate.accepted,
               exhausted: gate.gateExhausted,
-              rounds: gate.rounds.map((r) => ({ outcome: r.outcome, tried: r.mutantsTried, survived: r.mutantsSurvived })),
+              rounds: gate.rounds.map((r) => ({
+                outcome: r.outcome,
+                tried: r.mutantsTried,
+                survived: r.mutantsSurvived,
+                killed: r.mutantsKilled,
+                coverage: r.coverage,
+              })),
             },
           }
         : {}),
