@@ -1,0 +1,332 @@
+import { test, expect } from "bun:test"
+import { handleStop } from "../src/core/stop.ts"
+import { INITIAL_STATE } from "../src/types.ts"
+import type { CcGateState, CoreDeps, StopInput } from "../src/types.ts"
+import { HYGIENE_MARKER } from "../../minimal/session2.ts"
+
+const input: StopInput = { session_id: "sess-1", cwd: "/repo" }
+
+function gateJson(overrides: Record<string, unknown> = {}): string {
+  return JSON.stringify({ check: "bun test", rounds: 2, marker: false, ...overrides })
+}
+
+/** Fake deps with a controllable, call-recording runCheck. */
+function fakeDeps(opts: {
+  results?: Array<{ code: number; out: string } | Error>
+  nowValues?: number[]
+} = {}): CoreDeps & { calls: string[]; logs: string[] } {
+  const results = opts.results ?? []
+  const nowValues = opts.nowValues ?? []
+  let resultIdx = 0
+  let nowIdx = 0
+  const calls: string[] = []
+  const logs: string[] = []
+
+  return {
+    calls,
+    logs,
+    runCheck: async (cmd: string) => {
+      calls.push(cmd)
+      const r = results[resultIdx] ?? { code: 0, out: "" }
+      resultIdx++
+      if (r instanceof Error) throw r
+      return r
+    },
+    now: () => {
+      const v = nowValues[nowIdx] ?? nowIdx * 1000
+      nowIdx++
+      return v
+    },
+    hostname: () => "test-host",
+    log: (msg: string) => {
+      logs.push(msg)
+    },
+  }
+}
+
+test("fast path: no edits, not gating -> allow, runCheck never called, no sensor, no crash on undefined raw", async () => {
+  const deps = fakeDeps()
+  const result = await handleStop(INITIAL_STATE, input, undefined, deps)
+
+  expect(result.decision).toEqual({ kind: "allow" })
+  expect(result.sensor).toBeUndefined()
+  expect(deps.calls).toEqual([])
+  expect(result.state).toBe(INITIAL_STATE)
+})
+
+test("edited, no gate.json (raw undefined) -> allow, edited preserved", async () => {
+  const state: CcGateState = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps()
+  const result = await handleStop(state, input, undefined, deps)
+
+  expect(result.decision).toEqual({ kind: "allow" })
+  expect(result.sensor).toBeUndefined()
+  expect(result.state.edited).toBe(true)
+  expect(deps.calls).toEqual([])
+})
+
+test("edited, invalid gate.json -> allow", async () => {
+  const state: CcGateState = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps()
+  const result = await handleStop(state, input, "{not valid json", deps)
+
+  expect(result.decision).toEqual({ kind: "allow" })
+  expect(result.sensor).toBeUndefined()
+  expect(result.state.edited).toBe(true)
+  expect(deps.calls).toEqual([])
+})
+
+test("gating but config removed mid-cycle -> cycle reset, no sensor, edited preserved", async () => {
+  const state: CcGateState = {
+    ...INITIAL_STATE,
+    edited: true,
+    gating: true,
+    round: 1,
+    outcomes: ["verify-failed"],
+    cycleStartedAt: 500,
+    failStreak: 0,
+  }
+  const deps = fakeDeps()
+  const result = await handleStop(state, input, undefined, deps)
+
+  expect(result.decision).toEqual({ kind: "allow" })
+  expect(result.sensor).toBeUndefined()
+  expect(result.state).toEqual({ ...INITIAL_STATE, edited: true })
+  expect(deps.calls).toEqual([])
+})
+
+test("check passes -> allow, sensor has all 11 fields, rounds ['accepted'], state deep-equals INITIAL_STATE", async () => {
+  const state: CcGateState = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps({ results: [{ code: 0, out: "" }] })
+  const result = await handleStop(state, input, gateJson(), deps)
+
+  expect(result.decision).toEqual({ kind: "allow" })
+  expect(result.state).toEqual(INITIAL_STATE)
+  expect(result.sensor).toBeDefined()
+  const sensorKeys = Object.keys(result.sensor!).sort()
+  expect(sensorKeys).toEqual(
+    ["ts", "sessionID", "check", "accepted", "gateExhausted", "rounds", "interrupted", "marker", "durationMs", "host", "app"].sort(),
+  )
+  expect(result.sensor!.rounds).toEqual(["accepted"])
+  expect(result.sensor!.accepted).toBe(true)
+  expect(result.sensor!.gateExhausted).toBe(false)
+  expect(result.sensor!.sessionID).toBe("sess-1")
+  expect(result.sensor!.check).toBe("bun test")
+})
+
+test("marker:true + accept -> allow-with-marker with HYGIENE_MARKER verbatim; sensor marker:true", async () => {
+  const state: CcGateState = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps({ results: [{ code: 0, out: "" }] })
+  const result = await handleStop(state, input, gateJson({ marker: true }), deps)
+
+  expect(result.decision).toEqual({ kind: "allow-with-marker", marker: HYGIENE_MARKER })
+  expect(result.sensor!.marker).toBe(true)
+})
+
+test("marker:true + EXHAUSTED -> no marker (allow-exhausted only); sensor marker:false", async () => {
+  let state: CcGateState = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps({
+    results: [
+      { code: 1, out: "fail1" },
+      { code: 1, out: "fail2" },
+      { code: 1, out: "fail3" },
+    ],
+  })
+
+  // round 1 -> block
+  let result = await handleStop(state, input, gateJson({ marker: true, rounds: 2 }), deps)
+  expect(result.decision.kind).toBe("block")
+  state = result.state
+
+  // round 2 -> block
+  result = await handleStop(state, input, gateJson({ marker: true, rounds: 2 }), deps)
+  expect(result.decision.kind).toBe("block")
+  state = result.state
+
+  // round 3 -> exhausted
+  result = await handleStop(state, input, gateJson({ marker: true, rounds: 2 }), deps)
+  expect(result.decision.kind).toBe("allow-exhausted")
+  expect(result.sensor!.marker).toBe(false)
+  expect(result.sensor!.gateExhausted).toBe(true)
+})
+
+test("check fails round 1 of default 2 -> block, evidence contains check output tail, state {gating:true, round:1, outcomes:['verify-failed']}, no sensor", async () => {
+  const state: CcGateState = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps({ results: [{ code: 1, out: "boom output" }] })
+  const result = await handleStop(state, input, gateJson({ rounds: 2 }), deps)
+
+  expect(result.decision.kind).toBe("block")
+  if (result.decision.kind === "block") {
+    expect(result.decision.evidence).toContain("boom output")
+    expect(result.decision.round).toBe(1)
+    expect(result.decision.roundsMax).toBe(2)
+  }
+  expect(result.state.gating).toBe(true)
+  expect(result.state.round).toBe(1)
+  expect(result.state.outcomes).toEqual(["verify-failed"])
+  expect(result.sensor).toBeUndefined()
+})
+
+test("second consecutive fail -> block round 2", async () => {
+  let state: CcGateState = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps({ results: [{ code: 1, out: "fail1" }, { code: 1, out: "fail2" }] })
+
+  const first = await handleStop(state, input, gateJson({ rounds: 2 }), deps)
+  state = first.state
+
+  const second = await handleStop(state, input, gateJson({ rounds: 2 }), deps)
+  expect(second.decision.kind).toBe("block")
+  if (second.decision.kind === "block") {
+    expect(second.decision.round).toBe(2)
+  }
+  expect(second.state.gating).toBe(true)
+  expect(second.state.round).toBe(2)
+  expect(second.state.outcomes).toEqual(["verify-failed", "verify-failed"])
+  expect(second.sensor).toBeUndefined()
+})
+
+test("third fail (rounds:2) -> allow-exhausted; sensor rounds all verify-failed, gateExhausted:true, interrupted:false; state reset", async () => {
+  let state: CcGateState = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps({
+    results: [
+      { code: 1, out: "fail1" },
+      { code: 1, out: "fail2" },
+      { code: 1, out: "fail3" },
+    ],
+  })
+
+  state = (await handleStop(state, input, gateJson({ rounds: 2 }), deps)).state
+  state = (await handleStop(state, input, gateJson({ rounds: 2 }), deps)).state
+  const third = await handleStop(state, input, gateJson({ rounds: 2 }), deps)
+
+  expect(third.decision.kind).toBe("allow-exhausted")
+  expect(third.sensor!.rounds).toEqual(["verify-failed", "verify-failed", "verify-failed"])
+  expect(third.sensor!.gateExhausted).toBe(true)
+  expect(third.sensor!.interrupted).toBe(false)
+  expect(third.state).toEqual(INITIAL_STATE)
+})
+
+test("fail then pass -> sensor rounds ['verify-failed','accepted'], durationMs spans invocations (cycleStartedAt from first Stop)", async () => {
+  let state: CcGateState = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps({
+    results: [{ code: 1, out: "fail1" }, { code: 0, out: "" }],
+    nowValues: [1000, 5000],
+  })
+
+  const first = await handleStop(state, input, gateJson({ rounds: 2 }), deps)
+  expect(first.state.cycleStartedAt).toBe(1000)
+  state = first.state
+
+  const second = await handleStop(state, input, gateJson({ rounds: 2 }), deps)
+  expect(second.decision).toEqual({ kind: "allow" })
+  expect(second.sensor!.rounds).toEqual(["verify-failed", "accepted"])
+  // durationMs = deps.now() at accept (5000) - cycleStartedAt from FIRST Stop (1000)
+  expect(second.sensor!.durationMs).toBe(4000)
+  expect(second.state).toEqual(INITIAL_STATE)
+})
+
+test("runCheck rejects -> allow, no sensor, cycle fields unchanged, failStreak incremented, deps.log called", async () => {
+  const state: CcGateState = {
+    ...INITIAL_STATE,
+    edited: true,
+    gating: true,
+    round: 1,
+    outcomes: ["verify-failed"],
+    cycleStartedAt: 42,
+  }
+  const deps = fakeDeps({ results: [new Error("spawn failed")] })
+  const result = await handleStop(state, input, gateJson(), deps)
+
+  expect(result.decision).toEqual({ kind: "allow" })
+  expect(result.sensor).toBeUndefined()
+  expect(result.state.gating).toBe(true)
+  expect(result.state.round).toBe(1)
+  expect(result.state.outcomes).toEqual(["verify-failed"])
+  expect(result.state.cycleStartedAt).toBe(42)
+  expect(result.state.failStreak).toBe(1)
+  expect(deps.logs.length).toBeGreaterThan(0)
+})
+
+test("failStreak accumulates across two rejections then a third -> disarm allow-exhausted, state full reset, no sensor", async () => {
+  let state: CcGateState = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps({
+    results: [new Error("boom1"), new Error("boom2"), new Error("boom3")],
+  })
+
+  const first = await handleStop(state, input, gateJson(), deps)
+  expect(first.state.failStreak).toBe(1)
+  state = first.state
+
+  const second = await handleStop(state, input, gateJson(), deps)
+  expect(second.state.failStreak).toBe(2)
+  state = second.state
+
+  const third = await handleStop(state, input, gateJson(), deps)
+  expect(third.decision.kind).toBe("allow-exhausted")
+  if (third.decision.kind === "allow-exhausted") {
+    expect(third.decision.message).toContain("disabled")
+  }
+  expect(third.state).toEqual(INITIAL_STATE)
+  expect(third.sensor).toBeUndefined()
+})
+
+test("failStreak resets after a completed check run (reject once, then fail-block -> streak back to 0)", async () => {
+  let state: CcGateState = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps({
+    results: [new Error("boom1"), { code: 1, out: "fail-after-reject" }],
+  })
+
+  const first = await handleStop(state, input, gateJson({ rounds: 2 }), deps)
+  expect(first.state.failStreak).toBe(1)
+  state = first.state
+
+  const second = await handleStop(state, input, gateJson({ rounds: 2 }), deps)
+  expect(second.decision.kind).toBe("block")
+  expect(second.state.failStreak).toBe(0)
+  expect(second.state.gating).toBe(true)
+  expect(second.state.round).toBe(1)
+})
+
+test("multi-session isolation: two independent state objects don't interfere", async () => {
+  const stateA: CcGateState = { ...INITIAL_STATE, edited: true }
+  const stateB: CcGateState = { ...INITIAL_STATE, edited: true }
+  const depsA = fakeDeps({ results: [{ code: 1, out: "a-fail" }] })
+  const depsB = fakeDeps({ results: [{ code: 0, out: "" }] })
+
+  const resultA = await handleStop(stateA, { session_id: "a", cwd: "/repo" }, gateJson(), depsA)
+  const resultB = await handleStop(stateB, { session_id: "b", cwd: "/repo" }, gateJson(), depsB)
+
+  expect(resultA.decision.kind).toBe("block")
+  expect(resultB.decision).toEqual({ kind: "allow" })
+  expect(stateA).toEqual({ ...INITIAL_STATE, edited: true })
+  expect(stateB).toEqual({ ...INITIAL_STATE, edited: true })
+})
+
+test("two overlapping handleStop calls on the SAME state object both resolve without throwing", async () => {
+  const state: CcGateState = { ...INITIAL_STATE, edited: true }
+
+  const slowDeps: CoreDeps = {
+    runCheck: async (_cmd: string) => {
+      await new Promise((r) => setTimeout(r, 10))
+      return { code: 0, out: "" }
+    },
+    now: () => 1000,
+    hostname: () => "test-host",
+    log: () => undefined,
+  }
+
+  const p1 = handleStop(state, input, gateJson(), slowDeps)
+  const p2 = handleStop(state, input, gateJson(), slowDeps)
+
+  const [r1, r2] = await Promise.all([p1, p2])
+  expect(r1.decision).toEqual({ kind: "allow" })
+  expect(r2.decision).toEqual({ kind: "allow" })
+})
+
+test("runCheck receives cfg.check verbatim", async () => {
+  const state: CcGateState = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps({ results: [{ code: 0, out: "" }] })
+  await handleStop(state, input, gateJson({ check: "make verify --strict" }), deps)
+
+  expect(deps.calls).toEqual(["make verify --strict"])
+})
