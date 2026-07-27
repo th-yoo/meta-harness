@@ -36,6 +36,26 @@ Place `gate.json` at your repo root (same level as `.git/`):
 
 Run `/kkamak:init` in Claude Code to inspect your repo and generate a starter `gate.json`.
 
+## What kkamak can and cannot touch
+
+The plugin never modifies tracked files. Its entire write surface is `.km/`
+(gitignored runtime state + sensor log); everything else is read-only — it
+reads `gate.json` and runs the check command **you** configured, nothing
+else. Launching `claude --plugin-dir …` in any directory changes nothing by
+itself: no `gate.json` in the repo means the plugin is inert beyond a single
+file-stat per turn.
+
+The alteration risk in an interactive session is the one every Claude Code
+session already has — it edits files when you ask and permissions allow —
+and that is independent of this plugin. If anything, the gate shrinks that
+damage class: broken edits get caught and fixed before "done" instead of
+being discovered later.
+
+Trust boundary to be aware of: the check command in `gate.json` is arbitrary
+shell, executed with your permissions. It is your own repo's config, same
+trust model as a Makefile or package.json script — but review it in repos
+you didn't author.
+
 ## Runtime artifacts
 
 All runtime state lives under `.km/` (gitignore this directory):
