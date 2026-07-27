@@ -3,7 +3,39 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-27 ~16:20 (office `yoo-dev`) — §6.3 ARMS PARTIAL: headless-ON DONE (pooled), control+sparql HANDED TO MACBOOK
+## ⏸ SESSION END 2026-07-27 night (MacBook home) — §6.3 EXECUTED + CLOSED BY MATH · RANKED ITEM 1 DONE · NEXT = §4.1 SMOKE-TEST
+
+**WHAT CLOSED (all pushed through `f355646`; full detail HISTORY.md FA1 +
+the two ✅ UPDATE blocks in the office section below):**
+1. **sparql k=5 probes-ON shape check (option c):** 5/5, all round-0 accepts,
+   zero exhaustion/reinjects/false-accepts, ~1.2–2x tax. Clock preflight
+   auto-fixed a −39190s VM skew (Mac-sleep class) at launch.
+2. **headless control k=10 (user-directed on MacBook despite the cross-host
+   caveat):** 9 valid = 8/9, false-accepts 1/9, exhaustion 0/9, median 446s,
+   probes header null ✓; 1 void (a1 0-turn).
+3. **§6.3 CLOSED BY MATH (user: "determine from the math"):** ON 1/10 vs
+   control 1/9 p=1.0; rewards p=1.0; G1 2/5 reference uncertified (k=5
+   noise). **Futility: perfect ON 0/10 vs control 1/9 → p=0.47; cert needs
+   control ≥4/9 vs observed ~11% floor → BOTH remaining arms (b′/a) refused
+   pre-spend.** Probes: no quantitative claim, ship fail-open, qualitative
+   saves real-but-rare. **~10% residual (2/19 pooled) = §4.3 calibration
+   rate.** Grip fix (G1) stays the only certified mechanism change.
+
+**QUEUE: ranked item 1 DONE → item 2 live: §4.1 gate-plugin live smoke-test
+(host-agnostic, cheap, next action) → §4.3 trial mode (calibration rate in
+hand) → §4.4 mechanism proposals. S4 operators open. Standing: mid-arm
+futility curtailment still unexercised; wrapper-verify watch-item moves to
+plugin sensor data.**
+
+**BOX STATE (MacBook):** clean — no containers, no run tmux (squad gateway
+only), no monitors; tree clean except known host-local logs
+(logs-fa-* new tonight) + stray `.agents/`/`.roo/`. Everything pushed.
+
+**Rules in force unchanged:** explicit go before token spend · one variable
+per test · gate.ts sole adopter · forensics before verdict math · same-host
+arms · tmux + rotated logs · no bare "gate" in new docs · SITREP style.
+
+## ⏸ SESSION END 2026-07-27 ~16:20 (office `yoo-dev`) — §6.3 ARMS PARTIAL: headless-ON DONE (pooled), control+sparql HANDED TO MACBOOK — **EXECUTED + CLOSED same night, see block above**
 
 **WHAT RAN (probes built + merge-ready earlier today, commits a61b08b..eb2ac11 +
 4f9b46a; see the queue block below):** §6.3 headless probes-ON k=10 executed as
@@ -113,10 +145,9 @@ analysis, user-confirmed) — attack order:**
    MERGE-READY; suites 1671+26 green; desk-validated oracle-pass/
    degraded-fail both tasks; plan:
    `docs/superpowers/plans/2026-07-27-false-accept-probes.md`).
-   **REMAINING: §6.3 calibration arms** (pre-registered in grip-fix design
-   doc, SPEND-GATED — headless k=10 probes-ON vs deleted-files control,
-   sparql k=5; watch: wrapper-style verify.sh = likeliest exhaustion
-   trigger; relation timing under container load). S4 behavior-targeting
+   ~~REMAINING: §6.3 calibration arms~~ **DONE + CLOSED BY MATH 07-27
+   night (MacBook) — probe effect null, remaining arms futile; see the
+   session-end block at top + HISTORY.md FA1.** S4 behavior-targeting
    operators ride along after (hand-design active — §4.4 deferred).
 2. **Machine crank (plugin, deferred):** §4.1 live smoke-test → §4.3 trial
    mode (HARD constraint: gate-accept ≠ correct; consumes calibration rate
