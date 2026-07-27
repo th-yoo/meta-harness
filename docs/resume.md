@@ -3,7 +3,21 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-27 night (MacBook home) — §6.3 CLOSED BY MATH · §4.1 SMOKE-TEST PASS (SM1) · CC-PLUGIN PLAN READY · NEXT = 2.1b BUILD
+## ⏸ SESSION END 2026-07-27 night (MacBook home) — §6.3 CLOSED · SM1 PASS · **2.1b CC PLUGIN SHIPPED + SMOKE PASS (SM2, merge 6d443df)** · NEXT = DOGFOOD INSTALL + §4.3 DESIGN
+
+**2.1b DONE same night:** `cc-gate-plugin/` (plugin name **kkamak**) built via
+15-node parallel-DAG subagent waves per the plan; suites 120+26 green, tsc
+clean; wave reviews + final merge-gate review (2 blocking findings fixed:
+.km gitignore, sweep littering; + post-kill stream-hang grace) → MERGE-READY
+→ merged. **Live smoke (3 headless CC sessions): block-json evidence
+delivery VERIFIED** (self-describing check → agent received the block reason
+and fixed it, rounds ["verify-failed","accepted"] in 4s) — shipped default
+stays block-json; rounds bound exact; marker/no-edit/mkdir/-p all ✓.
+HISTORY.md SM2. Build ledger: .superpowers/sdd/progress.md (host-local).
+**NEXT:** (a) dogfood install — write gate.json for this repo + squad
+(squad .gitignore needs `.km/` first — reviewer note), use daily; (b) §4.3
+design (brainstorm workload-confound problem first) against the now-two-host
+union sensor stream; (c) S4 operators + §4.4 unchanged in queue.
 
 **WHAT CLOSED (full detail HISTORY.md FA1 + SM1 + the two ✅ UPDATE blocks
 in the office section below):**
