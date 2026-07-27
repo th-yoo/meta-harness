@@ -36,6 +36,7 @@ import {
   seedPlaybook,
   buildProposerContext,
   readRejectedLedger,
+  readTrial,
   nextVersion,
   candidateExists,
   readCandidateSystem,
@@ -49,6 +50,7 @@ import { parseSensorLines, aggregate, notable, type SensorLine } from "./scan.ts
 import { readPositions, writePositionsAtomic, type Positions } from "./positions.ts"
 import { renderEvidence, type RepoEvidence } from "./evidence.ts"
 import { formatSitrep, postSlack, type SitrepAction, type RepoSummary } from "./sitrep.ts"
+import { decideGate, acquireCrankLock, releaseCrankLock } from "./gate.ts"
 
 function expandHome(p: string): string {
   return p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p
@@ -119,6 +121,13 @@ async function main(): Promise<void> {
   const force = process.argv.includes("--force")
   const now = Date.now()
 
+  // FIX 3: launchd will NOT create StandardOutPath's parent directory on the
+  // very first scheduled run, and positions.json / crank.lock live under the
+  // same directory — self-heal unconditionally, before anything else, so
+  // even a bare `bun src/crank.ts` (no prior manual mkdir, README Install
+  // step skipped) works on a fresh host.
+  fs.mkdirSync(path.join(accountMetaRoot(), "km-crank"), { recursive: true })
+
   const positions = readPositions()
 
   const scans: RepoScan[] = REPOS.map((repo) => {
@@ -129,15 +138,6 @@ async function main(): Promise<void> {
   })
 
   const totalNew = scans.reduce((sum, s) => sum + s.newLines.length, 0)
-  const ageMs = now - positions.lastRunTs
-  const recentEnough = positions.lastRunTs > 0 && ageMs < MAX_AGE_DAYS * 24 * 60 * 60 * 1000
-
-  if (!force && totalNew < THRESHOLD && recentEnough) {
-    console.log(
-      `[km-crank] skip: ${totalNew} new line(s) pooled (< ${THRESHOLD}), last run ${(ageMs / 3_600_000).toFixed(1)}h ago`,
-    )
-    return // positions NOT advanced — new lines stay pending
-  }
 
   const repoResults: RepoEvidence[] = scans.map((s) => ({
     repo: s.repo,
@@ -161,149 +161,203 @@ async function main(): Promise<void> {
   const targetRepo = target.repo
 
   const layer = layersFor(targetRepo, AGENT_ROLE)[1]! // project-global
-
-  // Evidence dir: opencode-plugin's buildExternalEvidenceSection only
-  // discovers <dir>/<task>/<agent>.md — see evidence.ts's header comment for
-  // why the file goes one level deeper than a bare "evidence-<ts>/*.md" read
-  // of the brief would suggest.
-  const evidenceRoot = path.join(accountMetaRoot(), "km-crank", `evidence-${now}`)
-  const evidenceTaskDir = path.join(evidenceRoot, "kkamak-sensors")
-  fs.mkdirSync(evidenceTaskDir, { recursive: true })
-  fs.writeFileSync(path.join(evidenceTaskDir, "km-crank.md"), renderEvidence(repoResults, now), "utf-8")
-
-  const version = nextVersion(layer.root)
-  const stagingBase = path.join(targetRepo, ".meta-harness", "staging")
-  const stagingSystem = path.join(stagingBase, `${layer.scope}-${version}-system.md`)
-  const stagingTools = path.join(stagingBase, `${layer.scope}-${version}-tools.md`)
-  const stagingDiagnosis = path.join(stagingBase, `${layer.scope}-${version}-diagnosis.json`)
-  const stagingOps = path.join(stagingBase, `${layer.scope}-${version}-ops.json`)
-  const stagingAgentConfig = path.join(stagingBase, `${layer.scope}-${version}-agent-config.json`)
-  const stagingEnvPolicy = path.join(stagingBase, `${layer.scope}-${version}-env-policy.json`)
-
-  const playbook = seedPlaybook(layer.root)
-  const context = buildProposerContext(layer.root, layer.higherRoots)
-  const cfg = readMhConfig()
-  const proposerModel = parseModelSpec(cfg.proposerModel)
-
-  const prompt = buildProposerPrompt(
-    layer,
-    version,
-    context,
-    stagingSystem,
-    stagingTools,
-    stagingDiagnosis,
-    stagingOps,
-    stagingAgentConfig,
-    stagingEnvPolicy,
-    targetRepo,
-    playbook,
-    evidenceRoot,
-    [], // heldOut — km-crank's evidence isn't TB2-leaderboard evidence, nothing to hold out
-  )
-
   const host = new ClaudeCodeHost(targetRepo, {})
-  const task = await host.runTaskAgent({
-    title: `[km-crank] ${layer.scope} ${version}`,
-    prompt,
-    model: proposerModel,
+
+  // Gate: threshold/age (unchanged behavior) + FIX 1 (trial-clobber guard)
+  // + FIX 2 (cross-process proposer guard) — ALL evaluated BEFORE computing
+  // nextVersion() or building anything, mirroring propose.ts's
+  // triggerPropose (opencode-plugin/src/propose.ts:141-149). See gate.ts's
+  // decideGate for the priority order and full rationale.
+  const gateDecision = decideGate({
+    force,
+    newCount: totalNew,
+    threshold: THRESHOLD,
+    lastRunTs: positions.lastRunTs,
+    maxAgeMs: MAX_AGE_DAYS * 24 * 60 * 60 * 1000,
+    now,
+    trialInProgress: readTrial(layer.root) !== null,
+    inFlight: !!host.proposerInFlight?.(layer.root),
   })
-  if (!task) throw new Error("km-crank: proposer failed to spawn (runTaskAgent returned null — check the crank log)")
 
-  const descriptor: StagedArtifactDescriptor = {
-    kind: "propose",
-    worktree: targetRepo,
-    version,
-    layer,
-    playbookMode: !!playbook,
-    proposerModel: cfg.proposerModel,
-    proposerVariant: cfg.proposerVariant,
-    sessionId: task.id,
-    spawnedAt: now,
-    timeoutMs: POLL_TIMEOUT_MS,
-    pid: process.pid,
+  if (gateDecision !== "run") {
+    const ageMs = now - positions.lastRunTs
+    const reason =
+      gateDecision === "skip-threshold"
+        ? `${totalNew} new line(s) pooled (< ${THRESHOLD}), last run ${(ageMs / 3_600_000).toFixed(1)}h ago`
+        : gateDecision === "skip-trial"
+          ? `trial already in progress for ${layer.scope} (readTrial) — a live session owns this layer, not clobbering its .trial state`
+          : `proposer already in flight for ${layer.scope} (host.proposerInFlight) — a live CC session's own round owns this layer`
+    console.log(`[km-crank] skip (${gateDecision}): ${reason}`)
+    return // positions NOT advanced — this round's lines (if any) stay pending, no Slack post
   }
 
-  const primary = playbook ? stagingOps : stagingSystem
-  let found = await waitForFile(primary, POLL_TIMEOUT_MS)
-  if (!found && playbook && fs.existsSync(stagingSystem)) found = true // propose.ts's own grace case
-
-  if (!found) {
-    await postSlack(
-      formatSitrep({ generatedAt: now, repos: repoSummaries, targetRepo, action: { kind: "proposer-timeout" } }),
-    )
-    console.log("[km-crank] proposer timeout — positions not advanced, this round's lines stay pending")
-    return
+  // FIX 2 (continued): crank-private round lock — NOT host.stageArtifactApply
+  // (see gate.ts's header comment for why: that lock format is consumed by
+  // proposer.ts's applyPendingArtifacts on every hook event, so registering
+  // there risks a live CC session double-applying the same staged artifact
+  // crank.ts itself polls for and applies). This lock guards ONLY against
+  // two crank.ts invocations racing each other; acquired before
+  // nextVersion() so both racers can never spawn a proposer for the same
+  // round. host.proposerInFlight above was already checked read-only.
+  const lockRoot = accountMetaRoot()
+  if (!acquireCrankLock(lockRoot, now, POLL_TIMEOUT_MS + 5 * 60_000)) {
+    console.log("[km-crank] skip (skip-inflight): another km-crank round already holds the round lock")
+    return // positions NOT advanced, no Slack post
   }
 
-  // Capture staged content BEFORE applyStagedArtifact consumes (deletes) it —
-  // applyStagedArtifact returns only "applied"|"pending", never which branch
-  // (no-op / review-rejected / staged) it took, so the sitrep's "bullet text"
-  // must be read from the raw staging files while they still exist.
-  let preApplyBulletText = ""
-  let preApplyFalsifyIf: string | undefined
   try {
-    if (playbook && fs.existsSync(stagingOps)) {
-      const raw = JSON.parse(fs.readFileSync(stagingOps, "utf-8")) as { ops?: Array<{ op: string; text?: string }> }
-      preApplyBulletText = (raw.ops ?? [])
-        .filter((o) => o.op === "add")
-        .map((o) => o.text ?? "")
-        .join("\n")
-    } else if (fs.existsSync(stagingSystem)) {
-      preApplyBulletText = fs.readFileSync(stagingSystem, "utf-8").trim()
+    // Evidence dir: opencode-plugin's buildExternalEvidenceSection only
+    // discovers <dir>/<task>/<agent>.md — see evidence.ts's header comment for
+    // why the file goes one level deeper than a bare "evidence-<ts>/*.md" read
+    // of the brief would suggest.
+    const evidenceRoot = path.join(accountMetaRoot(), "km-crank", `evidence-${now}`)
+    const evidenceTaskDir = path.join(evidenceRoot, "kkamak-sensors")
+    fs.mkdirSync(evidenceTaskDir, { recursive: true })
+    fs.writeFileSync(path.join(evidenceTaskDir, "km-crank.md"), renderEvidence(repoResults, now), "utf-8")
+
+    const version = nextVersion(layer.root)
+    const stagingBase = path.join(targetRepo, ".meta-harness", "staging")
+    const stagingSystem = path.join(stagingBase, `${layer.scope}-${version}-system.md`)
+    const stagingTools = path.join(stagingBase, `${layer.scope}-${version}-tools.md`)
+    const stagingDiagnosis = path.join(stagingBase, `${layer.scope}-${version}-diagnosis.json`)
+    const stagingOps = path.join(stagingBase, `${layer.scope}-${version}-ops.json`)
+    const stagingAgentConfig = path.join(stagingBase, `${layer.scope}-${version}-agent-config.json`)
+    const stagingEnvPolicy = path.join(stagingBase, `${layer.scope}-${version}-env-policy.json`)
+
+    const playbook = seedPlaybook(layer.root)
+    const context = buildProposerContext(layer.root, layer.higherRoots)
+    const cfg = readMhConfig()
+    const proposerModel = parseModelSpec(cfg.proposerModel)
+
+    const prompt = buildProposerPrompt(
+      layer,
+      version,
+      context,
+      stagingSystem,
+      stagingTools,
+      stagingDiagnosis,
+      stagingOps,
+      stagingAgentConfig,
+      stagingEnvPolicy,
+      targetRepo,
+      playbook,
+      evidenceRoot,
+      [], // heldOut — km-crank's evidence isn't TB2-leaderboard evidence, nothing to hold out
+    )
+
+    const task = await host.runTaskAgent({
+      title: `[km-crank] ${layer.scope} ${version}`,
+      prompt,
+      model: proposerModel,
+    })
+    if (!task) throw new Error("km-crank: proposer failed to spawn (runTaskAgent returned null — check the crank log)")
+
+    const descriptor: StagedArtifactDescriptor = {
+      kind: "propose",
+      worktree: targetRepo,
+      version,
+      layer,
+      playbookMode: !!playbook,
+      proposerModel: cfg.proposerModel,
+      proposerVariant: cfg.proposerVariant,
+      sessionId: task.id,
+      spawnedAt: now,
+      timeoutMs: POLL_TIMEOUT_MS,
+      pid: process.pid,
     }
-    if (fs.existsSync(stagingDiagnosis)) {
-      const dx = JSON.parse(fs.readFileSync(stagingDiagnosis, "utf-8")) as Record<string, unknown>
-      // Not part of propose.ts's diagnosis schema today (see report) — checked
-      // defensively in case a future proposer prompt starts emitting it.
-      if (typeof dx["falsify_if"] === "string") preApplyFalsifyIf = dx["falsify_if"] as string
+
+    const primary = playbook ? stagingOps : stagingSystem
+    let found = await waitForFile(primary, POLL_TIMEOUT_MS)
+    if (!found && playbook && fs.existsSync(stagingSystem)) found = true // propose.ts's own grace case
+
+    if (!found) {
+      await postSlack(
+        formatSitrep({ generatedAt: now, repos: repoSummaries, targetRepo, action: { kind: "proposer-timeout" } }),
+      )
+      console.log("[km-crank] proposer timeout — positions not advanced, this round's lines stay pending")
+      return
     }
-  } catch {
-    /* best-effort capture only — never block the round over a read/parse error */
-  }
 
-  const rejectedBefore = readRejectedLedger(layer.root)
-  const candidateExistedBefore = candidateExists(layer.root, version)
-
-  const applyResult = await applyStagedArtifact(host, descriptor)
-
-  let action: SitrepAction
-  let roundCompleted = false
-
-  if (applyResult === "pending") {
-    // Shouldn't happen (we just confirmed the primary artifact is on disk),
-    // but defensive: treat exactly like a poll timeout — no candidate state
-    // was touched, so positions must not advance either.
-    action = { kind: "proposer-timeout" }
-  } else {
-    roundCompleted = true
-    const rejectedAfter = readRejectedLedger(layer.root)
-    if (rejectedAfter.length > rejectedBefore.length) {
-      const newest = rejectedAfter[rejectedAfter.length - 1]!
-      action = {
-        kind: "review-rejected",
-        reason: `${(newest.violations ?? []).join(", ") || "violations"} — "${newest.bullet.slice(0, 200)}"`,
+    // Capture staged content BEFORE applyStagedArtifact consumes (deletes) it —
+    // applyStagedArtifact returns only "applied"|"pending", never which branch
+    // (no-op / review-rejected / staged) it took, so the sitrep's "bullet text"
+    // must be read from the raw staging files while they still exist.
+    let preApplyBulletText = ""
+    let preApplyFalsifyIf: string | undefined
+    try {
+      if (playbook && fs.existsSync(stagingOps)) {
+        const raw = JSON.parse(fs.readFileSync(stagingOps, "utf-8")) as { ops?: Array<{ op: string; text?: string }> }
+        preApplyBulletText = (raw.ops ?? [])
+          .filter((o) => o.op === "add")
+          .map((o) => o.text ?? "")
+          .join("\n")
+      } else if (fs.existsSync(stagingSystem)) {
+        preApplyBulletText = fs.readFileSync(stagingSystem, "utf-8").trim()
       }
-    } else if (!candidateExistedBefore && candidateExists(layer.root, version)) {
-      action = {
-        kind: "proposed-staged",
-        scope: layer.scope,
-        version,
-        bulletText: preApplyBulletText || readCandidateSystem(layer.root, version),
-        falsifyIf: preApplyFalsifyIf,
+      if (fs.existsSync(stagingDiagnosis)) {
+        const dx = JSON.parse(fs.readFileSync(stagingDiagnosis, "utf-8")) as Record<string, unknown>
+        // Not part of propose.ts's diagnosis schema today (see report) — checked
+        // defensively in case a future proposer prompt starts emitting it.
+        if (typeof dx["falsify_if"] === "string") preApplyFalsifyIf = dx["falsify_if"] as string
       }
+    } catch {
+      /* best-effort capture only — never block the round over a read/parse error */
+    }
+
+    const rejectedBefore = readRejectedLedger(layer.root)
+    const candidateExistedBefore = candidateExists(layer.root, version)
+
+    // FIX 2 (continued): applyStagedArtifact is called from THIS process only
+    // — crank.ts never registers via host.stageArtifactApply, so there is no
+    // second consumer (a live CC session's applyPendingArtifacts scan) that
+    // could race this call. The crank-private round lock (acquired above)
+    // is released in the outer `finally`, right after this returns or throws.
+    const applyResult = await applyStagedArtifact(host, descriptor)
+
+    let action: SitrepAction
+    let roundCompleted = false
+
+    if (applyResult === "pending") {
+      // Shouldn't happen (we just confirmed the primary artifact is on disk),
+      // but defensive: treat exactly like a poll timeout — no candidate state
+      // was touched, so positions must not advance either.
+      action = { kind: "proposer-timeout" }
     } else {
-      action = { kind: "no-op" }
+      roundCompleted = true
+      const rejectedAfter = readRejectedLedger(layer.root)
+      if (rejectedAfter.length > rejectedBefore.length) {
+        const newest = rejectedAfter[rejectedAfter.length - 1]!
+        action = {
+          kind: "review-rejected",
+          reason: `${(newest.violations ?? []).join(", ") || "violations"} — "${newest.bullet.slice(0, 200)}"`,
+        }
+      } else if (!candidateExistedBefore && candidateExists(layer.root, version)) {
+        action = {
+          kind: "proposed-staged",
+          scope: layer.scope,
+          version,
+          bulletText: preApplyBulletText || readCandidateSystem(layer.root, version),
+          falsifyIf: preApplyFalsifyIf,
+        }
+      } else {
+        action = { kind: "no-op" }
+      }
     }
-  }
 
-  if (roundCompleted) {
-    const newPositions: Positions = { files: { ...positions.files }, lastRunTs: now }
-    for (const s of scans) newPositions.files[s.sensorPath] = { offset: s.newOffset }
-    writePositionsAtomic(newPositions)
-  }
+    if (roundCompleted) {
+      const newPositions: Positions = { files: { ...positions.files }, lastRunTs: now }
+      for (const s of scans) newPositions.files[s.sensorPath] = { offset: s.newOffset }
+      writePositionsAtomic(newPositions)
+    }
 
-  await postSlack(formatSitrep({ generatedAt: now, repos: repoSummaries, targetRepo, action }))
-  console.log(`[km-crank] done: ${action.kind}`)
+    await postSlack(formatSitrep({ generatedAt: now, repos: repoSummaries, targetRepo, action }))
+    console.log(`[km-crank] done: ${action.kind}`)
+  } finally {
+    // FIX 2: always release the crank-private round lock, whether the round
+    // completed, timed out, or threw — mirrors triggerPropose's
+    // `finally { inFlight.delete(layer.root) }` (propose.ts:270-272).
+    releaseCrankLock(lockRoot)
+  }
 }
 
 main().catch(async (err) => {

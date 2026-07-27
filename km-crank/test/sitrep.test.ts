@@ -43,6 +43,18 @@ test("formatSitrep: SKIPPED action", () => {
   expect(text).toContain("SKIPPED")
 })
 
+test("formatSitrep: skip-trial action (FIX 1 — never posted by crank.ts, kept for formatting symmetry)", () => {
+  const text = formatSitrep(outcome({ action: { kind: "skip-trial" } }))
+  expect(text).toContain("SKIPPED")
+  expect(text).toContain("trial")
+})
+
+test("formatSitrep: skip-inflight action (FIX 2 — never posted by crank.ts, kept for formatting symmetry)", () => {
+  const text = formatSitrep(outcome({ action: { kind: "skip-inflight" } }))
+  expect(text).toContain("SKIPPED")
+  expect(text).toContain("in flight")
+})
+
 test("formatSitrep: PROPOSED+STAGED includes scope, version, bullet text, and falsify_if when present", () => {
   const text = formatSitrep(
     outcome({

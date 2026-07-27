@@ -16,9 +16,16 @@ import * as path from "node:path"
  *   - "failure": the top-level catch-all for any thrown error.
  * "skipped" itself is never passed to formatSitrep from crank.ts (routine
  * skips print a log line and never post to Slack) but is kept in the union
- * for completeness / testability. */
+ * for completeness / testability. Same for "skip-trial" / "skip-inflight"
+ * (FIX 1 / FIX 2, gate.ts's decideGate outcomes): both are routine skips —
+ * crank.ts prints a distinct log line and returns WITHOUT calling
+ * formatSitrep/postSlack at all. They exist here only for formatting
+ * symmetry with the other skip kind and so the render logic is testable in
+ * isolation. */
 export type SitrepAction =
   | { kind: "skipped" }
+  | { kind: "skip-trial" }
+  | { kind: "skip-inflight" }
   | { kind: "proposed-staged"; scope: string; version: string; bulletText: string; falsifyIf?: string }
   | { kind: "review-rejected"; reason: string }
   | { kind: "proposer-timeout" }
@@ -67,6 +74,12 @@ export function formatSitrep(o: SitrepOutcome): string {
   switch (o.action.kind) {
     case "skipped":
       lines.push("*Action:* SKIPPED (below threshold, recent run)")
+      break
+    case "skip-trial":
+      lines.push("*Action:* SKIPPED (trial already in progress for the target layer)")
+      break
+    case "skip-inflight":
+      lines.push("*Action:* SKIPPED (proposer already in flight for the target layer)")
       break
     case "proposed-staged": {
       lines.push(`*Action:* PROPOSED+STAGED — candidate \`${o.action.version}\` (${o.action.scope})`)
