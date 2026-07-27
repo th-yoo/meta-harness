@@ -35,13 +35,27 @@ host-local, ignorable) + stray `.agents/`/`.roo/` (not ours, untouched). No
 tmux (squad gateway only), no containers. Everything pushed.
 
 **⏭ OFFICE PLAYBOOK — REORDERED 2026-07-27 (user): opencode-plugin tasks
-DEFERRED until after bench-side mechanism work.** New order: (A) bench first —
-S4 grip operators + spec-coverage/metamorphic probe classes in minimal/
-(hand-design now active by this decision — §4.4 machine-seat routing was the
-preference but §4.4 is itself deferred plugin work) + false-accept
-calibration measurement on bench tasks; THEN (B) plugin queue — §4.1 live
-smoke-test, §4.3 trial mode, §4.4 mechanism proposals. Original numbered
-list below kept for reference:
+DEFERRED until after bench-side mechanism work. RANKED 2026-07-27 (gap
+analysis, user-confirmed) — attack order:**
+1. **False-accept countermeasures (bench):** spec-coverage probe →
+   metamorphic-relation probes → calibration arms (spend-gated). The only
+   remaining real-failure class (every real fail C2+C1+G1 = accepted-but-
+   graded-fail); probes also improve the agent DIRECTLY in-session (G1 a1
+   precedent). S4 behavior-targeting operators ride along after (same
+   mutate.ts territory, hand-design active — §4.4 deferred).
+2. **Machine crank (plugin, deferred):** §4.1 live smoke-test → §4.3 trial
+   mode (HARD constraint: gate-accept ≠ correct; consumes calibration rate
+   from 1) → §4.4 mechanism proposals. Built only AFTER 1 — otherwise the
+   crank optimizes a poisoned signal.
+3. **Behavioral fingerprinting:** one evaluation session someday (86%-vs-0%
+   regression-detection claim; smaller k per verdict if real). Not a build
+   commitment.
+4. **Task/curriculum generation:** → `explicitly-not-now.md` (oracle-squared
+   trap: synthesized tasks need synthesized graders; revisit at band
+   saturation with item-1 verification tech in hand).
+5. **Cross-family judge check:** opportunistic — run when a judge verdict
+   next materially matters (field: ~5–7% same-family inflation).
+Original numbered list below kept for reference:
 1. ~~git pull + installs + suite verify~~ **DONE 2026-07-27 office (`yoo-dev`):
    gate-plugin 26/26, opencode-plugin 1641 ran 0 fail. Pull through `7d37a3a`.**
 2. **Live smoke-test of the gate plugin** (the one unverified assumption:

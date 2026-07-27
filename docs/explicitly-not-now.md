@@ -401,6 +401,21 @@ becomes the binding constraint on loop cadence.
 
 ---
 
+## 7.6 Automatic task / curriculum generation (deferred 2026-07-27, gap analysis)
+
+The one strategic gap nothing on the roadmap addresses: we depend on a fixed
+TB2 band; at saturation, signal dries up. Field has task-synthesis /
+curriculum methods (targeted tasks at diagnosed failure classes = proven
+effective). Deferred anyway because of the **oracle-squared trap**: a
+synthesized task needs a synthesized grader, and our entire false-accept
+watch-item (every real fail across C2+C1+G1 = agent-side checker accepted,
+grader failed) demonstrates what un-vetted checkers do — a task generator
+with that bug class feeds the loop pure noise while looking productive.
+**Trigger to revisit:** band saturation (screen shows no 0<pass<1 tasks
+left) AND spec-coverage/metamorphic verification tech (resume.md ranked
+item 1) proven — the same tech that vets agent verify.sh can vet generated
+graders. Until both: fixed band + Cat-A reserves.
+
 ## 8. Reading this doc in six months
 
 Ask, per entry: did the trigger fire? If yes, the entry graduates into the next
