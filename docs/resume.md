@@ -14,7 +14,7 @@ delivery VERIFIED** (self-describing check → agent received the block reason
 and fixed it, rounds ["verify-failed","accepted"] in 4s) — shipped default
 stays block-json; rounds bound exact; marker/no-edit/mkdir/-p all ✓.
 HISTORY.md SM2. Build ledger: .superpowers/sdd/progress.md (host-local).
-**NEXT:** (a) dogfood install — write gate.json for this repo + squad
+**First interactive-dogfood finding (07-28 demo):** after a block, the agent may RE-RUN the check itself via Bash → permission prompt stalls the fix loop in default/acceptEdits modes (gate itself fine — turn just waits). Mitigation candidates: reinject wording ('do not re-run the check yourself; just fix and finish') or docs note; sensor durationMs inflates with human-wait time (282s incl. approval wait). **NEXT:** (a) dogfood install — write gate.json for this repo + squad
 (squad .gitignore needs `.km/` first — reviewer note), use daily; (b) §4.3
 design (brainstorm workload-confound problem first) against the now-two-host
 union sensor stream; (c) S4 operators + §4.4 unchanged in queue.
