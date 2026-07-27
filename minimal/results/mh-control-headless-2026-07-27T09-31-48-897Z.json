@@ -1,0 +1,297 @@
+{
+  "task": "mh-control-headless",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-mac.local",
+  "startedAt": "2026-07-27T09:31:48.897Z",
+  "k": 10,
+  "parallel": 2,
+  "sampling": null,
+  "system": {
+    "file": "minimal/harness/system-v0.md",
+    "sha256": "3b65fb7d6573fe4b"
+  },
+  "harness": {
+    "file": "minimal/harness/seed-v0.md",
+    "sha256": "e72331a29823cfb4"
+  },
+  "completeGate": {
+    "artifact": "/app/headless_terminal.py",
+    "rounds": 2,
+    "mutants": 4
+  },
+  "probes": {
+    "requirements": 0,
+    "relations": 0
+  },
+  "thenTask": null,
+  "marker": false,
+  "stopFutile": null,
+  "stoppedFutile": null,
+  "rewards": [
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+  ],
+  "passRate": 0.8,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 0,
+      "turns": 0,
+      "elapsedSec": 3.81,
+      "agentExitCode": 1,
+      "timedOut": false,
+      "suspect": true,
+      "resultText": "",
+      "trajFile": "mh-control-headless-2026-07-27T09-31-48-897Z-a1.traj.ndjson",
+      "agentStderr": "\u001b[91m\u001b[1mError: \u001b[0mUnexpected error\n\ndatabase is locked",
+      "gate": {
+        "accepted": true,
+        "exhausted": true,
+        "rounds": [
+          {
+            "outcome": "no-verify",
+            "tried": 0,
+            "survived": 0,
+            "killed": 0,
+            "coverage": "off"
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 2,
+      "reward": 0,
+      "turns": 1,
+      "elapsedSec": 376.29,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "## Verification — definition of done\n\nI implemented `HeadlessTerminal(BaseTerminal)` in `/app/headless_terminal.py` using a real PTY (`pty.fork`) running `bash -i`, with a `pyte` terminal emulator to render output. Here is each stated requirement checked against the real artifact:\n\n1. **\"Implement the provided `BaseTerminal` interface\"** — `HeadlessTerminal` subclasses `BaseTerminal` and concretel",
+      "trajFile": "mh-control-headless-2026-07-27T09-31-48-897Z-a2.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 2,
+            "killed": 2,
+            "coverage": "filtered"
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 3,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 567.73,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Everything is in place. Let me now perform the final verification procedure per the definition-of-done, mapping each task requirement to its evidence.\n\n## Verification — Definition of Done\n\nI read each requirement from the task's operative wording and verified the real shipped artifact (`/app/headless_terminal.py`) against it by running `/app/verify.sh` (exit 0):\n\n1. **\"Call your implementation `H",
+      "trajFile": "mh-control-headless-2026-07-27T09-31-48-897Z-a3.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 3,
+            "killed": 1,
+            "coverage": "filtered"
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 4,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 478.04,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Everything is clean (bashrc restored — no leftover markers, `__pycache__` is a harmless byproduct). Now the final definition-of-done verification.\n\n## Verification — Definition of Done\n\n**1. \"Implement the provided `BaseTerminal` interface\" / \"Call your implementation `HeadlessTerminal(BaseTerminal)`\" / put in `/app/headless_terminal.py` importable as `from headless_terminal import HeadlessTermina",
+      "trajFile": "mh-control-headless-2026-07-27T09-31-48-897Z-a4.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 2,
+            "killed": 2,
+            "coverage": "filtered"
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 5,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 405.99,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "The task is complete. Here is my verification against each stated requirement.\n\n## Requirements → Verification\n\n**1. \"Call your implementation `HeadlessTerminal(BaseTerminal)`... in `/app/headless_terminal.py`... imported as `from headless_terminal import HeadlessTerminal`\"**\n- Verified: `/usr/bin/python3 -c \"from headless_terminal import HeadlessTerminal\"` → `import OK`. Class subclasses `BaseTer",
+      "trajFile": "mh-control-headless-2026-07-27T09-31-48-897Z-a5.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 2,
+            "killed": 2,
+            "coverage": "filtered"
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 6,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 384.34,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "All confirmed. Now the final verification report.\n\n## Verification — Definition of Done\n\nI ran `/app/verify.sh` against the real shipped artifact; it exited **0** with all 10 checks passing. I also confirmed it detects faults (3 injected faults all produced exit 1). Requirement-by-requirement:\n\n1. **\"Call your implementation `HeadlessTerminal(BaseTerminal)` and put it in `/app/headless_terminal.py",
+      "trajFile": "mh-control-headless-2026-07-27T09-31-48-897Z-a6.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 1,
+            "killed": 3,
+            "coverage": "filtered"
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 7,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 425.59,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Everything is in place and passing. Let me do the final verification procedure against the literal requirements.\n\n## Verification — Definition of Done\n\nI read the task requirements and checked my real artifacts against each:\n\n**1. \"Implement the provided `BaseTerminal` interface\" / \"Call your implementation `HeadlessTerminal(BaseTerminal)`\"**\n- `HeadlessTerminal` subclasses `BaseTerminal` and impl",
+      "trajFile": "mh-control-headless-2026-07-27T09-31-48-897Z-a7.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "accepted",
+            "tried": 3,
+            "survived": 2,
+            "killed": 1,
+            "coverage": "fallback-static"
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 8,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 446.38,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "## Verification — Definition of Done\n\nI'll now check each stated requirement against the actual shipped artifact and its observed output.\n\n**1. \"Implement the provided `BaseTerminal` interface\" / \"Call your implementation `HeadlessTerminal(BaseTerminal)` … in `/app/headless_terminal.py` so it can be imported as `from headless_terminal import HeadlessTerminal`.\"**\n- ✅ `/app/headless_terminal.py` de",
+      "trajFile": "mh-control-headless-2026-07-27T09-31-48-897Z-a8.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 2,
+            "killed": 2,
+            "coverage": "filtered"
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 9,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 499.14,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Everything is in place and clean. Now the definition-of-done procedure.\n\n## Verification — definition of done\n\n**Requirements (quoting operative wording) and how each was checked against the real shipped artifact (`/app/headless_terminal.py`), verified by running `/app/verify.sh`, exit 0):**\n\n1. **\"Implement the provided `BaseTerminal` interface\"** / **\"Call your implementation `HeadlessTerminal(B",
+      "trajFile": "mh-control-headless-2026-07-27T09-31-48-897Z-a9.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 0,
+            "killed": 4,
+            "coverage": "filtered"
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 10,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 571.74,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Both the import path (`from headless_terminal import HeadlessTerminal`) and `verify.sh` (exit 0) pass. \n\n## Verification against stated requirements\n\nI checked each requirement against the real shipped artifact by running `verify.sh`, which drives a live interactive bash shell over a PTY. I also fault-injected the artifact to confirm the script *detects* breakage.\n\n1. **\"Implement the provided `Ba",
+      "trajFile": "mh-control-headless-2026-07-27T09-31-48-897Z-a10.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 2,
+            "killed": 2,
+            "coverage": "filtered"
+          }
+        ]
+      }
+    }
+  ]
+}

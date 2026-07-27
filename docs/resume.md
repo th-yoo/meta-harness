@@ -51,6 +51,18 @@ auto-corrected −39190s VM skew at launch. Detail in HISTORY.md FA1.
 **REMAINING for §6.3 verdict: headless control k=10 AT OFFICE (option a)
 — then the ON-vs-control false-accept math.**
 
+**✅ UPDATE 2026-07-27 late evening (MacBook): headless control k=10 RUN HERE
+(user-directed over the same-host recommendation)** —
+`mh-control-headless-2026-07-27T09-31-48-897Z.json`: 9 valid = 8/9 reward,
+**false-accepts 1/9**, exhaustion 0/9, all round-0 accepts, median 446s;
+1 void (a1, 0-turn). Probes header null ✓. Control dir per recipe (scratchpad
+copy, probe fixtures removed). **STILL NO §6.3 verdict — this control is
+MacBook, the ON arm is office (cross-host).** Two ways to close: (b') run
+**MacBook probes-ON k=10** → same-host math vs this control; or (a) office
+control next office session vs the office ON arm. Directional-only note
+(recorded in HISTORY FA1): control 1/9 ≈ office ON 1/10, both ≪ G1 2/5 —
+grip fix may carry most of the false-accept reduction; same-host arm decides.
+
 **Verdict math when both arms exist:** primary = false-accept count (gate
 accepted ∧ grader failed) ON vs control; reference G1 2/5. Guards: exhaustion
 0, median elapsed < 2x G1 (400s), `probes:` header present in ON records /

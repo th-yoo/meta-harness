@@ -209,9 +209,22 @@ class). Fail-open throughout; probes provenance in run headers.
   serializer preserves the field on this task). Clock preflight corrected
   a −39190s VM skew at launch (Mac-sleep class, auto-recovered).
   S3 calibration watch stands: 3/5 trials accepted with survivors.
-- **NOT run: headless control k=10** (handed to next office session). NO
-  verdict math — ON-vs-control needs same-host control (provenance trap
-  flagged in resume.md; office ON arm ⇒ office control).
+- **Headless control k=10 RUN 2026-07-27 evening on MACBOOK (user-directed
+  over the same-host recommendation; provenance caveat standing):**
+  `mh-control-headless-2026-07-27T09-31-48-897Z.json` — gate-ON, probes
+  absent (header {requirements:0, relations:0} ✓ null). **9 valid = 8/9
+  reward, false-accepts 1/9 (a2: accepted 2/4 kills, grader failed),
+  exhaustion 0/9, all round-0 accepts, median 446s**; a1 = 0-turn SUSPECT
+  void (3.81s, no-verify — infra class). Coverage `filtered` 8/9 (grip fix
+  visibly tracing the python artifact), 1 fallback-static. **NO §6.3
+  verdict math from this arm vs the OFFICE ON arm — cross-host, gate.ts
+  class refusal. Paths to a verdict: MacBook probes-ON k=10 (completes
+  option (b) same-host: ON vs this control) OR office control next office
+  session (option (a) vs the office ON arm).** Honest directional read
+  only: control false-accept 1/9 vs office ON 1/10 — both far below the
+  G1 2/5 reference; suggests the grip fix (G1), not the FA probes, may
+  carry most of the false-accept reduction on this task; underpowered +
+  cross-host, hence the required same-host arm before any claim.
 - **Records:** run-1 trajs `headless-terminal-2026-07-27T05-54-08-764Z-a*`
   + `...-run1-authrace.log` (6 valid, no results.json — killed run);
   top-up `headless-terminal-2026-07-27T06-53-49-506Z.json`; sparql
