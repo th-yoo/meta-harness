@@ -1,0 +1,105 @@
+{
+  "task": "sparql-university",
+  "driver": "opencode",
+  "model": "anthropic/claude-opus-4-8",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-dev",
+  "startedAt": "2026-07-27T03:01:09.245Z",
+  "k": 3,
+  "parallel": 2,
+  "sampling": null,
+  "system": {
+    "file": "minimal/harness/system-v0.md",
+    "sha256": "3b65fb7d6573fe4b"
+  },
+  "harness": {
+    "file": "minimal/harness/seed-v0.md",
+    "sha256": "e72331a29823cfb4"
+  },
+  "completeGate": {
+    "artifact": "/app/solution.sparql",
+    "rounds": 2,
+    "mutants": 4
+  },
+  "thenTask": null,
+  "marker": false,
+  "stopFutile": null,
+  "stoppedFutile": null,
+  "rewards": [
+    1,
+    1,
+    1
+  ],
+  "passRate": 1,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 301.5,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "All temporary files removed and the final state is clean. Now the definition-of-done verification.\n\n## Verification against stated requirements\n\n**Req 1 — \"They are full professors.\"**\nThe query uses `FILTER(STRSTARTS(?role, \"Professor\"))`, which admits roles like \"Professor of Computer Science\" while excluding \"Assistant Professor of …\". Reading of wording: the data has no explicit `fullProfessor",
+      "trajFile": "sparql-university-2026-07-27T03-01-09-245Z-a1.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 2
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 2,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 433.26,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "All temp files cleaned. Now let me perform the final formal verification against the task's literal requirements.\n\n## Verification — Definition of Done\n\n**Requirement 1:** *\"They are full professors.\"*\n- Query implements `FILTER(STRSTARTS(?role, \"Professor\"))`, excluding \"Assistant Professor of ...\" (and \"Student\"). Verified: Athanasios Voulodimos and Stefan Mueller (both \"Assistant Professor\") ar",
+      "trajFile": "sparql-university-2026-07-27T03-01-09-245Z-a2.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 2
+          }
+        ]
+      }
+    },
+    {
+      "attempt": 3,
+      "reward": 1,
+      "turns": 1,
+      "elapsedSec": 427.02,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "All artifacts in place, temp files removed. Now the final verification procedure against the task's literal requirements.\n\n## Verification — Definition of Done\n\n**Requirement 1: \"They are full professors.\"**\n- Query uses `FILTER(STRSTARTS(?role, \"Professor\"))`, matching roles like \"Professor of Computer Science\" while excluding \"Assistant Professor of...\". \n- Verified: assistant professors Athanas",
+      "trajFile": "sparql-university-2026-07-27T03-01-09-245Z-a3.traj.ndjson",
+      "agentStderr": "",
+      "gate": {
+        "accepted": true,
+        "exhausted": false,
+        "rounds": [
+          {
+            "outcome": "accepted",
+            "tried": 4,
+            "survived": 2
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -136,6 +136,37 @@ S1+S2 already remove the known no-op classes.
   close this — the agent's check remains a weaker proxy than the grader's
   oracle. §4.3 must not treat completion-gate acceptance as ground truth.
 
+### 5.1 False-accept fix directions (researched 2026-07-27; design only)
+
+The false-accept gap is structural (invariant 1: the completion gate never
+sees the grader) — narrow it + account for it, never claim it closed:
+
+- **L4 — account (hard §4.3 constraint, field-standard):** gate-accept =
+  "self-verified", NEVER "correct". Trial mode scores gate SHAPE (exhaustion,
+  kill ratios, rounds), not accept rate; periodic **calibration arms** on
+  bench tasks with graders measure the live false-accept rate and discount
+  the daily signal. Judge-calibration literature: golden-set anchoring +
+  drift monitoring is production norm, no standard cadence exists —
+  pre-register ours. Reward-hacking research: LLM detectors catch only ~63%
+  of hacks; gate-outcome-as-reward is a gameable channel.
+- **L1 — spec-coverage probe (RTM discipline):** compile instruction.md at
+  design time (frozen) into requirement IDs + acceptance criteria; probe
+  demands verify.sh exercise each; reinject names the untested requirement;
+  deferrals must be explicit, never silent. This is bidirectional
+  requirements traceability (FDA/RTM standard) mechanized per-task. No
+  grader leak — derives only from agent-visible instruction.
+- **NEW — metamorphic-relation probes:** the oracle-problem literature's
+  standard weapon when no ground truth exists: check RELATIONS between
+  executions (terminal resize A→B→A restores screen; write N lines + scroll
+  k shifts content by k), not absolute outputs. Deterministic, oracle-free,
+  and reaches the exact channel artifact mutants cannot: missing/
+  misunderstood code. Prime §4.4 machine-seat proposal class.
+- **L2 — probe pressure (already running):** arm A a1 proved reinject
+  pressure repairs some would-be false-accepts (rework passed grader).
+- **L3 — independent re-reader (parked):** if ever revived, cross-family
+  judge only (same-family self-preference inflation ≈5–7% documented;
+  juries reduce bias 30–40% at 3–5x cost).
+
 ## 6. Verification plan (spend — needs explicit go)
 
 ### 6.1 PRE-REGISTERED arms (2026-07-27 office, sealed BEFORE launch; go given)
@@ -168,6 +199,32 @@ comparison arms at office need fresh OFFICE baselines (provenance rule —
 gate.ts enforces; all 07-25/26 arms are yoo-mac.local). sparql re-run as
 no-regression check on the healthy class (≥1-kill rule must not weaken its
 one-fix-round shape).
+
+### 6.2 VERDICT (2026-07-27 office, same day — arms complete, forensics clean)
+
+Zero auth errors, zero 0-turn/timeout/suspect trials — all trials valid.
+
+- **Arm A headless k=5: PASS.** (a) exhaustion **0/5** (C1: 7/9; Fisher
+  p≈0.02) ✓; (c) every accepted probe round killed 1–2 of 4 (derived
+  tried−survived) ✓; (d) median 400s (276/324/400/1012/3968 — C1 exhaustion
+  class was 1000–5000s) ✓; (b) coverage provenance **formally unverifiable**
+  — serializer gap (fixed same day, `3064893`) dropped the field; behavior
+  consistent with filtering. Rewards 3/5 directional (no cross-host verdict
+  math). a1+a5 = first-ever healthy verify-fix loops on headless: round-1
+  zero kills → reinject → agent strengthened → round-2 kills → accept; a1's
+  rework passed the grader (reinject repaired a would-be false-accept).
+- **Arm B sparql k=3: PASS.** Zero exhaustion, zero fix rounds, rewards 3/3.
+  Every trial: single accepted round, killed 2 / survived 2 of 4. Shape
+  change vs C1 noted honestly: under the old all-must-die rule the 2
+  survivors would have forced a fix round (C1's healthy shape); the ≥1-kill
+  rule accepts immediately — verification-strengthening pressure on the
+  healthy class is REDUCED by design (S3 trade-off). No harm here (3/3
+  grader pass, ~1.4–2x faster than C1 gated); false-accept rate under the
+  new rule = calibration-arm watch item.
+- **False-accept watch-item recurs:** headless a2+a5 gate-accepted,
+  grader-failed — see §5 threats; L-series fix directions + field research
+  (RTM/spec-coverage, metamorphic-relation probes, judge-calibration) in the
+  session notes of 2026-07-27.
 
 ## 7. Order
 

@@ -145,6 +145,33 @@ unexercised (needs a future lift-certifiable arm).
 - **Records:** `headless-terminal-2026-07-25T18-03-55-427Z.json`,
   `sparql-university-2026-07-25T20-54-25-477Z.json`.
 
+## G1 — adequacy-probe grip-fix verification (2026-07-27, office `yoo-dev`) — MECHANISM PASS both tasks
+
+C1's headless no-grip finding fixed same day it was queued
+(`docs/2026-07-27-probe-grip-fix-design.md`, S1 coverage-guided sites via
+`minimal/cover.ts` trace hook + S2 `__main__` exclusion + S3 ≥1-kill round
+rule; commits `7db8081`..`3064893`). Pre-registered §6.1 BEFORE launch; arms
+on OFFICE box (first office arms — no cross-host reward math, mechanism
+claims only). Forensics clean (0 auth errors, 0 voids).
+
+- **headless k=5: exhaustion 0/5 vs C1 7/9** (Fisher p≈0.02), accepted rounds
+  killed 1–2/4, median 400s (C1 exhaustion class 1000–5000s). a1+a5 = first
+  healthy verify-fix loops ever seen on this task; a1's reinject-driven
+  rework passed the grader. Rewards 3/5 directional.
+- **sparql k=3: 3/3 rewards, zero exhaustion, zero fix rounds** — each trial
+  single accepted round killed 2/4. Honest shape note: old rule would have
+  forced a fix round on the 2 survivors; ≥1-kill accepts immediately →
+  strengthening pressure on the healthy class reduced by design (S3
+  trade-off, calibration watch).
+- **False-accept recurs** (headless a2+a5 accepted, grader failed) — fix
+  directions researched + recorded in design note §5.1 (RTM spec-coverage
+  probe, metamorphic-relation probes, §4.3 calibration-arm constraint).
+- Coverage provenance field was dropped by the trial serializer (gap found
+  in arm A, fixed `3064893`) — §6.1 criterion (b) formally unverifiable for
+  these arms, recorded honestly.
+- **Records:** `headless-terminal-2026-07-27T01-54-16-685Z.json`,
+  `sparql-university-2026-07-27T03-01-09-245Z.json`.
+
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
 | R1 | 2026-07-23 | machine bullet (script-verify) on bare | bare 4/10 vs 5/10 | 1.0 | — | REJECT null |
@@ -165,6 +192,7 @@ unexercised (needs a future lift-certifiable arm).
 | **A2** | 2026-07-25 | completion gate ADOPTION (gate-ON guards) | (lift from R10) | 0.0031 | cdt 2/2 valid (2 skew-voids rerolled), chess 3/3 all turns=1 | **ADOPT — first MECHANISM-class adoption; gate joins active config; held-out transfer = standing open** |
 | C2 | 2026-07-25 | session-carryover hygiene arms (cancel-async `--then` cdt, MacBook) | B: alone 3/3 vs raw 10/10 vs marker 5/5-valid | 1.0 | — (measurement) | **NULL reward effect (pre-registered ✓); contamination 1/10 raw vs 0/10 marker-valid (top-up 07-26 closed the arm); marker A-side depressed 4/12 vs 7/10 p=0.198 null — port recommendation: marker default OFF** |
 | C1 | 2026-07-25/26 | held-out completion-gate transfer (headless + sparql gate-ON k=10, MacBook) | headless 7/9 vs 7/8 OFF; sparql 8/9 vs 10/10 OFF (same-host baseline rerun) | 1.0 / 0.47 | — (measurement) | **BOTH HOLD certified (null): headless 7/9 gate-EXHAUSTED (no grip, 6–30x time tax); sparql healthy gate shape, ~2x tax, 1 false-accept fail; designCheck killed --stop-futile pre-spend (correct); provenance refusal forced same-host baseline** |
+| G1 | 2026-07-27 | adequacy-probe grip fix S1+S2+S3 (headless k=5 + sparql k=3, office) | headless exhaustion 0/5 vs C1 7/9; sparql 3/3 zero exhaustion | ≈0.02 (exhaustion) | — (mechanism) | **PASS pre-registered both arms: coverage-guided sites + ≥1-kill rule end headless exhaustion (median 400s vs 1000–5000s); first healthy verify-fix loops on headless; false-accept recurs (a2+a5) → §5.1 fix directions; serializer coverage-field gap found+fixed** |
 
 ---
 
