@@ -9,7 +9,7 @@ lineage.
 
 | Name | Level | Decides | Seat | Code |
 |---|---|---|---|---|
-| **Completion gate** | one attempt, at "done" | is this attempt's work verified? (verify.sh + mutation probe; reinjects evidence, bounded rounds) | code | `complete-gate.ts` + `mutate.ts`, run.ts `--complete-gate`; daily deployment `gate-plugin/` (2026-07-26, mutants=0 v1, marker default OFF) |
+| **Completion gate** | one attempt, at "done" | is this attempt's work verified? (verify.sh + mutation probe; reinjects evidence, bounded rounds) | code | `complete-gate.ts` + `mutate.ts`, run.ts `--complete-gate`; daily deployment `gate-plugin/` (2026-07-26, mutants=0 v1, marker default OFF; **LIVE-VERIFIED 2026-07-27 SM1**); CC port planned (`docs/superpowers/plans/2026-07-27-kkamak-cc-plugin-v0.1.md`) |
 | **Review gate** | one proposal, pre-spend | is this candidate bullet fit to test? (dup/scope/leak checks + rubric; bounded revise loop) | LLM + deterministic layer-1 | minimal: propose.ts Reviewer seat (`review.ts`); production: `opencode-plugin/src/review-gate.ts` + per-layer `rejected.json` (ported 2026-07-26) |
 | **Adoption gate** | the active base | does this candidate replace the base? (Fisher lift + guard non-regression + forensics void-exclusion) | code, sole base-mutator | `gate.ts` |
 
@@ -245,6 +245,34 @@ class). Fail-open throughout; probes provenance in run headers.
   top-up `headless-terminal-2026-07-27T06-53-49-506Z.json`; sparql
   `sparql-university-2026-07-27T08-55-31-719Z.json`.
 
+## SM1 — gate-plugin live smoke-test (2026-07-27 night, MacBook) — PASS all criteria
+
+The §4.1 queue item: first live exercise of the shipped opencode gate-plugin
+on a REAL interactive session (scratch project, `gate.json`
+`{"check":"test -f done.txt","rounds":2}`, opencode 1.17.20 TUI, ~$0.06).
+Mechanism verification, zero bench trials, NOT an adoption verdict.
+
+- **Sensor line (all fields correct, first live line ever):**
+  `{check, accepted:true, gateExhausted:false, rounds:["verify-failed",
+  "accepted"], interrupted:false, marker:false, durationMs:23195}` at
+  `.meta-harness/gate-outcomes.ndjson` (pre-rename path; km- rename = CC
+  plan node N).
+- **The one test-faked assumption LIVE-VERIFIED:** `interrupted:false` on an
+  uninterrupted run — the chat.message echo guard consumed the gate's own
+  `client.session.prompt` self-inject exactly once; no false human-interrupt,
+  no wedged composer (the failure class the assumption feared).
+- **Reinject channel works end-to-end:** round-0 check fail → evidence
+  injected → the agent diagnosed the failing check and created `done.txt`
+  unprompted → round-1 accepted. A complete healthy verify-fix cycle in
+  daily-use conditions, 23s.
+- **Bonus (edit-tool set exactness, live):** the first prompt's file was
+  created via bash `echo` — gate correctly did NOT arm (edited-set tracks
+  write/edit/patch/multiedit only); second prompt forced the write tool →
+  gate armed. Contract 4's live confirmation.
+- **Meaning:** the daily deployment of the A2-adopted mechanism is now
+  verified in situ — the §4.3 sensor stream's producer is trustworthy.
+  Next: CC port (kkamak plugin, plan triple-architect-reviewed) → §4.3.
+
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
 | R1 | 2026-07-23 | machine bullet (script-verify) on bare | bare 4/10 vs 5/10 | 1.0 | — | REJECT null |
@@ -267,6 +295,7 @@ class). Fail-open throughout; probes provenance in run headers.
 | C1 | 2026-07-25/26 | held-out completion-gate transfer (headless + sparql gate-ON k=10, MacBook) | headless 7/9 vs 7/8 OFF; sparql 8/9 vs 10/10 OFF (same-host baseline rerun) | 1.0 / 0.47 | — (measurement) | **BOTH HOLD certified (null): headless 7/9 gate-EXHAUSTED (no grip, 6–30x time tax); sparql healthy gate shape, ~2x tax, 1 false-accept fail; designCheck killed --stop-futile pre-spend (correct); provenance refusal forced same-host baseline** |
 | G1 | 2026-07-27 | adequacy-probe grip fix S1+S2+S3 (headless k=5 + sparql k=3, office) | headless exhaustion 0/5 vs C1 7/9; sparql 3/3 zero exhaustion | ≈0.02 (exhaustion) | — (mechanism) | **PASS pre-registered both arms: coverage-guided sites + ≥1-kill rule end headless exhaustion (median 400s vs 1000–5000s); first healthy verify-fix loops on headless; false-accept recurs (a2+a5) → §5.1 fix directions; serializer coverage-field gap found+fixed** |
 | FA1 | 2026-07-27 | false-accept probes (spec-coverage + relations) — headless probes-ON k=10, office | pooled 9/10 reward, false-accept 1/10 vs G1 2/5, exhaustion 0/10 | — (control pending) | — (measurement) | **ON-ARM SEALED, verdict pending same-host control k=10: first live spec-probe save (a2: 0-coverage verify → named reinjects → rewrite → pass); residual false-accept a4 = calibration point; 2 auth-race voids rule-covered by top-up; sparql k=5 shape check (MacBook) 5/5 all round-0 accepts, zero exhaustion/false-accepts, ~1.2–2x tax. §6.3 CLOSED BY MATH 07-27 late: ON 1/10 vs control 1/9 p=1.0 null, remaining arms futile (cert needs control ≥4/9, observed 1/9) — probes ship fail-open with no quantitative claim; ~10% residual = §4.3 calibration rate** |
+| SM1 | 2026-07-27 | gate-plugin live smoke-test (real opencode session, MacBook) | 1 live session, scratch repo, rounds ["verify-failed","accepted"] | — | — (mechanism) | **PASS all §4.1 criteria: sensor line correct, interrupted:false (echo-guard assumption live-verified), reinject evidence reached the agent → fixed check unprompted; bash-edit correctly did not arm the gate; daily sensor producer trustworthy → §4.3 unblocked** |
 
 ---
 

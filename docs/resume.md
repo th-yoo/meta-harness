@@ -3,10 +3,19 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-27 night (MacBook home) — §6.3 EXECUTED + CLOSED BY MATH · RANKED ITEM 1 DONE · NEXT = §4.1 SMOKE-TEST
+## ⏸ SESSION END 2026-07-27 night (MacBook home) — §6.3 CLOSED BY MATH · §4.1 SMOKE-TEST PASS (SM1) · CC-PLUGIN PLAN READY · NEXT = 2.1b BUILD
 
-**WHAT CLOSED (all pushed through `f355646`; full detail HISTORY.md FA1 +
-the two ✅ UPDATE blocks in the office section below):**
+**WHAT CLOSED (full detail HISTORY.md FA1 + SM1 + the two ✅ UPDATE blocks
+in the office section below):**
+0. **§4.1 gate-plugin live smoke-test PASS → HISTORY.md SM1** (echo-guard
+   assumption live-verified, full verify-fix cycle in 23s on a real
+   session). Sensor producer trustworthy → §4.3 unblocked.
+0b. **kkamak-CC plugin plan READY** (`docs/superpowers/plans/
+   2026-07-27-kkamak-cc-plugin-v0.1.md`, 3 architect review rounds, 15-node
+   parallel DAG) — 2.1b in the queue below; product decisions this session:
+   plugin name kkamak on every host, km-/.km/ runtime prefix (node N renames
+   the opencode sensor default in lockstep), meta-harness → kkamak-harness
+   rename = future housekeeping.
 1. **sparql k=5 probes-ON shape check (option c):** 5/5, all round-0 accepts,
    zero exhaustion/reinjects/false-accepts, ~1.2–2x tax. Clock preflight
    auto-fixed a −39190s VM skew (Mac-sleep class) at launch.
