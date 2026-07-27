@@ -21,8 +21,13 @@ the two ✅ UPDATE blocks in the office section below):**
    saves real-but-rare. **~10% residual (2/19 pooled) = §4.3 calibration
    rate.** Grip fix (G1) stays the only certified mechanism change.
 
-**QUEUE: ranked item 1 DONE → item 2 live: §4.1 gate-plugin live smoke-test
-(host-agnostic, cheap, next action) → **2.1b CC gate plugin** (PLAN READY:
+**QUEUE: ranked item 1 DONE → item 2 live: ~~§4.1 gate-plugin live smoke-test~~
+**DONE 2026-07-27 night (MacBook, ~$0.06, 23s gate cycle): PASS all criteria
+— sensor line correct, rounds ["verify-failed","accepted"], interrupted:false
+(echo-timing assumption LIVE-VERIFIED: echo guard consumed the self-inject),
+reinject evidence REACHED the agent which fixed the check (created done.txt
+unprompted). Bonus finding: bash-echo edits correctly do NOT arm the gate
+(edit-tool set exactness live-confirmed). Scratch: scratchpad/km-smoke.** → **2.1b CC gate plugin** (PLAN READY:
 `docs/superpowers/plans/2026-07-27-kkamak-cc-plugin-v0.1.md` — plugin name
 kkamak, `.km/` runtime prefix, 15-node parallel DAG, 3 architect review
 rounds applied; build via subagent-driven waves) → §4.3 trial mode
