@@ -39,6 +39,18 @@ Control task dir recipe: copy `minimal/tasks/headless-terminal` MINUS
 fail-open → same binary, one variable); office copy was
 `/mnt/d/tmp/mh-control-headless`.
 
+**✅ UPDATE 2026-07-27 evening (MacBook): option (c) EXECUTED — sparql k=5
+probes-ON shape check DONE** (`sparql-university-2026-07-27T08-55-31-719Z.json`,
+same-host MacBook, no cross-host math): **5/5 rewards, all turns=1, every
+trial round-0 accept with 2–3/4 kills, zero exhaustion, zero probe
+reinjects, zero false-accepts; 208–487s (median 291s) vs 117–286s gate-OFF
+baseline — mild tax.** Watch-items quiet (no wrapper-verify exhaustion, no
+relation timing issues). `coverage: "fallback-static"` all 5 (trace hook
+doesn't grip .sparql — static fallback by design). Clock preflight
+auto-corrected −39190s VM skew at launch. Detail in HISTORY.md FA1.
+**REMAINING for §6.3 verdict: headless control k=10 AT OFFICE (option a)
+— then the ON-vs-control false-accept math.**
+
 **Verdict math when both arms exist:** primary = false-accept count (gate
 accepted ∧ grader failed) ON vs control; reference G1 2/5. Guards: exhaustion
 0, median elapsed < 2x G1 (400s), `probes:` header present in ON records /

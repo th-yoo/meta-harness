@@ -197,12 +197,25 @@ class). Fail-open throughout; probes provenance in run headers.
 - **Residual false-accept (top-up a4):** probes passed (killed 3/4,
   coverage filtered), gate accepted, grader failed — the measured
   calibration point ("floor is not zero" as pre-registered).
-- **NOT run: control k=10 + sparql k=5** (user call, handed to next
-  session). NO verdict math — ON-vs-control needs same-host control
-  (provenance trap flagged in resume.md; office ON arm ⇒ office control).
+- **§6.3 sparql k=5 probes-ON (2026-07-27 evening, MacBook — option-c
+  single-arm shape check, NO cross-host math): 5/5 rewards, all turns=1,
+  every trial round-0 gate-accept with kills (2–3/4), zero exhaustion,
+  zero probe reinjects, zero false-accepts.** Wrapper-verify exhaustion
+  watch-item did NOT fire; relation probes silent under load. Time
+  208–487s (median 291s) vs same-host gate-OFF baseline 117–286s — mild
+  ~1.2–2x tax, far below C1's 340–1014s. Provenance note: `coverage:
+  "fallback-static"` all 5 — trace hook doesn't grip a .sparql artifact,
+  static site fallback engaged as designed (first record where the
+  serializer preserves the field on this task). Clock preflight corrected
+  a −39190s VM skew at launch (Mac-sleep class, auto-recovered).
+  S3 calibration watch stands: 3/5 trials accepted with survivors.
+- **NOT run: headless control k=10** (handed to next office session). NO
+  verdict math — ON-vs-control needs same-host control (provenance trap
+  flagged in resume.md; office ON arm ⇒ office control).
 - **Records:** run-1 trajs `headless-terminal-2026-07-27T05-54-08-764Z-a*`
   + `...-run1-authrace.log` (6 valid, no results.json — killed run);
-  top-up `headless-terminal-2026-07-27T06-53-49-506Z.json`.
+  top-up `headless-terminal-2026-07-27T06-53-49-506Z.json`; sparql
+  `sparql-university-2026-07-27T08-55-31-719Z.json`.
 
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
@@ -225,7 +238,7 @@ class). Fail-open throughout; probes provenance in run headers.
 | C2 | 2026-07-25 | session-carryover hygiene arms (cancel-async `--then` cdt, MacBook) | B: alone 3/3 vs raw 10/10 vs marker 5/5-valid | 1.0 | — (measurement) | **NULL reward effect (pre-registered ✓); contamination 1/10 raw vs 0/10 marker-valid (top-up 07-26 closed the arm); marker A-side depressed 4/12 vs 7/10 p=0.198 null — port recommendation: marker default OFF** |
 | C1 | 2026-07-25/26 | held-out completion-gate transfer (headless + sparql gate-ON k=10, MacBook) | headless 7/9 vs 7/8 OFF; sparql 8/9 vs 10/10 OFF (same-host baseline rerun) | 1.0 / 0.47 | — (measurement) | **BOTH HOLD certified (null): headless 7/9 gate-EXHAUSTED (no grip, 6–30x time tax); sparql healthy gate shape, ~2x tax, 1 false-accept fail; designCheck killed --stop-futile pre-spend (correct); provenance refusal forced same-host baseline** |
 | G1 | 2026-07-27 | adequacy-probe grip fix S1+S2+S3 (headless k=5 + sparql k=3, office) | headless exhaustion 0/5 vs C1 7/9; sparql 3/3 zero exhaustion | ≈0.02 (exhaustion) | — (mechanism) | **PASS pre-registered both arms: coverage-guided sites + ≥1-kill rule end headless exhaustion (median 400s vs 1000–5000s); first healthy verify-fix loops on headless; false-accept recurs (a2+a5) → §5.1 fix directions; serializer coverage-field gap found+fixed** |
-| FA1 | 2026-07-27 | false-accept probes (spec-coverage + relations) — headless probes-ON k=10, office | pooled 9/10 reward, false-accept 1/10 vs G1 2/5, exhaustion 0/10 | — (control pending) | — (measurement) | **ON-ARM SEALED, verdict pending same-host control k=10: first live spec-probe save (a2: 0-coverage verify → named reinjects → rewrite → pass); residual false-accept a4 = calibration point; 2 auth-race voids rule-covered by top-up** |
+| FA1 | 2026-07-27 | false-accept probes (spec-coverage + relations) — headless probes-ON k=10, office | pooled 9/10 reward, false-accept 1/10 vs G1 2/5, exhaustion 0/10 | — (control pending) | — (measurement) | **ON-ARM SEALED, verdict pending same-host control k=10: first live spec-probe save (a2: 0-coverage verify → named reinjects → rewrite → pass); residual false-accept a4 = calibration point; 2 auth-race voids rule-covered by top-up; sparql k=5 shape check (MacBook) 5/5 all round-0 accepts, zero exhaustion/false-accepts, ~1.2–2x tax** |
 
 ---
 
