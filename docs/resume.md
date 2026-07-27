@@ -5,6 +5,14 @@ does NOT transfer; this file + the repo are the source of truth.)
 
 ## ⏸ SESSION END 2026-07-27 night (MacBook home) — §6.3 CLOSED · SM1 PASS · **2.1b CC PLUGIN SHIPPED + SMOKE PASS (SM2, merge 6d443df)** · NEXT = DOGFOOD INSTALL + §4.3 DESIGN
 
+**✅ OFFICE VERIFY 2026-07-28 (yoo-dev, token-free):** repo at f95d56a; bun
+install cc-gate-plugin + km-crank; all 4 suites green — opencode-plugin
+1672 pass (1 skip), gate-plugin 26, cc-gate-plugin 120, km-crank 70;
+`claude plugin validate` PASS (1 cosmetic warning: no author field) +
+`claude --plugin-dir … plugin details kkamak` loads 0.1.0 (skill init,
+hooks Stop/PostToolUse/UserPromptSubmit, ~32 tok always-on). CC 2.1.220.
+Office box ready for queue items (b)/(c)/(d) — awaiting go for any spend.
+
 **2.1b DONE same night:** `cc-gate-plugin/` (plugin name **kkamak**) built via
 15-node parallel-DAG subagent waves per the plan; suites 120+26 green, tsc
 clean; wave reviews + final merge-gate review (2 blocking findings fixed:
