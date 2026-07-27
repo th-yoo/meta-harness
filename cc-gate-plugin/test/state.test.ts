@@ -162,6 +162,18 @@ test("sweep: never throws even against a missing directory", () => {
   expect(() => store.sweep(Date.now())).not.toThrow()
 })
 
+test("sweep on nonexistent dir → no dir created, no throw", () => {
+  const missingDir = path.join(dir, "never-armed", "cc-gate")
+  const store = new FileStateStore(missingDir)
+
+  expect(fs.existsSync(missingDir)).toBe(false)
+  expect(() => store.sweep(Date.now())).not.toThrow()
+  // No mkdir, no marker file, no parent dir either — a Stop hook firing in
+  // an ungated/untouched cwd must not create .km/cc-gate at all.
+  expect(fs.existsSync(missingDir)).toBe(false)
+  expect(fs.existsSync(path.join(dir, "never-armed"))).toBe(false)
+})
+
 test("concurrent-write safety: interleaved load->modify->save is last-writer-wins and never corrupt", () => {
   const store = new FileStateStore(dir)
   const sessionId = "concurrent-session"

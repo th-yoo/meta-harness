@@ -95,6 +95,13 @@ export class FileStateStore implements StateStore {
 
   sweep(nowMs: number): void {
     try {
+      // Never litter a directory that has no state in it: a Stop hook fires
+      // in every repo (gated or not), so bail BEFORE any mkdir/marker-write
+      // if this store's dir was never created (nothing ever armed the gate
+      // here). This keeps sweeping alive for any repo that ever armed state
+      // while not creating .km/cc-gate in untouched cwds.
+      if (!fs.existsSync(this.dirAbs)) return
+
       const markerPath = path.join(this.dirAbs, LAST_SWEPT_FILE)
 
       let markerMtimeMs: number | undefined

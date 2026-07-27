@@ -139,6 +139,20 @@ test("KM_CHILD set -> exit 0 instantly, no state file created even with a blocki
   }
 })
 
+test("Stop in a repo with NO gate.json and no prior state -> exit 0 AND no .km/ directory created", async () => {
+  const repo = mkRepo()
+  try {
+    const r = await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "s1", cwd: repo }) })
+    expect(r.exitCode).toBe(0)
+    expect(r.stdout).toBe("")
+    // Nothing ever armed the gate here: Stop's unconditional sweep() must
+    // not litter an untouched cwd with .km/cc-gate/.last-swept.
+    expect(fs.existsSync(path.join(repo, ".km"))).toBe(false)
+  } finally {
+    rmRepo(repo)
+  }
+})
+
 test("PostToolUse Write -> state file exists with edited:true", async () => {
   const repo = mkRepo()
   try {
@@ -280,6 +294,56 @@ test(
   },
   10_000,
 )
+
+test(
+  "compound check leaves a pipe-holding grandchild after SIGTERM -> CLI still completes well under 10s with a block/timeout decision",
+  async () => {
+    const repo = mkRepo()
+    try {
+      // `bash -c 'sleep 30 & sleep 30'` backgrounds one sleep and holds the
+      // pipes open with the other; SIGTERM to the outer bash process does
+      // not reach either child, so the stdout/stderr text promises would
+      // never settle without the grace-timer race + SIGKILL escalation.
+      writeGate(repo, { check: "bash -c 'sleep 30 & sleep 30'", checkTimeoutMs: 300 })
+      seedState(repo, "s1", { edited: true })
+
+      const started = Date.now()
+      const r = await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "s1", cwd: repo }) })
+      const elapsedMs = Date.now() - started
+
+      expect(elapsedMs).toBeLessThan(9000)
+      expect(r.exitCode).toBe(0)
+      const out = JSON.parse(r.stdout)
+      expect(out.decision).toBe("block")
+      expect((out.reason as string)).toContain("timed out")
+    } finally {
+      rmRepo(repo)
+    }
+  },
+  10_000,
+)
+
+test("gate.json with an absolute sensor path writes there directly, not re-rooted under cwd", async () => {
+  const repo = mkRepo()
+  const sensorDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-gate-sensor-"))
+  const absSensor = path.join(sensorDir, "outcomes.ndjson")
+  try {
+    writeGate(repo, { check: "true", marker: true, sensor: absSensor })
+    seedState(repo, "s1", { edited: true })
+
+    const r = await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "s1", cwd: repo }) })
+    expect(r.exitCode).toBe(0)
+
+    // Written to the absolute path itself...
+    expect(fs.existsSync(absSensor)).toBe(true)
+    // ...and NOT re-rooted under <repo>/<absSensor> (the path.join(cwd, sensor) bug).
+    const wrongPath = path.join(repo, absSensor)
+    expect(fs.existsSync(wrongPath)).toBe(false)
+  } finally {
+    rmRepo(repo)
+    fs.rmSync(sensorDir, { recursive: true, force: true })
+  }
+})
 
 test.skipIf((process.getuid?.() ?? -1) === 0)(
   "unwritable state dir -> fail-open: exit 0, decision allow, no block on an unrecorded round",

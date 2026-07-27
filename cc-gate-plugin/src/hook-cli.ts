@@ -44,7 +44,10 @@ function readGateConfigRaw(cwd: string): string | undefined {
 
 function sensorFilePath(cwd: string, gateConfigRaw: string | undefined): string {
   const cfg = parseGateConfig(gateConfigRaw)
-  return path.join(cwd, cfg?.sensor ?? DEFAULT_SENSOR_REL_PATH)
+  // path.resolve (not path.join): an absolute `sensor` must stay absolute —
+  // path.join would silently re-root it under cwd. For a relative sensor,
+  // resolve behaves the same as join-against-an-absolute-cwd.
+  return path.resolve(cwd, cfg?.sensor ?? DEFAULT_SENSOR_REL_PATH)
 }
 
 /** mkdir -p the sensor's parent dir then append one ndjson line. Never throws:
@@ -89,20 +92,43 @@ function buildDeps(cwd: string, gateConfigRaw: string | undefined): CoreDeps {
         const stdoutP = new Response(proc.stdout as ReadableStream<Uint8Array>).text().catch(() => "")
         const stderrP = new Response(proc.stderr as ReadableStream<Uint8Array>).text().catch(() => "")
 
+        // A killed `bash -c` compound command (e.g. `cmd & cmd`) can leave
+        // forked grandchildren holding the stdout/stderr pipe fds open —
+        // bash does not forward signals to background jobs — so the text
+        // promises above may never settle even after the process "exits".
+        // Race each against a short grace timer so we never hang the hook.
+        const GRACE_MS = 2000
+        const withGrace = (p: Promise<string>): Promise<string> =>
+          Promise.race([p, new Promise<string>((res) => setTimeout(() => res(""), GRACE_MS))])
+
         let timedOut = false
+        let hasExited = false
         const timer = setTimeout(() => {
           timedOut = true
           try {
-            proc.kill()
+            proc.kill() // SIGTERM
           } catch {
             // best-effort kill only
           }
+          // Escalate to SIGKILL if the process (group) hasn't actually
+          // exited shortly after — SIGTERM alone won't reach grandchildren
+          // left behind by a `bash -c 'a & b'` style compound command.
+          setTimeout(() => {
+            if (!hasExited) {
+              try {
+                proc.kill("SIGKILL")
+              } catch {
+                // best-effort only
+              }
+            }
+          }, 1500)
         }, timeoutMs)
 
         proc.exited
           .then(async (code) => {
+            hasExited = true
             clearTimeout(timer)
-            const [so, se] = await Promise.all([stdoutP, stderrP])
+            const [so, se] = await Promise.all([withGrace(stdoutP), withGrace(stderrP)])
             const combined = capOutput(so + se)
             if (timedOut) {
               // A timeout is a FAILED CHECK, not an internal error: resolve
@@ -113,6 +139,7 @@ function buildDeps(cwd: string, gateConfigRaw: string | undefined): CoreDeps {
             }
           })
           .catch((err) => {
+            hasExited = true
             clearTimeout(timer)
             reject(err)
           })
