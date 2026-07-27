@@ -14,10 +14,33 @@ delivery VERIFIED** (self-describing check → agent received the block reason
 and fixed it, rounds ["verify-failed","accepted"] in 4s) — shipped default
 stays block-json; rounds bound exact; marker/no-edit/mkdir/-p all ✓.
 HISTORY.md SM2. Build ledger: .superpowers/sdd/progress.md (host-local).
-**First interactive-dogfood finding (07-28 demo):** after a block, the agent may RE-RUN the check itself via Bash → permission prompt stalls the fix loop in default/acceptEdits modes (gate itself fine — turn just waits). Mitigation candidates: reinject wording ('do not re-run the check yourself; just fix and finish') or docs note; sensor durationMs inflates with human-wait time (282s incl. approval wait). **NEXT:** (a) dogfood install — write gate.json for this repo + squad
-(squad .gitignore needs `.km/` first — reviewer note), use daily; (b) §4.3
-design (brainstorm workload-confound problem first) against the now-two-host
-union sensor stream; (c) S4 operators + §4.4 unchanged in queue.
+**First interactive-dogfood finding (07-28 demo):** after a block, the agent may RE-RUN the check itself via Bash → permission prompt stalls the fix loop in default/acceptEdits modes (gate itself fine — turn just waits). Mitigation candidates: reinject wording ('do not re-run the check yourself; just fix and finish') or docs note; sensor durationMs inflates with human-wait time (282s incl. approval wait). **Dogfood state (07-28):** meta-harness `gate.json` COMMITTED (`659a712`,
+both plugin suites ~4s — monorepo blind spot noted: doesn't cover
+opencode-plugin edits); `~/z2/km-play` playground created; README trust
+section (`078d6dd`); squad NOT yet (needs `.km/` in its .gitignore first).
+Load via `claude --plugin-dir ~/z2/meta-harness/cc-gate-plugin` (alias
+recommended).
+
+**NEW DIRECTIVE (user, 07-28): at-least-HALF-AUTOMATIC evolution** —
+"human is a mistaking animal, no full manual; even LLMs err, hence the
+reviewer loop." Hand-cranked cadence rejected (rule 7b binds the human:
+the human-as-scheduler is itself the failure point). → **NEW QUEUE ITEM
+2.2a, BEFORE §4.3: the scheduled crank.** Design agreed in-session:
+AUTOMATIC = trigger (launchd/N-new-sensor-lines) → evidence assembly
+(sensor + trajs + ledger) → proposer (engine seat, headless) → review
+gate kills junk pre-spend → stage candidate + SITREP to Slack via cc-acp.
+HUMAN = exactly two touchpoints, both already mandated by standing rules:
+"go" on trial spend (explicit-go rule) + adoption veto (R4-class scope
+veto). Build cost small (pieces exist: §4.2 propose path, cc-acp
+delivery, launchd pattern). §4.3 later dissolves touchpoint 1 (auto
+keep/rollback on gate-outcome deltas) → fully-automatic-with-veto.
+
+**NEXT:** (a) **2.2a scheduled-crank build** (awaiting go); (b) squad
+dogfood (gitignore + /kkamak:init); (c) §4.3 design (workload-confound
+brainstorm; consumes ~10% calibration rate + two-host union stream);
+(d) §4.4 mechanism proposals + S4 operators. First §4.4-class candidate
+already queued from daily data: post-block reinject wording (see
+HISTORY.md SM2 finding).
 
 **WHAT CLOSED (full detail HISTORY.md FA1 + SM1 + the two ✅ UPDATE blocks
 in the office section below):**

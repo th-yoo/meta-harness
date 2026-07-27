@@ -9,7 +9,7 @@ lineage.
 
 | Name | Level | Decides | Seat | Code |
 |---|---|---|---|---|
-| **Completion gate** | one attempt, at "done" | is this attempt's work verified? (verify.sh + mutation probe; reinjects evidence, bounded rounds) | code | `complete-gate.ts` + `mutate.ts`, run.ts `--complete-gate`; daily deployment `gate-plugin/` (2026-07-26, mutants=0 v1, marker default OFF; **LIVE-VERIFIED 2026-07-27 SM1**); CC port planned (`docs/superpowers/plans/2026-07-27-kkamak-cc-plugin-v0.1.md`) |
+| **Completion gate** | one attempt, at "done" | is this attempt's work verified? (verify.sh + mutation probe; reinjects evidence, bounded rounds) | code | `complete-gate.ts` + `mutate.ts`, run.ts `--complete-gate`; daily deployments: opencode `gate-plugin/` (2026-07-26, mutants=0 v1, marker OFF; **LIVE-VERIFIED SM1**) + CC `cc-gate-plugin/` (**kkamak plugin, SHIPPED+SMOKE-VERIFIED SM2**, merge 6d443df); both write one `.km/gate-outcomes.ndjson` stream |
 | **Review gate** | one proposal, pre-spend | is this candidate bullet fit to test? (dup/scope/leak checks + rubric; bounded revise loop) | LLM + deterministic layer-1 | minimal: propose.ts Reviewer seat (`review.ts`); production: `opencode-plugin/src/review-gate.ts` + per-layer `rejected.json` (ported 2026-07-26) |
 | **Adoption gate** | the active base | does this candidate replace the base? (Fisher lift + guard non-regression + forensics void-exclusion) | code, sole base-mutator | `gate.ts` |
 
@@ -272,6 +272,37 @@ Mechanism verification, zero bench trials, NOT an adoption verdict.
 - **Meaning:** the daily deployment of the A2-adopted mechanism is now
   verified in situ — the §4.3 sensor stream's producer is trustworthy.
   Next: CC port (kkamak plugin, plan triple-architect-reviewed) → §4.3.
+
+## SM2 — kkamak CC plugin v0.1: build + live smoke (2026-07-27/28, MacBook) — SHIPPED, all smoke criteria PASS
+
+- **Built via 15-node parallel-DAG subagent waves** (plan
+  `docs/superpowers/plans/2026-07-27-kkamak-cc-plugin-v0.1.md`, itself
+  3-round architect-reviewed; branch feat/kkamak-cc → merge `6d443df`):
+  frozen `types.ts` contract → 10 parallel Wave-2 nodes → Stop state
+  machine → hook-cli adapter. Suites 120 (CC) + 26 (opencode) green, tsc
+  clean. Wave reviews APPROVED; final whole-branch review found 2 blocking
+  (.km gitignore; unconditional sweep littering ungated cwds) + post-kill
+  pipe-hang → one fix wave → re-verified MERGE-READY.
+- **Live smoke (3 headless CC sessions + 1 interactive tmux demo): the CC
+  contract's one open uncertainty RESOLVED — `{"decision":"block","reason"}`
+  evidence DOES reach the agent.** Self-describing check → agent received
+  the block reason, fixed, rounds ["verify-failed","accepted"] in 4s;
+  rounds bound exact (2 blocks → exhausted-allow, loud); marker via
+  additionalContext ✓; no-edit turns silent ✓; bash-writes don't arm ✓;
+  mkdir-recursive fresh-repo ✓; headless `-p` ✓. Shipped default stays
+  block-json.
+- **Naming shipped:** plugin name `kkamak` on every host; runtime prefix
+  `.km/` (node N renamed the opencode sensor default in lockstep — both
+  hosts write ONE app-tagged stream).
+- **Dogfood begun 07-28:** `gate.json` committed at repo root (both plugin
+  suites, ~4s, `659a712`); `~/z2/km-play` playground; README gains the
+  "what kkamak can and cannot touch" trust section (`078d6dd`).
+- **First interactive-dogfood finding (07-28 demo):** after a block, the
+  agent re-ran the check itself via Bash → permission prompt stalled the
+  fix loop (gate correct throughout; durationMs 282s inflated by human
+  wait). Candidate mechanism delta: reinject wording "fix it; do not
+  re-run the check — the gate re-checks automatically". **First
+  §4.4-class candidate produced by daily usage.**
 
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
