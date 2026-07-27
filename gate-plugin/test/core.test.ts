@@ -4,7 +4,7 @@ import { HYGIENE_MARKER } from "../../minimal/session2.ts"
 
 test("parseGateConfig: minimal valid config gets defaults", () => {
   const c = parseGateConfig(`{"check": "bun test"}`)
-  expect(c).toEqual({ check: "bun test", rounds: 2, marker: false, sensor: ".meta-harness/gate-outcomes.ndjson" })
+  expect(c).toEqual({ check: "bun test", rounds: 2, marker: false, sensor: ".km/gate-outcomes.ndjson" })
 })
 test("parseGateConfig: explicit fields respected", () => {
   const c = parseGateConfig(`{"check": "make verify", "rounds": 1, "marker": true, "sensor": "out.ndjson"}`)

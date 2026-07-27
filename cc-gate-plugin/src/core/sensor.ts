@@ -1,5 +1,5 @@
-// TODO(E): buildSensorLine — gate-plugin schema parity + host/app tags
 import type { CoreDeps, RoundOutcome, SensorLine } from "../types.ts"
+
 export function buildSensorLine(
   deps: CoreDeps,
   args: {
@@ -13,6 +13,17 @@ export function buildSensorLine(
     durationMs: number
   },
 ): SensorLine {
-  void deps; void args
-  throw new Error("TODO(E)")
+  return {
+    ts: deps.now(),
+    sessionID: args.sessionID,
+    check: args.check,
+    accepted: args.accepted,
+    gateExhausted: args.gateExhausted,
+    rounds: args.rounds,
+    interrupted: args.interrupted,
+    marker: args.marker,
+    durationMs: args.durationMs,
+    host: deps.hostname(),
+    app: "claude-code",
+  }
 }

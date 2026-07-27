@@ -22,7 +22,7 @@ export function parseGateConfig(raw: string): GateConfig | undefined {
       check: j.check,
       rounds: typeof j.rounds === "number" ? j.rounds : 2,
       marker: j.marker === true,
-      sensor: typeof j.sensor === "string" ? j.sensor : ".meta-harness/gate-outcomes.ndjson",
+      sensor: typeof j.sensor === "string" ? j.sensor : ".km/gate-outcomes.ndjson",
     }
   } catch {
     return undefined
