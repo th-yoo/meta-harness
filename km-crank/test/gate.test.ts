@@ -46,15 +46,23 @@ test("decideGate: below threshold but last run is stale (past maxAgeMs) -> run",
   expect(decideGate(input({ newCount: 3, threshold: 10, lastRunTs: 1_000, maxAgeMs: 7 * DAY_MS, now }))).toBe("run")
 })
 
-test("decideGate: lastRunTs=0 (never run) -> not 'recent enough' even with few new lines -> run", () => {
-  expect(decideGate(input({ newCount: 0, threshold: 10, lastRunTs: 0, now: 1_000 }))).toBe("run")
+test("decideGate: zero new lines NEVER runs — first-run age hole closed (live bug 2026-07-28)", () => {
+  expect(decideGate(input({ newCount: 0, threshold: 10, lastRunTs: 0, now: 1_000 }))).toBe("skip-threshold")
 })
 
-test("decideGate: force=true bypasses the threshold/age gate even with 0 new lines", () => {
+test("decideGate: zero new lines NEVER runs — not even --force", () => {
   const now = 1_000 + 1 * DAY_MS
   expect(
     decideGate(input({ force: true, newCount: 0, threshold: 10, lastRunTs: 1_000, maxAgeMs: 7 * DAY_MS, now })),
-  ).toBe("run")
+  ).toBe("skip-threshold")
+})
+
+test("decideGate: first run (lastRunTs=0) below threshold -> skip (age clause needs a prior run)", () => {
+  expect(decideGate(input({ newCount: 3, threshold: 10, lastRunTs: 0, now: 1_000 }))).toBe("skip-threshold")
+})
+
+test("decideGate: force=true with >0 lines below threshold -> run", () => {
+  expect(decideGate(input({ force: true, newCount: 3, threshold: 10, lastRunTs: 0, now: 1_000 }))).toBe("run")
 })
 
 test("decideGate: trial in progress -> skip-trial (even with plenty of new lines)", () => {

@@ -66,9 +66,17 @@ export interface GateInput {
  * exit 0 — only the outcome kind differs for the log message.
  */
 export function decideGate(input: GateInput): GateDecision {
-  const ageMs = input.now - input.lastRunTs
-  const recentEnough = input.lastRunTs > 0 && ageMs < input.maxAgeMs
-  if (!input.force && input.newCount < input.threshold && recentEnough) return "skip-threshold"
+  // Zero new evidence NEVER runs — not even --force. An evidence-free propose
+  // round is pure noise (live-proven 2026-07-28: the first crank invocation
+  // ran on 0 lines via the first-run age hole below and produced a
+  // review-rejected junk proposal). --force bypasses the THRESHOLD, not the
+  // existence of data.
+  if (input.newCount === 0) return "skip-threshold"
+  // The age trigger only applies once a prior round exists (lastRunTs > 0).
+  // A never-run crank must wait for threshold (or --force), not fire because
+  // "more than maxAge has passed since epoch".
+  const aged = input.lastRunTs > 0 && input.now - input.lastRunTs >= input.maxAgeMs
+  if (!input.force && input.newCount < input.threshold && !aged) return "skip-threshold"
   if (input.trialInProgress) return "skip-trial"
   if (input.inFlight) return "skip-inflight"
   return "run"
