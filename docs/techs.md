@@ -120,6 +120,8 @@ transfer, memory index).
 | Gate plugin (daily sessions) | `gate-plugin/`: session.idle completion-gate loop, `gate.json` opt-in, ndjson outcome sensor, self-inject echo guard, `[meta-harness]` child exclusion, marker default OFF (C2 verdict). Echo timing = test-faked, smoke pending. |
 | Session-hygiene marker | C2-tested countermand injection between chained tasks — reward-null, A-side depressed → ships default OFF. |
 | Pre-registration, practiced | G1 sealed pass/fail criteria in the repo BEFORE launch (§6.1 → §6.2 same file). SPRT still deferred. |
+| Spec-coverage probe (added 07-27) | RTM-style frozen `requirements.json` per task (from instruction.md only) matched against comment-stripped verify.sh; `requirement-untested` reinject names the gap. First live save same day (FA1 a2). |
+| Relation probes (added 07-27) | Instruction-derived metamorphic/property scripts vs the artifact (oracle-free — the literature's standard weapon for the no-ground-truth channel); desk-validated oracle-pass/degraded-fail; `relation-violated` outcome. |
 
 ### Dormant / rejected-for-now
 

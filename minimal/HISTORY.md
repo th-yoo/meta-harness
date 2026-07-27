@@ -172,6 +172,38 @@ claims only). Forensics clean (0 auth errors, 0 voids).
 - **Records:** `headless-terminal-2026-07-27T01-54-16-685Z.json`,
   `sparql-university-2026-07-27T03-01-09-245Z.json`.
 
+## FA1 — false-accept probes: build + probes-ON arm (2026-07-27, office `yoo-dev`) — ON-ARM SEALED, VERDICT PENDING CONTROL
+
+Attack on the false-accept class (every real fail across C2+C1+G1 =
+completion-gate accepted, grader failed). Two new deterministic probe classes
+added to the completion gate (plan
+`docs/superpowers/plans/2026-07-27-false-accept-probes.md`, SDD 8 tasks +
+final review + fix wave, commits `a61b08b..eb2ac11`, suites 1671+26 green):
+**spec-coverage probe** (frozen per-task `requirements.json` from
+instruction.md, RTM-style, matched against comment-stripped verify.sh;
+`requirement-untested` outcome names the gap) and **relation probes**
+(instruction-derived metamorphic/property scripts vs the artifact;
+`relation-violated`). Desk-validated: all relations pass oracle solutions,
+fail degraded artifacts (incl. the hardcoded-names sparql false-accept
+class). Fail-open throughout; probes provenance in run headers.
+
+- **§6.3 headless probes-ON k=10 (pooled office runs; auth-race voided 2,
+  rule-covered top-up):** **10 valid = 9/10 reward, false-accepts 1/10
+  (G1 reference 2/5), exhaustion 0/10 ✓, median 651s < 2x-G1 guard ✓.**
+- **First live spec-probe save (top-up a2):** verify.sh covered ZERO
+  requirements (wrapper-style watch-item, live) → two `requirement-untested`
+  reinjects naming all 5 → agent rewrote verification → accepted with kill →
+  grader PASS.
+- **Residual false-accept (top-up a4):** probes passed (killed 3/4,
+  coverage filtered), gate accepted, grader failed — the measured
+  calibration point ("floor is not zero" as pre-registered).
+- **NOT run: control k=10 + sparql k=5** (user call, handed to next
+  session). NO verdict math — ON-vs-control needs same-host control
+  (provenance trap flagged in resume.md; office ON arm ⇒ office control).
+- **Records:** run-1 trajs `headless-terminal-2026-07-27T05-54-08-764Z-a*`
+  + `...-run1-authrace.log` (6 valid, no results.json — killed run);
+  top-up `headless-terminal-2026-07-27T06-53-49-506Z.json`.
+
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
 | R1 | 2026-07-23 | machine bullet (script-verify) on bare | bare 4/10 vs 5/10 | 1.0 | — | REJECT null |
@@ -193,6 +225,7 @@ claims only). Forensics clean (0 auth errors, 0 voids).
 | C2 | 2026-07-25 | session-carryover hygiene arms (cancel-async `--then` cdt, MacBook) | B: alone 3/3 vs raw 10/10 vs marker 5/5-valid | 1.0 | — (measurement) | **NULL reward effect (pre-registered ✓); contamination 1/10 raw vs 0/10 marker-valid (top-up 07-26 closed the arm); marker A-side depressed 4/12 vs 7/10 p=0.198 null — port recommendation: marker default OFF** |
 | C1 | 2026-07-25/26 | held-out completion-gate transfer (headless + sparql gate-ON k=10, MacBook) | headless 7/9 vs 7/8 OFF; sparql 8/9 vs 10/10 OFF (same-host baseline rerun) | 1.0 / 0.47 | — (measurement) | **BOTH HOLD certified (null): headless 7/9 gate-EXHAUSTED (no grip, 6–30x time tax); sparql healthy gate shape, ~2x tax, 1 false-accept fail; designCheck killed --stop-futile pre-spend (correct); provenance refusal forced same-host baseline** |
 | G1 | 2026-07-27 | adequacy-probe grip fix S1+S2+S3 (headless k=5 + sparql k=3, office) | headless exhaustion 0/5 vs C1 7/9; sparql 3/3 zero exhaustion | ≈0.02 (exhaustion) | — (mechanism) | **PASS pre-registered both arms: coverage-guided sites + ≥1-kill rule end headless exhaustion (median 400s vs 1000–5000s); first healthy verify-fix loops on headless; false-accept recurs (a2+a5) → §5.1 fix directions; serializer coverage-field gap found+fixed** |
+| FA1 | 2026-07-27 | false-accept probes (spec-coverage + relations) — headless probes-ON k=10, office | pooled 9/10 reward, false-accept 1/10 vs G1 2/5, exhaustion 0/10 | — (control pending) | — (measurement) | **ON-ARM SEALED, verdict pending same-host control k=10: first live spec-probe save (a2: 0-coverage verify → named reinjects → rewrite → pass); residual false-accept a4 = calibration point; 2 auth-race voids rule-covered by top-up** |
 
 ---
 
