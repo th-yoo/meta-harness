@@ -22,10 +22,15 @@ the two ✅ UPDATE blocks in the office section below):**
    rate.** Grip fix (G1) stays the only certified mechanism change.
 
 **QUEUE: ranked item 1 DONE → item 2 live: §4.1 gate-plugin live smoke-test
-(host-agnostic, cheap, next action) → §4.3 trial mode (calibration rate in
-hand) → §4.4 mechanism proposals. S4 operators open. Standing: mid-arm
+(host-agnostic, cheap, next action) → **2.1b CC gate plugin** (PLAN READY:
+`docs/superpowers/plans/2026-07-27-kkamak-cc-plugin-v0.1.md` — plugin name
+kkamak, `.km/` runtime prefix, 15-node parallel DAG, 3 architect review
+rounds applied; build via subagent-driven waves) → §4.3 trial mode
+(calibration rate in hand; design against the host-tagged union sensor
+stream) → §4.4 mechanism proposals. S4 operators open. Standing: mid-arm
 futility curtailment still unexercised; wrapper-verify watch-item moves to
-plugin sensor data.**
+plugin sensor data. NAMING (user, this session): product prefix km-/.km/;
+project rename meta-harness → kkamak-harness = future housekeeping.**
 
 **BOX STATE (MacBook):** clean — no containers, no run tmux (squad gateway
 only), no monitors; tree clean except known host-local logs
