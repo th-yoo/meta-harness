@@ -190,3 +190,48 @@ test("coverage is off when coveredLines is absent or returns undefined", async (
   expect(rf.rounds[0]!.coverage).toBe("off")
   expect(rf.rounds[0]!.mutantsTried).toBeGreaterThan(0)
 })
+
+// --- S2 in the round: spec-coverage probe (false-accept L1) — verify.sh must
+// exercise every requirement instruction (markers in script, not comments). ---
+
+import { type Requirement } from "../../minimal/spec-probe.ts"
+
+const REQS: Requirement[] = [
+  { id: "R-a", text: "does A", markers: ["scenario_a"] },
+  { id: "R-b", text: "does B", markers: ["scenario_b"] },
+]
+
+test("spec probe fails the round and names uncovered requirements", async () => {
+  const io = fakeIO({
+    readVerify: () => "run scenario_a only\n",
+    runVerify: (onMutant?: boolean) => (onMutant ? { code: 1, out: "caught" } : { code: 0, out: "ok" }),
+  })
+  const r = await runCompletionGate(io, { rounds: 1, mutants: 2, requirements: REQS })
+  expect(r.rounds[0]!.outcome).toBe("requirement-untested")
+  expect(r.rounds[0]!.uncoveredReqs).toEqual(["R-b"])
+  const msg = io.log.find((l) => l.startsWith("reinject:"))!
+  expect(msg).toContain("does B")
+  expect(msg).toContain("R-b")
+})
+
+test("spec probe passes through when verify covers all requirements", async () => {
+  const io = fakeIO({
+    readVerify: () => "scenario_a then scenario_b\n",
+    runVerify: (onMutant?: boolean) => (onMutant ? { code: 1, out: "caught" } : { code: 0, out: "ok" }),
+  })
+  const r = await runCompletionGate(io, { rounds: 1, mutants: 2, requirements: REQS })
+  expect(r.rounds[0]!.outcome).toBe("accepted")
+  expect(r.rounds[0]!.uncoveredReqs).toBeUndefined()
+})
+
+test("spec probe is fail-open: no requirements, no readVerify, or unreadable verify", async () => {
+  const noReqs = fakeIO({ runVerify: (m?: boolean) => (m ? { code: 1, out: "x" } : { code: 0, out: "ok" }) })
+  expect((await runCompletionGate(noReqs, { rounds: 1, mutants: 2 })).rounds[0]!.outcome).toBe("accepted")
+  const unreadable = fakeIO({
+    readVerify: () => undefined,
+    runVerify: (m?: boolean) => (m ? { code: 1, out: "x" } : { code: 0, out: "ok" }),
+  })
+  expect(
+    (await runCompletionGate(unreadable, { rounds: 1, mutants: 2, requirements: REQS })).rounds[0]!.outcome,
+  ).toBe("accepted")
+})

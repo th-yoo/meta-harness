@@ -14,6 +14,7 @@
  * use fakes. The gate never touches the task grader (invariant 1).
  */
 import { generateMutants, unifiedDiff } from "./mutate.ts"
+import { type Requirement, uncoveredRequirements } from "./spec-probe.ts"
 
 type MaybeAsync<T> = T | Promise<T>
 
@@ -31,10 +32,13 @@ export interface GateIO {
    * actually executes — typically one traced verify run. Fail-open: absent
    * or `undefined` result = no coverage filtering. */
   coveredLines?(): MaybeAsync<Set<number> | undefined>
+  /** Optional (false-accept L1): content of the agent's verify.sh for the
+   * spec-coverage probe. undefined = unreadable → probe skips (fail-open). */
+  readVerify?(): MaybeAsync<string | undefined>
 }
 
 export interface GateRoundResult {
-  outcome: "accepted" | "no-verify" | "verify-failed" | "mutant-survived" | "artifact-missing"
+  outcome: "accepted" | "no-verify" | "verify-failed" | "mutant-survived" | "artifact-missing" | "requirement-untested"
   mutantsTried: number
   mutantsSurvived: number
   mutantsKilled: number
@@ -42,6 +46,9 @@ export interface GateRoundResult {
    * "fallback-static" = coverage emptied them (vacuity hazard) so static
    * sites were used; "off" = no coverage data. */
   coverage: "off" | "filtered" | "fallback-static"
+  /** Spec-coverage probe: ids of instruction requirements the verify script
+   * never exercises (present only when the probe ran and found gaps). */
+  uncoveredReqs?: string[]
 }
 
 export interface GateResult {
@@ -52,7 +59,11 @@ export interface GateResult {
 
 const OUT_TAIL = 600
 
-async function checkRound(io: GateIO, mutants: number): Promise<{ r: GateRoundResult; reinjectMsg?: string }> {
+async function checkRound(
+  io: GateIO,
+  mutants: number,
+  requirements?: Requirement[],
+): Promise<{ r: GateRoundResult; reinjectMsg?: string }> {
   if (!(await io.verifyExists()))
     return {
       r: { outcome: "no-verify", mutantsTried: 0, mutantsSurvived: 0, mutantsKilled: 0, coverage: "off" },
@@ -65,6 +76,32 @@ async function checkRound(io: GateIO, mutants: number): Promise<{ r: GateRoundRe
       r: { outcome: "verify-failed", mutantsTried: 0, mutantsSurvived: 0, mutantsKilled: 0, coverage: "off" },
       reinjectMsg: `not done: your verification script fails:\n${v.out.slice(-OUT_TAIL)}\nFix the artifact (or the script if it is wrong about the contract) and re-run it.`,
     }
+  // Spec-coverage probe (false-accept L1): every instruction requirement
+  // must be exercised by the verification. Free text check — runs before
+  // any mutant execution. Fail-open when the task ships no requirements
+  // or verify.sh is unreadable.
+  if (requirements && io.readVerify) {
+    const verifyText = await io.readVerify()
+    if (verifyText !== undefined) {
+      const uncovered = uncoveredRequirements(requirements, verifyText)
+      if (uncovered.length > 0)
+        return {
+          r: {
+            outcome: "requirement-untested",
+            mutantsTried: 0,
+            mutantsSurvived: 0,
+            mutantsKilled: 0,
+            coverage: "off",
+            uncoveredReqs: uncovered.map((q) => q.id),
+          },
+          reinjectMsg: `not done: the task instruction states requirements your verification never exercises:\n${uncovered
+            .map((q) => `- [${q.id}] ${q.text}`)
+            .join(
+              "\n",
+            )}\nAdd a scenario to /app/verify.sh for each (exercise the behavior itself — naming it in a comment does not count), run it, and fix anything it finds.`,
+        }
+    }
+  }
   const src = await io.readArtifact()
   if (src === undefined)
     return {
@@ -109,11 +146,11 @@ async function checkRound(io: GateIO, mutants: number): Promise<{ r: GateRoundRe
 
 export async function runCompletionGate(
   io: GateIO,
-  opts: { rounds: number; mutants: number },
+  opts: { rounds: number; mutants: number; requirements?: Requirement[] },
 ): Promise<GateResult> {
   const rounds: GateRoundResult[] = []
   for (let attempt = 0; ; attempt++) {
-    const { r, reinjectMsg } = await checkRound(io, opts.mutants)
+    const { r, reinjectMsg } = await checkRound(io, opts.mutants, opts.requirements)
     rounds.push(r)
     if (r.outcome === "accepted") return { accepted: true, gateExhausted: false, rounds }
     if (attempt >= opts.rounds)
