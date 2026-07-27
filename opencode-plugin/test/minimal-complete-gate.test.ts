@@ -235,3 +235,43 @@ test("spec probe is fail-open: no requirements, no readVerify, or unreadable ver
     (await runCompletionGate(unreadable, { rounds: 1, mutants: 2, requirements: REQS })).rounds[0]!.outcome,
   ).toBe("accepted")
 })
+
+// --- S4 in the round: relation probe (false-accept fix) — metamorphic
+// properties and instruction-derived relations run after coverage but before
+// mutation; all violations reported in a single reinject. ---
+
+import { type Relation } from "../../minimal/complete-gate.ts"
+
+const RELS: Relation[] = [
+  { id: "MR-echo", script: "echo-roundtrip-py" },
+  { id: "MR-ctrlc", script: "ctrlc-py" },
+]
+
+test("relation probe fails the round listing every violated relation", async () => {
+  const io = fakeIO({
+    runScript: (script: string) => ({ code: script === "ctrlc-py" ? 1 : 0, out: "sleep survived interrupt" }),
+    runVerify: (m?: boolean) => (m ? { code: 1, out: "caught" } : { code: 0, out: "ok" }),
+  })
+  const r = await runCompletionGate(io, { rounds: 1, mutants: 2, relations: RELS })
+  expect(r.rounds[0]!.outcome).toBe("relation-violated")
+  expect(r.rounds[0]!.violatedRelations).toEqual(["MR-ctrlc"])
+  const msg = io.log.find((l) => l.startsWith("reinject:"))!
+  expect(msg).toContain("MR-ctrlc")
+  expect(msg).toContain("sleep survived interrupt")
+})
+
+test("relation probe passes when every relation holds, then mutation probe still runs", async () => {
+  const io = fakeIO({
+    runScript: () => ({ code: 0, out: "ok" }),
+    runVerify: (m?: boolean) => (m ? { code: 1, out: "caught" } : { code: 0, out: "ok" }),
+  })
+  const r = await runCompletionGate(io, { rounds: 1, mutants: 2, relations: RELS })
+  expect(r.rounds[0]!.outcome).toBe("accepted")
+  expect(r.rounds[0]!.mutantsTried).toBeGreaterThan(0) // relations did not short-circuit the mutation probe
+})
+
+test("relation probe is fail-open without runScript", async () => {
+  const io = fakeIO({ runVerify: (m?: boolean) => (m ? { code: 1, out: "x" } : { code: 0, out: "ok" }) })
+  const r = await runCompletionGate(io, { rounds: 1, mutants: 2, relations: RELS })
+  expect(r.rounds[0]!.outcome).toBe("accepted")
+})

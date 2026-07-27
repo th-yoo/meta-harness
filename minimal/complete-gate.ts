@@ -18,6 +18,14 @@ import { type Requirement, uncoveredRequirements } from "./spec-probe.ts"
 
 type MaybeAsync<T> = T | Promise<T>
 
+/** A metamorphic/property relation probe: a self-contained python script
+ * derived ONLY from instruction.md (never the grader). Exit 0 = relation
+ * holds; non-zero = violated, stdout/stderr tail = evidence. */
+export interface Relation {
+  id: string
+  script: string
+}
+
 export interface GateIO {
   verifyExists(): MaybeAsync<boolean>
   /** Run /app/verify.sh. `onMutant` true while a mutant is installed. */
@@ -35,10 +43,13 @@ export interface GateIO {
   /** Optional (false-accept L1): content of the agent's verify.sh for the
    * spec-coverage probe. undefined = unreadable → probe skips (fail-open). */
   readVerify?(): MaybeAsync<string | undefined>
+  /** Optional (false-accept probes): run a relation script in the task
+   * environment. Absent → relation probe skips (fail-open). */
+  runScript?(script: string): MaybeAsync<{ code: number; out: string }>
 }
 
 export interface GateRoundResult {
-  outcome: "accepted" | "no-verify" | "verify-failed" | "mutant-survived" | "artifact-missing" | "requirement-untested"
+  outcome: "accepted" | "no-verify" | "verify-failed" | "mutant-survived" | "artifact-missing" | "requirement-untested" | "relation-violated"
   mutantsTried: number
   mutantsSurvived: number
   mutantsKilled: number
@@ -49,6 +60,8 @@ export interface GateRoundResult {
   /** Spec-coverage probe: ids of instruction requirements the verify script
    * never exercises (present only when the probe ran and found gaps). */
   uncoveredReqs?: string[]
+  /** Relation probe: ids of violated relations (present only on violation). */
+  violatedRelations?: string[]
 }
 
 export interface GateResult {
@@ -63,6 +76,7 @@ async function checkRound(
   io: GateIO,
   mutants: number,
   requirements?: Requirement[],
+  relations?: Relation[],
 ): Promise<{ r: GateRoundResult; reinjectMsg?: string }> {
   if (!(await io.verifyExists()))
     return {
@@ -101,6 +115,33 @@ async function checkRound(
             )}\nAdd a scenario to /app/verify.sh for each (exercise the behavior itself — naming it in a comment does not count), run it, and fix anything it finds.`,
         }
     }
+  }
+  // Relation probe (false-accept fix): instruction-derived metamorphic/
+  // property relations run against the artifact itself — they catch
+  // wrong-behavior the agent's own scenarios never imagined. All relations
+  // run; one reinject reports every violation.
+  if (relations && io.runScript) {
+    const violated: { id: string; out: string }[] = []
+    for (const rel of relations) {
+      const res = await io.runScript(rel.script)
+      if (res.code !== 0) violated.push({ id: rel.id, out: res.out.slice(-OUT_TAIL) })
+    }
+    if (violated.length > 0)
+      return {
+        r: {
+          outcome: "relation-violated",
+          mutantsTried: 0,
+          mutantsSurvived: 0,
+          mutantsKilled: 0,
+          coverage: "off",
+          violatedRelations: violated.map((v) => v.id),
+        },
+        reinjectMsg: `not done: your artifact violates behavior the task instruction implies:\n${violated
+          .map((v) => `- [${v.id}]\n${v.out}`)
+          .join(
+            "\n",
+          )}\nFix the artifact so the stated behavior holds, extend /app/verify.sh to cover it, and re-run your verification.`,
+      }
   }
   const src = await io.readArtifact()
   if (src === undefined)
@@ -146,11 +187,11 @@ async function checkRound(
 
 export async function runCompletionGate(
   io: GateIO,
-  opts: { rounds: number; mutants: number; requirements?: Requirement[] },
+  opts: { rounds: number; mutants: number; requirements?: Requirement[]; relations?: Relation[] },
 ): Promise<GateResult> {
   const rounds: GateRoundResult[] = []
   for (let attempt = 0; ; attempt++) {
-    const { r, reinjectMsg } = await checkRound(io, opts.mutants, opts.requirements)
+    const { r, reinjectMsg } = await checkRound(io, opts.mutants, opts.requirements, opts.relations)
     rounds.push(r)
     if (r.outcome === "accepted") return { accepted: true, gateExhausted: false, rounds }
     if (attempt >= opts.rounds)
