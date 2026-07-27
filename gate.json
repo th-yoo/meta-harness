@@ -1,0 +1,4 @@
+{
+  "check": "cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test",
+  "rounds": 2
+}
