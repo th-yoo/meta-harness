@@ -1,0 +1,330 @@
+// test/cli.test.ts — integration tests that spawn the real hook-cli.ts
+// process (bun src/hook-cli.ts <Event>) against hermetic tmp repos, exactly
+// as Claude Code itself would invoke it. Pure-module behavior is already
+// covered by the other test files; these tests exercise ONLY the adapter
+// wiring: env guards, stdin parsing, path plumbing, persist-before-emit
+// ordering, sensor appends, delivery modes, and fail-open behavior.
+import { test, expect } from "bun:test"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
+import { FileStateStore } from "../src/state.ts"
+import { INITIAL_STATE, type CcGateState } from "../src/types.ts"
+
+const HOOK_CLI = path.join(import.meta.dir, "..", "src", "hook-cli.ts")
+
+interface RunResult {
+  stdout: string
+  stderr: string
+  exitCode: number
+}
+
+async function runHook(opts: {
+  event: string
+  stdin: string
+  env?: Record<string, string>
+}): Promise<RunResult> {
+  const env: Record<string, string> = { ...(process.env as Record<string, string>) }
+  // Never let this test process's own environment accidentally trip the
+  // child-exclusion guard or delivery-mode seam for cases that don't intend it.
+  delete env.MH_CHILD
+  delete env.KM_CHILD
+  delete env.KKAMAK_DELIVERY
+  if (opts.env) Object.assign(env, opts.env)
+
+  const proc = Bun.spawn(["bun", HOOK_CLI, opts.event], {
+    stdout: "pipe",
+    stderr: "pipe",
+    stdin: new TextEncoder().encode(opts.stdin),
+    env,
+  })
+
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout as ReadableStream<Uint8Array>).text(),
+    new Response(proc.stderr as ReadableStream<Uint8Array>).text(),
+    proc.exited,
+  ])
+
+  return { stdout, stderr, exitCode }
+}
+
+function mkRepo(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "cc-gate-cli-"))
+}
+
+function rmRepo(repo: string): void {
+  fs.rmSync(repo, { recursive: true, force: true })
+}
+
+function writeGate(repo: string, cfg: Record<string, unknown>): void {
+  fs.writeFileSync(path.join(repo, "gate.json"), JSON.stringify(cfg))
+}
+
+function stateFilePath(repo: string, sessionId: string): string {
+  return path.join(repo, ".km", "cc-gate", `${sessionId}.json`)
+}
+
+function seedState(repo: string, sessionId: string, overrides: Partial<CcGateState>): void {
+  const store = new FileStateStore(path.join(repo, ".km", "cc-gate"))
+  store.save(sessionId, { ...INITIAL_STATE, ...overrides })
+}
+
+function loadState(repo: string, sessionId: string): CcGateState {
+  const store = new FileStateStore(path.join(repo, ".km", "cc-gate"))
+  return store.load(sessionId)
+}
+
+function sensorLines(repo: string): Record<string, unknown>[] {
+  const p = path.join(repo, ".km", "gate-outcomes.ndjson")
+  return fs
+    .readFileSync(p, "utf-8")
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l))
+}
+
+test("unknown event arg -> exit 0, empty stdout", async () => {
+  const repo = mkRepo()
+  try {
+    const r = await runHook({
+      event: "TotallyBogusEvent",
+      stdin: JSON.stringify({ session_id: "s1", cwd: repo }),
+    })
+    expect(r.exitCode).toBe(0)
+    expect(r.stdout).toBe("")
+  } finally {
+    rmRepo(repo)
+  }
+})
+
+test("malformed stdin JSON -> exit 0", async () => {
+  const r = await runHook({ event: "Stop", stdin: "{not valid json" })
+  expect(r.exitCode).toBe(0)
+  expect(r.stdout).toBe("")
+})
+
+test("MH_CHILD set -> exit 0 instantly, no state file created even with a blocking gate.json", async () => {
+  const repo = mkRepo()
+  try {
+    writeGate(repo, { check: "exit 1" })
+    const r = await runHook({
+      event: "Stop",
+      stdin: JSON.stringify({ session_id: "s1", cwd: repo }),
+      env: { MH_CHILD: "1" },
+    })
+    expect(r.exitCode).toBe(0)
+    expect(r.stdout).toBe("")
+    // No IO before the guard: not even the .km directory should exist.
+    expect(fs.existsSync(path.join(repo, ".km"))).toBe(false)
+  } finally {
+    rmRepo(repo)
+  }
+})
+
+test("KM_CHILD set -> exit 0 instantly, no state file created even with a blocking gate.json", async () => {
+  const repo = mkRepo()
+  try {
+    writeGate(repo, { check: "exit 1" })
+    const r = await runHook({
+      event: "Stop",
+      stdin: JSON.stringify({ session_id: "s1", cwd: repo }),
+      env: { KM_CHILD: "1" },
+    })
+    expect(r.exitCode).toBe(0)
+    expect(r.stdout).toBe("")
+    expect(fs.existsSync(path.join(repo, ".km"))).toBe(false)
+  } finally {
+    rmRepo(repo)
+  }
+})
+
+test("PostToolUse Write -> state file exists with edited:true", async () => {
+  const repo = mkRepo()
+  try {
+    const r = await runHook({
+      event: "PostToolUse",
+      stdin: JSON.stringify({ session_id: "s1", cwd: repo, tool_name: "Write" }),
+    })
+    expect(r.exitCode).toBe(0)
+    expect(r.stdout).toBe("")
+    expect(fs.existsSync(stateFilePath(repo, "s1"))).toBe(true)
+    expect(loadState(repo, "s1").edited).toBe(true)
+  } finally {
+    rmRepo(repo)
+  }
+})
+
+test("PostToolUse Bash -> no state file created", async () => {
+  const repo = mkRepo()
+  try {
+    const r = await runHook({
+      event: "PostToolUse",
+      stdin: JSON.stringify({ session_id: "s1", cwd: repo, tool_name: "Bash" }),
+    })
+    expect(r.exitCode).toBe(0)
+    expect(r.stdout).toBe("")
+    expect(fs.existsSync(stateFilePath(repo, "s1"))).toBe(false)
+  } finally {
+    rmRepo(repo)
+  }
+})
+
+test("Stop end-to-end BLOCK: seeded edited + failing check -> block decision, state advanced to gating round 1", async () => {
+  const repo = mkRepo()
+  try {
+    writeGate(repo, { check: "exit 1" })
+    seedState(repo, "s1", { edited: true })
+
+    const r = await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "s1", cwd: repo }) })
+
+    expect(r.exitCode).toBe(0)
+    const out = JSON.parse(r.stdout)
+    expect(out.decision).toBe("block")
+    expect(typeof out.reason).toBe("string")
+
+    // persist-before-emit: state advanced BEFORE the block was emitted.
+    const state = loadState(repo, "s1")
+    expect(state.gating).toBe(true)
+    expect(state.round).toBe(1)
+  } finally {
+    rmRepo(repo)
+  }
+})
+
+test("Stop end-to-end ACCEPT with marker: additionalContext present, state deleted, sensor line written under a fresh .km/", async () => {
+  const repo = mkRepo()
+  try {
+    writeGate(repo, { check: "true", marker: true })
+    seedState(repo, "s1", { edited: true }) // creates .km/cc-gate as a side effect only
+
+    const r = await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "s1", cwd: repo }) })
+
+    expect(r.exitCode).toBe(0)
+    const out = JSON.parse(r.stdout)
+    expect(out.hookSpecificOutput?.hookEventName).toBe("Stop")
+    expect(typeof out.hookSpecificOutput?.additionalContext).toBe("string")
+    expect((out.hookSpecificOutput.additionalContext as string).length).toBeGreaterThan(0)
+
+    // initial-equivalent state -> deleted, not written.
+    expect(fs.existsSync(stateFilePath(repo, "s1"))).toBe(false)
+
+    // sensor file written (mkdir-recursive proven: gate-outcomes.ndjson's own
+    // dirname is created independently of the sensor content itself).
+    const sensorPath = path.join(repo, ".km", "gate-outcomes.ndjson")
+    expect(fs.existsSync(sensorPath)).toBe(true)
+    const lines = sensorLines(repo)
+    expect(lines.length).toBe(1)
+    expect(lines[0]!.app).toBe("claude-code")
+    expect(lines[0]!.accepted).toBe(true)
+    expect(lines[0]!.marker).toBe(true)
+  } finally {
+    rmRepo(repo)
+  }
+})
+
+test("Stop EXHAUSTED end-to-end: systemMessage emitted, sensor line has gateExhausted:true", async () => {
+  const repo = mkRepo()
+  try {
+    writeGate(repo, { check: "exit 1", rounds: 2 })
+    seedState(repo, "s1", {
+      edited: true,
+      gating: true,
+      round: 2,
+      outcomes: ["verify-failed", "verify-failed"],
+      cycleStartedAt: Date.now() - 500,
+    })
+
+    const r = await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "s1", cwd: repo }) })
+
+    expect(r.exitCode).toBe(0)
+    const out = JSON.parse(r.stdout)
+    expect(typeof out.systemMessage).toBe("string")
+
+    const lines = sensorLines(repo)
+    expect(lines.length).toBe(1)
+    expect(lines[0]!.gateExhausted).toBe(true)
+    expect(lines[0]!.rounds).toEqual(["verify-failed", "verify-failed", "verify-failed"])
+
+    // Exhausted cycle resets to initial state -> file deleted.
+    expect(fs.existsSync(stateFilePath(repo, "s1"))).toBe(false)
+  } finally {
+    rmRepo(repo)
+  }
+})
+
+test(
+  "check timeout resolves as a blocked round well under the sleep duration, evidence mentions the timeout",
+  async () => {
+    const repo = mkRepo()
+    try {
+      writeGate(repo, { check: "sleep 5", checkTimeoutMs: 300 })
+      seedState(repo, "s1", { edited: true })
+
+      const started = Date.now()
+      const r = await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "s1", cwd: repo }) })
+      const elapsedMs = Date.now() - started
+
+      expect(elapsedMs).toBeLessThan(4000) // well under the 5s sleep
+      expect(r.exitCode).toBe(0)
+      const out = JSON.parse(r.stdout)
+      expect(out.decision).toBe("block")
+      expect((out.reason as string)).toContain("timed out")
+
+      const state = loadState(repo, "s1")
+      expect(state.gating).toBe(true)
+      expect(state.round).toBe(1)
+    } finally {
+      rmRepo(repo)
+    }
+  },
+  10_000,
+)
+
+test.skipIf((process.getuid?.() ?? -1) === 0)(
+  "unwritable state dir -> fail-open: exit 0, decision allow, no block on an unrecorded round",
+  async () => {
+    const repo = mkRepo()
+    try {
+      writeGate(repo, { check: "exit 1" })
+      seedState(repo, "s1", { edited: true }) // readable non-initial state to seed the write path
+
+      const stateDir = path.join(repo, ".km", "cc-gate")
+      // Read+execute only: load() can still open+read the existing file, but
+      // writing the new (non-initial, "gating") state's tmp file into this
+      // dir must fail — this is the save()-throws fail-open path, distinct
+      // from the initial-equivalent delete path (which state.ts swallows).
+      fs.chmodSync(stateDir, 0o500)
+
+      try {
+        const r = await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "s1", cwd: repo }) })
+        expect(r.exitCode).toBe(0)
+        expect(r.stdout).toBe("") // "allow" emits no stdout at all
+      } finally {
+        fs.chmodSync(stateDir, 0o700) // restore so cleanup can remove it
+      }
+    } finally {
+      rmRepo(repo)
+    }
+  },
+)
+
+test("KKAMAK_DELIVERY=exit2-stderr on a block -> exit 2, evidence on stderr, empty stdout", async () => {
+  const repo = mkRepo()
+  try {
+    writeGate(repo, { check: "exit 1" })
+    seedState(repo, "s1", { edited: true })
+
+    const r = await runHook({
+      event: "Stop",
+      stdin: JSON.stringify({ session_id: "s1", cwd: repo }),
+      env: { KKAMAK_DELIVERY: "exit2-stderr" },
+    })
+
+    expect(r.exitCode).toBe(2)
+    expect(r.stdout).toBe("")
+    expect(r.stderr.length).toBeGreaterThan(0)
+  } finally {
+    rmRepo(repo)
+  }
+})

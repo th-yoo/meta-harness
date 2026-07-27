@@ -302,7 +302,7 @@ test("multi-session isolation: two independent state objects don't interfere", a
   expect(stateB).toEqual({ ...INITIAL_STATE, edited: true })
 })
 
-test("two overlapping handleStop calls on the SAME state object both resolve without throwing", async () => {
+test("handleStop is pure: two calls sharing an input state object resolve independently (real last-writer-wins coverage lives in state.test.ts)", async () => {
   const state: CcGateState = { ...INITIAL_STATE, edited: true }
 
   const slowDeps: CoreDeps = {
