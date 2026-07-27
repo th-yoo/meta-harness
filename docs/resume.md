@@ -18,7 +18,12 @@ TWO pooled office runs (pre-registered void rule covers the pooling):
   partials wasted, nothing recorded).
 - run 3 top-up k=4 (`headless-terminal-2026-07-27T06-5*`): auto-committed by
   the fa-finish script (this commit) — results.json + trajs.
-**Headless-ON pooled verdict inputs = run-1's 6 valids + run-3's 4 attempts.**
+**Headless-ON pooled verdict inputs (SEALED 16:28): 10 valid = 9/10 reward,
+false-accepts 1/10 (a4; G1 ref 2/5), exhaustion 0/10 ✓, median 651s < 800s ✓,
+probes header {requirements:5, relations:4} ✓. LIVE EVENTS: top-up a2 = first
+live spec-probe save (verify covered 0 reqs → 2 named reinjects → rewritten →
+pass); a4 = residual false-accept (probes passed, grader failed) = the
+calibration data point.**
 Auto-finish script killed the chain after the top-up (user call: control+sparql
 NOT run at office).
 
