@@ -138,6 +138,30 @@ S1+S2 already remove the known no-op classes.
 
 ## 6. Verification plan (spend — needs explicit go)
 
+### 6.1 PRE-REGISTERED arms (2026-07-27 office, sealed BEFORE launch; go given)
+
+Host `yoo-dev`, image `localhost/mh-bench:latest`, `anthropic/claude-opus-4-8`,
+system-v0 + seed-v0, completion-gate rounds 2 / mutants 4 — identical to C1
+except k and host. Mechanism claims only; rewards recorded but DIRECTIONAL
+(cross-host vs C1's MacBook arms — provenance rule forbids reward verdict math).
+
+- **Arm A — headless k=5** (`--complete-gate /app/headless_terminal.py`):
+  PASS = (a) ≤1/5 valid trials `gateExhausted`; (b) probe rounds report
+  `coverage: "filtered"` (python artifact, traced set expected non-empty);
+  (c) accepted probe rounds have `mutantsKilled ≥ 1`; (d) median per-attempt
+  elapsed < 600s (C1 exhaustion class was 1000–5000s).
+- **Arm B — sparql k=3** (`--complete-gate /app/solution.sparql`):
+  no-regression shape: ≤1 fix round then accept per valid trial, zero
+  exhaustion, no vacuous accepts (killed ≥ 1 on accepted probe rounds).
+  Expected coverage provenance: `"fallback-static"` or `"off"` — a .sparql
+  artifact has no python-executed lines, so the empty-set → static-fallback
+  path is exercised BY DESIGN here.
+- Voids: 0-turn / auth-race trials excluded per standing forensics rule
+  (post-run log grep before any counting).
+- C1 forensic support for the ≥1-kill rule: headless C1 a1 rounds ran
+  survived 3/4 → 2/4 → 1/4 — kills happened every round; only the
+  all-must-die rule burned them.
+
 Rerun the headless gate-ON arm with S1–S3 in place: exhaustion rate expected
 7/9 → ~0; time tax should compress toward the sparql shape (~2x). Any new
 comparison arms at office need fresh OFFICE baselines (provenance rule —
