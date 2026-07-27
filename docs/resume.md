@@ -34,7 +34,14 @@ remaining queue).
 host-local, ignorable) + stray `.agents/`/`.roo/` (not ours, untouched). No
 tmux (squad gateway only), no containers. Everything pushed.
 
-**⏭ OFFICE PLAYBOOK (in order):**
+**⏭ OFFICE PLAYBOOK — REORDERED 2026-07-27 (user): opencode-plugin tasks
+DEFERRED until after bench-side mechanism work.** New order: (A) bench first —
+S4 grip operators + spec-coverage/metamorphic probe classes in minimal/
+(hand-design now active by this decision — §4.4 machine-seat routing was the
+preference but §4.4 is itself deferred plugin work) + false-accept
+calibration measurement on bench tasks; THEN (B) plugin queue — §4.1 live
+smoke-test, §4.3 trial mode, §4.4 mechanism proposals. Original numbered
+list below kept for reference:
 1. ~~git pull + installs + suite verify~~ **DONE 2026-07-27 office (`yoo-dev`):
    gate-plugin 26/26, opencode-plugin 1641 ran 0 fail. Pull through `7d37a3a`.**
 2. **Live smoke-test of the gate plugin** (the one unverified assumption:
