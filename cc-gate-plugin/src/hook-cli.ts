@@ -1,0 +1,269 @@
+#!/usr/bin/env bun
+/**
+ * hook-cli.ts — the Claude Code hook entrypoint: `bun hook-cli.ts <Event>`
+ * reads the CC hook JSON on stdin, drives the pure core (edits/prompt/stop)
+ * against a FileStateStore, and (for Stop) emits the delivery-mode-shaped
+ * stdout/stderr payload built by buildStopOutput.
+ *
+ * PRIME DIRECTIVE — a broken hook must NEVER break a user's normal CC
+ * session. Every code path below either no-ops (exit 0, no output) or emits
+ * an INTENTIONAL decision built by the pure core. The only non-zero exit is
+ * an intentional block delivered via KKAMAK_DELIVERY=exit2-stderr.
+ */
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
+import { FileStateStore } from "./state.ts"
+import { parseGateConfig } from "./config.ts"
+import { buildStopOutput } from "./output.ts"
+import { handlePostToolUse } from "./core/edits.ts"
+import { handleUserPromptSubmit } from "./core/prompt.ts"
+import { handleStop } from "./core/stop.ts"
+import type { CoreDeps, DeliveryMode, EmitPlan, SensorLine } from "./types.ts"
+
+const MH_CHILD_ENV = "MH_CHILD"
+const KM_CHILD_ENV = "KM_CHILD"
+const KNOWN_EVENTS = new Set(["PostToolUse", "UserPromptSubmit", "Stop"])
+const MAX_OUTPUT_BYTES = 64 * 1024
+const DEFAULT_CHECK_TIMEOUT_MS = 300_000
+const DEFAULT_SENSOR_REL_PATH = ".km/gate-outcomes.ndjson"
+const VALID_DELIVERY_MODES: readonly DeliveryMode[] = ["block-json", "exit2-stderr", "block-json+context"]
+
+function capOutput(s: string): string {
+  return s.length > MAX_OUTPUT_BYTES ? s.slice(0, MAX_OUTPUT_BYTES) : s
+}
+
+/** gate.json at <cwd>/gate.json, read as a raw string; undefined if unreadable. */
+function readGateConfigRaw(cwd: string): string | undefined {
+  try {
+    return fs.readFileSync(path.join(cwd, "gate.json"), "utf-8")
+  } catch {
+    return undefined
+  }
+}
+
+function sensorFilePath(cwd: string, gateConfigRaw: string | undefined): string {
+  const cfg = parseGateConfig(gateConfigRaw)
+  // path.resolve (not path.join): an absolute `sensor` must stay absolute —
+  // path.join would silently re-root it under cwd. For a relative sensor,
+  // resolve behaves the same as join-against-an-absolute-cwd.
+  return path.resolve(cwd, cfg?.sensor ?? DEFAULT_SENSOR_REL_PATH)
+}
+
+/** mkdir -p the sensor's parent dir then append one ndjson line. Never throws:
+ * failures are logged to stderr and swallowed — a sensor-write problem must
+ * never change the emitted decision. */
+function appendSensor(
+  cwd: string,
+  gateConfigRaw: string | undefined,
+  sensor: SensorLine,
+  log: (msg: string) => void,
+): void {
+  try {
+    const p = sensorFilePath(cwd, gateConfigRaw)
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.appendFileSync(p, JSON.stringify(sensor) + "\n")
+  } catch (e) {
+    try {
+      log(`hook-cli: failed to append sensor line (swallowed): ${String(e)}`)
+    } catch {
+      // even logging failed; nothing more to do
+    }
+  }
+}
+
+function buildDeps(cwd: string, gateConfigRaw: string | undefined): CoreDeps {
+  const cfg = parseGateConfig(gateConfigRaw)
+  const timeoutMs = cfg?.checkTimeoutMs ?? DEFAULT_CHECK_TIMEOUT_MS
+
+  return {
+    runCheck: (cmd: string) =>
+      new Promise((resolve, reject) => {
+        let proc: ReturnType<typeof Bun.spawn>
+        try {
+          proc = Bun.spawn(["bash", "-c", cmd], { cwd, stdout: "pipe", stderr: "pipe" })
+        } catch (e) {
+          reject(e)
+          return
+        }
+
+        // Read stdout/stderr concurrently; these resolve once each stream
+        // closes, which happens on normal exit OR after proc.kill() below.
+        const stdoutP = new Response(proc.stdout as ReadableStream<Uint8Array>).text().catch(() => "")
+        const stderrP = new Response(proc.stderr as ReadableStream<Uint8Array>).text().catch(() => "")
+
+        // A killed `bash -c` compound command (e.g. `cmd & cmd`) can leave
+        // forked grandchildren holding the stdout/stderr pipe fds open —
+        // bash does not forward signals to background jobs — so the text
+        // promises above may never settle even after the process "exits".
+        // Race each against a short grace timer so we never hang the hook.
+        const GRACE_MS = 2000
+        const withGrace = (p: Promise<string>): Promise<string> =>
+          Promise.race([p, new Promise<string>((res) => setTimeout(() => res(""), GRACE_MS))])
+
+        let timedOut = false
+        let hasExited = false
+        const timer = setTimeout(() => {
+          timedOut = true
+          try {
+            proc.kill() // SIGTERM
+          } catch {
+            // best-effort kill only
+          }
+          // Escalate to SIGKILL if the process (group) hasn't actually
+          // exited shortly after — SIGTERM alone won't reach grandchildren
+          // left behind by a `bash -c 'a & b'` style compound command.
+          setTimeout(() => {
+            if (!hasExited) {
+              try {
+                proc.kill("SIGKILL")
+              } catch {
+                // best-effort only
+              }
+            }
+          }, 1500)
+        }, timeoutMs)
+
+        proc.exited
+          .then(async (code) => {
+            hasExited = true
+            clearTimeout(timer)
+            const [so, se] = await Promise.all([withGrace(stdoutP), withGrace(stderrP)])
+            const combined = capOutput(so + se)
+            if (timedOut) {
+              // A timeout is a FAILED CHECK, not an internal error: resolve
+              // (never reject) so the core folds it into the round outcome.
+              resolve({ code: 124, out: combined + "\n[kkamak: check timed out]" })
+            } else {
+              resolve({ code, out: combined })
+            }
+          })
+          .catch((err) => {
+            hasExited = true
+            clearTimeout(timer)
+            reject(err)
+          })
+      }),
+    now: () => Date.now(),
+    hostname: () => os.hostname(),
+    log: (msg: string) => console.error(msg),
+  }
+}
+
+/** Write the EmitPlan's stdout/stderr (awaiting flush) then exit with its code. */
+async function emit(plan: EmitPlan): Promise<never> {
+  if (plan.stdout) {
+    const json = JSON.stringify(plan.stdout)
+    await new Promise<void>((resolve) => {
+      process.stdout.write(json, () => resolve())
+    })
+  }
+  if (plan.stderr) {
+    await new Promise<void>((resolve) => {
+      process.stderr.write(plan.stderr!, () => resolve())
+    })
+  }
+  process.exit(plan.exitCode)
+}
+
+function resolveDeliveryMode(): DeliveryMode {
+  const raw = process.env.KKAMAK_DELIVERY
+  return (VALID_DELIVERY_MODES as readonly string[]).includes(raw ?? "") ? (raw as DeliveryMode) : "block-json"
+}
+
+async function main(): Promise<void> {
+  // 1. Engine-child exclusion — before ANY IO (env lookup is not IO).
+  if (process.env[MH_CHILD_ENV] !== undefined || process.env[KM_CHILD_ENV] !== undefined) return
+
+  // 2. Event arg. Unknown/missing event -> exit 0 silently, no stdin read needed.
+  const event = process.argv[2]
+  if (!event || !KNOWN_EVENTS.has(event)) return
+
+  let raw: string
+  try {
+    raw = await Bun.stdin.text()
+  } catch {
+    return
+  }
+
+  let input: unknown
+  try {
+    input = JSON.parse(raw)
+  } catch {
+    return
+  }
+  if (typeof input !== "object" || input === null) return
+  const rec = input as Record<string, unknown>
+
+  const sessionId = rec.session_id
+  const cwd = rec.cwd
+  if (typeof sessionId !== "string" || !sessionId) return
+  if (typeof cwd !== "string" || !cwd) return
+
+  const gateConfigRaw = readGateConfigRaw(cwd)
+  const stateDir = path.join(cwd, ".km", "cc-gate")
+  const store = new FileStateStore(stateDir)
+
+  if (event === "PostToolUse") {
+    const toolName = typeof rec.tool_name === "string" ? rec.tool_name : ""
+    const state = store.load(sessionId)
+    const next = handlePostToolUse(state, toolName)
+    if (next !== state) store.save(sessionId, next)
+    return
+  }
+
+  if (event === "UserPromptSubmit") {
+    const deps = buildDeps(cwd, gateConfigRaw)
+    const state = store.load(sessionId)
+    const { state: next, sensor } = handleUserPromptSubmit(state, sessionId, gateConfigRaw, deps)
+    store.save(sessionId, next)
+    if (sensor) appendSensor(cwd, gateConfigRaw, sensor, deps.log)
+    return
+  }
+
+  // event === "Stop"
+  const deps = buildDeps(cwd, gateConfigRaw)
+  const state = store.load(sessionId)
+  try {
+    store.sweep(Date.now())
+  } catch {
+    // sweep() never throws by contract; belt-and-suspenders only.
+  }
+
+  const { state: next, decision, sensor } = await handleStop(
+    state,
+    { session_id: sessionId, cwd },
+    gateConfigRaw,
+    deps,
+  )
+
+  // (a) Persist BEFORE emitting. A throw here is fail-open: never block on
+  // an unrecorded round.
+  try {
+    store.save(sessionId, next)
+  } catch (e) {
+    try {
+      console.error(`hook-cli: state save failed, failing open: ${String(e)}`)
+    } catch {
+      // even logging failed; still fail open below
+    }
+    await emit({ exitCode: 0 })
+    return
+  }
+
+  // (b) Sensor append never changes the decision.
+  if (sensor) appendSensor(cwd, gateConfigRaw, sensor, deps.log)
+
+  // (c) Emit the delivery-mode-shaped plan.
+  const mode = resolveDeliveryMode()
+  await emit(buildStopOutput(decision, mode))
+}
+
+main().catch((e) => {
+  try {
+    console.error(`hook-cli: fatal (swallowed): ${e?.stack ?? e}`)
+  } catch {
+    // nothing more we can do
+  }
+  process.exit(0)
+})
