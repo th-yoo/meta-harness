@@ -226,6 +226,31 @@ Zero auth errors, zero 0-turn/timeout/suspect trials — all trials valid.
   (RTM/spec-coverage, metamorphic-relation probes, judge-calibration) in the
   session notes of 2026-07-27.
 
+### 6.3 PRE-REGISTERED false-accept arms (sealed before launch; SPEND-GATED — not yet run)
+
+Paired arms on `yoo-dev`, config identical to G1 (opus-4-8, system-v0+seed-v0,
+completion-gate rounds 2 / mutants 4) plus `requirements.json` + `relations/`
+now present in both task dirs. Futility designCheck vets the design pre-spend.
+
+- **Arms:** headless k=10 probes-ON vs probes-OFF control; probes are
+  fail-open, so the control arm = the same task dir copied to a scratch
+  location with `requirements.json` + `relations/` DELETED — byte-identical
+  binary, same commit, one variable. sparql k=5 probes-ON (shape watch).
+- **Primary metric:** false-accept count per valid trial (completion gate
+  accepted ∧ grader failed). Reference rates: G1 headless 2/5 accepted-but-
+  failed; C1 sparql 1/9. Expect a drop; floor is NOT zero (graders test
+  semantics no marker/relation fully encodes) — the residual is the
+  calibration number that §4.3 must consume.
+- **Guards:** exhaustion rate stays 0 (no C1 regression); median elapsed
+  < 2x G1 medians (headless 400s, sparql ~420s); rewards non-regressing
+  (Fisher vs the paired control arm, same host).
+- **Calibration protocol:** false-accept rate + Wilson 95% CI recorded per
+  arm into this doc; recheck cadence = every mechanism change to any probe
+  (mutation, spec-coverage, relation) triggers a fresh calibration arm
+  before §4.3 may consume its outcomes.
+- **Voids:** standing forensics rule (auth-race / 0-turn / timeout-suspect
+  excluded before counting).
+
 ## 7. Order
 
 1. §4.1 live smoke-test (queue 2) and §4.3 design (queue 3) come first —
