@@ -37,12 +37,16 @@ tmux (squad gateway only), no containers. Everything pushed.
 **⏭ OFFICE PLAYBOOK — REORDERED 2026-07-27 (user): opencode-plugin tasks
 DEFERRED until after bench-side mechanism work. RANKED 2026-07-27 (gap
 analysis, user-confirmed) — attack order:**
-1. **False-accept countermeasures (bench):** spec-coverage probe →
-   metamorphic-relation probes → calibration arms (spend-gated). The only
-   remaining real-failure class (every real fail C2+C1+G1 = accepted-but-
-   graded-fail); probes also improve the agent DIRECTLY in-session (G1 a1
-   precedent). S4 behavior-targeting operators ride along after (same
-   mutate.ts territory, hand-design active — §4.4 deferred).
+1. **False-accept countermeasures (bench): PROBES BUILT 2026-07-27 office**
+   (SDD 8 tasks + fix wave, commits a61b08b..eb2ac11, final review
+   MERGE-READY; suites 1671+26 green; desk-validated oracle-pass/
+   degraded-fail both tasks; plan:
+   `docs/superpowers/plans/2026-07-27-false-accept-probes.md`).
+   **REMAINING: §6.3 calibration arms** (pre-registered in grip-fix design
+   doc, SPEND-GATED — headless k=10 probes-ON vs deleted-files control,
+   sparql k=5; watch: wrapper-style verify.sh = likeliest exhaustion
+   trigger; relation timing under container load). S4 behavior-targeting
+   operators ride along after (hand-design active — §4.4 deferred).
 2. **Machine crank (plugin, deferred):** §4.1 live smoke-test → §4.3 trial
    mode (HARD constraint: gate-accept ≠ correct; consumes calibration rate
    from 1) → §4.4 mechanism proposals. Built only AFTER 1 — otherwise the
