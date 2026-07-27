@@ -1,6 +1,7 @@
 # Techniques employed — inventory + evidence status
 
-*Written 2026-07-21; Part 2 re-audited 2026-07-23 (post loops 1–3). Two purposes:
+*Written 2026-07-21; Part 2 re-audited 2026-07-23 (post loops 1–3) and
+**2026-07-27 (gate era — delta section at the end of Part 2; Part 1 gains §K)**. Two purposes:
 (1) a map of every technique the project employs and where it came from; (2) an honest audit of
 which are **proven by our own evidence**, which are **disproven**, and which remain **unproven** —
 so nobody (including us) mistakes built-and-runs for validated. Companion docs:
@@ -106,6 +107,20 @@ summarizers (playwright DOM reads after WebFetch's summary proved wrong) · prio
 confirmed) · cross-host/cross-session continuity protocol (resume.md as state carrier, git-only
 transfer, memory index).
 
+### K. Binding actuators + machine seat (gate era, 2026-07-24 →; added at 07-27 re-audit)
+
+| Technique | What / why |
+|---|---|
+| Completion gate + adequacy probe | The binding actuator (`minimal/complete-gate.ts`): refuse "done" until verify.sh exists → passes → kills injected mutants; bounded reinjection rounds; exhaustion accepts anyway (gate shapes behavior, grader owns reward — invariant 1: gate never sees grader). |
+| Crude mutation operators | `mutate.ts`: deterministic regex-site operators — exactly the class weak agent suites miss; docstring + `__main__`-block lines excluded (R9F, G1). |
+| Coverage-guided probe sites | `minimal/cover.ts` sitecustomize trace hook (zero-dep, every python child captured) → mutate only verify-executed lines; static fallback on vacuity; ≥1-kill round rule (field-standard: equivalent mutants 4–39%, 100%-kill is an anti-pattern). |
+| Pre-arm futility designCheck | `futility.ts` design check dies BEFORE spend when the arm cannot certify (Alling curtailment for mid-arm — still unexercised). |
+| Machine-enforced provenance | `gate.ts` same-host rule: refuses cross-host baseline comparisons mechanically, not by convention. |
+| Review gate + rejected ledger | `review-gate.ts` over `minimal/review.ts` wired pre-createCandidate; `rejected.json` per layer feeds the proposer prompt (loop learns from rejects — the loop-2 blind-spot fix, productionized). |
+| Gate plugin (daily sessions) | `gate-plugin/`: session.idle completion-gate loop, `gate.json` opt-in, ndjson outcome sensor, self-inject echo guard, `[meta-harness]` child exclusion, marker default OFF (C2 verdict). Echo timing = test-faked, smoke pending. |
+| Session-hygiene marker | C2-tested countermand injection between chained tasks — reward-null, A-side depressed → ships default OFF. |
+| Pre-registration, practiced | G1 sealed pass/fail criteria in the repo BEFORE launch (§6.1 → §6.2 same file). SPRT still deferred. |
+
 ### Dormant / rejected-for-now
 
 Phase-0 self-score transport (gate found it undersized) · best-of-N / verify-retry (evaluated,
@@ -156,3 +171,59 @@ Every organ is now individually proven — diagnosis finds certifying fix-classe
 can move a strong model (p=0.020), the gate certifies and rejects truthfully in both directions —
 but **no lesson has yet passed the whole body** (lift + no collateral = zero adoptions); v11,
 the first candidate authored end-to-end by the machine, is the pending test of exactly that.
+
+---
+
+## Part 2 — RE-AUDIT DELTA 2026-07-27 (gate era: A-series adoptions, C-series measurements, G1)
+
+*The 07-23 tables above are preserved as a snapshot. Everything below is what changed in the
+four days since — the minimal-kernel track (HISTORY.md R/A/C/G series). The TB2-store track
+(v7–v11) is FROZEN: v11 was never run; the machine-seat build superseded it in priority.*
+
+### PROVEN — new since 07-23
+
+| Technique | Evidence |
+|---|---|
+| **Adoption exists — the 07-23 headline frontier closed within hours, on the other track** | **A1** (system-v0+seed-v0, p=0.00106, guards cdt 3/3 + chess 3/3, 2026-07-23 MacBook) = first adoption in project history. |
+| **Binding actuator moves outcomes — mechanism-class** | **R10:** fixed completion gate, cancel-async bare 3/10 vs gate-ON 10/10, **p=0.0031** — first perfect arm on that task; **A2** adopted it with gate-ON guards (first MECHANISM adoption). |
+| **Prose→binding escalation was the right read** | On the post-A1 residual, the prose channel exhausted honestly (R5/R6 ABSTAIN, R7 refuted the placement hypothesis in BOTH channels, R8 staged-not-gated); the mechanism class then delivered R10. Refines loop-1's line: prose grip is content-dependent AND residual-dependent. |
+| **Completion gate transfers as no-harm** | C1: held-out non-regression CERTIFIED both tasks (headless p=1.0, sparql p=0.47, same-host baselines). Value channel splits by artifact class — which became G1's target. |
+| **Coverage-guided grip fix** | **G1 (same-day design→TDD→pre-registered arms→verdict):** headless exhaustion 0/5 vs C1's 7/9 (p≈0.02), median 400s vs 1000–5000s; sparql 3/3 clean. First healthy verify-fix loops ever on headless; a1's reinject rework passed the grader. |
+| **Session-carryover reward null** | C2 pre-registered: B-side p=1.0 across arms; ONE real contamination event observed (raw a10, filesystem channel); marker A-side 4/12 vs 7/10 p=0.198 → marker ships default OFF. |
+| **Pre-spend safety layers fire live** | Futility designCheck refused the playbook's --stop-futile as uncertifiable (zero tokens); gate.ts provenance check refused cross-host baselines and forced the same-host rerun. Both = machine-enforced discipline catching human plans. |
+| **Forensics-before-verdict pays** | R9F: R9's 5 office trajectories root-caused the unkillable docstring mutant with ZERO re-trials; the "4/5 lift" was nudge-text, not mechanism — a wrong-mechanism adoption averted. |
+
+### DISPROVEN — new since 07-23
+
+- **All-must-die mutant rule on large artifacts**: structurally unsatisfiable (C1 headless
+  7/9 exhausted; G1 forensics: rounds were killing 1–3/4 mutants all along — the rule, not
+  the agents, burned them). Replaced by coverage-guided sites + ≥1-kill (field-standard).
+- **Marker hygiene as a free win**: reward-null but A-side depressed (p=0.198) → default OFF.
+- **Nudge-text ≈ mechanism** (R9/R9F): reinject text alone produced 4/5; the actual probe was
+  unsatisfiable the whole time. Text effects and mechanism effects must be separated by design.
+
+### UNPROVEN — the live frontier (2026-07-27)
+
+- **Machine-authored end-to-end win** — still THE open question, now in two forms: v11
+  (TB2 track, frozen-pending) and the machine seat (§4.1+§4.2 built + G1-hardened, but
+  §4.3 trial mode + §4.4 mechanism proposals unbuilt → no machine-routed candidate yet).
+- **Gate outcomes as a reward signal (§4.3)** — poisoned until calibrated: EVERY real failure
+  across C2+C1+G1 was false-accept (gate accepted, grader failed). Calibration arms +
+  "accept = self-verified, never correct" constraint designed (grip-fix §5.1), unrun.
+- **Held-out LIFT** — only non-regression shown; no lesson/mechanism has certified lift on a
+  held-out task.
+- **Gate-plugin echo-timing** — test-faked only; live smoke deferred behind bench work (user
+  2026-07-27).
+- **Spec-coverage + metamorphic-relation probes** — designed (§5.1), unbuilt: the direct
+  attack on the false-accept channel.
+- **Mid-arm curtailment** — still unexercised (needs a lift-certifiable arm).
+- **Cross-family judge check** — still unrun; field now quantifies the risk (≈5–7%
+  same-family inflation).
+
+### Scoreboard, one sentence (2026-07-27)
+
+The 07-23 frontier fell in four days — two adoptions (A1 prompt-pair, A2 mechanism), and the
+binding actuator went design → lift-certification (p=0.0031) → adoption → held-out no-harm →
+same-day grip-fix verification (G1) — so the body works when humans drive the crank; what
+remains unproven is the machine driving it (v11 frozen, §4.3/§4.4 unbuilt) and whether gate
+outcomes can be trusted as its reward signal (false-accept calibration = the gating question).
