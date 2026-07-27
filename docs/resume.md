@@ -35,7 +35,7 @@ veto). Build cost small (pieces exist: §4.2 propose path, cc-acp
 delivery, launchd pattern). §4.3 later dissolves touchpoint 1 (auto
 keep/rollback on gate-outcome deltas) → fully-automatic-with-veto.
 
-**NEXT:** (a) **2.2a scheduled-crank build** (awaiting go); (b) squad
+**2.2a DONE 07-28 (go received): `km-crank/` shipped** (70 tests; review wave fixed trial-clobber guard + check-only inflight gate + private lock; live gate-bug fix: zero evidence never runs). TWO LIVE ROUNDS: empty-evidence junk → review-gate REJECTED (thesis proven live); real-evidence (km-play 4 lines) → candidate v1 staged + trial started + Slack SITREPs delivered. launchd com.kkamak.crank daily 10:00 INSTALLED (MacBook). WATCH-ITEM: legacy-mode proposals bypass the review gate (it only covers playbook op:add) — close before trusting unsupervised rounds on real stores. Positions/evidence/log: ~/.config/meta-harness/km-crank/. **NEXT:** (b) squad
 dogfood (gitignore + /kkamak:init); (c) §4.3 design (workload-confound
 brainstorm; consumes ~10% calibration rate + two-host union stream);
 (d) §4.4 mechanism proposals + S4 operators. First §4.4-class candidate
