@@ -1,0 +1,29 @@
+{
+  "requirements": [
+    {
+      "id": "R-shell-exec",
+      "text": "Mimics a terminal: interactive bash shell, commands executed by typing characters and hitting Enter",
+      "markers": ["send_keystrokes"]
+    },
+    {
+      "id": "R-interactive-programs",
+      "text": "Supports interactive programs",
+      "markers": ["cat >", "python3 -", "read ", "interactive"]
+    },
+    {
+      "id": "R-modifier-keys",
+      "text": "Has support for modifier keys like \"\\x03\" for control C",
+      "markers": ["\\x03", "\\x04", "ctrl"]
+    },
+    {
+      "id": "R-startup-files",
+      "text": "Because the shell is interactive, it should source the startup files (e.g. ~/.bashrc)",
+      "markers": ["bashrc", "startup"]
+    },
+    {
+      "id": "R-class-contract",
+      "text": "Call your implementation HeadlessTerminal(BaseTerminal) in /app/headless_terminal.py, importable as from headless_terminal import HeadlessTerminal",
+      "markers": ["import headlessterminal", "from headless_terminal"]
+    }
+  ]
+}

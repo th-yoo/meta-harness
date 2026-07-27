@@ -42,3 +42,18 @@ test("uncoveredRequirements: markers inside bash comments do NOT count (anti-gam
   const gamed = "# \\x03 ctrl bashrc — mentioning every marker in a comment\nexit 0\n"
   expect(uncoveredRequirements(rs, gamed).map((r) => r.id)).toEqual(["R-ctrlc", "R-bashrc"])
 })
+
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+
+const TASKS = join(import.meta.dir, "../../minimal/tasks")
+
+test("both tasks ship parseable requirements.json with unique ids", () => {
+  for (const task of ["headless-terminal", "sparql-university"]) {
+    const rs = parseRequirements(readFileSync(join(TASKS, task, "requirements.json"), "utf-8"))
+    expect(rs).toBeDefined()
+    const ids = rs!.map((r) => r.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(rs!.length).toBeGreaterThanOrEqual(4)
+  }
+})

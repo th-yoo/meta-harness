@@ -1,0 +1,24 @@
+{
+  "requirements": [
+    {
+      "id": "R-full-professor",
+      "text": "They are full professors",
+      "markers": ["professor"]
+    },
+    {
+      "id": "R-eu-country",
+      "text": "Work in at least one department of a university located in a European Union country",
+      "markers": ["country", "\"gr\"", "\"de\"", "\"fr\""]
+    },
+    {
+      "id": "R-enrollment-threshold",
+      "text": "Among all departments they work in, at least one has more than 10 students currently enrolled in classes taught in that department",
+      "markers": ["10", "enroll"]
+    },
+    {
+      "id": "R-result-shape",
+      "text": "SELECT ?professorName (GROUP_CONCAT(DISTINCT ?country; separator=\", \") AS ?countries)",
+      "markers": ["professorname", "group_concat", "countries"]
+    }
+  ]
+}
