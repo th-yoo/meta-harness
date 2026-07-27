@@ -31,6 +31,7 @@ import { clampParallel, pidAlive } from "./schedule.ts"
 import { clockPreflight } from "./clock.ts"
 import { designCheck, liftFutility } from "./futility.ts"
 import { HYGIENE_MARKER, bInstruction, mergeThen, type ThenResult } from "./session2.ts"
+import { parseRequirements } from "./spec-probe.ts"
 
 const HERE = import.meta.dir
 
@@ -369,7 +370,7 @@ if (!hasVerifySh && !hasTestSh) die(`no verify.sh or tests/test.sh in ${taskDir}
 // one-variable: arms differ by the gate + its contract, not by base content.
 const GATE_CONTRACT = `
 
-Before you finish: leave a runnable verification script at /app/verify.sh (exit 0 = verified) that exercises each promised behavior of your artifact, including scenarios that combine boundary conditions. The harness will run it, and may inject faults into your artifact to check that your script detects them. You are done only when the harness accepts.`
+Before you finish: leave a runnable verification script at /app/verify.sh (exit 0 = verified) that exercises each promised behavior of your artifact, including scenarios that combine boundary conditions. The harness will run it, and may inject faults into your artifact to check that your script detects them. You are done only when the harness accepts. Your verification must exercise every requirement stated in the task instruction — an unexercised stated requirement, or artifact behavior contradicting the instruction, will be treated as not done.`
 const instruction = readFileSync(instructionPath, "utf-8").trim() + (gateArtifact ? GATE_CONTRACT : "")
 const testsDir = join(taskDir, "tests")
 
@@ -392,6 +393,19 @@ function resolveFixtures(dir: string): string {
   return staged
 }
 const fixturesDir = resolveFixtures(taskDir)
+
+// False-accept probes (docs/superpowers/plans/2026-07-27-false-accept-probes.md):
+// frozen per-task requirement list + instruction-derived relation scripts.
+// Both optional — tasks without them get the unchanged completion gate.
+const reqPath = join(taskDir, "requirements.json")
+const gateRequirements = existsSync(reqPath) ? parseRequirements(readFileSync(reqPath, "utf-8")) : undefined
+const relationsDir = join(taskDir, "relations")
+const gateRelations: import("./complete-gate.ts").Relation[] = existsSync(relationsDir)
+  ? readdirSync(relationsDir)
+      .filter((f) => f.endsWith(".py"))
+      .sort()
+      .map((f) => ({ id: f.replace(/\.py$/, ""), script: readFileSync(join(relationsDir, f), "utf-8") }))
+  : []
 
 // --- Task B (--then): the multi-task-session chain target. Same layout
 // rules as task A (instruction.md + verify.sh OR tests/test.sh; optional
@@ -679,8 +693,28 @@ async function attempt(i: number): Promise<Trial> {
           if (cat.code !== 0) return undefined
           return parseCoveredLines(cat.out)
         },
+        readVerify: async () => {
+          const r = await podman(["exec", name, "cat", "/app/verify.sh"])
+          return r.code === 0 ? r.out : undefined
+        },
+        runScript: async (script: string) => {
+          const tmp = join(tmpdir(), `minimal-relation-${process.pid}-${i}.py`)
+          writeFileSync(tmp, script)
+          if ((await podman(["cp", tmp, `${name}:/tmp/mh-relation.py`])).code !== 0)
+            return { code: 0, out: "" } // copy failure = fail-open, never a violation
+          const r = await podman([
+            "exec", name, "timeout", "60", "bash", "-c",
+            `cd /app && APPDIR=/app ARTIFACT=${gateArtifact} python3 /tmp/mh-relation.py`,
+          ])
+          return { code: r.code, out: (r.out + "\n" + r.err).trim() }
+        },
       }
-      gate = await runCompletionGate(gateIO, { rounds: gateRounds, mutants: gateMutants })
+      gate = await runCompletionGate(gateIO, {
+        rounds: gateRounds,
+        mutants: gateMutants,
+        requirements: gateRequirements,
+        relations: gateRelations.length > 0 ? gateRelations : undefined,
+      })
     }
 
     const elapsedSec = Math.round((Date.now() - t0) / 10) / 100
@@ -785,6 +819,8 @@ async function attempt(i: number): Promise<Trial> {
                 survived: r.mutantsSurvived,
                 killed: r.mutantsKilled,
                 coverage: r.coverage,
+                ...(r.uncoveredReqs ? { uncoveredReqs: r.uncoveredReqs } : {}),
+                ...(r.violatedRelations ? { violatedRelations: r.violatedRelations } : {}),
               })),
             },
           }
