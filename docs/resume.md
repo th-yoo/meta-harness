@@ -56,12 +56,16 @@ auto-corrected −39190s VM skew at launch. Detail in HISTORY.md FA1.
 `mh-control-headless-2026-07-27T09-31-48-897Z.json`: 9 valid = 8/9 reward,
 **false-accepts 1/9**, exhaustion 0/9, all round-0 accepts, median 446s;
 1 void (a1, 0-turn). Probes header null ✓. Control dir per recipe (scratchpad
-copy, probe fixtures removed). **STILL NO §6.3 verdict — this control is
-MacBook, the ON arm is office (cross-host).** Two ways to close: (b') run
-**MacBook probes-ON k=10** → same-host math vs this control; or (a) office
-control next office session vs the office ON arm. Directional-only note
-(recorded in HISTORY FA1): control 1/9 ≈ office ON 1/10, both ≪ G1 2/5 —
-grip fix may carry most of the false-accept reduction; same-host arm decides.
+copy, probe fixtures removed). **§6.3 CLOSED BY MATH same night (user-directed):** ON 1/10 vs control 1/9
+p=1.0 null; rewards p=1.0 no-harm; G1 2/5 reference uncertified vs anything
+(likely k=5 noise); **futility — even perfect ON 0/10 vs control 1/9 gives
+p=0.47, certification needs control ≥4/9 → both remaining arms (b′ MacBook
+ON, a office control) REFUSED pre-spend.** Probes ship fail-open, no
+quantitative reduction claim; qualitative saves real-but-rare. **~10%
+false-accept residual (2/19 pooled) = the §4.3 calibration rate — item 1
+of the ranked queue is DONE; item 2 (machine crank: §4.1 smoke-test →
+§4.3 → §4.4) unblocks. S4 operators remain open (mechanism work).**
+Full math in HISTORY.md FA1.
 
 **Verdict math when both arms exist:** primary = false-accept count (gate
 accepted ∧ grader failed) ON vs control; reference G1 2/5. Guards: exhaustion

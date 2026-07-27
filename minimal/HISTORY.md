@@ -225,6 +225,21 @@ class). Fail-open throughout; probes provenance in run headers.
   G1 2/5 reference; suggests the grip fix (G1), not the FA probes, may
   carry most of the false-accept reduction on this task; underpowered +
   cross-host, hence the required same-host arm before any claim.
+- **§6.3 CLOSED BY MATH (2026-07-27 late, user-directed "determine from
+  the math"):** ON 1/10 vs control 1/9 Fisher p=1.0 (null, and equal rates
+  are unrescuable by fixing host); rewards 9/10 vs 8/9 p=1.0 (no harm);
+  G1's 2/5 reference NOT certified vs anything (vs ON p=0.24, vs pooled
+  2/19 p=0.18 — likely k=5 noise around the same floor). **FUTILITY: a
+  perfect same-host ON 0/10 vs control 1/9 gives p=0.47 (0/20 → 0.31);
+  certification requires control ≥4/9 false-accepts vs the observed 1/9 —
+  no feasible k certifies a probe effect against an ~11% base rate. Both
+  remaining arms (b′ MacBook ON, a office control) refused as futile —
+  designCheck-class catch, pre-spend.** VERDICT: probes = no measured
+  false-accept reduction, no measured harm, real-but-rare qualitative
+  saves (spec-probe a2); ship fail-open, claim nothing quantitative.
+  **The ~10% false-accept residual (2/19 pooled) = the §4.3 calibration
+  rate.** Grip fix remains the only certified mechanism change (G1
+  exhaustion p≈0.02).
 - **Records:** run-1 trajs `headless-terminal-2026-07-27T05-54-08-764Z-a*`
   + `...-run1-authrace.log` (6 valid, no results.json — killed run);
   top-up `headless-terminal-2026-07-27T06-53-49-506Z.json`; sparql
@@ -251,7 +266,7 @@ class). Fail-open throughout; probes provenance in run headers.
 | C2 | 2026-07-25 | session-carryover hygiene arms (cancel-async `--then` cdt, MacBook) | B: alone 3/3 vs raw 10/10 vs marker 5/5-valid | 1.0 | — (measurement) | **NULL reward effect (pre-registered ✓); contamination 1/10 raw vs 0/10 marker-valid (top-up 07-26 closed the arm); marker A-side depressed 4/12 vs 7/10 p=0.198 null — port recommendation: marker default OFF** |
 | C1 | 2026-07-25/26 | held-out completion-gate transfer (headless + sparql gate-ON k=10, MacBook) | headless 7/9 vs 7/8 OFF; sparql 8/9 vs 10/10 OFF (same-host baseline rerun) | 1.0 / 0.47 | — (measurement) | **BOTH HOLD certified (null): headless 7/9 gate-EXHAUSTED (no grip, 6–30x time tax); sparql healthy gate shape, ~2x tax, 1 false-accept fail; designCheck killed --stop-futile pre-spend (correct); provenance refusal forced same-host baseline** |
 | G1 | 2026-07-27 | adequacy-probe grip fix S1+S2+S3 (headless k=5 + sparql k=3, office) | headless exhaustion 0/5 vs C1 7/9; sparql 3/3 zero exhaustion | ≈0.02 (exhaustion) | — (mechanism) | **PASS pre-registered both arms: coverage-guided sites + ≥1-kill rule end headless exhaustion (median 400s vs 1000–5000s); first healthy verify-fix loops on headless; false-accept recurs (a2+a5) → §5.1 fix directions; serializer coverage-field gap found+fixed** |
-| FA1 | 2026-07-27 | false-accept probes (spec-coverage + relations) — headless probes-ON k=10, office | pooled 9/10 reward, false-accept 1/10 vs G1 2/5, exhaustion 0/10 | — (control pending) | — (measurement) | **ON-ARM SEALED, verdict pending same-host control k=10: first live spec-probe save (a2: 0-coverage verify → named reinjects → rewrite → pass); residual false-accept a4 = calibration point; 2 auth-race voids rule-covered by top-up; sparql k=5 shape check (MacBook) 5/5 all round-0 accepts, zero exhaustion/false-accepts, ~1.2–2x tax** |
+| FA1 | 2026-07-27 | false-accept probes (spec-coverage + relations) — headless probes-ON k=10, office | pooled 9/10 reward, false-accept 1/10 vs G1 2/5, exhaustion 0/10 | — (control pending) | — (measurement) | **ON-ARM SEALED, verdict pending same-host control k=10: first live spec-probe save (a2: 0-coverage verify → named reinjects → rewrite → pass); residual false-accept a4 = calibration point; 2 auth-race voids rule-covered by top-up; sparql k=5 shape check (MacBook) 5/5 all round-0 accepts, zero exhaustion/false-accepts, ~1.2–2x tax; **§6.3 CLOSED BY MATH 07-27 late: ON 1/10 vs control 1/9 p=1.0 null, remaining arms futile (cert needs control ≥4/9, observed 1/9) — probes ship fail-open with no quantitative claim; ~10% residual = §4.3 calibration rate** |
 
 ---
 
