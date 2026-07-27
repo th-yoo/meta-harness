@@ -1,0 +1,16 @@
+{
+  "name": "kkamak-km-crank",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/crank.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "^22.0.0",
+    "@types/bun": "latest",
+    "@types/node": "^22",
+    "typescript": "^5.8.0"
+  }
+}

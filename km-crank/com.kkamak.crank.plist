@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Template. Copy to ~/Library/LaunchAgents/ and load:
+     launchctl bootstrap gui/501 ~/Library/LaunchAgents/com.kkamak.crank.plist
+     Runs once daily at 10:00 local time; RunAtLoad is false (no burst-run on
+     login/reboot — the crank's own threshold/age gate handles catch-up). -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.kkamak.crank</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/yoo/.bun/bin/bun</string>
+    <string>/Users/yoo/z2/meta-harness/km-crank/src/crank.ts</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>10</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+  <key>RunAtLoad</key><false/>
+  <key>KeepAlive</key><false/>
+  <key>StandardOutPath</key><string>/Users/yoo/.config/meta-harness/km-crank/crank.log</string>
+  <key>StandardErrorPath</key><string>/Users/yoo/.config/meta-harness/km-crank/crank.log</string>
+</dict>
+</plist>
