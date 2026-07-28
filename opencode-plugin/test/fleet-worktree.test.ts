@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { createWorktree, removeWorktree } from "../src/fleet/worktree.ts"
 
 /** A real, minimal git repo in a temp dir, mirroring meta-harness's own
- * `.gitignore` for `.meta-harness/` + `node_modules/` so a runtime-ledger
+ * `.gitignore` for `.kkamak/` + `node_modules/` so a runtime-ledger
  * write does not dirty the tracked tree. */
 function initRepo(): string {
   const repo = mkdtempSync(join(tmpdir(), "mh-wt-repo-"))
@@ -14,7 +14,7 @@ function initRepo(): string {
   g(["init", "-q", "-b", "main"])
   g(["config", "user.email", "t@t.t"])
   g(["config", "user.name", "t"])
-  writeFileSync(join(repo, ".gitignore"), ".meta-harness/\nnode_modules/\n")
+  writeFileSync(join(repo, ".gitignore"), ".kkamak/\nnode_modules/\n")
   writeFileSync(join(repo, "README.md"), "hi\n")
   g(["add", "-A"])
   g(["commit", "-qm", "init"])

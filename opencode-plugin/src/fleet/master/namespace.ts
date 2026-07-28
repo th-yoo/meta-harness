@@ -40,7 +40,7 @@ export interface NamespaceRegistry {
 const DEFAULT_GLOBAL_CAP = 3
 
 export function registryPath(masterRoot: string): string {
-  return join(masterRoot, ".meta-harness", "runtime", "master", "namespace-registry.json")
+  return join(masterRoot, ".kkamak", "runtime", "master", "namespace-registry.json")
 }
 
 export function loadRegistry(masterRoot: string): NamespaceRegistry {

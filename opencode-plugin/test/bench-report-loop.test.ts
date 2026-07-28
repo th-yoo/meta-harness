@@ -83,7 +83,7 @@ test("summarizeLoop([]) has an empty speedRatios array, not undefined", () => {
 
 // ── plateauVerdict ───────────────────────────────────────────────────────
 
-const PROJECT_SINK = "/repo/.meta-harness/meta-metrics.jsonl" // passed explicitly as projectSink
+const PROJECT_SINK = "/repo/.kkamak/meta-metrics.jsonl" // passed explicitly as projectSink
 
 function ab(decision: string, hiDelta: number, layer = "account-global"): MetaMetricEvent {
   // heldInDelta is the trend series

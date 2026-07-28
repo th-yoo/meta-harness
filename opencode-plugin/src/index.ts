@@ -4,10 +4,10 @@
  * 4-layer harness evolution system for mh-* agents.
  *
  * Layers (injection order, general → specific):
- *   account-global  <accountMetaRoot()>/global/          (default ~/.config/meta-harness/global/)
- *   project-global  <project>/.meta-harness/global/
- *   account-role    <accountMetaRoot()>/roles/<agent>/    (default ~/.config/meta-harness/roles/<agent>/)
- *   project-role    <project>/.meta-harness/roles/<agent>/
+ *   account-global  <accountMetaRoot()>/global/          (default ~/.config/kkamak/global/)
+ *   project-global  <project>/.kkamak/global/
+ *   account-role    <accountMetaRoot()>/roles/<agent>/    (default ~/.config/kkamak/roles/<agent>/)
+ *   project-role    <project>/.kkamak/roles/<agent>/
  *   env-snapshot    (pushed last as context)
  *
  * A session uses the harness iff it runs under a primary agent whose name
@@ -45,6 +45,7 @@ import {
   projectGlobalRoot,
   bootstrapStore,
   migrateFlatToProjectGlobal,
+  migrateProjectRoot,
   migrateAccountRoot,
   DEFAULT_SYSTEM_PROMPT,
 } from "./harness-store.ts"
@@ -98,6 +99,11 @@ const metaHarness: Plugin = async (input) => {
   const host = new OpencodeHost(input)
   const state = new InMemorySessionStateStore()
   const engine = new EvolutionEngine(host, state)
+
+  // Project rename (meta-harness → kkamak) FIRST: it moves the whole
+  // `.meta-harness/` tree to `.kkamak/`. Running it after the flat migration
+  // below would let that one create `.kkamak/` and strand the old tree.
+  migrateProjectRoot(worktree)
 
   // One-time migration of legacy flat store into project-global
   migrateFlatToProjectGlobal(worktree)

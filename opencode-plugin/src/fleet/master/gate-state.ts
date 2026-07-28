@@ -40,9 +40,9 @@ export interface MasterLog {
   processed: ProcessedRecord[]
 }
 
-/** `<masterRoot>/.meta-harness/runtime/master/gate-log.json` */
+/** `<masterRoot>/.kkamak/runtime/master/gate-log.json` */
 export function masterLogPath(masterRoot: string): string {
-  return join(masterRoot, ".meta-harness", "runtime", "master", "gate-log.json")
+  return join(masterRoot, ".kkamak", "runtime", "master", "gate-log.json")
 }
 
 /** Missing file → empty log. A stray `*.tmp` sibling from an interrupted

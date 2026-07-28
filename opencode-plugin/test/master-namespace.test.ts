@@ -33,9 +33,9 @@ describe("master/namespace", () => {
     }
   }
 
-  test("registryPath is under .meta-harness/runtime/master/ of masterRoot", () => {
+  test("registryPath is under .kkamak/runtime/master/ of masterRoot", () => {
     const p = registryPath(root)
-    expect(p).toContain(join(root, ".meta-harness", "runtime", "master"))
+    expect(p).toContain(join(root, ".kkamak", "runtime", "master"))
   })
 
   test("loadRegistry defaults sanely when missing", () => {

@@ -95,7 +95,7 @@ function noLlmHost(rec: Rec): HarnessHost {
 }
 
 function stagingBase(): string {
-  const b = path.join(worktree, ".meta-harness", "staging")
+  const b = path.join(worktree, ".kkamak", "staging")
   fs.mkdirSync(b, { recursive: true })
   return b
 }

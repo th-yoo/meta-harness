@@ -10,7 +10,7 @@
  *
  * Layout: `<accountMetaRoot()>/runtime/cc/<session_id>.json`. Using the L5 lazy
  * `accountMetaRoot()` resolver means tests get hermeticity for free (they set
- * `META_HARNESS_HOME` to a tmp dir; nothing ever touches the real ~/.config).
+ * `KKAMAK_HOME` to a tmp dir; nothing ever touches the real ~/.config).
  *
  * Durability / safety contract (the adapter's prime directive: a broken hook
  * must NEVER break a user's normal CC session):
@@ -28,7 +28,7 @@ import { writeJsonAtomic } from "../../bench/util.ts"
 import type { SessionState, SessionStateStore } from "../../engine.ts"
 
 /** `<accountMetaRoot()>/runtime/cc` — resolved fresh on every call (mirrors the
- * L5 lazy account-root convention, so META_HARNESS_HOME re-stubbing in tests is
+ * L5 lazy account-root convention, so KKAMAK_HOME re-stubbing in tests is
  * honored without a cached import-time constant). */
 export function ccRuntimeDir(): string {
   return path.join(accountMetaRoot(), "runtime", "cc")

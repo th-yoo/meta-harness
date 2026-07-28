@@ -216,7 +216,7 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(evidenceTaskDir, "km-crank.md"), renderEvidence(repoResults, now), "utf-8")
 
     const version = nextVersion(layer.root)
-    const stagingBase = path.join(targetRepo, ".meta-harness", "staging")
+    const stagingBase = path.join(targetRepo, ".kkamak", "staging")
     const stagingSystem = path.join(stagingBase, `${layer.scope}-${version}-system.md`)
     const stagingTools = path.join(stagingBase, `${layer.scope}-${version}-tools.md`)
     const stagingDiagnosis = path.join(stagingBase, `${layer.scope}-${version}-diagnosis.json`)

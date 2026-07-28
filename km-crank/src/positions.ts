@@ -3,7 +3,7 @@
  * dogfooded repo's sensor file, plus when it last completed a round.
  *
  * Store: <accountMetaRoot()>/km-crank/positions.json. Host-local by design
- * (this is exactly the ".meta-harness/ runtime store" class of state
+ * (this is exactly the ".kkamak/ runtime store" class of state
  * CLAUDE.md calls out as non-shareable — it never needs to travel between
  * hosts; each host tracks its own sensor-file offsets independently).
  */

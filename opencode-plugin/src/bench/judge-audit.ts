@@ -298,7 +298,7 @@ export type RunJudgeFn = (prompt: string, model: string) => Promise<string | nul
  *
  * Meta-metric sink: like splits.ts's `rotate` (see that file's header),
  * this reuses harness-store.ts's appendMetaMetric (which walks up from a
- * storeRoot to the nearest ".meta-harness" ancestor) rather than Python's
+ * storeRoot to the nearest ".kkamak" ancestor) rather than Python's
  * fixed term-bench2/results/meta-metrics.jsonl sink — a DOCUMENTED
  * deviation, same rationale and precedent as cmdSplit's rotate event.
  */
@@ -452,7 +452,7 @@ export async function cmdJudgeAudit(
       `(pass=${passAgreementS}, fail=${failAgreementS})`,
   )
 
-  appendMetaMetric(join(paths.metaRoot, ".meta-harness"), {
+  appendMetaMetric(join(paths.metaRoot, ".kkamak"), {
     event: "judge-audit",
     n: nScored,
     agreement: Math.round(agreement * 10000) / 10000,

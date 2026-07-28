@@ -362,8 +362,8 @@ export interface SplitArgs {
  * This TS port reuses harness-store.ts's `appendMetaMetric` per the task
  * brief's reuse mandate rather than hand-rolling a second appender; that
  * helper resolves its sink by walking up from storeRoot to the nearest
- * ".meta-harness" ancestor, which the flat bench sink path has none of — so
- * the event instead lands in the PROJECT sink (metaRoot/.meta-harness/
+ * ".kkamak" ancestor, which the flat bench sink path has none of — so
+ * the event instead lands in the PROJECT sink (metaRoot/.kkamak/
  * meta-metrics.jsonl, the same file `appendMetaMetric` already uses
  * elsewhere in this codebase). report-loop's 3-sink merge still picks it up
  * either way; only the physical file (and hence its `_sink` tag) differs.
@@ -439,7 +439,7 @@ export function cmdSplit(paths: BenchPaths, args: SplitArgs): void {
     data.activeFold = nextFold
     data.rotatedAt = new Date().toISOString()
     writeJsonAtomic(splitsPath, data)
-    appendMetaMetric(join(paths.metaRoot, ".meta-harness"), {
+    appendMetaMetric(join(paths.metaRoot, ".kkamak"), {
       event: "rotate",
       splitFold: nextFold,
       ts: data.rotatedAt,

@@ -60,7 +60,7 @@ export function roleForPhase(phase: string): string {
 export function checkpointPath(project: string, sliceId: string): string {
   return join(
     project,
-    ".meta-harness",
+    ".kkamak",
     "runtime",
     "fleet",
     `squad-${sliceId.replace(/[^A-Za-z0-9_-]/g, "_")}.json`,

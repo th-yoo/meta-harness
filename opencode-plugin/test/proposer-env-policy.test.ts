@@ -17,7 +17,7 @@ function tmpDir(name: string): string {
 }
 
 function stagingPaths(worktree: string, scope: string, version: string) {
-  const base = path.join(worktree, ".meta-harness", "staging")
+  const base = path.join(worktree, ".kkamak", "staging")
   return {
     system: path.join(base, `${scope}-${version}-system.md`),
     tools: path.join(base, `${scope}-${version}-tools.md`),

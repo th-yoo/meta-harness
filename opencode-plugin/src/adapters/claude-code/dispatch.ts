@@ -70,7 +70,7 @@ export function isMhRole(role: string): boolean {
 
 /**
  * The session's declared role. Precedence: MH_ROLE env (set by the installed
- * settings.json env block) → the project's .meta-harness/config.json
+ * settings.json env block) → the project's .kkamak/config.json
  * `defaultRole` → null. Null means "no role declared" → the session does not
  * participate and the hook exits silently.
  */
@@ -78,7 +78,7 @@ export function resolveRole(cwd: string, env: NodeJS.ProcessEnv): string | null 
   const fromEnv = env["MH_ROLE"]
   if (fromEnv && fromEnv.trim()) return fromEnv.trim()
   try {
-    const cfg = JSON.parse(fs.readFileSync(path.join(cwd, ".meta-harness", "config.json"), "utf-8"))
+    const cfg = JSON.parse(fs.readFileSync(path.join(cwd, ".kkamak", "config.json"), "utf-8"))
     if (typeof cfg?.defaultRole === "string" && cfg.defaultRole.trim()) return cfg.defaultRole.trim()
   } catch {
     /* no project config, or unreadable → fall through to null */

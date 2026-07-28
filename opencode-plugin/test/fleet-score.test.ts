@@ -53,7 +53,7 @@ describe("role-score", () => {
     expect(activeScore.nPass).toBe(0)
     expect(activeScore.sessions.length).toBe(0)
 
-    expect(existsSync(join(project, ".meta-harness/runtime/fleet/scored/ses_a1.json"))).toBe(true)
+    expect(existsSync(join(project, ".kkamak/runtime/fleet/scored/ses_a1.json"))).toBe(true)
   })
 
   test("double-score refused; missing id dies listing pending", async () => {
@@ -85,7 +85,7 @@ describe("role-score", () => {
 
     writePending({ ...basePending("ses_impl1", "## Implementation Report\ndone"), role: "implementer", agent: "mh-implementer", project })
     await cmdRoleScore({ project, id: "ses_impl1", verdict: "good", gate: "verdict" }) // squad-run's own auto-score
-    expect(existsSync(join(project, ".meta-harness/runtime/fleet/scored/ses_impl1.json"))).toBe(true)
+    expect(existsSync(join(project, ".kkamak/runtime/fleet/scored/ses_impl1.json"))).toBe(true)
 
     // Master's merge-gate score, on the SAME id, post-done.
     await cmdRoleScore({ project, id: "ses_impl1", verdict: "good", gate: "merge" })

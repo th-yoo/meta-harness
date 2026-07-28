@@ -58,10 +58,10 @@ export interface MasterDeps {
   now?: () => string
 }
 
-/** `<masterRoot>/.meta-harness/runtime/master/master.lock` (N1b ledger
+/** `<masterRoot>/.kkamak/runtime/master/master.lock` (N1b ledger
  * anchoring — under masterRoot, never a throwaway worktree). */
 export function masterLockPath(masterRoot: string): string {
-  return join(masterRoot, ".meta-harness", "runtime", "master", "master.lock")
+  return join(masterRoot, ".kkamak", "runtime", "master", "master.lock")
 }
 
 /**

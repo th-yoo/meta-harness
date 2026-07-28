@@ -55,7 +55,7 @@ describe("cmdSquadRun worktreeDir threading", () => {
     expect(outcome.status).toBe("escalation")
     const at = captured[0]!.indexOf("--dir")
     expect(captured[0]![at + 1]).toBe(wt)                  // N1: role drives the worktree
-    // pendingDir === checkpointPath dir (<project>/.meta-harness/runtime/fleet/),
+    // pendingDir === checkpointPath dir (<project>/.kkamak/runtime/fleet/),
     // so listPending also returns the checkpoint file squad-<slice>.json — filter
     // to the real session (ses_ prefix) to assert the SESSION ledger, not the checkpoint.
     expect(listPending(rt).filter((id) => id.startsWith("ses_")).length).toBeGreaterThan(0) // N1b: session ledger under runtimeRoot
@@ -78,7 +78,7 @@ describe("cmdSquadRun in a real worktree (N1 isolation + N1b ledger survival)", 
     const r = mkdtempSync(join(tmpdir(), "mh-sqwt-repo-"))
     const g = (a: string[]) => execFileSync("git", ["-C", r, ...a], { encoding: "utf-8" })
     g(["init", "-q", "-b", "main"]); g(["config", "user.email", "t@t.t"]); g(["config", "user.name", "t"])
-    writeFileSync(join(r, ".gitignore"), ".meta-harness/\nnode_modules/\n")
+    writeFileSync(join(r, ".gitignore"), ".kkamak/\nnode_modules/\n")
     writeFileSync(join(r, "README.md"), "hi\n")
     g(["add", "-A"]); g(["commit", "-qm", "init"])
     return r
@@ -110,7 +110,7 @@ describe("cmdSquadRun in a real worktree (N1 isolation + N1b ledger survival)", 
     const sessions = listPending(repo).filter((id) => id.startsWith("ses_"))
     expect(sessions).toContain("ses_wt_1")                // N1b: session ledger under repo runtimeRoot
     const status = execFileSync("git", ["-C", repo, "status", "--porcelain"], { encoding: "utf-8" })
-    expect(status.trim()).toBe("")                        // live tree clean (.meta-harness gitignored)
+    expect(status.trim()).toBe("")                        // live tree clean (.kkamak gitignored)
 
     removeWorktree(wt)                                     // terminal cleanup
     expect(existsSync(wt.dir)).toBe(false)                // worktree gone

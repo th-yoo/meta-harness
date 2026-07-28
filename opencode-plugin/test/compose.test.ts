@@ -268,8 +268,8 @@ test("layersFor returns all 4 layers in the correct injection order", () => {
 
   // Verify project-scoped roots are under worktree; account-scoped are elsewhere
   // (we don't assert the real account paths — they're host-dependent).
-  expect(layers[1].root).toContain(".meta-harness")
-  expect(layers[3].root).toContain(".meta-harness")
+  expect(layers[1].root).toContain(".kkamak")
+  expect(layers[3].root).toContain(".kkamak")
 
   // Verify higherRoots are correctly populated (for gap-filling context)
   expect(layers[0].higherRoots).toEqual([])

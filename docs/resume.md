@@ -30,6 +30,44 @@ committed → every kkamak-loaded session in THIS repo feeds M0–M3, both hosts
 after pull. Analyse at ≥30 task-shaped prompts in the union stream. tmux gotcha: send prompt text and Enter as
 separate send-keys (bracketed paste swallows submit); pre-trust dirs.
 
+**✅ PLUGIN INSTALLED + ESCAPE HATCH (10e14c6, 5fe9ef4, 04abb9c).** Arming a
+repo is NOT enough — an armed `gate.json` collects nothing unless kkamak's
+hooks are loaded, and `--plugin-dir` loads them for one launch only.
+Installed locally: `.claude-plugin/marketplace.json` + `claude plugin
+marketplace add <dir>` + `claude plugin install kkamak@kkamak-local`;
+auto-load verified with a plain `claude` run (sensor + gate state + gauge
+refiner all fired). **Installation is PER-HOST and does NOT travel via git —
+MacBook needs those 2 commands after pulling; only gate.json arming travels.**
+`/reload-plugins` attaches hooks to an already-running session (no restart,
+no context loss).
+
+**Install bug, silent-failure class (fixed 10e14c6):** `claude plugin
+install` COPIES the plugin dir out of the monorepo, so the three imports
+escaping the plugin root (`../../minimal/…`) died with "Cannot find module"
+— and fail-open turned that into SILENCE (exit 0, gate inert, zero sensor
+data, no visible error). The first install was broken exactly this way; only
+found by executing the cached copy directly. Fix: `cc-gate-plugin/vendor/`
+holds byte-identical copies of the 4 kernel modules (minimal/ is a shared
+kernel, can't move); `test/self-contained.test.ts` locks no-escaping-imports
++ a drift guard + an INSTALL-SHAPE test that copies the plugin to a temp dir
+and drives a real gated Stop through it.
+
+**Escape hatch (5fe9ef4, 04abb9c):** `KKAMAK_GAUGE=off` is launch-time only
+(read from the CC process env) and CANNOT stop a session already running —
+that is why `scripts/km-panic.sh {status|gauge-off|off|restore|nuke|--help}`
+exists. `gate.json` is re-read on every hook call, so every action lands on
+the NEXT turn with no restart and no lost context; `escape-hatch.test.ts`
+locks that invariant. Mid-turn hang = Esc (km-panic can't reach an in-flight
+hook). Built-in bounds: auto-allow after rounds+1 failures, CC force-ends
+after 8 consecutive blocks, a new prompt preempts an open cycle, 3 internal
+errors disarm the session.
+
+200 tests, tsc clean. **OPEN (offered, not done):** cache-refresh script so
+the installed copy can't silently rot behind source; pre-reg line separating
+kkamak-dev sensor data from the real-work M0–M3 sample (filter on the
+`check` string — self-referential workload biases M1/M2 optimistic);
+km-crank (70 tests) absent from the gate check.
+
 **2.1b DONE same night:** `cc-gate-plugin/` (plugin name **kkamak**) built via
 15-node parallel-DAG subagent waves per the plan; suites 120+26 green, tsc
 clean; wave reviews + final merge-gate review (2 blocking findings fixed:

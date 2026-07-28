@@ -34,9 +34,9 @@ describe("master/gate-state", () => {
     expect(loadMasterLog(root).processed.map((r) => r.inboundId)).toEqual(["u7"])
   })
 
-  test("masterLogPath is under .meta-harness/runtime/master/ of masterRoot", () => {
+  test("masterLogPath is under .kkamak/runtime/master/ of masterRoot", () => {
     const p = masterLogPath(root)
-    expect(p).toBe(join(root, ".meta-harness", "runtime", "master", "gate-log.json"))
+    expect(p).toBe(join(root, ".kkamak", "runtime", "master", "gate-log.json"))
   })
 
   test("missing file → loadMasterLog defaults to empty pending/processed", () => {

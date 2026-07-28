@@ -21,7 +21,7 @@ import {
 
 function tmpStore(): { metaRoot: string; storeRoot: string } {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mh-t7-trial-"))
-  const storeRoot = path.join(tmp, ".meta-harness", "roles", "mh-build")
+  const storeRoot = path.join(tmp, ".kkamak", "roles", "mh-build")
   fs.mkdirSync(storeRoot, { recursive: true })
   return { metaRoot: tmp, storeRoot }
 }
@@ -59,7 +59,7 @@ function withMetaHome<T>(recordTimeouts: boolean, fn: () => T): T {
 }
 
 function lastMetaMetric(metaRoot: string): Record<string, unknown> {
-  const sink = path.join(metaRoot, ".meta-harness", "meta-metrics.jsonl")
+  const sink = path.join(metaRoot, ".kkamak", "meta-metrics.jsonl")
   const lines = fs.readFileSync(sink, "utf-8").trim().split("\n")
   return JSON.parse(lines[lines.length - 1]!) as Record<string, unknown>
 }

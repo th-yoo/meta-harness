@@ -59,17 +59,17 @@ test("accountMetaRoot: META_HARNESS_HOME wins outright (used as-is, absolute)", 
   expect(accountMetaRoot()).toBe(mh)
 })
 
-test("accountMetaRoot: XDG_CONFIG_HOME/meta-harness when META_HARNESS_HOME is unset", () => {
+test("accountMetaRoot: XDG_CONFIG_HOME/kkamak when no HOME override is set", () => {
   delete process.env["META_HARNESS_HOME"]
   const xdg = tmpDir("mh-root-xdg-")
   process.env["XDG_CONFIG_HOME"] = xdg
-  expect(accountMetaRoot()).toBe(path.join(xdg, "meta-harness"))
+  expect(accountMetaRoot()).toBe(path.join(xdg, "kkamak"))
 })
 
-test("accountMetaRoot: falls back to ~/.config/meta-harness when neither env var is set (pure string check, no I/O)", () => {
+test("accountMetaRoot: falls back to ~/.config/kkamak when neither env var is set (pure string check, no I/O)", () => {
   delete process.env["META_HARNESS_HOME"]
   delete process.env["XDG_CONFIG_HOME"]
-  expect(accountMetaRoot()).toBe(path.join(os.homedir(), ".config", "meta-harness"))
+  expect(accountMetaRoot()).toBe(path.join(os.homedir(), ".config", "kkamak"))
 })
 
 test("accountMetaRoot: is lazy — reflects env changes made AFTER the module was imported", () => {

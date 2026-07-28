@@ -631,7 +631,7 @@ export class EvolutionEngine {
       && readTrial(pgLayer.root) === null
 
     // Check for project plateau pause flag.
-    const pausedFlagPath = path.join(this.worktree, ".meta-harness", "paused")
+    const pausedFlagPath = path.join(this.worktree, ".kkamak", "paused")
     const paused = fs.existsSync(pausedFlagPath)
     const stAfter = this.state.get(sessionId)
     if (paused && (prDue || pgDue) && stAfter && !stAfter.pausedToastShown) {
@@ -639,7 +639,7 @@ export class EvolutionEngine {
       this.state.put(sessionId, stAfter)
       await this.host.log("info", "[hook:event] auto-propose skipped — project plateau pause flag present")
       await this.host.notify(
-        "auto-propose paused (project plateau) — rm .meta-harness/paused to resume; /mh-propose still works",
+        "auto-propose paused (project plateau) — rm .kkamak/paused to resume; /mh-propose still works",
         "info", 10_000,
       )
     } else if (prDue && !paused) {
@@ -878,7 +878,7 @@ export class EvolutionEngine {
       }
 
       // Check for plateau pause flag and show status
-      const pausedFlagPath = path.join(this.worktree, ".meta-harness", "paused")
+      const pausedFlagPath = path.join(this.worktree, ".kkamak", "paused")
       if (fs.existsSync(pausedFlagPath)) {
         let ts = "unknown"
         try {
@@ -889,7 +889,7 @@ export class EvolutionEngine {
         } catch {
           // Tolerate unreadable/garbage flag content — presence alone means paused
         }
-        lines.push(`  PAUSED: auto-propose disabled (plateau since ${ts}) — rm .meta-harness/paused to resume`)
+        lines.push(`  PAUSED: auto-propose disabled (plateau since ${ts}) — rm .kkamak/paused to resume`)
       }
 
       const prLayer = layers.find((l) => l.scope === "project-role")

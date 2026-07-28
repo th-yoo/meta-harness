@@ -43,7 +43,7 @@ function seedCandidate(
 }
 
 function stagingPaths(worktree: string, scope: string, version: string) {
-  const base = path.join(worktree, ".meta-harness", "staging")
+  const base = path.join(worktree, ".kkamak", "staging")
   return {
     system: path.join(base, `${scope}-${version}-system.md`),
     tools: path.join(base, `${scope}-${version}-tools.md`),
@@ -191,7 +191,7 @@ test("buildCuratePrompt: embeds the store-access section as prune evidence", () 
     ],
   }
 
-  const prompt = buildCuratePrompt(layer, playbook, path.join(worktree, ".meta-harness", "staging", "ops.json"), worktree)
+  const prompt = buildCuratePrompt(layer, playbook, path.join(worktree, ".kkamak", "staging", "ops.json"), worktree)
 
   expect(prompt).toContain("## Store access — read the archive before diagnosing")
   expect(prompt).toContain(storeRoot)

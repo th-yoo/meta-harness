@@ -888,7 +888,7 @@ export async function cmdAb(
   const finalHeldOut = final["heldOut"] as AbSetStats | null
   const finalEnv = final["env"] as { resourceEnforcement?: boolean } | undefined
   const finalSpeed = final["speed"] as { heldIn: AbSpeedStats | null; heldOut: AbSpeedStats | null } | undefined
-  appendMetaMetric(join(paths.metaRoot, ".meta-harness"), {
+  appendMetaMetric(join(paths.metaRoot, ".kkamak"), {
     event: "ab",
     layer,
     candidate,

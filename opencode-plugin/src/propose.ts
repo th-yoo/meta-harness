@@ -151,7 +151,7 @@ export async function triggerPropose(
   inFlight.add(layer.root)
   try {
     const version = nextVersion(layer.root)
-    const stagingBase = path.join(worktree, ".meta-harness", "staging")
+    const stagingBase = path.join(worktree, ".kkamak", "staging")
     const stagingSystem = path.join(stagingBase, `${layer.scope}-${version}-system.md`)
     const stagingTools  = path.join(stagingBase, `${layer.scope}-${version}-tools.md`)
     const stagingDiagnosis = path.join(stagingBase, `${layer.scope}-${version}-diagnosis.json`)
@@ -285,7 +285,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
   const isProject = layer.scope === "project-global" || layer.scope === "project-role"
   const playbook = d.playbookMode ? seedPlaybook(layer.root) : null
 
-  const stagingBase = path.join(worktree, ".meta-harness", "staging")
+  const stagingBase = path.join(worktree, ".kkamak", "staging")
   const stagingSystem = path.join(stagingBase, `${layer.scope}-${version}-system.md`)
   const stagingTools  = path.join(stagingBase, `${layer.scope}-${version}-tools.md`)
   const stagingDiagnosis = path.join(stagingBase, `${layer.scope}-${version}-diagnosis.json`)
@@ -554,7 +554,7 @@ export async function triggerPromote(
   inFlight.add(target.root)
   try {
     const version = nextVersion(target.root)
-    const stagingBase = path.join(worktree, ".meta-harness", "staging")
+    const stagingBase = path.join(worktree, ".kkamak", "staging")
     const stagingSystem = path.join(stagingBase, `promote-${target.scope}-${version}-system.md`)
     const stagingTools  = path.join(stagingBase, `promote-${target.scope}-${version}-tools.md`)
 
@@ -608,7 +608,7 @@ export async function triggerPromote(
  * event path). "pending" until the merged system.md is staged, then "applied". */
 async function applyPromoteArtifact(host: HarnessHost, d: StagedArtifactDescriptor): Promise<ApplyResult> {
   const { layer: target, source, version, worktree } = d
-  const stagingBase = path.join(worktree, ".meta-harness", "staging")
+  const stagingBase = path.join(worktree, ".kkamak", "staging")
   const stagingSystem = path.join(stagingBase, `promote-${target.scope}-${version}-system.md`)
   const stagingTools  = path.join(stagingBase, `promote-${target.scope}-${version}-tools.md`)
 
@@ -1230,7 +1230,7 @@ export async function triggerCurate(
   inFlight.add(layer.root)
   try {
     const version = nextVersion(layer.root)
-    const stagingBase = path.join(worktree, ".meta-harness", "staging")
+    const stagingBase = path.join(worktree, ".kkamak", "staging")
     const stagingOps = path.join(stagingBase, `curate-${layer.scope}-${version}-ops.json`)
     const prompt = buildCuratePrompt(layer, playbook, stagingOps, worktree)
     const cfg = readMhConfig()
@@ -1284,7 +1284,7 @@ export async function triggerCurate(
 async function applyCurateArtifact(host: HarnessHost, d: StagedArtifactDescriptor): Promise<ApplyResult> {
   const { layer, version, worktree } = d
   const isProject = layer.scope === "project-global" || layer.scope === "project-role"
-  const stagingBase = path.join(worktree, ".meta-harness", "staging")
+  const stagingBase = path.join(worktree, ".kkamak", "staging")
   const stagingOps = path.join(stagingBase, `curate-${layer.scope}-${version}-ops.json`)
 
   if (!fs.existsSync(stagingOps)) return "pending"

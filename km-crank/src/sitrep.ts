@@ -102,7 +102,7 @@ export function formatSitrep(o: SitrepOutcome): string {
       lines.push("*Action:* PROPOSER-TIMEOUT — no staged artifact within the 10-minute window")
       lines.push("")
       lines.push(
-        "Next step: check ~/.config/meta-harness/km-crank/crank.log and the proposer's own runtime log; " +
+        "Next step: check ~/.config/kkamak/km-crank/crank.log and the proposer's own runtime log; " +
           "positions were NOT advanced, so this round's sensor lines stay pending for the next run.",
       )
       break
@@ -112,7 +112,7 @@ export function formatSitrep(o: SitrepOutcome): string {
     case "failure":
       lines.push(`*Action:* FAILURE — ${o.action.message}`)
       lines.push("")
-      lines.push("Next step: check ~/.config/meta-harness/km-crank/crank.log for the stack trace; re-run with --force once resolved.")
+      lines.push("Next step: check ~/.config/kkamak/km-crank/crank.log for the stack trace; re-run with --force once resolved.")
       break
   }
 

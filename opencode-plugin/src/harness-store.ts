@@ -5,10 +5,10 @@
  *
  * Four stores form a 2×2 lattice (scope × location):
  *
- *   account-global  <accountMetaRoot()>/global/          (default ~/.config/meta-harness/global/)
- *   account-role    <accountMetaRoot()>/roles/<agent>/    (default ~/.config/meta-harness/roles/<agent>/)
- *   project-global  <project>/.meta-harness/global/
- *   project-role    <project>/.meta-harness/roles/<agent>/
+ *   account-global  <accountMetaRoot()>/global/          (default ~/.config/kkamak/global/)
+ *   account-role    <accountMetaRoot()>/roles/<agent>/    (default ~/.config/kkamak/roles/<agent>/)
+ *   project-global  <project>/.kkamak/global/
+ *   project-role    <project>/.kkamak/roles/<agent>/
  *
  * Each store has the same internal layout:
  *   <storeRoot>/
@@ -43,6 +43,22 @@ import { rankRoleFailures, type RoleRankOpts } from "./failure-retrieval.ts"
 
 // ── Root resolvers ─────────────────────────────────────────────────────────
 //
+// Project rename (2026-07-28): meta-harness → kkamak. The store directory is
+// `.kkamak/` per worktree and `~/.config/kkamak` per account; the previous
+// names are migrated on first read (migrateAccountRoot / migrateProjectRoot)
+// because NONE of this state is git-tracked — an un-migrated host would come
+// up with an empty store, which looks like "nothing proposed yet" rather than
+// like an error.
+
+/** Account/project store directory name. */
+const STORE_DIR_NAME = "kkamak"
+/** Per-worktree store directory name. */
+const PROJECT_STORE_DIR = ".kkamak"
+/** Pre-rename names, newest-first, migrated away from on first use. */
+const LEGACY_STORE_DIR_NAME = "meta-harness"
+const LEGACY_PROJECT_STORE_DIR = ".meta-harness"
+
+//
 // The account-layer root is platform-neutral (Task L5) — it used to be an
 // opencode-owned, IMPORT-TIME constant (`~/.config/opencode/.meta-harness`),
 // which was wrong the moment the loop runs on a different coding agent AND
@@ -53,25 +69,35 @@ import { rankRoleFailures, type RoleRankOpts } from "./failure-retrieval.ts"
 // META_HARNESS_HOME in-process around the calls they care about.
 //
 // Resolution order:
-//   1. META_HARNESS_HOME (absolute path, used as-is)
-//   2. $XDG_CONFIG_HOME/meta-harness
-//   3. ~/.config/meta-harness
+//   1. KKAMAK_HOME (absolute path, used as-is)
+//   2. META_HARNESS_HOME — DEPRECATED pre-rename name, still honored so that
+//      existing scripts, launchd jobs and docs keep working
+//   3. $XDG_CONFIG_HOME/kkamak
+//   4. ~/.config/kkamak
 
 export function accountMetaRoot(): string {
-  const override = process.env["META_HARNESS_HOME"]
+  const override = process.env["KKAMAK_HOME"] ?? process.env["META_HARNESS_HOME"]
   if (override) return override
   const xdg = process.env["XDG_CONFIG_HOME"]
-  if (xdg) return path.join(xdg, "meta-harness")
-  return path.join(os.homedir(), ".config", "meta-harness")
+  if (xdg) return path.join(xdg, STORE_DIR_NAME)
+  return path.join(os.homedir(), ".config", STORE_DIR_NAME)
 }
 
-/** The PRE-L5 account root: opencode-owned, XDG-aware exactly like the old
- * import-time OPENCODE_CONFIG_DIR constant. Used ONLY by migrateAccountRoot()
- * to find legacy content to move — never a general-purpose path helper. */
-function legacyAccountRoot(): string {
+/** Pre-rename account roots, NEWEST FIRST — the meta-harness-named store
+ * (2026-07-28 rename) and, before that, the PRE-L5 opencode-owned location.
+ * Used ONLY by migrateAccountRoot() to find legacy content to move; never
+ * general-purpose path helpers.
+ *
+ * Still consulted under an env override: an explicitly-set root is exactly
+ * where a legacy store SHOULD be migrated to (pre-rename contract, kept). */
+function legacyAccountRoots(): string[] {
   const xdg = process.env["XDG_CONFIG_HOME"]
+  const configDir = xdg ?? path.join(os.homedir(), ".config")
   const opencodeConfigDir = xdg ? path.join(xdg, "opencode") : path.join(os.homedir(), ".config", "opencode")
-  return path.join(opencodeConfigDir, ".meta-harness")
+  return [
+    path.join(configDir, LEGACY_STORE_DIR_NAME),
+    path.join(opencodeConfigDir, LEGACY_PROJECT_STORE_DIR),
+  ]
 }
 
 export function accountGlobalRoot(): string {
@@ -83,16 +109,16 @@ export function accountRoleRoot(agent: string): string {
 }
 
 export function projectGlobalRoot(worktree: string): string {
-  return path.join(worktree, ".meta-harness", "global")
+  return path.join(worktree, PROJECT_STORE_DIR, "global")
 }
 
 export function projectRoleRoot(worktree: string, agent: string): string {
-  return path.join(worktree, ".meta-harness", "roles", agent)
+  return path.join(worktree, PROJECT_STORE_DIR, "roles", agent)
 }
 
 /** Legacy flat store used before the 4-layer refactor. */
 function legacyRoot(worktree: string): string {
-  return path.join(worktree, ".meta-harness")
+  return path.join(worktree, LEGACY_PROJECT_STORE_DIR)
 }
 
 // ── Paths inside a store ───────────────────────────────────────────────────
@@ -414,7 +440,7 @@ export function budgetIdentityMatches(
  * makes the self-improvement loop net-negative (STOP, arXiv 2310.02304), and an
  * unpinned proposer inherits whatever model the user happens to be running.
  * Config: <accountMetaRoot()>/config.json (see the "Root resolvers" section
- * above — default ~/.config/meta-harness/config.json).
+ * above — default ~/.config/kkamak/config.json).
  */
 export interface MhConfig {
   proposerModel: string
@@ -694,14 +720,19 @@ function writeJson(p: string, data: unknown): void {
 // ── Loop observability (meta-metrics.jsonl) ────────────────────────────────
 //
 // Mirrors the Python appender (term-bench2/bench_store.py append_meta_metric).
-// Sink lives at the nearest ".meta-harness" ancestor of storeRoot, so project
-// stores land in the repo-local (git-tracked) sink and account stores land in
-// <accountMetaRoot()>/meta-metrics.jsonl (default ~/.config/meta-harness/meta-metrics.jsonl).
+// Sink lives at the nearest ".kkamak" ancestor of storeRoot, so project stores
+// land in the repo-local sink and account stores land in
+// <accountMetaRoot()>/meta-metrics.jsonl (default ~/.config/kkamak/meta-metrics.jsonl).
+// The pre-rename ".meta-harness" basename is still recognised so a store that
+// has not been migrated yet keeps writing to its existing sink.
 
 function metricsSinkFor(storeRoot: string): string | null {
   let dir = path.resolve(storeRoot)
   for (let i = 0; i < 6; i++) {
-    if (path.basename(dir) === ".meta-harness") return path.join(dir, "meta-metrics.jsonl")
+    const base = path.basename(dir)
+    if (base === PROJECT_STORE_DIR || base === LEGACY_PROJECT_STORE_DIR) {
+      return path.join(dir, "meta-metrics.jsonl")
+    }
     const parent = path.dirname(dir)
     if (parent === dir) break
     dir = parent
@@ -1413,6 +1444,57 @@ export function bootstrapStore(storeRoot: string, baseline: string): void {
  * at worktree root and project-global hasn't been set up yet, move it there.
  * This preserves any evolved improvements (e.g. the v2 "do more, not less" rule).
  */
+/**
+ * Project-store rename migration (2026-07-28): `<worktree>/.meta-harness/` →
+ * `<worktree>/.kkamak/`, leaving a back-compat symlink at the old path.
+ *
+ * Automatic for the same reason as migrateAccountRoot(): the project store is
+ * NOT git-tracked, so a host that pulls the rename without migrating comes up
+ * with an empty store — indistinguishable from "nothing proposed yet". Never
+ * throws; a failed migration logs and leaves both trees untouched.
+ */
+export function migrateProjectRoot(worktree: string): void {
+  const oldRoot = path.join(worktree, LEGACY_PROJECT_STORE_DIR)
+  const newRoot = path.join(worktree, PROJECT_STORE_DIR)
+
+  let oldStat: fs.Stats | null = null
+  try {
+    oldStat = fs.lstatSync(oldRoot)
+  } catch {
+    return // nothing at the old location — first run or already migrated
+  }
+  if (!oldStat.isDirectory()) return // already a symlink from a prior migration
+
+  if (fs.existsSync(newRoot)) {
+    if (isRealStore(oldRoot)) {
+      console.error(
+        `[kkamak] WARNING: project store stranded at old path:\n` +
+        `  Old path (has evolved content): ${oldRoot}\n` +
+        `  New path (exists): ${newRoot}\n` +
+        `  Remediation: merge the old directory into the new one manually`,
+      )
+    }
+    return
+  }
+
+  try {
+    fs.renameSync(oldRoot, newRoot)
+  } catch (err) {
+    console.error(
+      `[kkamak] ERROR: project store migration failed (old store stranded):\n` +
+      `  Old path: ${oldRoot}\n  New path: ${newRoot}\n` +
+      `  Error: ${err instanceof Error ? err.message : String(err)}`,
+    )
+    return
+  }
+
+  try {
+    fs.symlinkSync(PROJECT_STORE_DIR, oldRoot)
+  } catch { /* best-effort back-compat link; the move itself already succeeded */ }
+
+  console.error(`[kkamak] migrated project store: ${oldRoot} -> ${newRoot} (symlink left at old path)`)
+}
+
 export function migrateFlatToProjectGlobal(worktree: string): void {
   const flat = legacyRoot(worktree)
   const flatActive = path.join(flat, "active", "system.md")
@@ -1443,8 +1525,8 @@ export function migrateFlatToProjectGlobal(worktree: string): void {
  * One-time migration of the account-layer root off its old opencode-owned
  * location (legacyAccountRoot(): ~/.config/opencode/.meta-harness, XDG-aware
  * exactly like the pre-L5 constant) onto the new platform-neutral one
- * (accountMetaRoot(): META_HARNESS_HOME > $XDG_CONFIG_HOME/meta-harness >
- * ~/.config/meta-harness).
+ * (accountMetaRoot(): KKAMAK_HOME > META_HARNESS_HOME > $XDG_CONFIG_HOME/kkamak >
+ * ~/.config/kkamak).
  *
  * Called from BOTH the plugin's init (index.ts) and the bench CLI's process
  * entrypoint (term-bench2/runner.ts) — either can be first to touch the
@@ -1477,61 +1559,57 @@ export function migrateFlatToProjectGlobal(worktree: string): void {
 export function migrateAccountRoot(): void {
   const newRoot = accountMetaRoot()
 
-  // Detect poisoned state: newRoot exists AND old path exists as a real directory with content.
-  // This means a prior migration failed (rename threw) but mkdir(newRoot.parent) already
-  // succeeded, permanently poisoning the guard. Log once per call so it's discoverable.
-  const oldRoot = legacyAccountRoot()
-  let oldStat: fs.Stats | null = null
-  try {
-    oldStat = fs.lstatSync(oldRoot)
-  } catch {
-    // nothing at the old location — first run or already cleaned up
-  }
-
-  if (fs.existsSync(newRoot) && oldStat && oldStat.isDirectory()) {
-    // Both exist and old is a real directory — check if it has any content beyond empty scaffolding
-    const hasContent = isRealStore(oldRoot)
-    if (hasContent) {
-      console.error(
-        `[meta-harness] WARNING: account store stranded at old path (migration may have failed earlier):\n` +
-        `  Old path (has evolved content): ${oldRoot}\n` +
-        `  New path (exists): ${newRoot}\n` +
-        `  Remediation: move the old directory to the new location manually or unset META_HARNESS_HOME and retry`,
-      )
+  // Legacy roots are tried NEWEST FIRST, so a host that skipped a rename
+  // still lands on its most recent store rather than a stale ancestor.
+  for (const oldRoot of legacyAccountRoots()) {
+    let oldStat: fs.Stats | null = null
+    try {
+      oldStat = fs.lstatSync(oldRoot)
+    } catch {
+      continue // nothing at this old location — try the next one
     }
+    if (!oldStat.isDirectory()) continue // symlink (prior migration) or non-dir
+
+    // Detect poisoned state: newRoot exists AND old path is a real directory
+    // with content. A prior migration failed (rename threw) after
+    // mkdir(newRoot.parent) succeeded, permanently poisoning the guard.
+    if (fs.existsSync(newRoot)) {
+      if (isRealStore(oldRoot)) {
+        console.error(
+          `[kkamak] WARNING: account store stranded at old path (migration may have failed earlier):\n` +
+          `  Old path (has evolved content): ${oldRoot}\n` +
+          `  New path (exists): ${newRoot}\n` +
+          `  Remediation: move the old directory to the new location manually, or set KKAMAK_HOME and retry`,
+        )
+      }
+      return
+    }
+
+    try {
+      fs.mkdirSync(path.dirname(newRoot), { recursive: true })
+      fs.renameSync(oldRoot, newRoot)
+    } catch (err) {
+      // Lost a race with a concurrent migration, or genuinely failed (e.g. an
+      // EXDEV cross-device rename under an unusual KKAMAK_HOME) — log it loud
+      // so the user can discover the stranded store, then never block startup.
+      const errorMsg = err instanceof Error ? err.message : String(err)
+      console.error(
+        `[kkamak] ERROR: account store migration failed (old store stranded):\n` +
+        `  Old path: ${oldRoot}\n` +
+        `  New path: ${newRoot}\n` +
+        `  Error: ${errorMsg}\n` +
+        `  Remediation: move the old directory to the new location manually, or set KKAMAK_HOME and retry`,
+      )
+      return
+    }
+
+    try {
+      fs.symlinkSync(newRoot, oldRoot)
+    } catch { /* best-effort back-compat link only; the move itself already succeeded */ }
+
+    console.error(`[kkamak] migrated account store: ${oldRoot} -> ${newRoot} (symlink left at old path)`)
     return
   }
-
-  if (fs.existsSync(newRoot)) return
-
-  if (!oldStat) {
-    return // nothing at the old location either — first run, nothing to migrate
-  }
-  if (!oldStat.isDirectory()) return // symlink (prior migration) or non-dir — no-op
-
-  try {
-    fs.mkdirSync(path.dirname(newRoot), { recursive: true })
-    fs.renameSync(oldRoot, newRoot)
-  } catch (err) {
-    // Lost a race with a concurrent migration, or genuinely failed (e.g. an
-    // EXDEV cross-device rename under an unusual META_HARNESS_HOME) — log it
-    // loud so the user can discover the stranded store, then never block startup.
-    const errorMsg = err instanceof Error ? err.message : String(err)
-    console.error(
-      `[meta-harness] ERROR: account store migration failed (old store stranded):\n` +
-      `  Old path: ${oldRoot}\n` +
-      `  New path: ${newRoot}\n` +
-      `  Error: ${errorMsg}\n` +
-      `  Remediation: move the old directory to the new location manually or unset META_HARNESS_HOME and retry`,
-    )
-    return
-  }
-
-  try {
-    fs.symlinkSync(newRoot, oldRoot)
-  } catch { /* best-effort back-compat link only; the move itself already succeeded */ }
-
-  console.error(`[meta-harness] migrated account store: ${oldRoot} -> ${newRoot} (symlink left at old path)`)
 }
 
 /**

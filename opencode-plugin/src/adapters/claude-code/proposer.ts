@@ -13,7 +13,7 @@
  *
  *   1. At spawn time, triggerPropose hands the descriptor to
  *      host.stageArtifactApply → writeProposerLock writes a lock file under
- *      `<worktree>/.meta-harness/proposer-locks/<sanitized-root>.json`. That
+ *      `<worktree>/.kkamak/proposer-locks/<sanitized-root>.json`. That
  *      file's presence IS the cross-process "in flight" marker (proposerInFlight)
  *      that replaces propose.ts's in-memory `inFlight` Set (useless across
  *      processes), and it carries the full descriptor needed to apply later.
@@ -36,11 +36,11 @@ import path from "node:path"
 import type { HarnessHost, StagedArtifactDescriptor } from "../../host.ts"
 import { applyStagedArtifact } from "../../propose.ts"
 
-/** `<worktree>/.meta-harness/proposer-locks` — locks live in the worktree (that
+/** `<worktree>/.kkamak/proposer-locks` — locks live in the worktree (that
  * is where /mh-propose is issued and where the staging files are written, even
  * for account-layer candidates whose store root is elsewhere). */
 export function proposerLocksDir(worktree: string): string {
-  return path.join(worktree, ".meta-harness", "proposer-locks")
+  return path.join(worktree, ".kkamak", "proposer-locks")
 }
 
 /** Filesystem-safe lock filename keyed by store ROOT — one live cycle per root,

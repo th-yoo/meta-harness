@@ -14,7 +14,7 @@ import { createCandidate, recordSession, readScore, candidatePath, type SessionR
 
 function tmpStore(): string {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mh-session-record-platform-"))
-  const storeRoot = path.join(tmp, ".meta-harness", "roles", "mh-build")
+  const storeRoot = path.join(tmp, ".kkamak", "roles", "mh-build")
   fs.mkdirSync(storeRoot, { recursive: true })
   return storeRoot
 }

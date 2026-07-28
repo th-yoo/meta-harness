@@ -812,7 +812,7 @@ function isolatedBenchPaths(): BenchPaths {
 }
 
 function readMetaMetricsLines(metaRoot: string): Record<string, unknown>[] {
-  const sink = path.join(metaRoot, ".meta-harness", "meta-metrics.jsonl")
+  const sink = path.join(metaRoot, ".kkamak", "meta-metrics.jsonl")
   return fs
     .readFileSync(sink, "utf-8")
     .trim()
@@ -862,7 +862,7 @@ test("Loop-3 T7 integration: two REAL cmdAb runs at different maxAgentTimeout ar
     ),
   )
 
-  const sink = path.join(paths.metaRoot, ".meta-harness", "meta-metrics.jsonl")
+  const sink = path.join(paths.metaRoot, ".kkamak", "meta-metrics.jsonl")
   const events = loadMetaMetrics([sink])
   const abEvents = events.filter((e) => e.event === "ab")
   expect(abEvents.length).toBe(2)

@@ -62,9 +62,9 @@ test("resolveRole: MH_ROLE env wins", () => {
   expect(resolveRole(project, { MH_ROLE: "mh-build" } as any)).toBe("mh-build")
 })
 
-test("resolveRole: falls back to project .meta-harness/config.json defaultRole", () => {
-  fs.mkdirSync(path.join(project, ".meta-harness"), { recursive: true })
-  fs.writeFileSync(path.join(project, ".meta-harness", "config.json"), JSON.stringify({ defaultRole: "mh-review" }))
+test("resolveRole: falls back to project .kkamak/config.json defaultRole", () => {
+  fs.mkdirSync(path.join(project, ".kkamak"), { recursive: true })
+  fs.writeFileSync(path.join(project, ".kkamak", "config.json"), JSON.stringify({ defaultRole: "mh-review" }))
   expect(resolveRole(project, {} as any)).toBe("mh-review")
 })
 

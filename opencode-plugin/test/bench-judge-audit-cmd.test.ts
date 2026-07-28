@@ -61,7 +61,7 @@ function args(overrides: Partial<JudgeAuditArgs> = {}): JudgeAuditArgs {
 }
 
 function metrics(metaRoot: string): Record<string, unknown>[] {
-  const sinkPath = path.join(metaRoot, ".meta-harness", "meta-metrics.jsonl")
+  const sinkPath = path.join(metaRoot, ".kkamak", "meta-metrics.jsonl")
   if (!fs.existsSync(sinkPath)) return []
   return fs
     .readFileSync(sinkPath, "utf-8")

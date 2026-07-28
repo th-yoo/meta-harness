@@ -8,7 +8,7 @@ across multiple machines (WSL2 Linux box, MacBook); **cross-host transfer is
 git-only** — host-local state does NOT transfer.
 
 **Host-local — does NOT travel (never the source of truth for shared work):**
-- `.meta-harness/`, `~/.config/meta-harness/` — runtime store (gitignored)
+- `.kkamak/`, `~/.config/kkamak/` — runtime store (gitignored; pre-rename `.meta-harness/` + `~/.config/meta-harness` remain as back-compat symlinks)
 - `/mnt/d/tmp/`, `/tmp/`, `$CLAUDE_JOB_DIR` — scratch scripts + temp files
 - `~/.claude/` — personal memory
 - `resource-profiles/` — deliberately host-class-keyed + gitignored
@@ -20,6 +20,6 @@ git-only** — host-local state does NOT transfer.
   into `docs/resume.md` so they reconstruct on any host)
 - design, state, decisions → `docs/` + the `docs/resume.md` handoff
 
-**Live proof:** a paused k=5 ab partial left in `.meta-harness/` on one host is
+**Live proof:** a paused k=5 ab partial left in `.kkamak/` on one host is
 stranded — another host cannot resume it. If it needs sharing, it must reach the
 committed snapshot.

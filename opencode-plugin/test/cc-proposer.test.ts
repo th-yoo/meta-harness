@@ -47,7 +47,7 @@ function recHost(rec: Rec): HarnessHost {
 }
 
 function stagingBase(): string {
-  const b = path.join(worktree, ".meta-harness", "staging")
+  const b = path.join(worktree, ".kkamak", "staging")
   fs.mkdirSync(b, { recursive: true })
   return b
 }
@@ -156,7 +156,7 @@ test("applyPendingArtifacts: corrupt lock file → warn + remove, no crash", asy
 
 test("applyPendingArtifacts: no lock dir → silent no-op", async () => {
   const rec: Rec = { notes: [], logs: [] }
-  await applyPendingArtifacts(recHost(rec), worktree) // worktree has no .meta-harness
+  await applyPendingArtifacts(recHost(rec), worktree) // worktree has no .kkamak
   expect(rec.logs.length).toBe(0)
   expect(rec.notes.length).toBe(0)
 })

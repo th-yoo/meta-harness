@@ -10,12 +10,12 @@
  *
  * The account-layer sink (3rd of `defaultMetaMetricsSinks`) is derived from
  * harness-store.ts's `accountMetaRoot()` (Task L5) — a LAZY resolver
- * (META_HARNESS_HOME > $XDG_CONFIG_HOME/meta-harness > ~/.config/meta-harness)
+ * (KKAMAK_HOME > $XDG_CONFIG_HOME/kkamak > ~/.config/kkamak)
  * that reads env fresh per call. That supersedes this file's old `home`
  * parameter, which existed only as a workaround for the pre-L5 account root
  * being an import-time constant (env stubbing in tests was infeasible
  * otherwise) — tests now isolate the account-layer sink by setting
- * META_HARNESS_HOME in-process instead. Production call sites (cli.ts)
+ * KKAMAK_HOME in-process instead. Production call sites (cli.ts)
  * never touch it either way, so behavior there is unchanged.
  */
 import { existsSync, readFileSync, rmSync } from "node:fs"
@@ -36,15 +36,15 @@ export const SPEED_RATIO_PRINT_K = 5 // W1a: last K held-in speed ratios printed
 export function defaultMetaMetricsSinks(paths: BenchPaths): string[] {
   return [
     join(paths.resultsDir, "meta-metrics.jsonl"),
-    join(paths.metaRoot, ".meta-harness", "meta-metrics.jsonl"),
+    join(paths.metaRoot, ".kkamak", "meta-metrics.jsonl"),
     join(accountMetaRoot(), "meta-metrics.jsonl"),
   ]
 }
 
-/** metaRoot/.meta-harness/paused — mirrors runner.py's module-global
+/** metaRoot/.kkamak/paused — mirrors runner.py's module-global
  * PAUSED_FLAG, but derived from `paths` instead of a process-wide constant. */
 export function pausedFlagPath(paths: BenchPaths): string {
-  return join(paths.metaRoot, ".meta-harness", "paused")
+  return join(paths.metaRoot, ".kkamak", "paused")
 }
 
 // ── event shape ──────────────────────────────────────────────────────────

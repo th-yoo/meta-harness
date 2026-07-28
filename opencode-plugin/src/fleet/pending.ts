@@ -38,7 +38,7 @@ export interface FleetPendingSession {
 const sanitize = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, "_")
 
 export function pendingDir(project: string): string {
-  return join(project, ".meta-harness", "runtime", "fleet")
+  return join(project, ".kkamak", "runtime", "fleet")
 }
 
 export function writePending(p: FleetPendingSession): void {
