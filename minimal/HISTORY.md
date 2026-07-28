@@ -304,6 +304,49 @@ Mechanism verification, zero bench trials, NOT an adoption verdict.
   re-run the check — the gate re-checks automatically". **First
   §4.4-class candidate produced by daily usage.**
 
+## GA1 — km-gauge shadow PoC + scorecard + reinject experiment (2026-07-28, office `yoo-dev`) — SHIPPED; v1 repair pending
+
+Office day builds on the kkamak sensor stream (all mechanism-class, no
+adoption verdicts). Pre-registrations written before data throughout.
+
+- **km-gauge PoC (955fbec + guard f3be80d):** per-task derived acceptance
+  checks, SHADOW ONLY. Task-shaped classifier (deterministic) → detached
+  haiku refiner → pending file → next-Stop shadow eval → `gauge` field on
+  the sensor line. Live smoke (4 real haiku calls): derivation quality 3/3
+  excellent, latency 10.7–40.9s → one-shot headless = M0 miss; interactive
+  next-turn consume works. Read-only guard: model-generated checks refused
+  unrun unless plainly read-only (`gauge.refused`); all 4 live checks pass
+  it. M0–M3 window OPEN (gate.json `gauge:true`, both repos; ≥30 task-shaped
+  prompts then verdict). Install trap found+fixed (10e14c6): plugin install
+  COPIES the dir — escaping `../../minimal/` imports died silently
+  (fail-open = inert gate, zero data); `vendor/` byte-identical copies +
+  drift-guard + INSTALL-SHAPE test.
+- **kkamak scorecard (9ca8ad5):** sensor stream → M-catch / M-exhaust /
+  M-interrupt / M-tax per (check,host); rates suppressed <20 cycles;
+  kkamak-dev never pools with real work. Claimable without counterfactual:
+  M-exhaust/M-interrupt fall at non-decreasing M-catch. M-catch alone =
+  §4.3's problem.
+- **§4.4 experiment #1 (fc7fa38):** SM2's stall root-caused to the kernel
+  reinject text "…and re-run it." (correct where agent owns verify.sh;
+  ownership inverted under kkamak). v0 kernel wording vs v1; arm =
+  FNV-1a(sessionID), recorded per sensor line; within-workload
+  randomisation so both arms share workload drift.
+- **CORRECTION (user-caught):** v1 as shipped SELF-CONTRADICTS (appends
+  "do not run it yourself" after "and re-run it") — my own test enshrined
+  the append. Evidence honesty: stall = n=1 (artifact lost); "your script"
+  falsity + gate-gaming invite = zero observations, hypothesis only. Audit
+  659a712..HEAD: zero check/test weakening (+430 assertions) but ~1 block
+  opportunity = no power. Plan: repair v1 (REPLACE next-action sentence),
+  v0 byte-identical, run the pre-registered A/B. **v1 repair NOT DONE.**
+  Process lesson memorised: no reason-drift without new observations.
+- **Rename (872cef8):** runtime store `.meta-harness/`→`.kkamak/`,
+  `~/.config/meta-harness`→`~/.config/kkamak`, KKAMAK_HOME; auto-migrating
+  both roots with back-compat symlinks; repo dir/remote unchanged.
+- **Escape hatch (5fe9ef4):** `scripts/km-panic.sh
+  {status|gauge-off|off|restore|nuke}` — gate.json re-read every hook call
+  (locked invariant), so all actions land next turn, no restart.
+  KKAMAK_GAUGE=off is launch-time only, cannot stop a live session.
+
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
 | R1 | 2026-07-23 | machine bullet (script-verify) on bare | bare 4/10 vs 5/10 | 1.0 | — | REJECT null |
@@ -329,6 +372,7 @@ Mechanism verification, zero bench trials, NOT an adoption verdict.
 | SM1 | 2026-07-27 | gate-plugin live smoke-test (real opencode session, MacBook) | 1 live session, scratch repo, rounds ["verify-failed","accepted"] | — | — (mechanism) | **PASS all §4.1 criteria: sensor line correct, interrupted:false (echo-guard assumption live-verified), reinject evidence reached the agent → fixed check unprompted; bash-edit correctly did not arm the gate; daily sensor producer trustworthy → §4.3 unblocked** |
 | CR1 | 2026-07-28 | km-crank v0.1 — scheduled half-automatic evolution crank (2.2a, MacBook) | 2 live rounds: accidental empty-evidence + supervised real-evidence (km-play, 4 lines) | — | — (mechanism) | **SHIPPED + E2E both paths: empty-evidence round → proposer junk → REVIEW GATE REJECTED (no candidate/trial, ledgered, SITREP) — the reviewer-loop thesis live; gate bug found+fixed (first-run age hole: zero evidence never runs, not even --force, +regression tests); real-evidence round → candidate v1 staged + trial started on km-play + Slack SITREP; launchd daily 10:00 installed; WATCH: legacy-mode proposals bypass review gate (playbook-adds only)** |
 | SM2 | 2026-07-27 | kkamak CC plugin v0.1 BUILT + live smoke (2.1b, MacBook night) | 15-node parallel DAG, 3 live headless CC sessions | — | — (mechanism) | **SHIPPED + SMOKE PASS (merge 6d443df): 120+26 tests green; CC block-json evidence delivery VERIFIED live (self-describing check → agent fixed → rounds ["verify-failed","accepted"] in 4s); rounds bound exact (2 blocks → exhausted); marker + no-edit-silence + mkdir-recursive + headless -p all ✓; both hosts now write one .km/ sensor stream — §4.3 gets a two-host union producer** |
+| GA1 | 2026-07-28 | km-gauge shadow PoC + scorecard + §4.4 reinject A/B (office) | 4 live haiku derivations; 234 tests; audit 659a712..HEAD | — | — (mechanism) | **SHIPPED: gauge M0–M3 window open (shadow-only, read-only guard); scorecard defines improvement (M-exhaust/M-interrupt fall at non-decreasing M-catch); reinject v0/v1 within-workload randomised — CORRECTION: v1 self-contradicts (append vs replace), repair pending; audit found zero gate-gaming (no power, ~1 opportunity); plugin-install copy trap fixed (vendor/ + install-shape test); store renamed .kkamak/ auto-migrating** |
 
 ---
 

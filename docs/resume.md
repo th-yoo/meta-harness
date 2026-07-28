@@ -63,10 +63,41 @@ after 8 consecutive blocks, a new prompt preempts an open cycle, 3 internal
 errors disarm the session.
 
 200 tests, tsc clean. **OPEN (offered, not done):** cache-refresh script so
-the installed copy can't silently rot behind source; pre-reg line separating
-kkamak-dev sensor data from the real-work M0–M3 sample (filter on the
-`check` string — self-referential workload biases M1/M2 optimistic);
+the installed copy can't silently rot behind source;
 km-crank (70 tests) absent from the gate check.
+
+**✅ RENAME meta-harness → kkamak, runtime store only (872cef8):**
+`.meta-harness/` → `.kkamak/`, `~/.config/meta-harness` → `~/.config/kkamak`,
+env `KKAMAK_HOME` (META_HARNESS_HOME still honored). Repo dir + remote
+UNCHANGED (installed plugin path keeps resolving). BOTH roots auto-migrate on
+first use (migrateAccountRoot + NEW migrateProjectRoot, back-compat symlinks;
+migrateProjectRoot runs BEFORE migrateFlatToProjectGlobal or the old tree
+strands). Live stores migrated byte-verified vs tar backup (14 playbooks,
+active v7). MacBook: self-migrates on first plugin run, nothing manual.
+Backup gotcha: cp -a to /mnt/d fails on timestamps → && chain left EMPTY
+backup; tar to native fs + extract-verify instead.
+
+**✅ SCORECARD (9ca8ad5) + §4.4 EXPERIMENT #1 (fc7fa38):**
+`bun cc-gate-plugin/src/score-cli.ts` — M-catch/M-exhaust/M-interrupt/M-tax
+per (check,host), rates suppressed <20 cycles, kkamak-dev never pools with
+real work (--pool explicit). Claimable: M-exhaust/M-interrupt fall at
+non-decreasing M-catch; M-catch alone NOT claimable (needs §4.3
+counterfactual). Reinject experiment: v0 kernel wording vs v1, arm =
+FNV-1a(sessionID) ~50/50 recorded on every sensor line, scorecard splits
+arms + prints decision rule. Within-workload randomisation = both arms share
+workload drift → mechanism comparison survives §4.3 confound.
+
+**⚠ REINJECT CORRECTION (user-caught, read before touching wording):**
+v1 as shipped is SELF-CONTRADICTORY (appends "do not run it yourself" after
+kernel's "and re-run it") — repair = REPLACE the next-action sentence, not
+append; v0 = deployed baseline, never changes unmeasured. Kernel ownership
+inversion: term-bench2 agent owns verify.sh, kkamak repo owns check — but
+defects #1 (wrong "your script") and #3 ("fix the script" = gate-gaming
+invite) have ZERO observations; #2 (re-run stall) is n=1, artifact lost.
+Audit 659a712..HEAD: zero check/test weakening (+430 assertions), but ~1
+block opportunity = no power. #3 stays watch-item, not design driver.
+V1 REPAIR NOT YET DONE. Process rule saved to memory: flag "same evidence,
+new interpretation" — no reason-drift without new observations.
 
 **2.1b DONE same night:** `cc-gate-plugin/` (plugin name **kkamak**) built via
 15-node parallel-DAG subagent waves per the plan; suites 120+26 green, tsc
