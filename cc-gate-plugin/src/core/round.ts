@@ -12,7 +12,7 @@
 // message; reinject then returns false, so the loop exits right there
 // without a second check-round.
 import type { RoundOutcome } from "../types.ts"
-import { runCompletionGate, type GateIO } from "../../../minimal/complete-gate.ts"
+import { runCompletionGate, type GateIO } from "../../vendor/complete-gate.ts"
 
 export async function runSingleRound(
   runCheck: (cmd: string) => Promise<{ code: number; out: string }>,

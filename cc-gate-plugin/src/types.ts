@@ -1,7 +1,7 @@
 // cc-gate-plugin/src/types.ts — the FROZEN shared contract (DAG Wave 1).
 // Every other module depends on this file and NEVER on a sibling module's
 // internals. A needed change here = stop the wave, amend, re-fan-out.
-import type { GateRoundResult } from "../../minimal/complete-gate.ts"
+import type { GateRoundResult } from "../vendor/complete-gate.ts"
 
 export type RoundOutcome = GateRoundResult["outcome"]
 

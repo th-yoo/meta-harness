@@ -113,6 +113,27 @@ kkamak-loaded session here (both hosts after pull) contributes to the M0–M3
 window. km-play (office) also armed. Analysis when ≥30 task-shaped prompts
 have accumulated in the two-host union stream.
 
+**Arming is not enough — the plugin must be INSTALLED (2026-07-28).** An
+armed `gate.json` collects nothing unless kkamak's hooks are loaded, and
+`--plugin-dir` only loads it for that one launch. Installed locally on the
+office box via a `.claude-plugin/marketplace.json` + `claude plugin
+marketplace add <plugin-dir>` + `claude plugin install kkamak@kkamak-local`;
+auto-load then VERIFIED with a plain `claude` run (no flag): sensor line,
+gate state, and gauge refiner all fired. MacBook needs the same two commands
+after pulling — arming travels via git, installation does not.
+
+**Install bug found and fixed the same hour (silent-failure class).** The
+install COPIES the plugin dir out of the monorepo, so the three imports that
+escaped the plugin root (`../../minimal/…`) died with "Cannot find module" —
+and the hook's fail-open contract turned that into SILENCE: exit 0, gate
+inert, zero sensor data, no visible error. The first install was broken this
+way and only surfaced because the cached copy was executed directly. Fix:
+`vendor/` holds byte-identical copies of the four kernel modules
+(complete-gate, session2, mutate, spec-probe) and `test/self-contained.test.ts`
+enforces (a) no `src/` import escapes the plugin root, (b) vendored files
+match their `minimal/` originals, (c) an INSTALL-SHAPE test that copies the
+plugin to a temp dir and drives a real gated Stop through it.
+
 ## 6. Known risks
 
 - Fast turns beat the async refiner → M0 measures it; mitigation candidates

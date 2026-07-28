@@ -4,7 +4,22 @@
 
 A Claude Code plugin that prevents the agent from saying "done" until a repo-configured check passes. Claude remains blocked with evidence until the check succeeds or exhausts allowed rounds. Once installed, every assistant turn ending checks your gate condition—fast checks only (300s timeout).
 
-## Install (dev)
+## Install
+
+**Permanent (auto-loads in every session)** — required if you want the gate
+to run without remembering a flag:
+
+```bash
+claude plugin marketplace add /path/to/cc-gate-plugin
+claude plugin install kkamak@kkamak-local
+```
+
+Installation is per-host: it does NOT travel with the repo, so each machine
+runs these two commands once. After changing plugin source, refresh the
+installed copy with `claude plugin marketplace update kkamak-local` followed
+by uninstall + install (the install is a *copy*, not a live reference).
+
+**One-off (dev)** — loads for a single launch only:
 
 ```bash
 claude --plugin-dir /path/to/cc-gate-plugin

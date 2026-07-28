@@ -15,7 +15,7 @@ import type { CcGateState, CoreDeps, StopInput, StopResult } from "../types.ts"
 import { parseGateConfig } from "../config.ts"
 import { buildSensorLine } from "./sensor.ts"
 import { runSingleRound } from "./round.ts"
-import { HYGIENE_MARKER } from "../../../minimal/session2.ts"
+import { HYGIENE_MARKER } from "../../vendor/session2.ts"
 
 export async function handleStop(
   state: CcGateState,
