@@ -83,6 +83,8 @@ export interface EmitPlan {
 export interface GaugeSensorField {
   present: boolean
   executable?: boolean
+  /** Safety-guard verdict when the derived check was refused unrun. */
+  refused?: string
   pass?: boolean
   wouldBlock?: boolean
   agreesWithFloor?: boolean

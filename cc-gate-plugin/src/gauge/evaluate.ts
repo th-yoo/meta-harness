@@ -3,6 +3,7 @@
 // injected. The result NEVER feeds any gate decision (shadow-only).
 import type { GaugeSensorField } from "../types.ts"
 import type { GaugeFile } from "./files.ts"
+import { unsafeReason } from "./guard.ts"
 
 /** Floor-gate context for agreement scoring. ran=false → fast-path Stop. */
 export interface FloorOutcome {
@@ -30,6 +31,12 @@ export async function evaluateGauge(
   }
 
   if (!gauge.check) return base
+
+  // The derived check is model-generated shell run with the user's
+  // permissions: refuse anything that is not plainly read-only. A refusal
+  // is an M1 miss, never a risk to the repo.
+  const refused = unsafeReason(gauge.check)
+  if (refused) return { ...base, refused }
 
   let code: number
   try {

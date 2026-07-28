@@ -77,6 +77,28 @@ test("timeout (124) counts as executable + failing (would block)", async () => {
   expect(g.wouldBlock).toBe(true)
 })
 
+test("unsafe derived check is REFUSED: never run, reason recorded", async () => {
+  let ran = false
+  const spy = async () => {
+    ran = true
+    return { code: 0, out: "" }
+  }
+  const g = await evaluateGauge(
+    { ...BASE, check: "rm -rf build && bun test" },
+    { ran: true, accepted: true },
+    spy,
+  )
+  expect(ran).toBe(false)
+  expect(g.executable).toBe(false)
+  expect(g.refused).toBe("destructive-command")
+  expect(g.pass).toBeUndefined()
+})
+
+test("safe derived check carries no refusal", async () => {
+  const g = await evaluateGauge(BASE, { ran: true, accepted: true }, ok)
+  expect(g.refused).toBeUndefined()
+})
+
 test("runCheck throw → executable false, never throws out", async () => {
   const g = await evaluateGauge(BASE, { ran: true, accepted: true }, boom)
   expect(g.present).toBe(true)

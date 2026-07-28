@@ -97,6 +97,22 @@ No opencode port (CC plugin only).
   prompt-N+1's work started — acceptable shadow noise, revisit at blocking
   pilot alongside the storage-shape reservation.
 
+## 5c. Safety guard + window OPEN (2026-07-28)
+
+Before arming a real repo, `src/gauge/guard.ts` was added (TDD, 9 tests):
+derived checks are refused unrun unless plainly read-only — writes, `sudo`,
+network, state-changing git/package commands, in-place editors, file
+redirection, shell-escape, process control. Refusals record
+`gauge.refused: "<reason>"` with `executable: false` (counts as an M1 miss,
+never a repo risk). Validation: all 4 checks haiku produced in the live
+smoke pass the guard unchanged; patterns are word-anchored (`formula` does
+not trip `rm`, `sudoku` does not trip `sudo`).
+
+**WINDOW OPEN:** `gauge: true` committed in this repo's `gate.json` — every
+kkamak-loaded session here (both hosts after pull) contributes to the M0–M3
+window. km-play (office) also armed. Analysis when ≥30 task-shaped prompts
+have accumulated in the two-host union stream.
+
 ## 6. Known risks
 
 - Fast turns beat the async refiner → M0 measures it; mitigation candidates

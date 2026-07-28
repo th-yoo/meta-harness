@@ -116,6 +116,15 @@ Fencing: 30 refiner calls/day per repo (`.km/gauge/daily-count`, fail-closed),
 kill-switch `KKAMAK_GAUGE=off`, refiner runs with `KM_CHILD=1` so kkamak's own
 hooks stay out of the child session.
 
+**Safety guard.** A derived check is model-generated shell run with your
+permissions — shadow mode stops it from changing a gate decision, not from
+touching your disk. Before any derived check runs, `src/gauge/guard.ts`
+refuses anything that is not plainly read-only (writes, `sudo`, network,
+state-changing `git`/package commands, in-place editors, redirection to a
+file, shell-escape, process control). Refusals are logged as
+`gauge.refused: "<reason>"` with `executable: false` and never execute. All
+four checks haiku produced during the live smoke passed the guard unchanged.
+
 ## Accepted v0.1 limitations
 
 - **Crash window:** If the process crashes between persisting state and appending to the sensor, one round may be lost. Rounds are redeemed on the next turn.
