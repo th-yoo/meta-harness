@@ -19,6 +19,8 @@ import { buildStopOutput } from "./output.ts"
 import { handlePostToolUse } from "./core/edits.ts"
 import { handleUserPromptSubmit } from "./core/prompt.ts"
 import { handleStop } from "./core/stop.ts"
+import { maybeSpawnGauge } from "./gauge/spawn.ts"
+import { shadowEvaluateAtStop } from "./gauge/shadow.ts"
 import type { CoreDeps, DeliveryMode, EmitPlan, SensorLine } from "./types.ts"
 
 const MH_CHILD_ENV = "MH_CHILD"
@@ -27,6 +29,7 @@ const KNOWN_EVENTS = new Set(["PostToolUse", "UserPromptSubmit", "Stop"])
 const MAX_OUTPUT_BYTES = 64 * 1024
 const DEFAULT_CHECK_TIMEOUT_MS = 300_000
 const DEFAULT_SENSOR_REL_PATH = ".km/gate-outcomes.ndjson"
+const GAUGE_CHECK_TIMEOUT_MS = 30_000
 const VALID_DELIVERY_MODES: readonly DeliveryMode[] = ["block-json", "exit2-stderr", "block-json+context"]
 
 function capOutput(s: string): string {
@@ -72,9 +75,9 @@ function appendSensor(
   }
 }
 
-function buildDeps(cwd: string, gateConfigRaw: string | undefined): CoreDeps {
+function buildDeps(cwd: string, gateConfigRaw: string | undefined, timeoutMsOverride?: number): CoreDeps {
   const cfg = parseGateConfig(gateConfigRaw)
-  const timeoutMs = cfg?.checkTimeoutMs ?? DEFAULT_CHECK_TIMEOUT_MS
+  const timeoutMs = timeoutMsOverride ?? cfg?.checkTimeoutMs ?? DEFAULT_CHECK_TIMEOUT_MS
 
   return {
     runCheck: (cmd: string) =>
@@ -218,6 +221,25 @@ async function main(): Promise<void> {
     const { state: next, sensor } = handleUserPromptSubmit(state, sessionId, gateConfigRaw, deps)
     store.save(sessionId, next)
     if (sensor) appendSensor(cwd, gateConfigRaw, sensor, deps.log)
+
+    // km-gauge (pre-reg §2.2): best-effort, swallowed inside; spawns the
+    // detached refiner via a double-fork so the hook returns immediately.
+    maybeSpawnGauge({
+      cwd,
+      sessionID: sessionId,
+      prompt: rec.prompt,
+      cfg: parseGateConfig(gateConfigRaw),
+      env: process.env as Record<string, string | undefined>,
+      now: Date.now(),
+      spawn: (cmd) => {
+        const quoted = cmd.map((c) => `'${c.replace(/'/g, `'\\''`)}'`).join(" ")
+        const proc = Bun.spawn(["bash", "-c", `nohup ${quoted} </dev/null >/dev/null 2>&1 &`], {
+          stdout: "ignore",
+          stderr: "ignore",
+        })
+        proc.unref()
+      },
+    })
     return
   }
 
@@ -251,8 +273,16 @@ async function main(): Promise<void> {
     return
   }
 
-  // (b) Sensor append never changes the decision.
-  if (sensor) appendSensor(cwd, gateConfigRaw, sensor, deps.log)
+  // (b) Sensor append never changes the decision. km-gauge shadow eval
+  // (pre-reg §2.3) may attach a gauge field or fabricate a gauge-only line —
+  // it runs AFTER the decision is final and can only shape what gets logged.
+  let line = sensor
+  const cfg = parseGateConfig(gateConfigRaw)
+  if (cfg?.gauge && process.env.KKAMAK_GAUGE !== "off") {
+    const gaugeDeps = buildDeps(cwd, gateConfigRaw, GAUGE_CHECK_TIMEOUT_MS)
+    line = await shadowEvaluateAtStop(cwd, sessionId, cfg, sensor, gaugeDeps.runCheck, gaugeDeps)
+  }
+  if (line) appendSensor(cwd, gateConfigRaw, line, deps.log)
 
   // (c) Emit the delivery-mode-shaped plan.
   const mode = resolveDeliveryMode()

@@ -9,6 +9,7 @@ test("parseGateConfig: minimal valid config gets ALL defaults", () => {
     marker: false,
     sensor: ".km/gate-outcomes.ndjson",
     checkTimeoutMs: 300_000,
+    gauge: false,
   })
 })
 
@@ -22,6 +23,7 @@ test("parseGateConfig: explicit fields respected (incl. checkTimeoutMs)", () => 
     marker: true,
     sensor: "out.ndjson",
     checkTimeoutMs: 5000,
+    gauge: false,
   })
 })
 
@@ -55,6 +57,7 @@ test("parseGateConfig: unknown fields ignored", () => {
     marker: false,
     sensor: ".km/gate-outcomes.ndjson",
     checkTimeoutMs: 300_000,
+    gauge: false,
   })
   expect(c).not.toHaveProperty("foo")
   expect(c).not.toHaveProperty("nested")
@@ -105,6 +108,13 @@ test("parseGateConfig: checkTimeoutMs respects value and defaults to 300_000", (
 
   const cDefault = parseGateConfig(`{"check": "cmd"}`)
   expect(cDefault!.checkTimeoutMs).toBe(300_000)
+})
+
+test("parseGateConfig: gauge === true only (default false, truthy non-true → false)", () => {
+  expect(parseGateConfig(`{"check": "cmd", "gauge": true}`)!.gauge).toBe(true)
+  expect(parseGateConfig(`{"check": "cmd", "gauge": false}`)!.gauge).toBe(false)
+  expect(parseGateConfig(`{"check": "cmd", "gauge": 1}`)!.gauge).toBe(false)
+  expect(parseGateConfig(`{"check": "cmd"}`)!.gauge).toBe(false)
 })
 
 test("parseGateConfig: sensor respects custom value and defaults to .km/gate-outcomes.ndjson", () => {

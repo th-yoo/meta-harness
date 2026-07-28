@@ -95,6 +95,27 @@ Control how blocked turns surface evidence to Claude via the `KKAMAK_DELIVERY` e
 
 Only blocks are affected. Successful turns (allow, allow-with-marker, allow-exhausted) always exit 0 and never change behavior based on this setting.
 
+## km-gauge (shadow PoC, opt-in)
+
+Per-task derived acceptance checks, SHADOW ONLY — never blocks, never changes
+any gate decision. Pre-registration: `docs/superpowers/specs/
+2026-07-28-km-gauge-poc-preregistration.md` (metrics M0–M3 locked).
+
+Opt in per repo via `"gauge": true` in `gate.json`. On each task-shaped user
+prompt (deterministic classifier — imperative verb or file path, not
+question-only), a detached refiner makes one small-model `claude -p` call
+(default `haiku`, override `KKAMAK_GAUGE_MODEL`) deriving
+`{goalSummary, criteria[], check|null, confidence}` into `.km/gauge/`. At the
+next cycle-ending Stop the derived check runs shadow (30s timeout) and the
+sensor line gains a `gauge` field (`present/executable/pass/wouldBlock/
+agreesWithFloor/...`). Fast-path Stops with a pending gauge log a gauge-only
+line, marked by `rounds: []`. Evaluated derivations live on as
+`.km/gauge/*.done.json` (audit trail).
+
+Fencing: 30 refiner calls/day per repo (`.km/gauge/daily-count`, fail-closed),
+kill-switch `KKAMAK_GAUGE=off`, refiner runs with `KM_CHILD=1` so kkamak's own
+hooks stay out of the child session.
+
 ## Accepted v0.1 limitations
 
 - **Crash window:** If the process crashes between persisting state and appending to the sensor, one round may be lost. Rounds are redeemed on the next turn.

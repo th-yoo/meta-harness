@@ -15,6 +15,7 @@ export function parseGateConfig(raw: string | undefined): GateConfig | undefined
       marker: j.marker === true,
       sensor: typeof j.sensor === "string" ? j.sensor : ".km/gate-outcomes.ndjson",
       checkTimeoutMs: typeof j.checkTimeoutMs === "number" ? j.checkTimeoutMs : 300_000,
+      gauge: j.gauge === true,
     }
   } catch {
     return undefined

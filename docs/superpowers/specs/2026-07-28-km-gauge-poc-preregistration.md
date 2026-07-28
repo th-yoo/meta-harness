@@ -1,6 +1,8 @@
 # km-gauge PoC — pre-registration (2026-07-28)
 
-**Status:** DRAFT — metrics below need explicit user approval before any code.
+**Status:** APPROVED 2026-07-28 (user) — metrics M0–M3 + decision rule locked.
+**User reservation:** `.km/gauge/<sessionID>-<n>.json` file layout disliked —
+accepted for PoC only; revisit storage shape before any blocking pilot.
 **Component name:** km-gauge (user-picked; go/no-go gauge metaphor — per-task
 acceptance check derived from the prompt, held against the work at the
 completion gate).

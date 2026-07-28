@@ -1,0 +1,190 @@
+// Integration: the real hook-cli process with gauge enabled — spawn seam on
+// UserPromptSubmit (detached refiner against a stub claude bin) and shadow
+// eval on Stop. Mirrors cli.test.ts harness style.
+import { test, expect } from "bun:test"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
+import { FileStateStore } from "../src/state.ts"
+import { INITIAL_STATE, type CcGateState } from "../src/types.ts"
+import { gaugeDir, writeGaugeFile } from "../src/gauge/files.ts"
+
+const HOOK_CLI = path.join(import.meta.dir, "..", "src", "hook-cli.ts")
+
+async function runHook(opts: {
+  event: string
+  stdin: string
+  env?: Record<string, string>
+}): Promise<number> {
+  const env: Record<string, string> = { ...(process.env as Record<string, string>) }
+  delete env.MH_CHILD
+  delete env.KM_CHILD
+  delete env.KKAMAK_DELIVERY
+  delete env.KKAMAK_GAUGE
+  if (opts.env) Object.assign(env, opts.env)
+  const proc = Bun.spawn(["bun", HOOK_CLI, opts.event], {
+    stdout: "ignore",
+    stderr: "ignore",
+    stdin: new TextEncoder().encode(opts.stdin),
+    env,
+  })
+  return proc.exited
+}
+
+function mkRepo(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "km-gauge-wire-"))
+}
+
+function writeGate(repo: string, cfg: Record<string, unknown>): void {
+  fs.writeFileSync(path.join(repo, "gate.json"), JSON.stringify(cfg))
+}
+
+function seedState(repo: string, sessionId: string, overrides: Partial<CcGateState>): void {
+  const store = new FileStateStore(path.join(repo, ".km", "cc-gate"))
+  store.save(sessionId, { ...INITIAL_STATE, ...overrides })
+}
+
+function sensorLines(repo: string): Record<string, unknown>[] {
+  const p = path.join(repo, ".km", "gate-outcomes.ndjson")
+  return fs
+    .readFileSync(p, "utf-8")
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l))
+}
+
+function stubBin(repo: string): string {
+  const derivation = {
+    goalSummary: "stub goal",
+    criteria: ["stub criterion"],
+    check: "test -f done-marker.txt",
+    confidence: 0.9,
+  }
+  const wrapper = JSON.stringify({ type: "result", result: JSON.stringify(derivation) })
+  const p = path.join(repo, "stub-claude")
+  fs.writeFileSync(p, `#!/usr/bin/env bash\ncat >/dev/null\necho '${wrapper.replace(/'/g, `'\\''`)}'\n`)
+  fs.chmodSync(p, 0o755)
+  return p
+}
+
+const SID = "wire-sid"
+
+function promptStdin(repo: string, prompt: string): string {
+  return JSON.stringify({ session_id: SID, cwd: repo, prompt })
+}
+
+async function waitFor(pred: () => boolean, ms = 5000): Promise<boolean> {
+  const deadline = Date.now() + ms
+  while (Date.now() < deadline) {
+    if (pred()) return true
+    await new Promise((r) => setTimeout(r, 50))
+  }
+  return pred()
+}
+
+test("UserPromptSubmit + gauge on + task prompt → detached refiner produces the pending gauge file", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true", gauge: true })
+  const bin = stubBin(repo)
+
+  await runHook({
+    event: "UserPromptSubmit",
+    stdin: promptStdin(repo, "create done-marker.txt at the repo root"),
+    env: { KKAMAK_GAUGE_CLAUDE_BIN: bin },
+  })
+
+  // req written synchronously by the hook; pending file arrives from the
+  // detached refiner shortly after.
+  const pendingPath = path.join(gaugeDir(repo), `${SID}-1.json`)
+  expect(await waitFor(() => fs.existsSync(pendingPath))).toBe(true)
+  const gauge = JSON.parse(fs.readFileSync(pendingPath, "utf-8"))
+  expect(gauge.check).toBe("test -f done-marker.txt")
+
+  const count = JSON.parse(fs.readFileSync(path.join(gaugeDir(repo), "daily-count"), "utf-8"))
+  expect(count.count).toBe(1)
+})
+
+test("UserPromptSubmit with KKAMAK_GAUGE=off → nothing written", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true", gauge: true })
+  await runHook({
+    event: "UserPromptSubmit",
+    stdin: promptStdin(repo, "create done-marker.txt"),
+    env: { KKAMAK_GAUGE: "off" },
+  })
+  expect(fs.existsSync(gaugeDir(repo))).toBe(false)
+})
+
+test("UserPromptSubmit with gauge unset in config → nothing written", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true" })
+  await runHook({ event: "UserPromptSubmit", stdin: promptStdin(repo, "create done-marker.txt") })
+  expect(fs.existsSync(gaugeDir(repo))).toBe(false)
+})
+
+test("Stop with pending gauge + edited session → sensor line carries gauge field (M3 shape), pending consumed", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true", gauge: true }) // floor passes; gauge check fails (no done-marker.txt)
+  seedState(repo, SID, { edited: true })
+  writeGaugeFile(gaugeDir(repo), {
+    v: 1,
+    sessionID: SID,
+    n: 1,
+    ts: 1,
+    model: "haiku",
+    derivationMs: 5,
+    goalSummary: "g",
+    criteria: ["c"],
+    check: "test -f done-marker.txt",
+    confidence: 0.9,
+  })
+
+  await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: SID, cwd: repo }) })
+
+  const lines = sensorLines(repo)
+  expect(lines.length).toBe(1)
+  const g = lines[0]!.gauge as Record<string, unknown>
+  expect(g.present).toBe(true)
+  expect(g.executable).toBe(true)
+  expect(g.pass).toBe(false)
+  expect(g.wouldBlock).toBe(true)
+  expect(g.agreesWithFloor).toBe(false)
+  expect(fs.existsSync(path.join(gaugeDir(repo), `${SID}-1.json`))).toBe(false)
+  expect(fs.existsSync(path.join(gaugeDir(repo), `${SID}-1.done.json`))).toBe(true)
+})
+
+test("fast-path Stop (no edits) + pending gauge → gauge-only line with rounds:[]", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true", gauge: true })
+  writeGaugeFile(gaugeDir(repo), {
+    v: 1,
+    sessionID: SID,
+    n: 1,
+    ts: 1,
+    model: "haiku",
+    derivationMs: 5,
+    goalSummary: "g",
+    criteria: ["c"],
+    check: "true",
+    confidence: 0.9,
+  })
+
+  await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: SID, cwd: repo }) })
+
+  const lines = sensorLines(repo)
+  expect(lines.length).toBe(1)
+  expect(lines[0]!.rounds).toEqual([])
+  const g = lines[0]!.gauge as Record<string, unknown>
+  expect(g.pass).toBe(true)
+  expect(g.agreesWithFloor).toBeUndefined()
+})
+
+test("Stop without gauge config behaves exactly as before (no gauge field)", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true" })
+  seedState(repo, SID, { edited: true })
+  await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: SID, cwd: repo }) })
+  const lines = sensorLines(repo)
+  expect(lines.length).toBe(1)
+  expect(lines[0]!.gauge).toBeUndefined()
+})

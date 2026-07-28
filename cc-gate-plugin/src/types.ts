@@ -46,6 +46,7 @@ export interface GateConfig {
   marker: boolean // default false (C2 verdict)
   sensor: string // default ".km/gate-outcomes.ndjson", relative to cwd
   checkTimeoutMs: number // default 300_000
+  gauge: boolean // default false — km-gauge shadow PoC opt-in (2026-07-28 pre-reg)
 }
 
 /** Injected IO for the pure core — tests fake this whole surface. */
@@ -77,6 +78,20 @@ export interface EmitPlan {
   exitCode: 0 | 2
 }
 
+/** km-gauge shadow-eval record (pre-reg §2.3) — attached to sensor lines,
+ * NEVER consulted by any gate decision. absent/present:false = no gauge. */
+export interface GaugeSensorField {
+  present: boolean
+  executable?: boolean
+  pass?: boolean
+  wouldBlock?: boolean
+  agreesWithFloor?: boolean
+  derivationMs?: number
+  confidence?: number
+  model?: string
+  n?: number
+}
+
 /** One ndjson sensor line — field names are SCHEMA PARITY with gate-plugin + host/app tags. */
 export interface SensorLine {
   ts: number
@@ -90,6 +105,7 @@ export interface SensorLine {
   durationMs: number
   host: string
   app: "claude-code"
+  gauge?: GaugeSensorField
 }
 
 /** Handlers return sensor lines; hook-cli owns the append (persist → sensor → emit). */
