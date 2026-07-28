@@ -124,6 +124,23 @@ test("km-panic is safe to run twice and in a repo with no gate.json", async () =
   expect(fs.existsSync(path.join(repo, "gate.json.disabled"))).toBe(true)
 })
 
+test("km-panic --help / -h / help print usage and exit 0", async () => {
+  const repo = mkRepo()
+  for (const flag of ["--help", "-h", "help"]) {
+    const r = await panic(repo, flag)
+    expect(r.exitCode).toBe(0)
+    expect(r.stdout).toContain("gauge-off")
+    expect(r.stdout).toContain("restore")
+  }
+})
+
+test("km-panic with no argument prints usage and exits non-zero", async () => {
+  const repo = mkRepo()
+  const r = await panic(repo)
+  expect(r.exitCode).not.toBe(0)
+  expect(r.stdout).toContain("usage")
+})
+
 test("km-panic rejects an unknown verb loudly", async () => {
   const repo = mkRepo()
   const r = await panic(repo, "explode")

@@ -20,7 +20,27 @@ DISABLED="gate.json.disabled"
 
 die() { echo "km-panic: $*" >&2; exit 2; }
 
+usage() {
+  cat <<'EOF'
+km-panic — stop kkamak NOW, without restarting Claude Code.
+
+  km-panic.sh status      what is armed right now (read-only)
+  km-panic.sh gauge-off   stop km-gauge refiner spend, keep the gate
+  km-panic.sh off         disable the gate entirely (recoverable)
+  km-panic.sh restore     undo `off`
+  km-panic.sh nuke        print the full plugin-removal commands
+
+Every action takes effect on the NEXT turn of a running session: gate.json
+is re-read on every hook call, so no restart and no lost context.
+Run from the repo whose gate you want to stop (uses $PWD).
+EOF
+}
+
 case "${1:-}" in
+  -h|--help|help)
+    usage
+    ;;
+
   status)
     echo "repo:    $PWD"
     if [ -f "$GATE" ]; then
@@ -87,6 +107,7 @@ EOF
     ;;
 
   *)
-    die "usage: km-panic.sh {status|gauge-off|off|restore|nuke}"
+    usage >&2
+    die "usage: unknown verb '${1:-}'"
     ;;
 esac
