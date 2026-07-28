@@ -12,3 +12,6 @@ data/
 logs/
 .playwright-mcp/
 term-bench2/leaderboard/cache/
+
+# km-panic escape hatch (host-local, never commit a disabled gate)
+gate.json.disabled

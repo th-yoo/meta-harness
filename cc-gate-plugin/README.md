@@ -140,6 +140,29 @@ file, shell-escape, process control). Refusals are logged as
 `gauge.refused: "<reason>"` with `executable: false` and never execute. All
 four checks haiku produced during the live smoke passed the guard unchanged.
 
+## Escape hatch — stopping kkamak mid-session
+
+`gate.json` is re-read on every hook call, so the gate can be stopped from
+*inside* a running session with no restart and no lost context. Run from the
+repo whose gate you want to stop (`scripts/km-panic.sh` in this monorepo):
+
+| Command | Effect | Scope |
+|---------|--------|-------|
+| `km-panic.sh status` | what is armed right now | read-only |
+| `km-panic.sh gauge-off` | stops km-gauge refiner spend, gate keeps running | next turn |
+| `km-panic.sh off` | disables the gate entirely (moves `gate.json` aside) | next turn |
+| `km-panic.sh restore` | undoes `off` | next turn |
+| `km-panic.sh nuke` | prints full plugin-removal commands | needs `/reload-plugins` |
+
+`KKAMAK_GAUGE=off` is read from the Claude Code process's environment, so it
+only applies if set **before** launching `claude` — it cannot stop a session
+already in flight. Use `gauge-off` for that.
+
+Built-in limits that already bound the damage: a cycle auto-allows after
+`rounds + 1` failed checks, Claude Code force-ends the turn after 8
+consecutive blocks, sending a new prompt preempts an open cycle, and 3
+consecutive internal errors disarm the gate for the session.
+
 ## Accepted v0.1 limitations
 
 - **Crash window:** If the process crashes between persisting state and appending to the sensor, one round may be lost. Rounds are redeemed on the next turn.
