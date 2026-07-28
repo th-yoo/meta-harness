@@ -337,7 +337,13 @@ adoption verdicts). Pre-registrations written before data throughout.
   falsity + gate-gaming invite = zero observations, hypothesis only. Audit
   659a712..HEAD: zero check/test weakening (+430 assertions) but ~1 block
   opportunity = no power. Plan: repair v1 (REPLACE next-action sentence),
-  v0 byte-identical, run the pre-registered A/B. **v1 repair NOT DONE.**
+  v0 byte-identical, run the pre-registered A/B. ~~v1 repair NOT DONE~~
+  **DONE `322f2c1` (07-29): composed at the IO seam** — round.ts tees the
+  raw check output, v1 built fresh (never reads kernel prose; collision
+  edge-cases structurally gone), rawOut outcome-gated to verify-failed,
+  fail-open without it; 2x adversarial architect plan review; §4b
+  re-registered pre-data (zero v1-tagged block rows existed); live-proven
+  both arms through the real hook binary.
   Process lesson memorised: no reason-drift without new observations.
 - **Rename (872cef8):** runtime store `.meta-harness/`→`.kkamak/`,
   `~/.config/meta-harness`→`~/.config/kkamak`, KKAMAK_HOME; auto-migrating

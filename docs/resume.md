@@ -96,7 +96,12 @@ defects #1 (wrong "your script") and #3 ("fix the script" = gate-gaming
 invite) have ZERO observations; #2 (re-run stall) is n=1, artifact lost.
 Audit 659a712..HEAD: zero check/test weakening (+430 assertions), but ~1
 block opportunity = no power. #3 stays watch-item, not design driver.
-V1 REPAIR NOT YET DONE. Process rule saved to memory: flag "same evidence,
+~~V1 REPAIR NOT YET DONE~~ **DONE `322f2c1` (07-29): v1 composed at the
+round.ts IO seam** (tees raw check output; never reads kernel prose —
+collision edge-cases structurally eliminated; rawOut outcome-gated;
+fail-open), v0 byte-identical, §4b re-registered pre-data (audit: zero
+v1-tagged block rows existed), 2x adversarial architect plan review,
+live-proven both arms. Process rule saved to memory: flag "same evidence,
 new interpretation" — no reason-drift without new observations.
 
 **2.1b DONE same night:** `cc-gate-plugin/` (plugin name **kkamak**) built via
