@@ -21,6 +21,7 @@ import { handleUserPromptSubmit } from "./core/prompt.ts"
 import { handleStop } from "./core/stop.ts"
 import { maybeSpawnGauge } from "./gauge/spawn.ts"
 import { shadowEvaluateAtStop } from "./gauge/shadow.ts"
+import { applyReinjectVariant, pickReinjectVariant } from "./reinject.ts"
 import type { CoreDeps, DeliveryMode, EmitPlan, SensorLine } from "./types.ts"
 
 const MH_CHILD_ENV = "MH_CHILD"
@@ -276,17 +277,27 @@ async function main(): Promise<void> {
   // (b) Sensor append never changes the decision. km-gauge shadow eval
   // (pre-reg §2.3) may attach a gauge field or fabricate a gauge-only line —
   // it runs AFTER the decision is final and can only shape what gets logged.
-  let line = sensor
+  // The arm is per-session and constant for the session's lifetime: a
+  // mid-experiment flip would contaminate both arms.
+  const arm = pickReinjectVariant(sessionId)
+  let line: SensorLine | undefined = sensor ? { ...sensor, reinject: arm } : undefined
   const cfg = parseGateConfig(gateConfigRaw)
   if (cfg?.gauge && process.env.KKAMAK_GAUGE !== "off") {
     const gaugeDeps = buildDeps(cwd, gateConfigRaw, GAUGE_CHECK_TIMEOUT_MS)
-    line = await shadowEvaluateAtStop(cwd, sessionId, cfg, sensor, gaugeDeps.runCheck, gaugeDeps)
+    const gauged = await shadowEvaluateAtStop(cwd, sessionId, cfg, line, gaugeDeps.runCheck, gaugeDeps)
+    // Re-stamp the arm: shadowEvaluateAtStop may FABRICATE a gauge-only line
+    // (fast-path Stop), which never passed through the stamping above.
+    line = gauged ? { ...gauged, reinject: arm } : undefined
   }
   if (line) appendSensor(cwd, gateConfigRaw, line, deps.log)
 
-  // (c) Emit the delivery-mode-shaped plan.
+  // (c) Emit the delivery-mode-shaped plan, with the session's reinject arm
+  // applied to block evidence (§4.4 experiment, pre-reg §4b).
   const mode = resolveDeliveryMode()
-  await emit(buildStopOutput(decision, mode))
+  const armed = decision.kind === "block"
+    ? { ...decision, evidence: applyReinjectVariant(decision.evidence, arm) }
+    : decision
+  await emit(buildStopOutput(armed, mode))
 }
 
 main().catch((e) => {

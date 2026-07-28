@@ -69,6 +69,24 @@ function render(r: ScoreResult, minN: number): string {
     out.push("")
   }
 
+  const { v0, v1 } = r.arms
+  if (v0.gateCycles + v1.gateCycles + v0.counts.interrupted + v1.counts.interrupted > 0) {
+    out.push(`── §4.4 reinject wording (within-workload randomised by session)`)
+    for (const [name, a] of [["v0 control ", v0], ["v1 candidate", v1]] as const) {
+      out.push(
+        `   ${name}  cycles ${String(a.gateCycles).padStart(4)}` +
+        `   M-catch ${pct(a.mCatch)}   M-exhaust ${pct(a.mExhaust)}   M-interrupt ${pct(a.mInterrupt)}`,
+      )
+    }
+    if (v0.underpowered || v1.underpowered) {
+      out.push(`   ⚠ an arm is under ${minN} cycles — no comparison yet`)
+    } else if (v1.mInterrupt !== null && v0.mInterrupt !== null && v1.mCatch !== null && v0.mCatch !== null) {
+      const wins = v1.mInterrupt <= v0.mInterrupt && v1.mCatch >= v0.mCatch
+      out.push(`   pre-registered rule: adopt v1 iff M-interrupt(v1) ≤ v0 AND M-catch(v1) ≥ v0 → ${wins ? "ADOPT v1" : "KEEP v0"}`)
+    }
+    out.push("")
+  }
+
   const gg = r.gauge
   if (gg.present) {
     out.push(`── km-gauge (shadow)`)

@@ -70,6 +70,41 @@ counts alongside every rate, and refuses to print a rate below `MIN_N`
 cycles (default 20) — a rate over 6 cycles is noise wearing a percentage
 sign.
 
+## 4b. First mechanism experiment — reinject wording (§4.4-class)
+
+**Observation (HISTORY.md SM2, 2026-07-28 dogfood):** after a block, the
+agent sometimes re-runs the check itself via Bash, which raises a permission
+prompt and stalls the fix loop in default/acceptEdits modes. Root cause: the
+shared kernel's reinject message ends *"Fix the artifact … and re-run it."*
+Correct for term-bench2 (the agent owns `verify.sh`); wrong for kkamak, where
+the **gate** runs the check.
+
+**Hypothesis:** appending an explicit "the gate re-runs the check itself; do
+not run it yourself" clause reduces stalled cycles.
+
+**Predicted movement:** **M-interrupt** falls (fewer stalls the human has to
+break) and **M-exhaust** falls or holds. Both are claimable without a
+counterfactual (§4). **M-catch must not fall** — that would mean the wording
+suppressed real fixes.
+
+**Assignment — within-workload randomisation.** The variant is chosen by a
+deterministic hash of `sessionID`, ~50/50, so BOTH arms accumulate
+concurrently over the same workload. This is what makes the comparison
+survive the §4.3 confound for a mechanism change: workload drift hits both
+arms equally, because they are interleaved rather than sequential. No
+scheduling, no baseline period.
+
+- `v0` — control: kernel wording, unmodified.
+- `v1` — candidate: kernel wording + the do-not-re-run clause.
+
+Every sensor line records `reinject: "v0" | "v1"`. `KKAMAK_REINJECT` forces a
+variant (testing/escape only; a forced run is still recorded and must be
+excluded from the comparison — it is not randomised).
+
+**Decision rule:** at ≥`MIN_N` cycles per arm, adopt `v1` iff M-interrupt(v1)
+≤ M-interrupt(v0) and M-catch(v1) is not lower. Otherwise keep `v0` and
+record the null — a null here is a real result, per the loop-1 precedent.
+
 ## 5. Non-goals (v0)
 
 No time-series/regression. No significance testing (counts only — the

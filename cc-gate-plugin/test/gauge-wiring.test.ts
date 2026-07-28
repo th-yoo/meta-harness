@@ -188,3 +188,93 @@ test("Stop without gauge config behaves exactly as before (no gauge field)", asy
   expect(lines.length).toBe(1)
   expect(lines[0]!.gauge).toBeUndefined()
 })
+
+// ── §4.4 reinject-wording experiment (pre-reg §4b) ───────────────────────
+
+test("blocked turn: v1 arm receives the do-not-re-run clause in the block reason", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "false", rounds: 2 }) // always fails -> block
+  seedState(repo, SID, { edited: true })
+
+  const proc = Bun.spawn(["bun", HOOK_CLI, "Stop"], {
+    stdin: new TextEncoder().encode(JSON.stringify({ session_id: SID, cwd: repo })),
+    stdout: "pipe",
+    stderr: "ignore",
+    env: { ...(process.env as Record<string, string>), KKAMAK_REINJECT: "v1" },
+  })
+  const [out] = await Promise.all([
+    new Response(proc.stdout as ReadableStream<Uint8Array>).text(),
+    proc.exited,
+  ])
+  const payload = JSON.parse(out)
+  expect(payload.decision).toBe("block")
+  expect(payload.reason.toLowerCase()).toContain("do not run it yourself")
+})
+
+test("blocked turn: v0 arm gets the kernel wording untouched", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "false", rounds: 2 })
+  seedState(repo, SID, { edited: true })
+
+  const proc = Bun.spawn(["bun", HOOK_CLI, "Stop"], {
+    stdin: new TextEncoder().encode(JSON.stringify({ session_id: SID, cwd: repo })),
+    stdout: "pipe",
+    stderr: "ignore",
+    env: { ...(process.env as Record<string, string>), KKAMAK_REINJECT: "v0" },
+  })
+  const [out] = await Promise.all([
+    new Response(proc.stdout as ReadableStream<Uint8Array>).text(),
+    proc.exited,
+  ])
+  const payload = JSON.parse(out)
+  expect(payload.decision).toBe("block")
+  expect(payload.reason.toLowerCase()).not.toContain("do not run it yourself")
+})
+
+test("every sensor line records the reinject arm, so the scorecard can split by it", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true" }) // passes -> accepted cycle, still records the arm
+  seedState(repo, SID, { edited: true })
+  await runHook({
+    event: "Stop",
+    stdin: JSON.stringify({ session_id: SID, cwd: repo }),
+    env: { KKAMAK_REINJECT: "v1" },
+  })
+  const lines = sensorLines(repo)
+  expect(lines[0]!.reinject).toBe("v1")
+})
+
+test("REGRESSION: the reinject arm survives the gauge path (both fields on one line)", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true", gauge: true })
+  seedState(repo, SID, { edited: true })
+  writeGaugeFile(gaugeDir(repo), {
+    v: 1, sessionID: SID, n: 1, ts: 1, model: "haiku", derivationMs: 5,
+    goalSummary: "g", criteria: ["c"], check: "true", confidence: 0.9,
+  })
+  await runHook({
+    event: "Stop",
+    stdin: JSON.stringify({ session_id: SID, cwd: repo }),
+    env: { KKAMAK_REINJECT: "v0" },
+  })
+  const l = sensorLines(repo)[0]!
+  expect(l.reinject).toBe("v0")
+  expect((l.gauge as Record<string, unknown>).present).toBe(true)
+})
+
+test("REGRESSION: a gauge-only line (no gate cycle) still records the arm", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true", gauge: true })
+  writeGaugeFile(gaugeDir(repo), {
+    v: 1, sessionID: SID, n: 1, ts: 1, model: "haiku", derivationMs: 5,
+    goalSummary: "g", criteria: ["c"], check: "true", confidence: 0.9,
+  })
+  await runHook({
+    event: "Stop",
+    stdin: JSON.stringify({ session_id: SID, cwd: repo }),
+    env: { KKAMAK_REINJECT: "v1" },
+  })
+  const l = sensorLines(repo)[0]!
+  expect(l.rounds).toEqual([])
+  expect(l.reinject).toBe("v1")
+})

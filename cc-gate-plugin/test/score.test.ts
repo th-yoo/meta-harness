@@ -196,3 +196,24 @@ test("CLI: unreadable file is reported, never a crash", async () => {
 test("CLI: bad --min-n exits 2", async () => {
   expect((await runCli(["--min-n", "zero"])).code).toBe(2)
 })
+
+// ── §4.4 arm split (pre-reg §4b) ─────────────────────────────────────────
+
+test("arms are reported separately so v0/v1 can be compared", () => {
+  const lines = [
+    ...MANY(10, { reinject: "v0" }),
+    ...MANY(8, { reinject: "v1" }),
+    ...MANY(2, { reinject: "v1", interrupted: true }),
+  ]
+  const { arms } = scoreLines(lines, { minN: 1 })
+  expect(arms.v0.gateCycles).toBe(10)
+  expect(arms.v1.gateCycles).toBe(8)
+  expect(arms.v1.counts.interrupted).toBe(2)
+  expect(arms.v1.mInterrupt).toBeCloseTo(2 / 10)
+})
+
+test("lines with no arm recorded are excluded from BOTH arms", () => {
+  const { arms } = scoreLines([...MANY(5, {}), ...MANY(3, { reinject: "v0" })], { minN: 1 })
+  expect(arms.v0.gateCycles).toBe(3)
+  expect(arms.v1.gateCycles).toBe(0)
+})

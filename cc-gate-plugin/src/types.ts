@@ -108,6 +108,8 @@ export interface SensorLine {
   host: string
   app: "claude-code"
   gauge?: GaugeSensorField
+  /** §4.4 reinject-wording arm for this session (pre-reg §4b). */
+  reinject?: "v0" | "v1"
 }
 
 /** Handlers return sensor lines; hook-cli owns the append (persist → sensor → emit). */
