@@ -114,6 +114,7 @@ export async function handleStop(
         evidence: result.evidence ?? "check failed",
         round: state.round + 1,
         roundsMax: cfg.rounds,
+        ...(result.rawOut !== undefined ? { rawOut: result.rawOut } : {}),
       },
     }
   }

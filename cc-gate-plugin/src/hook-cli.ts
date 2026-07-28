@@ -295,7 +295,7 @@ async function main(): Promise<void> {
   // applied to block evidence (§4.4 experiment, pre-reg §4b).
   const mode = resolveDeliveryMode()
   const armed = decision.kind === "block"
-    ? { ...decision, evidence: applyReinjectVariant(decision.evidence, arm) }
+    ? { ...decision, evidence: applyReinjectVariant(decision.evidence, arm, decision.rawOut) }
     : decision
   await emit(buildStopOutput(armed, mode))
 }

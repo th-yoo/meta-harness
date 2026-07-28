@@ -330,3 +330,13 @@ test("runCheck receives cfg.check verbatim", async () => {
 
   expect(deps.calls).toEqual(["make verify --strict"])
 })
+
+// ── rawOut threading into the block decision (composition design) ────────
+
+test("block decision carries rawOut from the failing check", async () => {
+  const state = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps({ results: [{ code: 1, out: "the raw tail" }] })
+  const r = await handleStop(state, { session_id: "s", cwd: "/w" }, `{"check":"c","rounds":2}`, deps)
+  expect(r.decision.kind).toBe("block")
+  if (r.decision.kind === "block") expect(r.decision.rawOut).toBe("the raw tail")
+})

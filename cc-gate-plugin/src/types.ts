@@ -67,7 +67,11 @@ export type StopDecision =
   | { kind: "allow" }
   | { kind: "allow-with-marker"; marker: string }
   | { kind: "allow-exhausted"; message: string }
-  | { kind: "block"; evidence: string; round: number; roundsMax: number }
+  // rawOut: the raw check output captured at the round.ts tee — the reinject
+  // composer builds v1's message from it instead of editing kernel prose.
+  // (Deliberate contract amendment per this file's protocol; consumers
+  // audited: output.ts reads only evidence/kind.)
+  | { kind: "block"; evidence: string; round: number; roundsMax: number; rawOut?: string }
 
 /** Delivery seam — applies to BLOCK decisions ONLY; allow-family is mode-independent. */
 export type DeliveryMode = "block-json" | "exit2-stderr" | "block-json+context"

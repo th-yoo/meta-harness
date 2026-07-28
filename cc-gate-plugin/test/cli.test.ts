@@ -392,3 +392,38 @@ test("KKAMAK_DELIVERY=exit2-stderr on a block -> exit 2, evidence on stderr, emp
     rmRepo(repo)
   }
 })
+
+// ── §4.4 composed v1 E2E (composition design; forced arm) ────────────────
+
+test("forced v1: composed block message — raw output present, kernel closing sentence absent", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "echo KM_E2E_FAILURE_MARKER; false", rounds: 2 })
+  seedState(repo, "sid-v1", { edited: true })
+  const r = await runHook({
+    event: "Stop",
+    stdin: JSON.stringify({ session_id: "sid-v1", cwd: repo }),
+    env: { KKAMAK_REINJECT: "v1" },
+  })
+  const payload = JSON.parse(r.stdout)
+  expect(payload.decision).toBe("block")
+  expect(payload.reason).toContain("KM_E2E_FAILURE_MARKER")
+  expect(payload.reason).not.toContain("re-run it")
+  expect(payload.reason).toContain("gate.json")
+  rmRepo(repo)
+})
+
+test("forced v1 + check timeout: timeout marker survives the composed tail", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "sleep 5", rounds: 2, checkTimeoutMs: 300 })
+  seedState(repo, "sid-v1t", { edited: true })
+  const r = await runHook({
+    event: "Stop",
+    stdin: JSON.stringify({ session_id: "sid-v1t", cwd: repo }),
+    env: { KKAMAK_REINJECT: "v1" },
+  })
+  const payload = JSON.parse(r.stdout)
+  expect(payload.decision).toBe("block")
+  expect(payload.reason).toContain("[kkamak: check timed out]")
+  expect(payload.reason).not.toContain("re-run it")
+  rmRepo(repo)
+})

@@ -39,29 +39,50 @@ test("both variants exist and are exactly the pre-registered pair", () => {
 
 // ── wording ──────────────────────────────────────────────────────────────
 
-test("v0 is the control: evidence passes through byte-identical", () => {
+// v1 is COMPOSED FRESH from the raw check output — it never reads or edits
+// the kernel's prose (the earlier append model produced a message containing
+// both "re-run it" and "do not run it yourself"; architect-reviewed
+// composition design, plan-to-fix-velvet-pizza).
+
+const RAW_OUT = "test_cancel FAILED — queued task never cancelled\n2/5 checks pass"
+const KERNEL_CLOSING = "Fix the artifact (or the script if it is wrong about the contract) and re-run it."
+
+test("v0 is the control: evidence passes through byte-identical, rawOut ignored", () => {
+  expect(applyReinjectVariant(KERNEL, "v0", RAW_OUT)).toBe(KERNEL)
   expect(applyReinjectVariant(KERNEL, "v0")).toBe(KERNEL)
 })
 
-test("v1 appends the do-not-re-run clause, preserving the original evidence", () => {
-  const out = applyReinjectVariant(KERNEL, "v1")
-  expect(out.startsWith(KERNEL)).toBe(true)
+test("v1 composes fresh: no kernel closing sentence, no self-contradiction", () => {
+  const out = applyReinjectVariant(KERNEL, "v1", RAW_OUT)
+  expect(out).not.toContain(KERNEL_CLOSING)
+  expect(out).not.toContain("re-run it")
   expect(out.toLowerCase()).toContain("do not run it yourself")
-  expect(out.length).toBeGreaterThan(KERNEL.length)
 })
 
-test("v1 states WHO runs the check — the actionable part of the clause", () => {
-  const out = applyReinjectVariant(KERNEL, "v1").toLowerCase()
-  expect(out).toContain("gate")
-  expect(out).toMatch(/automatically|itself/)
+test("v1 carries the raw check output and ownership-true framing", () => {
+  const out = applyReinjectVariant(KERNEL, "v1", RAW_OUT)
+  expect(out).toContain(RAW_OUT)
+  expect(out).toContain("not done")
+  expect(out).toContain("gate.json")
+  const lower = out.toLowerCase()
+  expect(lower).toContain("gate")
+  expect(lower).toMatch(/automatically|itself/)
+  expect(lower).not.toContain("your verification script") // ownership-true diagnosis
 })
 
-test("v1 is idempotent — a re-blocked cycle never stacks the clause twice", () => {
-  const once = applyReinjectVariant(KERNEL, "v1")
-  expect(applyReinjectVariant(once, "v1")).toBe(once)
+test("v1 tails long rawOut to the kernel's OUT_TAIL: last 600 chars, suffix-exact", () => {
+  const long = "X".repeat(1000) + "TAIL_END_MARKER"
+  const out = applyReinjectVariant(KERNEL, "v1", long)
+  const body = long.slice(-600)
+  expect(out).toContain(body)
+  expect(out).not.toContain("X".repeat(601)) // nothing beyond the tail leaks in
 })
 
-test("empty or whitespace evidence is left alone (nothing to append to)", () => {
-  expect(applyReinjectVariant("", "v1")).toBe("")
-  expect(applyReinjectVariant("   ", "v1")).toBe("   ")
+test("v1 without rawOut fails open: kernel evidence untransformed", () => {
+  expect(applyReinjectVariant(KERNEL, "v1")).toBe(KERNEL)
+  expect(applyReinjectVariant(KERNEL, "v1", undefined)).toBe(KERNEL)
+})
+
+test("v1 with empty rawOut also fails open (empty tail proves nothing)", () => {
+  expect(applyReinjectVariant(KERNEL, "v1", "")).toBe(KERNEL)
 })

@@ -191,9 +191,11 @@ test("Stop without gauge config behaves exactly as before (no gauge field)", asy
 
 // ── §4.4 reinject-wording experiment (pre-reg §4b) ───────────────────────
 
-test("blocked turn: v1 arm receives the do-not-re-run clause in the block reason", async () => {
+test("blocked turn: v1 arm receives the composed do-not-re-run message", async () => {
   const repo = mkRepo()
-  writeGate(repo, { check: "false", rounds: 2 }) // always fails -> block
+  // The check must EMIT output: v1 composes from the raw output and
+  // fails open to kernel text when there is none (bare `false` case).
+  writeGate(repo, { check: "echo wiring-fail; false", rounds: 2 })
   seedState(repo, SID, { edited: true })
 
   const proc = Bun.spawn(["bun", HOOK_CLI, "Stop"], {
@@ -209,6 +211,8 @@ test("blocked turn: v1 arm receives the do-not-re-run clause in the block reason
   const payload = JSON.parse(out)
   expect(payload.decision).toBe("block")
   expect(payload.reason.toLowerCase()).toContain("do not run it yourself")
+  expect(payload.reason).toContain("wiring-fail")
+  expect(payload.reason).not.toContain("re-run it") // contradiction gone
 })
 
 test("blocked turn: v0 arm gets the kernel wording untouched", async () => {

@@ -58,3 +58,17 @@ test("runSingleRound: runCheck rejection propagates as a thrown error", async ()
 
   await expect(runSingleRound(runCheck, "bun test")).rejects.toThrow("spawn failed")
 })
+
+// ── rawOut tee (composition design) ──────────────────────────────────────
+
+test("verify-failed round: rawOut equals the raw check output", async () => {
+  const r = await runSingleRound(async () => ({ code: 1, out: "raw failure text" }), "cmd")
+  expect(r.outcome).toBe("verify-failed")
+  expect(r.rawOut).toBe("raw failure text")
+})
+
+test("accepted round: rawOut absent (outcome-gated)", async () => {
+  const r = await runSingleRound(async () => ({ code: 0, out: "all good" }), "cmd")
+  expect(r.outcome).toBe("accepted")
+  expect(r.rawOut).toBeUndefined()
+})

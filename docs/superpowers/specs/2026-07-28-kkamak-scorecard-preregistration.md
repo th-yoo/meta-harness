@@ -79,8 +79,17 @@ shared kernel's reinject message ends *"Fix the artifact … and re-run it."*
 Correct for term-bench2 (the agent owns `verify.sh`); wrong for kkamak, where
 the **gate** runs the check.
 
-**Hypothesis:** appending an explicit "the gate re-runs the check itself; do
-not run it yourself" clause reduces stalled cycles.
+**Hypothesis:** a v1 message COMPOSED FRESH for the daily-usage ownership
+model (repo-owned check, gate re-runs it automatically, do not run it
+yourself) reduces stalled cycles vs the kernel's bench-context wording.
+
+*Correction lineage (pre-data, 2026-07-29):* the original registration
+described v1 as "kernel wording + appended clause" — that construction was
+self-contradictory (kept "and re-run it." while adding "do not run it
+yourself") and was replaced by composition at the IO seam before ANY block
+was ever delivered under v1: a stream audit found zero catch/exhausted
+sensor rows tagged v1, so no data existed to contaminate. Decision rule and
+MIN_N unchanged.
 
 **Predicted movement:** **M-interrupt** falls (fewer stalls the human has to
 break) and **M-exhaust** falls or holds. Both are claimable without a
@@ -94,8 +103,11 @@ survive the §4.3 confound for a mechanism change: workload drift hits both
 arms equally, because they are interleaved rather than sequential. No
 scheduling, no baseline period.
 
-- `v0` — control: kernel wording, unmodified.
-- `v1` — candidate: kernel wording + the do-not-re-run clause.
+- `v0` — control: kernel wording, unmodified (deployed baseline, verbatim).
+- `v1` — candidate: composed fresh from the raw check output (teed at the
+  round.ts IO seam): `"not done: the repository's completion check
+  failed:" + tail(rawOut, 600) + ownership-true next-action sentence`.
+  Fail-open: without rawOut, kernel evidence passes through untransformed.
 
 Every sensor line records `reinject: "v0" | "v1"`. `KKAMAK_REINJECT` forces a
 variant (testing/escape only; a forced run is still recorded and must be

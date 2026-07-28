@@ -17,12 +17,19 @@ import { runCompletionGate, type GateIO } from "../../vendor/complete-gate.ts"
 export async function runSingleRound(
   runCheck: (cmd: string) => Promise<{ code: number; out: string }>,
   check: string,
-): Promise<{ outcome: RoundOutcome; evidence?: string }> {
+): Promise<{ outcome: RoundOutcome; evidence?: string; rawOut?: string }> {
   let evidence: string | undefined
+  // Tee the raw check output at OUR IO seam: the reinject composer builds
+  // v1's message from it instead of editing the kernel's prose.
+  let lastOut: string | undefined
 
   const io: GateIO = {
     verifyExists: () => true,
-    runVerify: () => runCheck(check),
+    runVerify: async () => {
+      const r = await runCheck(check)
+      lastOut = r.out
+      return r
+    },
     readArtifact: () => "",
     writeArtifact: () => false,
     restoreArtifact: () => true,
@@ -40,5 +47,13 @@ export async function runSingleRound(
   // cycle, so under this single-shot harness a failure always presents
   // as "exhausted" — the per-round outcome + captured evidence is the
   // signal callers actually need.
-  return { outcome: result.rounds[0]!.outcome, evidence }
+  // rawOut only on verify-failed: if requirements/relations are ever wired
+  // in, a PASSING check output must never be composed under a "check
+  // failed" headline (architect review Q1).
+  const outcome = result.rounds[0]!.outcome
+  return {
+    outcome,
+    evidence,
+    ...(outcome === "verify-failed" && lastOut !== undefined ? { rawOut: lastOut } : {}),
+  }
 }

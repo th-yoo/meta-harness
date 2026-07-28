@@ -15,10 +15,16 @@
 export const REINJECT_VARIANTS = ["v0", "v1"] as const
 export type ReinjectVariant = (typeof REINJECT_VARIANTS)[number]
 
-/** Appended by v1. Says who runs the check and what to do instead. */
-const V1_CLAUSE =
-  "\n\nThe gate runs this check itself, automatically, when you finish. " +
-  "Do not run it yourself — just fix the problem above and end your turn."
+/** Kernel's tail length for check output (vendor/complete-gate.ts OUT_TAIL,
+ * unexported — same redeclaration precedent as gate-plugin/src/core.ts). */
+const OUT_TAIL = 600
+
+/** v1's next-action sentence: says who owns the check, who runs it, what to
+ * do. Replaces (never joins) the kernel's bench-context instruction. */
+const V1_SENTENCE =
+  "This check is configured by the repository (gate.json); the gate runs it " +
+  "automatically when you finish. Do not run it yourself — fix the failures " +
+  "above and end your turn."
 
 /** FNV-1a: tiny, stable across processes and hosts (Math.random is not). */
 function hash(s: string): number {
@@ -44,10 +50,26 @@ export function pickReinjectVariant(
   return hash(sessionID) % 2 === 0 ? "v0" : "v1"
 }
 
-/** Apply the arm's wording to the kernel's evidence text. */
-export function applyReinjectVariant(evidence: string, variant: ReinjectVariant): string {
+/**
+ * Produce the arm's block message.
+ *
+ * v0 = kernel evidence VERBATIM (deployed baseline).
+ * v1 = COMPOSED FRESH from the raw check output — never reads or edits the
+ * kernel's prose, so text-collision edge cases (self-referential output,
+ * idempotency, unknown shapes) cannot exist. Fail-open: without rawOut the
+ * kernel evidence passes through untransformed.
+ */
+export function applyReinjectVariant(
+  evidence: string,
+  variant: ReinjectVariant,
+  rawOut?: string,
+): string {
   if (variant === "v0") return evidence
-  if (!evidence.trim()) return evidence // nothing to append to
-  if (evidence.includes(V1_CLAUSE)) return evidence // re-blocked cycle: never stack
-  return evidence + V1_CLAUSE
+  if (rawOut === undefined || rawOut === "") return evidence // fail-open
+  return (
+    "not done: the repository's completion check failed:\n" +
+    rawOut.slice(-OUT_TAIL) +
+    "\n" +
+    V1_SENTENCE
+  )
 }
