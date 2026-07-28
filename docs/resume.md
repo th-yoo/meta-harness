@@ -22,8 +22,12 @@ quality 3/3 excellent; latency 10.7–40.9s → one-shot headless = M0 miss,
 interactive next-turn consume = works (dogfood shape). km-play (office)
 armed `gauge:true`; meta-harness NOT armed yet. Naming: **km-gauge**
 (go/no-go gauge metaphor; user dislikes .km/gauge file layout — PoC-only).
-Dogfood window (≥30 task-shaped prompts) NOT started — needs go + arming
-decision for meta-harness repo. tmux gotcha: send prompt text and Enter as
+**WINDOW NOW OPEN (f3be80d):** safety guard shipped first (guard.ts, 11 tests,
+189 total) — derived checks are model-generated shell, so anything not plainly
+read-only is refused unrun (`gauge.refused:<reason>`, executable:false); all 4
+live-smoke haiku checks pass it unchanged. Then `gate.json gauge:true`
+committed → every kkamak-loaded session in THIS repo feeds M0–M3, both hosts
+after pull. Analyse at ≥30 task-shaped prompts in the union stream. tmux gotcha: send prompt text and Enter as
 separate send-keys (bracketed paste swallows submit); pre-trust dirs.
 
 **2.1b DONE same night:** `cc-gate-plugin/` (plugin name **kkamak**) built via
