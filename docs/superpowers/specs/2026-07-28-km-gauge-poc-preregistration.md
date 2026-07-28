@@ -79,6 +79,24 @@ task carry-forward (gauge is per-prompt; "continue" prompts classify
 non-task-shaped and get no gauge). No §4.3 auto-keep/rollback integration.
 No opencode port (CC plugin only).
 
+## 5b. Live smoke 2026-07-28 (office, tmux, 4 real haiku calls) — LOOP CLOSED
+
+- **Full pipeline proven live**: task prompt → classifier → detached haiku
+  refiner → pending file → next-Stop shadow eval → sensor line with `gauge`
+  field (`pass:true, agreesWithFloor:true, executable:true, conf 0.95`) →
+  `.done.json` audit. Derived checks 3/3 correct + executable (round 3's ran
+  and PASSED against work it had never seen: doc-comment regex matched).
+- **Derivation latency 10.7s / 40.9s / 15.8s** (haiku, high variance).
+  One-shot headless turns finish first → 0/2 consumed at own Stop (M0 misses
+  by design of the run shape); interactive next-turn consumption worked 1/1 —
+  the dogfood shape the PoC targets.
+- Ops gotchas: tmux send-keys needs text and Enter as SEPARATE sends
+  (bracketed-paste swallows combined submit); first-run trust dialog stalls
+  scripted interactive sessions (pre-trust the dir once).
+- Noted semantics: deferred consumption evaluates prompt-N's gauge after
+  prompt-N+1's work started — acceptable shadow noise, revisit at blocking
+  pilot alongside the storage-shape reservation.
+
 ## 6. Known risks
 
 - Fast turns beat the async refiner → M0 measures it; mitigation candidates

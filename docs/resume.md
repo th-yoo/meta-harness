@@ -13,6 +13,19 @@ install cc-gate-plugin + km-crank; all 4 suites green — opencode-plugin
 hooks Stop/PostToolUse/UserPromptSubmit, ~32 tok always-on). CC 2.1.220.
 Office box ready for queue items (b)/(c)/(d) — awaiting go for any spend.
 
+**✅ SAME DAY (office): km-gauge PoC shipped + LIVE-PROVEN** (955fbec + spec
+addendum). User-approved pre-reg (M0–M3) → TDD build (suite 120→178) →
+tmux live smoke, 4 real haiku refiner calls: full loop closed — classifier →
+detached refiner → pending → next-Stop shadow eval → sensor `gauge` field
+(pass:true agreesWithFloor:true conf .95) → .done.json audit. Derivation
+quality 3/3 excellent; latency 10.7–40.9s → one-shot headless = M0 miss,
+interactive next-turn consume = works (dogfood shape). km-play (office)
+armed `gauge:true`; meta-harness NOT armed yet. Naming: **km-gauge**
+(go/no-go gauge metaphor; user dislikes .km/gauge file layout — PoC-only).
+Dogfood window (≥30 task-shaped prompts) NOT started — needs go + arming
+decision for meta-harness repo. tmux gotcha: send prompt text and Enter as
+separate send-keys (bracketed paste swallows submit); pre-trust dirs.
+
 **2.1b DONE same night:** `cc-gate-plugin/` (plugin name **kkamak**) built via
 15-node parallel-DAG subagent waves per the plan; suites 120+26 green, tsc
 clean; wave reviews + final merge-gate review (2 blocking findings fixed:
