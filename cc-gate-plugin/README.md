@@ -140,6 +140,26 @@ file, shell-escape, process control). Refusals are logged as
 `gauge.refused: "<reason>"` with `executable: false` and never execute. All
 four checks haiku produced during the live smoke passed the guard unchanged.
 
+## Scorecard
+
+```bash
+bun cc-gate-plugin/src/score-cli.ts [sensor.ndjson ...] [--min-n N] [--pool] [--json]
+```
+
+Read-only aggregation of the sensor stream into four rates — **M-catch**
+(gate blocked, agent fixed, converged), **M-exhaust** (never converged),
+**M-interrupt** (you preempted), **M-tax** (median cost when nothing was
+wrong). Grouped by `(check, host)`, so a repo's own dev sessions never pool
+with real work unless you pass `--pool`. Rates are suppressed below `--min-n`
+(default 20) rather than printed as noise.
+
+What it can support: *a fall in M-exhaust or M-interrupt at non-decreasing
+M-catch* — both measure kkamak being wrong or annoying, and neither needs a
+counterfactual. What it cannot: any claim about M-catch alone, or about
+whether kkamak is worth running — the sensor never observes what the agent
+would have shipped ungated. Definitions and limits:
+`docs/superpowers/specs/2026-07-28-kkamak-scorecard-preregistration.md`.
+
 ## Escape hatch — stopping kkamak mid-session
 
 `gate.json` is re-read on every hook call, so the gate can be stopped from
