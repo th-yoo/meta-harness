@@ -9,7 +9,7 @@ staging), then posts a SITREP to the user's Slack DM.
 ## What it does, each run
 
 1. Reads `.km/gate-outcomes.ndjson` from each repo in `REPOS`
-   (`~/z2/kkamak`, `~/z2/squad`, `~/z2/km-play`), resuming from the
+   (`~/z2/meta-harness`, `~/z2/squad`, `~/z2/km-play`), resuming from the
    last recorded byte offset per file.
 2. If fewer than 10 new lines have accumulated across all repos AND the last
    completed round was under 7 days ago AND `--force` wasn't passed: prints

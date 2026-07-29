@@ -63,7 +63,7 @@ function expandHome(p: string): string {
   return p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p
 }
 
-const REPOS = ["~/z2/kkamak", "~/z2/squad", "~/z2/km-play"].map(expandHome)
+const REPOS = ["~/z2/meta-harness", "~/z2/squad", "~/z2/km-play"].map(expandHome)
 /** This repo's root — where km-crank/calibration.json (the §4.3 FA registry)
  * and the staleness git scope live, regardless of which repo hosts a trial. */
 const META_REPO_ROOT = path.resolve(import.meta.dir, "..", "..")
