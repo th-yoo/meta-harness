@@ -5,6 +5,37 @@ does NOT transfer; this file + the repo are the source of truth.)
 
 ## ⏸ SESSION END 2026-07-29 late (office `yoo-dev`) — GA2+GA3: §4.3 REGISTERED · GAUGE v1 M2 FAIL → v2 EXTRACTOR BUILT + DEPLOYED + WINDOW OPEN + LIVE-MEASURED · NEXT = §4.3 BUILD + EVENT-RATE MULTIPLIERS (need go)
 
+**MacBook FIRST STEPS (before any work):**
+```
+cd ~/z2/meta-harness && git pull
+claude plugin marketplace update kkamak-local
+claude plugin uninstall kkamak && claude plugin install kkamak@kkamak-local
+claude plugin list   # MUST show kkamak 0.2.0 — cache-path picking lies, list is authority
+```
+Store self-migrates on first plugin run; after the refresh MacBook joins the
+v2 gauge window automatically.
+
+**RESUME PROMPT (paste into the MacBook session):**
+```
+Resume kkamak (meta-harness), MacBook, 2026-07-29+. Read docs/resume.md FIRST
+(top block "SESSION END 2026-07-29 late (office yoo-dev) — GA2+GA3") +
+minimal/HISTORY.md GA2/GA3 as needed. Repo pushed through 18ca7f3.
+
+WHERE WE ARE: §4.3 trial-mode pre-reg REGISTERED. Gauge v1 M2 FAIL (shadow
+forever) → v2 extractor BUILT + DEPLOYED (0.2.0), fresh window OPEN —
+MacBook joins after the cache refresh above. Watch: class-C starvation
+trend ($() idiom, 0/4), ≥5-C validity floor; orphan supersede eats pendings
+under rapid prompting.
+
+QUEUE (GO before any spend): (1) §4.3 prerequisite build §11 (~4-6d);
+(2) event-rate multipliers: squad dogfood (.km/ into squad .gitignore +
+/kkamak:init) — MacBook install done via the refresh above.
+
+RULES: explicit go before spend · no bare "gate" · pre-data amendments only
+until data exists · `claude plugin list` = cache authority · never delete a
+running session's plugin cache dir.
+```
+
 **State (full detail: HISTORY.md GA2):** **§4.3 trial-mode pre-registration
 REGISTERED** (`docs/superpowers/specs/2026-07-29-trial-mode-gate-outcomes-preregistration.md`,
 commits `fdd0055..59c4924`, SDD + 3 architect-review iterations, 24 findings
