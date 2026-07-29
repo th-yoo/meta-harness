@@ -34,10 +34,26 @@ mutually exclusive. One decision axis, one scheduling axis:
 
 | Class | The completion criterion lives... | Action |
 |---|---|---|
-| **A** | nowhere derivable (question / review / judgment / plan goals) | no check, reason `no-criterion` |
+| **A1** | nowhere — no evaluation needed (greeting / chat / trivial) | no check, reason `no-eval-needed` |
+| **A2** | in reply/behavior QUALITY — real criterion, not shell-checkable (research / review / judgment / plan goals) | no check, reason `not-shell-checkable` |
 | **B** | in the repo-owned check already ("fix the failing tests", "make the build green") | no check, reason `floor-covered` |
 | **C** | **in the prompt text, artifact inside the repo** | extract check; schedule by horizon |
 | **D** | exists, but requires invention or out-of-repo observation | no check, reason `not-extractable` or `out-of-scope` |
+
+*Amendment lineage (pre-data, 2026-07-29):* the original registration had a
+single class A (`no-criterion`), conflating "nothing to evaluate" with
+"evaluation needed but not shell-checkable" — user-identified the same day,
+before any v2 data existed. A2 is deliberately NOT served by gauge: deriving
+reply-quality judgment would repeat v1's invention mistake one level up with
+no deterministic enforcement possible (L4: LLM detectors ≈63%). The sound A2
+instruments are the calibrated judge-shadow path (opencode
+`SessionRecord.judge` precedent, agreement-vs-human-labels) and human
+`/mh-score` — out of gauge's scope. What v2 DOES take on: measuring the A2
+share of daily work (measurement before instrument) — if the window shows A2
+is a large share, that number is the case for investing in judge-shadow
+calibration; if small, learned cheap. Behavior (as opposed to reply content)
+is already objectively graded by the sensor stream itself (§4.3's reward
+channel); A2's gap is reply content only.
 
 Horizon (C only): `single-turn` (evaluate at next Stop) vs `multi-turn`
 (two-strike deferred confirmation, §3). "Task-shaped" (v1 classifier)
@@ -53,7 +69,7 @@ v1's failure restated in these terms: it collapsed B, C, D into one
    no spawn, no class.
 2. **Refiner v2 = classifier + extractor (one haiku call, unchanged cost):**
    output schema
-   `{goalSummary, class: "A"|"B"|"C"|"D", reason, criteria[], check: string|null,
+   `{goalSummary, class: "A1"|"A2"|"B"|"C"|"D", reason, criteria[], check: string|null,
    horizon: "single-turn"|"multi-turn"|null, confidence}`.
    `check` non-null iff class C. The check may reference ONLY paths that
    appear literally in the prompt text, and must test a property the prompt
@@ -109,6 +125,11 @@ timestamp is the cut).
   of ≤10 null-check lines at review — how many were actually extractable C.
   Feeds the next design round; deliberately not a pass/fail criterion
   (small-N honesty).
+- **M5 A2 share (descriptive, no bar — amendment 2026-07-29):** fraction of
+  task-shaped prompts classified A2 (`not-shell-checkable`) over the window.
+  This is the sizing number for whether a calibrated reply-quality
+  judge-shadow instrument is worth building; it decides investment, never a
+  gauge verdict.
 
 **Decision rule (locked):** all of M0/M1v2/M2/M3 pass → a blocking-pilot
 design may be written (folded into the §4.3 trial machinery, per the v1
