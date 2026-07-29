@@ -282,3 +282,56 @@ test("REGRESSION: a gauge-only line (no gate cycle) still records the arm", asyn
   expect(l.rounds).toEqual([])
   expect(l.reinject).toBe("v1")
 })
+
+// ── shadow invariant lock (M0-M3 window closed 2026-07-29, M2 FAIL) ──────
+// A would-block gauge must never surface in the emitted Stop decision: the
+// gauge shapes ONLY the sensor line. This is the structural guarantee the
+// 90% false-block rate is contained by — lock it against refactors.
+
+test("wouldBlock gauge + passing floor → emitted decision is still allow", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true", gauge: true })
+  seedState(repo, SID, { edited: true })
+  writeGaugeFile(gaugeDir(repo), {
+    v: 1,
+    sessionID: SID,
+    n: 1,
+    ts: 1,
+    model: "haiku",
+    derivationMs: 5,
+    goalSummary: "g",
+    criteria: ["c"],
+    check: "false", // derived check fails -> wouldBlock: true
+    confidence: 0.9,
+  })
+
+  const proc = Bun.spawn(["bun", HOOK_CLI, "Stop"], {
+    stdin: new TextEncoder().encode(JSON.stringify({ session_id: SID, cwd: repo })),
+    stdout: "pipe",
+    stderr: "ignore",
+    env: (() => {
+      const env = { ...(process.env as Record<string, string>) }
+      delete env.MH_CHILD
+      delete env.KM_CHILD
+      delete env.KKAMAK_DELIVERY
+      delete env.KKAMAK_GAUGE
+      return env
+    })(),
+  })
+  const [out, code] = await Promise.all([
+    new Response(proc.stdout as ReadableStream<Uint8Array>).text(),
+    proc.exited,
+  ])
+
+  // Allow-family: exit 0, no block payload on stdout.
+  expect(code).toBe(0)
+  expect(out).not.toContain('"decision"')
+
+  // The would-block verdict landed ONLY on the sensor line.
+  const l = sensorLines(repo)[0]!
+  expect(l.accepted).toBe(true)
+  expect(l.gateExhausted).toBe(false)
+  const g = l.gauge as Record<string, unknown>
+  expect(g.wouldBlock).toBe(true)
+  expect(g.agreesWithFloor).toBe(false)
+})
