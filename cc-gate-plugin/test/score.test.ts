@@ -108,6 +108,19 @@ test("grouped by (check, host) so kkamak-dev never pools with real work by defau
   expect(groups.map((g) => g.gateCycles).sort()).toEqual([1, 2, 3])
 })
 
+test("(check, host) group key never collides across the field boundary", () => {
+  // Regression for the old NUL-joined key: two different (check, host)
+  // pairs that would produce the SAME joined string under a naive
+  // separator must still land in separate groups.
+  const lines = [
+    ...MANY(2, { check: "a\tb", host: "c" }),
+    ...MANY(3, { check: "a", host: "b\tc" }),
+  ]
+  const { groups } = scoreLines(lines, { minN: 1 })
+  expect(groups.length).toBe(2)
+  expect(groups.map((g) => g.gateCycles).sort()).toEqual([2, 3])
+})
+
 test("pool: true merges every group into one, as an explicit opt-in", () => {
   const lines = [
     ...MANY(3, { check: "a", host: "h1" }),
