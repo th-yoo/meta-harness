@@ -104,3 +104,61 @@ test("runCheck throw → executable false, never throws out", async () => {
   expect(g.present).toBe(true)
   expect(g.executable).toBe(false)
 })
+
+// ── v2: presence-conditional passthrough (km-gauge v2 extractor, Task 2) ──
+// Gated on gauge.class being present — a v1 GaugeFile (no class, see BASE
+// above) carries none of these fields, proven by the untouched toEqual test
+// at the top of this file staying green byte-for-byte.
+
+test("v2: class C executable → base carries class + horizon (reason null → omitted)", async () => {
+  const g = await evaluateGauge(
+    { ...BASE, v: 2, class: "C", reason: null, horizon: "single-turn" },
+    { ran: true, accepted: true },
+    ok,
+  )
+  expect(g.class).toBe("C")
+  expect(g.horizon).toBe("single-turn")
+  expect(g.reason).toBeUndefined()
+  expect(g.executable).toBe(true)
+})
+
+test("v2: class B, null check → base carries class + reason, executable false, no horizon", async () => {
+  const g = await evaluateGauge(
+    { ...BASE, v: 2, check: null, class: "B", reason: "floor-covered", horizon: null },
+    { ran: true, accepted: true },
+    ok,
+  )
+  expect(g.class).toBe("B")
+  expect(g.reason).toBe("floor-covered")
+  expect(g.executable).toBe(false)
+  expect(g.horizon).toBeUndefined()
+})
+
+test("v2: downgraded passthrough", async () => {
+  const downgraded = {
+    fromClass: "C" as const,
+    fromCheck: "test -f x.ts",
+    rule: "path-not-in-prompt" as const,
+    token: "x.ts",
+  }
+  const g = await evaluateGauge(
+    { ...BASE, v: 2, check: null, class: "D", reason: "not-extractable", horizon: null, downgraded },
+    { ran: true, accepted: true },
+    ok,
+  )
+  expect(g.downgraded).toEqual(downgraded)
+})
+
+test("v2: no class present → no class/reason/horizon/downgraded fields even if somehow set", async () => {
+  const g = await evaluateGauge(BASE, { ran: true, accepted: true }, ok)
+  expect(g.class).toBeUndefined()
+  expect(g.reason).toBeUndefined()
+  expect(g.horizon).toBeUndefined()
+  expect(g.downgraded).toBeUndefined()
+})
+
+test("v2: strike passthrough — independent of class presence", async () => {
+  const g = await evaluateGauge({ ...BASE, v: 2, strike: 1 }, { ran: true, accepted: true }, ok)
+  expect(g.strike).toBe(1)
+  expect(g.class).toBeUndefined()
+})

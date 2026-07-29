@@ -28,6 +28,20 @@ export async function evaluateGauge(
     confidence: gauge.confidence,
     model: gauge.model,
     n: gauge.n,
+    // v2 passthrough (validate.ts's persisted, already-validated result) —
+    // presence-conditional on gauge.class: a v1 GaugeFile carries none of
+    // this. reason/horizon are separately null-stripped (GaugeFile allows
+    // null for "not applicable to this class"; GaugeSensorField's contract
+    // is optional-when-absent, never a live null).
+    ...(gauge.class !== undefined
+      ? {
+          class: gauge.class,
+          ...(gauge.reason != null ? { reason: gauge.reason } : {}),
+          ...(gauge.horizon != null ? { horizon: gauge.horizon } : {}),
+          ...(gauge.downgraded ? { downgraded: gauge.downgraded } : {}),
+        }
+      : {}),
+    ...(gauge.strike !== undefined ? { strike: gauge.strike } : {}),
   }
 
   if (!gauge.check) return base

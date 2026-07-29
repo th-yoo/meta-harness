@@ -50,6 +50,8 @@ test("happy path: writes req file, bumps daily count, spawns refiner", () => {
   )
   expect(req.prompt).toBe(PROMPT)
   expect(req.sessionID).toBe("sid-1")
+  expect(req.v).toBe(2)
+  expect(req.floorCheck).toBe(GAUGE_ON!.check)
 
   const count = JSON.parse(fs.readFileSync(path.join(gaugeDir(repo), "daily-count"), "utf-8"))
   expect(count.count).toBe(1)

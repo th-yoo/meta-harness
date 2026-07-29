@@ -24,12 +24,7 @@ export interface GaugeDerivation {
 const CLASS_LITERALS: readonly string[] = ["A1", "A2", "B", "C", "D"]
 const HORIZON_LITERALS: readonly string[] = ["single-turn", "multi-turn"]
 
-// TEMPORARY(v2-T2): the "" default exists only so refiner-cli.ts's current
-// single-arg call site (Task 2/3 scope, not touched here) keeps compiling
-// against this Task-1 signature change. Task 2 must drop this default once
-// refiner-cli.ts is wired to pass cfg.check explicitly — an unarmed floor
-// should be an explicit "" argument from the caller, not a silent fallback.
-export function buildRefinerPrompt(userPrompt: string, floorCheck = ""): string {
+export function buildRefinerPrompt(userPrompt: string, floorCheck: string): string {
   return [
     "You classify a coding-agent task prompt and, ONLY when possible, EXTRACT a completion check from it.",
     "Output ONLY a JSON object, no prose, no markdown fences:",

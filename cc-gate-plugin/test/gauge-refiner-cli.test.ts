@@ -26,13 +26,17 @@ function mkRepo(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "km-gauge-rcli-"))
 }
 
-function writeReq(repo: string, sessionID: string, n: number, prompt: string): void {
+// floorCheck omitted (undefined) by default → writes a v1-shaped req, no
+// floorCheck key at all (pre-Task-2 spawn.ts shape); pass a string to write
+// a fresh v2-shaped req instead.
+function writeReq(repo: string, sessionID: string, n: number, prompt: string, floorCheck?: string): void {
   const dir = gaugeDir(repo)
   fs.mkdirSync(dir, { recursive: true })
-  fs.writeFileSync(
-    path.join(dir, `${sessionID}-${n}.req.json`),
-    JSON.stringify({ v: 1, sessionID, n, ts: 1, prompt }),
-  )
+  const body: Record<string, unknown> =
+    floorCheck === undefined
+      ? { v: 1, sessionID, n, ts: 1, prompt }
+      : { v: 2, sessionID, n, ts: 1, prompt, floorCheck }
+  fs.writeFileSync(path.join(dir, `${sessionID}-${n}.req.json`), JSON.stringify(body))
 }
 
 function stubBin(repo: string, script: string): string {
@@ -56,17 +60,21 @@ async function runRefinerCli(repo: string, sessionID: string, n: number, bin: st
 // malformed (M0 miss), same as any other refiner-cli.ts caller.
 const DERIVATION = { goalSummary: "g", class: "C", criteria: ["c1"], check: "test -f done.txt", confidence: 0.9 }
 
-test("E2E: valid stub output → gauge file written, req removed, KM_CHILD set in child", async () => {
-  const repo = mkRepo()
-  writeReq(repo, "sid-9", 1, "create done.txt")
-  // Stub proves it received a prompt on stdin and had KM_CHILD=1, then emits the wrapper.
-  const bin = stubBin(
+function stubBinFor(repo: string, derivation: unknown): string {
+  return stubBin(
     repo,
     `PROMPT=$(cat)
 [ -n "$PROMPT" ] || exit 3
 [ "$KM_CHILD" = "1" ] || exit 4
-echo '${JSON.stringify({ type: "result", result: JSON.stringify(DERIVATION) }).replace(/'/g, `'\\''`)}'`,
+echo '${JSON.stringify({ type: "result", result: JSON.stringify(derivation) }).replace(/'/g, `'\\''`)}'`,
   )
+}
+
+test("E2E: valid stub output → gauge file written, req removed, KM_CHILD set in child", async () => {
+  const repo = mkRepo()
+  writeReq(repo, "sid-9", 1, "create done.txt", "")
+  // Stub proves it received a prompt on stdin and had KM_CHILD=1, then emits the wrapper.
+  const bin = stubBinFor(repo, DERIVATION)
   await runRefinerCli(repo, "sid-9", 1, bin)
 
   const gauge = JSON.parse(
@@ -76,9 +84,44 @@ echo '${JSON.stringify({ type: "result", result: JSON.stringify(DERIVATION) }).r
   expect(gauge.check).toBe("test -f done.txt")
   expect(gauge.sessionID).toBe("sid-9")
   expect(gauge.n).toBe(1)
-  expect(gauge.v).toBe(1)
+  // v2: the persisted pending is the run-through-validateDerivation result —
+  // v:2 and it carries the validated class (run pre-persist, not raw parse).
+  expect(gauge.v).toBe(2)
+  expect(gauge.class).toBe("C")
   expect(typeof gauge.derivationMs).toBe("number")
   expect(fs.existsSync(path.join(gaugeDir(repo), "sid-9-1.req.json"))).toBe(false)
+})
+
+test("E2E: class C with a path NOT in the prompt → validated down to D pre-persist (downgraded, check null)", async () => {
+  const repo = mkRepo()
+  // Prompt names no path at all — the stub's check names "done.txt", which
+  // validateDerivation cannot find verbatim in the prompt below.
+  writeReq(repo, "sid-9", 4, "please finish the task", "")
+  const derivation = { goalSummary: "g", class: "C", criteria: ["c1"], check: "test -f done.txt", confidence: 0.9 }
+  const bin = stubBinFor(repo, derivation)
+  await runRefinerCli(repo, "sid-9", 4, bin)
+
+  const gauge = JSON.parse(fs.readFileSync(path.join(gaugeDir(repo), "sid-9-4.json"), "utf-8"))
+  expect(gauge.v).toBe(2)
+  expect(gauge.class).toBe("D")
+  expect(gauge.check).toBeNull()
+  expect(gauge.downgraded?.rule).toBe("path-not-in-prompt")
+  expect(gauge.downgraded?.token).toBe("done.txt")
+})
+
+test("E2E: stale v1-shaped req (no floorCheck key) still produces a valid v2 pending (floorCheck '' path)", async () => {
+  const repo = mkRepo()
+  // No 5th arg → writeReq emits the OLD v1 req shape: no floorCheck key at
+  // all. refiner-cli.ts must tolerate this (typeof req.floorCheck ===
+  // "string" ? it : "") rather than crash or silently drop the request.
+  writeReq(repo, "sid-9", 5, "create done.txt")
+  const bin = stubBinFor(repo, DERIVATION)
+  await runRefinerCli(repo, "sid-9", 5, bin)
+
+  const gauge = JSON.parse(fs.readFileSync(path.join(gaugeDir(repo), "sid-9-5.json"), "utf-8"))
+  expect(gauge.v).toBe(2)
+  expect(gauge.class).toBe("C")
+  expect(gauge.check).toBe("test -f done.txt")
 })
 
 test("E2E: garbage stub output → no gauge file, req still cleaned up, exit 0", async () => {

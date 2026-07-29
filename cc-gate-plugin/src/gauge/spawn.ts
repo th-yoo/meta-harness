@@ -45,7 +45,7 @@ export function maybeSpawnGauge(input: SpawnGaugeInput): number | undefined {
     fs.mkdirSync(dir, { recursive: true })
     fs.writeFileSync(
       path.join(dir, `${sessionID}-${n}.req.json`),
-      JSON.stringify({ v: 1, sessionID, n, ts: now, prompt }),
+      JSON.stringify({ v: 2, sessionID, n, ts: now, prompt, floorCheck: cfg.check }),
     )
     bumpDailyCount(dir, date)
 

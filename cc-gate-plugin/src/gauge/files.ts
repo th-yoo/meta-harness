@@ -6,20 +6,24 @@
 //   daily-count                {date, count} refiner-call cap (fail-closed on corruption)
 import fs from "node:fs"
 import path from "node:path"
+import type { GaugeHorizon, GaugePromptClass } from "../types.ts"
+import type { Downgrade } from "./validate.ts"
 
 /** Persisted gauge file payload — derivation + provenance.
  *
  * v2-extractor note (2026-07-29, Task 1): deliberately NOT `extends
  * GaugeDerivation` — GaugeDerivation gained required class/reason/horizon
- * fields for the v2 refiner+validate pipeline, but this v1 GaugeFile shape
- * (and every writer/fixture that still constructs it) is untouched until
- * Task 2 wires validate.ts's ValidatedDerivation through here. Redeclaring
- * the same four v1 fields locally keeps files.ts/spawn.ts/refiner-cli.ts/
- * evaluate.ts/shadow.ts and their tests compiling unmodified in the
- * meantime — see task-1-brief.md's GaugeDerivation-required/GaugeFile-
- * optional split. */
+ * fields for the v2 refiner+validate pipeline, but this GaugeFile shape
+ * keeps those fields OPTIONAL so v1 literals (and every fixture that still
+ * constructs one) keep typechecking unmodified.
+ *
+ * Task 2: `v` widens to 1|2 and gains the validated-extraction fields
+ * (class/reason/horizon/downgraded/strike) — all optional, all additive.
+ * A v2 pending file is the refiner-cli.ts output of validateDerivation
+ * (validate.ts) already run: shadow.ts trusts it as-is. `strike` is
+ * Task 3's two-strike policy state on a multi-turn class-C pending. */
 export interface GaugeFile {
-  v: 1
+  v: 1 | 2
   sessionID: string
   n: number
   ts: number
@@ -29,6 +33,11 @@ export interface GaugeFile {
   criteria: string[]
   check: string | null
   confidence: number
+  class?: GaugePromptClass
+  reason?: string | null
+  horizon?: GaugeHorizon | null
+  downgraded?: Downgrade
+  strike?: 1
 }
 
 export function gaugeDir(cwd: string): string {

@@ -233,6 +233,21 @@ test("verbatim-in-prompt requires a token boundary: 'app.js' inside 'webapp.jsx'
   expect(v.downgraded?.rule).toBe("path-not-in-prompt")
 })
 
+// Deferred minor from the Task-1 fix pass (2026-07-29): tokenInPrompt scans
+// ALL occurrences, not just the first — a bad-flank hit earlier in the
+// prompt must not short-circuit a later boundary-clean hit.
+test("multi-occurrence: first occurrence has a bad flank, second occurrence is clean → C", () => {
+  const d = mkDerivation({ check: "test -f a.ts" })
+  const v = validateDerivation({
+    derivation: d,
+    prompt: "thisisnota.tsfile isn't real, but a.ts is",
+    floorCheck: "",
+    repoRoot: REPO,
+  })
+  expect(v.class).toBe("C")
+  expect(v.downgraded).toBeUndefined()
+})
+
 test("verbatim-in-prompt: a sentence-final period is a valid boundary", () => {
   const d = mkDerivation({ check: "test -f done.txt" })
   const v = validateDerivation({

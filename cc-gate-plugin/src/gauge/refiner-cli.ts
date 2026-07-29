@@ -13,6 +13,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { buildRefinerPrompt, parseRefinerOutput } from "./refiner.ts"
+import { validateDerivation } from "./validate.ts"
 import { gaugeDir, writeGaugeFile } from "./files.ts"
 
 const CALL_TIMEOUT_MS = 60_000
@@ -30,14 +31,14 @@ export function extractResultText(text: string): string | undefined {
   return undefined
 }
 
-async function callModel(prompt: string): Promise<string | undefined> {
+async function callModel(prompt: string, floorCheck: string): Promise<string | undefined> {
   const bin = process.env.KKAMAK_GAUGE_CLAUDE_BIN ?? "claude"
   const model = process.env.KKAMAK_GAUGE_MODEL ?? "haiku"
 
   let proc: ReturnType<typeof Bun.spawn>
   try {
     proc = Bun.spawn([bin, "-p", "--output-format", "json", "--model", model], {
-      stdin: new TextEncoder().encode(buildRefinerPrompt(prompt)),
+      stdin: new TextEncoder().encode(buildRefinerPrompt(prompt, floorCheck)),
       stdout: "pipe",
       stderr: "ignore",
       env: { ...process.env, KM_CHILD: "1" },
@@ -77,25 +78,39 @@ async function main(): Promise<void> {
   const reqPath = path.join(dir, `${sessionID}-${n}.req.json`)
 
   let prompt: string
+  let floorCheck: string
   try {
     const req = JSON.parse(fs.readFileSync(reqPath, "utf-8"))
     if (typeof req?.prompt !== "string" || !req.prompt) throw new Error("bad req")
     prompt = req.prompt
+    // Stale v1 req tolerance: no floorCheck key at all → treat as unarmed.
+    floorCheck = typeof req?.floorCheck === "string" ? req.floorCheck : ""
   } catch {
     return
   }
 
   try {
     const started = Date.now()
-    const raw = await callModel(prompt)
+    const raw = await callModel(prompt, floorCheck)
     if (raw === undefined) return
 
     const derivation = parseRefinerOutput(extractResultText(raw) ?? raw)
     if (!derivation) return
 
+    // The persisted pending file is the VALIDATED result — validation runs
+    // pre-persist so shadow.ts can trust a pending file as-is (no re-checking).
+    const validated = validateDerivation({ derivation, prompt, floorCheck, repoRoot: cwd })
+
     writeGaugeFile(dir, {
-      ...derivation,
-      v: 1,
+      goalSummary: derivation.goalSummary,
+      criteria: derivation.criteria,
+      confidence: derivation.confidence,
+      class: validated.class,
+      reason: validated.reason,
+      horizon: validated.horizon,
+      check: validated.check,
+      ...(validated.downgraded ? { downgraded: validated.downgraded } : {}),
+      v: 2,
       sessionID,
       n,
       ts: Date.now(),

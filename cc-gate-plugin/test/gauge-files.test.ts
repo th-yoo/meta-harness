@@ -100,3 +100,44 @@ test("daily cap: corrupt counter file fails CLOSED (over cap)", () => {
   fs.writeFileSync(path.join(d, "daily-count"), "{corrupt")
   expect(underDailyCap(d, "2026-07-28", 30)).toBe(false)
 })
+
+// ── v2 fields round-trip (km-gauge v2 extractor, Task 2) ────────────────
+
+const GAUGE_V2 = {
+  v: 2 as const,
+  sessionID: SID,
+  n: 1,
+  ts: 1000,
+  model: "haiku",
+  derivationMs: 1234,
+  goalSummary: "g",
+  criteria: ["c"],
+  check: "true",
+  confidence: 0.9,
+  class: "C" as const,
+  reason: null,
+  horizon: "single-turn" as const,
+  downgraded: { fromClass: "C" as const, fromCheck: "true", rule: "b-keyword" as const },
+  strike: 1 as const,
+}
+
+test("v2: class/reason/horizon/downgraded/strike round-trip through write/pick", () => {
+  const d = tmp()
+  writeGaugeFile(d, GAUGE_V2)
+  const got = pickPending(d, SID)!
+  expect(got.v).toBe(2)
+  expect(got.class).toBe("C")
+  expect(got.reason).toBeNull()
+  expect(got.horizon).toBe("single-turn")
+  expect(got.downgraded).toEqual({ fromClass: "C", fromCheck: "true", rule: "b-keyword" })
+  expect(got.strike).toBe(1)
+})
+
+test("v2: same-n overwrite carries strike:1 through", () => {
+  const d = tmp()
+  writeGaugeFile(d, { ...GAUGE_V2, n: 4, strike: undefined })
+  writeGaugeFile(d, { ...GAUGE_V2, n: 4, strike: 1 })
+  const got = pickPending(d, SID)!
+  expect(got.n).toBe(4)
+  expect(got.strike).toBe(1)
+})
