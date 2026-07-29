@@ -3,7 +3,7 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-29 late (office `yoo-dev`) — GA2: §4.3 PRE-REG REGISTERED + GAUGE M0–M3 VERDICT (M2 FAIL → v2 EXTRACTOR REGISTERED) · NEXT = v2 BUILD + §4.3 BUILD + EVENT-RATE MULTIPLIERS (all need go)
+## ⏸ SESSION END 2026-07-29 late (office `yoo-dev`) — GA2+GA3: §4.3 REGISTERED · GAUGE v1 M2 FAIL → v2 EXTRACTOR BUILT + DEPLOYED + WINDOW OPEN + LIVE-MEASURED · NEXT = §4.3 BUILD + EVENT-RATE MULTIPLIERS (need go)
 
 **State (full detail: HISTORY.md GA2):** **§4.3 trial-mode pre-registration
 REGISTERED** (`docs/superpowers/specs/2026-07-29-trial-mode-gate-outcomes-preregistration.md`,
@@ -39,7 +39,15 @@ first real derivation = haiku's $(cat)-style check downgraded
 D/no-path-reference with audit record (registered over-refusal direction
 live — $()-idiom suppresses class-C rate; validity floor ≥5 C measures it).
 MacBook joins window at its own cache refresh after pull. NOTE: in-session
-spawn was daily-cap-blocked (30) during smoke — cap resets tomorrow.**
+spawn was daily-cap-blocked (30) during smoke — cap resets tomorrow.
+LIVE MEASURE (post-reinstall, km-play 3-prompt haiku session, GA3): A2 and
+B model-classified EXACT (check null, no downgrade needed); C-attempt →
+$()-style check → D `no-path-reference` downgrade with audit (2nd $()
+specimen — class-C 0/4 real derivations, starvation trend, ≥5-C validity
+floor watches; redesign-round lever = prompt-nudge toward `grep -qxF`);
+scorecard byClass renders, v1-era lines excluded by class filter; ORPHAN
+MECHANISM OBSERVED LIVE (A2 pending stranded by highest-n supersede —
+rapid-fire prompting amplifies, normal cadence less; eats M5 points).**
 
 **QUEUE (WAIT FOR GO):** (1) **§4.3 prerequisite build** (§11, 10 items,
 ≈4-6 days). (2) event-rate multipliers: squad dogfood + MacBook install

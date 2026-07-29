@@ -406,6 +406,55 @@ Registration + measurement day; zero adoption verdicts, zero bench trials.
   permanently.** Deploy trap pre-registered: installed-cache refresh
   mandatory or the window silently measures stale v1.
 
+## GA3 — km-gauge v2 extractor: BUILD + DEPLOY + WINDOW OPEN + LIVE MEASURE (2026-07-29 late, office `yoo-dev`)
+
+Implements the v2 extractor pre-registration (fix-or-drop). SDD: 3 tasks +
+per-task reviews + final whole-branch review + one fix wave; commits
+`a3638cb..ecf42f6`; 332 CC tests + 26 opencode, tsc clean.
+
+- **Build:** types (GaugePromptClass/GaugeHorizon, sensor field ext) →
+  refiner v2 (classify A1/A2/B/C/D + extract-only prompt, shape-only parse)
+  → NEW validate.ts (the deterministic enforcement: path-in-prompt with
+  word-boundary rule, repo-scope via path.resolve, cd-stripped B-screen with
+  scoped-subset exception, no-path-reference vacuous-C rule, unconditional
+  final check-nulling) → spawn req carries floorCheck → refiner-cli
+  validates BEFORE persisting (pending file = already-validated artifact) →
+  evaluate presence-conditional passthrough (v1 BASE literal untouched =
+  acceptance proof) → shadow two-strike (floor-gated advancement; gauge-only
+  Stops skip evaluation of open multi-turn-C entirely) → score re-scoped to
+  class-carrying lines (class presence = v2-window filter) + byClass render.
+- **Reviews earned their keep:** T1 reviewer's adversarial probing found 2
+  real extraction holes BEYOND the 28-case matrix (bare `cd <dir>` target
+  credited as B2'-scoping token; unbounded substring match — `a.ts` inside
+  "thisisnota.tsfile") — both fixed + re-reviewed. T2 reviewer traced every
+  persist path: no route for an unvalidated check to reach disk. T3 reviewer
+  byte-diffed the af0a132 shadow-invariant lock test (untouched) and traced
+  the two-strike table row-by-row. **Final review caught spec-code
+  divergence PRE-deploy** (floor-gated two-strike, `strike` field,
+  per-derivation M1v2/M5, class-presence filter — all sound engineering the
+  registered text didn't describe) → pre-data amendment landed BEFORE the
+  window opened; re-registration ceremony avoided.
+- **Deploy (window cut):** cache refreshed; **verify-gotcha live: stale
+  0.1.0 cache dir coexisted with 0.2.0 — `claude plugin list` is the
+  authority, never cache-path picking** (stale dir removed; deleting a
+  RUNNING session's plugin root kills its hooks fail-open — refresh between
+  sessions only). Deploy commit + timestamp recorded in pre-reg §4
+  (`1f4c0f6`); WINDOW OPEN (office; MacBook joins at its own refresh).
+- **Live measure (reinstall + km-play 3-prompt haiku session):** A2
+  (`not-shell-checkable`) and B (`floor-covered`) MODEL-CLASSIFIED exact,
+  check null, no downgrade needed; C-attempt → haiku's `$()`-style check →
+  D `no-path-reference` downgrade with full audit record (fromCheck
+  preserved, check nulled — step-8 invariant live). **Second consecutive
+  `$()` specimen: class-C 0/4 real derivations — starvation trend; the ≥5-C
+  validity floor is the tripwire; the one permitted redesign round's lever =
+  refiner-prompt nudge toward `grep -qxF 'line' file` style.** Scorecard
+  byClass renders (`A1 0 · A2 1 · B 1 · C 0 · D 1 · downgraded 1`); v1-era
+  lines correctly excluded. **Orphan mechanism observed live:** the A2
+  pending was stranded by highest-n supersede (P3's derivation landed before
+  the Stop that would have consumed P2's) — registered limitation; rapid
+  prompting amplifies it, eats M5 data points. Daily cap fence verified
+  (meta-harness 30/30 blocked spawns; fence, not bug).
+
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
 | R1 | 2026-07-23 | machine bullet (script-verify) on bare | bare 4/10 vs 5/10 | 1.0 | — | REJECT null |
@@ -433,6 +482,7 @@ Registration + measurement day; zero adoption verdicts, zero bench trials.
 | SM2 | 2026-07-27 | kkamak CC plugin v0.1 BUILT + live smoke (2.1b, MacBook night) | 15-node parallel DAG, 3 live headless CC sessions | — | — (mechanism) | **SHIPPED + SMOKE PASS (merge 6d443df): 120+26 tests green; CC block-json evidence delivery VERIFIED live (self-describing check → agent fixed → rounds ["verify-failed","accepted"] in 4s); rounds bound exact (2 blocks → exhausted); marker + no-edit-silence + mkdir-recursive + headless -p all ✓; both hosts now write one .km/ sensor stream — §4.3 gets a two-host union producer** |
 | GA1 | 2026-07-28/29 | km-gauge shadow PoC + scorecard + §4.4 reinject A/B (office) | 4 live haiku derivations; 240 tests; audit 659a712..HEAD | — | — (mechanism) | **SHIPPED: gauge M0–M3 window open (shadow-only, read-only guard); scorecard defines improvement (M-exhaust/M-interrupt fall at non-decreasing M-catch; MIN_N=20 locked = display floor, not certification); reinject v0/v1 within-workload randomised — v1 append self-contradiction user-caught, REPAIRED `322f2c1` (composed at IO seam, 2x adversarial plan review, §4b re-registered pre-data, live-proven both arms); audit found zero gate-gaming (no power, ~1 opportunity); plugin-install copy trap fixed (vendor/ + install-shape test); store renamed .kkamak/ auto-migrating. A/B LIVE + clean; bottleneck = block EVENTS, not instruments** |
 | GA2 | 2026-07-29 | §4.3 trial-mode pre-reg + gauge M0–M3 verdict + km-gauge v2 extractor pre-reg (office) | 36-prompt gauge window (user-labeled 10 would-blocks); 1 live tmux smoke session; zero bench trials | — | — (registration + measurement) | **§4.3 REGISTERED (`fdd0055..59c4924`, SDD + 3 review iterations, 24 findings resolved; playbook v0, salted arms, three-floor verdict, auto keep/rollback + human-go, golden every 3 KEEPs, A/A first, activation ≥10 cycles/day). Gauge M0 91.7% ✓ M1 63.6% ✓ M3 ✓ (caught the spec's DRAFT defect pre-final-review) but M2 FAIL 9/10 false-block → SHADOW INDEFINITELY per locked rule; root cause = invention beyond information bound. Fix-or-drop → v2 EXTRACTOR REGISTERED (`63c94f2`+`61f8d78`: A1/A2/B/C/D classes, code-enforced extraction, two-strike eval, M5 A2-share; second M2 fail = derivation killed). Shadow invariant test-locked `af0a132`; first v0 reinject cycle (arms v0:1/v1:19)** |
+| GA3 | 2026-07-29 | km-gauge v2 extractor BUILD + DEPLOY + LIVE MEASURE (office) | SDD 3 tasks + reviews + final review + fix wave; 1 reinstall + km-play 3-prompt haiku session; zero bench trials | — | — (mechanism + measurement) | **BUILT (`a3638cb..1cad4ba`, 332 tests; T1 review caught cd-target + substring-boundary extraction holes; final review caught spec-code divergence → pre-data amendment BEFORE deploy). DEPLOYED 0.2.0, WINDOW OPEN (`1f4c0f6`; stale-cache-dir gotcha: `claude plugin list` = authority). LIVE MEASURE: A2 + B model-classified exact; C→D $()-downgrade with audit ×2 (class-C 0/4 = starvation trend, ≥5-C floor watches); byClass renders, v1 lines excluded; orphan mechanism observed live (A2 stranded by highest-n supersede); cap fence verified** |
 
 ## R1 — round-1 machine bullet (2026-07-23, office) — REJECT
 
