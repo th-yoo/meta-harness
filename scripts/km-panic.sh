@@ -10,6 +10,7 @@
 #   km-panic.sh gauge-off   stop km-gauge refiner spend, keep the gate
 #   km-panic.sh off         disable the gate entirely (recoverable)
 #   km-panic.sh restore     undo `off`
+#   km-panic.sh trial-off   force-stop a live §4.3 gate-outcomes trial (rollback)
 #   km-panic.sh nuke        print the full plugin-removal commands
 #
 # Run it from the repo whose gate you want to stop (uses $PWD).
@@ -17,6 +18,8 @@ set -uo pipefail
 
 GATE="gate.json"
 DISABLED="gate.json.disabled"
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 die() { echo "km-panic: $*" >&2; exit 2; }
 
@@ -28,6 +31,7 @@ km-panic — stop kkamak NOW, without restarting Claude Code.
   km-panic.sh gauge-off   stop km-gauge refiner spend, keep the gate
   km-panic.sh off         disable the gate entirely (recoverable)
   km-panic.sh restore     undo `off`
+  km-panic.sh trial-off   force-stop a live §4.3 gate-outcomes trial (rollback)
   km-panic.sh nuke        print the full plugin-removal commands
 
 Every action takes effect on the NEXT turn of a running session: gate.json
@@ -91,6 +95,38 @@ PY
     [ -f "$GATE" ] && die "$GATE exists — remove it before restoring"
     mv "$DISABLED" "$GATE"
     echo "km-panic: gate restored."
+    ;;
+
+  trial-off)
+    # §11 item 9: manual command supersedes (§6 authority) — force-rollback a
+    # live §4.3 gate-outcomes trial for the cwd's project-global store root
+    # right now, without waiting for km-crank's next scheduled verdict. Reads
+    # the live .trial via the same primitives resolveGateTrial/km-crank use
+    # (opencode-plugin/src/harness-store.ts) — never a second, drifting
+    # reimplementation of the .trial schema in bash.
+    #
+    # A LEGACY trial (no rewardMode) is explicitly NOT touched here: it
+    # belongs to the old resolveTrial's rate-comparison path, not
+    # resolveGateTrial's §4.3 authority — this verb only prints instructions
+    # for that case (brief: "legacy .trial -> print instructions").
+    command -v bun >/dev/null || die "bun not found — trial-off needs it to call resolveGateTrial"
+    KKAMAK_PANIC_REPO_ROOT="$REPO_ROOT" bun run - <<'TS'
+    const repoRoot = process.env.KKAMAK_PANIC_REPO_ROOT
+    const { projectGlobalRoot, readTrial, resolveGateTrial } = await import(`${repoRoot}/opencode-plugin/src/harness-store.ts`)
+    const root = projectGlobalRoot(process.cwd())
+    const trial = readTrial(root)
+    if (!trial) {
+      console.log(`km-panic: no trial in this project's store (${root}) — nothing to do.`)
+    } else if (trial.rewardMode !== "gate-outcomes") {
+      console.log(`km-panic: legacy trial at ${root} (no rewardMode) — owned by resolveTrial, not this verb.`)
+      console.log(`  It resolves automatically on the next /mh-score once minSessions is reached (rate comparison vs baseline).`)
+      console.log(`  To force it now instead: manually restore ${root}/active/{system.md,tools.md} from the`)
+      console.log(`  baselineSystem/baselineTools fields recorded in ${root}/active/.trial, then remove that .trial file.`)
+    } else {
+      const result = resolveGateTrial(root, { verdict: "rollback", reason: "km-panic trial-off" })
+      console.log(`km-panic: gate-outcomes trial at ${root} -> ${JSON.stringify(result)}`)
+    }
+TS
     ;;
 
   nuke)
