@@ -360,6 +360,35 @@ describe("calibration-stale refusal (spec §4 rule 1)", () => {
       expect(r.verdict.projection).not.toContain("floors unmet")
     }
   })
+
+  test("stale + elapsed just under T_MAX → pending refusal (existing behavior preserved)", () => {
+    const { lines, rows } = aaStream()
+    const r = evaluate(lines, rows, {
+      calibrationIsStale: true,
+      now: T0 + T_MAX_MS - 1,
+    })
+    expect(r.verdict.verdict).toBe("pending")
+    if (r.verdict.verdict === "pending") expect(r.verdict.projection).toContain("calibration-stale")
+  })
+
+  test("stale + elapsed EXACTLY AT T_MAX → abandoned 'calibration-stale' (boundary: ≥ fires abandon)", () => {
+    const { lines, rows } = aaStream()
+    const r = evaluate(lines, rows, {
+      calibrationIsStale: true,
+      now: T0 + T_MAX_MS,
+    })
+    expect(r.verdict.verdict).toBe("abandoned")
+    if (r.verdict.verdict === "abandoned") expect(r.verdict.reason).toBe("calibration-stale")
+  })
+
+  test("stale + elapsed past T_MAX → abandoned 'calibration-stale'", () => {
+    const r = evaluate([], [], {
+      calibrationIsStale: true,
+      now: T0 + T_MAX_MS + DAY,
+    })
+    expect(r.verdict.verdict).toBe("abandoned")
+    if (r.verdict.verdict === "abandoned") expect(r.verdict.reason).toBe("calibration-stale")
+  })
 })
 
 describe("exposure-density guard (§9)", () => {
@@ -555,6 +584,22 @@ describe("runTrialScan (crank wiring seam)", () => {
     expect(deps.resolveCalls.length).toBe(0)
     expect(r!.action.kind).toBe("trial-pending")
     if (r!.action.kind === "trial-pending") expect(r!.action.projection).toContain("calibration-stale")
+  })
+
+  test("calibration stale PAST T_MAX → resolveGateTrial enacted EXACTLY ONCE with abandoned 'calibration-stale', emitting trial-abandoned", () => {
+    const { lines, rows } = aaStream()
+    const deps = fakeDeps({
+      trials: { "/repoA/store": mkTrial() },
+      linesByRepo: { "/repoA": lines },
+      rowsByRepo: { "/repoA": rows },
+      stale: true,
+    })
+    deps.now = T0 + T_MAX_MS + DAY
+    const r = runTrialScan(REPOS, deps)
+    expect(deps.resolveCalls.length).toBe(1)
+    expect(deps.resolveCalls[0]!.v).toEqual({ verdict: "abandoned", reason: "calibration-stale" })
+    expect(r!.action.kind).toBe("trial-abandoned")
+    if (r!.action.kind === "trial-abandoned") expect(r!.action.reason).toBe("calibration-stale")
   })
 
   test("rollback verdict → trial-rollback action carrying the reason", () => {

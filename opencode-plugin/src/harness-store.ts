@@ -1470,11 +1470,19 @@ export type GateTrialVerdict =
  * Abandon-on-active-changed (spec §5/§6) is checked HERE, unconditionally,
  * before any verdict is enacted — same precedent as `resolveTrial`'s
  * existing abandon branch (`:1336-1339` above), just re-homed to this
- * authority for gate-outcomes trials. An explicit `{verdict:"abandoned"}`
- * (e.g. calibration gone stale, a manual supersede) mirrors that same
- * precedent: `clearTrial` WITHOUT `writeActive` — the active version is
- * presumed already changed/superseded by whatever triggered the abandon, so
- * there is nothing here to restore.
+ * authority for gate-outcomes trials: `activeVersion(storeRoot) !==
+ * trial.trial` means the trial candidate is already superseded, so that
+ * early guard is clear-only — nothing to restore, the active version moved
+ * on without this function's help.
+ *
+ * An EXPLICIT `{verdict:"abandoned"}` (exposure-divergence, calibration-
+ * stale) is a different case: it is only ever reached when the guard above
+ * did NOT fire, i.e. `activeVersion(storeRoot) === trial.trial` — the trial
+ * candidate is still the live active version. Leaving it active on abandon
+ * would ship an unvalidated candidate permanently. So this branch restores
+ * the baseline with the same `writeActive` call `case "rollback"` uses, then
+ * clears the trial (spec §5 abandon amendment clause 2, pre-data, TM6
+ * review, 54238eb).
  */
 export function resolveGateTrial(
   storeRoot: string,
@@ -1517,8 +1525,16 @@ export function resolveGateTrial(
       return { action: "deferred" }
     }
     case "abandoned": {
+      // Reached only when the active-changed guard above did NOT fire — the
+      // trial candidate is still active. Restore the baseline (same call as
+      // "rollback") so an engine-computed abandon never leaves an
+      // unvalidated candidate live.
+      writeActive(storeRoot, trial.baseline, trial.baselineSystem, trial.baselineTools,
+        trial.baselinePlaybook ?? null, trial.baselineAgentConfig ?? null, trial.baselineEnvPolicy ?? null)
       clearTrial(storeRoot)
-      appendMetaMetric(storeRoot, { event: "trial", action: "abandoned", trial: trial.trial, reason: v.reason })
+      appendMetaMetric(storeRoot, {
+        event: "trial", action: "abandoned", trial: trial.trial, baseline: trial.baseline, reason: v.reason,
+      })
       return { action: "abandoned" }
     }
   }

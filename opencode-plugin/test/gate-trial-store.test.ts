@@ -198,25 +198,44 @@ test("resolveGateTrial: deferred → NO state change, ledger action=deferred", (
   expect(metric["reason"]).toBe("metric null")
 })
 
-test("resolveGateTrial: abandoned (explicit verdict) → clearTrial WITHOUT writeActive, ledger action=abandoned", () => {
+test("resolveGateTrial: abandoned (explicit verdict, trial candidate still active) → restores baseline, clearTrial, ledger action=abandoned + baseline", () => {
   const { metaRoot, storeRoot: root } = tmpStore()
-  createCandidate(root, "v0", "baseline system", "")
+  createCandidate(root, "v0", "baseline system", "baseline tools")
   activateCandidate(root, "v0")
-  createCandidate(root, "v1", "trial system", "")
-  startTrial(root, "v1", "trial system", "", 1, null, null, null, { rewardMode: "gate-outcomes" })
+  createCandidate(root, "v1", "trial system", "trial tools")
+  startTrial(root, "v1", "trial system", "trial tools", 1, null, null, null, { rewardMode: "gate-outcomes" })
+  expect(activeVersion(root)).toBe("v1") // trial candidate is live before abandon
 
-  const result = resolveGateTrial(root, { verdict: "abandoned", reason: "calibration registry stale" })
+  const result = resolveGateTrial(root, { verdict: "abandoned", reason: "calibration-stale" })
 
   expect(result).toEqual({ action: "abandoned" })
   expect(readTrial(root)).toBeNull()
-  // Abandon mirrors the old resolveTrial precedent: no writeActive — active
-  // is left exactly where it was (still the trial version here), never
-  // reverted to baseline.
-  expect(activeVersion(root)).toBe("v1")
+  // §5 abandon amendment clause 2 (pre-data, TM6 review, 54238eb): the
+  // active-changed guard did NOT fire here (active === trial.trial), so this
+  // is the explicit-abandon path — it must restore the baseline, same as
+  // rollback, never leave the unvalidated trial candidate active.
+  expect(activeVersion(root)).toBe("v0")
+  expect(readActiveSystem(root)).toBe("baseline system")
+  expect(readActiveTools(root)).toBe("baseline tools")
   const metric = lastMetaMetric(metaRoot)
   expect(metric["event"]).toBe("trial")
   expect(metric["action"]).toBe("abandoned")
-  expect(metric["reason"]).toBe("calibration registry stale")
+  expect(metric["reason"]).toBe("calibration-stale")
+  expect(metric["baseline"]).toBe("v0")
+})
+
+test("resolveGateTrial: abandoned (explicit verdict, exposure-divergence) → restores baseline", () => {
+  const { storeRoot: root } = tmpStore()
+  createCandidate(root, "v0", "baseline system", "baseline tools")
+  activateCandidate(root, "v0")
+  createCandidate(root, "v1", "trial system", "trial tools")
+  startTrial(root, "v1", "trial system", "trial tools", 1, null, null, null, { rewardMode: "gate-outcomes" })
+
+  const result = resolveGateTrial(root, { verdict: "abandoned", reason: "exposure-divergence" })
+
+  expect(result).toEqual({ action: "abandoned" })
+  expect(activeVersion(root)).toBe("v0")
+  expect(readActiveSystem(root)).toBe("baseline system")
 })
 
 // ── Contract 4: rollback restores ALL five snapshot fields ─────────────────

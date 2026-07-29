@@ -314,12 +314,15 @@ function densityDiverged(a: number, b: number): boolean {
 /**
  * Verdict branch ORDER (each earlier branch masks the later ones):
  *   1. calibration stale → pending "calibration-stale" (§4 rule 1: verdicts
- *      are refused while stale — checked BEFORE floors, enacts NOTHING).
- *      Chosen over §5's abandon-on-stale reading: refusal is conservative
- *      (the trial stays live, the SITREP shows the refusal, recalibration
- *      un-blocks the next crank round), where an auto-abandon would destroy
- *      a healthy trial over any mechanism-path commit. Recorded as a plan-
- *      resolved reading, not a silent choice (see the Task 6 report).
+ *      are refused while stale — checked BEFORE floors, enacts NOTHING),
+ *      UNLESS the trial has already occupied the single live slot for
+ *      ≥ T_MAX_MS, in which case the refusal is bounded by the same §5
+ *      T_MAX backstop the floors branch uses: abandoned "calibration-stale"
+ *      (pre-data spec amendment, 54238eb, TM6 review). Refusal alone is
+ *      conservative (the trial stays live, the SITREP shows the refusal,
+ *      recalibration un-blocks the next crank round) — but unbounded, a
+ *      permanently-stale registry would occupy that slot forever, which
+ *      T_MAX exists to prevent everywhere else in this engine.
  *   2. exposure-density gross divergence → abandoned "exposure-divergence"
  *      (§9: VOID for that trial, not silently pooled through).
  *   3. the §5 floors/T_MAX/null-metric/three-clause rule.
@@ -345,10 +348,16 @@ export function evaluateGateTrial(i: TrialEvaluationInput): TrialEvaluation {
 
   let verdict: TrialVerdictOutcome
   if (i.calibrationIsStale) {
-    verdict = {
-      verdict: "pending",
-      projection:
-        "calibration-stale — verdict refused (spec §4 rule 1): refresh the calibration registry before any verdict can be read",
+    if (elapsedMs >= T_MAX_MS) {
+      // §5 T_MAX backstop bounds the stale refusal too — see the branch-
+      // order comment above evaluateGateTrial (pre-data amendment 54238eb).
+      verdict = { verdict: "abandoned", reason: "calibration-stale" }
+    } else {
+      verdict = {
+        verdict: "pending",
+        projection:
+          "calibration-stale — verdict refused (spec §4 rule 1): refresh the calibration registry before any verdict can be read",
+      }
     }
   } else if (voided) {
     verdict = { verdict: "abandoned", reason: "exposure-divergence" }
