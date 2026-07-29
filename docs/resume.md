@@ -89,6 +89,13 @@ script, km-crank absent from gate.json check, score.ts NUL group-key
 
 **Gotchas:** all prior + v2-window poisoning above; gauge keeps calling
 haiku under v1 rules until v2 deploys (cap 30/day, shadow-only, harmless).
+**Host-python `rdflib` is a per-host TEST prerequisite** (2026-07-29 MacBook
+find): `test/minimal-relations-desk.test.ts` runs relation-probe scripts on
+host python3 — missing rdflib = 2 suite fails that look like probe defects.
+Fix: `pip3 install --user --break-system-packages rdflib` (user-site only).
+Bench arms unaffected (probes run in containers); daily gate v1 unaffected
+(no relation probes). These desk tests are the ONLY tripwire for the
+missing-rdflib-silently-inert class if host-python probes ever ship.
 
 ## ⏸ SESSION END 2026-07-29 morning (office `yoo-dev`) — GA1 COMPLETE: kkamak INSTALLED + gauge window OPEN + scorecard + reinject A/B LIVE (v1 repaired `322f2c1`) — superseded by GA2 above; kept for lineage
 
