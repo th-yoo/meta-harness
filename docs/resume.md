@@ -25,13 +25,17 @@ task-reviewed Approved, all pushed:**
 - Suites at cutoff: opencode-plugin 1738/1/0 · cc-gate-plugin 345 · km-crank 81
   · gate-plugin 26. MacBook rdflib gotcha fixed (see gotchas below).
 
-**TM6 (trial-verdict engine, km-crank) was IN FLIGHT at cutoff** — if
-`km-crank/src/trial-verdict.ts` exists on main with commit message
-"feat(km-crank): trial-verdict engine…": it committed but is UNREVIEWED —
-review it first (brief `.superpowers/sdd/tm6-brief.md` if present, else plan
-Task 6; scrutiny = §5 truth table fidelity, §2 exclusion matrix, A/A tie,
-calibration-stale refusal order, crank wiring before decideGate). If absent:
-re-dispatch TM6 from the plan (nothing lost).
+**TM6 LANDED at cutoff: `0fe63b9` — COMMITTED, UNREVIEWED. Review FIRST next
+session** (plan Task 6 is the spec; km-crank 144 tests, all suites green).
+Scrutiny list: §5 truth-table fidelity (22-row table shipped), §2 exclusion
+matrix, A/A KEEP-by-tie, crank wiring before decideGate + all-REPOS scan,
+enact-exactly-once, KKAMAK_DEV_CHECK drift-guard. **Plus one SPEC AMBIGUITY
+the implementer surfaced (not silent): calibration-stale = §4 "verdicts
+refused while stale" vs §5 abandon-list "registry goes stale mid-trial".
+Implemented as pending-refuse (enacts nothing; manual abandon available) —
+if mechanical abandon-on-stale was the registered intent, needs a pre-data
+amendment ruling.** Snapshot-age SITREP line deferred to TM8 (no snapshot
+files exist yet).
 
 **Then:** TM7 (scorecard per-arm N_eff + exposure guard) → TM8 (km-sensors-sync
 script + km-panic trial-off) → final whole-branch review vs base `fc03f95` →
