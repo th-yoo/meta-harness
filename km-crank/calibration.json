@@ -1,0 +1,9 @@
+{
+  "rate": 0.105,
+  "numerator": 2,
+  "denominator": 19,
+  "wilson95CI": [0.03, 0.31],
+  "coveredMechanismRev": "1af4b02f64ec409e98e87d232049250db6a57383",
+  "date": "2026-07-29",
+  "note": "cross-host pooled C2+C1+G1, not independently certified (HISTORY.md FA1 CLOSED BY MATH)"
+}
