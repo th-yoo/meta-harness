@@ -172,7 +172,13 @@ Haiku, exactly 1 call per task-shaped prompt, daily cap 30
 `KKAMAK_GAUGE=off` + `scripts/km-panic.sh gauge-off`. Deploy REQUIRES the
 installed-plugin cache refresh (marketplace update + uninstall + install) —
 the standing watch-item; a stale cache silently runs v1 and poisons the
-window. Deploy commit: _recorded here when the build lands._
+window. **Deploy: build head `1cad4ba` (v0.2.0), installed-cache refreshed
+2026-07-29T16:00+09:00 (office `yoo-dev`); active cache verified 0.2.0 with
+v2 code (validate.ts present, two-strike in shadow.ts, vendor intact); a
+stale leftover 0.1.0 cache dir was found beside it and removed — the
+version-dir enumeration gotcha is real, verify via `claude plugin list`,
+not by picking a cache path. THE WINDOW OPENS HERE (office; MacBook joins
+at its own refresh after pull).**
 
 ## 5. Non-goals (v2)
 
