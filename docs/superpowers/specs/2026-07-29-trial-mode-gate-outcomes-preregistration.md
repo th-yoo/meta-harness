@@ -100,14 +100,27 @@ beside the pooled number (scorecard pre-reg §3/§4 convention, `score.ts`'s `po
 
 ## 3. Assignment
 
-`arm = FNV-1a(`${trialId}:${sessionID}`) % 2`. **The trial ID is a required salt.**
-Hashing `sessionID` alone would make this trial's arm assignment collinear with the live
-reinject experiment's arm assignment (`hash(sessionID) % 2`, `reinject.ts:29-51`) — every
-session would land in the same arm on both axes, so a real effect on one axis could be
-mistaken for the other's. Every verdict reports the reinject-arm composition (v0/v1 split)
-of each trial arm as a balance check; a skewed split is a warning sign, not by itself a
-void. Arm assignment is constant for the life of a session, same rationale as reinject's
-per-session stability (`reinject.ts:39-42`).
+`arm = (FNV-1a(`${trialId}:${sessionID}`) >>> 16) & 1`. **The trial ID is a required
+salt.** Hashing `sessionID` alone would make this trial's arm assignment collinear with
+the live reinject experiment's arm assignment (`hash(sessionID) % 2`, `reinject.ts:29-51`)
+— every session would land in the same arm on both axes, so a real effect on one axis
+could be mistaken for the other's. Every verdict reports the reinject-arm composition
+(v0/v1 split) of each trial arm as a balance check; a skewed split is a warning sign, not
+by itself a void. Arm assignment is constant for the life of a session, same rationale as
+reinject's per-session stability (`reinject.ts:39-42`).
+
+**PRE-DATA AMENDMENT (2026-07-29, build TM2; zero exposure rows existed):** as
+originally registered this read `… % 2`. That formula is algebraically broken for its
+own stated purpose: FNV-1a's low bit is a linear XOR-parity of the input's character
+low bits (the multiply by an odd constant preserves parity), so for any FIXED
+`trialId`, `hash(trialId:sid) % 2` agrees with the reinject axis `hash(sid) % 2` at
+exactly 0% or 100% across ALL sessions — perfect (anti-)collinearity within every
+real trial, the precise failure §3 exists to prevent. Found by the build's named
+salt-decorrelation test (§11 item 10) during TM2; verified algebraically and
+empirically (per-trialId agreement 500/500 or 0/500; bit-16 formula ~50% with
+balanced splits). Remedy: take bit 16 (a carry-mixed, non-parity-linear bit) instead
+of bit 0. The reinject axis (`% 2`) is deployed and UNCHANGED. Lineage: same
+pre-data-amendment ceremony as the GA3 build-review amendment.
 
 The baseline arm is composed from the `TrialState` snapshot taken at trial start — the
 fields already captured there (`baselineSystem`, `baselineTools`, `baselinePlaybook`,
