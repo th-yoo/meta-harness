@@ -87,7 +87,7 @@ each_pair() {
 cmd_export() {
   local dry="${1:-}"
   local any_violation=0
-  local pair src dst label missing count
+  local src dst label missing count
 
   # Pass 1: diff-first refusal check — scan ALL pairs before writing anything.
   while IFS='|' read -r src dst label; do
@@ -138,7 +138,7 @@ cmd_export() {
 
 cmd_import() {
   echo "km-sensors-sync: import is REPORT-ONLY — .km/ runtime files are never written."
-  local pair src dst label add n
+  local src dst label add n
   while IFS='|' read -r src dst label; do
     if [ ! -f "$dst" ]; then
       echo "  $label: no committed snapshot ($dst absent) — nothing to report"
@@ -156,7 +156,7 @@ cmd_import() {
 }
 
 cmd_diff() {
-  local pair src dst label local_only snapshot_only lo so
+  local src dst label local_only snapshot_only lo so
   while IFS='|' read -r src dst label; do
     local_only="$(lines_missing "$dst" "$src")"
     snapshot_only="$(lines_missing "$src" "$dst")"
