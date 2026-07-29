@@ -154,9 +154,13 @@ const metaHarness: Plugin = async (input) => {
 
       if (proposerSessions.has(sessionID)) return
 
-      // opencode adapter never appends exposure rows (§4.3 spec §1: v0 arms
-      // are Claude Code sessions only) — `enrollment` is intentionally unused
-      // here; only `blocks` composes the injected system text.
+      // opencode adapter never composes arm-aware (§4.3 spec §1: v0 arms are
+      // Claude Code sessions only; opencode-session arms are an explicit §10
+      // deferral) and never appends exposure rows — `composeInjection` is
+      // called with no opts, so it always composes the active store (= the
+      // live trial's text while a trial runs, same as legacy pre-arm
+      // behavior); `enrollment` stays unused since opencode sessions
+      // contribute no §4.3 data.
       const { blocks } = await engine.composeInjection(sessionID)
       for (const block of blocks) {
         output.system.push(block)

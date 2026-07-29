@@ -44,7 +44,7 @@ import { EvolutionEngine, InMemorySessionStateStore, type SessionState } from ".
 import { dispatch, type HookInput } from "../src/adapters/claude-code/dispatch.ts"
 import { ClaudeCodeHost } from "../src/adapters/claude-code/cc-host.ts"
 import { FileSessionStateStore } from "../src/adapters/claude-code/file-state.ts"
-import { readExposureRows } from "../src/trial-arm.ts"
+import { readExposureRows, pickTrialArm } from "../src/trial-arm.ts"
 
 let home: string
 let project: string
@@ -151,6 +151,36 @@ test("contract 1: no live trial -> dispatch's SessionStart appends no exposure r
   expect(readExposureRows(project)).toEqual([])
 })
 
+// ── Platform gate (spec §1/§10): armAware defaults false -> opencode never arms ──
+
+test("platform gate: composeInjection WITHOUT armAware composes active (trial) text, enrollment undefined, even with a live gate-outcomes trial (opencode sessions never arm, spec §1/§10)", async () => {
+  const pg = projectGlobalRoot(project)
+  bootstrapStore(pg, "BASELINE SYSTEM TEXT")
+  startTrial(pg, "v1", "TRIAL SYSTEM TEXT", "trial tools", 5)
+  markGateOutcomes(pg, { trialId: "gate-trial-noarm" })
+
+  // Pick a sessionID that WOULD land in the baseline arm if armAware were
+  // true, so a regression that re-enables the arm path here would flip this
+  // assertion (baseline text) instead of coincidentally matching.
+  let sid = "s-noarm-0"
+  let i = 0
+  while (pickTrialArm("gate-trial-noarm", sid).arm !== "baseline") {
+    i += 1
+    sid = `s-noarm-${i}`
+  }
+
+  const host = fakeHost(project)
+  const store = new InMemorySessionStateStore()
+  const engine = new EvolutionEngine(host, store)
+  seedParticipating(store, sid)
+
+  const { blocks, enrollment } = await engine.composeInjection(sid)
+  expect(enrollment).toBeUndefined()
+  const text = blocks.join("\n")
+  expect(text).toContain("TRIAL SYSTEM TEXT")
+  expect(text).not.toContain("BASELINE SYSTEM TEXT")
+})
+
 // ── Contract 2: live gate-outcomes trial -> arm-aware compose ──────────────
 
 test("contract 2: baseline arm composes project-global from the TrialState snapshot", async () => {
@@ -165,7 +195,7 @@ test("contract 2: baseline arm composes project-global from the TrialState snaps
   const engine = new EvolutionEngine(host, store)
   seedParticipating(store, "s-baseline")
 
-  const { blocks, enrollment } = await engine.composeInjection("s-baseline")
+  const { blocks, enrollment } = await engine.composeInjection("s-baseline", { armAware: true })
   expect(enrollment).toEqual({ trialId: "gate-trial-1", arm: "baseline", forced: true })
   const text = blocks.join("\n")
   expect(text).toContain("BASELINE SYSTEM TEXT")
@@ -184,7 +214,7 @@ test("contract 2: trial arm composes the active (trial) text unchanged", async (
   const engine = new EvolutionEngine(host, store)
   seedParticipating(store, "s-trial")
 
-  const { blocks, enrollment } = await engine.composeInjection("s-trial")
+  const { blocks, enrollment } = await engine.composeInjection("s-trial", { armAware: true })
   expect(enrollment).toEqual({ trialId: "gate-trial-1", arm: "trial", forced: true })
   const text = blocks.join("\n")
   expect(text).toContain("TRIAL SYSTEM TEXT")
@@ -203,7 +233,7 @@ test("contract 2: legacy trial (no rewardMode) never arms — compose stays acti
   const engine = new EvolutionEngine(host, store)
   seedParticipating(store, "s-legacy")
 
-  const { blocks, enrollment } = await engine.composeInjection("s-legacy")
+  const { blocks, enrollment } = await engine.composeInjection("s-legacy", { armAware: true })
   expect(enrollment).toBeUndefined()
   const text = blocks.join("\n")
   expect(text).toContain("TRIAL SYSTEM TEXT")
@@ -222,7 +252,7 @@ test("contract 2: trialId falls back to trial.trial (the candidate version) when
   const engine = new EvolutionEngine(host, store)
   seedParticipating(store, "s-fallback")
 
-  const { enrollment } = await engine.composeInjection("s-fallback")
+  const { enrollment } = await engine.composeInjection("s-fallback", { armAware: true })
   expect(enrollment?.trialId).toBe("v7")
 })
 
@@ -240,7 +270,7 @@ test("contract 3: awaitingGo gate-outcomes trial -> no enrollment, active compos
   const engine = new EvolutionEngine(host, store)
   seedParticipating(store, "s-await")
 
-  const { blocks, enrollment } = await engine.composeInjection("s-await")
+  const { blocks, enrollment } = await engine.composeInjection("s-await", { armAware: true })
   expect(enrollment).toBeUndefined()
   expect(blocks.join("\n")).toContain("TRIAL SYSTEM TEXT")
 })

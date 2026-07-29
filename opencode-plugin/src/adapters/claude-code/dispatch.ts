@@ -164,7 +164,7 @@ export async function dispatch(
         isPrimary: true,
         participates: isMhRole(role),
       })
-      const { blocks, enrollment } = await engine.composeInjection(sessionId)
+      const { blocks, enrollment } = await engine.composeInjection(sessionId, { armAware: true })
       // §4.3 exposure log (spec §2): append AFTER compose succeeded, using
       // the SAME trial read composeInjection used to pick the arm (threaded
       // back via `enrollment`, not re-read here — no TOCTOU between compose
