@@ -12,8 +12,13 @@ still needs `claude plugin marketplace add ~/z2/meta-harness/cc-gate-plugin`
 window CLOSED 2026-07-29: M0 91.7% PASS, M1 63.6% PASS, **M2 FAIL (9/10
 false-block, user-labeled)**, M3 PASS (1 real catch: the DRAFT-status
 defect, pre-final-review) → per locked rule **km-gauge stays SHADOW
-indefinitely, no blocking pilot**; keep-shadow vs kill = open user call
-(analysis: km-gauge pre-reg §7). Scorecard shipped
+indefinitely, no blocking pilot**; user directed FIX-OR-DROP →
+**km-gauge v2 extractor pre-reg REGISTERED**
+(`2026-07-29-km-gauge-v2-extractor-preregistration.md`: A/B/C/D prompt
+classes, extraction-only enforced in code, two-strike multi-turn eval;
+fresh window post-deploy; second M2 fail = derivation KILLED for good).
+v2 build = next, needs go; deploy REQUIRES installed-cache refresh or
+window poisoned by stale v1. Scorecard shipped
 (`bun cc-gate-plugin/src/score-cli.ts`; **MIN_N=20 LOCKED by user** —
 display floor, not certification; certified verdicts = separate
 pre-registered sequential design). §4.4 reinject A/B LIVE and clean: v0
