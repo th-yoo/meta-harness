@@ -3,6 +3,47 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ⏸ SESSION END 2026-07-29 (office `yoo-dev`) — GA1 COMPLETE: kkamak INSTALLED + gauge window OPEN + scorecard + reinject A/B LIVE (v1 repaired `322f2c1`) · NEXT = §4.3 DESIGN + EVENT-RATE MULTIPLIERS
+
+**State (full detail: HISTORY.md GA1 + the 07-28 blocks below):** kkamak
+plugin INSTALLED on office (auto-loads every session; per-host — MacBook
+still needs `claude plugin marketplace add ~/z2/meta-harness/cc-gate-plugin`
++ `claude plugin install kkamak@kkamak-local` after pull). Gauge M0–M3
+window open (this repo + km-play armed). Scorecard shipped
+(`bun cc-gate-plugin/src/score-cli.ts`; **MIN_N=20 LOCKED by user** —
+display floor, not certification; certified verdicts = separate
+pre-registered sequential design). §4.4 reinject A/B LIVE and clean: v0
+kernel-verbatim vs v1 composed at the round.ts IO seam (`322f2c1` — tees
+raw check output, outcome-gated, fail-open; 2x adversarial architect plan
+review; §4b re-registered pre-data; live-proven both arms). 240 CC tests.
+
+**THE BOTTLENECK IS EVENTS, NOT INSTRUMENTS:** ~1 real block ever; MIN_N=20
+per arm. Raise event rate: (a) squad dogfood — `.km/` into squad .gitignore
+then `/kkamak:init`; (b) MacBook install (2 commands above; store
+auto-migrates on first plugin run — rename `872cef8` is self-healing).
+
+**QUEUE:** (1) **§4.3 trial-mode design** = "daily-usage verdicts for
+candidates" — hard part: gate outcomes are self-verified with ~10%
+false-accept (2/19 pooled FA1) — adoption on uncorrected noise forbidden;
+consumes calibration rate + two-host union stream + gauge dimension +
+scorecard. Design session, needs go. (2) squad + MacBook (above).
+(3) small opens: cache-refresh script (installed copy = COPY, rots behind
+source silently; refresh = `claude plugin marketplace update kkamak-local`
++ uninstall + install), km-crank (70 tests) absent from gate.json check.
+
+**GOTCHAS FOR NEXT SESSION:** kkamak hooks now run in EVERY session in this
+repo (installed) — gate check (~4.5s) fires on edited turns; after editing
+cc-gate-plugin source, REFRESH THE CACHE or hooks run yesterday's build;
+green gate after plugin-source edits ≠ plugin works (fail-open silence) —
+trust the suite. `/reload-plugins` hot-loads incl. hooks (no restart).
+Escape: `scripts/km-panic.sh {status|gauge-off|off|restore|nuke|--help}`
+(lands next turn; KKAMAK_GAUGE=off is launch-time only). Mid-turn hang=Esc.
+
+**Rules unchanged:** explicit go before spend · one variable per test ·
+gate.ts sole adopter · forensics before verdict math · no bare "gate" ·
+SITREP style · NEW: no reason-drift without new observations (flag "same
+evidence, new interpretation").
+
 ## ⏸ SESSION END 2026-07-27 night (MacBook home) — §6.3 CLOSED · SM1 PASS · **2.1b CC PLUGIN SHIPPED + SMOKE PASS (SM2, merge 6d443df)** · NEXT = DOGFOOD INSTALL + §4.3 DESIGN
 
 **✅ OFFICE VERIFY 2026-07-28 (yoo-dev, token-free):** repo at f95d56a; bun
