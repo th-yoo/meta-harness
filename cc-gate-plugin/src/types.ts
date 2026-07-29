@@ -1,6 +1,9 @@
 // cc-gate-plugin/src/types.ts — the FROZEN shared contract (DAG Wave 1).
 // Every other module depends on this file and NEVER on a sibling module's
 // internals. A needed change here = stop the wave, amend, re-fan-out.
+// Amendment (2026-07-29, km-gauge v2 extractor): GaugeSensorField gained
+// class/reason/horizon/downgraded/strike — additive & optional, so v1 sensor
+// consumers (present:false / no gauge) are unaffected.
 import type { GateRoundResult } from "../vendor/complete-gate.ts"
 
 export type RoundOutcome = GateRoundResult["outcome"]
@@ -82,6 +85,12 @@ export interface EmitPlan {
   exitCode: 0 | 2
 }
 
+/** km-gauge v2 classification (pre-reg §2.1/§2.2 extension, 2026-07-29 design). */
+export type GaugePromptClass = "A1" | "A2" | "B" | "C" | "D"
+
+/** Class-C only: horizon over which the derived check should be trusted. */
+export type GaugeHorizon = "single-turn" | "multi-turn"
+
 /** km-gauge shadow-eval record (pre-reg §2.3) — attached to sensor lines,
  * NEVER consulted by any gate decision. absent/present:false = no gauge. */
 export interface GaugeSensorField {
@@ -96,6 +105,19 @@ export interface GaugeSensorField {
   confidence?: number
   model?: string
   n?: number
+  /** v2 classification passthrough (validate.ts) — presence-conditional. */
+  class?: GaugePromptClass
+  reason?: string
+  horizon?: GaugeHorizon
+  /** Recorded when validate.ts discards a model-invented/misplaced check. */
+  downgraded?: {
+    fromClass: GaugePromptClass
+    fromCheck: string | null
+    rule: string
+    token?: string
+  }
+  /** Two-strike policy state (shadow.ts) for a multi-turn class-C pending. */
+  strike?: 1 | 2
 }
 
 /** One ndjson sensor line — field names are SCHEMA PARITY with gate-plugin + host/app tags. */

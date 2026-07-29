@@ -6,10 +6,21 @@
 const ACTION_VERBS =
   /\b(add|fix|implement|create|refactor|write|build|update|remove|delete|rename|move|convert|migrate|install|configure|change)\b/i
 
+// Bare-filename extensions that count as a path mention on their own (no
+// directory separator required). Single source of truth — also consumed by
+// validate.ts's extractPathTokens (km-gauge v2 extractor).
+export const PATH_EXTENSIONS = [
+  "ts", "tsx", "js", "jsx", "json", "md", "txt", "py", "sh", "rs", "go", "c",
+  "h", "cpp", "hpp", "java", "yml", "yaml", "toml", "css", "html", "sql",
+  "csv", "ndjson", "lock", "cfg", "conf", "ini", "env",
+] as const
+
 // A token with a directory separator, or a bare filename with a known code/
 // config extension. Whitelisting extensions keeps "e.g." / "i.e." out.
-const PATH_LIKE =
-  /(^|[\s"'`(])[\w.@~-]*\/[\w.@/~-]+|\b[\w-]+\.(ts|tsx|js|jsx|json|md|txt|py|sh|rs|go|c|h|cpp|hpp|java|yml|yaml|toml|css|html|sql|csv|ndjson|lock|cfg|conf|ini|env)\b/i
+const PATH_LIKE = new RegExp(
+  '(^|[\\s"\'`(])[\\w.@~-]*\\/[\\w.@/~-]+|\\b[\\w-]+\\.(' + PATH_EXTENSIONS.join("|") + ')\\b',
+  "i",
+)
 
 export function isTaskShaped(prompt: string): boolean {
   const p = prompt.trim()

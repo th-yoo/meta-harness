@@ -6,16 +6,29 @@
 //   daily-count                {date, count} refiner-call cap (fail-closed on corruption)
 import fs from "node:fs"
 import path from "node:path"
-import type { GaugeDerivation } from "./refiner.ts"
 
-/** Persisted gauge file payload — derivation + provenance. */
-export interface GaugeFile extends GaugeDerivation {
+/** Persisted gauge file payload — derivation + provenance.
+ *
+ * v2-extractor note (2026-07-29, Task 1): deliberately NOT `extends
+ * GaugeDerivation` — GaugeDerivation gained required class/reason/horizon
+ * fields for the v2 refiner+validate pipeline, but this v1 GaugeFile shape
+ * (and every writer/fixture that still constructs it) is untouched until
+ * Task 2 wires validate.ts's ValidatedDerivation through here. Redeclaring
+ * the same four v1 fields locally keeps files.ts/spawn.ts/refiner-cli.ts/
+ * evaluate.ts/shadow.ts and their tests compiling unmodified in the
+ * meantime — see task-1-brief.md's GaugeDerivation-required/GaugeFile-
+ * optional split. */
+export interface GaugeFile {
   v: 1
   sessionID: string
   n: number
   ts: number
   model: string
   derivationMs: number
+  goalSummary: string
+  criteria: string[]
+  check: string | null
+  confidence: number
 }
 
 export function gaugeDir(cwd: string): string {

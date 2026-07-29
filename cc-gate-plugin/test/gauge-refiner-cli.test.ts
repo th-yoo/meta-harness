@@ -51,7 +51,10 @@ async function runRefinerCli(repo: string, sessionID: string, n: number, bin: st
   await proc.exited
 }
 
-const DERIVATION = { goalSummary: "g", criteria: ["c1"], check: "test -f done.txt", confidence: 0.9 }
+// v2: class is now a required parse field (km-gauge v2 extractor, 2026-07-29) —
+// the stub model output must carry it or parseRefinerOutput discards it as
+// malformed (M0 miss), same as any other refiner-cli.ts caller.
+const DERIVATION = { goalSummary: "g", class: "C", criteria: ["c1"], check: "test -f done.txt", confidence: 0.9 }
 
 test("E2E: valid stub output → gauge file written, req removed, KM_CHILD set in child", async () => {
   const repo = mkRepo()

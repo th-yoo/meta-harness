@@ -54,8 +54,10 @@ function sensorLines(repo: string): Record<string, unknown>[] {
 }
 
 function stubBin(repo: string): string {
+  // v2: class is now a required parse field (km-gauge v2 extractor, 2026-07-29).
   const derivation = {
     goalSummary: "stub goal",
+    class: "C",
     criteria: ["stub criterion"],
     check: "test -f done-marker.txt",
     confidence: 0.9,
