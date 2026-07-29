@@ -183,6 +183,18 @@ fields (tripwire-only, never reward), `/mh-score` rate, and kkamak-dev cycles.
    last-modifying commit — never repo `HEAD` — because `HEAD` moves on every unrelated
    docs commit, which would make verdicts perpetually refused. The verdict engine (§6)
    checks this on every run; verdicts are refused while stale.
+   **PRE-DATA ADDENDUM (2026-07-29, build TM5; no verdict has ever consumed this
+   registry):** the 2/19 rate was measured with the mutation probe active in BOTH
+   FA1 arms (ON arm additionally ran spec-coverage + relations); the SHIPPED daily
+   gate (cc-gate-plugin `round.ts`, `mutants: 0`, no FA probes) is strictly weaker
+   than either measured arm. The registered rate is therefore a **lower-bound
+   proxy** for the daily mechanism's false-accept rate, not a point estimate of
+   it. Consumers of rule 2's minimum-effect floor MUST treat it as a lower bound
+   (a floor computed from it is itself a minimum); wiring any probe into the
+   daily gate is a mechanism change that already triggers the registered fresh-
+   calibration-arm cadence, which is also the path to replacing this proxy with
+   a shipped-mechanism measurement. Numbers unchanged; this records what they
+   cover. (Found at TM5 build review, escalated before first consumption.)
 2. A **minimum-effect floor**: an arm-to-arm difference in accept-derived counts smaller
    than what ~10% misclassification could itself generate is not claimable as a candidate
    effect — it is within the noise the FA rate already predicts.
