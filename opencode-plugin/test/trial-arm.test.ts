@@ -41,52 +41,76 @@ test("fnv1a: identical to reinject.ts's hash on sample strings", () => {
 })
 
 // --- Contract 1: salt decorrelation (§11 item 10, named test) --------
+//
+// PRE-DATA AMENDMENT (2026-07-29, build TM2; spec §3 amendment block,
+// commit fc252c2): the originally-registered formula (`% 2`, bit 0) was
+// proven parity-linear — for any FIXED trialId, agreement with the
+// reinject axis (`hash(sid) % 2`) was exactly 0% or 100% across ALL
+// sessionIDs, never ~50%. `pickTrialArm` now uses bit 16
+// (`(fnv1a(...) >>> 16) & 1`), a carry-mixed bit. The tests below exercise
+// the REAL condition the spec cares about: one real trial has ONE fixed
+// trialId for its whole life, so decorrelation must hold *within* that
+// fixed trialId across the sessionID population — not just across the
+// a-priori trialId space. Coordinator-verified empirically: fixed-trialId
+// agreement with reinject ~50% (254/500, 258/500, 248/500, 261/500 across
+// 4 trialIds), arm splits balanced (234/500, 266/500).
 
-test("salt decorrelation: pickTrialArm(trialId, sid) agrees with reinject's hash(sid)%2 near 50% across the trialId space", () => {
-  // CONCERN (see tm2-report.md): FNV-1a's low bit is a linear parity
-  // function of input-byte LSBs — Math.imul(h, ODD_PRIME) preserves h's
-  // parity mod 2^32, and h0=0x811c9dc5 is odd, so hash(s)%2 = 1 XOR (XOR of
-  // charCode LSBs in s). Consequence, verified below and empirically:
-  // hash(`${trialId}:${sid}`)%2 XOR hash(sid)%2 == parity(trialId) —
-  // CONSTANT across sessionID for any *fixed* trialId (":" is even, so it
-  // contributes 0). So within one real trial (one fixed trialId), the
-  // trial arm and the reinject arm are either PERFECTLY correlated or
-  // PERFECTLY anti-correlated — never an empirically-~50%, per-session-
-  // random split. The ~50% only emerges when trialId ALSO varies across
-  // the sample, i.e. across the a-priori space of trial IDs, not within
-  // any one trial. This test exercises that (necessarily weaker) claim;
-  // the stronger per-trial determinism is pinned by the next test.
-  const N = 300
-  let agree = 0
-  for (let i = 0; i < N; i++) {
-    const sid = `session-${i}-${Math.random().toString(36).slice(2)}`
-    const trialId = `trial-${i}-${Math.random().toString(36).slice(2)}`
-    const { arm } = pickTrialArm(trialId, sid, {})
-    const trialAxis = arm === "baseline" ? 0 : 1
-    if (trialAxis === reinjectArm(sid)) agree++
-  }
-  const rate = agree / N
-  expect(rate).toBeGreaterThanOrEqual(0.35)
-  expect(rate).toBeLessThanOrEqual(0.65)
-})
-
-test("CONCERN pin: for a FIXED trialId, agreement with the reinject axis is deterministic (0% or 100%), not ~50% — sessionID-independent", () => {
-  // This is the mathematical consequence documented above, pinned as a
-  // regression/evidence test rather than left as prose only. It does NOT
-  // assert the spec's §3 decorrelation intent holds per-trial — it proves
-  // it does not, for this exact hash formula.
-  const trialIds = ["v7", "v8", "trial-A", "trial-B", "2026-07-29-golden"]
+test("salt decorrelation: for a FIXED trialId, pickTrialArm agrees with reinject's hash(sid)%2 near 50% across >=500 sessionIDs (>=3 fixed trialIds)", () => {
+  const trialIds = ["v7", "v8", "trial-A"]
+  const N = 500
   for (const trialId of trialIds) {
     let agree = 0
-    const N = 200
     for (let i = 0; i < N; i++) {
       const sid = `session-${i}-${Math.random().toString(36).slice(2)}`
       const { arm } = pickTrialArm(trialId, sid, {})
       const trialAxis = arm === "baseline" ? 0 : 1
       if (trialAxis === reinjectArm(sid)) agree++
     }
-    // deterministic extreme, not a random-looking rate
-    expect(agree === 0 || agree === N).toBe(true)
+    const rate = agree / N
+    expect(rate).toBeGreaterThanOrEqual(0.4)
+    expect(rate).toBeLessThanOrEqual(0.6)
+  }
+})
+
+test("salt decorrelation: for a FIXED trialId, the trial/baseline arm split itself is balanced near 50/50 across >=500 sessionIDs (>=3 fixed trialIds)", () => {
+  const trialIds = ["v7", "v8", "trial-A"]
+  const N = 500
+  for (const trialId of trialIds) {
+    let trialCount = 0
+    for (let i = 0; i < N; i++) {
+      const sid = `session-${i}-${Math.random().toString(36).slice(2)}`
+      const { arm } = pickTrialArm(trialId, sid, {})
+      if (arm === "trial") trialCount++
+    }
+    const rate = trialCount / N
+    expect(rate).toBeGreaterThanOrEqual(0.4)
+    expect(rate).toBeLessThanOrEqual(0.6)
+  }
+})
+
+test("parity-proof pin: fnv1a's bit 0 is a CONSTANT (trialId-only) parity across sessionIDs for a fixed trialId — the witness proving bit 0 unusable (spec §3 amendment, commit fc252c2)", () => {
+  // This does NOT exercise pickTrialArm (which uses bit 16 now). It pins the
+  // algebraic property that made the ORIGINAL bit-0 formula unusable and
+  // triggered the pre-data spec amendment: Math.imul(h, ODD_PRIME) preserves
+  // h's parity mod 2^32, so fnv1a(s)%2 reduces to a linear XOR-parity
+  // function of s's charCode LSBs. Consequence: for any FIXED trialId t,
+  // `fnv1a(`${t}:${sid}`) % 2 XOR fnv1a(sid) % 2` is CONSTANT across sid
+  // (":" has an even char code, contributing 0) — i.e. bit 0 gives perfect
+  // (anti-)collinearity with the reinject axis within any one real trial,
+  // never the intended per-session ~50% split. Kept as regression/evidence
+  // documenting WHY bit 16 was substituted, per the amended docs/superpowers/
+  // specs/2026-07-29-trial-mode-gate-outcomes-preregistration.md §3.
+  const trialIds = ["v7", "v8", "trial-A", "trial-B", "2026-07-29-golden"]
+  for (const trialId of trialIds) {
+    const parities = new Set<number>()
+    for (let i = 0; i < 200; i++) {
+      const sid = `session-${i}-${Math.random().toString(36).slice(2)}`
+      const combined = fnv1a(`${trialId}:${sid}`) % 2
+      const sidOnly = fnv1a(sid) % 2
+      parities.add(combined ^ sidOnly)
+    }
+    // constant across ALL sids for this fixed trialId — the proof witness
+    expect(parities.size).toBe(1)
   }
 })
 

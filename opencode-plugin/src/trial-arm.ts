@@ -3,12 +3,24 @@
  * item §11 #1/#2, docs/superpowers/specs/2026-07-29-trial-mode-gate-outcomes-
  * preregistration.md §2/§3).
  *
- * Salt rationale (§3): `arm = FNV-1a("${trialId}:${sessionID}") % 2`. Hashing
- * sessionID alone would make this trial's arm collinear with the live
+ * Salt rationale (§3): `arm = (FNV-1a("${trialId}:${sessionID}") >>> 16) & 1`.
+ * Hashing sessionID alone would make this trial's arm collinear with the live
  * reinject experiment's arm (`hash(sessionID) % 2`, cc-gate-plugin/src/
  * reinject.ts:29-51) — every session would land in the same arm on both
  * axes, so an effect on one axis could be mistaken for the other's. The
  * trialId is a required salt to decorrelate the two axes.
+ *
+ * PRE-DATA AMENDMENT (2026-07-29, build TM2; zero exposure rows existed;
+ * spec §3 amendment block, commit fc252c2): as originally registered this
+ * used bit 0 (`% 2`). FNV-1a's low bit is a linear XOR-parity of the input's
+ * character low bits (multiplying by an odd constant preserves parity), so
+ * for any FIXED trialId, `hash(trialId:sid) % 2` agreed with the reinject
+ * axis `hash(sid) % 2` at exactly 0% or 100% across ALL sessions — perfect
+ * (anti-)collinearity within every real trial, the precise failure §3 exists
+ * to prevent. Found by the named salt-decorrelation test (§11 item 10)
+ * during TM2. Remedy: take bit 16 (a carry-mixed, non-parity-linear bit)
+ * instead of bit 0 — empirically confirmed ~50% fixed-trialId agreement with
+ * the reinject axis and balanced arm splits (see trial-arm.test.ts).
  *
  * FNV-1a here is a REIMPLEMENTATION of cc-gate-plugin/src/reinject.ts:30-37,
  * not an import — cc-gate-plugin → opencode-plugin is the wrong import
@@ -66,7 +78,10 @@ export function pickTrialArm(
 ): { arm: TrialArm; forced: boolean } {
   const forced = env["KKAMAK_TRIAL_ARM"]
   if (forced === "baseline" || forced === "trial") return { arm: forced, forced: true }
-  const arm: TrialArm = fnv1a(`${trialId}:${sessionID}`) % 2 === 0 ? "baseline" : "trial"
+  // Bit 16, not bit 0 — see the PRE-DATA AMENDMENT note above (spec §3, commit
+  // fc252c2). Bit 0 is a linear XOR-parity function of the input and is
+  // provably non-decorrelating for a fixed trialId; bit 16 is carry-mixed.
+  const arm: TrialArm = (fnv1a(`${trialId}:${sessionID}`) >>> 16) & 1 ? "trial" : "baseline"
   return { arm, forced: false }
 }
 
