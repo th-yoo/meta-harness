@@ -416,6 +416,27 @@ left) AND spec-coverage/metamorphic verification tech (resume.md ranked
 item 1) proven — the same tech that vets agent verify.sh can vet generated
 graders. Until both: fixed band + Cat-A reserves.
 
+## 7.7 §4.3 trial-mode (completion-gate-outcome trials) deferrals (registered 2026-07-29)
+
+Non-goals carried over verbatim from the §4.3 pre-registration's own §10
+(`docs/superpowers/specs/2026-07-29-trial-mode-gate-outcomes-preregistration.md`),
+mirrored here per this doc's deferral-register convention so each has a
+recorded reopen trigger, not just a footnote in the design doc:
+
+| Item | Why deferred (v0 scope) | Reopen trigger |
+|---|---|---|
+| Numeric false-accept discounting | The calibration rate's Wilson CI (`[3%, 31%]`) is too wide to subtract from a metric without manufacturing false precision | Calibration N large enough that the CI width < the minimum-effect floor |
+| Sequential stopping for trial verdicts | Already deferred — see §7.5; not duplicated here | See §7.5's own reopen trigger |
+| Concurrent trials | v0 = one live trial at a time, enforced per-layer by the `readTrial` guard and, across repos/hosts, by declared operational convention only | The first mechanical cross-repo/host trial lock ships (last row below) |
+| opencode-session arms | v0 = Claude Code sessions only | Playbook-class trial demand appears on opencode sessions |
+| Account-global / role-layer trials | v0 = project-global layer only | Project-global v0 produces ≥1 sound verdict |
+| Gauge-as-reward | Gauge fields stay tripwire-only, never a reward input | km-gauge M0–M3 verdict passes all four metrics |
+| Automated cross-host sensor sync | v0 sync is a manual, surgical snapshot script | Manual snapshot cadence proves insufficient ≥2 times |
+| Composite reward scores | Each metric stays separately reported, never combined into one number | Never, without a pre-registered weighting design |
+| Auto trial-start | v0 keeps trial start human-go (the human starting a trial is the concurrency lock) | km-crank's legacy-mode review-gate bypass is closed |
+| Mechanism-class generalized trial slots | v0 = playbook class only; the mechanism class keeps bespoke §4b-style pre-registrations | A second §4.3-style registration extends this machinery to the mechanism class |
+| Mechanical cross-repo/host trial lock | v0 = declared operational convention only, not a mechanism | The convention is violated once, or more than one operator exists |
+
 ## 8. Reading this doc in six months
 
 Ask, per entry: did the trigger fire? If yes, the entry graduates into the next

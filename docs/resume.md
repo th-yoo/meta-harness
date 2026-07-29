@@ -22,11 +22,15 @@ per arm. Raise event rate: (a) squad dogfood — `.km/` into squad .gitignore
 then `/kkamak:init`; (b) MacBook install (2 commands above; store
 auto-migrates on first plugin run — rename `872cef8` is self-healing).
 
-**QUEUE:** (1) **§4.3 trial-mode design** = "daily-usage verdicts for
-candidates" — hard part: gate outcomes are self-verified with ~10%
-false-accept (2/19 pooled FA1) — adoption on uncorrected noise forbidden;
-consumes calibration rate + two-host union stream + gauge dimension +
-scorecard. Design session, needs go. (2) squad + MacBook (above).
+**QUEUE:** (1) **§4.3 trial-mode pre-registration** — DONE: WRITTEN +
+registered
+(`docs/superpowers/specs/2026-07-29-trial-mode-gate-outcomes-preregistration.md`;
+3 architect-review iterations, 24 findings resolved; key decisions:
+playbook-class v0 build path, within-workload salted per-session arms, auto
+keep/rollback + human-go start, computed calibration staleness,
+golden-baseline every 3 KEEPs, A/A machinery test first, activation
+precondition trailing-14d ≥10 real-work cycles/day). NEXT for §4.3 =
+prerequisite build items §11 (≈4-6 days, NEEDS GO). (2) squad + MacBook (above).
 (3) small opens: cache-refresh script (installed copy = COPY, rots behind
 source silently; refresh = `claude plugin marketplace update kkamak-local`
 + uninstall + install), km-crank (70 tests) absent from gate.json check.

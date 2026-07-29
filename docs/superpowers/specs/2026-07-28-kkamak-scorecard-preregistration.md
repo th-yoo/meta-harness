@@ -123,3 +123,14 @@ No time-series/regression. No significance testing (counts only — the
 project's SPRT-spec rule applies: no p-values without a pre-registered
 sequential design). No automatic adoption; the scorecard informs, `gate.ts`
 remains the sole adopter. No writes — read-only over the sensor.
+
+*Correction lineage (pre-data, 2026-07-29):* the sentence above is hereby
+SCOPED to its own domain — bench certification (`minimal/gate.ts`) and
+scorecard/mechanism-class claims (the §4b-style experiments, e.g. §4b above).
+The §4.3 trial-mode pre-registration
+(`docs/superpowers/specs/2026-07-29-trial-mode-gate-outcomes-preregistration.md`)
+establishes a third adopter domain: daily playbook keep/rollback verdicts,
+automatic with post-hoc veto, trial start human-go. This scoping is
+registered before any §4.3 trial data exists (zero trials run). The original
+sentence is NOT weakened or deleted — it still holds, unmodified, for the two
+domains it always covered.
