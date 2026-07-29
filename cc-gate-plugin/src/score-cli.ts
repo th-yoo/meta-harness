@@ -144,7 +144,10 @@ interface TrialBlock {
  *   - otherwise -> attributed to the row's arm; gauge-only lines count
  *     toward density but not metrics (classifyCycle(l) !== "gauge-only").
  * First exposure row per sessionID wins on duplicates within the selected
- * trialId (same dedupe rule as the canonical reader).
+ * trialId (same dedupe rule as the canonical reader). The scoping trialId
+ * itself is chosen by max `ts` across ALL rows (before any forced/dedupe
+ * filtering); ties on `ts` are broken by first-seen-in-array-order, since the
+ * comparison below is strict `>`.
  */
 function joinTrialArms(lines: SensorLineIn[], rows: ExposureRow[]): TrialBlock {
   // Pick the trialId whose row has the most recent ts; scope everything to it.
@@ -157,6 +160,11 @@ function joinTrialArms(lines: SensorLineIn[], rows: ExposureRow[]): TrialBlock {
   const rowBySession = new Map<string, ExposureRow>()
   for (const r of scopedRows) if (!rowBySession.has(r.sessionID)) rowBySession.set(r.sessionID, r)
 
+  // Caveat: this counts forced exposure ROWS, not forced SESSIONS-with-visible-
+  // lines. The exposure file is shared across every check being scored, so a
+  // forced row's session may have zero matching sensor lines in THIS file —
+  // nothing was actually excluded from the numbers above for that row. Do not
+  // read forcedCount as "N cycles/lines were hidden".
   let forcedCount = 0
   for (const row of rowBySession.values()) if (row.forced) forcedCount++
 
@@ -276,7 +284,7 @@ function render(r: ScoreResult, minN: number, trial?: TrialBlock): string {
         `   density ${a.density.toFixed(2)}`,
       )
     }
-    out.push(`   forced (excluded): ${trial.forcedCount}`)
+    out.push(`   forced exposure rows: ${trial.forcedCount} (excluded from arms; a row's session may have 0 lines in this file)`)
     out.push("")
   }
 

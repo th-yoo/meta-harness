@@ -351,7 +351,7 @@ test("CLI: §4.3 trial block prints per-arm N_eff triplet, density, and forced c
   // trial: metrics = 1 (s2), density set = 1 line over 1 session -> density 1.00;
   // s4 (forced) contributes NOTHING here, only to the forced count below.
   expect(r.out).toMatch(/trial.*cycles\s+1.*sessions\s+1.*sessions-w-cycle\s+1.*density 1\.00/)
-  expect(r.out).toContain("forced (excluded): 1")
+  expect(r.out).toContain("forced exposure rows: 1 (excluded from arms; a row's session may have 0 lines in this file)")
   // single trialId in the exposure file ("t1", the expRow default) -> named in the
   // block, no other-trial-rows line (TM7 review fix 2).
   expect(r.out).toContain("t1")
@@ -371,7 +371,7 @@ test("CLI: forced count is per exposure ROW (deduped by session), not per matchi
   exposureFileBeside(f, [expRow({ sessionID: "s1", arm: "trial", forced: true })])
 
   const r = await runCli([f, "--min-n", "1"])
-  expect(r.out).toContain("forced (excluded): 1")
+  expect(r.out).toContain("forced exposure rows: 1 (excluded from arms; a row's session may have 0 lines in this file)")
   // both forced lines are still excluded from the trial arm's metrics/density.
   expect(r.out).toMatch(/trial.*cycles\s+0.*sessions\s+0.*sessions-w-cycle\s+0.*density 0\.00/)
 })
@@ -403,7 +403,30 @@ test("CLI: trial-arms.ndjson present but every row is unrelated to any sensor se
   expect(r.out).toContain("§4.3 trial")
   expect(r.out).toMatch(/baseline.*cycles\s+0.*sessions\s+0.*sessions-w-cycle\s+0.*density 0\.00/)
   expect(r.out).toMatch(/trial.*cycles\s+0.*sessions\s+0.*sessions-w-cycle\s+0.*density 0\.00/)
-  expect(r.out).toContain("forced (excluded): 0")
+  expect(r.out).toContain("forced exposure rows: 0 (excluded from arms; a row's session may have 0 lines in this file)")
+})
+
+test("CLI: trialId selection uses the row with the max ts even when that row is forced:true — selection happens before forced filtering", async () => {
+  const lines = [
+    line({ sessionID: "s1" }), // only s1 has a visible sensor line in this file
+  ]
+  const f = sensorFile(lines)
+  exposureFileBeside(f, [
+    expRow({ sessionID: "s1", trialId: "t-old", ts: 1000, arm: "baseline", forced: false }),
+    // s2's row has the max ts and is forced — it still determines the scoping
+    // trialId ("t-new"), even though the row itself is excluded from the arms.
+    expRow({ sessionID: "s2", trialId: "t-new", ts: 2000, arm: "trial", forced: true }),
+  ])
+
+  const r = await runCli([f, "--min-n", "1"])
+  expect(r.out).toContain("t-new")
+  expect(r.out).not.toContain("t-old")
+  // s1's row belongs to the non-selected older trial -> reported as not-shown.
+  expect(r.out).toContain("other-trial rows: 1 (not shown)")
+  // the forced s2 row is the ONLY row in the selected trial, so both arms are empty.
+  expect(r.out).toMatch(/baseline.*cycles\s+0.*sessions\s+0.*sessions-w-cycle\s+0.*density 0\.00/)
+  expect(r.out).toMatch(/trial.*cycles\s+0.*sessions\s+0.*sessions-w-cycle\s+0.*density 0\.00/)
+  expect(r.out).toContain("forced exposure rows: 1 (excluded from arms; a row's session may have 0 lines in this file)")
 })
 
 test("CLI: --json output is unaffected by an adjacent trial-arms.ndjson (still parseable, no trial key required)", async () => {
