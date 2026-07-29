@@ -118,17 +118,55 @@ test("pool: true merges every group into one, as an explicit opt-in", () => {
   expect(groups[0]!.gateCycles).toBe(5)
 })
 
-// ── gauge dimension ──────────────────────────────────────────────────────
+// ── gauge dimension (v2 extractor, Task 3): counters RE-SCOPED to lines
+// whose gauge carries a class field — class presence IS the v2-window
+// filter, so v1 PoC lines (no class) contribute ZERO. See the companion
+// "class-less legacy" test below for that half of the rule.
 
-test("gauge metrics count present/executable/would-block across ALL lines", () => {
+test("gauge metrics count present/executable/would-block across ALL v2 (class-carrying) lines", () => {
   const lines = [
-    line({ gauge: { present: true, executable: true, pass: true, wouldBlock: false } }),
-    line({ gauge: { present: true, executable: true, pass: false, wouldBlock: true, agreesWithFloor: false } }),
-    line({ gauge: { present: true, executable: false, refused: "destructive-command" } }),
+    line({ gauge: { present: true, executable: true, pass: true, wouldBlock: false, class: "C" } }),
+    line({
+      gauge: { present: true, executable: true, pass: false, wouldBlock: true, agreesWithFloor: false, class: "C" },
+    }),
+    line({ gauge: { present: true, executable: false, refused: "destructive-command", class: "C" } }),
     line({}), // no gauge at all
   ]
   const { gauge } = scoreLines(lines, { minN: 1 })
   expect(gauge).toMatchObject({ present: 3, executable: 2, wouldBlock: 1, refused: 1, disagreedWithFloor: 1 })
+})
+
+test("class-less legacy gauge line (v1 PoC) contributes ZERO to every top-level counter", () => {
+  const lines = [
+    line({ gauge: { present: true, executable: true, pass: true, wouldBlock: false } }),
+    line({ gauge: { present: true, executable: true, pass: false, wouldBlock: true, agreesWithFloor: false } }),
+    line({ gauge: { present: true, executable: false, refused: "destructive-command" } }),
+  ]
+  const { gauge } = scoreLines(lines, { minN: 1 })
+  expect(gauge).toMatchObject({ present: 0, executable: 0, refused: 0, wouldBlock: 0, disagreedWithFloor: 0 })
+})
+
+test("gauge byClass + downgraded counters", () => {
+  const lines = [
+    line({ gauge: { present: true, class: "A1" } }),
+    line({ gauge: { present: true, class: "A1" } }),
+    line({ gauge: { present: true, class: "A2" } }),
+    line({ gauge: { present: true, class: "B" } }),
+    line({ gauge: { present: true, class: "C", executable: true, pass: true, wouldBlock: false } }),
+    line({
+      gauge: {
+        present: true,
+        class: "D",
+        downgraded: { fromClass: "C", fromCheck: "cat x", rule: "path-not-in-prompt", token: "x" },
+      },
+    }),
+    line({ gauge: { present: true, class: "D", downgraded: { fromClass: "C", fromCheck: null, rule: "missing-check" } } }),
+    line({}), // no gauge — must not count anywhere
+    line({ gauge: { present: true, executable: true } }), // class-less legacy — must not count in byClass either
+  ]
+  const { gauge } = scoreLines(lines, { minN: 1 })
+  expect(gauge.byClass).toEqual({ A1: 2, A2: 1, B: 1, C: 1, D: 2 })
+  expect(gauge.downgraded).toBe(2)
 })
 
 // ── robustness ───────────────────────────────────────────────────────────
@@ -178,6 +216,22 @@ test("CLI: --min-n is honoured and its VALUE is not treated as a filename", asyn
   expect(r.out).not.toContain("cannot read")
   expect(r.out).toContain("M-catch") // rates printed, not suppressed
   expect(r.out).not.toContain("rates suppressed")
+})
+
+test("CLI: km-gauge block prints the classes/downgraded line (text render)", async () => {
+  const f = sensorFile([
+    line({ gauge: { present: true, class: "C", executable: true, pass: true, wouldBlock: false } }),
+    line({
+      gauge: {
+        present: true,
+        class: "D",
+        downgraded: { fromClass: "C", fromCheck: "cat x", rule: "path-not-in-prompt", token: "x" },
+      },
+    }),
+  ])
+  const r = await runCli([f, "--min-n", "1"])
+  expect(r.code).toBe(0)
+  expect(r.out).toContain("classes A1 0 · A2 0 · B 0 · C 1 · D 1 · downgraded 1")
 })
 
 test("CLI: --json emits parseable output; --pool merges groups", async () => {

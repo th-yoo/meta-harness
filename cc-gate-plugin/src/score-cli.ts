@@ -94,6 +94,10 @@ function render(r: ScoreResult, minN: number): string {
       `   present ${gg.present}, executable ${gg.executable}, refused ${gg.refused}` +
       `, would-have-blocked ${gg.wouldBlock}, disagreed-with-floor ${gg.disagreedWithFloor}`,
     )
+    const bc = gg.byClass
+    out.push(
+      `   classes A1 ${bc.A1} · A2 ${bc.A2} · B ${bc.B} · C ${bc.C} · D ${bc.D} · downgraded ${gg.downgraded}`,
+    )
     out.push("")
   }
 

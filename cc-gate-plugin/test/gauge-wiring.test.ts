@@ -337,3 +337,108 @@ test("wouldBlock gauge + passing floor → emitted decision is still allow", asy
   expect(g.wouldBlock).toBe(true)
   expect(g.agreesWithFloor).toBe(false)
 })
+
+// ── two-strike (km-gauge v2 extractor, Task 3) — real-hook E2E ───────────
+
+test("multi-turn C two-strike E2E: first edited Stop → strike:1 wouldBlock:false, pending persists; second edited Stop → wouldBlock:true strike:2, .done.json", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true", gauge: true }) // floor passes; gauge check fails (no done-marker.txt)
+  seedState(repo, SID, { edited: true })
+  writeGaugeFile(gaugeDir(repo), {
+    v: 2,
+    sessionID: SID,
+    n: 1,
+    ts: 1,
+    model: "haiku",
+    derivationMs: 5,
+    goalSummary: "g",
+    criteria: ["c"],
+    check: "test -f done-marker.txt",
+    confidence: 0.9,
+    class: "C",
+    reason: null,
+    horizon: "multi-turn",
+  })
+
+  await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: SID, cwd: repo }) })
+
+  let lines = sensorLines(repo)
+  expect(lines.length).toBe(1)
+  let g = lines[0]!.gauge as Record<string, unknown>
+  expect(g.pass).toBe(false)
+  expect(g.wouldBlock).toBe(false)
+  expect(g.strike).toBe(1)
+
+  const pendingPath = path.join(gaugeDir(repo), `${SID}-1.json`)
+  expect(fs.existsSync(pendingPath)).toBe(true)
+  expect(fs.existsSync(path.join(gaugeDir(repo), `${SID}-1.done.json`))).toBe(false)
+  const pendingOnDisk = JSON.parse(fs.readFileSync(pendingPath, "utf-8"))
+  expect(pendingOnDisk.strike).toBe(1)
+
+  // Second edited Stop: another turn of work, still not done.
+  seedState(repo, SID, { edited: true })
+  await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: SID, cwd: repo }) })
+
+  lines = sensorLines(repo)
+  expect(lines.length).toBe(2)
+  g = lines[1]!.gauge as Record<string, unknown>
+  expect(g.wouldBlock).toBe(true)
+  expect(g.strike).toBe(2)
+
+  expect(fs.existsSync(pendingPath)).toBe(false)
+  const done = JSON.parse(fs.readFileSync(path.join(gaugeDir(repo), `${SID}-1.done.json`), "utf-8"))
+  expect(done.eval.strike).toBe(2)
+  expect(done.eval.wouldBlock).toBe(true)
+})
+
+test("v2 invariant companion: strike-2 wouldBlock (two-strike consumed) + PASSING floor → emitted decision still allow", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true", gauge: true })
+  seedState(repo, SID, { edited: true })
+  writeGaugeFile(gaugeDir(repo), {
+    v: 2,
+    sessionID: SID,
+    n: 1,
+    ts: 1,
+    model: "haiku",
+    derivationMs: 5,
+    goalSummary: "g",
+    criteria: ["c"],
+    check: "false", // derived check fails -> second consecutive fail -> wouldBlock:true
+    confidence: 0.9,
+    class: "C",
+    reason: null,
+    horizon: "multi-turn",
+    strike: 1, // already carrying a first strike from an earlier Stop
+  })
+
+  const proc = Bun.spawn(["bun", HOOK_CLI, "Stop"], {
+    stdin: new TextEncoder().encode(JSON.stringify({ session_id: SID, cwd: repo })),
+    stdout: "pipe",
+    stderr: "ignore",
+    env: (() => {
+      const env = { ...(process.env as Record<string, string>) }
+      delete env.MH_CHILD
+      delete env.KM_CHILD
+      delete env.KKAMAK_DELIVERY
+      delete env.KKAMAK_GAUGE
+      return env
+    })(),
+  })
+  const [out, code] = await Promise.all([
+    new Response(proc.stdout as ReadableStream<Uint8Array>).text(),
+    proc.exited,
+  ])
+
+  // Allow-family: exit 0, no block payload on stdout — the deferred,
+  // two-strike-consumed verdict lands only on the sensor line too.
+  expect(code).toBe(0)
+  expect(out).not.toContain('"decision"')
+
+  const l = sensorLines(repo)[0]!
+  expect(l.accepted).toBe(true)
+  expect(l.gateExhausted).toBe(false)
+  const g = l.gauge as Record<string, unknown>
+  expect(g.wouldBlock).toBe(true)
+  expect(g.strike).toBe(2)
+})
