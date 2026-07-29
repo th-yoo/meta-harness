@@ -16,7 +16,7 @@
 - Salt: `arm = FNV-1a("${trialId}:${sessionID}") % 2` — REUSE the existing FNV-1a implementation (`cc-gate-plugin/src/reinject.ts:30-37` constants 0x811c9dc5/0x01000193); a second divergent hash impl is a defect. 0 → "baseline", 1 → "trial".
 - `KKAMAK_TRIAL_ARM` forcing mirrors `KKAMAK_REINJECT` (`reinject.ts:44-51`) but the exposure row records `forced:true` — exclusion is enforced from the exposure record at join time (§2), never sensor-side convention.
 - Old `resolveTrial` stand-down = literally the FIRST branch after `readTrial` null-check, BEFORE any `readScore` (`harness-store.ts:1322`) — it fires on every `/mh-score` (`engine.ts:607`).
-- `resolveGateTrial` verdict enactment reuses `writeActive`/`clearTrial`/`appendMetaMetric` only; new ledger `action` values on the existing `event:"trial"` stream: `"keep" | "rollback" | "insufficient-events" | "deferred" | "abandoned"`. A §4.3 ROLLBACK writes NO rejected-ledger entry.
+- `resolveGateTrial` verdict enactment reuses `writeActive`/`clearTrial`/`appendMetaMetric` only; new ledger `action` values on the existing `event:"trial"` stream: `"keep" | "rollback" | "insufficient-events" | "deferred" | "abandoned"`. A §4.3 ROLLBACK writes NO rejected-ledger entry. **AMENDED (pre-data, TM6 review): the explicit-abandon branch restores the baseline via `writeActive` when the trial candidate is still active (it always is at that branch — the active-changed guard already returned) — clear-only abandon silently adopted the unvalidated candidate (spec §5 abandon amendment, clause 2).**
 - Trial START stays human-go (v0). Nothing in this build may auto-start a trial.
 - kkamak-dev check group, gauge-only lines, forced rows, unmatched sensor lines: excluded from every metric (§2). Pooling only explicit.
 - **Build-time decision (spec flags it; plan resolves it):** the queued golden window reuses `.trial` — `TrialState` gains optional `golden?: true` and `awaitingGo?: true`. Rationale (record in code comment): `readTrial != null` already blocks clobber from every existing path (crank skip-trial, propose isProject guard), so a second state file would need a parallel guard net; layering on `.trial` inherits the whole net for free. `awaitingGo` rows are inert: compose ignores them (no arm assignment until go), verdict engine ignores them, only the human-go path activates them.
@@ -259,7 +259,7 @@ export function evaluateGateTrial(i: TrialEvaluationInput): TrialEvaluation
 - floors unmet + ≥28d → rollback `"insufficient-events"`.
 - floors met + any metric null → `deferred` (never coerce null to 0).
 - floors met: KEEP iff `mExhaust(T) ≤ mExhaust(B) && mInterrupt(T) ≤ mInterrupt(B) && mCatch(T) ≥ mCatch(B)`, else rollback.
-- calibrationIsStale → refuse (pending with reason "calibration-stale", enact nothing) — comes BEFORE floor evaluation.
+- calibrationIsStale → refuse (pending with reason "calibration-stale", enact nothing) — comes BEFORE floor evaluation — **AMENDED (pre-data, TM6 review): refusal only while `now − startedAt < T_MAX`; stale AND `≥ T_MAX` → verdict abandoned `"calibration-stale"` (spec §5 abandon amendment). Unconditional refusal masked the T_MAX slot bound.**
 - exposure-density gross divergence (>3x either way with both ≥5 sessions — pick and COMMENT the threshold; spec says "gross", plan pins 3x as the v0 constant) → verdict abandoned `"exposure-divergence"` (VOID for the trial per §9).
 - **A/A machinery test (§11 item 10):** synthetic identical-arm stream meeting all floors → KEEP by tie (all three clauses hold with equality).
 
@@ -273,7 +273,7 @@ export function evaluateGateTrial(i: TrialEvaluationInput): TrialEvaluation
 ```
 each with a render case (SITREP shows per-arm N_eff triplet + per-host coverage note).
 
-**Behavior contracts:** every exclusion rule, every truth-table row, A/A, futility projection string, non-winning-repo trial still evaluated (two-repo fixture), calibration-stale refusal, enactment called exactly once per verdict, `pending` enacts nothing.
+**Behavior contracts:** every exclusion rule, every truth-table row, A/A, futility projection string, non-winning-repo trial still evaluated (two-repo fixture), calibration-stale refusal, enactment called exactly once per verdict, `pending` enacts nothing. **AMENDED (pre-data, TM6 review), two more:** stale + `≥ T_MAX` → abandoned `"calibration-stale"`; engine-computed abandon (exposure-divergence, calibration-stale) restores baseline.
 
 - [ ] Steps: TDD (this is the largest test file — write the truth table as table-driven cases) → km-crank suite green → commit `feat(km-crank): trial-verdict engine + crank wiring before decideGate + trial SitrepActions (§11 items 4,10)`.
 

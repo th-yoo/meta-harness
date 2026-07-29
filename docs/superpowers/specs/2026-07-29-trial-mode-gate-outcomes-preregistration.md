@@ -183,6 +183,13 @@ fields (tripwire-only, never reward), `/mh-score` rate, and kkamak-dev cycles.
    last-modifying commit — never repo `HEAD` — because `HEAD` moves on every unrelated
    docs commit, which would make verdicts perpetually refused. The verdict engine (§6)
    checks this on every run; verdicts are refused while stale.
+   **PRE-DATA AMENDMENT (2026-07-29, build TM6 review; no verdict has ever been
+   enacted): refusal is time-bounded by §5's `T_MAX` — staleness persisting at
+   `now − startedAt ≥ T_MAX` abandons the live trial (reason
+   `"calibration-stale"`, §5 abandon list), so a permanently stale registry
+   cannot hold the single trial slot unboundedly. (Found at TM6 review: the
+   as-planned unconditional refusal, placed before the T_MAX check, converted
+   §5's bounded slot into an unbounded one.)**
    **PRE-DATA ADDENDUM (2026-07-29, build TM5; no verdict has ever consumed this
    registry):** the 2/19 rate was measured with the mutation probe active in BOTH
    FA1 arms (ON arm additionally ran spec-coverage + relations); the SHIPPED daily
@@ -274,6 +281,27 @@ governs only entries that actually land there, via the review gate.
 under the trial (manual `activate`, same precedent as today's abandon path,
 `resolveTrial`, `harness-store.ts:1317-1320`); the calibration registry goes stale
 mid-trial; or a manual command supersedes (§6).
+
+**PRE-DATA AMENDMENT (2026-07-29, TM6 review; no verdict has ever been enacted) —
+two clarifications, found at the first code that routes these paths:**
+1. **Stale-abandon trigger.** While the registry is stale and
+   `now − startedAt < T_MAX`, the engine refuses verdicts (§4 rule 1): pending,
+   nothing enacted, recalibration un-blocks it. If staleness persists at
+   `≥ T_MAX`, the trial is **abandoned** with reason `"calibration-stale"` — not
+   rollback `"insufficient-events"`, which would misname the cause; like every
+   abandon, no rejected-ledger entry, candidate re-proposable. Immediate
+   abandon-on-first-stale was rejected (any mechanism-path commit would destroy
+   a healthy trial that a recalibration arm could have resumed); unbounded
+   refusal was rejected (defeats this section's T_MAX slot bound). This gives
+   §4's refusal and this list's "goes stale mid-trial" clause one coherent,
+   bounded mechanization.
+2. **Abandon restores the baseline.** An abandon enacted while the trial
+   candidate is still the active version restores the recorded baseline (the
+   same `writeActive` path as ROLLBACK). Abandon-without-restore would leave an
+   unvalidated candidate silently adopted — a false-keep-shaped default that §4's
+   "prefers a false rollback over a false keep" posture forbids. When the active
+   version has already changed (manual `activate` / supersede), there is nothing
+   to restore and clear-only stands, as today.
 
 **Adoption semantics.** Across the null-adopt path, roughly 60% of KEEPs are expected to
 be "not measurably worse" ties rather than measured improvements — KEEP means exactly
