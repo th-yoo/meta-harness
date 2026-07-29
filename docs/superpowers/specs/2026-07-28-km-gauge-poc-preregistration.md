@@ -142,3 +142,43 @@ plugin to a temp dir and drives a real gated Stop through it.
   exactly this; refiner ≠ worker by construction (fresh context).
 - Sensor `durationMs` human-wait inflation (SM2 finding) applies to gauge
   review timing too — interpret with care.
+
+## 7. M0–M3 ANALYSIS 2026-07-29 (window closed, office union stream) — VERDICT: SHADOW INDEFINITELY
+
+Window: 36 task-shaped spawns (meta-harness 32 + km-play 4), ≥30 criterion
+met; office host only (MacBook uninstalled — union buys N only, absence
+unbiased). User review session held 2026-07-29; labels below are the user's.
+
+- **M0 coverage: PASS — 33/36 = 91.7%** (bar ≥70%). 3 misses = km-play
+  derivations stranded pending by session end (the known one-shot shape;
+  §6 risk confirmed benign at this rate).
+- **M1 executable: PASS — 21/33 = 63.6%** (bar ≥60%, thin margin).
+  Forensics on all 12 non-executables: every one is `check: null` — the
+  refiner honestly declined on review/audit/plan-shaped goals. Zero
+  malformed commands, zero guard refusals, zero 126/127. The miss-mode is
+  honest abstention, not derivation failure.
+- **M2 false-block: FAIL — 9/10 would-have-blocked lines judged WRONG**
+  (bar ≤20%). False-block taxonomy (not random): (a) stale-context
+  evaluation — checks graded before the commits they test landed
+  (deferred-consumption semantics, §5b noted); (b) wrong-path assumptions
+  (work in the plan file outside docs/, one hallucinated filename);
+  (c) scope-too-broad greps (repo-wide match on strings that legitimately
+  exist in source); (d) one inherited-false-premise case — the derived
+  check absorbed a refuted claim present in the prompt text. Common root:
+  the refiner derives from the prompt alone with no repo-state grounding.
+- **M3 value existence: PASS — 1 RIGHT catch** (sid 27ad1b0b n=17): derived
+  check `! grep -E '(Status.*DRAFT|resume\.md:(175-177|178))'` caught the
+  §4.3 spec's DRAFT status + stale resume.md anchors while the completion
+  gate's fast-path accepted the turn — the SAME two defects the final
+  whole-branch review later flagged as must-fix, found independently and
+  earlier. Floor-accepted status of the fast-path Stop: user-ruled COUNTS
+  (2026-07-29).
+
+**Decision (per the locked rule):** M2 fail → the per-task blocking layer
+stays SHADOW indefinitely; no blocking-pilot design will be written from
+this window. The sensor dimension alone must justify the cost (≤1 haiku
+call per task-shaped prompt, daily cap 30) — keep-shadow vs kill is an open
+user decision with no deadline. Any future blocking ambition requires a
+redesigned refiner with repo-state grounding (the M2 taxonomy is the
+requirements list) and a fresh pre-registered window; this window's data
+cannot be reused for that decision.

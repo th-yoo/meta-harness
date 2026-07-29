@@ -9,7 +9,11 @@ does NOT transfer; this file + the repo are the source of truth.)
 plugin INSTALLED on office (auto-loads every session; per-host — MacBook
 still needs `claude plugin marketplace add ~/z2/meta-harness/cc-gate-plugin`
 + `claude plugin install kkamak@kkamak-local` after pull). Gauge M0–M3
-window open (this repo + km-play armed). Scorecard shipped
+window CLOSED 2026-07-29: M0 91.7% PASS, M1 63.6% PASS, **M2 FAIL (9/10
+false-block, user-labeled)**, M3 PASS (1 real catch: the DRAFT-status
+defect, pre-final-review) → per locked rule **km-gauge stays SHADOW
+indefinitely, no blocking pilot**; keep-shadow vs kill = open user call
+(analysis: km-gauge pre-reg §7). Scorecard shipped
 (`bun cc-gate-plugin/src/score-cli.ts`; **MIN_N=20 LOCKED by user** —
 display floor, not certification; certified verdicts = separate
 pre-registered sequential design). §4.4 reinject A/B LIVE and clean: v0
