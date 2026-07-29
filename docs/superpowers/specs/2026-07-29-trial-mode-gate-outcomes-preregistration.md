@@ -12,7 +12,7 @@ and partitions them by trial arm instead of by `(check, host)` group.
 
 **Genesis, for future audit:** designed by two lenses — a minimal-buildable pass and an
 adversarial-integrity pass — with four resulting conflicts resolved by user ratification
-on 2026-07-29 (the decisions are codified in §1, §5, and §6 below, at the point each
+on 2026-07-29 (the decisions are codified in §1, §4, §5, and §6 below, at the point each
 applies), then carried through three adversarial architect-review iterations: iteration 1
 raised 16 findings (2 BLOCKER), iteration 2 raised 5 second-order findings (1 BLOCKER),
 iteration 3 raised 3 cross-reference residuals. All findings from all three iterations are
@@ -173,11 +173,12 @@ fields (tripwire-only, never reward), `/mh-score` rate, and kkamak-dev cycles.
 2. A **minimum-effect floor**: an arm-to-arm difference in accept-derived counts smaller
    than what ~10% misclassification could itself generate is not claimable as a candidate
    effect — it is within the noise the FA rate already predicts.
-3. **FA-relevance triage at registration.** A candidate whose mechanism could plausibly
-   move the false-accept rate (e.g. touches check-authoring guidance, verification
-   strength, acceptance criteria) is **refused in v0** — not trialed at all. Default on
-   doubt is FA-relevant (refuse). This keeps v0 scoped to candidates whose effect on
-   completion-gate shape cannot be confused with an effect on completion-gate correctness.
+3. **FA-relevance triage at registration (ratified decision 3).** A candidate whose
+   mechanism could plausibly move the false-accept rate (e.g. touches check-authoring
+   guidance, verification strength, acceptance criteria) is **refused in v0** — not
+   trialed at all. Default on doubt is FA-relevant (refuse). This keeps v0 scoped to
+   candidates whose effect on completion-gate shape cannot be confused with an effect on
+   completion-gate correctness.
 4. **No numeric discount.** The calibration rate informs the floor in rule 2 and the
    triage in rule 3; it is never subtracted from a metric or folded into a score.
 
