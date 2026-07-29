@@ -99,6 +99,29 @@ v1's failure restated in these terms: it collapsed B, C, D into one
    distribution (A/B/D counts) becomes a first-class measurable instead of
    an autopsy artifact.
 
+*Amendment lineage (pre-data, 2026-07-29, build-review):* build review
+sharpened §2.4/§2.5 beyond the original registration, still before any v2
+data exists. (a) Two-strike (§2.4) refinement as built: strike advancement
+requires a real floor-gate cycle — an edited turn whose completion-gate
+cycle ran. At a Stop with no floor cycle (fast-path/planning turns), an OPEN
+multi-turn-C pending is NOT evaluated at all: the check does not execute,
+the pending is left untouched, and the sensor line carries a
+passthrough-only gauge field (class/horizon/strike passthrough,
+`executable:false`, no `pass`/`wouldBlock`). Without this, planning turns
+could burn both strikes pre-work — mid-flight grading, the exact failure
+§2.4 exists to damp — or re-execute the check unboundedly. Single-turn C is
+unchanged: it still evaluates at any Stop. (b) Sensor (§2.5): the gauge
+field also records `strike: 1|2` — a first-strike marker or terminal second
+strike. (c) §3's metrics computation rule: M1v2 and M5 are computed PER
+DERIVATION, not per line — dedupe by `(sessionID, n)` using the terminal
+line (or the `.done.json` audit) so one derivation is one M1v2/M5 unit;
+passthrough-only lines (`horizon === "multi-turn" && rounds.length === 0`,
+no `pass` field) are excluded from M1v2's denominator. (d) Footnote: the
+operational v2-window filter (score.ts) is class-presence on the gauge
+field — only v2 lines carry `class` — a strict subset of the registered
+deploy-timestamp cut; a stale pre-deploy refiner writing a v:1 pending
+after the deploy commit self-excludes.
+
 ## 3. Pre-registered metrics + decision rule (fresh window)
 
 Window: ≥30 task-shaped prompts accumulated AFTER the v2 deploy commit,

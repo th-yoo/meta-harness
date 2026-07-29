@@ -169,6 +169,12 @@ test("gauge byClass + downgraded counters", () => {
   expect(gauge.downgraded).toBe(2)
 })
 
+test("byClass membership guard: a corrupted class string contributes to NOTHING — byClass unchanged", () => {
+  const lines = [line({ gauge: { present: true, class: "Z" as unknown as never } })]
+  const { gauge } = scoreLines(lines, { minN: 1 })
+  expect(gauge.byClass).toEqual({ A1: 0, A2: 0, B: 0, C: 0, D: 0 })
+})
+
 // ── robustness ───────────────────────────────────────────────────────────
 
 test("malformed lines are skipped, never throw, and are counted", () => {

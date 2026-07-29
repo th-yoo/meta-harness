@@ -229,6 +229,32 @@ test("multi-turn C: gauge-only Stop (no floor cycle) → NOT evaluated, pending 
   expect(out?.gauge?.strike).toBeUndefined()
 })
 
+test("multi-turn C: strike:1 pending at a gauge-only Stop (no floor cycle) → NOT evaluated, pending byte-unchanged, passthrough field carries strike:1", async () => {
+  const repo = mkRepo()
+  multiTurnCPending(repo, { strike: 1 })
+  const before = fs.readFileSync(pendingPath(repo), "utf-8")
+  let called = false
+  const spyCheck = async () => {
+    called = true
+    return { code: 1, out: "" }
+  }
+  const out = await shadowEvaluateAtStop(repo, "sid-1", CFG, undefined, spyCheck, deps)
+  expect(called).toBe(false) // evaluateGauge (and its runCheck) never ran
+
+  expect(fs.existsSync(donePath(repo))).toBe(false)
+  const after = fs.readFileSync(pendingPath(repo), "utf-8")
+  expect(after).toBe(before) // byte-unchanged, still strike:1
+
+  // fabricated line: passthrough-only field, strike:1 carried through, no execution outcome.
+  expect(out?.rounds).toEqual([])
+  expect(out?.gauge?.class).toBe("C")
+  expect(out?.gauge?.horizon).toBe("multi-turn")
+  expect(out?.gauge?.executable).toBe(false)
+  expect(out?.gauge?.strike).toBe(1)
+  expect(out?.gauge?.pass).toBeUndefined()
+  expect(out?.gauge?.wouldBlock).toBeUndefined()
+})
+
 test("multi-turn C: refused check (floor ran) → consumed immediately, no strike", async () => {
   const repo = mkRepo()
   multiTurnCPending(repo, { check: "rm -rf /" })
