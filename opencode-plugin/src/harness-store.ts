@@ -259,6 +259,13 @@ export interface TrialState {
    * candidate version string) at call sites until Task 4 populates this
    * distinctly. OPTIONAL interface field only, added by Task 3. */
   trialId?: string
+  /** Plan Global Constraints: golden-baseline window (§4.3 spec §5) — arms
+   * are the current incumbent (as "trial") vs. a frozen golden snapshot (as
+   * "baseline"), evaluated under the same decision rule as an ordinary
+   * gate-outcomes trial. Layered on `.trial` rather than a second state
+   * marker (build-time decision, plan Global Constraints) so it inherits
+   * readTrial's existing clobber guard for free. OPTIONAL interface field. */
+  golden?: boolean
   /** Plan Global Constraints: a queued golden window (or any trial not yet
    * human-go'd) is inert — compose ignores it (no arm assignment, active
    * compose), the verdict engine ignores it, only the human-go path
@@ -1272,6 +1279,19 @@ export function clearTrial(storeRoot: string): void {
  * be reverted later. Scores from /mh-score flow into the trial candidate
  * automatically (recordSession targets the active version, which is now the
  * trial).
+ *
+ * `opts.rewardMode: "gate-outcomes"` marks this as a §4.3-governed trial:
+ * the old rate-comparison resolveTrial stands down on it (first-branch
+ * guard below) and only resolveGateTrial may resolve it. A trialId is
+ * ALWAYS generated when rewardMode is set (`${trialVersion}-${startedAt}` —
+ * the salt trial-verdict.ts's arm assignment hashes, spec §3) — this is a
+ * required-when-rewardMode invariant, not an optional caller-supplied value.
+ * `opts.golden`/`opts.awaitingGo` layer the queued-golden-window build-time
+ * decision (plan Global Constraints) onto the same `.trial` file rather than
+ * a second state marker, so it inherits readTrial's existing clobber guard
+ * for free. `awaitingGo` means "queued, not started": the snapshot/trial
+ * metadata is recorded but active is left untouched — only the (future)
+ * human-go path flips it live.
  */
 export function startTrial(
   storeRoot: string,
@@ -1282,7 +1302,9 @@ export function startTrial(
   playbook: Playbook | null = null,
   agentConfig: AgentConfig | null = null,
   envPolicy: EnvPolicy | null = null,
+  opts?: { rewardMode?: "gate-outcomes"; golden?: boolean; awaitingGo?: boolean },
 ): void {
+  const startedAt = new Date().toISOString()
   const state: TrialState = {
     trial: trialVersion,
     baseline: activeVersion(storeRoot),
@@ -1291,12 +1313,26 @@ export function startTrial(
     baselinePlaybook: readPlaybook(storeRoot),
     baselineAgentConfig: readAgentConfig(storeRoot),
     baselineEnvPolicy: readEnvPolicy(storeRoot),
-    startedAt: new Date().toISOString(),
+    startedAt,
     minSessions,
   }
+  if (opts?.rewardMode) {
+    state.rewardMode = opts.rewardMode
+    state.trialId = `${trialVersion}-${startedAt}`
+  }
+  if (opts?.golden) state.golden = true
+  if (opts?.awaitingGo) state.awaitingGo = true
   writeJson(activePath(storeRoot, TRIAL_FILE), state)
-  writeActive(storeRoot, trialVersion, system, tools, playbook, agentConfig, envPolicy)
-  appendMetaMetric(storeRoot, { event: "trial", action: "started", trial: trialVersion, baseline: state.baseline })
+  // awaitingGo trials are queued, not started — leave active untouched.
+  if (!opts?.awaitingGo) {
+    writeActive(storeRoot, trialVersion, system, tools, playbook, agentConfig, envPolicy)
+  }
+  appendMetaMetric(storeRoot, {
+    event: "trial", action: "started", trial: trialVersion, baseline: state.baseline,
+    ...(state.rewardMode ? { rewardMode: state.rewardMode, trialId: state.trialId } : {}),
+    ...(state.golden ? { golden: true } : {}),
+    ...(state.awaitingGo ? { awaitingGo: true } : {}),
+  })
 }
 
 function sessionModel(s: SessionRecord): string {
@@ -1331,6 +1367,15 @@ function nonTrivial(sessions: SessionRecord[]): SessionRecord[] {
 export function resolveTrial(storeRoot: string): TrialResolution {
   const trial = readTrial(storeRoot)
   if (!trial) return { action: "none" }
+
+  // §4.3 stand-down guard (spec §6, plan Global Constraints): a gate-outcomes
+  // trial is owned end-to-end by resolveGateTrial — this function must not
+  // touch it. MUST be the very first branch, before any score read: this
+  // fires on EVERY /mh-score call (engine.ts:607), far more often than a
+  // crank round, so an underspecified guard here would be a silent
+  // confirm/revert race that bypasses the entire §4.3 decision rule from a
+  // completely different code path.
+  if (trial.rewardMode === "gate-outcomes") return { action: "none" }
 
   // A manual activation / hand-edit changed active out from under the trial.
   if (activeVersion(storeRoot) !== trial.trial) {
@@ -1399,6 +1444,84 @@ export function resolveTrial(storeRoot: string): TrialResolution {
     ...budgetStamp(trialSame),
   })
   return { action: "reverted", trial: trial.trial, baseline: trial.baseline, trialRate, baselineRate }
+}
+
+/** Verdict handed to `resolveGateTrial` by the (separately-built, km-crank
+ * Task 6) §4.3 decision engine — this module only ENACTS it, it never
+ * computes it. `"rollback"` covers both the ordinary three-clause-fails case
+ * and the `T_MAX` insufficient-events case (spec §5); the ledger `action`
+ * distinguishes them by `reason === "insufficient-events"` (see below). */
+export type GateTrialVerdict =
+  | { verdict: "keep" }
+  | { verdict: "rollback"; reason: string }
+  | { verdict: "deferred"; reason: string }
+  | { verdict: "abandoned"; reason: string }
+
+/**
+ * §4.3 gate-outcomes trial enactment authority (spec §6). Reads the live
+ * trial and enacts whatever verdict it's handed via the same primitives
+ * `resolveTrial` already uses (`writeActive`/`clearTrial`/`appendMetaMetric`)
+ * — it never computes the verdict itself (that's trial-verdict.ts, km-crank
+ * Task 6). `action: "none"` covers three inert cases: no trial at all, a
+ * legacy (non-gate-outcomes) trial (owned by the old `resolveTrial`, not
+ * this function), and a queued `awaitingGo` trial (spec/plan: inert
+ * everywhere until human-go).
+ *
+ * Abandon-on-active-changed (spec §5/§6) is checked HERE, unconditionally,
+ * before any verdict is enacted — same precedent as `resolveTrial`'s
+ * existing abandon branch (`:1336-1339` above), just re-homed to this
+ * authority for gate-outcomes trials. An explicit `{verdict:"abandoned"}`
+ * (e.g. calibration gone stale, a manual supersede) mirrors that same
+ * precedent: `clearTrial` WITHOUT `writeActive` — the active version is
+ * presumed already changed/superseded by whatever triggered the abandon, so
+ * there is nothing here to restore.
+ */
+export function resolveGateTrial(
+  storeRoot: string,
+  v: GateTrialVerdict,
+): { action: "kept" | "rolled-back" | "deferred" | "abandoned" | "none" } {
+  const trial = readTrial(storeRoot)
+  if (!trial || trial.rewardMode !== "gate-outcomes" || trial.awaitingGo) {
+    return { action: "none" }
+  }
+
+  if (activeVersion(storeRoot) !== trial.trial) {
+    clearTrial(storeRoot)
+    appendMetaMetric(storeRoot, {
+      event: "trial", action: "abandoned", trial: trial.trial,
+      reason: "active version changed under trial",
+    })
+    return { action: "abandoned" }
+  }
+
+  switch (v.verdict) {
+    case "keep": {
+      clearTrial(storeRoot)
+      appendMetaMetric(storeRoot, { event: "trial", action: "keep", trial: trial.trial, baseline: trial.baseline })
+      return { action: "kept" }
+    }
+    case "rollback": {
+      writeActive(storeRoot, trial.baseline, trial.baselineSystem, trial.baselineTools,
+        trial.baselinePlaybook ?? null, trial.baselineAgentConfig ?? null, trial.baselineEnvPolicy ?? null)
+      clearTrial(storeRoot)
+      const ledgerAction = v.reason === "insufficient-events" ? "insufficient-events" : "rollback"
+      appendMetaMetric(storeRoot, {
+        event: "trial", action: ledgerAction, trial: trial.trial, baseline: trial.baseline, reason: v.reason,
+      })
+      return { action: "rolled-back" }
+    }
+    case "deferred": {
+      // Floors met, metric null — NO enactment, no state change; just a
+      // ledger breadcrumb so SITREP can see the trial is still live.
+      appendMetaMetric(storeRoot, { event: "trial", action: "deferred", trial: trial.trial, reason: v.reason })
+      return { action: "deferred" }
+    }
+    case "abandoned": {
+      clearTrial(storeRoot)
+      appendMetaMetric(storeRoot, { event: "trial", action: "abandoned", trial: trial.trial, reason: v.reason })
+      return { action: "abandoned" }
+    }
+  }
 }
 
 /** Activate a candidate as the new active version. False if it has no system.md. */
