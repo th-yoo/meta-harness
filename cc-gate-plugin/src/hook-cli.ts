@@ -46,6 +46,28 @@ function readGateConfigRaw(cwd: string): string | undefined {
   }
 }
 
+// Cache sentinel: `null` = not yet attempted, `undefined` = attempted and
+// unreadable/invalid (cached negative — never re-stat every line).
+let cachedPluginVersion: string | undefined | null = null
+
+/** cc-gate-plugin version, read once per process from the manifest actually
+ * shipped alongside this module. Resolved MODULE-relative (import.meta.dir),
+ * never repo-relative: `claude plugin install` copies the whole plugin dir
+ * (self-contained.test.ts INSTALL SHAPE proves .claude-plugin/ travels with
+ * it), but a repo-relative path would resolve against the copy's cwd and
+ * die silently. Fail-open: any read/parse failure just omits the field. */
+function readPluginVersion(): string | undefined {
+  if (cachedPluginVersion !== null) return cachedPluginVersion
+  try {
+    const p = path.join(import.meta.dir, "..", ".claude-plugin", "plugin.json")
+    const parsed = JSON.parse(fs.readFileSync(p, "utf-8")) as { version?: unknown }
+    cachedPluginVersion = typeof parsed.version === "string" ? parsed.version : undefined
+  } catch {
+    cachedPluginVersion = undefined
+  }
+  return cachedPluginVersion
+}
+
 function sensorFilePath(cwd: string, gateConfigRaw: string | undefined): string {
   const cfg = parseGateConfig(gateConfigRaw)
   // path.resolve (not path.join): an absolute `sensor` must stay absolute —
@@ -64,9 +86,14 @@ function appendSensor(
   log: (msg: string) => void,
 ): void {
   try {
+    // pluginVersion stamped here — the single choke point every sensor line
+    // (UserPromptSubmit, Stop, and the gauge-fabricated re-stamp) funnels
+    // through — so "every emitted line" holds without touching each caller.
+    const version = readPluginVersion()
+    const stamped = version !== undefined ? { ...sensor, pluginVersion: version } : sensor
     const p = sensorFilePath(cwd, gateConfigRaw)
     fs.mkdirSync(path.dirname(p), { recursive: true })
-    fs.appendFileSync(p, JSON.stringify(sensor) + "\n")
+    fs.appendFileSync(p, JSON.stringify(stamped) + "\n")
   } catch (e) {
     try {
       log(`hook-cli: failed to append sensor line (swallowed): ${String(e)}`)
@@ -280,14 +307,24 @@ async function main(): Promise<void> {
   // The arm is per-session and constant for the session's lifetime: a
   // mid-experiment flip would contaminate both arms.
   const arm = pickReinjectVariant(sessionId)
-  let line: SensorLine | undefined = sensor ? { ...sensor, reinject: arm } : undefined
+  // forced:true iff KKAMAK_REINJECT itself picked the arm (env override),
+  // not the salted hash — §4.3 pre-reg exclusion marker (§2). Absent (not
+  // false) when unforced: cleaner lines, and Task 3 mirrors this for
+  // KKAMAK_TRIAL_ARM.
+  const reinjectForced = process.env.KKAMAK_REINJECT === "v0" || process.env.KKAMAK_REINJECT === "v1"
+  let line: SensorLine | undefined = sensor
+    ? { ...sensor, reinject: arm, ...(reinjectForced ? { forced: true } : {}) }
+    : undefined
   const cfg = parseGateConfig(gateConfigRaw)
   if (cfg?.gauge && process.env.KKAMAK_GAUGE !== "off") {
     const gaugeDeps = buildDeps(cwd, gateConfigRaw, GAUGE_CHECK_TIMEOUT_MS)
     const gauged = await shadowEvaluateAtStop(cwd, sessionId, cfg, line, gaugeDeps.runCheck, gaugeDeps)
     // Re-stamp the arm: shadowEvaluateAtStop may FABRICATE a gauge-only line
-    // (fast-path Stop), which never passed through the stamping above.
-    line = gauged ? { ...gauged, reinject: arm } : undefined
+    // (fast-path Stop), which never passed through the stamping above —
+    // forced must survive the same re-stamp for the same reason.
+    line = gauged
+      ? { ...gauged, reinject: arm, ...(reinjectForced ? { forced: true } : {}) }
+      : undefined
   }
   if (line) appendSensor(cwd, gateConfigRaw, line, deps.log)
 

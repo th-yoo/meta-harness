@@ -4,6 +4,9 @@
 // Amendment (2026-07-29, km-gauge v2 extractor): GaugeSensorField gained
 // class/reason/horizon/downgraded/strike — additive & optional, so v1 sensor
 // consumers (present:false / no gauge) are unaffected.
+// Amendment (2026-07-29, §4.3 trial-mode prereg, Task 1 of §11 item 6):
+// SensorLine gained forced?/pluginVersion? — additive & optional, so
+// existing consumers (scan.ts/score.ts) parse old and new lines alike.
 import type { GateRoundResult } from "../vendor/complete-gate.ts"
 
 export type RoundOutcome = GateRoundResult["outcome"]
@@ -136,6 +139,18 @@ export interface SensorLine {
   gauge?: GaugeSensorField
   /** §4.4 reinject-wording arm for this session (pre-reg §4b). */
   reinject?: "v0" | "v1"
+  /** True iff an env override (KKAMAK_REINJECT or, from Task 3,
+   * KKAMAK_TRIAL_ARM) forced this session's arm rather than the salted
+   * hash choosing it — §4.3 pre-reg exclusion marker (§2: forced rows are
+   * excluded from every metric). Absent means not forced; a stored `false`
+   * is never written (absent is the cleaner line). */
+  forced?: boolean
+  /** cc-gate-plugin version (from .claude-plugin/plugin.json) that emitted
+   * this line. Read once per process, resolved module-relative (the plugin
+   * runs from a copied install dir, so a repo-relative path would die
+   * silently there). Omitted if the manifest is unreadable — fail-open,
+   * never throws. */
+  pluginVersion?: string
 }
 
 /** Handlers return sensor lines; hook-cli owns the append (persist → sensor → emit). */

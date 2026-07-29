@@ -427,3 +427,76 @@ test("forced v1 + check timeout: timeout marker survives the composed tail", asy
   expect(payload.reason).not.toContain("re-run it")
   rmRepo(repo)
 })
+
+// ── §4.3 amendment (Task 1 of §11 item 6): forced + pluginVersion ────────
+
+test("KKAMAK_REINJECT=v1 (forced) -> sensor line carries forced:true", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true" })
+  seedState(repo, "sid-forced", { edited: true })
+  await runHook({
+    event: "Stop",
+    stdin: JSON.stringify({ session_id: "sid-forced", cwd: repo }),
+    env: { KKAMAK_REINJECT: "v1" },
+  })
+  const lines = sensorLines(repo)
+  expect(lines[0]!.forced).toBe(true)
+  rmRepo(repo)
+})
+
+test("no KKAMAK_REINJECT override (salted arm) -> sensor line has forced absent, not false", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true" })
+  seedState(repo, "sid-unforced", { edited: true })
+  await runHook({
+    event: "Stop",
+    stdin: JSON.stringify({ session_id: "sid-unforced", cwd: repo }),
+  })
+  const lines = sensorLines(repo)
+  expect("forced" in lines[0]!).toBe(false)
+  rmRepo(repo)
+})
+
+test("invalid KKAMAK_REINJECT value -> not treated as forced", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true" })
+  seedState(repo, "sid-bogus-reinject", { edited: true })
+  await runHook({
+    event: "Stop",
+    stdin: JSON.stringify({ session_id: "sid-bogus-reinject", cwd: repo }),
+    env: { KKAMAK_REINJECT: "bogus" },
+  })
+  const lines = sensorLines(repo)
+  expect("forced" in lines[0]!).toBe(false)
+  rmRepo(repo)
+})
+
+test("pluginVersion is stamped on the Stop sensor line, matching .claude-plugin/plugin.json", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true" })
+  seedState(repo, "sid-version", { edited: true })
+  await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "sid-version", cwd: repo }) })
+  const lines = sensorLines(repo)
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(import.meta.dir, "..", ".claude-plugin", "plugin.json"), "utf-8"),
+  )
+  expect(lines[0]!.pluginVersion).toBe(manifest.version)
+  rmRepo(repo)
+})
+
+test("pluginVersion is stamped on the UserPromptSubmit sensor line too (every emitted line)", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true" })
+  seedState(repo, "sid-ups-version", { gating: true, edited: true, round: 1, outcomes: ["verify-failed"] })
+  await runHook({
+    event: "UserPromptSubmit",
+    stdin: JSON.stringify({ session_id: "sid-ups-version", cwd: repo, prompt: "hi" }),
+  })
+  const lines = sensorLines(repo)
+  expect(lines.length).toBe(1)
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(import.meta.dir, "..", ".claude-plugin", "plugin.json"), "utf-8"),
+  )
+  expect(lines[0]!.pluginVersion).toBe(manifest.version)
+  rmRepo(repo)
+})

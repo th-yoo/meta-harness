@@ -160,6 +160,91 @@ describe("buildSensorLine", () => {
     expect(parsed.app).toBe(result.app)
   })
 
+  // ── §4.3 amendment (Task 1 of §11 item 6): forced + pluginVersion ───────
+
+  it("omits forced and pluginVersion when the caller doesn't supply them (old-shape line)", () => {
+    const result = buildSensorLine(fakeDeps, {
+      sessionID: "sess-old",
+      check: "npm test",
+      accepted: true,
+      gateExhausted: false,
+      rounds: [],
+      interrupted: false,
+      marker: false,
+      durationMs: 1000,
+    })
+
+    expect("forced" in result).toBe(false)
+    expect("pluginVersion" in result).toBe(false)
+  })
+
+  it("passes through forced:true when supplied", () => {
+    const result = buildSensorLine(fakeDeps, {
+      sessionID: "sess-forced",
+      check: "npm test",
+      accepted: true,
+      gateExhausted: false,
+      rounds: [],
+      interrupted: false,
+      marker: false,
+      durationMs: 1000,
+      forced: true,
+    })
+
+    expect(result.forced).toBe(true)
+  })
+
+  it("passes through pluginVersion when supplied", () => {
+    const result = buildSensorLine(fakeDeps, {
+      sessionID: "sess-version",
+      check: "npm test",
+      accepted: true,
+      gateExhausted: false,
+      rounds: [],
+      interrupted: false,
+      marker: false,
+      durationMs: 1000,
+      pluginVersion: "0.2.0",
+    })
+
+    expect(result.pluginVersion).toBe("0.2.0")
+  })
+
+  it("threads forced:false verbatim when explicitly supplied (caller's choice, not the default)", () => {
+    const result = buildSensorLine(fakeDeps, {
+      sessionID: "sess-explicit-false",
+      check: "npm test",
+      accepted: true,
+      gateExhausted: false,
+      rounds: [],
+      interrupted: false,
+      marker: false,
+      durationMs: 1000,
+      forced: false,
+    })
+
+    expect(result.forced).toBe(false)
+  })
+
+  it("JSON round-trips forced + pluginVersion when present", () => {
+    const result = buildSensorLine(fakeDeps, {
+      sessionID: "sess-rt",
+      check: "npm test",
+      accepted: true,
+      gateExhausted: false,
+      rounds: [],
+      interrupted: false,
+      marker: false,
+      durationMs: 1000,
+      forced: true,
+      pluginVersion: "0.2.0",
+    })
+    const parsed = JSON.parse(JSON.stringify(result)) as SensorLine
+
+    expect(parsed.forced).toBe(true)
+    expect(parsed.pluginVersion).toBe("0.2.0")
+  })
+
   it("handles empty rounds array", () => {
     const result = buildSensorLine(fakeDeps, {
       sessionID: "sess-empty",

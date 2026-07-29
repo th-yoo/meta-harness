@@ -285,6 +285,46 @@ test("REGRESSION: a gauge-only line (no gate cycle) still records the arm", asyn
   expect(l.reinject).toBe("v1")
 })
 
+// ── §4.3 amendment (Task 1 of §11 item 6): forced + pluginVersion survive
+// the gauge re-stamp (hook-cli.ts's fabricated-line path) ─────────────────
+
+test("REGRESSION: forced + pluginVersion survive the gauge path (gate-cycle line)", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true", gauge: true })
+  seedState(repo, SID, { edited: true })
+  writeGaugeFile(gaugeDir(repo), {
+    v: 1, sessionID: SID, n: 1, ts: 1, model: "haiku", derivationMs: 5,
+    goalSummary: "g", criteria: ["c"], check: "true", confidence: 0.9,
+  })
+  await runHook({
+    event: "Stop",
+    stdin: JSON.stringify({ session_id: SID, cwd: repo }),
+    env: { KKAMAK_REINJECT: "v0" },
+  })
+  const l = sensorLines(repo)[0]!
+  expect(l.forced).toBe(true)
+  expect(typeof l.pluginVersion).toBe("string")
+  expect((l.gauge as Record<string, unknown>).present).toBe(true)
+})
+
+test("REGRESSION: a FABRICATED gauge-only line (no gate cycle) still carries forced + pluginVersion", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true", gauge: true })
+  writeGaugeFile(gaugeDir(repo), {
+    v: 1, sessionID: SID, n: 1, ts: 1, model: "haiku", derivationMs: 5,
+    goalSummary: "g", criteria: ["c"], check: "true", confidence: 0.9,
+  })
+  await runHook({
+    event: "Stop",
+    stdin: JSON.stringify({ session_id: SID, cwd: repo }),
+    env: { KKAMAK_REINJECT: "v1" },
+  })
+  const l = sensorLines(repo)[0]!
+  expect(l.rounds).toEqual([])
+  expect(l.forced).toBe(true)
+  expect(typeof l.pluginVersion).toBe("string")
+})
+
 // ── shadow invariant lock (M0-M3 window closed 2026-07-29, M2 FAIL) ──────
 // A would-block gauge must never surface in the emitted Stop decision: the
 // gauge shapes ONLY the sensor line. This is the structural guarantee the
