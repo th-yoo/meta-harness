@@ -10,7 +10,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/Users/yoo/.bun/bin/bun</string>
-    <string>/Users/yoo/z2/meta-harness/km-crank/src/crank.ts</string>
+    <string>/Users/yoo/z2/kkamak/km-crank/src/crank.ts</string>
   </array>
   <key>StartCalendarInterval</key>
   <dict>
@@ -19,7 +19,7 @@
   </dict>
   <key>RunAtLoad</key><false/>
   <key>KeepAlive</key><false/>
-  <key>StandardOutPath</key><string>/Users/yoo/.config/meta-harness/km-crank/crank.log</string>
-  <key>StandardErrorPath</key><string>/Users/yoo/.config/meta-harness/km-crank/crank.log</string>
+  <key>StandardOutPath</key><string>/Users/yoo/.config/kkamak/km-crank/crank.log</string>
+  <key>StandardErrorPath</key><string>/Users/yoo/.config/kkamak/km-crank/crank.log</string>
 </dict>
 </plist>

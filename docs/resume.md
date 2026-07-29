@@ -3,6 +3,39 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## 🚚 REPO MOVED 2026-07-30: meta-harness → github.com/th-yoo/kkamak, working dir `~/z2/kkamak`
+
+Full history pushed to the new remote; both remotes carry the same tip during
+transition, then the old repo freezes. **Work from `~/z2/kkamak` from now on.**
+
+**Done at move (office `yoo-dev`):** crank.ts REPOS + km-sensors-sync.sh REPOS
++ launchd plist paths + km-crank README now say `~/z2/kkamak`; sensor snapshot
+renamed `meta-harness.gate-outcomes.ndjson` → `kkamak.gate-outcomes.ndjson`
+(basename join — repo basename changed, old name would orphan the 56 lines);
+host-local `.km/` + `.kkamak/` stores copied into the new dir; suites re-run
+green in the new location; project memory dir copied to the new project key.
+
+**PER-HOST steps remaining (each host, next session there):**
+1. `cd ~/z2 && git clone https://www.github.com/th-yoo/kkamak.git` (MacBook;
+   path `/Users/yoo/z2/kkamak`), copy `.km/` + `.kkamak/` from the old dir.
+2. Plugin re-point (NOT mid-session — never touch a running session's cache):
+   `claude plugin marketplace remove kkamak-local` →
+   `claude plugin marketplace add ~/z2/kkamak/cc-gate-plugin` →
+   `claude plugin uninstall kkamak && claude plugin install kkamak@kkamak-local`
+   → `claude plugin list` must show kkamak 0.2.0 (list = authority).
+3. MacBook only: re-copy `km-crank/com.kkamak.crank.plist` to
+   `~/Library/LaunchAgents/` + `launchctl bootout gui/501/com.kkamak.crank`
+   then `launchctl bootstrap gui/501 ~/Library/LaunchAgents/com.kkamak.crank.plist`
+   (paths inside changed: crank source + log now under `z2/kkamak` /
+   `.config/kkamak`).
+4. Old `~/z2/meta-harness` dir: keep until steps 1–3 done on that host, then
+   delete (it is fully pushed; nothing host-local left once stores copied).
+
+**Watch:** kkamak-dev cycle exclusion (§2) is check-string-based, unaffected
+by the rename. km-crank REPOS no longer lists the old dir — if the old dir
+still gets sessions before deletion, their sensor lines land only in the old
+dir's `.km/` (strand risk: copy again before delete, or stop working there).
+
 ## ✅ TM8 SYNC LIVE-TEST 2026-07-30 (`yoo-dev`, token-free, go received) — km-sensors-sync + snapshot-age + sensor-union FIRST REAL DATA
 
 First-ever run of `scripts/km-sensors-sync.sh`: export wrote
