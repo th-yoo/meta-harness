@@ -1,6 +1,6 @@
 # kkamak §4.3 trial mode — completion-gate-outcome trials, pre-registration (2026-07-29)
 
-**Status:** DRAFT — every decision rule below is fixed BEFORE any trial data exists.
+**Status:** REGISTERED (pre-data, 2026-07-29) — decision rules locked before any trial data exists.
 **Purpose:** replace the workload-confounded, sequential trial mode (`resolveTrial`,
 `opencode-plugin/src/harness-store.ts:1252-1383`) with an interleaved,
 completion-gate-outcome-scored trial mode for provisional playbook candidates, and
@@ -320,7 +320,8 @@ supersession.
 (`engine.ts:337`) is independent of `gate.json`. §11 item 9 adds a `km-panic.sh trial-off`
 verb that reverts to the baseline snapshot, matching the veto's intent. Auto trial-**start**
 is explicitly v1, blocked on closing km-crank's legacy-mode review-gate bypass first
-(resume.md:178, standing watch-item) — v0 keeps trial start human-go (resume.md:175-177).
+(docs/resume.md (km-crank "legacy-mode proposals bypass the review gate" WATCH-ITEM)) —
+v0 keeps trial start human-go (docs/resume.md ("fully-automatic-with-veto" §4.3 note)).
 
 ## 7. Two-host union
 
