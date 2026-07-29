@@ -3,6 +3,45 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ⏸ SESSION END 2026-07-29 (MacBook, library, hard time-stop) — §4.3 BUILD TM1–TM5 DONE + 2 SPEC AMENDMENTS · TM6 possibly in-flight at cutoff
+
+**State:** sweep batch (km-refresh.sh + km-crank-in-gate.json + score NUL-key) DONE
+reviewed. §4.3 prerequisite build (plan
+`docs/superpowers/plans/2026-07-29-trial-mode-build.md`, ledger
+`.superpowers/sdd/progress.md` host-local) — **TM1–TM5 complete, each
+task-reviewed Approved, all pushed:**
+- TM1 SensorLine amendment (forced/pluginVersion) `1af4b02`
+- TM2 trial-arm module `739a172..e2113f9` + **SPEC AMENDMENT `fc252c2`**: the
+  registered `%2` salt was PROVEN parity-linear (0%/100% collinearity with the
+  reinject axis per fixed trialId — implementer-caught, coordinator-verified
+  algebraically+empirically); amended pre-data to `(fnv1a >>> 16) & 1`.
+- TM3 arm-aware compose + exposure wiring `9168a75` + armAware fix `df3970d`
+  (**arms are Claude-Code-only per spec §1/§10** — opencode sessions always
+  compose active; the armAware flag is the reopen extension point).
+- TM4 rewardMode + stand-down guard + resolveGateTrial `694ae73`.
+- TM5 calibration registry `fd37a49` + **SPEC ADDENDUM `bcbfdb3`**: 2/19 rate =
+  LOWER-BOUND PROXY (measured arms ran mutation probe; shipped daily gate is
+  verify-only) — rule-2 floor consumers bound to lower-bound reading.
+- Suites at cutoff: opencode-plugin 1738/1/0 · cc-gate-plugin 345 · km-crank 81
+  · gate-plugin 26. MacBook rdflib gotcha fixed (see gotchas below).
+
+**TM6 (trial-verdict engine, km-crank) was IN FLIGHT at cutoff** — if
+`km-crank/src/trial-verdict.ts` exists on main with commit message
+"feat(km-crank): trial-verdict engine…": it committed but is UNREVIEWED —
+review it first (brief `.superpowers/sdd/tm6-brief.md` if present, else plan
+Task 6; scrutiny = §5 truth table fidelity, §2 exclusion matrix, A/A tie,
+calibration-stale refusal order, crank wiring before decideGate). If absent:
+re-dispatch TM6 from the plan (nothing lost).
+
+**Then:** TM7 (scorecard per-arm N_eff + exposure guard) → TM8 (km-sensors-sync
+script + km-panic trial-off) → final whole-branch review vs base `fc03f95` →
+HISTORY.md row + section for the build. Minors ledger for the final review
+lives in `.superpowers/sdd/progress.md` (MacBook host-local) — key items also
+listed per-task above in this block's commits.
+
+**Rules unchanged:** spec-is-law (2 amendments this session were both
+evidence-forced + pre-data); explicit go before spend; SITREP style.
+
 ## ⏸ SESSION END 2026-07-29 late (office `yoo-dev`) — GA2+GA3: §4.3 REGISTERED · GAUGE v1 M2 FAIL → v2 EXTRACTOR BUILT + DEPLOYED + WINDOW OPEN + LIVE-MEASURED · NEXT = §4.3 BUILD + EVENT-RATE MULTIPLIERS (need go)
 
 **MacBook FIRST STEPS (before any work):**
