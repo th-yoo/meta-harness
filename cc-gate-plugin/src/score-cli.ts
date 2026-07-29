@@ -112,42 +112,62 @@ interface TrialArmSummary {
 }
 
 interface TrialBlock {
+  /** The trialId the block is scoped to — the trialId of the exposure row
+   * with the most recent `ts` (undefined only when there are no rows at
+   * all). Rows under any other trialId are excluded entirely. */
+  trialId: string | undefined
+  /** Count of exposure rows (pre-dedupe, as read from file) whose trialId is
+   * NOT the selected one — printed as a "not shown" line so a blended read
+   * across trials is never silent. */
+  otherTrialRowCount: number
   baseline: TrialArmSummary
   trial: TrialArmSummary
-  /** Sensor lines whose matched exposure row was forced — excluded from
-   * both arms' metrics/density above, counted here instead. */
+  /** Exposure ROWS (deduped one-per-session, scoped to trialId) with
+   * forced:true — excluded from both arms' metrics/density above, counted
+   * here instead. Counted per row, NOT per matching sensor line: a forced
+   * session with N gate cycles still reports 1. */
   forcedCount: number
 }
 
 /**
  * Joins the read sensor lines against the exposure log by sessionID, mirroring
  * km-crank/src/trial-verdict.ts's join semantics where they apply to a plain
- * scorecard read (no trial state here, so no trialId/time-window/kkamak-dev
- * exclusions — those are the verdict engine's job, not this CLI's):
- *   - no exposure row for the session -> unmatched, attributed to neither arm;
- *   - row.forced -> excluded from all per-arm metrics/density, counted only
- *     in forcedCount;
+ * scorecard read (no full trial state here, so no time-window/kkamak-dev
+ * exclusions — those are the verdict engine's job, not this CLI's). This CLI
+ * DOES scope by trialId: the exposure file accumulates rows across trials, so
+ * the block is pinned to the trialId whose row has the most recent `ts`.
+ *   - no exposure row for the session (within the selected trialId) ->
+ *     unmatched, attributed to neither arm;
+ *   - row.forced -> excluded from all per-arm metrics/density; the row is
+ *     counted once in forcedCount regardless of how many sensor lines match
+ *     the session;
  *   - otherwise -> attributed to the row's arm; gauge-only lines count
  *     toward density but not metrics (classifyCycle(l) !== "gauge-only").
- * First exposure row per sessionID wins on duplicates (same dedupe rule as
- * the canonical reader).
+ * First exposure row per sessionID wins on duplicates within the selected
+ * trialId (same dedupe rule as the canonical reader).
  */
 function joinTrialArms(lines: SensorLineIn[], rows: ExposureRow[]): TrialBlock {
+  // Pick the trialId whose row has the most recent ts; scope everything to it.
+  let latest: ExposureRow | undefined
+  for (const r of rows) if (!latest || r.ts > latest.ts) latest = r
+  const trialId = latest?.trialId
+  const scopedRows = trialId === undefined ? rows : rows.filter((r) => r.trialId === trialId)
+  const otherTrialRowCount = rows.length - scopedRows.length
+
   const rowBySession = new Map<string, ExposureRow>()
-  for (const r of rows) if (!rowBySession.has(r.sessionID)) rowBySession.set(r.sessionID, r)
+  for (const r of scopedRows) if (!rowBySession.has(r.sessionID)) rowBySession.set(r.sessionID, r)
+
+  let forcedCount = 0
+  for (const row of rowBySession.values()) if (row.forced) forcedCount++
 
   const density: Record<TrialArm, SensorLineIn[]> = { baseline: [], trial: [] }
   const metrics: Record<TrialArm, SensorLineIn[]> = { baseline: [], trial: [] }
-  let forcedCount = 0
 
   for (const raw of lines) {
     if (!isJoinableSensorLine(raw)) continue
     const row = rowBySession.get(raw.sessionID)
-    if (!row) continue // unmatched: no exposure row at all
-    if (row.forced) {
-      forcedCount++
-      continue
-    }
+    if (!row) continue // unmatched: no exposure row for this session in the selected trial
+    if (row.forced) continue // excluded from metrics/density; already counted above
     density[row.arm].push(raw)
     if (classifyCycle(raw) !== "gauge-only") metrics[row.arm].push(raw)
   }
@@ -169,7 +189,7 @@ function joinTrialArms(lines: SensorLineIn[], rows: ExposureRow[]): TrialBlock {
     }
   }
 
-  return { baseline: summarize("baseline"), trial: summarize("trial"), forcedCount }
+  return { trialId, otherTrialRowCount, baseline: summarize("baseline"), trial: summarize("trial"), forcedCount }
 }
 
 function readLines(files: string[]): { lines: SensorLineIn[]; unreadable: string[] } {
@@ -246,7 +266,8 @@ function render(r: ScoreResult, minN: number, trial?: TrialBlock): string {
   }
 
   if (trial) {
-    out.push(`── §4.3 trial (per-arm N_eff + exposure guard; pre-registration: docs/superpowers/specs/2026-07-29-trial-mode-gate-outcomes-preregistration.md)`)
+    out.push(`── §4.3 trial ${trial.trialId ?? "(none)"} (per-arm N_eff + exposure guard; pre-registration: docs/superpowers/specs/2026-07-29-trial-mode-gate-outcomes-preregistration.md)`)
+    if (trial.otherTrialRowCount > 0) out.push(`   other-trial rows: ${trial.otherTrialRowCount} (not shown)`)
     for (const [name, a] of [["baseline", trial.baseline], ["trial   ", trial.trial]] as const) {
       out.push(
         `   ${name}  cycles ${String(a.cycleCount).padStart(4)}` +

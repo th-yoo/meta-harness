@@ -352,6 +352,48 @@ test("CLI: §4.3 trial block prints per-arm N_eff triplet, density, and forced c
   // s4 (forced) contributes NOTHING here, only to the forced count below.
   expect(r.out).toMatch(/trial.*cycles\s+1.*sessions\s+1.*sessions-w-cycle\s+1.*density 1\.00/)
   expect(r.out).toContain("forced (excluded): 1")
+  // single trialId in the exposure file ("t1", the expRow default) -> named in the
+  // block, no other-trial-rows line (TM7 review fix 2).
+  expect(r.out).toContain("t1")
+  expect(r.out).not.toContain("other-trial rows")
+})
+
+// ── TM7 review fixes: forced-ROW count + single-trial scoping ──────────────
+
+test("CLI: forced count is per exposure ROW (deduped by session), not per matching sensor line — a forced session with 2 gate cycles still reports 1", async () => {
+  const lines = [
+    // s1 is forced-exposed but produced 2 sensor lines (e.g. 2 gate cycles in one
+    // session) — the forced count must be 1 (rows), not 2 (lines).
+    line({ sessionID: "s1" }),
+    line({ sessionID: "s1" }),
+  ]
+  const f = sensorFile(lines)
+  exposureFileBeside(f, [expRow({ sessionID: "s1", arm: "trial", forced: true })])
+
+  const r = await runCli([f, "--min-n", "1"])
+  expect(r.out).toContain("forced (excluded): 1")
+  // both forced lines are still excluded from the trial arm's metrics/density.
+  expect(r.out).toMatch(/trial.*cycles\s+0.*sessions\s+0.*sessions-w-cycle\s+0.*density 0\.00/)
+})
+
+test("CLI: §4.3 trial block scopes to the trialId with the most recent ts; older-trial rows are excluded and reported as not-shown", async () => {
+  const lines = [
+    line({ sessionID: "s1" }), // exposed under the OLDER trial
+    line({ sessionID: "s2" }), // exposed under the NEWER trial
+  ]
+  const f = sensorFile(lines)
+  exposureFileBeside(f, [
+    expRow({ sessionID: "s1", trialId: "t-old", ts: 1000, arm: "baseline", forced: false }),
+    expRow({ sessionID: "s2", trialId: "t-new", ts: 2000, arm: "baseline", forced: false }),
+  ])
+
+  const r = await runCli([f, "--min-n", "1"])
+  expect(r.out).toContain("t-new")
+  expect(r.out).not.toContain("t-old")
+  // only s2 (the newer trial) is joined; s1's row belongs to the older trial and is
+  // excluded from the per-arm numbers entirely.
+  expect(r.out).toMatch(/baseline.*cycles\s+1.*sessions\s+1.*sessions-w-cycle\s+1.*density 1\.00/)
+  expect(r.out).toContain("other-trial rows: 1 (not shown)")
 })
 
 test("CLI: trial-arms.ndjson present but every row is unrelated to any sensor sessionID -> triplet all zero, no crash", async () => {
