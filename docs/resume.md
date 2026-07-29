@@ -3,6 +3,43 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ OFFICE VERIFY 2026-07-30 (`yoo-dev`, token-free) — GA4 pull CONFIRMED + cache refreshed
+
+Repo at `e90a598` pulled; all four suites green on office (cc-gate-plugin
+352 · km-crank 173 · gate-plugin 26 · opencode-plugin 1741) — GA4 seal
+cross-host-verified. **Office installed cache was STALE post-pull** (TM1
+changed plugin source, version stayed 0.2.0 → `claude plugin list` blind;
+caught by `grep pluginVersion <cache>/src/types.ts` = 0) → refreshed, cache
+now carries TM1. **Flags:** (a) version-bump discipline lapsed in GA4 —
+bump on next plugin-source change; field-grep = stopgap staleness detector;
+(b) MacBook cache freshness after TM1 unverified — its sensor lines carry
+`pluginVersion` presence as the tell.
+
+**RESUME PROMPT (either host):**
+```
+Resume kkamak (meta-harness), 2026-07-30+. Read docs/resume.md FIRST (top
+blocks: OFFICE VERIFY 2026-07-30 + GA4) + minimal/HISTORY.md GA4 as needed.
+
+WHERE WE ARE: §4.3 trial machinery BUILT+SEALED (GA4, 3 pre-data
+amendments; suites 352/173/26/1741 green both hosts). Gauge v2 deployed,
+window open (class-C starvation watch, ≥5-C floor). Both instruments wait
+on EVENTS: activation precondition = trailing-14d real-work ≥10 cycles/day,
+stream near-empty.
+
+QUEUE (GO before any spend): (1) A/A machinery trial — §4.3's registered
+first live use (human-go; blocked on activation precondition); (2) squad
+dogfood multiplier (.km/ into squad .gitignore + /kkamak:init) — attacks
+the event bottleneck, never started; (3) gauge v2 window watch.
+
+GOTCHAS: plugin-source change ⇒ cache refresh BOTH hosts (version stayed
+0.2.0 — grep pluginVersion in cached types.ts to detect); never delete a
+running session's cache dir; `claude plugin list` = install authority.
+
+RULES: explicit go before spend · no bare "gate" · spec-is-law (pre-data
+amendments only until data exists) · forensics before verdict math ·
+SITREP style.
+```
+
 ## ✅ SESSION 2026-07-29 (MacBook, background) — §4.3 PREREQUISITE BUILD TM1–TM8 SEALED · 3rd PRE-DATA AMENDMENT · FINAL REVIEW CLOSED (GA4)
 
 **The build is DONE and closed** — full record: `minimal/HISTORY.md` GA4
