@@ -29,12 +29,24 @@ test-locked `af0a132` (241 CC tests). Live tmux smoke PASS (haiku session:
 sensor exact, gauge full loop same-line, FIRST v0 reinject cycle —
 arms v0:1/v1:19).
 
-**QUEUE (WAIT FOR GO):** (1) **km-gauge v2 build** (§6 of its pre-reg,
-7 items; deploy REQUIRES installed-cache refresh or the fresh window
-silently measures stale v1 — window cut = deploy commit, record it in §4).
-(2) **§4.3 prerequisite build** (§11, 10 items, ≈4-6 days). (3) event-rate
-multipliers: squad dogfood + MacBook install. (4) small opens: cache-refresh
-script, km-crank absent from gate.json check. ~10 commits UNPUSHED.
+**km-gauge v2 BUILT + DEPLOYED + WINDOW OPEN (2026-07-29 late,
+`a3638cb..1f4c0f6`, SDD 3 tasks + reviews + final review + fix wave; 332 CC
+tests; build-review amendment landed PRE-deploy: floor-gated two-strike as
+built, strike field, per-derivation M1v2/M5, class-presence filter).
+Active cache verified 0.2.0 (stale 0.1.0 leftover dir removed — verify via
+`claude plugin list`, never by cache-path picking). Live smoke: hooks ✓;
+first real derivation = haiku's $(cat)-style check downgraded
+D/no-path-reference with audit record (registered over-refusal direction
+live — $()-idiom suppresses class-C rate; validity floor ≥5 C measures it).
+MacBook joins window at its own cache refresh after pull. NOTE: in-session
+spawn was daily-cap-blocked (30) during smoke — cap resets tomorrow.**
+
+**QUEUE (WAIT FOR GO):** (1) **§4.3 prerequisite build** (§11, 10 items,
+≈4-6 days). (2) event-rate multipliers: squad dogfood + MacBook install
+(now ALSO joins the v2 gauge window). (3) small opens: cache-refresh
+script, km-crank absent from gate.json check, score.ts NUL group-key
+(git-binary diff nuisance), $()/backtick guard rule (next gauge round).
+~17 commits UNPUSHED.
 
 **Gotchas:** all prior + v2-window poisoning above; gauge keeps calling
 haiku under v1 rules until v2 deploys (cap 30/day, shadow-only, harmless).
