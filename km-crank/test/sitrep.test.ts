@@ -120,6 +120,81 @@ test("formatSitrep: handles zero repos (e.g. a top-level failure before scanning
   expect(text).not.toContain("undefined")
 })
 
+// §4.3 trial-* actions (plan Task 6): every kind renders, and detail shows
+// the per-arm N_eff triplet + per-host coverage note (spec §3/§7).
+const trialDetail = {
+  perArm: {
+    baseline: { cycleCount: 25, sessionCount: 25, sessionsWithGateCycle: 23 },
+    trial: { cycleCount: 26, sessionCount: 24, sessionsWithGateCycle: 21 },
+  },
+  hosts: ["office", "macbook"],
+}
+
+test("formatSitrep: TRIAL-KEEP renders trial/scope, the not-better caveat, N_eff triplet, and host coverage", () => {
+  const text = formatSitrep(
+    outcome({ action: { kind: "trial-keep", scope: "project-global @ ~/z2/squad", trial: "v7", detail: trialDetail } }),
+  )
+  expect(text).toContain("TRIAL-KEEP")
+  expect(text).toContain("v7")
+  expect(text).toContain("project-global @ ~/z2/squad")
+  expect(text).toContain('never "better"')
+  expect(text).toContain("cycles 25 · sessions 25 · sessions-with-gate-cycle 23")
+  expect(text).toContain("cycles 26 · sessions 24 · sessions-with-gate-cycle 21")
+  expect(text).toContain("host coverage: office, macbook")
+})
+
+test("formatSitrep: TRIAL-ROLLBACK renders the reason and the re-proposable note", () => {
+  const text = formatSitrep(
+    outcome({
+      action: {
+        kind: "trial-rollback", scope: "project-global @ ~/z2/squad", trial: "v7",
+        reason: "three-clause-rule: mCatch(T)=0.100 < mCatch(B)=0.200", detail: trialDetail,
+      },
+    }),
+  )
+  expect(text).toContain("TRIAL-ROLLBACK")
+  expect(text).toContain("three-clause-rule")
+  expect(text).toContain("re-proposable")
+})
+
+test("formatSitrep: TRIAL-DEFERRED renders the null-metric reason", () => {
+  const text = formatSitrep(
+    outcome({ action: { kind: "trial-deferred", scope: "project-global @ ~/z2/squad", reason: "null-metric: mCatch(B)" } }),
+  )
+  expect(text).toContain("TRIAL-DEFERRED")
+  expect(text).toContain("null-metric: mCatch(B)")
+})
+
+test("formatSitrep: TRIAL-PENDING renders the futility projection", () => {
+  const text = formatSitrep(
+    outcome({
+      action: {
+        kind: "trial-pending", scope: "project-global @ ~/z2/squad",
+        projection: "floors unmet — ~12.5d to floors at current rate", detail: trialDetail,
+      },
+    }),
+  )
+  expect(text).toContain("TRIAL-PENDING")
+  expect(text).toContain("~12.5d")
+})
+
+test("formatSitrep: TRIAL-ABANDONED renders the reason", () => {
+  const text = formatSitrep(
+    outcome({ action: { kind: "trial-abandoned", scope: "project-global @ ~/z2/squad", reason: "exposure-divergence" } }),
+  )
+  expect(text).toContain("TRIAL-ABANDONED")
+  expect(text).toContain("exposure-divergence")
+})
+
+test("formatSitrep: trial action without detail renders without N_eff lines and without 'undefined'", () => {
+  const text = formatSitrep(
+    outcome({ action: { kind: "trial-keep", scope: "project-global @ ~/z2/squad", trial: "v7" } }),
+  )
+  expect(text).toContain("TRIAL-KEEP")
+  expect(text).not.toContain("per-arm N_eff")
+  expect(text).not.toContain("undefined")
+})
+
 test("formatSitrep: is a plain string, not JSON", () => {
   const text = formatSitrep(outcome())
   expect(typeof text).toBe("string")

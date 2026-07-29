@@ -21,7 +21,12 @@ import * as path from "node:path"
  * crank.ts prints a distinct log line and returns WITHOUT calling
  * formatSitrep/postSlack at all. They exist here only for formatting
  * symmetry with the other skip kind and so the render logic is testable in
- * isolation. */
+ * isolation.
+ *
+ * §4.3 trial kinds (plan Task 6): every gate-outcomes trial transition posts
+ * a SITREP (spec §6, "auto with post-hoc veto" — the SITREP is the veto's
+ * eyes). Each carries an optional TrialSitrepDetail so the render can show
+ * the per-arm N_eff triplet and per-host coverage (spec §3/§7). */
 export type SitrepAction =
   | { kind: "skipped" }
   | { kind: "skip-trial" }
@@ -31,6 +36,26 @@ export type SitrepAction =
   | { kind: "proposer-timeout" }
   | { kind: "no-op" }
   | { kind: "failure"; message: string }
+  | { kind: "trial-keep"; scope: string; trial: string; detail?: TrialSitrepDetail }
+  | { kind: "trial-rollback"; scope: string; trial: string; reason: string; detail?: TrialSitrepDetail }
+  | { kind: "trial-deferred"; scope: string; reason: string; detail?: TrialSitrepDetail }
+  | { kind: "trial-pending"; scope: string; projection: string; detail?: TrialSitrepDetail }
+  | { kind: "trial-abandoned"; scope: string; reason: string; detail?: TrialSitrepDetail }
+
+/** §3 N_eff: three denominators, printed separately so a thin arm cannot
+ * hide behind a healthier-looking one. */
+export interface TrialArmTriplet {
+  cycleCount: number
+  sessionCount: number
+  sessionsWithGateCycle: number
+}
+
+export interface TrialSitrepDetail {
+  perArm: { baseline: TrialArmTriplet; trial: TrialArmTriplet }
+  /** Distinct hosts observed in the sensor stream read for the verdict (§7:
+   * a stale or one-host-only read must be visible, not silently complete). */
+  hosts: string[]
+}
 
 export interface RepoSummary {
   repo: string
@@ -51,6 +76,17 @@ export interface SitrepOutcome {
 
 function fmtMs(ms: number): string {
   return `${Math.round(ms)}ms`
+}
+
+/** Per-arm N_eff triplet + per-host coverage note for trial-* actions. */
+function trialDetailLines(d?: TrialSitrepDetail): string[] {
+  if (!d) return []
+  const t = (a: TrialArmTriplet) =>
+    `cycles ${a.cycleCount} · sessions ${a.sessionCount} · sessions-with-gate-cycle ${a.sessionsWithGateCycle}`
+  return [
+    `per-arm N_eff — baseline: ${t(d.perArm.baseline)} | trial: ${t(d.perArm.trial)}`,
+    `host coverage: ${d.hosts.length ? d.hosts.join(", ") : "(no sensor lines read)"} — a one-host-only read is visible here, never silently treated as complete`,
+  ]
 }
 
 /** PURE. markdown-ish Slack text (mrkdwn: *bold*, `code`, > quote). */
@@ -113,6 +149,32 @@ export function formatSitrep(o: SitrepOutcome): string {
       lines.push(`*Action:* FAILURE — ${o.action.message}`)
       lines.push("")
       lines.push("Next step: check ~/.config/kkamak/km-crank/crank.log for the stack trace; re-run with --force once resolved.")
+      break
+    case "trial-keep":
+      lines.push(`*Action:* TRIAL-KEEP — trial \`${o.action.trial}\` kept at ${o.action.scope}`)
+      lines.push('KEEP means "not measurably worse than baseline", never "better" (spec §5 adoption semantics).')
+      lines.push(...trialDetailLines(o.action.detail))
+      break
+    case "trial-rollback":
+      lines.push(`*Action:* TRIAL-ROLLBACK — trial \`${o.action.trial}\` rolled back at ${o.action.scope}`)
+      lines.push(`> ${o.action.reason}`)
+      lines.push("Baseline snapshot restored; the candidate remains re-proposable (no rejected-ledger entry, spec §5).")
+      lines.push(...trialDetailLines(o.action.detail))
+      break
+    case "trial-deferred":
+      lines.push(`*Action:* TRIAL-DEFERRED — ${o.action.scope}: ${o.action.reason}`)
+      lines.push("Floors met but a needed metric is null — nothing enacted, the trial stays live (never coerced to 0).")
+      lines.push(...trialDetailLines(o.action.detail))
+      break
+    case "trial-pending":
+      lines.push(`*Action:* TRIAL-PENDING — ${o.action.scope}: ${o.action.projection}`)
+      lines.push("Nothing enacted; proposing stays paused for this layer while the trial is live.")
+      lines.push(...trialDetailLines(o.action.detail))
+      break
+    case "trial-abandoned":
+      lines.push(`*Action:* TRIAL-ABANDONED — ${o.action.scope}: ${o.action.reason}`)
+      lines.push("Trial cleared without a KEEP/ROLLBACK verdict (spec §5 abandon class).")
+      lines.push(...trialDetailLines(o.action.detail))
       break
   }
 

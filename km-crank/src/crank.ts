@@ -37,26 +37,34 @@ import {
   buildProposerContext,
   readRejectedLedger,
   readTrial,
+  resolveGateTrial,
   nextVersion,
   candidateExists,
   readCandidateSystem,
   parseModelSpec,
 } from "../../opencode-plugin/src/harness-store.ts"
+import { readExposureRows } from "../../opencode-plugin/src/trial-arm.ts"
 import { buildProposerPrompt, applyStagedArtifact } from "../../opencode-plugin/src/propose.ts"
 import { ClaudeCodeHost } from "../../opencode-plugin/src/adapters/claude-code/cc-host.ts"
 import type { StagedArtifactDescriptor } from "../../opencode-plugin/src/host.ts"
+import type { SensorLineIn } from "../../cc-gate-plugin/src/score.ts"
 
 import { parseSensorLines, aggregate, notable, type SensorLine } from "./scan.ts"
 import { readPositions, writePositionsAtomic, type Positions } from "./positions.ts"
 import { renderEvidence, type RepoEvidence } from "./evidence.ts"
 import { formatSitrep, postSlack, type SitrepAction, type RepoSummary } from "./sitrep.ts"
 import { decideGate, acquireCrankLock, releaseCrankLock } from "./gate.ts"
+import { readCalibration, calibrationStale } from "./calibration.ts"
+import { runTrialScan } from "./trial-verdict.ts"
 
 function expandHome(p: string): string {
   return p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p
 }
 
 const REPOS = ["~/z2/meta-harness", "~/z2/squad", "~/z2/km-play"].map(expandHome)
+/** This repo's root — where km-crank/calibration.json (the §4.3 FA registry)
+ * and the staleness git scope live, regardless of which repo hosts a trial. */
+const META_REPO_ROOT = path.resolve(import.meta.dir, "..", "..")
 const THRESHOLD = 10
 const MAX_AGE_DAYS = 7
 const POLL_TIMEOUT_MS = 10 * 60 * 1000
@@ -108,6 +116,24 @@ function readNewSensorLines(sensorPath: string, fromOffset: number): { lines: Se
   return { lines: parseSensorLines(complete), newOffset }
 }
 
+/**
+ * §4.3 verdict input: the WHOLE sensor file, never the positions-offset tail
+ * — the trial verdict wants the entire [startedAt, now] window every round
+ * (trial-verdict.ts time-bounds the join itself). parseSensorLines validates
+ * the shared required fields and passes extra optional fields (reinject /
+ * forced / gauge) through untouched on the parsed objects, so the runtime
+ * values are full SensorLineIn rows; the cast re-attaches the wider type.
+ */
+function readAllSensorLines(sensorPath: string): SensorLineIn[] {
+  let text: string
+  try {
+    text = fs.readFileSync(sensorPath, "utf-8")
+  } catch {
+    return []
+  }
+  return parseSensorLines(text) as unknown as SensorLineIn[]
+}
+
 async function waitForFile(p: string, timeoutMs: number, intervalMs = POLL_INTERVAL_MS): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -154,6 +180,36 @@ async function main(): Promise<void> {
     interrupted: r.aggregate.interrupted,
     medianDurationMs: r.aggregate.medianDurationMs,
   }))
+
+  // §4.3 trial scan (spec §5 acceptance criterion; plan Task 6) — BEFORE
+  // target selection and BEFORE decideGate, across ALL REPOS' project-global
+  // layers, independent of which repo wins this round's new-line-volume
+  // contest (a live trial in a non-winning repo must still be evaluated).
+  // This is what un-deadlocks km-crank: resolution fires on every scheduled
+  // run, and T_MAX bounds how long any one trial can occupy the slot.
+  const trialScan = runTrialScan(REPOS, {
+    readTrial,
+    projectGlobalRootFor: (repo) => layersFor(repo, AGENT_ROLE)[1]!.root,
+    readFullSensorLines: (repo) => readAllSensorLines(path.join(repo, ".km", "gate-outcomes.ndjson")),
+    readExposureRows: (repo) => readExposureRows(repo),
+    readCalibration: () => readCalibration(META_REPO_ROOT),
+    calibrationStale: (cal) => calibrationStale(META_REPO_ROOT, cal),
+    resolveGateTrial,
+    now,
+  })
+  if (trialScan) {
+    console.log(`[km-crank] trial: ${trialScan.action.kind} (${trialScan.repo})`)
+    await postSlack(formatSitrep({ generatedAt: now, repos: repoSummaries, action: trialScan.action }))
+  }
+  // Fall-through choice (Task 6, recorded deliberately): EVERY trial outcome
+  // falls through to the normal round below.
+  //   - keep / rollback / abandoned: resolveGateTrial CLEARED the trial, so
+  //     decideGate's trialInProgress check no longer fires for that layer and
+  //     the round continues normally (proposing may resume immediately).
+  //   - pending / deferred: nothing was cleared — the trial is still live,
+  //     and decideGate's existing trialInProgress check then correctly skips
+  //     proposing for that layer. No duplicate guard is needed here; the
+  //     round still posts its own skip log / other-repo work as usual.
 
   // Target = repo with the most new lines (ties keep array order / first).
   let target = scans[0]!
