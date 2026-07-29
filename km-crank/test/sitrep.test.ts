@@ -195,6 +195,40 @@ test("formatSitrep: trial action without detail renders without N_eff lines and 
   expect(text).not.toContain("undefined")
 })
 
+// §7 (deferred from TM6, built once evidence/kkamak-sensors/<host>/ exists,
+// scripts/km-sensors-sync.sh): every verdict's SITREP prints per-host
+// snapshot age so a stale or one-host-only committed snapshot is visible.
+test("formatSitrep: trial detail with snapshotAges renders a per-host age line", () => {
+  const text = formatSitrep(
+    outcome({
+      action: {
+        kind: "trial-keep", scope: "project-global @ ~/z2/squad", trial: "v7",
+        detail: { ...trialDetail, snapshotAges: [{ host: "macbook", ageDays: 1.2 }, { host: "office", ageDays: 10 }] },
+      },
+    }),
+  )
+  expect(text).toContain("snapshot age")
+  expect(text).toContain("macbook: 1.2d")
+  expect(text).toContain("office: 10.0d")
+})
+
+test("formatSitrep: trial detail with no snapshotAges (or an empty array) renders the absent-snapshot line", () => {
+  const withoutField = formatSitrep(
+    outcome({ action: { kind: "trial-keep", scope: "project-global @ ~/z2/squad", trial: "v7", detail: trialDetail } }),
+  )
+  expect(withoutField).toContain("no committed snapshot (evidence/kkamak-sensors absent for this repo)")
+
+  const withEmptyArray = formatSitrep(
+    outcome({
+      action: {
+        kind: "trial-keep", scope: "project-global @ ~/z2/squad", trial: "v7",
+        detail: { ...trialDetail, snapshotAges: [] },
+      },
+    }),
+  )
+  expect(withEmptyArray).toContain("no committed snapshot (evidence/kkamak-sensors absent for this repo)")
+})
+
 test("formatSitrep: is a plain string, not JSON", () => {
   const text = formatSitrep(outcome())
   expect(typeof text).toBe("string")

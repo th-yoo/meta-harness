@@ -503,6 +503,7 @@ interface FakeWorld {
   trials: Record<string, TrialState> // keyed by store root
   linesByRepo?: Record<string, SensorLineIn[]>
   rowsByRepo?: Record<string, ExposureRow[]>
+  agesByRepo?: Record<string, { host: string; ageDays: number }[]>
   stale?: boolean
   resolveResult?: "kept" | "rolled-back" | "deferred" | "abandoned" | "none"
 }
@@ -516,6 +517,7 @@ function fakeDeps(w: FakeWorld): TrialScanDeps & { resolveCalls: Array<{ root: s
     projectGlobalRootFor: (repo) => `${repo}/store`,
     readFullSensorLines: (repo) => w.linesByRepo?.[repo] ?? [],
     readExposureRows: (repo) => w.rowsByRepo?.[repo] ?? [],
+    readSnapshotAges: (repo) => w.agesByRepo?.[repo] ?? [],
     readCalibration: () => null,
     calibrationStale: () => w.stale ?? false,
     resolveGateTrial: (root, v) => {
@@ -535,6 +537,22 @@ describe("runTrialScan (crank wiring seam)", () => {
     const deps = fakeDeps({ trials: {} })
     expect(runTrialScan(REPOS, deps)).toBeNull()
     expect(deps.resolveCalls.length).toBe(0)
+  })
+
+  test("detail.snapshotAges is populated from deps.readSnapshotAges(repo) (§7, deferred from TM6)", () => {
+    const { lines, rows } = aaStream()
+    const deps = fakeDeps({
+      trials: { "/repoA/store": mkTrial() },
+      linesByRepo: { "/repoA": lines },
+      rowsByRepo: { "/repoA": rows },
+      agesByRepo: { "/repoA": [{ host: "office", ageDays: 3.5 }] },
+    })
+    const r = runTrialScan(REPOS, deps)
+    if (r!.action.kind === "trial-keep") {
+      expect(r!.action.detail?.snapshotAges).toEqual([{ host: "office", ageDays: 3.5 }])
+    } else {
+      throw new Error(`expected trial-keep, got ${r!.action.kind}`)
+    }
   })
 
   test("non-winning-repo trial still evaluated (two-repo fixture: trial lives in the SECOND repo)", () => {

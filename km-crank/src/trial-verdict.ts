@@ -388,6 +388,12 @@ export interface TrialScanDeps {
    * positions-offset tail: the verdict wants the entire trial window. */
   readFullSensorLines(repo: string): SensorLineIn[]
   readExposureRows(repo: string): ExposureRow[]
+  /** §7 (deferred from TM6, built alongside scripts/km-sensors-sync.sh):
+   * per-host age of the COMMITTED sensor snapshot for `repo`
+   * (evidence/kkamak-sensors/<host>/), distinct from the live `.km/` stream
+   * `readFullSensorLines` reads. crank.ts wires this to
+   * snapshot-age.ts's readSnapshotAges. */
+  readSnapshotAges(repo: string): { host: string; ageDays: number }[]
   readCalibration(): Calibration | null
   calibrationStale(cal: Calibration | null): boolean
   resolveGateTrial(
@@ -448,6 +454,9 @@ export function runTrialScan(repos: string[], deps: TrialScanDeps): TrialScanRes
       // §7: per-host coverage over the full stream READ (joined or not) — a
       // one-host-only read is visible in the SITREP, never silently complete.
       hosts: [...new Set(sensorLines.map((l) => l.host))],
+      // §7 (deferred from TM6): age of each host's COMMITTED snapshot, so a
+      // stale cross-host read is visible too, not just a missing-host read.
+      snapshotAges: deps.readSnapshotAges(repo),
     }
 
     const v = evaluation.verdict

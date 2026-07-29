@@ -55,6 +55,13 @@ export interface TrialSitrepDetail {
   /** Distinct hosts observed in the sensor stream read for the verdict (§7:
    * a stale or one-host-only read must be visible, not silently complete). */
   hosts: string[]
+  /** Age (days) of each host's COMMITTED sensor snapshot
+   * (evidence/kkamak-sensors/<host>/, scripts/km-sensors-sync.sh) for this
+   * trial's repo — distinct from `hosts` above, which is the live `.km/`
+   * stream read locally, not the git-tracked cross-host snapshot. Absent or
+   * empty means no host has exported a snapshot for this repo yet (§7,
+   * deferred from TM6). */
+  snapshotAges?: { host: string; ageDays: number }[]
 }
 
 export interface RepoSummary {
@@ -83,9 +90,11 @@ function trialDetailLines(d?: TrialSitrepDetail): string[] {
   if (!d) return []
   const t = (a: TrialArmTriplet) =>
     `cycles ${a.cycleCount} · sessions ${a.sessionCount} · sessions-with-gate-cycle ${a.sessionsWithGateCycle}`
+  const ages = d.snapshotAges ?? []
   return [
     `per-arm N_eff — baseline: ${t(d.perArm.baseline)} | trial: ${t(d.perArm.trial)}`,
     `host coverage: ${d.hosts.length ? d.hosts.join(", ") : "(no sensor lines read)"} — a one-host-only read is visible here, never silently treated as complete`,
+    `snapshot age — ${ages.length ? ages.map((a) => `${a.host}: ${a.ageDays.toFixed(1)}d`).join(", ") : "no committed snapshot (evidence/kkamak-sensors absent for this repo)"}`,
   ]
 }
 

@@ -51,6 +51,7 @@ import type { SensorLineIn } from "../../cc-gate-plugin/src/score.ts"
 
 import { parseSensorLines, aggregate, notable, type SensorLine } from "./scan.ts"
 import { readPositions, writePositionsAtomic, type Positions } from "./positions.ts"
+import { readSnapshotAges } from "./snapshot-age.ts"
 import { renderEvidence, type RepoEvidence } from "./evidence.ts"
 import { formatSitrep, postSlack, type SitrepAction, type RepoSummary } from "./sitrep.ts"
 import { decideGate, acquireCrankLock, releaseCrankLock } from "./gate.ts"
@@ -65,6 +66,11 @@ const REPOS = ["~/z2/meta-harness", "~/z2/squad", "~/z2/km-play"].map(expandHome
 /** This repo's root — where km-crank/calibration.json (the §4.3 FA registry)
  * and the staleness git scope live, regardless of which repo hosts a trial. */
 const META_REPO_ROOT = path.resolve(import.meta.dir, "..", "..")
+/** Committed cross-host sensor snapshot dir (scripts/km-sensors-sync.sh
+ * export target) — feeds TrialSitrepDetail.snapshotAges (§7, deferred from
+ * TM6). Always this repo's own tree, regardless of which repo a trial
+ * lives in: the snapshot is git-tracked here, not per-target-repo. */
+const EVIDENCE_ROOT = path.join(META_REPO_ROOT, "evidence", "kkamak-sensors")
 const THRESHOLD = 10
 const MAX_AGE_DAYS = 7
 const POLL_TIMEOUT_MS = 10 * 60 * 1000
@@ -192,6 +198,7 @@ async function main(): Promise<void> {
     projectGlobalRootFor: (repo) => layersFor(repo, AGENT_ROLE)[1]!.root,
     readFullSensorLines: (repo) => readAllSensorLines(path.join(repo, ".km", "gate-outcomes.ndjson")),
     readExposureRows: (repo) => readExposureRows(repo),
+    readSnapshotAges: (repo) => readSnapshotAges(EVIDENCE_ROOT, repo, now),
     readCalibration: () => readCalibration(META_REPO_ROOT),
     calibrationStale: (cal) => calibrationStale(META_REPO_ROOT, cal),
     resolveGateTrial,
