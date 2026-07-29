@@ -45,7 +45,7 @@ import {
   projectRoleRoot,
 } from "../src/harness-store.ts"
 import { LAYER_LABELS } from "../src/bench/record.ts"
-import { composeHarness, renderAgentsMd, renderSystemBlocks, type LayerRef } from "../src/compose.ts"
+import { composeHarness, renderAgentsMd, renderSystemBlocks, type LayerRef, type SnapshotOverride } from "../src/compose.ts"
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "mh-compose-"))
@@ -317,4 +317,150 @@ test("composeHarness legacy layer (no playbook.json) falls back to flat", () => 
   fs.mkdirSync(path.join(root, "active"), { recursive: true })
   fs.writeFileSync(path.join(root, "active", "system.md"), "- legacy\n")
   expect(composeHarness([{ scope: "account-global", root }], {}, "anthropic/x")[0].system).toBe("- legacy")
+})
+
+// ── composeHarness(snapshot?) — §4.3 arm-aware compose (Task 3) ────────────
+//
+// Behavior contract 1 (brief): NO snapshot arg -> byte-identical to today.
+// The whole existing suite above already exercises the 3-arg call form
+// unchanged; these tests exercise the NEW 4th param in isolation.
+
+test("composeHarness: omitting snapshot is identical to passing undefined explicitly", () => {
+  const metaRoot = tmpDir()
+  const pg = projectGlobalRoot(metaRoot)
+  createCandidate(pg, "v1", "active system text", "active tools text")
+  writeActive(pg, "v1", "active system text", "active tools text")
+  const layerRefs: LayerRef[] = [{ scope: "project-global", root: pg }]
+
+  const omitted = composeHarness(layerRefs, {}, undefined)
+  const explicitUndefined = composeHarness(layerRefs, {}, undefined, undefined)
+  expect(omitted).toEqual(explicitUndefined)
+  expect(omitted[0]!.system).toBe("active system text")
+  expect(omitted[0]!.tools).toBe("active tools text")
+})
+
+test("composeHarness: snapshot overrides ONLY the matching-scope layer; other layers compose from disk as usual", () => {
+  const metaRoot = tmpDir()
+  const agent = freshAgent()
+
+  const pg = projectGlobalRoot(metaRoot)
+  createCandidate(pg, "v1", "ACTIVE project-global system", "active pg tools")
+  writeActive(pg, "v1", "ACTIVE project-global system", "active pg tools")
+
+  const pr = projectRoleRoot(metaRoot, agent)
+  createCandidate(pr, "v1", "ACTIVE project-role system", "active pr tools")
+  writeActive(pr, "v1", "ACTIVE project-role system", "active pr tools")
+
+  const layerRefs: LayerRef[] = [
+    { scope: "project-global", root: pg },
+    { scope: "project-role", root: pr },
+  ]
+
+  const snapshot: SnapshotOverride = {
+    scope: "project-global",
+    system: "SNAPSHOT project-global system",
+    tools: "snapshot pg tools",
+    playbook: null,
+  }
+
+  const composed = composeHarness(layerRefs, {}, undefined, snapshot)
+  const [pgLayer, prLayer] = composed
+
+  expect(pgLayer!.system).toBe("SNAPSHOT project-global system")
+  expect(pgLayer!.tools).toBe("snapshot pg tools")
+  // project-role is untouched by the snapshot — reads its own active text.
+  expect(prLayer!.system).toBe("ACTIVE project-role system")
+  expect(prLayer!.tools).toBe("active pr tools")
+})
+
+test("composeHarness: a snapshot whose scope matches no layer in the walk has no effect", () => {
+  const metaRoot = tmpDir()
+  const pg = projectGlobalRoot(metaRoot)
+  createCandidate(pg, "v1", "active text")
+  writeActive(pg, "v1", "active text")
+  const layerRefs: LayerRef[] = [{ scope: "project-global", root: pg }]
+
+  const snapshot: SnapshotOverride = { scope: "account-role", system: "SHOULD NOT APPEAR", tools: "", playbook: null }
+  const composed = composeHarness(layerRefs, {}, undefined, snapshot)
+
+  expect(composed[0]!.system).toBe("active text")
+  expect(composed[0]!.system).not.toContain("SHOULD NOT APPEAR")
+})
+
+test("composeHarness: snapshot wins over a pin for the same scope (snapshot takes precedence, pin ignored for that layer)", () => {
+  const metaRoot = tmpDir()
+  const pg = projectGlobalRoot(metaRoot)
+  createCandidate(pg, "v1", "active text")
+  writeActive(pg, "v1", "active text")
+  createCandidate(pg, "v2", "candidate v2 text")
+  const layerRefs: LayerRef[] = [{ scope: "project-global", root: pg }]
+
+  const snapshot: SnapshotOverride = { scope: "project-global", system: "SNAPSHOT text", tools: "", playbook: null }
+  const pins = { "project-global": "v2" }
+
+  const composed = composeHarness(layerRefs, pins, undefined, snapshot)
+  expect(composed[0]!.system).toBe("SNAPSHOT text")
+  expect(composed[0]!.system).not.toContain("candidate v2 text")
+})
+
+test("composeHarness: snapshot playbook routes by model with the same faithful-render guard as the disk path", () => {
+  const metaRoot = tmpDir()
+  const pg = projectGlobalRoot(metaRoot)
+  createCandidate(pg, "v1", "unused")
+  writeActive(pg, "v1", "unused")
+  const layerRefs: LayerRef[] = [{ scope: "project-global", root: pg }]
+
+  const pb = {
+    schemaVersion: 1,
+    nextId: 3,
+    bullets: [
+      { id: "b1", text: "U", helpful: 0, harmful: 0, addedBy: "t", status: "active" as const, createdAt: "t", updatedAt: "t" },
+      { id: "b2", text: "VA", generality: "vendor" as const, slice: "anthropic", helpful: 0, harmful: 0, addedBy: "t", status: "active" as const, createdAt: "t", updatedAt: "t" },
+    ],
+  }
+  const faithfulSystem = "- U\n- VA"
+  const snapshot: SnapshotOverride = { scope: "project-global", system: faithfulSystem, tools: "", playbook: pb }
+
+  // Matching provider -> vendor bullet included.
+  expect(composeHarness(layerRefs, {}, "anthropic/claude-haiku-4-5", snapshot)[0]!.system).toBe("- U\n- VA")
+  // Non-matching provider -> vendor bullet dropped (routed).
+  expect(composeHarness(layerRefs, {}, "openai/gpt-5", snapshot)[0]!.system).toBe("- U")
+  // No model -> flat snapshot system text, unrouted.
+  expect(composeHarness(layerRefs, {}, undefined, snapshot)[0]!.system).toBe(faithfulSystem)
+})
+
+test("composeHarness: snapshot playbook that does NOT faithfully render snapshot.system falls back to flat, even with a model", () => {
+  const metaRoot = tmpDir()
+  const pg = projectGlobalRoot(metaRoot)
+  createCandidate(pg, "v1", "unused")
+  writeActive(pg, "v1", "unused")
+  const layerRefs: LayerRef[] = [{ scope: "project-global", root: pg }]
+
+  const pb = {
+    schemaVersion: 1,
+    nextId: 2,
+    bullets: [
+      { id: "b1", text: "keep going", generality: "vendor" as const, slice: "openai", helpful: 0, harmful: 0, addedBy: "t", status: "active" as const, createdAt: "t", updatedAt: "t" },
+    ],
+  }
+  const snapshot: SnapshotOverride = {
+    scope: "project-global",
+    system: "You are an assistant.\n- keep going",
+    tools: "",
+    playbook: pb,
+  }
+
+  expect(composeHarness(layerRefs, {}, "anthropic/x", snapshot)[0]!.system).toBe("You are an assistant.\n- keep going")
+})
+
+test("composeHarness: snapshot.playbook null always uses the flat snapshot system text, even with a model", () => {
+  const metaRoot = tmpDir()
+  const pg = projectGlobalRoot(metaRoot)
+  createCandidate(pg, "v1", "unused")
+  writeActive(pg, "v1", "unused")
+  const layerRefs: LayerRef[] = [{ scope: "project-global", root: pg }]
+
+  const snapshot: SnapshotOverride = { scope: "project-global", system: "flat only", tools: "flat tools", playbook: null }
+  expect(composeHarness(layerRefs, {}, "anthropic/x", snapshot)[0]!.system).toBe("flat only")
+  expect(composeHarness(layerRefs, {}, "anthropic/x", snapshot)[0]!.tools).toBe("flat tools")
 })

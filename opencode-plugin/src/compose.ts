@@ -30,6 +30,7 @@ import {
   readPlaybook,
   renderPlaybook,
   renderPlaybookRouted,
+  type Playbook,
 } from "./harness-store.ts"
 
 /** One resolved layer to compose: a scope label + its store root. Callers
@@ -50,18 +51,44 @@ export interface ComposedLayer {
   tools: string
 }
 
+/** A `TrialState` snapshot (§4.3 spec §3) to compose ONE layer's text from,
+ * instead of reading its active/candidate files — the baseline arm of a
+ * live gate-outcomes trial. `scope` identifies which layer the snapshot
+ * applies to (v0 is project-global only, spec §1); every other layer in the
+ * walk composes as it does today. */
+export interface SnapshotOverride {
+  scope: string
+  system: string
+  tools: string
+  playbook: Playbook | null
+}
+
 /**
  * Walk `layers` in the given order and read each one's system.md/tools.md —
  * the active version, or the pinned candidate version when `pins[scope]` is
  * set (bench's --pin support; the live hook never passes pins and always
- * reads active text).
+ * reads active text). When `snapshot` is given and a layer's scope matches
+ * `snapshot.scope`, that layer composes from the snapshot's fields instead
+ * of reading from disk at all (arm-aware compose, §4.3 spec §3) — every
+ * other layer is unaffected.
  */
 export function composeHarness(
   layers: LayerRef[],
   pins: Record<string, string> = {},
   model?: string,
+  snapshot?: SnapshotOverride,
 ): ComposedLayer[] {
   return layers.map(({ scope, root }) => {
+    if (snapshot && scope === snapshot.scope) {
+      const flat = snapshot.system
+      const pb = model ? snapshot.playbook : null
+      // Same faithful-render guard as the disk path below: route only when
+      // the snapshot's playbook faithfully renders the snapshot's system text.
+      const system = pb && renderPlaybook(pb).trim() === flat.trim()
+        ? renderPlaybookRouted(pb, model!)
+        : flat
+      return { scope, root, system, tools: snapshot.tools }
+    }
     const ver = pins[scope]
     const flat = ver ? readCandidateSystem(root, ver) : readActiveSystem(root)
     const pb = model ? readPlaybook(root, ver) : null

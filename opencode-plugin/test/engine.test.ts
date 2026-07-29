@@ -213,12 +213,12 @@ test("composeInjection returns [] for a non-participating session and no state",
   const { host } = fakeHost(worktree)
   const engine = new EvolutionEngine(host, store)
 
-  expect(await engine.composeInjection("unknown")).toEqual([])
+  expect(await engine.composeInjection("unknown")).toEqual({ blocks: [] })
 
   const st = seedParticipating(store, "s7")
   st.participates = false
   store.put("s7", st)
-  expect(await engine.composeInjection("s7")).toEqual([])
+  expect(await engine.composeInjection("s7")).toEqual({ blocks: [] })
 })
 
 test("sessionIdle skips a degenerate session without recording a score", async () => {
@@ -602,10 +602,10 @@ test("composeInjection injects a vendor bullet only for the matching provider", 
   fs.writeFileSync(path.join(root, "active", "system.md"), "- U\n- VA\n")
 
   await engine.sessionMessage("gr-s1", { role: "mh-build", isPrimary: true, participates: true, model: "anthropic/claude-haiku-4-5" })
-  const anthropic = (await engine.composeInjection("gr-s1")).join("\n")
+  const anthropic = (await engine.composeInjection("gr-s1")).blocks.join("\n")
 
   await engine.sessionMessage("gr-s2", { role: "mh-build", isPrimary: true, participates: true, model: "openai/gpt-5" })
-  const openai = (await engine.composeInjection("gr-s2")).join("\n")
+  const openai = (await engine.composeInjection("gr-s2")).blocks.join("\n")
 
   expect(anthropic).toContain("- VA")
   expect(openai).not.toContain("- VA")

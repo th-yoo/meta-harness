@@ -245,6 +245,25 @@ export interface TrialState {
   baselineAgentConfig?: AgentConfig | null
   /** Snapshot of the baseline env policy so a revert restores it (Phase 4C). */
   baselineEnvPolicy?: EnvPolicy | null
+  /** §4.3 gate-outcomes trials only — marks this trial as governed by the
+   * new decision engine (trial-verdict.ts / resolveGateTrial), so the OLD
+   * resolveTrial's stand-down guard (Task 4) and composeInjection's
+   * arm-aware path (this task) both key off it. Legacy trials (undefined)
+   * never had arms — they compose active-only, exactly as before this
+   * field existed. OPTIONAL interface field only, added by Task 3; the
+   * behavior that sets/reads it beyond compose (startTrial/resolveTrial)
+   * is Task 4's. */
+  rewardMode?: "gate-outcomes"
+  /** §4.3 gate-outcomes trials only — the salt used in `pickTrialArm`'s
+   * `(trialId, sessionID)` hash (spec §3). Falls back to `trial` (the
+   * candidate version string) at call sites until Task 4 populates this
+   * distinctly. OPTIONAL interface field only, added by Task 3. */
+  trialId?: string
+  /** Plan Global Constraints: a queued golden window (or any trial not yet
+   * human-go'd) is inert — compose ignores it (no arm assignment, active
+   * compose), the verdict engine ignores it, only the human-go path
+   * activates it. OPTIONAL interface field only, added by Task 3. */
+  awaitingGo?: boolean
 }
 
 export type TrialResolution =

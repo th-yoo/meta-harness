@@ -154,7 +154,11 @@ const metaHarness: Plugin = async (input) => {
 
       if (proposerSessions.has(sessionID)) return
 
-      for (const block of await engine.composeInjection(sessionID)) {
+      // opencode adapter never appends exposure rows (§4.3 spec §1: v0 arms
+      // are Claude Code sessions only) — `enrollment` is intentionally unused
+      // here; only `blocks` composes the injected system text.
+      const { blocks } = await engine.composeInjection(sessionID)
+      for (const block of blocks) {
         output.system.push(block)
       }
     },

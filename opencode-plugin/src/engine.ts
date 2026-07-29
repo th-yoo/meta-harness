@@ -66,7 +66,8 @@ import {
   PROJECT_ROLE_THRESHOLD,
   PROJECT_GLOBAL_THRESHOLD,
 } from "./propose.ts"
-import { composeHarness, renderSystemBlocks } from "./compose.ts"
+import { composeHarness, renderSystemBlocks, type SnapshotOverride } from "./compose.ts"
+import { pickTrialArm, type TrialArm } from "./trial-arm.ts"
 import type { HarnessHost } from "./host.ts"
 
 // ── Per-session state ────────────────────────────────────────────────────────
@@ -334,19 +335,55 @@ export class EvolutionEngine {
   }
 
   // ── system.transform (non-judge case): inject all 4 layers + env snapshot ──
-  async composeInjection(sessionId: string): Promise<string[]> {
+  //
+  // Arm-aware compose (§4.3 spec §3, prerequisite build item §11/1): when the
+  // project-global layer holds a LIVE gate-outcomes trial (`rewardMode ===
+  // "gate-outcomes"`) that isn't `awaitingGo` (a queued golden window or a
+  // not-yet-human-go'd trial is inert per plan Global Constraints — no arm,
+  // no snapshot, active compose), the session's arm is picked ONCE here via
+  // `pickTrialArm`, and a baseline-arm session composes project-global from
+  // the trial's snapshot fields instead of its active/candidate files. A
+  // trial-arm session, and any session with no live gate-outcomes trial (or
+  // a legacy trial with no `rewardMode` — legacy trials never had arms),
+  // compose exactly as before this change. The picked arm is returned
+  // alongside the blocks (not re-derived at the exposure-append call site)
+  // so compose-read and exposure-append share the SAME trial read — no
+  // TOCTOU between the two.
+  async composeInjection(
+    sessionId: string,
+  ): Promise<{ blocks: string[]; enrollment?: { trialId: string; arm: TrialArm; forced: boolean } }> {
     const st = this.state.get(sessionId)
-    if (!st || !st.participates) return []
+    if (!st || !st.participates) return { blocks: [] }
     const agent = st.role ?? ""
 
     const layers = layersFor(this.worktree, agent)
-    const composed = composeHarness(layers.map((l) => ({ scope: l.scope, root: l.root })), {}, st.model)
+    const layerRefs = layers.map((l) => ({ scope: l.scope, root: l.root }))
+
+    let snapshot: SnapshotOverride | undefined
+    let enrollment: { trialId: string; arm: TrialArm; forced: boolean } | undefined
+    const pg = layers.find((l) => l.scope === "project-global")! // v0 arms are project-global only (spec §1)
+    const trial = readTrial(pg.root)
+    if (trial && trial.rewardMode === "gate-outcomes" && !trial.awaitingGo) {
+      const trialId = trial.trialId ?? trial.trial
+      const { arm, forced } = pickTrialArm(trialId, sessionId)
+      enrollment = { trialId, arm, forced }
+      if (arm === "baseline") {
+        snapshot = {
+          scope: "project-global",
+          system: trial.baselineSystem,
+          tools: trial.baselineTools,
+          playbook: trial.baselinePlaybook ?? null,
+        }
+      }
+    }
+
+    const composed = composeHarness(layerRefs, {}, st.model, snapshot)
 
     // Env snapshot injects once per session (pushed last, if present).
     const wantsSnapshot = sessionId && !st.snapshotInjected
-    const snapshot = wantsSnapshot ? st.snapshot : undefined
+    const envSnapshot = wantsSnapshot ? st.snapshot : undefined
 
-    const blocks = renderSystemBlocks(composed, snapshot)
+    const blocks = renderSystemBlocks(composed, envSnapshot)
 
     for (const layer of composed) {
       if (layer.system) {
@@ -357,12 +394,12 @@ export class EvolutionEngine {
     if (toolLayerCount > 0) {
       await this.host.log("debug", `[hook:system.transform] injected tool guidance from ${toolLayerCount} layer(s)`)
     }
-    if (snapshot) {
+    if (envSnapshot) {
       st.snapshotInjected = true
       this.state.put(sessionId, st)
       await this.host.log("debug", `[hook:system.transform] injected env snapshot`)
     }
-    return blocks
+    return { blocks, enrollment }
   }
 
   /** The judge full-replacement system prompt (system.transform judge case). */

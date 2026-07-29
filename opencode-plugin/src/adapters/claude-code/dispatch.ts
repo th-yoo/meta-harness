@@ -9,7 +9,12 @@
  * hook-cli.ts is the thin process wrapper around it.
  *
  * Event map (mirrors the opencode adapter index.ts, adapted to CC hooks):
- *   SessionStart     → sessionMessage + composeInjection → additionalContext
+ *   SessionStart     → sessionMessage + composeInjection → additionalContext;
+ *                      when composeInjection reports a live §4.3 gate-outcomes
+ *                      trial enrollment, also appends one exposure row to
+ *                      `.km/trial-arms.ndjson` (spec §2) — Claude Code
+ *                      sessions only (v0 scope); the opencode adapter never
+ *                      appends
  *   UserPromptSubmit → /mh-score: score-then-run-idle (the inversion) → block;
  *                      other /mh-*: handleCommand → block; else pass through
  *   PreToolUse(Bash) → adjustToolArgs → updatedInput (the bash-timeout knob)
@@ -28,6 +33,7 @@ import type { EvolutionEngine, SessionIdleOutcome, SessionState, SessionStateSto
 import { parseScoreArgs } from "../../score.ts"
 import { MH_CHILD_ENV, type ClaudeCodeHost } from "./cc-host.ts"
 import { applyPendingArtifacts } from "./proposer.ts"
+import { appendExposureRow } from "../../trial-arm.ts"
 
 /** The union of hook stdin shapes across the events we install (verified live
  * against claude 2.1.207 — see the brief's raw probe evidence). All event-
@@ -158,7 +164,29 @@ export async function dispatch(
         isPrimary: true,
         participates: isMhRole(role),
       })
-      const blocks = await engine.composeInjection(sessionId)
+      const { blocks, enrollment } = await engine.composeInjection(sessionId)
+      // §4.3 exposure log (spec §2): append AFTER compose succeeded, using
+      // the SAME trial read composeInjection used to pick the arm (threaded
+      // back via `enrollment`, not re-read here — no TOCTOU between compose
+      // and append). `enrollment` is only set when the session participates
+      // and a live, non-awaitingGo gate-outcomes trial sits on project-
+      // global, so non-participating roles and child sessions (already
+      // excluded above via MH_CHILD_ENV / resolveRole) never reach this.
+      // Same-session SessionStart re-fires (resume/compaction) are
+      // SEQUENTIAL — CC waits for each hook subprocess to exit before firing
+      // the next hook event — so appendExposureRow's any-row-for-sessionID
+      // dedupe (already-enrolled → keep the original row) is never racing
+      // itself across re-fires of one session.
+      if (enrollment) {
+        appendExposureRow(cwd, {
+          ts: Date.now(),
+          sessionID: sessionId,
+          trialId: enrollment.trialId,
+          layer: "project-global",
+          arm: enrollment.arm,
+          forced: enrollment.forced,
+        })
+      }
       if (blocks.length === 0) return undefined
       // resume/compaction re-fires SessionStart with the same session_id; the
       // engine is idempotent (snapshot injects once), and re-injecting the
