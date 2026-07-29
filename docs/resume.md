@@ -3,7 +3,49 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-29 (MacBook, library, hard time-stop) — §4.3 BUILD TM1–TM5 DONE + 2 SPEC AMENDMENTS · TM6 possibly in-flight at cutoff
+## ✅ SESSION 2026-07-29 (MacBook, background) — §4.3 PREREQUISITE BUILD TM1–TM8 SEALED · 3rd PRE-DATA AMENDMENT · FINAL REVIEW CLOSED (GA4)
+
+**The build is DONE and closed** — full record: `minimal/HISTORY.md` GA4
+(row + section). Range `fc03f95..61e5c6b`, all pushed. Suites at seal:
+opencode-plugin 1740/1 · cc-gate-plugin 352 · km-crank 173 · gate-plugin 26.
+
+**This session (continuing the library block below):**
+- **TM6 reviewed** (was committed-unreviewed): Approved; 2 Important findings
+  → **3rd PRE-DATA AMENDMENT `54238eb`**: (1) calibration-stale REFUSE-vs-ABANDON
+  ambiguity RULED — refuse while `now−startedAt < T_MAX`, abandon
+  `"calibration-stale"` at `≥ T_MAX` (unbounded refusal defeated §5's slot
+  bound; immediate abandon would nuke healthy trials on any mechanism-path
+  commit); (2) explicit abandon RESTORES BASELINE (clear-only abandon left the
+  unvalidated candidate active — false-keep-shaped). Fix `d762277`, re-review
+  clean.
+- **TM7** `3128e54` + fix waves `91f4a9c`,`14abb84` (forced count per exposure
+  ROW; §4.3 block scoped to latest trialId; truthful label). Approved.
+- **TM8** `dbd7ee3`,`6e2ac1f`,`47a5976`: km-sensors-sync.sh (refuse-on-shrink
+  reproduced by reviewer on own fixture), km-panic trial-off, SITREP
+  snapshot-age (deferred TM6 item, from max sensor ts not mtime). Approved.
+- **Final whole-branch review (fc03f95 base): "With fixes" → fix wave
+  `a72cf1e`+`61e5c6b` → re-verified "Ready to close: YES".** Rulings: §7
+  two-host union WIRED INTO VERDICT INPUT (`km-crank/src/sensor-union.ts`,
+  full-raw-line dedupe, §2 exclusions apply post-union); golden-window
+  machinery unbuilt → `runTrialScan` REFUSES `golden:true` + registered
+  deferral `docs/explicitly-not-now.md` §7.8; sensor-side KKAMAK_TRIAL_ARM
+  `forced` comments corrected (exposure record = sole authority, no sensor
+  stamp); `km-panic.sh trial-off` re-ruled ABANDON not rollback (spec §5
+  "manual command supersedes"; state-identical post-54238eb, ledger semantics
+  only) + plan annotations for fc252c2 and the trial-off mapping.
+- ACCEPT-tier minors + 2 optional hardening notes recorded in the final-review
+  output and `.superpowers/sdd/progress.md` (host-local, MacBook).
+
+**NEXT (unchanged queue, all need explicit go):**
+1. §4.3 first live use = **A/A machinery trial** (human-go start; blocked on
+   activation precondition: trailing-14d real-work ≥10 cycles/day — stream
+   near-empty, watch scorecard).
+2. Event-rate multipliers: squad dogfood (`.km/` into squad .gitignore +
+   `/kkamak:init`) — GA2 queue item, never started.
+3. Gauge v2 window: class-C starvation watch continues ($()-idiom, ≥5-C
+   validity floor).
+
+## ⏸ SESSION END 2026-07-29 (MacBook, library, hard time-stop) — §4.3 BUILD TM1–TM5 DONE + 2 SPEC AMENDMENTS · TM6 possibly in-flight at cutoff — **SUPERSEDED by the block above (TM6 reviewed, TM7–TM8 done, build sealed)**
 
 **State:** sweep batch (km-refresh.sh + km-crank-in-gate.json + score NUL-key) DONE
 reviewed. §4.3 prerequisite build (plan

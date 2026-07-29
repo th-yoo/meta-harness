@@ -455,6 +455,48 @@ per-task reviews + final whole-branch review + one fix wave; commits
   prompting amplifies it, eats M5 data points. Daily cap fence verified
   (meta-harness 30/30 blocked spawns; fence, not bug).
 
+## GA4 — §4.3 trial-mode prerequisite build TM1–TM8 (2026-07-29, office `yoo-dev` + MacBook) — BUILT + SEALED
+
+- **What:** all ten §11 prerequisite items of the registered §4.3 spec
+  (`docs/superpowers/specs/2026-07-29-trial-mode-gate-outcomes-preregistration.md`),
+  plan `docs/superpowers/plans/2026-07-29-trial-mode-build.md`, SDD 8 tasks +
+  per-task reviews + final whole-branch review + fix wave. Range
+  `fc03f95..61e5c6b`. Suites at seal: opencode-plugin 1740/1 · cc-gate-plugin
+  352 · km-crank 173 · gate-plugin 26 (baselines 1672/332/70/26).
+- **Shipped:** TM1 SensorLine `forced`/`pluginVersion`; TM2 salted arm module +
+  exposure log `.km/trial-arms.ndjson`; TM3 arm-aware compose (CC-only arms);
+  TM4 `rewardMode` + stand-down + `resolveGateTrial` authority; TM5 calibration
+  registry + path-scoped computed staleness; TM6 trial-verdict engine (§2
+  exclusion matrix, three-floor §5 rule, 21-row truth table, A/A KEEP-by-tie,
+  futility projection) + crank wiring before decideGate w/ all-REPOS scan +
+  trial SitrepActions; TM7 scorecard §4.3 block (per-arm N_eff triplet, density,
+  forced-rows, scoped to latest trialId); TM8 `km-sensors-sync.sh`
+  (append-only union, refuse-on-shrink — reviewer reproduced safety on own
+  fixture), `km-panic.sh trial-off`, SITREP snapshot-age from max sensor ts.
+- **THREE PRE-DATA AMENDMENTS, all evidence-forced, sealed before any verdict
+  existed:** `fc252c2` salt `%2` → `(fnv1a>>>16)&1` (bit-0 proven
+  parity-linear with reinject axis); `bcbfdb3` 2/19 calibration rate =
+  LOWER-BOUND PROXY (measured arms ran mutation probe, shipped daily gate is
+  verify-only); `54238eb` calibration-stale refusal bounded by T_MAX → then
+  abandon `"calibration-stale"` (unbounded refusal defeated §5 slot bound) +
+  explicit abandon RESTORES BASELINE (clear-only abandon silently adopted the
+  unvalidated candidate — false-keep-shaped, reviewer-caught).
+- **Final review (whole branch, 4 Important all closed):** plan salt pin
+  annotated; false sensor-side KKAMAK_TRIAL_ARM comments corrected (exposure
+  record = sole authority per §2); **§7 two-host union WIRED INTO VERDICT
+  INPUT** (`sensor-union.ts`, full-raw-line dedupe, snapshot rows subject to
+  the same §2 exclusions by provenance erasure); **golden-window machinery
+  ruled unbuilt → `runTrialScan` refuses `golden:true`, registered deferral
+  `explicitly-not-now.md` §7.8** (latent §5 violation at T_MAX otherwise).
+  Panic trial-off re-ruled abandon (spec §5 "manual command supersedes"),
+  state-identical to rollback post-54238eb, ledger-semantics fix.
+- **Not built (registered):** auto trial-start (human-go stays), golden-window
+  rules (§7.8), cadence mechanization for calibration refresh, SPRT,
+  cross-host auto-sync, opencode-session arms.
+- **Next:** activation precondition still gates everything — trailing-14d
+  real-work ≥10 cycles/day (stream near-empty). A/A machinery trial is the
+  registered first live use.
+
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
 | R1 | 2026-07-23 | machine bullet (script-verify) on bare | bare 4/10 vs 5/10 | 1.0 | — | REJECT null |
@@ -483,6 +525,7 @@ per-task reviews + final whole-branch review + one fix wave; commits
 | GA1 | 2026-07-28/29 | km-gauge shadow PoC + scorecard + §4.4 reinject A/B (office) | 4 live haiku derivations; 240 tests; audit 659a712..HEAD | — | — (mechanism) | **SHIPPED: gauge M0–M3 window open (shadow-only, read-only guard); scorecard defines improvement (M-exhaust/M-interrupt fall at non-decreasing M-catch; MIN_N=20 locked = display floor, not certification); reinject v0/v1 within-workload randomised — v1 append self-contradiction user-caught, REPAIRED `322f2c1` (composed at IO seam, 2x adversarial plan review, §4b re-registered pre-data, live-proven both arms); audit found zero gate-gaming (no power, ~1 opportunity); plugin-install copy trap fixed (vendor/ + install-shape test); store renamed .kkamak/ auto-migrating. A/B LIVE + clean; bottleneck = block EVENTS, not instruments** |
 | GA2 | 2026-07-29 | §4.3 trial-mode pre-reg + gauge M0–M3 verdict + km-gauge v2 extractor pre-reg (office) | 36-prompt gauge window (user-labeled 10 would-blocks); 1 live tmux smoke session; zero bench trials | — | — (registration + measurement) | **§4.3 REGISTERED (`fdd0055..59c4924`, SDD + 3 review iterations, 24 findings resolved; playbook v0, salted arms, three-floor verdict, auto keep/rollback + human-go, golden every 3 KEEPs, A/A first, activation ≥10 cycles/day). Gauge M0 91.7% ✓ M1 63.6% ✓ M3 ✓ (caught the spec's DRAFT defect pre-final-review) but M2 FAIL 9/10 false-block → SHADOW INDEFINITELY per locked rule; root cause = invention beyond information bound. Fix-or-drop → v2 EXTRACTOR REGISTERED (`63c94f2`+`61f8d78`: A1/A2/B/C/D classes, code-enforced extraction, two-strike eval, M5 A2-share; second M2 fail = derivation killed). Shadow invariant test-locked `af0a132`; first v0 reinject cycle (arms v0:1/v1:19)** |
 | GA3 | 2026-07-29 | km-gauge v2 extractor BUILD + DEPLOY + LIVE MEASURE (office) | SDD 3 tasks + reviews + final review + fix wave; 1 reinstall + km-play 3-prompt haiku session; zero bench trials | — | — (mechanism + measurement) | **BUILT (`a3638cb..1cad4ba`, 332 tests; T1 review caught cd-target + substring-boundary extraction holes; final review caught spec-code divergence → pre-data amendment BEFORE deploy). DEPLOYED 0.2.0, WINDOW OPEN (`1f4c0f6`; stale-cache-dir gotcha: `claude plugin list` = authority). LIVE MEASURE: A2 + B model-classified exact; C→D $()-downgrade with audit ×2 (class-C 0/4 = starvation trend, ≥5-C floor watches); byClass renders, v1 lines excluded; orphan mechanism observed live (A2 stranded by highest-n supersede); cap fence verified** |
+| GA4 | 2026-07-29 | §4.3 prerequisite build TM1–TM8 (office + MacBook) | SDD 8 tasks + per-task reviews + final whole-branch review + fix waves; zero bench trials | — | — (mechanism) | **BUILT + SEALED (`fc03f95..61e5c6b`; suites 1740/1 · 352 · 173 · 26). THREE pre-data amendments, all evidence-forced pre-verdict: `fc252c2` salt bit-16 (bit-0 parity-linear w/ reinject), `bcbfdb3` calibration 2/19 = lower-bound proxy, `54238eb` stale-refusal bounded by T_MAX → abandon + abandon-restores-baseline (clear-only abandon silently adopted candidate). Final review closed 4 Important: §7 union WIRED into verdict input (`sensor-union.ts`), golden trials REFUSED + §7.8 deferral, false sensor-side forced comments fixed, panic trial-off re-ruled abandon per §5. Human-go start preserved; activation precondition (≥10 real-work cycles/day trailing-14d) still gates first trial; A/A machinery trial = registered first live use** |
 
 ## R1 — round-1 machine bullet (2026-07-23, office) — REJECT
 
