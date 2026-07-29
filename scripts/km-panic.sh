@@ -10,7 +10,7 @@
 #   km-panic.sh gauge-off   stop km-gauge refiner spend, keep the gate
 #   km-panic.sh off         disable the gate entirely (recoverable)
 #   km-panic.sh restore     undo `off`
-#   km-panic.sh trial-off   force-stop a live §4.3 gate-outcomes trial (rollback)
+#   km-panic.sh trial-off   force-stop a live §4.3 gate-outcomes trial (abandon)
 #   km-panic.sh nuke        print the full plugin-removal commands
 #
 # Run it from the repo whose gate you want to stop (uses $PWD).
@@ -31,7 +31,7 @@ km-panic — stop kkamak NOW, without restarting Claude Code.
   km-panic.sh gauge-off   stop km-gauge refiner spend, keep the gate
   km-panic.sh off         disable the gate entirely (recoverable)
   km-panic.sh restore     undo `off`
-  km-panic.sh trial-off   force-stop a live §4.3 gate-outcomes trial (rollback)
+  km-panic.sh trial-off   force-stop a live §4.3 gate-outcomes trial (abandon)
   km-panic.sh nuke        print the full plugin-removal commands
 
 Every action takes effect on the NEXT turn of a running session: gate.json
@@ -98,12 +98,20 @@ PY
     ;;
 
   trial-off)
-    # §11 item 9: manual command supersedes (§6 authority) — force-rollback a
+    # §11 item 9: manual command supersedes (§6 authority) — force-ABANDON a
     # live §4.3 gate-outcomes trial for the cwd's project-global store root
     # right now, without waiting for km-crank's next scheduled verdict. Reads
     # the live .trial via the same primitives resolveGateTrial/km-crank use
     # (opencode-plugin/src/harness-store.ts) — never a second, drifting
     # reimplementation of the .trial schema in bash.
+    #
+    # ABANDON, not rollback (final review, plan Task 8 amendment): spec §5's
+    # abandon list names "a manual command supersedes (§6)" — a manual
+    # supersede is not a decision-rule outcome AGAINST the candidate.
+    # Post-54238eb, resolveGateTrial's abandon branch already restores the
+    # baseline exactly like rollback does (state-identical) — only the
+    # ledger row differs, and a "rollback" row here could later be misread
+    # as the three-clause rule having judged the candidate.
     #
     # A LEGACY trial (no rewardMode) is explicitly NOT touched here: it
     # belongs to the old resolveTrial's rate-comparison path, not
@@ -123,8 +131,8 @@ PY
       console.log(`  To force it now instead: manually restore ${root}/active/{system.md,tools.md} from the`)
       console.log(`  baselineSystem/baselineTools fields recorded in ${root}/active/.trial, then remove that .trial file.`)
     } else {
-      const result = resolveGateTrial(root, { verdict: "rollback", reason: "km-panic trial-off" })
-      console.log(`km-panic: gate-outcomes trial at ${root} -> ${JSON.stringify(result)}`)
+      const result = resolveGateTrial(root, { verdict: "abandoned", reason: "manual supersede (km-panic trial-off)" })
+      console.log(`km-panic: gate-outcomes trial at ${root} -> ${JSON.stringify(result)} (baseline restored, ledger action=abandoned)`)
     }
 TS
     ;;

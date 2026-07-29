@@ -437,6 +437,35 @@ recorded reopen trigger, not just a footnote in the design doc:
 | Mechanism-class generalized trial slots | v0 = playbook class only; the mechanism class keeps bespoke §4b-style pre-registrations | A second §4.3-style registration extends this machinery to the mechanism class |
 | Mechanical cross-repo/host trial lock | v0 = declared operational convention only, not a mechanism | The convention is violated once, or more than one operator exists |
 
+## 7.8 §4.3 golden-window decision rules (deferred at build final review, 2026-07-29)
+
+`TrialState.golden` exists (layered on `.trial`, plan Global Constraints) as a
+build-time placeholder for a queued golden-baseline window — arms would be the
+current incumbent (as `"trial"`) vs. a frozen golden snapshot (as `"baseline"`)
+— but the decision rules that would actually RUN one are not built: queueing
+every 3rd KEEP into a golden window, the golden human-go activation path, and
+golden T_MAX's keeps-incumbent-not-rollback semantics (a golden window losing
+to its own past self is not evidence the incumbent regressed — spec §5). Found
+at the §4.3 build's final whole-branch review: `trial-verdict.ts`'s
+`runTrialScan` had no `golden:true` handling, so the generic T_MAX/three-clause
+path would silently enact the §5-forbidden rollback-vs-incumbent decision on a
+golden window if one were ever started by hand.
+
+**Ruling:** refuse, don't build. Nothing can start a golden trial today (no
+queueing, no human-go path wired) — `startTrial`'s `opts.golden` flag is
+reachable only by direct code/test invocation, never any live command. The
+verdict engine now refuses outright: a `golden:true` live trial short-circuits
+to a `trial-pending` SITREP action ("golden-window machinery unbuilt —
+registered deferral (explicitly-not-now §7.8); no verdict will be read until
+it lands") before `evaluateGateTrial` runs at all — no evaluation, no
+enactment, no store touch.
+
+**Revisit trigger:** a real product need for a golden-baseline comparison
+(distinguishing "the metric moved" from "the incumbent drifted vs. its own
+history") reaches the front of the queue — at which point build the
+every-3rd-KEEP queue, the human-go activation, and the golden T_MAX rule
+together, and only then remove this refusal.
+
 ## 8. Reading this doc in six months
 
 Ask, per entry: did the trigger fire? If yes, the entry graduates into the next
