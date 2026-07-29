@@ -290,3 +290,83 @@ test("lines with no arm recorded are excluded from BOTH arms", () => {
   expect(arms.v0.gateCycles).toBe(3)
   expect(arms.v1.gateCycles).toBe(0)
 })
+
+// ── §4.3 trial block (per-arm N_eff + exposure guard, TM7 / §11 item 7) ────
+//
+// Regression contract: with no `.km/trial-arms.ndjson` beside the target
+// sensor file, the CLI's output must be byte-identical to the pre-trial
+// baseline (this exact string, captured from the CLI BEFORE the §4.3 block
+// existed). This test must stay green through the whole TM7 change.
+
+function exposureFileBeside(sensorPath: string, rows: Record<string, unknown>[]): void {
+  const p = path.join(path.dirname(sensorPath), "trial-arms.ndjson")
+  fs.writeFileSync(p, rows.length ? rows.map((r) => JSON.stringify(r)).join("\n") + "\n" : "")
+}
+
+function expRow(over: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+  return { ts: 1000, sessionID: "s1", trialId: "t1", layer: "project-global", arm: "baseline", forced: false, ...over }
+}
+
+test("CLI: no trial-arms.ndjson beside sensor file -> §4.3 trial block absent, output byte-identical to the pre-trial baseline", async () => {
+  const f = sensorFile(MANY(3, {}))
+  const r = await runCli([f, "--min-n", "1"])
+  expect(r.out).toBe(
+    "kkamak scorecard — read-only; see the pre-registration before quoting any number.\n\n" +
+      "── h · bun test\n" +
+      "   cycles 3  (clean 3, catch 0, exhausted 0, interrupted 0)\n" +
+      "   M-catch 0.0%   M-exhaust 0.0%   M-interrupt 0.0%   M-tax 100ms\n\n" +
+      "Claimable: a fall in M-exhaust or M-interrupt at non-decreasing M-catch.\n" +
+      "NOT claimable: M-catch alone, or kkamak's value — both need the §4.3 counterfactual.\n",
+  )
+  expect(r.out).not.toContain("§4.3 trial")
+})
+
+test("CLI: §4.3 trial block prints per-arm N_eff triplet, density, and forced count when trial-arms.ndjson exists beside the sensor file", async () => {
+  const lines = [
+    // s1: baseline, 2 clean gate cycles -> metrics 2, density-line 2
+    line({ sessionID: "s1" }),
+    line({ sessionID: "s1" }),
+    // s2: trial, 1 clean gate cycle
+    line({ sessionID: "s2" }),
+    // s3: baseline, gauge-only (rounds:[]) -> counts toward density, NOT metrics
+    line({ sessionID: "s3", rounds: [] }),
+    // s4: trial but FORCED -> excluded from all per-arm metrics/density, only forcedCount
+    line({ sessionID: "s4" }),
+    // s5: no exposure row at all -> unmatched, attributed to neither arm
+    line({ sessionID: "s5" }),
+  ]
+  const f = sensorFile(lines)
+  exposureFileBeside(f, [
+    expRow({ sessionID: "s1", arm: "baseline", forced: false }),
+    expRow({ sessionID: "s2", arm: "trial", forced: false }),
+    expRow({ sessionID: "s3", arm: "baseline", forced: false }),
+    expRow({ sessionID: "s4", arm: "trial", forced: true }),
+  ])
+
+  const r = await runCli([f, "--min-n", "1"])
+  expect(r.out).toContain("§4.3 trial")
+  // baseline: metrics = 2 (s1's two clean lines); density set = 3 lines (s1x2 + s3
+  // gauge-only) over 2 sessions (s1, s3) -> density 1.50; sessions-w-cycle = 1 (s1).
+  expect(r.out).toMatch(/baseline.*cycles\s+2.*sessions\s+2.*sessions-w-cycle\s+1.*density 1\.50/)
+  // trial: metrics = 1 (s2), density set = 1 line over 1 session -> density 1.00;
+  // s4 (forced) contributes NOTHING here, only to the forced count below.
+  expect(r.out).toMatch(/trial.*cycles\s+1.*sessions\s+1.*sessions-w-cycle\s+1.*density 1\.00/)
+  expect(r.out).toContain("forced (excluded): 1")
+})
+
+test("CLI: trial-arms.ndjson present but every row is unrelated to any sensor sessionID -> triplet all zero, no crash", async () => {
+  const f = sensorFile(MANY(2, { sessionID: "unmatched" }))
+  exposureFileBeside(f, [expRow({ sessionID: "some-other-session" })])
+  const r = await runCli([f, "--min-n", "1"])
+  expect(r.out).toContain("§4.3 trial")
+  expect(r.out).toMatch(/baseline.*cycles\s+0.*sessions\s+0.*sessions-w-cycle\s+0.*density 0\.00/)
+  expect(r.out).toMatch(/trial.*cycles\s+0.*sessions\s+0.*sessions-w-cycle\s+0.*density 0\.00/)
+  expect(r.out).toContain("forced (excluded): 0")
+})
+
+test("CLI: --json output is unaffected by an adjacent trial-arms.ndjson (still parseable, no trial key required)", async () => {
+  const f = sensorFile(MANY(2, {}))
+  exposureFileBeside(f, [expRow({ sessionID: "s" })])
+  const parsed = JSON.parse((await runCli([f, "--json", "--min-n", "1"])).out)
+  expect(parsed.groups.length).toBe(1)
+})
