@@ -3,6 +3,23 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ TM8 SYNC LIVE-TEST 2026-07-30 (`yoo-dev`, token-free, go received) — km-sensors-sync + snapshot-age + sensor-union FIRST REAL DATA
+
+First-ever run of `scripts/km-sensors-sync.sh`: export wrote
+`evidence/kkamak-sensors/yoo-dev/` (meta-harness 56 lines + km-play 7;
+squad + all trial-arms correctly skipped, no local data), `diff` in-sync,
+`import` report-only clean, re-export idempotent (0 adds). Live-exercised
+`readSnapshotAges` + `unionRawLines` on the real snapshot:
+**age computed from max sensor `ts` proven live** (km-play 0.65d despite
+seconds-old file mtime — the mtime lie the module guards), union dedupe
+exact (live 56 + identical snapshot 56 → 56), snapshot-only 56, absent
+kind 0, no-snapshot repo []. **Still never live:** refuse-on-shrink
+(fixture-only), `km-panic trial-off` (needs a trial), SITREP snapshot-age
+line render (trial-detail-only — blocked until first trial, registered).
+Sensor note: first TM1 `pluginVersion:0.2.0` line observed live on office
+(07:47, gauge-only line); `forced` correctly absent. MacBook cache
+freshness post-TM1 still unverified.
+
 ## ✅ OFFICE VERIFY 2026-07-30 (`yoo-dev`, token-free) — GA4 pull CONFIRMED + cache refreshed
 
 Repo at `e90a598` pulled; all four suites green on office (cc-gate-plugin
