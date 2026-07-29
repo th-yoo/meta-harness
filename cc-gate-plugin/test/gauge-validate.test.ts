@@ -203,6 +203,47 @@ test("case-sensitive verbatim match: readme.md != README.md → D", () => {
   expect(v.downgraded?.rule).toBe("path-not-in-prompt")
 })
 
+// ── step 5: word-boundary fix (finding #2, 2026-07-29 fix pass) ─────────
+// A plain substring match is not enough: "a.ts" must not match inside
+// "thisisnota.tsfile", "app.js" must not match inside "webapp.jsx". A match
+// only counts when both flanking characters (or a string edge) are
+// non-alphanumeric-non-underscore.
+
+test("verbatim-in-prompt requires a token boundary: 'a.ts' inside 'thisisnota.tsfile' does not count", () => {
+  const d = mkDerivation({ check: "test -f a.ts" })
+  const v = validateDerivation({
+    derivation: d,
+    prompt: "look at thisisnota.tsfile carefully",
+    floorCheck: "",
+    repoRoot: REPO,
+  })
+  expect(v.class).toBe("D")
+  expect(v.downgraded?.rule).toBe("path-not-in-prompt")
+})
+
+test("verbatim-in-prompt requires a token boundary: 'app.js' inside 'webapp.jsx' does not count", () => {
+  const d = mkDerivation({ check: "test -f app.js" })
+  const v = validateDerivation({
+    derivation: d,
+    prompt: "check that webapp.jsx renders",
+    floorCheck: "",
+    repoRoot: REPO,
+  })
+  expect(v.class).toBe("D")
+  expect(v.downgraded?.rule).toBe("path-not-in-prompt")
+})
+
+test("verbatim-in-prompt: a sentence-final period is a valid boundary", () => {
+  const d = mkDerivation({ check: "test -f done.txt" })
+  const v = validateDerivation({
+    derivation: d,
+    prompt: "please create done.txt.",
+    floorCheck: "",
+    repoRoot: REPO,
+  })
+  expect(v.class).toBe("C")
+})
+
 test("quoted path with a space is one token, checked verbatim", () => {
   const d = mkDerivation({ check: 'test -f "my dir/file.txt"' })
   const v = validateDerivation({
@@ -342,6 +383,35 @@ test("B-screen fires on bare floor-verb reuse with no scoping", () => {
   expect(v.downgraded?.rule).toBe("b-keyword")
 })
 
+test("directory-level cd scoping alone does NOT count as B2' scoping: cd <dir> in prompt still fires B", () => {
+  // Fix-pass finding #1: a bare `cd sub/dir && bun test` verifies nothing
+  // beyond the floor even though "sub/dir" is itself a real, prompt-named,
+  // in-repo path — the B2' exception requires a scoping token BEYOND the
+  // cd target.
+  const d = mkDerivation({ check: "cd sub/dir && bun test" })
+  const v = validateDerivation({
+    derivation: d,
+    prompt: "run the tests in sub/dir",
+    floorCheck: FLOOR,
+    repoRoot: REPO,
+  })
+  expect(v.class).toBe("B")
+  expect(v.downgraded?.rule).toBe("b-keyword")
+  expect(v.reason).toBe("floor-covered")
+})
+
+test("cd <dir> PLUS a real scoping token beyond it (both named in prompt) → stays C", () => {
+  const d = mkDerivation({ check: "cd sub/dir && bun test test/x.test.ts" })
+  const v = validateDerivation({
+    derivation: d,
+    prompt: "run the tests in sub/dir, specifically test/x.test.ts",
+    floorCheck: FLOOR,
+    repoRoot: REPO,
+  })
+  expect(v.class).toBe("C")
+  expect(v.check).toBe("cd sub/dir && bun test test/x.test.ts")
+})
+
 test("derived check containing the full floorCheck verbatim → B", () => {
   const d = mkDerivation({ check: `echo before; ${FLOOR}` })
   const v = validateDerivation({
@@ -391,8 +461,9 @@ test("floorCheck='' skips the floor-head branch entirely, but the phrase screen 
     repoRoot: REPO,
   })
   // No floor armed → head branch inert; the bare check also has zero path
-  // tokens, so it falls through to no-path-reference, NOT b-keyword.
-  expect(vHead.downgraded?.rule).not.toBe("b-keyword")
+  // tokens, so it falls through specifically to no-path-reference (not
+  // b-keyword, and not any other rule).
+  expect(vHead.downgraded?.rule).toBe("no-path-reference")
 
   const phrase = mkDerivation({ goalSummary: "make the tests pass", check: "test -f src/a.ts" })
   const vPhrase = validateDerivation({

@@ -118,19 +118,30 @@ function isPathLikeToken(tok: string): boolean {
   return PATH_EXT_RE.test(tok)
 }
 
+interface PathTokenHit {
+  token: string
+  /** True for a `cd`'s own directory argument. Included in the public
+   * extractPathTokens result (steps 5/6 still enforce it) but EXCLUDED from
+   * the B-screen's B2' scoping-token check (review finding #1, 2026-07-29
+   * fix pass) — a bare `cd <dir> && <floor cmd>` verifies nothing beyond
+   * the floor even when <dir> is named in the prompt. */
+  isCdTarget: boolean
+}
+
 /** Every path-like token in `check`, after excluding: flags, URLs,
  * /dev/null, the grep-family pattern slot, find's -name|-iname|-path|-regex
  * VALUE, and command words (the first token of each &&/||/;/|-separated
  * segment — never a path token, even when it happens to look path-like).
  * Globs are path-like and NOT expanded (step 4). */
-export function extractPathTokens(check: string): string[] {
+function extractPathTokenHits(check: string): PathTokenHit[] {
   const raw = shellTokenize(check)
-  const out: string[] = []
+  const out: PathTokenHit[] = []
 
   let commandWord: string | undefined
   let atSegmentStart = true
   let patternSlotPending = false
   let findValuePending = false
+  let cdTargetPending = false
 
   for (const tok of raw) {
     if (META.has(tok)) {
@@ -138,12 +149,14 @@ export function extractPathTokens(check: string): string[] {
       commandWord = undefined
       patternSlotPending = false
       findValuePending = false
+      cdTargetPending = false
       continue
     }
     if (atSegmentStart) {
       commandWord = tok
       atSegmentStart = false
       if (PATTERN_CMDS.has(commandWord)) patternSlotPending = true
+      if (commandWord === "cd") cdTargetPending = true
       continue // command word itself is never a path token
     }
 
@@ -160,12 +173,20 @@ export function extractPathTokens(check: string): string[] {
       patternSlotPending = false
       continue // grep-family PATTERN argument (known coarse gap: -f FILE)
     }
+    const isCdTarget = cdTargetPending
+    if (cdTargetPending) cdTargetPending = false
     if (tok === "/dev/null") continue
     if (tok.includes("://")) continue // URL
 
-    if (isPathLikeToken(tok)) out.push(tok)
+    if (isPathLikeToken(tok)) out.push({ token: tok, isCdTarget })
   }
   return out
+}
+
+/** Public step-4 tokenizer — includes cd-target directories (steps 5/6
+ * still verbatim/scope-enforce them). */
+export function extractPathTokens(check: string): string[] {
+  return extractPathTokenHits(check).map((h) => h.token)
 }
 
 // ── step 5: verbatim-in-prompt ───────────────────────────────────────────
@@ -177,8 +198,24 @@ function normalizeForPromptCheck(tok: string): string {
   return t
 }
 
+/** [^A-Za-z0-9_] or a string edge — a plain substring match is not enough
+ * (review finding #2, 2026-07-29 fix pass): "a.ts" must not match inside
+ * "thisisnota.tsfile", "app.js" must not match inside "webapp.jsx". */
+function isBoundaryChar(c: string | undefined): boolean {
+  return c === undefined || !/[A-Za-z0-9_]/.test(c)
+}
+
 function tokenInPrompt(tok: string, prompt: string): boolean {
-  return prompt.includes(normalizeForPromptCheck(tok))
+  const needle = normalizeForPromptCheck(tok)
+  if (!needle) return false
+  let idx = prompt.indexOf(needle)
+  while (idx !== -1) {
+    const before = idx > 0 ? prompt[idx - 1] : undefined
+    const after = idx + needle.length < prompt.length ? prompt[idx + needle.length] : undefined
+    if (isBoundaryChar(before) && isBoundaryChar(after)) return true
+    idx = prompt.indexOf(needle, idx + 1)
+  }
+  return false
 }
 
 // ── step 6: repo scope ───────────────────────────────────────────────────
@@ -232,10 +269,17 @@ function splitFloorSegments(floorCheck: string): string[] {
 
 /** cd-prefix-stripped floor comparison (review B2/B2'). Fires iff the
  * stripped derived check's head matches a stripped floor-segment head AND
- * carries no path token beyond that head verbatim-matching the prompt (a
- * scoped subset run, e.g. `bun test test/x.test.ts` naming a real file, is
- * legitimate C extraction) — OR the derived check contains the full
- * floorCheck verbatim. Skipped entirely when floorCheck === "". */
+ * carries no NON-CD-TARGET path token beyond that head verbatim-matching
+ * the prompt (a scoped subset run, e.g. `bun test test/x.test.ts` naming a
+ * real file, is legitimate C extraction) — OR the derived check contains
+ * the full floorCheck verbatim. Skipped entirely when floorCheck === "".
+ *
+ * Directory-level `cd` scoping does NOT count as a B2' scoping token
+ * (review finding #1, 2026-07-29 fix pass): `cd sub/dir && bun test` with
+ * "sub/dir" named in the prompt still verifies nothing beyond the floor and
+ * must fire B, even though "sub/dir" is itself a real, prompt-verified,
+ * in-repo path (steps 5/6 still enforce it on the cd target when the check
+ * DOES survive to class C via some other path). */
 function floorHeadFires(check: string, floorCheck: string, prompt: string): boolean {
   if (floorCheck === "") return false
   if (check.includes(floorCheck)) return true
@@ -246,8 +290,8 @@ function floorHeadFires(check: string, floorCheck: string, prompt: string): bool
   const headMatches = segments.some((seg) => headOf(stripLeadingCd(seg)) === derivedHead)
   if (!headMatches) return false
 
-  const tokens = extractPathTokens(check)
-  const hasScopingToken = tokens.some((t) => tokenInPrompt(t, prompt))
+  const hits = extractPathTokenHits(check).filter((h) => !h.isCdTarget)
+  const hasScopingToken = hits.some((h) => tokenInPrompt(h.token, prompt))
   return !hasScopingToken
 }
 
