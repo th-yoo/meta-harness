@@ -90,6 +90,26 @@ test("resolveTrial: gate-outcomes trial stands down with ZERO score reads (call-
   expect(scoreReadPaths).toEqual([])
 })
 
+test("resolveTrial: gate-outcomes trial stands down even when active==trial (old abandon path would NOT fire) AND a confirming score exists (discriminates the stand-down guard from the active-version check)", () => {
+  const { storeRoot: root } = tmpStore()
+  createCandidate(root, "v0", "baseline system", "")
+  activateCandidate(root, "v0")
+  recordSession(root, "v0", session({ sessionID: "base-1", passed: true }))
+  createCandidate(root, "v1", "trial system", "")
+  startTrial(root, "v1", "trial system", "", 1, null, null, null, { rewardMode: "gate-outcomes" })
+  // startTrial activates v1, so activeVersion(root) === trial.trial here — the
+  // old resolveTrial's "active changed under trial" abandon branch would NOT
+  // fire even without the stand-down guard. A recorded trial-side session
+  // that would otherwise CONFIRM (trialRate >= baselineRate) proves the
+  // "none" result below comes from the stand-down guard, not from that path.
+  recordSession(root, "v1", session({ sessionID: "trial-1", passed: true }))
+
+  const resolution = resolveTrial(root)
+
+  expect(resolution).toEqual({ action: "none" })
+  expect(readTrial(root)).not.toBeNull() // untouched — resolveGateTrial, not resolveTrial, owns clearing it
+})
+
 test("resolveTrial: legacy (no rewardMode) trial is unaffected by the guard — still resolves normally", () => {
   const { storeRoot: root } = tmpStore()
   createCandidate(root, "v0", "baseline system", "")

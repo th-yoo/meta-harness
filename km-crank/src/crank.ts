@@ -43,7 +43,7 @@ import {
   readCandidateSystem,
   parseModelSpec,
 } from "../../opencode-plugin/src/harness-store.ts"
-import { readExposureRows } from "../../opencode-plugin/src/trial-arm.ts"
+import { parseExposureRows, type ExposureRow } from "../../opencode-plugin/src/trial-arm.ts"
 import { buildProposerPrompt, applyStagedArtifact } from "../../opencode-plugin/src/propose.ts"
 import { ClaudeCodeHost } from "../../opencode-plugin/src/adapters/claude-code/cc-host.ts"
 import type { StagedArtifactDescriptor } from "../../opencode-plugin/src/host.ts"
@@ -52,6 +52,7 @@ import type { SensorLineIn } from "../../cc-gate-plugin/src/score.ts"
 import { parseSensorLines, aggregate, notable, type SensorLine } from "./scan.ts"
 import { readPositions, writePositionsAtomic, type Positions } from "./positions.ts"
 import { readSnapshotAges } from "./snapshot-age.ts"
+import { unionRawLines } from "./sensor-union.ts"
 import { renderEvidence, type RepoEvidence } from "./evidence.ts"
 import { formatSitrep, postSlack, type SitrepAction, type RepoSummary } from "./sitrep.ts"
 import { decideGate, acquireCrankLock, releaseCrankLock } from "./gate.ts"
@@ -125,19 +126,46 @@ function readNewSensorLines(sensorPath: string, fromOffset: number): { lines: Se
 /**
  * §4.3 verdict input: the WHOLE sensor file, never the positions-offset tail
  * — the trial verdict wants the entire [startedAt, now] window every round
- * (trial-verdict.ts time-bounds the join itself). parseSensorLines validates
- * the shared required fields and passes extra optional fields (reinject /
- * forced / gauge) through untouched on the parsed objects, so the runtime
- * values are full SensorLineIn rows; the cast re-attaches the wider type.
+ * (trial-verdict.ts time-bounds the join itself) — UNIONED with every OTHER
+ * host's committed snapshot under EVIDENCE_ROOT (§7, final review item 3;
+ * sensor-union.ts), deduped by full raw-line identity BEFORE parsing. No
+ * snapshot dir at all degrades to exactly the live-only read (pre-union
+ * behavior). parseSensorLines validates the shared required fields and
+ * passes extra optional fields (reinject / forced / gauge) through untouched
+ * on the parsed objects, so the runtime values are full SensorLineIn rows;
+ * the cast re-attaches the wider type.
  */
-function readAllSensorLines(sensorPath: string): SensorLineIn[] {
-  let text: string
+function readUnionSensorLines(repo: string): SensorLineIn[] {
+  const sensorPath = path.join(repo, ".km", "gate-outcomes.ndjson")
+  let liveText = ""
   try {
-    text = fs.readFileSync(sensorPath, "utf-8")
+    liveText = fs.readFileSync(sensorPath, "utf-8")
   } catch {
-    return []
+    // missing/unreadable live file degrades to snapshot-only union — same
+    // fail-open tolerance the pre-union read had for a missing live file.
   }
-  return parseSensorLines(text) as unknown as SensorLineIn[]
+  const unioned = unionRawLines(EVIDENCE_ROOT, repo, "gate-outcomes", liveText).join("\n")
+  return parseSensorLines(unioned) as unknown as SensorLineIn[]
+}
+
+/**
+ * Same cross-host union discipline for the exposure log (§7/item 3: the
+ * union feeds BOTH sensorLines and exposureRows, so a session enrolled and
+ * scored entirely on another host still joins here). readExposureRows
+ * (opencode-plugin/src/trial-arm.ts) is whole-file-only and can't take a
+ * pre-unioned text, so this reads the live file directly and reuses its
+ * exported parseExposureRows on the unioned text instead.
+ */
+function readUnionExposureRows(repo: string): ExposureRow[] {
+  const exposurePath = path.join(repo, ".km", "trial-arms.ndjson")
+  let liveText = ""
+  try {
+    liveText = fs.readFileSync(exposurePath, "utf-8")
+  } catch {
+    // missing/unreadable live file degrades to snapshot-only union.
+  }
+  const unioned = unionRawLines(EVIDENCE_ROOT, repo, "trial-arms", liveText).join("\n")
+  return parseExposureRows(unioned)
 }
 
 async function waitForFile(p: string, timeoutMs: number, intervalMs = POLL_INTERVAL_MS): Promise<boolean> {
@@ -196,8 +224,8 @@ async function main(): Promise<void> {
   const trialScan = runTrialScan(REPOS, {
     readTrial,
     projectGlobalRootFor: (repo) => layersFor(repo, AGENT_ROLE)[1]!.root,
-    readFullSensorLines: (repo) => readAllSensorLines(path.join(repo, ".km", "gate-outcomes.ndjson")),
-    readExposureRows: (repo) => readExposureRows(repo),
+    readFullSensorLines: readUnionSensorLines,
+    readExposureRows: readUnionExposureRows,
     readSnapshotAges: (repo) => readSnapshotAges(EVIDENCE_ROOT, repo, now),
     readCalibration: () => readCalibration(META_REPO_ROOT),
     calibrationStale: (cal) => calibrationStale(META_REPO_ROOT, cal),

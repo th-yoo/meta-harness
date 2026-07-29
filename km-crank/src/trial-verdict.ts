@@ -146,10 +146,13 @@ function joinAndExclude(
   const rowBySession = new Map<string, ExposureRow>()
   for (const r of exposureRows) if (!rowBySession.has(r.sessionID)) rowBySession.set(r.sessionID, r)
 
-  // Defensive: rewardMode trials always carry a trialId (startTrial
-  // invariant); a malformed startedAt degrades to an EMPTY window (nothing
+  // trialId fallback unified with engine.ts's enrollment fallback
+  // (engine.ts:379, `trial.trialId ?? trial.trial`) — a gate-outcomes trial
+  // predating trialId's introduction, or any other absence, must join under
+  // the same fallback the exposure rows were actually written under.
+  // Defensive: a malformed startedAt degrades to an EMPTY window (nothing
   // joins → floors unmet → inert pending), never a bogus since-epoch window.
-  const trialId = trial.trialId ?? ""
+  const trialId = trial.trialId ?? trial.trial
   const parsedStart = Date.parse(trial.startedAt)
   const startMs = Number.isFinite(parsedStart) ? parsedStart : now
 
@@ -407,7 +410,9 @@ export interface TrialScanResult {
   repo: string
   scope: string
   action: SitrepAction
-  evaluation: TrialEvaluation
+  /** Absent only for the golden-window refusal branch below — that branch
+   * never runs evaluateGateTrial at all. */
+  evaluation?: TrialEvaluation
 }
 
 /**
@@ -431,6 +436,28 @@ export function runTrialScan(repos: string[], deps: TrialScanDeps): TrialScanRes
     // awaitingGo trials are inert everywhere until human-go (plan Global
     // Constraints).
     if (!trial || trial.rewardMode !== "gate-outcomes" || trial.awaitingGo) continue
+
+    // Golden-window refusal guard: the golden machinery (every-3rd-KEEP
+    // queueing, golden human-go, golden T_MAX keep-incumbent rules) is
+    // unbuilt, and nothing can start a golden trial today — ruling: refuse,
+    // don't build (found at the §4.3 build's final whole-branch review;
+    // registered deferral, docs/explicitly-not-now.md §7.8). Without this
+    // guard the generic T_MAX/three-clause path below would enact the
+    // §5-forbidden rollback-vs-incumbent decision on a golden window. Checked
+    // BEFORE evaluateGateTrial runs at all — enacts NOTHING, no store touch.
+    if (trial.golden) {
+      const scope = `project-global @ ${repo}`
+      return {
+        repo,
+        scope,
+        action: {
+          kind: "trial-pending",
+          scope,
+          projection:
+            "golden-window machinery unbuilt — registered deferral (explicitly-not-now §7.8); no verdict will be read until it lands",
+        },
+      }
+    }
 
     const sensorLines = deps.readFullSensorLines(repo)
     const cal = deps.readCalibration()

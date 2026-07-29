@@ -105,6 +105,27 @@ function isExposureRow(v: unknown): v is ExposureRow {
 }
 
 /**
+ * Parse raw ndjson text into exposure rows. Tolerant: corrupt/malformed
+ * lines are skipped, not thrown. Exported so callers that already have the
+ * text in hand (e.g. km-crank's cross-host union, sensor-union.ts) don't
+ * need to round-trip through a synthetic file.
+ */
+export function parseExposureRows(raw: string): ExposureRow[] {
+  const rows: ExposureRow[] = []
+  for (const line of raw.split("\n")) {
+    const s = line.trim()
+    if (!s) continue
+    try {
+      const parsed = JSON.parse(s)
+      if (isExposureRow(parsed)) rows.push(parsed)
+    } catch {
+      // corrupt line — skip
+    }
+  }
+  return rows
+}
+
+/**
  * Read exposure rows. `pathOrCwd` accepts either the exact ndjson file path
  * or a project cwd (the `.km/trial-arms.ndjson` path is derived from it).
  * Tolerant parse: missing file → []; corrupt/malformed lines are skipped,
@@ -118,18 +139,7 @@ export function readExposureRows(pathOrCwd: string): ExposureRow[] {
   } catch {
     return []
   }
-  const rows: ExposureRow[] = []
-  for (const line of raw.split("\n")) {
-    const s = line.trim()
-    if (!s) continue
-    try {
-      const parsed = JSON.parse(s)
-      if (isExposureRow(parsed)) rows.push(parsed)
-    } catch {
-      // corrupt line — skip
-    }
-  }
-  return rows
+  return parseExposureRows(raw)
 }
 
 /**

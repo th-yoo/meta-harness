@@ -11,7 +11,11 @@
  */
 import { test, expect, describe } from "bun:test"
 import * as fs from "node:fs"
+import * as os from "node:os"
+import * as path from "node:path"
 
+import { unionRawLines } from "../src/sensor-union.ts"
+import { parseExposureRows } from "../../opencode-plugin/src/trial-arm.ts"
 import {
   evaluateGateTrial,
   decideTrialVerdict,
@@ -175,6 +179,15 @@ describe("§2 exclusions", () => {
     const r = evaluate([mkLine("s1")], [mkRow("s1", "baseline")])
     expect(r.perArm.baseline.cycleCount).toBe(1)
     expect(r.perArm.trial.cycleCount).toBe(0)
+  })
+
+  test("no-trialId: a gate-outcomes TrialState without trialId falls back to trial.trial (unified with engine.ts's enrollment fallback, engine.ts:379) — rows written under that fallback still join", () => {
+    const r = evaluate(
+      [mkLine("s1")],
+      [mkRow("s1", "trial", { trialId: "v7" })], // exposure enrolled while trial.trialId was absent — engine.ts's fallback used trial.trial ("v7")
+      { trial: mkTrial({ trialId: undefined }) },
+    )
+    expect(r.perArm.trial.cycleCount).toBe(1)
   })
 })
 
@@ -677,6 +690,37 @@ describe("runTrialScan (crank wiring seam)", () => {
     expect(runTrialScan(REPOS, deps)).toBeNull()
   })
 
+  test("golden window: refused with a registered-deferral pending action — no evaluation, no enactment (golden machinery unbuilt)", () => {
+    const { lines, rows } = aaStream() // a stream that WOULD otherwise decide (keep) — proves refusal, not floors
+    const deps = fakeDeps({
+      trials: { "/repoA/store": mkTrial({ golden: true }) },
+      linesByRepo: { "/repoA": lines },
+      rowsByRepo: { "/repoA": rows },
+    })
+    const r = runTrialScan(REPOS, deps)
+    expect(deps.resolveCalls.length).toBe(0)
+    expect(r).not.toBeNull()
+    expect(r!.repo).toBe("/repoA")
+    expect(r!.action.kind).toBe("trial-pending")
+    if (r!.action.kind === "trial-pending") {
+      expect(r!.action.projection).toBe(
+        "golden-window machinery unbuilt — registered deferral (explicitly-not-now §7.8); no verdict will be read until it lands",
+      )
+    }
+  })
+
+  test("golden window: false/absent golden is unaffected — normal evaluation still runs", () => {
+    const { lines, rows } = aaStream()
+    const deps = fakeDeps({
+      trials: { "/repoA/store": mkTrial({ golden: false }) },
+      linesByRepo: { "/repoA": lines },
+      rowsByRepo: { "/repoA": rows },
+    })
+    const r = runTrialScan(REPOS, deps)
+    expect(r!.action.kind).toBe("trial-keep")
+    expect(deps.resolveCalls.length).toBe(1)
+  })
+
   test("legacy trial (no rewardMode) is ignored — owned by the old resolveTrial, not this engine", () => {
     const legacy = mkTrial()
     delete legacy.rewardMode
@@ -711,6 +755,131 @@ describe("runTrialScan (crank wiring seam)", () => {
       expect(d.perArm.trial).toEqual({ cycleCount: 25, sessionCount: 25, sessionsWithGateCycle: 23 })
       expect(d.hosts).toContain("office")
       expect(d.hosts).toContain("macbook")
+    }
+  })
+})
+
+// ── 5. Cross-host union verdict input (§7, final review item 3) ───────────
+// Wires runTrialScan's readFullSensorLines/readExposureRows exactly the way
+// crank.ts wires them (unionRawLines + parseSensorLines/parseExposureRows on
+// the unioned raw text) so these tests exercise the real union path the
+// verdict input goes through, not just the sensor-union.ts primitive
+// (covered directly in sensor-union.test.ts).
+
+function tmpEvidenceRoot(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "km-trial-verdict-union-"))
+}
+
+function writeSnapshotFile(evidenceRoot: string, host: string, base: string, kind: string, lines: string[]): void {
+  const dir = path.join(evidenceRoot, host)
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(path.join(dir, `${base}.${kind}.ndjson`), lines.join("\n") + (lines.length ? "\n" : ""), "utf-8")
+}
+
+/** Deps wired through the real union path (mirrors crank.ts's
+ * readUnionSensorLines/readUnionExposureRows), reading `liveLines`/`liveRows`
+ * as this repo's "local" data and unioning against whatever is committed
+ * under `evidenceRoot` for the repo's basename. */
+function unionWiredDeps(
+  world: { trials: Record<string, TrialState>; agesByRepo?: Record<string, { host: string; ageDays: number }[]> },
+  evidenceRoot: string,
+  liveLines: SensorLineIn[],
+  liveRows: ExposureRow[],
+): TrialScanDeps & { resolveCalls: Array<{ root: string; v: GateTrialVerdict }> } {
+  const resolveCalls: Array<{ root: string; v: GateTrialVerdict }> = []
+  return {
+    resolveCalls,
+    now: NOW,
+    readTrial: (root) => world.trials[root] ?? null,
+    projectGlobalRootFor: (repo) => `${repo}/store`,
+    readFullSensorLines: (repo) => {
+      const liveText = liveLines.map((l) => JSON.stringify(l)).join("\n")
+      const unioned = unionRawLines(evidenceRoot, repo, "gate-outcomes", liveText).join("\n")
+      return unioned ? (unioned.split("\n").map((l) => JSON.parse(l)) as SensorLineIn[]) : []
+    },
+    readExposureRows: (repo) => {
+      const liveText = liveRows.map((r) => JSON.stringify(r)).join("\n")
+      const unioned = unionRawLines(evidenceRoot, repo, "trial-arms", liveText).join("\n")
+      return parseExposureRows(unioned)
+    },
+    readSnapshotAges: (repo) => world.agesByRepo?.[repo] ?? [],
+    readCalibration: () => null,
+    calibrationStale: () => false,
+    resolveGateTrial: (root, v) => {
+      resolveCalls.push({ root, v })
+      const auto: Record<string, "kept" | "rolled-back" | "deferred" | "abandoned"> = {
+        keep: "kept", rollback: "rolled-back", deferred: "deferred", abandoned: "abandoned",
+      }
+      return { action: auto[v.verdict]! }
+    },
+  }
+}
+
+/** trial-sN's numeric suffix, or null if `sid` isn't a trial-arm aaStream id. */
+function trialNum(sid: string): number | null {
+  const m = /^trial-s(\d+)$/.exec(sid)
+  return m ? Number(m[1]) : null
+}
+
+describe("cross-host union verdict input (§7, final review item 3)", () => {
+  test("(a) other-host snapshot-only sessions reach the verdict input — can push an arm's session/gateCycle counts over the §5 floors", () => {
+    const { lines, rows } = aaStream()
+    // Keep the baseline arm entirely local. Split the TRIAL arm: sessions
+    // trial-s1..trial-s4 stay "live"; trial-s5..trial-s25 exist ONLY in
+    // another host's committed snapshot. Live-only, the trial arm has just 4
+    // sessions/cycles — under both MIN_SESSIONS_PER_ARM (5) and MIN_N (20).
+    const liveLines = lines.filter((l) => trialNum(l.sessionID) === null || trialNum(l.sessionID)! <= 4)
+    const snapshotOnlyLines = lines.filter((l) => trialNum(l.sessionID) !== null && trialNum(l.sessionID)! > 4)
+    const liveRows = rows.filter((r) => trialNum(r.sessionID) === null || trialNum(r.sessionID)! <= 4)
+    const snapshotOnlyRows = rows.filter((r) => trialNum(r.sessionID) !== null && trialNum(r.sessionID)! > 4)
+
+    // Sanity: proves the split actually starves the trial arm without union.
+    const liveOnly = evaluateGateTrial({
+      trial: mkTrial(), sensorLines: liveLines, exposureRows: liveRows,
+      now: NOW, calibration: null, calibrationIsStale: false,
+    })
+    expect(liveOnly.verdict.verdict).toBe("pending")
+    expect(liveOnly.perArm.trial.sessionsWithGateCycle).toBeLessThan(MIN_SESSIONS_PER_ARM)
+
+    const evidenceRoot = tmpEvidenceRoot()
+    writeSnapshotFile(evidenceRoot, "other-host", "myrepo", "gate-outcomes", snapshotOnlyLines.map((l) => JSON.stringify(l)))
+    writeSnapshotFile(evidenceRoot, "other-host", "myrepo", "trial-arms", snapshotOnlyRows.map((r) => JSON.stringify(r)))
+
+    const deps = unionWiredDeps({ trials: { "/repos/myrepo/store": mkTrial() } }, evidenceRoot, liveLines, liveRows)
+    const r = runTrialScan(["/repos/myrepo"], deps)
+    // Union restores the full aaStream (both arms 25 sessions, all floors
+    // met) → decided normally instead of stuck pending.
+    expect(r!.action.kind).toBe("trial-keep")
+  })
+
+  test("(b) a raw line present in BOTH the live data and the snapshot counts once (no double-counted sessions in the verdict input)", () => {
+    const { lines, rows } = aaStream()
+    const evidenceRoot = tmpEvidenceRoot()
+    // The ENTIRE live stream is also committed to the snapshot verbatim —
+    // full overlap, not just one session.
+    writeSnapshotFile(evidenceRoot, "other-host", "myrepo", "gate-outcomes", lines.map((l) => JSON.stringify(l)))
+    writeSnapshotFile(evidenceRoot, "other-host", "myrepo", "trial-arms", rows.map((r) => JSON.stringify(r)))
+
+    const deps = unionWiredDeps({ trials: { "/repos/myrepo/store": mkTrial() } }, evidenceRoot, lines, rows)
+    const r = runTrialScan(["/repos/myrepo"], deps)
+    expect(r!.action.kind).toBe("trial-keep")
+    if (r!.action.kind === "trial-keep") {
+      // Exactly aaStream's own per-arm counts (25/25/23) — not doubled by
+      // the full-overlap snapshot.
+      expect(r!.action.detail?.perArm.baseline).toEqual({ cycleCount: 25, sessionCount: 25, sessionsWithGateCycle: 23 })
+      expect(r!.action.detail?.perArm.trial).toEqual({ cycleCount: 25, sessionCount: 25, sessionsWithGateCycle: 23 })
+    }
+  })
+
+  test("(c) no snapshot dir for this repo at all → identical to the pre-union, live-only read", () => {
+    const { lines, rows } = aaStream()
+    const evidenceRoot = path.join(os.tmpdir(), "km-trial-verdict-union-absent-" + Date.now())
+    const deps = unionWiredDeps({ trials: { "/repos/myrepo/store": mkTrial() } }, evidenceRoot, lines, rows)
+    const r = runTrialScan(["/repos/myrepo"], deps)
+    expect(r!.action.kind).toBe("trial-keep")
+    if (r!.action.kind === "trial-keep") {
+      expect(r!.action.detail?.perArm.baseline).toEqual({ cycleCount: 25, sessionCount: 25, sessionsWithGateCycle: 23 })
+      expect(r!.action.detail?.perArm.trial).toEqual({ cycleCount: 25, sessionCount: 25, sessionsWithGateCycle: 23 })
     }
   })
 })

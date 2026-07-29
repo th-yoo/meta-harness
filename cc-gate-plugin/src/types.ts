@@ -139,11 +139,14 @@ export interface SensorLine {
   gauge?: GaugeSensorField
   /** §4.4 reinject-wording arm for this session (pre-reg §4b). */
   reinject?: "v0" | "v1"
-  /** True iff an env override (KKAMAK_REINJECT or, from Task 3,
-   * KKAMAK_TRIAL_ARM) forced this session's arm rather than the salted
-   * hash choosing it — §4.3 pre-reg exclusion marker (§2: forced rows are
-   * excluded from every metric). Absent means not forced; a stored `false`
-   * is never written (absent is the cleaner line). */
+  /** True iff an env override (KKAMAK_REINJECT) forced this session's
+   * reinject arm rather than the salted hash choosing it — §4.4 exclusion
+   * marker. Sensor-side `forced` covers KKAMAK_REINJECT ONLY: it is NOT a
+   * frozen contract for KKAMAK_TRIAL_ARM (§4.3) — that forcing is enforced
+   * from the exposure record at join time (`.km/trial-arms.ndjson`'s own
+   * `forced` field is the sole and authoritative record), never sensor-side
+   * convention (spec §2, plan Global Constraints). Absent means not forced;
+   * a stored `false` is never written (absent is the cleaner line). */
   forced?: boolean
   /** cc-gate-plugin version (from .claude-plugin/plugin.json) that emitted
    * this line. Read once per process, resolved module-relative (the plugin

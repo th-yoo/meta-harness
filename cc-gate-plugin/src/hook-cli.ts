@@ -308,9 +308,12 @@ async function main(): Promise<void> {
   // mid-experiment flip would contaminate both arms.
   const arm = pickReinjectVariant(sessionId)
   // forced:true iff KKAMAK_REINJECT itself picked the arm (env override),
-  // not the salted hash — §4.3 pre-reg exclusion marker (§2). Absent (not
-  // false) when unforced: cleaner lines, and Task 3 mirrors this for
-  // KKAMAK_TRIAL_ARM.
+  // not the salted hash — §4.4 exclusion marker. Absent (not false) when
+  // unforced: cleaner lines. This is reinject-ONLY: KKAMAK_TRIAL_ARM (§4.3)
+  // forcing is never stamped here — the exposure row in
+  // `.km/trial-arms.ndjson` is the sole (and authoritative) record of that,
+  // enforced from the exposure record at join time, never sensor-side
+  // convention (spec §2, plan Global Constraints).
   const reinjectForced = process.env.KKAMAK_REINJECT === "v0" || process.env.KKAMAK_REINJECT === "v1"
   let line: SensorLine | undefined = sensor
     ? { ...sensor, reinject: arm, ...(reinjectForced ? { forced: true } : {}) }
