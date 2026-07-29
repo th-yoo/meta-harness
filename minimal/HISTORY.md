@@ -353,6 +353,59 @@ adoption verdicts). Pre-registrations written before data throughout.
   (locked invariant), so all actions land next turn, no restart.
   KKAMAK_GAUGE=off is launch-time only, cannot stop a live session.
 
+## GA2 — §4.3 pre-reg + gauge M0–M3 verdict + v2 extractor pre-reg (2026-07-29, office `yoo-dev`) — REGISTERED ×2, ONE LOCKED FAIL
+
+Registration + measurement day; zero adoption verdicts, zero bench trials.
+
+- **§4.3 trial-mode pre-registration REGISTERED**
+  (`docs/superpowers/specs/2026-07-29-trial-mode-gate-outcomes-preregistration.md`,
+  `fdd0055..59c4924`): SDD execution of a plan hardened by 3 adversarial
+  architect-review iterations (24 findings: golden-window auto-start
+  contradiction, crank single-target trial starvation, exposure
+  dedupe/boundary leak, null-metric coercion, all resolved). Core:
+  playbook-class v0; within-workload salted arms (unsalted = collinear with
+  live reinject arms — caught in review); three-floor verdict (MIN_N=20
+  gateCycles + ≥5 sessions/arm + E_MIN=5 block events); KEEP = "not
+  measurably worse", never "better" (null-adopt ≈60% documented); auto
+  keep/rollback with human-go start; golden-baseline anti-ratchet every 3
+  KEEPs; A/A machinery falsification test before any real trial; activation
+  precondition trailing-14d ≥10 real-work cycles/day. Satellites: scorecard
+  §5 sole-adopter sentence scoped inline (three adopter domains),
+  explicitly-not-now §7.7 (11 deferrals + reopen triggers), resume, INDEX.
+- **Live tmux smoke (1 haiku session):** sensor line exact (durationMs
+  4952, check string, host/app), reinject arm matches recomputed
+  FNV-1a → **first v0-arm cycle ever** (arms were v1:19/v0:0); gauge full
+  loop consumed SAME-line (23.5s refiner beat the Stop thanks to the
+  permission wait).
+- **Gauge M0–M3 window CLOSED (36 task-shaped prompts, user labels):**
+  M0 91.7% PASS, M1 63.6% PASS (all 12 misses = honest `check:null`
+  abstentions), **M2 FAIL — 9/10 would-blocks judged WRONG** (bar ≤20%),
+  M3 PASS (the 1 RIGHT catch found the §4.3 spec's DRAFT status + stale
+  anchors BEFORE the final whole-branch review flagged the same two
+  must-fixes; fast-path floor-accept user-ruled counting). Per locked rule:
+  **shadow indefinitely, no blocking pilot** (`a18b73d`). Root-cause
+  analysis (user-forced, symptom framing rejected): three gaps — world
+  (never sees repo), semantics ("done" = workflow outcome, not worktree
+  predicate), timing (multi-turn graded mid-flight) — refiner INVENTS
+  beyond its information bound; success signature = it was right exactly
+  when it could EXTRACT (prompt contained path + property).
+- **Shadow invariant test-locked (`af0a132`):** would-block gauge + passing
+  floor through the real hook binary → exit 0, no block payload; 241 CC
+  tests.
+- **km-gauge v2 extractor pre-reg REGISTERED (fix-or-drop, user-directed;
+  `63c94f2` + amendment `61f8d78`):** prompt classes A1/A2/B/C/D
+  (user-ratified: no-eval-needed / not-shell-checkable / floor-covered /
+  extractable-in-repo / not-extractable-or-out-of-scope; 5 classes,
+  3 behaviors, 1 parameterized slot); extraction enforced DETERMINISTICALLY
+  in code (path-in-prompt, repo-scope, B-keyword screen, downgrade
+  records) — model never trusted with the information bound it violated;
+  two-strike multi-turn eval; M1 redefined to class-C executable precision
+  ≥90% (class-C rate reported, no bar); M5 A2-share sizes the future
+  reply-quality judge-shadow case; fresh window post-deploy, v1 data
+  discarded; **locked: a second M2 fail kills per-task derivation
+  permanently.** Deploy trap pre-registered: installed-cache refresh
+  mandatory or the window silently measures stale v1.
+
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
 | R1 | 2026-07-23 | machine bullet (script-verify) on bare | bare 4/10 vs 5/10 | 1.0 | — | REJECT null |
@@ -379,8 +432,7 @@ adoption verdicts). Pre-registrations written before data throughout.
 | CR1 | 2026-07-28 | km-crank v0.1 — scheduled half-automatic evolution crank (2.2a, MacBook) | 2 live rounds: accidental empty-evidence + supervised real-evidence (km-play, 4 lines) | — | — (mechanism) | **SHIPPED + E2E both paths: empty-evidence round → proposer junk → REVIEW GATE REJECTED (no candidate/trial, ledgered, SITREP) — the reviewer-loop thesis live; gate bug found+fixed (first-run age hole: zero evidence never runs, not even --force, +regression tests); real-evidence round → candidate v1 staged + trial started on km-play + Slack SITREP; launchd daily 10:00 installed; WATCH: legacy-mode proposals bypass review gate (playbook-adds only)** |
 | SM2 | 2026-07-27 | kkamak CC plugin v0.1 BUILT + live smoke (2.1b, MacBook night) | 15-node parallel DAG, 3 live headless CC sessions | — | — (mechanism) | **SHIPPED + SMOKE PASS (merge 6d443df): 120+26 tests green; CC block-json evidence delivery VERIFIED live (self-describing check → agent fixed → rounds ["verify-failed","accepted"] in 4s); rounds bound exact (2 blocks → exhausted); marker + no-edit-silence + mkdir-recursive + headless -p all ✓; both hosts now write one .km/ sensor stream — §4.3 gets a two-host union producer** |
 | GA1 | 2026-07-28/29 | km-gauge shadow PoC + scorecard + §4.4 reinject A/B (office) | 4 live haiku derivations; 240 tests; audit 659a712..HEAD | — | — (mechanism) | **SHIPPED: gauge M0–M3 window open (shadow-only, read-only guard); scorecard defines improvement (M-exhaust/M-interrupt fall at non-decreasing M-catch; MIN_N=20 locked = display floor, not certification); reinject v0/v1 within-workload randomised — v1 append self-contradiction user-caught, REPAIRED `322f2c1` (composed at IO seam, 2x adversarial plan review, §4b re-registered pre-data, live-proven both arms); audit found zero gate-gaming (no power, ~1 opportunity); plugin-install copy trap fixed (vendor/ + install-shape test); store renamed .kkamak/ auto-migrating. A/B LIVE + clean; bottleneck = block EVENTS, not instruments** |
-
----
+| GA2 | 2026-07-29 | §4.3 trial-mode pre-reg + gauge M0–M3 verdict + km-gauge v2 extractor pre-reg (office) | 36-prompt gauge window (user-labeled 10 would-blocks); 1 live tmux smoke session; zero bench trials | — | — (registration + measurement) | **§4.3 REGISTERED (`fdd0055..59c4924`, SDD + 3 review iterations, 24 findings resolved; playbook v0, salted arms, three-floor verdict, auto keep/rollback + human-go, golden every 3 KEEPs, A/A first, activation ≥10 cycles/day). Gauge M0 91.7% ✓ M1 63.6% ✓ M3 ✓ (caught the spec's DRAFT defect pre-final-review) but M2 FAIL 9/10 false-block → SHADOW INDEFINITELY per locked rule; root cause = invention beyond information bound. Fix-or-drop → v2 EXTRACTOR REGISTERED (`63c94f2`+`61f8d78`: A1/A2/B/C/D classes, code-enforced extraction, two-strike eval, M5 A2-share; second M2 fail = derivation killed). Shadow invariant test-locked `af0a132`; first v0 reinject cycle (arms v0:1/v1:19)** |
 
 ## R1 — round-1 machine bullet (2026-07-23, office) — REJECT
 

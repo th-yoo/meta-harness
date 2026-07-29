@@ -3,7 +3,43 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION END 2026-07-29 (office `yoo-dev`) — GA1 COMPLETE: kkamak INSTALLED + gauge window OPEN + scorecard + reinject A/B LIVE (v1 repaired `322f2c1`) · NEXT = §4.3 DESIGN + EVENT-RATE MULTIPLIERS
+## ⏸ SESSION END 2026-07-29 late (office `yoo-dev`) — GA2: §4.3 PRE-REG REGISTERED + GAUGE M0–M3 VERDICT (M2 FAIL → v2 EXTRACTOR REGISTERED) · NEXT = v2 BUILD + §4.3 BUILD + EVENT-RATE MULTIPLIERS (all need go)
+
+**State (full detail: HISTORY.md GA2):** **§4.3 trial-mode pre-registration
+REGISTERED** (`docs/superpowers/specs/2026-07-29-trial-mode-gate-outcomes-preregistration.md`,
+commits `fdd0055..59c4924`, SDD + 3 architect-review iterations, 24 findings
+all resolved): playbook-class v0, salted per-session arms
+FNV-1a(trialId:sessionID), MIN_N=20 gateCycles/arm + ≥5 sessions/arm +
+E_MIN=5 block events, T_MAX=28d, KEEP="not measurably worse" NEVER better
+(null-adopt ≈60%), auto keep/rollback + human-go start, golden baseline
+every 3 KEEPs, A/A machinery test first, computed calibration staleness,
+activation precondition trailing-14d ≥10 real-work cycles/day (stream
+EMPTY today). Satellites: scorecard §5 scoping amendment, explicitly-not-now
+§7.7, INDEX. **Gauge M0–M3 window CLOSED** (36 prompts): M0 91.7% / M1
+63.6% / M3 PASS, **M2 FAIL 9/10 false-block (user-labeled)** → shadow
+indefinitely per locked rule (`a18b73d`); root cause = refiner INVENTS
+beyond its information bound (world/semantics/timing gaps, not "grounding").
+User: fix-or-drop → **km-gauge v2 extractor pre-reg REGISTERED**
+(`2026-07-29-km-gauge-v2-extractor-preregistration.md`, `63c94f2`+`61f8d78`):
+A1/A2/B/C/D classes (user-ratified), extraction-only ENFORCED IN CODE
+(path-in-prompt, repo-scope, B-screen, downgrades), two-strike multi-turn
+eval, M1v2 = class-C precision ≥90%, M5 A2-share sizes the judge-shadow
+case; **second M2 fail = derivation KILLED for good**. Shadow invariant
+test-locked `af0a132` (241 CC tests). Live tmux smoke PASS (haiku session:
+sensor exact, gauge full loop same-line, FIRST v0 reinject cycle —
+arms v0:1/v1:19).
+
+**QUEUE (WAIT FOR GO):** (1) **km-gauge v2 build** (§6 of its pre-reg,
+7 items; deploy REQUIRES installed-cache refresh or the fresh window
+silently measures stale v1 — window cut = deploy commit, record it in §4).
+(2) **§4.3 prerequisite build** (§11, 10 items, ≈4-6 days). (3) event-rate
+multipliers: squad dogfood + MacBook install. (4) small opens: cache-refresh
+script, km-crank absent from gate.json check. ~10 commits UNPUSHED.
+
+**Gotchas:** all prior + v2-window poisoning above; gauge keeps calling
+haiku under v1 rules until v2 deploys (cap 30/day, shadow-only, harmless).
+
+## ⏸ SESSION END 2026-07-29 morning (office `yoo-dev`) — GA1 COMPLETE: kkamak INSTALLED + gauge window OPEN + scorecard + reinject A/B LIVE (v1 repaired `322f2c1`) — superseded by GA2 above; kept for lineage
 
 **State (full detail: HISTORY.md GA1 + the 07-28 blocks below):** kkamak
 plugin INSTALLED on office (auto-loads every session; per-host — MacBook
