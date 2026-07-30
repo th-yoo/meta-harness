@@ -465,13 +465,20 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch(async (err) => {
-  const message = err instanceof Error ? err.message : String(err)
-  console.error("[km-crank] failure:", message)
-  try {
-    await postSlack(formatSitrep({ generatedAt: Date.now(), repos: [], action: { kind: "failure", message } }))
-  } catch (postErr) {
-    console.error("[km-crank] failed to post failure sitrep:", postErr instanceof Error ? postErr.message : String(postErr))
-  }
-  process.exit(0)
-})
+// Run only when executed as the entrypoint (bun src/crank.ts / launchd) —
+// NEVER on import. test/repos-parity.test.ts imports REPOS from this module;
+// an unguarded main() here made every `bun test` start a real crank round
+// (repo scans, offset reads, potential Slack SITREP) and kill it mid-flight
+// at process exit. Found at Phase 0 T3 review (2026-07-30).
+if (import.meta.main) {
+  main().catch(async (err) => {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error("[km-crank] failure:", message)
+    try {
+      await postSlack(formatSitrep({ generatedAt: Date.now(), repos: [], action: { kind: "failure", message } }))
+    } catch (postErr) {
+      console.error("[km-crank] failed to post failure sitrep:", postErr instanceof Error ? postErr.message : String(postErr))
+    }
+    process.exit(0)
+  })
+}
