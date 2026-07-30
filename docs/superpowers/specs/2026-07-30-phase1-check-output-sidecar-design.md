@@ -35,13 +35,15 @@ same missing-await pattern".
 
   ```json
   {"ts": 1753900000000, "sessionID": "…", "round": 1, "roundsMax": 2,
-   "check": "bun test", "excerpt": "…", "truncatedBytes": 12345}
+   "check": "bun test", "excerpt": "…", "elidedChars": 12345}
   ```
 
-- **Excerpt cap 8KB: head 2KB + tail 6KB** with a splice marker
-  (`\n…[kkamak sidecar: N bytes elided]…\n`); compile errors sit at the head,
-  test summaries at the tail. Source text: `decision.rawOut ?? decision.evidence`.
-  `truncatedBytes` present only when elision happened.
+- **Excerpt cap 8192 chars: head 2048 + tail 6144** with a splice marker
+  (`\n…[kkamak sidecar: N chars elided]…\n`); compile errors sit at the head,
+  test summaries at the tail. Chars (not bytes) deliberately — parity with
+  hook-cli's existing `capOutput`, which slices `String.length`. Source
+  text: `decision.rawOut ?? decision.evidence`. `elidedChars` present only
+  when elision happened.
 - Path is the fixed default `.km/check-output.ndjson` relative to cwd —
   deliberately independent of a `gate.json` `sensor` override (all live repos
   use the default; keeping it fixed avoids a second configurable path).
