@@ -5,24 +5,33 @@ does NOT transfer; this file + the repo are the source of truth.)
 
 ## ✅ SESSION 2026-07-30/31 (`yoo-mac.local`) — PHASE 1 COMPLETE + SEALED (GA6) + DEPLOYED (MacBook) — meta-harness through `3f92b9f`, pushed
 
-**RESUME PROMPT (either host):**
+**RESUME PROMPT (either host; office-current as of 2026-07-31 midday):**
 ```
 Resume kkamak (meta-harness), 2026-07-31+. Read docs/resume.md FIRST (top
-block) + docs/2026-07-30-enhancement-roadmap.md. meta-harness pushed
-through 3f92b9f; kkamak ead09d5; squad 7c167f8.
+block) + docs/2026-07-30-enhancement-roadmap.md. All repos pushed:
+meta-harness (sidecar office-deployed note), kkamak ead09d5, squad
+7c167f8.
 
-WHERE WE ARE: Phase 0 + Phase 1 COMPLETE (GA6: check-output sidecar at
-hook-cli seam + proposer excerpt rendering, deployed on MacBook 07-31;
-office host still pre-sidecar). Activation precondition day ~2/14
-(trailing-14d ≥10 real-work cycles/day; A/A earliest ~Aug 12).
+WHERE WE ARE: Phase 0 + Phase 1 COMPLETE (GA6) and the sidecar is
+DEPLOYED ON BOTH HOSTS (office 07-31: --force with live sessions
+survived 2nd time, grep-verified, stale 0.2.0 cache dir deleted). Office
+dogfood tmux session `kkamak` was RESTARTED FRESH on the new cache
+(Sonnet 5, idle, no task yet) — its next milestone per that repo:
+packaging/marketplace (incl. D1 deferral: port pluginVersion/forced).
+First block event on office writes its first sidecar record. Activation
+precondition day ~2/14 (trailing-14d ≥10 real-work cycles/day; A/A
+earliest ~Aug 12).
 
-QUEUE (GO before spend, in order): (1) office-host
-scripts/km-refresh.sh --force (verify by GREP not version — GA3 rule);
-(2) sustain dogfood daily both hosts (tmux `kkamak`); (3) Phase 2
-bench-fixture harvest (~3-5d, own plan; per-repo private-fixture
-decision); (4) Phase 3 async promptCheck (PRE-DATA AMENDMENT,
-skippedStop template) + mechanize-instead rubric key; (5) sensors export
-after dogfood (scripts/km-sensors-sync.sh export).
+QUEUE (GO before spend, in order): (1) sustain dogfood daily both hosts
+— drive the tmux `kkamak` session (re-arm watchers: pane-state monitor +
+notable-cycle tail on .km/gate-outcomes.ndjson); (2) kkamak
+packaging/marketplace step; (3) Phase 2 bench-fixture harvest (~3-5d,
+own plan; per-repo private-fixture decision); (4) Phase 3 async
+promptCheck (PRE-DATA AMENDMENT, skippedStop template) +
+mechanize-instead rubric key; (5) sensors export after dogfood
+(scripts/km-sensors-sync.sh export + commit); (6) still-open PRE-DATA
+RULING: does the kkamak repo's gate-editing workload class feed §4.3
+verdicts as real work? (flagged GA5, unresolved).
 
 DEADLINE ITEMS: calibration-refresh tooling before 2nd consumed KEEP;
 golden-window machinery before 3rd KEEP.
@@ -31,8 +40,8 @@ RULES: explicit go before spend · spec-is-law, pre-data amendments only
 (4 landed) · F1: never touch cc-gate-plugin/src/core|vendor without
 recalibration intent · F2: code-bearing text never enters
 gate-outcomes.ndjson (sidecar stays out of km-sensors-sync FILES —
-test-locked) · no bare "gate" in new docs · SITREP style · per-task
-reviews mandatory.
+test-locked) · verify plugin deploys by GREP not version · no bare
+"gate" in new docs · SITREP style · per-task reviews mandatory.
 ```
 
 **Phase 1 (check-output sidecar + proposer excerpt rendering) BUILT + SEALED
