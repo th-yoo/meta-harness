@@ -112,7 +112,7 @@ test("renders up to 2 excerpts per notable session, latest first, tilde-fenced",
   expect(md.indexOf("THIRD")).toBeLessThan(md.indexOf("SECOND")) // latest first
 })
 
-test("render excerpt trimmed to last 1200 chars with leading elision marker", () => {
+test("render excerpt trimmed to head 300 + tail 900 chars with elision marker", () => {
   const long = "A".repeat(500) + "Z".repeat(1200)
   const l = line({ sessionID: "sess-1", gateExhausted: true, rounds: ["verify-failed"] })
   const md = renderEvidence(
@@ -125,15 +125,24 @@ test("render excerpt trimmed to last 1200 chars with leading elision marker", ()
     }],
     0,
   )
-  expect(md).toContain("Z".repeat(1200))
-  expect(md).not.toContain("A".repeat(500) + "Z") // head trimmed away
-  expect(md).toContain("…") // trim marker
+  expect(md).toContain("A".repeat(300)) // head kept
+  expect(md).toContain("Z".repeat(900)) // tail kept
+  expect(md).toContain("[trimmed for render]") // trim marker
+  expect(md).not.toContain("A".repeat(301)) // head cut
+  expect(md).not.toContain("Z".repeat(901)) // middle cut
 })
 
 test("absent excerptsBySession renders byte-identical to pre-Phase-1 output", () => {
+  const l = line({ sessionID: "sess-1" })
   const repo = {
-    repo: "/r", newLines: [], aggregate: aggregate([]), notableLines: [],
+    repo: "/r", newLines: [l], aggregate: aggregate([l]), notableLines: [l],
   }
-  const withField = { ...repo, excerptsBySession: new Map() }
-  expect(renderEvidence([withField], 0)).toBe(renderEvidence([repo], 0))
+  const withoutField = renderEvidence([repo], 0)
+  const withEmptyMap = renderEvidence([{ ...repo, excerptsBySession: new Map() }], 0)
+  const withUnmatchedSession = renderEvidence(
+    [{ ...repo, excerptsBySession: new Map([["some-other-session", [checkRec({ sessionID: "some-other-session" })]]]) }],
+    0,
+  )
+  expect(withoutField).toBe(withEmptyMap)
+  expect(withEmptyMap).toBe(withUnmatchedSession)
 })

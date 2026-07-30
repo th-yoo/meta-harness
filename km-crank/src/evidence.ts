@@ -18,7 +18,8 @@ import type { Aggregate, SensorLine } from "./scan.ts"
 import type { CheckOutputRecord } from "./check-output.ts"
 
 const MAX_EXCERPTS_PER_SESSION = 2
-const EXCERPT_RENDER_CHARS = 1200
+const EXCERPT_RENDER_HEAD = 300
+const EXCERPT_RENDER_TAIL = 900
 
 export interface RepoEvidence {
   repo: string
@@ -63,13 +64,15 @@ function renderRepoSection(r: RepoEvidence): string {
       )
       const recs = r.excerptsBySession?.get(l.sessionID) ?? []
       for (const rec of recs.slice(0, MAX_EXCERPTS_PER_SESSION)) {
-        const tail =
-          rec.excerpt.length > EXCERPT_RENDER_CHARS
-            ? "…" + rec.excerpt.slice(-EXCERPT_RENDER_CHARS)
+        const rendered =
+          rec.excerpt.length > EXCERPT_RENDER_HEAD + EXCERPT_RENDER_TAIL
+            ? rec.excerpt.slice(0, EXCERPT_RENDER_HEAD) +
+              "\n…[trimmed for render]…\n" +
+              rec.excerpt.slice(-EXCERPT_RENDER_TAIL)
             : rec.excerpt
         // Tilde fence: check output routinely contains backticks; a
         // backtick fence would break the markdown mid-excerpt.
-        lines.push(`  - check output, round ${rec.round}/${rec.roundsMax}:`, "", "~~~", tail, "~~~", "")
+        lines.push(`  - check output, round ${rec.round}/${rec.roundsMax}:`, "", "~~~", rendered, "~~~", "")
       }
     }
   }

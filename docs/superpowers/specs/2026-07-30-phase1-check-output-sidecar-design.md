@@ -65,7 +65,8 @@ same missing-await pattern".
   byte-offset bookkeeping — the file grows slowly and the join filters to
   notable sessionIDs anyway). Missing file → no excerpts, no error.
 - `evidence.ts`: `RepoEvidence` gains optional per-notable-session excerpts;
-  render up to **2 excerpts per session, ≤1200 chars each**, latest rounds
+  render up to **2 excerpts per session, ≤~1200 chars each (head 300 + tail
+  900 split — mirrors the capture-side head-preservation rationale)**, latest rounds
   first, in fenced blocks under the notable-session bullet. Absent sidecar
   (kernel-emitted repos, pre-Phase-1 data) renders exactly as today.
 - Cross-host caveat (accepted in roadmap): sidecar is host-local; the
