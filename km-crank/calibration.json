@@ -6,7 +6,7 @@
     0.03,
     0.31
   ],
-  "coveredMechanismRev": "1af4b02f64ec409e98e87d232049250db6a57383",
+  "coveredMechanismRev": "72da8411ba082fc6356b81235d789ab941596bc9",
   "date": "2026-07-29",
-  "note": "cross-host pooled C2+C1+G1, not independently certified (HISTORY.md FA1 CLOSED BY MATH) LOWER-BOUND PROXY for the shipped daily gate (verify-only, mutants:0, no FA probes — strictly weaker than both measured arms); see spec §4 rule 1 pre-data addendum 2026-07-29."
+  "note": "cross-host pooled C2+C1+G1, not independently certified (HISTORY.md FA1 CLOSED BY MATH) LOWER-BOUND PROXY for the shipped daily gate (verify-only, mutants:0, no FA probes — strictly weaker than both measured arms); see spec §4 rule 1 pre-data addendum 2026-07-29.; 2026-07-30 rev advanced over telemetry-only core edits (skippedStop sensor line, TM1-precedent measurement-preserving class; pre-data, no trial live)"
 }
