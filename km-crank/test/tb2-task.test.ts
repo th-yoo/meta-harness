@@ -13,7 +13,10 @@ describe("renderTaskToml", () => {
     expect(toml).toContain('name = "terminal-bench/harvested-kkamak-20260731-101500"')
     expect(toml).toContain('category = "harvested"')
     expect(toml).toContain("allow_internet = true")
-    expect(toml).toContain("timeout_sec = 900")
+  })
+  test("verifier and agent timeouts in correct sections", () => {
+    expect(toml).toContain("[verifier]\ntimeout_sec = 300.0")
+    expect(toml).toContain("[agent]\ntimeout_sec = 900.0")
   })
 })
 
@@ -31,11 +34,14 @@ describe("renderTestSh", () => {
   const sh = renderTestSh({ check: "bun test" })
   test("tamper guard restores pristine test files before the check", () => {
     expect(sh).toContain("pristine.tar")
-    expect(sh).toContain("bun test")
+    expect(sh).toContain("( bun test )")
     expect(sh).toContain("/logs/verifier/reward.txt")
   })
   test("check command is not shell-mangled", () => {
-    expect(renderTestSh({ check: 'bun test --filter "x y"' })).toContain('bun test --filter "x y"')
+    expect(renderTestSh({ check: 'bun test --filter "x y"' })).toContain('( bun test --filter "x y" )')
+  })
+  test("semicolon-chained check is wrapped in subshell", () => {
+    expect(renderTestSh({ check: "make build; make test" })).toContain("( make build; make test )")
   })
 })
 

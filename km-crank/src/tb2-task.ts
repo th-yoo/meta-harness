@@ -60,7 +60,7 @@ cd /app
 if [ -f /tests/pristine.tar ]; then
   tar -xf /tests/pristine.tar -C /app
 fi
-if ${a.check}; then
+if ( ${a.check} ); then
   echo 1 > /logs/verifier/reward.txt
 else
   echo 0 > /logs/verifier/reward.txt
