@@ -142,7 +142,11 @@ interface TrialBlock {
  *     counted once in forcedCount regardless of how many sensor lines match
  *     the session;
  *   - otherwise -> attributed to the row's arm; gauge-only lines count
- *     toward density but not metrics (classifyCycle(l) !== "gauge-only").
+ *     toward density but not metrics (classifyCycle(l) !== "gauge-only");
+ *     skipped-stop lines (Task 1, fix-them-serialized-teacup plan) are
+ *     excluded from BOTH density and metrics — a pure diagnostic class,
+ *     never a density/metric input (own rationale, not gauge-only's
+ *     "never armed" one — see the spec amendment).
  * First exposure row per sessionID wins on duplicates within the selected
  * trialId (same dedupe rule as the canonical reader). The scoping trialId
  * itself is chosen by max `ts` across ALL rows (before any forced/dedupe
@@ -176,8 +180,13 @@ function joinTrialArms(lines: SensorLineIn[], rows: ExposureRow[]): TrialBlock {
     const row = rowBySession.get(raw.sessionID)
     if (!row) continue // unmatched: no exposure row for this session in the selected trial
     if (row.forced) continue // excluded from metrics/density; already counted above
-    density[row.arm].push(raw)
-    if (classifyCycle(raw) !== "gauge-only") metrics[row.arm].push(raw)
+    // Task 1 (fix-them-serialized-teacup plan, round-3 review Critical 2):
+    // "skipped-stop" is excluded from BOTH density and metrics here,
+    // mirroring km-crank/src/trial-verdict.ts's join semantics (:171/:172
+    // comment there) — a pure diagnostic class, never a density/metric input.
+    const cls = classifyCycle(raw)
+    if (cls !== "skipped-stop") density[row.arm].push(raw)
+    if (cls !== "gauge-only" && cls !== "skipped-stop") metrics[row.arm].push(raw)
   }
 
   const summarize = (arm: TrialArm): TrialArmSummary => {
@@ -242,7 +251,8 @@ function render(r: ScoreResult, minN: number, trial?: TrialBlock): string {
     out.push(
       `   cycles ${g.gateCycles}` +
       `  (clean ${c.clean}, catch ${c.catch}, exhausted ${c.exhausted}` +
-      `, interrupted ${c.interrupted}${c.gaugeOnly ? `, gauge-only ${c.gaugeOnly}` : ""})`,
+      `, interrupted ${c.interrupted}${c.gaugeOnly ? `, gauge-only ${c.gaugeOnly}` : ""}` +
+      `${c.skippedStop ? `, skipped-stop ${c.skippedStop}` : ""})`,
     )
     out.push(
       `   M-catch ${pct(g.mCatch)}   M-exhaust ${pct(g.mExhaust)}` +

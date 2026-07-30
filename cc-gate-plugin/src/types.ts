@@ -7,6 +7,9 @@
 // Amendment (2026-07-29, §4.3 trial-mode prereg, Task 1 of §11 item 6):
 // SensorLine gained forced?/pluginVersion? — additive & optional, so
 // existing consumers (scan.ts/score.ts) parse old and new lines alike.
+// Amendment (2026-07-30, fix-them-serialized-teacup plan, Task 1):
+// SensorLine gained skippedStop?: true — additive & optional, recording the
+// unmeasured-edits-across-a-prompt-boundary dogfood finding.
 import type { GateRoundResult } from "../vendor/complete-gate.ts"
 
 export type RoundOutcome = GateRoundResult["outcome"]
@@ -154,6 +157,25 @@ export interface SensorLine {
    * silently there). Omitted if the manifest is unreadable — fail-open,
    * never throws. */
   pluginVersion?: string
+  /** Fix-them-serialized-teacup plan, Task 1 (2026-07-30 dogfood finding):
+   * `true` means "a user prompt arrived while edits were unmeasured
+   * (`edited:true, gating:false`)". Deliberately coarse semantics — three
+   * caveats apply:
+   *   1. Emission point is SOLELY the prompt path (`src/core/prompt.ts`) —
+   *      the line reports the unmeasured STATE at prompt time, whatever
+   *      earlier event produced it: a queued prompt eating the Stop
+   *      boundary, or a Stop that no-op'd on a transiently unreadable
+   *      gate.json (`src/core/stop.ts:32-45` returns unchanged state; no
+   *      instrumentation added there — its leftover state is detected at
+   *      the NEXT prompt).
+   *   2. The label claims only "edits went unmeasured across a prompt
+   *      boundary", never "queued prompt" specifically.
+   *   3. Repeated queued prompts in one open turn each emit a line: the
+   *      counter measures unmeasured-boundary EVENTS, not distinct skipped
+   *      Stops.
+   * Absent means no such boundary was observed; a stored `false` is never
+   * written (absent is the cleaner line, same convention as `forced`). */
+  skippedStop?: true
 }
 
 /** Handlers return sensor lines; hook-cli owns the append (persist → sensor → emit). */

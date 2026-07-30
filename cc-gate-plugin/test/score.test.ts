@@ -51,6 +51,32 @@ test("gauge-only line (rounds: []) is NOT a gate cycle", () => {
   expect(classifyCycle(line({ rounds: [] }))).toBe("gauge-only")
 })
 
+// ── Task 1 (fix-them-serialized-teacup plan): skipped-stop class ───────────
+
+test("skipped-stop: classified BEFORE gauge-only — skippedStop:true must not fall into the empty-rounds branch", () => {
+  // Same rounds:[] shape as a gauge-only line — ordering is load-bearing
+  // (round-1 review Critical 1). If gauge-only were checked first, this
+  // line would misclassify as gauge-only and the fix would defeat itself.
+  expect(classifyCycle(line({ rounds: [], skippedStop: true }))).toBe("skipped-stop")
+})
+
+test("skipped-stop wins over gauge-only but loses to interrupted (precedence)", () => {
+  const l = line({ interrupted: true, rounds: [], skippedStop: true })
+  expect(classifyCycle(l)).toBe("interrupted")
+})
+
+test("skipped-stop cycles are excluded from every rate denominator and populated+printed in counts", () => {
+  const lines = [
+    ...MANY(15, {}), // clean
+    ...MANY(4, { rounds: ["verify-failed", "accepted"] }), // catch
+    ...MANY(3, { rounds: [], skippedStop: true }), // skipped-stop, must not count
+  ]
+  const [g] = scoreLines(lines, { minN: 1 }).groups
+  expect(g!.counts).toMatchObject({ clean: 15, catch: 4, skippedStop: 3 })
+  expect(g!.gateCycles).toBe(19) // clean+catch+exhausted only — skipped-stop excluded
+  expect(g!.mCatch).toBeCloseTo(4 / 19)
+})
+
 // ── aggregation ──────────────────────────────────────────────────────────
 
 const MANY = (n: number, over: Partial<SensorLineIn>) => Array.from({ length: n }, () => line(over))
@@ -260,6 +286,13 @@ test("CLI: --json emits parseable output; --pool merges groups", async () => {
   expect(parsed.groups[0].gateCycles).toBe(4)
 })
 
+test("CLI: skipped-stop count is printed in the cycles breakdown line", async () => {
+  const f = sensorFile([...MANY(2, {}), ...MANY(3, { rounds: [], skippedStop: true })])
+  const r = await runCli([f, "--min-n", "1"])
+  expect(r.code).toBe(0)
+  expect(r.out).toContain("skipped-stop 3")
+})
+
 test("CLI: unreadable file is reported, never a crash", async () => {
   const r = await runCli(["/nope/missing.ndjson"])
   expect(r.code).toBe(0)
@@ -427,6 +460,19 @@ test("CLI: trialId selection uses the row with the max ts even when that row is 
   expect(r.out).toMatch(/baseline.*cycles\s+0.*sessions\s+0.*sessions-w-cycle\s+0.*density 0\.00/)
   expect(r.out).toMatch(/trial.*cycles\s+0.*sessions\s+0.*sessions-w-cycle\s+0.*density 0\.00/)
   expect(r.out).toContain("forced exposure rows: 1 (excluded from arms; a row's session may have 0 lines in this file)")
+})
+
+test("CLI: §4.3 trial block excludes skipped-stop lines from BOTH density and metrics (Task 1, own rationale, not gauge-only's)", async () => {
+  const lines = [
+    line({ sessionID: "s1" }), // baseline, 1 clean gate cycle -> metrics 1, density 1
+    line({ sessionID: "s1", rounds: [], skippedStop: true }), // must count toward NEITHER
+    line({ sessionID: "s1", rounds: [], skippedStop: true }),
+  ]
+  const f = sensorFile(lines)
+  exposureFileBeside(f, [expRow({ sessionID: "s1", arm: "baseline", forced: false })])
+
+  const r = await runCli([f, "--min-n", "1"])
+  expect(r.out).toMatch(/baseline.*cycles\s+1.*sessions\s+1.*sessions-w-cycle\s+1.*density 1\.00/)
 })
 
 test("CLI: --json output is unaffected by an adjacent trial-arms.ndjson (still parseable, no trial key required)", async () => {

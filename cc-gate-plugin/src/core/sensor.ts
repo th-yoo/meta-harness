@@ -17,6 +17,11 @@ export function buildSensorLine(
     // before this amendment.
     forced?: boolean
     pluginVersion?: string
+    // Task 1 (fix-them-serialized-teacup plan) amendment — same
+    // spread-only-when-defined discipline, so callers that omit it (every
+    // caller except the new prompt.ts skipped-Stop marker) produce
+    // byte-identical lines to before this amendment.
+    skippedStop?: true
   },
 ): SensorLine {
   return {
@@ -33,5 +38,6 @@ export function buildSensorLine(
     app: "claude-code",
     ...(args.forced !== undefined ? { forced: args.forced } : {}),
     ...(args.pluginVersion !== undefined ? { pluginVersion: args.pluginVersion } : {}),
+    ...(args.skippedStop !== undefined ? { skippedStop: args.skippedStop } : {}),
   }
 }

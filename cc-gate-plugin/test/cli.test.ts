@@ -500,3 +500,42 @@ test("pluginVersion is stamped on the UserPromptSubmit sensor line too (every em
   expect(lines[0]!.pluginVersion).toBe(manifest.version)
   rmRepo(repo)
 })
+
+// ── Task 1 (fix-them-serialized-teacup plan): skipped-Stop boundary e2e ────
+
+test("UserPromptSubmit while edited:true, gating:false (queued-prompt boundary loss) -> a skippedStop sensor line is appended and edited survives", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true" })
+  seedState(repo, "sid-skipped-stop", { edited: true, gating: false })
+  const r = await runHook({
+    event: "UserPromptSubmit",
+    stdin: JSON.stringify({ session_id: "sid-skipped-stop", cwd: repo, prompt: "another edit please" }),
+  })
+  expect(r.exitCode).toBe(0)
+
+  const lines = sensorLines(repo)
+  expect(lines.length).toBe(1)
+  expect(lines[0]!.skippedStop).toBe(true)
+  expect(lines[0]!.rounds).toEqual([])
+  expect(lines[0]!.accepted).toBe(true)
+  expect(lines[0]!.gateExhausted).toBe(false)
+  expect(lines[0]!.interrupted).toBe(false)
+
+  // Marker, not measurement: edited survives for the next real Stop.
+  const state = loadState(repo, "sid-skipped-stop")
+  expect(state.edited).toBe(true)
+  expect(state.gating).toBe(false)
+  rmRepo(repo)
+})
+
+test("UserPromptSubmit while edited:false, gating:false -> no sensor line (nothing unmeasured)", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true" })
+  const r = await runHook({
+    event: "UserPromptSubmit",
+    stdin: JSON.stringify({ session_id: "sid-no-skipped-stop", cwd: repo, prompt: "hi" }),
+  })
+  expect(r.exitCode).toBe(0)
+  expect(fs.existsSync(path.join(repo, ".km", "gate-outcomes.ndjson"))).toBe(false)
+  rmRepo(repo)
+})

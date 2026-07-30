@@ -11,15 +11,22 @@ import type { GaugePromptClass, GaugeSensorField, SensorLine } from "./types.ts"
 /** A sensor line as read back from ndjson — same shape, but untrusted. */
 export type SensorLineIn = SensorLine & { gauge?: GaugeSensorField }
 
-export type CycleClass = "interrupted" | "exhausted" | "catch" | "clean" | "gauge-only"
+export type CycleClass = "interrupted" | "exhausted" | "catch" | "clean" | "gauge-only" | "skipped-stop"
 
 /**
  * Pre-reg §1 taxonomy, in precedence order. `accepted` is true on BOTH catch
  * and exhausted lines (schema parity with the opencode plugin), so it must
  * never be read as success on its own.
+ *
+ * `skipped-stop` MUST be checked before the empty-rounds `gauge-only`
+ * branch below (Task 1, fix-them-serialized-teacup plan, round-1 review
+ * Critical 1) — a skipped-stop line also carries `rounds: []`, so checking
+ * gauge-only first would swallow every skipped-stop line into gauge-only
+ * and defeat the whole fix.
  */
 export function classifyCycle(l: SensorLineIn): CycleClass {
   if (l.interrupted) return "interrupted"
+  if (l.skippedStop) return "skipped-stop"
   if (l.rounds.length === 0) return "gauge-only" // fabricated on a fast-path Stop
   if (l.gateExhausted) return "exhausted"
   const last = l.rounds[l.rounds.length - 1]
@@ -31,7 +38,17 @@ export function classifyCycle(l: SensorLineIn): CycleClass {
 export interface GroupScore {
   check: string
   host: string
-  counts: { clean: number; catch: number; exhausted: number; interrupted: number; gaugeOnly: number }
+  counts: {
+    clean: number
+    catch: number
+    exhausted: number
+    interrupted: number
+    gaugeOnly: number
+    /** Task 1 (fix-them-serialized-teacup plan): populated by scoreGroup's
+     * switch below; excluded from every rate denominator, same as
+     * gaugeOnly. */
+    skippedStop: number
+  }
   /** Converged cycles: clean + catch + exhausted (the rate denominator). */
   gateCycles: number
   /** True when gateCycles < minN — every rate is suppressed to null. */
@@ -162,7 +179,7 @@ export function scoreLines(lines: SensorLineIn[], opts: ScoreOpts): ScoreResult 
 function scoreGroup(check: string, host: string, lines: SensorLineIn[], opts: ScoreOpts): GroupScore {
   {
     const b = { check, host, lines }
-    const counts = { clean: 0, catch: 0, exhausted: 0, interrupted: 0, gaugeOnly: 0 }
+    const counts = { clean: 0, catch: 0, exhausted: 0, interrupted: 0, gaugeOnly: 0, skippedStop: 0 }
     const cleanDurations: number[] = []
     const catchRounds: number[] = []
 
@@ -179,6 +196,7 @@ function scoreGroup(check: string, host: string, lines: SensorLineIn[], opts: Sc
         case "exhausted": counts.exhausted++; break
         case "interrupted": counts.interrupted++; break
         case "gauge-only": counts.gaugeOnly++; break
+        case "skipped-stop": counts.skippedStop++; break
       }
     }
 

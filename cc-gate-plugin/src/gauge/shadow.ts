@@ -3,6 +3,14 @@
 // sensor line (or fabricates a gauge-only line on fast-path Stops), and
 // consumes the pending file into the .done.json audit trail.
 //
+// NOTE (Task 1, fix-them-serialized-teacup plan, 2026-07-30): `rounds: []`
+// is no longer a UNIQUE gauge-only marker — prompt.ts's skippedStop lines
+// also carry `rounds: []`. The two are disambiguated by `skippedStop`
+// (classifyCycle checks it before the empty-rounds gauge-only branch,
+// score.ts). This module only ever fabricates gauge-only lines (never
+// skippedStop), so its own behavior is unchanged; the comments below are
+// updated for anyone reading `rounds: []` as sufficient on its own.
+//
 // SHADOW ONLY: the return value feeds appendSensor and nothing else — the
 // Stop DECISION is computed before this runs and is never touched.
 //
@@ -114,7 +122,10 @@ function fabricateLine(
  * sensor = the floor gate's outgoing line for this Stop (undefined on the
  * no-edit fast path). Returns the line to append: the input line (with a
  * gauge field when one was evaluated), a fabricated gauge-only line
- * (rounds: [] is the marker — real gate lines always carry ≥1 outcome), or
+ * (rounds: [] is A marker — real gate lines always carry ≥1 outcome — but
+ * no longer THE marker: prompt.ts's skippedStop lines share the same
+ * `rounds: []` envelope for an unrelated reason; `skippedStop` is what
+ * actually distinguishes the two, see score.ts's classifyCycle), or
  * undefined when there is nothing to log.
  */
 export async function shadowEvaluateAtStop(

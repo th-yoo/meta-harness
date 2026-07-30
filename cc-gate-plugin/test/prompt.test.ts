@@ -27,12 +27,55 @@ describe("handleUserPromptSubmit", () => {
     }
   }
 
-  it("not gating: returns the SAME state reference, no sensor", () => {
+  // ── Task 1 (fix-them-serialized-teacup plan): skipped-Stop boundary ──────
+  // A queued prompt eats the Stop boundary — `edited:true, gating:false` at
+  // prompt time means edits went unmeasured across this prompt boundary.
+  // State is UNCHANGED (still the same reference): the marker is emitted,
+  // not a measurement, so `edited` must survive for the next real Stop to
+  // still measure the edits cumulatively.
+
+  it("not gating + edited:true + readable config: SAME state reference, but a skippedStop sensor line is now emitted", () => {
     const state: CcGateState = { ...INITIAL_STATE, edited: true }
 
     const result = handleUserPromptSubmit(state, "sess-1", validConfigRaw, fakeDeps)
 
-    expect(result.state).toBe(state) // same reference, not just deep-equal
+    expect(result.state).toBe(state) // same reference, not just deep-equal — marker, not measurement
+    expect(result.sensor).toBeDefined()
+    const sensor = result.sensor!
+    expect(sensor.skippedStop).toBe(true)
+    expect(sensor.rounds).toEqual([])
+    expect(sensor.accepted).toBe(true)
+    expect(sensor.gateExhausted).toBe(false)
+    expect(sensor.interrupted).toBe(false)
+    expect(sensor.durationMs).toBe(0)
+    expect(sensor.sessionID).toBe("sess-1")
+    expect(sensor.check).toBe("npm test")
+  })
+
+  it("not gating + edited:false: no sensor line (nothing unmeasured to report)", () => {
+    const state: CcGateState = { ...INITIAL_STATE, edited: false }
+
+    const result = handleUserPromptSubmit(state, "sess-1", validConfigRaw, fakeDeps)
+
+    expect(result.state).toBe(state)
+    expect(result.sensor).toBeUndefined()
+  })
+
+  it("not gating + edited:true but config missing: no sensor line (config unreadable)", () => {
+    const state: CcGateState = { ...INITIAL_STATE, edited: true }
+
+    const result = handleUserPromptSubmit(state, "sess-1", undefined, fakeDeps)
+
+    expect(result.state).toBe(state)
+    expect(result.sensor).toBeUndefined()
+  })
+
+  it("not gating + edited:true but config malformed: no sensor line", () => {
+    const state: CcGateState = { ...INITIAL_STATE, edited: true }
+
+    const result = handleUserPromptSubmit(state, "sess-1", "{not json", fakeDeps)
+
+    expect(result.state).toBe(state)
     expect(result.sensor).toBeUndefined()
   })
 

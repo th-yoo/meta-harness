@@ -8,6 +8,13 @@
 // config, emit an interrupted sensor line mirroring the opencode plugin's
 // refused-reinject shape (accepted:true + gateExhausted:true is
 // deliberate schema parity, not a bug).
+//
+// Task 1 (fix-them-serialized-teacup plan, 2026-07-30 dogfood finding):
+// when NOT gating but edits are unmeasured (`edited:true`), a queued prompt
+// has just eaten the Stop boundary — this is the SOLE emission point for
+// the `skippedStop` marker (types.ts has the full semantics doc). State is
+// left UNCHANGED (`edited` stays true) — this is a marker, not a
+// measurement, so the next real Stop still measures the edits cumulatively.
 import { INITIAL_STATE } from "../types.ts"
 import type { CcGateState, CoreDeps, PromptResult } from "../types.ts"
 import { parseGateConfig } from "../config.ts"
@@ -19,7 +26,23 @@ export function handleUserPromptSubmit(
   gateConfigRaw: string | undefined,
   deps: CoreDeps,
 ): PromptResult {
-  if (!state.gating) return { state }
+  if (!state.gating) {
+    if (!state.edited) return { state }
+    const cfg = parseGateConfig(gateConfigRaw)
+    if (!cfg) return { state }
+    const sensor = buildSensorLine(deps, {
+      sessionID: sessionId,
+      check: cfg.check,
+      accepted: true,
+      gateExhausted: false,
+      rounds: [],
+      interrupted: false,
+      marker: false,
+      durationMs: 0,
+      skippedStop: true,
+    })
+    return { state, sensor }
+  }
 
   const cfg = parseGateConfig(gateConfigRaw)
   if (!cfg) return { state: { ...INITIAL_STATE } }
