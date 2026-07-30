@@ -25,12 +25,15 @@ Critical/Important:
   head 300 + tail 900; + vacuous byte-identity test MUST-FIX; both fixed
   `4c0c06c`, re-verified **READY TO CLOSE: YES**. Full HISTORY.md GA6.
 
-**NOT DONE (needs go): deploy.** Installed plugin on BOTH hosts still
-pre-sidecar — no sidecar data flows until `scripts/km-refresh.sh --force`
-(and office host refresh). First queue item next session.
+**DEPLOYED (MacBook, 2026-07-31 go):** `km-refresh.sh --force` OK; cache
+grep-verified (`sidecar.ts` shipped, `appendCheckOutput` ×2 in cached
+hook-cli, only `0.2.1/` dir — no stale-dir recurrence); scratch-repo smoke
+against the INSTALLED copy wrote the exact record. **Office host still
+pre-sidecar — run `scripts/km-refresh.sh --force` there next office
+session** (version stays 0.2.1; verify by grep per GA3 rule).
 
-**QUEUE (GO before spend, in order):** (1) deploy 0.2.1+sidecar via
-km-refresh both hosts; (2) sustain dogfood daily (tmux `kkamak`); (3)
+**QUEUE (GO before spend, in order):** (1) office-host km-refresh (above);
+(2) sustain dogfood daily (tmux `kkamak`); (3)
 Phase 2 bench-fixture harvest (~3-5d, own plan; per-repo private-fixture
 decision); (4) Phase 3 async promptCheck (PRE-DATA AMENDMENT) +
 mechanize-instead rubric key; (5) sensors export after dogfood
