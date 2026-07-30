@@ -68,14 +68,28 @@ const WORD_CAP = 60
 const TRIGGER_RE = /^when\b/i
 const HARD_GATE_RE = /^do not\b[\s\S]*\buntil\b/i
 const EXTENSION_RE = /\.(py|js|ts|sh|md|json|txt|ya?ml|c|cpp|rs|go|java)\b/i
-/** A slash counts as path-like only when the token actually looks like a
- * path: anchored (./ ../ ~/ /abs), multi-segment (2+ slashes), or with a
- * non-plain-word side (digits/underscores/dots). A single slash between two
- * plain alphabetic words is prose ("and/or", "filters/qualifies") — live
- * false-positive 2026-07-30, km-crank round 1 rejected a bullet for
- * "filters/qualifies". Bare word/word real paths (e.g. "src/main") slip
- * this layer by design; layer 2's domain_swap/behavior_level rubric checks
- * remain the net for those. */
+/** Slash sides that make a bare word/word token read as a source-tree path
+ * ("src/main", "docs/resume") rather than prose. Either side matching
+ * flags the token. */
+const PATH_WORDS = new Set([
+  "src", "lib", "app", "apps", "bin", "dist", "build", "out", "pkg", "cmd",
+  "docs", "doc", "test", "tests", "spec", "specs", "scripts", "script",
+  "config", "configs", "vendor", "node_modules", "assets", "public", "api",
+  "internal", "core", "utils", "tools", "examples",
+])
+/** A slash counts as path-like when the token is anchored (./ ../ ~/ /abs),
+ * multi-segment (2+ slashes — this deliberately also catches prose chains
+ * like "read/write/execute"; accepted residual false-positive), has a
+ * non-alphabetic side (any character outside ASCII [a-zA-Z]: digits,
+ * underscores, hyphens, dots, accented letters — ASCII-only by intent,
+ * fail-closed for non-English words), or has a PATH_WORDS side. A single
+ * slash between two plain alphabetic non-PATH_WORDS words is prose
+ * ("and/or", "filters/qualifies" — live false-positive 2026-07-30,
+ * km-crank round 1). Residual risk: a bare word/word path whose BOTH sides
+ * are plain non-PATH_WORDS English words (e.g. "kernel/gate") passes this
+ * layer; recorded in docs/2026-07-24-proposer-review-loop.md as an
+ * accepted trade-off — layer 2 has NO leak check (RUBRIC_KEYS), so layer 1
+ * is the only leak guard. */
 function hasPathLikeToken(bullet: string): boolean {
   if (EXTENSION_RE.test(bullet)) return true
   for (const raw of bullet.split(/\s+/)) {
@@ -85,6 +99,7 @@ function hasPathLikeToken(bullet: string): boolean {
     if ((tok.match(/\//g) ?? []).length >= 2) return true
     const [left, right] = tok.split("/")
     if (!/^[a-z]+$/i.test(left ?? "") || !/^[a-z]+$/i.test(right ?? "")) return true
+    if (PATH_WORDS.has((left ?? "").toLowerCase()) || PATH_WORDS.has((right ?? "").toLowerCase())) return true
   }
   return false
 }

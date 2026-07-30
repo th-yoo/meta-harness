@@ -47,7 +47,7 @@ diagnosis bias.
 |---|---|
 | length | ≤ 60 words |
 | form | trigger form (`When …, …`) or hard-gate form (`Do not … until …`) |
-| leakage | bullet contains no task-id fragment, no path-like token (`/`, `.py`, …), no quoted literal from the task id |
+| leakage | bullet contains no task-id fragment, no path-like token, no quoted literal from the task id. Path-like (amended 2026-07-30 after a live false positive on "filters/qualifies"): known file extension, anchored slash (`./ ../ ~/ /abs`), 2+ slashes, non-alphabetic slash side, or a source-tree word side (`src/`, `docs/`, … — PATH_WORDS in `minimal/review.ts`). A single slash between two plain non-PATH_WORDS English words is prose and passes. **Accepted residual:** a bare word/word path with both sides plain English non-PATH_WORDS (e.g. `kernel/gate`) passes layer 1, and layer 2 has no leak check — known, documented trade-off |
 
 ### Layer 2 — LLM rubric call (one small call, ~3k tokens)
 

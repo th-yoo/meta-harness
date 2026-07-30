@@ -92,6 +92,18 @@ test("layer1 still fails on non-word slash sides", () => {
   expect(r.violations.join(" ")).toContain("path-like")
 })
 
+test("layer1 still fails on source-tree word/word paths (PATH_WORDS)", () => {
+  const r = layer1Checks("When src/main compiles, do not skip the tests until they pass.")
+  expect(r.pass).toBe(false)
+  expect(r.violations.join(" ")).toContain("path-like")
+})
+
+test("layer1 PATH_WORDS is case-insensitive and matches either side", () => {
+  const r = layer1Checks("When editing Docs/resume, do not skip the tests until they pass.")
+  expect(r.pass).toBe(false)
+  expect(r.violations.join(" ")).toContain("path-like")
+})
+
 test("layer1 fails on backtick-quoted literals", () => {
   const r = layer1Checks("When you see `verify.sh` fail, do not proceed until it passes.", "sparql-university")
   expect(r.pass).toBe(false)
