@@ -23,6 +23,7 @@ import { maybeSpawnGauge } from "./gauge/spawn.ts"
 import { shadowEvaluateAtStop } from "./gauge/shadow.ts"
 import { applyReinjectVariant, pickReinjectVariant } from "./reinject.ts"
 import { appendCheckOutput, buildCheckOutputRecord } from "./sidecar.ts"
+import { captureFixtureRef, bunGitRunner } from "./fixture-ref.ts"
 import type { CoreDeps, DeliveryMode, EmitPlan, SensorLine } from "./types.ts"
 
 const MH_CHILD_ENV = "MH_CHILD"
@@ -229,6 +230,8 @@ async function main(): Promise<void> {
 
   const sessionId = rec.session_id
   const cwd = rec.cwd
+  const transcriptPath = typeof rec.transcript_path === "string" && rec.transcript_path
+    ? rec.transcript_path : undefined
   if (typeof sessionId !== "string" || !sessionId) return
   if (typeof cwd !== "string" || !cwd) return
 
@@ -341,16 +344,26 @@ async function main(): Promise<void> {
   // their rawOut never leaves core/stop.ts, and core/ is a MECHANISM_PATH
   // (F1) — documented spec limitation, not an oversight.
   if (decision.kind === "block") {
+    const blockTs = Date.now()
     appendCheckOutput(
       cwd,
       buildCheckOutputRecord({
-        ts: Date.now(),
+        ts: blockTs,
         sessionID: sessionId,
         round: decision.round,
         roundsMax: decision.roundsMax,
         check: cfg?.check ?? "",
         rawText: decision.rawOut ?? decision.evidence,
       }),
+      deps.log,
+    )
+    // Phase 2 fixture ref (evidence-only): snapshot the dirty tree that the
+    // failing check saw. Fail-open inside; never touches gate-outcomes,
+    // never changes the decision. Shares blockTs with the check-output
+    // record — (sessionID, ts, round) is the harvest join key.
+    await captureFixtureRef(
+      { cwd, ts: blockTs, sessionID: sessionId, round: decision.round, check: cfg?.check ?? "", transcriptPath },
+      bunGitRunner,
       deps.log,
     )
   }
