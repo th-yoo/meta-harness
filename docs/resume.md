@@ -3,7 +3,37 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ✅ SESSION 2026-07-30 late night (`yoo-mac.local`) — PHASE 1 COMPLETE + SEALED (GA6) — meta-harness through `4c0c06c` (+docs seal)
+## ✅ SESSION 2026-07-30/31 (`yoo-mac.local`) — PHASE 1 COMPLETE + SEALED (GA6) + DEPLOYED (MacBook) — meta-harness through `3f92b9f`, pushed
+
+**RESUME PROMPT (either host):**
+```
+Resume kkamak (meta-harness), 2026-07-31+. Read docs/resume.md FIRST (top
+block) + docs/2026-07-30-enhancement-roadmap.md. meta-harness pushed
+through 3f92b9f; kkamak ead09d5; squad 7c167f8.
+
+WHERE WE ARE: Phase 0 + Phase 1 COMPLETE (GA6: check-output sidecar at
+hook-cli seam + proposer excerpt rendering, deployed on MacBook 07-31;
+office host still pre-sidecar). Activation precondition day ~2/14
+(trailing-14d ≥10 real-work cycles/day; A/A earliest ~Aug 12).
+
+QUEUE (GO before spend, in order): (1) office-host
+scripts/km-refresh.sh --force (verify by GREP not version — GA3 rule);
+(2) sustain dogfood daily both hosts (tmux `kkamak`); (3) Phase 2
+bench-fixture harvest (~3-5d, own plan; per-repo private-fixture
+decision); (4) Phase 3 async promptCheck (PRE-DATA AMENDMENT,
+skippedStop template) + mechanize-instead rubric key; (5) sensors export
+after dogfood (scripts/km-sensors-sync.sh export).
+
+DEADLINE ITEMS: calibration-refresh tooling before 2nd consumed KEEP;
+golden-window machinery before 3rd KEEP.
+
+RULES: explicit go before spend · spec-is-law, pre-data amendments only
+(4 landed) · F1: never touch cc-gate-plugin/src/core|vendor without
+recalibration intent · F2: code-bearing text never enters
+gate-outcomes.ndjson (sidecar stays out of km-sensors-sync FILES —
+test-locked) · no bare "gate" in new docs · SITREP style · per-task
+reviews mandatory.
+```
 
 **Phase 1 (check-output sidecar + proposer excerpt rendering) BUILT + SEALED
 same night as go.** Spec `docs/superpowers/specs/2026-07-30-phase1-check-output-sidecar-design.md`
