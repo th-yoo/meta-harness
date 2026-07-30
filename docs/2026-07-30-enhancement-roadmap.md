@@ -1,8 +1,13 @@
 # kkamak enhancement roadmap (2026-07-30, architect-reviewed)
 
-**Status:** ROADMAP — no phase started, no plan docs written yet. Each phase
-gets its own brainstorm → plan (`docs/superpowers/plans/`) → SDD execution
-with per-task reviews before any build token is spent.
+**Status:** Phase 0 COMPLETE (2026-07-30 same day, plan
+`docs/superpowers/plans/2026-07-30-phase0-contract-events.md`; kkamak repo
+`ead09d5` — all 3 drift axes incl. rounds vocabulary; meta-harness
+`e76cd74`/`7d89b74`/`1caeb27`/`b4ae92f`; squad `7c167f8`; both drift guards
+live, cross-repo parity green 5/5, suites 268 · 189 · 385 · 1748/1 · 26.
+Bonus: crank.ts entrypoint guarded — unguarded top-level `main()` had every
+`bun test` starting a real crank round). Phases 1-3: not started; each gets
+its own plan → SDD with per-task reviews before any build token.
 **Origin:** strategic review (MacBook session 2026-07-30) + code-architect
 verification pass (every claim below cited to code by the reviewing agent;
 corrections applied). Predecessor state: §4.3 build sealed (HISTORY.md GA4),
