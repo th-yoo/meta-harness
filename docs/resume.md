@@ -3,6 +3,28 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ MACBOOK SETUP 2026-07-30 evening (`yoo-mac.local`) — 0.2.1 DEPLOYED + kkamak DOGFOOD OPEN — queue item 5 DONE
+
+- **GA5 pull verified token-free:** suites green on MacBook — cc-gate-plugin
+  385 (one first-run fail+error, 3 consecutive reruns green; flake unnamed,
+  cold-start class, watch for recurrence) · km-crank 183 · gate-plugin 26 ·
+  opencode-plugin 1748/1 (1749 ran = +8 leak-rule tests post-GA5-count).
+- **Plugin 0.2.1 deployed** via `km-refresh.sh --force` (second live-session
+  survival; hooks re-exec per call). Cache verified by GREP not version:
+  `pluginVersion` ×2 + `skippedStop` ×2 in cached `types.ts`. Stale `0.2.0/`
+  dir (recreated beside the install, GA3 gotcha shape) deleted on user order
+  — the setup session itself was its only consumer (possible fail-open for
+  its remainder; kkamak-dev stream, metrics-excluded, accepted).
+- **`~/z2/kkamak` cloned** (tip `22c146c`): `gate.json` committed (`bun
+  test`, rounds 2, gauge on) — gated from turn 1, no init. Check verified on
+  this host: 260/260. `.km/` starts empty; repo already in km-crank REPOS +
+  sensors-sync (`e1b1115`) — after dogfood sessions run
+  `scripts/km-sensors-sync.sh export` to add `yoo-mac.local/` to the
+  snapshot.
+- **Dogfood session LIVE:** tmux session `kkamak` (interactive claude,
+  folder trusted, idle at prompt) — `tmux attach -t kkamak`. MacBook cycles
+  now feed the activation-precondition rate alongside office.
+
 ## ✅ SESSION 2026-07-30 (`yoo-dev`) — GA5: FIRST REAL-WORK DOGFOOD + SAME-DAY 0.2.1 FIX WAVE — full record: `minimal/HISTORY.md` GA5
 
 **The loop closed live in one day:** dogfood found 3 instrument gaps at
