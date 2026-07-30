@@ -95,7 +95,7 @@ test("gating but config removed mid-cycle -> cycle reset, no sensor, edited pres
   expect(deps.calls).toEqual([])
 })
 
-test("check passes -> allow, sensor has all 11 fields, rounds ['accepted'], state deep-equals INITIAL_STATE", async () => {
+test("check passes -> allow, sensor has all 12 fields (checkMs joins as Task 2's 12th key), rounds ['accepted'], state deep-equals INITIAL_STATE", async () => {
   const state: CcGateState = { ...INITIAL_STATE, edited: true }
   const deps = fakeDeps({ results: [{ code: 0, out: "" }] })
   const result = await handleStop(state, input, gateJson(), deps)
@@ -105,13 +105,16 @@ test("check passes -> allow, sensor has all 11 fields, rounds ['accepted'], stat
   expect(result.sensor).toBeDefined()
   const sensorKeys = Object.keys(result.sensor!).sort()
   expect(sensorKeys).toEqual(
-    ["ts", "sessionID", "check", "accepted", "gateExhausted", "rounds", "interrupted", "marker", "durationMs", "host", "app"].sort(),
+    ["ts", "sessionID", "check", "accepted", "gateExhausted", "rounds", "interrupted", "marker", "durationMs", "host", "app", "checkMs"].sort(),
   )
   expect(result.sensor!.rounds).toEqual(["accepted"])
   expect(result.sensor!.accepted).toBe(true)
   expect(result.sensor!.gateExhausted).toBe(false)
   expect(result.sensor!.sessionID).toBe("sess-1")
   expect(result.sensor!.check).toBe("bun test")
+  // Task 2 (fix-them-serialized-teacup plan): one round ran -> one entry.
+  expect(result.sensor!.checkMs).toHaveLength(1)
+  expect(typeof result.sensor!.checkMs![0]).toBe("number")
 })
 
 test("marker:true + accept -> allow-with-marker with HYGIENE_MARKER verbatim; sensor marker:true", async () => {
@@ -329,6 +332,89 @@ test("runCheck receives cfg.check verbatim", async () => {
   await handleStop(state, input, gateJson({ check: "make verify --strict" }), deps)
 
   expect(deps.calls).toEqual(["make verify --strict"])
+})
+
+// ── checkMs (Task 2, fix-them-serialized-teacup plan): per-round check ────
+// timing — deps.now() wrapped tightly around each runSingleRound call.
+
+test("checkMs accumulates across invocations: fail, fail, accept -> 3 entries; reset (dropped) on the next cycle", async () => {
+  let state: CcGateState = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps({
+    results: [
+      { code: 1, out: "fail1" },
+      { code: 1, out: "fail2" },
+      { code: 0, out: "" },
+    ],
+  })
+
+  const first = await handleStop(state, input, gateJson({ rounds: 2 }), deps)
+  expect(first.decision.kind).toBe("block")
+  expect(first.state.checkMs).toHaveLength(1)
+  state = first.state
+
+  const second = await handleStop(state, input, gateJson({ rounds: 2 }), deps)
+  expect(second.decision.kind).toBe("block")
+  expect(second.state.checkMs).toHaveLength(2)
+  state = second.state
+
+  const third = await handleStop(state, input, gateJson({ rounds: 2 }), deps)
+  expect(third.decision).toEqual({ kind: "allow" })
+  expect(third.sensor!.checkMs).toHaveLength(3)
+  expect(third.sensor!.checkMs!.every((n) => typeof n === "number")).toBe(true)
+  // Reset drops checkMs entirely — INITIAL_STATE never declares the key.
+  expect(third.state).toEqual(INITIAL_STATE)
+  expect(third.state.checkMs).toBeUndefined()
+})
+
+test("checkMs: legacy state without the field still accumulates correctly (state.checkMs ?? [])", async () => {
+  const state: CcGateState = {
+    ...INITIAL_STATE,
+    edited: true,
+    gating: true,
+    round: 1,
+    outcomes: ["verify-failed"],
+    cycleStartedAt: 500,
+    // deliberately no `checkMs` key at all — exactly a pre-Task-2 persisted file.
+  }
+  const deps = fakeDeps({ results: [{ code: 1, out: "fail again" }] })
+  const result = await handleStop(state, input, gateJson({ rounds: 3 }), deps)
+
+  expect(result.decision.kind).toBe("block")
+  expect(result.state.checkMs).toHaveLength(1)
+})
+
+test("checkMs: exhausted line carries the full per-round array (3 rounds -> 3 entries)", async () => {
+  let state: CcGateState = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps({
+    results: [
+      { code: 1, out: "fail1" },
+      { code: 1, out: "fail2" },
+      { code: 1, out: "fail3" },
+    ],
+  })
+
+  state = (await handleStop(state, input, gateJson({ rounds: 2 }), deps)).state
+  state = (await handleStop(state, input, gateJson({ rounds: 2 }), deps)).state
+  const third = await handleStop(state, input, gateJson({ rounds: 2 }), deps)
+
+  expect(third.decision.kind).toBe("allow-exhausted")
+  expect(third.sensor!.checkMs).toHaveLength(3)
+})
+
+test("checkMs: runCheck rejects (internal error) does NOT add an entry — no round consumed", async () => {
+  const state: CcGateState = {
+    ...INITIAL_STATE,
+    edited: true,
+    gating: true,
+    round: 1,
+    outcomes: ["verify-failed"],
+    cycleStartedAt: 42,
+  }
+  const deps = fakeDeps({ results: [new Error("spawn failed")] })
+  const result = await handleStop(state, input, gateJson(), deps)
+
+  expect(result.decision).toEqual({ kind: "allow" })
+  expect(result.state.checkMs).toBeUndefined()
 })
 
 // ── rawOut threading into the block decision (composition design) ────────

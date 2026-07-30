@@ -254,6 +254,26 @@ function sensorFile(lines: SensorLineIn[]): string {
   return p
 }
 
+// ── checkMs (Task 2, fix-them-serialized-teacup plan) ───────────────────
+
+test("CLI: prints M-check (median per-round check time) next to M-tax when checkMs is present", async () => {
+  const f = sensorFile([
+    line({ checkMs: [100, 200] }),
+    line({ checkMs: [300] }),
+    line({ checkMs: [900] }),
+  ])
+  const r = await runCli([f, "--min-n", "1"])
+  expect(r.code).toBe(0)
+  // flattened across the group: [100,200,300,900] -> median (200+300)/2 = 250
+  expect(r.out).toContain("M-check 250ms")
+})
+
+test("CLI: M-check is absent from the stats line when no line in the group carries checkMs (legacy lines)", async () => {
+  const f = sensorFile(MANY(3, {}))
+  const r = await runCli([f, "--min-n", "1"])
+  expect(r.out).not.toContain("M-check")
+})
+
 test("CLI: --min-n is honoured and its VALUE is not treated as a filename", async () => {
   const f = sensorFile(MANY(3, {}))
   const r = await runCli([f, "--min-n", "2"])

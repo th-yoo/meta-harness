@@ -47,6 +47,14 @@ export async function handleStop(
   // 3. Run one round.
   const started = state.gating ? state.cycleStartedAt : deps.now()
 
+  // Task 2 (fix-them-serialized-teacup plan): time THIS round only, tightly
+  // around the runSingleRound call — durationMs (started..now, above) spans
+  // every Stop invocation in the cycle including subagent-wait between
+  // them; checkElapsed isolates just the check-command wall time. Not
+  // captured on the catch-branch below: an internal error consumes no
+  // round (cycle fields unchanged there), so there's no round to time.
+  const checkStartedAt = deps.now()
+
   let result: Awaited<ReturnType<typeof runSingleRound>>
   try {
     result = await runSingleRound(deps.runCheck, cfg.check)
@@ -76,6 +84,10 @@ export async function handleStop(
     }
   }
 
+  // Task 2 (fix-them-serialized-teacup plan): this round's own elapsed
+  // check time, isolated from durationMs's cross-invocation span.
+  const checkElapsed = deps.now() - checkStartedAt
+
   // 4. Round result outcome.
   if (result.outcome === "accepted") {
     const sensor = buildSensorLine(deps, {
@@ -87,6 +99,7 @@ export async function handleStop(
       interrupted: false,
       marker: cfg.marker,
       durationMs: deps.now() - started,
+      checkMs: [...(state.checkMs ?? []), checkElapsed],
     })
 
     return {
@@ -108,6 +121,7 @@ export async function handleStop(
         outcomes: [...state.outcomes, result.outcome],
         cycleStartedAt: started,
         failStreak: 0,
+        checkMs: [...(state.checkMs ?? []), checkElapsed],
       },
       decision: {
         kind: "block",
@@ -130,6 +144,7 @@ export async function handleStop(
     interrupted: false,
     marker: false,
     durationMs: deps.now() - started,
+    checkMs: [...(state.checkMs ?? []), checkElapsed],
   })
 
   return {

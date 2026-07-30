@@ -22,6 +22,11 @@ export function buildSensorLine(
     // caller except the new prompt.ts skipped-Stop marker) produce
     // byte-identical lines to before this amendment.
     skippedStop?: true
+    // Task 2 (fix-them-serialized-teacup plan) amendment — same
+    // spread-only-when-defined discipline; stop.ts is the only caller that
+    // ever supplies it (accept/exhaust points), so every other caller
+    // (and every pre-amendment line) is byte-identical.
+    checkMs?: number[]
   },
 ): SensorLine {
   return {
@@ -39,5 +44,6 @@ export function buildSensorLine(
     ...(args.forced !== undefined ? { forced: args.forced } : {}),
     ...(args.pluginVersion !== undefined ? { pluginVersion: args.pluginVersion } : {}),
     ...(args.skippedStop !== undefined ? { skippedStop: args.skippedStop } : {}),
+    ...(args.checkMs !== undefined ? { checkMs: args.checkMs } : {}),
   }
 }

@@ -3,7 +3,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { FileStateStore } from "../src/state.ts"
-import { INITIAL_STATE, type CcGateState } from "../src/types.ts"
+import { INITIAL_STATE, isInitialState, type CcGateState } from "../src/types.ts"
 
 let dir: string
 
@@ -77,6 +77,27 @@ test("save: initial-equivalent state ignoring updatedAt still deletes (no file e
   const store = new FileStateStore(dir)
   store.save("s1", { ...INITIAL_STATE, updatedAt: 123456 })
   expect(fs.existsSync(path.join(dir, "s1.json"))).toBe(false)
+})
+
+// ── isInitialState hardening (Task 2, fix-them-serialized-teacup plan) ────
+// A state carrying only checkMs (every other field back at its initial
+// value) must NOT read as initial, or FileStateStore.save() would silently
+// rmSync it away — losing in-flight per-round timing.
+
+test("isInitialState: a state with only checkMs populated is NOT initial", () => {
+  expect(isInitialState({ ...INITIAL_STATE, checkMs: [123] })).toBe(false)
+})
+
+test("isInitialState: checkMs undefined or an empty array is still initial", () => {
+  expect(isInitialState({ ...INITIAL_STATE })).toBe(true)
+  expect(isInitialState({ ...INITIAL_STATE, checkMs: [] })).toBe(true)
+})
+
+test("save: a state carrying only checkMs is NOT deleted — it must persist to disk, not vanish as if initial", () => {
+  const store = new FileStateStore(dir)
+  store.save("s1", { ...INITIAL_STATE, checkMs: [456] })
+  expect(fs.existsSync(path.join(dir, "s1.json"))).toBe(true)
+  expect(store.load("s1").checkMs).toEqual([456])
 })
 
 test("sessionId is sanitized: path-escape attempt writes inside dir only", () => {

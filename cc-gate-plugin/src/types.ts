@@ -10,6 +10,12 @@
 // Amendment (2026-07-30, fix-them-serialized-teacup plan, Task 1):
 // SensorLine gained skippedStop?: true — additive & optional, recording the
 // unmeasured-edits-across-a-prompt-boundary dogfood finding.
+// Amendment (2026-07-30, fix-them-serialized-teacup plan, Task 2):
+// SensorLine + CcGateState both gained checkMs?: number[] — additive &
+// optional, recording per-round check time (deps.now() around
+// runSingleRound) so durationMs's subagent-wait inflation (live dogfood:
+// 420s/174s cycles, ~1s actual check) has a companion measurement that
+// isn't reinterpreted from durationMs itself.
 import type { GateRoundResult } from "../vendor/complete-gate.ts"
 
 export type RoundOutcome = GateRoundResult["outcome"]
@@ -27,6 +33,13 @@ export interface CcGateState {
   cycleStartedAt: number
   failStreak: number
   updatedAt: number
+  /** Task 2 (fix-them-serialized-teacup plan): per-round check elapsed-ms,
+   * accumulated across Stop invocations exactly as `outcomes` is. Absent on
+   * legacy state files and never declared on INITIAL_STATE (a freshly-reset
+   * cycle has no rounds yet, same convention as `outcomes: []` being the
+   * only array INITIAL_STATE actually declares — this one stays undefined
+   * until the first round runs). */
+  checkMs?: number[]
 }
 
 export const INITIAL_STATE: CcGateState = {
@@ -40,11 +53,18 @@ export const INITIAL_STATE: CcGateState = {
   updatedAt: 0,
 }
 
-/** Initial-equivalence ignores updatedAt (a saved initial-equivalent state is deleted instead). */
+/** Initial-equivalence ignores updatedAt (a saved initial-equivalent state is deleted instead).
+ * Task 2 (fix-them-serialized-teacup plan) hardening: a state carrying only
+ * `checkMs` (every other field back at its initial value) must NOT read as
+ * initial — otherwise FileStateStore.save() would silently rmSync it away,
+ * losing in-flight per-round timing for a cycle that is, e.g., between two
+ * Stop invocations with round-tracking fields already reset by some other
+ * path. Same `?? []`-shaped emptiness check as `outcomes`. */
 export function isInitialState(s: CcGateState): boolean {
   return (
     !s.edited && !s.gating && s.round === 0 && s.outcomes.length === 0 &&
-    s.cycleStartedAt === 0 && s.failStreak === 0
+    s.cycleStartedAt === 0 && s.failStreak === 0 &&
+    (!s.checkMs || s.checkMs.length === 0)
   )
 }
 
@@ -176,6 +196,18 @@ export interface SensorLine {
    * Absent means no such boundary was observed; a stored `false` is never
    * written (absent is the cleaner line, same convention as `forced`). */
   skippedStop?: true
+  /** Task 2 (fix-them-serialized-teacup plan, 2026-07-30 dogfood finding):
+   * per-round check elapsed-ms — `deps.now()` wrapped tightly around each
+   * `runSingleRound` call in stop.ts, one entry per round that actually ran
+   * (never for the internal-error/spawn-failure path, which consumes no
+   * round). `durationMs` is UNCHANGED and still spans
+   * `cycleStartedAt → now` across every Stop invocation in the cycle,
+   * including subagent-wait between them; `checkMs` is the additive
+   * companion that isolates just the check-command wall time, so the two
+   * are never conflated. Emitted only on accept/exhaust (the same points
+   * `durationMs` is emitted), carrying the full per-round array for the
+   * cycle. Absent on lines from before this amendment. */
+  checkMs?: number[]
 }
 
 /** Handlers return sensor lines; hook-cli owns the append (persist → sensor → emit). */

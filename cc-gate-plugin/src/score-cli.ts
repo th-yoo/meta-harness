@@ -235,7 +235,48 @@ function readLines(files: string[]): { lines: SensorLineIn[]; unreadable: string
 const pct = (x: number | null): string => (x === null ? "  n/a" : `${(x * 100).toFixed(1)}%`)
 const ms = (x: number | null): string => (x === null ? "n/a" : x >= 1000 ? `${(x / 1000).toFixed(1)}s` : `${x}ms`)
 
-function render(r: ScoreResult, minN: number, trial?: TrialBlock): string {
+function medianOf(xs: number[]): number | null {
+  if (!xs.length) return null
+  const s = [...xs].sort((a, b) => a - b)
+  const mid = Math.floor(s.length / 2)
+  return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2
+}
+
+/** Task 2 (fix-them-serialized-teacup plan): median per-round check time
+ * (`checkMs`), grouped the SAME way scoreGroup buckets lines — (check, host)
+ * or "(pooled)" under --pool — so a lookup by a rendered group's
+ * (check, host) lands on the matching bucket. Deliberately re-groups here
+ * rather than threading a new field through score.ts's GroupScore: this is
+ * a leaf CLI-only presentation concern (score.ts stays untouched, its exact
+ * test suite unaffected), same spirit as the local ExposureRow mirror
+ * above. Absent entirely for a group where no line carries checkMs
+ * (legacy lines / a field not yet emitted) — "when present" per the brief,
+ * never printed as 0 or null. */
+function medianCheckMsByGroup(lines: SensorLineIn[], pool: boolean): Map<string, number> {
+  const byKey = new Map<string, number[]>()
+  for (const raw of lines) {
+    if (typeof raw !== "object" || raw === null) continue
+    const l = raw as SensorLineIn
+    if (!Array.isArray(l.checkMs) || l.checkMs.length === 0) continue
+    const check = pool ? "(pooled)" : l.check
+    const host = pool ? "(pooled)" : (l.host ?? "unknown")
+    const key = JSON.stringify([check, host])
+    let arr = byKey.get(key)
+    if (!arr) {
+      arr = []
+      byKey.set(key, arr)
+    }
+    arr.push(...l.checkMs)
+  }
+  const out = new Map<string, number>()
+  for (const [key, vals] of byKey) {
+    const med = medianOf(vals)
+    if (med !== null) out.set(key, med)
+  }
+  return out
+}
+
+function render(r: ScoreResult, minN: number, trial?: TrialBlock, checkMsByGroup?: Map<string, number>): string {
   const out: string[] = []
   out.push("kkamak scorecard — read-only; see the pre-registration before quoting any number.")
   out.push("")
@@ -254,9 +295,11 @@ function render(r: ScoreResult, minN: number, trial?: TrialBlock): string {
       `, interrupted ${c.interrupted}${c.gaugeOnly ? `, gauge-only ${c.gaugeOnly}` : ""}` +
       `${c.skippedStop ? `, skipped-stop ${c.skippedStop}` : ""})`,
     )
+    const checkMsMedian = checkMsByGroup?.get(JSON.stringify([g.check, g.host]))
     out.push(
       `   M-catch ${pct(g.mCatch)}   M-exhaust ${pct(g.mExhaust)}` +
-      `   M-interrupt ${pct(g.mInterrupt)}   M-tax ${ms(g.mTaxMedianMs)}`,
+      `   M-interrupt ${pct(g.mInterrupt)}   M-tax ${ms(g.mTaxMedianMs)}` +
+      (checkMsMedian !== undefined ? `   M-check ${ms(checkMsMedian)}` : ""),
     )
     if (g.mRounds.length) out.push(`   rounds-to-accept: ${g.mRounds.join(", ")}`)
     if (g.underpowered) {
@@ -343,7 +386,9 @@ function main(): void {
     ? joinTrialArms(lines, exposureFiles.flatMap(readExposureRowsLocal))
     : undefined
 
-  console.log(asJson ? JSON.stringify(result, null, 2) : render(result, minN, trial))
+  const checkMsByGroup = medianCheckMsByGroup(lines, pool)
+
+  console.log(asJson ? JSON.stringify(result, null, 2) : render(result, minN, trial, checkMsByGroup))
 }
 
 if (import.meta.main) main()
