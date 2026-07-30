@@ -53,6 +53,7 @@ import { parseSensorLines, aggregate, notable, newLineCount, type SensorLine } f
 import { readPositions, writePositionsAtomic, type Positions } from "./positions.ts"
 import { readSnapshotAges } from "./snapshot-age.ts"
 import { unionRawLines } from "./sensor-union.ts"
+import { joinBySession, parseCheckOutputRecords } from "./check-output.ts"
 import { renderEvidence, type RepoEvidence } from "./evidence.ts"
 import { formatSitrep, postSlack, type SitrepAction, type RepoSummary } from "./sitrep.ts"
 import { decideGate, acquireCrankLock, releaseCrankLock } from "./gate.ts"
@@ -211,12 +212,23 @@ async function main(): Promise<void> {
   // trial-verdict.ts's readUnionSensorLines needs the unfiltered parse too).
   const totalNew = scans.reduce((sum, s) => sum + newLineCount(s.newLines), 0)
 
-  const repoResults: RepoEvidence[] = scans.map((s) => ({
-    repo: s.repo,
-    newLines: s.newLines,
-    aggregate: aggregate(s.newLines),
-    notableLines: notable(s.newLines, 5),
-  }))
+  const repoResults: RepoEvidence[] = scans.map((s) => {
+    const notableLines = notable(s.newLines, 5)
+    // Phase 1 sidecar (host-local, never exported — F2): whole-file read,
+    // no byte-offset bookkeeping — the file grows slowly and the join
+    // filters to notable sessionIDs anyway. Missing file -> no excerpts.
+    let sidecarText = ""
+    try {
+      sidecarText = fs.readFileSync(path.join(s.repo, ".km", "check-output.ndjson"), "utf-8")
+    } catch {
+      // absent/unreadable sidecar is the normal pre-Phase-1 case
+    }
+    const excerptsBySession = joinBySession(
+      notableLines.map((l) => l.sessionID),
+      parseCheckOutputRecords(sidecarText),
+    )
+    return { repo: s.repo, newLines: s.newLines, aggregate: aggregate(s.newLines), notableLines, excerptsBySession }
+  })
   const repoSummaries: RepoSummary[] = repoResults.map((r) => ({
     repo: r.repo,
     newLines: r.newLines.length,

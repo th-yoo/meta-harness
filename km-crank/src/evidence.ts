@@ -15,12 +15,21 @@
  * agnostic to that placement — it only renders content.
  */
 import type { Aggregate, SensorLine } from "./scan.ts"
+import type { CheckOutputRecord } from "./check-output.ts"
+
+const MAX_EXCERPTS_PER_SESSION = 2
+const EXCERPT_RENDER_CHARS = 1200
 
 export interface RepoEvidence {
   repo: string
   newLines: SensorLine[]
   aggregate: Aggregate
   notableLines: SensorLine[]
+  /** Phase 1 sidecar join (check-output.ts's joinBySession) — host-local
+   * block-round excerpts keyed by sessionID, ts DESC. Optional: absent
+   * (pre-Phase-1 data, kernel-emitted repos, missing sidecar file) must
+   * render byte-identical to the pre-Phase-1 output. */
+  excerptsBySession?: Map<string, CheckOutputRecord[]>
 }
 
 function fmtMs(ms: number): string {
@@ -52,6 +61,16 @@ function renderRepoSection(r: RepoEvidence): string {
       lines.push(
         `- \`${l.sessionID}\` | ${l.check} | rounds=[${l.rounds.join(",")}] | accepted=${l.accepted} | ${fmtMs(l.durationMs)}${flags ? ` | ${flags}` : ""}`,
       )
+      const recs = r.excerptsBySession?.get(l.sessionID) ?? []
+      for (const rec of recs.slice(0, MAX_EXCERPTS_PER_SESSION)) {
+        const tail =
+          rec.excerpt.length > EXCERPT_RENDER_CHARS
+            ? "…" + rec.excerpt.slice(-EXCERPT_RENDER_CHARS)
+            : rec.excerpt
+        // Tilde fence: check output routinely contains backticks; a
+        // backtick fence would break the markdown mid-excerpt.
+        lines.push(`  - check output, round ${rec.round}/${rec.roundsMax}:`, "", "~~~", tail, "~~~", "")
+      }
     }
   }
   lines.push("", "### Raw notable lines (ndjson)", "", "```")

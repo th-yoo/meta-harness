@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test"
 import { renderEvidence, type RepoEvidence } from "../src/evidence.ts"
 import { aggregate, notable, type SensorLine } from "../src/scan.ts"
+import type { CheckOutputRecord } from "../src/check-output.ts"
 
 function line(overrides: Partial<SensorLine> = {}): SensorLine {
   return {
@@ -78,4 +79,61 @@ test("renderEvidence: is deterministic for the same inputs", () => {
   const a = renderEvidence([repoEvidence("repo", lines)], 5000)
   const b = renderEvidence([repoEvidence("repo", lines)], 5000)
   expect(a).toBe(b)
+})
+
+function checkRec(over: Partial<CheckOutputRecord>): CheckOutputRecord {
+  return {
+    ts: 1000, sessionID: "sess-1", round: 1, roundsMax: 2,
+    check: "bun test", excerpt: "FAIL: expected await", ...over,
+  }
+}
+
+test("renders up to 2 excerpts per notable session, latest first, tilde-fenced", () => {
+  const l = line({ sessionID: "sess-1", gateExhausted: true, rounds: ["verify-failed", "verify-failed", "verify-failed"] })
+  const md = renderEvidence(
+    [{
+      repo: "/r",
+      newLines: [l],
+      aggregate: aggregate([l]),
+      notableLines: [l],
+      excerptsBySession: new Map([[
+        "sess-1",
+        [checkRec({ ts: 30, round: 3, excerpt: "THIRD" }),
+         checkRec({ ts: 20, round: 2, excerpt: "SECOND" }),
+         checkRec({ ts: 10, round: 1, excerpt: "FIRST" })],
+      ]]),
+    }],
+    0,
+  )
+  expect(md).toContain("THIRD")
+  expect(md).toContain("SECOND")
+  expect(md).not.toContain("FIRST") // budget: 2 per session
+  expect(md).toContain("~~~") // tilde fence — check output may contain backticks
+  expect(md.indexOf("THIRD")).toBeLessThan(md.indexOf("SECOND")) // latest first
+})
+
+test("render excerpt trimmed to last 1200 chars with leading elision marker", () => {
+  const long = "A".repeat(500) + "Z".repeat(1200)
+  const l = line({ sessionID: "sess-1", gateExhausted: true, rounds: ["verify-failed"] })
+  const md = renderEvidence(
+    [{
+      repo: "/r",
+      newLines: [],
+      aggregate: aggregate([]),
+      notableLines: [l],
+      excerptsBySession: new Map([["sess-1", [checkRec({ excerpt: long })]]]),
+    }],
+    0,
+  )
+  expect(md).toContain("Z".repeat(1200))
+  expect(md).not.toContain("A".repeat(500) + "Z") // head trimmed away
+  expect(md).toContain("…") // trim marker
+})
+
+test("absent excerptsBySession renders byte-identical to pre-Phase-1 output", () => {
+  const repo = {
+    repo: "/r", newLines: [], aggregate: aggregate([]), notableLines: [],
+  }
+  const withField = { ...repo, excerptsBySession: new Map() }
+  expect(renderEvidence([withField], 0)).toBe(renderEvidence([repo], 0))
 })

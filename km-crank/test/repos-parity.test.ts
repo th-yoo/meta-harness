@@ -56,3 +56,15 @@ test("REPOS parity: crank.ts and km-sensors-sync.sh contain the same repository 
   expect(onlyInCrank).toEqual([])
   expect(onlyInBash).toEqual([])
 })
+
+test("F2: check-output sidecar is NEVER in km-sensors-sync.sh's FILES export list", () => {
+  // The snapshot is a one-way door (refuse-on-shrink dedup): a sidecar line
+  // exported once can never be retroactively stripped. The sidecar carries
+  // code-bearing check output and must stay host-local forever.
+  const repoRoot = path.resolve(import.meta.dir, "..", "..")
+  const scriptPath = path.join(repoRoot, "scripts", "km-sensors-sync.sh")
+  const script = fs.readFileSync(scriptPath, "utf-8")
+  const filesLine = script.split("\n").find((l) => l.trimStart().startsWith("FILES=("))
+  expect(filesLine).toBeDefined()
+  expect(filesLine!).not.toContain("check-output")
+})
