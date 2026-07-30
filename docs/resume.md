@@ -3,6 +3,33 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ DOGFOOD FIX WAVE 2026-07-30 (`yoo-dev`) — 0.2.1: skipped-stop class + checkMs + init CLI (SDD, final review READY-TO-PUSH)
+
+Live dogfood (kkamak reimplementation build at `~/z2/kkamak`, github.com/th-yoo/kkamak)
+surfaced 3 instrument gaps; fixed same day via SDD (4 tasks, 5 fix rounds, final
+whole-branch review clean; range `1a6b337..HEAD`):
+1. **`skippedStop` sensor class** — queued prompt eats the Stop boundary (8-commit
+   build recorded ZERO cycles). New line at UserPromptSubmit when `edited && !gating`,
+   `rounds:[]`, classified BEFORE gauge-only; excluded from ALL metrics AND §4.3
+   density (PRE-DATA AMENDMENT in the trial-mode spec — own rationale, gate WAS
+   armed + false-void multiplicity risk); scan.ts volume contest discounts it;
+   host still visible in SITREP coverage (composition-tested).
+2. **`checkMs` per-round timing** — durationMs inflates with subagent/human wait
+   (420s cycle, ~1s check). Optional array parallel to rounds; `isInitialState`
+   hardened; M-check printed beside M-tax (deliberately pools clean+catch+exhausted,
+   documented).
+3. **`init-cli.ts`** — token-free gate.json writer (`--check/--gauge/--force/--dry-run`,
+   .gitignore handling). `/kkamak:init` stays as the interactive path.
+Plus: **0.2.1** + version-parity test (plugin.json↔package.json — GA4 lapse class
+closed). Calibration `coveredMechanismRev` advanced twice (TM1-precedent,
+telemetry-only class, noted pre-data). Suites: cc-gate 385 · km-crank 183 ·
+gate-plugin 26 · opencode-plugin 1741. Deferred minors in
+`.superpowers/sdd/plan-to-fix-them-serialized-teacup/progress.md` (host-local).
+**MacBook after pull: run `scripts/km-refresh.sh` (no live claude) — cache must
+carry 0.2.1; `claude plugin list` = authority.** Dogfood repo `~/z2/kkamak`:
+kernel merged (165 tests, final review clean), adapters plan next
+(`docs/superpowers/plans/2026-07-30-harness-adapters.md` in that repo).
+
 ## ✅ TM8 SYNC LIVE-TEST 2026-07-30 (`yoo-dev`, token-free, go received) — km-sensors-sync + snapshot-age + sensor-union FIRST REAL DATA
 
 First-ever run of `scripts/km-sensors-sync.sh`: export wrote
