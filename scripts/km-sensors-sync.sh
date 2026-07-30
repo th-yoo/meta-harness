@@ -35,10 +35,10 @@ HOST="$(hostname -s)"
 
 die() { echo "km-sensors-sync: $*" >&2; exit 2; }
 
-# REPOS mirrors km-crank/src/crank.ts:64 (the three dogfooded repos) — kept
+# REPOS mirrors km-crank/src/crank.ts:64 (the dogfooded repos) — kept
 # as a plain list here, not sourced from the .ts, so this script has no
 # runtime dependency on bun/node.
-REPOS=(~/z2/meta-harness ~/z2/squad ~/z2/km-play)
+REPOS=(~/z2/meta-harness ~/z2/squad ~/z2/km-play ~/z2/kkamak)
 FILES=(gate-outcomes trial-arms)
 
 usage() {
