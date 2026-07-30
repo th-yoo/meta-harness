@@ -63,7 +63,9 @@ function expandHome(p: string): string {
   return p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p
 }
 
-const REPOS = ["~/z2/meta-harness", "~/z2/squad", "~/z2/km-play", "~/z2/kkamak"].map(expandHome)
+export const REPOS = ["~/z2/meta-harness", "~/z2/squad", "~/z2/km-play", "~/z2/kkamak"].map(expandHome)
+/** Dogfooded repos list — mirrored in scripts/km-sensors-sync.sh:41 (REPOS array).
+ * Drift-guarded by km-crank/test/repos-parity.test.ts. */
 /** This repo's root — where km-crank/calibration.json (the §4.3 FA registry)
  * and the staleness git scope live, regardless of which repo hosts a trial. */
 const META_REPO_ROOT = path.resolve(import.meta.dir, "..", "..")
