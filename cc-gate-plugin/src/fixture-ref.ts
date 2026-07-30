@@ -36,7 +36,13 @@ export const bunGitRunner: GitRunner = async (argv, opts) => {
     stdout: "pipe", stderr: "pipe",
   })
   const timer = setTimeout(() => { try { proc.kill("SIGKILL") } catch {} }, 15_000)
-  const out = await new Response(proc.stdout).text()
+  // Drain stdout AND stderr concurrently — a git call that writes >64KB to
+  // stderr while nothing reads it deadlocks the child on the pipe, stalling
+  // this (interactive Stop-critical-path) call until the SIGKILL timer.
+  const [out] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ])
   const code = await proc.exited
   clearTimeout(timer)
   return { code, out }
