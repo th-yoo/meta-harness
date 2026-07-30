@@ -539,3 +539,67 @@ test("UserPromptSubmit while edited:false, gating:false -> no sensor line (nothi
   expect(fs.existsSync(path.join(repo, ".km", "gate-outcomes.ndjson"))).toBe(false)
   rmRepo(repo)
 })
+
+// ── Task 1: check-output sidecar wiring ──────────────────────────────────
+
+function sidecarRecords(repo: string): Record<string, unknown>[] {
+  const p = path.join(repo, ".km", "check-output.ndjson")
+  return fs
+    .readFileSync(p, "utf-8")
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l))
+}
+
+test("Stop block round appends one check-output sidecar record with pre-reinject raw output", async () => {
+  const repo = mkRepo()
+  try {
+    writeGate(repo, { check: "echo COMPILE_HEAD; echo TEST_TAIL; exit 1", rounds: 2 })
+    seedState(repo, "sc1", { edited: true })
+    const r = await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "sc1", cwd: repo }) })
+    expect(r.exitCode).toBe(0) // block-json delivery: decision on stdout
+    const recs = sidecarRecords(repo)
+    expect(recs.length).toBe(1)
+    expect(recs[0]).toMatchObject({ sessionID: "sc1", round: 1, roundsMax: 2 })
+    expect(recs[0]!.excerpt as string).toContain("COMPILE_HEAD")
+    expect(recs[0]!.excerpt as string).toContain("TEST_TAIL")
+    expect(typeof recs[0]!.ts).toBe("number")
+  } finally {
+    rmRepo(repo)
+  }
+})
+
+test("Stop accepted round appends NO sidecar record", async () => {
+  const repo = mkRepo()
+  try {
+    writeGate(repo, { check: "true", rounds: 2 })
+    seedState(repo, "sc2", { edited: true })
+    await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "sc2", cwd: repo }) })
+    expect(fs.existsSync(path.join(repo, ".km", "check-output.ndjson"))).toBe(false)
+  } finally {
+    rmRepo(repo)
+  }
+})
+
+test("sidecar write failure changes nothing about the emitted block decision", async () => {
+  const repo = mkRepo()
+  try {
+    writeGate(repo, { check: "echo NOPE; exit 1", rounds: 2 })
+    // Baseline run in a healthy twin repo for comparison.
+    const twin = mkRepo()
+    writeGate(twin, { check: "echo NOPE; exit 1", rounds: 2 })
+    seedState(twin, "sc3", { edited: true })
+    const healthy = await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "sc3", cwd: twin }) })
+    // Sabotage: sidecar path is a directory -> append fails (EISDIR).
+    fs.mkdirSync(path.join(repo, ".km", "check-output.ndjson"), { recursive: true })
+    seedState(repo, "sc3", { edited: true })
+    const sabotaged = await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "sc3", cwd: repo }) })
+    expect(sabotaged.exitCode).toBe(healthy.exitCode)
+    expect(sabotaged.stdout).toBe(healthy.stdout)
+    expect(sabotaged.stderr).toContain("check-output")
+    rmRepo(twin)
+  } finally {
+    rmRepo(repo)
+  }
+})

@@ -22,6 +22,7 @@ import { handleStop } from "./core/stop.ts"
 import { maybeSpawnGauge } from "./gauge/spawn.ts"
 import { shadowEvaluateAtStop } from "./gauge/shadow.ts"
 import { applyReinjectVariant, pickReinjectVariant } from "./reinject.ts"
+import { appendCheckOutput, buildCheckOutputRecord } from "./sidecar.ts"
 import type { CoreDeps, DeliveryMode, EmitPlan, SensorLine } from "./types.ts"
 
 const MH_CHILD_ENV = "MH_CHILD"
@@ -330,6 +331,29 @@ async function main(): Promise<void> {
       : undefined
   }
   if (line) appendSensor(cwd, gateConfigRaw, line, deps.log)
+
+  // Phase 1 check-output sidecar (evidence-only; spec docs/superpowers/
+  // specs/2026-07-30-phase1-check-output-sidecar-design.md): capture the
+  // failing check output the block branch otherwise discards. PRE-reinject
+  // rawOut on purpose — the sidecar records what the check printed, not
+  // what delivery shaped. Fail-open inside; never touches gate-outcomes,
+  // never changes the decision. Exhausted final rounds are NOT captured:
+  // their rawOut never leaves core/stop.ts, and core/ is a MECHANISM_PATH
+  // (F1) — documented spec limitation, not an oversight.
+  if (decision.kind === "block") {
+    appendCheckOutput(
+      cwd,
+      buildCheckOutputRecord({
+        ts: Date.now(),
+        sessionID: sessionId,
+        round: decision.round,
+        roundsMax: decision.roundsMax,
+        check: cfg?.check ?? "",
+        rawText: decision.rawOut ?? decision.evidence,
+      }),
+      deps.log,
+    )
+  }
 
   // (c) Emit the delivery-mode-shaped plan, with the session's reinject arm
   // applied to block evidence (§4.4 experiment, pre-reg §4b).
