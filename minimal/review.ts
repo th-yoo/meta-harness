@@ -89,7 +89,13 @@ const PATH_WORDS = new Set([
  * are plain non-PATH_WORDS English words (e.g. "kernel/gate") passes this
  * layer; recorded in docs/2026-07-24-proposer-review-loop.md as an
  * accepted trade-off — layer 2 has NO leak check (RUBRIC_KEYS), so layer 1
- * is the only leak guard. */
+ * is the only leak guard. Known false-positive class, ruled accepted
+ * (re-review 2026-07-30): prose pairs whose side collides with PATH_WORDS
+ * ("internal/external", "public/private", "build/verify") are flagged —
+ * fail-closed, costs one revision round, and these were ALWAYS flagged
+ * under the pre-2026-07-30 all-slashes rule; trimming those words would
+ * reopen the real-path leak surface. Proposers can rephrase ("internal
+ * versus external"). */
 function hasPathLikeToken(bullet: string): boolean {
   if (EXTENSION_RE.test(bullet)) return true
   for (const raw of bullet.split(/\s+/)) {

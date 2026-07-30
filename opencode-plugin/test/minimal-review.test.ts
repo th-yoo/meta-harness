@@ -104,6 +104,14 @@ test("layer1 PATH_WORDS is case-insensitive and matches either side", () => {
   expect(r.violations.join(" ")).toContain("path-like")
 })
 
+test("layer1 PATH_WORDS prose collision is a RULED accepted false positive (internal/external)", () => {
+  // Ruling 2026-07-30 (re-review): fail-closed by design — see review.ts comment
+  // and the design doc's leakage row. This test locks the ruling, not a bug.
+  const r = layer1Checks("When comparing internal/external behavior, do not merge until they match.")
+  expect(r.pass).toBe(false)
+  expect(r.violations.join(" ")).toContain("path-like")
+})
+
 test("layer1 fails on backtick-quoted literals", () => {
   const r = layer1Checks("When you see `verify.sh` fail, do not proceed until it passes.", "sparql-university")
   expect(r.pass).toBe(false)
