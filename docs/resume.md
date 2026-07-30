@@ -3,6 +3,72 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-07-30 night (`yoo-mac.local`) — ENHANCEMENT ROADMAP + PHASE 0 COMPLETE (same day) — meta-harness @ `90bc301` · kkamak @ `ead09d5` · squad @ `7c167f8`, all pushed
+
+**This session (after the MacBook-setup block below):** strategic review
+(field-practice search + code-architect verification) → roadmap documented
+(`docs/2026-07-30-enhancement-roadmap.md`: phases 0-3, F1 calibration-path
+tripwire + F2 snapshot one-way door as binding constraints, rejected list)
+→ **Phase 0 EXECUTED + SEALED** (plan
+`docs/superpowers/plans/2026-07-30-phase0-contract-events.md`, SDD,
+per-task reviews all Approved):
+- T1 kkamak `ead09d5`: ALL 3 contract drift axes (sessionID casing, marker
+  field, rounds vocab `accepted`/`verify-failed`), golden-vector fixture,
+  driven-emission conformance test; 268 tests.
+- T2 `e76cd74`: 4 canonical vectors + drift-rejection tests in km-crank.
+- T3 `7d89b74`+`1caeb27`+`b4ae92f`: REPOS drift guard + **BONUS CATCH:
+  crank.ts top-level `main()` was unguarded — every km-crank `bun test`
+  started a REAL crank round (killed mid-flight at exit; state verified
+  undamaged) — now `import.meta.main`-guarded, import chain traced clean.
+- T4 squad `7c167f8`: gate armed (`bun test`, rounds 2) — third repo feeds
+  the event stream.
+- Cross-repo parity LIVE: kernel lines parse in km-crank; either side
+  drifting alone fails tests loudly in both repos.
+
+**Suites at end:** kkamak 268 · km-crank 189 · cc-gate-plugin 385 ·
+opencode-plugin 1748/1 · gate-plugin 26 · squad 156.
+**Also this session:** caveman statusline configured (`~/.claude/settings.json`,
+cache-hash-pinned path — breaks silently on caveman plugin update); stale
+kkamak 0.2.0 cache dir deleted; Parallel Search MCP verified working on
+MacBook (memory corrected); tmux dogfood session `kkamak` opened.
+
+**RESUME PROMPT (either host):**
+```
+Resume kkamak (meta-harness), 2026-07-30+. Read docs/resume.md FIRST (top
+block "SESSION END 2026-07-30 night") + docs/2026-07-30-enhancement-roadmap.md.
+meta-harness pushed through 90bc301; ~/z2/kkamak through ead09d5; squad
+through 7c167f8.
+
+WHERE WE ARE: §4.3 machinery sealed (GA4) + first dogfood day (GA5) +
+enhancement roadmap documented + Phase 0 COMPLETE (sensor-contract
+conformance, live cross-repo parity guards, REPOS guard, squad gate armed,
+crank entrypoint guard). Event stream: 3 repos armed (kkamak, squad,
+km-play) + meta-harness kkamak-dev; activation precondition day 1/14
+(trailing-14d ≥10 real-work cycles/day; A/A trial earliest ~Aug 12).
+
+QUEUE (GO before spend, in order):
+(1) Phase 1 — block-output sidecar at hook-cli seam + proposer evidence
+    enrichment (~1.5-2d, NO spec amendment; roadmap has full scope +
+    constraints F1/F2). Needs its own short plan first.
+(2) Sustain dogfood daily both hosts (tmux `kkamak` session on MacBook;
+    kkamak-repo next milestone = packaging/marketplace — pluginVersion/
+    forced porting deferral D1 lands there).
+(3) Phase 2 — bench-fixture harvest (~3-5d, own plan; private-repo fixture
+    inclusion decision per repo).
+(4) Phase 3 — async promptCheck (PRE-DATA AMENDMENT, skippedStop template)
+    + mechanize-instead rubric key.
+(5) sensors export after dogfood: scripts/km-sensors-sync.sh export.
+
+DEADLINE ITEMS (not next, not never): calibration-refresh tooling before
+2nd consumed KEEP; golden-window machinery before 3rd KEEP.
+
+RULES: explicit go before spend · spec-is-law, pre-data amendments only
+(4 landed) · F1: never touch cc-gate-plugin/src/core|vendor without
+recalibration intent · F2: code-bearing text never enters
+gate-outcomes.ndjson · no bare "gate" in new docs · SITREP style ·
+per-task reviews mandatory.
+```
+
 ## ✅ MACBOOK SETUP 2026-07-30 evening (`yoo-mac.local`) — 0.2.1 DEPLOYED + kkamak DOGFOOD OPEN — queue item 5 DONE
 
 - **GA5 pull verified token-free:** suites green on MacBook — cc-gate-plugin
