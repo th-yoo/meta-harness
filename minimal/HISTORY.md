@@ -497,6 +497,67 @@ per-task reviews + final whole-branch review + one fix wave; commits
   real-work ≥10 cycles/day (stream near-empty). A/A machinery trial is the
   registered first live use.
 
+## GA5 — first real-work dogfood + same-day instrument fix wave 0.2.1 (2026-07-30, office `yoo-dev`) — LOOP CLOSED LIVE
+
+- **New repo `~/z2/kkamak` (github.com/th-yoo/kkamak, MIT):** fresh dogfood
+  project — reimplementing kkamak as a harness-abstract plugin (pure kernel +
+  adapter contract for CC AND opencode), gated by the INSTALLED kkamak from
+  turn 1. (First push mistake — full meta-harness history copied over — caught
+  by user, reverted `1a6b337`, repo deleted+recreated; fresh-start intent =
+  "rename would have been the move".) `/kkamak:init` Step-4 no-test-command
+  branch live-tested; **first-ever cycle = block→fix: the gate forced the
+  scaffold into existence** (`bun test` unsatisfiable until the agent created
+  it). **First real-work sensor stream in project history** (check ≠
+  kkamak-dev group; ~10 cycles day 1 = activation-precondition rate, day 1/14).
+- **Reimplementation state (Opus 5, SDD from adapters on):** kernel merged —
+  pure state machine, zero non-relative imports, 3 events in / 2 decisions
+  out, 165 tests; its review found 1 real fail-open bug (unpersistable block
+  → stale round → unbounded blocking; fixed as invariant "never issue a block
+  that cannot be recorded", mutation-tested). Session independently
+  re-derived the opencode no-blocking-stop-hook asymmetry + self-prompt trap
+  from source. Adapters plan executing (2 plan-conflict rulings by driver:
+  byte-true evidence cap; import-closure install test); final review pending
+  at day end (529 Overloaded hiccup, resumed).
+- **Dogfood surfaced 3 instrument gaps → FIXED + DEPLOYED SAME DAY (0.2.1,
+  range `72da841..a00519e` + `e1b1115`,`feb94e6`):** plan hardened by 3
+  adversarial architect rounds (21 findings), SDD 4 tasks + 5 fix rounds,
+  final whole-branch review READY-TO-PUSH (0 Critical/Important):
+  1. **`skippedStop` sensor class** — queued prompt eats the Stop boundary
+     (8-commit kernel build recorded ZERO cycles). Emitted at
+     UserPromptSubmit on `edited && !gating`; classified BEFORE gauge-only;
+     excluded from ALL metrics AND §4.3 density (**4th pre-data amendment**
+     — own rationale: gate WAS armed, and per-queued-prompt multiplicity
+     would false-void trials via the density guard); scan volume-contest
+     discounts it; host stays visible in SITREP coverage.
+  2. **`checkMs` per-round timing** — durationMs inflates with
+     subagent/human wait. Array parallel to rounds; `isInitialState`
+     hardened; M-check beside M-tax (pools clean+catch+exhausted,
+     documented deliberate).
+  3. **`init-cli.ts`** — token-free gate.json writer (13 tests).
+  Plus 0.2.1 + **version-parity test** (GA4 lapse class closed) and
+  calibration `coveredMechanismRev` advances (TM1-precedent telemetry-only
+  class, noted pre-data). Suites 385 · 183 · 26 · 1741.
+- **Deployed via `km-refresh.sh` (guard exercised live: refused on live
+  claude, `--force` per plan; driving session SURVIVED the refresh — hooks
+  re-exec per call). Same-day live validation of every fix:** 7+ skippedStop
+  lines captured in the adapters run (the class that hid the kernel build);
+  `checkMs [884,882]` inside a 34,877ms blocked cycle = wait-vs-check
+  separation proven; scorecard digests mixed 0.2.0/0.2.1 lines; gauge v2
+  live in dogfood (A1/A2/B/D, 0 refusals). Multiplicity prediction
+  vindicated: 7 markers vs 10 cycles under subagent-driven work — density
+  inclusion would have voided trials.
+- **Wiring:** `~/z2/kkamak` added to km-crank REPOS + km-sensors-sync;
+  snapshot carries the first 42 kkamak-repo lines. Proposer loop unblocked
+  (supervised rounds need go; A/A trial earliest ~Aug 12-13 if rate holds).
+- **Registered honesty:** improvement claim still OPEN — M-catch alone not
+  claimable; gate-aware turn-holding observed (agent held a red tree open to
+  avoid a block) = M-catch suppression invisible to the stream, the §4.3
+  counterfactual argument made flesh. Main historical improvement channel =
+  playbook bullets (A1/A2, bench-certified); §4.3 v0 = playbook-class
+  trials scored by gate-outcome deltas precisely because real work has no
+  grader; ~10% false-accept = the quantified blind spot; bench stays the
+  sharp instrument.
+
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
 | R1 | 2026-07-23 | machine bullet (script-verify) on bare | bare 4/10 vs 5/10 | 1.0 | — | REJECT null |
@@ -526,6 +587,7 @@ per-task reviews + final whole-branch review + one fix wave; commits
 | GA2 | 2026-07-29 | §4.3 trial-mode pre-reg + gauge M0–M3 verdict + km-gauge v2 extractor pre-reg (office) | 36-prompt gauge window (user-labeled 10 would-blocks); 1 live tmux smoke session; zero bench trials | — | — (registration + measurement) | **§4.3 REGISTERED (`fdd0055..59c4924`, SDD + 3 review iterations, 24 findings resolved; playbook v0, salted arms, three-floor verdict, auto keep/rollback + human-go, golden every 3 KEEPs, A/A first, activation ≥10 cycles/day). Gauge M0 91.7% ✓ M1 63.6% ✓ M3 ✓ (caught the spec's DRAFT defect pre-final-review) but M2 FAIL 9/10 false-block → SHADOW INDEFINITELY per locked rule; root cause = invention beyond information bound. Fix-or-drop → v2 EXTRACTOR REGISTERED (`63c94f2`+`61f8d78`: A1/A2/B/C/D classes, code-enforced extraction, two-strike eval, M5 A2-share; second M2 fail = derivation killed). Shadow invariant test-locked `af0a132`; first v0 reinject cycle (arms v0:1/v1:19)** |
 | GA3 | 2026-07-29 | km-gauge v2 extractor BUILD + DEPLOY + LIVE MEASURE (office) | SDD 3 tasks + reviews + final review + fix wave; 1 reinstall + km-play 3-prompt haiku session; zero bench trials | — | — (mechanism + measurement) | **BUILT (`a3638cb..1cad4ba`, 332 tests; T1 review caught cd-target + substring-boundary extraction holes; final review caught spec-code divergence → pre-data amendment BEFORE deploy). DEPLOYED 0.2.0, WINDOW OPEN (`1f4c0f6`; stale-cache-dir gotcha: `claude plugin list` = authority). LIVE MEASURE: A2 + B model-classified exact; C→D $()-downgrade with audit ×2 (class-C 0/4 = starvation trend, ≥5-C floor watches); byClass renders, v1 lines excluded; orphan mechanism observed live (A2 stranded by highest-n supersede); cap fence verified** |
 | GA4 | 2026-07-29 | §4.3 prerequisite build TM1–TM8 (office + MacBook) | SDD 8 tasks + per-task reviews + final whole-branch review + fix waves; zero bench trials | — | — (mechanism) | **BUILT + SEALED (`fc03f95..61e5c6b`; suites 1740/1 · 352 · 173 · 26). THREE pre-data amendments, all evidence-forced pre-verdict: `fc252c2` salt bit-16 (bit-0 parity-linear w/ reinject), `bcbfdb3` calibration 2/19 = lower-bound proxy, `54238eb` stale-refusal bounded by T_MAX → abandon + abandon-restores-baseline (clear-only abandon silently adopted candidate). Final review closed 4 Important: §7 union WIRED into verdict input (`sensor-union.ts`), golden trials REFUSED + §7.8 deferral, false sensor-side forced comments fixed, panic trial-off re-ruled abandon per §5. Human-go start preserved; activation precondition (≥10 real-work cycles/day trailing-14d) still gates first trial; A/A machinery trial = registered first live use** |
+| GA5 | 2026-07-30 | First real-work dogfood (`~/z2/kkamak` reimplementation) + same-day 0.2.1 instrument fix wave (office) | live dogfood session (Opus 5) + SDD fix wave (4 tasks, 5 fix rounds, 3-round plan review); zero bench trials | — | — (mechanism + measurement) | **LOOP CLOSED LIVE: dogfood found 3 instrument gaps at breakfast (queued-prompt cycle loss — 8-commit build invisible; durationMs wait-inflation 420s/~1s; no token-free init), fixes shipped+deployed by lunch (0.2.1: skippedStop class w/ 4th pre-data amendment metrics+density-excluded, checkMs, init-cli, version-parity test), fixed instrument measured its own fix by afternoon (7 skippedStop captured; checkMs [884,882] in 34.9s cycle). First real-work sensor stream ever — day 1 at activation rate; first cycle = gate FORCED scaffold into existence. Reimplemented kernel merged (165 tests; review caught real fail-open bug, mutation-tested fix). Gate-aware turn-holding observed = live §4.3 counterfactual argument. REPOS + snapshot wired; proposer loop unblocked, A/A earliest ~08-12** |
 
 ## R1 — round-1 machine bullet (2026-07-23, office) — REJECT
 

@@ -3,32 +3,67 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ✅ DOGFOOD FIX WAVE 2026-07-30 (`yoo-dev`) — 0.2.1: skipped-stop class + checkMs + init CLI (SDD, final review READY-TO-PUSH)
+## ✅ SESSION 2026-07-30 (`yoo-dev`) — GA5: FIRST REAL-WORK DOGFOOD + SAME-DAY 0.2.1 FIX WAVE — full record: `minimal/HISTORY.md` GA5
 
-Live dogfood (kkamak reimplementation build at `~/z2/kkamak`, github.com/th-yoo/kkamak)
-surfaced 3 instrument gaps; fixed same day via SDD (4 tasks, 5 fix rounds, final
-whole-branch review clean; range `1a6b337..HEAD`):
-1. **`skippedStop` sensor class** — queued prompt eats the Stop boundary (8-commit
-   build recorded ZERO cycles). New line at UserPromptSubmit when `edited && !gating`,
-   `rounds:[]`, classified BEFORE gauge-only; excluded from ALL metrics AND §4.3
-   density (PRE-DATA AMENDMENT in the trial-mode spec — own rationale, gate WAS
-   armed + false-void multiplicity risk); scan.ts volume contest discounts it;
-   host still visible in SITREP coverage (composition-tested).
-2. **`checkMs` per-round timing** — durationMs inflates with subagent/human wait
-   (420s cycle, ~1s check). Optional array parallel to rounds; `isInitialState`
-   hardened; M-check printed beside M-tax (deliberately pools clean+catch+exhausted,
-   documented).
-3. **`init-cli.ts`** — token-free gate.json writer (`--check/--gauge/--force/--dry-run`,
-   .gitignore handling). `/kkamak:init` stays as the interactive path.
-Plus: **0.2.1** + version-parity test (plugin.json↔package.json — GA4 lapse class
-closed). Calibration `coveredMechanismRev` advanced twice (TM1-precedent,
-telemetry-only class, noted pre-data). Suites: cc-gate 385 · km-crank 183 ·
-gate-plugin 26 · opencode-plugin 1741. Deferred minors in
+**The loop closed live in one day:** dogfood found 3 instrument gaps at
+breakfast → 0.2.1 shipped+deployed by lunch → the fixed instrument measured
+its own fix by afternoon.
+
+**Dogfood repo `~/z2/kkamak`** (github.com/th-yoo/kkamak, MIT, fresh history —
+first-push mistake reverted, repo recreated): reimplementing kkamak as
+harness-abstract plugin (pure kernel + CC/opencode adapter contract), gated
+by installed kkamak from turn 1. Kernel MERGED (165 tests; review caught a
+real fail-open bug — unpersistable block → unbounded blocking — fixed as
+mutation-tested invariant). Adapters plan
+(`docs/superpowers/plans/2026-07-30-harness-adapters.md` in that repo)
+executing SDD; 2 plan-conflict rulings made (byte-true evidence cap,
+import-closure install test); **final whole-branch review + merge = where it
+stopped** (529 Overloaded turbulence; resume by nudging the tmux `kkamak`
+session or relaunching `claude` in `~/z2/kkamak`).
+
+**0.2.1 fix wave (meta-harness, `72da841..a00519e` + `e1b1115` REPOS +
+`feb94e6` snapshot, all pushed):** skippedStop sensor class (queued prompt
+eats Stop boundary; **4th pre-data amendment** — excluded from metrics AND
+density, own rationale) · checkMs per-round timing (`[884,882]` in a 34.9s
+cycle proven live) · init-cli.ts token-free init · version-parity test.
+3-round adversarial plan review (21 findings), SDD 4 tasks + 5 fix rounds,
+final review READY-TO-PUSH. Suites 385 · 183 · 26 · 1741. Deferred minors:
 `.superpowers/sdd/plan-to-fix-them-serialized-teacup/progress.md` (host-local).
-**MacBook after pull: run `scripts/km-refresh.sh` (no live claude) — cache must
-carry 0.2.1; `claude plugin list` = authority.** Dogfood repo `~/z2/kkamak`:
-kernel merged (165 tests, final review clean), adapters plan next
-(`docs/superpowers/plans/2026-07-30-harness-adapters.md` in that repo).
+
+**Milestone: first real-work sensor stream ever** — ~10 cycles day 1 =
+activation-precondition rate (needs trailing-14d ≥10/day; day 1/14, earliest
+A/A ~08-12). `~/z2/kkamak` wired into km-crank REPOS + sensors-sync;
+snapshot carries its first 42 lines. Proposer loop UNBLOCKED (supervised
+rounds need explicit go). Gate-aware turn-holding observed live = the §4.3
+counterfactual argument made flesh.
+
+**RESUME PROMPT (office):**
+```
+Resume kkamak (meta-harness), 2026-07-30+. Read docs/resume.md FIRST (top
+block GA5) + minimal/HISTORY.md GA5.
+
+WHERE WE ARE: 0.2.1 deployed office (skippedStop/checkMs/init-cli), all
+live-validated. ~/z2/kkamak reimplementation: kernel merged; adapters SDD
+run needs final whole-branch review + merge (was 529-interrupted) — tmux
+session "kkamak", nudge or relaunch. First real-work stream at activation
+rate day 1/14.
+
+QUEUE (GO before spend): (1) finish adapters final review + merge in
+dogfood session; (2) sustain dogfood daily ≥10 cycles → A/A trial ~08-12;
+(3) supervised km-crank proposer round on kkamak evidence; (4) squad
+dogfood multiplier (still never started); (5) MacBook: pull +
+scripts/km-refresh.sh (no live claude) → 0.2.1.
+
+GOTCHAS: km-refresh --force with live sessions survived once (hooks
+re-exec per call) but stays a documented risk; kkamak-dev exclusion is
+check-string-based — the kkamak repo's "bun test" group counts as REAL
+work; queued tmux messages eat turn boundaries (now measured as
+skippedStop, no longer silent).
+
+RULES: explicit go before spend · no bare "gate" · spec-is-law (pre-data
+amendments only until data exists; 4 landed) · forensics before verdict
+math · SITREP style.
+```
 
 ## ✅ TM8 SYNC LIVE-TEST 2026-07-30 (`yoo-dev`, token-free, go received) — km-sensors-sync + snapshot-age + sensor-union FIRST REAL DATA
 
