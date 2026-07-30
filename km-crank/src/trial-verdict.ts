@@ -134,6 +134,15 @@ interface JoinedStream {
  *      itself, the exact confound this design exists to avoid);
  *   6. gauge-only (`rounds: []`, non-interrupted) → excluded from metrics,
  *      COUNTED for the density guard.
+ *   7. skipped-stop (Task 1, fix-them-serialized-teacup plan) → excluded
+ *      from BOTH metrics AND the density guard — a pure diagnostic class,
+ *      unlike gauge-only. §9's gauge-only density-inclusion rationale
+ *      ("witness a Stop the gate never armed for") does NOT apply here — a
+ *      skipped-stop line means the gate WAS armed. Density inclusion would
+ *      also let a prompt-queuing habit difference inflate density
+ *      arbitrarily (repeated queued prompts emit one line each) and falsely
+ *      trip `DENSITY_DIVERGENCE_FACTOR` (§9, below). See the pre-data spec
+ *      amendment, docs/superpowers/specs/2026-07-29-trial-mode-gate-outcomes-preregistration.md.
  * Arm attribution comes from the exposure ROW (the record of what was
  * actually injected), never recomputed from the salt.
  */
@@ -167,8 +176,13 @@ function joinAndExclude(
     if (row.forced) continue // §2: forced arms are never compared
     if (l.ts < startMs || l.ts > now) continue // §2: time-bounded join
     if (l.check === KKAMAK_DEV_CHECK) continue // §2: kkamak-dev group
+    // Task 1 (fix-them-serialized-teacup plan): "skipped-stop" is excluded
+    // from BOTH density and metrics — see the join-rule comment above
+    // (rule 7). Gauge-only stays density-included per §9.
+    const cls = classifyCycle(l)
+    if (cls === "skipped-stop") continue
     out.density[row.arm].push(l)
-    if (classifyCycle(l) !== "gauge-only") out.metrics[row.arm].push(l)
+    if (cls !== "gauge-only") out.metrics[row.arm].push(l)
   }
   return out
 }
@@ -180,7 +194,7 @@ function emptyGroupScore(): GroupScore {
   return {
     check: "(pooled)",
     host: "(pooled)",
-    counts: { clean: 0, catch: 0, exhausted: 0, interrupted: 0, gaugeOnly: 0 },
+    counts: { clean: 0, catch: 0, exhausted: 0, interrupted: 0, gaugeOnly: 0, skippedStop: 0 },
     gateCycles: 0,
     underpowered: true,
     mCatch: null,

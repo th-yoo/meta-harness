@@ -139,6 +139,32 @@ describe("§2 exclusions", () => {
     expect(r.exposureGuard.densityTrial).toBe(2) // ...but it IS density: 2 lines / 1 session
   })
 
+  test("skipped-stop (Task 1, fix-them-serialized-teacup plan): excluded from metrics AND from the exposure-density guard (own rationale, unlike gauge-only)", () => {
+    const r = evaluate(
+      [mkLine("s1"), mkLine("s1", { rounds: [], accepted: false, skippedStop: true })],
+      [mkRow("s1", "trial")],
+    )
+    expect(r.perArm.trial.cycleCount).toBe(1) // skipped-stop line NOT a metric cycle
+    expect(r.perArm.trial.score.gateCycles).toBe(1)
+    // Unlike gauge-only, the skipped-stop line does NOT inflate density:
+    // still 1 line / 1 session, not 2 lines / 1 session.
+    expect(r.exposureGuard.densityTrial).toBe(1)
+  })
+
+  test("skipped-stop: repeated queued-prompt lines in one session do not inflate density at all (the false-void risk this exclusion prevents)", () => {
+    const r = evaluate(
+      [
+        mkLine("s1"),
+        mkLine("s1", { rounds: [], accepted: false, skippedStop: true }),
+        mkLine("s1", { rounds: [], accepted: false, skippedStop: true }),
+        mkLine("s1", { rounds: [], accepted: false, skippedStop: true }),
+      ],
+      [mkRow("s1", "trial")],
+    )
+    expect(r.perArm.trial.cycleCount).toBe(1)
+    expect(r.exposureGuard.densityTrial).toBe(1)
+  })
+
   test("kkamak-dev: this repo's own check group is excluded from every metric", () => {
     const r = evaluate(
       [mkLine("s1", { check: KKAMAK_DEV_CHECK }), mkLine("s2")],
@@ -197,7 +223,7 @@ function mkScore(o: Partial<GroupScore> = {}): GroupScore {
   return {
     check: "(pooled)",
     host: "(pooled)",
-    counts: { clean: 15, catch: 5, exhausted: 3, interrupted: 2, gaugeOnly: 0 },
+    counts: { clean: 15, catch: 5, exhausted: 3, interrupted: 2, gaugeOnly: 0, skippedStop: 0 },
     gateCycles: 23,
     underpowered: false,
     mCatch: 0.3,

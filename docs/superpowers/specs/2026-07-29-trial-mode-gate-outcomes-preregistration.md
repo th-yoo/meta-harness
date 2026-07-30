@@ -98,6 +98,30 @@ confound this design exists to avoid). Pooling across the remaining `(check, hos
 is explicit opt-in and must be stated in any verdict, with the per-group breakdown printed
 beside the pooled number (scorecard pre-reg §3/§4 convention, `score.ts`'s `pool` option).
 
+**PRE-DATA AMENDMENT (2026-07-30, fix-them-serialized-teacup plan Task 1; no trial data
+exists yet, §4.3 has never enrolled a real session):** a new sensor line class,
+`skipped-stop` (`SensorLine.skippedStop`, `cc-gate-plugin/src/types.ts`), is registered as
+excluded from every §4.3 metric AND from the §9 exposure-density guard — a stronger
+exclusion than gauge-only's, which is density-INCLUDED. `skipped-stop` marks a user prompt
+that arrived while edits were unmeasured (`edited:true, gating:false`), fabricated at the
+prompt path — most commonly a queued prompt eating the Stop boundary (the live dogfood
+finding this amendment codifies: an 8-commit kernel build on the installed plugin produced
+**zero** sensor cycles, because every prompt in that session queued past an open Stop
+boundary and the boundary loss went entirely unrecorded before this fix). This class gets
+its OWN rationale, not §9's gauge-only one ("witness a Stop the gate never armed for") —
+that rationale does not hold here, because a skipped-stop line means the gate WAS armed;
+the boundary was lost, not absent. The reason for excluding it from density specifically is
+a **false-void risk**: repeated queued prompts within one open turn each emit their own
+`skipped-stop` line (the field counts unmeasured-boundary EVENTS, not distinct sessions or
+distinct skipped Stops), so a habit difference in how often either arm's sessions queue
+prompts could inflate that arm's line-per-session density arbitrarily and trip the §9
+`DENSITY_DIVERGENCE_FACTOR` guard on pure prompting-style noise, voiding a trial for a
+reason unrelated to either arm's candidate text. Excluding `skipped-stop` from density
+(alongside metrics) removes that failure mode entirely, at the cost of the class carrying
+no exposure-guard signal of its own — an accepted trade given it is a diagnostic/instrument
+line, not a workload-shape observation. `km-crank/src/trial-verdict.ts`'s join
+(`joinAndExclude`) implements this as join rule 7, alongside the existing 6.
+
 ## 3. Assignment
 
 `arm = (FNV-1a(`${trialId}:${sessionID}`) >>> 16) & 1`. **The trial ID is a required
