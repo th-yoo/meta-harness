@@ -5,6 +5,7 @@ import { EDIT_TOOLS } from "../src/types.ts"
 
 const pluginRoot = dirname(import.meta.dir)
 const pluginJsonPath = join(pluginRoot, ".claude-plugin/plugin.json")
+const packageJsonPath = join(pluginRoot, "package.json")
 const hooksJsonPath = join(pluginRoot, "hooks/hooks.json")
 
 function parseJson(path: string): unknown {
@@ -25,6 +26,12 @@ test("plugin.json has name, version, description", () => {
   expect(typeof p.version).toBe("string")
   expect(typeof p.description).toBe("string")
   expect((p.description as string).length).toBeGreaterThan(0)
+})
+
+test("plugin.json version === package.json version (parity)", () => {
+  const plugin = parseJson(pluginJsonPath) as Record<string, unknown>
+  const pkg = parseJson(packageJsonPath) as Record<string, unknown>
+  expect(plugin.version).toBe(pkg.version)
 })
 
 interface HookEntry {
