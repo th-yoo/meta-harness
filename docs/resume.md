@@ -24,6 +24,12 @@ does NOT transfer; this file + the repo are the source of truth.)
 - **Dogfood session LIVE:** tmux session `kkamak` (interactive claude,
   folder trusted, idle at prompt) — `tmux attach -t kkamak`. MacBook cycles
   now feed the activation-precondition rate alongside office.
+- **ENHANCEMENT ROADMAP documented** (strategic review + code-architect
+  verification): `docs/2026-07-30-enhancement-roadmap.md`. Phases 0-3 (contract fix
+  + multipliers → evidence sidecar → bench-fixture harvest → promptCheck
+  amendment + mechanize rubric), two binding constraints (calibration-path
+  tripwire F1, snapshot one-way door F2), rejected list. NO phase started —
+  each needs go + its own plan doc.
 
 ## ✅ SESSION 2026-07-30 (`yoo-dev`) — GA5: FIRST REAL-WORK DOGFOOD + SAME-DAY 0.2.1 FIX WAVE — full record: `minimal/HISTORY.md` GA5
 
