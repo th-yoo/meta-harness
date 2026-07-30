@@ -49,7 +49,7 @@ Place `gate.json` at your repo root (same level as `.git/`):
 | `sensor` | string | `.km/gate-outcomes.ndjson` | Where to log check outcomes (append-only NDJSON). Relative to repo root. |
 | `checkTimeoutMs` | number | `300000` | Hook timeout is 600s; internal timeout (kill + fail) is this value. Timeout counts as a failed check. |
 
-Run `/kkamak:init` in Claude Code to inspect your repo and generate a starter `gate.json`.
+Run `/kkamak:init` in Claude Code to inspect your repo and generate a starter `gate.json` interactively, or run `bun cc-gate-plugin/src/init-cli.ts [--check <cmd>] [--gauge] [--force] [--dry-run]` for the token-free equivalent (no model call).
 
 ## What kkamak can and cannot touch
 

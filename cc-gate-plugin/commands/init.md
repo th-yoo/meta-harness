@@ -4,6 +4,8 @@ description: Initialize kkamak gate.json with auto-detected test command
 
 # kkamak init — Set up gate.json
 
+> Token-free alternative: `bun cc-gate-plugin/src/init-cli.ts [--check <cmd>] [--gauge] [--force] [--dry-run]` detects and writes gate.json without a model call — use this command only when you want the interactive walkthrough.
+
 You are helping the user set up kkamak, a gate that runs a verification check when Claude finishes responding after edits. Follow these steps:
 
 ## Step 1: Detect the test command
