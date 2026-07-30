@@ -3,6 +3,40 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION 2026-07-30 late night (`yoo-mac.local`) — PHASE 1 COMPLETE + SEALED (GA6) — meta-harness through `4c0c06c` (+docs seal)
+
+**Phase 1 (check-output sidecar + proposer excerpt rendering) BUILT + SEALED
+same night as go.** Spec `docs/superpowers/specs/2026-07-30-phase1-check-output-sidecar-design.md`
+(`f3bb362`) · plan `docs/superpowers/plans/2026-07-30-phase1-check-output-sidecar.md`
+(`8fce9ae`) · SDD 4 tasks, per-task reviews all Approved zero
+Critical/Important:
+- T1 `e207ae2`: `cc-gate-plugin/src/sidecar.ts` + hook-cli wiring — block
+  rounds append `(sessionID, ts, round)`-keyed records, 8192-char cap
+  (head 2048 + tail 6144), fail-open like appendSensor, PRE-reinject rawOut.
+- T2 `339c5f5`: km-crank pure parser + `joinBySession` (local re-declared
+  type, standalone-package rule).
+- T3 `a9df656`: evidence render (≤2 excerpts/notable session, tilde fences)
+  + crank.ts whole-file sidecar read + F2 FILES-list tripwire test.
+- T4 inline: F1 `git log` EMPTY over MECHANISM_PATHS whole phase; F2 sync
+  script untouched; suites cc-gate-plugin 394 · km-crank 196; scratch-repo
+  live smoke wrote exact record.
+- Final whole-branch review (fable): caught cross-task drift I-1
+  (head-preserving emitter vs tail-only renderer) → ruling: render split
+  head 300 + tail 900; + vacuous byte-identity test MUST-FIX; both fixed
+  `4c0c06c`, re-verified **READY TO CLOSE: YES**. Full HISTORY.md GA6.
+
+**NOT DONE (needs go): deploy.** Installed plugin on BOTH hosts still
+pre-sidecar — no sidecar data flows until `scripts/km-refresh.sh --force`
+(and office host refresh). First queue item next session.
+
+**QUEUE (GO before spend, in order):** (1) deploy 0.2.1+sidecar via
+km-refresh both hosts; (2) sustain dogfood daily (tmux `kkamak`); (3)
+Phase 2 bench-fixture harvest (~3-5d, own plan; per-repo private-fixture
+decision); (4) Phase 3 async promptCheck (PRE-DATA AMENDMENT) +
+mechanize-instead rubric key; (5) sensors export after dogfood
+(`scripts/km-sensors-sync.sh export`). DEADLINE ITEMS + RULES unchanged
+(block below).
+
 ## ✅ SESSION END 2026-07-30 night (`yoo-mac.local`) — ENHANCEMENT ROADMAP + PHASE 0 COMPLETE (same day) — meta-harness @ `90bc301` · kkamak @ `ead09d5` · squad @ `7c167f8`, all pushed
 
 **This session (after the MacBook-setup block below):** strategic review
