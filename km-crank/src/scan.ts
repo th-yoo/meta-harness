@@ -36,6 +36,16 @@ export interface SensorLine {
   durationMs: number
   host: string
   app: string
+  /** cc-gate-plugin's skipped-Stop marker (Task 1, fix-them-serialized-teacup
+   * plan) — see cc-gate-plugin/src/types.ts's SensorLine for full semantics.
+   * Declared here so the type matches the wire shape; `parseSensorLines`
+   * below EXCLUDES lines carrying it from its returned array (round-3 review
+   * "Important 6" — its per-queued-prompt multiplicity would otherwise skew
+   * this repo's new-line-volume contest/threshold toward noisy repos). Note:
+   * gauge-only lines (also `rounds: []`) share this same pre-existing
+   * distortion and are NOT filtered here — recorded as a known minor,
+   * out of scope for this fix. */
+  skippedStop?: true
 }
 
 /** Runtime shape guard — malformed/partial lines (a torn concurrent write, a
@@ -66,6 +76,16 @@ function isSensorLine(v: unknown): v is SensorLine {
  * silently skipped — never throws. `text` is assumed to already be
  * whole-lines-only (crank.ts's byte-offset reader trims any trailing
  * partial line before calling this).
+ *
+ * Task 1 (fix-them-serialized-teacup plan, round-3 review "Important 6"):
+ * lines carrying `skippedStop:true` are ALSO excluded from the returned
+ * array — not just filtered from a downstream count. This repo's crank.ts
+ * builds its new-line-volume contest/threshold, `aggregate()`'s totals, and
+ * `notable()`'s selection directly off this array's length/contents, so
+ * excluding here is what keeps a queued-prompt-heavy repo from looking
+ * artificially "busier" than one with equivalent real gate cycles.
+ * `cleanAccepts` (below) was already immune (`rounds:[]` never matches
+ * `["accepted"]`) — this is about the raw count, not that field.
  */
 export function parseSensorLines(text: string): SensorLine[] {
   const out: SensorLine[] = []
@@ -78,7 +98,7 @@ export function parseSensorLines(text: string): SensorLine[] {
     } catch {
       continue
     }
-    if (isSensorLine(parsed)) out.push(parsed)
+    if (isSensorLine(parsed) && !parsed.skippedStop) out.push(parsed)
   }
   return out
 }

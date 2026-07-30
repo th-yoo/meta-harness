@@ -58,6 +58,21 @@ test("parseSensorLines: empty text -> empty array", () => {
   expect(parseSensorLines("")).toEqual([])
 })
 
+// ── Task 1 (fix-them-serialized-teacup plan): skippedStop exclusion ────────
+
+test("parseSensorLines: excludes skippedStop lines entirely (not just from a downstream count) — keeps the volume contest/threshold from being skewed by queued-prompt multiplicity", () => {
+  const real = line({ sessionID: "real" })
+  const skipped = line({ sessionID: "skipped", rounds: [], skippedStop: true })
+  const text = `${JSON.stringify(real)}\n${JSON.stringify(skipped)}\n`
+  expect(parseSensorLines(text)).toEqual([real])
+})
+
+test("parseSensorLines: repeated skippedStop lines in one session all drop out, not just the first", () => {
+  const skipped = line({ sessionID: "s1", rounds: [], skippedStop: true })
+  const text = Array.from({ length: 3 }, () => JSON.stringify(skipped)).join("\n") + "\n"
+  expect(parseSensorLines(text)).toEqual([])
+})
+
 // ── aggregate ────────────────────────────────────────────────────────────────
 
 test("aggregate: empty input", () => {
