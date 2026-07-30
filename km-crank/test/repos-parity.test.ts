@@ -13,7 +13,11 @@ function extractReposFromBashScript(scriptPath: string): string[] {
   const content = fs.readFileSync(scriptPath, "utf-8")
 
   // Match: REPOS=( ... )
-  // The pattern captures what's inside the parentheses
+  // The pattern captures what's inside the parentheses.
+  // FORMAT ASSUMPTION: the assignment must stay single-line and unquoted
+  // (REPOS=(~/a ~/b ...)). Reformatting it multi-line or quoting entries
+  // breaks this extraction LOUDLY (throw / spurious mismatch), never
+  // silently — if you reformat the script, update this parser with it.
   const match = content.match(/^REPOS=\((.*?)\)$/m)
   if (!match || !match[1]) {
     throw new Error(`Could not find REPOS assignment in ${scriptPath}`)
@@ -45,12 +49,10 @@ test("REPOS parity: crank.ts and km-sensors-sync.sh contain the same repository 
   const crankSet = new Set(REPOS_FROM_CRANK)
   const bashSet = new Set(reposFromBash)
 
-  // Check set equality
-  expect(crankSet.size).toBe(bashSet.size)
-  for (const repo of crankSet) {
-    expect(bashSet.has(repo)).toBe(true)
-  }
-  for (const repo of bashSet) {
-    expect(crankSet.has(repo)).toBe(true)
-  }
+  // Set equality asserted as empty difference lists so a drift failure
+  // PRINTS the offending repo paths, not just sizes/booleans.
+  const onlyInCrank = [...crankSet].filter((r) => !bashSet.has(r))
+  const onlyInBash = [...bashSet].filter((r) => !crankSet.has(r))
+  expect(onlyInCrank).toEqual([])
+  expect(onlyInBash).toEqual([])
 })
