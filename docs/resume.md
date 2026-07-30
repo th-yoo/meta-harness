@@ -42,17 +42,23 @@ counterfactual argument made flesh.
 Resume kkamak (meta-harness), 2026-07-30+. Read docs/resume.md FIRST (top
 block GA5) + minimal/HISTORY.md GA5.
 
-WHERE WE ARE: 0.2.1 deployed office (skippedStop/checkMs/init-cli), all
-live-validated. ~/z2/kkamak reimplementation: kernel merged; adapters SDD
-run needs final whole-branch review + merge (was 529-interrupted) — tmux
-session "kkamak", nudge or relaunch. First real-work stream at activation
-rate day 1/14.
+WHERE WE ARE: 0.2.1 deployed office, all fixes live-validated.
+~/z2/kkamak reimplementation: kernel + BOTH harness adapters MERGED +
+PUSHED (260 tests; dogfood lessons in the new kernel too); next milestone
+there = packaging/marketplace. Pre-crank BASELINE sealed (kkamak
+dogfood-log top block; anchor only, never a control arm). km-crank round
+1 vs kkamak evidence RAN: review-gate REJECT, no candidate — machinery
+E2E-proven on real data; its false-positive trigger fixed + ruled
+(leak rule 19196e2..605a407, review->re-review->ruling chain). First
+real-work stream at activation rate day 1/14.
 
-QUEUE (GO before spend): (1) finish adapters final review + merge in
-dogfood session; (2) sustain dogfood daily ≥10 cycles → A/A trial ~08-12;
-(3) supervised km-crank proposer round on kkamak evidence; (4) squad
-dogfood multiplier (still never started); (5) MacBook: pull +
-scripts/km-refresh.sh (no live claude) → 0.2.1.
+QUEUE (GO before spend): (1) sustain dogfood daily ≥10 cycles / ≥2
+sessions → A/A trial ~08-12 (pre-data ruling on gate-editing-workload
+class still NEEDED before kkamak cycles feed a verdict); (2) kkamak-repo
+packaging/marketplace step; (3) next supervised crank round after a
+fatter stream; (4) squad dogfood multiplier (never started); (5) MacBook:
+pull + scripts/km-refresh.sh (no live claude) → 0.2.1, then clone
+~/z2/kkamak + dogfood there (sensors export via meta-harness snapshot).
 
 GOTCHAS: km-refresh --force with live sessions survived once (hooks
 re-exec per call) but stays a documented risk; kkamak-dev exclusion is

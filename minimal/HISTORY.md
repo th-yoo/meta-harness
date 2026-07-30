@@ -557,6 +557,24 @@ per-task reviews + final whole-branch review + one fix wave; commits
   trials scored by gate-outcome deltas precisely because real work has no
   grader; ~10% false-accept = the quantified blind spot; bench stays the
   sharp instrument.
+- **Late-day (same session): adapters SEALED + first crank round + leak-rule
+  amendment.** (1) Harness adapters MERGED + PUSHED in the kkamak repo (260
+  tests; final review 3 Important all fixed pre-merge; both dogfood lessons
+  implemented in the NEW kernel; import-closure packaging test). (2)
+  **Pre-crank BASELINE sealed** (kkamak `docs/dogfood-log.md` top block +
+  snapshot `ed95d71` + memory): 25 cycles / 5 catch all round-1 / 13
+  skippedStop / checkMs median 898ms — descriptive anchor ONLY, never a
+  control arm. (3) **km-crank round 1 vs kkamak evidence** (go received):
+  proposer bullet → review gate REJECTED ("leak: path-like") → ledgered; no
+  candidate, no trial — third lifetime rejection, machinery E2E on real
+  dogfood data. Rejection trigger = false positive (prose slash in
+  "filters/qualifies") → **leak rule amended** (`19196e2..605a407`): prose
+  word/word passes; anchored/multi-segment/extension/non-word/PATH_WORDS
+  still caught. The amendment itself went review → re-review → ruling: the
+  controller's unsubstantiated "layer 2 catches it" claim was CAUGHT (layer
+  2 has no leak check — now documented as layer 1 being the only leak
+  guard), and three residual classes ruled + test-locked. Office Slack
+  SITREP transport gap found, deprioritized by user.
 
 | # | Date | Candidate | Arms (sparql k=10 unless noted) | p | Guards | Verdict |
 |---|---|---|---|---|---|---|
