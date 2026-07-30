@@ -242,6 +242,22 @@ function medianOf(xs: number[]): number | null {
   return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2
 }
 
+/** Same shape guard as score.ts's isUsable (rounds is an array, check is a
+ * string) — duplicated locally rather than exported+imported, matching this
+ * file's existing precedent (isJoinableSensorLine above) of a small local
+ * mirror over adding cross-module coupling for a leaf CLI concern. Task 2
+ * round-1 review Minor: defense-in-depth so a malformed raw line (missing
+ * `check`/non-array `rounds`) can never reach the checkMs pooling below,
+ * even though scoreLines already filters such lines out of `result`
+ * upstream — this function reads the same raw `lines` array independently. */
+function isUsableSensorLine(l: unknown): l is SensorLineIn {
+  return (
+    typeof l === "object" && l !== null &&
+    Array.isArray((l as SensorLineIn).rounds) &&
+    typeof (l as SensorLineIn).check === "string"
+  )
+}
+
 /** Task 2 (fix-them-serialized-teacup plan): median per-round check time
  * (`checkMs`), grouped the SAME way scoreGroup buckets lines — (check, host)
  * or "(pooled)" under --pool — so a lookup by a rendered group's
@@ -251,12 +267,23 @@ function medianOf(xs: number[]): number | null {
  * test suite unaffected), same spirit as the local ExposureRow mirror
  * above. Absent entirely for a group where no line carries checkMs
  * (legacy lines / a field not yet emitted) — "when present" per the brief,
- * never printed as 0 or null. */
+ * never printed as 0 or null.
+ *
+ * SCOPE DIFFERENCE from M-tax (round-1 review Important): `mTaxMedianMs`
+ * (score.ts's scoreGroup) is clean-cycles-only. This function pools
+ * `checkMs` rounds from clean+catch+exhausted lines with no such filter —
+ * deliberate, not an oversight: catch/exhausted is exactly where M-tax's
+ * wait-inflation is worst (a failing round that sits on a human/subagent
+ * approval before the next Stop), so excluding those rounds from M-check
+ * would hide the very cycles the fix exists to see the true check time
+ * for. The two numbers print side-by-side on the same stats line with
+ * different populations — reader beware, but the populations are chosen on
+ * purpose, not accidentally mismatched. */
 function medianCheckMsByGroup(lines: SensorLineIn[], pool: boolean): Map<string, number> {
   const byKey = new Map<string, number[]>()
   for (const raw of lines) {
-    if (typeof raw !== "object" || raw === null) continue
-    const l = raw as SensorLineIn
+    if (!isUsableSensorLine(raw)) continue
+    const l = raw
     if (!Array.isArray(l.checkMs) || l.checkMs.length === 0) continue
     const check = pool ? "(pooled)" : l.check
     const host = pool ? "(pooled)" : (l.host ?? "unknown")
