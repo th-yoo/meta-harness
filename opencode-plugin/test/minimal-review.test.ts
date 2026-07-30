@@ -61,6 +61,37 @@ test("layer1 fails on path-like or file-extension tokens", () => {
   expect(r.pass).toBe(false)
 })
 
+test("layer1 allows plain prose word/word slashes (not path-like)", () => {
+  // 2026-07-30 live false-positive: "filters/qualifies" tripped the slash rule
+  const r = layer1Checks(
+    "When one value both filters/qualifies rows and populates an output field, derive the output binding independently of the filter.",
+  )
+  expect(r.violations.join(" ")).not.toContain("path-like")
+})
+
+test("layer1 allows and/or in prose", () => {
+  const r = layer1Checks("When a step can fail and/or block, do not retry until the cause is known.")
+  expect(r.violations.join(" ")).not.toContain("path-like")
+})
+
+test("layer1 still fails on anchored paths", () => {
+  const r = layer1Checks("When editing ./config, do not skip the tests until they pass.")
+  expect(r.pass).toBe(false)
+  expect(r.violations.join(" ")).toContain("path-like")
+})
+
+test("layer1 still fails on multi-segment paths", () => {
+  const r = layer1Checks("When touching scripts/build/run, do not skip the tests until they pass.")
+  expect(r.pass).toBe(false)
+  expect(r.violations.join(" ")).toContain("path-like")
+})
+
+test("layer1 still fails on non-word slash sides", () => {
+  const r = layer1Checks("When touching src_lib/main2, do not skip the tests until they pass.")
+  expect(r.pass).toBe(false)
+  expect(r.violations.join(" ")).toContain("path-like")
+})
+
 test("layer1 fails on backtick-quoted literals", () => {
   const r = layer1Checks("When you see `verify.sh` fail, do not proceed until it passes.", "sparql-university")
   expect(r.pass).toBe(false)

@@ -67,7 +67,27 @@ export function extractJsonObject(text: string, keyRe: RegExp): any | undefined 
 const WORD_CAP = 60
 const TRIGGER_RE = /^when\b/i
 const HARD_GATE_RE = /^do not\b[\s\S]*\buntil\b/i
-const PATHLIKE_RE = /\/|\.(py|js|ts|sh|md|json|txt|ya?ml|c|cpp|rs|go|java)\b/i
+const EXTENSION_RE = /\.(py|js|ts|sh|md|json|txt|ya?ml|c|cpp|rs|go|java)\b/i
+/** A slash counts as path-like only when the token actually looks like a
+ * path: anchored (./ ../ ~/ /abs), multi-segment (2+ slashes), or with a
+ * non-plain-word side (digits/underscores/dots). A single slash between two
+ * plain alphabetic words is prose ("and/or", "filters/qualifies") — live
+ * false-positive 2026-07-30, km-crank round 1 rejected a bullet for
+ * "filters/qualifies". Bare word/word real paths (e.g. "src/main") slip
+ * this layer by design; layer 2's domain_swap/behavior_level rubric checks
+ * remain the net for those. */
+function hasPathLikeToken(bullet: string): boolean {
+  if (EXTENSION_RE.test(bullet)) return true
+  for (const raw of bullet.split(/\s+/)) {
+    if (!raw.includes("/")) continue
+    const tok = raw.replace(/^["'(\[]+/, "").replace(/["'.,;:!?)\]]+$/, "")
+    if (/^(\.{1,2}\/|~\/|\/)/.test(tok)) return true
+    if ((tok.match(/\//g) ?? []).length >= 2) return true
+    const [left, right] = tok.split("/")
+    if (!/^[a-z]+$/i.test(left ?? "") || !/^[a-z]+$/i.test(right ?? "")) return true
+  }
+  return false
+}
 // task-id fragments generic enough to appear in legitimate behavior rules
 const LEAK_STOPWORDS = new Set(["task", "tasks", "best", "data", "file", "test", "tests", "count"])
 
@@ -82,7 +102,7 @@ export function layer1Checks(bullet: string, taskId?: string): Layer1Result {
   if (words > WORD_CAP) violations.push(`over ${WORD_CAP} words (${words})`)
   if (!TRIGGER_RE.test(bullet.trim()) && !HARD_GATE_RE.test(bullet.trim()))
     violations.push(`form: neither trigger ("When …, …") nor hard-gate ("Do not … until …")`)
-  if (PATHLIKE_RE.test(bullet)) violations.push("leak: path-like or file-extension token")
+  if (hasPathLikeToken(bullet)) violations.push("leak: path-like or file-extension token")
   if (bullet.includes("`")) violations.push("leak: backtick-quoted literal")
   if (taskId) {
     const low = bullet.toLowerCase()
