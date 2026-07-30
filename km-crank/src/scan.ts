@@ -38,13 +38,16 @@ export interface SensorLine {
   app: string
   /** cc-gate-plugin's skipped-Stop marker (Task 1, fix-them-serialized-teacup
    * plan) — see cc-gate-plugin/src/types.ts's SensorLine for full semantics.
-   * Declared here so the type matches the wire shape; `parseSensorLines`
-   * below EXCLUDES lines carrying it from its returned array (round-3 review
-   * "Important 6" — its per-queued-prompt multiplicity would otherwise skew
-   * this repo's new-line-volume contest/threshold toward noisy repos). Note:
-   * gauge-only lines (also `rounds: []`) share this same pre-existing
-   * distortion and are NOT filtered here — recorded as a known minor,
-   * out of scope for this fix. */
+   * Declared here so the type matches the wire shape. `parseSensorLines`
+   * PASSES lines carrying it through like any other optional field (round-2
+   * review finding: the parser feeds BOTH crank.ts's volume contest AND
+   * trial-verdict.ts's `evaluateGateTrial` join in production
+   * (`readUnionSensorLines`, crank.ts) — dropping the field at parse time
+   * would make trial-verdict.ts's rule-7 exclusion unreachable in the real
+   * runtime path, and would silently drop a host's only trial-window
+   * activity from `runTrialScan`'s SITREP host-coverage list). The
+   * volume-contest/threshold consumer excludes it separately, at its own
+   * counting site — see `newLineCount` below. */
   skippedStop?: true
 }
 
@@ -75,17 +78,11 @@ function isSensorLine(v: unknown): v is SensorLine {
  * lines, malformed JSON, and lines not matching the SensorLine shape are
  * silently skipped — never throws. `text` is assumed to already be
  * whole-lines-only (crank.ts's byte-offset reader trims any trailing
- * partial line before calling this).
- *
- * Task 1 (fix-them-serialized-teacup plan, round-3 review "Important 6"):
- * lines carrying `skippedStop:true` are ALSO excluded from the returned
- * array — not just filtered from a downstream count. This repo's crank.ts
- * builds its new-line-volume contest/threshold, `aggregate()`'s totals, and
- * `notable()`'s selection directly off this array's length/contents, so
- * excluding here is what keeps a queued-prompt-heavy repo from looking
- * artificially "busier" than one with equivalent real gate cycles.
- * `cleanAccepts` (below) was already immune (`rounds:[]` never matches
- * `["accepted"]`) — this is about the raw count, not that field.
+ * partial line before calling this). Extra optional fields (including
+ * `skippedStop`) pass through untouched on the parsed objects — this parser
+ * does not decide what any particular consumer should do with them; see
+ * `newLineCount` below for the one consumer (crank.ts's volume
+ * contest/threshold) that needs to discount skipped-stop lines.
  */
 export function parseSensorLines(text: string): SensorLine[] {
   const out: SensorLine[] = []
@@ -98,9 +95,33 @@ export function parseSensorLines(text: string): SensorLine[] {
     } catch {
       continue
     }
-    if (isSensorLine(parsed) && !parsed.skippedStop) out.push(parsed)
+    if (isSensorLine(parsed)) out.push(parsed)
   }
   return out
+}
+
+/**
+ * Count of `lines` that are eligible for the new-line-volume
+ * contest/threshold (Task 1, fix-them-serialized-teacup plan, round-2
+ * review finding) — every line EXCEPT `skippedStop` ones. Scoped narrowly
+ * to this one consumer (crank.ts's `totalNew`/target-selection reduce,
+ * `crank.ts:200,251`): a queued prompt can emit one skipped-stop line per
+ * repeat, so counting them here would let a prompt-queuing habit difference
+ * make a repo look artificially "busier" than one with equivalent real gate
+ * cycles, and could win it that round's proposal target or trip the
+ * threshold on noise alone. Other consumers of the raw `SensorLine[]`
+ * (`aggregate()`, `notable()`, evidence rendering, the SITREP's per-repo
+ * `newLines` count) are NOT filtered by this function — `aggregate()`'s
+ * cleanAccepts/fixCycles/exhausted/interrupted sub-counters are already
+ * immune by construction (a skipped-stop line has `rounds: []`,
+ * `gateExhausted: false`, `interrupted: false`, so none of those branches
+ * fire for it); its `total`/`medianDurationMs` share gauge-only's existing,
+ * pre-existing, out-of-scope distortion (both also carry `rounds: []`).
+ */
+export function newLineCount(lines: SensorLine[]): number {
+  let n = 0
+  for (const l of lines) if (!l.skippedStop) n++
+  return n
 }
 
 export interface Aggregate {

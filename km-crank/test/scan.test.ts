@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test"
-import { parseSensorLines, aggregate, notable, type SensorLine } from "../src/scan.ts"
+import { parseSensorLines, aggregate, notable, newLineCount, type SensorLine } from "../src/scan.ts"
 
 function line(overrides: Partial<SensorLine> = {}): SensorLine {
   return {
@@ -58,19 +58,68 @@ test("parseSensorLines: empty text -> empty array", () => {
   expect(parseSensorLines("")).toEqual([])
 })
 
-// ── Task 1 (fix-them-serialized-teacup plan): skippedStop exclusion ────────
+// ── Task 1 (fix-them-serialized-teacup plan, round-2 review): skippedStop
+// passes THROUGH the parser (restored, so trial-verdict.ts's rule-7 filter
+// is reachable in the real production path); only the volume-contest
+// counting site (newLineCount) discounts it. ───────────────────────────────
 
-test("parseSensorLines: excludes skippedStop lines entirely (not just from a downstream count) — keeps the volume contest/threshold from being skewed by queued-prompt multiplicity", () => {
+test("parseSensorLines: skippedStop lines pass through like any other optional field (NOT dropped by the parser)", () => {
   const real = line({ sessionID: "real" })
   const skipped = line({ sessionID: "skipped", rounds: [], skippedStop: true })
   const text = `${JSON.stringify(real)}\n${JSON.stringify(skipped)}\n`
-  expect(parseSensorLines(text)).toEqual([real])
+  expect(parseSensorLines(text)).toEqual([real, skipped])
 })
 
-test("parseSensorLines: repeated skippedStop lines in one session all drop out, not just the first", () => {
+test("parseSensorLines: repeated skippedStop lines in one session all pass through, not just the first", () => {
   const skipped = line({ sessionID: "s1", rounds: [], skippedStop: true })
   const text = Array.from({ length: 3 }, () => JSON.stringify(skipped)).join("\n") + "\n"
-  expect(parseSensorLines(text)).toEqual([])
+  expect(parseSensorLines(text)).toEqual([skipped, skipped, skipped])
+})
+
+// ── newLineCount: the narrow, single-consumer discount ─────────────────────
+
+test("newLineCount: counts every line except skippedStop ones", () => {
+  const lines = [
+    line({ sessionID: "a" }),
+    line({ sessionID: "b", rounds: [], skippedStop: true }),
+    line({ sessionID: "c" }),
+    line({ sessionID: "d", rounds: [], skippedStop: true }),
+  ]
+  expect(newLineCount(lines)).toBe(2)
+})
+
+test("newLineCount: empty input -> 0", () => {
+  expect(newLineCount([])).toBe(0)
+})
+
+test("newLineCount: all-real input counts every line", () => {
+  const lines = [line({ sessionID: "a" }), line({ sessionID: "b" })]
+  expect(newLineCount(lines)).toBe(2)
+})
+
+test("newLineCount: all-skipped-stop input counts zero", () => {
+  const lines = [
+    line({ sessionID: "a", rounds: [], skippedStop: true }),
+    line({ sessionID: "a", rounds: [], skippedStop: true }),
+  ]
+  expect(newLineCount(lines)).toBe(0)
+})
+
+// ── aggregate(): skippedStop lines don't misclassify into any sub-counter
+// (round-2 review: "verify the rest" — cleanAccepts was already checked) ───
+
+test("aggregate: a skippedStop line (rounds:[], gateExhausted:false, interrupted:false) contributes to NO sub-counter except total/medianDurationMs", () => {
+  const a = aggregate([
+    line({ sessionID: "real", rounds: ["accepted"] }), // clean
+    line({ sessionID: "skip", rounds: [], skippedStop: true, gateExhausted: false, interrupted: false, durationMs: 0 }),
+  ])
+  expect(a.cleanAccepts).toBe(1) // only the real clean line
+  expect(a.fixCycles).toBe(0)
+  expect(a.exhausted).toBe(0)
+  expect(a.interrupted).toBe(0)
+  // total/medianDurationMs are NOT filtered by aggregate() — scoped
+  // out-of-scope for this fix, same pre-existing shape as gauge-only lines.
+  expect(a.total).toBe(2)
 })
 
 // ── aggregate ────────────────────────────────────────────────────────────────

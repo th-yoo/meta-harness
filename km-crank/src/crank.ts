@@ -49,7 +49,7 @@ import { ClaudeCodeHost } from "../../opencode-plugin/src/adapters/claude-code/c
 import type { StagedArtifactDescriptor } from "../../opencode-plugin/src/host.ts"
 import type { SensorLineIn } from "../../cc-gate-plugin/src/score.ts"
 
-import { parseSensorLines, aggregate, notable, type SensorLine } from "./scan.ts"
+import { parseSensorLines, aggregate, notable, newLineCount, type SensorLine } from "./scan.ts"
 import { readPositions, writePositionsAtomic, type Positions } from "./positions.ts"
 import { readSnapshotAges } from "./snapshot-age.ts"
 import { unionRawLines } from "./sensor-union.ts"
@@ -131,9 +131,13 @@ function readNewSensorLines(sensorPath: string, fromOffset: number): { lines: Se
  * sensor-union.ts), deduped by full raw-line identity BEFORE parsing. No
  * snapshot dir at all degrades to exactly the live-only read (pre-union
  * behavior). parseSensorLines validates the shared required fields and
- * passes extra optional fields (reinject / forced / gauge) through untouched
- * on the parsed objects, so the runtime values are full SensorLineIn rows;
- * the cast re-attaches the wider type.
+ * passes extra optional fields (reinject / forced / gauge / skippedStop)
+ * through untouched on the parsed objects, so the runtime values are full
+ * SensorLineIn rows; the cast re-attaches the wider type. This is what
+ * makes trial-verdict.ts's evaluateGateTrial (via runTrialScan below) the
+ * REAL production filter for skipped-stop lines (join rule 7, metrics AND
+ * density) — km-crank's own volume-contest discount (newLineCount, scan.ts)
+ * is a separate, narrower concern scoped to totalNew/target-selection only.
  */
 function readUnionSensorLines(repo: string): SensorLineIn[] {
   const sensorPath = path.join(repo, ".km", "gate-outcomes.ndjson")
@@ -197,7 +201,13 @@ async function main(): Promise<void> {
     return { repo, sensorPath, newLines: lines, newOffset }
   })
 
-  const totalNew = scans.reduce((sum, s) => sum + s.newLines.length, 0)
+  // Task 1 (fix-them-serialized-teacup plan, round-2 review finding):
+  // skipped-stop lines are counted OUT of the volume-contest/threshold input
+  // (newLineCount), scoped narrowly to this one consumer — the raw
+  // s.newLines array itself keeps them (aggregate()/notable()/evidence/the
+  // SITREP's per-repo count below are unfiltered on purpose, and
+  // trial-verdict.ts's readUnionSensorLines needs the unfiltered parse too).
+  const totalNew = scans.reduce((sum, s) => sum + newLineCount(s.newLines), 0)
 
   const repoResults: RepoEvidence[] = scans.map((s) => ({
     repo: s.repo,
@@ -247,8 +257,10 @@ async function main(): Promise<void> {
   //     round still posts its own skip log / other-repo work as usual.
 
   // Target = repo with the most new lines (ties keep array order / first).
+  // Same newLineCount discount as totalNew above — skipped-stop lines must
+  // not be able to win a repo that round's proposal target.
   let target = scans[0]!
-  for (const s of scans) if (s.newLines.length > target.newLines.length) target = s
+  for (const s of scans) if (newLineCount(s.newLines) > newLineCount(target.newLines)) target = s
   const targetRepo = target.repo
 
   const layer = layersFor(targetRepo, AGENT_ROLE)[1]! // project-global

@@ -15,6 +15,7 @@ import * as os from "node:os"
 import * as path from "node:path"
 
 import { unionRawLines } from "../src/sensor-union.ts"
+import { parseSensorLines } from "../src/scan.ts"
 import { parseExposureRows } from "../../opencode-plugin/src/trial-arm.ts"
 import {
   evaluateGateTrial,
@@ -906,6 +907,74 @@ describe("cross-host union verdict input (§7, final review item 3)", () => {
     if (r!.action.kind === "trial-keep") {
       expect(r!.action.detail?.perArm.baseline).toEqual({ cycleCount: 25, sessionCount: 25, sessionsWithGateCycle: 23 })
       expect(r!.action.detail?.perArm.trial).toEqual({ cycleCount: 25, sessionCount: 25, sessionsWithGateCycle: 23 })
+    }
+  })
+})
+
+// ── 6. Composition: disk -> scan.ts's REAL parseSensorLines -> runTrialScan
+// (round-2 review finding). Everywhere else in this file feeds
+// evaluateGateTrial/runTrialScan hand-built SensorLineIn fixtures — this is
+// the one test that goes through the actual production parser reading an
+// actual file off disk, proving (a) skipped-stop lines are NOT dropped by
+// the parser (so trial-verdict.ts's rule-7 exclusion is reachable at all in
+// production, not just exercised by unit fixtures), (b) rule 7 still
+// excludes them from BOTH metrics and density once they reach
+// evaluateGateTrial, and (c) a host whose ONLY trial-window activity is a
+// skipped-stop line still appears in runTrialScan's SITREP host coverage.
+
+describe("composition: disk -> parseSensorLines -> runTrialScan (round-2 review, real production path)", () => {
+  test("a skipped-stop line read off disk via the real parser is excluded from metrics AND density, but its host still appears in SITREP coverage", () => {
+    const { lines, rows } = aaStream() // meets all §5 floors on its own
+    const QUEUED_HOST = "queued-host"
+    const queuedSession = "baseline-queued-only"
+    // A session whose ONLY sensor line is a skipped-stop marker (the shape
+    // prompt.ts actually emits: rounds:[], accepted:true, gateExhausted:
+    // false, interrupted:false, durationMs:0), on a host that appears
+    // NOWHERE else in the stream.
+    rows.push(mkRow(queuedSession, "baseline"))
+    lines.push(
+      mkLine(queuedSession, {
+        host: QUEUED_HOST,
+        rounds: [],
+        accepted: true,
+        gateExhausted: false,
+        interrupted: false,
+        durationMs: 0,
+        skippedStop: true,
+      }),
+    )
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "km-trial-verdict-disk-"))
+    const sensorPath = path.join(dir, "gate-outcomes.ndjson")
+    fs.writeFileSync(sensorPath, lines.map((l) => JSON.stringify(l)).join("\n") + "\n", "utf-8")
+
+    // The REAL parser, reading the REAL file off disk (mirrors
+    // readUnionSensorLines's own parseSensorLines(unioned) call in crank.ts,
+    // minus the union step itself — already covered by section 5 above).
+    const diskText = fs.readFileSync(sensorPath, "utf-8")
+    const parsed = parseSensorLines(diskText) as unknown as SensorLineIn[]
+
+    // Sanity: the parser must NOT have dropped the skipped-stop line —
+    // this is what makes the rest of this test meaningful.
+    expect(parsed.length).toBe(lines.length)
+    expect(parsed.some((l) => l.sessionID === queuedSession && l.skippedStop === true)).toBe(true)
+
+    const deps = fakeDeps({
+      trials: { "/repoA/store": mkTrial() },
+      linesByRepo: { "/repoA": parsed },
+      rowsByRepo: { "/repoA": rows },
+    })
+    const r = runTrialScan(["/repoA"], deps)
+    expect(r!.action.kind).toBe("trial-keep")
+    if (r!.action.kind === "trial-keep") {
+      // (c) host coverage: the queued-only host is visible in the SITREP
+      // even though it contributed zero cycles to any arm.
+      expect(r!.action.detail?.hosts).toContain(QUEUED_HOST)
+      // (b) metrics + density exclusion: baseline's numbers are UNCHANGED
+      // from plain aaStream (25/25/23) — the extra skipped-stop-only
+      // session moved neither cycleCount nor sessionCount nor
+      // sessionsWithGateCycle.
+      expect(r!.action.detail?.perArm.baseline).toEqual({ cycleCount: 25, sessionCount: 25, sessionsWithGateCycle: 23 })
     }
   })
 })
