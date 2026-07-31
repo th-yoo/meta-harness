@@ -3,13 +3,25 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ✅ SESSION 2026-07-31 (`yoo-dev` office) — PHASE 2 COMPLETE + LIVE-PROVEN + MERGED — meta-harness main @ `fdec2f7`+seal, pushed
+## ✅ SESSION 2026-07-31 (`yoo-dev` office) — PHASE 2 COMPLETE + LIVE-PROVEN + MERGED (GA7) + DOGFOOD DAY 2 — meta-harness main pushed; kkamak @ `65c9546`
+
+**Dogfood day 2 (same session):** D1 closed (`ad63d3b`: kernel emits
+pluginVersion/forced) + real `marker` milestone (`65c9546`, 283 tests) —
+both independently reviewed clean pre-commit. Notable: the dogfood session
+SELF-CAUGHT a spec misreading present in both my task prompt and its own
+README ("session-carryover" marker never existed in the frozen contract),
+paused on a decision menu, and built the contract-true semantics after the
+ruling. ~4 real-work clean cycles today, ZERO organic blocks — capture
+armed and waiting; do NOT manufacture blocks in the real repo (F2 snapshot
+one-way door; livetest clone pattern exists for pipeline demos). Next
+natural kkamak task: wire `cfg.marker` through the CC adapter (session
+noted adapters don't wire it yet).
 
 **RESUME PROMPT (either host):**
 ```
 Resume kkamak (meta-harness), 2026-08-01+. Read docs/resume.md FIRST (top
 block) + docs/2026-07-30-enhancement-roadmap.md +
-docs/2026-07-31-phase2-fixture-registration.md.
+docs/2026-07-31-phase2-fixture-registration.md. HISTORY GA7 = Phase 2.
 
 WHERE WE ARE: Phase 0+1+2 COMPLETE. Phase 2 (blocked-cycle → bench-fixture
 harvest) built via SDD (plan docs/superpowers/plans/2026-07-31-phase2-bench-fixture-harvest.md,
