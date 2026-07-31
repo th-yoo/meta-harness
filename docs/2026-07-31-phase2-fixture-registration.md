@@ -28,8 +28,15 @@ Same status as the Phase 1 check-output sidecar:
   `scripts/km-sensors-sync.sh` — its `FILES=(gate-outcomes trial-arms)` line
   does not list them (F2), and this note adds nothing to that list.
 - No `SensorLine` field changed or added. The check-output/fixture-ref
-  capture sits strictly AFTER the Stop decision is finalized and emitted —
-  it cannot influence a block/allow outcome and is invisible to it.
+  capture runs AFTER the Stop decision is finalized but BEFORE it is
+  emitted — in `cc-gate-plugin/src/hook-cli.ts`, `captureFixtureRef` is
+  `await`ed ahead of `emit(buildStopOutput(...))`. It cannot change the
+  decision VALUE: every failure path inside `captureFixtureRef` is caught
+  and swallowed (fail-open, verified). What it CAN do is delay delivery of
+  a block outcome to the agent, by a bounded worst case of roughly 60s —
+  four sequential git calls (`rev-parse`, `add -A`, `write-tree`,
+  `update-ref`), each under its own 15s SIGKILL timer
+  (`cc-gate-plugin/src/fixture-ref.ts`'s `bunGitRunner`).
 - No §4.3 calibration metric is touched by this phase — the fixture ref is
   provenance for harvested terminal-bench-2 tasks, not a scored signal.
 
@@ -65,6 +72,16 @@ allowlisted yet.
   capture-time archive before rerunning the check. A harvested task whose
   check depends on fixtures outside those three directory names is not
   protected against an agent editing them to force a pass.
+- **Hygiene is best-effort, pattern-based.** The materialize step strips
+  `.env*`, `.npmrc`, and `.netrc` recursively (any depth) from
+  `environment/repo/`, but that is a fixed name-pattern list, not a secret
+  scanner — it does not catch, e.g., a credential pasted into a tracked
+  file with an unmatched name. Separately, transcript text lands verbatim
+  in `instruction.md` and `fixture.json` (original session ask, most
+  recent instruction, failing-check excerpt) with no redaction at all. A
+  harvested task dir must be manually scanned before it is committed; that
+  scan is part of the burden the per-repo inclusion ruling above already
+  takes on.
 
 ## Smoke evidence (Task 5, this seal)
 

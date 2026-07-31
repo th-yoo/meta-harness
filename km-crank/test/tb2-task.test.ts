@@ -5,7 +5,6 @@ describe("renderTaskToml", () => {
   const toml = renderTaskToml({
     name: "harvested-kkamak-20260731-101500",
     description: "Harvested blocked cycle: bun test failing after agent turn",
-    check: "bun test",
     agentTimeoutSec: 900, verifierTimeoutSec: 300,
   })
   test("carries schema 1.1, name, harvested category, internet on", () => {
@@ -42,6 +41,19 @@ describe("renderTestSh", () => {
   })
   test("semicolon-chained check is wrapped in subshell", () => {
     expect(renderTestSh({ check: "make build; make test" })).toContain("( make build; make test )")
+  })
+  test("tar extraction failure fails closed: reward 0, exit before running the check (finding M6)", () => {
+    expect(sh).toContain("if ! tar -xf /tests/pristine.tar -C /app; then")
+    const tarFailIdx = sh.indexOf("if ! tar -xf /tests/pristine.tar -C /app; then")
+    expect(tarFailIdx).toBeGreaterThanOrEqual(0)
+    const failBranch = sh.slice(tarFailIdx)
+    const exitIdx = failBranch.indexOf("exit 0")
+    const rewardZeroIdx = failBranch.indexOf('echo 0 > /logs/verifier/reward.txt')
+    const checkIdx = failBranch.indexOf("if ( bun test ); then")
+    expect(rewardZeroIdx).toBeGreaterThan(0)
+    expect(exitIdx).toBeGreaterThan(rewardZeroIdx)
+    // the fail-closed branch's exit must precede the normal check invocation
+    expect(exitIdx).toBeLessThan(checkIdx)
   })
 })
 

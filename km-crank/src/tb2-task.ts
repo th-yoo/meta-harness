@@ -4,7 +4,7 @@
 export const TEST_PRISTINE_GLOBS = ["test", "tests", "__tests__"]  // dirs restored by the tamper guard
 
 export function renderTaskToml(a: {
-  name: string; description: string; check: string
+  name: string; description: string
   agentTimeoutSec: number; verifierTimeoutSec: number
 }): string {
   return `schema_version = "1.1"
@@ -57,8 +57,15 @@ mkdir -p /logs/verifier
 cd /app
 # Tamper guard: the check lives inside the repo, so an agent could "pass"
 # by editing the tests. Restore test dirs from the capture-time archive.
+# Fail CLOSED if the archive won't extract: a torn/tampered pristine.tar
+# must never let the check run against unrestored (possibly agent-edited)
+# test files — reward 0 and stop, rather than continuing on a shakier
+# guarantee.
 if [ -f /tests/pristine.tar ]; then
-  tar -xf /tests/pristine.tar -C /app
+  if ! tar -xf /tests/pristine.tar -C /app; then
+    echo 0 > /logs/verifier/reward.txt
+    exit 0
+  fi
 fi
 if ( ${a.check} ); then
   echo 1 > /logs/verifier/reward.txt

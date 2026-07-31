@@ -104,6 +104,54 @@ function scratchRepoWithOverrides(over: { treeSha?: string; transcriptPath?: str
   return dir
 }
 
+/** Nested secrets at depth 2 (`packages/sub/.env`) plus a top-level
+ * `.npmrc` — exercises the RECURSIVE hygiene strip (finding I2). A sibling
+ * file in the same nested dir proves the strip removes only the matched
+ * files, not the directory tree around them. */
+function scratchRepoWithNestedSecrets(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "harvest-secrets-"))
+  sh(dir, "git init -q && git config user.email t@t && git config user.name t")
+  fs.mkdirSync(path.join(dir, "test"))
+  fs.writeFileSync(path.join(dir, "test", "x.test.ts"), "// t\n")
+  fs.writeFileSync(path.join(dir, "app.ts"), "export const x = 1\n")
+  fs.mkdirSync(path.join(dir, ".km"), { recursive: true })
+  fs.writeFileSync(path.join(dir, ".km", "runtime-state.json"), "{}\n")
+  fs.mkdirSync(path.join(dir, "packages", "sub"), { recursive: true })
+  fs.writeFileSync(path.join(dir, "packages", "sub", ".env"), "SECRET=deep\n")
+  fs.writeFileSync(path.join(dir, "packages", "sub", "index.ts"), "export const y = 2\n")
+  fs.writeFileSync(path.join(dir, ".npmrc"), "//registry.npmjs.org/:_authToken=shh\n")
+  fs.writeFileSync(path.join(dir, ".netrc"), "machine example.com login x password shh\n")
+  sh(dir, "git add -A && git commit -qm init")
+  sh(dir, "git add -A && git write-tree > .treesha")
+  const treeSha = fs.readFileSync(path.join(dir, ".treesha"), "utf-8").trim()
+  sh(dir, `git update-ref refs/kkamak/fixtures/100-scratch-r1 ${treeSha}`)
+  fs.writeFileSync(path.join(dir, ".km", "fixture-refs.ndjson"),
+    JSON.stringify({ ts: 100, sessionID: "scratchsess", round: 1, check: "exit 1",
+      headSha: "x", treeSha, ref: "refs/kkamak/fixtures/100-scratch-r1" }) + "\n")
+  fs.writeFileSync(path.join(dir, ".km", "check-output.ndjson"), "")
+  return dir
+}
+
+/** Fixture-ref record carrying a `check` override — for exercising the
+ * empty/whitespace-check rejection (finding M8). */
+function scratchRepoWithCheck(check: string): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "harvest-check-"))
+  sh(dir, "git init -q && git config user.email t@t && git config user.name t")
+  fs.mkdirSync(path.join(dir, "test"))
+  fs.writeFileSync(path.join(dir, "test", "x.test.ts"), "// t\n")
+  fs.writeFileSync(path.join(dir, "app.ts"), "export const x = 1\n")
+  fs.mkdirSync(path.join(dir, ".km"), { recursive: true })
+  sh(dir, "git add -A && git commit -qm init")
+  sh(dir, "git add -A && git write-tree > .treesha")
+  const treeSha = fs.readFileSync(path.join(dir, ".treesha"), "utf-8").trim()
+  sh(dir, `git update-ref refs/kkamak/fixtures/100-scratch-r1 ${treeSha}`)
+  fs.writeFileSync(path.join(dir, ".km", "fixture-refs.ndjson"),
+    JSON.stringify({ ts: 100, sessionID: "scratchsess", round: 1, check,
+      headSha: "x", treeSha, ref: "refs/kkamak/fixtures/100-scratch-r1" }) + "\n")
+  fs.writeFileSync(path.join(dir, ".km", "check-output.ndjson"), "")
+  return dir
+}
+
 describe("harvestFixture", () => {
   test("refuses repos outside the allowlist", async () => {
     const dir = scratchRepo()
@@ -204,5 +252,42 @@ describe("harvestFixture", () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
     await expect(harvestFixture({ repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)] }))
       .rejects.toThrow()
+  })
+
+  test("recursive hygiene: nested .env, .npmrc, .netrc stripped at any depth (finding I2)", async () => {
+    const dir = scratchRepoWithNestedSecrets()
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    const taskDir = await harvestFixture({ repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)] })
+    expect(fs.existsSync(path.join(taskDir, "environment/repo/packages/sub/.env"))).toBe(false)
+    expect(fs.existsSync(path.join(taskDir, "environment/repo/.npmrc"))).toBe(false)
+    expect(fs.existsSync(path.join(taskDir, "environment/repo/.netrc"))).toBe(false)
+    // sibling file in the same nested dir survives — only matched names are stripped
+    expect(fs.existsSync(path.join(taskDir, "environment/repo/packages/sub/index.ts"))).toBe(true)
+  })
+
+  test("collision: harvesting into an already-existing task dir throws (finding M7)", async () => {
+    const dir = scratchRepo()
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    await harvestFixture({ repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)], taskName: "dup-task" })
+    await expect(harvestFixture({ repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)], taskName: "dup-task" }))
+      .rejects.toThrow(/already exists/)
+  })
+
+  test("empty check throws before assembly, no task dir created (finding M8)", async () => {
+    const dir = scratchRepoWithCheck("")
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    const before = fs.readdirSync(out)
+    await expect(harvestFixture({ repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)] }))
+      .rejects.toThrow(/check/)
+    expect(fs.readdirSync(out)).toEqual(before)
+  })
+
+  test("whitespace-only check throws before assembly, no task dir created (finding M8)", async () => {
+    const dir = scratchRepoWithCheck("   ")
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    const before = fs.readdirSync(out)
+    await expect(harvestFixture({ repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)] }))
+      .rejects.toThrow(/check/)
+    expect(fs.readdirSync(out)).toEqual(before)
   })
 })

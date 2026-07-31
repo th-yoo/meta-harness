@@ -42,6 +42,22 @@ function runOrThrow(cmd: string, cwd: string): void {
   }
 }
 
+/** Secrets hygiene, RECURSIVE (finding I2): strip `.env*`, `.npmrc`, and
+ * `.netrc` at ANY depth under `dir`, not just the top level — a tracked
+ * `packages/sub/.env` must not survive into a committed fixture any more
+ * than a top-level one would. Best-effort / pattern-based: see the
+ * registration note's Known Limitations for what this does NOT catch. */
+function stripSecretsRecursive(dir: string): void {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name)
+    if (entry.name.startsWith(".env") || entry.name === ".npmrc" || entry.name === ".netrc") {
+      fs.rmSync(p, { recursive: true, force: true })
+      continue
+    }
+    if (entry.isDirectory()) stripSecretsRecursive(p)
+  }
+}
+
 /** Single-quote a string for safe interpolation into `bash -c "..."`. Double
  * quotes leave `$` and backticks live (command/variable substitution), so
  * paths must be single-quoted with the standard '\'' escape — same pattern
@@ -104,6 +120,14 @@ export async function harvestFixture(opts: HarvestOptions): Promise<string> {
   if (!TREE_SHA_RE.test(ref.treeSha)) {
     throw new Error(`fixture-ref treeSha is not a valid 40-hex-char sha: ${JSON.stringify(ref.treeSha)}`)
   }
+  // Empty/whitespace check would render `if ( ); then` — broken bash in the
+  // rendered test.sh. Reject BEFORE any directory is created or any
+  // subprocess runs (finding M8).
+  if (ref.check.trim().length === 0) {
+    throw new Error(
+      `fixture-ref check is empty/whitespace-only for ref ${JSON.stringify(ref.ref)}: cannot render a verifier`,
+    )
+  }
   const join = joinFixture(ref, sidecar)
 
   let promptContext = {} as ReturnType<typeof extractPromptContext>
@@ -118,6 +142,12 @@ export async function harvestFixture(opts: HarvestOptions): Promise<string> {
 
   const taskName = opts.taskName ?? `harvested-${repoBasename}-${utcStamp(ref.ts)}`
   const taskDir = path.join(opts.outDir, taskName)
+  // mkdirSync(recursive) silently MERGES into an existing dir — refuse
+  // outright rather than let a second harvest quietly overwrite/interleave
+  // with a prior one's contents (finding M7).
+  if (fs.existsSync(taskDir)) {
+    throw new Error(`harvest refused: task dir already exists: ${taskDir}`)
+  }
   const envDir = path.join(taskDir, "environment")
   const repoDir = path.join(envDir, "repo")
   const testsDir = path.join(taskDir, "tests")
@@ -136,11 +166,11 @@ export async function harvestFixture(opts: HarvestOptions): Promise<string> {
   )
 
   // Secrets hygiene: host-local runtime state and secrets must not enter a
-  // committed fixture.
+  // committed fixture. `.km` is stripped top-level only (it is only ever
+  // materialized at the repo root); `.env*`/`.npmrc`/`.netrc` are stripped
+  // recursively — see stripSecretsRecursive above (finding I2).
   fs.rmSync(path.join(repoDir, ".km"), { recursive: true, force: true })
-  for (const entry of fs.readdirSync(repoDir)) {
-    if (entry.startsWith(".env")) fs.rmSync(path.join(repoDir, entry), { recursive: true, force: true })
-  }
+  stripSecretsRecursive(repoDir)
 
   // Pristine test archive: tamper guard restores these dirs before the
   // check runs, from the capture-time snapshot. Empty archive if none exist
@@ -158,7 +188,6 @@ export async function harvestFixture(opts: HarvestOptions): Promise<string> {
     renderTaskToml({
       name: taskName,
       description: `Harvested blocked cycle: '${ref.check}' failing (session ${ref.sessionID}, round ${ref.round})`,
-      check: ref.check,
       agentTimeoutSec: AGENT_TIMEOUT_SEC,
       verifierTimeoutSec: VERIFIER_TIMEOUT_SEC,
     }),
