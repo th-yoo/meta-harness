@@ -3,7 +3,27 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ IN FLIGHT 2026-07-31 (`yoo-dev`) — gauge corpus-replay build, T1+T2 of 5 COMPLETE — branch `gauge-corpus-replay` @ `27d0a03`, PUSHED
+## ✅ SESSION 2026-07-31/08-01 (`yoo-mac.local`) — GA9 CORPUS-REPLAY SEALED + MERGED · MacBook Phases 2+3 DEPLOYED — main @ `27d1ed3`+seal, pushed
+
+**Resumed the office handoff below; both steps done:**
+- **MacBook deploy (Phases 2+3):** `km-refresh.sh --force` OK; cache grep-verified (`fixture-ref.ts` + `captureFixtureRef` ×2 + `prompt-check` ×2, single `0.2.1/`). Both hosts now run Phases 1+2+3 live.
+- **Corpus-replay T3-T5 built + sealed (SDD, per-task reviews):** T3 deriver `43c4ef3`+`02ed9b8` (review forced lifecycle lock — model spend only under lock, fence re-checked under lock after acquire); T4 resolver `e69de78`+`0d81bb2` (3 under-specified mechanics adjudicated SOUND, recorded as plan annotations; pipefail bsdtar catch; real 7d-cap test); T5 report `34ef861`+`419a507`+`55c5b2a` (point-4 `≥90%?` verbatim + yes/no/n-a ruled SOUND; provenance pin so corpus-bench can never pool; FIX-1 drift footnote). Fable final whole-branch review: READY TO CLOSE YES. **MERGED `27d1ed3`, branch deleted.** Suites: cc-gate-plugin 552 + tsc clean. Full ruling record: HISTORY.md GA9 row + plan's Task-4 "Post-review rulings" + SDD ledger.
+- Live model-free `mine` smoke on this host: **198 records** in `.km/gauge-corpus/`.
+
+**NEXT (GO before spend, in order):**
+(1) **First real `derive` batch — SIZED GO REQUIRED** (amendment cost fence):
+    run `mine` fresh, then `derive --go <pending-count>` (haiku spend; report
+    corpus size first). Then `resolve` (model-free) + `report` → first
+    provenance-split M1v2 reading.
+(2) Office host: pull main; office cache already carries Phases 2+3 — no
+    action unless plugin version bumps.
+(3) Sustain dogfood daily both hosts (tmux `kkamak`).
+(4) Parked user decisions: §3 over-refusal redesign round (likely available,
+    single-use); kkamak gate-editing workload ruling (GA5); per-repo fixture
+    inclusion on first organic block. A/A ~Aug 12.
+DEADLINE ITEMS + RULES unchanged (blocks below).
+
+## ⏸ SUPERSEDED (handoff executed 2026-08-01, see block above) — 2026-07-31 (`yoo-dev`) — gauge corpus-replay build, T1+T2 of 5 COMPLETE — branch `gauge-corpus-replay` @ `27d0a03`, PUSHED
 
 **HANDOFF PROMPT (MacBook, 2026-07-31+):**
 ```
