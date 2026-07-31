@@ -43,9 +43,14 @@ const STALE_MS = 10 * 60 * 1000 // 10 minutes
 
 export type CorpusStage = "mined" | "derived" | "resolved"
 
-/** Corpus-bench (TB2) lane deferred — this schema reserves the provenance
- * value only; only "transcript" is ever produced today. */
-export type CorpusProvenance = "transcript" | "corpus-bench"
+/** Registered literal per the pre-verdict amendment (d869660, gauge v2
+ * pre-reg lines 46-47): `live | corpus-transcript | corpus-bench`. `"live"`
+ * is deliberately NOT a member here — live provenance exists only in
+ * verdict reporting computed over the sensor stream (`.km/gate-outcomes
+ * .ndjson`), never as a stored corpus record; this store persists the two
+ * corpus lanes only. Corpus-bench (TB2) lane deferred — this schema
+ * reserves the value only; only "corpus-transcript" is ever produced today. */
+export type CorpusProvenance = "corpus-transcript" | "corpus-bench"
 
 export interface CorpusRecordState {
   kind: "fixture-ref" | "commit" | "none"

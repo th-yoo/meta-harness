@@ -96,7 +96,7 @@ export function mineJsonl(jsonlText: string, opts: MineOptions): CorpusRecord[] 
     if (!repo || !sessionId || Number.isNaN(promptTs)) continue
 
     out.push({
-      provenance: "transcript",
+      provenance: "corpus-transcript",
       stage: "mined",
       repo,
       sessionId,

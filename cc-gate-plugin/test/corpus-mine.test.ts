@@ -28,7 +28,7 @@ describe("mineJsonl — filter matrix", () => {
     expect(records.length).toBe(1)
     expect(records[0]!.prompt).toBe("fix the login bug in src/auth.ts")
     expect(records[0]!.stage).toBe("mined")
-    expect(records[0]!.provenance).toBe("transcript")
+    expect(records[0]!.provenance).toBe("corpus-transcript")
   })
 
   test("isSidechain:true — excluded", () => {
@@ -124,7 +124,7 @@ describe("mineJsonl — field construction", () => {
 describe("dedupeEarliest", () => {
   function rec(over: Partial<CorpusRecord> = {}): CorpusRecord {
     return {
-      provenance: "transcript",
+      provenance: "corpus-transcript",
       stage: "mined",
       repo: REPO,
       sessionId: "sess-1",
@@ -218,6 +218,6 @@ describe("mine CLI — real subprocess", () => {
     expect(lines[0]!.promptSha256).toBe(sha256Hex("fix the login bug in src/auth.ts"))
     expect(lines[0]!.floorCheck).toBe("bun test")
     expect(lines[0]!.stage).toBe("mined")
-    expect(lines[0]!.provenance).toBe("transcript")
+    expect(lines[0]!.provenance).toBe("corpus-transcript")
   }, 20_000)
 })

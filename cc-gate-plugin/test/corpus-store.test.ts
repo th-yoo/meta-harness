@@ -17,7 +17,7 @@ function mkRepo(): string {
 
 function rec(over: Partial<CorpusRecord> = {}): CorpusRecord {
   return {
-    provenance: "transcript",
+    provenance: "corpus-transcript",
     stage: "mined",
     repo: "/repo/a",
     sessionId: "sess-1",
