@@ -255,7 +255,31 @@ test("loop coerces abstain when the revision also fails review", async () => {
 
 function mechanizeFailResult(command = "bun test --filter x"): ReviewResult {
   const violation = `mechanize_instead: failed (${command})`
-  return { verdict: "fail", violations: [violation], layer1: { pass: true, violations: [] }, checks: null, confidence: null }
+  return {
+    verdict: "fail",
+    violations: [violation],
+    layer1: { pass: true, violations: [] },
+    // affirmative fail: the reviewer filled the key and set pass:false —
+    // this is the only shape the immediate-abstain route should trigger on.
+    checks: allPassChecks({ mechanize_instead: { pass: false, command } }),
+    confidence: null,
+  }
+}
+
+/** Malformed reviewer reply: the `mechanize_instead` key is entirely absent
+ * from the parsed checks object (not merely failed) — e.g. the model
+ * dropped the key. computeVerdict still records a generic rubric violation
+ * for it (`mechanize_instead: failed ()`, `c` undefined), but this is NOT an
+ * affirmative fail and must NOT route to immediate abstain (finding I1). */
+function malformedMechanizeKeyResult(): ReviewResult {
+  const { mechanize_instead, ...rest } = allPassChecks()
+  return {
+    verdict: "fail",
+    violations: ["mechanize_instead: failed ()"],
+    layer1: { pass: true, violations: [] },
+    checks: rest as ReviewChecks,
+    confidence: null,
+  }
 }
 
 test("loop coerces immediate abstain on round 1 for a mechanize_instead violation, never calling revise", async () => {
@@ -274,6 +298,26 @@ test("loop coerces immediate abstain on round 1 for a mechanize_instead violatio
   expect(out.final.reason).toBe("mechanize_instead: failed (bun test --filter x)")
   expect(reviseCalled).toBe(false)
   expect(out.trail.length).toBe(1)
+})
+
+test("loop does NOT immediate-abstain when the reviewer reply omits the mechanize_instead key entirely (malformed reply) — falls through to ordinary revise (finding I1)", async () => {
+  let reviseCalled = false
+  const out = await reviewLoop({
+    proposal: proposal("bad bullet"),
+    rounds: 1,
+    review: async () => malformedMechanizeKeyResult(),
+    revise: async () => {
+      reviseCalled = true
+      return proposal("still bad")
+    },
+  })
+  expect(reviseCalled).toBe(true)
+  expect(out.trail.length).toBe(2) // round0 fail -> revise (proof the immediate-abstain route was NOT taken) -> round1 fail again -> rounds exhausted -> abstain
+  expect(out.staged).toBe(false)
+  expect(out.final.action).toBe("abstain")
+  // "review-fail: " prefix (not a bare mechanize_instead reason) proves the
+  // generic revise-then-exhausted path ran, not the immediate-abstain route.
+  expect(out.final.reason).toMatch(/^review-fail: /)
 })
 
 test("loop still calls revise for a non-mechanize failure (regression)", async () => {

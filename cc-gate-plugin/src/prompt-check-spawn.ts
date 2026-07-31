@@ -4,6 +4,13 @@
 // lockfile, and fires the detached prompt-check-cli (T3). Every failure is
 // swallowed: prompt-check problems must NEVER touch a session — same prime
 // directive as km-gauge's spawn seam (gauge/spawn.ts).
+//
+// Accepted cross-config drift window (M4): staleness here derives from
+// `cfg` as passed in at spawn time, while the detached prompt-check-cli
+// re-reads gate.json fresh on its own; a mid-run raise of checkTimeoutMs can
+// therefore cause a takeover mid-run and, at worst, one duplicate
+// excluded-class diagnostic line — accepted, and confined to the same
+// lost-race window the takeover retry above already tolerates.
 import fs from "node:fs"
 import path from "node:path"
 import type { GateConfig, SensorLine } from "./types.ts"
@@ -71,6 +78,10 @@ function isLockStaleOrGone(lockPath: string, staleMs: number, now: number): bool
  * throwing spawn — returns "skipped:error" rather than touching the hook.
  */
 export function maybeSpawnPromptCheck(input: MaybeSpawnPromptCheckInput): PromptCheckSpawnResult {
+  // Tracked across the try so the catch can attempt a best-effort ownership
+  // release (M2) — only set once OUR lock write has actually landed.
+  let ownedLockPath: string | undefined
+  let ownedSpawnTs: number | undefined
   try {
     const { cwd, sessionID, sensor, cfg, env, now, spawn } = input
 
@@ -102,11 +113,31 @@ export function maybeSpawnPromptCheck(input: MaybeSpawnPromptCheckInput): Prompt
       }
       if (!tryCreateLock(lockPath, content)) return "skipped:in-flight"
     }
+    // Our write landed (either branch above) — record ownership for a
+    // possible release below.
+    ownedLockPath = lockPath
+    ownedSpawnTs = content.spawnTs
 
     // 4. Spawn, detached, through the injected launcher.
     spawn(["bun", PROMPT_CHECK_CLI, cwd, sessionID, String(now)])
     return "spawned"
   } catch {
+    // M2: if OUR lock write landed but something after it threw (most
+    // commonly the injected spawn itself), release it here rather than
+    // leaving it stranded for the full staleMs outage window. Best-effort
+    // and ownership-gated: read the lock back and unlink only if its
+    // spawnTs still matches the one we just wrote — if it no longer
+    // matches, a concurrent process has already taken over and this must
+    // not touch it.
+    if (ownedLockPath !== undefined) {
+      try {
+        const raw = fs.readFileSync(ownedLockPath, "utf-8")
+        const parsed = JSON.parse(raw) as Partial<LockContent> | null
+        if (parsed?.spawnTs === ownedSpawnTs) fs.unlinkSync(ownedLockPath)
+      } catch {
+        // best-effort only — never let the release attempt itself surface
+      }
+    }
     return "skipped:error"
   }
 }

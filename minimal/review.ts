@@ -299,13 +299,31 @@ export async function reviewLoop(a: {
     const review = await a.review(bullet, current.reason ?? "")
     trail.push({ round, bullet, review })
     if (review.verdict === "pass") return { final: current, staged: true, trail }
-    const mechanizeViolation = review.violations.find((v) => v.startsWith("mechanize_instead"))
-    if (mechanizeViolation) {
-      // A mechanize_instead fail names a runnable check the bullet's effect
-      // should become — the revise seat could rephrase around mechanizability
-      // without fixing the underlying problem, so it is never given the
-      // chance (roadmap abstain-on-reject pin). Abstain immediately, verbatim
-      // reason, no revision round spent.
+    // Immediate-abstain routes ONLY on an AFFIRMATIVE reviewer fail of the
+    // mechanize_instead key (checks.mechanize_instead.pass === false) — a
+    // mechanize_instead fail names a runnable check the bullet's effect
+    // should become, and the revise seat could rephrase around
+    // mechanizability without fixing the underlying problem, so it is never
+    // given the chance (roadmap abstain-on-reject pin). Abstain immediately,
+    // verbatim reason, no revision round spent.
+    //
+    // A MISSING mechanize_instead key (malformed reviewer reply — `c`
+    // undefined) is NOT an affirmative fail: computeVerdict still records a
+    // generic rubric violation for it (`mechanize_instead: failed ()`), but
+    // that string-prefix match alone must never drive routing here — it
+    // falls through to the ordinary round-exhaustion / revise flow below,
+    // same as any other generic-failure round (finding I1: the string-only
+    // check previously coerced this malformed-reply case into the harshest
+    // path, with the revise seat locked out and an empty command logged).
+    //
+    // This branch is reachable on ANY round, not just round 0 — a
+    // post-revise re-review can affirmatively fail mechanize_instead again
+    // on a later round, and landing here then is correct behavior, not a
+    // bug.
+    if (review.checks?.mechanize_instead?.pass === false) {
+      const mechanizeViolation =
+        review.violations.find((v) => v.startsWith("mechanize_instead")) ??
+        `mechanize_instead: failed (${review.checks.mechanize_instead.command ?? ""})`
       const final: ProposalLike = { ...current, action: "abstain", reason: mechanizeViolation }
       return { final, staged: false, trail }
     }

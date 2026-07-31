@@ -3,13 +3,16 @@
 // sensor line (or fabricates a gauge-only line on fast-path Stops), and
 // consumes the pending file into the .done.json audit trail.
 //
-// NOTE (Task 1, fix-them-serialized-teacup plan, 2026-07-30): `rounds: []`
-// is no longer a UNIQUE gauge-only marker — prompt.ts's skippedStop lines
-// also carry `rounds: []`. The two are disambiguated by `skippedStop`
-// (classifyCycle checks it before the empty-rounds gauge-only branch,
-// score.ts). This module only ever fabricates gauge-only lines (never
-// skippedStop), so its own behavior is unchanged; the comments below are
-// updated for anyone reading `rounds: []` as sufficient on its own.
+// NOTE (Task 1, fix-them-serialized-teacup plan, 2026-07-30; updated Phase 3
+// Task 4, 5th pre-data amendment): `rounds: []` is no longer a UNIQUE
+// gauge-only marker — prompt.ts's skippedStop lines and prompt-check lines
+// (`promptCheck: true`) also carry `rounds: []`. There are now THREE
+// `rounds: []` classes (gauge-only / skipped-stop / prompt-check),
+// disambiguated by `skippedStop` then `promptCheck`, both checked before the
+// empty-rounds gauge-only branch (classifyCycle, score.ts). This module only
+// ever fabricates gauge-only lines (never skippedStop, never promptCheck),
+// so its own behavior is unchanged; the comments below are updated for
+// anyone reading `rounds: []` as sufficient on its own.
 //
 // SHADOW ONLY: the return value feeds appendSensor and nothing else — the
 // Stop DECISION is computed before this runs and is never touched.
@@ -123,10 +126,11 @@ function fabricateLine(
  * no-edit fast path). Returns the line to append: the input line (with a
  * gauge field when one was evaluated), a fabricated gauge-only line
  * (rounds: [] is A marker — real gate lines always carry ≥1 outcome — but
- * no longer THE marker: prompt.ts's skippedStop lines share the same
- * `rounds: []` envelope for an unrelated reason; `skippedStop` is what
- * actually distinguishes the two, see score.ts's classifyCycle), or
- * undefined when there is nothing to log.
+ * no longer THE marker: prompt.ts's skippedStop lines and prompt-check lines
+ * (`promptCheck: true`) share the same `rounds: []` envelope for unrelated
+ * reasons, giving three `rounds: []` classes in total; `skippedStop` then
+ * `promptCheck` are what actually distinguish them, see score.ts's
+ * classifyCycle), or undefined when there is nothing to log.
  */
 export async function shadowEvaluateAtStop(
   cwd: string,

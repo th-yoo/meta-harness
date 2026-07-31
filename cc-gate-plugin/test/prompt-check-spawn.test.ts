@@ -202,3 +202,23 @@ test("spawn throwing is swallowed (prime directive) → skipped:error", () => {
     }),
   ).not.toThrow()
 })
+
+test("spawn throwing releases the fresh lock (finding M2) → lock absent afterward, no stranded ~staleMs outage", () => {
+  const repo = mkRepo()
+  let result: string | undefined
+  expect(() => {
+    result = maybeSpawnPromptCheck({
+      cwd: repo,
+      sessionID: "sid-1",
+      sensor: TRIGGERED,
+      cfg: CFG,
+      env: {},
+      now: NOW,
+      spawn: () => {
+        throw new Error("boom")
+      },
+    })
+  }).not.toThrow()
+  expect(result).toBe("skipped:error")
+  expect(fs.existsSync(lockPathFor(repo))).toBe(false)
+})
