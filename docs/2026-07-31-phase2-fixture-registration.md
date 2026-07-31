@@ -5,6 +5,25 @@ sidecar the same way `docs/superpowers/specs/2026-07-30-phase1-check-output-side
 registered the check-output sidecar: evidence-only, host-local, one-way door
 until an explicit ruling says otherwise.
 
+## Live dogfood test (2026-07-31, pre-merge, office host)
+
+Full pipeline proven on a REAL agent session before merge, in a
+contamination-free clone (`~/tmp/kkamak-livetest`, own `.km`, not in REPOS —
+nothing entered the real sensor stream or the committed snapshot):
+branch build deployed to the installed cache via `km-refresh.sh --force`
+(grep-verified: `fixture-ref.ts` present, `captureFixtureRef` ×2 in cached
+hook-cli); a live Sonnet session given a TDD-red task produced a real
+3-round `verify-failed` exhausted cycle; capture wrote 2 fixture-refs + 2
+check-output records (rounds 1+2; exhausted final round not captured, per
+the documented limitation) with EXACT shared ts `1785458541926`; the tree
+ref resolved and carried the session's untracked red test file;
+`harvestFixture` (allowlist injected test-side; committed allowlist still
+empty) produced a complete task dir with the real transcript ask in
+instruction.md; `podman build` of the real repo + `tests/test.sh` returned
+**reward=0** — the fixture reproduces the blocked state. Data-quality note
+for a later refinement: `extractPromptContext`'s `lastUser` can pick up
+skill-injection content recorded as user-type transcript lines.
+
 ## What this is
 
 `cc-gate-plugin/src/fixture-ref.ts` (T1) snapshots the dirty working tree at

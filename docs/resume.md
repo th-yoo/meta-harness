@@ -3,6 +3,44 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION 2026-07-31 (`yoo-dev` office) — PHASE 2 COMPLETE + LIVE-PROVEN + MERGED — meta-harness main @ `fdec2f7`+seal, pushed
+
+**RESUME PROMPT (either host):**
+```
+Resume kkamak (meta-harness), 2026-08-01+. Read docs/resume.md FIRST (top
+block) + docs/2026-07-30-enhancement-roadmap.md +
+docs/2026-07-31-phase2-fixture-registration.md.
+
+WHERE WE ARE: Phase 0+1+2 COMPLETE. Phase 2 (blocked-cycle → bench-fixture
+harvest) built via SDD (plan docs/superpowers/plans/2026-07-31-phase2-bench-fixture-harvest.md,
+5 tasks, per-task reviews, fable whole-branch review + fix wave), then
+LIVE-PROVEN pre-merge on a real Sonnet session in a contamination-free
+kkamak clone (registration note "Live dogfood test" section: exact-ts
+sidecar pair, tree ref carries untracked file, harvest + podman reward=0),
+then fast-forward merged to main. Suites: cc-gate-plugin 404 · km-crank 225.
+OFFICE CACHE ALREADY CARRIES THE MERGED BUILD (km-refresh --force during
+live test, grep-verified). MacBook deploy PENDING: pull + km-refresh.sh
+--force there, grep-verify (fixture-ref.ts + captureFixtureRef ×2).
+Capture is LIVE on office: every real block event now writes fixture-refs.
+FIXTURE_ALLOWED_REPOS = [] — first real harvest needs per-repo inclusion
+ruling (a reviewed commit adding the repo). kkamak repo D1 CLOSED
+(ad63d3b: kernel emits pluginVersion/forced).
+
+QUEUE (GO before spend, in order): (1) MacBook pull + refresh (user-side);
+(2) sustain dogfood daily both hosts; (3) Phase 3 async promptCheck
+PRE-DATA AMENDMENT draft + mechanize-instead rubric key (window closes as
+trial nears ~Aug 12); (4) per-repo fixture inclusion ruling when first
+organic block lands; (5) sensors export + commit; (6) open ruling: does
+kkamak repo gate-editing workload feed §4.3 as real work (GA5, still
+unresolved). Later hardening (parked with rulings in final review):
+fixture-ref retention/prune, sid8 refname sanitize, .git-as-file worktree
+probes, transcript skill-injection filter for extractPromptContext.
+
+DEADLINE ITEMS + RULES unchanged (calibration-refresh before 2nd consumed
+KEEP; golden-window before 3rd; F1/F2; explicit go; grep-verify deploys;
+no bare "gate" in new docs; SITREP; per-task reviews).
+```
+
 ## ✅ SESSION 2026-07-30/31 (`yoo-mac.local`) — PHASE 1 COMPLETE + SEALED (GA6) + DEPLOYED (MacBook) — meta-harness through `3f92b9f`, pushed
 
 **RESUME PROMPT (either host; office-current as of 2026-07-31 midday):**
