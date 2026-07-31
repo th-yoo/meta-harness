@@ -165,6 +165,90 @@ labels only.
 This is the user's 2026-07-29 "fix or drop" directive made operational:
 v2 is the fix; v2's failure is the drop.
 
+**PRE-VERDICT AMENDMENT (2026-07-31, corpus-replay amplification; no §3 verdict
+has been read — the live window's class-C validity floor is unmet, recomputed
+2026-07-31 by direct script tally across all three armed streams' gauge fields:
+1 class-C of 72 gauge-classified lines UNION (kkamak 30: A1×1 · A2×11 · B×11 ·
+C×1 · D×6; meta-harness 40: A1×12 · A2×14 · B×6 · D×8; km-play 2: B×1 · D×1) —
+so every bar amended here is still unconsumed. Since gauge-classified lines are
+a lower bound on task-shaped prompts, the window has plausibly already crossed
+§3's 60-prompt over-refusal checkpoint with class-C still at 1 — meaning §3's
+own remedy (one extractor redesign round) may already be AVAILABLE on live
+grounds alone; this amendment is registered alongside, not instead of, that
+reading, and consuming the redesign round remains a separate §3 decision. Lineage note: styled as its own block rather than the italic
+*Amendment lineage* convention above, deliberately — those were pre-data
+amendments to unmeasured definitions; this is a pre-verdict amendment to an
+open, partially-accumulated window, a distinct class):** the class-C starvation
+risk is an event-rate problem of exactly the shape Phases 2-3 solved for other
+rare classes (GA7/GA8): the measurement is fine, the live event supply is thin.
+This amendment registers an **offline corpus-replay evaluation channel** that
+raises the event count feeding the M1v2 bar (and its validity floor) — no
+threshold, class definition, or shadow-invariant changes anywhere in this
+block; the two places it touches §3's decision-rule MECHANICS are stated
+explicitly in point 5, not left implicit.
+
+1. **Instrument.** The v2 deriver (same prompt, same model, same extraction and
+   validation path) may be run OFFLINE over two captured-prompt corpora:
+   (a) real task-shaped prompts mined from Claude Code session transcripts
+   (the JSONLs CC keeps under `~/.claude/projects/<slug>/`, joinable to sensor
+   cycles by sessionID + ts; Phase 2's `transcriptPath` capture where a
+   block-cycle fixture-ref exists); (b) TB2 bench task instructions, executed
+   against the task's containered state. Each corpus derivation is one
+   M1v2-unit with a mandatory `provenance` field:
+   `live` | `corpus-transcript` | `corpus-bench`.
+   **Prompt inputs may predate the v2 window — a stated departure from the
+   fresh-window framing, justified narrowly:** the fresh-window rule (§1)
+   bars v1-era MEASUREMENTS from v2 metrics; corpus replay produces fresh v2
+   OUTPUTS on old prompt INPUTS, and no v1 derivation output ever enters any
+   corpus number.
+2. **Execution-state resolution (pool eligibility).** A corpus-transcript
+   class-C derivation enters the M1v2 pool ONLY if its check executed against
+   a well-defined state, resolved in this order: (i) the same-cycle Phase 2
+   fixture-ref tree, where one exists (block cycles only — `fixture-ref.ts`
+   captures nothing on accepts); (ii) otherwise the first commit in that
+   repo whose committer timestamp is ≥ the prompt's cycle `ts`, same host as
+   the cycle's sensor-line `host` field, within 7 days — the post-turn commit approximates the state the turn
+   produced, adequate for M1v2's MECHANICAL property (command parses,
+   resolves its binaries/paths, exits 0/1) though never for correctness
+   judgments, which this pool does not feed; (iii) no resolvable state → the
+   derivation is DESCRIPTIVE only (class-C rate, extraction shape), never
+   pooled.
+3. **What pools and what does not.** M1v2 (executable precision) may be
+   computed over POOLED live + pool-eligible corpus-transcript class-C
+   derivations at the unchanged ≥90% bar, with the unchanged ≥5-event floor
+   satisfiable by the pool **provided ≥1 event is live** (an all-corpus M1v2
+   is reportable but cannot alone satisfy §3's M1v2 leg). Corpus-bench M1v2
+   is DESCRIPTIVE only (distribution shift: bench prompts are not dogfood
+   prompts). M0, M2, M3, M4, M5 are UNCHANGED and live-window-only — M2's
+   wrongness judgment stays a user-labeled live review; corpus-derived
+   would-block/wrongness evidence may be shown to the user AT that review as
+   context, never counted in M2's denominator.
+4. **Provenance split is mandatory in any verdict text** — pooled M1v2 must be
+   reported as `live a/b · corpus c/d · pooled ≥90%?`, never as one number.
+5. **§3 interaction rules (consumption ordering + unwind, explicit):**
+   (a) a pooled M1v2 pass permits the blocking-pilot design to be WRITTEN
+   (cheap, reversible doc work) but NOT registered or deployed — §3
+   decision-rule CONSUMPTION requires live-only class-C n≥5 confirming ≥90%
+   first; (b) a redesign round triggered SOLELY by a pooled M1v2 fail is
+   provisional: if live-only data at n≥5 later passes, the spent
+   redesign-round allowance is restored; (c) if live-only precision at n≥5
+   contradicts a pooled pass, the live reading GOVERNS, the pooled pass is
+   void, and any design written under (a) is shelved un-actioned. All three
+   recorded before data exists on either side.
+6. **Cost fence:** corpus replay is batch haiku spend outside §4's daily cap —
+   each batch needs its own explicit go, sized in the go (prompts × 1 call).
+7. **What this cannot do (restated to prevent drift):** it cannot unshadow the
+   gauge, cannot substitute for M2/M3, cannot lower any bar, cannot count
+   toward the §3 window's ≥30-prompt accumulation NOR toward the 60-prompt
+   over-refusal checkpoint (both live-only), and does not extend the
+   two-strike kill rule — a second M2-class failure still kills the
+   derivation regardless of any corpus result.
+8. **Build items (addendum to §6, each gated on its own explicit go):**
+   (i) transcript miner (session JSONLs → task-shaped prompt corpus,
+   sessionID/ts join); (ii) offline replay runner (deriver batch mode +
+   `provenance` stamping); (iii) execution-state resolver implementing
+   point 2's order.
+
 ## 4. Cost fencing (unchanged) + deploy
 
 Haiku, exactly 1 call per task-shaped prompt, daily cap 30
