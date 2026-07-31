@@ -30,7 +30,7 @@ function rec(over: Partial<CorpusRecord> = {}): CorpusRecord {
   }
 }
 
-function lockDirFor(repo: string): string {
+function lockPathFor(repo: string): string {
   return path.join(repo, CORPUS_DIR_REL, ".lock")
 }
 
@@ -82,7 +82,7 @@ describe("writeCorpus happy path", () => {
       .filter((n) => n.includes(".tmp-"))
     expect(leftovers.length).toBe(0)
     // lock released after a successful write
-    expect(fs.existsSync(lockDirFor(repo))).toBe(false)
+    expect(fs.existsSync(lockPathFor(repo))).toBe(false)
   })
 
   test("empty records array writes an empty file", () => {
@@ -94,16 +94,17 @@ describe("writeCorpus happy path", () => {
 })
 
 describe("writeCorpus lockfile contention", () => {
-  test("fresh lock held by another writer -> refuses, logs REFUSING, no lost update", () => {
+  test("wx-collision: fresh lock held by another writer -> refuses, logs REFUSING, no lost update", () => {
     const repo = mkRepo()
     // Seed the store with a first, already-committed write.
     expect(writeCorpus(repo, [rec()], () => {})).toBe(true)
     const before = fs.readFileSync(path.join(repo, CORPUS_FILE_REL), "utf-8")
 
-    // Simulate a concurrent in-flight writer holding a fresh lock.
-    const lockDir = lockDirFor(repo)
-    fs.mkdirSync(lockDir, { recursive: true })
-    fs.writeFileSync(path.join(lockDir, "lock.json"), JSON.stringify({ pid: 999, ts: Date.now() }))
+    // Simulate a concurrent in-flight writer holding a fresh lock: a
+    // pre-existing lock FILE (single atomic wx artifact, not a directory).
+    const lockPath = lockPathFor(repo)
+    fs.mkdirSync(path.dirname(lockPath), { recursive: true })
+    fs.writeFileSync(lockPath, JSON.stringify({ pid: 999, ts: Date.now() }), { flag: "wx" })
 
     const logs: string[] = []
     const ok = writeCorpus(repo, [rec({ promptSha256: "sha-b" })], (m) => logs.push(m))
@@ -115,15 +116,15 @@ describe("writeCorpus lockfile contention", () => {
     // no lost update: store content unchanged
     expect(fs.readFileSync(path.join(repo, CORPUS_FILE_REL), "utf-8")).toBe(before)
     // the other writer's lock is untouched
-    expect(fs.existsSync(lockDir)).toBe(true)
+    expect(fs.existsSync(lockPath)).toBe(true)
   })
 
   test("stale lock (>10min old) -> takeover, write succeeds, lock cleaned up", () => {
     const repo = mkRepo()
-    const lockDir = lockDirFor(repo)
-    fs.mkdirSync(lockDir, { recursive: true })
+    const lockPath = lockPathFor(repo)
+    fs.mkdirSync(path.dirname(lockPath), { recursive: true })
     const staleTs = Date.now() - (10 * 60 * 1000 + 1)
-    fs.writeFileSync(path.join(lockDir, "lock.json"), JSON.stringify({ pid: 111, ts: staleTs }))
+    fs.writeFileSync(lockPath, JSON.stringify({ pid: 111, ts: staleTs }), { flag: "wx" })
 
     const logs: string[] = []
     const ok = writeCorpus(repo, [rec()], (m) => logs.push(m))
@@ -136,32 +137,67 @@ describe("writeCorpus lockfile contention", () => {
       .split("\n")
       .map((l) => JSON.parse(l))
     expect(lines.length).toBe(1)
-    expect(fs.existsSync(lockDir)).toBe(false)
+    expect(fs.existsSync(lockPath)).toBe(false)
   })
 
   test("torn/unparseable lock content -> treated as stale, takeover succeeds", () => {
     const repo = mkRepo()
-    const lockDir = lockDirFor(repo)
-    fs.mkdirSync(lockDir, { recursive: true })
-    fs.writeFileSync(path.join(lockDir, "lock.json"), "{not valid json")
+    const lockPath = lockPathFor(repo)
+    fs.mkdirSync(path.dirname(lockPath), { recursive: true })
+    fs.writeFileSync(lockPath, "{not valid json")
 
     const ok = writeCorpus(repo, [rec()], () => {})
     expect(ok).toBe(true)
-    expect(fs.existsSync(lockDir)).toBe(false)
+    expect(fs.existsSync(lockPath)).toBe(false)
   })
 
   test("after a refused write, once the other writer releases the lock, a retry succeeds", () => {
     const repo = mkRepo()
-    const lockDir = lockDirFor(repo)
-    fs.mkdirSync(lockDir, { recursive: true })
-    fs.writeFileSync(path.join(lockDir, "lock.json"), JSON.stringify({ pid: 999, ts: Date.now() }))
+    const lockPath = lockPathFor(repo)
+    fs.mkdirSync(path.dirname(lockPath), { recursive: true })
+    fs.writeFileSync(lockPath, JSON.stringify({ pid: 999, ts: Date.now() }), { flag: "wx" })
 
     expect(writeCorpus(repo, [rec()], () => {})).toBe(false)
 
     // other writer releases
-    fs.rmSync(lockDir, { recursive: true, force: true })
+    fs.unlinkSync(lockPath)
 
     expect(writeCorpus(repo, [rec()], () => {})).toBe(true)
+  })
+
+  test("takeover race: a concurrent writer recreates the lock between our unlink and our fresh wx-create -> refuses, spawn NOT lost (no double-hold)", () => {
+    const repo = mkRepo()
+    const lockPath = lockPathFor(repo)
+    fs.mkdirSync(path.dirname(lockPath), { recursive: true })
+    const staleTs = Date.now() - (10 * 60 * 1000 + 1)
+    fs.writeFileSync(lockPath, JSON.stringify({ pid: 111, ts: staleTs }), { flag: "wx" })
+
+    // Inject the race: the instant our takeover unlinks the stale lock, a
+    // concurrent writer wins the fresh wx-create first. This is exactly the
+    // window the original directory+separate-write design got wrong (both
+    // sides could end up believing they held the lock); the single wx-file
+    // design must collapse this to a clean refusal for the loser.
+    const origUnlink = fs.unlinkSync
+    fs.unlinkSync = ((...args: Parameters<typeof fs.unlinkSync>) => {
+      const r = origUnlink(...args)
+      fs.writeFileSync(lockPath, JSON.stringify({ pid: 222, ts: Date.now() }), { flag: "wx" })
+      return r
+    }) as typeof fs.unlinkSync
+
+    try {
+      const logs: string[] = []
+      const ok = writeCorpus(repo, [rec()], (m) => logs.push(m))
+      expect(ok).toBe(false)
+      expect(logs[0]).toContain("REFUSING")
+      // the concurrent winner's lock must survive untouched — we must not
+      // have clobbered it or believed we also held it.
+      const held = JSON.parse(fs.readFileSync(lockPath, "utf-8"))
+      expect(held.pid).toBe(222)
+      // no store file was written by the loser
+      expect(fs.existsSync(path.join(repo, CORPUS_FILE_REL))).toBe(false)
+    } finally {
+      fs.unlinkSync = origUnlink
+    }
   })
 })
 
@@ -208,6 +244,15 @@ describe("upsertRecords", () => {
     const incoming = [rec({ stage: "derived" })]
     const merged = upsertRecords(existing, incoming)
     expect(merged[0]!.poolEligible).toBe(true)
+  })
+
+  test("incoming explicit undefined does not erase a previously-set field", () => {
+    const state = { kind: "commit" as const, sha: "abc123" }
+    const existing = [rec({ stage: "resolved", state })]
+    const incoming = [rec({ stage: "resolved", state: undefined })]
+    const merged = upsertRecords(existing, incoming)
+    expect(merged.length).toBe(1)
+    expect(merged[0]!.state).toEqual(state)
   })
 
   test("pure: does not mutate inputs", () => {
