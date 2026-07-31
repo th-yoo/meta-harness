@@ -20,6 +20,7 @@ import { handlePostToolUse } from "./core/edits.ts"
 import { handleUserPromptSubmit } from "./core/prompt.ts"
 import { handleStop } from "./core/stop.ts"
 import { maybeSpawnGauge } from "./gauge/spawn.ts"
+import { maybeSpawnPromptCheck } from "./prompt-check-spawn.ts"
 import { shadowEvaluateAtStop } from "./gauge/shadow.ts"
 import { applyReinjectVariant, pickReinjectVariant } from "./reinject.ts"
 import { appendCheckOutput, buildCheckOutputRecord } from "./sidecar.ts"
@@ -131,6 +132,25 @@ async function main(): Promise<void> {
     const { state: next, sensor } = handleUserPromptSubmit(state, sessionId, gateConfigRaw, deps)
     store.save(sessionId, next)
     if (sensor) appendSensor(cwd, gateConfigRaw, sensor, deps.log)
+
+    // 5th pre-data amendment (prompt-check): accompany, never replace — the
+    // skippedStop line above is already appended; this only SPAWNS, detached.
+    maybeSpawnPromptCheck({
+      cwd,
+      sessionID: sessionId,
+      sensor,
+      cfg: parseGateConfig(gateConfigRaw) ?? undefined,
+      env: process.env as Record<string, string | undefined>,
+      now: Date.now(),
+      spawn: (cmd) => {
+        const quoted = cmd.map((c) => `'${c.replace(/'/g, `'\\''`)}'`).join(" ")
+        const proc = Bun.spawn(["bash", "-c", `nohup ${quoted} </dev/null >/dev/null 2>&1 &`], {
+          stdout: "ignore",
+          stderr: "ignore",
+        })
+        proc.unref()
+      },
+    })
 
     // km-gauge (pre-reg §2.2): best-effort, swallowed inside; spawns the
     // detached refiner via a double-fork so the hook returns immediately.

@@ -196,6 +196,23 @@ export interface SensorLine {
    * Absent means no such boundary was observed; a stored `false` is never
    * written (absent is the cleaner line, same convention as `forced`). */
   skippedStop?: true
+  /** Phase 3 Task 2 (5th pre-data amendment, prompt-check-mechanize plan,
+   * 2026-07-31): `true` iff this UserPromptSubmit's skippedStop condition
+   * triggered a detached prompt-check spawn (single-flighted via
+   * `.km/cc-gate/prompt-check.lock`, prompt-check-spawn.ts). Amendment
+   * discipline: this field ACCOMPANIES the `skippedStop` line already
+   * appended for the same prompt — it is never a replacement signal, and a
+   * sensor line never carries `promptCheck` without `skippedStop` also
+   * being `true` on some line for the same boundary. Absent means no spawn
+   * was attempted or recorded here; a stored `false` is never written (same
+   * convention as `forced`/`skippedStop`). Populated by T3's detached CLI,
+   * not by this task's hook-cli wiring. */
+  promptCheck?: true
+  /** Companion to `promptCheck` (5th amendment) — the `now` timestamp (ms)
+   * captured at spawn time, i.e. the same value written into the lockfile's
+   * `spawnTs` and forwarded as the detached prompt-check-cli's third argv.
+   * Present iff `promptCheck` is present. */
+  spawnTs?: number
   /** Task 2 (fix-them-serialized-teacup plan, 2026-07-30 dogfood finding):
    * per-round check elapsed-ms — `deps.now()` wrapped tightly around each
    * `runSingleRound` call in stop.ts, one entry per round that actually ran
