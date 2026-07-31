@@ -3,6 +3,20 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ⏸ IN FLIGHT 2026-07-31 (`yoo-dev`) — gauge corpus-replay build, T1+T2 of 5 COMPLETE — branch `gauge-corpus-replay` @ `27d0a03`, PUSHED
+
+Corpus-replay amendment (`d869660`) build via SDD. Plan (architect-reviewed 3
+rounds, 14 findings): `docs/superpowers/plans/2026-07-31-gauge-corpus-replay.md`.
+DONE: T1 corpus-store (atomic wx lock, diff-safe keys, undefined-stripping
+upsert; 1 fix round — lock TOCTOU + NUL-byte-binary-file catches) · T2 transcript
+miner + `mine` subcommand (origin no-hard-gate, dedupe-earliest order-independent,
+provenance literal corrected to registered `corpus-transcript`; clean first pass).
+RESUME: SDD ledger `.superpowers/sdd/2026-07-31-gauge-corpus-replay/progress.md`
+(host-local — re-create from this note if absent: T1+T2 complete, resume at T3);
+next = T3 batch deriver + `derive --go <n>` (cost-fenced), then T4 state resolver,
+T5 report, fable final review, merge. First real `derive` batch = separate sized
+go. Suites at seal: cc-gate-plugin 476 · tsc clean.
+
 ## ✅ SESSION 2026-07-31 (`yoo-dev` office, continued) — PHASE 3 COMPLETE + ORGANIC PAIR LIVE-OBSERVED (GA8) — main merged, pushed
 
 **Phase 3 (async prompt-check + mechanize-instead) merged to main same day** (GA8
