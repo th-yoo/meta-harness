@@ -122,6 +122,43 @@ no exposure-guard signal of its own — an accepted trade given it is a diagnost
 line, not a workload-shape observation. `km-crank/src/trial-verdict.ts`'s join
 (`joinAndExclude`) implements this as join rule 7, alongside the existing 6.
 
+**PRE-DATA AMENDMENT (2026-07-31, roadmap Phase 3.1 draft; no trial data exists yet,
+§4.3 has never enrolled a real session — A/A earliest ~08-12):** a new sensor line class,
+`prompt-check` (`SensorLine.promptCheck?: true`), is registered as excluded from every
+§4.3 metric AND from the §9 exposure-density guard — the same double exclusion as
+`skipped-stop`, for partly different reasons. The class recovers *measurement* from the
+boundary-loss events `skipped-stop` can only *count*: when a user prompt arrives with
+edits unmeasured (`edited:true, gating:false` at UserPromptSubmit — the skipped-stop
+trigger), the hook additionally spawns the repo's check **detached** (double-fork, the
+`maybeSpawnGauge` pattern at the same hook, `hook-cli.ts:256-271`; emission at the
+hook-cli seam ONLY, F1). A synchronous in-hook run is prohibited: it would delay every
+queued prompt by up to `checkTimeoutMs`. When the detached check completes it fabricates
+one `prompt-check` line carrying its result. Registered relationship to `skipped-stop`
+at the same trigger: **accompany, never replace** — the `skipped-stop` line is emitted
+at trigger time exactly as today (its shape unchanged), because the boundary-loss
+diagnostic must survive even when the detached spawn dies unobserved; the `prompt-check`
+line is a second, later line for the same event, joinable by `sessionID` plus the spawn
+timestamp it stamps. Three registered exclusion rationales: (1) **wrong quantity** — the
+check runs mid-turn against whatever half-finished state the agent left at the boundary,
+not the agent's own Stop-boundary claim of done; scoring it in §4.3 metrics would mix
+two different measurands under one `accepted` label; (2) **false-void density risk** —
+line count scales with per-session prompting habit exactly as `skipped-stop` does, so
+density inclusion re-opens the §9 `DENSITY_DIVERGENCE_FACTOR` noise-void this spec's
+fourth amendment closed; (3) **no actuator exposure** — the line is fabricated; the
+completion gate never delivered evidence to the agent at that boundary, so the line says
+nothing about either arm's candidate text in action. Implementation pins, binding on the
+build: `classifyCycle` (`cc-gate-plugin/src/score.ts:29-30`) must test `promptCheck`
+immediately after `skippedStop` and BEFORE the empty-rounds `gauge-only` branch — a
+`prompt-check` line also carries `rounds: []`, and the gauge-only class is
+density-INCLUDED, so misordering silently converts the exclusion into inclusion (the
+exact swallow the skipped-stop review caught, `score.ts:21-27`); `joinAndExclude`
+(`km-crank/src/trial-verdict.ts`) excludes it as join rule 8; `newLineCount`
+(`km-crank/src/scan.ts:121-125`) discounts `prompt-check` lines alongside `skipped-stop`
+so the crank volume threshold cannot be inflated by prompting habit. Purpose of the
+class, registered so it cannot drift: proposer evidence density (the ~1/3 of day-1
+boundaries queued prompts destroyed: 13 skipped-stop vs 25 cycles, GA5) — never trial
+metrics.
+
 ## 3. Assignment
 
 `arm = (FNV-1a(`${trialId}:${sessionID}`) >>> 16) & 1`. **The trial ID is a required
