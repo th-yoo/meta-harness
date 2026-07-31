@@ -105,6 +105,27 @@ test("newLineCount: all-skipped-stop input counts zero", () => {
   expect(newLineCount(lines)).toBe(0)
 })
 
+// ── Phase 3 Task 4 (5th pre-data amendment): newLineCount also discounts
+// prompt-check lines, alongside skippedStop ─────────────────────────────────
+
+test("newLineCount: counts every line except skippedStop AND promptCheck ones", () => {
+  const lines = [
+    line({ sessionID: "a" }),
+    line({ sessionID: "b", rounds: [], skippedStop: true }),
+    line({ sessionID: "c" }),
+    line({ sessionID: "d", rounds: [], promptCheck: true }),
+  ]
+  expect(newLineCount(lines)).toBe(2)
+})
+
+test("newLineCount: all-prompt-check input counts zero", () => {
+  const lines = [
+    line({ sessionID: "a", rounds: [], promptCheck: true }),
+    line({ sessionID: "a", rounds: [], promptCheck: true }),
+  ]
+  expect(newLineCount(lines)).toBe(0)
+})
+
 // ── aggregate(): skippedStop lines don't misclassify into any sub-counter
 // (round-2 review: "verify the rest" — cleanAccepts was already checked) ───
 

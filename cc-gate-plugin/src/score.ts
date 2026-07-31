@@ -11,7 +11,14 @@ import type { GaugePromptClass, GaugeSensorField, SensorLine } from "./types.ts"
 /** A sensor line as read back from ndjson — same shape, but untrusted. */
 export type SensorLineIn = SensorLine & { gauge?: GaugeSensorField }
 
-export type CycleClass = "interrupted" | "exhausted" | "catch" | "clean" | "gauge-only" | "skipped-stop"
+export type CycleClass =
+  | "interrupted"
+  | "exhausted"
+  | "catch"
+  | "clean"
+  | "gauge-only"
+  | "skipped-stop"
+  | "prompt-check"
 
 /**
  * Pre-reg §1 taxonomy, in precedence order. `accepted` is true on BOTH catch
@@ -23,10 +30,18 @@ export type CycleClass = "interrupted" | "exhausted" | "catch" | "clean" | "gaug
  * Critical 1) — a skipped-stop line also carries `rounds: []`, so checking
  * gauge-only first would swallow every skipped-stop line into gauge-only
  * and defeat the whole fix.
+ *
+ * `prompt-check` MUST be checked immediately after `skipped-stop` and
+ * BEFORE the same empty-rounds `gauge-only` branch (Phase 3 Task 4, 5th
+ * pre-data amendment) — a `prompt-check` line also carries `rounds: []`,
+ * and `gauge-only` is density-INCLUDED (§9), so misordering would silently
+ * convert the registered exclusion into inclusion — the exact swallow the
+ * skipped-stop review caught above.
  */
 export function classifyCycle(l: SensorLineIn): CycleClass {
   if (l.interrupted) return "interrupted"
   if (l.skippedStop) return "skipped-stop"
+  if (l.promptCheck) return "prompt-check"
   if (l.rounds.length === 0) return "gauge-only" // fabricated on a fast-path Stop
   if (l.gateExhausted) return "exhausted"
   const last = l.rounds[l.rounds.length - 1]
@@ -48,6 +63,10 @@ export interface GroupScore {
      * switch below; excluded from every rate denominator, same as
      * gaugeOnly. */
     skippedStop: number
+    /** Phase 3 Task 4 (5th pre-data amendment): populated by scoreGroup's
+     * switch below; excluded from every rate denominator, same as
+     * skippedStop. */
+    promptCheck: number
   }
   /** Converged cycles: clean + catch + exhausted (the rate denominator). */
   gateCycles: number
@@ -179,7 +198,7 @@ export function scoreLines(lines: SensorLineIn[], opts: ScoreOpts): ScoreResult 
 function scoreGroup(check: string, host: string, lines: SensorLineIn[], opts: ScoreOpts): GroupScore {
   {
     const b = { check, host, lines }
-    const counts = { clean: 0, catch: 0, exhausted: 0, interrupted: 0, gaugeOnly: 0, skippedStop: 0 }
+    const counts = { clean: 0, catch: 0, exhausted: 0, interrupted: 0, gaugeOnly: 0, skippedStop: 0, promptCheck: 0 }
     const cleanDurations: number[] = []
     const catchRounds: number[] = []
 
@@ -197,6 +216,7 @@ function scoreGroup(check: string, host: string, lines: SensorLineIn[], opts: Sc
         case "interrupted": counts.interrupted++; break
         case "gauge-only": counts.gaugeOnly++; break
         case "skipped-stop": counts.skippedStop++; break
+        case "prompt-check": counts.promptCheck++; break
       }
     }
 

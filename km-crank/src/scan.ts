@@ -49,6 +49,20 @@ export interface SensorLine {
    * volume-contest/threshold consumer excludes it separately, at its own
    * counting site — see `newLineCount` below. */
   skippedStop?: true
+  /** Phase 3 Task 4 (5th pre-data amendment, prompt-check-mechanize plan) —
+   * mirrors cc-gate-plugin/src/types.ts's SensorLine.promptCheck: `true` iff
+   * this line's skippedStop boundary triggered a detached prompt-check
+   * spawn. Declared here (optional, not shape-checked below — same
+   * convention as skippedStop above) so the type matches the wire shape;
+   * `parseSensorLines` passes it through untouched like any other optional
+   * field. Discounted alongside skippedStop at `newLineCount`'s one
+   * consumer site below. */
+  promptCheck?: true
+  /** Companion to `promptCheck` — the spawn-time timestamp (ms). Optional,
+   * not shape-checked, passed through untouched; not consumed by anything
+   * in this package (join-by-sessionID+spawnTs is trial-verdict.ts's job
+   * upstream via cc-gate-plugin's SensorLine, not this local mirror's). */
+  spawnTs?: number
 }
 
 /** Runtime shape guard — malformed/partial lines (a torn concurrent write, a
@@ -117,10 +131,16 @@ export function parseSensorLines(text: string): SensorLine[] {
  * `gateExhausted: false`, `interrupted: false`, so none of those branches
  * fire for it); its `total`/`medianDurationMs` share gauge-only's existing,
  * pre-existing, out-of-scope distortion (both also carry `rounds: []`).
+ *
+ * Phase 3 Task 4 (5th pre-data amendment): `promptCheck` lines are
+ * discounted here too, alongside `skippedStop` — same rationale (a
+ * detached-check spawn's line count also scales with per-session prompting
+ * habit, not real gate-cycle volume) and same `rounds: []` shape immunity
+ * in `aggregate()`'s sub-counters.
  */
 export function newLineCount(lines: SensorLine[]): number {
   let n = 0
-  for (const l of lines) if (!l.skippedStop) n++
+  for (const l of lines) if (!l.skippedStop && !l.promptCheck) n++
   return n
 }
 

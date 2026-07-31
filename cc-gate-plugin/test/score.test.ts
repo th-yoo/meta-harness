@@ -77,6 +77,40 @@ test("skipped-stop cycles are excluded from every rate denominator and populated
   expect(g!.mCatch).toBeCloseTo(4 / 19)
 })
 
+// ── Phase 3 Task 4 (5th pre-data amendment): prompt-check class ────────────
+
+test("prompt-check: classified BEFORE gauge-only — promptCheck:true must not fall into the empty-rounds branch", () => {
+  // Same rounds:[] shape as a gauge-only line — ordering is load-bearing,
+  // same defeat-the-fix risk as skipped-stop's precedent (score.ts:29-30).
+  expect(classifyCycle(line({ rounds: [], promptCheck: true }))).toBe("prompt-check")
+})
+
+test("prompt-check precedence: loses to interrupted, wins over gauge-only, coexists with a separate skippedStop line", () => {
+  // promptCheck accompanies skippedStop (own line, per the amendment) but
+  // classifyCycle operates per-line — a line stamped BOTH still classifies
+  // deterministically: skippedStop is checked first (score.ts:29-30 order).
+  const both = line({ rounds: [], skippedStop: true, promptCheck: true })
+  expect(classifyCycle(both)).toBe("skipped-stop")
+
+  const interrupted = line({ interrupted: true, rounds: [], promptCheck: true })
+  expect(classifyCycle(interrupted)).toBe("interrupted")
+
+  const pc = line({ rounds: [], promptCheck: true })
+  expect(classifyCycle(pc)).toBe("prompt-check")
+})
+
+test("prompt-check cycles are excluded from every rate denominator and populated+printed in counts", () => {
+  const lines = [
+    ...MANY(15, {}), // clean
+    ...MANY(4, { rounds: ["verify-failed", "accepted"] }), // catch
+    ...MANY(3, { rounds: [], promptCheck: true }), // prompt-check, must not count
+  ]
+  const [g] = scoreLines(lines, { minN: 1 }).groups
+  expect(g!.counts).toMatchObject({ clean: 15, catch: 4, promptCheck: 3 })
+  expect(g!.gateCycles).toBe(19) // clean+catch+exhausted only — prompt-check excluded
+  expect(g!.mCatch).toBeCloseTo(4 / 19)
+})
+
 // ── aggregation ──────────────────────────────────────────────────────────
 
 const MANY = (n: number, over: Partial<SensorLineIn>) => Array.from({ length: n }, () => line(over))
@@ -313,6 +347,13 @@ test("CLI: skipped-stop count is printed in the cycles breakdown line", async ()
   expect(r.out).toContain("skipped-stop 3")
 })
 
+test("CLI: prompt-check count is printed in the cycles breakdown line", async () => {
+  const f = sensorFile([...MANY(2, {}), ...MANY(3, { rounds: [], promptCheck: true })])
+  const r = await runCli([f, "--min-n", "1"])
+  expect(r.code).toBe(0)
+  expect(r.out).toContain("prompt-check 3")
+})
+
 test("CLI: unreadable file is reported, never a crash", async () => {
   const r = await runCli(["/nope/missing.ndjson"])
   expect(r.code).toBe(0)
@@ -487,6 +528,19 @@ test("CLI: §4.3 trial block excludes skipped-stop lines from BOTH density and m
     line({ sessionID: "s1" }), // baseline, 1 clean gate cycle -> metrics 1, density 1
     line({ sessionID: "s1", rounds: [], skippedStop: true }), // must count toward NEITHER
     line({ sessionID: "s1", rounds: [], skippedStop: true }),
+  ]
+  const f = sensorFile(lines)
+  exposureFileBeside(f, [expRow({ sessionID: "s1", arm: "baseline", forced: false })])
+
+  const r = await runCli([f, "--min-n", "1"])
+  expect(r.out).toMatch(/baseline.*cycles\s+1.*sessions\s+1.*sessions-w-cycle\s+1.*density 1\.00/)
+})
+
+test("CLI: §4.3 trial block excludes prompt-check lines from BOTH density and metrics (5th amendment, mirrors skipped-stop's exclusion shape)", async () => {
+  const lines = [
+    line({ sessionID: "s1" }), // baseline, 1 clean gate cycle -> metrics 1, density 1
+    line({ sessionID: "s1", rounds: [], promptCheck: true }), // must count toward NEITHER
+    line({ sessionID: "s1", rounds: [], promptCheck: true }),
   ]
   const f = sensorFile(lines)
   exposureFileBeside(f, [expRow({ sessionID: "s1", arm: "baseline", forced: false })])

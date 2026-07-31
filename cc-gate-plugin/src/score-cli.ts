@@ -146,7 +146,10 @@ interface TrialBlock {
  *     skipped-stop lines (Task 1, fix-them-serialized-teacup plan) are
  *     excluded from BOTH density and metrics — a pure diagnostic class,
  *     never a density/metric input (own rationale, not gauge-only's
- *     "never armed" one — see the spec amendment).
+ *     "never armed" one — see the spec amendment). prompt-check lines
+ *     (Phase 3 Task 4, 5th pre-data amendment) get the SAME double
+ *     exclusion, for its own three-part rationale (wrong quantity / density
+ *     false-void / no actuator exposure) — see the spec amendment.
  * First exposure row per sessionID wins on duplicates within the selected
  * trialId (same dedupe rule as the canonical reader). The scoping trialId
  * itself is chosen by max `ts` across ALL rows (before any forced/dedupe
@@ -184,9 +187,15 @@ function joinTrialArms(lines: SensorLineIn[], rows: ExposureRow[]): TrialBlock {
     // "skipped-stop" is excluded from BOTH density and metrics here,
     // mirroring km-crank/src/trial-verdict.ts's join semantics (:171/:172
     // comment there) — a pure diagnostic class, never a density/metric input.
+    // Phase 3 Task 4 (5th pre-data amendment): "prompt-check" gets the SAME
+    // double exclusion — this is the CRITICAL mirror site (this file
+    // independently reimplements km-crank's exclusion rule rather than
+    // calling it, per the docstring above), so both the density push and the
+    // metrics push must be updated here or a prompt-check line would
+    // silently double-INCLUDE, the exact violation the amendment forbids.
     const cls = classifyCycle(raw)
-    if (cls !== "skipped-stop") density[row.arm].push(raw)
-    if (cls !== "gauge-only" && cls !== "skipped-stop") metrics[row.arm].push(raw)
+    if (cls !== "skipped-stop" && cls !== "prompt-check") density[row.arm].push(raw)
+    if (cls !== "gauge-only" && cls !== "skipped-stop" && cls !== "prompt-check") metrics[row.arm].push(raw)
   }
 
   const summarize = (arm: TrialArm): TrialArmSummary => {
@@ -320,7 +329,8 @@ function render(r: ScoreResult, minN: number, trial?: TrialBlock, checkMsByGroup
       `   cycles ${g.gateCycles}` +
       `  (clean ${c.clean}, catch ${c.catch}, exhausted ${c.exhausted}` +
       `, interrupted ${c.interrupted}${c.gaugeOnly ? `, gauge-only ${c.gaugeOnly}` : ""}` +
-      `${c.skippedStop ? `, skipped-stop ${c.skippedStop}` : ""})`,
+      `${c.skippedStop ? `, skipped-stop ${c.skippedStop}` : ""}` +
+      `${c.promptCheck ? `, prompt-check ${c.promptCheck}` : ""})`,
     )
     const checkMsMedian = checkMsByGroup?.get(JSON.stringify([g.check, g.host]))
     out.push(
