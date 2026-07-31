@@ -3,6 +3,22 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION 2026-07-31 (`yoo-dev` office, continued) — PHASE 3 COMPLETE + ORGANIC PAIR LIVE-OBSERVED (GA8) — main merged, pushed
+
+**Phase 3 (async prompt-check + mechanize-instead) merged to main same day** (GA8
+row in HISTORY: `e79ea1b..2031575` + fix wave; plan reviewed-to-FLAWLESS 4 rounds
+pre-build; all 6 SDD tasks clean first-pass). **ORGANIC PAIR OBSERVED in the real
+kkamak stream on the installed cache**: skippedStop 14:04:14.679 + promptCheck
+spawnTs+1ms + resumed turn's normal accept — accompany, exact join, lock lifecycle
+all live. **BEHAVIORAL FINDING (volume correction, pre-data):** the skippedStop /
+prompt-check trigger is INTERRUPT-shaped boundary loss only (Escape mid-turn with
+unmeasured edits, aborts, resumes); queue-shaped loss is extinct in current Claude
+Code — three clean disproofs. Expect prompt-check volume well below GA5's ~1/3
+estimate; amendment validity unaffected. Office cache carries Phases 2+3 live.
+MacBook: pull + km-refresh --force + grep-verify (`prompt-check` ×2 in cache src +
+`captureFixtureRef` ×2). Dogfood day 2 final: 6 reviewed-clean kkamak milestones
+incl. CHANGELOG (packaging precursor) + adapter marker delivery both adapters.
+
 ## ✅ SESSION 2026-07-31 (`yoo-dev` office) — PHASE 2 COMPLETE + LIVE-PROVEN + MERGED (GA7) + DOGFOOD DAY 2 — meta-harness main pushed; kkamak @ `65c9546`
 
 **Phase 3 COMPLETE (sealing task, this session):** async prompt-check
