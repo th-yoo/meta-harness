@@ -449,6 +449,21 @@ export const REPORT_BANNER = [
   "  live-only), and does not extend the two-strike kill rule (point 7).",
 ].join("\n")
 
+/** Footnotes documenting data provenance and drift caveats. Exported so
+ * tests can pin exact wording. */
+export const REPORT_FOOTNOTES = [
+  "footnotes:",
+  "- floorCheck is captured at mine time (per-record floorCheckMinedAt) and may",
+  "  have drifted from the repo's current gate.json check — audit",
+  "  floorCheckMinedAt before trusting any pooled reading.",
+  "- corpus checks run against a synthetic commit of the captured tree",
+  "  (mechanical property only — git-history-dependent checks carry a",
+  "  comparability caveat).",
+  "- live a/b tallies THIS repo's sensor stream only ([cwd]); the §3 window is",
+  "  the union across armed repos/hosts — a 0-live reading here does not mean",
+  "  0 live in the window.",
+].join("\n")
+
 export interface ReportResult {
   live: LiveClassCTally
   corpus: CorpusClassCTally
@@ -481,6 +496,8 @@ export function computeReport(cwd: string): ReportResult {
     renderClassTable(liveCounts, corpusTranscriptCounts, corpusBenchCounts),
     "",
     REPORT_BANNER,
+    "",
+    REPORT_FOOTNOTES,
   ].join("\n")
 
   return { live, corpus, verdict, text }

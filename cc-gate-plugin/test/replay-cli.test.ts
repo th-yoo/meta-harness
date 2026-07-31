@@ -14,6 +14,7 @@ import {
   computeReport,
   runReport,
   REPORT_BANNER,
+  REPORT_FOOTNOTES,
   POOLED_FLOOR_MIN,
   POOLED_M1V2_BAR,
   type LiveClassCTally,
@@ -423,7 +424,7 @@ describe("computeReport / runReport — read-only end to end", () => {
     fs.writeFileSync(p, lines.map((l) => JSON.stringify(l)).join("\n") + (lines.length ? "\n" : ""))
   }
 
-  test("assembles pooled line, floor verdict, class table, and banner into one text", () => {
+  test("assembles pooled line, floor verdict, class table, banner, and footnotes into one text", () => {
     const cwd = mkdir()
     writeSensor(cwd, [
       sline({ sessionID: "sid-1", ts: 1000, gauge: classCField({ pass: true, wouldBlock: false, strike: undefined, horizon: "single-turn" }) }),
@@ -447,6 +448,7 @@ describe("computeReport / runReport — read-only end to end", () => {
     expect(result.text).toContain("live 1/1 · corpus 1/1 · pooled ≥90%? yes")
     expect(result.text).toContain("class-rate")
     expect(result.text).toContain(REPORT_BANNER)
+    expect(result.text).toContain(REPORT_FOOTNOTES)
   })
 
   test("missing sensor stream and missing corpus store -> zero tallies, no throw", () => {
@@ -463,6 +465,19 @@ describe("computeReport / runReport — read-only end to end", () => {
     expect(logged.length).toBe(1)
     expect(logged[0]).toBe(computeReport(cwd).text)
   })
+
+  test("report includes drift footnotes with exact key phrases", () => {
+    const cwd = mkdir()
+    writeSensor(cwd, [
+      sline({ sessionID: "sid-1", ts: 1000, gauge: classCField({ pass: true, wouldBlock: false, strike: undefined, horizon: "single-turn" }) }),
+    ])
+    writeCorpus(cwd, [], () => {})
+
+    const result = computeReport(cwd)
+    expect(result.text).toContain("floorCheck is captured at mine time")
+    expect(result.text).toContain("synthetic commit")
+    expect(result.text).toContain("THIS repo's sensor stream only")
+  })
 })
 
 describe("report CLI — real subprocess, zero writes", () => {
@@ -470,7 +485,7 @@ describe("report CLI — real subprocess, zero writes", () => {
     return fs.mkdtempSync(path.join(os.tmpdir(), "km-corpus-report-cli-"))
   }
 
-  test("bun replay-cli.ts report <cwd> prints the pooled line and leaves the corpus store + sensor stream byte-identical", async () => {
+  test("bun replay-cli.ts report <cwd> prints the pooled line, footnotes, and leaves the corpus store + sensor stream byte-identical", async () => {
     const cwd = mkdir()
 
     const sensorPath = path.join(cwd, DEFAULT_SENSOR_REL_PATH)
@@ -504,6 +519,9 @@ describe("report CLI — real subprocess, zero writes", () => {
     const code = await proc.exited
     expect(code).toBe(0)
     expect(stdout).toContain("live 1/1 · corpus 0/1 · pooled ≥90%? no")
+    expect(stdout).toContain("floorCheck is captured at mine time")
+    expect(stdout).toContain("synthetic commit")
+    expect(stdout).toContain("THIS repo's sensor stream only")
 
     const afterSensor = fs.readFileSync(sensorPath, "utf-8")
     const afterCorpus = fs.readFileSync(corpusPath, "utf-8")
