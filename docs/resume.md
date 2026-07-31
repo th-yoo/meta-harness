@@ -5,6 +5,47 @@ does NOT transfer; this file + the repo are the source of truth.)
 
 ## ⏸ IN FLIGHT 2026-07-31 (`yoo-dev`) — gauge corpus-replay build, T1+T2 of 5 COMPLETE — branch `gauge-corpus-replay` @ `27d0a03`, PUSHED
 
+**HANDOFF PROMPT (MacBook, 2026-07-31+):**
+```
+Resume kkamak (meta-harness) on yoo-mac, 2026-07-31+. git pull main AND
+git fetch && git checkout gauge-corpus-replay (27d0a03). Read
+docs/resume.md top block + docs/superpowers/plans/2026-07-31-gauge-corpus-replay.md.
+
+FIRST (standing queue, no model spend): deploy Phases 2+3 to this host's
+installed plugin — scripts/km-refresh.sh --force from MAIN checkout state
+is fine (branch only adds gauge/ files), then grep-verify the cache:
+fixture-ref.ts present + captureFixtureRef ×2 in hook-cli + prompt-check
+×2 in src listing. Restart any dogfood tmux session afterward if hooks
+look stale.
+
+THEN (build go already granted for the SDD): continue subagent-driven
+development of the corpus-replay plan at T3. SDD workspace is host-local
+and ABSENT here — recreate: run the skill's sdd-workspace script on the
+plan path, write a fresh ledger stating "T1+T2 complete (57ad9b2..27d0a03,
+both reviewed clean; T1 had 1 fix round: atomic wx lock TOCTOU + NUL-byte
+key + undefined-stripping upsert; provenance literal = corpus-transcript
+per amendment d869660), resume at T3". Briefs regenerate via task-brief
+script. Remaining: T3 batch deriver + derive --go <n> (cost fence: refuses
+unless n == pending count; stub KKAMAK_GAUGE_CLAUDE_BIN in tests — ZERO
+real model calls), T4 state resolver (30_000ms check budget pinned =
+GAUGE_CHECK_TIMEOUT_MS hook-cli.ts:36; sensor-stream-bounded fixture-ref
+join; raw bash pipe for git archive, never GitRunner), T5 report
+(provenance-split M1v2, live dedup by (sessionID, gauge.n) terminal line,
+passthrough-only excluded), fable final whole-branch review + fix wave,
+merge to main via finishing-a-development-branch, GA9 HISTORY row + resume
+seal. First REAL derive batch afterward = separate sized go (haiku spend,
+report corpus size from a model-free mine first).
+
+RULES unchanged: explicit go before spend · F1 (core/, vendor/, 4 minimal/
+files untouchable; gauge/ editable) · F2 (gauge-corpus never in
+km-sensors-sync FILES) · per-task reviews mandatory · grep-verify deploys ·
+no bare "gate" in new docs · script-tally gauge counts, never quote notes ·
+SITREP style. Open user decisions parked: §3 extractor redesign round
+(single-use, likely available — 72 classified, C=1); kkamak gate-editing
+workload ruling (GA5); per-repo fixture inclusion when first organic block
+lands. A/A ~Aug 12.
+```
+
 Corpus-replay amendment (`d869660`) build via SDD. Plan (architect-reviewed 3
 rounds, 14 findings): `docs/superpowers/plans/2026-07-31-gauge-corpus-replay.md`.
 DONE: T1 corpus-store (atomic wx lock, diff-safe keys, undefined-stripping
