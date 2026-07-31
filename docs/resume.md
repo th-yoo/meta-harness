@@ -8,16 +8,27 @@ does NOT transfer; this file + the repo are the source of truth.)
 **Resumed the office handoff below; both steps done:**
 - **MacBook deploy (Phases 2+3):** `km-refresh.sh --force` OK; cache grep-verified (`fixture-ref.ts` + `captureFixtureRef` ×2 + `prompt-check` ×2, single `0.2.1/`). Both hosts now run Phases 1+2+3 live.
 - **Corpus-replay T3-T5 built + sealed (SDD, per-task reviews):** T3 deriver `43c4ef3`+`02ed9b8` (review forced lifecycle lock — model spend only under lock, fence re-checked under lock after acquire); T4 resolver `e69de78`+`0d81bb2` (3 under-specified mechanics adjudicated SOUND, recorded as plan annotations; pipefail bsdtar catch; real 7d-cap test); T5 report `34ef861`+`419a507`+`55c5b2a` (point-4 `≥90%?` verbatim + yes/no/n-a ruled SOUND; provenance pin so corpus-bench can never pool; FIX-1 drift footnote). Fable final whole-branch review: READY TO CLOSE YES. **MERGED `27d1ed3`, branch deleted.** Suites: cc-gate-plugin 552 + tsc clean. Full ruling record: HISTORY.md GA9 row + plan's Task-4 "Post-review rulings" + SDD ledger.
-- Live model-free `mine` smoke on this host: **198 records** in `.km/gauge-corpus/`.
+- **FIRST REAL BATCH CONSUMED (sized go 198, 08-01):** mine 70 transcripts →
+  198 records · `derive --go 198` → **160 derived / 38 stayed mined**
+  (retryable; re-spend = new sized go 38) · resolve 160/160 → ALL
+  `kind:"none"`, 0 poolEligible — honest starvation: fixture-refs armed only
+  today (zero organic blocks yet), commit lane needs same-session cycle
+  lines that predate this host's streams. **First report reading:
+  `live 0/0 · corpus 0/0 · pooled ≥90%? n/a`, floor NOT MET; class table
+  corpus-transcript A1 2 / A2 49 / B 0 / C 12 / D 97 (160)** — corpus
+  C-rate ~7.5% vs live 1/72. Pool builds forward from organic blocks
+  (Phase 2 capture live both hosts). **Store canonical location =
+  `meta-harness/.km/gauge-corpus/`** (moved out of cc-gate-plugin/.km —
+  run mine/derive/resolve/report from the meta-harness root).
 
 **NEXT (GO before spend, in order):**
-(1) **First real `derive` batch — SIZED GO REQUIRED** (amendment cost fence):
-    run `mine` fresh, then `derive --go <pending-count>` (haiku spend; report
-    corpus size first). Then `resolve` (model-free) + `report` → first
-    provenance-split M1v2 reading.
+(1) Retry batch for the 38 stayed-mined records when desired — new sized go
+    (`derive --go 38` from meta-harness root).
 (2) Office host: pull main; office cache already carries Phases 2+3 — no
-    action unless plugin version bumps.
-(3) Sustain dogfood daily both hosts (tmux `kkamak`).
+    action unless plugin version bumps. Optionally mine office transcripts
+    into its own corpus store (model-free) for a second lane.
+(3) Sustain dogfood daily both hosts (tmux `kkamak`) — organic blocks now
+    feed fixture-refs → future corpus records become poolEligible.
 (4) Parked user decisions: §3 over-refusal redesign round (likely available,
     single-use); kkamak gate-editing workload ruling (GA5); per-repo fixture
     inclusion on first organic block. A/A ~Aug 12.
