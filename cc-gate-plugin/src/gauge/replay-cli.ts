@@ -19,6 +19,12 @@
  * zero effect (no model calls, no store write); omitting `--go` also
  * refuses, printing the pending count so the operator can size the next
  * call. This is the ONLY subcommand that spends against a real model.
+ *
+ * `bun replay-cli.ts resolve [cwd]` batch-resolves every "derived"-stage
+ * record via state-resolve.ts's `runResolve` — locates a real repo
+ * snapshot (fixture-ref or commit join), materializes it, and runs the
+ * derived check against it. Model-free (no cost fence needed): resolve only
+ * evaluates an ALREADY-derived check.
  */
 import fs from "node:fs"
 import os from "node:os"
@@ -33,6 +39,7 @@ import {
 } from "./corpus-store.ts"
 import { mineJsonl, dedupeEarliest } from "./corpus-mine.ts"
 import { runDerive } from "./corpus-replay.ts"
+import { runResolve } from "./state-resolve.ts"
 
 /** `~/.claude/projects`, or `KKAMAK_CLAUDE_PROJECTS_DIR` override. */
 export function projectsDir(): string {
@@ -164,7 +171,16 @@ async function main(): Promise<void> {
     return
   }
 
-  console.error(`unknown subcommand: ${sub ?? "(none)"} — usage: replay-cli.ts mine|derive [cwd] [--go <n>]`)
+  if (sub === "resolve") {
+    const cwd = args[1] ?? process.cwd()
+    const summary = await runResolve(cwd, (m) => console.log(m))
+    if (summary === undefined) process.exitCode = 1
+    return
+  }
+
+  console.error(
+    `unknown subcommand: ${sub ?? "(none)"} — usage: replay-cli.ts mine|derive|resolve [cwd] [--go <n>]`,
+  )
   process.exitCode = 1
 }
 
