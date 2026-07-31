@@ -5,6 +5,13 @@ does NOT transfer; this file + the repo are the source of truth.)
 
 ## ✅ SESSION 2026-07-31 (`yoo-dev` office) — PHASE 2 COMPLETE + LIVE-PROVEN + MERGED (GA7) + DOGFOOD DAY 2 — meta-harness main pushed; kkamak @ `65c9546`
 
+**Phase 3 COMPLETE (sealing task, this session):** async prompt-check
+class live-smoked in a scratch repo (skippedStop accompany + single-flight
++ env kill switch all live-proven), 5th amendment conformance read-back
+ticked file:line against built code, F1/F2 both verified clean
+(`18b5472..31c4662`; suites cc-gate-plugin 437 · km-crank 228 ·
+opencode-plugin 1753/1). Doc-only commit; deploy still a separate go.
+
 **Dogfood day 2 (same session):** D1 closed (`ad63d3b`: kernel emits
 pluginVersion/forced) + real `marker` milestone (`65c9546`, 283 tests) —
 both independently reviewed clean pre-commit. Notable: the dogfood session

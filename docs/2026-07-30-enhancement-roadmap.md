@@ -6,8 +6,12 @@
 `e76cd74`/`7d89b74`/`1caeb27`/`b4ae92f`; squad `7c167f8`; both drift guards
 live, cross-repo parity green 5/5, suites 268 · 189 · 385 · 1748/1 · 26.
 Bonus: crank.ts entrypoint guarded — unguarded top-level `main()` had every
-`bun test` starting a real crank round). Phases 1-3: not started; each gets
-its own plan → SDD with per-task reviews before any build token.
+`bun test` starting a real crank round). Phases 1-2: complete (see
+resume.md for detail). **Phase 3 COMPLETE** (`18b5472..31c4662`: async
+prompt-check class w/ live smoke + amendment conformance read-back +
+mechanize-instead rubric key; suites cc-gate-plugin 437 · km-crank 228 ·
+opencode-plugin 1753/1). Each phase carries its own plan → SDD with
+per-task reviews before any build token.
 **Origin:** strategic review (MacBook session 2026-07-30) + code-architect
 verification pass (every claim below cited to code by the reviewing agent;
 corrections applied). Predecessor state: §4.3 build sealed (HISTORY.md GA4),
