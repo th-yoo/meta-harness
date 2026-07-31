@@ -16,13 +16,22 @@ const PASS_CHECKS = `ok
 {"checks":{"category":{"pass":true,"category":"iteration-discipline","quote":"…"},
 "domain_swap":{"pass":true,"swapped_bullet":"When a SQL migration fails twice, change the diagnosis."},
 "behavior_level":{"pass":true,"restatement":"Agent changes approach after repeated failure."},
-"duplicate":{"pass":true,"match":"none"}},"confidence":0.8}`
+"duplicate":{"pass":true,"match":"none"},
+"mechanize_instead":{"pass":true,"command":""}},"confidence":0.8}`
 
 const FAIL_CHECKS = `not quite
 {"checks":{"category":{"pass":false,"category":"","quote":""},
 "domain_swap":{"pass":true,"swapped_bullet":"When a SQL migration fails twice, change the diagnosis."},
 "behavior_level":{"pass":true,"restatement":"Agent changes approach after repeated failure."},
-"duplicate":{"pass":true,"match":"none"}},"confidence":0.4}`
+"duplicate":{"pass":true,"match":"none"},
+"mechanize_instead":{"pass":true,"command":""}},"confidence":0.4}`
+
+const MECHANIZE_FAIL_CHECKS = `should be a check
+{"checks":{"category":{"pass":true,"category":"iteration-discipline","quote":"…"},
+"domain_swap":{"pass":true,"swapped_bullet":"When a SQL migration fails twice, change the diagnosis."},
+"behavior_level":{"pass":true,"restatement":"Agent changes approach after repeated failure."},
+"duplicate":{"pass":true,"match":"none"},
+"mechanize_instead":{"pass":false,"command":"bun test --filter migration-retry"}},"confidence":0.7}`
 
 const REVISED_BULLET = "When you fail twice on the same approach, change your diagnosis before retrying."
 
@@ -139,6 +148,20 @@ test("rejected ledger text is embedded in the review prompt", async () => {
   })
   expect(rec.prompts.length).toBe(1)
   expect(rec.prompts[0]!.includes(entry.bullet)).toBe(true)
+})
+
+// 8. mechanize_instead fail → immediate abstain, staged=false, only ONE
+//    LLM call (revise seat never invoked), reason embeds the named command.
+test("mechanize_instead fail routes to immediate abstain with the named command in the reason", async () => {
+  const rec: Rec = { prompts: [] }
+  const host = fakeHost(rec, [MECHANIZE_FAIL_CHECKS])
+  const [outcome] = await reviewAddedBullets({
+    host, bullets: [GOOD_BULLET], ledger: [], ...BASE,
+  })
+  expect(outcome!.staged).toBe(false)
+  expect(outcome!.violations.some((v) => v.includes("mechanize_instead") && v.includes("bun test --filter migration-retry"))).toBe(true)
+  expect(outcome!.trail.length).toBe(1)
+  expect(rec.prompts.length).toBe(1) // no revision-round LLM call
 })
 
 // 7. Empty bullets array → [], zero LLM calls.

@@ -26,13 +26,15 @@ const REVIEW_PASS = `ok
 {"checks":{"category":{"pass":true,"category":"iteration-discipline","quote":"…"},
 "domain_swap":{"pass":true,"swapped_bullet":"When a SQL migration fails twice, change the diagnosis."},
 "behavior_level":{"pass":true,"restatement":"Agent changes approach after repeated failure."},
-"duplicate":{"pass":true,"match":"none"}},"confidence":0.8}`
+"duplicate":{"pass":true,"match":"none"},
+"mechanize_instead":{"pass":true,"command":""}},"confidence":0.8}`
 
 const REVIEW_FAIL = `not quite
 {"checks":{"category":{"pass":false,"category":"","quote":""},
 "domain_swap":{"pass":true,"swapped_bullet":"When a SQL migration fails twice, change the diagnosis."},
 "behavior_level":{"pass":true,"restatement":"Agent changes approach after repeated failure."},
-"duplicate":{"pass":true,"match":"none"}},"confidence":0.4}`
+"duplicate":{"pass":true,"match":"none"},
+"mechanize_instead":{"pass":true,"command":""}},"confidence":0.4}`
 
 // Hermetic: no real claude, no opencode. We seed staging files by hand (as a
 // finished child would) and drive the EXTRACTED apply body directly, plus the

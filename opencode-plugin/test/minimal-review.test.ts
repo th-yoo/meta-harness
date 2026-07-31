@@ -17,6 +17,7 @@ function allPassChecks(over: Partial<ReviewChecks> = {}): ReviewChecks {
     domain_swap: { pass: true, swapped_bullet: GOOD_BULLET },
     behavior_level: { pass: true, restatement: "the agent re-reads the requirement before claiming done" },
     duplicate: { pass: true, match: "none" },
+    mechanize_instead: { pass: true, command: "" },
     ...over,
   }
 }
@@ -139,6 +140,23 @@ test("verdict fails on layer1 alone with rubric absent", () => {
   expect(v.violations).toContain("over 60 words")
 })
 
+test("verdict fails when only mechanize_instead fails, embedding the named command", () => {
+  const l1 = { pass: true, violations: [] }
+  const v = computeVerdict(
+    l1,
+    allPassChecks({ mechanize_instead: { pass: false, command: "bun test --filter x" } }),
+  )
+  expect(v.verdict).toBe("fail")
+  expect(v.violations).toEqual(["mechanize_instead: failed (bun test --filter x)"])
+})
+
+test("verdict passes when all 5 rubric keys pass (mechanize_instead included)", () => {
+  const l1 = { pass: true, violations: [] }
+  const v = computeVerdict(l1, allPassChecks())
+  expect(v.verdict).toBe("pass")
+  expect(v.violations).toEqual([])
+})
+
 // --- reviewBullet: layer1 short-circuit + rubric via injected call ---
 
 test("reviewBullet skips the LLM call when layer1 fails", async () => {
@@ -233,6 +251,46 @@ test("loop coerces abstain when the revision also fails review", async () => {
   expect(out.final.action).toBe("abstain")
   expect(out.final.reason).toContain("review-fail")
   expect(out.trail.length).toBe(2)
+})
+
+function mechanizeFailResult(command = "bun test --filter x"): ReviewResult {
+  const violation = `mechanize_instead: failed (${command})`
+  return { verdict: "fail", violations: [violation], layer1: { pass: true, violations: [] }, checks: null, confidence: null }
+}
+
+test("loop coerces immediate abstain on round 1 for a mechanize_instead violation, never calling revise", async () => {
+  let reviseCalled = false
+  const out = await reviewLoop({
+    proposal: proposal("bad bullet"),
+    rounds: 1,
+    review: async () => mechanizeFailResult("bun test --filter x"),
+    revise: async () => {
+      reviseCalled = true
+      throw new Error("revise must not be called for mechanize_instead")
+    },
+  })
+  expect(out.staged).toBe(false)
+  expect(out.final.action).toBe("abstain")
+  expect(out.final.reason).toBe("mechanize_instead: failed (bun test --filter x)")
+  expect(reviseCalled).toBe(false)
+  expect(out.trail.length).toBe(1)
+})
+
+test("loop still calls revise for a non-mechanize failure (regression)", async () => {
+  let reviseCalled = false
+  const out = await reviewLoop({
+    proposal: proposal("bad bullet"),
+    rounds: 1,
+    review: async () => failResult("domain_swap: unwritable"),
+    revise: async () => {
+      reviseCalled = true
+      return proposal(GOOD_BULLET + " Revised.")
+    },
+  })
+  expect(reviseCalled).toBe(true)
+  expect(out.trail.length).toBe(2) // round0 fail -> revise -> round1 fail again -> rounds exhausted -> abstain
+  expect(out.final.action).toBe("abstain")
+  expect(out.final.reason).toContain("review-fail")
 })
 
 test("loop honors an abstain returned by the revision call", async () => {

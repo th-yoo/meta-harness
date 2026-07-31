@@ -142,9 +142,10 @@ export interface ReviewChecks {
   domain_swap: { pass: boolean; swapped_bullet?: string }
   behavior_level: { pass: boolean; restatement?: string }
   duplicate: { pass: boolean; match?: string }
+  mechanize_instead?: { pass: boolean; command: string }
 }
 
-const RUBRIC_KEYS = ["category", "domain_swap", "behavior_level", "duplicate"] as const
+const RUBRIC_KEYS = ["category", "domain_swap", "behavior_level", "duplicate", "mechanize_instead"] as const
 
 export function computeVerdict(
   l1: Layer1Result,
@@ -156,7 +157,10 @@ export function computeVerdict(
     else
       for (const k of RUBRIC_KEYS) {
         const c: any = checks[k]
-        if (!c || c.pass !== true) violations.push(`${k}: failed${c?.swapped_bullet === "" ? " (unwritable)" : ""}`)
+        if (!c || c.pass !== true) {
+          if (k === "mechanize_instead") violations.push(`mechanize_instead: failed (${c?.command ?? ""})`)
+          else violations.push(`${k}: failed${c?.swapped_bullet === "" ? " (unwritable)" : ""}`)
+        }
       }
   }
   return { verdict: violations.length === 0 ? "pass" : "fail", violations }
@@ -209,6 +213,14 @@ ${a.rejected}
    Artifact: the restatement.
 4. duplicate — is the rule a near-duplicate in substance of the current
    harness or a ledger entry? Artifact: quote the matching line, or "none".
+5. mechanize_instead — could this bullet's effect be enforced by a runnable
+   check instead (a shell command or test the completion gate could run
+   mechanically)? If yes: name the concrete command or check it should
+   become, and mark this key FAILED — prose must never do a check's job
+   (spec §4 rule 3 harmonization). If no: state in one sentence why the
+   behavior cannot be expressed as a runnable check, and mark it passed.
+   Artifact: the named command (if failed) or the one-sentence reason (if
+   passed).
 
 Judge strictly; when genuinely borderline, fail the check (a false fail costs
 one cheap revision; a false pass costs a long experiment).
@@ -218,7 +230,8 @@ A short justification, then EXACTLY ONE JSON object:
 {"checks":{"category":{"pass":bool,"category":"...","quote":"..."},
            "domain_swap":{"pass":bool,"swapped_bullet":"..."},
            "behavior_level":{"pass":bool,"restatement":"..."},
-           "duplicate":{"pass":bool,"match":"none|<quoted line>"}},
+           "duplicate":{"pass":bool,"match":"none|<quoted line>"},
+           "mechanize_instead":{"pass":bool,"command":"<named command if failed, else \\"\\">"}},
  "confidence":<0..1, advisory only>}`
 }
 
@@ -286,6 +299,16 @@ export async function reviewLoop(a: {
     const review = await a.review(bullet, current.reason ?? "")
     trail.push({ round, bullet, review })
     if (review.verdict === "pass") return { final: current, staged: true, trail }
+    const mechanizeViolation = review.violations.find((v) => v.startsWith("mechanize_instead"))
+    if (mechanizeViolation) {
+      // A mechanize_instead fail names a runnable check the bullet's effect
+      // should become — the revise seat could rephrase around mechanizability
+      // without fixing the underlying problem, so it is never given the
+      // chance (roadmap abstain-on-reject pin). Abstain immediately, verbatim
+      // reason, no revision round spent.
+      const final: ProposalLike = { ...current, action: "abstain", reason: mechanizeViolation }
+      return { final, staged: false, trail }
+    }
     if (round >= a.rounds) {
       const final: ProposalLike = {
         ...current,
