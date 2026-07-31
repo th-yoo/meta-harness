@@ -24,7 +24,13 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { parseGateConfig } from "../config.ts"
-import { readCorpus, writeCorpus, upsertRecords } from "./corpus-store.ts"
+import {
+  readCorpus,
+  writeCorpus,
+  upsertRecords,
+  acquireCorpusLock,
+  releaseCorpusLock,
+} from "./corpus-store.ts"
 import { mineJsonl, dedupeEarliest } from "./corpus-mine.ts"
 import { runDerive } from "./corpus-replay.ts"
 
@@ -81,6 +87,15 @@ function makeFloorCheckLookup(): (repo: string) => string {
   }
 }
 
+/** mine is model-free — no derive-sized spend to protect — but its
+ * store-side read (`readCorpus`) -> merge -> write (`writeCorpus`) is still
+ * a real read-modify-write against a store another process can rewrite in
+ * between. Task 3 review mirror check (finding 1's shape, applied here):
+ * rather than argue the gap is "probably fine" because it's synchronous
+ * JS with no other await point in between, hold the corpus lock across the
+ * whole read -> merge -> write sequence — same acquire/write(lockHeld)/
+ * release pattern as runDerive, just without any per-record refresh since
+ * there's no multi-minute batch to guard against going stale. */
 export function runMine(cwd: string, log: (m: string) => void): void {
   const files = findTranscriptFiles(projectsDir())
   const floorCheckFor = makeFloorCheckLookup()
@@ -97,13 +112,19 @@ export function runMine(cwd: string, log: (m: string) => void): void {
   })
 
   const deduped = dedupeEarliest(mined)
-  const merged = upsertRecords(readCorpus(cwd), deduped)
-  const ok = writeCorpus(cwd, merged, log)
-  if (ok) {
-    log(
-      `mine: scanned ${files.length} transcript file(s), mined ${deduped.length} record(s) ` +
-        `(pre-dedupe ${mined.length}); store now ${merged.length} record(s)`,
-    )
+
+  if (!acquireCorpusLock(cwd, log)) return
+  try {
+    const merged = upsertRecords(readCorpus(cwd), deduped)
+    const ok = writeCorpus(cwd, merged, log, { lockHeld: true })
+    if (ok) {
+      log(
+        `mine: scanned ${files.length} transcript file(s), mined ${deduped.length} record(s) ` +
+          `(pre-dedupe ${mined.length}); store now ${merged.length} record(s)`,
+      )
+    }
+  } finally {
+    releaseCorpusLock(cwd)
   }
 }
 

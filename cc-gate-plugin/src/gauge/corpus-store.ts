@@ -185,17 +185,75 @@ function releaseLock(cwd: string): void {
   }
 }
 
-/** Atomic tmp+rename full rewrite of the corpus store, guarded by the
- * lockfile. Returns true on success; on lock contention, logs a
- * "REFUSING: ..." message (km-sensors-sync.sh discipline) and returns false
- * WITHOUT touching the store file — no lost update. */
+// --- Exported lock lifecycle (Task 3 review, findings 1+2: the lock must be
+// able to guard a whole read -> derive -> write lifecycle, not just
+// writeCorpus's own tmp+rename, so a caller doing expensive work (model
+// calls) between its read and its write can hold the lock across all of it.
+// These are the SAME mechanics writeCorpus uses internally — acquireLock /
+// releaseLock above — just exposed so a caller can acquire before its first
+// read and release after its write, passing writeCorpus `{lockHeld: true}`
+// so it neither double-acquires nor releases out from under the caller. ---
+
+/** Acquire `.km/gauge-corpus/.lock` as a standalone step. Same
+ * mkdir-exclusive + pid/ts + stale(>10min)-takeover mechanics as
+ * writeCorpus's internal acquire (this IS that acquire, exported). On
+ * contention, logs a "REFUSING: ..." message (km-sensors-sync.sh refusal
+ * discipline) and returns false — caller decides what to refuse (e.g. an
+ * entire cost-fenced batch, before any spend). */
+export function acquireCorpusLock(cwd: string, log: (m: string) => void): boolean {
+  const ok = acquireLock(cwd, Date.now())
+  if (!ok) {
+    log(
+      `REFUSING: gauge-corpus lock — lock held (${CORPUS_DIR_REL}/${LOCK_FILE_NAME}); ` +
+        "another writer is in flight.",
+    )
+  }
+  return ok
+}
+
+/** Rewrite the held lock's `ts` in place (pid unchanged) — staleness guard
+ * for a long-running batch: without periodic refresh, a batch that runs
+ * longer than STALE_MS would let a second caller observe the still-valid
+ * lock as stale and take over mid-batch. Best-effort: a failed refresh
+ * (e.g. the lock file vanished from underneath, which should not happen
+ * absent a bug elsewhere) is silently ignored — release/re-acquire handles
+ * the fallout, not this call. */
+export function refreshCorpusLock(cwd: string): void {
+  const lockPath = path.join(cwd, CORPUS_DIR_REL, LOCK_FILE_NAME)
+  const content: LockContent = { pid: process.pid, ts: Date.now() }
+  try {
+    fs.writeFileSync(lockPath, JSON.stringify(content))
+  } catch {
+    // best-effort — see doc comment above
+  }
+}
+
+/** Release `.km/gauge-corpus/.lock` as a standalone step (this IS
+ * releaseLock, exported) — pairs with acquireCorpusLock for a caller
+ * holding the lock across more than just writeCorpus's own tmp+rename. */
+export function releaseCorpusLock(cwd: string): void {
+  releaseLock(cwd)
+}
+
+/** Atomic tmp+rename full rewrite of the corpus store. By default acquires
+ * and releases the lock itself, refusing on contention. When the caller
+ * already holds the lock (`opts.lockHeld: true` — acquired via
+ * acquireCorpusLock across its own read -> derive -> write sequence, Task 3
+ * review finding 1/2), this skips BOTH acquire and release: the caller owns
+ * the lock's lifetime, and a post-spend write under an already-held lock
+ * can never hit contention. Default path (no opts) is byte-identical to the
+ * pre-refactor behavior. Returns true on success; on lock contention (only
+ * possible when not lockHeld), logs a "REFUSING: ..." message and returns
+ * false WITHOUT touching the store file — no lost update. */
 export function writeCorpus(
   cwd: string,
   records: CorpusRecord[],
   log: (m: string) => void,
+  opts?: { lockHeld?: boolean },
 ): boolean {
   const now = Date.now()
-  if (!acquireLock(cwd, now)) {
+  const lockHeld = opts?.lockHeld ?? false
+  if (!lockHeld && !acquireLock(cwd, now)) {
     log(
       `REFUSING: gauge-corpus write — lock held (${CORPUS_DIR_REL}/${LOCK_FILE_NAME}); ` +
         "another writer is in flight. Nothing written — retry later.",
@@ -212,7 +270,7 @@ export function writeCorpus(
     fs.renameSync(tmp, dest)
     return true
   } finally {
-    releaseLock(cwd)
+    if (!lockHeld) releaseLock(cwd)
   }
 }
 

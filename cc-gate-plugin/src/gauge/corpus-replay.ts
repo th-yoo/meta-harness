@@ -25,7 +25,15 @@ import { extractResultText } from "./refiner-cli.ts"
 import { buildRefinerPrompt, parseRefinerOutput } from "./refiner.ts"
 import { validateDerivation } from "./validate.ts"
 import type { GaugeFile } from "./files.ts"
-import { readCorpus, writeCorpus, upsertRecords, type CorpusRecord } from "./corpus-store.ts"
+import {
+  readCorpus,
+  writeCorpus,
+  upsertRecords,
+  acquireCorpusLock,
+  refreshCorpusLock,
+  releaseCorpusLock,
+  type CorpusRecord,
+} from "./corpus-store.ts"
 
 const CALL_TIMEOUT_MS = 60_000
 
@@ -118,12 +126,55 @@ export interface DeriveSummary {
   staysMined: number
 }
 
+export interface FenceCheck {
+  all: CorpusRecord[]
+  pending: CorpusRecord[]
+}
+
+/** Re-read the corpus and re-check the `go` fence against a FRESH pending
+ * count. Meant to be called AFTER the lock is held (Task 3 review finding
+ * 1: a `mine` can land between the CLI's first, pre-lock read and lock
+ * acquisition; re-checking under the lock closes that window before any
+ * model call happens). Extracted as its own exported function — rather
+ * than inlined in runDerive — so this re-check is directly unit-testable:
+ * seed a corpus, pass the outer fence, mutate the store (simulating a mine
+ * landing in that window), then call this and observe it reject the
+ * now-stale `go` with zero model calls. */
+export function checkFenceUnderLock(
+  cwd: string,
+  go: number,
+  log: (m: string) => void,
+): FenceCheck | undefined {
+  const all = readCorpus(cwd)
+  const pending = all.filter((r) => r.stage === "mined")
+  if (pending.length !== go) {
+    log(
+      `REFUSING: derive — pending count changed under lock (now ${pending.length}, ` +
+        `expected ${go}); a concurrent mine landed. Re-run with --go ${pending.length}.`,
+    )
+    return undefined
+  }
+  return { all, pending }
+}
+
 /** Cost fence (amendment-mandated, no bypass): `go` must exactly equal the
  * CURRENT pending ("mined" stage) record count, or the batch refuses with
  * zero effect — no model calls, no store write. `go === undefined` (no
  * `--go` given) also refuses, printing the pending count so the operator
  * can size the next call. Pending records are derived SEQUENTIALLY (not in
- * parallel) — a batch is a deliberately sized, deliberately paced spend. */
+ * parallel) — a batch is a deliberately sized, deliberately paced spend.
+ *
+ * Lock discipline (Task 3 review, findings 1+2): the corpus lock is
+ * acquired AFTER the fence passes but BEFORE any model call, and held for
+ * the entire derive batch (`refreshCorpusLock` after each record guards
+ * against the lock going stale mid-batch), released only in a `finally` so
+ * a thrown model error can't leak it. The pending set is re-read and the
+ * fence re-checked UNDER the lock (`checkFenceUnderLock`) before spending
+ * anything, closing the window where a concurrent `mine` lands between the
+ * first (pre-lock) read and lock acquisition. Net effect: model spend only
+ * ever happens while holding the lock, so the post-spend `writeCorpus(...,
+ * {lockHeld: true})` can never hit contention — a spent-but-discarded
+ * refusal is no longer possible. */
 export async function runDerive(
   cwd: string,
   go: number | undefined,
@@ -147,24 +198,34 @@ export async function runDerive(
     return undefined
   }
 
-  const results: CorpusRecord[] = []
-  for (const record of pending) {
-    results.push(await deriveRecord(record))
-  }
-  const derivedCount = results.filter((r) => r.stage === "derived").length
+  if (!acquireCorpusLock(cwd, log)) return undefined
+  try {
+    const fenced = checkFenceUnderLock(cwd, go, log)
+    if (!fenced) return undefined
+    const { all: freshAll, pending: freshPending } = fenced
 
-  const merged = upsertRecords(all, results)
-  const ok = writeCorpus(cwd, merged, log)
-  if (!ok) return undefined
+    const results: CorpusRecord[] = []
+    for (const record of freshPending) {
+      results.push(await deriveRecord(record))
+      refreshCorpusLock(cwd)
+    }
+    const derivedCount = results.filter((r) => r.stage === "derived").length
 
-  const summary: DeriveSummary = {
-    pending: pending.length,
-    derived: derivedCount,
-    staysMined: pending.length - derivedCount,
+    const merged = upsertRecords(freshAll, results)
+    const ok = writeCorpus(cwd, merged, log, { lockHeld: true })
+    if (!ok) return undefined
+
+    const summary: DeriveSummary = {
+      pending: freshPending.length,
+      derived: derivedCount,
+      staysMined: freshPending.length - derivedCount,
+    }
+    log(
+      `derive: ${summary.derived}/${summary.pending} derived, ${summary.staysMined} stayed mined ` +
+        `(retryable); store now ${merged.length} record(s)`,
+    )
+    return summary
+  } finally {
+    releaseCorpusLock(cwd)
   }
-  log(
-    `derive: ${summary.derived}/${summary.pending} derived, ${summary.staysMined} stayed mined ` +
-      `(retryable); store now ${merged.length} record(s)`,
-  )
-  return summary
 }
