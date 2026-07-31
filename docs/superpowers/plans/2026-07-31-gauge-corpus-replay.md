@@ -79,6 +79,28 @@ amendment point-2 order: (i) `.km/fixture-refs.ndjson` join — pinned predicate
 
 state-resolve + `resolve` (scratch repos: fixture-ref path, commit-window/host match+mismatch, none, pruned-ref fallthrough, misattribution guard — two mined prompts one session, later one blocks: EARLIER prompt must NOT take the ref, later one must; PLUS the non-mined-turn case: a sensor cycle line (non-task-shaped turn) between an early mined prompt and the ref also blocks the match (sensor-stream bound, not mined-records bound); joinKind clean-vs-nearest assertions; cleanup after timeout AND after writing check, install-skip, evaluateGauge semantics delegation).
 
+**Post-review rulings (T4 adjudication, 2026-07-31 MacBook — all three implementer interpretations ruled SOUND):**
+
+1. "Completed cycle" for the misattribution guard and commit-join anchor =
+   cycle-terminal sensor line (accepted or exhausted emission points in
+   core/stop.ts) with skippedStop lines EXCLUDED (prompt.ts marker for a
+   turn that never engaged the gate — not a cycle; interrupted preemption
+   lines DO count, conservative). For a prompt whose own turn emitted no
+   line, the anchor is the next turn's cycle-terminal line (pushes the
+   commit window later only — still post-turn state).
+2. joinKind pinned computable: "nearest" ⇔ ≥1 skippedStop marker line
+   strictly between promptTs and the matched ref's ts; "clean" otherwise.
+   Clean still cannot exclude un-instrumented no-edit fast-path turns —
+   the plan's honest residual, now bounded by the only persisted signal.
+3. Commit-join host clause = cycle sensor-line `host` must equal the
+   RESOLVING machine's hostname() (commits are host-anonymous; sensor
+   streams travel cross-host via sync, so without this check host B's
+   parallel commits would be attributed to host A's cycles). Cross-host
+   resolve therefore starves to descriptive-only — the amendment's
+   designed anti-misattribution fallback. Residual accepted: even
+   same-host resolve can select a commit pulled from another host; the
+   check bounds, not eliminates, cross-host misattribution.
+
 ---
 
 ### Task 5: Report subcommand (provenance-split M1v2)

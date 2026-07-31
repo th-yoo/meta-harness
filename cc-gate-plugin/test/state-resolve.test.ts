@@ -7,6 +7,7 @@ import {
   runResolve,
   findCycle,
   findFixtureRefCandidate,
+  materializeTree,
   CHECK_TIMEOUT_MS,
   type ResolveDeps,
 } from "../src/gauge/state-resolve.ts"
@@ -160,6 +161,30 @@ describe("findFixtureRefCandidate", () => {
   })
 })
 
+describe("materializeTree — pipefail on git archive failure", () => {
+  test("bogus sha -> git archive fails -> pipe now reports failure despite bsdtar's empty-input exit 0", async () => {
+    // Without `set -o pipefail` in the bash -c pipe, bash's exit status is
+    // the LAST command's only: `git archive <bad-sha>` fails and writes
+    // nothing to stdout, but `tar -x` on an EMPTY stdin exits 0 (bsdtar,
+    // confirmed on this host) — so the whole pipe would report success
+    // with nothing actually extracted. This proves the fix: a bogus sha
+    // must now make materializeTree return false.
+    const repo = mkGitRepo()
+    commitFile(repo, "a.txt", "hi\n") // give the repo real history so this isn't "empty repo" noise
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "km-materialize-pipefail-test-"))
+    try {
+      const ok = await materializeTree(
+        "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        repo,
+        dir,
+      )
+      expect(ok).toBe(false)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
 // --- resolveRecord: join order + materialization + evaluateGauge delegation ---
 
 describe("resolveRecord — fixture-ref happy path", () => {
@@ -220,6 +245,24 @@ describe("resolveRecord — commit join", () => {
     const repo = mkGitRepo()
     const { ct } = commitFile(repo, "a.txt", "hi\n")
     const cycleTs = ct * 1000 + 8 * 24 * 3600 * 1000 // cycle is 8 days AFTER the only commit
+    const sensors = [sline({ ts: cycleTs, host: "host-a" })]
+
+    const record = rec({ repo, promptTs: cycleTs - 1000 })
+    const result = await resolveRecord(record, sensors, [], stubDeps({ hostname: () => "host-a" }))
+
+    expect(result.state?.kind).toBe("none")
+  })
+
+  test("commit >7d AFTER the cycle is skipped (upper cap) — cycle at T, commit at T+8d -> none", async () => {
+    // The test above only exercises the LOWER-bound guard (committerTs <
+    // cycle.ts): its cycle sits AFTER the only commit, so the loop's very
+    // first `continue` fires before the upper-cap line is ever reached.
+    // This test puts the cycle BEFORE the commit by >7d so the commit
+    // clears the lower bound and the code must fall through to
+    // `committerTs > cycle.ts + MS_7D` to reject it.
+    const repo = mkGitRepo()
+    const { ct } = commitFile(repo, "a.txt", "hi\n")
+    const cycleTs = ct * 1000 - 8 * 24 * 3600 * 1000 // cycle is 8 days BEFORE the only commit
     const sensors = [sline({ ts: cycleTs, host: "host-a" })]
 
     const record = rec({ repo, promptTs: cycleTs - 1000 })

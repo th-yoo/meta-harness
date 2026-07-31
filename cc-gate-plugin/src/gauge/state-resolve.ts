@@ -182,21 +182,6 @@ export function findFixtureRefCandidate(
   return best
 }
 
-/** True iff any NON-skippedStop sensor line for `sessionId` falls strictly
- * between `promptTs` and `boundTs` — the misattribution guard: such a line
- * is a DIFFERENT completed cycle, proof the candidate ref (at boundTs)
- * cannot be this record's own. */
-function hasInterveningCycle(
-  sensors: SensorLine[],
-  sessionId: string,
-  promptTs: number,
-  boundTs: number,
-): boolean {
-  return sensors.some(
-    (s) => s.sessionID === sessionId && !s.skippedStop && s.ts > promptTs && s.ts < boundTs,
-  )
-}
-
 /** True iff any `skippedStop` marker line for `sessionId` falls strictly
  * between `promptTs` and `boundTs` — the joinKind "nearest" signal. */
 function hasInterveningMarker(
@@ -230,15 +215,25 @@ function shQuote(s: string): string {
 /** `git archive <sha> | tar -x -C <dir>` — ONE raw bash pipe (module doc:
  * NEVER through GitRunner, whose `.text()` UTF-8-decode corrupts binary tar
  * output). Runs with cwd = the SOURCE repo (git archive reads from there);
- * extracts into `dir`. */
-async function materializeTree(sha: string, repo: string, dir: string): Promise<boolean> {
+ * extracts into `dir`. `set -o pipefail` is REQUIRED: bash's default pipe
+ * status is the LAST command's exit code only, and bsdtar exits 0 on empty
+ * stdin (empirically confirmed on this host) — so a failing `git archive`
+ * (bad/pruned sha) feeding an empty stream into `tar -x` would otherwise
+ * report a successful pipe with nothing actually extracted, silently
+ * turning a materialization failure into a false "materialized:true" and
+ * violating the plan's "setup failure -> descriptive-only, never a miss"
+ * pin. */
+export async function materializeTree(sha: string, repo: string, dir: string): Promise<boolean> {
   let proc: ReturnType<typeof Bun.spawn>
   try {
-    proc = Bun.spawn(["bash", "-c", `git archive ${shQuote(sha)} | tar -x -C ${shQuote(dir)}`], {
-      cwd: repo,
-      stdout: "ignore",
-      stderr: "ignore",
-    })
+    proc = Bun.spawn(
+      ["bash", "-c", `set -o pipefail; git archive ${shQuote(sha)} | tar -x -C ${shQuote(dir)}`],
+      {
+        cwd: repo,
+        stdout: "ignore",
+        stderr: "ignore",
+      },
+    )
   } catch {
     return false
   }
