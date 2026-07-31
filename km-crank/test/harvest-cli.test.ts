@@ -18,6 +18,10 @@ function scratchRepo(): string {
   fs.writeFileSync(path.join(dir, "test", "x.test.ts"), "// failing test placeholder\n")
   fs.writeFileSync(path.join(dir, "app.ts"), "export const x = 1\n")
   fs.mkdirSync(path.join(dir, ".km"), { recursive: true })
+  // A TRACKED placeholder inside .km/ — git never tracks empty dirs, so
+  // without a real file here the archived tree would never contain .km/
+  // at all and the strip-.km assertion below would pass vacuously.
+  fs.writeFileSync(path.join(dir, ".km", "runtime-state.json"), "{}\n")
   fs.writeFileSync(path.join(dir, ".env.local"), "SECRET=shh\n")
   sh(dir, "git add -A && git commit -qm init")
   // fixture ref via the same plumbing Task 1 uses
@@ -57,6 +61,49 @@ function scratchRepoWithBail(): { dir: string; validRef: string; treeSha: string
   return { dir, validRef, treeSha }
 }
 
+/** Bare repo with a valid commit/tree but NO test/tests/__tests__ dirs —
+ * exercises the empty-pristine-archive branch. */
+function scratchRepoNoTests(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "harvest-notests-"))
+  sh(dir, "git init -q && git config user.email t@t && git config user.name t")
+  fs.writeFileSync(path.join(dir, "app.ts"), "export const x = 1\n")
+  fs.mkdirSync(path.join(dir, ".km"), { recursive: true })
+  sh(dir, "git add -A && git commit -qm init")
+  sh(dir, "git add -A && git write-tree > .treesha")
+  const treeSha = fs.readFileSync(path.join(dir, ".treesha"), "utf-8").trim()
+  sh(dir, `git update-ref refs/kkamak/fixtures/100-scratch-r1 ${treeSha}`)
+  fs.writeFileSync(path.join(dir, ".km", "fixture-refs.ndjson"),
+    JSON.stringify({ ts: 100, sessionID: "scratchsess", round: 1, check: "exit 1",
+      headSha: "x", treeSha, ref: "refs/kkamak/fixtures/100-scratch-r1" }) + "\n")
+  fs.writeFileSync(path.join(dir, ".km", "check-output.ndjson"), "")
+  return dir
+}
+
+/** Valid repo + a fixture-ref record carrying a `treeSha` override and an
+ * optional `transcriptPath` — for exercising the treeSha-validation /
+ * materialize-failure paths and the transcript-read paths without
+ * duplicating the whole scratch-repo setup per case. */
+function scratchRepoWithOverrides(over: { treeSha?: string; transcriptPath?: string }): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "harvest-ov-"))
+  sh(dir, "git init -q && git config user.email t@t && git config user.name t")
+  fs.mkdirSync(path.join(dir, "test"))
+  fs.writeFileSync(path.join(dir, "test", "x.test.ts"), "// t\n")
+  fs.writeFileSync(path.join(dir, "app.ts"), "export const x = 1\n")
+  fs.mkdirSync(path.join(dir, ".km"), { recursive: true })
+  sh(dir, "git add -A && git commit -qm init")
+  sh(dir, "git add -A && git write-tree > .treesha")
+  const realTreeSha = fs.readFileSync(path.join(dir, ".treesha"), "utf-8").trim()
+  sh(dir, `git update-ref refs/kkamak/fixtures/100-scratch-r1 ${realTreeSha}`)
+  const record = {
+    ts: 100, sessionID: "scratchsess", round: 1, check: "exit 1", headSha: "x",
+    treeSha: over.treeSha ?? realTreeSha, ref: "refs/kkamak/fixtures/100-scratch-r1",
+    ...(over.transcriptPath !== undefined ? { transcriptPath: over.transcriptPath } : {}),
+  }
+  fs.writeFileSync(path.join(dir, ".km", "fixture-refs.ndjson"), JSON.stringify(record) + "\n")
+  fs.writeFileSync(path.join(dir, ".km", "check-output.ndjson"), "")
+  return dir
+}
+
 describe("harvestFixture", () => {
   test("refuses repos outside the allowlist", async () => {
     const dir = scratchRepo()
@@ -72,6 +119,7 @@ describe("harvestFixture", () => {
       "environment/repo/app.ts", "tests/test.sh", "tests/pristine.tar"])
       expect(fs.existsSync(path.join(taskDir, f))).toBe(true)
     expect(fs.existsSync(path.join(taskDir, "environment/repo/.km"))).toBe(false)
+    expect(fs.existsSync(path.join(taskDir, "environment/repo/.km/runtime-state.json"))).toBe(false)
     expect(fs.existsSync(path.join(taskDir, "environment/repo/.env.local"))).toBe(false)
     const fx = JSON.parse(fs.readFileSync(path.join(taskDir, "fixture.json"), "utf-8"))
     expect(fx.excerpt).toBe("synthetic failure output")
@@ -107,5 +155,54 @@ describe("harvestFixture", () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
     const taskDir = await harvestFixture({ repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)], taskName: "my-custom-task" })
     expect(path.basename(taskDir)).toBe("my-custom-task")
+  })
+
+  test("no test/tests/__tests__ dirs -> empty pristine.tar, harvest still succeeds", async () => {
+    const dir = scratchRepoNoTests()
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    const taskDir = await harvestFixture({ repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)] })
+    expect(fs.existsSync(path.join(taskDir, "tests/pristine.tar"))).toBe(true)
+    const list = Bun.spawnSync(["tar", "-tf", path.join(taskDir, "tests", "pristine.tar")]).stdout.toString().trim()
+    expect(list).toBe("")
+  })
+
+  test("transcript read: happy path populates firstUser/lastUser in fixture.json", async () => {
+    const dir = scratchRepoWithOverrides({})
+    const transcriptPath = path.join(dir, "transcript.jsonl")
+    fs.writeFileSync(transcriptPath,
+      JSON.stringify({ type: "user", timestamp: "1970-01-01T00:00:00.050Z",
+        message: { role: "user", content: "please fix the bug" } }) + "\n")
+    // rewrite the ref record with transcriptPath (ts stays 100, transcript line at 50ms is before cutoff)
+    const refsPath = path.join(dir, ".km", "fixture-refs.ndjson")
+    const rec = JSON.parse(fs.readFileSync(refsPath, "utf-8").trim())
+    fs.writeFileSync(refsPath, JSON.stringify({ ...rec, transcriptPath }) + "\n")
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    const taskDir = await harvestFixture({ repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)] })
+    const fx = JSON.parse(fs.readFileSync(path.join(taskDir, "fixture.json"), "utf-8"))
+    expect(fx.firstUser).toBe("please fix the bug")
+    expect(fx.lastUser).toBe("please fix the bug")
+  })
+
+  test("transcript read: unreadable path -> harvest still succeeds with empty prompt context", async () => {
+    const dir = scratchRepoWithOverrides({ transcriptPath: path.join(fs.mkdtempSync(path.join(os.tmpdir(), "harvest-ghost-")), "does-not-exist.jsonl") })
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    const taskDir = await harvestFixture({ repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)] })
+    const fx = JSON.parse(fs.readFileSync(path.join(taskDir, "fixture.json"), "utf-8"))
+    expect(fx.firstUser).toBeUndefined()
+    expect(fx.lastUser).toBeUndefined()
+  })
+
+  test("invalid-format treeSha throws before any subprocess runs", async () => {
+    const dir = scratchRepoWithOverrides({ treeSha: "not-a-sha" })
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    await expect(harvestFixture({ repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)] }))
+      .rejects.toThrow(/treeSha/)
+  })
+
+  test("valid-format but nonexistent treeSha: git archive failure throws, not masked by pipefail", async () => {
+    const dir = scratchRepoWithOverrides({ treeSha: "0".repeat(40) })
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    await expect(harvestFixture({ repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)] }))
+      .rejects.toThrow()
   })
 })

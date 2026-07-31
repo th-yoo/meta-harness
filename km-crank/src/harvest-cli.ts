@@ -42,6 +42,16 @@ function runOrThrow(cmd: string, cwd: string): void {
   }
 }
 
+/** Single-quote a string for safe interpolation into `bash -c "..."`. Double
+ * quotes leave `$` and backticks live (command/variable substitution), so
+ * paths must be single-quoted with the standard '\'' escape — same pattern
+ * as cc-gate-plugin/src/hook-cli.ts:264. */
+function shQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`
+}
+
+const TREE_SHA_RE = /^[0-9a-f]{40}$/
+
 function pad2(n: number): string {
   return String(n).padStart(2, "0")
 }
@@ -88,6 +98,12 @@ export async function harvestFixture(opts: HarvestOptions): Promise<string> {
   const records = parseFixtureRefRecords(refsText)
   const sidecar = parseCheckOutputRecords(sidecarText)
   const ref = selectRef(records, opts.refName)
+  // Parsed records are not trusted input: treeSha flows straight into a
+  // shell command below, so reject anything that isn't a 40-hex-char sha
+  // BEFORE any directory is created or any subprocess runs.
+  if (!TREE_SHA_RE.test(ref.treeSha)) {
+    throw new Error(`fixture-ref treeSha is not a valid 40-hex-char sha: ${JSON.stringify(ref.treeSha)}`)
+  }
   const join = joinFixture(ref, sidecar)
 
   let promptContext = {} as ReturnType<typeof extractPromptContext>
@@ -109,9 +125,13 @@ export async function harvestFixture(opts: HarvestOptions): Promise<string> {
   fs.mkdirSync(testsDir, { recursive: true })
 
   // Materialize the captured tree — git archive of the ref's treeSha,
-  // extracted straight into environment/repo/.
+  // extracted straight into environment/repo/. `set -o pipefail` is
+  // required: without it bash's exit status is the LAST command in the
+  // pipe (tar), so a `git archive` failure (e.g. treeSha not found) would
+  // be masked by `tar -x` succeeding trivially on empty stdin, silently
+  // producing an empty environment/repo instead of throwing.
   runOrThrow(
-    `git -C ${JSON.stringify(opts.repoPath)} archive --format=tar ${JSON.stringify(ref.treeSha)} | tar -x -C ${JSON.stringify(repoDir)}`,
+    `set -o pipefail && git -C ${shQuote(opts.repoPath)} archive --format=tar ${ref.treeSha} | tar -x -C ${shQuote(repoDir)}`,
     opts.repoPath,
   )
 
@@ -128,9 +148,9 @@ export async function harvestFixture(opts: HarvestOptions): Promise<string> {
   const pristinePath = path.join(testsDir, "pristine.tar")
   const existingGlobs = TEST_PRISTINE_GLOBS.filter((g) => fs.existsSync(path.join(repoDir, g)))
   if (existingGlobs.length > 0) {
-    runOrThrow(`tar -cf ${JSON.stringify(pristinePath)} ${existingGlobs.map((g) => JSON.stringify(g)).join(" ")}`, repoDir)
+    runOrThrow(`tar -cf ${shQuote(pristinePath)} ${existingGlobs.map((g) => shQuote(g)).join(" ")}`, repoDir)
   } else {
-    runOrThrow(`tar -cf ${JSON.stringify(pristinePath)} -T /dev/null`, repoDir)
+    runOrThrow(`tar -cf ${shQuote(pristinePath)} -T /dev/null`, repoDir)
   }
 
   fs.writeFileSync(
