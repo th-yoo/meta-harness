@@ -219,6 +219,40 @@ describe("computeCorpusClassCTally", () => {
   test("empty corpus -> 0/0", () => {
     expect(computeCorpusClassCTally([])).toEqual({ c: 0, d: 0 })
   })
+
+  test("amendment point 3: corpus-bench class-C records excluded from pooling; only corpus-transcript pools", () => {
+    // corpus-bench record: poolEligible, class C, executable true — should NOT enter c/d
+    const benchRecord = corpusRec({
+      promptSha256: "bench-1",
+      provenance: "corpus-bench",
+      derivation: { v: 2, sessionID: "x", n: 1, ts: 1, model: "haiku", derivationMs: 1, goalSummary: "", criteria: [], check: "c", confidence: 0.5, class: "C" },
+      exec: { executable: true, timeoutMs: 30000 },
+      poolEligible: true,
+    })
+    // corpus-transcript record: same properties — SHOULD enter c/d
+    const transcriptRecord = corpusRec({
+      promptSha256: "transcript-1",
+      provenance: "corpus-transcript",
+      derivation: { v: 2, sessionID: "x", n: 1, ts: 1, model: "haiku", derivationMs: 1, goalSummary: "", criteria: [], check: "c", confidence: 0.5, class: "C" },
+      exec: { executable: true, timeoutMs: 30000 },
+      poolEligible: true,
+    })
+
+    // bench alone: should not pool
+    const { c: benchC, d: benchD } = computeCorpusClassCTally([benchRecord])
+    expect(benchD).toBe(0)
+    expect(benchC).toBe(0)
+
+    // transcript alone: should pool
+    const { c: transcriptC, d: transcriptD } = computeCorpusClassCTally([transcriptRecord])
+    expect(transcriptD).toBe(1)
+    expect(transcriptC).toBe(1)
+
+    // both together: only transcript counts
+    const { c: bothC, d: bothD } = computeCorpusClassCTally([benchRecord, transcriptRecord])
+    expect(bothD).toBe(1)
+    expect(bothC).toBe(1)
+  })
 })
 
 describe("computePooledVerdict — floor rules", () => {

@@ -290,6 +290,8 @@ export function computeCorpusClassCTally(records: CorpusRecord[]): CorpusClassCT
   for (const r of records) {
     if (!r.poolEligible) continue
     if (r.derivation?.class !== "C") continue
+    // amendment point 3: only corpus-transcript pools; corpus-bench is descriptive-only
+    if (r.provenance !== "corpus-transcript") continue
     d++
     if (r.exec?.executable === true) c++
   }
