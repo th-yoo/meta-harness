@@ -412,6 +412,39 @@ test("forced v1: composed block message — raw output present, kernel closing s
   rmRepo(repo)
 })
 
+test("forced v2 (Loop F): biggest-gap headline first, then the composed body", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "echo KM_E2E_FAILURE_MARKER; false", rounds: 2 })
+  seedState(repo, "sid-v2", { edited: true })
+  const r = await runHook({
+    event: "Stop",
+    stdin: JSON.stringify({ session_id: "sid-v2", cwd: repo }),
+    env: { KKAMAK_REINJECT: "v2" },
+  })
+  const payload = JSON.parse(r.stdout)
+  expect(payload.decision).toBe("block")
+  expect(payload.reason.startsWith("biggest gap: ")).toBe(true)
+  expect(payload.reason).toContain("KM_E2E_FAILURE_MARKER")
+  expect(payload.reason).toContain("gate.json")
+  expect(payload.reason).not.toContain("re-run it")
+  rmRepo(repo)
+})
+
+test("KKAMAK_REINJECT=v2 (forced) -> sensor line stamps reinject=v2 + forced:true", async () => {
+  const repo = mkRepo()
+  writeGate(repo, { check: "true" })
+  seedState(repo, "sid-v2-forced", { edited: true })
+  await runHook({
+    event: "Stop",
+    stdin: JSON.stringify({ session_id: "sid-v2-forced", cwd: repo }),
+    env: { KKAMAK_REINJECT: "v2" },
+  })
+  const lines = sensorLines(repo)
+  expect(lines[0]!.reinject).toBe("v2")
+  expect(lines[0]!.forced).toBe(true)
+  rmRepo(repo)
+})
+
 test("forced v1 + check timeout: timeout marker survives the composed tail", async () => {
   const repo = mkRepo()
   writeGate(repo, { check: "sleep 5", rounds: 2, checkTimeoutMs: 300 })
