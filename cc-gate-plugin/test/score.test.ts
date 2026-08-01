@@ -385,6 +385,47 @@ test("lines with no arm recorded are excluded from BOTH arms", () => {
   expect(arms.v1.gateCycles).toBe(0)
 })
 
+test("v2 arm (env-gated Loop F) splits separately from v0/v1", () => {
+  const lines = [
+    ...MANY(4, { reinject: "v0" }),
+    ...MANY(3, { reinject: "v1" }),
+    ...MANY(5, { reinject: "v2" }),
+    ...MANY(1, { reinject: "v2", interrupted: true }),
+    ...MANY(2, {}), // pre-experiment lines belong to no arm
+  ]
+  const { arms } = scoreLines(lines, { minN: 1 })
+  expect(arms.v0.gateCycles).toBe(4)
+  expect(arms.v1.gateCycles).toBe(3)
+  expect(arms.v2.gateCycles).toBe(5)
+  expect(arms.v2.counts.interrupted).toBe(1)
+  expect(arms.v2.mInterrupt).toBeCloseTo(1 / 6)
+})
+
+test("CLI: v2 arm line renders in the §4.4 block once v2 has cycles", async () => {
+  const f = sensorFile([
+    ...MANY(3, { reinject: "v0" }),
+    ...MANY(3, { reinject: "v1" }),
+    ...MANY(2, { reinject: "v2" }),
+  ])
+  const r = await runCli([f, "--min-n", "1"])
+  expect(r.code).toBe(0)
+  expect(r.out).toContain("§4.4 reinject wording")
+  expect(r.out).toContain("v0 control")
+  expect(r.out).toContain("v1 candidate")
+  expect(r.out).toContain("v2 candidate")
+  expect(r.out).toContain("cycles    2") // v2's count, same column format as v0/v1
+})
+
+test("CLI: no v2 data -> §4.4 block is the status-quo two-arm report, v2 never mentioned", async () => {
+  const f = sensorFile([...MANY(3, { reinject: "v0" }), ...MANY(3, { reinject: "v1" })])
+  const r = await runCli([f, "--min-n", "1"])
+  expect(r.code).toBe(0)
+  expect(r.out).toContain("v0 control")
+  expect(r.out).toContain("v1 candidate")
+  // Byte-identical to the pre-v2 render: no v2 text anywhere in the report.
+  expect(r.out).not.toContain("v2")
+})
+
 // ── §4.3 trial block (per-arm N_eff + exposure guard, TM7 / §11 item 7) ────
 //
 // Regression contract: with no `.km/trial-arms.ndjson` beside the target

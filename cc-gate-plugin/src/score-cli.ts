@@ -345,16 +345,21 @@ function render(r: ScoreResult, minN: number, trial?: TrialBlock, checkMsByGroup
     out.push("")
   }
 
-  const { v0, v1 } = r.arms
-  if (v0.gateCycles + v1.gateCycles + v0.counts.interrupted + v1.counts.interrupted > 0) {
+  const { v0, v1, v2 } = r.arms
+  // v2 (Loop F, env-gated behind KKAMAK_REINJECT_V2) renders only once it has
+  // data — until then the block stays byte-identical to the two-arm report.
+  const v2Active = v2.gateCycles + v2.counts.interrupted > 0
+  if (v0.gateCycles + v1.gateCycles + v0.counts.interrupted + v1.counts.interrupted + v2.gateCycles + v2.counts.interrupted > 0) {
     out.push(`── §4.4 reinject wording (within-workload randomised by session)`)
-    for (const [name, a] of [["v0 control ", v0], ["v1 candidate", v1]] as const) {
+    const armRows: [string, typeof v0][] = [["v0 control ", v0], ["v1 candidate", v1]]
+    if (v2Active) armRows.push(["v2 candidate", v2])
+    for (const [name, a] of armRows) {
       out.push(
         `   ${name}  cycles ${String(a.gateCycles).padStart(4)}` +
         `   M-catch ${pct(a.mCatch)}   M-exhaust ${pct(a.mExhaust)}   M-interrupt ${pct(a.mInterrupt)}`,
       )
     }
-    if (v0.underpowered || v1.underpowered) {
+    if (v0.underpowered || v1.underpowered || (v2Active && v2.underpowered)) {
       out.push(`   ⚠ an arm is under ${minN} cycles — no comparison yet`)
     } else if (v1.mInterrupt !== null && v0.mInterrupt !== null && v1.mCatch !== null && v0.mCatch !== null) {
       const wins = v1.mInterrupt <= v0.mInterrupt && v1.mCatch >= v0.mCatch

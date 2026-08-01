@@ -11,8 +11,12 @@
 // Assignment is a deterministic hash of sessionID, ~50/50, so both arms
 // accumulate CONCURRENTLY over the same workload. Interleaving is what lets
 // the comparison survive workload drift without §4.3's full machinery.
+//
+// v2 (Gauntlet Loop F) is env-gated behind KKAMAK_REINJECT_V2=1 — the live
+// v0/v1 assignment stays untouched until the user rules on the §4.4
+// registration amendment adding a third arm.
 
-export const REINJECT_VARIANTS = ["v0", "v1"] as const
+export const REINJECT_VARIANTS = ["v0", "v1", "v2"] as const
 export type ReinjectVariant = (typeof REINJECT_VARIANTS)[number]
 
 /** Kernel's tail length for check output (vendor/complete-gate.ts OUT_TAIL,
@@ -25,6 +29,26 @@ const V1_SENTENCE =
   "This check is configured by the repository (gate.json); the gate runs it " +
   "automatically when you finish. Do not run it yourself — fix the failures " +
   "above and end your turn."
+
+/** v2's gap-line detector: first rawOut line that looks like the decisive
+ * failure. Mechanical on purpose — no model call, no heuristics beyond one
+ * regex, so the arm stays deterministic and free. */
+const V2_GAP_RE = /error|fail|FAIL|✗|assert/i
+
+/** v2's gap-line length cap: a "single decisive failure" that needs more
+ * than 200 chars is a paragraph, not a headline. */
+const V2_GAP_MAX = 200
+
+/** First rawOut line matching V2_GAP_RE, else the last non-empty line —
+ * trimmed and capped to V2_GAP_MAX. Empty string only if rawOut is all
+ * whitespace (callers fail open before that on truly empty rawOut). */
+function biggestGapLine(rawOut: string): string {
+  const lines = rawOut.split("\n")
+  const hit = lines.find((l) => V2_GAP_RE.test(l))
+  const nonEmpty = lines.filter((l) => l.trim() !== "")
+  const line = hit ?? nonEmpty[nonEmpty.length - 1] ?? ""
+  return line.trim().slice(0, V2_GAP_MAX)
+}
 
 /** FNV-1a: tiny, stable across processes and hosts (Math.random is not). */
 function hash(s: string): number {
@@ -46,7 +70,12 @@ export function pickReinjectVariant(
   env: Record<string, string | undefined> = process.env,
 ): ReinjectVariant {
   const forced = env["KKAMAK_REINJECT"]
-  if (forced === "v0" || forced === "v1") return forced
+  if (forced === "v0" || forced === "v1" || forced === "v2") return forced
+  // Third arm is opt-in only (KKAMAK_REINJECT_V2=1): without the flag the
+  // live 50/50 v0/v1 assignment is byte-identical to pre-v2 behaviour.
+  if (env["KKAMAK_REINJECT_V2"] === "1") {
+    return REINJECT_VARIANTS[hash(sessionID) % 3]!
+  }
   return hash(sessionID) % 2 === 0 ? "v0" : "v1"
 }
 
@@ -58,6 +87,9 @@ export function pickReinjectVariant(
  * kernel's prose, so text-collision edge cases (self-referential output,
  * idempotency, unknown shapes) cannot exist. Fail-open: without rawOut the
  * kernel evidence passes through untransformed.
+ * v2 = v1's composition with a "biggest gap:" headline FIRST — one line
+ * naming the single decisive failure, extracted mechanically from rawOut —
+ * so the agent reads the gap before the evidence dump. Same fail-open rule.
  */
 export function applyReinjectVariant(
   evidence: string,
@@ -66,7 +98,9 @@ export function applyReinjectVariant(
 ): string {
   if (variant === "v0") return evidence
   if (rawOut === undefined || rawOut === "") return evidence // fail-open
+  const gap = variant === "v2" ? `biggest gap: ${biggestGapLine(rawOut)}\n` : ""
   return (
+    gap +
     "not done: the repository's completion check failed:\n" +
     rawOut.slice(-OUT_TAIL) +
     "\n" +

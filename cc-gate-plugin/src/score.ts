@@ -97,8 +97,9 @@ export interface GaugeScore {
 
 export interface ScoreResult {
   groups: GroupScore[]
-  /** §4.4 reinject experiment, split by arm (pre-reg §4b). */
-  arms: { v0: GroupScore; v1: GroupScore }
+  /** §4.4 reinject experiment, split by arm (pre-reg §4b; v2 = env-gated
+   * Loop F arm, pending amendment ruling). */
+  arms: { v0: GroupScore; v1: GroupScore; v2: GroupScore }
   gauge: GaugeScore
   /** Lines that were not usable at all (malformed ndjson rows). */
   skipped: number
@@ -190,6 +191,7 @@ export function scoreLines(lines: SensorLineIn[], opts: ScoreOpts): ScoreResult 
   const arms = {
     v0: scoreGroup("v0", "arm", usable.filter((l) => l.reinject === "v0"), opts),
     v1: scoreGroup("v1", "arm", usable.filter((l) => l.reinject === "v1"), opts),
+    v2: scoreGroup("v2", "arm", usable.filter((l) => l.reinject === "v2"), opts),
   }
 
   return { groups, arms, gauge, skipped }
