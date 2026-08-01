@@ -13,6 +13,17 @@ itself (fresh-context critics).
 | F | reinject v2 biggest-gap-first wording (`cc-gate-plugin/src/reinject.ts`) | `gauntlet-sf-reinject-v2` @ `e2ad44b`+`47af5f7` — **MERGED `989630e`** (user-approved §4b amendment `41a7411`, 2026-08-01) | **MERGED ENV-GATED — employ/drop verdict still OPEN pending evidence** | Round 1 FAIL (score-cli render dropped v2 arm) → fixed + render/e2e tests; round 2 PASS: byte-identical live behavior without `KKAMAK_REINJECT_V2=1` (test-pinned), F1 verified byte-level clean, 568 tests + tsc. Suite run independently by orchestrator. Employ/drop BLOCKED on evidence: fixtures=0, live blocked-cycle flow ≈8/2.5wk. **Two user gates before merge/activation:** (1) §4.4 amendment ruling for the 3rd arm (merge ≠ activation; env-gated); (2) final bar = fixture-replay k=5 paired McNemar on ≥3 fixtures OR live n≥20 blocked cycles. Sub-threshold note for amendment author: 3-arm underpowered guard couples v0/v1 verdict availability to v2's N during ramp-up. |
 | P2 | agent-node Gauntlet Evaluator (fleet spec) | (spec edit on main) | PRE-REGISTERED — experiment written into fleet spec; decision deferred to fleet existence | spec §"Pre-registered future experiment" |
 
+## v2 activation log
+
+- **2026-08-01, yoo-mac.local (user-directed):** installed cache refreshed
+  from merged main + grep-verified (v2 ×3, biggestGapLine ×2, score split,
+  env-gate; single 0.2.1). `KKAMAK_REINJECT_V2=1` set in
+  `~/.claude/settings.json` env (all CC sessions on this host). Dogfood
+  tmux session restarted 13:44 KST on the refreshed cache. From this point
+  this host's blocked cycles randomize v0/v1/v2 (hash%3); v2 clock for the
+  §4b decision rule starts here. Office host: NOT activated (pull + refresh
+  + env there would be its own logged decision).
+
 ## Program seal (2026-08-01)
 
 Method: self-applying Gauntlet Loop — orchestrator lead, builder subagents
