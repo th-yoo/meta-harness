@@ -33,11 +33,17 @@ QUEUE (GO before spend, in order):
     there = own sized go.
 (3) Re-run resolve+report (model-free, no go needed) after organic blocks
     accumulate — watch for first poolEligible record.
-(4) Parked decisions: §3 over-refusal redesign round (single-use, likely
+(4) Path A seed tournament (office, own goes per stage): DRAFT plan
+    docs/superpowers/plans/2026-08-01-path-a-seed-tournament.md — 3
+    seed-scale rewrites (S1 verification-first / S2 interpretation-policy /
+    S3 workflow-scaffold) vs v7 (394-char baseline); screen k=1 held-in
+    band 7 → confirm k=5 McNemar → ace guards k=3 + held-out directional.
+    Stage 0 (authoring, cheap) first go.
+(5) Parked decisions: §3 over-refusal redesign round (single-use, likely
     available) · kkamak gate-editing workload ruling (GA5) · per-repo
     fixture inclusion on first organic block · 22 parked mined records
     (retry only with cause + sized go 22).
-(5) sensors export after dogfood: scripts/km-sensors-sync.sh export.
+(6) sensors export after dogfood: scripts/km-sensors-sync.sh export.
 
 DEADLINE ITEMS: calibration-refresh tooling before 2nd consumed KEEP;
 golden-window machinery before 3rd KEEP.
