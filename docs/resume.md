@@ -86,6 +86,25 @@ QUEUE (GO before spend, in order):
     release LAST, only after (b) passes. 0.4.0 is merged but UNPROVEN:
     nothing has yet shown a clean machine can install it and get blocked.
     Seven Minor findings recorded in that repo's docs/known-issues.md.
+(9b) IN-FLIGHT 2026-08-01 evening, yoo-mac: container install proof PAUSED
+    mid-run. Host steps 1-2 of the runbook already PASSED here (marketplace
+    install from GitHub works logged-OUT; cache lands at
+    $CLAUDE_CONFIG_DIR/plugins/cache/kkamak/kkamak/0.4.0/ with init-cli.ts +
+    commands/init.md present). Step 3 (live block) BLOCKED on host because an
+    isolated CLAUDE_CONFIG_DIR has no keychain auth. Container route was
+    running when the lid closed: podman (at /opt/podman/bin, NOT on PATH)
+    container `kkamak-install-proof` on ubuntu:24.04, PAUSED with bun +
+    claude CLI + plugin 0.4.0 + scratch repo already installed — do NOT
+    `podman rm` it. Credential export was SHREDDED for transit. Resume:
+    (1) podman unpause kkamak-install-proof; (2) re-export keychain creds to
+    the SAME mount paths /var/folders/.../T/kkamak-cc-auth-8uUVmc/claude/
+    .credentials.json + ../claude.json (recipe = opencode-plugin/src/bench/
+    agent-auth.ts darwin branch: security find-generic-password -s "Claude
+    Code-credentials" -w, 0700 dir / 0600 file, mount ro); (3) re-run ONLY
+    the block step: claude -p inside the container against /root/kkamak-check
+    whose gate.json is {check:"exit 1", rounds:1}; expect one block then
+    exhaustion, sensor line gateExhausted:true, two verify-failed rounds,
+    pluginVersion 0.4.0. TAG STAYS UNGATED until that is observed.
 (10) CONSISTENCY between ~/z2/kkamak and cc-gate-plugin (two implementations,
     zero shared code, coupled only by the frozen SensorLine contract). Item 1
     DONE 2026-08-01 (emission conformance suite + negative control, 10e885d).
