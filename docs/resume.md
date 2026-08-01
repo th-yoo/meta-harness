@@ -55,10 +55,12 @@ QUEUE (GO before spend, in order):
     available) · kkamak gate-editing workload ruling (GA5) · per-repo
     fixture inclusion on first organic block · 22 parked mined records
     (retry only with cause + sized go 22) · §4.4 v2 reinject: amendment
-    APPROVED + branch MERGED env-gated 989630e (GA10 + ledger); ACTIVATION
-    still a separate logged decision — needs km-refresh (grep-verify) +
-    KKAMAK_REINJECT_V2=1 on the chosen host; v2 decision rule
-    pre-registered in §4b amendment 41a7411.
+    APPROVED + branch MERGED env-gated 989630e (GA10 + ledger); ACTIVATED on
+    yoo-mac 2026-08-01 (4fec674, ledger v2-activation log) — office host NOT
+    activated, that stays its own logged decision; v2 decision rule
+    pre-registered in §4b amendment 41a7411. NOTE: activating an env-gated
+    arm is a state the SUITE must be proven under — activation broke two
+    pre-v2 tests on yoo-mac and sat red for a day (fixed 10e885d).
 (6) sensors export after dogfood: scripts/km-sensors-sync.sh export.
 (7) MODEL ROLE POLICY (user, 2026-08-01): sonnet = the SUBJECT under
     evolution (kkamak dogfood session's main LLM); opus = judgment roles
@@ -69,6 +71,35 @@ QUEUE (GO before spend, in order):
     OPEN: Path A is pre-registered all-arms opus-5 while sonnet is the
     subject — a seed certified on opus-5 measures the supervisor. Adjudicate
     BEFORE Stage 1 spend.
+(8) DEPLOY gauge fail-loud (merged 0c2482c, §6b amendment, NOT deployed).
+    Source-only today: the installed cache is 0.2.1, so live cycles still
+    omit the field. Needs km-refresh.sh --force + grep-verify `offReason` in
+    the cache (GA3) + dogfood tmux restart. The refresh deletes the plugin
+    cache root and kills hooks fail-open in any LIVE session — pick a moment.
+    Verify after: next cycle carries either a real gauge record or
+    present:false/offReason, never silence.
+(9) kkamak 0.4.0 RELEASE REMAINDER (repo ~/z2/kkamak, main @ 64ff902, CI
+    green): (a) repo description still says "Self-improving agent plugin" —
+    that is meta-harness's tagline; (b) run docs/install-verification.md for
+    real on a DISPOSABLE clone (GA7 precedent) — never against the live
+    install, which is the 0.2.1 research build; (c) tag v0.4.0 + GitHub
+    release LAST, only after (b) passes. 0.4.0 is merged but UNPROVEN:
+    nothing has yet shown a clean machine can install it and get blocked.
+    Seven Minor findings recorded in that repo's docs/known-issues.md.
+(10) CONSISTENCY between ~/z2/kkamak and cc-gate-plugin (two implementations,
+    zero shared code, coupled only by the frozen SensorLine contract). Item 1
+    DONE 2026-08-01 (emission conformance suite + negative control, 10e885d).
+    Remaining: (a) both parity guards skip silently when the counterpart is
+    missing or unparseable — kkamak's scrapes km-crank's test SOURCE with a
+    regex, so a reformat disarms it while still reporting green; make
+    "counterpart present but unreadable" a FAILURE and have both read the one
+    committed fixture; (b) producer identity on the sensor line — pluginVersion
+    does double duty as version AND provenance, and 0.4.0 vs 0.2.1 are
+    different codebases, not newer/older (fold MODEL provenance in, see item
+    7); (c) consolidate research instrumentation as layers over kkamak's
+    kernel AFTER A/A + activation — blocked now by F1 and by mid-stream
+    producer change (R1 class). Two live instances already: the gate.json
+    `gauge` removal (64ff902) and pluginVersion ambiguity.
 
 DEADLINE ITEMS: calibration-refresh tooling before 2nd consumed KEEP;
 golden-window machinery before 3rd KEEP.
