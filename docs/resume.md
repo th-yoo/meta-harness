@@ -30,6 +30,16 @@ precondition ticking; A/A earliest ~Aug 12.
 QUEUE (GO before spend, in order):
 (1) Sustain dogfood daily both hosts (tmux `kkamak`) — organic blocks feed
     fixture-refs AND the activation rate.
+    CYCLE-HARVEST MECHANICS (learned live 2026-08-01, cost 2 tasks for 1
+    cycle): (a) the Stop hook fires at TURN end, not at commit — N tasks in
+    one turn = ONE cycle; (b) the gate only arms on EDIT-TOOL use in that
+    turn (PostToolUse matches Edit|MultiEdit|Write|NotebookEdit), so a turn
+    that only runs `git commit` via Bash produces NO cycle at all. When
+    routing work to a dogfood session: ONE task per turn, and edit + check +
+    commit must all fall INSIDE that turn. Drafting in one turn and
+    committing in the next yields one cycle for two turns of work. Cycle
+    count is bounded by turn boundaries and edit-tool use, never by work
+    done.
 (2) Office host: git pull only (cache already Phases 2+3). Optional:
     model-free mine of office transcripts into its own store; any derive
     there = own sized go.
@@ -50,6 +60,15 @@ QUEUE (GO before spend, in order):
     KKAMAK_REINJECT_V2=1 on the chosen host; v2 decision rule
     pre-registered in §4b amendment 41a7411.
 (6) sensors export after dogfood: scripts/km-sensors-sync.sh export.
+(7) MODEL ROLE POLICY (user, 2026-08-01): sonnet = the SUBJECT under
+    evolution (kkamak dogfood session's main LLM); opus = judgment roles
+    (critics/judges/reviewers/design) + default tier. Supervisor is never
+    the subject. Dogfood model changes must be LOGGED with an exact
+    timestamp in the gauntlet ledger — SensorLine has no model field, so a
+    silent switch merges two populations unrecoverably (R1 class).
+    OPEN: Path A is pre-registered all-arms opus-5 while sonnet is the
+    subject — a seed certified on opus-5 measures the supervisor. Adjudicate
+    BEFORE Stage 1 spend.
 
 DEADLINE ITEMS: calibration-refresh tooling before 2nd consumed KEEP;
 golden-window machinery before 3rd KEEP.
