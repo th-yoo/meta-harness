@@ -776,3 +776,18 @@ Everything else flows one way:
 None — all decisions (D1–D9) closed (D8 master lifecycle & scaling, D9
 crash-consistency added 2026-07-16, §9.4/§9.5). Next: spec self-review, user
 review gate, then writing-plans.
+
+## Pre-registered future experiment: Gauntlet-shaped Evaluator (added 2026-08-01)
+
+Registered BEFORE any fleet build (Gauntlet adoption loop, phase 2 —
+`docs/superpowers/plans/2026-08-01-gauntlet-adoption-loop.md`). When the
+fleet exists: A/B two squad variants as bench arms (both AgentDriver-
+compatible per §1's contract, so no bench modification): (a) plain
+Evaluator per this spec; (b) Gauntlet-shaped Evaluator — wire adds a
+concrete reference-bar input the Evaluator must compare the artifact
+against, verdict payload adds a single ranked biggest-gap sentence that
+`reentry: "delta"` feeds back to the producing slot. Same slots, models,
+bounds otherwise. Verdict machinery: TB2 paired k-trials + McNemar, same
+standard as harness candidates. Decision rule frozen now: adopt (b) into
+SquadDef default only on a certified win; otherwise plain Evaluator stands
+and the comparison records as evidence. No spend authorized here.
