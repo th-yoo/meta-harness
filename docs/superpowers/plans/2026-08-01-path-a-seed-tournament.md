@@ -3,6 +3,13 @@
 **Status:** DRAFT — awaiting user review + go. No spend authorized by this
 document; every stage below has its own go line.
 **Date:** 2026-08-01 (MacBook draft; execution = office box, podman).
+**Pre-data amendment (2026-08-01, before Stage 0):** all trial arms run
+**`claude-opus-5`** (`anthropic/claude-opus-5` via opencode) — Opus updated
+to 5, user directive to use it wherever opus was used. Consequence: v7's
+HISTORICAL band rates (measured on opus-4-8) are no longer a valid screen
+baseline, so Stage 1 gains a concurrent v7 k=1 arm (+7 trials); Stage 2's
+paired v7 control arm already handles this by construction. No verdict
+semantics change.
 **Lane:** TB2 agent harness store (opencode `account-global` layer,
 candidates v0..v11 lineage, active=**v7**). This is NOT the kkamak §4.3
 live-trial lane — no interaction with gate-outcomes, trial-arms,
@@ -81,13 +88,14 @@ the evidence inputs. Commit candidate texts under
 `term-bench2/store/global/candidates/` as INACTIVE (surgical store sync,
 never blind export). No bench spend.
 
-**Stage 1 — screen (go: ~30 trials).** S1, S2, S3 vs nothing (v7 band
-rates already known from the k=3 screen: band definition = 0<pass<1).
-Each candidate × held-in band (7) × **k=1**, opus-4-8, width 4,
-`--no-pack-measured --no-oauth-gate`, tmux (never setsid). 21 trials + up
+**Stage 1 — screen (go: ~37 trials).** S1, S2, S3 **plus a concurrent v7
+arm** (amendment above: historical opus-4-8 band rates are not a valid
+baseline under opus-5; band definition = 0<pass<1 still from the k=3
+screen). Each arm × held-in band (7) × **k=1**, **opus-5**, width 4,
+`--no-pack-measured --no-oauth-gate`, tmux (never setsid). 28 trials + up
 to 9 re-rolls for R2-flagged artifacts. Decision rule (screen has NO
 verdict authority): rank by band passes; kill any candidate strictly below
-v7's expected band rate; at most **2 advance**. Est 2-4h wall.
+the concurrent v7 arm's band rate; at most **2 advance**. Est 2-4h wall.
 
 **Stage 2 — confirm (go: ~100-120 trials, the real spend).**
 - v7 control arm: held-in band × **k=5** = 35 trials (store-writing — this

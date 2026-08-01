@@ -11,8 +11,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 export const PROPOSER_DRIVERS = {
-  "claude-code": { defaultModel: "claude-opus-4-8" },
-  opencode: { defaultModel: "anthropic/claude-opus-4-8" },
+  "claude-code": { defaultModel: "claude-opus-5" },
+  opencode: { defaultModel: "anthropic/claude-opus-5" },
 } as const
 export type ProposerDriverId = keyof typeof PROPOSER_DRIVERS
 

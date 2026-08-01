@@ -75,7 +75,7 @@ const CONTAINER_MEM_CAP = "2048m"
 const DRIVERS = {
   "claude-code": {
     harnessFile: "CLAUDE.md",
-    defaultModel: "claude-opus-4-8",
+    defaultModel: "claude-opus-5",
     argv: (model: string, instruction: string) => [
       "claude", "-p", instruction,
       "--output-format", "stream-json", "--verbose",
@@ -94,7 +94,7 @@ const DRIVERS = {
   },
   opencode: {
     harnessFile: "AGENTS.md",
-    defaultModel: "anthropic/claude-opus-4-8",
+    defaultModel: "anthropic/claude-opus-5",
     argv: (model: string, instruction: string) => [
       "opencode", "run", "--dir", "/app", "--auto", "--format", "json", "--model", model, instruction,
     ],

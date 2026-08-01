@@ -512,7 +512,7 @@ export interface MhConfig {
   activeSplitFile: string
 }
 
-const DEFAULT_PROPOSER_MODEL = "anthropic/claude-opus-4-8"
+const DEFAULT_PROPOSER_MODEL = "anthropic/claude-opus-5"
 const DEFAULT_PROPOSER_VARIANT = "high"
 const DEFAULT_JUDGE_MIN_SESSIONS = 20
 const DEFAULT_JUDGE_MIN_AGREEMENT = 0.8
