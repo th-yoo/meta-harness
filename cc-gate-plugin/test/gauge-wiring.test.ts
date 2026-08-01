@@ -181,14 +181,24 @@ test("fast-path Stop (no edits) + pending gauge → gauge-only line with rounds:
   expect(g.agreesWithFloor).toBeUndefined()
 })
 
-test("Stop without gauge config behaves exactly as before (no gauge field)", async () => {
+// Was: "…(no gauge field)". Superseded by the §6b amendment (2026-08-01,
+// user-approved): an omitted field could not distinguish "instrument ran,
+// nothing to say" from "instrument never ran", and the second went unnoticed
+// for two live cycles. The GATE behaviour this test guards is unchanged — one
+// line, no gauge machinery — but the line now states the instrument was off.
+test("Stop without gauge config leaves gating untouched and SAYS the gauge was off", async () => {
   const repo = mkRepo()
   writeGate(repo, { check: "true" })
   seedState(repo, SID, { edited: true })
   await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: SID, cwd: repo }) })
   const lines = sensorLines(repo)
   expect(lines.length).toBe(1)
-  expect(lines[0]!.gauge).toBeUndefined()
+  const gauge = lines[0]!.gauge as Record<string, unknown>
+  expect(gauge.present).toBe(false)
+  expect(gauge.offReason).toBe("disabled")
+  // No derivation ever ran, so none of the measurement fields appear.
+  expect(gauge.class).toBeUndefined()
+  expect(gauge.executable).toBeUndefined()
 })
 
 // ── §4.4 reinject-wording experiment (pre-reg §4b) ───────────────────────
