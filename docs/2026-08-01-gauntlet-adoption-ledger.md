@@ -52,6 +52,27 @@ itself (fresh-context critics).
   pinning that the check rejects the drifts it exists to catch. No gap found:
   emission already conformed. Tests only — F1 untouched.
 
+## Gauge fail-loud deploy boundary (2026-08-01)
+
+- **Deployed 2026-08-01 17:05 KST (ts 1785571509000), yoo-mac.local.**
+  `km-refresh.sh --force` from merged main (`0c2482c`); cache grep-verified
+  per GA3 — single `0.2.1/` dir, `offReason` present in `hook-cli.ts` and
+  `types.ts`, `GaugeOffReason` type landed. Verified by driving the INSTALLED
+  copy against a scratch repo, not by trusting the refresh script: emitted
+  `gauge {present:false, offReason:"disabled"}`.
+- **No restart was required.** Hook commands re-read `hook-cli.ts` per
+  invocation and the reinstall wrote to the same path and version, so live
+  sessions resumed gating with the new code. The documented gotcha still
+  applies to the deletion window itself, during which live hooks fail open.
+- **BOUNDARY MATTERS — the version did not move.** This changed emitted
+  behaviour while `pluginVersion` stayed `0.2.1`, so sensor lines before and
+  after are indistinguishable by stamp. Lines from this host before ts
+  1785571509000 may omit the gauge field on an un-instrumented cycle; lines
+  after must carry either a real record or `present:false` + `offReason`.
+  Partition by `ts` at that boundary, not by version. Same defect the queue's
+  producer-identity item exists to close; recorded here because it is the
+  second time today a shared artifact could not say which code produced it.
+
 ## Program seal (2026-08-01)
 
 Method: self-applying Gauntlet Loop — orchestrator lead, builder subagents
