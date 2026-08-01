@@ -78,33 +78,29 @@ QUEUE (GO before spend, in order):
     cache root and kills hooks fail-open in any LIVE session — pick a moment.
     Verify after: next cycle carries either a real gauge record or
     present:false/offReason, never silence.
-(9) kkamak 0.4.0 RELEASE REMAINDER (repo ~/z2/kkamak, main @ 64ff902, CI
-    green): (a) repo description still says "Self-improving agent plugin" —
-    that is meta-harness's tagline; (b) run docs/install-verification.md for
-    real on a DISPOSABLE clone (GA7 precedent) — never against the live
-    install, which is the 0.2.1 research build; (c) tag v0.4.0 + GitHub
-    release LAST, only after (b) passes. 0.4.0 is merged but UNPROVEN:
-    nothing has yet shown a clean machine can install it and get blocked.
-    Seven Minor findings recorded in that repo's docs/known-issues.md.
-(9b) IN-FLIGHT 2026-08-01 evening, yoo-mac: container install proof PAUSED
-    mid-run. Host steps 1-2 of the runbook already PASSED here (marketplace
-    install from GitHub works logged-OUT; cache lands at
-    $CLAUDE_CONFIG_DIR/plugins/cache/kkamak/kkamak/0.4.0/ with init-cli.ts +
-    commands/init.md present). Step 3 (live block) BLOCKED on host because an
-    isolated CLAUDE_CONFIG_DIR has no keychain auth. Container route was
-    running when the lid closed: podman (at /opt/podman/bin, NOT on PATH)
-    container `kkamak-install-proof` on ubuntu:24.04, PAUSED with bun +
-    claude CLI + plugin 0.4.0 + scratch repo already installed — do NOT
-    `podman rm` it. Credential export was SHREDDED for transit. Resume:
-    (1) podman unpause kkamak-install-proof; (2) re-export keychain creds to
-    the SAME mount paths /var/folders/.../T/kkamak-cc-auth-8uUVmc/claude/
-    .credentials.json + ../claude.json (recipe = opencode-plugin/src/bench/
-    agent-auth.ts darwin branch: security find-generic-password -s "Claude
-    Code-credentials" -w, 0700 dir / 0600 file, mount ro); (3) re-run ONLY
-    the block step: claude -p inside the container against /root/kkamak-check
-    whose gate.json is {check:"exit 1", rounds:1}; expect one block then
-    exhaustion, sensor line gateExhausted:true, two verify-failed rounds,
-    pluginVersion 0.4.0. TAG STAYS UNGATED until that is observed.
+(9) kkamak 0.4.0 — SHIPPED 2026-08-01 evening. Released at
+    https://github.com/th-yoo/kkamak/releases/tag/v0.4.0 (annotated tag
+    v0.4.0 on 586d476, CI green, 311 tests). Repo description + topics fixed
+    and byte-matched to the manifests. PROVEN, not assumed: on a pristine
+    ubuntu:24.04 podman container — marketplace add + install from
+    th-yoo/kkamak (works logged-OUT), cache at
+    plugins/cache/kkamak/kkamak/0.4.0/, then a real CC turn BLOCKED twice and
+    exhausted; sensor line gateExhausted:true, rounds
+    ["verify-failed","verify-failed"], pluginVersion "0.4.0". Container,
+    scratch repos and the keychain credential export all cleaned/shredded.
+    Seven Minor findings live in that repo's docs/known-issues.md — recorded,
+    deliberately NOT fixed.
+    LESSON WORTH KEEPING: docs/install-verification.md yielded THREE defects,
+    every one found by EXECUTING it, none visible to two prior reviews — (a) a
+    block proof that produced no sensor line at all (in-budget blocks never
+    call record()), (b) CLAUDE_CONFIG_DIR isolation strips keychain auth so
+    the host variant cannot finish step 3 on macOS, (c) a missing permission
+    flag meant the agent never edited, so the gate never armed. The runbook
+    now encodes the bench's proven recipe (opencode-plugin/src/bench/
+    agent-auth.ts prepareClaudeCodeAuth + drivers/claude-code.ts): /root/.claude
+    mounted RW as a whole dir, /root/.claude.json ro containing exactly
+    {"hasCompletedOnboarding":true}, and --dangerously-skip-permissions with
+    IS_SANDBOX=1.
 (10) CONSISTENCY between ~/z2/kkamak and cc-gate-plugin (two implementations,
     zero shared code, coupled only by the frozen SensorLine contract). Item 1
     DONE 2026-08-01 (emission conformance suite + negative control, 10e885d).
