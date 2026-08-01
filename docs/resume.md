@@ -49,6 +49,14 @@ grep-verify deploys (GA3 rule).
 
 **Resumed the office handoff below; both steps done:**
 - **MacBook deploy (Phases 2+3):** `km-refresh.sh --force` OK; cache grep-verified (`fixture-ref.ts` + `captureFixtureRef` ×2 + `prompt-check` ×2, single `0.2.1/`). Both hosts now run Phases 1+2+3 live.
+  **LIVE-PROVEN on this host 08-01 (clone test, GA7 precedent):** disposable
+  kkamak clone + real headless CC session; agent flipped `===`/`!==` in the
+  clone's own gate kernel, held a no-fix instruction → installed plugin
+  blocked 3× → exhausted. All instruments fired: exhausted gate-outcomes
+  line · 2 check-output records w/ real bun-test excerpts (exhausted round
+  3 absent = Phase 1 documented limitation observed live) · 2 fixture-refs
+  + 2 anchored `refs/kkamak/fixtures/` tree refs · blockTs EXACT join-key
+  match fixture↔sidecar. Clone discarded, zero stream contamination.
 - **Corpus-replay T3-T5 built + sealed (SDD, per-task reviews):** T3 deriver `43c4ef3`+`02ed9b8` (review forced lifecycle lock — model spend only under lock, fence re-checked under lock after acquire); T4 resolver `e69de78`+`0d81bb2` (3 under-specified mechanics adjudicated SOUND, recorded as plan annotations; pipefail bsdtar catch; real 7d-cap test); T5 report `34ef861`+`419a507`+`55c5b2a` (point-4 `≥90%?` verbatim + yes/no/n-a ruled SOUND; provenance pin so corpus-bench can never pool; FIX-1 drift footnote). Fable final whole-branch review: READY TO CLOSE YES. **MERGED `27d1ed3`, branch deleted.** Suites: cc-gate-plugin 552 + tsc clean. Full ruling record: HISTORY.md GA9 row + plan's Task-4 "Post-review rulings" + SDD ledger.
 - **FIRST REAL BATCH CONSUMED (sized go 198, 08-01):** mine 70 transcripts →
   198 records · `derive --go 198` → **160 derived / 38 stayed mined**
