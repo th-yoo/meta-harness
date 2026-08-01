@@ -3,7 +3,49 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ✅ SESSION 2026-07-31/08-01 (`yoo-mac.local`) — GA9 CORPUS-REPLAY SEALED + MERGED · MacBook Phases 2+3 DEPLOYED — main @ `27d1ed3`+seal, pushed
+## ✅ SESSION 2026-07-31/08-01 (`yoo-mac.local`) — GA9 CORPUS-REPLAY SEALED + MERGED + FIRST BATCHES CONSUMED · MacBook Phases 2+3 DEPLOYED — main pushed
+
+**RESUME PROMPT (either host):**
+```
+Resume kkamak (meta-harness), 2026-08-01+. Read docs/resume.md top block +
+minimal/HISTORY.md GA6-GA9 rows. All phases 0-3 + GA9 corpus-replay tooling
+MERGED to main; both hosts' installed plugin carries Phases 1+2+3.
+
+WHERE WE ARE: gauge corpus-replay pipeline live (mine|derive|resolve|report,
+store = repo-root .km/gauge-corpus/, run from meta-harness root). First
+batches consumed (198+38 sized goes): 176 derived, 22 parked
+(malformed-prone), resolve 176/176 all descriptive-only — pool 0/0 by
+honest starvation (fixture-refs armed 08-01, zero organic blocks yet).
+First reading: pooled n/a floor NOT MET; corpus class table A1 3 / A2 58 /
+B 0 / C 13 / D 102 (C-rate ~7.4% vs live 1/72). Pool grows as dogfood
+produces organic blocks (Phase 2 fixture-refs both hosts). Activation
+precondition ticking; A/A earliest ~Aug 12.
+
+QUEUE (GO before spend, in order):
+(1) Sustain dogfood daily both hosts (tmux `kkamak`) — organic blocks feed
+    fixture-refs AND the activation rate.
+(2) Office host: git pull only (cache already Phases 2+3). Optional:
+    model-free mine of office transcripts into its own store; any derive
+    there = own sized go.
+(3) Re-run resolve+report (model-free, no go needed) after organic blocks
+    accumulate — watch for first poolEligible record.
+(4) Parked decisions: §3 over-refusal redesign round (single-use, likely
+    available) · kkamak gate-editing workload ruling (GA5) · per-repo
+    fixture inclusion on first organic block · 22 parked mined records
+    (retry only with cause + sized go 22).
+(5) sensors export after dogfood: scripts/km-sensors-sync.sh export.
+
+DEADLINE ITEMS: calibration-refresh tooling before 2nd consumed KEEP;
+golden-window machinery before 3rd KEEP.
+
+RULES: explicit go before spend (derive batches: sized go = pending count)
+· spec-is-law, pre-data amendments only (5 landed + corpus-replay d869660)
+· F1: core/, vendor/, 4 minimal/ files untouchable (gauge/ editable) ·
+F2: code-bearing text never enters gate-outcomes.ndjson; .km/gauge-corpus +
+check-output + fixture-refs never in km-sensors-sync FILES (test-locked) ·
+no bare "gate" in new docs · SITREP style · per-task reviews mandatory ·
+grep-verify deploys (GA3 rule).
+```
 
 **Resumed the office handoff below; both steps done:**
 - **MacBook deploy (Phases 2+3):** `km-refresh.sh --force` OK; cache grep-verified (`fixture-ref.ts` + `captureFixtureRef` ×2 + `prompt-check` ×2, single `0.2.1/`). Both hosts now run Phases 1+2+3 live.
