@@ -385,6 +385,22 @@ test("lines with no arm recorded are excluded from BOTH arms", () => {
   expect(arms.v1.gateCycles).toBe(0)
 })
 
+test("v2 arm (env-gated Loop F) splits separately from v0/v1", () => {
+  const lines = [
+    ...MANY(4, { reinject: "v0" }),
+    ...MANY(3, { reinject: "v1" }),
+    ...MANY(5, { reinject: "v2" }),
+    ...MANY(1, { reinject: "v2", interrupted: true }),
+    ...MANY(2, {}), // pre-experiment lines belong to no arm
+  ]
+  const { arms } = scoreLines(lines, { minN: 1 })
+  expect(arms.v0.gateCycles).toBe(4)
+  expect(arms.v1.gateCycles).toBe(3)
+  expect(arms.v2.gateCycles).toBe(5)
+  expect(arms.v2.counts.interrupted).toBe(1)
+  expect(arms.v2.mInterrupt).toBeCloseTo(1 / 6)
+})
+
 // ── §4.3 trial block (per-arm N_eff + exposure guard, TM7 / §11 item 7) ────
 //
 // Regression contract: with no `.km/trial-arms.ndjson` beside the target

@@ -216,7 +216,7 @@ async function main(): Promise<void> {
   // `.km/trial-arms.ndjson` is the sole (and authoritative) record of that,
   // enforced from the exposure record at join time, never sensor-side
   // convention (spec §2, plan Global Constraints).
-  const reinjectForced = process.env.KKAMAK_REINJECT === "v0" || process.env.KKAMAK_REINJECT === "v1"
+  const reinjectForced = process.env.KKAMAK_REINJECT === "v0" || process.env.KKAMAK_REINJECT === "v1" || process.env.KKAMAK_REINJECT === "v2"
   let line: SensorLine | undefined = sensor
     ? { ...sensor, reinject: arm, ...(reinjectForced ? { forced: true } : {}) }
     : undefined

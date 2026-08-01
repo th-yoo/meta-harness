@@ -160,8 +160,9 @@ export interface SensorLine {
   host: string
   app: "claude-code"
   gauge?: GaugeSensorField
-  /** §4.4 reinject-wording arm for this session (pre-reg §4b). */
-  reinject?: "v0" | "v1"
+  /** §4.4 reinject-wording arm for this session (pre-reg §4b; "v2" is the
+   * env-gated Loop F arm, pending amendment ruling). */
+  reinject?: "v0" | "v1" | "v2"
   /** True iff an env override (KKAMAK_REINJECT) forced this session's
    * reinject arm rather than the salted hash choosing it — §4.4 exclusion
    * marker. Sensor-side `forced` covers KKAMAK_REINJECT ONLY: it is NOT a
