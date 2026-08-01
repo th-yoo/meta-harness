@@ -18,7 +18,11 @@ batches consumed (198+38 sized goes): 176 derived, 22 parked
 honest starvation (fixture-refs armed 08-01, zero organic blocks yet).
 First reading: pooled n/a floor NOT MET; corpus class table A1 3 / A2 58 /
 B 0 / C 13 / D 102 (C-rate ~7.4% vs live 1/72). Pool grows as dogfood
-produces organic blocks (Phase 2 fixture-refs both hosts). Activation
+produces organic blocks (Phase 2 fixture-refs both hosts). MacBook deploy
+LIVE-PROVEN 08-01 via clone test (all Phase 1+2 instruments fired, blockTs
+join exact; Phase 3 promptCheck = office-organic-proven only — needs a real
+Escape-interrupt, next organic one on MacBook proves it free). kkamak
+dogfood repo pulled to a71206e, 291/291 on this host. Activation
 precondition ticking; A/A earliest ~Aug 12.
 
 QUEUE (GO before spend, in order):
