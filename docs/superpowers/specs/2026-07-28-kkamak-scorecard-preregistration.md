@@ -117,6 +117,22 @@ excluded from the comparison — it is not randomised).
 ≤ M-interrupt(v0) and M-catch(v1) is not lower. Otherwise keep `v0` and
 record the null — a null here is a real result, per the loop-1 precedent.
 
+**Amendment (2026-08-01, user-approved; armed-event n≈5 at ruling):** a
+third arm `v2` exists in code (Gauntlet Loop F, branch merged env-gated;
+GA10 + `docs/2026-08-01-gauntlet-adoption-ledger.md`): biggest-gap line
+composed mechanically from rawOut FIRST, then the v1-style tail + ownership
+sentence; fail-open identical to v1. `v2` enters the randomisation ONLY
+when `KKAMAK_REINJECT_V2=1` is set (hash%3 three-arm split; unset =
+original 50/50, byte-identical, test-pinned). Sensor lines may record
+`reinject:"v2"`; forced `KKAMAK_REINJECT=v2` is stamped `forced:true` and
+excluded like the other arms. Decision rule for v2 (pre-registered now,
+before any v2 data): same form as v1's — adopt v2 over the v0/v1 winner
+iff M-interrupt(v2) ≤ winner's and M-catch(v2) not lower, at ≥`MIN_N`
+cycles per arm counted from activation — or the equivalent fixture-replay
+k=5 paired comparison on ≥3 harvested fixtures (GA7 lane). Activation
+(setting the env var on a host) is a separate logged decision, not implied
+by this amendment.
+
 ## 5. Non-goals (v0)
 
 No time-series/regression. No significance testing (counts only — the
