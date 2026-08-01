@@ -28,7 +28,7 @@ const REVIEW_PASS = `ok
 "behavior_level":{"pass":true,"restatement":"Agent changes approach after repeated failure."},
 "duplicate":{"pass":true,"match":"none"},
 "mechanize_instead":{"pass":true,"command":""},
-"null_precedent":{"pass":true,"closest_null":"none","mechanism_difference":""}},"confidence":0.8}`
+"null_precedent":{"pass":true,"closest_null":"none","null_mechanism":"","headroom_evidence":""}},"confidence":0.8}`
 
 const REVIEW_FAIL = `not quite
 {"checks":{"category":{"pass":false,"category":"","quote":""},
@@ -36,7 +36,7 @@ const REVIEW_FAIL = `not quite
 "behavior_level":{"pass":true,"restatement":"Agent changes approach after repeated failure."},
 "duplicate":{"pass":true,"match":"none"},
 "mechanize_instead":{"pass":true,"command":""},
-"null_precedent":{"pass":true,"closest_null":"none","mechanism_difference":""}},"confidence":0.4}`
+"null_precedent":{"pass":true,"closest_null":"none","null_mechanism":"","headroom_evidence":""}},"confidence":0.4}`
 
 // Hermetic: no real claude, no opencode. We seed staging files by hand (as a
 // finished child would) and drive the EXTRACTED apply body directly, plus the

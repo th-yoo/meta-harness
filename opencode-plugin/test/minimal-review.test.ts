@@ -20,7 +20,7 @@ function allPassChecks(over: Partial<ReviewChecks> = {}): ReviewChecks {
     behavior_level: { pass: true, restatement: "the agent re-reads the requirement before claiming done" },
     duplicate: { pass: true, match: "none" },
     mechanize_instead: { pass: true, command: "" },
-    null_precedent: { pass: true, closest_null: "none", mechanism_difference: "" },
+    null_precedent: { pass: true, closest_null: "none", null_mechanism: "", headroom_evidence: "" },
     ...over,
   }
 }
@@ -168,11 +168,13 @@ test("verdict fails when the null_precedent key is missing entirely", () => {
   expect(v.violations).toContain("null_precedent: failed")
 })
 
-test("verdict fails when null_precedent pass:false (no distinguishing mechanism)", () => {
+test("verdict fails when null_precedent pass:false (rule mandates default behavior — no headroom)", () => {
   const l1 = { pass: true, violations: [] }
   const v = computeVerdict(
     l1,
-    allPassChecks({ null_precedent: { pass: false, closest_null: "some null bullet", mechanism_difference: "" } }),
+    allPassChecks({
+      null_precedent: { pass: false, closest_null: "some null bullet", null_mechanism: "baseline already re-verifies", headroom_evidence: "" },
+    }),
   )
   expect(v.verdict).toBe("fail")
   expect(v.violations).toContain("null_precedent: failed")
@@ -182,13 +184,13 @@ test("verdict passes null_precedent on empty-ledger semantics (pass:true, closes
   const l1 = { pass: true, violations: [] }
   const v = computeVerdict(
     l1,
-    allPassChecks({ null_precedent: { pass: true, closest_null: "none", mechanism_difference: "" } }),
+    allPassChecks({ null_precedent: { pass: true, closest_null: "none", null_mechanism: "", headroom_evidence: "" } }),
   )
   expect(v.verdict).toBe("pass")
   expect(v.violations).toEqual([])
 })
 
-test("review prompt carries the null_precedent check and the biggest_gap output field", () => {
+test("review prompt carries the null_precedent headroom check and the biggest_gap output field", () => {
   const p = buildReviewPrompt({
     bullet: GOOD_BULLET,
     reason: "x",
@@ -197,7 +199,10 @@ test("review prompt carries the null_precedent check and the biggest_gap output 
     taskId: "sparql-university",
   })
   expect(p).toContain("null_precedent")
+  expect(p).toContain("does NOT already do by default")
   expect(p).toContain('pass=true with closest_null="none"')
+  expect(p).toContain('"null_mechanism"')
+  expect(p).toContain('"headroom_evidence"')
   expect(p).toContain('"biggest_gap"')
 })
 

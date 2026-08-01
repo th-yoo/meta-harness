@@ -18,7 +18,7 @@ const PASS_CHECKS = `ok
 "behavior_level":{"pass":true,"restatement":"Agent changes approach after repeated failure."},
 "duplicate":{"pass":true,"match":"none"},
 "mechanize_instead":{"pass":true,"command":""},
-"null_precedent":{"pass":true,"closest_null":"none","mechanism_difference":""}},"confidence":0.8}`
+"null_precedent":{"pass":true,"closest_null":"none","null_mechanism":"","headroom_evidence":""}},"confidence":0.8}`
 
 const FAIL_CHECKS = `not quite
 {"checks":{"category":{"pass":false,"category":"","quote":""},
@@ -26,7 +26,7 @@ const FAIL_CHECKS = `not quite
 "behavior_level":{"pass":true,"restatement":"Agent changes approach after repeated failure."},
 "duplicate":{"pass":true,"match":"none"},
 "mechanize_instead":{"pass":true,"command":""},
-"null_precedent":{"pass":true,"closest_null":"none","mechanism_difference":""}},"confidence":0.4}`
+"null_precedent":{"pass":true,"closest_null":"none","null_mechanism":"","headroom_evidence":""}},"confidence":0.4}`
 
 const MECHANIZE_FAIL_CHECKS = `should be a check
 {"checks":{"category":{"pass":true,"category":"iteration-discipline","quote":"…"},
@@ -34,7 +34,7 @@ const MECHANIZE_FAIL_CHECKS = `should be a check
 "behavior_level":{"pass":true,"restatement":"Agent changes approach after repeated failure."},
 "duplicate":{"pass":true,"match":"none"},
 "mechanize_instead":{"pass":false,"command":"bun test --filter migration-retry"},
-"null_precedent":{"pass":true,"closest_null":"none","mechanism_difference":""}},"confidence":0.7}`
+"null_precedent":{"pass":true,"closest_null":"none","null_mechanism":"","headroom_evidence":""}},"confidence":0.7}`
 
 const REVISED_BULLET = "When you fail twice on the same approach, change your diagnosis before retrying."
 

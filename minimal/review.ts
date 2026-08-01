@@ -143,7 +143,7 @@ export interface ReviewChecks {
   behavior_level: { pass: boolean; restatement?: string }
   duplicate: { pass: boolean; match?: string }
   mechanize_instead?: { pass: boolean; command: string }
-  null_precedent?: { pass: boolean; closest_null?: string; mechanism_difference?: string }
+  null_precedent?: { pass: boolean; closest_null?: string; null_mechanism?: string; headroom_evidence?: string }
 }
 
 const RUBRIC_KEYS = ["category", "domain_swap", "behavior_level", "duplicate", "mechanize_instead", "null_precedent"] as const
@@ -223,15 +223,23 @@ ${a.rejected}
    Artifact: the named command (if failed) or the one-sentence reason (if
    passed).
 6. null_precedent — the rejected-rules ledger above records rules that
-   PASSED review but showed NO pass-rate effect at bench (null). QUOTE the
-   ledger entry closest in mechanism to this rule (or "none" if the ledger
-   is empty or has no plausible neighbor), then WRITE one sentence stating
-   the concrete mechanism by which THIS rule would move a pass rate where
-   that neighbor did not. If you cannot articulate a distinguishing
-   mechanism, pass=false. If the ledger is empty or has no plausible
+   PASSED review but died at bench: NO pass-rate delta (null) or a scope
+   veto; each entry's verdict text records its actual mechanism. Nulls
+   typically mandated behavior the baseline agent already mostly performs.
+   QUOTE the ledger entry closest in mechanism to this rule AND quote that
+   entry's recorded null mechanism. Then judge THE CANDIDATE against that
+   same failure shape: does this rule require behavior the baseline agent
+   demonstrably does NOT already do by default? If the rule mandates what
+   a competent agent mostly already does (re-verifying an answer it
+   already formed, careful reading, generic diligence, double-checking),
+   pass=false. pass=true requires naming the specific NON-DEFAULT behavior
+   the rule introduces. If the ledger is empty or has no plausible
    neighbor, pass=true with closest_null="none".
-   Artifact: closest_null (the quoted entry, or "none") and
-   mechanism_difference (the sentence, or "" when closest_null is "none").
+   Artifact: closest_null (the quoted entry, or "none"), null_mechanism
+   (that entry's recorded mechanism quoted from its verdict text, or ""),
+   and headroom_evidence (the rule fragment naming the non-default
+   behavior plus one sentence why it is non-default, or "" when
+   pass=false).
 
 Judge strictly; when genuinely borderline, fail the check (a false fail costs
 one cheap revision; a false pass costs a long experiment).
@@ -245,7 +253,7 @@ single largest remaining problem, quoting the decisive artifact — like
            "behavior_level":{"pass":bool,"restatement":"..."},
            "duplicate":{"pass":bool,"match":"none|<quoted line>"},
            "mechanize_instead":{"pass":bool,"command":"<named command if failed, else \\"\\">"},
-           "null_precedent":{"pass":bool,"closest_null":"none|<quoted ledger entry>","mechanism_difference":"<one sentence, else \\"\\">"}},
+           "null_precedent":{"pass":bool,"closest_null":"none|<quoted ledger entry>","null_mechanism":"<quoted recorded mechanism, else \\"\\">","headroom_evidence":"<rule fragment + why non-default, else \\"\\">"}},
  "biggest_gap":"<one sentence: the single largest remaining problem, quoting the decisive artifact>",
  "confidence":<0..1, advisory only>}`
 }
