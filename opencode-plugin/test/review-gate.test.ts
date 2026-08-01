@@ -17,21 +17,24 @@ const PASS_CHECKS = `ok
 "domain_swap":{"pass":true,"swapped_bullet":"When a SQL migration fails twice, change the diagnosis."},
 "behavior_level":{"pass":true,"restatement":"Agent changes approach after repeated failure."},
 "duplicate":{"pass":true,"match":"none"},
-"mechanize_instead":{"pass":true,"command":""}},"confidence":0.8}`
+"mechanize_instead":{"pass":true,"command":""},
+"null_precedent":{"pass":true,"closest_null":"none","mechanism_difference":""}},"confidence":0.8}`
 
 const FAIL_CHECKS = `not quite
 {"checks":{"category":{"pass":false,"category":"","quote":""},
 "domain_swap":{"pass":true,"swapped_bullet":"When a SQL migration fails twice, change the diagnosis."},
 "behavior_level":{"pass":true,"restatement":"Agent changes approach after repeated failure."},
 "duplicate":{"pass":true,"match":"none"},
-"mechanize_instead":{"pass":true,"command":""}},"confidence":0.4}`
+"mechanize_instead":{"pass":true,"command":""},
+"null_precedent":{"pass":true,"closest_null":"none","mechanism_difference":""}},"confidence":0.4}`
 
 const MECHANIZE_FAIL_CHECKS = `should be a check
 {"checks":{"category":{"pass":true,"category":"iteration-discipline","quote":"…"},
 "domain_swap":{"pass":true,"swapped_bullet":"When a SQL migration fails twice, change the diagnosis."},
 "behavior_level":{"pass":true,"restatement":"Agent changes approach after repeated failure."},
 "duplicate":{"pass":true,"match":"none"},
-"mechanize_instead":{"pass":false,"command":"bun test --filter migration-retry"}},"confidence":0.7}`
+"mechanize_instead":{"pass":false,"command":"bun test --filter migration-retry"},
+"null_precedent":{"pass":true,"closest_null":"none","mechanism_difference":""}},"confidence":0.7}`
 
 const REVISED_BULLET = "When you fail twice on the same approach, change your diagnosis before retrying."
 

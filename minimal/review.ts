@@ -143,9 +143,10 @@ export interface ReviewChecks {
   behavior_level: { pass: boolean; restatement?: string }
   duplicate: { pass: boolean; match?: string }
   mechanize_instead?: { pass: boolean; command: string }
+  null_precedent?: { pass: boolean; closest_null?: string; mechanism_difference?: string }
 }
 
-const RUBRIC_KEYS = ["category", "domain_swap", "behavior_level", "duplicate", "mechanize_instead"] as const
+const RUBRIC_KEYS = ["category", "domain_swap", "behavior_level", "duplicate", "mechanize_instead", "null_precedent"] as const
 
 export function computeVerdict(
   l1: Layer1Result,
@@ -221,17 +222,31 @@ ${a.rejected}
    behavior cannot be expressed as a runnable check, and mark it passed.
    Artifact: the named command (if failed) or the one-sentence reason (if
    passed).
+6. null_precedent — the rejected-rules ledger above records rules that
+   PASSED review but showed NO pass-rate effect at bench (null). QUOTE the
+   ledger entry closest in mechanism to this rule (or "none" if the ledger
+   is empty or has no plausible neighbor), then WRITE one sentence stating
+   the concrete mechanism by which THIS rule would move a pass rate where
+   that neighbor did not. If you cannot articulate a distinguishing
+   mechanism, pass=false. If the ledger is empty or has no plausible
+   neighbor, pass=true with closest_null="none".
+   Artifact: closest_null (the quoted entry, or "none") and
+   mechanism_difference (the sentence, or "" when closest_null is "none").
 
 Judge strictly; when genuinely borderline, fail the check (a false fail costs
 one cheap revision; a false pass costs a long experiment).
 
 ## Output
-A short justification, then EXACTLY ONE JSON object:
+A short justification, then EXACTLY ONE JSON object. "biggest_gap" names the
+single largest remaining problem, quoting the decisive artifact — like
+"confidence" it is advisory only, never a pass condition:
 {"checks":{"category":{"pass":bool,"category":"...","quote":"..."},
            "domain_swap":{"pass":bool,"swapped_bullet":"..."},
            "behavior_level":{"pass":bool,"restatement":"..."},
            "duplicate":{"pass":bool,"match":"none|<quoted line>"},
-           "mechanize_instead":{"pass":bool,"command":"<named command if failed, else \\"\\">"}},
+           "mechanize_instead":{"pass":bool,"command":"<named command if failed, else \\"\\">"},
+           "null_precedent":{"pass":bool,"closest_null":"none|<quoted ledger entry>","mechanism_difference":"<one sentence, else \\"\\">"}},
+ "biggest_gap":"<one sentence: the single largest remaining problem, quoting the decisive artifact>",
  "confidence":<0..1, advisory only>}`
 }
 
@@ -241,6 +256,9 @@ export interface ReviewResult {
   layer1: Layer1Result
   checks: ReviewChecks | null
   confidence: number | null
+  /** Reviewer-ranked single largest remaining problem — advisory only,
+   * never part of the code-computed verdict; consumed by the revise seat. */
+  biggestGap?: string
 }
 
 /** One full review of one bullet. `call` is the injectable LLM runner
@@ -263,8 +281,24 @@ export async function reviewBullet(a: {
   const parsed = extractJsonObject(reply, /\{\s*"checks"/)
   const checks: ReviewChecks | null = parsed?.checks ?? null
   const confidence = typeof parsed?.confidence === "number" ? parsed.confidence : null
+  const biggestGap =
+    typeof parsed?.biggest_gap === "string" && parsed.biggest_gap.trim() !== "" ? parsed.biggest_gap : undefined
   const { verdict, violations } = computeVerdict(layer1, checks)
-  return { verdict, violations, layer1, checks, confidence }
+  return { verdict, violations, layer1, checks, confidence, biggestGap }
+}
+
+/** Revise-seat feedback block: the reviewer's biggest_gap — advisory, never
+ * verdict-bearing — is presented FIRST, labeled as the one thing to fix
+ * first, before the full violation list. Pure formatting; the
+ * diagnosis-frozen contract lives in the prompt that embeds this block. */
+export function buildReviseFeedback(review: ReviewResult): string {
+  const violations = `## Review violations (each names the failed check; artifacts included)
+${review.violations.map((v) => `- ${v}`).join("\n")}`
+  if (!review.biggestGap) return violations
+  return `## Biggest gap — the ONE thing to fix first (reviewer-ranked)
+${review.biggestGap}
+
+${violations}`
 }
 
 // --- the propose → review → revise loop (control only; seats injected) ---

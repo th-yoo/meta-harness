@@ -26,7 +26,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
 import { basename, dirname, join, resolve } from "node:path"
 import { llmCall, PROPOSER_DRIVERS, type ProposerDriverId } from "./llm.ts"
-import { extractJsonObject, reviewBullet, reviewLoop, type ProposalLike, type ReviewResult } from "./review.ts"
+import { buildReviseFeedback, extractJsonObject, reviewBullet, reviewLoop, type ProposalLike, type ReviewResult } from "./review.ts"
 
 const HERE = import.meta.dir
 // Per-traj budget. Real opus sparql trajs run 45-60k chars; at n=1 task x k=10
@@ -295,8 +295,7 @@ ${p.reason ?? ""}
 ## Your rejected rule
 ${p.bullet?.text ?? ""}
 
-## Review violations (each names the failed check; artifacts included)
-${r.violations.map((v) => `- ${v}`).join("\n")}
+${buildReviseFeedback(r)}
 ${r.checks ? `\nReviewer artifacts: ${JSON.stringify(r.checks)}` : ""}
 
 ## Previously REJECTED lessons (do NOT re-derive)

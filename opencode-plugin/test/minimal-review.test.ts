@@ -4,6 +4,8 @@ import {
   computeVerdict,
   reviewBullet,
   reviewLoop,
+  buildReviewPrompt,
+  buildReviseFeedback,
   type ReviewChecks,
   type ReviewResult,
 } from "../../minimal/review.ts"
@@ -18,6 +20,7 @@ function allPassChecks(over: Partial<ReviewChecks> = {}): ReviewChecks {
     behavior_level: { pass: true, restatement: "the agent re-reads the requirement before claiming done" },
     duplicate: { pass: true, match: "none" },
     mechanize_instead: { pass: true, command: "" },
+    null_precedent: { pass: true, closest_null: "none", mechanism_difference: "" },
     ...over,
   }
 }
@@ -150,11 +153,52 @@ test("verdict fails when only mechanize_instead fails, embedding the named comma
   expect(v.violations).toEqual(["mechanize_instead: failed (bun test --filter x)"])
 })
 
-test("verdict passes when all 5 rubric keys pass (mechanize_instead included)", () => {
+test("verdict passes when all 6 rubric keys pass (mechanize_instead + null_precedent included)", () => {
   const l1 = { pass: true, violations: [] }
   const v = computeVerdict(l1, allPassChecks())
   expect(v.verdict).toBe("pass")
   expect(v.violations).toEqual([])
+})
+
+test("verdict fails when the null_precedent key is missing entirely", () => {
+  const l1 = { pass: true, violations: [] }
+  const { null_precedent, ...rest } = allPassChecks()
+  const v = computeVerdict(l1, rest as ReviewChecks)
+  expect(v.verdict).toBe("fail")
+  expect(v.violations).toContain("null_precedent: failed")
+})
+
+test("verdict fails when null_precedent pass:false (no distinguishing mechanism)", () => {
+  const l1 = { pass: true, violations: [] }
+  const v = computeVerdict(
+    l1,
+    allPassChecks({ null_precedent: { pass: false, closest_null: "some null bullet", mechanism_difference: "" } }),
+  )
+  expect(v.verdict).toBe("fail")
+  expect(v.violations).toContain("null_precedent: failed")
+})
+
+test("verdict passes null_precedent on empty-ledger semantics (pass:true, closest_null 'none')", () => {
+  const l1 = { pass: true, violations: [] }
+  const v = computeVerdict(
+    l1,
+    allPassChecks({ null_precedent: { pass: true, closest_null: "none", mechanism_difference: "" } }),
+  )
+  expect(v.verdict).toBe("pass")
+  expect(v.violations).toEqual([])
+})
+
+test("review prompt carries the null_precedent check and the biggest_gap output field", () => {
+  const p = buildReviewPrompt({
+    bullet: GOOD_BULLET,
+    reason: "x",
+    harness: "(none)",
+    rejected: "(none recorded)",
+    taskId: "sparql-university",
+  })
+  expect(p).toContain("null_precedent")
+  expect(p).toContain('pass=true with closest_null="none"')
+  expect(p).toContain('"biggest_gap"')
 })
 
 // --- reviewBullet: layer1 short-circuit + rubric via injected call ---
@@ -191,6 +235,68 @@ test("reviewBullet parses a pretty-printed rubric reply and passes", async () =>
   })
   expect(r.verdict).toBe("pass")
   expect(r.confidence).toBe(0.85)
+})
+
+test("reviewBullet parses top-level biggest_gap into biggestGap (advisory — verdict untouched)", async () => {
+  const reply = JSON.stringify({
+    checks: allPassChecks(),
+    biggest_gap: "the swapped bullet still names async primitives (domain_swap artifact)",
+    confidence: 0.7,
+  })
+  const r = await reviewBullet({
+    bullet: GOOD_BULLET,
+    reason: "x",
+    harness: "(none)",
+    rejected: "(none)",
+    taskId: "sparql-university",
+    call: () => reply,
+  })
+  expect(r.biggestGap).toBe("the swapped bullet still names async primitives (domain_swap artifact)")
+  expect(r.verdict).toBe("pass") // advisory: never a pass condition
+})
+
+test("reviewBullet leaves biggestGap undefined when the reply omits or blanks it", async () => {
+  const r = await reviewBullet({
+    bullet: GOOD_BULLET,
+    reason: "x",
+    harness: "(none)",
+    rejected: "(none)",
+    taskId: "sparql-university",
+    call: () => JSON.stringify({ checks: allPassChecks(), biggest_gap: "  ", confidence: 0.9 }),
+  })
+  expect(r.biggestGap).toBeUndefined()
+})
+
+// --- revise-seat feedback: biggest gap FIRST, then the violation list ---
+
+test("buildReviseFeedback presents biggest_gap before the violation list, labeled fix-first", () => {
+  const review: ReviewResult = {
+    verdict: "fail",
+    violations: ["domain_swap: failed", "duplicate: failed"],
+    layer1: { pass: true, violations: [] },
+    checks: null,
+    confidence: null,
+    biggestGap: "the rule is a near-duplicate of ledger entry X",
+  }
+  const fb = buildReviseFeedback(review)
+  const gapAt = fb.indexOf("the rule is a near-duplicate of ledger entry X")
+  const violationsAt = fb.indexOf("- domain_swap: failed")
+  expect(gapAt).toBeGreaterThanOrEqual(0)
+  expect(violationsAt).toBeGreaterThan(gapAt)
+  expect(fb).toContain("ONE thing to fix first")
+})
+
+test("buildReviseFeedback degrades to the violation list alone when biggestGap is absent", () => {
+  const review: ReviewResult = {
+    verdict: "fail",
+    violations: ["domain_swap: failed"],
+    layer1: { pass: true, violations: [] },
+    checks: null,
+    confidence: null,
+  }
+  const fb = buildReviseFeedback(review)
+  expect(fb).not.toContain("Biggest gap")
+  expect(fb).toContain("- domain_swap: failed")
 })
 
 // --- reviewLoop control ---
