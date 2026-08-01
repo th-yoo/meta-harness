@@ -27,7 +27,7 @@ import { appendCheckOutput, buildCheckOutputRecord } from "./sidecar.ts"
 import { captureFixtureRef, bunGitRunner } from "./fixture-ref.ts"
 import { appendSensor } from "./sensor-append.ts"
 import { runCheck } from "./check-runner.ts"
-import type { CoreDeps, DeliveryMode, EmitPlan, SensorLine } from "./types.ts"
+import type { CoreDeps, DeliveryMode, EmitPlan, GaugeOffReason, SensorLine } from "./types.ts"
 
 const MH_CHILD_ENV = "MH_CHILD"
 const KM_CHILD_ENV = "KM_CHILD"
@@ -221,15 +221,31 @@ async function main(): Promise<void> {
     ? { ...sensor, reinject: arm, ...(reinjectForced ? { forced: true } : {}) }
     : undefined
   const cfg = parseGateConfig(gateConfigRaw)
-  if (cfg?.gauge && process.env.KKAMAK_GAUGE !== "off") {
+  // Instrument state, not gate state (pre-reg §6b amendment, 2026-08-01). An
+  // omitted gauge field cannot distinguish "ran, nothing to say" from "never
+  // ran" — and on 2026-08-01 the second went unnoticed for two cycles after a
+  // review removed `gauge` from gate.json. Silence is the one thing a
+  // measurement instrument must not do.
+  const gaugeOff: GaugeOffReason | undefined = !cfg?.gauge
+    ? "disabled"
+    : process.env.KKAMAK_GAUGE === "off"
+      ? "env-off"
+      : undefined
+  if (!gaugeOff) {
     const gaugeDeps = buildDeps(cwd, gateConfigRaw, GAUGE_CHECK_TIMEOUT_MS)
-    const gauged = await shadowEvaluateAtStop(cwd, sessionId, cfg, line, gaugeDeps.runCheck, gaugeDeps)
+    const gauged = await shadowEvaluateAtStop(cwd, sessionId, cfg!, line, gaugeDeps.runCheck, gaugeDeps)
     // Re-stamp the arm: shadowEvaluateAtStop may FABRICATE a gauge-only line
     // (fast-path Stop), which never passed through the stamping above —
     // forced must survive the same re-stamp for the same reason.
     line = gauged
       ? { ...gauged, reinject: arm, ...(reinjectForced ? { forced: true } : {}) }
       : undefined
+  }
+  // Annotate only; never fabricate. A line that already carries a real gauge
+  // record keeps it, and a dropped line stays dropped — this must not change
+  // which lines exist, only what an existing line admits about the instrument.
+  if (line && !line.gauge) {
+    line = { ...line, gauge: { present: false, offReason: gaugeOff ?? "no-record" } }
   }
   if (line) appendSensor(cwd, gateConfigRaw, line, deps.log)
 

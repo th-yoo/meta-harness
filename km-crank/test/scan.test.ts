@@ -234,3 +234,29 @@ test("notable: default k is 5", () => {
 test("notable: empty input", () => {
   expect(notable([])).toEqual([])
 })
+
+// ── §6b amendment acceptance check (2026-08-01) ─────────────────────────────
+// The producer now emits `gauge: {present:false, offReason}` where it used to
+// omit the field, so a disarmed instrument is distinguishable from a starved
+// one. The amendment BINDS that this cannot move any measured rate — so this
+// consumer must treat such a line exactly like one with no gauge field at all.
+// Registered as a real test rather than an assumption, because a consumer
+// testing `"gauge" in line` instead of `gauge.present === true` would inflate
+// its counts the moment the change shipped.
+
+test("present:false gauge lines parse and aggregate identically to gauge-less lines", () => {
+  const bare = line({ ts: 1000, sessionID: "bare" })
+  const off = { ...line({ ts: 2000, sessionID: "off" }), gauge: { present: false, offReason: "disabled" } }
+
+  const parsed = parseSensorLines(`${JSON.stringify(bare)}\n${JSON.stringify(off)}\n`)
+  expect(parsed.length).toBe(2)
+
+  // Same shape of aggregate whether the instrument announced itself off or
+  // said nothing at all: instrument state is not gate measurement.
+  const withOff = aggregate([bare, off as SensorLine])
+  const withBareOnly = aggregate([bare, line({ ts: 2000, sessionID: "off" })])
+  expect(withOff.total).toBe(withBareOnly.total)
+  expect(withOff.cleanAccepts).toBe(withBareOnly.cleanAccepts)
+  expect(withOff.fixCycles).toBe(withBareOnly.fixCycles)
+  expect(withOff.exhausted).toBe(withBareOnly.exhausted)
+})

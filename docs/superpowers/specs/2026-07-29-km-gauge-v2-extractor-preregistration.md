@@ -281,6 +281,74 @@ gauge block: class/reason/downgrade counts; (6) tests per mechanism incl.
 downgrade matrix + two-strike sequences + invariant lock untouched;
 (7) cache refresh + deploy-commit recording in §4.
 
+## 6b. Amendment (pre-data, 2026-08-01, user-approved): instrument-state visibility
+
+**Trigger — a live incident, not a hypothesis.** On 2026-08-01 the yoo-mac
+dogfood repo lost its gauge for two cycles (16:18-16:30). A pre-release review
+of the *public* kkamak kernel correctly found that `"gauge": true` is absent
+from that kernel's `parseGateConfig`, and the field was removed from
+`gate.json`. But the same `gate.json` also configures the *research* build
+that actually runs there, where `gauge` is load-bearing: `spawn.ts`'s
+`maybeSpawnGauge` returns early unless `cfg?.gauge`, and `hook-cli.ts:224`
+skips the whole attach path on the same condition. Gate cycles kept recording
+normally; gauge records simply stopped. Nothing errored, nothing surfaced, and
+detection was incidental — noticing that two sensor lines carried a gauge field
+and two did not.
+
+**The failure mode this closes.** An absent gauge field is currently
+ambiguous: it means either "the instrument ran and had nothing to say" or "the
+instrument was not running". Those are opposite facts. Under the second, a
+starved corpus and a disarmed corpus are indistinguishable — and corpus
+starvation (`pool 0/0`, the class table, the C-rate) is precisely what the
+activation precondition is read from.
+
+**Change.** Where the gauge path currently omits the field, it emits
+`gauge: {present: false, offReason: <cause>}` instead. Causes registered for
+this build, chosen by what is honestly derivable at the point the sensor line
+is written:
+
+- `disabled` — no `cfg.gauge`. The 2026-08-01 incident, and the one that
+  matters most: it distinguishes "instrument switched off" from "nothing to
+  report".
+- `env-off` — `KKAMAK_GAUGE=off`.
+- `no-record` — the instrument was armed but no derivation was available to
+  attach at Stop. Deliberately COLLECTIVE: it covers not-task-shaped,
+  daily-cap, a swallowed spawn error, and a derivation still pending (the
+  state that left record `-3.json` un-consumed on 2026-08-01).
+
+*Finer attribution deferred, with its reason:* splitting `no-record` into its
+four causes requires the spawn path to persist why it declined, at prompt time,
+for a line written at Stop. That is new cross-turn state in the instrument, and
+this amendment deliberately does not add it — the ambiguity being closed here
+is armed-vs-disarmed, which `disabled` alone resolves. A later amendment may
+register the split if `no-record` proves too coarse in practice.
+
+**`offReason`, NOT `reason` (build-review correction, pre-write).**
+`GaugeSensorField.reason` already carries the *classification* reason
+(`not-extractable`, `floor-covered`). Reusing it for instrument state would
+overload one key with two meanings and let a consumer grouping by `reason` mix
+instrument states into class statistics. Same defect class as a version field
+doing double duty as provenance. `offReason` is additive and optional.
+
+**Metric neutrality (BINDING).** A `present: false` field is **not a gauge
+record**. M1-M5, the class table, the C-rate and pool eligibility count
+`present: true` lines only; `present: false` lines are excluded from every
+numerator and denominator. This amendment adds instrument-state visibility and
+cannot move any measured rate. Any future metric that wishes to count them must
+register that intent separately.
+
+**Why pre-data.** No metric definition changes and no excluded line enters the
+corpus window, so the measured window is untouched.
+
+**Risk + acceptance check (not an assumption).** A consumer testing
+`"gauge" in line` rather than `gauge.present === true` would inflate its counts
+the moment this ships. `km-crank/src/scan.ts` must be verified against a
+`present: false` line by a real test before deploy; that verification is part
+of the build item.
+
+**Prime directive unchanged.** Gauge failures still never touch a session.
+This makes the instrument stop lying by omission; it does not let it interfere.
+
 ## 7. Known risks
 
 - Extraction discipline may over-refuse (class-C starvation) — the validity

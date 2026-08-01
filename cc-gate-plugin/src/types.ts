@@ -119,8 +119,18 @@ export type GaugeHorizon = "single-turn" | "multi-turn"
 
 /** km-gauge shadow-eval record (pre-reg §2.3) — attached to sensor lines,
  * NEVER consulted by any gate decision. absent/present:false = no gauge. */
+/** Why the instrument produced nothing. Present iff `present` is false
+ * (pre-reg §6b amendment, 2026-08-01). `no-record` is deliberately
+ * collective — armed but nothing to attach, covering not-task-shaped,
+ * daily-cap, a swallowed spawn error, and a still-pending derivation. */
+export type GaugeOffReason = "disabled" | "env-off" | "no-record"
+
 export interface GaugeSensorField {
   present: boolean
+  /** Set ONLY when present is false. Distinct from `reason`, which carries
+   * the CLASSIFICATION reason — overloading one key with instrument state
+   * would let a consumer grouping by `reason` mix the two populations. */
+  offReason?: GaugeOffReason
   executable?: boolean
   /** Safety-guard verdict when the derived check was refused unrun. */
   refused?: string
