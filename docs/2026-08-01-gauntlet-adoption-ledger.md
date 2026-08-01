@@ -37,3 +37,44 @@ survive contact: fresh-context critics caught real defects both rounds
 (unfailable check, invisible v2 arm), and biggest-gap single-issue
 feedback made both round-2 fixes surgical. The loop process is employed
 (this program ran on it); the specific mechanism transplants are not.
+
+## Program retrospective — was the Gauntlet Loop useful as OUR process? (2026-08-01, user-reviewed)
+
+**Verdict: EMPLOYED as standing practice for mechanism/adoption decisions.**
+Scope rule: full loop (isolated builder subagents — sonnet; fresh-context
+critics per round — opus; ≤2 gap-feedback rounds; bars frozen pre-build)
+ONLY for adoption-grade decisions with recorded ground truth to judge
+against. Routine edits keep ordinary per-task review — the loop is too
+heavy for them (~600k subagent tokens + ~24 opus-5 eval calls + ~4 manual
+orchestrator interventions for this 3-loop day).
+
+**What earned the verdict (concrete counterfactuals):**
+1. Fresh-context critics caught two defects green tests would have
+   shipped: the unfailable-by-construction null_precedent check (replay vs
+   recorded fates killed in one round what self-review had approved) and
+   the invisible v2 arm in the scorecard render (deliverable-vs-intent
+   gap, invisible to the builder's own passing tests). Two prevented
+   merges of plausible, tested, useless mechanisms = the program's value.
+2. Single-biggest-gap feedback: both round-2 fixes surgical, zero scope
+   creep — cheaper than SDD fix-waves at this change size.
+3. Frozen bars + terminal rounds resisted, in real time, (a) iterating
+   Loop A's check to fit 3 data points and (b) merging Loop D on
+   "directionally favorable" — DROP stayed the path of least resistance.
+
+**Honest attribution:** the judgment standard (replay vs recorded
+outcomes, pre-registration, paired arms) was already this project's own;
+Gauntlet's marginal contribution is the ORCHESTRATION choreography —
+parallel isolated builders, per-round fresh critics, one-gap iteration —
+which we preached for the product but had not been running on our own dev
+work.
+
+**Defect the process did NOT catch (orchestrator's, now a rule):** Loop
+D's bar was unrunnable from the start — corpus saturation was knowable
+before the build; a full build+eval was spent discovering it. Gauntlet
+critiques artifacts; nothing critiqued the bars. **New standing step:
+bar-feasibility pre-check** — before any builder launches, a critic (or
+the orchestrator with data in hand) must show the bar's EMPLOY condition
+CAN fire on existing evidence; a bar that cannot fire is returned to
+design, not built against.
+
+Caveat: n=3 loops, one day — provisional, revisit after the next program.
