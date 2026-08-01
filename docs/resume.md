@@ -3,13 +3,15 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ✅ SESSION 2026-07-31/08-01 (`yoo-mac.local`) — GA9 CORPUS-REPLAY SEALED + MERGED + FIRST BATCHES CONSUMED · MacBook Phases 2+3 DEPLOYED — main pushed
+## ✅ SESSION END 2026-07-30 night → 08-01 (`yoo-mac.local`) — GA6 PHASE 1 + GA9 CORPUS-REPLAY BUILT/SEALED/MERGED · MacBook FULLY DEPLOYED + CLONE-PROVEN · first batches consumed · Path A tournament drafted — meta-harness @ `bcc9f08` · kkamak @ `a71206e` · squad @ `7c167f8`, all pushed
 
 **RESUME PROMPT (either host):**
 ```
-Resume kkamak (meta-harness), 2026-08-01+. Read docs/resume.md top block +
-minimal/HISTORY.md GA6-GA9 rows. All phases 0-3 + GA9 corpus-replay tooling
-MERGED to main; both hosts' installed plugin carries Phases 1+2+3.
+Resume kkamak (meta-harness), 2026-08-01+. Read docs/resume.md FIRST (top
+block "SESSION END 2026-07-30 night → 08-01") + minimal/HISTORY.md GA6-GA9
+rows. meta-harness pushed through bcc9f08; kkamak a71206e; squad 7c167f8.
+All roadmap phases 0-3 + GA9 corpus-replay tooling MERGED to main; both
+hosts' installed plugin carries Phases 1+2+3.
 
 WHERE WE ARE: gauge corpus-replay pipeline live (mine|derive|resolve|report,
 store = repo-root .km/gauge-corpus/, run from meta-harness root). First
