@@ -24,6 +24,34 @@ itself (fresh-context critics).
   §4b decision rule starts here. Office host: NOT activated (pull + refresh
   + env there would be its own logged decision).
 
+- **2026-08-01 (same day, later): activation broke this host's own suite —
+  found by the gate, not by us.** With `KKAMAK_REINJECT_V2=1` live in the
+  session environment, two pre-v2 tests in `cc-gate-plugin/test/reinject.test.ts`
+  failed: both called `pickReinjectVariant(id)` with no env argument, so they
+  inherited the host's activation and exercised the three-arm rotation while
+  asserting the two-arm split (even-split saw v1≈125/400 instead of ~200; the
+  escape-hatch test compared a three-arm `natural` against a two-arm override
+  call). Product code is correct — the `process.env` default is the mechanism
+  activation *depends* on. Fix was hermeticity: both tests now pass an explicit
+  `{}`, matching what every v2-era test in that file already did. Verified 573
+  pass with the flag set AND unset, identical expect() counts.
+  **Why it went unseen:** Loop F was verified with the flag unset
+  ("byte-identical live behavior without `KKAMAK_REINJECT_V2=1`"), then
+  `4fec674` set it globally, and nobody re-ran the suite in the activated
+  state. **Standing rule:** an env-gated arm's ACTIVATED state is a
+  configuration the suite must be proven under — proving it only in the
+  unactivated state leaves every activating host silently red until someone
+  trips over it. Applies to the office host if v2 is ever activated there.
+
+- **Related, same session:** `cc-gate-plugin` had no emission-conformance test
+  at all, while the standalone kernel (`~/z2/kkamak`) proves every line it
+  emits against the frozen SensorLine contract. The unproven emitter was the
+  *measured* one — this producer's lines feed the gauge corpus and the §4.3
+  stream. Closed by porting the scenario set (clean accept, block-then-fix,
+  exhausted, skippedStop) as driven `hook-cli` runs, plus a negative control
+  pinning that the check rejects the drifts it exists to catch. No gap found:
+  emission already conformed. Tests only — F1 untouched.
+
 ## Program seal (2026-08-01)
 
 Method: self-applying Gauntlet Loop — orchestrator lead, builder subagents

@@ -20,7 +20,9 @@ test("assignment is DETERMINISTIC per session — same id always same arm", () =
 
 test("assignment splits roughly evenly across many sessions (within-workload randomisation)", () => {
   const ids = Array.from({ length: 400 }, (_, i) => `session-${i}-${i * 7919}`)
-  const v1 = ids.filter((id) => pickReinjectVariant(id) === "v1").length
+  // Explicit env: this asserts the two-arm split, so it must not inherit a
+  // host that has KKAMAK_REINJECT_V2=1 set (activation makes it three-arm).
+  const v1 = ids.filter((id) => pickReinjectVariant(id, {}) === "v1").length
   // Both arms must actually accumulate; a wildly skewed hash would starve one.
   expect(v1).toBeGreaterThan(140)
   expect(v1).toBeLessThan(260)
@@ -29,7 +31,9 @@ test("assignment splits roughly evenly across many sessions (within-workload ran
 test("env override forces a variant (escape hatch), invalid value ignored", () => {
   expect(pickReinjectVariant("any", { KKAMAK_REINJECT: "v0" })).toBe("v0")
   expect(pickReinjectVariant("any", { KKAMAK_REINJECT: "v1" })).toBe("v1")
-  const natural = pickReinjectVariant("any")
+  // Both sides take the same explicit env, so the comparison stays about the
+  // invalid override alone — not about which arms the host happens to enable.
+  const natural = pickReinjectVariant("any", {})
   expect(pickReinjectVariant("any", { KKAMAK_REINJECT: "nonsense" })).toBe(natural)
 })
 
