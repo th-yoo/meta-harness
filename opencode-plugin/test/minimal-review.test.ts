@@ -1,9 +1,11 @@
 import { test, expect } from "bun:test"
 import {
+  extractJsonObject,
   layer1Checks,
   computeVerdict,
   reviewBullet,
   reviewLoop,
+  type ProposalLike,
   type ReviewChecks,
   type ReviewResult,
 } from "../../minimal/review.ts"
@@ -335,6 +337,71 @@ test("loop still calls revise for a non-mechanize failure (regression)", async (
   expect(out.trail.length).toBe(2) // round0 fail -> revise -> round1 fail again -> rounds exhausted -> abstain
   expect(out.final.action).toBe("abstain")
   expect(out.final.reason).toContain("review-fail")
+})
+
+// --- targeted_gap (Gauntlet Loop D): advisory metadata, back-compat parsing ---
+
+const TARGETED_GAP =
+  "Failing attempts skip re-reading the acceptance criteria before declaring done — 3/4 fails (r.json#a1, r.json#a3, r.json#a4) show it, the largest single flip source."
+
+test("proposer reply with targeted_gap parses and preserves the field", () => {
+  const reply =
+    "analysis...\n" +
+    JSON.stringify(
+      {
+        action: "propose",
+        reason: "diagnosis-x",
+        targeted_gap: TARGETED_GAP,
+        bullet: { text: GOOD_BULLET, evidence: ["r.json#a1", "r.json#a3"] },
+        predictions: { falsify_if: "no lift" },
+      },
+      null,
+      2,
+    ) +
+    "\ntrailing"
+  const p = extractJsonObject(reply, /\{\s*"action"/) as ProposalLike
+  expect(p).toBeDefined()
+  expect(p.action).toBe("propose")
+  expect(p.targeted_gap).toBe(TARGETED_GAP)
+  expect(p.bullet!.text).toBe(GOOD_BULLET)
+})
+
+test("proposal without targeted_gap still parses (back-compat with old proposals)", () => {
+  const reply = "analysis...\n" + JSON.stringify(proposal(GOOD_BULLET)) + "\n"
+  const p = extractJsonObject(reply, /\{\s*"action"/) as ProposalLike
+  expect(p).toBeDefined()
+  expect(p.action).toBe("propose")
+  expect(p.targeted_gap).toBeUndefined()
+  expect(p.bullet!.text).toBe(GOOD_BULLET)
+})
+
+test("loop stages a targeted_gap proposal intact when review passes", async () => {
+  const withGap: ProposalLike = { ...proposal(GOOD_BULLET), targeted_gap: TARGETED_GAP }
+  const out = await reviewLoop({
+    proposal: withGap,
+    rounds: 1,
+    review: async () => passResult(),
+    revise: async () => {
+      throw new Error("revise must not be called")
+    },
+  })
+  expect(out.staged).toBe(true)
+  expect(out.final.targeted_gap).toBe(TARGETED_GAP)
+})
+
+test("loop preserves targeted_gap when coercing abstain on exhausted rounds", async () => {
+  const withGap: ProposalLike = { ...proposal("bad bullet"), targeted_gap: TARGETED_GAP }
+  const out = await reviewLoop({
+    proposal: withGap,
+    rounds: 0,
+    review: async () => failResult(),
+    revise: async () => {
+      throw new Error("revise must not be called at rounds 0")
+    },
+  })
+  expect(out.staged).toBe(false)
+  expect(out.final.action).toBe("abstain")
+  expect(out.final.targeted_gap).toBe(TARGETED_GAP)
 })
 
 test("loop honors an abstain returned by the revision call", async () => {

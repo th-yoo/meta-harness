@@ -272,6 +272,9 @@ export async function reviewBullet(a: {
 export interface ProposalLike {
   action: string
   reason?: string
+  /** Gauntlet Loop D advisory metadata — the ranked-largest gap the bullet
+   * attacks; optional so pre-Loop-D proposals still parse. */
+  targeted_gap?: string
   bullet?: { text: string; evidence?: string[] }
   predictions?: any
 }

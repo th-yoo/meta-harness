@@ -204,15 +204,34 @@ const RULES_BLOCK = `## Rules
    mechanism certified — then a NARROWER-scoped variant is the indicated fix.
 9. Predict and expose yourself to falsification.`
 
+// Gap targeting (Gauntlet Loop D) lives OUTSIDE the shared rules — the
+// revision call keeps the diagnosis (and thus the targeted gap) frozen, so
+// only the initial proposer call enumerates and ranks.
+const GAP_TARGETING_BLOCK = `## Gap targeting (do this BEFORE writing your bullet)
+(a) ENUMERATE the distinct failure gaps you observe across the failing
+    trajectories — each gap is one recurring way attempts diverge from the
+    Verifier contract, tied to the attempt id(s) that show it.
+(b) RANK the gaps by expected pass-rate impact: how many failing attempts
+    each gap explains, and how directly closing it would flip them to pass.
+(c) Your ONE bullet must attack exactly the LARGEST gap. Do not blend gaps,
+    and do not pick a smaller gap because it is easier to phrase.
+(d) Report the winner in the "targeted_gap" output field: one sentence
+    naming the gap and why it ranked largest, citing which attempt id(s)/
+    trajectory evidence show it.
+All rules below stay in force — if the largest gap is fixable only with
+domain knowledge, or the gaps are too heterogeneous to rank a dominant one,
+ABSTAIN as usual.`
+
 const OUTPUT_BLOCK = `## Output
 Reply with a short analysis, then EXACTLY ONE JSON object on its own line:
 {"action":"propose"|"abstain",
  "reason":"<one sentence>",
+ "targeted_gap":"<one sentence naming the gap and why it ranked largest, citing which task(s)/trajectory evidence show it>",
  "bullet":{"text":"<the rule, <=60 words>","evidence":["<attempt id>", ...]},
  "predictions":{"expect_improve":"<what should flip and why>",
                 "expect_unchanged_guards":"<why guards stay intact>",
                 "falsify_if":"<ONE concrete observable A/B outcome that would prove this lesson wrong>"}}
-(For abstain: omit bullet/predictions; keep reason.)`
+(For abstain: omit targeted_gap/bullet/predictions; keep reason.)`
 
 const prompt = `You are the LESSON PROPOSER for a self-improving coding-agent harness. Your output
 is at most ONE new playbook bullet — a short behavioral rule injected into the
@@ -248,6 +267,8 @@ ${rejected}
 
 ## Guards (currently-passing tasks your lesson must not break)
 ${guards}
+
+${GAP_TARGETING_BLOCK}
 
 ${RULES_BLOCK}
 
@@ -305,7 +326,9 @@ ${rejected}
 ${RULES_BLOCK}
 
 ${OUTPUT_BLOCK}
-(Keep "evidence" identical to your original citation: ${JSON.stringify(p.bullet?.evidence ?? [])}.)`
+(Keep "evidence" identical to your original citation: ${JSON.stringify(p.bullet?.evidence ?? [])}.)${
+    p.targeted_gap ? `\n(Keep "targeted_gap" identical to your original: ${JSON.stringify(p.targeted_gap)}.)` : ""
+  }`
 
   const loopOut = await reviewLoop({
     proposal,
@@ -322,7 +345,12 @@ ${OUTPUT_BLOCK}
     revise: async (p, r) => {
       console.error(`proposer (revision): ${driverId}/${model} — reforming rule, diagnosis frozen`)
       const reply = llmCall(driverId, model, revisionPrompt(p, r))
-      return (extractJsonObject(reply, PROPOSAL_KEY) as ProposalLike) ?? { action: "abstain", reason: "revision reply unparseable" }
+      const revised = (extractJsonObject(reply, PROPOSAL_KEY) as ProposalLike) ?? { action: "abstain", reason: "revision reply unparseable" }
+      // targeted_gap is part of the frozen diagnosis — carry it forward when
+      // the revision reply drops it (advisory; absence never breaks parsing)
+      if (revised.action === "propose" && revised.targeted_gap === undefined && p.targeted_gap !== undefined)
+        revised.targeted_gap = p.targeted_gap
+      return revised
     },
   })
   reviewTrail = loopOut.trail
@@ -355,6 +383,7 @@ if (proposal.action === "propose" && proposal.bullet?.text) {
   mkdirSync(dirname(candidateFile), { recursive: true })
   writeFileSync(candidateFile, `${base}\n- ${proposal.bullet.text}\n`)
   console.log(`bullet: ${proposal.bullet.text}`)
+  console.log(`targeted_gap: ${proposal.targeted_gap ?? "(none)"}`)
   console.log(`falsify_if: ${proposal.predictions?.falsify_if ?? "(none)"}`)
   console.log(`\nproposal:  ${proposalFile}\ncandidate: ${candidateFile}`)
   console.log(`\ngate (unchanged, sole adopter — run both arms same host/model/driver):`)
