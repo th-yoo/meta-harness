@@ -44,9 +44,11 @@ QUEUE (GO before spend, in order):
 (5) Parked decisions: §3 over-refusal redesign round (single-use, likely
     available) · kkamak gate-editing workload ruling (GA5) · per-repo
     fixture inclusion on first organic block · 22 parked mined records
-    (retry only with cause + sized go 22) · §4.4 v2 reinject amendment
-    ruling — branch gauntlet-sf-reinject-v2 code-PASS, env-gated, held
-    unmerged (GA10 + docs/2026-08-01-gauntlet-adoption-ledger.md).
+    (retry only with cause + sized go 22) · §4.4 v2 reinject: amendment
+    APPROVED + branch MERGED env-gated 989630e (GA10 + ledger); ACTIVATION
+    still a separate logged decision — needs km-refresh (grep-verify) +
+    KKAMAK_REINJECT_V2=1 on the chosen host; v2 decision rule
+    pre-registered in §4b amendment 41a7411.
 (6) sensors export after dogfood: scripts/km-sensors-sync.sh export.
 
 DEADLINE ITEMS: calibration-refresh tooling before 2nd consumed KEEP;
