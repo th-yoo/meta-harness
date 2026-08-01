@@ -22,8 +22,8 @@ does NOT transfer; this file + the repo are the source of truth.)
   run mine/derive/resolve/report from the meta-harness root).
 
 **NEXT (GO before spend, in order):**
-(1) Retry batch for the 38 stayed-mined records when desired — new sized go
-    (`derive --go 38` from meta-harness root).
+(1) DONE 08-01: retry go 38 → 16 derived, 22 stayed mined (42% vs 81% hit — diminishing returns, park unless cause found). Corpus resolved 176: A1 3 / A2 58 / B 0 / C 13 / D 102; pool still 0/0 (starvation by design). Next retry only with new sized go
+    (`derive --go 22`).
 (2) Office host: pull main; office cache already carries Phases 2+3 — no
     action unless plugin version bumps. Optionally mine office transcripts
     into its own corpus store (model-free) for a second lane.
