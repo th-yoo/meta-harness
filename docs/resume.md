@@ -261,6 +261,14 @@ grep-verify deploys (GA3 rule).
     Build authorized by this directive; any real derive batch still needs
     its own sized go. Office pulls + switches at the same commit next
     session.
+    → USER RULING (2026-08-02 ~22:00 KST): the CLI-derived corpus (MacBook
+    176 + office 410 = 586 records) IS the transport baseline — the paired
+    anchor for SDK validation (re-derive same records on SDK, compare
+    classifications) and the reference population for anything pre-boundary.
+    Descriptive anchor, not verdict authority: transport-effect claims still
+    need the paired comparison under a pre-registered bar in the amendment
+    (same discipline as the dogfood baseline rule — anchors never
+    self-certify).
 (3) Sustain dogfood daily both hosts (tmux `kkamak`) — organic blocks now
     feed fixture-refs → future corpus records become poolEligible.
 (4) Parked user decisions: §3 over-refusal redesign round (likely available,
