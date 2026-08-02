@@ -118,6 +118,17 @@ QUEUE (GO before spend, in order):
     kernel AFTER A/A + activation — blocked now by F1 and by mid-stream
     producer change (R1 class). Two live instances already: the gate.json
     `gauge` removal (64ff902) and pluginVersion ambiguity.
+(10b) GATE FLOOR BOUNDARY — measured, written up in
+    docs/2026-08-01-gate-floor-boundary.md. Dogfood day: 7 cycles, ZERO
+    blocks; the gate never caught the sonnet session once. Not a defect —
+    the check was `bun test`, the work was docs, and every real error was
+    prose the suite cannot see (all caught by the opus review layer). The
+    day's one real catch went the OTHER way: the meta-harness gate blocked
+    the ORCHESTRATOR's turn on a reinject test failure. kkamak enforces
+    "your check passed", not "your work is correct" — a floor whose value
+    scales with what the configured check detects. The failure was routing
+    work whose success condition the floor could not express, then reading
+    silence as approval. Doc referenced from item 11/12 work below.
 (11) GAUGE CLASSIFIER — measured 2026-08-01 night, NOTHING SHIPPED, decisions
     open. All evidence-backed, none acted on:
     (a) TRANSPORT. The refiner spawns `claude -p`, dragging Claude Code's
