@@ -238,8 +238,22 @@ grep-verify deploys (GA3 rule).
     NOTE: runDerive writes ONE writeCorpus at batch end (corpus-replay.ts
     209-215) — kill/reboot mid-run loses all spend, records stay `mined`.
     Auto-chain armed (tmux `resolve-chain`): on derive exit runs resolve +
-    report model-free, log /mnt/d/tmp/resolve-chain-0802.log. NEXT SESSION
-    (this host): read chain log, commit report numbers here. Corpus store is
+    report model-free, log /mnt/d/tmp/resolve-chain-0802.log.
+    ✅ BATCH LANDED 2026-08-03 00:50 KST (3h49m, ~33s/rec): derive 298/410
+    (72.7% vs MacBook 81% first-batch), 112 stayed mined = next retry sized
+    go 112. resolve 298/298 (31s). REPORT (script output, chain log):
+    `live 0/0 · corpus 2/2 · pooled ≥90%? yes — floor NOT MET (pooled n=2
+    < 5; live n=0)`. Class table corpus-transcript A1 22 / A2 110 / B 10 /
+    C 16 / D 140 (298). FINDINGS: (a) FIRST poolEligible records in project
+    history — 46 poolEligible total, 2 pool-C, both checks ran + passed
+    (smoke-v2.txt content check @ meta-harness; CHANGELOG anchor check @
+    kkamak). Pooled 2/2=100% prints "yes" but floor stays NOT MET — n=2<5
+    and zero live; permits nothing (d869660 point 5). (b) C-RATE REPLICATES
+    CROSS-HOST: office 16/298 = 5.4% nominal vs MacBook 7.4% nominal —
+    same ballpark; blind-label 69% precision caveat applies to both
+    (~3.7% corrected here). (c) first nonzero corpus B (10). (d) office
+    live lane grew 41→50 lines during the evening (this orchestrator
+    session's own cycles). Corpus store is
     host-bound by design (.km/ gitignored, F2 excludes from km-sensors-sync;
     resolve is hostname-bound per GA9) — only READINGS travel via git.
     Office live-lane class table (report 08-02, pre-derive): A1 12 / A2 15 /
