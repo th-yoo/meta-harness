@@ -349,6 +349,136 @@ of the build item.
 **Prime directive unchanged.** Gauge failures still never touch a session.
 This makes the instrument stop lying by omission; it does not let it interfere.
 
+## 6c. Amendment (pre-data, 2026-08-02, DRAFT — awaiting user approval): derive transport → direct API SDK
+
+**Trigger.** The refiner spawns `claude -p`, which carries Claude Code's whole
+system prompt and tool definitions into every derivation — measured on this
+host 2026-08-01: `input_tokens 9`, `cache_creation 10481`, `cache_read 17536`,
+i.e. ~28k tokens of harness per call. A direct Anthropic API SDK call sends the
+refiner prompt and nothing else. On identical corpus prompts: **CLI median
+15.6-33.0s vs SDK 2.3-3.1s (5-10x)**, ~700-3000 prompt tokens vs ~28k.
+Structured outputs additionally remove a failure mode the CLI path cannot fix
+(markdown fences, truncation) by construction. User ruling 2026-08-02 ~21:45
+KST: transport moves to the SDK; the CLI has no intrinsic meaning, only
+comparability with what it already produced.
+
+**Change.** `maybeSpawnGauge`'s refiner call switches from a detached
+`claude -p --output-format json` child to a direct `@anthropic-ai/sdk`
+`messages.create` call. Model selection (`KKAMAK_GAUGE_MODEL`, default haiku),
+the daily cap (§4, 30/day), the prompt text, `validate.ts`, and every
+downstream metric definition are **unchanged by this amendment**.
+
+### THIS AMENDMENT IS NOT METRIC-NEUTRAL
+
+§6b could bind itself to metric neutrality because `present:false` is not a
+gauge record. **This one cannot make that claim and must not pretend to.** The
+transport demonstrably changes classifications, and classification is what the
+metrics are computed from. Everything below exists to keep that change
+attributable rather than silent.
+
+**Known error-profile delta** (GA11, n=13 corpus class-C records, blind opus
+labels — see `docs/2026-08-01-gauge-classifier-labels.md`):
+
+| | correct (C vs not-C) | false-C | missed-C |
+|---|---|---|---|
+| CLI | 9/13 | 4 | 0 |
+| SDK | 9/13 | 1 | 3 |
+
+The transports **tie on accuracy** and differ in direction: CLI over-extracts
+(a path appears ⇒ C), SDK under-extracts. **The mechanism is not understood** —
+the hypothesis that CC's ambient system prompt supplies repo grounding was
+tested by adding that grounding explicitly to the prompt and made *no
+difference* (3/6 both ways). Recorded as an open unknown, not a settled cause.
+
+### Validity-floor hazard (the sharp one)
+
+§3's floor is **≥5 class-C derivations in the window**, and its failure branch
+reads "the extractor is over-refusing: one redesign round allowed, then
+re-run." The SDK under-extracts C. **A floor trip caused by the transport would
+therefore be misattributed to the extractor design and would burn the single
+redesign round on a cause that is not the extractor.**
+
+Binding rule: **a validity-floor trip must be evaluated per transport before
+any redesign round is opened.** If SDK-derived records fall below the floor
+while CLI-derived records in the same window do not, that is a TRANSPORT
+finding and does not consume the redesign allowance. Only a trip visible in
+both transports, or in the sole transport in use once CLI records age out, is
+an extractor-design trip.
+
+### Provenance — a new field, not a reused one
+
+Every derivation record gains **`transport: "cli" | "sdk"`**, written at
+derive time. **Absent means `"cli"`** — the 586 pre-boundary records carry no
+field and must not be rewritten.
+
+This is deliberately a *new* key rather than a widened meaning for `model` or
+`v`. Two live instances this week of a field doing double duty and losing the
+distinction: `pluginVersion` serving as both version and producer identity
+(0.4.0 vs 0.2.1 are different codebases, not newer/older), and `reason`
+carrying both classification reason and instrument state until §6b split it.
+
+**Split rule.** Any M1v2, class-table, or C-rate reading that spans the
+boundary MUST report per-transport, exactly as GA9's amendment requires the
+live/corpus provenance split. Pooling across transports is permitted only
+after the paired validation below passes its bar.
+
+### The 586 CLI records are the baseline anchor (user ruling 2026-08-02 ~22:00)
+
+MacBook 176 + office 410 = **586 CLI-derived records** are the transport
+baseline: the paired anchor for SDK validation and the reference population for
+anything pre-boundary. **Descriptive anchor, not verdict authority** — an
+anchor never self-certifies. Transport-effect claims require the paired
+comparison below.
+
+### Paired validation + pre-registered bar (registered BEFORE any SDK data)
+
+Method: re-derive a sample of already-CLI-derived records on the SDK transport,
+same prompts, same model, same daily cap. Sample ≥50 records drawn across all
+classes, not class-C only (a C-only sample cannot see false-C in either
+direction).
+
+**Bar for pooling across transports:**
+- C-vs-not-C agreement between transports **≥90%** on the paired sample, AND
+- the paired sample's class-C count does not move by more than **±25%**
+  relative to CLI.
+
+Both hold → transports may be pooled in a single reading, with the split still
+reported. Either fails → all readings stay split by transport for the life of
+the window, and the pooled figure is not computed.
+
+**This bar tests comparability, not correctness.** Neither transport is ground
+truth; blind labels put CLI's own class-C precision at 9/13 = 69%.
+
+### Implementation constraints (binding on the build)
+
+- **Auth:** keychain OAuth token passed explicitly as `authToken`. A zero-arg
+  client does NOT inherit Claude Code credentials — proven 2026-08-02
+  (`Could not resolve authentication method`). Token is short-lived; read it
+  per process, never cache it to disk.
+- **Structured outputs:** `output_config.format` + `json_schema`. Union type
+  arrays (`["string","null"]`) are **rejected by the API** — use `anyOf`.
+- **Tests:** the suite makes **zero real model calls**. Transport is injected
+  and stubbed, same discipline as every other gauge test.
+- **Fail-open unchanged:** a transport error must behave exactly as a CLI spawn
+  failure does today — swallowed, no gauge record, never touching a session.
+- **Prime directive unchanged:** gauge failures never affect gate decisions.
+
+### Deploy
+
+Boundary timestamp logged in the gauntlet ledger at deploy, per §6b precedent —
+required because the behaviour changes while `pluginVersion` does not. **Both
+hosts switch at the same commit.** The office's in-flight 410-record batch
+finishes on CLI (sunk, and comparable with the MacBook's 176) and is the last
+CLI batch.
+
+### What would falsify this change
+
+If the paired validation shows the transports disagree beyond the bar AND the
+SDK's misses concentrate in prompts a human labeller calls C, then the SDK
+transport is buying speed at the cost of the instrument's sensitivity, and the
+correct response is to keep the CLI transport (or fix the prompt under §6c's
+own successor) rather than accept a cheaper but blinder derive path.
+
 ## 7. Known risks
 
 - Extraction discipline may over-refuse (class-C starvation) — the validity
