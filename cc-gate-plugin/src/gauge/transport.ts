@@ -42,8 +42,12 @@ export interface AuthTokenDeps {
   exec?: (argv: string[]) => string
 }
 
+// 10s cap: a locked keychain / ACL prompt must fail the derivation
+// (fail-open, no record) rather than hang the detached child forever.
+const EXEC_TIMEOUT_MS = 10_000
+
 function defaultExec(argv: string[]): string {
-  return execFileSync(argv[0]!, argv.slice(1), { encoding: "utf-8" })
+  return execFileSync(argv[0]!, argv.slice(1), { encoding: "utf-8", timeout: EXEC_TIMEOUT_MS })
 }
 
 function parseAccessToken(raw: string): string | undefined {
@@ -85,7 +89,11 @@ export function readAuthToken(
 
 /** JSON schema for the refiner's GaugeDerivation output (refiner.ts:14-22).
  * Shape-parity with parseRefinerOutput: same fields, same class/horizon
- * literals. Nullables are anyOf — the API rejects union type arrays. */
+ * literals. Nullables are anyOf — the API rejects union type arrays.
+ * DELIBERATELY looser than parseRefinerOutput on emptiness (no minLength /
+ * minItems): structured outputs rejects those constraint keywords, so
+ * empty-string/empty-array outputs are legal here and get discarded by
+ * parseRefinerOutput downstream — an M0 miss, never a wrong record. */
 export const DERIVATION_SCHEMA = {
   type: "object",
   properties: {
@@ -118,6 +126,11 @@ export async function callModelSdk(
 
     const client = new Anthropic({
       authToken,
+      // Review finding 1: without an explicit null, the SDK falls back to
+      // reading ANTHROPIC_API_KEY from the env and would send BOTH
+      // X-Api-Key and Authorization on hosts that carry a key (bench
+      // containers do). This transport is OAuth-only, always.
+      apiKey: null,
       ...(env.KKAMAK_GAUGE_SDK_BASE_URL ? { baseURL: env.KKAMAK_GAUGE_SDK_BASE_URL } : {}),
       maxRetries: 0,
       timeout: CALL_TIMEOUT_MS,

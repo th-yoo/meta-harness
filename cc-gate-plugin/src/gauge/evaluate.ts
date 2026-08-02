@@ -42,6 +42,9 @@ export async function evaluateGauge(
         }
       : {}),
     ...(gauge.strike !== undefined ? { strike: gauge.strike } : {}),
+    // §6c transport provenance — passthrough when present, absent means a
+    // pre-boundary CLI derivation (never fabricated here).
+    ...(gauge.transport !== undefined ? { transport: gauge.transport } : {}),
   }
 
   if (!gauge.check) return base

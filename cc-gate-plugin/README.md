@@ -118,9 +118,13 @@ any gate decision. Pre-registration: `docs/superpowers/specs/
 
 Opt in per repo via `"gauge": true` in `gate.json`. On each task-shaped user
 prompt (deterministic classifier — imperative verb or file path, not
-question-only), a detached refiner makes one small-model `claude -p` call
-(default `haiku`, override `KKAMAK_GAUGE_MODEL`) deriving
-`{goalSummary, criteria[], check|null, confidence}` into `.km/gauge/`. At the
+question-only), a detached refiner makes one direct Anthropic-API call
+(§6c amendment 2026-08-02 — previously a `claude -p` child; default model
+`haiku` → `claude-haiku-4-5`, override `KKAMAK_GAUGE_MODEL`) deriving
+`{goalSummary, criteria[], check|null, confidence}` into `.km/gauge/`, with
+structured outputs and `transport: "sdk"` provenance on the record. Auth is
+Claude Code's own OAuth token (macOS keychain / `~/.claude/.credentials.json`;
+override `KKAMAK_GAUGE_AUTH_TOKEN`). At the
 next cycle-ending Stop the derived check runs shadow (30s timeout) and the
 sensor line gains a `gauge` field (`present/executable/pass/wouldBlock/
 agreesWithFloor/...`). Fast-path Stops with a pending gauge log a gauge-only
@@ -128,8 +132,8 @@ line, marked by `rounds: []`. Evaluated derivations live on as
 `.km/gauge/*.done.json` (audit trail).
 
 Fencing: 30 refiner calls/day per repo (`.km/gauge/daily-count`, fail-closed),
-kill-switch `KKAMAK_GAUGE=off`, refiner runs with `KM_CHILD=1` so kkamak's own
-hooks stay out of the child session.
+kill-switch `KKAMAK_GAUGE=off`; exactly one API request per derivation (no
+HTTP retries), 60s timeout, every failure swallowed fail-open.
 
 **Safety guard.** A derived check is model-generated shell run with your
 permissions — shadow mode stops it from changing a gate decision, not from

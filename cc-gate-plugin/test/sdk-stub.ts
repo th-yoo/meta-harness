@@ -4,6 +4,9 @@
 export interface Captured {
   authorization: string | null
   beta: string | null
+  /** X-Api-Key header — must ALWAYS be null: the transport is OAuth-only
+   * and must suppress the SDK's ANTHROPIC_API_KEY env fallback. */
+  apiKey: string | null
   body: Record<string, unknown>
 }
 
@@ -21,6 +24,7 @@ export function stubServer(handler: (captured: Captured) => Response): SdkStub {
       const c: Captured = {
         authorization: req.headers.get("authorization"),
         beta: req.headers.get("anthropic-beta"),
+        apiKey: req.headers.get("x-api-key"),
         body: (await req.json()) as Record<string, unknown>,
       }
       captured.push(c)

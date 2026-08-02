@@ -16,22 +16,6 @@ import { callModelSdk, resolveModelId } from "./transport.ts"
 import { validateDerivation } from "./validate.ts"
 import { gaugeDir, writeGaugeFile } from "./files.ts"
 
-/** HISTORICAL (pre-§6c CLI transport): `claude -p --output-format json`
- * wrapper → .result text; undefined if not that shape. Kept exported for the
- * replay tooling that may still meet CLI-era artifacts; the live path no
- * longer produces this wrapper. */
-export function extractResultText(text: string): string | undefined {
-  try {
-    const j = JSON.parse(text)
-    if (typeof j === "object" && j !== null && typeof (j as Record<string, unknown>).result === "string") {
-      return (j as Record<string, unknown>).result as string
-    }
-  } catch {
-    // fall through
-  }
-  return undefined
-}
-
 async function main(): Promise<void> {
   const [cwd, sessionID, nStr] = process.argv.slice(2)
   const n = Number(nStr)

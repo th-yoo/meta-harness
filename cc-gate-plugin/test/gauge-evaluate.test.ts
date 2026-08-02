@@ -162,3 +162,16 @@ test("v2: strike passthrough — independent of class presence", async () => {
   expect(g.strike).toBe(1)
   expect(g.class).toBeUndefined()
 })
+
+// §6c transport provenance must reach the SENSOR LINE, not just the gauge
+// file store — the amendment's Split rule (per-transport reporting) is read
+// off the sensor stream by score.ts, which never opens .km/gauge/ files.
+test("transport passthrough: SDK-derived pending → sensor gauge field carries transport 'sdk'", async () => {
+  const g = await evaluateGauge({ ...BASE, transport: "sdk" }, { ran: true, accepted: true }, ok)
+  expect(g.transport).toBe("sdk")
+})
+
+test("transport absent (pre-boundary CLI record) → field absent on the sensor line, never fabricated", async () => {
+  const g = await evaluateGauge(BASE, { ran: true, accepted: true }, ok)
+  expect("transport" in g).toBe(false)
+})

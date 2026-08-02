@@ -223,6 +223,26 @@ describe("callModelSdk", () => {
     }
   })
 
+  test("stray ANTHROPIC_API_KEY in process env is SUPPRESSED — OAuth-only auth, no x-api-key header (review finding 1)", async () => {
+    const srv = stubServer(() => okResponse(RESULT_JSON))
+    const prev = process.env.ANTHROPIC_API_KEY
+    process.env.ANTHROPIC_API_KEY = "sk-ant-stray-key"
+    try {
+      const out = await callModelSdk("p", "", {
+        KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+        KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      })
+      expect(out).toBe(RESULT_JSON)
+      expect(srv.captured.length).toBe(1)
+      expect(srv.captured[0]!.apiKey).toBeNull()
+      expect(srv.captured[0]!.authorization).toBe("Bearer tok-1")
+    } finally {
+      if (prev === undefined) delete process.env.ANTHROPIC_API_KEY
+      else process.env.ANTHROPIC_API_KEY = prev
+      srv.stop()
+    }
+  })
+
   test("response with no text block → undefined", async () => {
     const srv = stubServer(() =>
       Response.json({
