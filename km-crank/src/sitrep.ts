@@ -193,9 +193,9 @@ export function formatSitrep(o: SitrepOutcome): string {
 /**
  * Impure: read the Slack bot token from ~/.squad/ccacp-slack.env (the ONLY
  * place this module touches that file) and POST to chat.postMessage. Throws
- * on any failure (missing token, network error, `!ok` response) — crank.ts's
- * top-level catch turns that into a best-effort failure log, never a crash
- * that leaves stale in-flight state.
+ * on any failure (missing token, network error, `!ok` response) — callers
+ * needing a round outcome to survive a transport failure should call
+ * deliverSitrep instead, which never throws.
  */
 export async function postSlack(text: string): Promise<void> {
   const envPath = path.join(os.homedir(), ".squad", "ccacp-slack.env")
@@ -220,4 +220,24 @@ export async function postSlack(text: string): Promise<void> {
   })
   const json = (await res.json()) as { ok: boolean; error?: string }
   if (!json.ok) throw new Error(`postSlack: chat.postMessage failed (${json.error ?? "unknown error"})`)
+}
+
+/**
+ * Impure: format + deliver a SITREP, NEVER throws. This is what crank.ts's
+ * round body calls (not postSlack directly) — a transport failure (missing
+ * env file, network error, Slack API error) is a delivery-channel problem,
+ * not a round outcome, and must not surface as one. On postSlack failure this
+ * degrades to printing the sitrep text to stdout, so the SITREP content is
+ * never silently lost, and the caller's already-decided action/round state is
+ * left untouched either way.
+ */
+export async function deliverSitrep(outcome: SitrepOutcome): Promise<void> {
+  const text = formatSitrep(outcome)
+  try {
+    await postSlack(text)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error(`[km-crank] SITREP Slack delivery failed (${message}), degrading to stdout:`)
+    console.log(text)
+  }
 }

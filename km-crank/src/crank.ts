@@ -55,7 +55,7 @@ import { readSnapshotAges } from "./snapshot-age.ts"
 import { unionRawLines } from "./sensor-union.ts"
 import { joinBySession, parseCheckOutputRecords } from "./check-output.ts"
 import { renderEvidence, type RepoEvidence } from "./evidence.ts"
-import { formatSitrep, postSlack, type SitrepAction, type RepoSummary } from "./sitrep.ts"
+import { deliverSitrep, type SitrepAction, type RepoSummary } from "./sitrep.ts"
 import { decideGate, acquireCrankLock, releaseCrankLock } from "./gate.ts"
 import { readCalibration, calibrationStale } from "./calibration.ts"
 import { runTrialScan } from "./trial-verdict.ts"
@@ -258,7 +258,7 @@ async function main(): Promise<void> {
   })
   if (trialScan) {
     console.log(`[km-crank] trial: ${trialScan.action.kind} (${trialScan.repo})`)
-    await postSlack(formatSitrep({ generatedAt: now, repos: repoSummaries, action: trialScan.action }))
+    await deliverSitrep({ generatedAt: now, repos: repoSummaries, action: trialScan.action })
   }
   // Fall-through choice (Task 6, recorded deliberately): EVERY trial outcome
   // falls through to the normal round below.
@@ -388,9 +388,7 @@ async function main(): Promise<void> {
     if (!found && playbook && fs.existsSync(stagingSystem)) found = true // propose.ts's own grace case
 
     if (!found) {
-      await postSlack(
-        formatSitrep({ generatedAt: now, repos: repoSummaries, targetRepo, action: { kind: "proposer-timeout" } }),
-      )
+      await deliverSitrep({ generatedAt: now, repos: repoSummaries, targetRepo, action: { kind: "proposer-timeout" } })
       console.log("[km-crank] proposer timeout — positions not advanced, this round's lines stay pending")
       return
     }
@@ -467,7 +465,7 @@ async function main(): Promise<void> {
       writePositionsAtomic(newPositions)
     }
 
-    await postSlack(formatSitrep({ generatedAt: now, repos: repoSummaries, targetRepo, action }))
+    await deliverSitrep({ generatedAt: now, repos: repoSummaries, targetRepo, action })
     console.log(`[km-crank] done: ${action.kind}`)
   } finally {
     // FIX 2: always release the crank-private round lock, whether the round
@@ -486,11 +484,7 @@ if (import.meta.main) {
   main().catch(async (err) => {
     const message = err instanceof Error ? err.message : String(err)
     console.error("[km-crank] failure:", message)
-    try {
-      await postSlack(formatSitrep({ generatedAt: Date.now(), repos: [], action: { kind: "failure", message } }))
-    } catch (postErr) {
-      console.error("[km-crank] failed to post failure sitrep:", postErr instanceof Error ? postErr.message : String(postErr))
-    }
+    await deliverSitrep({ generatedAt: Date.now(), repos: [], action: { kind: "failure", message } })
     process.exit(0)
   })
 }
