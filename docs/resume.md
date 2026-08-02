@@ -253,7 +253,11 @@ grep-verify deploys (GA3 rule).
     same ballpark; blind-label 69% precision caveat applies to both
     (~3.7% corrected here). (c) first nonzero corpus B (10). (d) office
     live lane grew 41→50 lines during the evening (this orchestrator
-    session's own cycles). Corpus store is
+    session's own cycles). (e) POST-§6c CROSS-HOST GOTCHA: pulling the SDK
+    merge leaves the suite RED (10 fail — detached refiner dies importing
+    @anthropic-ai/sdk) until `bun install` in cc-gate-plugin; office hit
+    this live 00:55, install → 594/594 + tsc clean. Any host pulling §6c:
+    bun install FIRST. Corpus store is
     host-bound by design (.km/ gitignored, F2 excludes from km-sensors-sync;
     resolve is hostname-bound per GA9) — only READINGS travel via git.
     Office live-lane class table (report 08-02, pre-derive): A1 12 / A2 15 /
