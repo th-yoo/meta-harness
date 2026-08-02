@@ -40,8 +40,10 @@ office sized off its class table (16 C). (3) Sustain dogfood daily (cycle
 mechanics: one task/turn, edit+check+commit inside the turn; tmux driving
 needs the allow rules in .claude/settings.local.json — auto-mode classifier
 blocks Enter-injection otherwise). (4) Office retry go 112 only with cause.
-(5) Path A Stage 0 (adjudicate opus-arms-vs-sonnet-subject conflict, item 7,
-BEFORE Stage 1). (6) Parked: §3 over-refusal round (now per-transport
+(5) Path A model conflict ADJUDICATED 08-03 (user): SONNET ARMS — pre-data
+amendment written into the plan doc (all trial arms = subject model
+claude-sonnet-5; concurrent v7 sonnet arm = only baseline; judgment seats
+stay opus; verdict semantics unchanged). Stage 0 authoring = next go. (6) Parked: §3 over-refusal round (now per-transport
 attribution first, §6c), GA5 gate-editing ruling, per-repo fixtures, item
 12 third lane. A/A ~Aug 12. RULES unchanged (explicit go / spec-is-law /
 F1-F2 / grep-verify / per-task reviews / sonnet=subject, opus=judgment).

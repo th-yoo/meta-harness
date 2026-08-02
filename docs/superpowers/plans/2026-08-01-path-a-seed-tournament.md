@@ -3,13 +3,44 @@
 **Status:** DRAFT — awaiting user review + go. No spend authorized by this
 document; every stage below has its own go line.
 **Date:** 2026-08-01 (MacBook draft; execution = office box, podman).
-**Pre-data amendment (2026-08-01, before Stage 0):** all trial arms run
-**`claude-opus-5`** (`anthropic/claude-opus-5` via opencode) — Opus updated
-to 5, user directive to use it wherever opus was used. Consequence: v7's
-HISTORICAL band rates (measured on opus-4-8) are no longer a valid screen
-baseline, so Stage 1 gains a concurrent v7 k=1 arm (+7 trials); Stage 2's
-paired v7 control arm already handles this by construction. No verdict
-semantics change.
+**Pre-data amendment (2026-08-01, before Stage 0) — SUPERSEDED by the
+2026-08-03 amendment below:** all trial arms run **`claude-opus-5`**
+(`anthropic/claude-opus-5` via opencode) — Opus updated to 5, user
+directive to use it wherever opus was used. Consequence: v7's HISTORICAL
+band rates (measured on opus-4-8) are no longer a valid screen baseline,
+so Stage 1 gains a concurrent v7 k=1 arm (+7 trials); Stage 2's paired v7
+control arm already handles this by construction. No verdict semantics
+change.
+
+**Pre-data amendment (2026-08-03, user ruling, before Stage 0 — zero
+trials run under any prior version):** all trial arms run the **SUBJECT
+model — sonnet** (`anthropic/claude-sonnet-5` via opencode; if the dogfood
+subject pin moves before Stage-1 launch, the launch log line records the
+exact pin actually used, and all arms share it).
+
+- **Why (conflict adjudicated):** the 2026-08-01 amendment above collided
+  with the same-day model-role policy (resume item 7): *sonnet = the
+  SUBJECT under evolution; opus = judgment roles; the supervisor is never
+  the subject.* Trial arms ARE the subject — a seed certified on opus-5
+  measures the supervisor, not the thing being evolved. The "use opus
+  wherever opus was used" directive concerned judgment/supervisor roles;
+  applying it to trial arms was a misread. The later, more specific policy
+  governs. Lessons transfer to the kkamak lane cleanly only if the bench
+  subject and the dogfood subject share a model.
+- **Band consequence (absorbed by design):** the pre-registered band
+  (0<pass<1) came from an opus-4-8 k=3 screen and was already invalid as a
+  historical baseline under the 08-01 amendment; under sonnet it stays
+  invalid the same way. The Stage-1 **concurrent v7 sonnet arm** is the
+  only baseline any decision reads — rank/kill semantics unchanged. Tasks
+  may drift out of the 0<pass<1 range under sonnet (e.g. sonnet 0/1 where
+  opus sat mid-band); that shows up symmetrically in the concurrent v7 arm
+  and is evidence, not a protocol break. Held-in/held-out/guard task SETS
+  are unchanged.
+- **Judgment roles unchanged:** reviews, verdict analysis, any
+  judge/critic seats stay opus (policy item 7). Only trial arms move.
+- **Verdict semantics unchanged:** Stage-1 screen (rank vs concurrent v7,
+  ≤2 advance), Stage-2 McNemar+Fisher p<0.05 + no ≥3/5→≤1/5 regression,
+  Stage-3 guard/held-out rules all as written.
 **Lane:** TB2 agent harness store (opencode `account-global` layer,
 candidates v0..v11 lineage, active=**v7**). This is NOT the kkamak §4.3
 live-trial lane — no interaction with gate-outcomes, trial-arms,
