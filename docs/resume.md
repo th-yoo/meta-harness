@@ -8,10 +8,15 @@ does NOT transfer; this file + the repo are the source of truth.)
 **RESUME PROMPT (either host):**
 ```
 Resume kkamak (meta-harness), 2026-08-01+. Read docs/resume.md FIRST (top
-block "SESSION END 2026-07-30 night → 08-01") + minimal/HISTORY.md GA6-GA9
-rows. meta-harness pushed through bcc9f08; kkamak a71206e; squad 7c167f8.
-All roadmap phases 0-3 + GA9 corpus-replay tooling MERGED to main; both
-hosts' installed plugin carries Phases 1+2+3.
+block "SESSION END 2026-07-30 night → 08-01") + minimal/HISTORY.md GA6-GA11
+rows + docs/2026-08-01-gate-floor-boundary.md (what the gate does and does
+NOT catch, measured on a real dogfood day — read before interpreting any
+zero-block stretch as the gate working or failing).
+meta-harness pushed through 1d9af4e; kkamak main 586d476 + tag v0.4.0
+RELEASED; squad 7c167f8. All roadmap phases 0-3 + GA9 corpus-replay tooling
+MERGED to main; both hosts' installed plugin carries Phases 1+2+3; MacBook
+also carries gauge fail-loud (deployed 08-01 17:05 KST, boundary ts
+1785571509000).
 
 WHERE WE ARE: gauge corpus-replay pipeline live (mine|derive|resolve|report,
 store = repo-root .km/gauge-corpus/, run from meta-harness root). First
