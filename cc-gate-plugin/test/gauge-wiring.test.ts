@@ -8,6 +8,7 @@ import path from "node:path"
 import { FileStateStore } from "../src/state.ts"
 import { INITIAL_STATE, type CcGateState } from "../src/types.ts"
 import { gaugeDir, writeGaugeFile } from "../src/gauge/files.ts"
+import { stubServerFor } from "./sdk-stub.ts"
 
 const HOOK_CLI = path.join(import.meta.dir, "..", "src", "hook-cli.ts")
 
@@ -53,20 +54,16 @@ function sensorLines(repo: string): Record<string, unknown>[] {
     .map((l) => JSON.parse(l))
 }
 
-function stubBin(repo: string): string {
-  // v2: class is now a required parse field (km-gauge v2 extractor, 2026-07-29).
-  const derivation = {
-    goalSummary: "stub goal",
-    class: "C",
-    criteria: ["stub criterion"],
-    check: "test -f done-marker.txt",
-    confidence: 0.9,
-  }
-  const wrapper = JSON.stringify({ type: "result", result: JSON.stringify(derivation) })
-  const p = path.join(repo, "stub-claude")
-  fs.writeFileSync(p, `#!/usr/bin/env bash\ncat >/dev/null\necho '${wrapper.replace(/'/g, `'\\''`)}'\n`)
-  fs.chmodSync(p, 0o755)
-  return p
+// v2: class is now a required parse field (km-gauge v2 extractor, 2026-07-29).
+// §6c: the detached refiner now calls the direct API — the stub is an HTTP
+// server (test/sdk-stub.ts), reached via the KKAMAK_GAUGE_SDK_BASE_URL env
+// seam that the hook process passes down to its detached child.
+const STUB_DERIVATION = {
+  goalSummary: "stub goal",
+  class: "C",
+  criteria: ["stub criterion"],
+  check: "test -f done-marker.txt",
+  confidence: 0.9,
 }
 
 const SID = "wire-sid"
@@ -87,20 +84,25 @@ async function waitFor(pred: () => boolean, ms = 5000): Promise<boolean> {
 test("UserPromptSubmit + gauge on + task prompt → detached refiner produces the pending gauge file", async () => {
   const repo = mkRepo()
   writeGate(repo, { check: "true", gauge: true })
-  const bin = stubBin(repo)
+  const srv = stubServerFor(STUB_DERIVATION)
 
-  await runHook({
-    event: "UserPromptSubmit",
-    stdin: promptStdin(repo, "create done-marker.txt at the repo root"),
-    env: { KKAMAK_GAUGE_CLAUDE_BIN: bin },
-  })
+  try {
+    await runHook({
+      event: "UserPromptSubmit",
+      stdin: promptStdin(repo, "create done-marker.txt at the repo root"),
+      env: { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-test" },
+    })
 
-  // req written synchronously by the hook; pending file arrives from the
-  // detached refiner shortly after.
-  const pendingPath = path.join(gaugeDir(repo), `${SID}-1.json`)
-  expect(await waitFor(() => fs.existsSync(pendingPath))).toBe(true)
-  const gauge = JSON.parse(fs.readFileSync(pendingPath, "utf-8"))
-  expect(gauge.check).toBe("test -f done-marker.txt")
+    // req written synchronously by the hook; pending file arrives from the
+    // detached refiner shortly after.
+    const pendingPath = path.join(gaugeDir(repo), `${SID}-1.json`)
+    expect(await waitFor(() => fs.existsSync(pendingPath))).toBe(true)
+    const gauge = JSON.parse(fs.readFileSync(pendingPath, "utf-8"))
+    expect(gauge.check).toBe("test -f done-marker.txt")
+    expect(gauge.transport).toBe("sdk")
+  } finally {
+    srv.stop()
+  }
 
   const count = JSON.parse(fs.readFileSync(path.join(gaugeDir(repo), "daily-count"), "utf-8"))
   expect(count.count).toBe(1)

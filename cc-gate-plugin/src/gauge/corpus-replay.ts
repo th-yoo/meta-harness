@@ -2,10 +2,11 @@
 //
 // mine -> derive -> resolve -> report pipeline, stage 2: turns "mined"
 // CorpusRecords into "derived" ones by running the SAME model pipeline as
-// the live refiner (refiner-cli.ts) — MIRRORED, not refactored, because
-// refiner-cli.ts is deployed live-path code (plan Global Constraints). Only
-// its exported `extractResultText` is imported; the `callModel` subprocess
-// pattern (not exported there) is copied verbatim below.
+// the live refiner (refiner-cli.ts). §6c amendment (2026-08-02): both paths
+// now share the ONE exported SDK transport (transport.ts callModelSdk) —
+// the earlier mirror-don't-refactor CLI-subprocess copy is gone with the
+// CLI transport itself; live and replay derivations are the same call by
+// construction, not by mirroring discipline.
 //
 // Persisted derivation blob is full GaugeFile-shaped (files.ts:25-41) per
 // the pinned corpus fill policy (plan, Task 1 design paragraph): `n` is
@@ -21,8 +22,8 @@
 // SHAPE-parsed derivation that validateDerivation itself downgrades
 // (C -> D, etc.) is still a complete, persistable result: validation is the
 // code-side judge, not a failure mode.
-import { extractResultText } from "./refiner-cli.ts"
-import { buildRefinerPrompt, parseRefinerOutput } from "./refiner.ts"
+import { parseRefinerOutput } from "./refiner.ts"
+import { callModelSdk, resolveModelId } from "./transport.ts"
 import { validateDerivation } from "./validate.ts"
 import type { GaugeFile } from "./files.ts"
 import {
@@ -35,59 +36,14 @@ import {
   type CorpusRecord,
 } from "./corpus-store.ts"
 
-const CALL_TIMEOUT_MS = 60_000
-
-/** Mirrors refiner-cli.ts:34-70 `callModel` — same argv shape, same
- * KM_CHILD=1, same 60s kill timeout, same env-override seams
- * (KKAMAK_GAUGE_CLAUDE_BIN / KKAMAK_GAUGE_MODEL). Copied rather than
- * imported: callModel is not exported there, and refiner-cli.ts stays
- * untouched per the plan's mirror-don't-refactor discipline. */
-async function callModel(prompt: string, floorCheck: string): Promise<string | undefined> {
-  const bin = process.env.KKAMAK_GAUGE_CLAUDE_BIN ?? "claude"
-  const model = process.env.KKAMAK_GAUGE_MODEL ?? "haiku"
-
-  let proc: ReturnType<typeof Bun.spawn>
-  try {
-    proc = Bun.spawn([bin, "-p", "--output-format", "json", "--model", model], {
-      stdin: new TextEncoder().encode(buildRefinerPrompt(prompt, floorCheck)),
-      stdout: "pipe",
-      stderr: "ignore",
-      env: { ...process.env, KM_CHILD: "1" },
-    })
-  } catch {
-    return undefined
-  }
-
-  const timer = setTimeout(() => {
-    try {
-      proc.kill()
-    } catch {
-      // best-effort
-    }
-  }, CALL_TIMEOUT_MS)
-
-  try {
-    const [out, code] = await Promise.all([
-      new Response(proc.stdout as ReadableStream<Uint8Array>).text().catch(() => ""),
-      proc.exited,
-    ])
-    if (code !== 0) return undefined
-    return out
-  } catch {
-    return undefined
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
 /** One "mined" CorpusRecord -> "derived" on a fully-validated success, the
  * SAME record unchanged (still stage "mined") on any upstream failure. */
 export async function deriveRecord(record: CorpusRecord): Promise<CorpusRecord> {
   const started = Date.now()
-  const raw = await callModel(record.prompt, record.floorCheck)
+  const raw = await callModelSdk(record.prompt, record.floorCheck, process.env)
   if (raw === undefined) return record
 
-  const derivation = parseRefinerOutput(extractResultText(raw) ?? raw)
+  const derivation = parseRefinerOutput(raw)
   if (!derivation) return record
 
   // The persisted blob is the VALIDATED result — same discipline as
@@ -113,8 +69,10 @@ export async function deriveRecord(record: CorpusRecord): Promise<CorpusRecord> 
     sessionID: record.sessionId,
     n: 1,
     ts: Date.now(),
-    model: process.env.KKAMAK_GAUGE_MODEL ?? "haiku",
+    // Resolved API id actually sent (transport.ts), not the CLI alias.
+    model: resolveModelId(process.env.KKAMAK_GAUGE_MODEL ?? "haiku"),
     derivationMs: Date.now() - started,
+    transport: "sdk",
   }
 
   return { ...record, stage: "derived", derivation: blob }

@@ -9,5 +9,8 @@
     "@types/bun": "latest",
     "@types/node": "^22",
     "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0"
   }
 }

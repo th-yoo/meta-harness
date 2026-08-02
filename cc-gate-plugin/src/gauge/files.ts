@@ -38,6 +38,12 @@ export interface GaugeFile {
   horizon?: GaugeHorizon | null
   downgraded?: Downgrade
   strike?: 1
+  /** §6c derive-transport provenance, written at derive time. ABSENT means
+   * "cli" — the 586 pre-boundary records carry no field and are never
+   * rewritten. Deliberately a NEW key (not a widened `model`/`v`): the
+   * transport demonstrably changes classifications, and a field doing
+   * double duty is how pluginVersion lost producer identity. */
+  transport?: "cli" | "sdk"
 }
 
 export function gaugeDir(cwd: string): string {

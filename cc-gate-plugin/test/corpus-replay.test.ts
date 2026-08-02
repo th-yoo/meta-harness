@@ -12,6 +12,7 @@ import {
   CORPUS_FILE_REL,
   type CorpusRecord,
 } from "../src/gauge/corpus-store.ts"
+import { stubServer, stubServerFor, okResponse, type SdkStub } from "./sdk-stub.ts"
 
 function mkRepo(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "km-corpus-replay-"))
@@ -36,13 +37,6 @@ function lockPathFor(cwd: string): string {
   return path.join(cwd, CORPUS_DIR_REL, ".lock")
 }
 
-function stubBin(dir: string, script: string): string {
-  const p = path.join(dir, "stub-claude")
-  fs.writeFileSync(p, `#!/usr/bin/env bash\n${script}\n`)
-  fs.chmodSync(p, 0o755)
-  return p
-}
-
 const DERIVATION = {
   goalSummary: "g",
   class: "C",
@@ -51,37 +45,31 @@ const DERIVATION = {
   confidence: 0.9,
 }
 
-function stubBinFor(dir: string, derivation: unknown): string {
-  return stubBin(
-    dir,
-    `PROMPT=$(cat)
-[ -n "$PROMPT" ] || exit 3
-[ "$KM_CHILD" = "1" ] || exit 4
-echo '${JSON.stringify({ type: "result", result: JSON.stringify(derivation) }).replace(/'/g, `'\\''`)}'`,
-  )
-}
-
-/** Run `fn` with KKAMAK_GAUGE_CLAUDE_BIN set to `bin`, restoring whatever was
- * there before (undefined or otherwise) afterward — zero real model calls,
- * every test routes through a stub bin. */
-async function withStubBin<T>(bin: string, fn: () => Promise<T>): Promise<T> {
-  const prev = process.env.KKAMAK_GAUGE_CLAUDE_BIN
-  process.env.KKAMAK_GAUGE_CLAUDE_BIN = bin
+/** Run `fn` with the SDK transport pointed at `srv` (base-URL + token env
+ * seams), restoring whatever was there before afterward — zero real model
+ * calls, every test routes through the stub server (§6c transport). */
+async function withSdkStub<T>(srv: SdkStub, fn: () => Promise<T>): Promise<T> {
+  const prevUrl = process.env.KKAMAK_GAUGE_SDK_BASE_URL
+  const prevTok = process.env.KKAMAK_GAUGE_AUTH_TOKEN
+  process.env.KKAMAK_GAUGE_SDK_BASE_URL = srv.url
+  process.env.KKAMAK_GAUGE_AUTH_TOKEN = "tok-test"
   try {
     return await fn()
   } finally {
-    if (prev === undefined) delete process.env.KKAMAK_GAUGE_CLAUDE_BIN
-    else process.env.KKAMAK_GAUGE_CLAUDE_BIN = prev
+    if (prevUrl === undefined) delete process.env.KKAMAK_GAUGE_SDK_BASE_URL
+    else process.env.KKAMAK_GAUGE_SDK_BASE_URL = prevUrl
+    if (prevTok === undefined) delete process.env.KKAMAK_GAUGE_AUTH_TOKEN
+    else process.env.KKAMAK_GAUGE_AUTH_TOKEN = prevTok
+    srv.stop()
   }
 }
 
 describe("deriveRecord", () => {
-  test("happy path: mined -> derived, GaugeFile-shaped blob (v2, n:1, model+derivationMs recorded)", async () => {
-    const tmp = mkRepo()
-    const bin = stubBinFor(tmp, DERIVATION)
+  test("happy path: mined -> derived, GaugeFile-shaped blob (v2, n:1, model+derivationMs+transport recorded)", async () => {
+    const srv = stubServerFor(DERIVATION)
     const record = rec({ prompt: "verify src/auth.ts exists", sessionId: "sid-42" })
 
-    const result = await withStubBin(bin, () => deriveRecord(record))
+    const result = await withSdkStub(srv, () => deriveRecord(record))
 
     expect(result.stage).toBe("derived")
     expect(result.derivation).toBeDefined()
@@ -90,9 +78,12 @@ describe("deriveRecord", () => {
     expect(d.n).toBe(1)
     expect(d.sessionID).toBe("sid-42")
     expect(typeof d.ts).toBe("number")
-    expect(typeof d.model).toBe("string")
+    // model = the resolved API id actually sent, not the CLI alias.
+    expect(d.model).toBe("claude-haiku-4-5")
     expect(typeof d.derivationMs).toBe("number")
     expect(d.goalSummary).toBe("g")
+    // §6c provenance: SDK-derived blobs carry transport "sdk" (absent = cli).
+    expect(d.transport).toBe("sdk")
     // path token verbatim in prompt + in repo scope -> stays class C, not downgraded.
     expect(d.class).toBe("C")
     expect(d.check).toBe("test -f src/auth.ts")
@@ -102,33 +93,30 @@ describe("deriveRecord", () => {
   })
 
   test("malformed model output (not JSON) -> record stays stage 'mined', no derivation persisted", async () => {
-    const tmp = mkRepo()
-    const bin = stubBin(tmp, `cat >/dev/null; echo "not json at all"`)
+    const srv = stubServer(() => okResponse("not json at all"))
     const record = rec()
 
-    const result = await withStubBin(bin, () => deriveRecord(record))
+    const result = await withSdkStub(srv, () => deriveRecord(record))
 
     expect(result.stage).toBe("mined")
     expect(result.derivation).toBeUndefined()
   })
 
   test("model output missing required parse fields -> stays 'mined'", async () => {
-    const tmp = mkRepo()
-    const bin = stubBinFor(tmp, { goalSummary: "g" }) // no class, no criteria
+    const srv = stubServerFor({ goalSummary: "g" }) // no class, no criteria
     const record = rec()
 
-    const result = await withStubBin(bin, () => deriveRecord(record))
+    const result = await withSdkStub(srv, () => deriveRecord(record))
 
     expect(result.stage).toBe("mined")
     expect(result.derivation).toBeUndefined()
   })
 
-  test("model call failure (non-zero exit) -> stays 'mined'", async () => {
-    const tmp = mkRepo()
-    const bin = stubBin(tmp, `cat >/dev/null; exit 1`)
+  test("model call failure (API error) -> stays 'mined'", async () => {
+    const srv = stubServer(() => new Response("boom", { status: 500 }))
     const record = rec()
 
-    const result = await withStubBin(bin, () => deriveRecord(record))
+    const result = await withSdkStub(srv, () => deriveRecord(record))
 
     expect(result.stage).toBe("mined")
     expect(result.derivation).toBeUndefined()
@@ -141,16 +129,14 @@ describe("runDerive — cost fence", () => {
     writeCorpus(cwd, [rec(), rec({ promptSha256: "sha-b" })], () => {})
     const before = fs.readFileSync(path.join(cwd, CORPUS_FILE_REL), "utf-8")
 
-    const marker = path.join(cwd, "called.marker")
-    const bin = stubBin(cwd, `touch ${marker}; cat >/dev/null; echo nope`)
-
+    const srv = stubServerFor(DERIVATION)
     const logs: string[] = []
-    const summary = await withStubBin(bin, () => runDerive(cwd, undefined, (m) => logs.push(m)))
+    const summary = await withSdkStub(srv, () => runDerive(cwd, undefined, (m) => logs.push(m)))
 
     expect(summary).toBeUndefined()
     expect(logs.some((l) => l.includes("2"))).toBe(true)
     expect(fs.readFileSync(path.join(cwd, CORPUS_FILE_REL), "utf-8")).toBe(before)
-    expect(fs.existsSync(marker)).toBe(false)
+    expect(srv.captured.length).toBe(0)
   })
 
   test("wrong --go (mismatched n): refuses, no store write, no model calls", async () => {
@@ -158,31 +144,30 @@ describe("runDerive — cost fence", () => {
     writeCorpus(cwd, [rec(), rec({ promptSha256: "sha-b" })], () => {})
     const before = fs.readFileSync(path.join(cwd, CORPUS_FILE_REL), "utf-8")
 
-    const marker = path.join(cwd, "called.marker")
-    const bin = stubBin(cwd, `touch ${marker}; cat >/dev/null; echo nope`)
-
+    const srv = stubServerFor(DERIVATION)
     const logs: string[] = []
-    const summary = await withStubBin(bin, () => runDerive(cwd, 1, (m) => logs.push(m)))
+    const summary = await withSdkStub(srv, () => runDerive(cwd, 1, (m) => logs.push(m)))
 
     expect(summary).toBeUndefined()
     expect(logs.some((l) => l.includes("REFUS") || l.includes("refus"))).toBe(true)
     expect(fs.readFileSync(path.join(cwd, CORPUS_FILE_REL), "utf-8")).toBe(before)
-    expect(fs.existsSync(marker)).toBe(false)
+    expect(srv.captured.length).toBe(0)
   })
 
   test("correct --go: derives every pending record, stage advances, store rewritten", async () => {
     const cwd = mkRepo()
     writeCorpus(cwd, [rec(), rec({ promptSha256: "sha-b" })], () => {})
-    const bin = stubBinFor(cwd, DERIVATION)
+    const srv = stubServerFor(DERIVATION)
 
     const logs: string[] = []
-    const summary = await withStubBin(bin, () => runDerive(cwd, 2, (m) => logs.push(m)))
+    const summary = await withSdkStub(srv, () => runDerive(cwd, 2, (m) => logs.push(m)))
 
     expect(summary).toEqual({ pending: 2, derived: 2, staysMined: 0 })
     const after = readCorpus(cwd)
     expect(after.length).toBe(2)
     expect(after.every((r) => r.stage === "derived")).toBe(true)
     expect(after.every((r) => r.derivation?.n === 1)).toBe(true)
+    expect(after.every((r) => r.derivation?.transport === "sdk")).toBe(true)
   })
 
   test("only stage:'mined' records count toward the pending fence — derived/resolved records excluded", async () => {
@@ -192,9 +177,9 @@ describe("runDerive — cost fence", () => {
       [rec({ stage: "derived", promptSha256: "sha-c" }), rec({ promptSha256: "sha-d" })],
       () => {},
     )
-    const bin = stubBinFor(cwd, DERIVATION)
+    const srv = stubServerFor(DERIVATION)
 
-    const summary = await withStubBin(bin, () => runDerive(cwd, 1, () => {}))
+    const summary = await withSdkStub(srv, () => runDerive(cwd, 1, () => {}))
 
     expect(summary?.pending).toBe(1)
     expect(summary?.derived).toBe(1)
@@ -204,21 +189,16 @@ describe("runDerive — cost fence", () => {
     const cwd = mkRepo()
     writeCorpus(cwd, [rec({ promptSha256: "sha-e", prompt: "verify src/auth.ts exists" }), rec({ promptSha256: "sha-f" })], () => {})
 
-    // A bin that alternates: first call returns malformed text, second a valid envelope.
-    const bin = stubBin(
-      cwd,
-      `PROMPT=$(cat)
-COUNTFILE="${cwd}/call-count"
-COUNT=$(cat "$COUNTFILE" 2>/dev/null || echo 0)
-echo $((COUNT+1)) > "$COUNTFILE"
-if [ "$COUNT" = "0" ]; then
-  echo '${JSON.stringify({ type: "result", result: JSON.stringify(DERIVATION) }).replace(/'/g, `'\\''`)}'
-else
-  echo "garbage, not json"
-fi`,
-    )
+    // A server that alternates: first call returns a valid derivation,
+    // second malformed text (runDerive is sequential, so this is
+    // deterministic — same shape as the old alternating stub bin).
+    let calls = 0
+    const srv = stubServer(() => {
+      calls += 1
+      return calls === 1 ? okResponse(JSON.stringify(DERIVATION)) : okResponse("garbage, not json")
+    })
 
-    const summary = await withStubBin(bin, () => runDerive(cwd, 2, () => {}))
+    const summary = await withSdkStub(srv, () => runDerive(cwd, 2, () => {}))
     expect(summary?.pending).toBe(2)
     expect(summary?.derived).toBe(1)
     expect(summary?.staysMined).toBe(1)
@@ -236,7 +216,7 @@ fi`,
 // looks identical to the zero-effect fence refusal). ---
 
 describe("runDerive — lock held by another writer", () => {
-  test("lock already held: refuses before any model call, store untouched (marker-file assertion)", async () => {
+  test("lock already held: refuses before any model call, store untouched (zero-requests assertion)", async () => {
     const cwd = mkRepo()
     writeCorpus(cwd, [rec()], () => {})
     const before = fs.readFileSync(path.join(cwd, CORPUS_FILE_REL), "utf-8")
@@ -245,18 +225,16 @@ describe("runDerive — lock held by another writer", () => {
     // the corpus lock.
     expect(acquireCorpusLock(cwd, () => {})).toBe(true)
 
-    const marker = path.join(cwd, "called.marker")
-    const bin = stubBin(cwd, `touch ${marker}; cat >/dev/null; echo nope`)
-
+    const srv = stubServerFor(DERIVATION)
     const logs: string[] = []
     let summary: unknown
     try {
-      summary = await withStubBin(bin, () => runDerive(cwd, 1, (m) => logs.push(m)))
+      summary = await withSdkStub(srv, () => runDerive(cwd, 1, (m) => logs.push(m)))
 
       expect(summary).toBeUndefined()
       expect(logs.some((l) => l.includes("REFUSING") && l.toLowerCase().includes("lock"))).toBe(true)
-      // zero model calls — the stub bin was never spawned.
-      expect(fs.existsSync(marker)).toBe(false)
+      // zero model calls — the stub server was never hit.
+      expect(srv.captured.length).toBe(0)
       // zero effect — the store is byte-identical to before the attempt.
       expect(fs.readFileSync(path.join(cwd, CORPUS_FILE_REL), "utf-8")).toBe(before)
       // and still stage "mined" — the fence-passing record was untouched.
@@ -308,7 +286,7 @@ describe("runDerive — lock released on throw (finally guarantee)", () => {
     writeCorpus(cwd, [rec()], () => {})
     // Valid derivation — the model call SUCCEEDS (real spend happens)
     // before the injected failure.
-    const bin = stubBinFor(cwd, DERIVATION)
+    const srv = stubServerFor(DERIVATION)
 
     // Monkey-patch fs.writeFileSync (corpus-store.test.ts "takeover race"
     // precedent) to fail ONLY the corpus store's tmp+rename write, leaving
@@ -325,11 +303,13 @@ describe("runDerive — lock released on throw (finally guarantee)", () => {
     }) as typeof fs.writeFileSync
 
     try {
-      await withStubBin(bin, async () => {
+      await withSdkStub(srv, async () => {
         await expect(runDerive(cwd, 1, () => {})).rejects.toThrow(
           "simulated fs failure writing the corpus store",
         )
       })
+      // the model call really happened before the injected write failure.
+      expect(srv.captured.length).toBe(1)
     } finally {
       fs.writeFileSync = origWriteFileSync
     }
