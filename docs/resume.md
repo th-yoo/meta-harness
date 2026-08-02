@@ -250,9 +250,17 @@ grep-verify deploys (GA3 rule).
     double-duty), state the known error-profile delta (CLI over-extracts /
     SDK misses, 9/13 tie), schema rule anyOf-never-union, auth = keychain
     OAuth as authToken. Then implement in spawn.ts + stubbed tests +
-    per-task review; BOTH hosts switch at same commit. Own go for the
-    build session. Tonight's 410 batch finishes on CLI (sunk, comparable
-    with MacBook's 176).
+    per-task review; BOTH hosts switch at same commit. Tonight's 410 batch
+    finishes on CLI (sunk, comparable with MacBook's 176) — LAST CLI batch
+    ever.
+    → MACBOOK SESSION DIRECTIVE (user, 2026-08-02 ~21:55 KST): MacBook does
+    the SDK work — draft the pre-data amendment, implement the SDK
+    transport (spawn.ts + stubbed tests, zero real calls in suite), per-task
+    review, merge; log the boundary ts at deploy. MacBook runs NO further
+    CLI derive batches; all its future derive work = SDK post-boundary.
+    Build authorized by this directive; any real derive batch still needs
+    its own sized go. Office pulls + switches at the same commit next
+    session.
 (3) Sustain dogfood daily both hosts (tmux `kkamak`) — organic blocks now
     feed fixture-refs → future corpus records become poolEligible.
 (4) Parked user decisions: §3 over-refusal redesign round (likely available,
