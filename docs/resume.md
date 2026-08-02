@@ -336,7 +336,20 @@ grep-verify deploys (GA3 rule).
     need the paired comparison under a pre-registered bar in the amendment
     (same discipline as the dogfood baseline rule — anchors never
     self-certify).
-(3) Sustain dogfood daily both hosts (tmux `kkamak`) — organic blocks now
+(3) DONE 2026-08-03 ~06:30-06:50 KST (MacBook): 3 dogfood cycles driven on
+    the sonnet subject (session bcd70a2a, tmux `kkamak`), all
+    rounds:["accepted"], all three sensor lines carry the FIRST ORGANIC
+    SDK-transport gauge records (transport:"sdk", derivations 5.2-6.5s vs
+    CLI 15-33s; all classed B/floor-covered — one was refiner-C with check
+    "bun test" that validate.ts correctly downgraded C→B). Work was real
+    queue items, committed+pushed on kkamak main (e8b9a38 parity-guard
+    fail-loud = item 10(a) kkamak half; bc1e882 known-issue 1 marketplace
+    $schema+description; c5f8600 known-issue 3 manifest-description parity
+    — each with a pinning test, suite 314+). Sensors exported (2ae1e99).
+    NOTE for drivers: injecting into the live pane needs the tmux allow
+    rules in .claude/settings.local.json (auto-mode classifier blocks
+    Enter-submission + self-granted permissions otherwise). Zero blocks
+    again — doc'd gate-floor boundary holds; still sustain daily both hosts:
     feed fixture-refs → future corpus records become poolEligible.
 (4) Parked user decisions: §3 over-refusal redesign round (likely available,
     single-use); kkamak gate-editing workload ruling (GA5); per-repo fixture
