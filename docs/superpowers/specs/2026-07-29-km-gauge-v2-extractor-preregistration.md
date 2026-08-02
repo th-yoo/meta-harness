@@ -349,7 +349,17 @@ of the build item.
 **Prime directive unchanged.** Gauge failures still never touch a session.
 This makes the instrument stop lying by omission; it does not let it interfere.
 
-## 6c. Amendment (pre-data, 2026-08-02, DRAFT — awaiting user approval): derive transport → direct API SDK
+## 6c. Amendment (pre-data, 2026-08-02, APPROVED — user rulings ~23:30 KST 2026-08-02): derive transport → direct API SDK
+
+**Approval record.** Drafted 2026-08-02 night (8a0b715), approved same night
+with three user rulings that replaced the draft's two invented numbers:
+(1) pooling bar → stratified C-enriched Jaccard bar (the draft's ±25% class-C
+band and flat ≥90% agreement were both degenerate at the corpus's ~5.1%
+C-rate — see the bar section for the arithmetic); (2) paired re-derivation
+runs on a shadow store copy, leaving the fenced/locked deriver untouched;
+(3) bar constants T=0.80, N=ceil(0.10×|C_cli|). The draft's claimed conflict
+with §4's daily cap was void: §3 point 6 already places corpus-replay batches
+outside the daily cap under their own sized go.
 
 **Trigger.** The refiner spawns `claude -p`, which carries Claude Code's whole
 system prompt and tool definitions into every derivation — measured on this
@@ -432,22 +442,60 @@ comparison below.
 
 ### Paired validation + pre-registered bar (registered BEFORE any SDK data)
 
-Method: re-derive a sample of already-CLI-derived records on the SDK transport,
-same prompts, same model, same daily cap. Sample ≥50 records drawn across all
-classes, not class-C only (a C-only sample cannot see false-C in either
-direction).
+**Why the draft's bar was replaced (recorded so the degeneracy stays known).**
+At the corpus's honest C-rate (~5.1% after blind-label correction), a
+50-record all-class sample carries ~2.5 class-C records — a ±25% band on that
+count is narrower than one record and can neither pass nor fail meaningfully.
+The flat ≥90% C-vs-not-C agreement clause fails the opposite way: with ~95%
+of records not-C, a transport that returns "not-C" for everything scores ~95%
+agreement — **the bar was beatable by an oracle that never finds a single C.**
+Both clauses were uninformative at the natural class distribution.
 
-**Bar for pooling across transports:**
-- C-vs-not-C agreement between transports **≥90%** on the paired sample, AND
-- the paired sample's class-C count does not move by more than **±25%**
-  relative to CLI.
+**Sample (stratified, C-enriched).** Per host, over that host's own corpus
+store: **every CLI-derived class-C record** in the store, plus an
+**equal-size random draw of CLI-derived not-C records**. Corpus stores are
+host-bound by design (`.km/` gitignored, resolve hostname-bound per GA9), so
+the paired validation runs per host and only the resulting counts travel via
+git; the bar below is evaluated on the combined counts across hosts. The
+not-C stratum exists because a C-only sample cannot see SDK-only C (records
+CLI called not-C that SDK calls C).
+
+**Method (shadow store — user ruling 2).** Copy the host's
+`.km/gauge-corpus/` to a side store, reset the sampled records to stage
+`"mined"`, run the standard derive there with `transport: "sdk"` under its
+own sized go, compare classifications offline. The real corpus is never
+mutated; the fenced/locked deriver (`runDerive`, whose cost fence requires
+`go === pending.length` and cannot re-derive `"derived"` records) is not
+modified; paired-validation derivations live only in the shadow store and
+are never pooled into, or counted in, any reading.
+
+**Bar for pooling across transports (user ruling 3, constants pre-registered
+before any SDK data):**
+- **Positive agreement on C** — of the records EITHER transport calls C,
+  the fraction both call C: `|C_cli ∩ C_sdk| / |C_cli ∪ C_sdk| ≥ 0.80`, AND
+- **Missed-C cap** — records CLI calls C that SDK calls not-C:
+  `≤ ceil(0.10 × |C_cli|)` where `|C_cli|` is the CLI class-C count in the
+  paired sample.
 
 Both hold → transports may be pooled in a single reading, with the split still
 reported. Either fails → all readings stay split by transport for the life of
 the window, and the pooled figure is not computed.
 
+**Expected outcome stated up front:** the only paired data in hand (the 13
+blind-labeled records) gives `|C_cli ∩ C_sdk| = 7`, union 13, positive
+agreement **7/13 ≈ 54%** — below the bar. If the full sample behaves like the
+slice, the bar FAILS and readings stay split. That is the designed result,
+not a defect: pooling is the exception to be earned, split is the default.
+The bar is set on principle, not tuned to pass.
+
 **This bar tests comparability, not correctness.** Neither transport is ground
 truth; blind labels put CLI's own class-C precision at 9/13 = 69%.
+
+**Spend.** Paired-validation derive batches are corpus-replay batches: per §3
+point 6 they sit **outside §4's daily cap** and each needs its own explicit
+sized go (the draft's claim that the sample collides with the 30/day cap was
+wrong and is withdrawn). Rough size: MacBook 13 C + 13 not-C = 26; office
+sized after its 410-batch class table is read.
 
 ### Implementation constraints (binding on the build)
 
