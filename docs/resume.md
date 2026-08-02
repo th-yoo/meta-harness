@@ -71,13 +71,16 @@ QUEUE (GO before spend, in order):
     OPEN: Path A is pre-registered all-arms opus-5 while sonnet is the
     subject — a seed certified on opus-5 measures the supervisor. Adjudicate
     BEFORE Stage 1 spend.
-(8) DEPLOY gauge fail-loud (merged 0c2482c, §6b amendment, NOT deployed).
-    Source-only today: the installed cache is 0.2.1, so live cycles still
-    omit the field. Needs km-refresh.sh --force + grep-verify `offReason` in
-    the cache (GA3) + dogfood tmux restart. The refresh deletes the plugin
-    cache root and kills hooks fail-open in any LIVE session — pick a moment.
-    Verify after: next cycle carries either a real gauge record or
-    present:false/offReason, never silence.
+(8) DONE 2026-08-01 17:05 KST: gauge fail-loud DEPLOYED (merged 0c2482c,
+    §6b amendment). km-refresh --force, cache grep-verified (single 0.2.1,
+    offReason in hook-cli + types, GaugeOffReason type), proven by driving
+    the INSTALLED copy → {present:false, offReason:"disabled"}. No restart
+    needed (same path+version, hooks re-read per invocation). Live-confirmed
+    17:20 cycle carried {present:false, offReason:"no-record"} — first line
+    in project history that STATES the instrument had nothing instead of
+    going silent. BOUNDARY ts 1785571509000 logged in the gauntlet ledger:
+    behaviour changed while pluginVersion stayed 0.2.1, so lines either side
+    are indistinguishable by stamp — partition by ts, not version.
 (9) kkamak 0.4.0 — SHIPPED 2026-08-01 evening. Released at
     https://github.com/th-yoo/kkamak/releases/tag/v0.4.0 (annotated tag
     v0.4.0 on 586d476, CI green, 311 tests). Repo description + topics fixed
@@ -115,6 +118,50 @@ QUEUE (GO before spend, in order):
     kernel AFTER A/A + activation — blocked now by F1 and by mid-stream
     producer change (R1 class). Two live instances already: the gate.json
     `gauge` removal (64ff902) and pluginVersion ambiguity.
+(11) GAUGE CLASSIFIER — measured 2026-08-01 night, NOTHING SHIPPED, decisions
+    open. All evidence-backed, none acted on:
+    (a) TRANSPORT. The refiner spawns `claude -p`, dragging Claude Code's
+        whole system prompt + tools into every derivation (~28k tokens:
+        input_tokens 9, cache_creation 10481, cache_read 17536). A direct
+        Anthropic API SDK call sends only the refiner prompt. On real corpus
+        prompts: CLI median 15.6-33.0s vs SDK 2.3-3.1s (5-10x), ~700-3000
+        prompt tokens vs ~28k. AUTH: the API SDK does NOT inherit CC
+        credentials (zero-arg client → "Could not resolve authentication
+        method"); the keychain OAuth token DOES work passed as authToken
+        (proven). Agent SDK inherits credentials by being CC.
+    (b) STRUCTURED OUTPUTS are a win the CLI path cannot have —
+        output_config.format + json_schema eliminated every markdown-fence
+        and truncation parse failure by construction. Caveat: union type
+        arrays ["string","null"] are REJECTED; use anyOf.
+    (c) BLIND LABELS (opus, fresh context, saw only rubric + 13 prompts, not
+        any transport's output): stored corpus C-precision is 9/13 = 69%,
+        NOT the 13/13 the class table implies. So `C 13` is really ~9 and
+        the C-rate drops 7.4% → ~5.1%. validate.ts caught some
+        over-extraction, not these four. THE VALIDITY FLOOR READS OFF THIS.
+    (d) The transports TIE at 9/13 on C-vs-not-C with opposite error
+        profiles: CLI 4 false-C / 0 missed; SDK 1 false-C / 3 missed. An
+        earlier "SDK is more accurate" claim came from a 6-record slice and
+        is RETRACTED.
+    (e) An anti-over-extraction prompt patch (four named traps: path with no
+        stated property; path-like non-paths e.g. git refs; bare filename
+        with no directory; "fill it" with no stated content) drove false-C
+        to ZERO on both transports — CLI 10/13, precision 69%→100% — but
+        cost recall (100%→67%) and overcorrected one unambiguous case
+        ("notes.txt containing one line: demo" → D). Text in scratchpad
+        fp-patch-test.ts; NOT applied to source.
+    OPEN: any transport or prompt change alters the instrument → pre-data
+    amendment + logged boundary required, same discipline as (8).
+(12) PROPOSED NEW LANE (user insight 2026-08-01, undecided): apply the
+    proposer/reviewer/A-B loop to the GAUGE REFINER PROMPT itself rather
+    than hand-tuning it. Better instrumented than the TB2 lane on every
+    axis — trials ~3s + one haiku call vs 30-60min containers, 176 corpus
+    records vs 7-14 band tasks, verdicts in minutes vs nights. Overfitting
+    (13 records, tuned and scored on the same set) is precisely what the
+    loop's held-out split + pre-registered bar exist to prevent. TWO LIMITS
+    TO PRE-REGISTER: labels are OPUS JUDGMENTS, not ground truth — this is
+    distillation capped at opus accuracy, never report agreement as
+    "correctness"; and it is a THIRD lane (not TB2, not §4.3) needing its
+    own bar and boundary.
 
 DEADLINE ITEMS: calibration-refresh tooling before 2nd consumed KEEP;
 golden-window machinery before 3rd KEEP.
