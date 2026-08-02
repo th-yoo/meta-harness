@@ -154,6 +154,11 @@ export interface GaugeSensorField {
   }
   /** Two-strike policy state (shadow.ts) for a multi-turn class-C pending. */
   strike?: 1 | 2
+  /** §6c derive-transport provenance passthrough — the Split rule (per-
+   * transport reporting) is read off the sensor stream, so the field must
+   * reach the line, not just the gauge file store. Absent = pre-boundary
+   * CLI derivation; never fabricated. */
+  transport?: "cli" | "sdk"
 }
 
 /** One ndjson sensor line — field names are SCHEMA PARITY with gate-plugin + host/app tags. */
