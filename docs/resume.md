@@ -28,9 +28,12 @@ validate downgrade caught. Office (concurrent, 00:50 KST): 410 batch landed
 pt 5); C-rate replicates cross-host (5.4% vs 7.4% nominal, 69%-precision
 caveat both); 112 stayed mined = next retry sized go 112.
 
-QUEUE (GO before spend): (1) OFFICE: pull + bun install in cc-gate-plugin
-BEFORE km-refresh (node_modules not in git), switch transport at de6e892,
-log its own boundary ts. MacBook/office CLI derive = OVER, SDK-only now.
+QUEUE (GO before spend): (1) DONE 08-03 08:00 KST (office): pull b57b187 +
+bun install → 594/594 + tsc + kkamak 315/315 → km-refresh --force +
+grep-verify (transport.ts + SDK in cache node_modules) → office boundary
+ts 1785711630125 logged in gauntlet ledger. MacBook/office CLI derive =
+OVER, SDK-only now. First organic office cycle's transport:"sdk" stamp =
+live confirmation.
 (2) Paired validation (own sized go per host): shadow-store copy/reset/
 compare script NOT yet built — build when go'd; MacBook sample ~13C+13,
 office sized off its class table (16 C). (3) Sustain dogfood daily (cycle

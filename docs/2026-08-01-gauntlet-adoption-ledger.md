@@ -156,6 +156,17 @@ Caveat: n=3 loops, one day — provisional, revisit after the next program.
 - **No restart required** — same path + version, hooks re-read per
   invocation (per the 2026-08-01 precedent above; same deletion-window
   caveat).
+- **Deployed 2026-08-03 08:00:30 KST (ts 1785711630125), office `yoo-dev`.**
+  Pull to `b57b187` + `bun install` (suite was RED without it — resume 08-02
+  block (2e)) → 594/594 + tsc clean + kkamak 315/315 → `km-refresh.sh
+  --force` → cache grep-verified per GA3: single `0.2.1/`,
+  `src/gauge/transport.ts` present w/ `@anthropic-ai/sdk` import, SDK in
+  cache `node_modules/`. Stub-drive proof not repeated on this host (MacBook
+  proved the installed artifact; office cache is byte-copied from the same
+  commit) — first organic office cycle's `transport:"sdk"` stamp is the
+  live confirmation. Office lines between the two boundary ts values
+  (00:29–08:00 KST) are CLI-produced if any exist; sensor-line transport
+  field is authoritative either way.
 - **BOUNDARY MATTERS — version again did not move (`0.2.1`), but this
   boundary is NOT metric-neutral** (unlike §6b): the transport changes
   classifications. Records/lines after this ts carry `transport:"sdk"` on
