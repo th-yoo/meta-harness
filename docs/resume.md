@@ -12,8 +12,9 @@ block "SESSION END 2026-07-30 night → 08-01") + minimal/HISTORY.md GA6-GA11
 rows + docs/2026-08-01-gate-floor-boundary.md (what the gate does and does
 NOT catch, measured on a real dogfood day — read before interpreting any
 zero-block stretch as the gate working or failing).
-meta-harness pushed through 1d9af4e; kkamak main 586d476 + tag v0.4.0
-RELEASED; squad 7c167f8. All roadmap phases 0-3 + GA9 corpus-replay tooling
+meta-harness pushed through 7108f71; kkamak main 586d476 + tag v0.4.0
+RELEASED; squad 7c167f8. Office host synced + verified 2026-08-02 (read-only
+session, nothing built there). All roadmap phases 0-3 + GA9 corpus-replay tooling
 MERGED to main; both hosts' installed plugin carries Phases 1+2+3; MacBook
 also carries gauge fail-loud (deployed 08-01 17:05 KST, boundary ts
 1785571509000).
@@ -220,9 +221,12 @@ grep-verify deploys (GA3 rule).
 **NEXT (GO before spend, in order):**
 (1) DONE 08-01: retry go 38 → 16 derived, 22 stayed mined (42% vs 81% hit — diminishing returns, park unless cause found). Corpus resolved 176: A1 3 / A2 58 / B 0 / C 13 / D 102; pool still 0/0 (starvation by design). Next retry only with new sized go
     (`derive --go 22`).
-(2) Office host: pull main; office cache already carries Phases 2+3 — no
-    action unless plugin version bumps. Optionally mine office transcripts
-    into its own corpus store (model-free) for a second lane.
+(2) DONE 2026-08-02 (office, read-only session): main pulled + verified in
+    sync, kkamak already at 586d476 + v0.4.0 tag, cache already carries
+    Phases 2+3 — no action needed. Also committed `7108f71`: the GA7 phase-2
+    plan doc had lived UNTRACKED since 07-31 while resume.md cited it — it
+    never reached the MacBook. Still open (model-free, no go needed): mine
+    office transcripts into a second corpus lane.
 (3) Sustain dogfood daily both hosts (tmux `kkamak`) — organic blocks now
     feed fixture-refs → future corpus records become poolEligible.
 (4) Parked user decisions: §3 over-refusal redesign round (likely available,
