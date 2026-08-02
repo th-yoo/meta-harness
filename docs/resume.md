@@ -3,7 +3,48 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ✅ SESSION END 2026-07-30 night → 08-01 (`yoo-mac.local`) — GA6 PHASE 1 + GA9 CORPUS-REPLAY BUILT/SEALED/MERGED · MacBook FULLY DEPLOYED + CLONE-PROVEN · first batches consumed · Path A tournament drafted — meta-harness @ `bcc9f08` · kkamak @ `a71206e` · squad @ `7c167f8`, all pushed
+## ✅ SESSION END 2026-08-02 night → 08-03 (`yoo-mac.local`) — §6c APPROVED + SDK TRANSPORT SHIPPED END-TO-END (build/review/merge/deploy, boundary ts 1785684571765) · 3 dogfood cycles = FIRST ORGANIC SDK GAUGE RECORDS · concurrent office batch: FIRST 2 poolEligible — meta-harness pushed (tip incl. `de6e892` merge + `6bb48f6`) · kkamak @ `c5f8600` pushed · squad @ `7c167f8`
+
+**RESUME PROMPT (either host):**
+```
+Resume kkamak (meta-harness), 2026-08-03+. Read docs/resume.md FIRST (this
+top block) + HISTORY.md GA12 + the "Gauge SDK-transport deploy boundary"
+entry in docs/2026-08-01-gauntlet-adoption-ledger.md.
+
+WHERE WE ARE: §6c derive-transport amendment APPROVED (c22fbd0 — three
+rulings replaced the draft's degenerate bar: stratified C-enriched sample,
+positive agreement >=0.80 AND missed-C <= ceil(0.10x|C_cli|), shadow-store
+paired re-derivation; measured slice 54% so expect SPLIT, that is the
+designed outcome). SDK transport BUILT (TDD, zero real calls; transport.ts,
+both derive paths, transport:"cli"|"sdk" on records AND sensor lines),
+REVIEWED (FIX-FIRST -> fix wave d15fc7f: apiKey:null OAuth-only, transport
+onto sensor line, keychain exec timeout), MERGED de6e892, DEPLOYED yoo-mac
+00:29 KST 08-03, boundary ts 1785684571765 (gauntlet ledger), installed
+copy PROVEN vs stub. First ORGANIC SDK gauge records live: 3 dogfood cycles
+on the sonnet subject, derivations 5.2-6.5s (CLI was 15-33s), one C->B
+validate downgrade caught. Office (concurrent, 00:50 KST): 410 batch landed
+298/410 derived, FIRST 2 poolEligible pool-C records (pooled 2/2 prints
+"yes" but floor NOT MET, n=2<5 + zero live — permits NOTHING per d869660
+pt 5); C-rate replicates cross-host (5.4% vs 7.4% nominal, 69%-precision
+caveat both); 112 stayed mined = next retry sized go 112.
+
+QUEUE (GO before spend): (1) OFFICE: pull + bun install in cc-gate-plugin
+BEFORE km-refresh (node_modules not in git), switch transport at de6e892,
+log its own boundary ts. MacBook/office CLI derive = OVER, SDK-only now.
+(2) Paired validation (own sized go per host): shadow-store copy/reset/
+compare script NOT yet built — build when go'd; MacBook sample ~13C+13,
+office sized off its class table (16 C). (3) Sustain dogfood daily (cycle
+mechanics: one task/turn, edit+check+commit inside the turn; tmux driving
+needs the allow rules in .claude/settings.local.json — auto-mode classifier
+blocks Enter-injection otherwise). (4) Office retry go 112 only with cause.
+(5) Path A Stage 0 (adjudicate opus-arms-vs-sonnet-subject conflict, item 7,
+BEFORE Stage 1). (6) Parked: §3 over-refusal round (now per-transport
+attribution first, §6c), GA5 gate-editing ruling, per-repo fixtures, item
+12 third lane. A/A ~Aug 12. RULES unchanged (explicit go / spec-is-law /
+F1-F2 / grep-verify / per-task reviews / sonnet=subject, opus=judgment).
+```
+
+## ⏸ SUPERSEDED (2026-08-03) — SESSION END 2026-07-30 night → 08-01 (`yoo-mac.local`) — GA6 PHASE 1 + GA9 CORPUS-REPLAY BUILT/SEALED/MERGED · MacBook FULLY DEPLOYED + CLONE-PROVEN · first batches consumed · Path A tournament drafted — meta-harness @ `bcc9f08` · kkamak @ `a71206e` · squad @ `7c167f8`, all pushed
 
 **RESUME PROMPT (either host):**
 ```
