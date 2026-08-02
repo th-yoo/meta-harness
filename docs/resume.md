@@ -12,9 +12,10 @@ block "SESSION END 2026-07-30 night → 08-01") + minimal/HISTORY.md GA6-GA11
 rows + docs/2026-08-01-gate-floor-boundary.md (what the gate does and does
 NOT catch, measured on a real dogfood day — read before interpreting any
 zero-block stretch as the gate working or failing).
-meta-harness pushed through 7108f71; kkamak main 586d476 + tag v0.4.0
+meta-harness pushed through 8a0b715; kkamak main 586d476 + tag v0.4.0
 RELEASED; squad 7c167f8. Office host synced + verified 2026-08-02 (read-only
-session, nothing built there). All roadmap phases 0-3 + GA9 corpus-replay tooling
+session, nothing built there). MacBook 2026-08-02 night: §6c transport
+amendment DRAFTED (8a0b715) — AWAITING USER APPROVAL, no code written. All roadmap phases 0-3 + GA9 corpus-replay tooling
 MERGED to main; both hosts' installed plugin carries Phases 1+2+3; MacBook
 also carries gauge fail-loud (deployed 08-01 17:05 KST, boundary ts
 1785571509000).
@@ -261,6 +262,32 @@ grep-verify deploys (GA3 rule).
     Build authorized by this directive; any real derive batch still needs
     its own sized go. Office pulls + switches at the same commit next
     session.
+    → MACBOOK 2026-08-02 night: §6c AMENDMENT DRAFTED + pushed (8a0b715,
+      in docs/superpowers/specs/2026-07-29-km-gauge-v2-extractor-preregistration.md).
+      STATUS: **DRAFT, awaiting user approval — zero code written.** Covers
+      the four required items (transport provenance field, error-profile
+      delta, anyOf-never-union, keychain-OAuth authToken) plus three the
+      draft adds because omitting them would be dishonest:
+      (i) it states plainly it is NOT metric-neutral — unlike §6b, the
+          transport changes classifications and classifications are what
+          every metric is computed from;
+      (ii) VALIDITY-FLOOR HAZARD: §3 trips below 5 class-C and reads the
+          trip as "extractor is over-refusing", spending the single
+          redesign round. The SDK UNDER-extracts C, so a transport-caused
+          trip would be misattributed and burn that allowance. Draft binds
+          floor trips to per-transport evaluation first;
+      (iii) the mechanism of the transport delta is recorded as UNKNOWN —
+          the grounding hypothesis was tested and made no difference
+          (3/6 both ways).
+      Pre-registers the pooling bar before any SDK data: ≥50 paired records
+      across all classes, ≥90% C-vs-not-C agreement, class-C count within
+      ±25%; either fails → readings stay split for the window.
+      TWO NUMBERS NEED YOUR RULING BEFORE BUILD: the ±25% class-C tolerance
+      is invented, not derived; and the ≥50 paired sample costs real derive
+      spend against the §4 daily cap of 30 → ≥2 days or its own sized go.
+      NEXT: approve/amend §6c → then implement (spawn.ts + stubbed tests,
+      zero real calls in suite) → per-task review → merge → log boundary ts
+      at deploy → office pulls + switches at the same commit.
     → USER RULING (2026-08-02 ~22:00 KST): the CLI-derived corpus (MacBook
     176 + office 410 = 586 records) IS the transport baseline — the paired
     anchor for SDK validation (re-derive same records on SDK, compare
