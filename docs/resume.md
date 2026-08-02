@@ -240,6 +240,19 @@ grep-verify deploys (GA3 rule).
     resolve is hostname-bound per GA9) — only READINGS travel via git.
     Office live-lane class table (report 08-02, pre-derive): A1 12 / A2 15 /
     B 6 / C 0 / D 8 (41 lines).
+(2c) USER RULING 2026-08-02 ~21:45 KST: gauge derive transport moves to
+    direct API SDK (time/token efficiency; GA11 measurements: 5-10x faster,
+    ~700-3000 vs ~28k prompt tokens, structured outputs kill parse
+    failures). CLI has no intrinsic meaning — only comparability with the
+    586 already-derived records. EXECUTION PATH (not yet done): pre-data
+    amendment + logged boundary ts FIRST (§6b discipline) — must add a
+    transport provenance field to derive records (avoid pluginVersion-style
+    double-duty), state the known error-profile delta (CLI over-extracts /
+    SDK misses, 9/13 tie), schema rule anyOf-never-union, auth = keychain
+    OAuth as authToken. Then implement in spawn.ts + stubbed tests +
+    per-task review; BOTH hosts switch at same commit. Own go for the
+    build session. Tonight's 410 batch finishes on CLI (sunk, comparable
+    with MacBook's 176).
 (3) Sustain dogfood daily both hosts (tmux `kkamak`) — organic blocks now
     feed fixture-refs → future corpus records become poolEligible.
 (4) Parked user decisions: §3 over-refusal redesign round (likely available,
