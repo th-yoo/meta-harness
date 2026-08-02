@@ -94,6 +94,11 @@ here.
 ## Launch check reminder (binding, from the plan)
 
 Per arm before any trial counts: "Harness assembled (N chars)" must exceed
-394 by roughly the seed's size — s1 ≈ +2662, s2 ≈ +3224, s3 ≈ +2988.
+394 by roughly the seed's size. UNITS: the assembled figure is a JS string
+length (codepoints), not wc -c bytes — multibyte punctuation makes the two
+differ. Authoritative per-arm expected values live in the Stage-1 runbook
+(computed from the committed files against the composer): v7=394,
+s1/v13=2689, s2/v14=3233, s3/v15=2991. The wc -c byte counts above
+(2662/3224/2988) identify the files, not the launch-check number.
 composeHarness silently drops playbook-only additions; each seed lives
 entirely in its system.md.
