@@ -227,6 +227,19 @@ grep-verify deploys (GA3 rule).
     plan doc had lived UNTRACKED since 07-31 while resume.md cited it — it
     never reached the MacBook. Still open (model-free, no go needed): mine
     office transcripts into a second corpus lane.
+(2b) 2026-08-02 evening (office): OFFICE CORPUS LANE OPENED. mine → 410
+    records (197 transcripts, store .km/gauge-corpus/ this host). derive
+    --go 410 GRANTED + IN FLIGHT (tmux `derive410`, launched 21:01 KST,
+    ~30s/record CLI transport, ETA ~00:30; log /mnt/d/tmp/derive-410-*.log).
+    NOTE: runDerive writes ONE writeCorpus at batch end (corpus-replay.ts
+    209-215) — kill/reboot mid-run loses all spend, records stay `mined`.
+    Auto-chain armed (tmux `resolve-chain`): on derive exit runs resolve +
+    report model-free, log /mnt/d/tmp/resolve-chain-0802.log. NEXT SESSION
+    (this host): read chain log, commit report numbers here. Corpus store is
+    host-bound by design (.km/ gitignored, F2 excludes from km-sensors-sync;
+    resolve is hostname-bound per GA9) — only READINGS travel via git.
+    Office live-lane class table (report 08-02, pre-derive): A1 12 / A2 15 /
+    B 6 / C 0 / D 8 (41 lines).
 (3) Sustain dogfood daily both hosts (tmux `kkamak`) — organic blocks now
     feed fixture-refs → future corpus records become poolEligible.
 (4) Parked user decisions: §3 over-refusal redesign round (likely available,
