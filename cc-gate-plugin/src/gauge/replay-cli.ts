@@ -49,6 +49,7 @@ import {
 import { mineJsonl, dedupeEarliest } from "./corpus-mine.ts"
 import { runDerive } from "./corpus-replay.ts"
 import { runResolve, readSensorLines } from "./state-resolve.ts"
+import { runPvSample, parsePvSampleArgs } from "./paired-validation.ts"
 
 /** `~/.claude/projects`, or `KKAMAK_CLAUDE_PROJECTS_DIR` override. */
 export function projectsDir(): string {
@@ -538,8 +539,15 @@ async function main(): Promise<void> {
     return
   }
 
+  if (sub === "pv-sample") {
+    const { cwd, reset } = parsePvSampleArgs(args.slice(1))
+    const summary = runPvSample(cwd, { reset }, (m) => console.log(m))
+    if (summary === undefined) process.exitCode = 1
+    return
+  }
+
   console.error(
-    `unknown subcommand: ${sub ?? "(none)"} — usage: replay-cli.ts mine|derive|resolve|report [cwd] [--go <n>]`,
+    `unknown subcommand: ${sub ?? "(none)"} — usage: replay-cli.ts mine|derive|resolve|report|pv-sample [cwd] [--go <n>] [--reset]`,
   )
   process.exitCode = 1
 }
