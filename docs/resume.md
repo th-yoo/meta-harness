@@ -163,8 +163,10 @@ QUEUE (GO before spend, in order):
         with no directory; "fill it" with no stated content) drove false-C
         to ZERO on both transports — CLI 10/13, precision 69%→100% — but
         cost recall (100%→67%) and overcorrected one unambiguous case
-        ("notes.txt containing one line: demo" → D). Text in scratchpad
-        fp-patch-test.ts; NOT applied to source.
+        ("notes.txt containing one line: demo" → D). PATCH TEXT + THE 13
+        BLIND LABELS ARE COMMITTED: docs/2026-08-01-gauge-classifier-labels.md
+        + docs/2026-08-01-gauge-class-c-blind-labels.json. NOT applied
+        to source.
     OPEN: any transport or prompt change alters the instrument → pre-data
     amendment + logged boundary required, same discipline as (8).
 (12) PROPOSED NEW LANE (user insight 2026-08-01, undecided): apply the
