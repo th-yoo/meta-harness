@@ -12,10 +12,13 @@ block "SESSION END 2026-07-30 night → 08-01") + minimal/HISTORY.md GA6-GA11
 rows + docs/2026-08-01-gate-floor-boundary.md (what the gate does and does
 NOT catch, measured on a real dogfood day — read before interpreting any
 zero-block stretch as the gate working or failing).
-meta-harness pushed through 8a0b715; kkamak main 586d476 + tag v0.4.0
+meta-harness pushed through de6e892; kkamak main 586d476 + tag v0.4.0
 RELEASED; squad 7c167f8. Office host synced + verified 2026-08-02 (read-only
-session, nothing built there). MacBook 2026-08-02 night: §6c transport
-amendment DRAFTED (8a0b715) — AWAITING USER APPROVAL, no code written. All roadmap phases 0-3 + GA9 corpus-replay tooling
+session, nothing built there). MacBook 2026-08-02→03 night: §6c APPROVED
+(c22fbd0, three user rulings) + SDK transport BUILT/REVIEWED/MERGED
+(de6e892) + DEPLOYED (boundary ts 1785684571765, 00:29 KST 08-03 — see
+queue 2c + gauntlet ledger; office switches at same commit, `bun install`
+in cc-gate-plugin FIRST). All roadmap phases 0-3 + GA9 corpus-replay tooling
 MERGED to main; both hosts' installed plugin carries Phases 1+2+3; MacBook
 also carries gauge fail-loud (deployed 08-01 17:05 KST, boundary ts
 1785571509000).
@@ -262,32 +265,51 @@ grep-verify deploys (GA3 rule).
     Build authorized by this directive; any real derive batch still needs
     its own sized go. Office pulls + switches at the same commit next
     session.
-    → MACBOOK 2026-08-02 night: §6c AMENDMENT DRAFTED + pushed (8a0b715,
-      in docs/superpowers/specs/2026-07-29-km-gauge-v2-extractor-preregistration.md).
-      STATUS: **DRAFT, awaiting user approval — zero code written.** Covers
-      the four required items (transport provenance field, error-profile
-      delta, anyOf-never-union, keychain-OAuth authToken) plus three the
-      draft adds because omitting them would be dishonest:
-      (i) it states plainly it is NOT metric-neutral — unlike §6b, the
-          transport changes classifications and classifications are what
-          every metric is computed from;
-      (ii) VALIDITY-FLOOR HAZARD: §3 trips below 5 class-C and reads the
-          trip as "extractor is over-refusing", spending the single
-          redesign round. The SDK UNDER-extracts C, so a transport-caused
-          trip would be misattributed and burn that allowance. Draft binds
-          floor trips to per-transport evaluation first;
-      (iii) the mechanism of the transport delta is recorded as UNKNOWN —
-          the grounding hypothesis was tested and made no difference
-          (3/6 both ways).
-      Pre-registers the pooling bar before any SDK data: ≥50 paired records
-      across all classes, ≥90% C-vs-not-C agreement, class-C count within
-      ±25%; either fails → readings stay split for the window.
-      TWO NUMBERS NEED YOUR RULING BEFORE BUILD: the ±25% class-C tolerance
-      is invented, not derived; and the ≥50 paired sample costs real derive
-      spend against the §4 daily cap of 30 → ≥2 days or its own sized go.
-      NEXT: approve/amend §6c → then implement (spawn.ts + stubbed tests,
-      zero real calls in suite) → per-task review → merge → log boundary ts
-      at deploy → office pulls + switches at the same commit.
+    → DONE 2026-08-02→03 night (MacBook). Full chain executed:
+      (a) §6c APPROVED c22fbd0 — three user rulings replaced the draft's two
+          invented numbers: pooling bar → stratified C-enriched (sample =
+          ALL CLI class-C + equal not-C draw, PER HOST — stores host-bound,
+          only counts travel; bar = positive agreement |C_cli∩C_sdk|/|C_cli∪
+          C_sdk| ≥ 0.80 AND missed-C ≤ ceil(0.10×|C_cli|)); paired
+          re-derivation runs on a SHADOW STORE copy (fenced/locked deriver
+          untouched, validation records never pooled); draft's ±25% band
+          (sub-one-record at ~5.1% C-rate) and flat ≥90% agreement (beatable
+          by an all-not-C oracle at ~95%) both DROPPED as degenerate; the
+          claimed §4 daily-cap conflict WITHDRAWN (§3 pt 6 already exempts
+          corpus-replay batches — own sized go; MacBook sample ≈ 13C+13,
+          office sized after its 410 class table is read). Measured
+          13-record slice = 54% positive agreement → bar expected to FAIL →
+          readings stay SPLIT; that is the designed outcome, bar set on
+          principle not tuned to pass.
+      (b) BUILT (TDD, zero real calls): new src/gauge/transport.ts
+          (callModelSdk, structured outputs json_schema anyOf-never-union,
+          keychain-OAuth authToken w/ apiKey:null, maxRetries 0, 60s
+          timeout, fail-open); refiner-cli + corpus-replay both switched to
+          the ONE shared transport (mirrored CLI callModel deleted);
+          GaugeFile + GaugeSensorField gain transport:"cli"|"sdk" (absent =
+          cli, sensor line carries it — Split rule reads off the stream);
+          model field now records resolved id claude-haiku-4-5 (do NOT infer
+          transport from model string). Test seams KKAMAK_GAUGE_SDK_BASE_URL
+          + KKAMAK_GAUGE_AUTH_TOKEN (stub Bun.serve API server, suite makes
+          zero real calls). 594 tests + tsc clean.
+      (c) REVIEWED: fresh-context reviewer, FIX-FIRST → fix wave d15fc7f
+          (OAuth-only apiKey:null + regression test; transport onto sensor
+          line; 10s keychain exec timeout; dead extractResultText removed;
+          schema emptiness documented — API rejects minLength/minItems;
+          README) → re-verified MERGE-READY. MERGED de6e892, branch deleted.
+      (d) DEPLOYED 00:29 KST 08-03, boundary ts 1785684571765 in the
+          gauntlet ledger (docs/2026-08-01-gauntlet-adoption-ledger.md,
+          "Gauge SDK-transport deploy boundary"). Cache grep-verified incl.
+          @anthropic-ai/sdk in cache node_modules; INSTALLED copy proven
+          against stub server (transport:"sdk", stray ANTHROPIC_API_KEY
+          suppressed). pluginVersion still 0.2.1 per amendment — partition
+          by transport field / boundary ts.
+      REMAINING: office pulls + switches at de6e892 next session — MUST
+      `bun install` in cc-gate-plugin BEFORE km-refresh (node_modules not in
+      git). Paired validation = its own sized go per host on the shadow
+      store (machinery for shadow-store copy/reset/compare NOT yet built —
+      small model-free script + sized-go derive, build when validation is
+      go'd). Any real derive batch still needs its own sized go.
     → USER RULING (2026-08-02 ~22:00 KST): the CLI-derived corpus (MacBook
     176 + office 410 = 586 records) IS the transport baseline — the paired
     anchor for SDK validation (re-derive same records on SDK, compare

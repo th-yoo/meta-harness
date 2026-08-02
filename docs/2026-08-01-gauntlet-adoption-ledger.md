@@ -138,3 +138,37 @@ CAN fire on existing evidence; a bar that cannot fire is returned to
 design, not built against.
 
 Caveat: n=3 loops, one day — provisional, revisit after the next program.
+
+## Gauge SDK-transport deploy boundary (§6c, 2026-08-03)
+
+- **Deployed 2026-08-03 00:29 KST (ts 1785684571765), yoo-mac.local.**
+  `km-refresh.sh --force` from merged main (`de6e892`, branch
+  `gauge-sdk-transport` reviewed MERGE-READY after one fix wave); cache
+  grep-verified per GA3 — single `0.2.1/` dir, `src/gauge/transport.ts`
+  present, `@anthropic-ai/sdk` in the cache's `node_modules/` (the install
+  copies the whole dir, so the runtime dep travels), `apiKey: null` in
+  transport.ts, `callModelSdk` wired in both `refiner-cli.ts` and
+  `corpus-replay.ts`, zero non-comment `claude -p` references. Verified by
+  driving the INSTALLED copy against a scratch repo + stub API server (zero
+  real calls): one request carrying resolved model `claude-haiku-4-5` +
+  `output_config` json_schema, stray `ANTHROPIC_API_KEY` suppressed (no
+  x-api-key header), gauge file stamped `transport:"sdk"`.
+- **No restart required** — same path + version, hooks re-read per
+  invocation (per the 2026-08-01 precedent above; same deletion-window
+  caveat).
+- **BOUNDARY MATTERS — version again did not move (`0.2.1`), but this
+  boundary is NOT metric-neutral** (unlike §6b): the transport changes
+  classifications. Records/lines after this ts carry `transport:"sdk"` on
+  gauge fields and derivation blobs; absent = pre-boundary CLI. Every
+  M1v2 / class-table / C-rate reading spanning this ts MUST split per
+  transport (§6c Split rule); pooling only after the paired-validation bar
+  (positive agreement ≥0.80 AND missed-C ≤ ceil(0.10×|C_cli|)) passes —
+  measured 13-record slice sits at 54%, so expect SPLIT, not pooled.
+- **Model field note:** SDK records carry `model:"claude-haiku-4-5"`
+  (resolved API id) where CLI records carried `"haiku"` — do NOT use the
+  model string to infer transport; use the `transport` field, which also
+  reaches the sensor line (`GaugeSensorField.transport`, review finding 2).
+- **Office host:** pulls and switches at the same commit next session;
+  MUST run `bun install` in `cc-gate-plugin/` before its `km-refresh` (git
+  does not carry `node_modules`). MacBook runs no further CLI derive
+  batches; all future derive work is SDK, post-boundary, own sized go.
