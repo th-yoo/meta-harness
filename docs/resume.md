@@ -3,7 +3,7 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ✅ SESSION END 2026-08-03 (`yoo-dev` office, all-day) — §6c OFFICE DEPLOY · PATH A SONNET AMENDMENT + STAGE 0 + STAGE-1 RUNBOOK MERGED · PAIRED-VALIDATION TOOLING MERGED + OFFICE VERDICT **SPLIT** · CLASSIFIER 2×2 REGISTERED + TOOLED + MERGED (label/arm gos GRANTED, blocked by 429, auto-launcher armed) · 7a DOC-LINTER FLOOR READY ON UNMERGED BRANCH — main @ `ea75add`+resume commits, pushed · branch `gate-floor-7a7b` @ ledger-fix, PUSHED, UNMERGED
+## ✅ SESSION END 2026-08-03 (`yoo-dev` office, all-day) — §6c OFFICE DEPLOY · PATH A SONNET AMENDMENT + STAGE 0 + STAGE-1 RUNBOOK MERGED · PAIRED-VALIDATION TOOLING MERGED + OFFICE VERDICT **SPLIT** · CLASSIFIER 2×2 REGISTERED + TOOLED + MERGED (label/arm gos GRANTED, blocked by 429, auto-launcher armed) · 7a DOC-LINTER FLOOR **MERGED 08-03 evening (user go)** — main @ `3617774` pushed, doc floor ARMED (this repo now, other hosts on pull); branch `gate-floor-7a7b` deleted locally, remote left per convention
 
 **RESUME PROMPT (either host):**
 ```
@@ -29,17 +29,16 @@ output, commit the emitted doc + record the per-host verdict here
 (PROVISIONAL/per-host scope — registered verdict needs both hosts +
 combine). If still probing, leave it.
 
-UNMERGED BRANCH `gate-floor-7a7b` (pushed, re-review READY): 7a
-doc-linter floor — scripts/doc-check.ts (link integrity + CommonMark
-fences, term-bench2/store/** EXCLUDED, green-on-HEAD 135 scanned) wired
-into gate.json check; KKAMAK_DEV_CHECKS grow-only allowlist (3 historical
-check epochs stay excluded from trials — first firing of the drift
-guard); boundary ts 1785727963349 in gauntlet ledger; execute-proof done.
-7b process-gate DRAFT spec (pre-merge placement recommended, 7 open user
-rulings). MERGE = user word; merging arms the doc floor on this repo
-immediately, other hosts on pull.
+MERGED 08-03 evening (user go "1"): `gate-floor-7a7b` → main `3617774`,
+pushed. 7a doc-linter floor ARMED — scripts/doc-check.ts (link integrity
++ CommonMark fences, term-bench2/store/** EXCLUDED, 135 scanned 0
+violations post-merge) in gate.json check; KKAMAK_DEV_CHECKS grow-only
+allowlist; boundary ts 1785727963349 in gauntlet ledger. Merged-result
+green: 783+26+230 tests + doc-check + tsc. Other hosts arm on pull.
+7b process-gate DRAFT spec in tree (docs/superpowers/specs/
+2026-08-03-process-gate-7b-draft.md), 7 user rulings still open.
 
-QUEUE (GO/ruling before spend): (1) merge gate-floor-7a7b ruling. (2)
+QUEUE (GO/ruling before spend): (1) DONE — 7a7b merged (above). (2)
 MacBook lane: pv-sample + counts commit; own classifier lane (sample →
 label go → arm gos); COMBINE HARD-GATE first — add provisional flag to
 combined verdict + read other-host provisional (parked residual,
