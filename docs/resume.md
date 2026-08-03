@@ -34,9 +34,28 @@ grep-verify (transport.ts + SDK in cache node_modules) → office boundary
 ts 1785711630125 logged in gauntlet ledger. MacBook/office CLI derive =
 OVER, SDK-only now. First organic office cycle's transport:"sdk" stamp =
 live confirmation.
-(2) Paired validation (own sized go per host): shadow-store copy/reset/
-compare script NOT yet built — build when go'd; MacBook sample ~13C+13,
-office sized off its class table (16 C). (3) Sustain dogfood daily (cycle
+(2) DONE 08-03 (office): paired-validation tooling BUILT + MERGED
+(`0bbb60d`, plan 2026-08-03-paired-validation-script.md w/ post-build
+annotations; 2 per-task reviews + final whole-branch READY-TO-MERGE;
+644 tests + tsc). `pv-sample` (stratified all-CLI-C + equal not-C shadow
+store, unmodified fenced deriver runs against it) · `pv-compare`
+(+`--combine`): bar spec-verbatim, undecided/missing/wrongTransport block
+evaluation, pv-combined.json durable verdict. COUNTS TRAVEL: copy
+pv-counts.json / pv-combined.json to docs/gauge-pv/<hostname>-*.json and
+commit (shadow dir is gitignored). NEXT (own sized go per host): office
+`pv-sample` then `derive <shadow> --go 32` (16C+16, SDK, ~2min);
+MacBook ~13C+13 after its own pv-sample count.
+(2d) DONE 08-03 (office): Path A STAGE 0 MERGED (`7972584`) — seeds
+s1/s2/s3 committed INACTIVE (term-bench2/store/global/candidates/,
+2662/3224/2988 bytes), authored by 3 parallel fresh-context agents,
+reviewed zero-Critical + fix-waved (S2 probe-beats-literal tie-break, S3
+observable budget triggers); provenance + overlap register + Stage-1
+RUNBOOK (2026-08-03-path-a-stage1-runbook.md): screen runs arms via
+candidate PIN (no activation flip, ab-trap N/A, noStore by construction);
+seeds must alias v13/v14/v15 (name gate ^v\d+$, v12 reserved for winner);
+5 OPEN items incl. pre-go token-free check that installed opencode
+accepts anthropic/claude-sonnet-5 (silent default sonnet-4-6 = R1-class
+trap). Stage-1 screen = next bench go (~28 trials + <=9 re-rolls). (3) Sustain dogfood daily (cycle
 mechanics: one task/turn, edit+check+commit inside the turn; tmux driving
 needs the allow rules in .claude/settings.local.json — auto-mode classifier
 blocks Enter-injection otherwise). (4) Office retry go 112 only with cause.
