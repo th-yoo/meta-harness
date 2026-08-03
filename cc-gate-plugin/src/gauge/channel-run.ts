@@ -88,7 +88,7 @@ export const CHANNEL_SCHEMA = {
  * env seams as transport.ts (KKAMAK_GAUGE_SDK_BASE_URL /
  * KKAMAK_GAUGE_AUTH_TOKEN) so tests can stub the whole call over localhost
  * with zero real model calls. */
-async function callChannelModel(
+export async function callChannelModel(
   messageText: string,
   env: Record<string, string | undefined>,
 ): Promise<string | undefined> {
