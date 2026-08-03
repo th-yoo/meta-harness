@@ -3,6 +3,69 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-03 (`yoo-dev` office, all-day) — §6c OFFICE DEPLOY · PATH A SONNET AMENDMENT + STAGE 0 + STAGE-1 RUNBOOK MERGED · PAIRED-VALIDATION TOOLING MERGED + OFFICE VERDICT **SPLIT** · CLASSIFIER 2×2 REGISTERED + TOOLED + MERGED (label/arm gos GRANTED, blocked by 429, auto-launcher armed) · 7a DOC-LINTER FLOOR READY ON UNMERGED BRANCH — main @ `ea75add`+resume commits, pushed · branch `gate-floor-7a7b` @ ledger-fix, PUSHED, UNMERGED
+
+**RESUME PROMPT (either host):**
+```
+Resume kkamak (meta-harness), 2026-08-03 evening+. Read docs/resume.md
+FIRST (this top block), then the 08-02→08-03 MacBook block below it.
+
+WHERE WE ARE: main has — §6c both hosts deployed (office boundary ts
+1785711630125); Path A sonnet-arms amendment + Stage 0 seeds s1/s2/s3
+INACTIVE + Stage-1 runbook (pin-based arms, seeds alias v13/v14/v15);
+paired-validation tooling; classifier 2×2 A/B: pre-reg spec (constants
+0.10-F1-margin etc., FROZEN at first label; rubric REWRITTEN independent
+of both arms) + cls-sample|cls-run|cls-label|cls-score(+--combine)
+tooling + runbook (2026-08-03-cls-ab-runbook.md). MEASURED: office pv
+verdict SPLIT (agreement 0.625 < 0.80, missed-C 6 > cap 2; SDK misses C,
+never over-extracts) — counts committed docs/gauge-pv/yoo-dev-pv-counts.json.
+
+IN FLIGHT (office box): tmux `clsab2` auto-launcher — probes the 429
+rate-limit every 5min, then runs the GRANTED chain: cls-label --go 32
+(opus, 32 blind labels) → 4× cls-run --go 32 → cls-score --emit-doc
+docs/gauge-cls-ab/yoo-dev-cls-score.json; log /mnt/d/tmp/clsab-run2.log.
+FIRST ACTION on office: read that log; if DONE, script-tally the score
+output, commit the emitted doc + record the per-host verdict here
+(PROVISIONAL/per-host scope — registered verdict needs both hosts +
+combine). If still probing, leave it.
+
+UNMERGED BRANCH `gate-floor-7a7b` (pushed, re-review READY): 7a
+doc-linter floor — scripts/doc-check.ts (link integrity + CommonMark
+fences, term-bench2/store/** EXCLUDED, green-on-HEAD 135 scanned) wired
+into gate.json check; KKAMAK_DEV_CHECKS grow-only allowlist (3 historical
+check epochs stay excluded from trials — first firing of the drift
+guard); boundary ts 1785727963349 in gauntlet ledger; execute-proof done.
+7b process-gate DRAFT spec (pre-merge placement recommended, 7 open user
+rulings). MERGE = user word; merging arms the doc floor on this repo
+immediately, other hosts on pull.
+
+QUEUE (GO/ruling before spend): (1) merge gate-floor-7a7b ruling. (2)
+MacBook lane: pv-sample + counts commit; own classifier lane (sample →
+label go → arm gos); COMBINE HARD-GATE first — add provisional flag to
+combined verdict + read other-host provisional (parked residual,
+registered-verdict path) before any real cls-score --combine. (3) Stage-1
+screen go (~28 sonnet trials, office; runbook pre-flight incl. token-free
+claude-sonnet-5 model-id check). (4) Retry --go 112 after classifier
+verdict. (5) Dogfood daily both hosts — office needs tmux allow rules
+pasted (Bash(tmux send-keys:*) etc. in .claude/settings.local.json);
+organic blocks are the ONLY M1v2-floor input; A/A ~Aug 12. (6) 7b's 7
+rulings. (7) Parked: §3 over-refusal round · GA5 · per-repo fixtures ·
+office reinject v2 · consistency 10b · queue 7c/7d.
+
+OPERATIONAL LESSONS (08-03): spend batches and subagent fleets share one
+account rate pool — run sized-go chains when the fleet is idle (429s cost
+nothing: maxRetries 0 + fail-open left everything retryable, fences
+intact). SDD TDD mid-states turn the gate red mid-turn — foreground
+until-green waits ride it out. Store artifacts (term-bench2/store/**) are
+DATA with load-bearing bytes: never lint, never edit for lint.
+
+RULES unchanged: explicit go before spend (sized) · spec-is-law,
+pre-data amendments only · F1 (core/, vendor/, 4 minimal/; gauge/
+editable) · F2 (no prompt text in committed artifacts) · sonnet=subject,
+opus=judgment · boundary ts on instrument changes · per-task reviews
+mandatory · grep-verify deploys · script-tally counts · SITREP style.
+```
+
 ## ✅ SESSION END 2026-08-02 night → 08-03 (`yoo-mac.local`) — §6c APPROVED + SDK TRANSPORT SHIPPED END-TO-END (build/review/merge/deploy, boundary ts 1785684571765) · 3 dogfood cycles = FIRST ORGANIC SDK GAUGE RECORDS · concurrent office batch: FIRST 2 poolEligible — meta-harness pushed (tip incl. `de6e892` merge + `6bb48f6`) · kkamak @ `c5f8600` pushed · squad @ `7c167f8`
 
 **RESUME PROMPT (either host):**
