@@ -12,7 +12,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { parseRefinerOutput } from "./refiner.ts"
-import { callModelSdk, resolveModelId } from "./transport.ts"
+import { callModelSdk, resolveModelId, selectTransport } from "./transport.ts"
 import { validateDerivation } from "./validate.ts"
 import { gaugeDir, writeGaugeFile } from "./files.ts"
 
@@ -65,7 +65,7 @@ async function main(): Promise<void> {
       // alias) so the sensor line names the real instrument.
       model: resolveModelId(process.env.KKAMAK_GAUGE_MODEL ?? "haiku"),
       derivationMs: Date.now() - started,
-      transport: "sdk",
+      transport: selectTransport(process.env),
     })
   } finally {
     try {

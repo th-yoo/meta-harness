@@ -22,6 +22,7 @@ import os from "node:os"
 import path from "node:path"
 import { execFileSync } from "node:child_process"
 import { buildRefinerPrompt, buildLabelPrompt, type PromptVariant } from "./refiner.ts"
+import { agentSdkCall } from "./agent-transport.ts"
 import type { GaugeTransport } from "../types.ts"
 
 const CALL_TIMEOUT_MS = 60_000
@@ -232,6 +233,11 @@ export async function callModelSdk(
 ): Promise<string | undefined> {
   const model = resolveModelId(opts.model ?? env.KKAMAK_GAUGE_MODEL ?? "haiku")
   const messageText = buildRefinerPrompt(prompt, floorCheck, opts.promptVariant ?? "base")
+  if (selectTransport(env) === "agent-sdk") {
+    return agentSdkCall(messageText, model, env, {
+      schema: DERIVATION_SCHEMA as unknown as Record<string, unknown>,
+    })
+  }
   return sdkCall(messageText, model, env, authDeps, {
     schema: DERIVATION_SCHEMA as unknown as Record<string, unknown>,
   })

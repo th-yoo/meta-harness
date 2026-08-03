@@ -23,7 +23,7 @@
 // (C -> D, etc.) is still a complete, persistable result: validation is the
 // code-side judge, not a failure mode.
 import { parseRefinerOutput } from "./refiner.ts"
-import { callModelSdk, resolveModelId } from "./transport.ts"
+import { callModelSdk, resolveModelId, selectTransport } from "./transport.ts"
 import { validateDerivation } from "./validate.ts"
 import type { GaugeFile } from "./files.ts"
 import {
@@ -72,7 +72,7 @@ export async function deriveRecord(record: CorpusRecord): Promise<CorpusRecord> 
     // Resolved API id actually sent (transport.ts), not the CLI alias.
     model: resolveModelId(process.env.KKAMAK_GAUGE_MODEL ?? "haiku"),
     derivationMs: Date.now() - started,
-    transport: "sdk",
+    transport: selectTransport(process.env),
   }
 
   return { ...record, stage: "derived", derivation: blob }

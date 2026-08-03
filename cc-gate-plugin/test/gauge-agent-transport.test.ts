@@ -1,8 +1,10 @@
 import { describe, test, expect } from "bun:test"
 import { GAUGE_TRANSPORTS } from "../src/types.ts"
 import { selectTransport } from "../src/gauge/transport.ts"
-import { stubServer } from "./sdk-stub.ts"
+import { stubServer, stubServerFor } from "./sdk-stub.ts"
 import { agentSdkCall } from "../src/gauge/agent-transport.ts"
+import { deriveRecord } from "../src/gauge/corpus-replay.ts"
+import type { CorpusRecord } from "../src/gauge/corpus-store.ts"
 
 describe("GaugeTransport", () => {
   test("three transports are recognized, incumbent order preserved", () => {
@@ -163,5 +165,94 @@ describe("agentSdkCall", () => {
     } finally {
       silent.stop(true)
     }
+  }, CLI_TEST_TIMEOUT_MS)
+})
+
+// Task 5: prove the seam is actually wired — deriveRecord routes through
+// whichever transport selectTransport(env) picks, AND stamps the record
+// with that same transport, driven against real stub servers rather than a
+// source-text grep (which would pass on cosmetic rewording or a miswired
+// dispatch). Reuses the `rec` builder idiom from corpus-replay.test.ts:21-34
+// (CorpusRecord has ~9 required fields; no hand-rolled partial literal).
+function rec(over: Partial<CorpusRecord> = {}): CorpusRecord {
+  return {
+    provenance: "corpus-transcript",
+    stage: "mined",
+    repo: "/repo/a",
+    sessionId: "sess-1",
+    promptTs: 1000,
+    prompt: "fix the thing",
+    promptSha256: "sha-a",
+    floorCheck: "",
+    floorCheckMinedAt: 1000,
+    ...over,
+  }
+}
+
+const STUB_DERIVATION = {
+  goalSummary: "summarize x", class: "A2", reason: "not-shell-checkable",
+  criteria: ["a summary of x exists"], check: null, horizon: null, confidence: 0.9,
+}
+
+const minedRecord = (prompt: string): CorpusRecord => rec({ prompt, stage: "mined" })
+
+/** Both cases share this scaffolding; only the env var and the expectations
+ * differ. Restores every env key it touches.
+ *
+ * The two stubs are deliberately NOT both `stubServerFor`: the sdk endpoint
+ * (plain @anthropic-ai/sdk `messages.create`) is happy with a bare
+ * text-block response, but the agent-sdk endpoint routes `DERIVATION_SCHEMA`
+ * through `outputFormat`, which forces the spawned CLI's StructuredOutput
+ * tool. A plain-text reply there is a same-bug-as-no-tool-call: the CLI's
+ * own enforcement loop injects a "you must call StructuredOutput" nudge,
+ * burns the one `maxTurns` we allow, and throws — verified empirically
+ * (agentSdkCall would fail-open to undefined, which would make this test
+ * pass or fail for the wrong reason: an unrelated harness mismatch, not the
+ * §6d routing this test exists to prove). The agent stub therefore answers
+ * with the same SSE tool_use envelope as the `agentSdkCall` tests above
+ * (`sseStructuredOutput`), which is what the real API sends back when the
+ * forced tool fires. */
+async function routeCase(transport: string | undefined) {
+  const sdkStub = stubServerFor(STUB_DERIVATION)
+  const agentStub = stubServer(() => sseStructuredOutput(STUB_DERIVATION))
+  const prev = {
+    t: process.env.KKAMAK_GAUGE_TRANSPORT,
+    sdk: process.env.KKAMAK_GAUGE_SDK_BASE_URL,
+    anth: process.env.ANTHROPIC_BASE_URL,
+    tok: process.env.KKAMAK_GAUGE_AUTH_TOKEN,
+  }
+  if (transport === undefined) delete process.env.KKAMAK_GAUGE_TRANSPORT
+  else process.env.KKAMAK_GAUGE_TRANSPORT = transport
+  process.env.KKAMAK_GAUGE_SDK_BASE_URL = sdkStub.url
+  process.env.ANTHROPIC_BASE_URL = agentStub.url
+  process.env.KKAMAK_GAUGE_AUTH_TOKEN = "tok-test"
+  try {
+    const out = await deriveRecord(minedRecord("write a summary of x"))
+    return { out, sdkHits: sdkStub.captured.length, agentHits: agentStub.captured.length }
+  } finally {
+    for (const [k, v] of [
+      ["KKAMAK_GAUGE_TRANSPORT", prev.t], ["KKAMAK_GAUGE_SDK_BASE_URL", prev.sdk],
+      ["ANTHROPIC_BASE_URL", prev.anth], ["KKAMAK_GAUGE_AUTH_TOKEN", prev.tok],
+    ] as const) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+    sdkStub.stop(); agentStub.stop()
+  }
+}
+
+describe("derive routes and stamps by selected transport (§6d split rule)", () => {
+  test("default: API SDK endpoint is hit, record stamped sdk", async () => {
+    const { out, sdkHits, agentHits } = await routeCase(undefined)
+    expect(out?.derivation?.transport).toBe("sdk")
+    expect(sdkHits).toBeGreaterThan(0)
+    expect(agentHits).toBe(0)
+  })
+
+  test("KKAMAK_GAUGE_TRANSPORT=agent-sdk: agent endpoint is hit, record stamped agent-sdk", async () => {
+    const { out, sdkHits, agentHits } = await routeCase("agent-sdk")
+    expect(out?.derivation?.transport).toBe("agent-sdk")
+    expect(agentHits).toBeGreaterThan(0)
+    expect(sdkHits).toBe(0)
   }, CLI_TEST_TIMEOUT_MS)
 })
