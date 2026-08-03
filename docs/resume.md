@@ -45,6 +45,21 @@ pv-counts.json / pv-combined.json to docs/gauge-pv/<hostname>-*.json and
 commit (shadow dir is gitignored). NEXT (own sized go per host): office
 `pv-sample` then `derive <shadow> --go 32` (16C+16, SDK, ~2min);
 MacBook ~13C+13 after its own pv-sample count.
+(2e) DONE 08-03 (office): CLASSIFIER 2×2 A/B BUILT + MERGED — pre-reg spec
+    (2026-08-03-gauge-classifier-ab-preregistration.md, constants frozen at
+    first label; rubric REWRITTEN INDEPENDENT of both arms per user ruling,
+    pre-data) + full tooling cls-sample|cls-run|cls-label|cls-score
+    (+--combine) via SDD: 4 tasks × (review+fix), final opus review
+    FIX-FIRST → 17-finding fix wave (float-margin gate, F1-zero fix,
+    combine port, lock refresh/ownership, manifest-first write,
+    --discard-spend guard, provenance hashes, transport strata) → re-review
+    READY-TO-MERGE. 783 tests + tsc. Runbook:
+    docs/superpowers/plans/2026-08-03-cls-ab-runbook.md. HARD GATE before
+    first real --combine: add provisional flag to combined verdict + read
+    other-host provisional (parked residual, registered-verdict path).
+    NEXT (own goes per host): label go ~32 opus + 4 arm gos ~32 each cheap;
+    verdict in minutes. Office pv verdict 08-03: SPLIT (agreement 0.625,
+    missed-C 6>cap 2) — counts committed docs/gauge-pv/.
 (2d) DONE 08-03 (office): Path A STAGE 0 MERGED (`7972584`) — seeds
 s1/s2/s3 committed INACTIVE (term-bench2/store/global/candidates/,
 2662/3224/2988 bytes), authored by 3 parallel fresh-context agents,
