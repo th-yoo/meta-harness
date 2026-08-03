@@ -63,8 +63,12 @@ blocks Enter-injection otherwise). (4) Office retry go 112 only with cause.
 amendment written into the plan doc (all trial arms = subject model
 claude-sonnet-5; concurrent v7 sonnet arm = only baseline; judgment seats
 stay opus; verdict semantics unchanged). Stage 0 authoring = next go. (6) Parked: §3 over-refusal round (now per-transport
-attribution first, §6c), GA5 gate-editing ruling, per-repo fixtures, item
-12 third lane. A/A ~Aug 12.
+attribution first, §6c), GA5 gate-editing ruling, per-repo fixtures. Item 12
+third lane: NO LONGER PARKED — REGISTERED + TOOLED (Tasks 0-3 shipped +
+fix-waved, this session): bar = docs/superpowers/specs/2026-08-03-gauge-
+classifier-ab-preregistration.md; execution procedure = docs/superpowers/
+plans/2026-08-03-cls-ab-runbook.md. Running the experiment itself (label go
++ 4 arm gos, per host) is still its own go, not yet spent. A/A ~Aug 12.
 (7) NON-PROGRAMMATICALLY-GATABLE WORK — queued ladder (researched 08-03,
 industry synthesis: deterministic-first → calibrated closed-ended judges
 w/ N-run aggregation + regression baselines → human sign-off w/ audit
@@ -94,8 +98,10 @@ calibration number). Each rung own go/ruling, cheapest first:
     (model-gated cycles = separate population on sensor line), human
     sign-off + ledger trail. Falsification clause per gate-floor doc:
     wrong blocks > right blocks → gate stays narrow, judgment stays in
-    the review layer. RULES unchanged (explicit go / spec-is-law /
-F1-F2 / grep-verify / per-task reviews / sonnet=subject, opus=judgment).
+    the review layer.
+
+RULES unchanged (explicit go / spec-is-law / F1-F2 / grep-verify /
+per-task reviews / sonnet=subject, opus=judgment).
 ```
 
 ## ⏸ SUPERSEDED (2026-08-03) — SESSION END 2026-07-30 night → 08-01 (`yoo-mac.local`) — GA6 PHASE 1 + GA9 CORPUS-REPLAY BUILT/SEALED/MERGED · MacBook FULLY DEPLOYED + CLONE-PROVEN · first batches consumed · Path A tournament drafted — meta-harness @ `bcc9f08` · kkamak @ `a71206e` · squad @ `7c167f8`, all pushed
