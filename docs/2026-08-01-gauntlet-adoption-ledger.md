@@ -183,3 +183,117 @@ Caveat: n=3 loops, one day — provisional, revisit after the next program.
   MUST run `bun install` in `cc-gate-plugin/` before its `km-refresh` (git
   does not carry `node_modules`). MacBook runs no further CLI derive
   batches; all future derive work is SDK, post-boundary, own sized go.
+
+## Doc-linter floor deploy boundary (7a, 2026-08-03)
+
+- **What changed in `gate.json`:** the `check` command gained a fourth
+  stage. Before:
+  `cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test && cd ../km-crank && bun test`.
+  After:
+  `cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test && cd ../km-crank && bun test && cd .. && bun scripts/doc-check.ts`.
+  Existing semantics preserved exactly (`&&`-chained, same three test
+  suites, same failure-short-circuits-early behavior); `doc-check.ts` runs
+  last, after the repo working directory is restored to root.
+- **New instrument:** `scripts/doc-check.ts` — zero-dependency, zero-network
+  deterministic linter over git-tracked `*.md` files
+  (`git ls-files '*.md'`, so untracked scratch never blocks the gate).
+  Checks relative-link integrity (target must resolve to an existing file,
+  `#fragment` stripped before checking; `http(s):`/`mailto:`/anchor-only
+  links skipped) and fenced-code-block balance per file. Measured runtime
+  on this repo: ~25-70ms for 155 tracked docs, well under the ~3s budget.
+  Verified green on HEAD before deploy; proof executed (scratch tracked doc
+  with a broken relative link → FAIL naming file:line → removed → PASS
+  again, no residue left in the tree).
+- **Boundary ts: `1785727963349`** (`date +%s%3N`, captured at commit time,
+  yoo-dev host). Cycles with a `check-output` sidecar record timestamped
+  before this ts ran the three-suite check only; cycles after ran the
+  three-suite check **and** the doc floor. As queue item 7a anticipated:
+  this is a gate.json check change, so it shifts the floor-check
+  population — the floorCheckMinedAt drift footnote already anticipates
+  exactly this shape of change, and this entry is the logged instance of
+  it. Not metric-neutral for doc-shaped turns: a doc turn that previously
+  could only ever read `rounds:["accepted"]` (§6a/10(b) gate-floor-boundary
+  finding — the floor could not see prose errors) can now fail on a
+  mechanical link/fence regression, closing a sliver of the measured gap
+  in `docs/2026-08-01-gate-floor-boundary.md` without adding any judgment
+  to the gate.
+- **Side effect discovered, fixed same commit:** `km-crank`'s §2
+  kkamak-dev-check drift guard
+  (`km-crank/src/trial-verdict.ts` `KKAMAK_DEV_CHECK`,
+  asserted equal to the live `gate.json` `check` string by
+  `km-crank/test/trial-verdict.test.ts`) failed the moment `gate.json`
+  changed — by design, per its own docstring ("must be revisited
+  deliberately, never silently"). Updated `KKAMAK_DEV_CHECK` to the new
+  four-stage string in the same commit; this is a deliberate, documented
+  revisit, not a silent drift-guard bypass. Full three-suite + doc-check
+  chain reverified green after the update (783 + 26 + 229 tests pass +
+  doc-check OK).
+
+## Fix wave on the doc-linter floor deploy (7a, same day, review verdict FIX-FIRST)
+
+- **FIX 1 — `KKAMAK_DEV_CHECK` scalar → `KKAMAK_DEV_CHECKS` append-only set.**
+  The in-place scalar swap above was itself a bug: the §2 exclusion rule
+  compared by equality against only the CURRENT check string, so every
+  historical sensor line carrying an older check string (55 lines on the
+  2-stage string, 209 on the 3-stage string, per `jq -r '.check'
+  .km/gate-outcomes.ndjson | sort | uniq -c` at fix time) would have leaked
+  into any future trial window as un-excluded meta-harness dev noise.
+  `km-crank/src/trial-verdict.ts` now exports `KKAMAK_DEV_CHECKS: readonly
+  string[]`, containing all three check strings ever run by this repo's
+  gate; exclusion is `KKAMAK_DEV_CHECKS.includes(l.check)`. Entries are
+  never removed or edited — a future `gate.json` check change appends a
+  new entry, which is the deliberate revisit the drift guard exists to
+  force. `km-crank/test/trial-verdict.test.ts`'s drift guard now asserts
+  (a) the live `gate.json` check equals the LAST array entry and (b) both
+  historical entries are still present (a removed entry fails the test);
+  a new regression test pins that lines carrying either historical string
+  stay excluded. km-crank suite: 230 pass (was 229 pre-fix-wave, +1 net
+  after replacing 2 tests with 3).
+- **FIX 2 — repo-root-relative links.** `scripts/doc-check.ts` previously
+  treated a leading `/` in a link target as OS-filesystem-absolute (untested
+  behavior). Now resolved against the repo root (`path.join(repoRoot,
+  targetPath)`), matching how such links are actually meant in this corpus.
+  Two new tests (resolves when present, still caught when missing).
+- **FIX 3 — CommonMark fence-close rule.** The prior fence check counted
+  ANY ``` /~~~ -looking line and required an even total — a false positive
+  on legitimately nested fences (a shorter same-char fence-like line inside
+  a longer one). Rewritten to track the opening marker's character + length
+  and require a same-char, same-or-longer-length, marker-only line to
+  close, per CommonMark. New tests: a 4-backtick outer fence containing a
+  3-backtick fence-like line passes; the same shape with no real closer
+  still fails. **This surfaced 3 genuine pre-existing corpus defects**
+  (`term-bench2/store/roles/mh-designer/{active,candidates/v1,candidates/v2}/system.md`)
+  — a template used identically across all three files wraps illustrative
+  `mermaid` example fences in an OUTER fence of the SAME delimiter length
+  (3 backticks both), which is not nested under CommonMark: the outer fence
+  actually closes at the first inner closer, exactly as a real renderer
+  (e.g. GitHub) would also mis-render it. An initial fix widened those
+  files' outer delimiters — OVERRULED (297b5d4): store artifacts are
+  experiment DATA with load-bearing bytes (sha-pinned harness slots,
+  candidate-lineage byte-compare) and must never be edited to satisfy a
+  lint. The three files were byte-restored (blob-sha verified against
+  their pre-wave state) and `term-bench2/store/**` is EXCLUDED from
+  doc-check's scope via an explicit constant, with a pinning test that a
+  violating store .md never blocks.
+- **FIX 4 — `git ls-files` anchored to repo root.** Was a bare `git
+  ls-files '*.md'`, which git interprets relative to CWD — an invocation
+  from a subdirectory would silently narrow scope. Now resolves the repo
+  root via `git rev-parse --show-toplevel` and runs `git -C <root>
+  ls-files '*.md'`; all paths (read, link-resolution, printed violations)
+  are repo-root-relative regardless of invocation CWD. New test: running
+  from a subdirectory still catches a broken link in a file outside that
+  subdirectory.
+- **Verification after the fix waves (final state, 297b5d4):**
+  `bun test scripts/doc-check.test.ts` 17 pass; km-crank 230 pass;
+  cc-gate-plugin 783 pass; `tsc --noEmit` clean both packages;
+  `doc-check.ts` green on HEAD — 155 tracked .md, 20 store-excluded,
+  **135 scanned, 0 violations** (~27-70ms); full `gate.json` check chain
+  end-to-end exit 0 (~10.1s total, doc-check <30ms of that).
+- **Rollback:** revert the `gate.json` `check` line to the three-suite form
+  above to fully back out the floor gating. `KKAMAK_DEV_CHECKS` keeps ALL
+  entries regardless of rollback direction — that is the point of making it
+  append-only, so reverting gate.json never needs a matching revert on the
+  km-crank side. `scripts/doc-check.ts` and its test file can stay in the
+  tree inert. The 3 `term-bench2/store/roles/mh-designer/**/system.md`
+  fence-delimiter fixes are independent of the gate.json wiring (they fix a
+  real rendering defect either way) and are not part of the gate rollback.
