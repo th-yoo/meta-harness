@@ -25,7 +25,16 @@ probes 429 every 5min then runs GRANTED chain: cls-label --go 32 (opus) →
 4× cls-run --go 32 → cls-score --emit-doc
 docs/gauge-cls-ab/yoo-dev-cls-score.json; log /mnt/d/tmp/clsab-run2.log.
 When DONE: script-tally, commit emitted doc, record per-host verdict
-(PROVISIONAL scope). (2) tmux `retry112` — retry derive --go 112 GO GIVEN
+(PROVISIONAL scope). (1b) tmux `gaugeverify` — "Verify gauge" GO 08-03
+(~14 opus calls): waits clsab2 DONE → probe → `bun scripts/
+channel-smoke.ts --go 14` (12 known-answer synthetic prompts, bar
+pre-registered ≥9/12, underCatch/overRefusal reported separately + 2-call
+live nudge proof in throwaway repo) → writes docs/gauge-channel/
+<host>-channel-smoke.json (COMMIT it) + marker gauge-verify.done; log
+/mnt/d/tmp/channel-smoke-*.log. Serial position 2 — retry112 re-gated on
+its marker. GOTCHA re-proven 14:46: editing a RUNNING launcher script
+kills its tmux session silently (bash re-reads file at stale offset) —
+kill session FIRST, edit, relaunch. (2) tmux `retry112` — retry derive --go 112 GO GIVEN
 08-03 evening; launcher /mnt/d/tmp/retry112-autolaunch.sh waits clsab2
 "=== DONE" → opus probe OK → derive --go 112 (SDK transport, ~12min; ONE
 writeCorpus at batch end, never kill mid-run) → resolve + report
