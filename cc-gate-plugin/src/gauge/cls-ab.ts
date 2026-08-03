@@ -1753,7 +1753,8 @@ export function runClsScore(
     if (other === undefined) {
       log(
         `REFUSING: --combine — ${opts.combine} is not a valid cls-score file (missing/non-integer/` +
-          "negative/inconsistent counts, unrecognized arm name, or missing hostname/scoredAt/sample).",
+          "negative/inconsistent counts, unrecognized arm name, missing hostname/scoredAt/sample, " +
+          "or missing/non-boolean provisional flag).",
       )
       return undefined
     }
