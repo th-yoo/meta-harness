@@ -25,12 +25,19 @@ probes 429 every 5min then runs GRANTED chain: cls-label --go 32 (opus) →
 4× cls-run --go 32 → cls-score --emit-doc
 docs/gauge-cls-ab/yoo-dev-cls-score.json; log /mnt/d/tmp/clsab-run2.log.
 When DONE: script-tally, commit emitted doc, record per-host verdict
-(PROVISIONAL scope). (2) tmux `stage1wait` — Stage-1 screen GO EXECUTED
+(PROVISIONAL scope). (2) tmux `retry112` — retry derive --go 112 GO GIVEN
+08-03 evening; launcher /mnt/d/tmp/retry112-autolaunch.sh waits clsab2
+"=== DONE" → opus probe OK → derive --go 112 (SDK transport, ~12min; ONE
+writeCorpus at batch end, never kill mid-run) → resolve + report
+(model-free) → marker /mnt/d/tmp/retry112.done; log
+/mnt/d/tmp/retry112-*.log. After: script-tally derive hit rate + report
+line, record here. (3) tmux `stage1wait` — Stage-1 screen GO EXECUTED
 08-03 evening (pre-flight all green, aliases v13=s1/v14=s2/v15=s3
 installed, sonnet-5 model id confirmed in opencode listing); launcher
-/mnt/d/tmp/stage1-autolaunch.sh waits clsab2 "=== DONE" → sonnet probe OK
-→ launches tmux `stage1screen` (runbook §4, run from ~/z2/meta-harness —
-worktree wt-path-a-stage0 GONE, main is superset) with §3H N-watchdog
+/mnt/d/tmp/stage1-autolaunch.sh waits retry112.done marker (serial order
+clsab2 → retry112 → stage1, one rate pool) → sonnet probe OK → launches
+tmux `stage1screen` (runbook §4, run from ~/z2/meta-harness — worktree
+wt-path-a-stage0 GONE, main is superset) with §3H N-watchdog
 (394/2689/3233/2991). Log /mnt/d/tmp/stage1-autolaunch.log. After screen:
 §5 R2 audit BEFORE tally → §6 script-tally (kill below v7, ≤2 advance) →
 §9 archive + alias hygiene (nextVersion mints v16 while v13-15 live).
@@ -50,8 +57,8 @@ label go → arm gos); COMBINE HARD-GATE first — add provisional flag to
 combined verdict + read other-host provisional (parked residual,
 registered-verdict path) before any real cls-score --combine. (3) Stage-1
 screen go (~28 sonnet trials, office; runbook pre-flight incl. token-free
-claude-sonnet-5 model-id check). (4) Retry --go 112 after classifier
-verdict. (5) Dogfood daily both hosts — office needs tmux allow rules
+claude-sonnet-5 model-id check). (4) GO GIVEN 08-03 evening — retry112 armed in the serial chain (IN
+FLIGHT item 2 above); tally on completion. (5) Dogfood daily both hosts — office needs tmux allow rules
 pasted (Bash(tmux send-keys:*) etc. in .claude/settings.local.json);
 organic blocks are the ONLY M1v2-floor input; A/A ~Aug 12. (6) DONE 08-03
 evening — 7b's 7 rulings ALL DECIDED (each = draft's recommended option;
