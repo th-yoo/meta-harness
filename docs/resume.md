@@ -3,6 +3,80 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## 📡 RELAY → MacBook (`yoo-mac`), handed off 2026-08-03 ~16:50 KST from office
+
+**PASTE THIS ON THE MACBOOK:**
+```
+Resume kkamak (meta-harness) on yoo-mac, 2026-08-03 evening. Office handed
+off. FIRST: `git pull` (office pushed a lot today), then read docs/resume.md
+top block (this RELAY block + the office SESSION END block under it).
+
+FIRST ACTION, before any spend — the decisive open experiment:
+    source scripts/probe-models.sh
+    probe_models claude-haiku-4-5 claude-sonnet-5 claude-opus-5
+Office measured (16:45 KST): haiku=OK, sonnet=429, opus=429 — quotas are
+PER MODEL TIER, and office premium has been walled since ~12:37 (>4h,
+survived a token refresh ⇒ suspect the WEEKLY premium cap, not a 5h
+window). MacBook result decides the next move:
+ · premium OK here  ⇒ the wall is HOST/IP-scoped, not account-scoped.
+   MacBook can run its own premium lanes now; record the counter-evidence
+   in resume (it falsifies the account-wide reading).
+ · premium 429 here ⇒ account-scoped premium cap. Then the only premium
+   paths are: wait for reset (/usage names it), or ANTHROPIC_API_KEY
+   (instrument-NEUTRAL: same transport/schema/speed, only the credential
+   changes; costs real money). Option (d) impersonation stays PROHIBITED.
+Either way, `derive` is haiku (claude-haiku-4-5, KKAMAK_GAUGE_MODEL unset)
+and is LIVE even under a premium wall.
+
+WHAT CHANGED TODAY THAT AFFECTS HOW YOU WORK HERE (pull first!):
+ 1. **7b process gate is ARMED on this repo.** Merges to main now go
+    through `bash scripts/merge-with-gate.sh <branch> -m "..."`, and the
+    branch must carry a committed `docs/reviews/<short-sha>-<slug>.md`
+    with 5 fields (reviewed-range/reviewed-commit, reviewer,
+    fresh-context, verdict ∈ approved|fix-first|blocked, findings-count).
+    Plain `git merge` bypasses the floor — don't. Each merge appends a row
+    to the §6 ledger in docs/superpowers/specs/2026-08-03-process-gate-7b-draft.md
+    (window at 3/10 attempts, 0 blocks). Reviewed tip = newest non-
+    docs/reviews commit; merges are always non-exempt.
+ 2. **7a doc-linter floor is armed** — `gate.json` check now runs
+    `bun scripts/doc-check.ts` (link integrity + CommonMark fences;
+    term-bench2/store/** excluded). Run it before every docs commit.
+ 3. **Combine hard-gate merged** — `cls-score --combine` now REQUIRES a
+    boolean `provisional` on the other host's file (fail-closed) and marks
+    the combined verdict provisional if either side is provisional or any
+    registered arm is absent. The parked residual is CLOSED: a real
+    cross-host combine is now safe once both hosts' docs exist.
+ 4. New in-tree tools: `scripts/probe-models.sh` (above),
+    `scripts/check-review-artifact.ts`, `scripts/channel-smoke.ts`
+    (fenced `--go 14` gauge-instrument verification, opus — blocked here
+    while premium is capped).
+
+MACBOOK LANE (unchanged gos, all still granted):
+ · `pv-sample` then `derive <shadow> --go <n>` (~13 C + 13 not-C) — HAIKU,
+   so it runs even under a premium wall. Then copy pv-counts.json to
+   docs/gauge-pv/yoo-mac.local-pv-counts.json and commit (shadow dir is
+   gitignored; only counts travel).
+ · Own classifier lane: cls-sample → cls-label (opus, premium) → 4 arms
+   (2 haiku + 2 sonnet) → cls-score --emit-doc
+   docs/gauge-cls-ab/yoo-mac.local-cls-score.json. Needs premium; gate it
+   on the probe above. Runbook: docs/superpowers/plans/2026-08-03-cls-ab-runbook.md.
+ · Cross-host combine ONLY after both hosts' cls-score docs are committed.
+
+OFFICE STATE LEFT BEHIND (host-local, does NOT transfer — informational):
+4 tmux launchers armed and polling, all probe-fidelity-fixed 16:45:
+`clsab2` (holds until ALL THREE tiers clear — the granted go was the
+complete 4-arm chain, so it will not fire a provisional 2-arm run),
+`gaugeverify` (opus, channel-smoke --go 14), `retry112` (HAIKU probe now;
+still gated behind gauge-verify.done for the SUBSTANTIVE ordering reason
+that a patched-prompt classifier verdict changes what we re-derive),
+`stage1wait` (sonnet, 28-trial screen + §3H N-watchdog 394/2689/3233/2991).
+Office `.kkamak` store holds seed aliases v13=s1 v14=s2 v15=s3 (delete
+after Stage-1 tally, or nextVersion() mints v16).
+
+RULES unchanged (see the RULES line at the end of the office block below),
+including: no CC-identity impersonation on non-CC transports.
+```
+
 ## ✅ SESSION END 2026-08-03 (`yoo-dev` office, all-day) — §6c OFFICE DEPLOY · PATH A SONNET AMENDMENT + STAGE 0 + STAGE-1 RUNBOOK MERGED · PAIRED-VALIDATION TOOLING MERGED + OFFICE VERDICT **SPLIT** · CLASSIFIER 2×2 REGISTERED + TOOLED + MERGED (label/arm gos GRANTED, blocked by 429, auto-launcher armed) · 7a DOC-LINTER FLOOR **MERGED 08-03 evening (user go)** — main @ `3617774` pushed, doc floor ARMED (this repo now, other hosts on pull); branch `gate-floor-7a7b` deleted locally, remote left per convention
 
 **RESUME PROMPT (either host):**
