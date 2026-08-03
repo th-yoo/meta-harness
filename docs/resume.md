@@ -65,7 +65,18 @@ evening — 7b's 7 rulings ALL DECIDED (each = draft's recommended option;
 spec §7 now REGISTERED constants: pre-merge placement, docs/reviews/
 <sha>-<slug>.md, 5 fields, approved/fix-first/blocked, N=10 bar ≤0.20,
 meta-harness-only staged rollout, string-inequality self-review check).
-Build check-review-artifact.sh + arm = own go, not given. (7) Parked: §3
+BUILT + MERGED 08-03 late evening (`05e3b49`, user "do this in this box"):
+scripts/check-review-artifact.ts + 15 tests (TDD; 2-round fresh-context
+review: fix-first F1 evil-merge sneak / F2 ambiguity fail-open → fix wave
+→ approved 0 residual); first 7b-format artifact
+docs/reviews/bac9b28-gate-7b-build.md; execute-proof OK on own branch.
+EFFECTIVE-TIP AMENDMENT recorded in spec §1 (literal form unsatisfiable —
+artifact commit moves HEAD; trailing docs/reviews/**-only commits exempt,
+merges ALWAYS non-exempt, ambiguity fails closed) — USER ACK PENDING.
+Still NOT ARMED: arming (run at every merge + start N=10 window) = own
+go. Also DONE: office tmux allow rules pasted into
+.claude/settings.local.json (8 Bash(tmux ...) rules, live next session).
+(7) Parked: §3
 over-refusal round · GA5 · per-repo fixtures · office reinject v2 ·
 consistency 10b · queue 7c/7d.
 
