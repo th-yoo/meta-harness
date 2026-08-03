@@ -114,7 +114,22 @@ reinject v2 · consistency 10b · queue 7c/7d.
 OPERATIONAL LESSONS (08-03): spend batches and subagent fleets share one
 account rate pool — run sized-go chains when the fleet is idle (429s cost
 nothing: maxRetries 0 + fail-open left everything retryable, fences
-intact). SDD TDD mid-states turn the gate red mid-turn — foreground
+intact). 429 OBSERVATION (08-03 afternoon, ~2.5h/30+ probes): the block
+is a HARD PIN (100% ERR, zero transient OKs) and OPAQUE (rate_limit_error
+w/ empty message; no retry-after, no anthropic-ratelimit-* headers, only
+x-should-retry:true — reset time not surfaced, polling is the only
+detection). SCOPE ASYMMETRY: same account, same hours — interactive CC
+session ran heavy subagent fleets fine while every single-shot SDK OAuth
+probe (maxRetries:0) 429'd. Hypotheses: (a) shared pool at edge, retrying
+clients squeeze through; (b) raw-SDK OAuth traffic in its OWN bucket —
+100%-ERR consistency incl. quiet stretches slightly favors (b).
+Distinguishing test: probes staying ERR through a genuinely idle hour ⇒
+(b), idling pointless; any OK during idle ⇒ (a), fleet discipline
+matters. Refines (does not replace) the one-pool lesson: pool may be
+TRANSPORT-scoped. Opus probed directly; sonnet untested until stage1's
+probe fires. Probe design rule proven useful: probe with the SAME
+single-shot transport as the batch it gates — a retrying/CLI probe would
+report "clear" falsely. SDD TDD mid-states turn the gate red mid-turn — foreground
 until-green waits ride it out. Store artifacts (term-bench2/store/**) are
 DATA with load-bearing bytes: never lint, never edit for lint.
 
