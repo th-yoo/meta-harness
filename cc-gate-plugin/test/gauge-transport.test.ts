@@ -6,9 +6,11 @@ import {
   resolveModelId,
   readAuthToken,
   DERIVATION_SCHEMA,
+  LABEL_SCHEMA,
   callModelSdk,
+  callModelSdkLabel,
 } from "../src/gauge/transport.ts"
-import { buildRefinerPrompt } from "../src/gauge/refiner.ts"
+import { buildRefinerPrompt, buildLabelPrompt } from "../src/gauge/refiner.ts"
 import { stubServer, okResponse } from "./sdk-stub.ts"
 
 // ── resolveModelId ──────────────────────────────────────────────────────
@@ -262,6 +264,170 @@ describe("callModelSdk", () => {
         KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
       })
       expect(out).toBeUndefined()
+    } finally {
+      srv.stop()
+    }
+  })
+
+  // ── Task 2 (gauge-classifier 2×2 A/B): opts.model / opts.promptVariant ──
+
+  test("omitting opts (pre-T2 call shape) is BYTE-IDENTICAL to before this param existed", async () => {
+    const srv = stubServer(() => okResponse(RESULT_JSON))
+    try {
+      await callModelSdk("create done.txt", "bun test", {
+        KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+        KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+        KKAMAK_GAUGE_MODEL: "haiku",
+      })
+      const c = srv.captured[0]!
+      // same model resolution as before (env KKAMAK_GAUGE_MODEL through resolveModelId)...
+      expect(c.body.model).toBe("claude-haiku-4-5")
+      // ...and the same prompt text (buildRefinerPrompt's own "base" default).
+      const messages = c.body.messages as Array<{ role: string; content: string }>
+      expect(messages[0]!.content).toBe(buildRefinerPrompt("create done.txt", "bun test"))
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("opts.model overrides KKAMAK_GAUGE_MODEL with the exact literal (no re-aliasing)", async () => {
+    const srv = stubServer(() => okResponse(RESULT_JSON))
+    try {
+      await callModelSdk(
+        "p",
+        "",
+        { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1", KKAMAK_GAUGE_MODEL: "haiku" },
+        {},
+        { model: "claude-sonnet-5" },
+      )
+      expect(srv.captured[0]!.body.model).toBe("claude-sonnet-5")
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("opts.promptVariant 'patched' sends the trap-augmented prompt; default stays 'base'", async () => {
+    const srv = stubServer(() => okResponse(RESULT_JSON))
+    try {
+      await callModelSdk(
+        "create done.txt",
+        "bun test",
+        { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+        {},
+        { promptVariant: "patched" },
+      )
+      const messages = srv.captured[0]!.body.messages as Array<{ role: string; content: string }>
+      expect(messages[0]!.content).toBe(buildRefinerPrompt("create done.txt", "bun test", "patched"))
+      expect(messages[0]!.content).not.toBe(buildRefinerPrompt("create done.txt", "bun test", "base"))
+    } finally {
+      srv.stop()
+    }
+  })
+})
+
+// ── LABEL_SCHEMA — anyOf-never-union (same §6c constraint) ───────────────
+
+describe("LABEL_SCHEMA", () => {
+  test("no `type` anywhere in the schema is a union array", () => {
+    const types: unknown[] = []
+    collectTypeValues(LABEL_SCHEMA, types)
+    expect(types.length).toBeGreaterThan(0)
+    for (const t of types) expect(Array.isArray(t)).toBe(false)
+  })
+
+  test("covers label + class, both required, closed object", () => {
+    const s = LABEL_SCHEMA as unknown as {
+      properties: Record<string, unknown>
+      required: string[]
+      additionalProperties: boolean
+    }
+    expect(Object.keys(s.properties).sort()).toEqual(["class", "label"])
+    expect([...s.required].sort()).toEqual(["class", "label"])
+    expect(s.additionalProperties).toBe(false)
+  })
+})
+
+// ── callModelSdkLabel — stub HTTP server, zero real calls ─────────────────
+
+const LABEL_RESULT_JSON = JSON.stringify({ label: "C", class: "C" })
+
+describe("callModelSdkLabel", () => {
+  test("success: sends the LABEL rubric prompt + LABEL_SCHEMA, defaults to claude-opus-5", async () => {
+    const srv = stubServer(() => okResponse(LABEL_RESULT_JSON))
+    try {
+      const out = await callModelSdkLabel("fix src/auth.ts", "bun test", {
+        KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+        KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      })
+      expect(out).toBe(LABEL_RESULT_JSON)
+      const c = srv.captured[0]!
+      expect(c.body.model).toBe("claude-opus-5")
+      const messages = c.body.messages as Array<{ role: string; content: string }>
+      expect(messages[0]!.content).toBe(buildLabelPrompt("fix src/auth.ts", "bun test"))
+      const outputConfig = c.body.output_config as { format: { type: string; schema: unknown } }
+      expect(outputConfig.format.schema).toEqual(LABEL_SCHEMA as unknown as Record<string, unknown>)
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("is NEVER routed through KKAMAK_GAUGE_MODEL — a live-refiner env var cannot retarget the labeler", async () => {
+    const srv = stubServer(() => okResponse(LABEL_RESULT_JSON))
+    try {
+      await callModelSdkLabel("p", "", {
+        KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+        KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+        KKAMAK_GAUGE_MODEL: "haiku",
+      })
+      expect(srv.captured[0]!.body.model).toBe("claude-opus-5")
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("opts.model overrides the claude-opus-5 default", async () => {
+    const srv = stubServer(() => okResponse(LABEL_RESULT_JSON))
+    try {
+      await callModelSdkLabel(
+        "p",
+        "",
+        { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+        {},
+        { model: "claude-opus-5-override" },
+      )
+      expect(srv.captured[0]!.body.model).toBe("claude-opus-5-override")
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("no auth token resolvable → undefined WITHOUT any request", async () => {
+    const srv = stubServer(() => okResponse(LABEL_RESULT_JSON))
+    try {
+      const out = await callModelSdkLabel(
+        "p",
+        "",
+        { KKAMAK_GAUGE_SDK_BASE_URL: srv.url },
+        { platform: "linux", home: fs.mkdtempSync(path.join(os.tmpdir(), "km-transport-home-")) },
+      )
+      expect(out).toBeUndefined()
+      expect(srv.captured.length).toBe(0)
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("API error (non-2xx) → undefined, no throw, no retry (exactly one request)", async () => {
+    const srv = stubServer(() =>
+      Response.json({ type: "error", error: { type: "invalid_request_error", message: "nope" } }, { status: 400 }),
+    )
+    try {
+      const out = await callModelSdkLabel("p", "", {
+        KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+        KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      })
+      expect(out).toBeUndefined()
+      expect(srv.captured.length).toBe(1)
     } finally {
       srv.stop()
     }

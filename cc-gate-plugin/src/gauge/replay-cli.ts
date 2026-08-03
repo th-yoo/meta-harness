@@ -50,7 +50,14 @@ import { mineJsonl, dedupeEarliest } from "./corpus-mine.ts"
 import { runDerive } from "./corpus-replay.ts"
 import { runResolve, readSensorLines } from "./state-resolve.ts"
 import { runPvSample, parsePvSampleArgs, runPvCompare, parsePvCompareArgs } from "./paired-validation.ts"
-import { runClsSample, parseClsSampleArgs } from "./cls-ab.ts"
+import {
+  runClsSample,
+  parseClsSampleArgs,
+  runClsRun,
+  parseClsRunArgs,
+  runClsLabel,
+  parseClsLabelArgs,
+} from "./cls-ab.ts"
 
 /** `~/.claude/projects`, or `KKAMAK_CLAUDE_PROJECTS_DIR` override. */
 export function projectsDir(): string {
@@ -561,8 +568,28 @@ async function main(): Promise<void> {
     return
   }
 
+  if (sub === "cls-run") {
+    const { cwd, arm, go } = parseClsRunArgs(args.slice(1))
+    if (arm === undefined) {
+      console.error("cls-run: --arm <haiku|sonnet>-<base|patched> is required")
+      process.exitCode = 1
+      return
+    }
+    const summary = await runClsRun(cwd, arm, go, (m) => console.log(m))
+    if (summary === undefined) process.exitCode = 1
+    return
+  }
+
+  if (sub === "cls-label") {
+    const { cwd, go } = parseClsLabelArgs(args.slice(1))
+    const summary = await runClsLabel(cwd, go, (m) => console.log(m))
+    if (summary === undefined) process.exitCode = 1
+    return
+  }
+
   console.error(
-    `unknown subcommand: ${sub ?? "(none)"} — usage: replay-cli.ts mine|derive|resolve|report|pv-sample|pv-compare|cls-sample [cwd] [--go <n>] [--reset] [--combine <pv-counts.json>]`,
+    `unknown subcommand: ${sub ?? "(none)"} — usage: replay-cli.ts mine|derive|resolve|report|pv-sample|pv-compare|` +
+      "cls-sample|cls-run|cls-label [cwd] [--go <n>] [--reset] [--combine <pv-counts.json>] [--arm <name>]",
   )
   process.exitCode = 1
 }

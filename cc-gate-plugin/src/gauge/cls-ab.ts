@@ -54,6 +54,9 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { readCorpus, recordKey, type CorpusRecord } from "./corpus-store.ts"
+import { parseRefinerOutput, parseLabelOutput, type PromptVariant, type ClsLabel } from "./refiner.ts"
+import { callModelSdk, callModelSdkLabel } from "./transport.ts"
+import type { GaugePromptClass } from "../types.ts"
 
 export const CLS_AB_DIR_REL = ".km/gauge-cls-ab"
 export const CLS_MANIFEST_NAME = "manifest.json"
@@ -326,4 +329,377 @@ export function runClsSample(
   } finally {
     releaseClsAbLock(cwd)
   }
+}
+
+// ── Task 2: `cls-run` (arm classification) + `cls-label` (blind labels) ──
+//
+// Both spend subcommands share this file's `.km/gauge-cls-ab/` root and the
+// SAME `acquireClsAbLock`/`releaseClsAbLock` T1 exports (module doc above) —
+// a mutating phase in either one holds the one lock the whole time, so
+// cls-sample --reset, cls-run <arm>, and cls-label can never interleave.
+//
+// Both read ONLY `records.ndjson` (key/prompt/floorCheck — T1) for their
+// input population. Neither ever opens `manifest.json` (which carries the
+// stored nominal class per stratum) or the OTHER kind of output file
+// (`cls-run` never opens `labels.ndjson`; `cls-label` never opens any
+// `arm-<name>.ndjson`) — this is the pre-registration's §5 blind-isolation
+// protocol enforced BY CONSTRUCTION (no code path here can even name those
+// files for a read), not by a manual check, and pinned by a test that
+// plants poisoned arm files + a poisoned manifest and asserts cls-label's
+// output and the arm files themselves are both untouched.
+//
+// Idempotent top-up: "pending" for either subcommand is simply every
+// records.ndjson key NOT already present in the (arm|labels) output file —
+// a record that failed transport last run has no row yet and is
+// automatically re-attempted on the next `--go`, no separate retry
+// bookkeeping needed. Fail-open per record (plan Task 2): a transport
+// failure or an unparseable response is counted in `failed` and produces NO
+// row — never a fabricated class/label, never a crashed batch.
+//
+// Cost fence + lock re-check mechanics mirror corpus-replay.ts's
+// `runDerive`/`checkFenceUnderLock` exactly: `go` is checked once
+// fast (pre-lock, cheap fail without touching the lock), then the pending
+// set is RE-READ and RE-CHECKED under the lock immediately before any model
+// call — closing the window where a concurrent cls-run/cls-label/cls-sample
+// lands between the first read and lock acquisition.
+
+export const CLS_ARM_MODELS = ["haiku", "sonnet"] as const
+export type ClsArmModel = (typeof CLS_ARM_MODELS)[number]
+
+export const CLS_PROMPT_VARIANTS = ["base", "patched"] as const
+
+/** Model literals are experiment pins (pre-reg §2.3) — exactly these two API
+ * ids, never the CLI-era "haiku" alias, recorded verbatim on every row. */
+export const CLS_ARM_MODEL_LITERALS: Record<ClsArmModel, string> = {
+  haiku: "claude-haiku-4-5",
+  sonnet: "claude-sonnet-5",
+}
+
+/** Labeler model literal (pre-reg §2.3) — the labeler is NEVER routed
+ * through `KKAMAK_GAUGE_MODEL` (transport.ts's `callModelSdkLabel` doc). */
+export const CLS_LABEL_MODEL_LITERAL = "claude-opus-5"
+
+const ARM_NAME_RE = /^(haiku|sonnet)-(base|patched)$/
+
+/** `<model>-<variant>` -> its two parts, or undefined for anything else
+ * (typo, wrong case, extra dash). The ONLY four valid arm names are
+ * `haiku-base`, `haiku-patched`, `sonnet-base`, `sonnet-patched`. */
+export function parseClsArmName(
+  arm: string,
+): { model: ClsArmModel; variant: PromptVariant } | undefined {
+  const m = ARM_NAME_RE.exec(arm)
+  if (!m) return undefined
+  return { model: m[1] as ClsArmModel, variant: m[2] as PromptVariant }
+}
+
+/** `arm-<name>.ndjson` — the file name a given arm's results live in. */
+export function clsArmFileName(arm: string): string {
+  return `arm-${arm}.ndjson`
+}
+
+export const CLS_LABELS_NAME = "labels.ndjson"
+
+/** One row of `arm-<name>.ndjson` — NO prompt text (F2), same discipline as
+ * `ClsManifest`. `class` is the arm's raw classification (A1/A2/B/C/D, not
+ * yet reduced to C-vs-not-C — Task 3's scorer does that reduction against
+ * the blind labels). */
+export interface ClsArmRow {
+  key: string
+  class: GaugePromptClass
+  model: string
+  promptVariant: PromptVariant
+  transport: "sdk"
+  ts: string
+}
+
+/** One row of `labels.ndjson` — NO prompt text (F2). `label` is the
+ * pre-registered C-vs-not-C ground truth; `class` (optional context, may be
+ * null) is the labeler's finer-grained guess, never authoritative on its
+ * own (pre-reg §2.2: "Label = C / not-C, with an optional class letter"). */
+export interface ClsLabelRow {
+  key: string
+  label: ClsLabel
+  class: GaugePromptClass | null
+  model: string
+  ts: string
+}
+
+/** Missing/unreadable file -> []. Malformed lines are skipped silently
+ * (corpus-store.ts's `readCorpus` precedent) — a torn write from a killed
+ * writer must not take down every later reader. */
+function readNdjson<T>(filePath: string): T[] {
+  let raw: string
+  try {
+    raw = fs.readFileSync(filePath, "utf-8")
+  } catch {
+    return []
+  }
+  const out: T[] = []
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    try {
+      const j: unknown = JSON.parse(trimmed)
+      if (typeof j === "object" && j !== null) out.push(j as T)
+    } catch {
+      // malformed line — skip silently, keep reading the rest of the file
+    }
+  }
+  return out
+}
+
+function writeNdjsonAtomic(filePath: string, rows: unknown[]): void {
+  const body = rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : "")
+  atomicWrite(filePath, body)
+}
+
+/** Sampled records this experiment has to work with — `cls-run`/`cls-label`
+ * refuse ("no sample exists") whenever this file is absent, i.e. before
+ * `cls-sample` has ever run. Reading it never touches `manifest.json`. */
+function readSampledRecords(cwd: string): ClsSampleRecord[] {
+  return readNdjson<ClsSampleRecord>(path.join(clsAbRoot(cwd), CLS_RECORDS_NAME))
+}
+
+export interface ClsRunSummary {
+  arm: string
+  pending: number
+  classified: number
+  failed: number
+}
+
+/** `cls-run --arm <haiku|sonnet>-<base|patched> --go n` (Task 2). See the
+ * section doc above for the shared mechanics (idempotent top-up, fail-open,
+ * lock/fence discipline). Sequential per record — corpus-replay.ts's
+ * `runDerive` precedent, a batch is a deliberately sized, deliberately
+ * paced spend, never parallelized. */
+export async function runClsRun(
+  cwd: string,
+  arm: string,
+  go: number | undefined,
+  log: (m: string) => void,
+): Promise<ClsRunSummary | undefined> {
+  const parsed = parseClsArmName(arm)
+  if (!parsed) {
+    log(
+      `REFUSING: cls-run — unknown arm "${arm}"; expected one of ` +
+        "haiku-base, haiku-patched, sonnet-base, sonnet-patched.",
+    )
+    return undefined
+  }
+  const { model, variant } = parsed
+  const modelLiteral = CLS_ARM_MODEL_LITERALS[model]
+
+  const root = clsAbRoot(cwd)
+  const recordsPath = path.join(root, CLS_RECORDS_NAME)
+  if (!fs.existsSync(recordsPath)) {
+    log(`REFUSING: cls-run — no sample exists (${CLS_AB_DIR_REL}); run cls-sample first.`)
+    return undefined
+  }
+  const armPath = path.join(root, clsArmFileName(arm))
+
+  const records = readSampledRecords(cwd)
+  const alreadyDone = new Set(readNdjson<ClsArmRow>(armPath).map((r) => r.key))
+  const pendingPreLock = records.filter((r) => !alreadyDone.has(r.key))
+
+  if (go === undefined) {
+    log(
+      `REFUSING: cls-run — no --go given; ${pendingPreLock.length} pending record(s) for arm ` +
+        `${arm}. Re-run with --go ${pendingPreLock.length}.`,
+    )
+    return undefined
+  }
+  if (go !== pendingPreLock.length) {
+    log(
+      `REFUSING: cls-run — --go ${go} does not match the current pending count ` +
+        `${pendingPreLock.length} for arm ${arm}. Re-run with --go ${pendingPreLock.length}.`,
+    )
+    return undefined
+  }
+
+  if (!acquireClsAbLock(cwd)) {
+    log(
+      `REFUSING: cls-run — lock held (${CLS_AB_LOCK_REL}) — another cls-sample/cls-run/cls-label ` +
+        "appears to be in flight against this experiment dir.",
+    )
+    return undefined
+  }
+
+  try {
+    const freshDone = new Set(readNdjson<ClsArmRow>(armPath).map((r) => r.key))
+    const pending = records.filter((r) => !freshDone.has(r.key))
+    if (pending.length !== go) {
+      log(
+        `REFUSING: cls-run — pending count changed under lock (now ${pending.length}, expected ` +
+          `${go}); a concurrent run landed. Re-run with --go ${pending.length}.`,
+      )
+      return undefined
+    }
+
+    const newRows: ClsArmRow[] = []
+    let failed = 0
+    for (const record of pending) {
+      const raw = await callModelSdk(record.prompt, record.floorCheck, process.env, {}, {
+        model: modelLiteral,
+        promptVariant: variant,
+      })
+      const derivation = raw !== undefined ? parseRefinerOutput(raw) : undefined
+      if (!derivation) {
+        failed++
+        continue
+      }
+      newRows.push({
+        key: record.key,
+        class: derivation.class,
+        model: modelLiteral,
+        promptVariant: variant,
+        transport: "sdk",
+        ts: new Date().toISOString(),
+      })
+    }
+
+    const merged = [...readNdjson<ClsArmRow>(armPath), ...newRows]
+    writeNdjsonAtomic(armPath, merged)
+
+    const summary: ClsRunSummary = { arm, pending: pending.length, classified: newRows.length, failed }
+    log(
+      `cls-run ${arm}: ${summary.classified}/${summary.pending} classified, ${failed} failed-this-run ` +
+        `(retryable); ${clsArmFileName(arm)} now ${merged.length} record(s)`,
+    )
+    return summary
+  } finally {
+    releaseClsAbLock(cwd)
+  }
+}
+
+export interface ClsLabelSummary {
+  pending: number
+  labeled: number
+  failed: number
+}
+
+/** `cls-label --go n` (Task 2). BLIND ISOLATION (hard, pinned by test): this
+ * function's only file reads are `records.ndjson` (key/prompt/floorCheck)
+ * and its OWN output file `labels.ndjson` — it never opens
+ * `manifest.json` or any `arm-<name>.ndjson`, structurally, not by
+ * convention (see the section doc above). */
+export async function runClsLabel(
+  cwd: string,
+  go: number | undefined,
+  log: (m: string) => void,
+): Promise<ClsLabelSummary | undefined> {
+  const root = clsAbRoot(cwd)
+  const recordsPath = path.join(root, CLS_RECORDS_NAME)
+  if (!fs.existsSync(recordsPath)) {
+    log(`REFUSING: cls-label — no sample exists (${CLS_AB_DIR_REL}); run cls-sample first.`)
+    return undefined
+  }
+  const labelsPath = path.join(root, CLS_LABELS_NAME)
+
+  const records = readSampledRecords(cwd)
+  const alreadyDone = new Set(readNdjson<ClsLabelRow>(labelsPath).map((r) => r.key))
+  const pendingPreLock = records.filter((r) => !alreadyDone.has(r.key))
+
+  if (go === undefined) {
+    log(
+      `REFUSING: cls-label — no --go given; ${pendingPreLock.length} pending record(s). ` +
+        `Re-run with --go ${pendingPreLock.length}.`,
+    )
+    return undefined
+  }
+  if (go !== pendingPreLock.length) {
+    log(
+      `REFUSING: cls-label — --go ${go} does not match the current pending count ` +
+        `${pendingPreLock.length}. Re-run with --go ${pendingPreLock.length}.`,
+    )
+    return undefined
+  }
+
+  if (!acquireClsAbLock(cwd)) {
+    log(
+      `REFUSING: cls-label — lock held (${CLS_AB_LOCK_REL}) — another cls-sample/cls-run/cls-label ` +
+        "appears to be in flight against this experiment dir.",
+    )
+    return undefined
+  }
+
+  try {
+    const freshDone = new Set(readNdjson<ClsLabelRow>(labelsPath).map((r) => r.key))
+    const pending = records.filter((r) => !freshDone.has(r.key))
+    if (pending.length !== go) {
+      log(
+        `REFUSING: cls-label — pending count changed under lock (now ${pending.length}, expected ` +
+          `${go}); a concurrent run landed. Re-run with --go ${pending.length}.`,
+      )
+      return undefined
+    }
+
+    const newRows: ClsLabelRow[] = []
+    let failed = 0
+    for (const record of pending) {
+      const raw = await callModelSdkLabel(record.prompt, record.floorCheck, process.env, {}, {
+        model: CLS_LABEL_MODEL_LITERAL,
+      })
+      const parsed = raw !== undefined ? parseLabelOutput(raw) : undefined
+      if (!parsed) {
+        failed++
+        continue
+      }
+      newRows.push({
+        key: record.key,
+        label: parsed.label,
+        class: parsed.class,
+        model: CLS_LABEL_MODEL_LITERAL,
+        ts: new Date().toISOString(),
+      })
+    }
+
+    const merged = [...readNdjson<ClsLabelRow>(labelsPath), ...newRows]
+    writeNdjsonAtomic(labelsPath, merged)
+
+    const summary: ClsLabelSummary = { pending: pending.length, labeled: newRows.length, failed }
+    log(
+      `cls-label: ${summary.labeled}/${summary.pending} labeled, ${failed} failed-this-run ` +
+        `(retryable); ${CLS_LABELS_NAME} now ${merged.length} record(s)`,
+    )
+    return summary
+  } finally {
+    releaseClsAbLock(cwd)
+  }
+}
+
+/** `cls-run [cwd] --arm <name> --go <n>` arg parsing — pv-sample/derive's
+ * precedent (extract flags, everything else positional). */
+export function parseClsRunArgs(
+  args: string[],
+): { cwd: string; arm: string | undefined; go: number | undefined } {
+  let arm: string | undefined
+  let go: number | undefined
+  const positional: string[] = []
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--arm") {
+      arm = args[i + 1]
+      i++
+    } else if (args[i] === "--go") {
+      go = Number(args[i + 1])
+      i++
+    } else {
+      positional.push(args[i]!)
+    }
+  }
+  return { cwd: positional[0] ?? process.cwd(), arm, go }
+}
+
+/** `cls-label [cwd] --go <n>` arg parsing. */
+export function parseClsLabelArgs(args: string[]): { cwd: string; go: number | undefined } {
+  let go: number | undefined
+  const positional: string[] = []
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--go") {
+      go = Number(args[i + 1])
+      i++
+    } else {
+      positional.push(args[i]!)
+    }
+  }
+  return { cwd: positional[0] ?? process.cwd(), go }
 }

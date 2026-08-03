@@ -21,7 +21,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { execFileSync } from "node:child_process"
-import { buildRefinerPrompt } from "./refiner.ts"
+import { buildRefinerPrompt, buildLabelPrompt, type PromptVariant } from "./refiner.ts"
 
 const CALL_TIMEOUT_MS = 60_000
 const MAX_TOKENS = 2048
@@ -109,16 +109,51 @@ export const DERIVATION_SCHEMA = {
   additionalProperties: false,
 } as const
 
-/** ONE refiner derivation over the direct API: returns the model's JSON text
- * (feed to parseRefinerOutput), undefined on ANY failure. Same env seams as
- * the CLI path (KKAMAK_GAUGE_MODEL) plus KKAMAK_GAUGE_SDK_BASE_URL /
- * KKAMAK_GAUGE_AUTH_TOKEN so tests stub the whole call over localhost with
- * zero real model calls. */
-export async function callModelSdk(
-  prompt: string,
-  floorCheck: string,
+/** JSON schema for `cls-label`'s ClsLabelOutput (refiner.ts's
+ * `parseLabelOutput` — `{label, class}`, shape-parity precedent as
+ * DERIVATION_SCHEMA/parseRefinerOutput above). Nullable `class` is `anyOf`,
+ * same union-type-array-is-rejected constraint. */
+export const LABEL_SCHEMA = {
+  type: "object",
+  properties: {
+    label: { type: "string", enum: ["C", "not-C"] },
+    class: { anyOf: [{ type: "string", enum: ["A1", "A2", "B", "C", "D"] }, { type: "null" }] },
+  },
+  required: ["label", "class"],
+  additionalProperties: false,
+} as const
+
+/** Optional per-call overrides — added for Task 2 (gauge-classifier 2×2 A/B,
+ * `cls-run`/`cls-label`). `opts` defaults to `{}` on every exported call
+ * below, and every field of it defaults to the PRE-T2 behavior when absent:
+ * `model` absent -> `resolveModelId(env.KKAMAK_GAUGE_MODEL ?? "haiku")`,
+ * exactly the literal expression this file used before this param existed.
+ * `promptVariant` absent -> `"base"`, `buildRefinerPrompt`'s own default.
+ * Every existing production caller (refiner-cli.ts, corpus-replay.ts) calls
+ * `callModelSdk` with its original 4 positional args and is therefore
+ * BYTE-UNTOUCHED — pinned by gauge-transport.test.ts's
+ * "omitting opts preserves pre-T2 behavior" test. */
+export interface SdkCallOptions {
+  /** Exact API model literal (e.g. `claude-sonnet-5`) — still passed through
+   * `resolveModelId`, which is a no-op for anything other than the legacy
+   * `"haiku"` CLI alias, so an exact literal here is untouched. */
+  model?: string
+  promptVariant?: PromptVariant
+}
+
+/** Shared call plumbing (auth -> client -> structured-output request -> text
+ * block extraction) for BOTH `callModelSdk` (refiner-shaped) and
+ * `callModelSdkLabel` (label-rubric-shaped) — same auth/env seams, same
+ * fail-open-on-anything discipline, same maxRetries:0 (§4 exactly-1-call),
+ * differing only in which prompt text + JSON schema + model literal they
+ * pass in. Not exported — callers always go through one of the two
+ * purpose-specific wrappers below. */
+async function sdkComplete(
+  messageText: string,
+  schema: Record<string, unknown>,
+  model: string,
   env: Record<string, string | undefined>,
-  authDeps: AuthTokenDeps = {},
+  authDeps: AuthTokenDeps,
 ): Promise<string | undefined> {
   try {
     const authToken = readAuthToken(env, authDeps)
@@ -139,11 +174,11 @@ export async function callModelSdk(
     })
 
     const response = await client.messages.create({
-      model: resolveModelId(env.KKAMAK_GAUGE_MODEL ?? "haiku"),
+      model,
       max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: buildRefinerPrompt(prompt, floorCheck) }],
+      messages: [{ role: "user", content: messageText }],
       output_config: {
-        format: { type: "json_schema", schema: DERIVATION_SCHEMA as unknown as Record<string, unknown> },
+        format: { type: "json_schema", schema },
       },
     })
 
@@ -154,4 +189,45 @@ export async function callModelSdk(
   } catch {
     return undefined
   }
+}
+
+/** ONE refiner derivation over the direct API: returns the model's JSON text
+ * (feed to parseRefinerOutput), undefined on ANY failure. Same env seams as
+ * the CLI path (KKAMAK_GAUGE_MODEL) plus KKAMAK_GAUGE_SDK_BASE_URL /
+ * KKAMAK_GAUGE_AUTH_TOKEN so tests stub the whole call over localhost with
+ * zero real model calls. `opts` (Task 2) — see SdkCallOptions doc above. */
+export async function callModelSdk(
+  prompt: string,
+  floorCheck: string,
+  env: Record<string, string | undefined>,
+  authDeps: AuthTokenDeps = {},
+  opts: SdkCallOptions = {},
+): Promise<string | undefined> {
+  const model = resolveModelId(opts.model ?? env.KKAMAK_GAUGE_MODEL ?? "haiku")
+  const messageText = buildRefinerPrompt(prompt, floorCheck, opts.promptVariant ?? "base")
+  return sdkComplete(
+    messageText,
+    DERIVATION_SCHEMA as unknown as Record<string, unknown>,
+    model,
+    env,
+    authDeps,
+  )
+}
+
+/** `cls-label`'s (Task 2) blind-label call: the SAME transport plumbing as
+ * `callModelSdk`, but `buildLabelPrompt` (the rubric, not the extraction
+ * prompt) + `LABEL_SCHEMA`, and defaults to the pre-registered labeler
+ * literal `claude-opus-5` rather than the refiner's haiku default — the
+ * label go is never routed through `KKAMAK_GAUGE_MODEL`, so a stray env
+ * var armed for the live refiner can never silently retarget the labeler. */
+export async function callModelSdkLabel(
+  prompt: string,
+  floorCheck: string,
+  env: Record<string, string | undefined>,
+  authDeps: AuthTokenDeps = {},
+  opts: { model?: string } = {},
+): Promise<string | undefined> {
+  const model = resolveModelId(opts.model ?? "claude-opus-5")
+  const messageText = buildLabelPrompt(prompt, floorCheck)
+  return sdkComplete(messageText, LABEL_SCHEMA as unknown as Record<string, unknown>, model, env, authDeps)
 }
