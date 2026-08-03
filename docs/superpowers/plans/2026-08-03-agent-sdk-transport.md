@@ -15,7 +15,9 @@ pre/post records separable in every reading (the §6c split rule), and makes
 "replace" a decision the measurement earns rather than an assumption the code
 bakes in. The verification order is fixed: instrument the transport → prove
 call-count semantics → run paired validation against a pre-registered bar →
-then, and only then, flip the default.
+then, and only then, let BATCH callers opt in. (Scope amended 2026-08-03:
+there is no global default flip — the live path stays pinned to "sdk"
+because it runs on unwalled haiku. See §6d "Selection is PER-CALLER".)
 
 **Tech Stack:** Bun + TypeScript, `@anthropic-ai/claude-agent-sdk` (bundles a
 native Claude Code binary), existing gauge modules (`transport.ts`,
@@ -35,8 +37,14 @@ native Claude Code binary), existing gauge modules (`transport.ts`,
 - **F1**: `core/` is a MECHANISM_PATH — never edited. All work in
   `cc-gate-plugin/src/gauge/` + `types.ts` + `package.json`.
 - **F2**: no sampled prompt text in committed artifacts; counts only.
-- **Never remove the `"sdk"` path.** This plan adds a peer and changes a
-  default at most. Rollback must always be one env var.
+- **Never remove the `"sdk"` path.** This plan adds a peer; per the
+  2026-08-03 ruling it does not change the default at all. Rollback is
+  removing the opt-in from a batch caller.
+- **NOTE on Task 1's embedded §6d text below:** Task 1 is already COMPLETE
+  (commit f3a36c9). The live spec has since been amended twice — the
+  context-isolation requirement and the per-caller ruling. The SPEC FILE is
+  the source of truth; the block quoted in Task 1 is the historical
+  as-registered text, not the current §6d.
 - **Measured facts this plan is built on** (wire capture 2026-08-03, recorded
   in `docs/resume.md`): with `systemPrompt: ""`, `settingSources: []`,
   `tools: []`, `title` supplied, the Agent SDK sends 1 tool
@@ -975,12 +983,29 @@ stamp not wired) — fix that and re-run rather than interpreting the numbers.
 Copy to `docs/gauge-pv/<hostname>-sdk-vs-agent-sdk-pv-counts.json` and commit
 (F2: counts travel, prompt text does not).
 
-### Task 9: Verdict, and the default only if earned
+### Task 9: Verdict, and per-caller opt-in only if earned
+
+**SCOPE CHANGED 2026-08-03 (user ruling, §6d "Selection is PER-CALLER").**
+This task no longer flips a global default. The live path
+(`refiner-cli.ts`) stays pinned to `"sdk"` permanently: it runs on haiku,
+haiku is not rate-walled, so routing it through `agent-sdk` would cost
+~1.25 s of spawn and ~423 B of `/clear` echo per Stop hook for zero
+benefit. `"agent-sdk"` is opt-in per BATCH caller instead.
+
+Consequences for what this task does — read these before starting:
+- `selectTransport`'s default STAYS `"sdk"`. Do not change it.
+- The four default-path test updates the old Step 3 demanded
+  (`gauge-wiring.test.ts:102`, `gauge-refiner-cli.test.ts:71`,
+  `corpus-replay.test.ts:86`, and Task 5's `routeCase(undefined)`) are NO
+  LONGER NEEDED — nothing they assert changes. Do not touch them.
+- The `.every(...)`-shaped assertions at `corpus-replay.test.ts:170` and
+  `paired-validation.test.ts:395`, and the default-pairing test around
+  `paired-validation.test.ts:1093-1104`, are likewise unaffected.
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-07-29-km-gauge-v2-extractor-preregistration.md` (§6d outcome)
-- Modify: `docs/2026-08-01-gauntlet-adoption-ledger.md` (boundary ts, ONLY on a pass)
-- Modify: `cc-gate-plugin/src/gauge/transport.ts` (default flip, ONLY on a pass)
+- Modify: `docs/2026-08-01-gauntlet-adoption-ledger.md` (boundary ts, ONLY on a pass, logged when the first batch caller opts in)
+- Modify: the batch caller(s) that opt in — NOT `transport.ts`'s default
 
 - [ ] **Step 1: Script-tally the verdict** (never quote notes; counts only)
 

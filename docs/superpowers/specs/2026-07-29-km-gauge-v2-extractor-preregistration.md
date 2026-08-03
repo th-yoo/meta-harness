@@ -570,9 +570,35 @@ is CLI-family (it drives the bundled `claude` binary), so a SPLIT result here
 is the likely outcome, not a surprise. Split is the default; pooling is the
 exception to be earned.
 
+**Selection is PER-CALLER, not a global default (RULED 2026-08-03, user).**
+The original draft ended with a global default flip once the bar passed.
+That is withdrawn, for a reason that only became visible once the live
+path was measured:
+
+- The LIVE derive path (`refiner-cli.ts`, the detached child the Stop
+  hook spawns) resolves `KKAMAK_GAUGE_MODEL ?? "haiku"` — it runs on
+  **haiku**, and haiku is NOT rate-walled (probed directly 2026-08-03:
+  haiku OK, sonnet 429, opus 429 on the same token in the same second).
+  It therefore has no premium problem for this transport to solve.
+- Routing it through `agent-sdk` anyway would impose ~1.25 s of
+  subprocess spawn plus the ~423-byte `/clear` echo on EVERY Stop hook,
+  buying nothing. A global flip is a pure tax on the one code path whose
+  prime directive is to never affect the session.
+- The premium-blocked work — `cls-label` (opus), the sonnet arms,
+  `channel-smoke` — is ALL batch. That is the only place the lane earns
+  its cost.
+
+BINDING: the live path stays pinned to `transport: "sdk"`. `"agent-sdk"`
+is opt-in per batch caller. `selectTransport(env)` already takes its env
+as a parameter rather than reading `process.env` internally, so per-caller
+selection is a call-site change, not a redesign.
+
 **Deploy.** Boundary ts logged in `docs/2026-08-01-gauntlet-adoption-ledger.md`
-at the moment the default flips, per §6b/§6c precedent — required because
-behaviour changes while `pluginVersion` does not.
+when the first batch caller opts in, per §6b/§6c precedent — required
+because behaviour changes while `pluginVersion` does not. There is no
+global default flip to log, and the §6c split rule still governs every
+reading: `"agent-sdk"` records stay separable from `"sdk"` records
+regardless of which caller produced them.
 
 **Context-isolation requirement (measured on the wire 2026-08-03, binding
 on the implementation).** The Agent SDK injects per-project context into
