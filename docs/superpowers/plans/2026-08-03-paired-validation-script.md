@@ -85,6 +85,35 @@ Two model-free subcommands + the existing fenced deriver do the spend:
   merge via finishing-a-development-branch. Suite: zero real model calls
   (transport stubbed via existing sdk-stub.ts pattern).
 
+## Post-build annotations (final whole-branch review, 2026-08-03 — shipped
+## behavior where it extends or deviates from the text above)
+
+- **Counts travel channel (review finding 1, REQUIRED):** the shadow dir is
+  gitignored, so `pv-counts.json` / `pv-combined.json` do NOT travel by
+  sitting there. Operator step: copy the artifact(s) to
+  **`docs/gauge-pv/<hostname>-pv-counts.json`** (and
+  `docs/gauge-pv/pv-combined.json` from whichever host ran `--combine`)
+  and commit. That committed copy is the file the OTHER host feeds to
+  `pv-compare --combine`, and the audit trail for the window ruling.
+- **R4 layout (as shipped):** records nest at
+  `.km/gauge-corpus-shadow/.km/gauge-corpus/records.ndjson` so the
+  UNMODIFIED deriver resolves the store; manifest + counts artifacts sit
+  at the shadow root top.
+- **R5 (as shipped):** a successful `--combine` additionally writes
+  `pv-combined.json` (both hosts' counts + combined bar verdict) — the
+  durable cross-host decision artifact.
+- **T2 (as shipped):** a `wrongTransport` bucket (shadow derivation not
+  `transport:"sdk"`, or real arm failing the CLI predicate) blocks bar
+  evaluation exactly like undecided/missing — the instrument detects its
+  own miswiring.
+- **T1 (as shipped):** `--reset` refuses while the SHADOW store's lock is
+  live (store's own staleness rule) — an in-flight shadow derive cannot be
+  destroyed.
+- **R1 status note (review finding 4):** R1 (sample-only copy) deviates
+  from the spec's LETTER ("copy the store") with recorded rationale —
+  pre-registered in this plan before build, so a deviation on record, not
+  silent drift.
+
 ## Out of scope
 
 Any spend (sample derive batches = own sized go per host, after merge).

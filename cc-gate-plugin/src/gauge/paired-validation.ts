@@ -596,9 +596,13 @@ export interface PvCompareSummary {
 }
 
 /** `pv-combined.json` — written beside pv-counts.json on a successful
- * `--combine` so the actual CROSS-HOST decision is durable and committable
- * (the per-host pv-counts.json alone only carries one arm of it). Counts +
- * verdict only — keys already live in the two per-host files (R5/F2). */
+ * `--combine` so the actual CROSS-HOST decision survives the terminal
+ * session (the per-host pv-counts.json alone only carries one arm of it).
+ * NOTE: the shadow dir is host-local/gitignored — travel happens by the
+ * operator COPYING pv-counts.json / pv-combined.json to the repo path
+ * named in the plan's post-build annotations (docs/gauge-pv/) and
+ * committing. Counts + verdict only — keys already live in the two
+ * per-host files (R5/F2). */
 export interface PvCombinedFile {
   comparedAt: string
   local: { hostname: string; counts: PvCounts }
