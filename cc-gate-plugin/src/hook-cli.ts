@@ -19,7 +19,10 @@ import { buildStopOutput } from "./output.ts"
 import { handlePostToolUse } from "./core/edits.ts"
 import { handleUserPromptSubmit } from "./core/prompt.ts"
 import { handleStop } from "./core/stop.ts"
+import Anthropic from "@anthropic-ai/sdk"
 import { maybeSpawnGauge } from "./gauge/spawn.ts"
+import { decideNudge, NUDGE_TIMEOUT_MS } from "./gauge/nudge.ts"
+import { readAuthToken } from "./gauge/transport.ts"
 import { maybeSpawnPromptCheck } from "./prompt-check-spawn.ts"
 import { shadowEvaluateAtStop } from "./gauge/shadow.ts"
 import { applyReinjectVariant, pickReinjectVariant } from "./reinject.ts"
@@ -170,6 +173,64 @@ async function main(): Promise<void> {
         proc.unref()
       },
     })
+
+    // Channel-ladder T5b (spec §5): C4 nudge — soft additionalContext ONLY.
+    // cfg.channelNudge !== true skips this entire block: no model call, no
+    // output, byte-identical to pre-T5b behavior (inertness is the
+    // contract). When armed, decideNudge owns prefilter → transport →
+    // 8s-budget race → parse; anything but a parsed C4 returns undefined
+    // and we emit nothing (fail-open family rule — a broken channel
+    // classification must never surface or block a prompt).
+    const nudgeCfg = parseGateConfig(gateConfigRaw)
+    if (nudgeCfg?.channelNudge === true) {
+      try {
+        const env = process.env as Record<string, string | undefined>
+        const ctx = await decideNudge(
+          {
+            // Real SDK transport: same auth/base-URL seams + OAuth-only
+            // client shape as gauge/transport.ts sdkComplete (unexported
+            // there), minus structured outputs — parseChannelOutput is
+            // shape-only and fence-tolerant. claude-opus-5: channel
+            // classification is judgment (sonnet=subject, opus=judgment),
+            // and like cls-label it is never routed through
+            // KKAMAK_GAUGE_MODEL.
+            transport: async (messageText) => {
+              const authToken = readAuthToken(env)
+              if (!authToken) return undefined
+              const client = new Anthropic({
+                authToken,
+                apiKey: null,
+                ...(env.KKAMAK_GAUGE_SDK_BASE_URL ? { baseURL: env.KKAMAK_GAUGE_SDK_BASE_URL } : {}),
+                maxRetries: 0,
+                timeout: NUDGE_TIMEOUT_MS,
+                defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" },
+              })
+              const response = await client.messages.create({
+                model: "claude-opus-5",
+                max_tokens: 512,
+                messages: [{ role: "user", content: messageText }],
+              })
+              for (const block of response.content) {
+                if (block.type === "text" && block.text) return block.text
+              }
+              return undefined
+            },
+          },
+          typeof rec.prompt === "string" ? rec.prompt : "",
+          nudgeCfg,
+        )
+        if (ctx) {
+          await emit({
+            stdout: {
+              hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: ctx },
+            },
+            exitCode: 0,
+          })
+        }
+      } catch {
+        // Fail-open: emit nothing, exit 0 — the prompt proceeds untouched.
+      }
+    }
     return
   }
 
