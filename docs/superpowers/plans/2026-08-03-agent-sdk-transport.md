@@ -1031,8 +1031,21 @@ export function selectTransport(env: Record<string, string | undefined>): GaugeT
   `routeCase("agent-sdk")` case at `routeCase(undefined)` so the pair still
   covers default-vs-explicit.
 
-  Then sweep for any remaining ones with
-  `grep -rn 'toBe("sdk")' cc-gate-plugin/test/`; note that
+  **Two MORE pre-existing default-path assertions that a `toBe("sdk")` grep
+  does NOT match**, because they are written as `.every(...)`:
+  `test/corpus-replay.test.ts:170` and `test/paired-validation.test.ts:395`
+  (`expect(after.every((r) => r.derivation?.transport === "sdk")).toBe(true)`).
+  Both run `runDerive`/`deriveRecord` on the unmodified default env, so both
+  fail after the flip. Pin `KKAMAK_GAUGE_TRANSPORT=sdk` in each. Related
+  knock-on in the same file around `paired-validation.test.ts:1093-1104`: it
+  derives with no transport env var and then calls `runPvCompare(cwd, {})`
+  with no `--pair`, so `PV_DEFAULT_PAIRING.shadowTransport` stays `"sdk"` and
+  every post-flip record routes to `wrongTransport` — pin the env var there
+  too.
+
+  Then sweep with BOTH patterns, since one alone provably misses the other's
+  sites: `grep -rn 'toBe("sdk")' cc-gate-plugin/test/` AND
+  `grep -rn '=== "sdk"' cc-gate-plugin/test/`. Note that
   `gauge-evaluate.test.ts` and `cls-ab-run.test.ts` hits are NOT affected —
   the first passes `transport` as explicit input to a passthrough, the second
   is cls-ab's own literal.
