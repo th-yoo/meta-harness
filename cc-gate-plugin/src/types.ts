@@ -76,6 +76,7 @@ export interface GateConfig {
   sensor: string // default ".km/gate-outcomes.ndjson", relative to cwd
   checkTimeoutMs: number // default 300_000
   gauge: boolean // default false — km-gauge shadow PoC opt-in (2026-07-28 pre-reg)
+  channelNudge?: boolean // default undefined/off — C4 nudge arming flag (2026-08-03 channel-ladder Task 5; inert until true)
 }
 
 /** Injected IO for the pure core — tests fake this whole surface. */

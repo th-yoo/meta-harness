@@ -16,6 +16,7 @@ export function parseGateConfig(raw: string | undefined): GateConfig | undefined
       sensor: typeof j.sensor === "string" ? j.sensor : ".km/gate-outcomes.ndjson",
       checkTimeoutMs: typeof j.checkTimeoutMs === "number" ? j.checkTimeoutMs : 300_000,
       gauge: j.gauge === true,
+      channelNudge: typeof j.channelNudge === "boolean" ? j.channelNudge : undefined,
     }
   } catch {
     return undefined
