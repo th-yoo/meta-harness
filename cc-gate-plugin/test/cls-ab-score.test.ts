@@ -696,17 +696,49 @@ describe("runClsScore", () => {
 
 /** Raw JSON string standing in for another host's `cls-score.json`/
  * `--emit-doc` file, shaped exactly like `ClsScoreFileParsed` (the ONLY
- * shape `--combine` accepts). */
+ * shape `--combine` accepts — including the REQUIRED `provisional` flag,
+ * combine hard-gate). */
 function otherHostFile(
   hostname: string,
   arms: { arm: string; totalKeys: number; presentKeys: number; missingKeys: number; complete: boolean; counts: { tp: number; fp: number; fn: number; tn: number } }[],
+  provisional = false,
 ): string {
   return JSON.stringify({
     hostname,
     scoredAt: "2026-08-03T01:00:00.000Z",
     sample: { cCount: 2, notCCount: 2, total: 4 },
+    provisional,
     arms,
   })
+}
+
+/** One believable other-host per-arm entry (complete, consistent counts). */
+function otherArmEntry(arm: string) {
+  return { arm, totalKeys: 2, presentKeys: 2, missingKeys: 0, complete: true, counts: { tp: 1, fp: 0, fn: 1, tn: 0 } }
+}
+
+/** Clean full-local fixture: all 4 registered arms, every sampled key
+ * classified, no provenance red flags -> local `provisional: false`. Same
+ * prediction table as the "provisional: false once all 4 registered arms
+ * are present and complete" test above. */
+const CLS_CLEAN_PREDS: [string, ClsArmRow["class"]][] = [
+  ["c1", "C"],
+  ["c2", "C"],
+  ["c3", "B"],
+  ["c4", "B"],
+  ["n1", "B"],
+  ["n2", "C"],
+  ["n3", "B"],
+  ["n4", "B"],
+]
+function writeAllFourCleanArms(cwd: string): void {
+  const root = clsAbRoot(cwd)
+  for (const arm of CLS_ALL_ARM_NAMES) {
+    writeNdjson(
+      path.join(root, clsArmFileName(arm)),
+      CLS_CLEAN_PREDS.map(([k, c]) => armRowFor(arm, k, c)),
+    )
+  }
 }
 
 describe("runClsScore --combine", () => {
@@ -913,6 +945,120 @@ describe("runClsScore --combine", () => {
     const emittedCombined = JSON.parse(fs.readFileSync(combinedDoc, "utf-8"))
     expect(emittedCombined.combined.decision.scope).toBe("combined")
     expect(emittedCombined).not.toHaveProperty("decision") // it's the ClsCombinedFile shape, not ClsScoreFile
+  })
+})
+
+// ── combine provisional hard-gate ────────────────────────────────────────
+// The combined verdict is THE registered verdict (spec §6 / runbook §6) —
+// so it must carry its own `provisional` flag, and the other host's file
+// must declare one (fail-closed parse: every emitted doc carries the field;
+// a file without it is not a cls-score doc).
+
+describe("parseClsScoreCombineFile — provisional hard-gate", () => {
+  const validArms = [otherArmEntry("haiku-base")]
+
+  test("missing provisional -> undefined (fail-closed refusal)", () => {
+    const raw = JSON.parse(otherHostFile("other-host", validArms)) as Record<string, unknown>
+    delete raw.provisional
+    expect(parseClsScoreCombineFile(JSON.stringify(raw))).toBeUndefined()
+  })
+
+  test("non-boolean provisional -> undefined", () => {
+    const raw = JSON.parse(otherHostFile("other-host", validArms)) as Record<string, unknown>
+    raw.provisional = "false"
+    expect(parseClsScoreCombineFile(JSON.stringify(raw))).toBeUndefined()
+  })
+
+  test("provisional: false parses and is carried", () => {
+    const parsed = parseClsScoreCombineFile(otherHostFile("other-host", validArms))
+    expect(parsed).toBeDefined()
+    expect(parsed!.provisional).toBe(false)
+  })
+
+  test("provisional: true parses and is carried", () => {
+    const parsed = parseClsScoreCombineFile(otherHostFile("other-host", validArms, true))
+    expect(parsed).toBeDefined()
+    expect(parsed!.provisional).toBe(true)
+  })
+})
+
+describe("runClsScore --combine — combined provisional hard-gate", () => {
+  function allFourOtherArms() {
+    return CLS_ALL_ARM_NAMES.map((a) => otherArmEntry(a))
+  }
+
+  test("clean case: both hosts non-provisional + all 4 arms combined -> combined provisional false, no warning", () => {
+    const cwd = mkRepo()
+    setupBasicExperiment(cwd)
+    writeAllFourCleanArms(cwd)
+    const otherPath = path.join(cwd, "other-cls-score.json")
+    fs.writeFileSync(otherPath, otherHostFile("other-host", allFourOtherArms()))
+    const logs: string[] = []
+    const result = runClsScore(cwd, { combine: otherPath }, (m) => logs.push(m))
+    expect(result).toBeDefined()
+    expect(result!.provisional).toBe(false)
+    expect(result!.combined!.combined.absentArms).toEqual([])
+    // registered-decision object carries provisional: false ONLY here.
+    expect(result!.combined!.combined.provisional).toBe(false)
+    const parsedCombined = JSON.parse(
+      fs.readFileSync(path.join(clsAbRoot(cwd), CLS_COMBINED_NAME), "utf-8"),
+    ) as { combined: { provisional: boolean } }
+    expect(parsedCombined.combined.provisional).toBe(false)
+    expect(logs.some((l) => /PROVISIONAL/.test(l))).toBe(false)
+  })
+
+  test("other host provisional -> combined provisional true + WARNING naming the other host", () => {
+    const cwd = mkRepo()
+    setupBasicExperiment(cwd)
+    writeAllFourCleanArms(cwd)
+    const otherPath = path.join(cwd, "other-cls-score.json")
+    fs.writeFileSync(otherPath, otherHostFile("other-host", allFourOtherArms(), true))
+    const logs: string[] = []
+    const result = runClsScore(cwd, { combine: otherPath }, (m) => logs.push(m))
+    expect(result).toBeDefined()
+    expect(result!.provisional).toBe(false) // local itself is clean
+    expect(result!.combined!.combined.provisional).toBe(true)
+    expect(logs.some((l) => /WARNING: PROVISIONAL/.test(l) && /other host/i.test(l))).toBe(true)
+  })
+
+  test("local run provisional (mixed prompt hash) -> combined provisional true + WARNING naming local", () => {
+    const cwd = mkRepo()
+    setupBasicExperiment(cwd)
+    writeAllFourCleanArms(cwd)
+    const root = clsAbRoot(cwd)
+    // re-write haiku-base with a mixed promptSha256 -> local provisional (F8).
+    writeNdjson(
+      path.join(root, clsArmFileName("haiku-base")),
+      CLS_CLEAN_PREDS.map(([k, c], i) => armRowFor("haiku-base", k, c, { promptSha256: i === 0 ? "hash-other" : "hash-default" })),
+    )
+    const otherPath = path.join(cwd, "other-cls-score.json")
+    fs.writeFileSync(otherPath, otherHostFile("other-host", allFourOtherArms()))
+    const logs: string[] = []
+    const result = runClsScore(cwd, { combine: otherPath }, (m) => logs.push(m))
+    expect(result).toBeDefined()
+    expect(result!.provisional).toBe(true)
+    expect(result!.combined!.combined.provisional).toBe(true)
+    expect(logs.some((l) => /WARNING: PROVISIONAL/.test(l) && /local/.test(l))).toBe(true)
+  })
+
+  test("registered arm absent from the combined set -> combined provisional true + WARNING naming the absent arm", () => {
+    const cwd = mkRepo()
+    setupBasicExperiment(cwd)
+    writeAllFourCleanArms(cwd)
+    const otherPath = path.join(cwd, "other-cls-score.json")
+    // other host claims provisional: false but lists only 3 of the 4
+    // registered arms -> the absent-arm clause must still flag the combine.
+    fs.writeFileSync(
+      otherPath,
+      otherHostFile("other-host", ["haiku-base", "haiku-patched", "sonnet-base"].map((a) => otherArmEntry(a))),
+    )
+    const logs: string[] = []
+    const result = runClsScore(cwd, { combine: otherPath }, (m) => logs.push(m))
+    expect(result).toBeDefined()
+    expect(result!.provisional).toBe(false) // local itself is clean
+    expect(result!.combined!.combined.absentArms).toEqual(["sonnet-patched"])
+    expect(result!.combined!.combined.provisional).toBe(true)
+    expect(logs.some((l) => /WARNING: PROVISIONAL/.test(l) && /absent/i.test(l) && /sonnet-patched/.test(l))).toBe(true)
   })
 })
 
