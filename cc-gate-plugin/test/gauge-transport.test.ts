@@ -9,6 +9,7 @@ import {
   LABEL_SCHEMA,
   callModelSdk,
   callModelSdkLabel,
+  sdkCall,
 } from "../src/gauge/transport.ts"
 import { buildRefinerPrompt, buildLabelPrompt } from "../src/gauge/refiner.ts"
 import { stubServer, okResponse } from "./sdk-stub.ts"
@@ -319,6 +320,123 @@ describe("callModelSdk", () => {
       const messages = srv.captured[0]!.body.messages as Array<{ role: string; content: string }>
       expect(messages[0]!.content).toBe(buildRefinerPrompt("create done.txt", "bun test", "patched"))
       expect(messages[0]!.content).not.toBe(buildRefinerPrompt("create done.txt", "bun test", "base"))
+    } finally {
+      srv.stop()
+    }
+  })
+})
+
+// ── sdkCall — the generalized shared transport (stub server, zero real calls)
+
+describe("sdkCall", () => {
+  test("schema present: sends structured-output config + OAuth-only client shape, returns the text block", async () => {
+    const srv = stubServer(() => okResponse(RESULT_JSON))
+    try {
+      const out = await sdkCall(
+        "raw message",
+        "claude-opus-5",
+        { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+        {},
+        { schema: DERIVATION_SCHEMA as unknown as Record<string, unknown> },
+      )
+      expect(out).toBe(RESULT_JSON)
+      expect(srv.captured.length).toBe(1)
+      const c = srv.captured[0]!
+      expect(c.authorization).toBe("Bearer tok-1")
+      expect(c.beta ?? "").toContain("oauth-2025-04-20")
+      expect(c.apiKey).toBeNull()
+      expect(c.body.model).toBe("claude-opus-5")
+      expect(c.body.max_tokens).toBe(2048)
+      const messages = c.body.messages as Array<{ role: string; content: string }>
+      expect(messages).toEqual([{ role: "user", content: "raw message" }])
+      const outputConfig = c.body.output_config as { format: { type: string; schema: unknown } }
+      expect(outputConfig.format.type).toBe("json_schema")
+      expect(outputConfig.format.schema).toEqual(DERIVATION_SCHEMA as unknown as Record<string, unknown>)
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("schema absent: PLAIN text call — no output_config key in the request body at all", async () => {
+    const srv = stubServer(() => okResponse("plain text answer"))
+    try {
+      const out = await sdkCall("nudge prompt", "claude-opus-5", {
+        KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+        KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      })
+      expect(out).toBe("plain text answer")
+      expect(srv.captured.length).toBe(1)
+      expect("output_config" in srv.captured[0]!.body).toBe(false)
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("maxTokens override lands as the request's max_tokens", async () => {
+    const srv = stubServer(() => okResponse("ok"))
+    try {
+      await sdkCall(
+        "p",
+        "claude-opus-5",
+        { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+        {},
+        { maxTokens: 512 },
+      )
+      expect(srv.captured[0]!.body.max_tokens).toBe(512)
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("no auth token resolvable → undefined WITHOUT any request", async () => {
+    const srv = stubServer(() => okResponse("ok"))
+    try {
+      const out = await sdkCall(
+        "p",
+        "claude-opus-5",
+        { KKAMAK_GAUGE_SDK_BASE_URL: srv.url },
+        { platform: "linux", home: fs.mkdtempSync(path.join(os.tmpdir(), "km-transport-home-")) },
+      )
+      expect(out).toBeUndefined()
+      expect(srv.captured.length).toBe(0)
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("server 500 → undefined, no throw, STILL exactly one request (maxRetries 0)", async () => {
+    const srv = stubServer(() => new Response("boom", { status: 500 }))
+    try {
+      const out = await sdkCall("p", "claude-opus-5", {
+        KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+        KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      })
+      expect(out).toBeUndefined()
+      expect(srv.captured.length).toBe(1)
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("response with no text block → undefined", async () => {
+    const srv = stubServer(() =>
+      Response.json({
+        id: "msg_stub",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-5",
+        content: [],
+        stop_reason: "refusal",
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 0 },
+      }),
+    )
+    try {
+      const out = await sdkCall("p", "claude-opus-5", {
+        KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+        KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      })
+      expect(out).toBeUndefined()
     } finally {
       srv.stop()
     }
