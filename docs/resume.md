@@ -3,6 +3,66 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-03 late (`yoo-dev` office) — §6d AGENT-SDK TRANSPORT BUILT (T1-T5, pushed, UNMERGED) · 429 ROOT-CAUSED = PER-MODEL-TIER QUOTA · 7b GATE ARMED (3 gated merges) · CHANNEL LADDER + TRANSPORT DEDUP + COMBINE HARD-GATE MERGED — main @ `ef3627d` pushed · branch `agent-sdk-transport` @ `ab9e513` pushed, 13 commits
+
+**RESUME PROMPT (office `yoo-dev`):**
+```
+Resume kkamak (meta-harness), 2026-08-04. Read docs/resume.md FIRST (this
+top block), then minimal/HISTORY.md GA13 for the full 08-03 evening.
+
+STATE: main @ ef3627d pushed. Branch `agent-sdk-transport` @ ab9e513
+PUSHED but UNMERGED — 833 tests + tsc green, tree clean. NO SPEND has
+occurred on it. Tasks 1-5 of docs/superpowers/plans/2026-08-03-agent-sdk-
+transport.md are done with per-task reviews; Tasks 6-9 untouched.
+
+429 IS NOT OVER AND IS NOT A WALL-CLOCK WAIT: it is a PER-MODEL-TIER
+quota. Re-probed at session end — haiku OK, sonnet 429, opus 429
+(unchanged for ~19h). Probe before assuming anything:
+    source scripts/probe-models.sh && probe_models claude-haiku-4-5       claude-sonnet-5 claude-opus-5
+Anything haiku runs today. All premium work stays blocked.
+
+4 tmux launchers are still armed and correctly gated (clsab2 →
+gaugeverify → retry112 → stage1wait, markers /mnt/d/tmp/kkamak-markers/,
+none fired). They need premium and will fire unattended when it returns;
+each has a model-free tally duty listed further down this file. Leave
+them unless you want to re-scope them.
+
+FIRST DECISION (mine to make, not the session's): the agent-sdk branch is
+built and measured but its VALUE is unproven — Task 8's paired validation
+is the only thing that would prove it, and it is real spend needing its
+own sized go. Measured cost vs the incumbent API SDK: +335 input tokens
+per record (1.51x) and +1.46s subprocess spawn (~25% end-to-end). Its
+ONLY benefit is reaching premium models via the Agent-SDK credit pool
+while premium OAuth is walled. If premium comes back, the branch may not
+be worth merging at all — decide that before spending on Task 8.
+
+NEXT ACTIONS IF THE ANSWER IS "KEEP GOING" (all token-free):
+ 1. Tasks 6-7 — parameterize the pv machinery to pair ANY two transports
+    (4 hardcoded cli-vs-sdk sites incl. runPvCompare, the actual CLI entry
+    point) + a `--pair sdk:agent-sdk` flag. Plan has full code.
+ 2. Batch-only in-process daemon: /clear between records is PROVEN to
+    reset the transcript (838ms first record then ~20ms; residue = ~423B
+    constant /clear echo). Agreed shape = in-process singleton for BATCH
+    only, auto-create, 15-min idle self-kill. Live path must NOT use it.
+ 3. 2 deferred minors (stale comments in agent-transport.ts) — see
+    .superpowers/sdd/2026-08-03-agent-sdk-transport/progress.md.
+
+RULES THAT BIT ME YESTERDAY, IN PRIORITY ORDER:
+ · READ THE DEPENDENCY'S OWN TYPES/DOCS BEFORE ASSERTING. I committed
+   three wrong verdicts about the Agent SDK from search excerpts and one
+   mis-configured probe before opening sdk.d.ts. Every correction came
+   from the user pushing back. Reference first, then measure, then assert.
+ · MEASURE ON THE WIRE. A local stub + ANTHROPIC_BASE_URL answers "what
+   does this actually send" in ~5 min at zero spend, and settled every
+   Agent-SDK question that docs alone got wrong.
+ · Merges to main go through scripts/merge-with-gate.sh with a committed
+   docs/reviews/<short-sha>-<slug>.md (7b gate ARMED; window 3/10, 0
+   blocks). Direct commits to main bypass it BY DESIGN — see 7b §6b.
+ · Explicit sized go before spend · spec-is-law, pre-data amendments only
+   · F1/F2 · sonnet=subject, opus=judgment · boundary ts on instrument
+   changes · per-task reviews · grep-verify · script-tally · SITREP.
+```
+
 ## 📡 RELAY → MacBook (`yoo-mac`), handed off 2026-08-03 ~16:50 KST from office
 
 **PASTE THIS ON THE MACBOOK:**
