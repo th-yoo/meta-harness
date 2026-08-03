@@ -14,6 +14,43 @@
 //  · `settingSources: []` keeps CLAUDE.md and user/project settings out.
 //  · schema arrives via `outputFormat`, enforced by a forced StructuredOutput
 //                     tool — `output_config` is absent by design here.
+//
+// Fix round 2 (2026-08-03) — context-contamination bug found AFTER the
+// initial review: `settingSources: []` does NOT stop the CLI from reading
+// this project's auto-memory index (~/.claude/projects/<cwd>/memory/) into
+// the first user turn as a `<system-reminder>` block. Measured on the wire:
+// without the settings below, every call shipped the full contents of
+// MEMORY.md (this repo's persistent notes on gauge/classifier/class-C rules)
+// into the context of a call whose job is judging whether a prompt IS
+// class C — a measurement instrument contaminated by notes about the thing
+// it measures. Task 8 depends on this transport's context being clean for a
+// paired-validation comparison against the API-SDK arm; silent contamination
+// would have corrupted that comparison. Verified individually against
+// sdk.d.ts, not guessed:
+//  · `settings: { autoMemoryEnabled: false }` — Settings key, "When false,
+//                     Claude will not read from or write to the auto-memory
+//                     directory." This is the whole payload win (~10.7KB ->
+//                     ~1.6KB measured).
+//  · `persistSession: false` — no session transcript written to disk; this
+//                     transport is a one-shot classifier, never resumed.
+//  · `strictMcpConfig: true` — otherwise project .mcp.json, user settings,
+//                     plugin-provided MCP servers and claude.ai connectors
+//                     can load into the session.
+// Deliberately NOT added:
+//  · `cwd`            — measured as redundant once autoMemoryEnabled is
+//                     false (both key off the same auto-memory directory
+//                     resolution) — dead configuration.
+//  · `excludeDynamicSections` — only applies to the `claude_code` PRESET
+//                     form of `systemPrompt`; inert here since we pass a
+//                     custom string. It also MOVES context into the first
+//                     user message rather than removing it, so it would be
+//                     the wrong tool even where it does apply.
+//
+// KNOWN RESIDUAL (do not chase — documented so a later reader does not
+// re-litigate it): a ~369-byte `<system-reminder>` carrying the account
+// email address and the current date survives every documented isolation
+// option tested (settingSources, settings, persistSession, strictMcpConfig,
+// cwd). This appears unavoidable via the current SDK surface.
 import { query } from "@anthropic-ai/claude-agent-sdk"
 
 export interface AgentSdkOptions {
@@ -49,6 +86,9 @@ export async function agentSdkCall(
         model,
         systemPrompt: "",
         settingSources: [],
+        settings: { autoMemoryEnabled: false },
+        persistSession: false,
+        strictMcpConfig: true,
         tools: [],
         title: "kkamak-gauge",
         maxTurns: 1,

@@ -133,6 +133,38 @@ describe("agentSdkCall", () => {
     }
   }, CLI_TEST_TIMEOUT_MS)
 
+  // Fix round 2 (2026-08-03): pins the context-isolation fix
+  // (settings.autoMemoryEnabled: false / persistSession: false /
+  // strictMcpConfig: true). Before the fix, every call shipped this
+  // project's auto-memory MEMORY.md index (containing notes about
+  // gauge/classifier/class-C rules) into the model's context — a
+  // measurement instrument contaminated by notes about the thing it
+  // measures. The byte-size assertion is the regression guard: it fails
+  // loudly if a future SDK version reintroduces bulk context injection, even
+  // if the specific "MEMORY.md" / "claudeMd" substrings it happens to use
+  // change.
+  test("context isolation: no auto-memory/CLAUDE.md bleed, request stays small", async () => {
+    const { CAPTURED, stub, env } = withCaptureStub()
+    try {
+      await agentSdkCall("ISOLATION PROBE MARKER", "claude-haiku-4-5", env, { schema: SCHEMA })
+      expect(CAPTURED.length).toBeGreaterThan(0)
+      const req = CAPTURED[0] as { messages: Array<{ content: unknown }> }
+      const serialized = JSON.stringify(req)
+      const userTurn = JSON.stringify(req.messages)
+      expect(userTurn).toContain("ISOLATION PROBE MARKER")
+      expect(serialized).not.toContain("MEMORY.md")
+      expect(serialized).not.toContain("claudeMd")
+      // Known residual (do not chase): a ~369-byte <system-reminder> with
+      // the account email + current date survives every documented
+      // isolation option — see agent-transport.ts's header comment. ~3000
+      // bytes leaves generous headroom above that while still catching bulk
+      // reinjection (measured pre-fix: ~10.7KB; post-fix: ~1.6KB).
+      expect(serialized.length).toBeLessThan(3000)
+    } finally {
+      stub.stop()
+    }
+  }, CLI_TEST_TIMEOUT_MS)
+
   test("fail-open: unreachable endpoint resolves undefined, never throws", async () => {
     // Wire-capture finding: unlike a plain TCP connect (which fails
     // instantly with ECONNREFUSED — verified with curl against the same
