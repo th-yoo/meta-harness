@@ -176,6 +176,19 @@ function acquireLock(cwd: string, now: number): boolean {
   return tryCreateLock(lockPath, content)
 }
 
+/** True iff `<cwd>/.km/gauge-corpus/.lock` exists AND is not stale-equivalent
+ * — i.e. a writer is, as far as the lock protocol can tell, genuinely in
+ * flight. Exported for paired-validation.ts's `--reset` guard (T1 fix wave):
+ * discarding a shadow store must refuse while a shadow derive holds the
+ * shadow's own lock, judged by THIS store's staleness rule (isLockStale +
+ * STALE_MS above), never a re-invented one. Read-only — never creates,
+ * refreshes, or takes over the lock. */
+export function hasLiveCorpusLock(cwd: string, now: number = Date.now()): boolean {
+  const lockPath = path.join(cwd, CORPUS_DIR_REL, LOCK_FILE_NAME)
+  if (!fs.existsSync(lockPath)) return false
+  return !isLockStale(lockPath, now)
+}
+
 function releaseLock(cwd: string): void {
   const lockPath = path.join(cwd, CORPUS_DIR_REL, LOCK_FILE_NAME)
   try {
@@ -278,8 +291,10 @@ const STAGE_RANK: Record<CorpusStage, number> = { mined: 0, derived: 1, resolved
 
 /** Text-safe identity key — plain JSON array serialization, never a raw
  * control-byte separator (review round 1: a literal delimiter char between
- * the two fields made this source file diff as binary to git). */
-function recordKey(r: CorpusRecord): string {
+ * the two fields made this source file diff as binary to git). Exported for
+ * paired-validation.ts (§6c plan T1) — the pv manifest records sampled keys
+ * with the store's own identity formula, never a re-derived one. */
+export function recordKey(r: CorpusRecord): string {
   return JSON.stringify([r.repo, r.promptSha256])
 }
 
