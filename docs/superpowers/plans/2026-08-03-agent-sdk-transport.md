@@ -802,6 +802,28 @@ All four sites take `PV_DEFAULT_PAIRING` as their default, so `stratify`'s
 taking a bare predicate (it needs nothing else) and the other three taking the
 whole `PvPairing`.
 
+- [ ] **Step 3a: Fix `isCliDerived` for a three-transport world (one line)**
+
+`isCliDerived` (paired-validation.ts:51-54) currently returns
+`r.derivation.transport !== "sdk"`, which was correct only while `"cli"` and
+`"sdk"` were the only values. Its own docstring already says CLI-derived means
+`"cli"` OR absent. Once `"agent-sdk"` records exist in a REAL store (which
+starts at Task 9's flip, via refiner-cli.ts and corpus-replay.ts), the current
+implementation silently counts them into the CLI baseline arm of every future
+default-pairing `pv-sample`/`comparePvRecords`. Make the implementation match
+the docstring:
+
+```typescript
+export function isCliDerived(r: CorpusRecord): boolean {
+  if (r.derivation === undefined) return false
+  return r.derivation.transport === "cli" || r.derivation.transport === undefined
+}
+```
+
+Add a test asserting an `"agent-sdk"` record is NOT CLI-derived. Existing
+tests must still pass: absent-transport and `"cli"` both remain true, `"sdk"`
+remains false — only the new third value changes behaviour.
+
 - [ ] **Step 3b: De-CLI the operator-facing strings**
 
 Two messages hardcode "CLI" and would mislabel any non-`cli:sdk` run:
@@ -987,6 +1009,19 @@ export function selectTransport(env: Record<string, string | undefined>): GaugeT
 }
 ```
 
+  **Before running Step 4's suite, update the THREE pre-existing tests that
+  assert the default path stamps `"sdk"`** — verified present and env-var-free:
+  `test/gauge-wiring.test.ts:102`, `test/gauge-refiner-cli.test.ts:71`,
+  `test/corpus-replay.test.ts:86`. Each either asserts `"agent-sdk"` or pins
+  `KKAMAK_GAUGE_TRANSPORT=sdk` in its env — choose per test according to what
+  that test is actually about (the two E2E wiring tests should pin the env var
+  so they keep testing the incumbent path; the corpus-replay one should assert
+  the new default). Sweep for others with
+  `grep -rn 'toBe("sdk")' cc-gate-plugin/test/`; note that
+  `gauge-evaluate.test.ts` and `cls-ab-run.test.ts` hits are NOT affected —
+  the first passes `transport` as explicit input to a passthrough, the second
+  is cls-ab's own literal.
+
   Then UPDATE and re-run Task 3's tests: the "defaults to sdk" cases become
   "defaults to agent-sdk", while the "never selects cli" case must still hold
   (`selectTransport({ KKAMAK_GAUGE_TRANSPORT: "cli" })` → `"agent-sdk"`, i.e.
@@ -1035,6 +1070,15 @@ git add -A && git commit -m "docs(spec): §6d verdict + transport default"
   `CorpusRecord` carries the field at `r.derivation.transport`, so it would
   have returned false for every real record while its `as never` test fixture
   hid the bug from `tsc`.
+- **Architect review 4 (3 findings — down from 10/9/10, and all eight
+  revision-3 claims independently verified clean)**: Task 9's flip would have
+  broken three pre-existing default-path tests (`gauge-wiring.test.ts:102`,
+  `gauge-refiner-cli.test.ts:71`, `corpus-replay.test.ts:86` — all assert
+  `"sdk"`, none set the env var) at its own verification step, so Step 3 now
+  updates them first; `isCliDerived`'s `!== "sdk"` implementation, correct
+  only in a two-transport world, is fixed to match its own docstring before
+  any third value can reach a real store; the Task 5 grep-verify's expected
+  output corrected for a comment-line false positive in `transport.ts:6`.
 - **Architect review 3 (10 findings) applied**: `refiner-cli.ts:68` — the
   LIVE derive path, missed by two prior revisions — now stamps the selected
   transport, with a grep-verify step; `PvCountsFile.arms` made OPTIONAL
