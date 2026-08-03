@@ -219,8 +219,10 @@ green: 783+26+230 tests + doc-check + tsc. Other hosts arm on pull.
 
 AGENT-SDK TRANSPORT (§6d) — BUILT, UNMERGED, UNPUSHED. Branch
 `agent-sdk-transport` @ `ab9e513`, 833 tests + tsc green, tree clean,
-NOTHING PUSHED (whole evening is local to this box; git is the only
-cross-host transfer). Tasks 1-5 of
+PUSHED to origin/agent-sdk-transport (13 commits, tracking set) — the
+branch is recoverable and MacBook-reachable; this GA13/resume pair was
+cherry-picked onto main so a main-only reader sees it without the
+transport work. Tasks 1-5 of
 docs/superpowers/plans/2026-08-03-agent-sdk-transport.md done w/ per-task
 reviews; Tasks 6-9 untouched; Task 8 = the real-spend paired validation,
 needs its own sized go. §6d amended THREE times pre-data (context
