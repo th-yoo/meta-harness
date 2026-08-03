@@ -124,11 +124,15 @@ REMAINING WORK — WHOLE PROGRAM (owner · blocker · authorization):
     real money; any auth/transport swap = pre-data amendment +
     boundary ts, and the cls-ab amendment window closes at its FIRST
     label.
- 7. CLOSED 16:58 (was: does the Agent SDK expose structured outputs?).
-    ANSWER: the Agent SDK IS Claude Code — it spawns the bundled
-    `claude` binary — so it is the retired CLI transport, has no
-    structured outputs, and loads settings/CLAUDE.md by default. RULED
-    OUT as an instrument lane; premium board is (a) wait or (b) API key.
+ 7. ANSWERED 17:0x (was: does the Agent SDK expose structured outputs?).
+    YES — `outputFormat`/`output_format` json_schema with a validated
+    `structured_output`. And it IS Claude Code (spawns the bundled
+    binary), but systemPrompt/settingSources/tools are all clampable.
+    So it is VIABLE, not ruled out — the price is its own paired
+    validation (CLI-family, comparability unmeasured) plus a
+    validate-and-re-prompt schema mechanism that differs from the API's
+    constrained sampling. Premium board: (a) wait · (b) API key
+    (simplest, instrument-neutral) · (c) Agent SDK (included credit).
  8. Dogfood daily BOTH hosts — organic blocks are the only M1v2-floor
     input; A/A checkpoint ~Aug 12.
  9. Repo-visibility decision (user): `th-yoo/meta-harness` is a PUBLIC
@@ -298,23 +302,34 @@ OPTIONS IF THE PREMIUM CAP HOLDS: (a) wait for reset (`/usage` says
 when); (b) **ANTHROPIC_API_KEY** — instrument-NEUTRAL (same transport,
 same schema, same speed; only the credential changes — `sdkCall`
 hardcodes apiKey:null + oauth beta header, so it needs an auth-mode
-branch + tests) but real money at list rates; (c) **RULED OUT 16:58 —
-@anthropic-ai/claude-agent-sdk IS Claude Code.** It bundles the `claude`
-binary and drives it as a SUBPROCESS (Python package bundles the CLI, TS
-ships it as a native optional dep, third-party providers expose
-`path_to_claude_code_executable` / `spawn_claude_code_process`). So it is
-the §6c-RETIRED CLI transport with a library API — same
-non-poolability as `claude -p` (this host's paired verdict SPLIT
-0.625 / missed-C 6>2). Two further disqualifiers: it has NO structured
-outputs (`--output-format json` wraps an UNSTRUCTURED result field —
-upstream issue), so we would lose the schema enforcement
-DERIVATION_SCHEMA/CHANNEL_SCHEMA give us; and it loads settingSources
-(user/project/local settings + CLAUDE.md) plus the full agent loop by
-default, i.e. MORE instrument contamination than a bare spawn, not less.
-The earlier "minimal system prompt ⇒ close to bare messages.create" note
-was wrong and is withdrawn. Also relevant: published guidance says
-subscription rate limits are not intended for third-party agent usage —
-API keys are. NET: the premium board is just (a) wait or (b) API key.
+branch + tests) but real money at list rates; (c)
+**@anthropic-ai/claude-agent-sdk — VIABLE, but needs its own paired
+validation (corrected TWICE 17:0x; two of my three objections were
+wrong).** What is TRUE: it IS Claude Code — bundles the `claude` binary
+and drives it as a SUBPROCESS (Python bundles the CLI, TS ships it as a
+native optional dep, providers expose `path_to_claude_code_executable` /
+`spawn_claude_code_process`), so it is CLI-FAMILY transport, and §6c
+retired that family after the paired verdict came back SPLIT for the
+CLI-spawn variant (0.625 / missed-C 6>2). What I got WRONG and hereby
+withdraw: (i) "no structured outputs" — FALSE, the SDK supports
+`outputFormat: {type:"json_schema", schema}` (TS) /
+`output_format` (Python) returning a validated `structured_output`
+(the upstream issue I cited was 2025-09 and is resolved); (ii) "loads
+CLAUDE.md/settings, so worse contamination" — FALSE as a fixed property,
+`systemPrompt` is settable (default is already minimal, CC preset is
+opt-in), `settingSources: []` disables settings/CLAUDE.md, and tools and
+turns can be clamped. REAL residual caveats, in order: (1) a
+configured-minimal Agent SDK is NOT the old CLI transport, so its
+comparability with our SDK corpus is UNMEASURED — it needs its own
+paired validation before any pooling, which is a cost, not a blocker;
+(2) its schema mechanism is validate-and-RE-PROMPT, not the API's
+grammar-constrained sampling — retries introduce a selection effect on a
+measured classification distribution, which matters for an instrument
+even though it is invisible in ordinary use; (3) it bills the Agent-SDK
+credit (included monthly, then stops unless overflow credits are on).
+NET premium board: (a) wait, (b) API key (simplest, instrument-neutral,
+pay-as-you-go), (c) Agent SDK (included credit, but buy the paired
+validation first).
 (d) **KNOWN AND
 DELIBERATELY NOT IMPLEMENTED — FYI so nobody re-derives it as a
 "discovery":** the widely-circulated trick of setting `system: "You are
