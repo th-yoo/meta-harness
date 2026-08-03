@@ -724,3 +724,447 @@ export function parseClsLabelArgs(args: string[]): { cwd: string; go: number | u
   }
   return { cwd: positional[0] ?? process.cwd(), go }
 }
+
+// ── Task 3: `cls-score` — metrics + pre-registered decision rule ─────────
+//
+// `cls-score` is MODEL-FREE and READ-ONLY on every input it touches:
+// `manifest.json` (JSON.parse), `labels.ndjson`, and every present
+// `arm-<name>.ndjson` are read via `readNdjson`/`fs.readFileSync` only —
+// never written, never locked. A pure read cannot contend with a
+// concurrent cls-run/cls-label writer (report-subcommand precedent, same
+// as pv-compare in paired-validation.ts), so `acquireClsAbLock` is neither
+// called nor needed here.
+//
+// Decision-rule constants (pre-reg spec §3) live in ONE exported object,
+// `CLS_DECISION_CONSTANTS` below — the single source every decision path
+// reads from; no number here is ever re-typed inline. Its tie-break order
+// reuses this file's OWN `CLS_ARM_MODELS`/`CLS_PROMPT_VARIANTS` arrays
+// (already declared cheapest-model/base-prompt-first), so the tie-break
+// order and the valid-arm-name order can never drift apart.
+
+export const CLS_SCORE_NAME = "cls-score.json"
+
+/** Pre-registered decision-rule constants (spec §3) — copied verbatim:
+ * incumbent = haiku+base, F1 margin = 0.10 raw points, tie-break = cheaper
+ * model then base prompt. */
+export const CLS_DECISION_CONSTANTS = {
+  /** haiku + base prompt — the production default today (spec §3). */
+  incumbentArm: "haiku-base",
+  /** raw F1-point margin the winner must clear over the incumbent (spec §3
+   * point (a)) — NOT a relative lift, NOT a significance test. */
+  f1Margin: 0.1,
+  /** tie-break order (spec §3): cheaper model first, then base prompt. */
+  tieBreak: {
+    modelOrder: CLS_ARM_MODELS,
+    variantOrder: CLS_PROMPT_VARIANTS,
+  },
+} as const
+
+export type ClsMetricValue = number | "n/a"
+
+export interface ClsArmMetrics {
+  arm: string
+  totalKeys: number
+  presentKeys: number
+  missingKeys: number
+  complete: boolean
+  tp: number
+  /** false-C: predicted C, labeled not-C */
+  fp: number
+  /** missed-C: predicted not-C, labeled C */
+  fn: number
+  tn: number
+  precision: ClsMetricValue
+  recall: ClsMetricValue
+  f1: ClsMetricValue
+}
+
+/** All four valid arm names, in the constants' cheapest-model/base-prompt-
+ * first order (haiku-base, haiku-patched, sonnet-base, sonnet-patched) —
+ * the ONE order every report/table below iterates in. */
+export const CLS_ALL_ARM_NAMES: readonly string[] = CLS_ARM_MODELS.flatMap((model) =>
+  CLS_PROMPT_VARIANTS.map((variant) => `${model}-${variant}`),
+)
+
+/** Arm names with an `arm-<name>.ndjson` file actually present on disk —
+ * "ALL present arm files" (plan Task 3). An arm that has never been run at
+ * all is simply absent from this list (not part of this scoring run),
+ * distinct from an arm that has been run but is missing some records
+ * (INCOMPLETE — see `computeArmMetrics`). */
+export function listPresentArmNames(cwd: string): string[] {
+  const root = clsAbRoot(cwd)
+  return CLS_ALL_ARM_NAMES.filter((name) => fs.existsSync(path.join(root, clsArmFileName(name))))
+}
+
+/** Metrics for one arm against the labels, restricted to the manifest's
+ * sampled keys. `complete` iff every manifest key has a row in `armRows` —
+ * an arm missing even one key is INCOMPLETE (plan Task 3): its
+ * TP/FP/FN/TN/precision/recall/F1 all come out zero/"n/a" (the loop below
+ * is skipped entirely) and it is excluded from winner selection
+ * (`pickWinner`), but `missingKeys` is always reported explicitly, never
+ * silently dropped. Zero-division edges (plan step 3): no C predicted ->
+ * precision "n/a"; no C in labels -> recall "n/a"; F1 "n/a" whenever
+ * EITHER is "n/a", or when both are defined but both zero (0/0 is
+ * reported as "n/a", never NaN). `tp+fp===0`/`tp+fn===0` already cover the
+ * incomplete case too (the skipped loop leaves every count at 0), so no
+ * separate `complete` branch is needed in the precision/recall formulas. */
+export function computeArmMetrics(
+  arm: string,
+  manifestKeys: string[],
+  armRows: ClsArmRow[],
+  labelPositiveByKey: Map<string, boolean>,
+): ClsArmMetrics {
+  const armPositiveByKey = new Map(armRows.map((r) => [r.key, r.class === "C"] as const))
+  const presentKeys = manifestKeys.filter((k) => armPositiveByKey.has(k)).length
+  const missingKeys = manifestKeys.length - presentKeys
+  const complete = missingKeys === 0
+
+  let tp = 0
+  let fp = 0
+  let fn = 0
+  let tn = 0
+  if (complete) {
+    for (const k of manifestKeys) {
+      const predC = armPositiveByKey.get(k)!
+      const actualC = labelPositiveByKey.get(k)!
+      if (predC && actualC) tp++
+      else if (predC && !actualC) fp++
+      else if (!predC && actualC) fn++
+      else tn++
+    }
+  }
+
+  const precision: ClsMetricValue = tp + fp === 0 ? "n/a" : tp / (tp + fp)
+  const recall: ClsMetricValue = tp + fn === 0 ? "n/a" : tp / (tp + fn)
+  let f1: ClsMetricValue
+  if (precision === "n/a" || recall === "n/a") f1 = "n/a"
+  else if (precision === 0 && recall === 0) f1 = "n/a"
+  else f1 = (2 * precision * recall) / (precision + recall)
+
+  return {
+    arm,
+    totalKeys: manifestKeys.length,
+    presentKeys,
+    missingKeys,
+    complete,
+    tp,
+    fp,
+    fn,
+    tn,
+    precision,
+    recall,
+    f1,
+  }
+}
+
+/** Tie-break rank per spec §3: cheaper model first (haiku < sonnet), then
+ * base prompt (base < patched) — lower rank wins a tie. Reads its ordering
+ * from `CLS_DECISION_CONSTANTS.tieBreak`, never a re-typed literal. */
+function armTieBreakRank(arm: string): number {
+  const parsed = parseClsArmName(arm)!
+  const { modelOrder, variantOrder } = CLS_DECISION_CONSTANTS.tieBreak
+  const modelRank = modelOrder.indexOf(parsed.model)
+  const variantRank = variantOrder.indexOf(parsed.variant)
+  return modelRank * variantOrder.length + variantRank
+}
+
+/** argmax(F1) over complete arms with a DEFINED F1 (spec §3 — "arms with
+ * n/a F1 excluded from winning"), tie-broken by `armTieBreakRank`.
+ * undefined iff no complete arm has a defined F1 at all. */
+export function pickWinner(metrics: ClsArmMetrics[]): { arm: string; f1: number } | undefined {
+  let best: { arm: string; f1: number } | undefined
+  for (const m of metrics) {
+    if (!m.complete || m.f1 === "n/a") continue
+    if (
+      best === undefined ||
+      m.f1 > best.f1 ||
+      (m.f1 === best.f1 && armTieBreakRank(m.arm) < armTieBreakRank(best.arm))
+    ) {
+      best = { arm: m.arm, f1: m.f1 }
+    }
+  }
+  return best
+}
+
+export interface ClsDecisionResult {
+  verdict: "ADOPT" | "INCUMBENT-STAYS" | "NOT-EVALUABLE"
+  incumbentArm: string
+  winnerArm: string | null
+  f1Winner: ClsMetricValue | null
+  f1Incumbent: ClsMetricValue | null
+  marginAchieved: number | null
+  missedCWinner: number | null
+  missedCIncumbent: number | null
+  reason: string
+}
+
+/** The pre-registered decision rule (spec §3), evaluated against
+ * `CLS_DECISION_CONSTANTS` — the ONE exported constants object, never a
+ * re-derived number. If the incumbent arm is missing, incomplete, or has
+ * an undefined F1, there is no baseline to compare against -> verdict
+ * NOT-EVALUABLE (no adoption decision without it). Otherwise the winner is
+ * `pickWinner`'s argmax(F1) (which always includes the incumbent itself as
+ * a candidate, so it never comes back undefined here); if the winner IS
+ * the incumbent, or fails either adoption clause, the incumbent stays. */
+export function evaluateClsDecision(metrics: ClsArmMetrics[]): ClsDecisionResult {
+  const { incumbentArm, f1Margin } = CLS_DECISION_CONSTANTS
+  const incumbent = metrics.find((m) => m.arm === incumbentArm)
+
+  if (incumbent === undefined || !incumbent.complete) {
+    return {
+      verdict: "NOT-EVALUABLE",
+      incumbentArm,
+      winnerArm: null,
+      f1Winner: null,
+      f1Incumbent: null,
+      marginAchieved: null,
+      missedCWinner: null,
+      missedCIncumbent: null,
+      reason:
+        `incumbent arm "${incumbentArm}" is missing or incomplete — no adoption decision without ` +
+        "the incumbent baseline",
+    }
+  }
+  if (incumbent.f1 === "n/a") {
+    return {
+      verdict: "NOT-EVALUABLE",
+      incumbentArm,
+      winnerArm: null,
+      f1Winner: null,
+      f1Incumbent: "n/a",
+      marginAchieved: null,
+      missedCWinner: null,
+      missedCIncumbent: incumbent.fn,
+      reason:
+        `incumbent arm "${incumbentArm}" has an undefined F1 (zero-division edge) — no adoption ` +
+        "decision without a defined baseline",
+    }
+  }
+
+  const winner = pickWinner(metrics)! // incumbent itself always qualifies -> never undefined here
+  const winnerMetrics = metrics.find((m) => m.arm === winner.arm)!
+  const margin = winner.f1 - incumbent.f1
+  const missedCOk = winnerMetrics.fn <= incumbent.fn
+
+  if (winner.arm !== incumbentArm && margin >= f1Margin && missedCOk) {
+    return {
+      verdict: "ADOPT",
+      incumbentArm,
+      winnerArm: winner.arm,
+      f1Winner: winner.f1,
+      f1Incumbent: incumbent.f1,
+      marginAchieved: margin,
+      missedCWinner: winnerMetrics.fn,
+      missedCIncumbent: incumbent.fn,
+      reason:
+        `${winner.arm} clears the margin (${margin.toFixed(3)} >= ${f1Margin}) and is missed-C ` +
+        `not-worse (${winnerMetrics.fn} <= ${incumbent.fn})`,
+    }
+  }
+
+  const reason =
+    winner.arm === incumbentArm
+      ? "the incumbent is itself the argmax(F1) arm"
+      : margin < f1Margin
+        ? `margin ${margin.toFixed(3)} < required ${f1Margin}`
+        : `missed-C ${winnerMetrics.fn} > incumbent missed-C ${incumbent.fn} (not-worse condition fails)`
+
+  return {
+    verdict: "INCUMBENT-STAYS",
+    incumbentArm,
+    winnerArm: winner.arm,
+    f1Winner: winner.f1,
+    f1Incumbent: incumbent.f1,
+    marginAchieved: margin,
+    missedCWinner: winnerMetrics.fn,
+    missedCIncumbent: incumbent.fn,
+    reason,
+  }
+}
+
+export interface ClsScoreArmEntry {
+  arm: string
+  totalKeys: number
+  presentKeys: number
+  missingKeys: number
+  complete: boolean
+  counts: { tp: number; fp: number; fn: number; tn: number }
+  metrics: { precision: ClsMetricValue; recall: ClsMetricValue; f1: ClsMetricValue }
+}
+
+/** `cls-score.json` / `--emit-doc` target — counts/metrics/verdict/
+ * hostname/scoredAt ONLY, never prompt text (F2: neither `ClsArmRow` nor
+ * `ClsLabelRow` carries prompt text in the first place, so there is
+ * nothing here that could leak it). */
+export interface ClsScoreFile {
+  scoredAt: string
+  hostname: string
+  sample: { cCount: number; notCCount: number; total: number }
+  arms: ClsScoreArmEntry[]
+  decision: ClsDecisionResult
+}
+
+function fmtMetric(v: ClsMetricValue): string {
+  return v === "n/a" ? "n/a" : v.toFixed(3)
+}
+
+function renderArmRow(m: ClsArmMetrics): string {
+  const status = m.complete ? "complete" : `INCOMPLETE (missing ${m.missingKeys}/${m.totalKeys})`
+  return (
+    `  ${m.arm.padEnd(16)} ${status.padEnd(28)} ` +
+    `TP ${m.tp} FP(false-C) ${m.fp} FN(missed-C) ${m.fn} TN ${m.tn}  ` +
+    `P ${fmtMetric(m.precision)} R ${fmtMetric(m.recall)} F1 ${fmtMetric(m.f1)}`
+  )
+}
+
+function renderDecisionLines(d: ClsDecisionResult): string[] {
+  const lines = [`decision (pre-registered, spec §3 — incumbent ${d.incumbentArm}):`]
+  if (d.verdict === "NOT-EVALUABLE") {
+    lines.push(`  ${d.reason}`, "verdict: NOT-EVALUABLE")
+    return lines
+  }
+  const marginOk = d.marginAchieved! >= CLS_DECISION_CONSTANTS.f1Margin
+  const missedOk = d.missedCWinner! <= d.missedCIncumbent!
+  lines.push(
+    `  winner (argmax F1, tie-break cheaper-model-then-base-prompt): ${d.winnerArm}`,
+    `  F1_winner ${fmtMetric(d.f1Winner!)} - F1_incumbent ${fmtMetric(d.f1Incumbent!)} = ` +
+      `${d.marginAchieved!.toFixed(3)} >= ${CLS_DECISION_CONSTANTS.f1Margin}? ${marginOk ? "YES" : "NO"}`,
+    `  missed-C_winner ${d.missedCWinner} <= missed-C_incumbent ${d.missedCIncumbent}? ${missedOk ? "YES" : "NO"}`,
+    `  ${d.reason}`,
+    `verdict: ${d.verdict}${d.verdict === "ADOPT" ? ` <${d.winnerArm}>` : ""}`,
+  )
+  return lines
+}
+
+/** Human report for one score run. Exported for tests. */
+export function renderClsScoreReport(
+  sample: { cCount: number; notCCount: number },
+  metrics: ClsArmMetrics[],
+  decision: ClsDecisionResult,
+): string {
+  return [
+    "cls-score — gauge classifier 2×2 A/B (spec 2026-08-03-gauge-classifier-ab-preregistration.md §3)",
+    `sample: ${sample.cCount} C + ${sample.notCCount} not-C`,
+    "",
+    "per-arm metrics vs blind opus labels:",
+    ...metrics.map(renderArmRow),
+    "",
+    ...renderDecisionLines(decision),
+  ].join("\n")
+}
+
+/** `cls-score [cwd] [--emit-doc <path>]` arg parsing. `--emit-doc` with no
+ * following value becomes `""` (distinct from `undefined` = flag not
+ * passed at all) so `runClsScore` can refuse it cleanly instead of
+ * attempting to write to an empty path. */
+export function parseClsScoreArgs(args: string[]): { cwd: string; emitDoc: string | undefined } {
+  let emitDoc: string | undefined
+  const positional: string[] = []
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--emit-doc") {
+      emitDoc = args[i + 1] ?? ""
+      i++
+    } else {
+      positional.push(args[i]!)
+    }
+  }
+  return { cwd: positional[0] ?? process.cwd(), emitDoc }
+}
+
+/** `cls-score [cwd] [--emit-doc <path>]` (Task 3). READ-ONLY on every input
+ * (module doc above) — no lock is acquired or needed. Refusal-first ORDER:
+ * `--emit-doc ""` (flag with no value), a missing/malformed manifest, and
+ * incomplete labels all refuse BEFORE any write — including the main
+ * `cls-score.json` write, so a refusal has zero effect on either output. Per-
+ * arm completeness is reported explicitly (`missingKeys`, log line per
+ * incomplete arm) but does NOT refuse the whole run — only labels being
+ * incomplete does (labels are the ground truth every arm is scored against). */
+export function runClsScore(
+  cwd: string,
+  opts: { emitDoc?: string },
+  log: (m: string) => void,
+): ClsScoreFile | undefined {
+  if (opts.emitDoc === "") {
+    log("REFUSING: cls-score — --emit-doc requires a path argument.")
+    return undefined
+  }
+
+  const root = clsAbRoot(cwd)
+
+  let manifest: ClsManifest
+  try {
+    manifest = JSON.parse(fs.readFileSync(path.join(root, CLS_MANIFEST_NAME), "utf-8")) as ClsManifest
+  } catch {
+    log(`REFUSING: cls-score — no readable ${CLS_MANIFEST_NAME} under ${CLS_AB_DIR_REL} — run cls-sample first.`)
+    return undefined
+  }
+  if (!Array.isArray(manifest?.keys?.c) || !Array.isArray(manifest.keys.notC)) {
+    log(`REFUSING: cls-score — ${CLS_MANIFEST_NAME} is malformed (no keys.c/keys.notC arrays) — re-run cls-sample.`)
+    return undefined
+  }
+  const manifestKeys = [...manifest.keys.c, ...manifest.keys.notC]
+
+  const labelRows = readNdjson<ClsLabelRow>(path.join(root, CLS_LABELS_NAME))
+  const labelPositiveByKey = new Map(labelRows.map((r) => [r.key, r.label === "C"] as const))
+  const missingLabelKeys = manifestKeys.filter((k) => !labelPositiveByKey.has(k))
+  if (missingLabelKeys.length > 0) {
+    log(
+      `REFUSING: cls-score — labels incomplete (${missingLabelKeys.length}/${manifestKeys.length} sampled ` +
+        `record(s) unlabeled, e.g. ${missingLabelKeys[0]}) — labels are the ground truth for every arm. ` +
+        "Run cls-label first.",
+    )
+    return undefined
+  }
+
+  const presentArms = listPresentArmNames(cwd)
+  const metrics = presentArms.map((arm) =>
+    computeArmMetrics(
+      arm,
+      manifestKeys,
+      readNdjson<ClsArmRow>(path.join(root, clsArmFileName(arm))),
+      labelPositiveByKey,
+    ),
+  )
+  for (const m of metrics) {
+    if (!m.complete) {
+      log(
+        `cls-score: arm ${m.arm} is INCOMPLETE — missing ${m.missingKeys}/${m.totalKeys} record(s); ` +
+          "excluded from scoring.",
+      )
+    }
+  }
+
+  const decision = evaluateClsDecision(metrics)
+
+  const scoreFile: ClsScoreFile = {
+    scoredAt: new Date().toISOString(),
+    hostname: os.hostname(),
+    sample: { cCount: manifest.cCount, notCCount: manifest.notCCount, total: manifestKeys.length },
+    arms: metrics.map((m) => ({
+      arm: m.arm,
+      totalKeys: m.totalKeys,
+      presentKeys: m.presentKeys,
+      missingKeys: m.missingKeys,
+      complete: m.complete,
+      counts: { tp: m.tp, fp: m.fp, fn: m.fn, tn: m.tn },
+      metrics: { precision: m.precision, recall: m.recall, f1: m.f1 },
+    })),
+    decision,
+  }
+
+  const body = JSON.stringify(scoreFile, null, 2) + "\n"
+  const dest = path.join(root, CLS_SCORE_NAME)
+  fs.mkdirSync(root, { recursive: true })
+  atomicWrite(dest, body)
+
+  log(renderClsScoreReport(scoreFile.sample, metrics, decision))
+  log(`cls-score: wrote ${CLS_SCORE_NAME} -> ${dest}`)
+
+  if (opts.emitDoc !== undefined) {
+    fs.mkdirSync(path.dirname(opts.emitDoc), { recursive: true })
+    atomicWrite(opts.emitDoc, body)
+    log(`cls-score: --emit-doc -> ${opts.emitDoc}`)
+  }
+
+  return scoreFile
+}

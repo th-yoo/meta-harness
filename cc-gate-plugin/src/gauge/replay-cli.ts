@@ -57,6 +57,8 @@ import {
   parseClsRunArgs,
   runClsLabel,
   parseClsLabelArgs,
+  runClsScore,
+  parseClsScoreArgs,
 } from "./cls-ab.ts"
 
 /** `~/.claude/projects`, or `KKAMAK_CLAUDE_PROJECTS_DIR` override. */
@@ -587,9 +589,17 @@ async function main(): Promise<void> {
     return
   }
 
+  if (sub === "cls-score") {
+    const { cwd, emitDoc } = parseClsScoreArgs(args.slice(1))
+    const summary = runClsScore(cwd, { emitDoc }, (m) => console.log(m))
+    if (summary === undefined) process.exitCode = 1
+    return
+  }
+
   console.error(
     `unknown subcommand: ${sub ?? "(none)"} — usage: replay-cli.ts mine|derive|resolve|report|pv-sample|pv-compare|` +
-      "cls-sample|cls-run|cls-label [cwd] [--go <n>] [--reset] [--combine <pv-counts.json>] [--arm <name>]",
+      "cls-sample|cls-run|cls-label|cls-score [cwd] [--go <n>] [--reset] [--combine <pv-counts.json>] " +
+      "[--arm <name>] [--emit-doc <path>]",
   )
   process.exitCode = 1
 }
