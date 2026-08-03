@@ -129,7 +129,23 @@ matters. Refines (does not replace) the one-pool lesson: pool may be
 TRANSPORT-scoped. Opus probed directly; sonnet untested until stage1's
 probe fires. Probe design rule proven useful: probe with the SAME
 single-shot transport as the batch it gates — a retrying/CLI probe would
-report "clear" falsely. SDD TDD mid-states turn the gate red mid-turn — foreground
+report "clear" falsely. TIMELINE + SAME-AUTH PROOF (15:48): raw SDK
+32/32 SUCCESS 10:13 → cls-label 0/32 wall ≤12:37 → probes dead through
+15:38+, WHILE the same OAuth token (same .credentials.json, freshly
+rotated, verified unexpired) ran this CC session's heavy fleets all
+afternoon zero-failure. Ruled out by direct test: missing oauth beta
+header (WITH/WITHOUT both 429 identically), stale token. Conclusion:
+routing by CLIENT SHAPE — CC-shaped traffic rides a healthy interactive
+bucket; bare-SDK messages.create hits a separate exhausted-or-gated
+raw-API allowance (empty "Error" message = gateway-style rejection).
+>5h past last success + idle test negative so far ⇒ may NOT clear on a
+5h window. IF STILL WALLED TONIGHT, user decision queued: (i) ruling to
+re-enable CLI transport for chain spend (§6c retirement premised on
+"SDK works"; CLI-shaped traffic demonstrably flows — this session is
+the proof; 30-33s/rec but running beats blocked), or (ii) Console
+API-key lane for instrument spend (money, structurally immune). Cheap
+user-side diagnostic: /usage panel — a pinned weekly/secondary bar
+names the bucket. SDD TDD mid-states turn the gate red mid-turn — foreground
 until-green waits ride it out. Store artifacts (term-bench2/store/**) are
 DATA with load-bearing bytes: never lint, never edit for lint.
 
