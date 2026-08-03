@@ -79,9 +79,25 @@ never writes MERGE_HEAD before the hook; measured git 2.43.0) — recorded
 in ledger. N=10 falsification window OPEN (attempts ledger in spec §6,
 count 0). Also DONE: office tmux allow rules pasted into
 .claude/settings.local.json (8 Bash(tmux ...) rules, live next session).
-(7) Parked: §3
-over-refusal round · GA5 · per-repo fixtures · office reinject v2 ·
-consistency 10b · queue 7c/7d.
+(8) NEW 08-03 late evening — VERIFICATION-CHANNEL LADDER BUILT + MERGED
+(`9365551`, first armed 7b-gate merge = §6 ledger row 1, checker OK):
+user direction "gauge should reject prompts unverifiable with gate"
+refined to ladder C1 programmatic / C2 LLM / C3 human / C4 no-criterion —
+reject/nudge ONLY C4. Pre-reg spec
+2026-08-03-gauge-verification-channel-ladder-preregistration.md (DRAFT,
+constants freeze at first channel datum; 5 open rulings; falsification:
+C4 rate <5% parks arming). Shipped via DAG-parallel subagent build
+(3 waves, driver commits): channel.ts taxonomy+refinement (blind-
+isolated), cost-fenced `replay-cli.ts channel [cwd] --go <n>` (stamps
+derivation.channel; A2/D = model work, rest deterministic), inert
+soft-only C4 nudge (gate.json channelNudge flag, absent everywhere =
+byte-identical; 8s timeout fail-open). NEXT OWN GOS: (a) `channel --go
+<pending>` on office corpus (~250 A2/D) → C4 base rate → docs/
+gauge-channel/<host>-channel-counts.json; (b) arming decision w/ measured
+rate + cls-ab verdict; (c) follow-up: export generalized SDK helper from
+transport.ts, kill 3 dup OAuth client copies (review recommendation).
+(9) Parked: §3 over-refusal round · GA5 · per-repo fixtures · office
+reinject v2 · consistency 10b · queue 7c/7d.
 
 OPERATIONAL LESSONS (08-03): spend batches and subagent fleets share one
 account rate pool — run sized-go chains when the fleet is idle (429s cost
