@@ -6,9 +6,11 @@ authors, one seed each, evidence-grounded per the tournament plan
 Texts committed INACTIVE at `term-bench2/store/global/candidates/s{1,2,3}/
 system.md` — activation only via the tournament's adoption rule.
 
-**Final char counts (wc -c, post-fix-wave):** s1 2662 · s2 3224 · s3 2988.
-Section headers below carry pre-fix counts where they differ; the wc line
-above is authoritative for the launch check.
+**Final counts (post-fix-wave, reconciled 2026-08-03 per Stage-1 runbook
+§10.2):** bytes (wc -c) s1 2662 · s2 3224 · s3 2988; codepoints (JS
+`.length`) s1 2662 · s2 3206 · s3 2964. Section headers carry codepoints.
+These identify the files; the launch-check N is the runbook §3H table
+(28 + trimmed codepoints).
 
 ## S1 — verification-first (2662 chars)
 
@@ -23,7 +25,7 @@ circular self-validation; v0/v3 self-authored-proxy traps) · test-your-tests
 prose-actuator grip uncertainty (loop-1 ignored 7/8, loop-2 partial
 falsification).
 
-## S2 — interpretation-policy (3048 chars)
+## S2 — interpretation-policy (3206 chars)
 
 Sections → evidence: classify-then-interpret + enumerate/discriminate (v7
 looks_done cluster, loop-1 interpretation-overfit) · env-claims
@@ -38,7 +40,7 @@ narrow scoping, no re-interpretation loops (R3 reject: blanket distrust
 pre-registered note; procedure is necessary-not-sufficient where dev data
 cannot discriminate readings (minimal-lane residual).
 
-## S3 — workflow-scaffold (2725 chars)
+## S3 — workflow-scaffold (2964 chars)
 
 Sections → evidence: script-tallied taxonomy n=30: incomplete 15 /
 looks_done 10 / spec_precision 3 / comprehension 1 / errored 1 —
