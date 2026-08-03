@@ -16,10 +16,12 @@ import {
   parseClsLabelArgs,
   runClsRun,
   runClsLabel,
+  checkClsFenceUnderLock,
   CLS_ARM_MODEL_LITERALS,
   CLS_LABEL_MODEL_LITERAL,
   type ClsArmRow,
   type ClsLabelRow,
+  type ClsSampleRecord,
 } from "../src/gauge/cls-ab.ts"
 import { writeCorpus, type CorpusRecord } from "../src/gauge/corpus-store.ts"
 import type { GaugeFile } from "../src/gauge/files.ts"
@@ -163,6 +165,88 @@ describe("parseClsLabelArgs", () => {
   test("--go extracted; cwd positional; defaults", () => {
     expect(parseClsLabelArgs(["/some/dir", "--go", "5"])).toEqual({ cwd: "/some/dir", go: 5 })
     expect(parseClsLabelArgs([])).toEqual({ cwd: process.cwd(), go: undefined })
+  })
+})
+
+// ── checkClsFenceUnderLock — the ONE shared re-check both runClsRun and ──
+// runClsLabel call under the lock (review fix: previously inlined
+// separately in each, with no direct test for the re-check branch itself —
+// a regression that silently reused the pre-lock `pending` snapshot
+// instead of re-reading fresh under the lock would have passed the full
+// suite). Direct unit tests here mirror corpus-replay.test.ts's
+// `checkFenceUnderLock` precedent exactly: call the pure function directly
+// with a pre-written output file standing in for "what changed by the time
+// the lock was acquired."
+
+function sampleRecordsFixture(n: number): ClsSampleRecord[] {
+  return Array.from({ length: n }, (_, i) => ({ key: `k${i}`, prompt: "p", floorCheck: "" }))
+}
+
+const ARM_ROW_FIXTURE = {
+  key: "k0",
+  class: "C" as const,
+  model: "claude-haiku-4-5",
+  promptVariant: "base" as const,
+  transport: "sdk" as const,
+  ts: "t",
+}
+
+const LABEL_ROW_FIXTURE = { key: "k0", label: "C" as const, class: "C" as const, model: "claude-opus-5", ts: "t" }
+
+describe("checkClsFenceUnderLock — re-check under the lock", () => {
+  test("fresh read matches go -> returns the fresh pending list, no log", () => {
+    const outputPath = path.join(mkRepo(), "arm-haiku-base.ndjson")
+    const records = sampleRecordsFixture(3)
+
+    const logs: string[] = []
+    const result = checkClsFenceUnderLock<ClsArmRow>(records, outputPath, 3, "cls-run", (m) => logs.push(m))
+
+    expect(result?.length).toBe(3)
+    expect(result?.map((r) => r.key).sort()).toEqual(["k0", "k1", "k2"])
+    expect(logs.length).toBe(0)
+  })
+
+  test("fresh read differs from the pre-lock snapshot (a row landed in the output file) -> refuses, zero effect", () => {
+    const outputPath = path.join(mkRepo(), "arm-haiku-base.ndjson")
+    const records = sampleRecordsFixture(3)
+    // Simulate a concurrent writer landing in the window between the
+    // caller's pre-lock read (which saw 0 done, go=3 matched) and this
+    // fresh under-lock re-check: one record is now already classified.
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true })
+    fs.writeFileSync(outputPath, JSON.stringify(ARM_ROW_FIXTURE) + "\n")
+
+    const logs: string[] = []
+    const result = checkClsFenceUnderLock<ClsArmRow>(records, outputPath, 3, "cls-run", (m) => logs.push(m))
+
+    expect(result).toBeUndefined()
+    expect(
+      logs.some(
+        (l) => l.includes("REFUSING: cls-run") && l.includes("changed under lock") && l.includes("now 2"),
+      ),
+    ).toBe(true)
+  })
+
+  test("generic over the row shape — works identically for ClsLabelRow (cls-label)", () => {
+    const outputPath = path.join(mkRepo(), "labels.ndjson")
+    const records = sampleRecordsFixture(2)
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true })
+    fs.writeFileSync(outputPath, JSON.stringify(LABEL_ROW_FIXTURE) + "\n")
+
+    const matchLogs: string[] = []
+    // go=1 matches the fresh state (1 done, 1 pending) -> proceeds.
+    const ok = checkClsFenceUnderLock<ClsLabelRow>(records, outputPath, 1, "cls-label", (m) =>
+      matchLogs.push(m),
+    )
+    expect(ok?.length).toBe(1)
+    expect(matchLogs.length).toBe(0)
+
+    const mismatchLogs: string[] = []
+    // go=2 (the pre-write pending count) is now stale -> refuses.
+    const refused = checkClsFenceUnderLock<ClsLabelRow>(records, outputPath, 2, "cls-label", (m) =>
+      mismatchLogs.push(m),
+    )
+    expect(refused).toBeUndefined()
+    expect(mismatchLogs.some((l) => l.includes("REFUSING: cls-label"))).toBe(true)
   })
 })
 
@@ -314,6 +398,39 @@ describe("runClsRun — idempotent top-up (per arm)", () => {
     expect(summary).toBeUndefined()
     expect(logs.some((l) => l.includes("4 pending"))).toBe(true)
   })
+
+  // MINOR fix (review): a stale --go of the ORIGINAL pending count, taken
+  // after a partial run already reduced the residual, must refuse rather
+  // than silently accepted — pins the exact top-up scenario, not just a
+  // generic mismatch.
+  test("stale --go: after a partial run reduces pending 4->2, --go 4 (the ORIGINAL count) refuses", async () => {
+    const cwd = sampledRepo()
+    let n = 0
+    const srv = stubServer(() => {
+      n++
+      if (n <= 2) {
+        return okResponse(
+          JSON.stringify({ goalSummary: "g", class: "C", criteria: ["c1"], check: null, confidence: 0.9 }),
+        )
+      }
+      return new Response("boom", { status: 500 })
+    })
+    const first = await withSdkStub(srv, () => runClsRun(cwd, "haiku-base", 4, () => {}))
+    expect(first).toEqual({ arm: "haiku-base", pending: 4, classified: 2, failed: 2 })
+    expect(readArmFile(cwd, "haiku-base").length).toBe(2)
+
+    // The operator (or a stale script) re-issues the ORIGINAL --go 4 —
+    // current residual pending is actually 2. Must refuse, zero calls.
+    const srv2 = stubServer(() => okResponse("{}"))
+    const logs: string[] = []
+    const stale = await withSdkStub(srv2, () => runClsRun(cwd, "haiku-base", 4, (m) => logs.push(m)))
+
+    expect(stale).toBeUndefined()
+    expect(logs.some((l) => l.includes("REFUSING") && l.includes("2"))).toBe(true)
+    expect(srv2.captured.length).toBe(0)
+    // no new rows written — still exactly the 2 from the first (partial) run.
+    expect(readArmFile(cwd, "haiku-base").length).toBe(2)
+  })
 })
 
 describe("runClsRun — lock discipline", () => {
@@ -337,6 +454,63 @@ describe("runClsRun — lock discipline", () => {
     const srv = stubServerFor({ goalSummary: "g", class: "C", criteria: ["c1"], check: null, confidence: 0.9 })
     await withSdkStub(srv, () => runClsRun(cwd, "haiku-base", 4, () => {}))
     expect(fs.existsSync(path.join(cwd, CLS_AB_LOCK_REL))).toBe(false)
+  })
+})
+
+describe("runClsRun — integration: a real race lands between the pre-lock read and lock acquisition", () => {
+  test("a concurrent write to arm-haiku-base.ndjson lands exactly when the lock is created -> refuses under the fresh re-check, zero transport calls", async () => {
+    const cwd = sampledRepo()
+    const root = clsAbRoot(cwd)
+    const armPath = path.join(root, clsArmFileName("haiku-base"))
+    const lockPath = path.join(cwd, CLS_AB_LOCK_REL)
+    const firstKey = (JSON.parse(
+      fs.readFileSync(path.join(root, CLS_RECORDS_NAME), "utf-8").split("\n")[0]!,
+    ) as { key: string }).key
+
+    // Monkey-patch fs.writeFileSync (corpus-replay.test.ts precedent) to
+    // inject a concurrent cls-run write into arm-haiku-base.ndjson at the
+    // EXACT moment our own acquireClsAbLock creates the lock file — this
+    // places the injected write precisely in the window between runClsRun's
+    // pre-lock read (which saw 0 done, go=4 matched) and lock acquisition,
+    // which is the ONLY window checkClsFenceUnderLock exists to close.
+    const origWriteFileSync = fs.writeFileSync
+    let injected = false
+    fs.writeFileSync = ((...args: Parameters<typeof fs.writeFileSync>) => {
+      const target = String(args[0])
+      if (!injected && target === lockPath) {
+        injected = true
+        origWriteFileSync(
+          armPath,
+          JSON.stringify({
+            key: firstKey,
+            class: "C",
+            model: CLS_ARM_MODEL_LITERALS.haiku,
+            promptVariant: "base",
+            transport: "sdk",
+            ts: new Date().toISOString(),
+          }) + "\n",
+        )
+      }
+      return origWriteFileSync(...args)
+    }) as typeof fs.writeFileSync
+
+    try {
+      const srv = stubServerFor({ goalSummary: "g", class: "C", criteria: ["c1"], check: null, confidence: 0.9 })
+      const logs: string[] = []
+      const summary = await withSdkStub(srv, () => runClsRun(cwd, "haiku-base", 4, (m) => logs.push(m)))
+
+      expect(injected).toBe(true)
+      expect(summary).toBeUndefined()
+      expect(logs.some((l) => l.includes("REFUSING: cls-run") && l.includes("changed under lock"))).toBe(true)
+      // the fresh re-check ran BEFORE any model call — zero transport calls.
+      expect(srv.captured.length).toBe(0)
+      // the injected row is the only thing in the arm file — cls-run never
+      // wrote anything of its own on this refusal path.
+      expect(readArmFile(cwd, "haiku-base").length).toBe(1)
+      expect(readArmFile(cwd, "haiku-base")[0]!.key).toBe(firstKey)
+    } finally {
+      fs.writeFileSync = origWriteFileSync
+    }
   })
 })
 
@@ -415,6 +589,55 @@ describe("runClsLabel — fail-open + idempotent top-up", () => {
     const rows = readLabelsFile(cwd)
     expect(rows.length).toBe(4)
     expect(new Set(rows.map((r) => r.key)).size).toBe(4)
+  })
+})
+
+describe("runClsLabel — integration: a real race lands between the pre-lock read and lock acquisition", () => {
+  test("a concurrent write to labels.ndjson lands exactly when the lock is created -> refuses under the fresh re-check, zero transport calls", async () => {
+    const cwd = sampledRepo()
+    const root = clsAbRoot(cwd)
+    const labelsPath = path.join(root, CLS_LABELS_NAME)
+    const lockPath = path.join(cwd, CLS_AB_LOCK_REL)
+    const firstKey = (JSON.parse(
+      fs.readFileSync(path.join(root, CLS_RECORDS_NAME), "utf-8").split("\n")[0]!,
+    ) as { key: string }).key
+
+    const origWriteFileSync = fs.writeFileSync
+    let injected = false
+    fs.writeFileSync = ((...args: Parameters<typeof fs.writeFileSync>) => {
+      const target = String(args[0])
+      if (!injected && target === lockPath) {
+        injected = true
+        origWriteFileSync(
+          labelsPath,
+          JSON.stringify({
+            key: firstKey,
+            label: "C",
+            class: "C",
+            model: CLS_LABEL_MODEL_LITERAL,
+            ts: new Date().toISOString(),
+          }) + "\n",
+        )
+      }
+      return origWriteFileSync(...args)
+    }) as typeof fs.writeFileSync
+
+    try {
+      const srv = stubServerFor({ label: "C", class: "C" })
+      const logs: string[] = []
+      const summary = await withSdkStub(srv, () => runClsLabel(cwd, 4, (m) => logs.push(m)))
+
+      expect(injected).toBe(true)
+      expect(summary).toBeUndefined()
+      expect(logs.some((l) => l.includes("REFUSING: cls-label") && l.includes("changed under lock"))).toBe(
+        true,
+      )
+      expect(srv.captured.length).toBe(0)
+      expect(readLabelsFile(cwd).length).toBe(1)
+      expect(readLabelsFile(cwd)[0]!.key).toBe(firstKey)
+    } finally {
+      fs.writeFileSync = origWriteFileSync
+    }
   })
 })
 

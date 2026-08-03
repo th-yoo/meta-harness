@@ -357,11 +357,13 @@ export function runClsSample(
 // row — never a fabricated class/label, never a crashed batch.
 //
 // Cost fence + lock re-check mechanics mirror corpus-replay.ts's
-// `runDerive`/`checkFenceUnderLock` exactly: `go` is checked once
-// fast (pre-lock, cheap fail without touching the lock), then the pending
-// set is RE-READ and RE-CHECKED under the lock immediately before any model
-// call — closing the window where a concurrent cls-run/cls-label/cls-sample
-// lands between the first read and lock acquisition.
+// `runDerive`/`checkFenceUnderLock` precedent: `go` is checked once fast
+// (pre-lock, cheap fail without touching the lock), then the pending set is
+// RE-READ and RE-CHECKED under the lock immediately before any model call,
+// via the ONE shared `checkClsFenceUnderLock` helper below (used by both
+// `runClsRun` and `runClsLabel` — not two independently-driftable inlined
+// copies) — closing the window where a concurrent cls-run/cls-label/
+// cls-sample lands between the first read and lock acquisition.
 
 export const CLS_ARM_MODELS = ["haiku", "sonnet"] as const
 export type ClsArmModel = (typeof CLS_ARM_MODELS)[number]
@@ -460,6 +462,39 @@ function readSampledRecords(cwd: string): ClsSampleRecord[] {
   return readNdjson<ClsSampleRecord>(path.join(clsAbRoot(cwd), CLS_RECORDS_NAME))
 }
 
+/** Re-read `outputPath` (the arm's `arm-<name>.ndjson` or `labels.ndjson`)
+ * and re-check the `go` fence against a FRESH pending count. Meant to be
+ * called AFTER the lock is held — corpus-replay.ts's
+ * `checkFenceUnderLock` precedent, extracted here (review finding, fix
+ * wave) so BOTH `runClsRun` and `runClsLabel` share ONE re-check
+ * implementation instead of two inlined, independently-driftable copies: a
+ * regression that silently reused the pre-lock `pending` array instead of
+ * re-reading fresh under the lock would previously have passed the suite
+ * with zero coverage. Closes the window where a concurrent
+ * cls-run/cls-label/cls-sample writer lands between the caller's first
+ * (pre-lock) read and lock acquisition — the fresh read happens INSIDE this
+ * function, never passed in, so there is no way to call it with a stale
+ * `done` set by mistake. Generic over the row shape (`ClsArmRow` for
+ * cls-run, `ClsLabelRow` for cls-label) since both only need `key`. */
+export function checkClsFenceUnderLock<T extends { key: string }>(
+  records: ClsSampleRecord[],
+  outputPath: string,
+  go: number,
+  subcommand: string,
+  log: (m: string) => void,
+): ClsSampleRecord[] | undefined {
+  const done = new Set(readNdjson<T>(outputPath).map((r) => r.key))
+  const pending = records.filter((r) => !done.has(r.key))
+  if (pending.length !== go) {
+    log(
+      `REFUSING: ${subcommand} — pending count changed under lock (now ${pending.length}, expected ` +
+        `${go}); a concurrent run landed. Re-run with --go ${pending.length}.`,
+    )
+    return undefined
+  }
+  return pending
+}
+
 export interface ClsRunSummary {
   arm: string
   pending: number
@@ -525,15 +560,8 @@ export async function runClsRun(
   }
 
   try {
-    const freshDone = new Set(readNdjson<ClsArmRow>(armPath).map((r) => r.key))
-    const pending = records.filter((r) => !freshDone.has(r.key))
-    if (pending.length !== go) {
-      log(
-        `REFUSING: cls-run — pending count changed under lock (now ${pending.length}, expected ` +
-          `${go}); a concurrent run landed. Re-run with --go ${pending.length}.`,
-      )
-      return undefined
-    }
+    const pending = checkClsFenceUnderLock<ClsArmRow>(records, armPath, go, "cls-run", log)
+    if (!pending) return undefined
 
     const newRows: ClsArmRow[] = []
     let failed = 0
@@ -623,15 +651,8 @@ export async function runClsLabel(
   }
 
   try {
-    const freshDone = new Set(readNdjson<ClsLabelRow>(labelsPath).map((r) => r.key))
-    const pending = records.filter((r) => !freshDone.has(r.key))
-    if (pending.length !== go) {
-      log(
-        `REFUSING: cls-label — pending count changed under lock (now ${pending.length}, expected ` +
-          `${go}); a concurrent run landed. Re-run with --go ${pending.length}.`,
-      )
-      return undefined
-    }
+    const pending = checkClsFenceUnderLock<ClsLabelRow>(records, labelsPath, go, "cls-label", log)
+    if (!pending) return undefined
 
     const newRows: ClsLabelRow[] = []
     let failed = 0
