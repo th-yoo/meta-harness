@@ -6,6 +6,8 @@ import {
   runPvSample,
   parsePvSampleArgs,
   isCliDerived,
+  derivedOn,
+  stratify,
   shadowRoot,
   SHADOW_DIR_REL,
   PV_MANIFEST_NAME,
@@ -1120,5 +1122,43 @@ describe("parsePvCompareArgs", () => {
     })
     expect(parsePvCompareArgs([])).toEqual({ cwd: process.cwd(), combine: undefined })
     expect(parsePvCompareArgs(["--combine", "/x/c.json"])).toEqual({ cwd: process.cwd(), combine: "/x/c.json" })
+  })
+})
+
+// ── §6d: pv pairing parameterization (Task 6) ───────────────────────────
+//
+// `pairRec` is a minimal record literal distinct from the file-level `rec`
+// above (which needs a full derivation shape via `gauge()`) — these tests
+// only care about transport/class/prompt, so a smaller shape (cast `as
+// never`, this file's established pattern for test-only shortcuts) keeps
+// them terse. Named `pairRec` rather than `rec` to avoid shadowing the
+// existing top-level `rec` helper used throughout this file.
+const pairRec = (transport: string | undefined, cls: string, prompt: string) =>
+  ({ prompt, stage: "derived", derivation: { class: cls, ...(transport ? { transport } : {}) } }) as never
+
+describe("derivedOn (§6d pairing predicate)", () => {
+  test("reads derivation.transport, not a top-level field", () => {
+    expect(derivedOn("sdk")(pairRec("sdk", "C", "p1"))).toBe(true)
+    expect(derivedOn("sdk")(pairRec("agent-sdk", "C", "p2"))).toBe(false)
+    expect(derivedOn("sdk")(pairRec(undefined, "C", "p3"))).toBe(false)
+    expect(derivedOn("agent-sdk")(pairRec("agent-sdk", "C", "p4"))).toBe(true)
+  })
+})
+
+describe("stratify with an injected baseline predicate", () => {
+  test("defaults to the §6c CLI baseline (unchanged behaviour)", () => {
+    const s = stratify([pairRec("cli", "C", "a"), pairRec("sdk", "C", "b")])
+    expect(s.c.length).toBe(1)
+  })
+  test("can stratify the SDK arm instead", () => {
+    const s = stratify([pairRec("cli", "C", "a"), pairRec("sdk", "C", "b")], derivedOn("sdk"))
+    expect(s.c.length).toBe(1)
+    expect(s.c[0]!.prompt).toBe("b")
+  })
+})
+
+describe("isCliDerived — three-transport world (§6d Step 3a)", () => {
+  test("an agent-sdk record is NOT CLI-derived", () => {
+    expect(isCliDerived(rec({ derivation: gauge({ transport: "agent-sdk" }) }))).toBe(false)
   })
 })
