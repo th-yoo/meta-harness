@@ -34,7 +34,7 @@ import {
   hasLiveCorpusLock,
   type CorpusRecord,
 } from "./corpus-store.ts"
-import type { GaugeTransport } from "../types.ts"
+import { GAUGE_TRANSPORTS, type GaugeTransport } from "../types.ts"
 
 export const SHADOW_DIR_REL = ".km/gauge-corpus-shadow"
 export const PV_MANIFEST_NAME = "pv-manifest.json"
@@ -323,6 +323,27 @@ const PV_DEFAULT_PAIRING: PvPairing = {
   shadowTransport: "sdk",
 }
 
+/** Task 7: `--pair <baseline>:<shadow>` CLI flag, both sides must be known
+ * transports. Returns undefined for BOTH absent and malformed/unknown input
+ * — the CALLER (replay-cli.ts) distinguishes those two cases: absent means
+ * "apply the §6c default", malformed means REFUSE, so a typo can never be
+ * silently read as the default and run a §6c pairing labelled as something
+ * else. */
+export function parsePairFlag(args: string[]): PvPairing | undefined {
+  const i = args.indexOf("--pair")
+  if (i < 0) return undefined
+  const [b, s, ...rest] = (args[i + 1] ?? "").split(":")
+  if (rest.length > 0 || !b || !s) return undefined
+  if (!GAUGE_TRANSPORTS.includes(b as never) || !GAUGE_TRANSPORTS.includes(s as never)) return undefined
+  // "cli" MUST map to isCliDerived, not derivedOn("cli"): the 586 pre-boundary
+  // records carry no transport field and isCliDerived counts absent-as-cli
+  // (see isCliDerived above). A strict-equality predicate would give an
+  // explicit `--pair cli:sdk` a silently smaller stratum than the identical
+  // run with the flag omitted.
+  const baseline = b === "cli" ? isCliDerived : derivedOn(b as GaugeTransport)
+  return { baseline, baselineLabel: b as GaugeTransport, shadowTransport: s as GaugeTransport }
+}
+
 /** R3 — the join is MANIFEST-driven: exactly the sampled keys are compared;
  * records outside the manifest in EITHER store are ignored entirely (the
  * real store carries hundreds of unsampled records; a stray shadow record
@@ -527,6 +548,12 @@ export interface PvCountsFileParsed {
   comparedAt: string
   counts: PvCounts
   keys: PvSetKeys
+  /** Task 7: which two transports the OTHER host's run paired. Always
+   * populated — defaulted to `{baseline:"cli", shadow:"sdk"}` when the source
+   * file has no `arms` (the committed §6c artifact predates this field, and
+   * the pre-existing --combine test fixtures build PvCountsFile-shaped
+   * objects without it too; absence must never refuse). */
+  arms: { baseline: GaugeTransport; shadow: GaugeTransport }
 }
 
 /** Set-cardinality identities every honest pv-counts.json satisfies —
@@ -578,7 +605,23 @@ export function parsePvCountsFile(raw: string): PvCountsFileParsed | undefined {
     if (!Array.isArray(v) || v.some((k) => typeof k !== "string")) return undefined
     keys[f] = v as string[]
   }
-  return { hostname: o.hostname, comparedAt: o.comparedAt, counts, keys }
+  // Task 7: `arms` — OPTIONAL, defaults to the §6c pair when absent (never
+  // refuse on absence), but if PRESENT it must actually name two known
+  // transports (a hand-edited/corrupt `arms` must not silently combine under
+  // the wrong label).
+  let arms: { baseline: GaugeTransport; shadow: GaugeTransport }
+  if (o.arms === undefined) {
+    arms = { baseline: PV_DEFAULT_PAIRING.baselineLabel, shadow: PV_DEFAULT_PAIRING.shadowTransport }
+  } else {
+    if (typeof o.arms !== "object" || o.arms === null) return undefined
+    const rawArms = o.arms as Record<string, unknown>
+    const b = rawArms.baseline
+    const s = rawArms.shadow
+    if (typeof b !== "string" || typeof s !== "string") return undefined
+    if (!GAUGE_TRANSPORTS.includes(b as never) || !GAUGE_TRANSPORTS.includes(s as never)) return undefined
+    arms = { baseline: b as GaugeTransport, shadow: s as GaugeTransport }
+  }
+  return { hostname: o.hostname, comparedAt: o.comparedAt, counts, keys, arms }
 }
 
 function renderPvCountsLine(c: PvCounts): string {
@@ -758,6 +801,21 @@ export function runPvCompare(
       log(
         `REFUSING: --combine — ${overlap.length} record key(s) appear in BOTH hosts' samples ` +
           `(e.g. ${overlap[0]}); samples must be disjoint for summed counts to be valid.`,
+      )
+      return undefined
+    }
+    // Task 7: fail closed when the two hosts' EFFECTIVE arms disagree
+    // (cls-combine provisional hard-gate precedent, cls-ab.ts) — otherwise a
+    // `sdk:agent-sdk` run on one host and a `cli:sdk` run on the other would
+    // sum into a single meaningless combined bar. `other.arms` is always
+    // populated (parsePvCountsFile defaults it to cli:sdk when the file
+    // predates this field), so this check applies uniformly whether or not
+    // either side ever wrote an explicit `arms`.
+    if (other.arms.baseline !== pairing.baselineLabel || other.arms.shadow !== pairing.shadowTransport) {
+      log(
+        `REFUSING: --combine — this host's arms (${pairing.baselineLabel}:${pairing.shadowTransport}) ` +
+          `disagree with ${opts.combine}'s arms (${other.arms.baseline}:${other.arms.shadow}); ` +
+          "summing counts from two different transport pairings would produce a meaningless bar.",
       )
       return undefined
     }

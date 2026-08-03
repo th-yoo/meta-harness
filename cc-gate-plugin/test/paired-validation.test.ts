@@ -18,6 +18,7 @@ import {
   missedCCap,
   combinePvCounts,
   parsePvCountsFile,
+  parsePairFlag,
   PV_COUNTS_NAME,
   PV_COMBINED_NAME,
   PV_AGREEMENT_MIN,
@@ -1265,5 +1266,118 @@ describe("stratify with an injected baseline predicate", () => {
 describe("isCliDerived — three-transport world (§6d Step 3a)", () => {
   test("an agent-sdk record is NOT CLI-derived", () => {
     expect(isCliDerived(rec({ derivation: gauge({ transport: "agent-sdk" }) }))).toBe(false)
+  })
+})
+
+// ── Task 7: `--pair <baseline>:<shadow>` CLI wiring ─────────────────────
+
+describe("parsePairFlag", () => {
+  test("parses a valid pair", () => {
+    const p = parsePairFlag(["--pair", "sdk:agent-sdk"])!
+    expect(p.shadowTransport).toBe("agent-sdk")
+    expect(p.baseline({ derivation: { transport: "sdk", class: "C" } } as never)).toBe(true)
+  })
+  test("absent flag yields undefined (caller applies the §6c default)", () => {
+    expect(parsePairFlag([])).toBeUndefined()
+  })
+  test("unknown transports and malformed input yield undefined, never a default", () => {
+    expect(parsePairFlag(["--pair", "sdk:nonsense"])).toBeUndefined()
+    expect(parsePairFlag(["--pair", "sdk"])).toBeUndefined()
+    expect(parsePairFlag(["--pair", ""])).toBeUndefined()
+  })
+  test("'cli' baseline maps to isCliDerived, not a strict-equality predicate (absent-transport records still count)", () => {
+    const p = parsePairFlag(["--pair", "cli:sdk"])!
+    expect(p.baselineLabel).toBe("cli")
+    // pre-boundary record: no transport field at all.
+    expect(p.baseline({ derivation: { class: "C" } } as never)).toBe(true)
+    expect(p.baseline({ derivation: { transport: "sdk", class: "C" } } as never)).toBe(false)
+  })
+})
+
+describe("parsePvCountsFile — arms (§7)", () => {
+  test("absent arms defaults to {baseline:'cli', shadow:'sdk'} — never refused", () => {
+    const file = otherHostFile(counts({ cCli: 1, cSdk: 1, intersection: 1, union: 1, decided: 2 }))
+    const parsed = parsePvCountsFile(JSON.stringify(file))
+    expect(parsed?.arms).toEqual({ baseline: "cli", shadow: "sdk" })
+  })
+  test("parses arms when present", () => {
+    const file = {
+      ...otherHostFile(counts({ cCli: 1, cSdk: 1, intersection: 1, union: 1, decided: 2 })),
+      arms: { baseline: "sdk", shadow: "agent-sdk" },
+    }
+    const parsed = parsePvCountsFile(JSON.stringify(file))
+    expect(parsed?.arms).toEqual({ baseline: "sdk", shadow: "agent-sdk" })
+  })
+  test("arms with an unknown transport value refuses", () => {
+    const file = {
+      ...otherHostFile(counts({ cCli: 1, cSdk: 1, intersection: 1, union: 1, decided: 2 })),
+      arms: { baseline: "sdk", shadow: "bogus" },
+    }
+    expect(parsePvCountsFile(JSON.stringify(file))).toBeUndefined()
+  })
+  test("arms present but not an object refuses", () => {
+    const file = {
+      ...otherHostFile(counts({ cCli: 1, cSdk: 1, intersection: 1, union: 1, decided: 2 })),
+      arms: "cli:sdk",
+    }
+    expect(parsePvCountsFile(JSON.stringify(file))).toBeUndefined()
+  })
+})
+
+describe("runPvCompare --combine — effective-arms mismatch refuses (fail-closed, cls-combine hard-gate precedent)", () => {
+  test("local default (cli:sdk) vs other host's explicit sdk:agent-sdk arms refuses, zero writes", () => {
+    const cwd = mkRepo()
+    buildPvFixture(cwd, [{ sha: "arm1", stratum: "c", cli: "C", sdk: "C" }])
+    const other = {
+      ...otherHostFile(counts({ cCli: 1, cSdk: 1, intersection: 1, union: 1, decided: 2 })),
+      hostname: "other-host",
+      arms: { baseline: "sdk", shadow: "agent-sdk" },
+    }
+    const otherPath = path.join(cwd, "other.json")
+    fs.writeFileSync(otherPath, JSON.stringify(other))
+
+    const logs: string[] = []
+    expect(runPvCompare(cwd, { combine: otherPath }, (m) => logs.push(m))).toBeUndefined()
+    expect(logs.some((l) => l.includes("REFUSING") && l.includes("arms"))).toBe(true)
+    expect(fs.existsSync(path.join(shadowRoot(cwd), PV_COMBINED_NAME))).toBe(false)
+  })
+
+  test("matching effective arms (both sdk:agent-sdk) combine succeeds", () => {
+    const cwd = mkRepo()
+    buildPvFixture(cwd, [
+      { sha: "arm2", stratum: "c", cli: "C", cliTransport: "sdk", sdk: "C", shadowTransport: "agent-sdk" },
+    ])
+    const other = {
+      ...otherHostFile(counts({ cCli: 3, cSdk: 3, intersection: 3, union: 3, decided: 6 })),
+      hostname: "other-host",
+      arms: { baseline: "sdk", shadow: "agent-sdk" },
+    }
+    const otherPath = path.join(cwd, "other.json")
+    fs.writeFileSync(otherPath, JSON.stringify(other))
+
+    const logs: string[] = []
+    const summary = runPvCompare(
+      cwd,
+      { combine: otherPath, pairing: sdkAgentSdkPairing },
+      (m) => logs.push(m),
+    )
+    expect(summary?.combined?.counts.cCli).toBe(4)
+    expect(fs.existsSync(path.join(shadowRoot(cwd), PV_COMBINED_NAME))).toBe(true)
+  })
+
+  test("both sides at the (unstated) §6c default still combine — pre-existing behaviour unaffected", () => {
+    // This is the pre-existing "sums the two hosts' counts" test's shape,
+    // repeated here to pin that the new arms check does not regress the
+    // default-vs-default (no `arms` field on either side) path.
+    const cwd = mkRepo()
+    buildPvFixture(cwd, [{ sha: "arm3", stratum: "c", cli: "C", sdk: "C" }])
+    const other = otherHostFile(counts({ cCli: 2, cSdk: 2, intersection: 2, union: 2, decided: 4 }))
+    other.hostname = "other-host"
+    const otherPath = path.join(cwd, "other.json")
+    fs.writeFileSync(otherPath, JSON.stringify(other))
+
+    const logs: string[] = []
+    const summary = runPvCompare(cwd, { combine: otherPath }, (m) => logs.push(m))
+    expect(summary?.combined?.counts.cCli).toBe(3)
   })
 })
