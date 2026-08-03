@@ -62,14 +62,30 @@ MACBOOK LANE (unchanged gos, all still granted):
    on the probe above. Runbook: docs/superpowers/plans/2026-08-03-cls-ab-runbook.md.
  · Cross-host combine ONLY after both hosts' cls-score docs are committed.
 
+CHAIN TOOLING NOW TRAVELS (16:55 — the per-host launcher gap is CLOSED):
+the one-off `/mnt/d/tmp/*-autolaunch.sh` family is replaced by repo
+scripts you can use on MacBook verbatim —
+ · `scripts/probe-models.sh` — `probe_models <models...>` / `all_ok ...`
+   (probe-fidelity rule + the per-model-quota finding documented inside)
+ · `scripts/gated-run.sh --name X --models a,b --after m1 --marker m2
+   -- <cmd>` — wait on prerequisite markers, poll until every REQUIRED
+   TIER is available, run, touch a completion marker. All four gate paths
+   live-tested 16:52 (runs-and-marks / holds-on-429-with-no-marker /
+   passes-on-live-tier / holds-on-missing-dep).
+ · `scripts/stage1-screen.sh` — runbook §4 launch + §3H N-watchdog
+   (host knobs KKAMAK_HOME / TB_ROOT / SCREEN_SESSION via env).
+Markers are runtime state and stay host-local (office:
+/mnt/d/tmp/kkamak-markers/).
+
 OFFICE STATE LEFT BEHIND (host-local, does NOT transfer — informational):
-4 tmux launchers armed and polling, all probe-fidelity-fixed 16:45:
-`clsab2` (holds until ALL THREE tiers clear — the granted go was the
+4 tmux launchers re-armed 16:53 ON THE REPO SCRIPTS (single implementation,
+no host drift): `clsab2` (needs ALL THREE tiers — the granted go was the
 complete 4-arm chain, so it will not fire a provisional 2-arm run),
-`gaugeverify` (opus, channel-smoke --go 14), `retry112` (HAIKU probe now;
-still gated behind gauge-verify.done for the SUBSTANTIVE ordering reason
-that a patched-prompt classifier verdict changes what we re-derive),
-`stage1wait` (sonnet, 28-trial screen + §3H N-watchdog 394/2689/3233/2991).
+`gaugeverify` (opus, channel-smoke --go 14), `retry112` (HAIKU probe —
+the earlier opus probe was gating haiku work behind a premium quota it
+never calls; still ordered behind gauge-verify.done for the SUBSTANTIVE
+reason that a patched-prompt classifier verdict changes what we
+re-derive), `stage1wait` (sonnet, then scripts/stage1-screen.sh).
 Office `.kkamak` store holds seed aliases v13=s1 v14=s2 v15=s3 (delete
 after Stage-1 tally, or nextVersion() mints v16).
 
