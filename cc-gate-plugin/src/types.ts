@@ -159,8 +159,13 @@ export interface GaugeSensorField {
    * transport reporting) is read off the sensor stream, so the field must
    * reach the line, not just the gauge file store. Absent = pre-boundary
    * CLI derivation; never fabricated. */
-  transport?: "cli" | "sdk"
+  transport?: GaugeTransport
 }
+
+/** §6d: a third transport joins the §6c pair. Order is incumbent-first so
+ * existing readings that sort by this array do not reshuffle. */
+export const GAUGE_TRANSPORTS = ["cli", "sdk", "agent-sdk"] as const
+export type GaugeTransport = (typeof GAUGE_TRANSPORTS)[number]
 
 /** One ndjson sensor line — field names are SCHEMA PARITY with gate-plugin + host/app tags. */
 export interface SensorLine {
