@@ -20,7 +20,8 @@ import {
   type LiveClassCTally,
   type CorpusClassCTally,
 } from "../src/gauge/replay-cli.ts"
-import { CORPUS_FILE_REL, writeCorpus, type CorpusRecord } from "../src/gauge/corpus-store.ts"
+import { CORPUS_FILE_REL, writeCorpus, recordKey, type CorpusRecord } from "../src/gauge/corpus-store.ts"
+import { shadowRoot, PV_MANIFEST_NAME, PV_COUNTS_NAME, type PvManifest } from "../src/gauge/paired-validation.ts"
 import { DEFAULT_SENSOR_REL_PATH } from "../src/sensor-append.ts"
 import type { GaugeSensorField, SensorLine } from "../src/types.ts"
 
@@ -529,5 +530,127 @@ describe("report CLI — real subprocess, zero writes", () => {
     expect(afterSensor).toBe(beforeSensor)
     expect(afterCorpus).toBe(beforeCorpus)
     expect(afterEntries).toEqual(beforeEntries) // no .lock file left behind either
+  }, 20_000)
+})
+
+// ── Task 7 fix round 1: subprocess coverage for the `--pair` CLI wiring ──
+//
+// The library-level tests in paired-validation.test.ts exercise
+// parsePairFlag/parsePvCountsFile/runPvCompare directly; nothing proved the
+// CLI BOUNDARY in replay-cli.ts (resolvePairFlag/stripPairFlag/the
+// pv-sample/pv-compare branches in main()) actually wires those functions
+// together correctly through a real `bun replay-cli.ts ...` invocation —
+// same subprocess-spawn precedent as the "report CLI" describe block above.
+describe("pv-compare CLI — --pair wiring (Task 7 fix round 1)", () => {
+  function mkdir(): string {
+    return fs.mkdtempSync(path.join(os.tmpdir(), "km-corpus-pv-pair-cli-"))
+  }
+
+  const cliPath = path.join(import.meta.dir, "../src/gauge/replay-cli.ts")
+
+  test("pv-compare --pair sdk:bogus refuses at the CLI boundary: non-zero exit, REFUSING on output, zero store reads/writes", async () => {
+    const cwd = mkdir() // deliberately empty — no corpus store, no shadow store, no manifest anywhere under it
+
+    const proc = Bun.spawn(["bun", cliPath, "pv-compare", cwd, "--pair", "sdk:bogus"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ])
+    const code = await proc.exited
+
+    expect(code).not.toBe(0)
+    expect(stdout + stderr).toContain("REFUSING")
+    expect(stdout + stderr).toContain("sdk:bogus")
+
+    // No store read: refusal happens before parsePvCompareArgs/runPvCompare
+    // are ever called, so pv-compare's own "no readable pv-manifest.json"
+    // message must NOT appear, and nothing gets created under cwd at all
+    // (no .km, no shadow root, no pv-counts.json).
+    expect(stdout + stderr).not.toContain("pv-manifest.json")
+    expect(fs.existsSync(path.join(cwd, ".km"))).toBe(false)
+  }, 20_000)
+
+  test("pv-compare --pair sdk:agent-sdk (flag BEFORE the positional cwd) resolves the real cwd via stripPairFlag, not the literal \"--pair\" token, and writes matching arms into pv-counts.json", async () => {
+    const cwd = mkdir()
+
+    // Real store: one sdk-derived class-C record. Shadow store: the SAME
+    // key, agent-sdk-derived, also class C — a healthy sdk:agent-sdk pair.
+    const real: CorpusRecord[] = [
+      corpusRec({
+        promptSha256: "pair-cli-1",
+        derivation: {
+          v: 2,
+          sessionID: "x",
+          n: 1,
+          ts: 1,
+          model: "h",
+          derivationMs: 1,
+          goalSummary: "",
+          criteria: [],
+          check: "c",
+          confidence: 0.9,
+          class: "C",
+          transport: "sdk",
+        },
+      }),
+    ]
+    const shadow: CorpusRecord[] = [
+      corpusRec({
+        promptSha256: "pair-cli-1",
+        derivation: {
+          v: 2,
+          sessionID: "x",
+          n: 1,
+          ts: 1,
+          model: "h",
+          derivationMs: 1,
+          goalSummary: "",
+          criteria: [],
+          check: "c",
+          confidence: 0.9,
+          class: "C",
+          transport: "agent-sdk",
+        },
+      }),
+    ]
+    writeCorpus(cwd, real, () => {})
+    const root = shadowRoot(cwd)
+    writeCorpus(root, shadow, () => {})
+    const manifest: PvManifest = {
+      sampledAt: new Date().toISOString(),
+      hostname: os.hostname(),
+      cCount: 1,
+      notCCount: 0,
+      keys: { c: [recordKey(real[0]!)], notC: [] },
+    }
+    fs.mkdirSync(root, { recursive: true })
+    fs.writeFileSync(path.join(root, PV_MANIFEST_NAME), JSON.stringify(manifest, null, 2) + "\n")
+
+    // `--pair` and its value placed BEFORE the positional cwd — the ordering
+    // most likely to break if stripPairFlag mis-slices the args array (e.g.
+    // if cwd's positional parser saw "--pair" or "sdk:agent-sdk" as the cwd
+    // instead of the real path, pv-compare would look for a manifest under
+    // the WRONG root and refuse with "no readable pv-manifest.json").
+    const proc = Bun.spawn(["bun", cliPath, "pv-compare", "--pair", "sdk:agent-sdk", cwd], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ])
+    const code = await proc.exited
+
+    expect(code).toBe(0)
+    expect(stdout).not.toContain("REFUSING")
+    expect(stderr).toBe("")
+    expect(stdout).toContain("sdk-vs-agent-sdk transport comparison")
+
+    const countsRaw = fs.readFileSync(path.join(root, PV_COUNTS_NAME), "utf-8")
+    const counts = JSON.parse(countsRaw) as { arms?: { baseline: string; shadow: string } }
+    expect(counts.arms).toEqual({ baseline: "sdk", shadow: "agent-sdk" })
   }, 20_000)
 })
