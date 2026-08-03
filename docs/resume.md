@@ -172,7 +172,12 @@ tooling + runbook (2026-08-03-cls-ab-runbook.md). MEASURED: office pv
 verdict SPLIT (agreement 0.625 < 0.80, missed-C 6 > cap 2; SDK misses C,
 never over-extracts) — counts committed docs/gauge-pv/yoo-dev-pv-counts.json.
 
-IN FLIGHT (office box, serialized on one rate pool): (1) tmux `clsab2` —
+429 SETTLED — SEE OPERATIONAL LESSONS BELOW. The four tmux launchers
+(`clsab2` / `gaugeverify` / `retry112` / `stage1wait`, repo scripts
+scripts/gated-run.sh + probe-models.sh, markers /mnt/d/tmp/kkamak-markers/)
+remain armed and correctly gated; premium (sonnet/opus) was still walled at
+session end, haiku open. Their per-link tally duties are unchanged.
+ORIGINAL CHAIN NOTES: (1) tmux `clsab2` —
 probes 429 every 5min then runs GRANTED chain: cls-label --go 32 (opus) →
 4× cls-run --go 32 → cls-score --emit-doc
 docs/gauge-cls-ab/yoo-dev-cls-score.json; log /mnt/d/tmp/clsab-run2.log.
@@ -211,6 +216,25 @@ allowlist; boundary ts 1785727963349 in gauntlet ledger. Merged-result
 green: 783+26+230 tests + doc-check + tsc. Other hosts arm on pull.
 7b process-gate DRAFT spec in tree (docs/superpowers/specs/
 2026-08-03-process-gate-7b-draft.md), 7 user rulings still open.
+
+AGENT-SDK TRANSPORT (§6d) — BUILT, UNMERGED, UNPUSHED. Branch
+`agent-sdk-transport` @ `ab9e513`, 833 tests + tsc green, tree clean,
+NOTHING PUSHED (whole evening is local to this box; git is the only
+cross-host transfer). Tasks 1-5 of
+docs/superpowers/plans/2026-08-03-agent-sdk-transport.md done w/ per-task
+reviews; Tasks 6-9 untouched; Task 8 = the real-spend paired validation,
+needs its own sized go. §6d amended THREE times pre-data (context
+isolation / enforcement asymmetry declared / selection is PER-CALLER) —
+the spec file is the source of truth, the plan's Task-1 block is
+historical. Live path PINNED to "sdk" in code (`ab9e513`) because it runs
+unwalled haiku; agent-sdk is opt-in per BATCH caller only. Measured cost
+vs API SDK: +335 input tokens/record (1.51x) and +1.46s spawn (~25%
+end-to-end). Daemon via `/clear` PROVEN viable (838ms first record then
+~20ms; residue = ~423B constant `/clear` echo per turn) but NOT BUILT —
+batch-only in-process singleton was the agreed shape.
+NOT STARTED: batch singleton · Tasks 6-9 · 2 deferred minors (stale
+comments in agent-transport.ts, see SDD ledger
+.superpowers/sdd/2026-08-03-agent-sdk-transport/progress.md).
 
 QUEUE (GO/ruling before spend): (1) DONE — 7a7b merged (above). (2)
 MacBook lane: pv-sample + counts commit; own classifier lane (sample →
