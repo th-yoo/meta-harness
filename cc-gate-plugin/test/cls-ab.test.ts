@@ -11,6 +11,10 @@ import {
   CLS_AB_DIR_REL,
   CLS_MANIFEST_NAME,
   CLS_RECORDS_NAME,
+  CLS_AB_LOCK_REL,
+  acquireClsAbLock,
+  releaseClsAbLock,
+  hasLiveClsAbLock,
   type ClsManifest,
   type ClsSampleRecord,
 } from "../src/gauge/cls-ab.ts"
@@ -255,6 +259,68 @@ describe("runClsSample — manifest <-> records key match; no prompt text in man
     // records.ndjson DOES carry the prompt text (host-local, never committed).
     const recordsRaw = fs.readFileSync(path.join(clsAbRoot(cwd), CLS_RECORDS_NAME), "utf-8")
     expect(recordsRaw.includes("fix the thing")).toBe(true)
+  })
+})
+
+describe("runClsSample — concurrency: cls-sample-vs-itself cannot interleave (fix-wave)", () => {
+  test("a live lock (simulating a concurrent invocation in flight) causes clean refusal — no interleave, nothing mutated", () => {
+    const cwd = mkRepo()
+    writeCorpus(cwd, [...cRecs(2), ...notCRecs(2)], () => {})
+    const realFile = path.join(cwd, CORPUS_FILE_REL)
+    const realBefore = fs.readFileSync(realFile)
+
+    // Simulate a concurrent competitor (another cls-sample invocation, or —
+    // per the module doc — a Task 2 arm/label writer) holding the shared
+    // lock mid-operation.
+    expect(acquireClsAbLock(cwd)).toBe(true)
+    try {
+      const logs: string[] = []
+      const summary = runClsSample(cwd, {}, (m) => logs.push(m))
+
+      expect(summary).toBeUndefined()
+      expect(logs.some((l) => l.includes("REFUSING") && l.toLowerCase().includes("lock"))).toBe(true)
+      // the second invocation never built (or touched) the experiment dir —
+      // no interleaved/partial records.ndjson or manifest.json.
+      expect(fs.existsSync(clsAbRoot(cwd))).toBe(false)
+      expect(fs.readFileSync(realFile).equals(realBefore)).toBe(true)
+    } finally {
+      releaseClsAbLock(cwd)
+    }
+  })
+
+  test("the lock is released after a successful run (no leftover lockfile)", () => {
+    const cwd = mkRepo()
+    writeCorpus(cwd, [...cRecs(2), ...notCRecs(2)], () => {})
+
+    expect(runClsSample(cwd, {}, () => {})).toBeDefined()
+
+    expect(hasLiveClsAbLock(cwd)).toBe(false)
+    expect(fs.existsSync(path.join(cwd, CLS_AB_LOCK_REL))).toBe(false)
+  })
+
+  test("the lock is released after a refuse-if-exists refusal too", () => {
+    const cwd = mkRepo()
+    writeCorpus(cwd, [...cRecs(2), ...notCRecs(2)], () => {})
+    expect(runClsSample(cwd, {}, () => {})).toBeDefined()
+
+    expect(runClsSample(cwd, {}, () => {})).toBeUndefined()
+
+    expect(hasLiveClsAbLock(cwd)).toBe(false)
+  })
+
+  test("a STALE lock (>10min old) is taken over rather than blocking forever", () => {
+    const cwd = mkRepo()
+    writeCorpus(cwd, [...cRecs(2), ...notCRecs(2)], () => {})
+    fs.mkdirSync(path.dirname(path.join(cwd, CLS_AB_LOCK_REL)), { recursive: true })
+    fs.writeFileSync(
+      path.join(cwd, CLS_AB_LOCK_REL),
+      JSON.stringify({ pid: 99999, ts: Date.now() - 11 * 60 * 1000 }),
+    )
+
+    const summary = runClsSample(cwd, {}, () => {})
+
+    expect(summary).toEqual({ cCount: 2, notCCount: 2, total: 4 })
+    expect(hasLiveClsAbLock(cwd)).toBe(false)
   })
 })
 
