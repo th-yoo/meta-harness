@@ -120,7 +120,12 @@ arm, or when comparing candidates before applying argmax): **cheaper model
 first, then base prompt.** Concretely: haiku beats sonnet at equal
 qualifying F1; base beats patched at equal qualifying F1 and equal model.
 This keeps the tie-break monotonic with production cost, not with
-complexity of the prompt.
+complexity of the prompt. (Clarified pre-data 2026-08-03, before any label
+existed; implemented reading: `argmax(F1)` first selects a SINGLE winner
+candidate across the 4 arms — the tie-break applies only among arms tied at
+that max F1 — and ONLY THEN do adoption conditions (a)/(b) gate that one
+winner against the incumbent. The tie-break never re-enters after (a)/(b)
+are evaluated; there is exactly one winner candidate per run.)
 
 **If no arm clears (a) and (b):** the incumbent (haiku + base) stands. See
 §7, falsification clause — this is a registered outcome, not an

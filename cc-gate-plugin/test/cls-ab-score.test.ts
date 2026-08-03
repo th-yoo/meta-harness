@@ -368,12 +368,18 @@ describe("runClsScore", () => {
     ])
     // haiku-patched: never run — file absent entirely
 
+    // records.ndjson (T1 output, never read by the scorer) — present in a
+    // real experiment dir; must survive byte-identical (minor fix 2).
+    const recordsPath = path.join(root, "records.ndjson")
+    fs.writeFileSync(recordsPath, keys.map((k) => JSON.stringify({ key: k, prompt: "x", floorCheck: "y" })).join("\n") + "\n")
+
     expect(listPresentArmNames(cwd).sort()).toEqual(["haiku-base", "sonnet-base", "sonnet-patched"].sort())
 
     // snapshot inputs before scoring
     const before = {
       manifest: fs.readFileSync(path.join(root, CLS_MANIFEST_NAME), "utf-8"),
       labels: fs.readFileSync(path.join(root, CLS_LABELS_NAME), "utf-8"),
+      records: fs.readFileSync(recordsPath, "utf-8"),
       haikuBase: fs.readFileSync(path.join(root, clsArmFileName("haiku-base")), "utf-8"),
       sonnetPatched: fs.readFileSync(path.join(root, clsArmFileName("sonnet-patched")), "utf-8"),
       sonnetBase: fs.readFileSync(path.join(root, clsArmFileName("sonnet-base")), "utf-8"),
@@ -394,13 +400,28 @@ describe("runClsScore", () => {
     expect(result!.decision.verdict).toBe("ADOPT")
     expect(result!.decision.winnerArm).toBe("sonnet-patched")
 
+    // fix-wave (IMPORTANT): haiku-patched never ran -> absent, and sonnet-base
+    // is incomplete -> this run is PROVISIONAL even though a verdict computed.
+    expect(result!.expectedArms.sort()).toEqual(
+      ["haiku-base", "haiku-patched", "sonnet-base", "sonnet-patched"].sort(),
+    )
+    expect(result!.absentArms).toEqual(["haiku-patched"])
+    expect(result!.provisional).toBe(true)
+    expect(logs.some((l) => /PROVISIONAL/.test(l))).toBe(true)
+    expect(logs.some((l) => /arms present 3\/4/.test(l))).toBe(true)
+    expect(logs.some((l) => /never run.*haiku-patched/.test(l))).toBe(true)
+
     // main output written
     const scoreFileContent = fs.readFileSync(path.join(root, CLS_SCORE_NAME), "utf-8")
     const parsed = JSON.parse(scoreFileContent)
     expect(parsed.decision.verdict).toBe("ADOPT")
+    expect(parsed.provisional).toBe(true)
+    expect(parsed.absentArms).toEqual(["haiku-patched"])
 
     // F2 pin: only the expected top-level keys, no prompt/floorCheck text anywhere
-    expect(Object.keys(parsed).sort()).toEqual(["arms", "decision", "hostname", "scoredAt", "sample"].sort())
+    expect(Object.keys(parsed).sort()).toEqual(
+      ["absentArms", "arms", "decision", "expectedArms", "hostname", "provisional", "scoredAt", "sample"].sort(),
+    )
     expect(scoreFileContent).not.toMatch(/prompt/i)
     expect(scoreFileContent).not.toMatch(/floorCheck/i)
     for (const arm of parsed.arms) {
@@ -413,14 +434,100 @@ describe("runClsScore", () => {
     expect(fs.existsSync(emitDocPath)).toBe(true)
     expect(fs.readFileSync(emitDocPath, "utf-8")).toBe(scoreFileContent)
 
-    // byte-identity: every input untouched
+    // byte-identity: every input untouched (minor fix 2 adds records.ndjson)
     expect(fs.readFileSync(path.join(root, CLS_MANIFEST_NAME), "utf-8")).toBe(before.manifest)
     expect(fs.readFileSync(path.join(root, CLS_LABELS_NAME), "utf-8")).toBe(before.labels)
+    expect(fs.readFileSync(recordsPath, "utf-8")).toBe(before.records)
     expect(fs.readFileSync(path.join(root, clsArmFileName("haiku-base")), "utf-8")).toBe(before.haikuBase)
     expect(fs.readFileSync(path.join(root, clsArmFileName("sonnet-patched")), "utf-8")).toBe(before.sonnetPatched)
     expect(fs.readFileSync(path.join(root, clsArmFileName("sonnet-base")), "utf-8")).toBe(before.sonnetBase)
+  })
 
-    void keys // stratum keys asserted indirectly via arm presence checks above
+  test("provisional: false once all 4 registered arms are present and complete", () => {
+    const cwd = mkRepo()
+    setupBasicExperiment(cwd)
+    const root = clsAbRoot(cwd)
+    const allComplete = [
+      armRow("c1", "C"),
+      armRow("c2", "C"),
+      armRow("c3", "B"),
+      armRow("c4", "B"),
+      armRow("n1", "B"),
+      armRow("n2", "C"),
+      armRow("n3", "B"),
+      armRow("n4", "B"),
+    ]
+    for (const arm of ["haiku-base", "haiku-patched", "sonnet-base", "sonnet-patched"]) {
+      writeNdjson(path.join(root, clsArmFileName(arm)), allComplete)
+    }
+    const logs: string[] = []
+    const result = runClsScore(cwd, {}, (m) => logs.push(m))
+    expect(result).toBeDefined()
+    expect(result!.absentArms).toEqual([])
+    expect(result!.arms.every((a) => a.complete)).toBe(true)
+    expect(result!.provisional).toBe(false)
+    expect(logs.some((l) => /PROVISIONAL/.test(l))).toBe(false)
+    expect(logs.some((l) => /arms present 4\/4/.test(l))).toBe(true)
+  })
+
+  test("provisional: true when all 4 arms are present but one is incomplete", () => {
+    const cwd = mkRepo()
+    setupBasicExperiment(cwd)
+    const root = clsAbRoot(cwd)
+    const allComplete = [
+      armRow("c1", "C"),
+      armRow("c2", "C"),
+      armRow("c3", "B"),
+      armRow("c4", "B"),
+      armRow("n1", "B"),
+      armRow("n2", "C"),
+      armRow("n3", "B"),
+      armRow("n4", "B"),
+    ]
+    for (const arm of ["haiku-base", "haiku-patched", "sonnet-patched"]) {
+      writeNdjson(path.join(root, clsArmFileName(arm)), allComplete)
+    }
+    // sonnet-base present but missing one key
+    writeNdjson(path.join(root, clsArmFileName("sonnet-base")), allComplete.slice(0, 7))
+
+    const result = runClsScore(cwd, {}, () => {})
+    expect(result).toBeDefined()
+    expect(result!.absentArms).toEqual([]) // all 4 files present
+    expect(result!.provisional).toBe(true) // but one is incomplete
+  })
+
+  test("zero present arms: manifest + labels only -> empty arms, NOT-EVALUABLE, provisional", () => {
+    const cwd = mkRepo()
+    setupBasicExperiment(cwd)
+    const root = clsAbRoot(cwd)
+    const logs: string[] = []
+    const result = runClsScore(cwd, {}, (m) => logs.push(m))
+    expect(result).toBeDefined()
+    expect(result!.arms).toEqual([])
+    expect(result!.absentArms.sort()).toEqual(
+      ["haiku-base", "haiku-patched", "sonnet-base", "sonnet-patched"].sort(),
+    )
+    expect(result!.decision.verdict).toBe("NOT-EVALUABLE")
+    expect(result!.provisional).toBe(true)
+    // still writes cls-score.json — a registered "nothing run yet" state
+    expect(fs.existsSync(path.join(root, CLS_SCORE_NAME))).toBe(true)
+    expect(logs.some((l) => /PROVISIONAL/.test(l))).toBe(true)
+    expect(logs.some((l) => /arms present 0\/4/.test(l))).toBe(true)
+  })
+
+  test("refuses on malformed manifest (keys.c/keys.notC not arrays)", () => {
+    const cwd = mkRepo()
+    const root = clsAbRoot(cwd)
+    fs.mkdirSync(root, { recursive: true })
+    fs.writeFileSync(
+      path.join(root, CLS_MANIFEST_NAME),
+      JSON.stringify({ sampledAt: "t", hostname: "h", cCount: 1, notCCount: 1, keys: { c: "not-an-array", notC: [] } }),
+    )
+    const logs: string[] = []
+    const result = runClsScore(cwd, {}, (m) => logs.push(m))
+    expect(result).toBeUndefined()
+    expect(logs.some((l) => /REFUSING.*malformed/i.test(l))).toBe(true)
+    expect(fs.existsSync(path.join(root, CLS_SCORE_NAME))).toBe(false)
   })
 })
 

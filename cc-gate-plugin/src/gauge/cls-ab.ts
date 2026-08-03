@@ -995,11 +995,25 @@ export interface ClsScoreArmEntry {
 /** `cls-score.json` / `--emit-doc` target — counts/metrics/verdict/
  * hostname/scoredAt ONLY, never prompt text (F2: neither `ClsArmRow` nor
  * `ClsLabelRow` carries prompt text in the first place, so there is
- * nothing here that could leak it). */
+ * nothing here that could leak it).
+ *
+ * `expectedArms`/`absentArms`/`provisional` (review fix-wave finding,
+ * IMPORTANT): a never-run arm is silently absent from `arms` — without
+ * these fields, a `cls-score` run before all 4 registered arms exist would
+ * produce an unflagged ADOPT/INCUMBENT-STAYS verdict computed over FEWER
+ * than the registered 4 arms. `expectedArms` is always the full registered
+ * set (`CLS_ALL_ARM_NAMES`); `absentArms` is the subset with no
+ * `arm-<name>.ndjson` file at all; `provisional` is true whenever ANY
+ * registered arm is absent OR present-but-incomplete — i.e. whenever
+ * `decision` was NOT computed over all 4 registered arms fully derived.
+ * `provisional: false` iff all 4 are present AND complete. */
 export interface ClsScoreFile {
   scoredAt: string
   hostname: string
   sample: { cCount: number; notCCount: number; total: number }
+  expectedArms: string[]
+  absentArms: string[]
+  provisional: boolean
   arms: ClsScoreArmEntry[]
   decision: ClsDecisionResult
 }
@@ -1036,21 +1050,37 @@ function renderDecisionLines(d: ClsDecisionResult): string[] {
   return lines
 }
 
-/** Human report for one score run. Exported for tests. */
+/** Human report for one score run. Exported for tests. `presence` carries
+ * the fix-wave's arm-presence accounting (module doc above) — the "arms
+ * present N/4; absent: ..." line is ALWAYS shown (even when nothing is
+ * absent), and a PROVISIONAL warning is appended whenever `provisional`. */
 export function renderClsScoreReport(
   sample: { cCount: number; notCCount: number },
   metrics: ClsArmMetrics[],
   decision: ClsDecisionResult,
+  presence: { expectedArms: string[]; absentArms: string[]; provisional: boolean },
 ): string {
-  return [
+  const presentCount = presence.expectedArms.length - presence.absentArms.length
+  const lines = [
     "cls-score — gauge classifier 2×2 A/B (spec 2026-08-03-gauge-classifier-ab-preregistration.md §3)",
     `sample: ${sample.cCount} C + ${sample.notCCount} not-C`,
+    `arms present ${presentCount}/${presence.expectedArms.length}; absent: ` +
+      `${presence.absentArms.length ? presence.absentArms.join(", ") : "none"}`,
     "",
     "per-arm metrics vs blind opus labels:",
     ...metrics.map(renderArmRow),
     "",
     ...renderDecisionLines(decision),
-  ].join("\n")
+  ]
+  if (presence.provisional) {
+    lines.push(
+      "",
+      "WARNING: PROVISIONAL — not all 4 registered arms are present AND complete; this verdict is NOT " +
+        "the registered 4-arm decision (spec §3 evaluates all four arms). Re-run cls-score once every " +
+        "arm has been derived to completion.",
+    )
+  }
+  return lines.join("\n")
 }
 
 /** `cls-score [cwd] [--emit-doc <path>]` arg parsing. `--emit-doc` with no
@@ -1117,6 +1147,8 @@ export function runClsScore(
   }
 
   const presentArms = listPresentArmNames(cwd)
+  const expectedArms = [...CLS_ALL_ARM_NAMES]
+  const absentArms = expectedArms.filter((a) => !presentArms.includes(a))
   const metrics = presentArms.map((arm) =>
     computeArmMetrics(
       arm,
@@ -1133,13 +1165,23 @@ export function runClsScore(
       )
     }
   }
+  if (absentArms.length > 0) {
+    log(`cls-score: ${absentArms.length}/${expectedArms.length} registered arm(s) never run: ${absentArms.join(", ")}.`)
+  }
 
   const decision = evaluateClsDecision(metrics)
+  // PROVISIONAL (fix-wave, IMPORTANT): true whenever the decision above was
+  // NOT computed over all 4 registered arms fully derived — i.e. any
+  // registered arm is absent OR present-but-incomplete.
+  const provisional = absentArms.length > 0 || metrics.some((m) => !m.complete)
 
   const scoreFile: ClsScoreFile = {
     scoredAt: new Date().toISOString(),
     hostname: os.hostname(),
     sample: { cCount: manifest.cCount, notCCount: manifest.notCCount, total: manifestKeys.length },
+    expectedArms,
+    absentArms,
+    provisional,
     arms: metrics.map((m) => ({
       arm: m.arm,
       totalKeys: m.totalKeys,
@@ -1157,7 +1199,7 @@ export function runClsScore(
   fs.mkdirSync(root, { recursive: true })
   atomicWrite(dest, body)
 
-  log(renderClsScoreReport(scoreFile.sample, metrics, decision))
+  log(renderClsScoreReport(scoreFile.sample, metrics, decision, { expectedArms, absentArms, provisional }))
   log(`cls-score: wrote ${CLS_SCORE_NAME} -> ${dest}`)
 
   if (opts.emitDoc !== undefined) {
