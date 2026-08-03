@@ -12,8 +12,10 @@
 //                     `x-anthropic-billing-header` line and an agent-identity
 //                     line survive. That residue is what §6d's bar measures.
 //  · `settingSources: []` keeps CLAUDE.md and user/project settings out.
-//  · schema arrives via `outputFormat`, enforced by a forced StructuredOutput
-//                     tool — `output_config` is absent by design here.
+//  · schema arrives as a terse trailing instruction appended to the
+//                     outgoing text (fix round 3 dropped `outputFormat` and
+//                     its forced StructuredOutput tool) — `output_config`
+//                     and `outputFormat` are both absent by design here.
 //
 // Fix round 2 (2026-08-03) — context-contamination bug found AFTER the
 // initial review: `settingSources: []` does NOT stop the CLI from reading

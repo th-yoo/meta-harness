@@ -179,8 +179,10 @@ describe("agentSdkCall", () => {
       // shrinking the payload further — measured ~1.35KB for this exact
       // call post-round-3 (was ~1.6KB post-round-2, ~10.7KB pre-round-2).
       // 2000 bytes leaves comfortable headroom above the measured size while
-      // still catching bulk reinjection (memory bleed) or the forced-tool
-      // definition reappearing.
+      // still catching bulk reinjection (memory bleed). It does NOT catch a
+      // reappearing forced-tool definition (~1790B total, still under the
+      // threshold) — the sibling request-shape test's tools/output_config
+      // assertions cover that case.
       expect(serialized.length).toBeLessThan(2000)
     } finally {
       stub.stop()
