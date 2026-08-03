@@ -236,6 +236,41 @@ its rollout further. This is deliberately asymmetric: failing the bar
 does not unwind the gate, it only caps its spread. (Both N and the 0.20
 threshold are PROPOSED, not decided.)
 
+## 6b. Scope exemption: the gate covers MERGES ONLY (recorded 2026-08-03,
+user-ruled after a live bypass)
+
+**What happened.** Two docs-only commits (`311d6d7` GA13 + resume,
+`5f25286` a follow-up correction) reached `main` by cherry-pick and direct
+commit, carrying no review artifact and triggering no block. Not an
+oversight in the run — a structural property of ruling 1: the enforcement
+point is `scripts/merge-with-gate.sh`, which only intercepts merges.
+`git commit` and `git cherry-pick` onto `main` never touch it. The §6
+ledger therefore still reads 3 attempts / 0 blocks while two commits
+landed unreviewed, and that asymmetry would have been discovered later as
+an apparent contradiction rather than a known boundary.
+
+**Ruled: the exemption stands, the gate stays merge-scoped.** Direct
+commits to `main` are OUT OF SCOPE for the review-artifact floor. The
+reasoning is the same one that produced ruling 1 — the gate is a floor on
+*branch work landing*, and branch work lands by merge. Extending it to
+every commit would mean a pre-commit hook, which §1 already rejected for
+the after-the-work race, and which would make routine doc fixes require a
+review artifact naming a commit that does not exist yet.
+
+**What this exemption is NOT.** It is not permission to route code around
+the gate by committing directly to `main`. The floor's purpose is that
+reviewed work is the only work that lands; a direct code commit to `main`
+defeats it just as effectively as a bypassed merge, and the gate cannot
+see it. That gap is now a known, accepted limitation of the mechanism —
+in the same family as §5's "a fabricated artifact satisfies every
+mechanical check": the review layer is the detector, not the gate.
+
+**Ledger accounting.** Direct commits do not count as §6 attempts and do
+not enter the N=10 falsification window — the window measures the gate's
+spurious-block rate, and a path the gate never evaluates produces neither
+a block nor a pass. The two commits above are recorded here rather than
+in the §6 table for exactly that reason.
+
 ## 7. Rulings — DECIDED 2026-08-03 (user, interactive session)
 
 All seven rulings taken; each = the draft's recommended option. These are
