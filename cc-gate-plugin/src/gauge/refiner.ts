@@ -95,31 +95,51 @@ export function buildRefinerPrompt(
   ].join("\n")
 }
 
-/** Gauge-classifier-2×2-A/B label rubric (`cls-label`, Task 2). Deliberately
- * NOT `buildRefinerPrompt`: the labeler asks a strictly narrower question
- * (C vs not-C, plus an optional class letter for context) and never
- * extracts a check — the pre-registration's ground-truth judgment is a
- * classification only. Inputs are the SAME two fields buildRefinerPrompt
- * takes (`userPrompt`, `floorCheck`) and nothing else — this is what makes
- * the blind-isolation protocol (pre-reg §5) hold BY CONSTRUCTION: this
- * function has no parameter through which a stored nominal class or an
- * arm's output could even be passed in. */
+/** Gauge-classifier-2×2-A/B label rubric (`cls-label`, Task 2).
+ *
+ * Rewritten 2026-08-03 per user ruling on final-review finding F13
+ * (pre-data — zero labels existed at rewrite time): the earlier draft
+ * copied `buildRefinerPrompt`'s class-C clause near-verbatim, which
+ * aligns the judge's prior with the base arm and structurally blinds the
+ * experiment to corrections the patched arm (`ANTI_OVER_EXTRACTION_TRAPS`)
+ * is measured against. This version is authored fresh from the
+ * pre-registration's CONCEPT of class C
+ * (`docs/superpowers/specs/2026-08-03-gauge-classifier-ab-preregistration.md`
+ * §2.2) — the judge is asked the underlying question in its own words,
+ * never handed either arm's phrasing, its traps, or its "when in doubt"
+ * bias. Deliberately NOT `buildRefinerPrompt`: the labeler asks a
+ * strictly narrower question (C vs not-C, plus an optional class letter
+ * for context) and never extracts a check — the pre-registration's
+ * ground-truth judgment is a classification only. Inputs are the SAME two
+ * fields buildRefinerPrompt takes (`userPrompt`, `floorCheck`) and
+ * nothing else — this is what makes the blind-isolation protocol
+ * (pre-reg §5) hold BY CONSTRUCTION: this function has no parameter
+ * through which a stored nominal class or an arm's output could even be
+ * passed in. */
 export function buildLabelPrompt(userPrompt: string, floorCheck: string): string {
   return [
-    "You are given a coding-agent task prompt. Judge it against ONE rubric:",
-    'class "C" — the prompt ITSELF states an observable property of a file or path inside the',
-    "repo AND names that path literally, so a completion check could be extracted from the prompt",
-    "text alone without inventing anything.",
-    "Every other prompt is NOT class C — including: no evaluation needed (greeting/chat), a",
-    "criterion that is really about the QUALITY of a reply (research/review/planning, not",
-    "shell-checkable), work already covered by the repo's own gate check shown below, or a",
-    "criterion that would require inventing a path/convention the prompt never states.",
+    "You are given a coding-agent task prompt. Answer one question about it:",
+    "does the prompt's own text state a success condition that could be mechanically",
+    "verified — for example by running a command from the repo root — against a named",
+    "artifact (a file, a directory, or an output the prompt points to)?",
+    "Answer C if it does, not-C if it does not.",
+    "",
+    "Clarifications:",
+    "- The success condition must be stated in the prompt's own words. A condition you",
+    "  infer from context, convention, or from what a typical repo would contain does not",
+    "  count.",
+    "- The named artifact must likewise come from the prompt's own text. If verifying the",
+    "  condition would require you to supply a path, file, or convention the prompt never",
+    "  gives, the answer is not-C.",
+    "- Judge only whether the condition and the artifact are both present in the prompt",
+    "  text as written. Do not judge how hard the condition would be to verify, and do not",
+    "  weigh it against any other task the prompt might also be doing.",
     "",
     `The repo's own gate check (for context only): ${floorCheck === "" ? "(none armed)" : floorCheck}`,
     "",
     "Output ONLY a JSON object, no prose, no markdown fences:",
     '{"label": "C"|"not-C", "class": "A1"|"A2"|"B"|"C"|"D"|null}',
-    "- label: your C vs not-C verdict per the rubric above.",
+    "- label: your C vs not-C verdict per the question above.",
     '- class: your best single-letter classification if you have one (may restate "C"/mirror',
     "  label, or name which of A1/A2/B/D fits best); null if you cannot narrow beyond not-C.",
     "",

@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { test, expect, describe } from "bun:test"
 import {
   buildRefinerPrompt,
   parseRefinerOutput,
@@ -265,6 +265,56 @@ test("parseLabelOutput: valid C / not-C with optional class", () => {
 test("parseLabelOutput: invalid/unknown class literal normalizes to null (never fabricated)", () => {
   expect(parseLabelOutput(JSON.stringify({ label: "C", class: "E" }))).toEqual({ label: "C", class: null })
   expect(parseLabelOutput(JSON.stringify({ label: "C" }))).toEqual({ label: "C", class: null })
+})
+
+// --- buildLabelPrompt structural independence (F13, user ruling 2026-08-03) ---
+//
+// Final-review finding: the rubric copied buildRefinerPrompt's class-C
+// clause near-verbatim, which aligns the judge's prior with the base arm
+// and structurally blinds the experiment to the patched arm's corrections.
+// User ruled: rewrite the rubric from the pre-registration's CONCEPT of
+// class C, in fresh words, independent of both buildRefinerPrompt's C
+// clause and its anti-over-extraction traps. These tests pin that
+// independence directly against the two texts it must not resemble.
+describe("buildLabelPrompt — structural independence from buildRefinerPrompt (F13)", () => {
+  // The base prompt's own class-C clause (buildRefinerPrompt, variant "base"):
+  // most distinctive substrings, picked to catch a near-verbatim reuse.
+  const BASE_C_CLAUSE_SUBSTRINGS = [
+    "states an observable property of a file or path",
+    "names that path literally",
+    "Only then extract a check",
+  ]
+
+  // One distinctive substring per anti-over-extraction trap bullet
+  // (ANTI_OVER_EXTRACTION_TRAPS, "patched" variant only).
+  const TRAP_BULLET_SUBSTRINGS = [
+    "leaves no filesystem trace",
+    "looks path-like",
+    "would have to invent the location",
+    "fill, populate, update or finish",
+  ]
+
+  test("contains none of the base prompt's C-clause distinctive phrasing", () => {
+    const p = buildLabelPrompt("fix src/auth.ts so the token never expires", "bun test")
+    for (const s of BASE_C_CLAUSE_SUBSTRINGS) expect(p).not.toContain(s)
+  })
+
+  test("contains none of the four anti-over-extraction trap bullets' phrasings", () => {
+    const p = buildLabelPrompt("fix src/auth.ts so the token never expires", "bun test")
+    for (const s of TRAP_BULLET_SUBSTRINGS) expect(p).not.toContain(s)
+  })
+
+  test("never carries base's doubt-handling clause", () => {
+    const p = buildLabelPrompt("fix src/auth.ts so the token never expires", "bun test")
+    expect(p).not.toContain("choose D")
+  })
+
+  test("blind protocol unchanged: still carries the record's prompt, floorCheck, and the C/not-C output instruction", () => {
+    const p = buildLabelPrompt("fix src/auth.ts so the token never expires", "bun test")
+    expect(p).toContain("fix src/auth.ts so the token never expires")
+    expect(p).toContain("bun test")
+    expect(p).toContain('"C"|"not-C"')
+  })
 })
 
 test("parseLabelOutput: missing/invalid label -> undefined (M0 miss, never fabricated)", () => {

@@ -66,6 +66,13 @@ Enforced by construction: labeling and arm classification are separate
 subcommands operating on separate files (see §5), never a shared process
 or a shared read.
 
+**Rubric provenance note (pre-data, 2026-08-03):** the label rubric was
+authored independently 2026-08-03 (pre-data — zero labels existed at
+rewrite time), replacing a base-prompt-derived draft. Final-review
+finding: reusing an arm's C-definition aligns the judge's prior with that
+arm and structurally blinds the experiment to the other arm's
+corrections.
+
 **Registered limit (opus-judgment ceiling), restated verbatim from GA11's
 own limit clause:** "these are opus judgments, not ground truth. Work
 optimised against them is distillation, capped at opus accuracy." Every
