@@ -54,8 +54,16 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { readCorpus, recordKey, type CorpusRecord } from "./corpus-store.ts"
-import { parseRefinerOutput, parseLabelOutput, type PromptVariant, type ClsLabel } from "./refiner.ts"
+import {
+  parseRefinerOutput,
+  parseLabelOutput,
+  buildRefinerPrompt,
+  buildLabelPrompt,
+  type PromptVariant,
+  type ClsLabel,
+} from "./refiner.ts"
 import { callModelSdk, callModelSdkLabel } from "./transport.ts"
+import { sha256Hex } from "./corpus-mine.ts"
 import type { GaugePromptClass } from "../types.ts"
 
 export const CLS_AB_DIR_REL = ".km/gauge-cls-ab"
@@ -107,16 +115,34 @@ function isClsAbLockStale(lockPath: string, now: number): boolean {
   }
 }
 
+/** In-process record of the lock content THIS process most recently wrote
+ * (via acquire or refresh), keyed by lock path (fix-wave F4). Backs the
+ * ownership check in `releaseClsAbLock` below: without it, a lock this
+ * process acquired, let go stale (e.g. a batch that outran
+ * `CLS_AB_LOCK_STALE_MS` without refreshing, or simply a bug), and that was
+ * legitimately taken over by a NEW acquirer could still be unlinked out
+ * from under that new owner by this process's own deferred
+ * `finally { releaseClsAbLock(cwd) }`. Deleted on every release attempt
+ * (matched or not) so repeated acquire/release cycles on the same cwd
+ * never accumulate stale entries. */
+const ownedLocks = new Map<string, ClsAbLockContent>()
+
 /** Acquire `.km/gauge-cls-ab.lock`. Fresh contention -> false (caller
  * refuses). Stale/torn/vanished lock -> unlink + ONE fresh `wx` attempt;
  * losing that race to a concurrent takeover (EEXIST on the retry) also ->
  * false — never "overwrite and assume ownership". EXPORTED for Task 2's
- * arm/label runners to share (see module doc). */
+ * arm/label runners to share (see module doc). On success, records the
+ * content just written in `ownedLocks` (fix-wave F4) so a later
+ * `releaseClsAbLock`/`refreshClsAbLock` can recognize it as this process's
+ * own. */
 export function acquireClsAbLock(cwd: string, now: number = Date.now()): boolean {
   const lockPath = clsAbLockPath(cwd)
   const content: ClsAbLockContent = { pid: process.pid, ts: now }
 
-  if (tryCreateClsAbLock(lockPath, content)) return true
+  if (tryCreateClsAbLock(lockPath, content)) {
+    ownedLocks.set(lockPath, content)
+    return true
+  }
   if (!isClsAbLockStale(lockPath, now)) return false
 
   try {
@@ -124,16 +150,52 @@ export function acquireClsAbLock(cwd: string, now: number = Date.now()): boolean
   } catch (e) {
     if ((e as NodeJS.ErrnoException)?.code !== "ENOENT") throw e
   }
-  return tryCreateClsAbLock(lockPath, content)
+  const ok = tryCreateClsAbLock(lockPath, content)
+  if (ok) ownedLocks.set(lockPath, content)
+  return ok
 }
 
-/** Release `.km/gauge-cls-ab.lock` — best-effort (never let release itself
- * surface). EXPORTED for Task 2's arm/label runners to share. */
-export function releaseClsAbLock(cwd: string): void {
+/** Rewrite the held lock's `ts` in place (pid unchanged) — staleness guard
+ * for a long-running `cls-run`/`cls-label` batch (corpus-store.ts's
+ * `refreshCorpusLock` precedent, fix-wave F4): without periodic refresh, a
+ * batch that runs longer than `CLS_AB_LOCK_STALE_MS` would let a second
+ * caller observe the still-in-flight lock as stale and take it over
+ * mid-batch. Also updates this process's `ownedLocks` record so a later
+ * `releaseClsAbLock` recognizes the refreshed content as still its own.
+ * Best-effort: a failed refresh (e.g. the lock file vanished from
+ * underneath, which should not happen absent a bug elsewhere) is silently
+ * ignored. EXPORTED for Task 2's arm/label runners to call once per record. */
+export function refreshClsAbLock(cwd: string, now: number = Date.now()): void {
+  const lockPath = clsAbLockPath(cwd)
+  const content: ClsAbLockContent = { pid: process.pid, ts: now }
   try {
-    fs.unlinkSync(clsAbLockPath(cwd))
+    fs.writeFileSync(lockPath, JSON.stringify(content))
+    ownedLocks.set(lockPath, content)
   } catch {
     // best-effort — see doc comment above
+  }
+}
+
+/** Release `.km/gauge-cls-ab.lock` — OWNERSHIP-CHECKED (fix-wave F4): only
+ * unlinks when the lock file's CURRENT on-disk pid+ts still match the
+ * content this process last wrote via `acquireClsAbLock`/`refreshClsAbLock`
+ * (`ownedLocks`). No record of ever having acquired this lock (or a
+ * content mismatch — someone else's lock now occupies the path) -> no-op,
+ * never unlink a lock this process does not own. Best-effort otherwise
+ * (never let release itself surface). EXPORTED for Task 2's arm/label
+ * runners to share. */
+export function releaseClsAbLock(cwd: string): void {
+  const lockPath = clsAbLockPath(cwd)
+  const owned = ownedLocks.get(lockPath)
+  ownedLocks.delete(lockPath)
+  if (owned === undefined) return
+  try {
+    const raw = fs.readFileSync(lockPath, "utf-8")
+    const parsed = JSON.parse(raw) as Partial<ClsAbLockContent> | null
+    if (parsed?.pid !== owned.pid || parsed?.ts !== owned.ts) return
+    fs.unlinkSync(lockPath)
+  } catch {
+    // best-effort — see doc comment above (includes: lock already gone)
   }
 }
 
@@ -165,11 +227,15 @@ export interface ClsStrata {
 /** Pure stratification over the whole store. Not-C deliberately includes
  * class-less derivations (class is optional on v1 blobs) — "not C" is the
  * literal predicate, not "classified as something else" (pv-sample's
- * `stratify` precedent). */
+ * `stratify` precedent). Deduped by `recordKey` FIRST (fix-wave F14, one
+ * line, last-write-wins) — a duplicated line in the store (e.g. a torn
+ * write joined across two upsert cycles) must never be double-counted into
+ * either stratum, which would silently skew the C-enrichment ratio. */
 export function stratify(records: CorpusRecord[]): ClsStrata {
+  const deduped = [...new Map(records.map((r) => [recordKey(r), r] as const)).values()]
   const c: CorpusRecord[] = []
   const notC: CorpusRecord[] = []
-  for (const r of records) {
+  for (const r of deduped) {
     if (!isDerived(r)) continue
     if (r.derivation!.class === "C") c.push(r)
     else notC.push(r)
@@ -195,6 +261,18 @@ export function drawNotC(
   return shuffled.slice(0, size)
 }
 
+/** Per-stratum tally of the sampled records' STORED derivation transport —
+ * absent-or-`"cli"` vs `"sdk"` (fix-wave F10; `"cli"` bucket mirrors
+ * paired-validation.ts's `isCliDerived` absent-means-cli reading). Descriptive
+ * only — the sample itself is any-transport (module doc above); this exists
+ * so a reader of the manifest/emitted score doc can see the transport mix
+ * without re-deriving it from `records.ndjson` (which carries no transport
+ * field at all — F2). */
+export interface ClsTransportTally {
+  cli: number
+  sdk: number
+}
+
 /** Sample manifest — counts + store keys per stratum ONLY, never prompt text
  * (F2: code-bearing text never travels). Task 2's arm/label runners join on
  * these keys against `records.ndjson`. */
@@ -204,6 +282,9 @@ export interface ClsManifest {
   cCount: number
   notCCount: number
   keys: { c: string[]; notC: string[] }
+  /** fix-wave F10 — per-stratum cli-vs-sdk transport tally of the STORED
+   * derivations sampled (descriptive; see `ClsTransportTally` doc). */
+  transportCounts: { c: ClsTransportTally; notC: ClsTransportTally }
 }
 
 /** One sampled record as persisted to `records.ndjson` — key/prompt/
@@ -223,16 +304,27 @@ export interface ClsSampleSummary {
   total: number
 }
 
-/** `cls-sample [cwd] [--reset]` — --reset extracted, one positional (cwd),
- * pv-sample's `parsePvSampleArgs` precedent. */
-export function parseClsSampleArgs(args: string[]): { cwd: string; reset: boolean } {
+/** `cls-sample [cwd] [--reset] [--discard-spend]` — flags extracted, one
+ * positional (cwd), pv-sample's `parsePvSampleArgs` precedent.
+ * `--discard-spend` (fix-wave F6) only matters alongside `--reset` — see
+ * `runClsSample`'s spend guard. `unknownFlag` (fix-wave F17) is the FIRST
+ * unrecognized `--`-prefixed token, if any: it is deliberately never pushed
+ * into `positional`, so a typo like `--goo` can never silently become the
+ * `cwd` positional — the caller refuses on it instead. */
+export function parseClsSampleArgs(
+  args: string[],
+): { cwd: string; reset: boolean; discardSpend: boolean; unknownFlag: string | undefined } {
   let reset = false
+  let discardSpend = false
+  let unknownFlag: string | undefined
   const positional: string[] = []
   for (const a of args) {
     if (a === "--reset") reset = true
+    else if (a === "--discard-spend") discardSpend = true
+    else if (a.startsWith("--")) unknownFlag ??= a
     else positional.push(a)
   }
-  return { cwd: positional[0] ?? process.cwd(), reset }
+  return { cwd: positional[0] ?? process.cwd(), reset, discardSpend, unknownFlag }
 }
 
 function atomicWrite(dest: string, body: string): void {
@@ -255,9 +347,44 @@ function atomicWrite(dest: string, body: string): void {
  * write sequence all happens WHILE THE LOCK IS HELD, so two concurrent
  * `cls-sample` calls can never both observe an absent dir and race to build
  * it — the second loses the lock and refuses cleanly. */
+/** Row counts of the "spend" files a `--reset` would destroy: `labels.ndjson`
+ * (if present) + every `arm-<name>.ndjson` (if present) under the experiment
+ * root. Fix-wave F6 — the exact-counts audit both the refusal and the
+ * (opted-in) discard path print, so `--reset` can never silently discard
+ * completed label/arm spend. */
+function clsSpendFileCounts(root: string): { file: string; rows: number }[] {
+  const out: { file: string; rows: number }[] = []
+  const labelsPath = path.join(root, CLS_LABELS_NAME)
+  if (fs.existsSync(labelsPath)) out.push({ file: CLS_LABELS_NAME, rows: readNdjson<unknown>(labelsPath).length })
+  for (const arm of CLS_ALL_ARM_NAMES) {
+    const armPath = path.join(root, clsArmFileName(arm))
+    if (fs.existsSync(armPath)) out.push({ file: clsArmFileName(arm), rows: readNdjson<unknown>(armPath).length })
+  }
+  return out
+}
+
+function fmtSpendFiles(files: { file: string; rows: number }[]): string {
+  return files.map((f) => `${f.file}: ${f.rows} row(s)`).join(", ")
+}
+
+/** Per-stratum cli-vs-sdk transport tally of the STORED derivations sampled
+ * (fix-wave F10) — every record here is already known `isDerived` (callers
+ * pass the `c`/`drawn` arrays straight from `stratify`/`drawNotC`), so
+ * `.derivation` is always defined; only `.transport` is optional
+ * (absent = cli, mirrors paired-validation.ts's `isCliDerived`). */
+function transportTally(records: CorpusRecord[]): ClsTransportTally {
+  let cli = 0
+  let sdk = 0
+  for (const r of records) {
+    if (r.derivation!.transport === "sdk") sdk++
+    else cli++
+  }
+  return { cli, sdk }
+}
+
 export function runClsSample(
   cwd: string,
-  opts: { reset?: boolean },
+  opts: { reset?: boolean; discardSpend?: boolean },
   log: (m: string) => void,
   rand: () => number = Math.random,
 ): ClsSampleSummary | undefined {
@@ -289,6 +416,34 @@ export function runClsSample(
         )
         return undefined
       }
+      // Belt-and-braces (fix-wave F15): re-confirm the lock we JUST acquired
+      // above reads back as live before any destructive rmSync — the same
+      // paranoia check pv-sample's --reset guard performs via
+      // hasLiveCorpusLock (against the shadow store's own separate lock),
+      // ported here against a torn/foreign lock file written between our
+      // acquisition and this point.
+      if (!hasLiveClsAbLock(cwd)) {
+        log(
+          `REFUSING: --reset — lock (${CLS_AB_LOCK_REL}) unexpectedly not live right after ` +
+            "acquisition; refusing to discard the sample defensively.",
+        )
+        return undefined
+      }
+      // Spend guard (fix-wave F6): a --reset must never silently discard
+      // completed label/arm spend. Both the refusal and the (opted-in)
+      // discard print the EXACT row counts about to be destroyed.
+      const spendFiles = clsSpendFileCounts(root)
+      if (spendFiles.length > 0) {
+        const summary = fmtSpendFiles(spendFiles)
+        if (!opts.discardSpend) {
+          log(
+            `REFUSING: --reset — spend file(s) present and would be destroyed (${summary}) — pass ` +
+              "--discard-spend (in addition to --reset) to confirm discarding this spend.",
+          )
+          return undefined
+        }
+        log(`cls-sample: --reset --discard-spend — destroying (${summary}).`)
+      }
       fs.rmSync(root, { recursive: true, force: true })
     }
 
@@ -303,6 +458,20 @@ export function runClsSample(
     fs.mkdirSync(root, { recursive: true })
 
     const sampled = [...c, ...drawn]
+
+    // manifest.json FIRST, records.ndjson second (fix-wave F5) — no other
+    // gating changes; cls-label's "succeeds without manifest" test still
+    // passes because labels gate on records.ndjson, never on manifest.json.
+    const manifest: ClsManifest = {
+      sampledAt: new Date().toISOString(),
+      hostname: os.hostname(),
+      cCount: c.length,
+      notCCount: drawn.length,
+      keys: { c: c.map(recordKey), notC: drawn.map(recordKey) },
+      transportCounts: { c: transportTally(c), notC: transportTally(drawn) },
+    }
+    atomicWrite(path.join(root, CLS_MANIFEST_NAME), JSON.stringify(manifest, null, 2) + "\n")
+
     const sampleRecords: ClsSampleRecord[] = sampled.map((r) => ({
       key: recordKey(r),
       prompt: r.prompt,
@@ -311,15 +480,6 @@ export function runClsSample(
     const recordsBody =
       sampleRecords.map((r) => JSON.stringify(r)).join("\n") + (sampleRecords.length ? "\n" : "")
     atomicWrite(path.join(root, CLS_RECORDS_NAME), recordsBody)
-
-    const manifest: ClsManifest = {
-      sampledAt: new Date().toISOString(),
-      hostname: os.hostname(),
-      cCount: c.length,
-      notCCount: drawn.length,
-      keys: { c: c.map(recordKey), notC: drawn.map(recordKey) },
-    }
-    atomicWrite(path.join(root, CLS_MANIFEST_NAME), JSON.stringify(manifest, null, 2) + "\n")
 
     log(
       `cls-sample: ${c.length} nominal-C + ${drawn.length} nominal-not-C derived record(s) -> ` +
@@ -411,6 +571,11 @@ export interface ClsArmRow {
   model: string
   promptVariant: PromptVariant
   transport: "sdk"
+  /** sha256 of the EXACT built prompt text sent (`buildRefinerPrompt`'s
+   * output) — fix-wave F8 provenance. Hash only, never the prompt text
+   * itself (F2). Lets `cls-score` detect a row whose prompt text drifted
+   * from what the rest of the arm (or the arm's expected variant) sent. */
+  promptSha256: string
   ts: string
 }
 
@@ -423,6 +588,9 @@ export interface ClsLabelRow {
   label: ClsLabel
   class: GaugePromptClass | null
   model: string
+  /** sha256 of the EXACT built prompt text sent (`buildLabelPrompt`'s
+   * output) — fix-wave F8 provenance, same discipline as `ClsArmRow`. */
+  promptSha256: string
   ts: string
 }
 
@@ -566,10 +734,18 @@ export async function runClsRun(
     const newRows: ClsArmRow[] = []
     let failed = 0
     for (const record of pending) {
+      // Exact prompt text this record is about to send, hashed for
+      // provenance ONLY (fix-wave F8) — the real, unmodified
+      // buildRefinerPrompt, never a re-implementation.
+      const promptSha256 = sha256Hex(buildRefinerPrompt(record.prompt, record.floorCheck, variant))
       const raw = await callModelSdk(record.prompt, record.floorCheck, process.env, {}, {
         model: modelLiteral,
         promptVariant: variant,
       })
+      // Staleness guard (fix-wave F4): refresh the held lock's ts after
+      // every record, success or failure, so a batch longer than
+      // CLS_AB_LOCK_STALE_MS is never mistaken for stale mid-flight.
+      refreshClsAbLock(cwd)
       const derivation = raw !== undefined ? parseRefinerOutput(raw) : undefined
       if (!derivation) {
         failed++
@@ -581,6 +757,7 @@ export async function runClsRun(
         model: modelLiteral,
         promptVariant: variant,
         transport: "sdk",
+        promptSha256,
         ts: new Date().toISOString(),
       })
     }
@@ -657,9 +834,15 @@ export async function runClsLabel(
     const newRows: ClsLabelRow[] = []
     let failed = 0
     for (const record of pending) {
+      // Exact prompt text this record is about to send, hashed for
+      // provenance ONLY (fix-wave F8) — the real, unmodified
+      // buildLabelPrompt, never a re-implementation.
+      const promptSha256 = sha256Hex(buildLabelPrompt(record.prompt, record.floorCheck))
       const raw = await callModelSdkLabel(record.prompt, record.floorCheck, process.env, {}, {
         model: CLS_LABEL_MODEL_LITERAL,
       })
+      // Staleness guard (fix-wave F4) — see runClsRun's identical comment.
+      refreshClsAbLock(cwd)
       const parsed = raw !== undefined ? parseLabelOutput(raw) : undefined
       if (!parsed) {
         failed++
@@ -670,6 +853,7 @@ export async function runClsLabel(
         label: parsed.label,
         class: parsed.class,
         model: CLS_LABEL_MODEL_LITERAL,
+        promptSha256,
         ts: new Date().toISOString(),
       })
     }
@@ -689,12 +873,15 @@ export async function runClsLabel(
 }
 
 /** `cls-run [cwd] --arm <name> --go <n>` arg parsing — pv-sample/derive's
- * precedent (extract flags, everything else positional). */
+ * precedent (extract flags, everything else positional). `unknownFlag`
+ * (fix-wave F17) is the first unrecognized `--`-prefixed token, never
+ * pushed into `positional` — see `parseClsSampleArgs`'s doc for why. */
 export function parseClsRunArgs(
   args: string[],
-): { cwd: string; arm: string | undefined; go: number | undefined } {
+): { cwd: string; arm: string | undefined; go: number | undefined; unknownFlag: string | undefined } {
   let arm: string | undefined
   let go: number | undefined
+  let unknownFlag: string | undefined
   const positional: string[] = []
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--arm") {
@@ -703,37 +890,52 @@ export function parseClsRunArgs(
     } else if (args[i] === "--go") {
       go = Number(args[i + 1])
       i++
+    } else if (args[i]!.startsWith("--")) {
+      unknownFlag ??= args[i]
     } else {
       positional.push(args[i]!)
     }
   }
-  return { cwd: positional[0] ?? process.cwd(), arm, go }
+  return { cwd: positional[0] ?? process.cwd(), arm, go, unknownFlag }
 }
 
-/** `cls-label [cwd] --go <n>` arg parsing. */
-export function parseClsLabelArgs(args: string[]): { cwd: string; go: number | undefined } {
+/** `cls-label [cwd] --go <n>` arg parsing. `unknownFlag` — fix-wave F17,
+ * see `parseClsRunArgs`'s doc. */
+export function parseClsLabelArgs(
+  args: string[],
+): { cwd: string; go: number | undefined; unknownFlag: string | undefined } {
   let go: number | undefined
+  let unknownFlag: string | undefined
   const positional: string[] = []
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--go") {
       go = Number(args[i + 1])
       i++
+    } else if (args[i]!.startsWith("--")) {
+      unknownFlag ??= args[i]
     } else {
       positional.push(args[i]!)
     }
   }
-  return { cwd: positional[0] ?? process.cwd(), go }
+  return { cwd: positional[0] ?? process.cwd(), go, unknownFlag }
 }
 
 // ── Task 3: `cls-score` — metrics + pre-registered decision rule ─────────
 //
-// `cls-score` is MODEL-FREE and READ-ONLY on every input it touches:
-// `manifest.json` (JSON.parse), `labels.ndjson`, and every present
-// `arm-<name>.ndjson` are read via `readNdjson`/`fs.readFileSync` only —
-// never written, never locked. A pure read cannot contend with a
-// concurrent cls-run/cls-label writer (report-subcommand precedent, same
-// as pv-compare in paired-validation.ts), so `acquireClsAbLock` is neither
-// called nor needed here.
+// `cls-score` READS every input it touches — `manifest.json` (JSON.parse),
+// `labels.ndjson`, every present `arm-<name>.ndjson`, and (on `--combine`) the
+// other host's counts file — via `readNdjson`/`fs.readFileSync` only, and all
+// of that stays LOCK-FREE (a pure read cannot contend with a concurrent
+// cls-run/cls-label writer, report-subcommand precedent, same as pv-compare
+// in paired-validation.ts). CORRECTED (fix-wave F12 — the previous doc here
+// claimed the whole subcommand was "READ-ONLY ... acquireClsAbLock is
+// neither called nor needed", which stopped being true once cls-score
+// started WRITING `cls-score.json`/`cls-combined.json`/`--emit-doc`): the
+// mkdir+write phase alone is guarded by the SAME shared `.km/gauge-cls-ab.lock`
+// cls-sample/cls-run/cls-label use, acquired only around that phase (after
+// every read and every pure computation) and released in a `finally` — so a
+// score write can never land torn against an in-flight cls-run/cls-label
+// batch, while every read stays as lock-free as before.
 //
 // Decision-rule constants (pre-reg spec §3) live in ONE exported object,
 // `CLS_DECISION_CONSTANTS` below — the single source every decision path
@@ -759,6 +961,16 @@ export const CLS_DECISION_CONSTANTS = {
     variantOrder: CLS_PROMPT_VARIANTS,
   },
 } as const
+
+/** Round to 3 decimals — IEEE-double-safe (fix-wave F1, pre-data fix
+ * 2026-08-03). `0.9 - 0.8` is `0.09999999999999998` in raw doubles, which
+ * fails an exactly-at-the-registered-bar `>= 0.1` comparison even though the
+ * pre-registered margin (spec §3) is meant to read as exactly met. The ONE
+ * helper every margin comparison AND every printed arithmetic line reads
+ * through, so the gate decision and the report text can never disagree. */
+export function roundTo3(n: number): number {
+  return Math.round(n * 1000) / 1000
+}
 
 export type ClsMetricValue = number | "n/a"
 
@@ -796,18 +1008,43 @@ export function listPresentArmNames(cwd: string): string[] {
   return CLS_ALL_ARM_NAMES.filter((name) => fs.existsSync(path.join(root, clsArmFileName(name))))
 }
 
+/** Precision/recall/F1 from raw tp/fp/fn counts — pulled out of
+ * `computeArmMetrics` (fix-wave F3) so the `--combine` path can recompute
+ * metrics from SUMMED cross-host counts using the exact same formula, never
+ * a re-derived one.
+ *
+ * F1 rule corrected (fix-wave F2, pre-data fix 2026-08-03): `f1 = (tp+fp+fn
+ * === 0) ? "n/a" : 2*tp/(2*tp+fp+fn)` — computed directly from the counts,
+ * NOT from precision/recall. The old rule (`f1 = "n/a"` whenever precision
+ * OR recall was `"n/a"`, or whenever both were defined-zero) wrongly
+ * reported `"n/a"` for e.g. tp=0,fp>0,fn>0 (precision=0, recall=0, but F1 is
+ * a perfectly defined 0) — which made an otherwise-evaluable incumbent read
+ * as NOT-EVALUABLE. P/R "n/a" semantics are UNCHANGED (still `tp+fp===0`
+ * and `tp+fn===0` respectively) — only F1's formula was wrong. */
+function metricsFromCounts(
+  tp: number,
+  fp: number,
+  fn: number,
+): { precision: ClsMetricValue; recall: ClsMetricValue; f1: ClsMetricValue } {
+  const precision: ClsMetricValue = tp + fp === 0 ? "n/a" : tp / (tp + fp)
+  const recall: ClsMetricValue = tp + fn === 0 ? "n/a" : tp / (tp + fn)
+  const f1: ClsMetricValue = tp + fp + fn === 0 ? "n/a" : (2 * tp) / (2 * tp + fp + fn)
+  return { precision, recall, f1 }
+}
+
 /** Metrics for one arm against the labels, restricted to the manifest's
  * sampled keys. `complete` iff every manifest key has a row in `armRows` —
  * an arm missing even one key is INCOMPLETE (plan Task 3): its
  * TP/FP/FN/TN/precision/recall/F1 all come out zero/"n/a" (the loop below
  * is skipped entirely) and it is excluded from winner selection
  * (`pickWinner`), but `missingKeys` is always reported explicitly, never
- * silently dropped. Zero-division edges (plan step 3): no C predicted ->
- * precision "n/a"; no C in labels -> recall "n/a"; F1 "n/a" whenever
- * EITHER is "n/a", or when both are defined but both zero (0/0 is
- * reported as "n/a", never NaN). `tp+fp===0`/`tp+fn===0` already cover the
+ * silently dropped. Zero-division edges (plan step 3, corrected fix-wave F2
+ * — see `metricsFromCounts`'s doc): no C predicted -> precision "n/a"; no C
+ * in labels -> recall "n/a"; F1 "n/a" ONLY when tp+fp+fn===0 — the earlier
+ * "F1 n/a whenever P or R is n/a, or both are defined-zero" rule undercounted
+ * evaluable arms. `tp+fp===0`/`tp+fn===0`/`tp+fp+fn===0` already cover the
  * incomplete case too (the skipped loop leaves every count at 0), so no
- * separate `complete` branch is needed in the precision/recall formulas. */
+ * separate `complete` branch is needed in the metric formulas. */
 export function computeArmMetrics(
   arm: string,
   manifestKeys: string[],
@@ -834,12 +1071,7 @@ export function computeArmMetrics(
     }
   }
 
-  const precision: ClsMetricValue = tp + fp === 0 ? "n/a" : tp / (tp + fp)
-  const recall: ClsMetricValue = tp + fn === 0 ? "n/a" : tp / (tp + fn)
-  let f1: ClsMetricValue
-  if (precision === "n/a" || recall === "n/a") f1 = "n/a"
-  else if (precision === 0 && recall === 0) f1 = "n/a"
-  else f1 = (2 * precision * recall) / (precision + recall)
+  const { precision, recall, f1 } = metricsFromCounts(tp, fp, fn)
 
   return {
     arm,
@@ -898,6 +1130,15 @@ export interface ClsDecisionResult {
   reason: string
 }
 
+/** `ClsDecisionResult` stamped with WHICH counts it was evaluated over
+ * (fix-wave F3) — `"per-host"` for a single host's own local sample,
+ * `"combined"` for the cross-host summed sample (`cls-combined.json`; §6:
+ * "the decision rule ... is evaluated on combined counts across hosts" is
+ * the REGISTERED verdict). `evaluateClsDecision` itself stays scope-unaware
+ * (pure over whatever metrics it is handed); the caller (`runClsScore`)
+ * stamps the scope onto the result before it lands in an emitted doc. */
+export type ClsScopedDecisionResult = ClsDecisionResult & { scope: "per-host" | "combined" }
+
 /** The pre-registered decision rule (spec §3), evaluated against
  * `CLS_DECISION_CONSTANTS` — the ONE exported constants object, never a
  * re-derived number. If the incumbent arm is missing, incomplete, or has
@@ -943,7 +1184,11 @@ export function evaluateClsDecision(metrics: ClsArmMetrics[]): ClsDecisionResult
 
   const winner = pickWinner(metrics)! // incumbent itself always qualifies -> never undefined here
   const winnerMetrics = metrics.find((m) => m.arm === winner.arm)!
-  const margin = winner.f1 - incumbent.f1
+  // Rounded to 3dp (fix-wave F1, pre-data fix 2026-08-03) — see roundTo3's
+  // doc. The SAME rounded value is stored in marginAchieved and rendered in
+  // renderDecisionLines's arithmetic line, so the gate decision and the
+  // printed report can never disagree.
+  const margin = roundTo3(winner.f1 - incumbent.f1)
   const missedCOk = winnerMetrics.fn <= incumbent.fn
 
   if (winner.arm !== incumbentArm && margin >= f1Margin && missedCOk) {
@@ -990,6 +1235,15 @@ export interface ClsScoreArmEntry {
   complete: boolean
   counts: { tp: number; fp: number; fn: number; tn: number }
   metrics: { precision: ClsMetricValue; recall: ClsMetricValue; f1: ClsMetricValue }
+  /** fix-wave F8 — true iff this arm's rows do not all share ONE
+   * `promptSha256` (i.e. at least one row was built from different prompt
+   * text than the others). Warned on stdout too; see `runClsScore`. */
+  mixedPrompt: boolean
+  /** fix-wave F9 — count of this arm's rows whose `model`/`promptVariant`
+   * does not match the arm filename's expected literals (e.g. a
+   * `sonnet-patched.ndjson` row recorded `model: "claude-haiku-4-5"`). Any
+   * mismatch marks the whole run provisional (see `ClsScoreFile` doc). */
+  mismatchedRows: number
 }
 
 /** `cls-score.json` / `--emit-doc` target — counts/metrics/verdict/
@@ -1010,12 +1264,28 @@ export interface ClsScoreArmEntry {
 export interface ClsScoreFile {
   scoredAt: string
   hostname: string
-  sample: { cCount: number; notCCount: number; total: number }
+  sample: {
+    cCount: number
+    notCCount: number
+    total: number
+    /** fix-wave F10 — per-stratum transport tally, carried straight from
+     * `ClsManifest.transportCounts` (never re-derived here). */
+    transportCounts: { c: ClsTransportTally; notC: ClsTransportTally }
+    /** fix-wave F11 — this sample's manifest `sampledAt`, carried alongside
+     * the score's own `scoredAt` so a reader can tell WHEN the sample this
+     * score was computed over was actually drawn. */
+    manifestSampledAt: string
+    /** fix-wave F11 — sha256 over the SORTED full manifest key set
+     * (`manifestKeysHash`, exported below) — a durable sample-identity
+     * fingerprint two different `cls-score.json`/emitted docs can be
+     * compared by without re-reading either host's `manifest.json`. */
+    manifestKeysHash: string
+  }
   expectedArms: string[]
   absentArms: string[]
   provisional: boolean
   arms: ClsScoreArmEntry[]
-  decision: ClsDecisionResult
+  decision: ClsScopedDecisionResult
 }
 
 function fmtMetric(v: ClsMetricValue): string {
@@ -1031,6 +1301,14 @@ function renderArmRow(m: ClsArmMetrics): string {
   )
 }
 
+/** Tie-break prose, DERIVED from `CLS_DECISION_CONSTANTS.tieBreak` (fix-wave
+ * F16) — never a hardcoded restatement that could silently drift from the
+ * constants' actual ordering if they are ever re-ruled pre-data. */
+function tieBreakProse(): string {
+  const { modelOrder, variantOrder } = CLS_DECISION_CONSTANTS.tieBreak
+  return `cheaper model first (${modelOrder.join(" < ")}), then earlier prompt variant (${variantOrder.join(" < ")})`
+}
+
 function renderDecisionLines(d: ClsDecisionResult): string[] {
   const lines = [`decision (pre-registered, spec §3 — incumbent ${d.incumbentArm}):`]
   if (d.verdict === "NOT-EVALUABLE") {
@@ -1040,7 +1318,7 @@ function renderDecisionLines(d: ClsDecisionResult): string[] {
   const marginOk = d.marginAchieved! >= CLS_DECISION_CONSTANTS.f1Margin
   const missedOk = d.missedCWinner! <= d.missedCIncumbent!
   lines.push(
-    `  winner (argmax F1, tie-break cheaper-model-then-base-prompt): ${d.winnerArm}`,
+    `  winner (argmax F1, tie-break ${tieBreakProse()}): ${d.winnerArm}`,
     `  F1_winner ${fmtMetric(d.f1Winner!)} - F1_incumbent ${fmtMetric(d.f1Incumbent!)} = ` +
       `${d.marginAchieved!.toFixed(3)} >= ${CLS_DECISION_CONSTANTS.f1Margin}? ${marginOk ? "YES" : "NO"}`,
     `  missed-C_winner ${d.missedCWinner} <= missed-C_incumbent ${d.missedCIncumbent}? ${missedOk ? "YES" : "NO"}`,
@@ -1083,37 +1361,240 @@ export function renderClsScoreReport(
   return lines.join("\n")
 }
 
-/** `cls-score [cwd] [--emit-doc <path>]` arg parsing. `--emit-doc` with no
- * following value becomes `""` (distinct from `undefined` = flag not
- * passed at all) so `runClsScore` can refuse it cleanly instead of
- * attempting to write to an empty path. */
-export function parseClsScoreArgs(args: string[]): { cwd: string; emitDoc: string | undefined } {
+/** sha256 over the SORTED full manifest key set (fix-wave F11) — a durable
+ * sample-identity fingerprint: two runs over the SAME sample (same keys,
+ * any order) hash identically; two DIFFERENT samples hash differently. */
+export function manifestKeysHash(keys: string[]): string {
+  return sha256Hex(JSON.stringify([...keys].sort()))
+}
+
+/** Distinct `promptSha256` values among a set of rows, ignoring rows with no
+ * hash at all (fix-wave F8 — tolerates pre-F8 fixtures/rows). */
+function distinctPromptHashes(rows: { promptSha256?: string }[]): Set<string> {
+  return new Set(rows.map((r) => r.promptSha256).filter((h): h is string => typeof h === "string"))
+}
+
+/** Count of `armRows` whose `model`/`promptVariant` does not match the arm
+ * FILENAME's expected literals (fix-wave F9) — e.g. a row landed in
+ * `arm-sonnet-patched.ndjson` recording `model: "claude-haiku-4-5"`.
+ * Unparseable arm names (should never happen — `listPresentArmNames` only
+ * ever returns the 4 valid literals) count zero mismatches defensively. */
+function countMismatchedRows(arm: string, rows: ClsArmRow[]): number {
+  const parsed = parseClsArmName(arm)
+  if (!parsed) return 0
+  const expectedModel = CLS_ARM_MODEL_LITERALS[parsed.model]
+  return rows.filter((r) => r.model !== expectedModel || r.promptVariant !== parsed.variant).length
+}
+
+export const CLS_COMBINED_NAME = "cls-combined.json"
+
+function nonNegInt(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v >= 0
+}
+
+export interface ClsScoreArmParsed {
+  arm: string
+  totalKeys: number
+  presentKeys: number
+  missingKeys: number
+  complete: boolean
+  counts: { tp: number; fp: number; fn: number; tn: number }
+}
+
+export interface ClsScoreFileParsed {
+  hostname: string
+  scoredAt: string
+  sample: { cCount: number; notCCount: number; total: number }
+  arms: ClsScoreArmParsed[]
+}
+
+/** Set-cardinality identity every honest per-arm entry satisfies (fix-wave
+ * F3, paired-validation.ts's `pvCountsConsistent` precedent): present +
+ * missing must sum to total, `complete` must agree with `missingKeys === 0`,
+ * and the four counts must sum to `totalKeys` when complete or to exactly
+ * zero when not (`computeArmMetrics` never accumulates counts for an
+ * incomplete arm — the loop is skipped entirely). */
+function clsArmEntryConsistent(a: ClsScoreArmParsed): boolean {
+  if (a.presentKeys + a.missingKeys !== a.totalKeys) return false
+  if (a.complete !== (a.missingKeys === 0)) return false
+  const sum = a.counts.tp + a.counts.fp + a.counts.fn + a.counts.tn
+  return a.complete ? sum === a.totalKeys : sum === 0
+}
+
+/** Shape-validate another host's `cls-score.json`/`--emit-doc` file for
+ * `--combine` (fix-wave F3, paired-validation.ts's `parsePvCountsFile`
+ * precedent) — required `hostname`/`scoredAt` strings, `sample` counts as
+ * non-negative integers, and every `arms[]` entry's `arm` (one of the 4
+ * registered names) / totalKeys / presentKeys / missingKeys / counts as
+ * non-negative integers satisfying the completeness identity above. A
+ * missing, non-integer, negative, unrecognized-arm, or inconsistent field
+ * refuses rather than silently summing garbage into the combined decision.
+ * Returns undefined on any violation. */
+export function parseClsScoreCombineFile(raw: string): ClsScoreFileParsed | undefined {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return undefined
+  }
+  if (typeof parsed !== "object" || parsed === null) return undefined
+  const o = parsed as Record<string, unknown>
+  if (typeof o.hostname !== "string" || typeof o.scoredAt !== "string") return undefined
+  if (typeof o.sample !== "object" || o.sample === null) return undefined
+  const s = o.sample as Record<string, unknown>
+  if (!nonNegInt(s.cCount) || !nonNegInt(s.notCCount) || !nonNegInt(s.total)) return undefined
+  if (!Array.isArray(o.arms)) return undefined
+  const arms: ClsScoreArmParsed[] = []
+  for (const rawArm of o.arms) {
+    if (typeof rawArm !== "object" || rawArm === null) return undefined
+    const a = rawArm as Record<string, unknown>
+    if (typeof a.arm !== "string" || !CLS_ALL_ARM_NAMES.includes(a.arm)) return undefined
+    if (!nonNegInt(a.totalKeys) || !nonNegInt(a.presentKeys) || !nonNegInt(a.missingKeys)) return undefined
+    if (typeof a.complete !== "boolean") return undefined
+    if (typeof a.counts !== "object" || a.counts === null) return undefined
+    const c = a.counts as Record<string, unknown>
+    if (!nonNegInt(c.tp) || !nonNegInt(c.fp) || !nonNegInt(c.fn) || !nonNegInt(c.tn)) return undefined
+    const entry: ClsScoreArmParsed = {
+      arm: a.arm,
+      totalKeys: a.totalKeys,
+      presentKeys: a.presentKeys,
+      missingKeys: a.missingKeys,
+      complete: a.complete,
+      counts: { tp: c.tp, fp: c.fp, fn: c.fn, tn: c.tn },
+    }
+    if (!clsArmEntryConsistent(entry)) return undefined
+    arms.push(entry)
+  }
+  return {
+    hostname: o.hostname,
+    scoredAt: o.scoredAt,
+    sample: { cCount: s.cCount, notCCount: s.notCCount, total: s.total },
+    arms,
+  }
+}
+
+/** Field-wise sum of one arm's local + other-host counts (fix-wave F3,
+ * paired-validation.ts's `combinePvCounts` precedent — valid set arithmetic
+ * because per-host corpus stores, and therefore per-host samples, are
+ * disjoint by construction, GA9). undefined iff the arm is absent from
+ * EITHER side — an arm neither host (or only one host) has run at all
+ * contributes nothing to the combined decision rather than a misleading
+ * partial sum. */
+function combineArmEntries(
+  arm: string,
+  local: ClsScoreArmEntry | undefined,
+  other: ClsScoreArmParsed | undefined,
+): ClsScoreArmEntry | undefined {
+  if (local === undefined || other === undefined) return undefined
+  const totalKeys = local.totalKeys + other.totalKeys
+  const presentKeys = local.presentKeys + other.presentKeys
+  const missingKeys = local.missingKeys + other.missingKeys
+  const complete = missingKeys === 0
+  const counts = {
+    tp: local.counts.tp + other.counts.tp,
+    fp: local.counts.fp + other.counts.fp,
+    fn: local.counts.fn + other.counts.fn,
+    tn: local.counts.tn + other.counts.tn,
+  }
+  const metrics = metricsFromCounts(counts.tp, counts.fp, counts.fn)
+  return {
+    arm,
+    totalKeys,
+    presentKeys,
+    missingKeys,
+    complete,
+    counts,
+    metrics,
+    // Combine arithmetic only sums COUNTS (F3's own scope) — per-row
+    // provenance checks (F8/F9) are per-host concerns, not meaningful to
+    // sum; the combined entry reports neither as flagged.
+    mixedPrompt: false,
+    mismatchedRows: 0,
+  }
+}
+
+function toArmMetrics(e: ClsScoreArmEntry): ClsArmMetrics {
+  return {
+    arm: e.arm,
+    totalKeys: e.totalKeys,
+    presentKeys: e.presentKeys,
+    missingKeys: e.missingKeys,
+    complete: e.complete,
+    tp: e.counts.tp,
+    fp: e.counts.fp,
+    fn: e.counts.fn,
+    tn: e.counts.tn,
+    precision: e.metrics.precision,
+    recall: e.metrics.recall,
+    f1: e.metrics.f1,
+  }
+}
+
+/** `cls-combined.json` — the CROSS-HOST registered verdict (spec §6: "the
+ * decision rule ... is evaluated on combined counts across hosts"), written
+ * beside `cls-score.json` on a successful `--combine` (fix-wave F3,
+ * paired-validation.ts's `PvCombinedFile` precedent). Counts + verdict only,
+ * mirroring `ClsScoreFile`'s own F2 discipline — no prompt text anywhere. */
+export interface ClsCombinedFile {
+  scoredAt: string
+  local: { hostname: string; arms: ClsScoreArmEntry[] }
+  other: { hostname: string; scoredAt: string; arms: ClsScoreArmParsed[] }
+  combined: { arms: ClsScoreArmEntry[]; absentArms: string[]; decision: ClsScopedDecisionResult }
+}
+
+/** `cls-score [cwd] [--emit-doc <path>] [--combine <path>]` arg parsing.
+ * `--emit-doc`/`--combine` with no following value become `""` (distinct
+ * from `undefined` = flag not passed at all) so `runClsScore` can refuse
+ * cleanly. `unknownFlag` — fix-wave F17, see `parseClsSampleArgs`'s doc. */
+export function parseClsScoreArgs(
+  args: string[],
+): { cwd: string; emitDoc: string | undefined; combine: string | undefined; unknownFlag: string | undefined } {
   let emitDoc: string | undefined
+  let combine: string | undefined
+  let unknownFlag: string | undefined
   const positional: string[] = []
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--emit-doc") {
       emitDoc = args[i + 1] ?? ""
       i++
+    } else if (args[i] === "--combine") {
+      combine = args[i + 1] ?? ""
+      i++
+    } else if (args[i]!.startsWith("--")) {
+      unknownFlag ??= args[i]
     } else {
       positional.push(args[i]!)
     }
   }
-  return { cwd: positional[0] ?? process.cwd(), emitDoc }
+  return { cwd: positional[0] ?? process.cwd(), emitDoc, combine, unknownFlag }
 }
 
-/** `cls-score [cwd] [--emit-doc <path>]` (Task 3). READ-ONLY on every input
- * (module doc above) — no lock is acquired or needed. Refusal-first ORDER:
- * `--emit-doc ""` (flag with no value), a missing/malformed manifest, and
- * incomplete labels all refuse BEFORE any write — including the main
- * `cls-score.json` write, so a refusal has zero effect on either output. Per-
- * arm completeness is reported explicitly (`missingKeys`, log line per
- * incomplete arm) but does NOT refuse the whole run — only labels being
- * incomplete does (labels are the ground truth every arm is scored against). */
+/** `cls-score [cwd] [--emit-doc <path>] [--combine <path>]` (Task 3, +
+ * fix-wave F3/F12). Every READ (manifest/labels/arm files/`--combine` file)
+ * stays lock-free (module doc above); only the mkdir+write phase is guarded
+ * by the shared cls-ab lock. Refusal-first ORDER: `--emit-doc ""`, a
+ * missing/malformed manifest, incomplete labels, and (when `--combine` is
+ * given) an unreadable/self-hosted/malformed combine file all refuse BEFORE
+ * any write — so a refusal has zero effect on every output, including
+ * `cls-score.json` itself. Per-arm completeness is reported explicitly
+ * (`missingKeys`, log line per incomplete arm) but does NOT refuse the whole
+ * run — only labels being incomplete does (labels are the ground truth every
+ * arm is scored against).
+ *
+ * `--combine` (fix-wave F3): once validated, `--emit-doc` (if also given)
+ * targets the COMBINED content instead of the per-host one — the registered
+ * verdict is the combined one (spec §6), so the committable doc an operator
+ * asks for during a combine run should be the combined result, not the
+ * per-host one (which is committed separately, its own earlier
+ * `--emit-doc`-only run — see the runbook). The per-host `cls-score.json` at
+ * the experiment root is ALWAYS written regardless (its `decision.scope` is
+ * always `"per-host"`), and `cls-combined.json` is written alongside it on a
+ * successful combine. */
 export function runClsScore(
   cwd: string,
-  opts: { emitDoc?: string },
+  opts: { emitDoc?: string; combine?: string },
   log: (m: string) => void,
-): ClsScoreFile | undefined {
+): (ClsScoreFile & { combined?: ClsCombinedFile }) | undefined {
   if (opts.emitDoc === "") {
     log("REFUSING: cls-score — --emit-doc requires a path argument.")
     return undefined
@@ -1149,14 +1630,10 @@ export function runClsScore(
   const presentArms = listPresentArmNames(cwd)
   const expectedArms = [...CLS_ALL_ARM_NAMES]
   const absentArms = expectedArms.filter((a) => !presentArms.includes(a))
-  const metrics = presentArms.map((arm) =>
-    computeArmMetrics(
-      arm,
-      manifestKeys,
-      readNdjson<ClsArmRow>(path.join(root, clsArmFileName(arm))),
-      labelPositiveByKey,
-    ),
+  const armRowsByName = new Map(
+    presentArms.map((arm) => [arm, readNdjson<ClsArmRow>(path.join(root, clsArmFileName(arm)))] as const),
   )
+  const metrics = presentArms.map((arm) => computeArmMetrics(arm, manifestKeys, armRowsByName.get(arm)!, labelPositiveByKey))
   for (const m of metrics) {
     if (!m.complete) {
       log(
@@ -1169,16 +1646,55 @@ export function runClsScore(
     log(`cls-score: ${absentArms.length}/${expectedArms.length} registered arm(s) never run: ${absentArms.join(", ")}.`)
   }
 
-  const decision = evaluateClsDecision(metrics)
-  // PROVISIONAL (fix-wave, IMPORTANT): true whenever the decision above was
-  // NOT computed over all 4 registered arms fully derived — i.e. any
-  // registered arm is absent OR present-but-incomplete.
-  const provisional = absentArms.length > 0 || metrics.some((m) => !m.complete)
+  // Provenance (fix-wave F8/F9): per-arm mixed-prompt-hash + model/variant
+  // mismatch checks, both warned on stdout; either flags the whole run
+  // provisional (see below).
+  let anyMixedOrMismatched = false
+  const mixedPromptByArm = new Map<string, boolean>()
+  const mismatchedByArm = new Map<string, number>()
+  for (const arm of presentArms) {
+    const rows = armRowsByName.get(arm)!
+    const mixed = distinctPromptHashes(rows).size > 1
+    const mismatched = countMismatchedRows(arm, rows)
+    mixedPromptByArm.set(arm, mixed)
+    mismatchedByArm.set(arm, mismatched)
+    if (mixed) {
+      anyMixedOrMismatched = true
+      log(`cls-score: WARNING — arm ${arm} has rows built from DIFFERING prompt text (mixed promptSha256).`)
+    }
+    if (mismatched > 0) {
+      anyMixedOrMismatched = true
+      log(
+        `cls-score: WARNING — arm ${arm} has ${mismatched} row(s) whose model/promptVariant does not ` +
+          "match the arm filename's expected literal(s).",
+      )
+    }
+  }
+  const labelsMixed = distinctPromptHashes(labelRows).size > 1
+  if (labelsMixed) {
+    log("cls-score: WARNING — labels.ndjson has rows built from DIFFERING prompt text (mixed promptSha256).")
+  }
+
+  const decisionRaw = evaluateClsDecision(metrics)
+  const decision: ClsScopedDecisionResult = { ...decisionRaw, scope: "per-host" }
+  // PROVISIONAL (fix-wave, IMPORTANT + F8/F9): true whenever the decision
+  // above was NOT computed over all 4 registered arms fully derived (any
+  // registered arm absent or present-but-incomplete), OR any present arm's
+  // rows carry a provenance red flag (mixed prompt hash / model-variant
+  // mismatch) that puts its metrics in question.
+  const provisional = absentArms.length > 0 || metrics.some((m) => !m.complete) || anyMixedOrMismatched
 
   const scoreFile: ClsScoreFile = {
     scoredAt: new Date().toISOString(),
     hostname: os.hostname(),
-    sample: { cCount: manifest.cCount, notCCount: manifest.notCCount, total: manifestKeys.length },
+    sample: {
+      cCount: manifest.cCount,
+      notCCount: manifest.notCCount,
+      total: manifestKeys.length,
+      transportCounts: manifest.transportCounts ?? { c: { cli: 0, sdk: 0 }, notC: { cli: 0, sdk: 0 } },
+      manifestSampledAt: manifest.sampledAt,
+      manifestKeysHash: manifestKeysHash(manifestKeys),
+    },
     expectedArms,
     absentArms,
     provisional,
@@ -1190,23 +1706,98 @@ export function runClsScore(
       complete: m.complete,
       counts: { tp: m.tp, fp: m.fp, fn: m.fn, tn: m.tn },
       metrics: { precision: m.precision, recall: m.recall, f1: m.f1 },
+      mixedPrompt: mixedPromptByArm.get(m.arm) ?? false,
+      mismatchedRows: mismatchedByArm.get(m.arm) ?? 0,
     })),
     decision,
   }
+  const scoreBody = JSON.stringify(scoreFile, null, 2) + "\n"
 
-  const body = JSON.stringify(scoreFile, null, 2) + "\n"
-  const dest = path.join(root, CLS_SCORE_NAME)
-  fs.mkdirSync(root, { recursive: true })
-  atomicWrite(dest, body)
+  // --combine (fix-wave F3): validated BEFORE any write, so a refusal here
+  // has zero effect (same discipline as pv-compare's --combine validation).
+  let combinedFile: ClsCombinedFile | undefined
+  if (opts.combine !== undefined) {
+    let raw: string
+    try {
+      raw = fs.readFileSync(opts.combine, "utf-8")
+    } catch {
+      log(`REFUSING: cls-score — cannot read --combine file ${opts.combine}`)
+      return undefined
+    }
+    const other = parseClsScoreCombineFile(raw)
+    if (other === undefined) {
+      log(
+        `REFUSING: --combine — ${opts.combine} is not a valid cls-score file (missing/non-integer/` +
+          "negative/inconsistent counts, unrecognized arm name, or missing hostname/scoredAt/sample).",
+      )
+      return undefined
+    }
+    if (other.hostname === os.hostname()) {
+      log(
+        `REFUSING: --combine — ${opts.combine} was produced on THIS host (${other.hostname}); combining ` +
+          "a host with itself double-counts its sample. Pass the OTHER host's cls-score file.",
+      )
+      return undefined
+    }
 
-  log(renderClsScoreReport(scoreFile.sample, metrics, decision, { expectedArms, absentArms, provisional }))
-  log(`cls-score: wrote ${CLS_SCORE_NAME} -> ${dest}`)
+    const otherArmByName = new Map(other.arms.map((a) => [a.arm, a] as const))
+    const localArmByName = new Map(scoreFile.arms.map((a) => [a.arm, a] as const))
+    const combinedArms: ClsScoreArmEntry[] = []
+    const combinedAbsentArms: string[] = []
+    for (const arm of CLS_ALL_ARM_NAMES) {
+      const combined = combineArmEntries(arm, localArmByName.get(arm), otherArmByName.get(arm))
+      if (combined) combinedArms.push(combined)
+      else combinedAbsentArms.push(arm)
+    }
+    const combinedDecisionRaw = evaluateClsDecision(combinedArms.map(toArmMetrics))
+    const combinedDecision: ClsScopedDecisionResult = { ...combinedDecisionRaw, scope: "combined" }
 
-  if (opts.emitDoc !== undefined) {
-    fs.mkdirSync(path.dirname(opts.emitDoc), { recursive: true })
-    atomicWrite(opts.emitDoc, body)
-    log(`cls-score: --emit-doc -> ${opts.emitDoc}`)
+    combinedFile = {
+      scoredAt: scoreFile.scoredAt,
+      local: { hostname: scoreFile.hostname, arms: scoreFile.arms },
+      other: { hostname: other.hostname, scoredAt: other.scoredAt, arms: other.arms },
+      combined: { arms: combinedArms, absentArms: combinedAbsentArms, decision: combinedDecision },
+    }
+  }
+  const combinedBody = combinedFile !== undefined ? JSON.stringify(combinedFile, null, 2) + "\n" : undefined
+
+  // Write phase — LOCK-GUARDED (fix-wave F12): every read/computation above
+  // is done; only mkdir+write from here on, and only for as long as that
+  // takes.
+  if (!acquireClsAbLock(cwd)) {
+    log(
+      `REFUSING: cls-score — lock held (${CLS_AB_LOCK_REL}) — a cls-sample/cls-run/cls-label write ` +
+        "appears to be in flight against this experiment dir.",
+    )
+    return undefined
+  }
+  try {
+    const dest = path.join(root, CLS_SCORE_NAME)
+    fs.mkdirSync(root, { recursive: true })
+    atomicWrite(dest, scoreBody)
+    log(renderClsScoreReport(scoreFile.sample, metrics, decision, { expectedArms, absentArms, provisional }))
+    log(`cls-score: wrote ${CLS_SCORE_NAME} -> ${dest}`)
+
+    if (combinedFile !== undefined && combinedBody !== undefined) {
+      const combinedDest = path.join(root, CLS_COMBINED_NAME)
+      atomicWrite(combinedDest, combinedBody)
+      log(
+        `cls-score: combine — other host ${combinedFile.other.hostname} (scoredAt ` +
+          `${combinedFile.other.scoredAt}); combined verdict: ${combinedFile.combined.decision.verdict}` +
+          (combinedFile.combined.decision.verdict === "ADOPT" ? ` <${combinedFile.combined.decision.winnerArm}>` : ""),
+      )
+      log(`cls-score: wrote ${CLS_COMBINED_NAME} -> ${combinedDest}`)
+    }
+
+    if (opts.emitDoc !== undefined) {
+      const emitBody = combinedBody ?? scoreBody
+      fs.mkdirSync(path.dirname(opts.emitDoc), { recursive: true })
+      atomicWrite(opts.emitDoc, emitBody)
+      log(`cls-score: --emit-doc -> ${opts.emitDoc} (${combinedBody !== undefined ? "combined" : "per-host"})`)
+    }
+  } finally {
+    releaseClsAbLock(cwd)
   }
 
-  return scoreFile
+  return combinedFile !== undefined ? { ...scoreFile, combined: combinedFile } : scoreFile
 }

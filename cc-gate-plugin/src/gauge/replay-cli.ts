@@ -564,14 +564,24 @@ async function main(): Promise<void> {
   }
 
   if (sub === "cls-sample") {
-    const { cwd, reset } = parseClsSampleArgs(args.slice(1))
-    const summary = runClsSample(cwd, { reset }, (m) => console.log(m))
+    const { cwd, reset, discardSpend, unknownFlag } = parseClsSampleArgs(args.slice(1))
+    if (unknownFlag !== undefined) {
+      console.error(`cls-sample: unknown flag ${unknownFlag}`)
+      process.exitCode = 1
+      return
+    }
+    const summary = runClsSample(cwd, { reset, discardSpend }, (m) => console.log(m))
     if (summary === undefined) process.exitCode = 1
     return
   }
 
   if (sub === "cls-run") {
-    const { cwd, arm, go } = parseClsRunArgs(args.slice(1))
+    const { cwd, arm, go, unknownFlag } = parseClsRunArgs(args.slice(1))
+    if (unknownFlag !== undefined) {
+      console.error(`cls-run: unknown flag ${unknownFlag}`)
+      process.exitCode = 1
+      return
+    }
     if (arm === undefined) {
       console.error("cls-run: --arm <haiku|sonnet>-<base|patched> is required")
       process.exitCode = 1
@@ -583,15 +593,25 @@ async function main(): Promise<void> {
   }
 
   if (sub === "cls-label") {
-    const { cwd, go } = parseClsLabelArgs(args.slice(1))
+    const { cwd, go, unknownFlag } = parseClsLabelArgs(args.slice(1))
+    if (unknownFlag !== undefined) {
+      console.error(`cls-label: unknown flag ${unknownFlag}`)
+      process.exitCode = 1
+      return
+    }
     const summary = await runClsLabel(cwd, go, (m) => console.log(m))
     if (summary === undefined) process.exitCode = 1
     return
   }
 
   if (sub === "cls-score") {
-    const { cwd, emitDoc } = parseClsScoreArgs(args.slice(1))
-    const summary = runClsScore(cwd, { emitDoc }, (m) => console.log(m))
+    const { cwd, emitDoc, combine, unknownFlag } = parseClsScoreArgs(args.slice(1))
+    if (unknownFlag !== undefined) {
+      console.error(`cls-score: unknown flag ${unknownFlag}`)
+      process.exitCode = 1
+      return
+    }
+    const summary = runClsScore(cwd, { emitDoc, combine }, (m) => console.log(m))
     if (summary === undefined) process.exitCode = 1
     return
   }

@@ -25,7 +25,8 @@ import {
 } from "../src/gauge/cls-ab.ts"
 import { writeCorpus, type CorpusRecord } from "../src/gauge/corpus-store.ts"
 import type { GaugeFile } from "../src/gauge/files.ts"
-import { buildRefinerPrompt } from "../src/gauge/refiner.ts"
+import { buildRefinerPrompt, buildLabelPrompt } from "../src/gauge/refiner.ts"
+import { sha256Hex } from "../src/gauge/corpus-mine.ts"
 import { stubServer, stubServerFor, okResponse, type SdkStub } from "./sdk-stub.ts"
 
 function mkRepo(): string {
@@ -156,15 +157,44 @@ describe("parseClsRunArgs", () => {
       cwd: "/some/dir",
       arm: "haiku-base",
       go: 3,
+      unknownFlag: undefined,
     })
-    expect(parseClsRunArgs([])).toEqual({ cwd: process.cwd(), arm: undefined, go: undefined })
+    expect(parseClsRunArgs([])).toEqual({
+      cwd: process.cwd(),
+      arm: undefined,
+      go: undefined,
+      unknownFlag: undefined,
+    })
+  })
+
+  // fix-wave F17: unrecognized flag captured, never swallowed into cwd.
+  test("unknown flag captured, never becomes the cwd positional", () => {
+    expect(parseClsRunArgs(["--typo", "/some/dir"])).toEqual({
+      cwd: "/some/dir",
+      arm: undefined,
+      go: undefined,
+      unknownFlag: "--typo",
+    })
   })
 })
 
 describe("parseClsLabelArgs", () => {
   test("--go extracted; cwd positional; defaults", () => {
-    expect(parseClsLabelArgs(["/some/dir", "--go", "5"])).toEqual({ cwd: "/some/dir", go: 5 })
-    expect(parseClsLabelArgs([])).toEqual({ cwd: process.cwd(), go: undefined })
+    expect(parseClsLabelArgs(["/some/dir", "--go", "5"])).toEqual({
+      cwd: "/some/dir",
+      go: 5,
+      unknownFlag: undefined,
+    })
+    expect(parseClsLabelArgs([])).toEqual({ cwd: process.cwd(), go: undefined, unknownFlag: undefined })
+  })
+
+  // fix-wave F17: unrecognized flag captured, never swallowed into cwd.
+  test("unknown flag captured, never becomes the cwd positional", () => {
+    expect(parseClsLabelArgs(["--typo", "/some/dir"])).toEqual({
+      cwd: "/some/dir",
+      go: undefined,
+      unknownFlag: "--typo",
+    })
   })
 })
 
@@ -314,6 +344,9 @@ describe("runClsRun — success: model literal + prompt variant per arm", () => 
       expect(r.transport).toBe("sdk")
       expect(typeof r.key).toBe("string")
       expect(typeof r.ts).toBe("string")
+      // fix-wave F8: promptSha256 is the hash of the EXACT built prompt
+      // text sent (buildRefinerPrompt), never the text itself.
+      expect(r.promptSha256).toBe(sha256Hex(buildRefinerPrompt("fix the thing", "test -f floor.ts", "base")))
     }
   })
 
@@ -457,6 +490,47 @@ describe("runClsRun — lock discipline", () => {
   })
 })
 
+describe("runClsRun / runClsLabel — lock refresh per record (fix-wave F4)", () => {
+  test("cls-run refreshes the held lock's ts after every record, success or failure", async () => {
+    const cwd = sampledRepo()
+    const lockPath = path.join(cwd, CLS_AB_LOCK_REL)
+    let lockWrites = 0
+    const origWriteFileSync = fs.writeFileSync
+    fs.writeFileSync = ((...args: Parameters<typeof fs.writeFileSync>) => {
+      if (String(args[0]) === lockPath) lockWrites++
+      return origWriteFileSync(...args)
+    }) as typeof fs.writeFileSync
+    try {
+      const srv = stubServerFor({ goalSummary: "g", class: "C", criteria: ["c1"], check: null, confidence: 0.9 })
+      const summary = await withSdkStub(srv, () => runClsRun(cwd, "haiku-base", 4, () => {}))
+      expect(summary).toEqual({ arm: "haiku-base", pending: 4, classified: 4, failed: 0 })
+    } finally {
+      fs.writeFileSync = origWriteFileSync
+    }
+    // 1 write for the initial acquire + 1 refresh per record (4) = >= 5.
+    expect(lockWrites).toBeGreaterThanOrEqual(5)
+  })
+
+  test("cls-label refreshes the held lock's ts after every record", async () => {
+    const cwd = sampledRepo()
+    const lockPath = path.join(cwd, CLS_AB_LOCK_REL)
+    let lockWrites = 0
+    const origWriteFileSync = fs.writeFileSync
+    fs.writeFileSync = ((...args: Parameters<typeof fs.writeFileSync>) => {
+      if (String(args[0]) === lockPath) lockWrites++
+      return origWriteFileSync(...args)
+    }) as typeof fs.writeFileSync
+    try {
+      const srv = stubServerFor({ label: "C", class: "C" })
+      const summary = await withSdkStub(srv, () => runClsLabel(cwd, 4, () => {}))
+      expect(summary).toEqual({ pending: 4, labeled: 4, failed: 0 })
+    } finally {
+      fs.writeFileSync = origWriteFileSync
+    }
+    expect(lockWrites).toBeGreaterThanOrEqual(5)
+  })
+})
+
 describe("runClsRun — integration: a real race lands between the pre-lock read and lock acquisition", () => {
   test("a concurrent write to arm-haiku-base.ndjson lands exactly when the lock is created -> refuses under the fresh re-check, zero transport calls", async () => {
     const cwd = sampledRepo()
@@ -558,6 +632,9 @@ describe("runClsLabel — success: claude-opus-5, label rubric, labels.ndjson sh
       expect(r.model).toBe("claude-opus-5")
       expect(typeof r.key).toBe("string")
       expect(typeof r.ts).toBe("string")
+      // fix-wave F8: promptSha256 is the hash of the EXACT built prompt
+      // text sent (buildLabelPrompt), never the text itself.
+      expect(r.promptSha256).toBe(sha256Hex(buildLabelPrompt("fix the thing", "test -f floor.ts")))
     }
   })
 
