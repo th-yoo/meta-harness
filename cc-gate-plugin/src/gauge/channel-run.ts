@@ -18,14 +18,12 @@
 // KKAMAK_GAUGE_MODEL, so a stray env var armed for the live refiner can
 // never silently retarget this instrument.
 //
-// Transport note: transport.ts's shared `sdkComplete` plumbing is not
-// exported and transport.ts is outside this task's touch set (plan Task 4
-// files list), so `callChannelModel` below carries the same client shape
-// (OAuth-only authToken + apiKey:null, KKAMAK_GAUGE_SDK_BASE_URL seam,
-// maxRetries:0, 60s timeout, oauth beta header, structured output) built
-// from transport.ts's EXPORTED pieces (readAuthToken, resolveModelId) —
-// same fail-open-on-anything discipline: undefined on any failure.
-import Anthropic from "@anthropic-ai/sdk"
+// Transport note: `callChannelModel` below rides transport.ts's shared
+// `sdkCall` plumbing (OAuth-only authToken + apiKey:null,
+// KKAMAK_GAUGE_SDK_BASE_URL seam, maxRetries:0, oauth beta header) with
+// this instrument's own knobs — 60s timeout, CHANNEL_SCHEMA structured
+// output, 2048 max tokens — same fail-open-on-anything discipline:
+// undefined on any failure.
 import type { GaugePromptClass } from "../types.ts"
 import type { GaugeFile } from "./files.ts"
 import {
@@ -34,7 +32,7 @@ import {
   parseChannelOutput,
   type ChannelOrExempt,
 } from "./channel.ts"
-import { readAuthToken, resolveModelId } from "./transport.ts"
+import { resolveModelId, sdkCall } from "./transport.ts"
 import {
   readCorpus,
   writeCorpus,
@@ -87,42 +85,17 @@ export const CHANNEL_SCHEMA = {
  * text (feed to parseChannelOutput), undefined on ANY failure — same
  * env seams as transport.ts (KKAMAK_GAUGE_SDK_BASE_URL /
  * KKAMAK_GAUGE_AUTH_TOKEN) so tests can stub the whole call over localhost
- * with zero real model calls. */
+ * with zero real model calls. Thin wrapper over transport.ts `sdkCall`,
+ * carrying this instrument's knobs: CHANNEL_SCHEMA, 60s, 2048 tokens. */
 export async function callChannelModel(
   messageText: string,
   env: Record<string, string | undefined>,
 ): Promise<string | undefined> {
-  try {
-    const authToken = readAuthToken(env)
-    if (!authToken) return undefined
-
-    const client = new Anthropic({
-      authToken,
-      // OAuth-only, always (transport.ts review finding 1): explicit null
-      // stops the SDK falling back to ANTHROPIC_API_KEY from the env.
-      apiKey: null,
-      ...(env.KKAMAK_GAUGE_SDK_BASE_URL ? { baseURL: env.KKAMAK_GAUGE_SDK_BASE_URL } : {}),
-      maxRetries: 0,
-      timeout: CALL_TIMEOUT_MS,
-      defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" },
-    })
-
-    const response = await client.messages.create({
-      model: resolveModelId(CHANNEL_MODEL),
-      max_tokens: MAX_TOKENS,
-      messages: [{ role: "user", content: messageText }],
-      output_config: {
-        format: { type: "json_schema", schema: CHANNEL_SCHEMA as unknown as Record<string, unknown> },
-      },
-    })
-
-    for (const block of response.content) {
-      if (block.type === "text" && block.text) return block.text
-    }
-    return undefined
-  } catch {
-    return undefined
-  }
+  return sdkCall(messageText, resolveModelId(CHANNEL_MODEL), env, {}, {
+    schema: CHANNEL_SCHEMA as unknown as Record<string, unknown>,
+    maxTokens: MAX_TOKENS,
+    timeoutMs: CALL_TIMEOUT_MS,
+  })
 }
 
 /** `derivation.channel` stamp — a NEW optional key on the persisted

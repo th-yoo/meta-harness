@@ -141,19 +141,37 @@ export interface SdkCallOptions {
   promptVariant?: PromptVariant
 }
 
-/** Shared call plumbing (auth -> client -> structured-output request -> text
- * block extraction) for BOTH `callModelSdk` (refiner-shaped) and
- * `callModelSdkLabel` (label-rubric-shaped) — same auth/env seams, same
- * fail-open-on-anything discipline, same maxRetries:0 (§4 exactly-1-call),
- * differing only in which prompt text + JSON schema + model literal they
- * pass in. Not exported — callers always go through one of the two
- * purpose-specific wrappers below. */
-async function sdkComplete(
+/** Per-call knobs for `sdkCall`. Every field defaults to the original
+ * refiner-transport behavior when absent: `schema` absent = a PLAIN text
+ * call (no `output_config` key on the request at all — the nudge shape),
+ * `maxTokens` absent = 2048, `timeoutMs` absent = 60s. */
+export interface SdkTransportOptions {
+  /** JSON schema for structured output. Present → the request carries
+   * `output_config.format = {type:"json_schema", schema}`; absent → plain
+   * text call, no output_config. Same anyOf-never-union constraint as
+   * DERIVATION_SCHEMA applies to anything passed here. */
+  schema?: Record<string, unknown>
+  /** Request max_tokens; defaults to 2048. */
+  maxTokens?: number
+  /** Whole-call SDK timeout in ms; defaults to 60s. */
+  timeoutMs?: number
+}
+
+/** Shared call plumbing (auth -> client -> request -> text block
+ * extraction) for EVERY gauge-family SDK call: `callModelSdk`
+ * (refiner-shaped) and `callModelSdkLabel` (label-rubric-shaped) below,
+ * plus channel-run.ts `callChannelModel` (structured, 60s/2048) and
+ * hook-cli.ts's C4-nudge transport (plain text, 8s/512) — same auth/env
+ * seams (KKAMAK_GAUGE_AUTH_TOKEN / KKAMAK_GAUGE_SDK_BASE_URL), same
+ * fail-open-on-anything discipline (undefined on ANY failure, never
+ * throws), same maxRetries:0 (§4 exactly-1-call), differing only in
+ * prompt text + model literal + the per-call knobs in `opts`. */
+export async function sdkCall(
   messageText: string,
-  schema: Record<string, unknown>,
   model: string,
   env: Record<string, string | undefined>,
-  authDeps: AuthTokenDeps,
+  authDeps: AuthTokenDeps = {},
+  opts: SdkTransportOptions = {},
 ): Promise<string | undefined> {
   try {
     const authToken = readAuthToken(env, authDeps)
@@ -168,18 +186,18 @@ async function sdkComplete(
       apiKey: null,
       ...(env.KKAMAK_GAUGE_SDK_BASE_URL ? { baseURL: env.KKAMAK_GAUGE_SDK_BASE_URL } : {}),
       maxRetries: 0,
-      timeout: CALL_TIMEOUT_MS,
+      timeout: opts.timeoutMs ?? CALL_TIMEOUT_MS,
       // OAuth bearer tokens require this beta on /v1/messages.
       defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" },
     })
 
     const response = await client.messages.create({
       model,
-      max_tokens: MAX_TOKENS,
+      max_tokens: opts.maxTokens ?? MAX_TOKENS,
       messages: [{ role: "user", content: messageText }],
-      output_config: {
-        format: { type: "json_schema", schema },
-      },
+      ...(opts.schema
+        ? { output_config: { format: { type: "json_schema" as const, schema: opts.schema } } }
+        : {}),
     })
 
     for (const block of response.content) {
@@ -205,13 +223,9 @@ export async function callModelSdk(
 ): Promise<string | undefined> {
   const model = resolveModelId(opts.model ?? env.KKAMAK_GAUGE_MODEL ?? "haiku")
   const messageText = buildRefinerPrompt(prompt, floorCheck, opts.promptVariant ?? "base")
-  return sdkComplete(
-    messageText,
-    DERIVATION_SCHEMA as unknown as Record<string, unknown>,
-    model,
-    env,
-    authDeps,
-  )
+  return sdkCall(messageText, model, env, authDeps, {
+    schema: DERIVATION_SCHEMA as unknown as Record<string, unknown>,
+  })
 }
 
 /** `cls-label`'s (Task 2) blind-label call: the SAME transport plumbing as
@@ -229,5 +243,7 @@ export async function callModelSdkLabel(
 ): Promise<string | undefined> {
   const model = resolveModelId(opts.model ?? "claude-opus-5")
   const messageText = buildLabelPrompt(prompt, floorCheck)
-  return sdkComplete(messageText, LABEL_SCHEMA as unknown as Record<string, unknown>, model, env, authDeps)
+  return sdkCall(messageText, model, env, authDeps, {
+    schema: LABEL_SCHEMA as unknown as Record<string, unknown>,
+  })
 }

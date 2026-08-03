@@ -19,10 +19,9 @@ import { buildStopOutput } from "./output.ts"
 import { handlePostToolUse } from "./core/edits.ts"
 import { handleUserPromptSubmit } from "./core/prompt.ts"
 import { handleStop } from "./core/stop.ts"
-import Anthropic from "@anthropic-ai/sdk"
 import { maybeSpawnGauge } from "./gauge/spawn.ts"
 import { decideNudge, NUDGE_TIMEOUT_MS } from "./gauge/nudge.ts"
-import { readAuthToken } from "./gauge/transport.ts"
+import { sdkCall } from "./gauge/transport.ts"
 import { maybeSpawnPromptCheck } from "./prompt-check-spawn.ts"
 import { shadowEvaluateAtStop } from "./gauge/shadow.ts"
 import { applyReinjectVariant, pickReinjectVariant } from "./reinject.ts"
@@ -187,34 +186,19 @@ async function main(): Promise<void> {
         const env = process.env as Record<string, string | undefined>
         const ctx = await decideNudge(
           {
-            // Real SDK transport: same auth/base-URL seams + OAuth-only
-            // client shape as gauge/transport.ts sdkComplete (unexported
-            // there), minus structured outputs — parseChannelOutput is
-            // shape-only and fence-tolerant. claude-opus-5: channel
-            // classification is judgment (sonnet=subject, opus=judgment),
-            // and like cls-label it is never routed through
-            // KKAMAK_GAUGE_MODEL.
-            transport: async (messageText) => {
-              const authToken = readAuthToken(env)
-              if (!authToken) return undefined
-              const client = new Anthropic({
-                authToken,
-                apiKey: null,
-                ...(env.KKAMAK_GAUGE_SDK_BASE_URL ? { baseURL: env.KKAMAK_GAUGE_SDK_BASE_URL } : {}),
-                maxRetries: 0,
-                timeout: NUDGE_TIMEOUT_MS,
-                defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" },
-              })
-              const response = await client.messages.create({
-                model: "claude-opus-5",
-                max_tokens: 512,
-                messages: [{ role: "user", content: messageText }],
-              })
-              for (const block of response.content) {
-                if (block.type === "text" && block.text) return block.text
-              }
-              return undefined
-            },
+            // Real SDK transport: gauge/transport.ts `sdkCall` — same
+            // auth/base-URL seams + OAuth-only client shape as every gauge
+            // call, minus structured outputs (no schema knob) —
+            // parseChannelOutput is shape-only and fence-tolerant. Nudge
+            // knobs: 8s budget (NUDGE_TIMEOUT_MS), 512 tokens.
+            // claude-opus-5: channel classification is judgment
+            // (sonnet=subject, opus=judgment), and like cls-label it is
+            // never routed through KKAMAK_GAUGE_MODEL.
+            transport: (messageText) =>
+              sdkCall(messageText, "claude-opus-5", env, {}, {
+                maxTokens: 512,
+                timeoutMs: NUDGE_TIMEOUT_MS,
+              }),
           },
           typeof rec.prompt === "string" ? rec.prompt : "",
           nudgeCfg,
