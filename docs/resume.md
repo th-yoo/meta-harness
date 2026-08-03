@@ -160,7 +160,18 @@ branch + tests) but real money at list rates; (c)
 **@anthropic-ai/claude-agent-sdk** — post-rename default system prompt
 is MINIMAL (CC preset opt-in) so a single-turn no-tools call sits close
 to bare messages.create and bills included credit; UNVERIFIED whether it
-exposes output_config/json_schema (we depend on those). Any transport or
+exposes output_config/json_schema (we depend on those). (d) **KNOWN AND
+DELIBERATELY NOT IMPLEMENTED — FYI so nobody re-derives it as a
+"discovery":** the widely-circulated trick of setting `system: "You are
+Claude Code, Anthropic's official CLI for Claude."` on bare-SDK calls to
+make premium traffic route as interactive-CC traffic. Reported to work.
+We do not use it: it defeats a billing/quota separation Anthropic drew
+deliberately, i.e. circumvention rather than engineering, and our
+transport must not claim an identity it does not have. Standing ruling —
+holds regardless of which diagnosis of any given 429 turns out correct
+(it survived the 16:15 retraction of the credit-split theory that
+originally prompted it). Legitimate premium-quota answers are (a)-(c)
+above. Any transport or
 auth swap = pre-data amendment + boundary ts; cls-ab is at 0 labels so
 that window is OPEN and closes at the first label.
 SDD TDD mid-states turn the gate red mid-turn — foreground
@@ -171,7 +182,8 @@ RULES unchanged: explicit go before spend (sized) · spec-is-law,
 pre-data amendments only · F1 (core/, vendor/, 4 minimal/; gauge/
 editable) · F2 (no prompt text in committed artifacts) · sonnet=subject,
 opus=judgment · boundary ts on instrument changes · per-task reviews
-mandatory · grep-verify deploys · script-tally counts · SITREP style.
+mandatory · grep-verify deploys · script-tally counts · SITREP style ·
+no CC-identity impersonation on non-CC transports (see option (d) above).
 ```
 
 ## ✅ SESSION END 2026-08-02 night → 08-03 (`yoo-mac.local`) — §6c APPROVED + SDK TRANSPORT SHIPPED END-TO-END (build/review/merge/deploy, boundary ts 1785684571765) · 3 dogfood cycles = FIRST ORGANIC SDK GAUGE RECORDS · concurrent office batch: FIRST 2 poolEligible — meta-harness pushed (tip incl. `de6e892` merge + `6bb48f6`) · kkamak @ `c5f8600` pushed · squad @ `7c167f8`
