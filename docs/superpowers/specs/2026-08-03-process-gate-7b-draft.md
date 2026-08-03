@@ -1,13 +1,15 @@
 # Process gate: mechanically checkable "review artifact exists" — draft (2026-08-03)
 
-**Status:** DRAFT. User ruling required on every constant marked PROPOSED
-below. Nothing in this document is armed, wired into `gate.json`, or
-enforced by any hook. It is a registration draft only, per resume.md queue
-item (7b): convert the mandatory-per-task-review discipline from convention
-into a mechanical floor, with zero judgment inside the gate itself — the
-same floor/judgment split the gate-floor-boundary doc (`docs/2026-08-01-
-gate-floor-boundary.md`) already draws between kkamak (floor: "your check
-passed") and the opus review layer (judgment: "your work is correct").
+**Status:** REGISTERED 2026-08-03 evening — all 7 rulings decided by the
+user (see §7; every ruling = the draft's recommended option). NOT YET
+ARMED: no script exists, nothing wired into `gate.json` or any hook;
+build + arming is a separate step with its own go. Purpose per resume.md
+queue item (7b): convert the mandatory-per-task-review discipline from
+convention into a mechanical floor, with zero judgment inside the gate
+itself — the same floor/judgment split the gate-floor-boundary doc
+(`docs/2026-08-01-gate-floor-boundary.md`) already draws between kkamak
+(floor: "your check passed") and the opus review layer (judgment: "your
+work is correct").
 
 ## 1. The central design problem
 
@@ -205,24 +207,31 @@ its rollout further. This is deliberately asymmetric: failing the bar
 does not unwind the gate, it only caps its spread. (Both N and the 0.20
 threshold are PROPOSED, not decided.)
 
-## 7. Open rulings for the user
+## 7. Rulings — DECIDED 2026-08-03 (user, interactive session)
 
-1. **Placement** — confirm (b) repo-level pre-merge, or override to (a)
-   turn-level ratchet / (c) commit-hook, with the lag constant N if (a).
-2. **Artifact path convention** — confirm `docs/reviews/<short-sha>-
-   <slug>.md`, or a different path/naming scheme.
-3. **Field set** — confirm the five fields in §2 (`reviewed-commit`/
-   `reviewed-range`, `reviewer`, `fresh-context`, `verdict`, `findings-
-   count`), or add/drop fields (e.g. a link to the reviewed diff, a
-   timestamp).
-4. **Verdict vocabulary** — confirm the closed set `approved` /
-   `fix-first` / `blocked`, or a different set.
-5. **Spurious-block bar** — confirm or replace N=10 attempts / rate
-   <=0.20 (§6).
-6. **Rollout** — which repos this arms on first (kkamak dogfood repo only?
-   meta-harness itself? both?), and whether rollout is staged or
-   simultaneous.
-7. **No-self-review enforcement strength** — is the string-inequality
-   check on `reviewer:` vs commit-author sufficient, or should a stronger
-   (still-mechanical) check be required, e.g. cross-referencing a roster of
-   known reviewer identities.
+All seven rulings taken; each = the draft's recommended option. These are
+now spec constants (spec-is-law: pre-data amendments only, and the gate is
+pre-arming — nothing measured yet).
+
+1. **Placement = (b) repo-level pre-merge.** Check runs once at merge
+   time; review artifact must exist naming merge-base..HEAD. Never a
+   per-turn hook.
+2. **Artifact path = `docs/reviews/<short-sha>-<slug>.md`**, committed on
+   the branch.
+3. **Field set = the five fields in §2** (`reviewed-commit`/
+   `reviewed-range`, `reviewer`, `fresh-context`, `verdict`,
+   `findings-count`). No timestamp, no diff link.
+4. **Verdict vocabulary = `approved` / `fix-first` / `blocked`** (closed
+   set).
+5. **Spurious-block bar = first N=10 merge attempts after arming, rate
+   <= 0.20** (§6 asymmetry stands: failing the bar caps rollout, never
+   loosens the gate).
+6. **Rollout = meta-harness only, staged.** kkamak dogfood repo later on
+   its own ruling.
+7. **No-self-review = string-inequality** on `reviewer:` vs commit-author
+   names/emails in the reviewed range. No roster.
+
+**Next step (own go, not yet given):** build
+`scripts/check-review-artifact.sh` per §1's pseudo-logic + tests, wire as
+the last step of `finishing-a-development-branch` practice on this repo,
+then start the N=10 falsification window.

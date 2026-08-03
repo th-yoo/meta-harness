@@ -53,9 +53,14 @@ screen go (~28 sonnet trials, office; runbook pre-flight incl. token-free
 claude-sonnet-5 model-id check). (4) Retry --go 112 after classifier
 verdict. (5) Dogfood daily both hosts — office needs tmux allow rules
 pasted (Bash(tmux send-keys:*) etc. in .claude/settings.local.json);
-organic blocks are the ONLY M1v2-floor input; A/A ~Aug 12. (6) 7b's 7
-rulings. (7) Parked: §3 over-refusal round · GA5 · per-repo fixtures ·
-office reinject v2 · consistency 10b · queue 7c/7d.
+organic blocks are the ONLY M1v2-floor input; A/A ~Aug 12. (6) DONE 08-03
+evening — 7b's 7 rulings ALL DECIDED (each = draft's recommended option;
+spec §7 now REGISTERED constants: pre-merge placement, docs/reviews/
+<sha>-<slug>.md, 5 fields, approved/fix-first/blocked, N=10 bar ≤0.20,
+meta-harness-only staged rollout, string-inequality self-review check).
+Build check-review-artifact.sh + arm = own go, not given. (7) Parked: §3
+over-refusal round · GA5 · per-repo fixtures · office reinject v2 ·
+consistency 10b · queue 7c/7d.
 
 OPERATIONAL LESSONS (08-03): spend batches and subagent fleets share one
 account rate pool — run sized-go chains when the fleet is idle (429s cost
