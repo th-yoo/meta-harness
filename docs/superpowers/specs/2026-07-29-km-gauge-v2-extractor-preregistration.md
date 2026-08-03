@@ -599,6 +599,25 @@ once auto-memory is off — both key off the same directory — and
 `claude_code` preset form of `systemPrompt`, and it MOVES context into the
 first user message rather than removing it).
 
+**RULED 2026-08-03 (user): keep OAuth, skip `--bare`.** The bundled CLI's
+`--bare` flag ("skip hooks, LSP, plugin sync, attribution, auto-memory,
+background prefetches, keychain reads, CLAUDE.md auto-discovery") does
+remove the email reminder and shrink attribution — measured 1,124 → 1,001
+bytes total, metadata 212 → 176, user turn 494 → 418, email gone. It is
+rejected because it authenticates **strictly** via `ANTHROPIC_API_KEY`
+(OAuth and keychain are never read — confirmed on the wire: the header
+switches from an OAuth bearer to `x-api-key`). Under `--bare` the traffic
+bills API rates, not the Agent-SDK credit pool — which is this
+transport's entire reason to exist. And if an API key is in play, the
+incumbent API SDK dominates on every measured axis (5 ms vs 1,293 ms
+per-call overhead, 342 vs ~1,349 bytes, no harness context, no
+subprocess, no paired validation needed). So `--bare` is not a
+configuration option for this instrument; it is a different lane, and
+that lane is option (b) in the 429 block, not this one.
+
+Consequence, accepted deliberately: the two residuals below stay. They
+are the price of the OAuth/credit-pool lane, not oversights.
+
 **Residual, unavoidable via the documented SDK surface:** a ~369-byte
 `<system-reminder>` carrying the account email address and the current
 date rides on every request. Tested against `settingSources`, `settings`,
