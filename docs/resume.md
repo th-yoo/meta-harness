@@ -145,7 +145,28 @@ re-enable CLI transport for chain spend (§6c retirement premised on
 the proof; 30-33s/rec but running beats blocked), or (ii) Console
 API-key lane for instrument spend (money, structurally immune). Cheap
 user-side diagnostic: /usage panel — a pinned weekly/secondary bar
-names the bucket. SDD TDD mid-states turn the gate red mid-turn — foreground
+names the bucket. **ROOT CAUSE FOUND (web research 15:55, external
+sources):** (1) Anthropic's **2026-06-15 subscription split** — Agent SDK,
+`claude -p`, CC GitHub Actions and third-party Agent-SDK apps no longer
+draw the interactive subscription pool; they draw a SEPARATE monthly
+Agent-SDK credit at API rates (Pro $20 / Max5x $100 / Max20x $200, no
+rollover; requests STOP when exhausted unless usage credits enabled).
+Interactive CC (terminal/IDE) is untouched — exactly our asymmetry.
+(2) Bare `@anthropic-ai/sdk` messages.create with a subscription OAuth
+token is not a supported path at all; community reports match our
+signature byte-for-byte (persistent 429, NO retry-after, NO
+anthropic-ratelimit-* headers, message just "Error"). SUPPORTED FIXES,
+in order: (a) run chain spend through **`claude -p`** (proven working
+here at 15:52 while raw SDK 429'd) or the official
+**@anthropic-ai/claude-agent-sdk** — both bill the Agent-SDK credit
+pool, which demonstrably has headroom; NOTE this is real money at API
+rates, so sized gos now carry a $ cost, not just a rate budget;
+(b) `ANTHROPIC_API_KEY` (Console pay-as-you-go, fully decoupled).
+**REJECTED (do not implement):** the widely-circulated trick of setting
+`system: "You are Claude Code, Anthropic's official CLI for Claude."`
+to route bare-SDK traffic into the CC pool — that is precisely the
+billing separation the June-15 split created, i.e. circumvention, not a
+workaround. Our transport must not impersonate CC identity. SDD TDD mid-states turn the gate red mid-turn — foreground
 until-green waits ride it out. Store artifacts (term-bench2/store/**) are
 DATA with load-bearing bytes: never lint, never edit for lint.
 
