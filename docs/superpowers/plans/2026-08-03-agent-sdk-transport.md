@@ -615,9 +615,12 @@ In `transport.ts`, inside `callModelSdk`, before building the request:
 
 In `corpus-replay.ts:75` AND in `refiner-cli.ts:68`, replace the hardcoded
 `transport: "sdk",` with `transport: selectTransport(process.env),` and import
-`selectTransport` in both. Grep-verify afterwards that no `transport: "sdk"`
-literal survives outside `cls-ab.ts` (which is out of scope):
-`grep -rn 'transport: "sdk"' cc-gate-plugin/src/` should return only cls-ab.ts.
+`selectTransport` in both. Grep-verify afterwards:
+`grep -rn 'transport: "sdk"' cc-gate-plugin/src/` — expect EXACTLY three
+hits, none of them a live stamp: two in `cls-ab.ts` (out of scope) and one at
+`transport.ts:6`, which is a module-header COMMENT containing the same literal
+substring and is never touched by this task. Any hit that is an actual field
+assignment in another file is a miss — fix it before continuing.
 
 - [ ] **Step 4: Run to verify it passes**
 
@@ -1016,7 +1019,19 @@ export function selectTransport(env: Record<string, string | undefined>): GaugeT
   `KKAMAK_GAUGE_TRANSPORT=sdk` in its env — choose per test according to what
   that test is actually about (the two E2E wiring tests should pin the env var
   so they keep testing the incumbent path; the corpus-replay one should assert
-  the new default). Sweep for others with
+  the new default).
+
+  **Plus a FOURTH default-path test that this plan itself creates** — a grep
+  of today's repo cannot find it, but Tasks 2-7 have created it by the time
+  Task 9 runs: Task 5 Step 1's `routeCase(undefined)` case in
+  `gauge-agent-transport.test.ts` asserts `transport === "sdk"`,
+  `sdkHits > 0`, and `agentHits === 0` on the default path, so the flip breaks
+  all three of its assertions. Change it to `routeCase("sdk")` (keeping it a
+  test of the pinned incumbent path) and repoint the existing
+  `routeCase("agent-sdk")` case at `routeCase(undefined)` so the pair still
+  covers default-vs-explicit.
+
+  Then sweep for any remaining ones with
   `grep -rn 'toBe("sdk")' cc-gate-plugin/test/`; note that
   `gauge-evaluate.test.ts` and `cls-ab-run.test.ts` hits are NOT affected —
   the first passes `transport` as explicit input to a passthrough, the second
@@ -1070,6 +1085,13 @@ git add -A && git commit -m "docs(spec): §6d verdict + transport default"
   `CorpusRecord` carries the field at `r.derivation.transport`, so it would
   have returned false for every real record while its `as never` test fixture
   hid the bug from `tsc`.
+- **Architect review 5 (2 findings)**: Task 9's test sweep missed a FOURTH
+  default-path test — one this plan itself creates in Task 5, so no grep of
+  the current repo could have found it; now named explicitly. And round 4's
+  claimed grep-verify correction had NOT actually landed: the edit silently
+  no-op'd and only the self-review prose changed. Both fixed and each verified
+  individually rather than by one combined grep, which is what let the false
+  claim through.
 - **Architect review 4 (3 findings — down from 10/9/10, and all eight
   revision-3 claims independently verified clean)**: Task 9's flip would have
   broken three pre-existing default-path tests (`gauge-wiring.test.ts:102`,
