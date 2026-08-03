@@ -574,6 +574,39 @@ exception to be earned.
 at the moment the default flips, per §6b/§6c precedent — required because
 behaviour changes while `pluginVersion` does not.
 
+**Context-isolation requirement (measured on the wire 2026-08-03, binding
+on the implementation).** The Agent SDK injects per-project context into
+every request unless explicitly disabled. Measured against a local stub,
+one classification call:
+
+| config | request | user turn | contents |
+|--------|---------|-----------|----------|
+| `settingSources: []` alone | 10,693 B | 9,627 B | `<system-reminder>` carrying `claudeMd` + the whole auto-memory `MEMORY.md` index |
+| + `settings: { autoMemoryEnabled: false }` | 1,572 B | 506 B | memory gone |
+| + `persistSession:false`, `strictMcpConfig:true`, neutral `cwd` | 1,572 B | 506 B | no further change |
+
+`settings: { autoMemoryEnabled: false }` is therefore MANDATORY for this
+transport, and not for cost reasons: without it the classifier reads this
+project's own memory index — which contains notes on gauge, classification
+and the class-C rules — while judging whether a prompt is class C. A
+paired validation run in that state would measure contamination and report
+it as transport disagreement. `persistSession: false` and
+`strictMcpConfig: true` are also set (no disk writes; no project
+`.mcp.json` / plugin MCP servers / claude.ai connectors loading into the
+session), though both are payload-neutral. A neutral `cwd` is redundant
+once auto-memory is off — both key off the same directory — and
+`excludeDynamicSections` is inert here (docs: applies only to the
+`claude_code` preset form of `systemPrompt`, and it MOVES context into the
+first user message rather than removing it).
+
+**Residual, unavoidable via the documented SDK surface:** a ~369-byte
+`<system-reminder>` carrying the account email address and the current
+date rides on every request. Tested against `settingSources`, `settings`,
+`persistSession`, `strictMcpConfig` and `cwd` — none remove it. Recorded
+so it is a known property of any `"agent-sdk"` record, not a later
+surprise. Net overhead after isolation: 1,572 B vs the API SDK's 342 B
+(~4.6x, ≈75 tokens per record) plus ~1.3 s of subprocess spawn per call.
+
 **Known reporting gap, acknowledged not fixed.** `cls-ab.ts`'s
 `transportTally` (lines ~375-380) buckets records as `if (transport === "sdk")
 sdk++ else cli++`, so any `"agent-sdk"` record it ever sees is counted as CLI.
