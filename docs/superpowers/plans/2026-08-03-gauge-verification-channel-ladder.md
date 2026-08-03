@@ -604,6 +604,26 @@ own go, gated on (a) Task 4's measured C4 base rate, (b) the classifier
 3. **Arming decision**: goes to the user with the measured C4 rate +
    spec §7 falsification threshold (<5% parks it).
 
+## Execution DAG (parallel decomposition, 2026-08-03)
+
+Task 5 splits at its natural seam: **T5a** = `nudge.ts` pure functions +
+`config.ts` flag (zero deps); **T5b** = hook-cli UserPromptSubmit wiring
+(needs T3 parser + T5a config).
+
+| wave | tasks (parallel within wave) | depends on | files (disjoint within wave) |
+|------|------------------------------|-----------|------------------------------|
+| 1 | T1 spec · T2 taxonomy · T5a nudge-pure | — | spec md · channel.ts+test · nudge.ts/config.ts+test |
+| 2 | T3 refinement fns | T2 (appends channel.ts) | channel.ts+test |
+| 3 | T4 batch cmd · T5b hook wiring | T4←T2,T3 · T5b←T3,T5a | channel-run.ts/replay-cli.ts+test · hook-cli.ts+test |
+| 4 | whole-branch review → artifact → gated merge | all | docs/reviews/ |
+
+Execution mode: wave agents EDIT+TEST only, never commit; the driver
+session commits each task separately after its per-task review (single
+committer — no git index races between parallel agents). Internal
+commits land plain on branch `gauge-channel-ladder`; only the final
+merge to main goes through `scripts/merge-with-gate.sh` (7b §6 ledger
+row).
+
 ## Self-review (run per writing-plans skill)
 
 - Spec coverage: ladder defs → Task 1; deterministic mapping → Task 2;
