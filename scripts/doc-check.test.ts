@@ -11,7 +11,7 @@ import { test, expect } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { checkLinks, checkFenceBalance, isSkippableTarget } from "./doc-check"
+import { checkLinks, checkFenceBalance, isSkippableTarget, isExcludedPath } from "./doc-check"
 
 function mkPlainDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "doc-check-unit-"))
@@ -175,6 +175,46 @@ test("untracked file with a broken link is ignored (git ls-files scope)", async 
   } finally {
     rm(repo)
   }
+})
+
+// ---------------------------------------------------------------------
+// Controller ruling (2026-08-03 fix wave): term-bench2/store/** is
+// experiment DATA (candidate lineage, live role prompts) with load-bearing
+// bytes — never linted, never edited to satisfy a lint check.
+// ---------------------------------------------------------------------
+
+test("a store-path .md with a lint violation does NOT block — excluded from scope entirely, not just tolerated", async () => {
+  const repo = mkRepo()
+  try {
+    // Tracked, clean file outside the excluded tree.
+    fs.writeFileSync(path.join(repo, "tracked.md"), "# Clean\n")
+    // Tracked file INSIDE term-bench2/store/** with BOTH a broken relative
+    // link and an unclosed fence — real violations, would fail the checks
+    // if scanned. Bytes are load-bearing (sha-pinned harness slots,
+    // byte-compare candidate discipline) — must never be a lint target.
+    fs.mkdirSync(path.join(repo, "term-bench2", "store", "roles", "x"), { recursive: true })
+    fs.writeFileSync(
+      path.join(repo, "term-bench2", "store", "roles", "x", "system.md"),
+      "# Candidate prompt\n\n[bad](./nowhere.md)\n\n```\nunterminated\n",
+    )
+    gitAdd(repo, "tracked.md", "term-bench2/store/roles/x/system.md")
+    const result = await run(repo)
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).not.toContain("term-bench2/store")
+    // Scanned-file count in the summary line reflects the exclusion (1
+    // tracked doc counted, not 2) — proves the file was never scanned, not
+    // merely that its violations were silently swallowed.
+    expect(result.stdout).toContain("1 tracked file(s)")
+  } finally {
+    rm(repo)
+  }
+})
+
+test("isExcludedPath matches term-bench2/store/** and leaves other paths alone", () => {
+  expect(isExcludedPath("term-bench2/store/roles/x/system.md")).toBe(true)
+  expect(isExcludedPath("term-bench2/store/global/candidates/s1/system.md")).toBe(true)
+  expect(isExcludedPath("docs/2026-08-01-gate-floor-boundary.md")).toBe(false)
+  expect(isExcludedPath("term-bench2/leaderboard/README.md")).toBe(false) // sibling tree, not store/
 })
 
 // ---------------------------------------------------------------------

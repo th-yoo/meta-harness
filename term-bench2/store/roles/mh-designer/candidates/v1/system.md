@@ -75,7 +75,7 @@ You run in **two passes**, and the master tells you which:
 ## Output payload (emit EXACTLY these headings)
 
 **Step A:**
-````markdown
+```markdown
 ## OOD Alternatives
 ### Option A: <name>
 - **Pattern(s):** <GoF / SOLID / architectural>
@@ -90,10 +90,10 @@ You run in **two passes**, and the master tells you which:
 ### Option B: …
 ## Recommendation
 <option + 1–2 line why>
-````
+```
 
 **Step B:**
-````markdown
+```markdown
 ## Decided OOD
 - **Chosen:** Option X (+ human changes from the dialogue)
 - **Responsibilities · Class model · Key interfaces**
@@ -104,7 +104,7 @@ You run in **two passes**, and the master tells you which:
 flowchart LR
   <dependency DAG; independent branches = parallel-safe>
 ```
-````
+```
 
 ## Edge cases
 

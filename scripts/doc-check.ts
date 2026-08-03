@@ -13,6 +13,11 @@
 // floor must be green on the current corpus by construction; it catches
 // regressions, not existing shape.
 //
+// EXCLUDED_PATH_PREFIXES (see below) removes experiment-data paths from
+// scope entirely — e.g. `term-bench2/store/**`, whose *.md bytes are
+// load-bearing candidate/role-prompt content, never documentation, and
+// must never be edited to satisfy a lint check.
+//
 // Checks:
 //   (a) every markdown link/image whose target is a relative path (i.e. not
 //       http(s):, not mailto:, not anchor-only `#...`) must resolve to an
@@ -35,6 +40,22 @@ interface Violation {
   file: string
   line: number
   reason: string
+}
+
+// Path prefixes (repo-root-relative, git-ls-files style) EXCLUDED from the
+// doc floor entirely — never scanned, never a reason to edit their bytes.
+// These are experiment DATA, not documentation: candidate lineage / live
+// role-prompt content whose bytes are load-bearing (sha-pinned harness
+// slots, byte-compare candidate discipline elsewhere in this project). A
+// lint check must never motivate touching them — controller ruling,
+// 2026-08-03 fix wave on 7a, after a prior fence-rule fix incorrectly
+// edited 3 files under this tree to satisfy the linter. Add future
+// store-like paths here deliberately, one at a time, not by broadening an
+// existing entry.
+const EXCLUDED_PATH_PREFIXES: readonly string[] = ["term-bench2/store/"]
+
+function isExcludedPath(file: string): boolean {
+  return EXCLUDED_PATH_PREFIXES.some((prefix) => file.startsWith(prefix))
 }
 
 function getRepoRoot(): string {
@@ -156,7 +177,7 @@ function checkFenceBalance(file: string, text: string, violations: Violation[]):
 async function main(): Promise<number> {
   const start = performance.now()
   const repoRoot = getRepoRoot()
-  const files = listTrackedMarkdown(repoRoot)
+  const files = listTrackedMarkdown(repoRoot).filter((f) => !isExcludedPath(f))
   const violations: Violation[] = []
 
   for (const file of files) {
@@ -190,4 +211,12 @@ if (import.meta.main) {
   process.exit(code)
 }
 
-export { checkLinks, checkFenceBalance, listTrackedMarkdown, isSkippableTarget, getRepoRoot }
+export {
+  checkLinks,
+  checkFenceBalance,
+  listTrackedMarkdown,
+  isSkippableTarget,
+  getRepoRoot,
+  isExcludedPath,
+  EXCLUDED_PATH_PREFIXES,
+}
