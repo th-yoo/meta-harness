@@ -26,6 +26,7 @@ import {
   type PvCountsFile,
   type PvCombinedFile,
   type PvSetKeys,
+  type PvPairing,
 } from "../src/gauge/paired-validation.ts"
 import {
   readCorpus,
@@ -39,6 +40,7 @@ import {
 } from "../src/gauge/corpus-store.ts"
 import { runDerive } from "../src/gauge/corpus-replay.ts"
 import type { GaugeFile } from "../src/gauge/files.ts"
+import type { GaugeTransport } from "../src/types.ts"
 import { stubServerFor, type SdkStub } from "./sdk-stub.ts"
 
 function mkRepo(): string {
@@ -438,10 +440,17 @@ interface PvCase {
   /** shadow arm: a class = SDK-derived; "mined" = shadow derive failed/not
    * run (still stage "mined"); undefined = key ABSENT from the shadow store */
   sdk?: "C" | "B" | "mined"
-  /** real arm's transport (default "cli") — "sdk" fails isCliDerived */
-  cliTransport?: "cli" | "sdk"
-  /** shadow arm's transport (default "sdk") — "cli"/"absent" = wrong transport */
-  shadowTransport?: "cli" | "sdk" | "absent"
+  /** real arm's transport (default "cli") — "sdk" fails isCliDerived.
+   * Widened to the full `GaugeTransport` (§6d) so fixtures can build a
+   * non-default-pairing baseline (e.g. "sdk") — existing callers only ever
+   * pass "cli"/"sdk"/undefined, so this is purely additive. */
+  cliTransport?: GaugeTransport
+  /** shadow arm's transport (default "sdk") — "cli"/"absent" = wrong
+   * transport under the §6c default pairing; widened to `GaugeTransport`
+   * (§6d) so fixtures can build a non-default shadow transport (e.g.
+   * "agent-sdk") — purely additive over the existing "cli"/"sdk"/"absent"
+   * callers. */
+  shadowTransport?: GaugeTransport | "absent"
 }
 
 function keyOf(sha: string): string {
@@ -938,6 +947,102 @@ describe("comparePvRecords — wrong-transport arms (reviewer repro 3)", () => {
     const file = readPvCounts(cwd)
     expect(file.counts.wrongTransport).toBe(3)
     expect(file.keys.wrongTransport.sort()).toEqual([keyOf("s2"), keyOf("s3"), keyOf("s4")].sort())
+  })
+})
+
+// ── §6d fix round 1: non-default-pairing coverage ───────────────────────
+//
+// Every test above drives `runPvCompare`/`comparePvRecords` with `{}`/no
+// `pairing` argument — exercising only `PV_DEFAULT_PAIRING` (cli-vs-sdk).
+// This is exactly the path two prior reviews already got wrong for: an
+// `agent-sdk` shadow run under the §6c default pairing lands EVERY record in
+// `wrongTransport` (the shadow's transport is never "sdk"), so the tests
+// below pin that a NON-default pairing (sdk baseline, agent-sdk shadow)
+// actually decides matching arms instead.
+const sdkAgentSdkPairing: PvPairing = {
+  baseline: derivedOn("sdk"),
+  baselineLabel: "sdk",
+  shadowTransport: "agent-sdk",
+}
+
+describe("comparePvRecords — non-default pairing (sdk baseline, agent-sdk shadow)", () => {
+  test("sdk-derived real + agent-sdk-derived shadow -> decided, not wrongTransport", () => {
+    const real = [rec({ promptSha256: "nd1", derivation: gauge({ class: "C", transport: "sdk" }) })]
+    const shadow = [rec({ promptSha256: "nd1", derivation: gauge({ class: "C", transport: "agent-sdk" }) })]
+    const manifest: PvManifest = {
+      sampledAt: "2026-08-04T00:00:00.000Z",
+      hostname: "h",
+      cCount: 1,
+      notCCount: 0,
+      keys: { c: [keyOf("nd1")], notC: [] },
+    }
+    const result = comparePvRecords(manifest, real, shadow, sdkAgentSdkPairing)
+    expect(result.counts.decided).toBe(1)
+    expect(result.counts.wrongTransport).toBe(0)
+    expect(result.counts.cCli).toBe(1)
+    expect(result.counts.cSdk).toBe(1)
+    expect(result.counts.intersection).toBe(1)
+  })
+
+  test("shadow derived on the wrong transport (plain sdk, not agent-sdk) -> wrongTransport under the custom pairing", () => {
+    const real = [rec({ promptSha256: "nd2", derivation: gauge({ class: "C", transport: "sdk" }) })]
+    const shadow = [rec({ promptSha256: "nd2", derivation: gauge({ class: "C", transport: "sdk" }) })]
+    const manifest: PvManifest = {
+      sampledAt: "2026-08-04T00:00:00.000Z",
+      hostname: "h",
+      cCount: 1,
+      notCCount: 0,
+      keys: { c: [keyOf("nd2")], notC: [] },
+    }
+    const result = comparePvRecords(manifest, real, shadow, sdkAgentSdkPairing)
+    expect(result.counts.wrongTransport).toBe(1)
+    expect(result.counts.decided).toBe(0)
+  })
+
+  test("real record from the wrong baseline (cli, not sdk) -> wrongTransport under the custom pairing", () => {
+    const real = [rec({ promptSha256: "nd3", derivation: gauge({ class: "C", transport: "cli" }) })]
+    const shadow = [rec({ promptSha256: "nd3", derivation: gauge({ class: "C", transport: "agent-sdk" }) })]
+    const manifest: PvManifest = {
+      sampledAt: "2026-08-04T00:00:00.000Z",
+      hostname: "h",
+      cCount: 1,
+      notCCount: 0,
+      keys: { c: [keyOf("nd3")], notC: [] },
+    }
+    const result = comparePvRecords(manifest, real, shadow, sdkAgentSdkPairing)
+    expect(result.counts.wrongTransport).toBe(1)
+    expect(result.counts.decided).toBe(0)
+  })
+})
+
+describe("runPvCompare — non-default pairing end-to-end (sdk baseline, agent-sdk shadow)", () => {
+  test("opts.pairing decides matching sdk/agent-sdk arms, blocks on a stale-transport arm, and writes arms into pv-counts.json", () => {
+    const cwd = mkRepo()
+    buildPvFixture(cwd, [
+      { sha: "e1", stratum: "c", cli: "C", cliTransport: "sdk", sdk: "C", shadowTransport: "agent-sdk" },
+      { sha: "e2", stratum: "notC", cli: "B", cliTransport: "sdk", sdk: "B", shadowTransport: "agent-sdk" },
+      // Stale shadow derived on plain "sdk" (not "agent-sdk") — must NOT be
+      // silently decided under this pairing: the guaranteed-NOT-EVALUATED
+      // failure this task exists to prevent, in the opposite direction (a
+      // real sdk:agent-sdk shadow run that accidentally used the wrong
+      // transport must still be caught, not waved through).
+      { sha: "e3", stratum: "notC", cli: "B", cliTransport: "sdk", sdk: "B", shadowTransport: "sdk" },
+    ])
+
+    const logs: string[] = []
+    const summary = runPvCompare(cwd, { pairing: sdkAgentSdkPairing }, (m) => logs.push(m))
+
+    expect(summary?.counts.decided).toBe(2)
+    expect(summary?.counts.wrongTransport).toBe(1)
+    expect(summary?.counts.cCli).toBe(1)
+    expect(summary?.counts.cSdk).toBe(1)
+    // e3's wrong-transport arm still blocks the bar, exactly like the §6c default pairing.
+    expect(summary?.bar.verdict).toBe("NOT-EVALUATED")
+
+    const file = readPvCounts(cwd)
+    expect(file.arms).toEqual({ baseline: "sdk", shadow: "agent-sdk" })
+    const text = logs.join("\n")
+    expect(text).toContain("sdk-vs-agent-sdk transport comparison")
   })
 })
 
