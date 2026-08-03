@@ -288,8 +288,11 @@ import { stubServer } from "./sdk-stub.ts"
 import { agentSdkCall } from "../src/gauge/agent-transport.ts"
 
 const CAPTURED: Array<Record<string, unknown>> = []
+// sdk-stub.ts's Captured.body is ALREADY `Record<string, unknown>` (it does
+// `await req.json()`), and the stub exposes `stop`, not `close`. Do not
+// re-parse or re-cast it.
 const stub = stubServer((captured) => {
-  try { CAPTURED.push(JSON.parse(captured.body as string)) } catch { /* non-JSON handshake call */ }
+  CAPTURED.push(captured.body)
   return Response.json({
     id: "msg_stub", type: "message", role: "assistant", model: "stub",
     content: [{ type: "text", text: '{"channel":"C4","reason":null}' }],
@@ -297,7 +300,7 @@ const stub = stubServer((captured) => {
     usage: { input_tokens: 1, output_tokens: 1 },
   })
 })
-afterAll(() => stub.close())
+afterAll(() => stub.stop())
 
 // The spawned CLI reads ANTHROPIC_BASE_URL from its own environment. Read
 // sdk-stub.ts for the exact field exposing the bound URL (it binds port 0, so
@@ -496,42 +499,79 @@ request. Note `deriveRecord` reads `process.env` directly
 (`corpus-replay.ts:43`), so the env var must be set on `process.env` and
 restored afterwards.
 
+Three things this test MUST get right, each verified against the real code:
+`stubServerFor(derivation)` (not bare `stubServer`) wraps the payload in a
+proper Anthropic message envelope — `sdkCall` iterates `response.content` and
+a bare `Response.json(derivation)` makes it throw into its own swallow, so the
+record would come back underived. `KKAMAK_GAUGE_AUTH_TOKEN` must be set, or
+`readAuthToken` returns undefined and NO request is ever sent (see
+`withSdkStub`, `test/corpus-replay.test.ts:51-65`). And the stub exposes
+`stop()`, not `close()`.
+
 ```typescript
 import { deriveRecord } from "../src/gauge/corpus-replay.ts"
-import { stubServer } from "./sdk-stub.ts"
+import { stubServerFor } from "./sdk-stub.ts"
+import type { CorpusRecord } from "../src/gauge/corpus-store.ts"
+
+const STUB_DERIVATION = {
+  goalSummary: "summarize x", class: "A2", reason: "not-shell-checkable",
+  criteria: ["a summary of x exists"], check: null, horizon: null, confidence: 0.9,
+}
+const minedRecord = (prompt: string): CorpusRecord =>
+  ({ prompt, stage: "mined" }) as CorpusRecord
+
+/** Both cases share this scaffolding; only the env var and the expectations
+ * differ. Restores every env key it touches. */
+async function routeCase(transport: string | undefined) {
+  const sdkStub = stubServerFor(STUB_DERIVATION)
+  const agentStub = stubServerFor(STUB_DERIVATION)
+  const prev = {
+    t: process.env.KKAMAK_GAUGE_TRANSPORT,
+    sdk: process.env.KKAMAK_GAUGE_SDK_BASE_URL,
+    anth: process.env.ANTHROPIC_BASE_URL,
+    tok: process.env.KKAMAK_GAUGE_AUTH_TOKEN,
+  }
+  if (transport === undefined) delete process.env.KKAMAK_GAUGE_TRANSPORT
+  else process.env.KKAMAK_GAUGE_TRANSPORT = transport
+  process.env.KKAMAK_GAUGE_SDK_BASE_URL = sdkStub.url
+  process.env.ANTHROPIC_BASE_URL = agentStub.url
+  process.env.KKAMAK_GAUGE_AUTH_TOKEN = "tok-test"
+  try {
+    const out = await deriveRecord(minedRecord("write a summary of x"))
+    return { out, sdkHits: sdkStub.captured.length, agentHits: agentStub.captured.length }
+  } finally {
+    for (const [k, v] of [
+      ["KKAMAK_GAUGE_TRANSPORT", prev.t], ["KKAMAK_GAUGE_SDK_BASE_URL", prev.sdk],
+      ["ANTHROPIC_BASE_URL", prev.anth], ["KKAMAK_GAUGE_AUTH_TOKEN", prev.tok],
+    ] as const) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+    sdkStub.stop(); agentStub.stop()
+  }
+}
 
 describe("derive routes and stamps by selected transport (§6d split rule)", () => {
   test("default: API SDK endpoint is hit, record stamped sdk", async () => {
-    let sdkHits = 0, agentHits = 0
-    const sdkStub = stubServer(() => { sdkHits++; return Response.json(STUB_DERIVATION) })
-    const agentStub = stubServer(() => { agentHits++; return Response.json(STUB_DERIVATION) })
-    const prev = process.env.KKAMAK_GAUGE_TRANSPORT
-    delete process.env.KKAMAK_GAUGE_TRANSPORT
-    process.env.KKAMAK_GAUGE_SDK_BASE_URL = sdkStub.url
-    process.env.ANTHROPIC_BASE_URL = agentStub.url
-    try {
-      const out = await deriveRecord(minedRecord("write a summary of x"))
-      expect(out?.derivation?.transport).toBe("sdk")
-      expect(sdkHits).toBeGreaterThan(0)
-      expect(agentHits).toBe(0)
-    } finally {
-      if (prev === undefined) delete process.env.KKAMAK_GAUGE_TRANSPORT
-      else process.env.KKAMAK_GAUGE_TRANSPORT = prev
-      sdkStub.close(); agentStub.close()
-    }
+    const { out, sdkHits, agentHits } = await routeCase(undefined)
+    expect(out?.derivation?.transport).toBe("sdk")
+    expect(sdkHits).toBeGreaterThan(0)
+    expect(agentHits).toBe(0)
   })
 
   test("KKAMAK_GAUGE_TRANSPORT=agent-sdk: agent endpoint is hit, record stamped agent-sdk", async () => {
-    // same shape, with process.env.KKAMAK_GAUGE_TRANSPORT = "agent-sdk";
-    // assert out?.derivation?.transport === "agent-sdk", agentHits > 0, sdkHits === 0
+    const { out, sdkHits, agentHits } = await routeCase("agent-sdk")
+    expect(out?.derivation?.transport).toBe("agent-sdk")
+    expect(agentHits).toBeGreaterThan(0)
+    expect(sdkHits).toBe(0)
   })
 })
 ```
 
-Define `STUB_DERIVATION` as a valid refiner payload (copy the shape used by
-`stubServerFor` in `test/sdk-stub.ts`) and `minedRecord(prompt)` as a
-stage-`"mined"` `CorpusRecord` literal. Write the second test out in full
-rather than leaving the comment — it is the half that proves the new path.
+Check `stubServerFor`'s real signature before use — if it takes the derivation
+and builds the envelope itself, the code above is correct as written; if it
+needs `okResponse(JSON.stringify(...))`, follow whatever
+`test/corpus-replay.test.ts:69` does, which is the established sibling.
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -569,15 +609,25 @@ git commit -m "feat(gauge): route derive through selected transport, stamp prove
 
 ### Task 6: Make the paired-validation machinery pair ANY two transports
 
-**Why this task is bigger than it looks (architect review, finding 1+2).** The
-existing pv tooling is hardcoded to the CLI-vs-SDK pairing in three places, and
-none of them takes a parameter:
+**Why this task is bigger than it looks (architect reviews 1 and 2).** The
+existing pv tooling is hardcoded to the CLI-vs-SDK pairing in FOUR places, and
+none of them takes a parameter. Missing the fourth is what made review 2's
+finding 1 a repeat of review 1's blocker — an appended optional parameter
+silently leaves every untouched caller on the old default forever:
 - `stratify` (paired-validation.ts:66-75) calls `isCliDerived(r)` internally.
-- `runPvSample` (paired-validation.ts:151-158) calls `stratify` and its
-  empty-sample message says "no CLI-derived class-C records".
+- `runPvSample` (paired-validation.ts:151-158) calls `stratify`; its
+  empty-sample message (line 160) says "no CLI-derived class-C records".
 - `comparePvRecords` (paired-validation.ts:339) hardcodes
   `if (shadow.derivation.transport !== "sdk" || !isCliDerived(real))` →
   `wrongTransport`.
+- **`runPvCompare` (paired-validation.ts:631-783) — THE ACTUAL CLI ENTRY
+  POINT** (wired at `replay-cli.ts:577`). It calls
+  `comparePvRecords(manifest, realRecords, shadowRecords)` with three
+  arguments at line 735 and builds `PvCountsFile` at 738-744. Parameterizing
+  the first three functions and not this one means `pv-compare --pair
+  sdk:agent-sdk` still runs the §6c default, every shadow record lands in
+  `wrongTransport`, and `evaluatePvBar` returns NOT-EVALUATED — the exact
+  guaranteed-non-result-on-real-spend failure this task exists to prevent.
 
 An `agent-sdk` shadow run therefore lands EVERY record in `wrongTransport`,
 and `evaluatePvBar` refuses to evaluate when `wrongTransport > 0` — i.e. the
@@ -688,7 +738,47 @@ export function comparePvRecords(
   // ...at line ~339:
   // if (shadow.derivation.transport !== pairing.shadowTransport || !pairing.baseline(real))
 }
+
+// THE FOURTH SITE — without this the CLI flag is parsed and then dropped.
+export function runPvCompare(
+  cwd: string,
+  opts: { combine?: string; pairing?: PvPairing },
+  log: (m: string) => void,
+): PvCompareSummary | undefined {
+  const pairing = opts.pairing ?? { baseline: isCliDerived, shadowTransport: "sdk" }
+  // ...line ~735: pass it through instead of relying on the default
+  // const comparison = comparePvRecords(manifest, realRecords, shadowRecords, pairing)
+  // ...lines ~738-744: include the arms in the emitted PvCountsFile
+  // arms: { baseline: pairingLabel(pairing), shadow: pairing.shadowTransport }
+}
 ```
+
+`PvPairing` therefore also needs a label for the emitted file, since a
+predicate cannot be serialized. Carry it on the object rather than deriving it:
+
+```typescript
+export interface PvPairing {
+  baseline: (r: CorpusRecord) => boolean
+  /** serializable name of the baseline arm, written into PvCountsFile.arms */
+  baselineLabel: GaugeTransport
+  shadowTransport: GaugeTransport
+}
+```
+
+Update the three defaults above to
+`{ baseline: isCliDerived, baselineLabel: "cli", shadowTransport: "sdk" }`.
+
+- [ ] **Step 3b: De-CLI the operator-facing strings**
+
+Two messages hardcode "CLI" and would mislabel any non-`cli:sdk` run:
+`runPvSample`'s empty-sample log (paired-validation.ts:160, "no CLI-derived
+class-C records") and `renderPvReport`'s banner (lines 566-567,
+"pv-compare — CLI-vs-SDK transport comparison"). Make both name the actual
+arms, e.g. `no ${baselineLabel}-derived class-C records` and
+`pv-compare — ${baselineLabel}-vs-${shadowTransport} transport comparison`.
+This requires the label to reach both functions — `runPvSample` takes it from
+the same pairing argument, `renderPvReport` from the `arms` on the counts it
+renders.
 
 - [ ] **Step 4: Run to verify they pass, and that §6c is untouched**
 
@@ -756,9 +846,22 @@ export function parsePairFlag(args: string[]): PvPairing | undefined {
   const [b, s, ...rest] = (args[i + 1] ?? "").split(":")
   if (rest.length > 0 || !b || !s) return undefined
   if (!GAUGE_TRANSPORTS.includes(b as never) || !GAUGE_TRANSPORTS.includes(s as never)) return undefined
-  return { baseline: derivedOn(b as GaugeTransport), shadowTransport: s as GaugeTransport }
+  // "cli" MUST map to isCliDerived, not derivedOn("cli"): the 586 pre-boundary
+  // records carry NO transport field and isCliDerived counts absent-as-cli
+  // (paired-validation.ts:51-54). A strict-equality predicate would give an
+  // explicit `--pair cli:sdk` a silently smaller stratum than the identical
+  // run with the flag omitted.
+  const baseline = b === "cli" ? isCliDerived : derivedOn(b as GaugeTransport)
+  return { baseline, baselineLabel: b as GaugeTransport, shadowTransport: s as GaugeTransport }
 }
 ```
+
+Also extend `parsePvCountsFile` (paired-validation.ts:510-538) to parse and
+REQUIRE `arms` on any file it reads for `--combine`, and make the combine path
+refuse when two hosts' files disagree on `arms` — otherwise a `sdk:agent-sdk`
+run on one host and a `cli:sdk` run on the other would sum into a single
+meaningless combined bar. Fail closed, matching the cls-combine hard-gate
+precedent (`cls-ab.ts`, provisional flag).
 
 In `replay-cli.ts`, for both `pv-sample` and `pv-compare`: if `--pair` is
 present in argv but `parsePairFlag` returns undefined, print
@@ -886,13 +989,25 @@ git add -A && git commit -m "docs(spec): §6d verdict + transport default"
   error"; Task 5's second test is explicitly required to be written out in
   full rather than left as a comment.
 - **Type consistency**: `GaugeTransport`, `GAUGE_TRANSPORTS`, `selectTransport`,
-  `agentSdkCall`, `AgentSdkOptions`, `derivedOn`, `PvPairing`, `parsePairFlag`
-  are used with identical names and signatures across Tasks 2–9. The earlier
+  `agentSdkCall`, `AgentSdkOptions`, `derivedOn`, `PvPairing` (with
+  `baselineLabel`), `parsePairFlag`, `runPvCompare`'s `opts.pairing` are used
+  with identical names and signatures across Tasks 2–9. The earlier
   `isSdkDerived` was REMOVED after review: it read `r.transport`, but
   `CorpusRecord` carries the field at `r.derivation.transport`, so it would
   have returned false for every real record while its `as never` test fixture
   hid the bug from `tsc`.
-- **Architect review (2026-08-03, 10 findings) applied in full**: pv machinery
+- **Architect review 2 (9 findings) applied**: the FOURTH pv call site
+  `runPvCompare` — the actual `pv-compare` entry point — is now parameterized,
+  which is what would otherwise have reproduced the guaranteed-NOT-EVALUATED
+  spend through an unthreaded flag; `PvPairing` gained a serializable
+  `baselineLabel` because a predicate cannot be written into the counts file;
+  `--pair cli:...` maps to `isCliDerived` (absent-transport records count as
+  CLI) rather than strict equality; the stub API calls corrected to `stop()`
+  and an already-parsed object `body`; Task 5's test rebuilt on
+  `stubServerFor` + `KKAMAK_GAUGE_AUTH_TOKEN` (without either, no request is
+  ever sent) and its second case written out in full; CLI-specific operator
+  strings de-hardcoded; `arms` validated on `--combine`.
+- **Architect review 1 (10 findings) applied in full**: pv machinery
   parameterized rather than assumed reusable (was a guaranteed
   NOT-EVALUATED run on real spend); `abortController` replaces a no-op
   `setTimeout` that could have hung a whole batch; the repo's existing
