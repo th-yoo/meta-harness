@@ -1405,6 +1405,11 @@ export interface ClsScoreFileParsed {
   hostname: string
   scoredAt: string
   sample: { cCount: number; notCCount: number; total: number }
+  /** Combine hard-gate — the other host's OWN `provisional` flag (see
+   * `ClsScoreFile` doc), REQUIRED on the file: every emitted doc carries it
+   * (no legacy docs exist without it), so a file missing it / carrying a
+   * non-boolean is not a cls-score doc and the parse refuses fail-closed. */
+  provisional: boolean
   arms: ClsScoreArmParsed[]
 }
 
@@ -1426,9 +1431,11 @@ function clsArmEntryConsistent(a: ClsScoreArmParsed): boolean {
  * precedent) — required `hostname`/`scoredAt` strings, `sample` counts as
  * non-negative integers, and every `arms[]` entry's `arm` (one of the 4
  * registered names) / totalKeys / presentKeys / missingKeys / counts as
- * non-negative integers satisfying the completeness identity above. A
- * missing, non-integer, negative, unrecognized-arm, or inconsistent field
- * refuses rather than silently summing garbage into the combined decision.
+ * non-negative integers satisfying the completeness identity above, and a
+ * REQUIRED boolean `provisional` (combine hard-gate — see
+ * `ClsScoreFileParsed`'s field doc). A missing, non-integer, negative,
+ * unrecognized-arm, non-boolean-provisional, or inconsistent field refuses
+ * rather than silently summing garbage into the combined decision.
  * Returns undefined on any violation. */
 export function parseClsScoreCombineFile(raw: string): ClsScoreFileParsed | undefined {
   let parsed: unknown
@@ -1443,6 +1450,7 @@ export function parseClsScoreCombineFile(raw: string): ClsScoreFileParsed | unde
   if (typeof o.sample !== "object" || o.sample === null) return undefined
   const s = o.sample as Record<string, unknown>
   if (!nonNegInt(s.cCount) || !nonNegInt(s.notCCount) || !nonNegInt(s.total)) return undefined
+  if (typeof o.provisional !== "boolean") return undefined
   if (!Array.isArray(o.arms)) return undefined
   const arms: ClsScoreArmParsed[] = []
   for (const rawArm of o.arms) {
@@ -1469,6 +1477,7 @@ export function parseClsScoreCombineFile(raw: string): ClsScoreFileParsed | unde
     hostname: o.hostname,
     scoredAt: o.scoredAt,
     sample: { cCount: s.cCount, notCCount: s.notCCount, total: s.total },
+    provisional: o.provisional,
     arms,
   }
 }
@@ -1539,7 +1548,22 @@ export interface ClsCombinedFile {
   scoredAt: string
   local: { hostname: string; arms: ClsScoreArmEntry[] }
   other: { hostname: string; scoredAt: string; arms: ClsScoreArmParsed[] }
-  combined: { arms: ClsScoreArmEntry[]; absentArms: string[]; decision: ClsScopedDecisionResult }
+  combined: {
+    arms: ClsScoreArmEntry[]
+    absentArms: string[]
+    /** Combine hard-gate — the combined verdict is THE registered verdict
+     * (spec §6), so it carries its own flag; no reader may mistake a
+     * provisional combine for the registered 4-arm decision. Rule (OR of
+     * three sources, mirroring the per-host `ClsScoreFile.provisional`
+     * semantics): true iff the LOCAL per-host run is provisional, OR the
+     * OTHER host's file declares itself provisional, OR any of the 4
+     * registered arms (`CLS_ALL_ARM_NAMES`) is absent from the combined
+     * arm set (`absentArms` non-empty — an arm either side never ran).
+     * The combine still RUNS and prints when provisional (per-host
+     * precedent: warn + mark, never hide data) — it is only marked. */
+    provisional: boolean
+    decision: ClsScopedDecisionResult
+  }
 }
 
 /** `cls-score [cwd] [--emit-doc <path>] [--combine <path>]` arg parsing.
@@ -1716,6 +1740,7 @@ export function runClsScore(
   // --combine (fix-wave F3): validated BEFORE any write, so a refusal here
   // has zero effect (same discipline as pv-compare's --combine validation).
   let combinedFile: ClsCombinedFile | undefined
+  const combinedProvisionalSources: string[] = []
   if (opts.combine !== undefined) {
     let raw: string
     try {
@@ -1752,11 +1777,25 @@ export function runClsScore(
     const combinedDecisionRaw = evaluateClsDecision(combinedArms.map(toArmMetrics))
     const combinedDecision: ClsScopedDecisionResult = { ...combinedDecisionRaw, scope: "combined" }
 
+    // Combined PROVISIONAL (hard-gate; rule doc'd on `ClsCombinedFile`):
+    // local-provisional OR other-provisional OR any registered arm absent
+    // from the combined set. Sources collected for the stdout warning.
+    if (provisional) combinedProvisionalSources.push("local per-host score is provisional")
+    if (other.provisional) combinedProvisionalSources.push(`other host's score (${other.hostname}) is provisional`)
+    if (combinedAbsentArms.length > 0) {
+      combinedProvisionalSources.push(`registered arm(s) absent from the combined set: ${combinedAbsentArms.join(", ")}`)
+    }
+
     combinedFile = {
       scoredAt: scoreFile.scoredAt,
       local: { hostname: scoreFile.hostname, arms: scoreFile.arms },
       other: { hostname: other.hostname, scoredAt: other.scoredAt, arms: other.arms },
-      combined: { arms: combinedArms, absentArms: combinedAbsentArms, decision: combinedDecision },
+      combined: {
+        arms: combinedArms,
+        absentArms: combinedAbsentArms,
+        provisional: combinedProvisionalSources.length > 0,
+        decision: combinedDecision,
+      },
     }
   }
   const combinedBody = combinedFile !== undefined ? JSON.stringify(combinedFile, null, 2) + "\n" : undefined
@@ -1786,6 +1825,12 @@ export function runClsScore(
           `${combinedFile.other.scoredAt}); combined verdict: ${combinedFile.combined.decision.verdict}` +
           (combinedFile.combined.decision.verdict === "ADOPT" ? ` <${combinedFile.combined.decision.winnerArm}>` : ""),
       )
+      if (combinedFile.combined.provisional) {
+        log(
+          "WARNING: PROVISIONAL — this combined verdict is NOT the registered 4-arm cross-host decision " +
+            `(spec §6 evaluates all four arms on combined counts across hosts) — ${combinedProvisionalSources.join("; ")}.`,
+        )
+      }
       log(`cls-score: wrote ${CLS_COMBINED_NAME} -> ${combinedDest}`)
     }
 
