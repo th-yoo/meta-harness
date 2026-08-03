@@ -527,6 +527,66 @@ transport is buying speed at the cost of the instrument's sensitivity, and the
 correct response is to keep the CLI transport (or fix the prompt under §6c's
 own successor) rather than accept a cheaper but blinder derive path.
 
+## 6d. Amendment (pre-data, 2026-08-03): third derive transport → Agent SDK
+
+**What changes.** A third derive transport, `transport: "agent-sdk"`, using
+`@anthropic-ai/claude-agent-sdk`. Selected per process by
+`KKAMAK_GAUGE_TRANSPORT=agent-sdk`; absent or any other value keeps the
+current `"sdk"` path byte-for-byte. The `"cli"` and `"sdk"` literals and
+their records are untouched.
+
+**Why a third transport rather than a replacement.** The subscription premium
+quota is per model tier (measured 2026-08-03: haiku OK, sonnet/opus 429 on the
+same token in the same second), and Agent-SDK traffic bills a separate
+Agent-SDK credit rather than the premium tier. If the bar below passes, this
+buys premium-model instrument work without an API key. If it fails, we keep
+the incumbent and lose nothing.
+
+**Known, accepted differences (measured on the wire, not inferred).** The
+Agent SDK sends 2 harness system blocks that `systemPrompt: ""` does not
+remove, enforces schemas via a forced `StructuredOutput` tool rather than
+`output_config`, and wraps the user turn with ~200 characters of
+`<system-reminder>` context. These are exactly what the bar below is measuring
+the effect of — they are not defects to be argued about in advance.
+
+**Call-count rule (binding).** §4's exactly-one-model-call-per-record rule
+holds for this transport too. Task 4 measures calls per `query()` against a
+stub; if a single classification query cannot be made to issue exactly one
+model call, this transport is REJECTED for batch use and the plan stops at
+Task 4. The cost fence sizes `--go N` against N records and must keep meaning
+N calls.
+
+**Pooling bar (reused verbatim from §6c, evaluated on combined counts).**
+- Positive agreement on C: `|C_sdk ∩ C_agent| / |C_sdk ∪ C_agent| >= 0.80`, AND
+- Missed-C cap: records `"sdk"` calls C that `"agent-sdk"` calls not-C,
+  `<= ceil(0.10 × |C_sdk|)`.
+Both hold → the transports may be pooled in one reading, split still reported.
+Either fails → readings stay split by transport for the life of the window,
+and `"agent-sdk"` does NOT become the default.
+
+**Expected outcome stated up front.** The CLI→SDK paired validation on
+`yoo-dev` came back SPLIT (0.625 agreement, missed-C 6 > cap 2). The Agent SDK
+is CLI-family (it drives the bundled `claude` binary), so a SPLIT result here
+is the likely outcome, not a surprise. Split is the default; pooling is the
+exception to be earned.
+
+**Deploy.** Boundary ts logged in `docs/2026-08-01-gauntlet-adoption-ledger.md`
+at the moment the default flips, per §6b/§6c precedent — required because
+behaviour changes while `pluginVersion` does not.
+
+**Known reporting gap, acknowledged not fixed.** `cls-ab.ts`'s
+`transportTally` (lines ~375-380) buckets records as `if (transport === "sdk")
+sdk++ else cli++`, so any `"agent-sdk"` record it ever sees is counted as CLI.
+That is a display miscount in the classifier A/B report, not a
+transport-selection defect, and `cls-ab.ts` is out of scope for this
+amendment. Recorded here so a later reader does not mistake it for a fresh
+bug; fix it when cls-ab is next opened.
+
+**What would falsify this change.** If the bar passes but Agent-SDK
+derivations cost more wall-clock per record than the API SDK without buying
+premium access (e.g. the credit is exhausted), the transport is retained as
+selectable but not defaulted.
+
 ## 7. Known risks
 
 - Extraction discipline may over-refuse (class-C starvation) — the validity
