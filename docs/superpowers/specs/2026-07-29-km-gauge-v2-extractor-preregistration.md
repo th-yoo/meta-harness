@@ -542,6 +542,16 @@ Agent-SDK credit rather than the premium tier. If the bar below passes, this
 buys premium-model instrument work without an API key. If it fails, we keep
 the incumbent and lose nothing.
 
+**Premise measured TRUE (2026-08-04, yoo-dev, pre-data note — evidence, not a
+bar change).** The separate-pool claim above was asserted from docs when
+registered; it is now measured. Same minute, same OAuth token: raw-API probe
+(`scripts/probe-models.sh`) returned sonnet 429 / opus 429, while `query()`
+with this transport's exact option set returned `subtype: "success"` on both
+`claude-sonnet-5` and `claude-opus-5`. The Agent-SDK lane rides a quota the
+raw-API premium tier does not share. Scope guard: this proves lane
+reachability only — instrument fidelity on this lane is still the bar below
+(Task 8), and the `claude -p` CLI lane was NOT re-measured.
+
 **Known, accepted differences (measured on the wire, not inferred).** The
 Agent SDK sends 2 harness system blocks that `systemPrompt: ""` does not
 remove, enforces schemas via a forced `StructuredOutput` tool rather than
