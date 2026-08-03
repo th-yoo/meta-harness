@@ -22,6 +22,7 @@ import os from "node:os"
 import path from "node:path"
 import { execFileSync } from "node:child_process"
 import { buildRefinerPrompt, buildLabelPrompt, type PromptVariant } from "./refiner.ts"
+import type { GaugeTransport } from "../types.ts"
 
 const CALL_TIMEOUT_MS = 60_000
 const MAX_TOKENS = 2048
@@ -33,6 +34,14 @@ const MAX_TOKENS = 2048
  * remapped to a different instrument. */
 export function resolveModelId(model: string): string {
   return model === "haiku" ? "claude-haiku-4-5" : model
+}
+
+/** §6d transport selection. Fail-safe by construction: anything other than
+ * the exact string "agent-sdk" keeps the incumbent SDK path, so a typo in an
+ * env var can never silently retarget an instrument run. "cli" is retired and
+ * deliberately not selectable. */
+export function selectTransport(env: Record<string, string | undefined>): GaugeTransport {
+  return env.KKAMAK_GAUGE_TRANSPORT === "agent-sdk" ? "agent-sdk" : "sdk"
 }
 
 export interface AuthTokenDeps {
