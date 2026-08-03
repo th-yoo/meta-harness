@@ -267,12 +267,14 @@ Caveat: n=3 loops, one day — provisional, revisit after the next program.
   `mermaid` example fences in an OUTER fence of the SAME delimiter length
   (3 backticks both), which is not nested under CommonMark: the outer fence
   actually closes at the first inner closer, exactly as a real renderer
-  (e.g. GitHub) would also mis-render it. Fixed by widening only the outer
-  wrapper's delimiter to 4 backticks in all three files (8/8/4 lines
-  changed respectively) — a pure escaping-length change, zero prompt-text
-  content touched; diffs are two-character-per-line delimiter swaps only,
-  trivially revertible per file if this scope is later judged
-  inappropriate for a doc-floor fix wave.
+  (e.g. GitHub) would also mis-render it. An initial fix widened those
+  files' outer delimiters — OVERRULED (297b5d4): store artifacts are
+  experiment DATA with load-bearing bytes (sha-pinned harness slots,
+  candidate-lineage byte-compare) and must never be edited to satisfy a
+  lint. The three files were byte-restored (blob-sha verified against
+  their pre-wave state) and `term-bench2/store/**` is EXCLUDED from
+  doc-check's scope via an explicit constant, with a pinning test that a
+  violating store .md never blocks.
 - **FIX 4 — `git ls-files` anchored to repo root.** Was a bare `git
   ls-files '*.md'`, which git interprets relative to CWD — an invocation
   from a subdirectory would silently narrow scope. Now resolves the repo
@@ -281,12 +283,12 @@ Caveat: n=3 loops, one day — provisional, revisit after the next program.
   are repo-root-relative regardless of invocation CWD. New test: running
   from a subdirectory still catches a broken link in a file outside that
   subdirectory.
-- **Verification after the fix wave:** `bun test scripts/doc-check.test.ts`
-  15 pass (was 10); km-crank 230 pass; cc-gate-plugin 783 pass; `tsc
-  --noEmit` clean in both `cc-gate-plugin/` and `km-crank/`; `doc-check.ts`
-  green on HEAD (155 tracked docs, 0 violations, ~27-70ms) after the 3
-  corpus fixes; full `gate.json` check chain re-run end-to-end, exit 0
-  (~10.1s total, doc-check itself <30ms of that).
+- **Verification after the fix waves (final state, 297b5d4):**
+  `bun test scripts/doc-check.test.ts` 17 pass; km-crank 230 pass;
+  cc-gate-plugin 783 pass; `tsc --noEmit` clean both packages;
+  `doc-check.ts` green on HEAD — 155 tracked .md, 20 store-excluded,
+  **135 scanned, 0 violations** (~27-70ms); full `gate.json` check chain
+  end-to-end exit 0 (~10.1s total, doc-check <30ms of that).
 - **Rollback:** revert the `gate.json` `check` line to the three-suite form
   above to fully back out the floor gating. `KKAMAK_DEV_CHECKS` keeps ALL
   entries regardless of rollback direction — that is the point of making it
