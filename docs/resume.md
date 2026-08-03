@@ -89,6 +89,56 @@ re-derive), `stage1wait` (sonnet, then scripts/stage1-screen.sh).
 Office `.kkamak` store holds seed aliases v13=s1 v14=s2 v15=s3 (delete
 after Stage-1 tally, or nextVersion() mints v16).
 
+ALREADY DONE 2026-08-03 — DO NOT REDO (all merged to main + pushed):
+ 7a doc-linter floor (armed) · 7b process gate: 7 rulings decided +
+ checker built + ARMED, window 3/10 attempts 0 blocks · verification-
+ channel ladder C1-C4 (pre-reg spec + channel.ts + cost-fenced
+ `replay-cli.ts channel --go <n>` + INERT C4 nudge) · transport dedup
+ (single exported `sdkCall`) · cls-combine provisional hard-gate ·
+ `scripts/channel-smoke.ts` (fenced gauge-instrument verification) ·
+ 429 root cause settled (per-model-tier quota) · chain tooling moved
+ into the repo.
+
+REMAINING WORK — WHOLE PROGRAM (owner · blocker · authorization):
+ 1. Chain link tallies, office, AUTO-FIRING once tiers clear — each
+    completion owes a model-free duty: clsab2 → script-tally +
+    commit yoo-dev-cls-score.json + PROVISIONAL per-host verdict;
+    gauge-verify → read smoke verdict (bar >=9/12 + nudge proof) +
+    commit docs/gauge-channel json; retry112 → derive hit-rate +
+    report line; stage1 → §5 R2 audit BEFORE tally, then §6 decision
+    (kill below v7, <=2 advance), then §9 archive + delete v13/v14/v15
+    aliases. Gos already granted; blocked only by premium quota.
+ 2. MacBook lane (this host) — see MACBOOK LANE above. pv/derive is
+    haiku so it runs under a premium wall; classifier lane is premium.
+ 3. Cross-host combine — needs BOTH hosts' cls-score docs committed.
+    Hard-gate now enforces the provisional marking.
+ 4. Channel ladder next gos (NOT YET GIVEN): (a) `channel --go
+    <pending>` over the corpus A2/D records (opus → premium-blocked)
+    to measure the C4 base rate; (b) nudge ARMING decision, which
+    needs that rate + the cls-ab verdict + spec §6 rulings 1-4.
+    Falsification pre-registered: C4 rate <5% parks arming.
+ 5. Stage-2 (paired k=5 + v7 store-writing control) — own go, after
+    the Stage-1 tally.
+ 6. Premium-quota decision (user): wait for reset vs ANTHROPIC_API_KEY
+    lane. `/usage` names the cap. API key = instrument-neutral but
+    real money; any auth/transport swap = pre-data amendment +
+    boundary ts, and the cls-ab amendment window closes at its FIRST
+    label.
+ 7. Open research question, no spend: does
+    @anthropic-ai/claude-agent-sdk expose output_config/json_schema?
+    Decides whether the included-credit lane is usable at all.
+ 8. Dogfood daily BOTH hosts — organic blocks are the only M1v2-floor
+    input; A/A checkpoint ~Aug 12.
+ 9. Repo-visibility decision (user): `th-yoo/meta-harness` is a PUBLIC
+    fork of stanford-iris-lab/meta-harness-tbench2-artifact, so it
+    cannot be flipped private in place — it needs a mirror into a new
+    private repo + remote repoint on BOTH hosts. `kkamak` and `squad`
+    are public non-forks and can be flipped with one command each.
+    Note: commits already pushed to a public fork stay reachable via
+    the upstream network even after deletion.
+10. Parked (unchanged): §3 over-refusal round · GA5 · per-repo fixture
+    inclusion · office reinject v2 · consistency 10b · queue 7c/7d.
+
 RULES unchanged (see the RULES line at the end of the office block below),
 including: no CC-identity impersonation on non-CC transports.
 ```
