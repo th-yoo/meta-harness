@@ -44,13 +44,20 @@ describe("selectTransport", () => {
 // bodiless HEAD (visible as a benign "HEAD - /api/hello failed" stderr line)
 // but the throw happens before `captured.push`, so it never reaches our
 // `handler` callback and does not inflate CAPTURED.
-function sseStructuredOutput(output: Record<string, unknown>): Response {
+//
+// Fix round 3 (2026-08-03): `agentSdkCall` no longer sends `outputFormat`,
+// so the CLI no longer forces a `StructuredOutput` tool — the model just
+// emits plain text (our schema requirement now rides in the prompt text
+// instead, and `parseRefinerOutput`/`parseChannelOutput` tolerate it). The
+// stub therefore answers with a plain TEXT SSE stream, not a `tool_use`
+// block — replaces the old `sseStructuredOutput` helper.
+function sseText(text: string): Response {
   const events = [
     { event: "message_start", data: { type: "message_start", message: { id: "msg_stub", type: "message", role: "assistant", content: [], model: "claude-haiku-4-5", stop_reason: null, stop_sequence: null, usage: { input_tokens: 1, output_tokens: 0 } } } },
-    { event: "content_block_start", data: { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "toolu_stub1", name: "StructuredOutput", input: {} } } },
-    { event: "content_block_delta", data: { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: JSON.stringify(output) } } },
+    { event: "content_block_start", data: { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } } },
+    { event: "content_block_delta", data: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } } },
     { event: "content_block_stop", data: { type: "content_block_stop", index: 0 } },
-    { event: "message_delta", data: { type: "message_delta", delta: { stop_reason: "tool_use", stop_sequence: null }, usage: { output_tokens: 5 } } },
+    { event: "message_delta", data: { type: "message_delta", delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 5 } } },
     { event: "message_stop", data: { type: "message_stop" } },
   ]
   const body = events.map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`).join("")
@@ -75,11 +82,10 @@ function withCaptureStub() {
   // not re-parse or re-cast it.
   const stub = stubServer((captured) => {
     CAPTURED.push(captured.body)
-    // Every caller of this helper passes `opts.schema`, so the CLI always
-    // forces the StructuredOutput tool — answer with a tool_use SSE stream
-    // carrying exactly the schema's required shape (`additionalProperties:
-    // false` on `channel` only — no extra fields).
-    return sseStructuredOutput({ channel: "C4" })
+    // Fix round 3: no forced tool anymore — plain text carrying the JSON
+    // our schema instruction (appended to the prompt by `agentSdkCall`)
+    // asked for.
+    return sseText('{"channel":"C4"}')
   })
   // The spawned CLI reads ANTHROPIC_BASE_URL from its own environment. The
   // stub binds port: 0, so the port is only known at runtime; `stub.url`
@@ -108,16 +114,27 @@ function withCaptureStub() {
 const CLI_TEST_TIMEOUT_MS = 60_000
 
 describe("agentSdkCall", () => {
-  test("sends our prompt verbatim, with the schema tool and no built-in tools", async () => {
+  // Fix round 3 (2026-08-03): `outputFormat` (and the `StructuredOutput`
+  // tool it forced) is gone — the schema requirement now rides as a terse
+  // trailing instruction on the prompt text, and `parseRefinerOutput` /
+  // `parseChannelOutput`'s existing tolerant first-`{`-to-last-`}` scan
+  // handles the reply. This test is the wire-level proof that change
+  // actually landed: no `tools` entries, no `output_config` key, and the
+  // schema instruction text is present in the outgoing message alongside
+  // our prompt marker.
+  test("sends our prompt + schema instruction verbatim, no tools, no output_config", async () => {
     const { CAPTURED, stub, env } = withCaptureStub()
     try {
       await agentSdkCall("PROBE BODY MARKER", "claude-haiku-4-5", env, { schema: SCHEMA })
       expect(CAPTURED.length).toBeGreaterThan(0)
-      const req = CAPTURED[0] as { tools?: Array<{ name: string }>; messages: Array<{ content: unknown }> }
-      expect(JSON.stringify(req.messages)).toContain("PROBE BODY MARKER")
-      // tools: [] must drop every built-in; only the schema tool may remain
-      const names = (req.tools ?? []).map((t) => t.name)
-      expect(names.filter((n) => n !== "StructuredOutput")).toEqual([])
+      const req = CAPTURED[0] as { tools?: unknown[]; output_config?: unknown; messages: Array<{ content: unknown }> }
+      const userTurn = JSON.stringify(req.messages)
+      expect(userTurn).toContain("PROBE BODY MARKER")
+      expect(userTurn).toContain("Respond with ONLY a JSON object matching this schema")
+      // tools: [] must drop every built-in AND no forced StructuredOutput
+      // tool is added anymore — the array is empty (or the key absent).
+      expect(req.tools ?? []).toEqual([])
+      expect("output_config" in req).toBe(false)
     } finally {
       stub.stop()
     }
@@ -156,10 +173,15 @@ describe("agentSdkCall", () => {
       expect(serialized).not.toContain("claudeMd")
       // Known residual (do not chase): a ~369-byte <system-reminder> with
       // the account email + current date survives every documented
-      // isolation option — see agent-transport.ts's header comment. ~3000
-      // bytes leaves generous headroom above that while still catching bulk
-      // reinjection (measured pre-fix: ~10.7KB; post-fix: ~1.6KB).
-      expect(serialized.length).toBeLessThan(3000)
+      // isolation option — see agent-transport.ts's header comment. Fix
+      // round 3 also dropped `outputFormat` (the forced-tool definition,
+      // ~352 bytes) and added `thinking: {type:"disabled"}` (~86 bytes),
+      // shrinking the payload further — measured ~1.35KB for this exact
+      // call post-round-3 (was ~1.6KB post-round-2, ~10.7KB pre-round-2).
+      // 2000 bytes leaves comfortable headroom above the measured size while
+      // still catching bulk reinjection (memory bleed) or the forced-tool
+      // definition reappearing.
+      expect(serialized.length).toBeLessThan(2000)
     } finally {
       stub.stop()
     }
@@ -233,20 +255,18 @@ const minedRecord = (prompt: string): CorpusRecord => rec({ prompt, stage: "mine
  *
  * The two stubs are deliberately NOT both `stubServerFor`: the sdk endpoint
  * (plain @anthropic-ai/sdk `messages.create`) is happy with a bare
- * text-block response, but the agent-sdk endpoint routes `DERIVATION_SCHEMA`
- * through `outputFormat`, which forces the spawned CLI's StructuredOutput
- * tool. A plain-text reply there is a same-bug-as-no-tool-call: the CLI's
- * own enforcement loop injects a "you must call StructuredOutput" nudge,
- * burns the one `maxTurns` we allow, and throws — verified empirically
- * (agentSdkCall would fail-open to undefined, which would make this test
- * pass or fail for the wrong reason: an unrelated harness mismatch, not the
- * §6d routing this test exists to prove). The agent stub therefore answers
- * with the same SSE tool_use envelope as the `agentSdkCall` tests above
- * (`sseStructuredOutput`), which is what the real API sends back when the
- * forced tool fires. */
+ * non-streaming text-block response, but the agent-sdk endpoint's spawned
+ * CLI always sends `stream: true` on the wire (see the `sseText` comment
+ * above) regardless of whether a schema is involved, so it needs an
+ * SSE-shaped reply or the CLI falls back to a second request. Fix round 3
+ * removed `outputFormat`/the forced `StructuredOutput` tool entirely, so the
+ * agent stub now answers with the same plain-text SSE envelope
+ * (`sseText`) as the `agentSdkCall` tests above, carrying
+ * `DERIVATION_SCHEMA`-shaped JSON as ordinary text — exactly what
+ * `parseRefinerOutput`'s tolerant parse expects. */
 async function routeCase(transport: string | undefined) {
   const sdkStub = stubServerFor(STUB_DERIVATION)
-  const agentStub = stubServer(() => sseStructuredOutput(STUB_DERIVATION))
+  const agentStub = stubServer(() => sseText(JSON.stringify(STUB_DERIVATION)))
   const prev = {
     t: process.env.KKAMAK_GAUGE_TRANSPORT,
     sdk: process.env.KKAMAK_GAUGE_SDK_BASE_URL,

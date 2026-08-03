@@ -51,6 +51,26 @@
 // email address and the current date survives every documented isolation
 // option tested (settingSources, settings, persistSession, strictMcpConfig,
 // cwd). This appears unavoidable via the current SDK surface.
+//
+// Fix round 3 (2026-08-03) — user-directed design change (not a defect):
+// dropped `outputFormat`. It is what materializes the forced
+// `StructuredOutput` tool on the wire — measured at 352 bytes of every
+// request, the single largest removable item — and it is largely
+// redundant: `buildRefinerPrompt` / `buildChannelPrompt` already instruct
+// "Output ONLY a JSON object, no prose, no markdown fences" with the exact
+// field shape, and `parseRefinerOutput` / `parseChannelOutput` already scan
+// first `{` to last `}`, tolerate fences and surrounding prose, and return
+// undefined on anything malformed (record stays pending + retryable, never
+// fabricated) — the same tolerant-parse contract `sdkCall`'s plain-text path
+// in transport.ts already relies on. So when `opts.schema` is given, the
+// schema requirement is now carried as a terse trailing instruction appended
+// to the OUTGOING text (never mutating the caller's `messageText`), and the
+// result is returned as plain text — there is no `structured_output` on the
+// result message without `outputFormat`, by design.
+// Also added: `thinking: { type: "disabled" }` — measured to drop the
+// `thinking` block 40->19 bytes and remove `context_management` entirely
+// (59->0 bytes), a further ~86 bytes at zero cost for a single-shot
+// classifier that never benefits from extended thinking.
 import { query } from "@anthropic-ai/claude-agent-sdk"
 
 export interface AgentSdkOptions {
@@ -60,6 +80,13 @@ export interface AgentSdkOptions {
 }
 
 const CALL_TIMEOUT_MS = 60_000
+
+/** Builds the outgoing message text, appending a terse schema instruction
+ * when a schema is given. Never mutates the caller's `messageText`. */
+function buildOutgoingText(messageText: string, schema: Record<string, unknown> | undefined): string {
+  if (!schema) return messageText
+  return `${messageText}\n\nRespond with ONLY a JSON object matching this schema, no prose and no markdown fences:\n${JSON.stringify(schema)}`
+}
 
 export async function agentSdkCall(
   messageText: string,
@@ -81,7 +108,7 @@ export async function agentSdkCall(
     for (const [k, v] of Object.entries(env)) if (v !== undefined) subprocessEnv[k] = v
 
     const it = query({
-      prompt: messageText,
+      prompt: buildOutgoingText(messageText, opts.schema),
       options: {
         model,
         systemPrompt: "",
@@ -92,15 +119,13 @@ export async function agentSdkCall(
         tools: [],
         title: "kkamak-gauge",
         maxTurns: 1,
+        thinking: { type: "disabled" },
         abortController: controller,
         env: subprocessEnv,
-        ...(opts.schema ? { outputFormat: { type: "json_schema" as const, schema: opts.schema } } : {}),
       },
     })
     for await (const m of it) {
       if (m.type === "result") {
-        const structured = (m as { structured_output?: unknown }).structured_output
-        if (structured !== undefined) return JSON.stringify(structured)
         const text = (m as { result?: unknown }).result
         return typeof text === "string" ? text : undefined
       }
