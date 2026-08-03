@@ -62,9 +62,11 @@ green: 783+26+230 tests + doc-check + tsc. Other hosts arm on pull.
 
 QUEUE (GO/ruling before spend): (1) DONE — 7a7b merged (above). (2)
 MacBook lane: pv-sample + counts commit; own classifier lane (sample →
-label go → arm gos); COMBINE HARD-GATE first — add provisional flag to
-combined verdict + read other-host provisional (parked residual,
-registered-verdict path) before any real cls-score --combine. (3) Stage-1
+label go → arm gos). COMBINE HARD-GATE DONE 08-03 evening on office
+(merged main, 7b ledger row 3; 821 tests): other-host provisional read
+fail-closed, combined verdict self-marks provisional (local || other ||
+absent-arms) + WARNING — real cls-score --combine now unblocked once
+both host docs exist (MacBook pulls main first). (3) Stage-1
 screen go (~28 sonnet trials, office; runbook pre-flight incl. token-free
 claude-sonnet-5 model-id check). (4) GO GIVEN 08-03 evening — retry112 armed in the serial chain (IN
 FLIGHT item 2 above); tally on completion. (5) Dogfood daily both hosts — office needs tmux allow rules

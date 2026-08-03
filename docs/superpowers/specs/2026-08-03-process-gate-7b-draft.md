@@ -222,6 +222,7 @@ N=10):**
 |---|------|--------|----------------------|--------------------------------------------|
 | 1 | 2026-08-03 | gauge-channel-ladder | pass (artifact d213353-gauge-channel-ladder.md, checker OK) | — |
 | 2 | 2026-08-03 | transport-dedup | pass (artifact 1c917fa-transport-dedup.md, checker OK) | — |
+| 3 | 2026-08-03 | cls-combine-hardgate | pass (artifact 06688fd-cls-combine-hardgate.md, checker OK) | — |
 
 **Spurious-block-rate bar (constant, RULED 2026-08-03 = as proposed):**
 measure over the first N merge attempts after arming — PROPOSED N = 10 —
