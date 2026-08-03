@@ -25,6 +25,14 @@
  * derived check against it. Model-free (no cost fence needed): resolve only
  * evaluates an ALREADY-derived check.
  *
+ * `bun replay-cli.ts channel [cwd] --go <n>` batch-classifies verification
+ * channels via channel-run.ts's `runChannel` — cost-fenced like `derive`:
+ * `n` must exactly equal the current model-refinement count (A2/D records
+ * lacking `derivation.channel`) or the call refuses with zero effect.
+ * Deterministic classes (A1/B/C) are stamped WITHOUT model calls; only the
+ * A2/D refinement spends (against `claude-opus-5` — judgment, never
+ * KKAMAK_GAUGE_MODEL).
+ *
  * `bun replay-cli.ts report [cwd]` — READ-ONLY, model-free, zero writes (no
  * corpus lock is ever taken: report never calls writeCorpus). Prints the
  * provenance-split M1v2 tally per the pre-verdict amendment
@@ -48,6 +56,7 @@ import {
 } from "./corpus-store.ts"
 import { mineJsonl, dedupeEarliest } from "./corpus-mine.ts"
 import { runDerive } from "./corpus-replay.ts"
+import { runChannel } from "./channel-run.ts"
 import { runResolve, readSensorLines } from "./state-resolve.ts"
 import { runPvSample, parsePvSampleArgs, runPvCompare, parsePvCompareArgs } from "./paired-validation.ts"
 import {
@@ -536,6 +545,13 @@ async function main(): Promise<void> {
     return
   }
 
+  if (sub === "channel") {
+    const { cwd, go } = parseDeriveArgs(args.slice(1))
+    const summary = await runChannel(cwd, go, (m) => console.log(m))
+    if (summary === undefined) process.exitCode = 1
+    return
+  }
+
   if (sub === "resolve") {
     const cwd = args[1] ?? process.cwd()
     const summary = await runResolve(cwd, (m) => console.log(m))
@@ -617,7 +633,7 @@ async function main(): Promise<void> {
   }
 
   console.error(
-    `unknown subcommand: ${sub ?? "(none)"} — usage: replay-cli.ts mine|derive|resolve|report|pv-sample|pv-compare|` +
+    `unknown subcommand: ${sub ?? "(none)"} — usage: replay-cli.ts mine|derive|channel|resolve|report|pv-sample|pv-compare|` +
       "cls-sample|cls-run|cls-label|cls-score [cwd] [--go <n>] [--reset] [--combine <pv-counts.json>] " +
       "[--arm <name>] [--emit-doc <path>]",
   )
