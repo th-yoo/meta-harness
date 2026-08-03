@@ -111,63 +111,59 @@ tests; 7b §6 ledger row 2 = pass).
 (9) Parked: §3 over-refusal round · GA5 · per-repo fixtures · office
 reinject v2 · consistency 10b · queue 7c/7d.
 
-OPERATIONAL LESSONS (08-03): spend batches and subagent fleets share one
-account rate pool — run sized-go chains when the fleet is idle (429s cost
-nothing: maxRetries 0 + fail-open left everything retryable, fences
-intact). 429 OBSERVATION (08-03 afternoon, ~2.5h/30+ probes): the block
-is a HARD PIN (100% ERR, zero transient OKs) and OPAQUE (rate_limit_error
-w/ empty message; no retry-after, no anthropic-ratelimit-* headers, only
-x-should-retry:true — reset time not surfaced, polling is the only
-detection). SCOPE ASYMMETRY: same account, same hours — interactive CC
-session ran heavy subagent fleets fine while every single-shot SDK OAuth
-probe (maxRetries:0) 429'd. Hypotheses: (a) shared pool at edge, retrying
-clients squeeze through; (b) raw-SDK OAuth traffic in its OWN bucket —
-100%-ERR consistency incl. quiet stretches slightly favors (b).
-Distinguishing test: probes staying ERR through a genuinely idle hour ⇒
-(b), idling pointless; any OK during idle ⇒ (a), fleet discipline
-matters. Refines (does not replace) the one-pool lesson: pool may be
-TRANSPORT-scoped. Opus probed directly; sonnet untested until stage1's
-probe fires. Probe design rule proven useful: probe with the SAME
-single-shot transport as the batch it gates — a retrying/CLI probe would
-report "clear" falsely. TIMELINE + SAME-AUTH PROOF (15:48): raw SDK
-32/32 SUCCESS 10:13 → cls-label 0/32 wall ≤12:37 → probes dead through
-15:38+, WHILE the same OAuth token (same .credentials.json, freshly
-rotated, verified unexpired) ran this CC session's heavy fleets all
-afternoon zero-failure. Ruled out by direct test: missing oauth beta
-header (WITH/WITHOUT both 429 identically), stale token. Conclusion:
-routing by CLIENT SHAPE — CC-shaped traffic rides a healthy interactive
-bucket; bare-SDK messages.create hits a separate exhausted-or-gated
-raw-API allowance (empty "Error" message = gateway-style rejection).
->5h past last success + idle test negative ⇒ does NOT clear on a 5h
-window. **ROOT CAUSE (research 15:55):** Anthropic's **2026-06-15
-subscription split** — Agent SDK / `claude -p` / CC GitHub Actions draw
-a SEPARATE monthly Agent-SDK credit at API rates (per-tier, refreshes
-monthly, no rollover; requests STOP when exhausted unless usage credits
-are enabled); interactive CC (terminal/IDE) is untouched — exactly our
-asymmetry. Bare `@anthropic-ai/sdk` messages.create with a subscription
-OAuth token is an UNSUPPORTED path (our signature: 429, no retry-after,
-no anthropic-ratelimit-* headers, message just "Error"). Aug-3 = fresh
-monthly credit + `claude -p` proven working 15:52 ⇒ the Agent-SDK pool
-has headroom and bare-SDK traffic simply is not drawing from it, so a
-plan upgrade would NOT fix this. SUPPORTED PATHS: (a)
+OPERATIONAL LESSONS (08-03): spend batches and subagent fleets draw the
+same account allowance PER MODEL TIER (the "one pool" phrasing from this
+morning is superseded by the 16:15 finding below — pools are model-tier
+scoped, so haiku work never competes with opus work) — 429s cost nothing:
+maxRetries 0 + fail-open left everything retryable, fences intact. **429 SETTLED 2026-08-03 16:15 — PER-MODEL QUOTA, not a path
+ban, not a credit pool, not a transport problem.** Decisive test, one
+token, one client, same second: `claude-haiku-4-5` **OK** ·
+`claude-sonnet-5` **429** · `claude-opus-5` **429**. Bare
+`@anthropic-ai/sdk` + subscription OAuth is a WORKING path — the premium
+(sonnet/opus) allowance is what ran out. Explains everything observed:
+MacBook 00:29 + office 10:13 SDK batches succeeded because premium
+headroom existed then; nothing about the code, auth, host, or transport
+changed. RETRACTED en route (recorded so the wrong turns stay visible):
+(i) "bare-SDK OAuth is an unsupported path" — falsified by our own two
+successful batches, and by haiku working on the walled host; I read past
+the tell (the community report I cited said haiku worked while sonnet
+429'd); (ii) "June-15 Agent-SDK credit split is the mechanism" — a
+monthly credit pool would not discriminate by model tier; (iii) "use
+`claude -p` as a zero-setup interim" — that IS the CLI transport §6c
+retired, and this host's paired verdict is already SPLIT (0.625 < 0.80,
+missed-C 6 > cap 2), so reverting breaks comparability, not just
+billing. WHAT IS STILL TRUE from the earlier observation: the block is a
+hard pin (100% ERR on premium, zero transient OKs), OPAQUE (no
+retry-after, no anthropic-ratelimit-* headers, message just "Error" —
+polling is the only detection), survived a token refresh (per-token
+window theory dead), and interactive CC keeps working throughout.
+Duration >3.5h and outliving a token refresh points at the WEEKLY
+premium cap rather than a 5h window ⇒ possibly days, not hours;
+`/usage` names it. WORK SPLIT BY MODEL — blocked: cls-label (opus),
+sonnet arms, channel-smoke (opus), stage1 (sonnet subject). LIVE NOW:
+anything haiku — `derive`/retry-112 resolves `claude-haiku-4-5`
+(callModelSdk default, KKAMAK_GAUGE_MODEL unset — verified OK 16:14) and
+the two haiku classifier arms. **MY CHAIN DESIGN FLAW, unfixed:** all
+four tmux launchers probe with OPUS, so haiku-capable work is gated
+behind premium availability — violates the probe-fidelity rule stated
+one paragraph earlier (probe with the model the batch uses). Fix before
+relying on the chain: per-link probe model = that link's own model (and
+kill the tmux session BEFORE editing its script). ORDERING NOT CHANGED
+UNILATERALLY: queue item 4 puts retry-112 after the classifier verdict
+for a substantive reason (a patched-prompt verdict would change what we
+re-derive), so haiku work waits on a user ruling, not on the quota.
+OPTIONS IF THE PREMIUM CAP HOLDS: (a) wait for reset (`/usage` says
+when); (b) **ANTHROPIC_API_KEY** — instrument-NEUTRAL (same transport,
+same schema, same speed; only the credential changes — `sdkCall`
+hardcodes apiKey:null + oauth beta header, so it needs an auth-mode
+branch + tests) but real money at list rates; (c)
 **@anthropic-ai/claude-agent-sdk** — post-rename default system prompt
-is MINIMAL (CC preset is opt-in), so a single-turn no-tools call is
-close to bare messages.create and bills the INCLUDED credit; UNVERIFIED
-whether it exposes output_config/json_schema structured outputs (we
-depend on those) — research before choosing; (b) **ANTHROPIC_API_KEY**
-(Console pay-as-you-go) — costs money at list rates but is
-instrument-NEUTRAL: same transport, same schema, same speed, only the
-credential changes (sdkCall hardcodes apiKey:null + oauth beta header,
-so it needs an auth-mode branch + tests). **CORRECTION (retracts the
-earlier `claude -p` interim suggestion):** `claude -p` IS the CLI
-transport §6c retired, and this host's paired-validation verdict is
-already SPLIT (agreement 0.625 < 0.80, missed-C 6 > cap 2) = CLI and
-SDK records are NON-POOLABLE — reverting breaks comparability of
-everything measured after, not just billing. Any transport swap =
-pre-data amendment + boundary ts; cls-ab is still at 0 labels so that
-window is OPEN, and closes at the first label. Cheap user-side
-diagnostic: /usage panel (Agent-SDK credit balance + whether overflow
-usage credits are enabled). SDD TDD mid-states turn the gate red mid-turn — foreground
+is MINIMAL (CC preset opt-in) so a single-turn no-tools call sits close
+to bare messages.create and bills included credit; UNVERIFIED whether it
+exposes output_config/json_schema (we depend on those). Any transport or
+auth swap = pre-data amendment + boundary ts; cls-ab is at 0 labels so
+that window is OPEN and closes at the first label.
+SDD TDD mid-states turn the gate red mid-turn — foreground
 until-green waits ride it out. Store artifacts (term-bench2/store/**) are
 DATA with load-bearing bytes: never lint, never edit for lint.
 
