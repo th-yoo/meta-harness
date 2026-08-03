@@ -124,9 +124,11 @@ REMAINING WORK — WHOLE PROGRAM (owner · blocker · authorization):
     real money; any auth/transport swap = pre-data amendment +
     boundary ts, and the cls-ab amendment window closes at its FIRST
     label.
- 7. Open research question, no spend: does
-    @anthropic-ai/claude-agent-sdk expose output_config/json_schema?
-    Decides whether the included-credit lane is usable at all.
+ 7. CLOSED 16:58 (was: does the Agent SDK expose structured outputs?).
+    ANSWER: the Agent SDK IS Claude Code — it spawns the bundled
+    `claude` binary — so it is the retired CLI transport, has no
+    structured outputs, and loads settings/CLAUDE.md by default. RULED
+    OUT as an instrument lane; premium board is (a) wait or (b) API key.
  8. Dogfood daily BOTH hosts — organic blocks are the only M1v2-floor
     input; A/A checkpoint ~Aug 12.
  9. Repo-visibility decision (user): `th-yoo/meta-harness` is a PUBLIC
@@ -296,11 +298,24 @@ OPTIONS IF THE PREMIUM CAP HOLDS: (a) wait for reset (`/usage` says
 when); (b) **ANTHROPIC_API_KEY** — instrument-NEUTRAL (same transport,
 same schema, same speed; only the credential changes — `sdkCall`
 hardcodes apiKey:null + oauth beta header, so it needs an auth-mode
-branch + tests) but real money at list rates; (c)
-**@anthropic-ai/claude-agent-sdk** — post-rename default system prompt
-is MINIMAL (CC preset opt-in) so a single-turn no-tools call sits close
-to bare messages.create and bills included credit; UNVERIFIED whether it
-exposes output_config/json_schema (we depend on those). (d) **KNOWN AND
+branch + tests) but real money at list rates; (c) **RULED OUT 16:58 —
+@anthropic-ai/claude-agent-sdk IS Claude Code.** It bundles the `claude`
+binary and drives it as a SUBPROCESS (Python package bundles the CLI, TS
+ships it as a native optional dep, third-party providers expose
+`path_to_claude_code_executable` / `spawn_claude_code_process`). So it is
+the §6c-RETIRED CLI transport with a library API — same
+non-poolability as `claude -p` (this host's paired verdict SPLIT
+0.625 / missed-C 6>2). Two further disqualifiers: it has NO structured
+outputs (`--output-format json` wraps an UNSTRUCTURED result field —
+upstream issue), so we would lose the schema enforcement
+DERIVATION_SCHEMA/CHANNEL_SCHEMA give us; and it loads settingSources
+(user/project/local settings + CLAUDE.md) plus the full agent loop by
+default, i.e. MORE instrument contamination than a bare spawn, not less.
+The earlier "minimal system prompt ⇒ close to bare messages.create" note
+was wrong and is withdrawn. Also relevant: published guidance says
+subscription rate limits are not intended for third-party agent usage —
+API keys are. NET: the premium board is just (a) wait or (b) API key.
+(d) **KNOWN AND
 DELIBERATELY NOT IMPLEMENTED — FYI so nobody re-derives it as a
 "discovery":** the widely-circulated trick of setting `system: "You are
 Claude Code, Anthropic's official CLI for Claude."` on bare-SDK calls to
