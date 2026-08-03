@@ -1,0 +1,79 @@
+{
+  "comparedAt": "2026-08-03T01:13:58.821Z",
+  "hostname": "yoo-dev",
+  "counts": {
+    "cCli": 16,
+    "cSdk": 10,
+    "intersection": 10,
+    "union": 16,
+    "missedC": 6,
+    "sdkOnlyC": 0,
+    "decided": 32,
+    "undecided": 0,
+    "missing": 0,
+    "wrongTransport": 0
+  },
+  "keys": {
+    "cCli": [
+      "[\"/home/th-yoo/tmp/kkamak-livetest\",\"da9dd64ad1c30edaf33c3cde019e195f297cd4a2e0239613198a16599dd93068\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"687f516b5c3bb65f842fea52bd506d91a01ee18dd3042fc66172f740bf39f430\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"ec4dec7fe66556963581f25712fa3fcac738de3b6415a6c58c58c459ca387745\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"96d2b3f998d4157f0d4a58f891a6e034a6d9397d8be08ceee205da44637eff5f\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"58f8629c83e199525fe7f63bc1966c4f11629a1cc7680957f8a460f311a24103\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"5e49ac95eab74a008a9dc288e975aa86b8f60a521e867b93bbace6d7e3f00d0b\"]",
+      "[\"/home/th-yoo/z2/oc-test\",\"8fd3bb3572f5ae87877b19435447174ae801549d3afcb5cafeaf3be2f4518eb4\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"3066219b2492bd23a88e602d8d8582e3ba85343bd03a10963bd4e9a38d2d76e4\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"4687fc1effff6304a52296194391884cb85b438be959727956c9e3406f21dc2b\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"e31267126c83a70eb3d9b7340d67564148040d49d0426a5f84761cd889c25b90\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"ea13cb5bad078a95a09538f9469065097083cff6b480b188b383227446e386fb\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"7502407cfdefe4634923717b28b9ecab4eb1c97448f12a5e4f2adc22f3f250a4\"]",
+      "[\"/app\",\"b4a9f03648da95c632cc909f6386ae424453f4a8713b4420cf17c7ee78c5506d\"]",
+      "[\"/tmp/kmtest\",\"52ca0f10c19d76061bd1aa4694753343f08521fe3fb5dca2bf6809b3c36f49db\"]",
+      "[\"/tmp/kmtest\",\"283545d1e108bddf3f06936667265f9cef1be358ed0484cf03361a89bc5f962f\"]",
+      "[\"/home/th-yoo/z2/kkamak\",\"2a9e22f7d2f2169a2ee432b358c0cacf59e46daa1147679677cceb559da4115e\"]"
+    ],
+    "cSdk": [
+      "[\"/home/th-yoo/z2/meta-harness\",\"687f516b5c3bb65f842fea52bd506d91a01ee18dd3042fc66172f740bf39f430\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"96d2b3f998d4157f0d4a58f891a6e034a6d9397d8be08ceee205da44637eff5f\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"58f8629c83e199525fe7f63bc1966c4f11629a1cc7680957f8a460f311a24103\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"5e49ac95eab74a008a9dc288e975aa86b8f60a521e867b93bbace6d7e3f00d0b\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"3066219b2492bd23a88e602d8d8582e3ba85343bd03a10963bd4e9a38d2d76e4\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"4687fc1effff6304a52296194391884cb85b438be959727956c9e3406f21dc2b\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"e31267126c83a70eb3d9b7340d67564148040d49d0426a5f84761cd889c25b90\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"ea13cb5bad078a95a09538f9469065097083cff6b480b188b383227446e386fb\"]",
+      "[\"/tmp/kmtest\",\"52ca0f10c19d76061bd1aa4694753343f08521fe3fb5dca2bf6809b3c36f49db\"]",
+      "[\"/tmp/kmtest\",\"283545d1e108bddf3f06936667265f9cef1be358ed0484cf03361a89bc5f962f\"]"
+    ],
+    "intersection": [
+      "[\"/home/th-yoo/z2/meta-harness\",\"687f516b5c3bb65f842fea52bd506d91a01ee18dd3042fc66172f740bf39f430\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"96d2b3f998d4157f0d4a58f891a6e034a6d9397d8be08ceee205da44637eff5f\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"58f8629c83e199525fe7f63bc1966c4f11629a1cc7680957f8a460f311a24103\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"5e49ac95eab74a008a9dc288e975aa86b8f60a521e867b93bbace6d7e3f00d0b\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"3066219b2492bd23a88e602d8d8582e3ba85343bd03a10963bd4e9a38d2d76e4\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"4687fc1effff6304a52296194391884cb85b438be959727956c9e3406f21dc2b\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"e31267126c83a70eb3d9b7340d67564148040d49d0426a5f84761cd889c25b90\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"ea13cb5bad078a95a09538f9469065097083cff6b480b188b383227446e386fb\"]",
+      "[\"/tmp/kmtest\",\"52ca0f10c19d76061bd1aa4694753343f08521fe3fb5dca2bf6809b3c36f49db\"]",
+      "[\"/tmp/kmtest\",\"283545d1e108bddf3f06936667265f9cef1be358ed0484cf03361a89bc5f962f\"]"
+    ],
+    "missedC": [
+      "[\"/home/th-yoo/tmp/kkamak-livetest\",\"da9dd64ad1c30edaf33c3cde019e195f297cd4a2e0239613198a16599dd93068\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"ec4dec7fe66556963581f25712fa3fcac738de3b6415a6c58c58c459ca387745\"]",
+      "[\"/home/th-yoo/z2/oc-test\",\"8fd3bb3572f5ae87877b19435447174ae801549d3afcb5cafeaf3be2f4518eb4\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"7502407cfdefe4634923717b28b9ecab4eb1c97448f12a5e4f2adc22f3f250a4\"]",
+      "[\"/app\",\"b4a9f03648da95c632cc909f6386ae424453f4a8713b4420cf17c7ee78c5506d\"]",
+      "[\"/home/th-yoo/z2/kkamak\",\"2a9e22f7d2f2169a2ee432b358c0cacf59e46daa1147679677cceb559da4115e\"]"
+    ],
+    "sdkOnlyC": [],
+    "undecided": [],
+    "missing": [],
+    "wrongTransport": []
+  },
+  "bar": {
+    "verdict": "SPLIT",
+    "agreement": 0.625,
+    "agreementOk": false,
+    "missedCap": 2,
+    "missedOk": false
+  }
+}
