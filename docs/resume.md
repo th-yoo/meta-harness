@@ -20,14 +20,20 @@ tooling + runbook (2026-08-03-cls-ab-runbook.md). MEASURED: office pv
 verdict SPLIT (agreement 0.625 < 0.80, missed-C 6 > cap 2; SDK misses C,
 never over-extracts) — counts committed docs/gauge-pv/yoo-dev-pv-counts.json.
 
-IN FLIGHT (office box): tmux `clsab2` auto-launcher — probes the 429
-rate-limit every 5min, then runs the GRANTED chain: cls-label --go 32
-(opus, 32 blind labels) → 4× cls-run --go 32 → cls-score --emit-doc
+IN FLIGHT (office box, serialized on one rate pool): (1) tmux `clsab2` —
+probes 429 every 5min then runs GRANTED chain: cls-label --go 32 (opus) →
+4× cls-run --go 32 → cls-score --emit-doc
 docs/gauge-cls-ab/yoo-dev-cls-score.json; log /mnt/d/tmp/clsab-run2.log.
-FIRST ACTION on office: read that log; if DONE, script-tally the score
-output, commit the emitted doc + record the per-host verdict here
-(PROVISIONAL/per-host scope — registered verdict needs both hosts +
-combine). If still probing, leave it.
+When DONE: script-tally, commit emitted doc, record per-host verdict
+(PROVISIONAL scope). (2) tmux `stage1wait` — Stage-1 screen GO EXECUTED
+08-03 evening (pre-flight all green, aliases v13=s1/v14=s2/v15=s3
+installed, sonnet-5 model id confirmed in opencode listing); launcher
+/mnt/d/tmp/stage1-autolaunch.sh waits clsab2 "=== DONE" → sonnet probe OK
+→ launches tmux `stage1screen` (runbook §4, run from ~/z2/meta-harness —
+worktree wt-path-a-stage0 GONE, main is superset) with §3H N-watchdog
+(394/2689/3233/2991). Log /mnt/d/tmp/stage1-autolaunch.log. After screen:
+§5 R2 audit BEFORE tally → §6 script-tally (kill below v7, ≤2 advance) →
+§9 archive + alias hygiene (nextVersion mints v16 while v13-15 live).
 
 MERGED 08-03 evening (user go "1"): `gate-floor-7a7b` → main `3617774`,
 pushed. 7a doc-linter floor ARMED — scripts/doc-check.ts (link integrity
