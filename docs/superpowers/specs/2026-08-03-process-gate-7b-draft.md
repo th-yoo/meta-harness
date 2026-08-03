@@ -84,6 +84,22 @@ non-zero (block the merge) if no such file exists or the field does not
 match. This would run as a pre-merge CI-style check or as the last step of
 `finishing-a-development-branch`, never as a per-turn hook.
 
+**Effective-tip amendment (pre-data, recorded at build time 2026-08-03,
+implemented in `scripts/check-review-artifact.ts`):** the literal form
+above is unsatisfiable — committing the review artifact moves the branch
+HEAD, so the artifact can never name the final HEAD (§1's own central
+design problem, resurfacing at merge level). Mechanical resolution:
+trailing commits whose diffs touch ONLY `docs/reviews/**` are exempt from
+the "reviewed" requirement; the **effective reviewed tip** = the newest
+non-exempt commit in the range; the artifact filename and its
+`reviewed-range`/`reviewed-commit` field must name
+`<merge-base>..<effective-tip>`. Any non-exempt commit after the reviewed
+tip therefore fails the check (sneak-code stays closed — only review
+artifacts may follow the reviewed tip). A range containing only
+`docs/reviews/**` commits passes vacuously (nothing to review). User ack
+of this amendment: pending (flagged in the build report); until acked it
+binds the implementation, not the registered constants.
+
 ## 2. Artifact format
 
 **PROPOSED path convention:** `docs/reviews/<short-sha>-<slug>.md`, where
@@ -231,7 +247,11 @@ pre-arming — nothing measured yet).
 7. **No-self-review = string-inequality** on `reviewer:` vs commit-author
    names/emails in the reviewed range. No roster.
 
-**Next step (own go, not yet given):** build
-`scripts/check-review-artifact.sh` per §1's pseudo-logic + tests, wire as
-the last step of `finishing-a-development-branch` practice on this repo,
-then start the N=10 falsification window.
+**BUILT 2026-08-03 evening (user go "do this in this box"):**
+`scripts/check-review-artifact.ts` (+`.test.ts`, 13 tests) — TypeScript
+per repo convention (7a's doc-check.ts pattern; the spec's `.sh` name was
+marked illustrative). Implements §1 incl. the effective-tip amendment, §2
+field checks, §3 string-inequality, §4 exact-sha staleness. Usage:
+`bun scripts/check-review-artifact.ts <merge-base-sha> <head-sha>`.
+**NOT ARMED:** arming = running it at every merge of this repo + starting
+the N=10 falsification window — own user go.
