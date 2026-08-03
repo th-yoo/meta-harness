@@ -124,15 +124,17 @@ REMAINING WORK — WHOLE PROGRAM (owner · blocker · authorization):
     real money; any auth/transport swap = pre-data amendment +
     boundary ts, and the cls-ab amendment window closes at its FIRST
     label.
- 7. ANSWERED 17:0x (was: does the Agent SDK expose structured outputs?).
-    YES — `outputFormat`/`output_format` json_schema with a validated
-    `structured_output`. And it IS Claude Code (spawns the bundled
-    binary), but systemPrompt/settingSources/tools are all clampable.
-    So it is VIABLE, not ruled out — the price is its own paired
-    validation (CLI-family, comparability unmeasured) plus a
-    validate-and-re-prompt schema mechanism that differs from the API's
-    constrained sampling. Premium board: (a) wait · (b) API key
-    (simplest, instrument-neutral) · (c) Agent SDK (included credit).
+ 7. CLOSED 17:10 BY MEASUREMENT (was: is the Agent SDK ~equivalent to
+    the API SDK if we zero the system prompt?). Wire capture says NO:
+    even at maximum minimality it sends 2 harness system blocks, 29 tool
+    definitions, injected <system-reminder> blocks in the user turn, NO
+    output_config on the measured turn, and FOUR model calls for one
+    query (incl. unrequested title generation) — which breaks spec §4's
+    exactly-1-call rule that the cost fence is built on. Full evidence +
+    repro method in the (c) entry of the 429 block below. Premium board:
+    (a) wait · (b) **API key** (simplest, instrument-neutral) ·
+    (c) Agent SDK only if the call-count and schema gaps are closed
+    first.
  8. Dogfood daily BOTH hosts — organic blocks are the only M1v2-floor
     input; A/A checkpoint ~Aug 12.
  9. Repo-visibility decision (user): `th-yoo/meta-harness` is a PUBLIC
@@ -318,18 +320,39 @@ withdraw: (i) "no structured outputs" — FALSE, the SDK supports
 CLAUDE.md/settings, so worse contamination" — FALSE as a fixed property,
 `systemPrompt` is settable (default is already minimal, CC preset is
 opt-in), `settingSources: []` disables settings/CLAUDE.md, and tools and
-turns can be clamped. REAL residual caveats, in order: (1) a
-configured-minimal Agent SDK is NOT the old CLI transport, so its
-comparability with our SDK corpus is UNMEASURED — it needs its own
-paired validation before any pooling, which is a cost, not a blocker;
-(2) its schema mechanism is validate-and-RE-PROMPT, not the API's
-grammar-constrained sampling — retries introduce a selection effect on a
-measured classification distribution, which matters for an instrument
-even though it is invisible in ordinary use; (3) it bills the Agent-SDK
-credit (included monthly, then stops unless overflow credits are on).
-NET premium board: (a) wait, (b) API key (simplest, instrument-neutral,
-pay-as-you-go), (c) Agent SDK (included credit, but buy the paired
-validation first).
+turns can be clamped. **MEASURED ON THE WIRE 17:10 (this ends the speculation).** Method, zero
+model spend, reproducible in ~5 min: `npm i @anthropic-ai/claude-agent-sdk`
+in a scratch dir, start a local http server, set `ANTHROPIC_BASE_URL` to
+it, call `query()` and dump the intercepted request bodies. Config used
+was the maximally-minimal one: `systemPrompt: ""`, `settingSources: []`,
+`allowedTools: []`, `maxTurns: 1`, plus `outputFormat` json_schema.
+WHAT ACTUALLY WENT OUT vs what was asked for:
+ · empty system → TWO system blocks survive: an
+   `x-anthropic-billing-header: cc_version=...; cc_entrypoint=sdk-cli;`
+   line (so SDK traffic is LABELLED as sdk-cli, not interactive CC — it
+   is the honest lane, and it explains the separate credit pool) and
+   "You are a Claude agent, built on Anthropic's Claude Agent SDK."
+ · `allowedTools: []` → **29 tool definitions still attached** to the
+   request (the option gates execution, not the definitions).
+ · our schema → `output_config: null` ON THE MEASURED TURN. The API-level
+   grammar constraint we rely on is NOT applied; validation happens at
+   the SDK layer by re-prompting.
+ · our prompt verbatim → the user turn is WRAPPED and prefixed with
+   injected `<system-reminder>` blocks (local agent-type listings), so
+   the model is not classifying our prompt, it is classifying our prompt
+   inside a harness context.
+ · one call → **FOUR** model calls: 2 for the query (a retry) + 2
+   UNREQUESTED session-title generations.
+DECISIVE for us: the call count. Spec §4 is exactly-1-call-per-record
+(`maxRetries: 0`) and the cost fence is built on it — `--go N` is
+authorized because N records = N calls. Under the Agent SDK a sized go
+stops meaning what it says. Behind that: no API-level schema
+enforcement on the measured turn, and 29 tool defs + reminders in
+context. VERDICT: not usable as an instrument transport without
+neutralizing all of the above (and re-validating), which is more work
+than the API-key branch. NET premium board: (a) wait, (b) **API key**
+(simplest, instrument-neutral, pay-as-you-go), (c) Agent SDK — only if
+someone first proves the call-count and schema gaps can be closed.
 (d) **KNOWN AND
 DELIBERATELY NOT IMPLEMENTED — FYI so nobody re-derives it as a
 "discovery":** the widely-circulated trick of setting `system: "You are
