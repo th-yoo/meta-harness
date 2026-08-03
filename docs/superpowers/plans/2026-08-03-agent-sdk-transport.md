@@ -111,6 +111,14 @@ exception to be earned.
 at the moment the default flips, per §6b/§6c precedent — required because
 behaviour changes while `pluginVersion` does not.
 
+**Known reporting gap, acknowledged not fixed.** `cls-ab.ts`'s
+`transportTally` (lines ~375-380) buckets records as `if (transport === "sdk")
+sdk++ else cli++`, so any `"agent-sdk"` record it ever sees is counted as CLI.
+That is a display miscount in the classifier A/B report, not a
+transport-selection defect, and `cls-ab.ts` is out of scope for this
+amendment. Recorded here so a later reader does not mistake it for a fresh
+bug; fix it when cls-ab is next opened.
+
 **What would falsify this change.** If the bar passes but Agent-SDK
 derivations cost more wall-clock per record than the API SDK without buying
 premium access (e.g. the credit is exhausted), the transport is retained as
@@ -283,7 +291,8 @@ cd cc-gate-plugin && bun add @anthropic-ai/claude-agent-sdk
   HTTP stub on a fixed port.
 
 ```typescript
-import { describe, test, expect, afterAll } from "bun:test"
+// NOTE: Tasks 2/3/4 all append to this same file. Do NOT re-import bun:test —
+// extend Task 2's existing line to `import { describe, test, expect, afterAll }`.
 import { stubServer } from "./sdk-stub.ts"
 import { agentSdkCall } from "../src/gauge/agent-transport.ts"
 
@@ -483,6 +492,12 @@ git commit -m "feat(gauge): agentSdkCall transport + binding call-count proof"
 **Files:**
 - Modify: `cc-gate-plugin/src/gauge/transport.ts` (`callModelSdk` dispatch)
 - Modify: `cc-gate-plugin/src/gauge/corpus-replay.ts:75` (transport stamp)
+- Modify: `cc-gate-plugin/src/gauge/refiner-cli.ts:68` (transport stamp — THE
+  LIVE PATH: this detached child is what the real gate hook spawns, and it
+  calls the same `callModelSdk`. Leaving its hardcoded `transport: "sdk"`
+  means that the moment Task 9 flips the default, every LIVE derivation runs
+  on agent-sdk while its persisted record still claims "sdk" — silently
+  falsifying the split rule this whole plan rests on.)
 - Test: `cc-gate-plugin/test/gauge-agent-transport.test.ts` (append)
 
 **Interfaces:**
@@ -512,13 +527,20 @@ record would come back underived. `KKAMAK_GAUGE_AUTH_TOKEN` must be set, or
 import { deriveRecord } from "../src/gauge/corpus-replay.ts"
 import { stubServerFor } from "./sdk-stub.ts"
 import type { CorpusRecord } from "../src/gauge/corpus-store.ts"
+// Copy the `rec(over: Partial<CorpusRecord> = {})` builder from
+// test/corpus-replay.test.ts:21-34 (or export it from a shared test helper);
+// do not hand-roll a partial literal.
 
 const STUB_DERIVATION = {
   goalSummary: "summarize x", class: "A2", reason: "not-shell-checkable",
   criteria: ["a summary of x exists"], check: null, horizon: null, confidence: 0.9,
 }
-const minedRecord = (prompt: string): CorpusRecord =>
-  ({ prompt, stage: "mined" }) as CorpusRecord
+// CorpusRecord (corpus-store.ts:85-99) requires provenance, repo, sessionId,
+// promptTs, promptSha256, floorCheck, floorCheckMinedAt in addition to
+// prompt/stage — a bare `as CorpusRecord` on a 2-field literal is TS2352.
+// Reuse the established builder idiom from test/corpus-replay.test.ts:21-34,
+// which spreads full defaults and takes a Partial override.
+const minedRecord = (prompt: string): CorpusRecord => rec({ prompt, stage: "mined" })
 
 /** Both cases share this scaffolding; only the env var and the expectations
  * differ. Restores every env key it touches. */
@@ -591,8 +613,11 @@ In `transport.ts`, inside `callModelSdk`, before building the request:
   }
 ```
 
-In `corpus-replay.ts:75`, replace the hardcoded `transport: "sdk",` with
-`transport: selectTransport(process.env),` and import `selectTransport`.
+In `corpus-replay.ts:75` AND in `refiner-cli.ts:68`, replace the hardcoded
+`transport: "sdk",` with `transport: selectTransport(process.env),` and import
+`selectTransport` in both. Grep-verify afterwards that no `transport: "sdk"`
+literal survives outside `cls-ab.ts` (which is out of scope):
+`grep -rn 'transport: "sdk"' cc-gate-plugin/src/` should return only cls-ab.ts.
 
 - [ ] **Step 4: Run to verify it passes**
 
@@ -651,10 +676,16 @@ NOT `r.transport`: `CorpusRecord` has no top-level transport field.
   - `comparePvRecords(manifest, realRecords, shadowRecords, pairing?)` where
     `pairing` is `{ baseline: (r: CorpusRecord) => boolean; shadowTransport: GaugeTransport }`,
     defaulting to `{ baseline: isCliDerived, shadowTransport: "sdk" }`.
-  - `PvCountsFile` gains `arms: { baseline: string; shadow: GaugeTransport }`
-    so an emitted counts file says which pair it measured. The `cCli`/`cSdk`
-    field NAMES stay (renaming breaks the already-committed
-    `docs/gauge-pv/*.json`); `arms` is what disambiguates them.
+  - `PvCountsFile` gains `arms?: { baseline: GaugeTransport; shadow: GaugeTransport }`
+    — **OPTIONAL, absent meaning `{baseline:"cli", shadow:"sdk"}`**, matching
+    this codebase's established absent-means-CLI convention. It MUST NOT be
+    required: `docs/gauge-pv/yoo-dev-pv-counts.json` is already committed
+    without it (verified: keys are comparedAt/hostname/counts/keys/bar), and
+    `test/paired-validation.test.ts:501-519`'s `otherHostFile()` helper — used
+    by ~15 existing `--combine` tests — builds these objects without it. A
+    required field would fail `tsc` and refuse a real production artifact.
+    The `cCli`/`cSdk` field NAMES stay (renaming breaks the same committed
+    file); `arms` is what disambiguates them.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -726,47 +757,50 @@ export function runPvSample(
 
 export interface PvPairing {
   baseline: (r: CorpusRecord) => boolean
+  /** serializable name of the baseline arm — a predicate cannot be written
+   * into PvCountsFile.arms, so the label travels alongside it. */
+  baselineLabel: GaugeTransport
   shadowTransport: GaugeTransport
+}
+
+/** The §6c pairing, used as the default everywhere so existing callers and
+ * existing records behave byte-for-byte as before. */
+const PV_DEFAULT_PAIRING: PvPairing = {
+  baseline: isCliDerived,
+  baselineLabel: "cli",
+  shadowTransport: "sdk",
 }
 
 export function comparePvRecords(
   manifest: PvManifest,
   realRecords: CorpusRecord[],
   shadowRecords: CorpusRecord[],
-  pairing: PvPairing = { baseline: isCliDerived, shadowTransport: "sdk" },
+  pairing: PvPairing = PV_DEFAULT_PAIRING,
 ): PvComparison {
   // ...at line ~339:
   // if (shadow.derivation.transport !== pairing.shadowTransport || !pairing.baseline(real))
 }
 
 // THE FOURTH SITE — without this the CLI flag is parsed and then dropped.
+// Only three lines of its ~150-line body change; everything else stays.
 export function runPvCompare(
   cwd: string,
-  opts: { combine?: string; pairing?: PvPairing },
+  opts: { combine?: string; pairing?: PvPairing },   // <- pairing added
   log: (m: string) => void,
 ): PvCompareSummary | undefined {
-  const pairing = opts.pairing ?? { baseline: isCliDerived, shadowTransport: "sdk" }
-  // ...line ~735: pass it through instead of relying on the default
-  // const comparison = comparePvRecords(manifest, realRecords, shadowRecords, pairing)
-  // ...lines ~738-744: include the arms in the emitted PvCountsFile
-  // arms: { baseline: pairingLabel(pairing), shadow: pairing.shadowTransport }
+  const pairing = opts.pairing ?? PV_DEFAULT_PAIRING          // <- new line
+  // ... body unchanged up to line ~735, then:
+  const comparison = comparePvRecords(manifest, realRecords, shadowRecords, pairing)
+  // ... and the PvCountsFile literal at ~738-744 gains one field:
+  //   arms: { baseline: pairing.baselineLabel, shadow: pairing.shadowTransport },
+  // ... and the renderPvReport call passes that same arms object (§3b).
 }
 ```
 
-`PvPairing` therefore also needs a label for the emitted file, since a
-predicate cannot be serialized. Carry it on the object rather than deriving it:
-
-```typescript
-export interface PvPairing {
-  baseline: (r: CorpusRecord) => boolean
-  /** serializable name of the baseline arm, written into PvCountsFile.arms */
-  baselineLabel: GaugeTransport
-  shadowTransport: GaugeTransport
-}
-```
-
-Update the three defaults above to
-`{ baseline: isCliDerived, baselineLabel: "cli", shadowTransport: "sdk" }`.
+All four sites take `PV_DEFAULT_PAIRING` as their default, so `stratify`'s
+`isBaseline` parameter is `pairing.baseline`'s counterpart — keep `stratify`
+taking a bare predicate (it needs nothing else) and the other three taking the
+whole `PvPairing`.
 
 - [ ] **Step 3b: De-CLI the operator-facing strings**
 
@@ -776,9 +810,12 @@ class-C records") and `renderPvReport`'s banner (lines 566-567,
 "pv-compare — CLI-vs-SDK transport comparison"). Make both name the actual
 arms, e.g. `no ${baselineLabel}-derived class-C records` and
 `pv-compare — ${baselineLabel}-vs-${shadowTransport} transport comparison`.
-This requires the label to reach both functions — `runPvSample` takes it from
-the same pairing argument, `renderPvReport` from the `arms` on the counts it
-renders.
+This requires the label to reach both functions. `runPvSample` takes it from
+its pairing argument. `renderPvReport(manifest, c: PvCounts, bar)` has NO
+access to it — `arms` lives on the outer `PvCountsFile`, not on `PvCounts` —
+so give it a fourth parameter `arms: { baseline: GaugeTransport; shadow:
+GaugeTransport }` defaulting to `{baseline:"cli", shadow:"sdk"}`, and pass it
+from `runPvCompare`.
 
 - [ ] **Step 4: Run to verify they pass, and that §6c is untouched**
 
@@ -856,9 +893,10 @@ export function parsePairFlag(args: string[]): PvPairing | undefined {
 }
 ```
 
-Also extend `parsePvCountsFile` (paired-validation.ts:510-538) to parse and
-REQUIRE `arms` on any file it reads for `--combine`, and make the combine path
-refuse when two hosts' files disagree on `arms` — otherwise a `sdk:agent-sdk`
+Also extend `parsePvCountsFile` (paired-validation.ts:510-538) to parse `arms`
+when present and DEFAULT it to `{baseline:"cli", shadow:"sdk"}` when absent
+(never refuse on absence — the committed §6c artifact has no `arms`), and make
+the combine path refuse only when two hosts' effective arms DISAGREE — otherwise a `sdk:agent-sdk`
 run on one host and a `cli:sdk` run on the other would sum into a single
 meaningless combined bar. Fail closed, matching the cls-combine hard-gate
 precedent (`cls-ab.ts`, provisional flag).
@@ -867,7 +905,8 @@ In `replay-cli.ts`, for both `pv-sample` and `pv-compare`: if `--pair` is
 present in argv but `parsePairFlag` returns undefined, print
 `REFUSING: --pair <value> is not <baseline>:<shadow> over ${GAUGE_TRANSPORTS.join("|")}`
 and exit non-zero. Otherwise pass the parsed pairing (or the §6c default)
-through to `runPvSample` / `comparePvRecords`, and include
+through to `runPvSample` / `runPvCompare` (replay-cli.ts:577 calls
+`runPvCompare`, never `comparePvRecords` directly), and include
 `arms: { baseline, shadow }` in the emitted counts file.
 
 - [ ] **Step 4: Run to verify it passes**
@@ -996,6 +1035,19 @@ git add -A && git commit -m "docs(spec): §6d verdict + transport default"
   `CorpusRecord` carries the field at `r.derivation.transport`, so it would
   have returned false for every real record while its `as never` test fixture
   hid the bug from `tsc`.
+- **Architect review 3 (10 findings) applied**: `refiner-cli.ts:68` — the
+  LIVE derive path, missed by two prior revisions — now stamps the selected
+  transport, with a grep-verify step; `PvCountsFile.arms` made OPTIONAL
+  (absent = `cli:sdk`) after verifying that requiring it would fail `tsc` on
+  ~15 existing tests and REFUSE the already-committed
+  `docs/gauge-pv/yoo-dev-pv-counts.json`; one `PvPairing` interface and one
+  `PV_DEFAULT_PAIRING` constant replace a duplicated interface and an
+  undefined `pairingLabel()`; `minedRecord` uses the sibling's `rec()` builder
+  instead of an invalid 2-field cast; the duplicate `bun:test` import removed;
+  `renderPvReport` gets `arms` as a parameter rather than reading it off
+  `PvCounts` where it does not exist; `runPvCompare`'s threading written out
+  concretely; `cls-ab.ts`'s `transportTally` agent-sdk miscount recorded in
+  §6d as a known, out-of-scope reporting gap.
 - **Architect review 2 (9 findings) applied**: the FOURTH pv call site
   `runPvCompare` — the actual `pv-compare` entry point — is now parameterized,
   which is what would otherwise have reproduced the guaranteed-NOT-EVALUATED
