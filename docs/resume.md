@@ -103,8 +103,9 @@ soft-only C4 nudge (gate.json channelNudge flag, absent everywhere =
 byte-identical; 8s timeout fail-open). NEXT OWN GOS: (a) `channel --go
 <pending>` on office corpus (~250 A2/D) → C4 base rate → docs/
 gauge-channel/<host>-channel-counts.json; (b) arming decision w/ measured
-rate + cls-ab verdict; (c) follow-up: export generalized SDK helper from
-transport.ts, kill 3 dup OAuth client copies (review recommendation).
+rate + cls-ab verdict; (c) DONE 08-03 evening — transport dedup MERGED
+(sdkCall exported, 3 OAuth copies gone, byte-for-byte reviewed, 813
+tests; 7b §6 ledger row 2 = pass).
 (9) Parked: §3 over-refusal round · GA5 · per-repo fixtures · office
 reinject v2 · consistency 10b · queue 7c/7d.
 
