@@ -570,6 +570,29 @@ is CLI-family (it drives the bundled `claude` binary), so a SPLIT result here
 is the likely outcome, not a surprise. Split is the default; pooling is the
 exception to be earned.
 
+**Schema enforcement differs between the arms — declared, not incidental
+(2026-08-03).** The API-SDK arm enforces `DERIVATION_SCHEMA` at the API
+layer via `output_config` (grammar-constrained sampling: the model cannot
+emit a non-conforming shape). The agent-sdk arm no longer uses the SDK's
+`outputFormat` — it was measured at 352 bytes of forced `StructuredOutput`
+tool on every request, and the schema instruction is already carried by
+`buildRefinerPrompt`/`buildChannelPrompt` ("Output ONLY a JSON object, no
+prose, no markdown fences" plus the field shape). So the agent arm's
+enforcement is PROMPT-SIDE, with `parseRefinerOutput`/`parseChannelOutput`
+as the backstop (first `{` to last `}`, fence-tolerant, `undefined` on
+anything malformed → record stays pending and retryable, never
+fabricated).
+
+Consequence the bar must not be allowed to hide: the two arms differ in
+whether a non-conforming generation is PREVENTED (API arm) or CAUGHT AFTER
+THE FACT (agent arm). A model that will not emit valid JSON produces a
+constrained-but-valid answer on one arm and an unstamped pending record on
+the other, so the arms can differ in PENDING COUNT as well as in
+classification. When reading the §6d verdict, a disagreement is therefore
+attributable to transport, harness context, OR enforcement mechanism —
+this note exists so a SPLIT result is not misread as a pure transport
+effect.
+
 **Selection is PER-CALLER, not a global default (RULED 2026-08-03, user).**
 The original draft ended with a global default flip once the bar passed.
 That is withdrawn, for a reason that only became visible once the live
