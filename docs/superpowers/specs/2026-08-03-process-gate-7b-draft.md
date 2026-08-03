@@ -1,9 +1,12 @@
 # Process gate: mechanically checkable "review artifact exists" — draft (2026-08-03)
 
-**Status:** REGISTERED 2026-08-03 evening — all 7 rulings decided by the
-user (see §7; every ruling = the draft's recommended option). NOT YET
-ARMED: no script exists, nothing wired into `gate.json` or any hook;
-build + arming is a separate step with its own go. Purpose per resume.md
+**Status:** ARMED on meta-harness 2026-08-03 late evening (user "go";
+boundary ts `1785732646822`, gauntlet ledger "Process-gate arming
+boundary"). All 7 rulings decided (§7). Effective-tip amendment (§1)
+ACKED by the same go. Enforcement point = `scripts/merge-with-gate.sh`
+(workflow-level, the spec-recommended placement; a `pre-merge-commit`
+git hook is provably unsound — see ledger entry). Falsification window
+§6 OPEN, attempts ledger below. Purpose per resume.md
 queue item (7b): convert the mandatory-per-task-review discipline from
 convention into a mechanical floor, with zero judgment inside the gate
 itself — the same floor/judgment split the gate-floor-boundary doc
@@ -211,7 +214,14 @@ per-turn checks produce blocks that a reviewer judges wrong more often than
 right, ... the gate should stay narrow and deterministic, with judgment
 left entirely to the review layer."
 
-**PROPOSED spurious-block-rate bar (constant, needs user ruling):**
+**§6 falsification-window ledger (opened 2026-08-03, ts 1785732646822;
+append one row per merge attempt through the armed gate, stop judging at
+N=10):**
+
+| # | date | branch | outcome (pass/block) | if block: spurious? (user/reviewer judged) |
+|---|------|--------|----------------------|--------------------------------------------|
+
+**Spurious-block-rate bar (constant, RULED 2026-08-03 = as proposed):**
 measure over the first N merge attempts after arming — PROPOSED N = 10 —
 the fraction judged spurious by a human/reviewer read of each block.
 PROPOSED bar: spurious-rate <= 0.20 (i.e., at most 1 in 5 blocks may be a

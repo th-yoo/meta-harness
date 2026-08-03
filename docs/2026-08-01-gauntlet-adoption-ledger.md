@@ -297,3 +297,35 @@ Caveat: n=3 loops, one day — provisional, revisit after the next program.
   tree inert. The 3 `term-bench2/store/roles/mh-designer/**/system.md`
   fence-delimiter fixes are independent of the gate.json wiring (they fix a
   real rendering defect either way) and are not part of the gate rollback.
+
+## Process-gate arming boundary (7b, 2026-08-03)
+
+- **Boundary ts: `1785732646822`** (office `yoo-dev`, 2026-08-03 ~13:50 KST).
+  The 7b review-artifact floor is ARMED on meta-harness from this instant
+  (rollout ruling 6: meta-harness only, staged). Merges of branches into
+  this repo now go through `scripts/merge-with-gate.sh <branch> [-m ...]`,
+  which refuses unless `scripts/check-review-artifact.ts` passes for
+  `merge-base..branch`, then merges `--no-ff`.
+- **Effective-tip amendment ACKED by user** (go, 2026-08-03 evening): the
+  spec's literal §1 was unsatisfiable (artifact commit moves HEAD).
+  Binding form: trailing `docs/reviews/**`-only commits exempt; effective
+  reviewed tip = newest non-exempt commit; merge commits ALWAYS non-exempt
+  (evil-merge sneak, review F1); ambiguous artifact matches fail closed
+  (decoy shadowing, review F2).
+- **Placement discovery (recorded, closes a design avenue):** a git
+  `pre-merge-commit` hook CANNOT implement this gate — modern git's
+  automatic ort merge never materializes `MERGE_HEAD` before that hook
+  runs (only `AUTO_MERGE`; measured git 2.43.0, GIT_TRACE-verified the
+  hook fires but cannot identify the merged tip). A hook version passes
+  silently = false security. Workflow-level wrapper is the sound
+  placement and matches the spec's own §1 recommendation.
+- **Execute-proof:** negative in-repo (probe branch without artifact →
+  BLOCK, exit 1, main untouched) + positive and negative in a throwaway
+  repo (compliant artifact → merge lands; sneak branch → BLOCK).
+- **Falsification window OPEN (§6, ruling 5):** first N=10 merge attempts
+  through the armed gate; spurious-block bar <= 0.20; failing the bar caps
+  rollout, never loosens the gate. Attempt/disposition rows recorded in
+  the spec's §6 ledger as they occur. Attempt count at arming: 0.
+- **Rollback:** stop using the wrapper (plain `git merge --no-ff`) — the
+  checker and wrapper stay in the tree inert; no gate.json or hook state
+  to unwind. First 7b-format artifact remains valid history.
