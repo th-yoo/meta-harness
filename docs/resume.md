@@ -124,17 +124,21 @@ REMAINING WORK — WHOLE PROGRAM (owner · blocker · authorization):
     real money; any auth/transport swap = pre-data amendment +
     boundary ts, and the cls-ab amendment window closes at its FIRST
     label.
- 7. CLOSED 17:10 BY MEASUREMENT (was: is the Agent SDK ~equivalent to
-    the API SDK if we zero the system prompt?). Wire capture says NO:
-    even at maximum minimality it sends 2 harness system blocks, 29 tool
-    definitions, injected <system-reminder> blocks in the user turn, NO
-    output_config on the measured turn, and FOUR model calls for one
-    query (incl. unrequested title generation) — which breaks spec §4's
-    exactly-1-call rule that the cost fence is built on. Full evidence +
-    repro method in the (c) entry of the 429 block below. Premium board:
-    (a) wait · (b) **API key** (simplest, instrument-neutral) ·
-    (c) Agent SDK only if the call-count and schema gaps are closed
-    first.
+ 7. RE-OPENED 17:20 (was: is the Agent SDK ~equivalent to the API SDK
+    with the system prompt zeroed?). After reading sdk.d.ts and fixing
+    MY misconfiguration (`tools: []` not `allowedTools: []`; supply
+    `title`), the answer is CLOSER TO YES than my earlier entries said:
+    tools 29→1 (the survivor is `StructuredOutput`, so the schema IS
+    enforced), title side-calls 2→0, and the "4 calls" claim is
+    withdrawn as a probable artifact of my stub. Residual, measured:
+    2 harness system blocks survive `systemPrompt: ""`, and the user
+    turn is wrapped with ~200 chars of `<system-reminder>` (account
+    email + date) around our verbatim prompt. REMAINING WORK to settle
+    it: a clean real-API run to count calls per query, then a paired
+    validation to see whether the residual context shifts
+    classifications. Premium board: (a) wait · (b) API key (simplest,
+    instrument-neutral) · (c) Agent SDK (included credit; residuals
+    now look small enough to be worth measuring).
  8. Dogfood daily BOTH hosts — organic blocks are the only M1v2-floor
     input; A/A checkpoint ~Aug 12.
  9. Repo-visibility decision (user): `th-yoo/meta-harness` is a PUBLIC
@@ -320,7 +324,43 @@ withdraw: (i) "no structured outputs" — FALSE, the SDK supports
 CLAUDE.md/settings, so worse contamination" — FALSE as a fixed property,
 `systemPrompt` is settable (default is already minimal, CC preset is
 opt-in), `settingSources: []` disables settings/CLAUDE.md, and tools and
-turns can be clamped. **MEASURED ON THE WIRE 17:10 (this ends the speculation).** Method, zero
+turns can be clamped. **RE-MEASURED 17:20 AFTER ACTUALLY READING THE SDK TYPE DEFS — three of
+my five objections were MY MISCONFIGURATION, not SDK behaviour.** The
+first capture used `allowedTools: []` (a PERMISSION filter) instead of
+`tools: []` (the knob that drops built-in tool DEFINITIONS — sdk.d.ts
+:1431 "`[]` (empty array) - Disable all built-in tools"), and omitted
+`title` (sdk.d.ts:2024 — supplying it stops the auto-title generation
+that was making the extra calls). Corrected run:
+ · tools 29 → **1**, and the survivor is `StructuredOutput` — i.e. the
+   schema IS enforced, via a forced tool rather than `output_config`.
+   `output_config: null` is the expected shape, NOT a missing guarantee.
+   My "no schema enforcement" claim is withdrawn.
+ · unrequested title calls 2 → **0**.
+ · call count: my stub answers every request with the same canned text,
+   so the retries + `error_max_turns` are probably MY artifact. The
+   earlier "4 calls per query, breaks §4 exactly-1-call" claim is
+   NOT PROVEN and is withdrawn pending a clean test against the real API.
+WHAT SURVIVED the corrected run (measured, still real):
+ · 2 system blocks that `systemPrompt: ""` does not remove — an
+   `x-anthropic-billing-header: cc_version=...; cc_entrypoint=sdk-cli;`
+   line and "You are a Claude agent, built on Anthropic's Claude Agent
+   SDK." (the sdk-cli stamp also explains the separate credit pool: this
+   is the honest lane, not a disguise).
+ · the user turn carries our prompt VERBATIM but wrapped with 2
+   `<system-reminder>` blocks (~200 chars incl. the account email and
+   today's date). For an instrument that is real contamination — the
+   model is not classifying only our text — and it is also a quiet
+   PII-into-every-call detail worth knowing.
+STATUS: option (c) is more viable than my earlier entries said. The open
+questions are narrow and empirical: (1) does a clean real-API run make
+exactly one call per query? (2) do the 2 system blocks + ~200 chars of
+reminder change classification outcomes vs our bare-SDK path — which is
+precisely what a paired validation would measure. LESSON (mine): I wrote
+three wrong verdicts into this file from search excerpts and one
+mis-configured probe before reading `node_modules/@anthropic-ai/
+claude-agent-sdk/sdk.d.ts`. Read the type defs FIRST next time.
+
+**FIRST CAPTURE 17:10, superseded above but kept for the method.** Zero
 model spend, reproducible in ~5 min: `npm i @anthropic-ai/claude-agent-sdk`
 in a scratch dir, start a local http server, set `ANTHROPIC_BASE_URL` to
 it, call `query()` and dump the intercepted request bodies. Config used
