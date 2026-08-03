@@ -31,7 +31,7 @@ native Claude Code binary), existing gauge modules (`transport.ts`,
   any cls-ab label run.
 - **Explicit sized go before spend.** Every task below is buildable and
   testable with ZERO model calls (local HTTP stub). The paired-validation run
-  in Task 6 is real spend and needs its own sized go.
+  in Task 8 is real spend and needs its own sized go.
 - **F1**: `core/` is a MECHANISM_PATH — never edited. All work in
   `cc-gate-plugin/src/gauge/` + `types.ts` + `package.json`.
 - **F2**: no sampled prompt text in committed artifacts; counts only.
@@ -53,10 +53,10 @@ native Claude Code binary), existing gauge modules (`transport.ts`,
 ### Task 1: Pre-data amendment (doc only, no code, must land first)
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-07-29-km-gauge-v2-extractor-preregistration.md` (append a §6d section after §6c)
+- Modify: `docs/superpowers/specs/2026-07-29-km-gauge-v2-extractor-preregistration.md` (append a `## 6d.` section after the existing `## 6c.` — match that heading style)
 
 **Interfaces:**
-- Produces: the constants Tasks 5–7 cite verbatim — the transport literal
+- Produces: the constants Tasks 5–9 cite verbatim — the transport literal
   `"agent-sdk"`, the pooling bar, and the call-count rule.
 
 - [ ] **Step 1: Append §6d** with exactly this content (constants are the
@@ -64,7 +64,7 @@ native Claude Code binary), existing gauge modules (`transport.ts`,
   would not be comparable to the first):
 
 ```markdown
-## §6d Agent-SDK transport (registered 2026-08-03, pre-data)
+## 6d. Amendment (pre-data, 2026-08-03): third derive transport → Agent SDK
 
 **What changes.** A third derive transport, `transport: "agent-sdk"`, using
 `@anthropic-ai/claude-agent-sdk`. Selected per process by
@@ -220,7 +220,8 @@ describe("selectTransport", () => {
 })
 ```
 
-Add `selectTransport` to the existing import from `../src/gauge/transport.ts`.
+Add a NEW import line — Task 2's test file imports only from `../src/types.ts`, so there is no transport.ts import to extend:
+`import { selectTransport } from "../src/gauge/transport.ts"`
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -276,39 +277,32 @@ extra, STOP: report to the user, do not proceed to Tasks 5–7.
 cd cc-gate-plugin && bun add @anthropic-ai/claude-agent-sdk
 ```
 
-- [ ] **Step 2: Write the failing test** (stub server, zero model calls —
-  the same interception technique already used by `gauge-transport.test.ts`)
+- [ ] **Step 2: Write the failing test** — reuse the repo's existing stub
+  helper `cc-gate-plugin/test/sdk-stub.ts` (`stubServer`, which binds
+  `port: 0` so parallel test files cannot collide). Do NOT hand-roll a second
+  HTTP stub on a fixed port.
 
 ```typescript
 import { describe, test, expect, afterAll } from "bun:test"
-import http from "node:http"
+import { stubServer } from "./sdk-stub.ts"
 import { agentSdkCall } from "../src/gauge/agent-transport.ts"
 
 const CAPTURED: Array<Record<string, unknown>> = []
-const server = http.createServer((req, res) => {
-  let body = ""
-  req.on("data", (c) => (body += c))
-  req.on("end", () => {
-    if (req.url?.includes("/v1/messages")) {
-      try { CAPTURED.push(JSON.parse(body)) } catch { /* non-JSON probe call */ }
-    }
-    res.writeHead(200, { "content-type": "application/json" })
-    res.end(JSON.stringify({
-      id: "msg_stub", type: "message", role: "assistant", model: "stub",
-      content: [{ type: "text", text: '{"channel":"C4","reason":null}' }],
-      stop_reason: "end_turn", stop_sequence: null,
-      usage: { input_tokens: 1, output_tokens: 1 },
-    }))
+const stub = stubServer((captured) => {
+  try { CAPTURED.push(JSON.parse(captured.body as string)) } catch { /* non-JSON handshake call */ }
+  return Response.json({
+    id: "msg_stub", type: "message", role: "assistant", model: "stub",
+    content: [{ type: "text", text: '{"channel":"C4","reason":null}' }],
+    stop_reason: "end_turn", stop_sequence: null,
+    usage: { input_tokens: 1, output_tokens: 1 },
   })
 })
-await new Promise<void>((r) => server.listen(4601, "127.0.0.1", () => r()))
-afterAll(() => server.close())
+afterAll(() => stub.close())
 
-const STUB_ENV = {
-  ...process.env,
-  ANTHROPIC_BASE_URL: "http://127.0.0.1:4601",
-  KKAMAK_GAUGE_AUTH_TOKEN: "stub-token",
-}
+// The spawned CLI reads ANTHROPIC_BASE_URL from its own environment. Read
+// sdk-stub.ts for the exact field exposing the bound URL (it binds port 0, so
+// the port is only known at runtime) and use that value here.
+const STUB_ENV = { ...process.env, ANTHROPIC_BASE_URL: stub.url }
 
 describe("agentSdkCall", () => {
   test("sends our prompt verbatim, with the schema tool and no built-in tools", async () => {
@@ -337,6 +331,23 @@ describe("agentSdkCall", () => {
       ...STUB_ENV, ANTHROPIC_BASE_URL: "http://127.0.0.1:9",
     })
     expect(r).toBeUndefined()
+  })
+
+  test("timeout aborts and resolves undefined (never hangs the batch)", async () => {
+    // A stub that accepts the connection and never answers is the only way to
+    // prove the abort path; without it a hung query would hang this test too,
+    // which is exactly the production failure being guarded against.
+    const silent = Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => {}) })
+    try {
+      const started = Date.now()
+      const r = await agentSdkCall("x", "claude-haiku-4-5",
+        { ...process.env, ANTHROPIC_BASE_URL: `http://127.0.0.1:${silent.port}` },
+        { timeoutMs: 2000 })
+      expect(r).toBeUndefined()
+      expect(Date.now() - started).toBeLessThan(30_000)
+    } finally {
+      silent.stop(true)
+    }
   })
 })
 ```
@@ -382,7 +393,19 @@ export async function agentSdkCall(
   env: Record<string, string | undefined>,
   opts: AgentSdkOptions = {},
 ): Promise<string | undefined> {
+  // The timeout MUST be able to cancel the query. `query()` exposes
+  // `abortController` for exactly this; a bare setTimeout cannot interrupt a
+  // `for await` and would let one stalled call hang an entire fenced batch.
+  const controller = new AbortController()
+  const deadline = setTimeout(() => controller.abort(), opts.timeoutMs ?? CALL_TIMEOUT_MS)
   try {
+    // `env` REPLACES the subprocess environment (sdk.d.ts: "this value
+    // REPLACES the subprocess environment entirely — it is not merged"), so
+    // callers must pass a FULL env. Undefined-valued keys are dropped rather
+    // than cast away, so the subprocess never receives "undefined" strings.
+    const subprocessEnv: Record<string, string> = {}
+    for (const [k, v] of Object.entries(env)) if (v !== undefined) subprocessEnv[k] = v
+
     const it = query({
       prompt: messageText,
       options: {
@@ -392,41 +415,58 @@ export async function agentSdkCall(
         tools: [],
         title: "kkamak-gauge",
         maxTurns: 1,
-        env: { ...env } as Record<string, string>,
+        abortController: controller,
+        env: subprocessEnv,
         ...(opts.schema ? { outputFormat: { type: "json_schema" as const, schema: opts.schema } } : {}),
       },
     })
-    const deadline = setTimeout(() => { /* abort below via race */ }, opts.timeoutMs ?? CALL_TIMEOUT_MS)
-    try {
-      for await (const m of it) {
-        if (m.type === "result") {
-          const structured = (m as { structured_output?: unknown }).structured_output
-          if (structured !== undefined) return JSON.stringify(structured)
-          const text = (m as { result?: unknown }).result
-          return typeof text === "string" ? text : undefined
-        }
+    for await (const m of it) {
+      if (m.type === "result") {
+        const structured = (m as { structured_output?: unknown }).structured_output
+        if (structured !== undefined) return JSON.stringify(structured)
+        const text = (m as { result?: unknown }).result
+        return typeof text === "string" ? text : undefined
       }
-      return undefined
-    } finally {
-      clearTimeout(deadline)
     }
+    return undefined
   } catch {
     return undefined
+  } finally {
+    clearTimeout(deadline)
   }
 }
 ```
+
+**Auth note (verify during Step 5, do not assume).** `sdkCall` in
+`transport.ts` reads the OAuth token explicitly via `readAuthToken` and passes
+it as `authToken`. `agentSdkCall` does NOT — the spawned CLI resolves its own
+credentials, most likely from `~/.claude/.credentials.json` or the keychain.
+That means `KKAMAK_GAUGE_AUTH_TOKEN` has no effect here, and the stub test's
+hermeticity depends on the CLI reaching the stubbed `ANTHROPIC_BASE_URL`
+rather than on an injected token. Step 5 checks this empirically.
 
 - [ ] **Step 5: Run the tests — THIS IS THE STOP GATE**
 
 Run: `cd cc-gate-plugin && bun test test/gauge-agent-transport.test.ts`
 Expected: all pass, including `exactly one model call per query`.
 
-If the call-count test fails with a count greater than 1: read
-`node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts` and search for an
-option that suppresses the extra call (grep the option names, do not guess).
-If no such option exists, STOP the plan here, report the measured count, and
-record it in the §6d section as the rejection reason. Do not continue to
-Task 5.
+Two distinct failure branches, each with its own diagnosis — do not conflate
+them:
+
+- **`CAPTURED.length === 0`** (the stub was never reached): the spawned CLI
+  did not route to `ANTHROPIC_BASE_URL`, or it refused before sending
+  anything (no credentials on this host). Check whether the CLI honours
+  `ANTHROPIC_BASE_URL` from `options.env`, and whether it needs on-disk
+  credentials to get that far. If the test can only pass on a host with live
+  credentials, say so explicitly in the test file — a test whose hermeticity
+  depends on ambient auth must not silently claim to be hermetic.
+- **`CAPTURED.length > 1`**: read
+  `node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts` and grep the option
+  names for something that suppresses the extra call — do not guess from
+  prose. (Precedent: `tools: []` vs `allowedTools: []`, and the `title`
+  option, were both found this way after guessing produced wrong verdicts.)
+  If no such option exists, STOP the plan here, report the measured count,
+  and record it in §6d as the rejection reason. Do not continue to Task 5.
 
 - [ ] **Step 6: Commit**
 
@@ -447,30 +487,57 @@ git commit -m "feat(gauge): agentSdkCall transport + binding call-count proof"
 - Produces: `callModelSdk` routes by `selectTransport(env)`; derive records
   carry `transport: "agent-sdk"` when that path ran.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing test — BEHAVIORAL, not a source grep**
+
+A source-text assertion would pass on cosmetic rewording and would also pass
+if the `transport.ts` dispatch were miswired. Drive the real `deriveRecord`
+against two stubs and assert on both the stamp AND which endpoint received the
+request. Note `deriveRecord` reads `process.env` directly
+(`corpus-replay.ts:43`), so the env var must be set on `process.env` and
+restored afterwards.
 
 ```typescript
-describe("derive transport stamping (§6d split rule)", () => {
-  test("stamp follows the selected transport, not a hardcoded literal", () => {
-    expect(selectTransport({ KKAMAK_GAUGE_TRANSPORT: "agent-sdk" })).toBe("agent-sdk")
-    expect(selectTransport({})).toBe("sdk")
+import { deriveRecord } from "../src/gauge/corpus-replay.ts"
+import { stubServer } from "./sdk-stub.ts"
+
+describe("derive routes and stamps by selected transport (§6d split rule)", () => {
+  test("default: API SDK endpoint is hit, record stamped sdk", async () => {
+    let sdkHits = 0, agentHits = 0
+    const sdkStub = stubServer(() => { sdkHits++; return Response.json(STUB_DERIVATION) })
+    const agentStub = stubServer(() => { agentHits++; return Response.json(STUB_DERIVATION) })
+    const prev = process.env.KKAMAK_GAUGE_TRANSPORT
+    delete process.env.KKAMAK_GAUGE_TRANSPORT
+    process.env.KKAMAK_GAUGE_SDK_BASE_URL = sdkStub.url
+    process.env.ANTHROPIC_BASE_URL = agentStub.url
+    try {
+      const out = await deriveRecord(minedRecord("write a summary of x"))
+      expect(out?.derivation?.transport).toBe("sdk")
+      expect(sdkHits).toBeGreaterThan(0)
+      expect(agentHits).toBe(0)
+    } finally {
+      if (prev === undefined) delete process.env.KKAMAK_GAUGE_TRANSPORT
+      else process.env.KKAMAK_GAUGE_TRANSPORT = prev
+      sdkStub.close(); agentStub.close()
+    }
   })
-  test("a record derived under agent-sdk is not counted as sdk", () => {
-    const rec = { derivation: { class: "C" }, transport: "agent-sdk" as const }
-    expect(rec.transport).not.toBe("sdk")
+
+  test("KKAMAK_GAUGE_TRANSPORT=agent-sdk: agent endpoint is hit, record stamped agent-sdk", async () => {
+    // same shape, with process.env.KKAMAK_GAUGE_TRANSPORT = "agent-sdk";
+    // assert out?.derivation?.transport === "agent-sdk", agentHits > 0, sdkHits === 0
   })
 })
 ```
 
+Define `STUB_DERIVATION` as a valid refiner payload (copy the shape used by
+`stubServerFor` in `test/sdk-stub.ts`) and `minedRecord(prompt)` as a
+stage-`"mined"` `CorpusRecord` literal. Write the second test out in full
+rather than leaving the comment — it is the half that proves the new path.
+
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `cd cc-gate-plugin && bun test test/gauge-agent-transport.test.ts`
-Expected: FAIL until `selectTransport` is imported in this describe block —
-if it already passes because Task 3 exported it, extend the test to assert the
-`corpus-replay.ts` stamp is not the literal `"sdk"`:
-`expect(await import("../src/gauge/corpus-replay.ts")).toBeDefined()` and grep
-the source in the assertion, e.g.
-`expect(await Bun.file("src/gauge/corpus-replay.ts").text()).not.toContain('transport: "sdk",')`
+Expected: FAIL — the agent-sdk case stamps `"sdk"` and hits the SDK stub,
+because `corpus-replay.ts:75` still hardcodes the literal.
 
 - [ ] **Step 3: Implementation**
 
@@ -500,28 +567,174 @@ git add cc-gate-plugin/src/gauge/transport.ts cc-gate-plugin/src/gauge/corpus-re
 git commit -m "feat(gauge): route derive through selected transport, stamp provenance"
 ```
 
-### Task 6: Paired validation against the §6d bar (REAL SPEND — own go)
+### Task 6: Make the paired-validation machinery pair ANY two transports
+
+**Why this task is bigger than it looks (architect review, finding 1+2).** The
+existing pv tooling is hardcoded to the CLI-vs-SDK pairing in three places, and
+none of them takes a parameter:
+- `stratify` (paired-validation.ts:66-75) calls `isCliDerived(r)` internally.
+- `runPvSample` (paired-validation.ts:151-158) calls `stratify` and its
+  empty-sample message says "no CLI-derived class-C records".
+- `comparePvRecords` (paired-validation.ts:339) hardcodes
+  `if (shadow.derivation.transport !== "sdk" || !isCliDerived(real))` →
+  `wrongTransport`.
+
+An `agent-sdk` shadow run therefore lands EVERY record in `wrongTransport`,
+and `evaluatePvBar` refuses to evaluate when `wrongTransport > 0` — i.e. the
+naive version of this task spends real budget on a guaranteed
+NOT-EVALUATED result. Also note `isCliDerived` reads `r.derivation.transport`,
+NOT `r.transport`: `CorpusRecord` has no top-level transport field.
 
 **Files:**
-- Modify: `cc-gate-plugin/src/gauge/paired-validation.ts` (`isCliDerived` companion)
+- Modify: `cc-gate-plugin/src/gauge/paired-validation.ts` (parameterize the
+  three sites above, defaults preserving §6c behaviour byte-for-byte)
 - Test: `cc-gate-plugin/test/paired-validation.test.ts` (append)
 
 **Interfaces:**
-- Consumes: `evaluatePvBar`, `missedCCap`, `comparePvRecords`, `stratify`,
-  `runPvSample` — all already exported from `paired-validation.ts`.
-- Produces: `isSdkDerived(r: CorpusRecord): boolean` (mirrors the existing
-  `isCliDerived` at line 51) so the shadow sample can be drawn from
-  `"sdk"`-derived records instead of `"cli"`-derived ones.
+- Consumes: `CorpusRecord`, `GaugeTransport` (Task 2).
+- Produces:
+  - `derivedOn(transport: GaugeTransport): (r: CorpusRecord) => boolean` —
+    predicate factory reading `r.derivation?.transport`.
+  - `stratify(records: CorpusRecord[], isBaseline?: (r: CorpusRecord) => boolean)`
+    — third-party callers unchanged; default `isCliDerived`.
+  - `runPvSample(cwd, opts, log, rand?, isBaseline?)` — default `isCliDerived`.
+  - `comparePvRecords(manifest, realRecords, shadowRecords, pairing?)` where
+    `pairing` is `{ baseline: (r: CorpusRecord) => boolean; shadowTransport: GaugeTransport }`,
+    defaulting to `{ baseline: isCliDerived, shadowTransport: "sdk" }`.
+  - `PvCountsFile` gains `arms: { baseline: string; shadow: GaugeTransport }`
+    so an emitted counts file says which pair it measured. The `cCli`/`cSdk`
+    field NAMES stay (renaming breaks the already-committed
+    `docs/gauge-pv/*.json`); `arms` is what disambiguates them.
+
+- [ ] **Step 1: Write the failing tests**
+
+```typescript
+import { derivedOn, stratify, comparePvRecords, isCliDerived } from "../src/gauge/paired-validation.ts"
+
+const rec = (transport: string | undefined, cls: string, prompt: string) =>
+  ({ prompt, stage: "derived", derivation: { class: cls, ...(transport ? { transport } : {}) } }) as never
+
+describe("derivedOn (§6d pairing predicate)", () => {
+  test("reads derivation.transport, not a top-level field", () => {
+    expect(derivedOn("sdk")(rec("sdk", "C", "p1"))).toBe(true)
+    expect(derivedOn("sdk")(rec("agent-sdk", "C", "p2"))).toBe(false)
+    expect(derivedOn("sdk")(rec(undefined, "C", "p3"))).toBe(false)
+    expect(derivedOn("agent-sdk")(rec("agent-sdk", "C", "p4"))).toBe(true)
+  })
+})
+
+describe("stratify with an injected baseline predicate", () => {
+  test("defaults to the §6c CLI baseline (unchanged behaviour)", () => {
+    const s = stratify([rec("cli", "C", "a"), rec("sdk", "C", "b")])
+    expect(s.c.length).toBe(1)
+  })
+  test("can stratify the SDK arm instead", () => {
+    const s = stratify([rec("cli", "C", "a"), rec("sdk", "C", "b")], derivedOn("sdk"))
+    expect(s.c.length).toBe(1)
+    expect(s.c[0]!.prompt).toBe("b")
+  })
+})
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `cd cc-gate-plugin && bun test test/paired-validation.test.ts`
+Expected: FAIL — `Export named 'derivedOn' not found`
+
+- [ ] **Step 3: Implementation**
+
+```typescript
+/** §6d: predicate factory for "this record was derived on <transport>".
+ * Reads `derivation.transport` — CorpusRecord has no top-level transport
+ * field (the §6c `isCliDerived` above reads the same path). */
+export function derivedOn(transport: GaugeTransport): (r: CorpusRecord) => boolean {
+  return (r) => r.derivation?.transport === transport
+}
+```
+
+Then change the three hardcoded sites to accept an optional parameter whose
+DEFAULT reproduces today's behaviour exactly:
+
+```typescript
+export function stratify(
+  records: CorpusRecord[],
+  isBaseline: (r: CorpusRecord) => boolean = isCliDerived,
+): PvStrata {
+  // ...body unchanged except `if (!isBaseline(r)) continue`
+}
+
+export function runPvSample(
+  cwd: string,
+  opts: { reset?: boolean },
+  log: (m: string) => void,
+  rand: () => number = Math.random,
+  isBaseline: (r: CorpusRecord) => boolean = isCliDerived,
+): PvSampleSummary | undefined {
+  const { c, notC } = stratify(readCorpus(cwd), isBaseline)
+  // ...rest unchanged
+}
+
+export interface PvPairing {
+  baseline: (r: CorpusRecord) => boolean
+  shadowTransport: GaugeTransport
+}
+
+export function comparePvRecords(
+  manifest: PvManifest,
+  realRecords: CorpusRecord[],
+  shadowRecords: CorpusRecord[],
+  pairing: PvPairing = { baseline: isCliDerived, shadowTransport: "sdk" },
+): PvComparison {
+  // ...at line ~339:
+  // if (shadow.derivation.transport !== pairing.shadowTransport || !pairing.baseline(real))
+}
+```
+
+- [ ] **Step 4: Run to verify they pass, and that §6c is untouched**
+
+Run: `cd cc-gate-plugin && bun test` — 0 fail. Every pre-existing
+paired-validation test must pass WITHOUT modification; if any needed editing,
+the defaults are wrong — fix the defaults, not the tests.
+Run: `bunx tsc --noEmit` — clean.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add cc-gate-plugin/src/gauge/paired-validation.ts cc-gate-plugin/test/paired-validation.test.ts
+git commit -m "feat(gauge): parameterize pv pairing, defaults preserve §6c"
+```
+
+### Task 7: CLI wiring for an agent-sdk pv run (still no spend)
+
+**Files:**
+- Modify: `cc-gate-plugin/src/gauge/replay-cli.ts` (pv-sample / pv-compare arg parsing)
+- Test: `cc-gate-plugin/test/paired-validation.test.ts` (append)
+
+**Interfaces:**
+- Consumes: `derivedOn`, `PvPairing` (Task 6), `GAUGE_TRANSPORTS` (Task 2).
+- Produces: `--pair <baseline>:<shadow>` on both `pv-sample` and `pv-compare`,
+  e.g. `--pair sdk:agent-sdk`. Absent → the §6c default (`cli:sdk`).
+  `parsePairFlag(args: string[]): PvPairing | undefined` exported from
+  `paired-validation.ts`; returns undefined for a malformed or unknown pair
+  (caller then refuses rather than silently defaulting — a typo must not
+  produce a §6c run labelled as §6d).
 
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
-describe("isSdkDerived (§6d pairing baseline)", () => {
-  test("selects sdk-derived records only", () => {
-    expect(isSdkDerived({ transport: "sdk", derivation: { class: "C" } } as never)).toBe(true)
-    expect(isSdkDerived({ transport: "cli", derivation: { class: "C" } } as never)).toBe(false)
-    expect(isSdkDerived({ transport: "agent-sdk", derivation: { class: "C" } } as never)).toBe(false)
-    expect(isSdkDerived({ derivation: { class: "C" } } as never)).toBe(false)
+describe("parsePairFlag", () => {
+  test("parses a valid pair", () => {
+    const p = parsePairFlag(["--pair", "sdk:agent-sdk"])!
+    expect(p.shadowTransport).toBe("agent-sdk")
+    expect(p.baseline({ derivation: { transport: "sdk", class: "C" } } as never)).toBe(true)
+  })
+  test("absent flag yields undefined (caller applies the §6c default)", () => {
+    expect(parsePairFlag([])).toBeUndefined()
+  })
+  test("unknown transports and malformed input yield undefined, never a default", () => {
+    expect(parsePairFlag(["--pair", "sdk:nonsense"])).toBeUndefined()
+    expect(parsePairFlag(["--pair", "sdk"])).toBeUndefined()
+    expect(parsePairFlag(["--pair", ""])).toBeUndefined()
   })
 })
 ```
@@ -529,46 +742,73 @@ describe("isSdkDerived (§6d pairing baseline)", () => {
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `cd cc-gate-plugin && bun test test/paired-validation.test.ts`
-Expected: FAIL — `Export named 'isSdkDerived' not found`
+Expected: FAIL — `Export named 'parsePairFlag' not found`
 
-- [ ] **Step 3: Implementation** (mirror `isCliDerived`, do not generalize it —
-  two named predicates read better at the call sites than one parameterized one)
+- [ ] **Step 3: Implementation**
 
 ```typescript
-/** §6d pairing baseline: the incumbent SDK records the agent-sdk arm is
- * measured against. Absent transport means pre-§6c and is NOT sdk. */
-export function isSdkDerived(r: CorpusRecord): boolean {
-  return r.transport === "sdk"
+/** `--pair <baseline>:<shadow>`; both must be known transports. Returns
+ * undefined on absent OR malformed input — the caller distinguishes those
+ * two cases, so a typo can never be silently read as the §6c default. */
+export function parsePairFlag(args: string[]): PvPairing | undefined {
+  const i = args.indexOf("--pair")
+  if (i < 0) return undefined
+  const [b, s, ...rest] = (args[i + 1] ?? "").split(":")
+  if (rest.length > 0 || !b || !s) return undefined
+  if (!GAUGE_TRANSPORTS.includes(b as never) || !GAUGE_TRANSPORTS.includes(s as never)) return undefined
+  return { baseline: derivedOn(b as GaugeTransport), shadowTransport: s as GaugeTransport }
 }
 ```
+
+In `replay-cli.ts`, for both `pv-sample` and `pv-compare`: if `--pair` is
+present in argv but `parsePairFlag` returns undefined, print
+`REFUSING: --pair <value> is not <baseline>:<shadow> over ${GAUGE_TRANSPORTS.join("|")}`
+and exit non-zero. Otherwise pass the parsed pairing (or the §6c default)
+through to `runPvSample` / `comparePvRecords`, and include
+`arms: { baseline, shadow }` in the emitted counts file.
 
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `cd cc-gate-plugin && bun test` — 0 fail. `bunx tsc --noEmit` clean.
+Token-free execute-proof of the refusal path:
+`bun cc-gate-plugin/src/gauge/replay-cli.ts pv-compare --pair sdk:bogus`
+→ prints REFUSING, exit non-zero, no store read.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add cc-gate-plugin/src/gauge/paired-validation.ts cc-gate-plugin/test/paired-validation.test.ts
-git commit -m "feat(gauge): isSdkDerived predicate for the agent-sdk pairing"
+git add cc-gate-plugin/src/gauge/replay-cli.ts cc-gate-plugin/src/gauge/paired-validation.ts cc-gate-plugin/test/paired-validation.test.ts
+git commit -m "feat(gauge): --pair flag for pv-sample/pv-compare"
 ```
 
-- [ ] **Step 6: STOP — request a sized go before the run**
+### Task 8: The paired-validation run (REAL SPEND — own sized go)
 
-Report to the user: the shadow-sample size (`pv-sample` prints it), the model
-tier the run will use, and that this is real spend. Do not run without an
-explicit sized go. When granted:
+- [ ] **Step 1: STOP and report before spending**
+
+Report to the user: the shadow-sample size that `pv-sample --pair sdk:agent-sdk`
+prints, which model tier the derive will use, and that this is real spend
+against the Agent-SDK credit. Do not proceed without an explicit sized go.
+
+- [ ] **Step 2: On a granted go, run the three commands**
 
 ```bash
-bun cc-gate-plugin/src/gauge/replay-cli.ts pv-sample
+bun cc-gate-plugin/src/gauge/replay-cli.ts pv-sample --pair sdk:agent-sdk
 KKAMAK_GAUGE_TRANSPORT=agent-sdk bun cc-gate-plugin/src/gauge/replay-cli.ts derive <shadow-dir> --go <n>
-bun cc-gate-plugin/src/gauge/replay-cli.ts pv-compare
+bun cc-gate-plugin/src/gauge/replay-cli.ts pv-compare --pair sdk:agent-sdk
 ```
 
-Then copy the counts to `docs/gauge-pv/<hostname>-agent-sdk-pv-counts.json`
-and commit them (F2: counts travel, prompt text does not).
+- [ ] **Step 3: Sanity-check BEFORE reading the verdict**
 
-### Task 7: Verdict, and the default only if earned
+`wrongTransport` must be 0. A non-zero count means the shadow derive did not
+run on `agent-sdk` (env var not exported into the derive process, or Task 5's
+stamp not wired) — fix that and re-run rather than interpreting the numbers.
+
+- [ ] **Step 4: Commit the counts**
+
+Copy to `docs/gauge-pv/<hostname>-sdk-vs-agent-sdk-pv-counts.json` and commit
+(F2: counts travel, prompt text does not).
+
+### Task 9: Verdict, and the default only if earned
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-07-29-km-gauge-v2-extractor-preregistration.md` (§6d outcome)
@@ -578,7 +818,7 @@ and commit them (F2: counts travel, prompt text does not).
 - [ ] **Step 1: Script-tally the verdict** (never quote notes; counts only)
 
 ```bash
-bun cc-gate-plugin/src/gauge/replay-cli.ts pv-compare
+bun cc-gate-plugin/src/gauge/replay-cli.ts pv-compare --pair sdk:agent-sdk
 ```
 
 Record positive agreement and missed-C against the §6d bar
@@ -590,11 +830,27 @@ Record positive agreement and missed-C against the §6d bar
   needs premium access and accepts split readings. This is a complete,
   successful outcome of the plan.
 
-- [ ] **Step 3: If the bar PASSES** — flip the default in `selectTransport`
-  (`env.KKAMAK_GAUGE_TRANSPORT === "sdk" ? "sdk" : "agent-sdk"`), update its
-  doc comment, log a boundary ts in the gauntlet ledger with the measured
-  counts, and note that `KKAMAK_GAUGE_TRANSPORT=sdk` is the one-env-var
-  rollback.
+- [ ] **Step 3: If the bar PASSES** — flip the default in `selectTransport`.
+  Write it as an EXPLICIT allow-list, never a two-way ternary — a
+  `=== "sdk" ? "sdk" : "agent-sdk"` form would silently map the retired
+  `"cli"` value onto a live transport, reversing the invariant Task 3
+  established and tested:
+
+```typescript
+export function selectTransport(env: Record<string, string | undefined>): GaugeTransport {
+  const v = env.KKAMAK_GAUGE_TRANSPORT
+  // Post-§6d-flip default. "cli" is retired and stays unselectable: anything
+  // that is not one of the two live literals falls through to the default.
+  return v === "sdk" || v === "agent-sdk" ? v : "agent-sdk"
+}
+```
+
+  Then UPDATE and re-run Task 3's tests: the "defaults to sdk" cases become
+  "defaults to agent-sdk", while the "never selects cli" case must still hold
+  (`selectTransport({ KKAMAK_GAUGE_TRANSPORT: "cli" })` → `"agent-sdk"`, i.e.
+  the default — never `"cli"`). Update the doc comment, log a boundary ts in
+  the gauntlet ledger with the measured counts, and note that
+  `KKAMAK_GAUGE_TRANSPORT=sdk` is the one-env-var rollback.
 
 - [ ] **Step 4: Verify and commit**
 
@@ -622,14 +878,27 @@ git add -A && git commit -m "docs(spec): §6d verdict + transport default"
 ## Self-review
 
 - **Spec coverage**: §6d's transport literal → Task 2; selection → Task 3;
-  call-count rule → Task 4 (with an explicit stop gate); provenance/split rule
-  → Task 5; pooling bar → Tasks 6–7; boundary ts → Task 7.
+  call-count rule → Task 4 (explicit stop gate); provenance/split rule →
+  Task 5; pairing machinery → Task 6; pair selection at the CLI → Task 7;
+  the measured run → Task 8; pooling bar + boundary ts → Task 9.
 - **Placeholder scan**: none. Every step carries real code or an exact command.
-  Task 4 Step 5's failure branch names the concrete next action (grep sdk.d.ts)
-  rather than "handle the error".
+  Task 4 Step 5 names two distinct diagnostic branches rather than "handle the
+  error"; Task 5's second test is explicitly required to be written out in
+  full rather than left as a comment.
 - **Type consistency**: `GaugeTransport`, `GAUGE_TRANSPORTS`, `selectTransport`,
-  `agentSdkCall`, `AgentSdkOptions`, `isSdkDerived` are used with identical
-  names and signatures across Tasks 2–7.
+  `agentSdkCall`, `AgentSdkOptions`, `derivedOn`, `PvPairing`, `parsePairFlag`
+  are used with identical names and signatures across Tasks 2–9. The earlier
+  `isSdkDerived` was REMOVED after review: it read `r.transport`, but
+  `CorpusRecord` carries the field at `r.derivation.transport`, so it would
+  have returned false for every real record while its `as never` test fixture
+  hid the bug from `tsc`.
+- **Architect review (2026-08-03, 10 findings) applied in full**: pv machinery
+  parameterized rather than assumed reusable (was a guaranteed
+  NOT-EVALUATED run on real spend); `abortController` replaces a no-op
+  `setTimeout` that could have hung a whole batch; the repo's existing
+  `stubServer` (`port: 0`) replaces a hand-rolled fixed-port stub; auth path
+  and its effect on test hermeticity stated rather than assumed; the flip
+  ternary that would have made `"cli"` selectable replaced by an allow-list.
 - **Known risk left in deliberately**: Task 4's call-count test is the plan's
   load-bearing assumption. It is written as a stop gate rather than a hope
   because the earlier wire capture measured a multi-call query and the
