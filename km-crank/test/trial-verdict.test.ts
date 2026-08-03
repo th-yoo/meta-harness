@@ -26,7 +26,7 @@ import {
   E_MIN,
   T_MAX_MS,
   DENSITY_DIVERGENCE_FACTOR,
-  KKAMAK_DEV_CHECK,
+  KKAMAK_DEV_CHECKS,
   type ArmReport,
   type TrialEvaluationInput,
   type TrialScanDeps,
@@ -178,20 +178,40 @@ describe("§2 exclusions", () => {
     expect(r.exposureGuard.densityTrial).toBe(1)
   })
 
-  test("kkamak-dev: this repo's own check group is excluded from every metric", () => {
+  test("kkamak-dev: this repo's own check group is excluded from every metric (current check)", () => {
     const r = evaluate(
-      [mkLine("s1", { check: KKAMAK_DEV_CHECK }), mkLine("s2")],
+      [mkLine("s1", { check: KKAMAK_DEV_CHECKS[KKAMAK_DEV_CHECKS.length - 1] }), mkLine("s2")],
       [mkRow("s1", "trial"), mkRow("s2", "trial")],
     )
     expect(r.perArm.trial.cycleCount).toBe(1)
     expect(r.perArm.trial.sessionCount).toBe(1)
   })
 
-  test("kkamak-dev: the pinned constant matches this repo's actual gate.json check (single-source drift guard)", () => {
+  test("kkamak-dev: HISTORICAL check strings stay excluded too — append-only set, not swap-in-place (regression for the fix-wave finding: 55/209 lines on the 2-stage/3-stage strings must not leak into a future trial window)", () => {
+    const r = evaluate(
+      [mkLine("s1", { check: KKAMAK_DEV_CHECKS[0] }), mkLine("s2", { check: KKAMAK_DEV_CHECKS[1] })],
+      [mkRow("s1", "trial"), mkRow("s2", "trial")],
+    )
+    expect(r.perArm.trial.cycleCount).toBe(0)
+    expect(r.perArm.trial.sessionCount).toBe(0)
+  })
+
+  test("kkamak-dev: KKAMAK_DEV_CHECKS is append-only — the CURRENT gate.json check is the LAST entry, and every check string this repo's gate has ever run stays present (single-source drift guard; a removed entry fails this test)", () => {
     const gate = JSON.parse(fs.readFileSync(new URL("../../gate.json", import.meta.url), "utf-8")) as {
       check: string
     }
-    expect(KKAMAK_DEV_CHECK).toBe(gate.check)
+    expect(KKAMAK_DEV_CHECKS[KKAMAK_DEV_CHECKS.length - 1]).toBe(gate.check)
+
+    // Historical entries this repo's gate has run, reconstructed from the
+    // live stream at fix-wave time (`jq -r '.check' .km/gate-outcomes.ndjson
+    // | sort -u`). Append-only: this list only ever grows.
+    const HISTORICAL_CHECKS = [
+      "cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test",
+      "cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test && cd ../km-crank && bun test",
+    ]
+    for (const h of HISTORICAL_CHECKS) {
+      expect(KKAMAK_DEV_CHECKS).toContain(h)
+    }
   })
 
   test("time-bound: lines with ts outside [startedAt, now] are excluded", () => {

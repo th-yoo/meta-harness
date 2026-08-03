@@ -13,6 +13,10 @@ import os from "node:os"
 import path from "node:path"
 import { checkLinks, checkFenceBalance, isSkippableTarget } from "./doc-check"
 
+function mkPlainDir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "doc-check-unit-"))
+}
+
 const DOC_CHECK = path.join(import.meta.dir, "doc-check.ts")
 
 interface RunResult {
@@ -198,9 +202,112 @@ test("checkFenceBalance passes balanced fences and flags an odd count", () => {
 })
 
 test("checkLinks flags a missing relative target with correct file:line", () => {
-  const violations: any[] = []
-  checkLinks("docs/sub/doc.md", "line1\n[x](./missing.md)\n", violations)
-  expect(violations.length).toBe(1)
-  expect(violations[0].file).toBe("docs/sub/doc.md")
-  expect(violations[0].line).toBe(2)
+  const repoRoot = mkPlainDir()
+  try {
+    const violations: any[] = []
+    checkLinks("docs/sub/doc.md", "line1\n[x](./missing.md)\n", violations, repoRoot)
+    expect(violations.length).toBe(1)
+    expect(violations[0].file).toBe("docs/sub/doc.md")
+    expect(violations[0].line).toBe(2)
+  } finally {
+    rm(repoRoot)
+  }
+})
+
+// ---------------------------------------------------------------------
+// FIX 2: repo-root-relative links (leading `/`) resolve against the repo
+// root, not the OS filesystem root.
+// ---------------------------------------------------------------------
+
+test("repo-root-relative link (leading slash) resolves against the repo root, not OS-absolute", async () => {
+  const repo = mkRepo()
+  try {
+    fs.mkdirSync(path.join(repo, "docs"))
+    fs.writeFileSync(path.join(repo, "docs", "target.md"), "# Target\n")
+    fs.writeFileSync(
+      path.join(repo, "doc.md"),
+      "# Title\n\nSee [target](/docs/target.md) for details.\n",
+    )
+    gitAdd(repo, "doc.md", "docs/target.md")
+    const result = await run(repo)
+    expect(result.exitCode).toBe(0)
+  } finally {
+    rm(repo)
+  }
+})
+
+test("repo-root-relative link (leading slash) to a missing file is still caught", async () => {
+  const repo = mkRepo()
+  try {
+    fs.writeFileSync(
+      path.join(repo, "doc.md"),
+      "# Title\n\nSee [target](/docs/nowhere.md) for details.\n",
+    )
+    gitAdd(repo, "doc.md")
+    const result = await run(repo)
+    expect(result.exitCode).toBe(1)
+    expect(result.stdout).toContain("doc.md:3")
+    expect(result.stdout).toContain("/docs/nowhere.md")
+  } finally {
+    rm(repo)
+  }
+})
+
+// ---------------------------------------------------------------------
+// FIX 3: CommonMark fence-close rule — a fence closes only on a same-char,
+// same-or-longer marker; a shorter or different-char fence-like line inside
+// stays literal content (no false-positive unclosed-fence on nesting-shaped
+// content).
+// ---------------------------------------------------------------------
+
+test("fence balance: a shorter same-char fence-like line inside a longer fence does not falsely close it", async () => {
+  const repo = mkRepo()
+  try {
+    const content = ["# Title", "", "````", "```", "some text", "````", ""].join("\n")
+    fs.writeFileSync(path.join(repo, "doc.md"), content)
+    gitAdd(repo, "doc.md")
+    const result = await run(repo)
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain("OK")
+  } finally {
+    rm(repo)
+  }
+})
+
+test("fence balance: a genuinely unclosed fence still fails even with a shorter same-char line inside it", async () => {
+  const repo = mkRepo()
+  try {
+    const content = ["# Title", "", "````", "```", "some text", ""].join("\n")
+    fs.writeFileSync(path.join(repo, "doc.md"), content)
+    gitAdd(repo, "doc.md")
+    const result = await run(repo)
+    expect(result.exitCode).toBe(1)
+    expect(result.stdout).toContain("doc.md:3")
+    expect(result.stdout).toContain("unclosed fenced code block")
+  } finally {
+    rm(repo)
+  }
+})
+
+// ---------------------------------------------------------------------
+// FIX 4: git ls-files is anchored to the repo root — invoking from a
+// subdirectory cannot silently narrow scope.
+// ---------------------------------------------------------------------
+
+test("invoking from a subdirectory still scans the whole tracked tree, not just the subdirectory", async () => {
+  const repo = mkRepo()
+  try {
+    fs.writeFileSync(path.join(repo, "root-level.md"), "# Root level\n")
+    fs.mkdirSync(path.join(repo, "sub"))
+    fs.writeFileSync(
+      path.join(repo, "sub", "nested.md"),
+      "# Nested\n\n[bad](./missing.md)\n",
+    )
+    gitAdd(repo, "root-level.md", "sub/nested.md")
+    const result = await run(path.join(repo, "sub"))
+    expect(result.exitCode).toBe(1)
+    expect(result.stdout).toContain("sub/nested.md")
+  } finally {
+    rm(repo)
+  }
 })

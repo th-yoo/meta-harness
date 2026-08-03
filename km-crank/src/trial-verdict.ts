@@ -54,14 +54,31 @@ export const DENSITY_GUARD_MIN_SESSIONS = 5
  * (gate.json at the meta-harness repo root). The scorecard identifies the
  * group purely by check-string grouping (scorecard pre-reg §3: "the
  * meta-harness/kkamak repo's own check is a distinct value"), so the same
- * convention is encoded here as a constant. SINGLE-SOURCED by test:
- * trial-verdict.test.ts's drift guard asserts this equals the live
- * gate.json's `check` — if the repo's check string ever changes, that test
- * fails and this constant (and the historical-exclusion question it raises)
- * must be revisited deliberately, never silently.
+ * convention is encoded here as a constant.
+ *
+ * GROW-ONLY / APPEND-ONLY SET, not a scalar. gate.json's `check` string has
+ * changed more than once (2-stage -> 3-stage -> 4-stage; the 4-stage
+ * doc-linter-floor addition is logged in docs/2026-08-01-gauntlet-adoption-
+ * ledger.md, "Doc-linter floor deploy boundary (7a)"). Exclusion is set
+ * membership over EVERY check string this repo's gate has ever run at turn
+ * end, not equality against only the current one — swapping a scalar in
+ * place would silently un-exclude every historical sensor line still
+ * carrying an older check string. Measured against the live stream at the
+ * time this became a set (`jq -r '.check' .km/gate-outcomes.ndjson | sort |
+ * uniq -c`): 55 lines on the 2-stage string, 209 on the 3-stage string, 6 on
+ * the new 4-stage string — all three populations must stay excluded.
+ *
+ * Entries are NEVER removed or edited. A gate.json check change appends a
+ * new entry here — this append IS the deliberate revisit
+ * trial-verdict.test.ts's drift guard exists to force: that test asserts
+ * the LIVE gate.json check equals the LAST entry of this array AND that
+ * every prior entry is still present (a removed entry fails the test).
  */
-export const KKAMAK_DEV_CHECK =
-  "cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test && cd ../km-crank && bun test && cd .. && bun scripts/doc-check.ts"
+export const KKAMAK_DEV_CHECKS: readonly string[] = [
+  "cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test",
+  "cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test && cd ../km-crank && bun test",
+  "cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test && cd ../km-crank && bun test && cd .. && bun scripts/doc-check.ts",
+]
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -189,7 +206,7 @@ function joinAndExclude(
     if (row.trialId !== trialId) continue // §2: boundary class — session VOID
     if (row.forced) continue // §2: forced arms are never compared
     if (l.ts < startMs || l.ts > now) continue // §2: time-bounded join
-    if (l.check === KKAMAK_DEV_CHECK) continue // §2: kkamak-dev group
+    if (KKAMAK_DEV_CHECKS.includes(l.check)) continue // §2: kkamak-dev group (append-only set)
     // Task 1 (fix-them-serialized-teacup plan): "skipped-stop" is excluded
     // from BOTH density and metrics — see the join-rule comment above
     // (rule 7). Gauge-only stays density-included per §9.

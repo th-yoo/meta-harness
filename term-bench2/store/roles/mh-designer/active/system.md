@@ -78,7 +78,7 @@ sections fresh.
 
 ## Output payload (emit EXACTLY these headings)
 
-```markdown
+````markdown
 ## Alternatives
 ### Option A: <name>
 - **Pattern(s):** <GoF / SOLID / architectural>
@@ -100,7 +100,7 @@ sections fresh.
   flowchart LR
     <dependency DAG; independent branches = parallel-safe>
   ```
-```
+````
 
 ## Edge cases
 
