@@ -61,7 +61,7 @@ export const DENSITY_GUARD_MIN_SESSIONS = 5
  * must be revisited deliberately, never silently.
  */
 export const KKAMAK_DEV_CHECK =
-  "cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test && cd ../km-crank && bun test"
+  "cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test && cd ../km-crank && bun test && cd .. && bun scripts/doc-check.ts"
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

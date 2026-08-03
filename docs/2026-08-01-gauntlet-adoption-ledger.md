@@ -183,3 +183,54 @@ Caveat: n=3 loops, one day — provisional, revisit after the next program.
   MUST run `bun install` in `cc-gate-plugin/` before its `km-refresh` (git
   does not carry `node_modules`). MacBook runs no further CLI derive
   batches; all future derive work is SDK, post-boundary, own sized go.
+
+## Doc-linter floor deploy boundary (7a, 2026-08-03)
+
+- **What changed in `gate.json`:** the `check` command gained a fourth
+  stage. Before:
+  `cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test && cd ../km-crank && bun test`.
+  After:
+  `cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test && cd ../km-crank && bun test && cd .. && bun scripts/doc-check.ts`.
+  Existing semantics preserved exactly (`&&`-chained, same three test
+  suites, same failure-short-circuits-early behavior); `doc-check.ts` runs
+  last, after the repo working directory is restored to root.
+- **New instrument:** `scripts/doc-check.ts` — zero-dependency, zero-network
+  deterministic linter over git-tracked `*.md` files
+  (`git ls-files '*.md'`, so untracked scratch never blocks the gate).
+  Checks relative-link integrity (target must resolve to an existing file,
+  `#fragment` stripped before checking; `http(s):`/`mailto:`/anchor-only
+  links skipped) and fenced-code-block balance per file. Measured runtime
+  on this repo: ~25-70ms for 155 tracked docs, well under the ~3s budget.
+  Verified green on HEAD before deploy; proof executed (scratch tracked doc
+  with a broken relative link → FAIL naming file:line → removed → PASS
+  again, no residue left in the tree).
+- **Boundary ts: `1785727963349`** (`date +%s%3N`, captured at commit time,
+  yoo-dev host). Cycles with a `check-output` sidecar record timestamped
+  before this ts ran the three-suite check only; cycles after ran the
+  three-suite check **and** the doc floor. As queue item 7a anticipated:
+  this is a gate.json check change, so it shifts the floor-check
+  population — the floorCheckMinedAt drift footnote already anticipates
+  exactly this shape of change, and this entry is the logged instance of
+  it. Not metric-neutral for doc-shaped turns: a doc turn that previously
+  could only ever read `rounds:["accepted"]` (§6a/10(b) gate-floor-boundary
+  finding — the floor could not see prose errors) can now fail on a
+  mechanical link/fence regression, closing a sliver of the measured gap
+  in `docs/2026-08-01-gate-floor-boundary.md` without adding any judgment
+  to the gate.
+- **Side effect discovered, fixed same commit:** `km-crank`'s §2
+  kkamak-dev-check drift guard
+  (`km-crank/src/trial-verdict.ts` `KKAMAK_DEV_CHECK`,
+  asserted equal to the live `gate.json` `check` string by
+  `km-crank/test/trial-verdict.test.ts`) failed the moment `gate.json`
+  changed — by design, per its own docstring ("must be revisited
+  deliberately, never silently"). Updated `KKAMAK_DEV_CHECK` to the new
+  four-stage string in the same commit; this is a deliberate, documented
+  revisit, not a silent drift-guard bypass. Full three-suite + doc-check
+  chain reverified green after the update (783 + 26 + 229 tests pass +
+  doc-check OK).
+- **Rollback:** revert the `gate.json` `check` line to the three-suite form
+  above (and revert the paired `KKAMAK_DEV_CHECK` constant in
+  `km-crank/src/trial-verdict.ts`, or its drift guard will fail red).
+  `scripts/doc-check.ts` and its test file can stay in the tree inert —
+  only the gate.json wiring need be reverted to fully back out the floor
+  change.
