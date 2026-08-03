@@ -21,11 +21,24 @@ export function stubServer(handler: (captured: Captured) => Response): SdkStub {
   const server = Bun.serve({
     port: 0,
     fetch: async (req) => {
+      // The Agent-SDK transport's spawned CLI issues a bodiless `HEAD
+      // /api/hello` connectivity probe before the real /v1/messages call —
+      // it is not a model call, so answer it directly rather than letting
+      // `JSON.parse("")` throw and turn into an unhandled rejection that
+      // bun:test then (mis)attributes to whichever test is running.
+      const bodyText = await req.text()
+      if (!bodyText) return new Response(null, { status: 200 })
+      let body: Record<string, unknown>
+      try {
+        body = JSON.parse(bodyText) as Record<string, unknown>
+      } catch {
+        return new Response(null, { status: 200 })
+      }
       const c: Captured = {
         authorization: req.headers.get("authorization"),
         beta: req.headers.get("anthropic-beta"),
         apiKey: req.headers.get("x-api-key"),
-        body: (await req.json()) as Record<string, unknown>,
+        body,
       }
       captured.push(c)
       return handler(c)
