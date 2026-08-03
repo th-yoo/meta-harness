@@ -40,14 +40,21 @@ function revParse(repo: string, ref: string): string | undefined {
   }
 }
 
-/** newest commit in base..head whose diff touches anything outside docs/reviews/ */
+/**
+ * Newest commit in base..head whose diff touches anything outside
+ * docs/reviews/. Merge commits are ALWAYS non-exempt: `diff-tree` prints
+ * nothing for a merge without -m/-c, so an evil merge would otherwise read
+ * as review-only and slip past the sneak-code guarantee (review F1).
+ */
 function effectiveReviewedTip(repo: string, base: string, head: string): string | undefined {
-  const shas = git(repo, "rev-list", `${base}..${head}`).split("\n").filter(Boolean)
-  for (const sha of shas) {
-    const files = git(repo, "diff-tree", "--no-commit-id", "--name-only", "-r", "--root", sha)
+  const rows = git(repo, "rev-list", "--parents", `${base}..${head}`).split("\n").filter(Boolean)
+  for (const row of rows) {
+    const [sha, ...parents] = row.split(" ")
+    if (parents.length > 1) return sha!
+    const files = git(repo, "diff-tree", "--no-commit-id", "--name-only", "-r", "--root", sha!)
       .split("\n")
       .filter(Boolean)
-    if (files.some((f) => !f.startsWith("docs/reviews/"))) return sha
+    if (files.some((f) => !f.startsWith("docs/reviews/"))) return sha!
   }
   return undefined
 }
@@ -86,6 +93,11 @@ export function checkReviewArtifact(repo: string, baseRef: string, headRef: stri
     errors.push(
       `no review artifact: expected committed docs/reviews/${short}-*.md naming reviewed tip ${short}`,
     )
+    return { ok: false, errors }
+  }
+  if (matches.length > 1) {
+    // fail closed: a decoy could sort ahead of a non-compliant artifact (review F2)
+    errors.push(`ambiguous review artifact: ${matches.length} files match docs/reviews/${short}-*.md`)
     return { ok: false, errors }
   }
   const artifactPath = matches[0]!

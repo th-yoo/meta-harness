@@ -196,6 +196,48 @@ describe("checkReviewArtifact", () => {
     expect(r.vacuous).toBe(true)
   })
 
+  test("fails: merge commit carrying code is non-exempt (F1 — evil-merge sneak)", () => {
+    const [repo, base] = mkRepo()
+    const { work } = mkReviewedBranch(repo, base)
+    // side branch touches ONLY docs/reviews/** — exempt-looking on its own
+    git(repo, "checkout", "-q", "-b", "side", base)
+    commitFile(repo, "docs/reviews/000000-side-note.md", "side note\n", "side docs")
+    git(repo, "checkout", "-q", "main")
+    // evil merge: sneak src/evil.ts into the merge commit itself — the change
+    // exists in NO individual commit of the range, only in the merge's diff
+    git(repo, "merge", "-q", "--no-ff", "--no-commit", "side")
+    writeFileSync(join(repo, "src/evil.ts"), "export const evil = true\n")
+    git(repo, "add", "src/evil.ts")
+    git(repo, "commit", "-q", "-m", "merge side (evil)")
+    const r = checkReviewArtifact(repo, base, git(repo, "rev-parse", "HEAD"))
+    expect(r.ok).toBe(false)
+    // effective tip must be the merge commit, not the earlier reviewed work commit
+    expect(r.errors.join("\n")).toContain("no review artifact")
+    expect(r.errors.join("\n")).not.toContain(`${git(repo, "rev-parse", "--short", work)}-`)
+  })
+
+  test("fails: two committed artifacts match the reviewed-tip prefix (F2 — ambiguity)", () => {
+    const [repo, base] = mkRepo()
+    const work = commitFile(repo, "src/a.ts", "a\n", "work")
+    const short = git(repo, "rev-parse", "--short", work)
+    // clean decoy sorts first; violating artifact sorts second
+    commitFile(
+      repo,
+      `docs/reviews/${short}-aaa-decoy.md`,
+      artifactBody({ "reviewed-range": `${base}..${work}` }),
+      "decoy artifact",
+    )
+    commitFile(
+      repo,
+      `docs/reviews/${short}-zzz-real.md`,
+      artifactBody({ "reviewed-range": `${base}..${work}`, reviewer: AUTHOR_EMAIL }),
+      "violating artifact",
+    )
+    const r = checkReviewArtifact(repo, base, git(repo, "rev-parse", "HEAD"))
+    expect(r.ok).toBe(false)
+    expect(r.errors.join("\n")).toContain("ambiguous")
+  })
+
   test("fails: bad sha arguments", () => {
     const [repo, base] = mkRepo()
     const r = checkReviewArtifact(repo, base, "0000000000000000000000000000000000000000")
