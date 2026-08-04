@@ -18,13 +18,18 @@ import path from "node:path"
 import { tmpdir } from "node:os"
 import { daemonCall, ensureDaemon } from "../src/gauge/acp-client.ts"
 import { buildAgentOutgoingText } from "../src/gauge/agent-transport.ts"
-import { ACP_BUDGET, modelProvenBy } from "../src/gauge/acp-wire.ts"
+import { ACP_BUDGET, modelProvenBy, GAUGE_ISOLATION, type WarmIsolation } from "../src/gauge/acp-wire.ts"
 import { envFingerprint, spawnLockPath, tryCreateLock } from "../src/gauge/acp-paths.ts"
 import { fakeDaemon } from "./acp-fake-daemon.ts"
 import { HAS_CLAUDE_CODE_CREDENTIALS, sseText } from "./agent-cli-stub.ts"
 import { stubServer } from "./sdk-stub.ts"
 
 const HAIKU = "claude-haiku-4-5"
+// N3c-iii: daemonCall's opts.isolation is REQUIRED, never defaulted. Every
+// existing test in this file only cares that SOME isolation was sent, not
+// which one, so they all share this constant; test 7 below uses its OWN
+// distinct isolation to prove deep-equality end to end.
+const ISO = { isolation: GAUGE_ISOLATION }
 
 /** Every test builds its OWN socket path under tmpdir — no test may ever
  * touch the real ~/.config/kkamak store (asserted in afterEach below). */
@@ -77,7 +82,7 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     const t0 = Date.now()
     const r = await daemonCall("x", "claude-haiku-4-5", {
       ...process.env, KKAMAK_ACP_SOCKET: `${tmpdir()}/nope-${Date.now()}.sock`,
-    })
+    }, ISO)
     expect(r.kind).toBe("no-call")
     expect(Date.now() - t0).toBeLessThan(2_000)
   })
@@ -87,7 +92,7 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     const env = { ...ENV, KKAMAK_ACP_SOCKET: sock }
     const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "ok" })
     LIVE_FAKES.push(fake)
-    const r = await daemonCall("hello", HAIKU, env)
+    const r = await daemonCall("hello", HAIKU, env, ISO)
     expect(r.kind).toBe("ok")
     if (r.kind !== "ok") throw new Error("unreachable")
     expect(r.text).toBe("ANSWER")
@@ -100,7 +105,7 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     const env = { ...ENV, KKAMAK_ACP_SOCKET: sock }
     const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "call-consumed" })
     LIVE_FAKES.push(fake)
-    const r = await daemonCall("x", HAIKU, env)
+    const r = await daemonCall("x", HAIKU, env, ISO)
     expect(r.kind).toBe("call-consumed")
   })
 
@@ -109,7 +114,7 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     const env = { ...ENV, KKAMAK_ACP_SOCKET: sock }
     const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "no-call" })
     LIVE_FAKES.push(fake)
-    const r = await daemonCall("x", HAIKU, env)
+    const r = await daemonCall("x", HAIKU, env, ISO)
     expect(r.kind).toBe("no-call")
   })
 
@@ -118,7 +123,7 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     const env = { ...ENV, KKAMAK_ACP_SOCKET: sock }
     const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "mismatched-data" })
     LIVE_FAKES.push(fake)
-    const r = await daemonCall("x", HAIKU, env)
+    const r = await daemonCall("x", HAIKU, env, ISO)
     expect(r.kind).toBe("call-consumed")   // the data field is authoritative
   })
 
@@ -127,13 +132,13 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     const envA = { ...ENV, KKAMAK_ACP_SOCKET: sockA }
     const fakeA = fakeDaemon(sockA, { fingerprint: envFingerprint(envA), answer: "no-call-code-no-data" })
     LIVE_FAKES.push(fakeA)
-    expect((await daemonCall("x", HAIKU, envA)).kind).toBe("no-call")
+    expect((await daemonCall("x", HAIKU, envA, ISO)).kind).toBe("no-call")
 
     const sockB = tempSock("codenodata-consumed")
     const envB = { ...ENV, KKAMAK_ACP_SOCKET: sockB }
     const fakeB = fakeDaemon(sockB, { fingerprint: envFingerprint(envB), answer: "consumed-code-no-data" })
     LIVE_FAKES.push(fakeB)
-    expect((await daemonCall("x", HAIKU, envB)).kind).toBe("call-consumed")
+    expect((await daemonCall("x", HAIKU, envB, ISO)).kind).toBe("call-consumed")
   })
 
   test("law L2: a NON-BOOLEAN data.callConsumed is an ambiguity, not a value", async () => {
@@ -141,7 +146,7 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     const env = { ...ENV, KKAMAK_ACP_SOCKET: sock }
     const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "nonboolean-data" })
     LIVE_FAKES.push(fake)
-    const r = await daemonCall("x", HAIKU, env)
+    const r = await daemonCall("x", HAIKU, env, ISO)
     expect(r.kind).toBe("call-consumed")
   })
 
@@ -150,7 +155,7 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     const env = { ...ENV, KKAMAK_ACP_SOCKET: sock }
     const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "unknown-code" })
     LIVE_FAKES.push(fake)
-    const r = await daemonCall("x", HAIKU, env)
+    const r = await daemonCall("x", HAIKU, env, ISO)
     expect(r.kind).toBe("call-consumed")   // never no-call — that would double-spend
   })
 
@@ -160,7 +165,7 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "hang" })
     LIVE_FAKES.push(fake)
     const t0 = Date.now()
-    const r = await daemonCall("x", HAIKU, env, { budgetMs: 500 })
+    const r = await daemonCall("x", HAIKU, env, { ...ISO, budgetMs: 500 })
     expect(r.kind).toBe("call-consumed")
     expect(Date.now() - t0).toBeLessThan(1_500)
     expect(fake.sawPrompt()).toBe(true)   // it really did cross the boundary
@@ -171,7 +176,7 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     const env = { ...ENV, KKAMAK_ACP_SOCKET: sock }
     const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "die-before-prompt" })
     LIVE_FAKES.push(fake)
-    const r = await daemonCall("x", HAIKU, env)
+    const r = await daemonCall("x", HAIKU, env, ISO)
     expect(r.kind).toBe("no-call")
     expect(fake.sawPrompt()).toBe(false)
   })
@@ -181,7 +186,7 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     const env = { ...ENV, KKAMAK_ACP_SOCKET: sock }
     const fake = fakeDaemon(sock, { fingerprint: envFingerprint({ ...env, ANTHROPIC_BASE_URL: "http://other" }), answer: "ok" })
     LIVE_FAKES.push(fake)
-    const r = await daemonCall("x", HAIKU, env)
+    const r = await daemonCall("x", HAIKU, env, ISO)
     expect(r.kind).toBe("no-call")
     expect(fake.sawPrompt()).toBe(false)
   })
@@ -193,10 +198,10 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     expect(envFingerprint(envA)).toBe(envFingerprint(envB))
     const fake = fakeDaemon(sock, { fingerprint: envFingerprint(envA), answer: "ok" })
     LIVE_FAKES.push(fake)
-    const rA = await daemonCall("x", HAIKU, envA)
+    const rA = await daemonCall("x", HAIKU, envA, ISO)
     expect(rA.kind).toBe("ok")
     expect(fake.sawPrompt()).toBe(true)
-    const rB = await daemonCall("x", HAIKU, envB)
+    const rB = await daemonCall("x", HAIKU, envB, ISO)
     expect(rB.kind).toBe("ok")
   })
 
@@ -206,10 +211,39 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "ok" })
     LIVE_FAKES.push(fake)
     const outgoing = "the exact outgoing string"
-    await daemonCall(outgoing, HAIKU, env)
+    await daemonCall(outgoing, HAIKU, env, ISO)
     const params = fake.promptParams()
     expect(params?._meta.model).toBe(HAIKU)
     expect(params?.prompt[0]?.text).toBe(outgoing)
+  })
+
+  test("N3c-iii test 7: daemonCall sends _meta.kkamak.isolation deep-equal to what the caller passed", async () => {
+    const sock = tempSock("isolation")
+    const env = { ...ENV, KKAMAK_ACP_SOCKET: sock }
+    const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "ok" })
+    LIVE_FAKES.push(fake)
+    const customIsolation: WarmIsolation = {
+      ...GAUGE_ISOLATION, systemPrompt: "CLIENT-CALLER-ISOLATION-MARKER", title: "kkamak-client-test",
+    }
+    await daemonCall("x", HAIKU, env, { isolation: customIsolation })
+    expect(fake.sessionNewParams()?._meta?.kkamak?.isolation).toEqual(customIsolation)
+    // and the shared-default-isolation calls elsewhere in this file are NOT
+    // silently equal to this one, proving the assertion above is actually
+    // discriminating on VALUE, not just presence.
+    expect(fake.sessionNewParams()?._meta?.kkamak?.isolation).not.toEqual(GAUGE_ISOLATION)
+  })
+
+  test("N3c-iii test 8: -32002 with data.callConsumed false from the fake -> {kind:\"no-call\"} (the load-bearing contract of daemon §2)", async () => {
+    const sock = tempSock("poolexhausted")
+    const env = { ...ENV, KKAMAK_ACP_SOCKET: sock }
+    const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "pool-exhausted" })
+    LIVE_FAKES.push(fake)
+    const r = await daemonCall("x", HAIKU, env, ISO)
+    // NO new client-side code classifies this -- classifyPostSendError's
+    // EXISTING step (i) (a boolean data.callConsumed wins outright) already
+    // routes it here; this test verifies that by observation, per the
+    // brief's own instruction ("verify by test, not by new code").
+    expect(r.kind).toBe("no-call")
   })
 
   test("the default budget is the contract constant, not a local literal", () => {
@@ -316,7 +350,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-client e2e (real daemon + SSE
       }
       const started = await ensureDaemon(env, { waitMs: 15_000 })
       expect(started).toBe(true)
-      const r = await daemonCall("hello", HAIKU, env)
+      const r = await daemonCall("hello", HAIKU, env, ISO)
       expect(r.kind).toBe("ok")
       if (r.kind !== "ok") throw new Error("unreachable")
       expect(modelProvenBy(r.model, HAIKU, r.canonicalModel)).toBe(true)

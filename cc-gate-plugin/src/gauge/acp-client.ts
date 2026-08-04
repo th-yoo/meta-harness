@@ -17,7 +17,8 @@ import {
   FrameDecoder, encodeFrame, ACP_BUDGET,
   ACP_INITIALIZE, ACP_SESSION_NEW, ACP_SESSION_PROMPT, ACP_SESSION_UPDATE,
   ACP_ERR_NO_CALL, ACP_ERR_CALL_CONSUMED,
-  type AcpInitializeResult, type AcpNewSessionResult, type AcpPromptParams, type AcpPromptResult,
+  type AcpInitializeResult, type AcpNewSessionParams, type AcpNewSessionResult,
+  type AcpPromptParams, type AcpPromptResult, type WarmIsolation,
 } from "./acp-wire.ts"
 
 /** Mirrors WarmSession's TurnOutcome across the wire so §6e's law survives
@@ -64,6 +65,12 @@ function classifyPostSendError(code: number, data: unknown): DaemonOutcome {
  * (+ fingerprint check) -> session/new -> session/prompt -> collect the
  * update -> close socket.
  *
+ * `opts.isolation` is REQUIRED, never defaulted (N3c-iii) — the same
+ * "no magic selection" rule the spec's send-prompt-interface ruling already
+ * applies to `model`: the caller names its policy explicitly, this file
+ * never substitutes one of its own. Sent as `session/new`'s
+ * `_meta.kkamak.isolation`.
+ *
  * §6e law, client side: `no-call` for EVERY failure that happens BEFORE the
  * session/prompt frame's write callback reports success (L1: no socket,
  * connect refused, initialize/session-new failure, fingerprint mismatch,
@@ -76,9 +83,9 @@ export function daemonCall(
   outgoingText: string,
   model: string,
   env: Record<string, string | undefined>,
-  opts?: { budgetMs?: number },
+  opts: { isolation: WarmIsolation; budgetMs?: number },
 ): Promise<DaemonOutcome> {
-  const budgetMs = opts?.budgetMs ?? ACP_BUDGET.daemonLegMs
+  const budgetMs = opts.budgetMs ?? ACP_BUDGET.daemonLegMs
   const sock = socketPath(env)
   const fp = envFingerprint(env)
 
@@ -188,7 +195,10 @@ export function daemonCall(
       const init = (await request(ACP_INITIALIZE, { protocolVersion: 1 })) as AcpInitializeResult | undefined
       if (init?._meta?.kkamak?.envFingerprint !== fp) { finish({ kind: "no-call" }); return }
 
-      const sessNew = (await request(ACP_SESSION_NEW, { cwd: "/", mcpServers: [] })) as AcpNewSessionResult | undefined
+      const newSessionParams = {
+        cwd: "/", mcpServers: [], _meta: { kkamak: { isolation: opts.isolation } },
+      } satisfies AcpNewSessionParams
+      const sessNew = (await request(ACP_SESSION_NEW, newSessionParams)) as AcpNewSessionResult | undefined
       const sessionId = sessNew?.sessionId
       if (!sessionId) { finish({ kind: "no-call" }); return }
 

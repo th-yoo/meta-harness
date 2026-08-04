@@ -31,6 +31,11 @@ export type FakeAnswer =
   | "unknown-code"
   | "hang"
   | "die-before-prompt"
+  /** N3c-iii test 8: the daemon's own -32002 pool-exhaustion shape
+   * (data.callConsumed:false) -- proves the client's EXISTING L3 step (i)
+   * classification already routes it to {kind:"no-call"} with no new
+   * client-side code, just this scripted response. */
+  | "pool-exhausted"
 
 export interface FakeDaemonOpts {
   /** echoed in initialize._meta; pass envFingerprint(theEnvUnderTest) */
@@ -53,6 +58,12 @@ export interface FakePromptParams {
   _meta: { model: string }
 }
 
+export interface FakeSessionNewParams {
+  cwd?: unknown
+  mcpServers?: unknown
+  _meta?: { kkamak?: { isolation?: unknown } }
+}
+
 export interface FakeDaemonHandle {
   stop: () => void
   /** true iff a session/prompt frame was ever decoded — the wire-level
@@ -60,11 +71,16 @@ export interface FakeDaemonHandle {
   sawPrompt: () => boolean
   /** the params of the last session/prompt, for byte-identity assertions */
   promptParams: () => FakePromptParams | undefined
+  /** the params of the last session/new, added N3c-iii so a test can assert
+   * `daemonCall` sent `_meta.kkamak.isolation` deep-equal to what the
+   * caller passed. */
+  sessionNewParams: () => FakeSessionNewParams | undefined
 }
 
 export function fakeDaemon(sock: string, opts: FakeDaemonOpts): FakeDaemonHandle {
   let sawPromptFlag = false
   let captured: FakePromptParams | undefined
+  let capturedSessionNew: FakeSessionNewParams | undefined
 
   // Fresh socket path per test (tempEndpoint-shaped), but tolerate a stale
   // leftover file the same way acp-daemon.ts's own takeover logic does.
@@ -112,6 +128,9 @@ export function fakeDaemon(sock: string, opts: FakeDaemonOpts): FakeDaemonHandle
       case "unknown-code":
         write({ jsonrpc: "2.0", id, error: { code: -32603, message: "unknown code" } })
         return
+      case "pool-exhausted":
+        write({ jsonrpc: "2.0", id, error: { code: -32002, message: "pool exhausted", data: { callConsumed: false } } })
+        return
       case "hang":
         // never respond — the client's budget timer owns this case.
         return
@@ -147,6 +166,7 @@ export function fakeDaemon(sock: string, opts: FakeDaemonOpts): FakeDaemonHandle
             break
           }
           case ACP_SESSION_NEW: {
+            capturedSessionNew = params as FakeSessionNewParams | undefined
             if (id === undefined) break
             const sessionId = crypto.randomUUID()
             if (opts.answer === "die-before-prompt") {
@@ -197,5 +217,6 @@ export function fakeDaemon(sock: string, opts: FakeDaemonOpts): FakeDaemonHandle
     },
     sawPrompt: () => sawPromptFlag,
     promptParams: () => captured,
+    sessionNewParams: () => capturedSessionNew,
   }
 }
