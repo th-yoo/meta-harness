@@ -15,11 +15,13 @@ import { GAUGE_ISOLATION, type WarmIsolation } from "../src/gauge/acp-wire.ts"
 import { resolveProvider } from "../src/gauge/send-prompt.ts"
 import { envFingerprint } from "../src/gauge/acp-paths.ts"
 import { fakeDaemon, type FakeDaemonHandle } from "./acp-fake-daemon.ts"
+import { shortSock } from "./sock-path.ts"
 
 const HAIKU = "claude-haiku-4-5"
 
+// Short names via sock-path.ts: darwin sun_path caps the path at 104B.
 function tempSock(tag: string): string {
-  return path.join(tmpdir(), `kkamak-acp-cli-warm-${tag}-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.sock`)
+  return shortSock(`w-${tag}`)
 }
 
 /** The base env every fake-daemon test starts from. Every fake in this file

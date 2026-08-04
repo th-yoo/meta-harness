@@ -25,7 +25,13 @@
 KKAMAK_PROBE_REPO=${KKAMAK_PROBE_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 
 probe_models() {
-  ( cd "$KKAMAK_PROBE_REPO/cc-gate-plugin" && timeout 90 bun -e '
+  # Stock darwin ships no `timeout` (coreutils' gtimeout only via brew) —
+  # exit 127 on the MacBook otherwise. Probe without a wrapper there; the
+  # SDK call itself fails fast (maxRetries: 0) so the wrapper is belt only.
+  local TO=""
+  if command -v timeout >/dev/null 2>&1; then TO="timeout 90"
+  elif command -v gtimeout >/dev/null 2>&1; then TO="gtimeout 90"; fi
+  ( cd "$KKAMAK_PROBE_REPO/cc-gate-plugin" && $TO bun -e '
 const t = require("./src/gauge/transport.ts");
 const A = require("@anthropic-ai/sdk");
 const An = A.default || A.Anthropic || A;

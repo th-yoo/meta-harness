@@ -21,6 +21,7 @@ import { buildAgentOutgoingText } from "../src/gauge/agent-transport.ts"
 import { ACP_BUDGET, modelProvenBy, GAUGE_ISOLATION, type WarmIsolation } from "../src/gauge/acp-wire.ts"
 import { envFingerprint, spawnLockPath, tryCreateLock } from "../src/gauge/acp-paths.ts"
 import { fakeDaemon } from "./acp-fake-daemon.ts"
+import { shortSock } from "./sock-path.ts"
 import { HAS_CLAUDE_CODE_CREDENTIALS, sseText } from "./agent-cli-stub.ts"
 import { stubServer } from "./sdk-stub.ts"
 
@@ -32,9 +33,10 @@ const HAIKU = "claude-haiku-4-5"
 const ISO = { isolation: GAUGE_ISOLATION }
 
 /** Every test builds its OWN socket path under tmpdir — no test may ever
- * touch the real ~/.config/kkamak store (asserted in afterEach below). */
+ * touch the real ~/.config/kkamak store (asserted in afterEach below).
+ * Short names via sock-path.ts: darwin sun_path caps the path at 104B. */
 function tempSock(tag: string): string {
-  return path.join(tmpdir(), `kkamak-acp-client-${tag}-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.sock`)
+  return shortSock(tag)
 }
 
 /** The base env every fake-daemon test starts from. `envFingerprint` is
