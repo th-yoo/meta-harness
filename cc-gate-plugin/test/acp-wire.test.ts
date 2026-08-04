@@ -3,6 +3,9 @@ import {
   FrameDecoder, encodeFrame, ACP_BUDGET, CLI_SPAWN_BUDGET_MS, modelProvenBy,
   ACP_ERR_NO_CALL, ACP_ERR_CALL_CONSUMED, GAUGE_ISOLATION,
 } from "../src/gauge/acp-wire.ts"
+import type {
+  AcpInitializeResult, AcpPromptParams, AcpPromptResult,
+} from "../src/gauge/acp-wire.ts"
 
 describe("acp-wire framing", () => {
   test("round-trips a request frame", () => {
@@ -145,5 +148,60 @@ describe("WarmIsolation / GAUGE_ISOLATION (§6d/§6e gauge isolation set)", () =
     expect(options.title).toBe("kkamak-gauge")
     expect(options.model).toBe("claude-haiku-4-5")
     expect(options.thinking).toEqual({ type: "disabled" })
+  })
+})
+
+// ACP extensibility rule (agentclientprotocol.com): every custom `_meta`
+// payload MUST be namespaced under a vendor key, because "all possible
+// [bare] names [at _meta's root] are reserved for future protocol
+// versions" — the spec's own examples key by vendor ("zed.dev/debugMode",
+// `agentCapabilities._meta` holding a `"zed.dev"` object). Ours is
+// "kkamak". `JsonRpcError.data` is exempt: it is JSON-RPC's own free-form
+// slot, not the root of an ACP spec type, so the namespacing rule does not
+// reach it.
+describe("_meta namespacing (ACP extensibility rule)", () => {
+  const initResult: AcpInitializeResult = {
+    protocolVersion: 1,
+    agentCapabilities: { loadSession: false },
+    _meta: { kkamak: { envFingerprint: "abc123" } },
+  }
+  const promptParams: AcpPromptParams = {
+    sessionId: "s1",
+    prompt: [{ type: "text", text: "hi" }],
+    _meta: { kkamak: { model: "claude-haiku-4-5" } },
+  }
+  const promptResult: AcpPromptResult = {
+    stopReason: "end_turn",
+    _meta: { kkamak: { model: "claude-haiku-4-5-20251001", canonicalModel: "claude-haiku-4-5", callConsumed: true } },
+  }
+
+  test("AcpInitializeResult._meta nests envFingerprint under kkamak", () => {
+    expect(initResult._meta.kkamak.envFingerprint).toBe("abc123")
+  })
+  test("AcpPromptParams._meta nests model under kkamak", () => {
+    expect(promptParams._meta.kkamak.model).toBe("claude-haiku-4-5")
+  })
+  test("AcpPromptResult._meta nests model/canonicalModel/callConsumed under kkamak", () => {
+    expect(promptResult._meta.kkamak).toEqual({
+      model: "claude-haiku-4-5-20251001",
+      canonicalModel: "claude-haiku-4-5",
+      callConsumed: true,
+    })
+  })
+
+  // The conformance property itself, shape-level: for every Acp*
+  // result/params fixture, `_meta` has no custom key other than `kkamak`.
+  // A future addition at `_meta` root (bypassing the kkamak nest) fails
+  // this loudly instead of silently colliding with a future protocol
+  // version's reserved name.
+  test("every Acp*'s _meta has no custom key other than 'kkamak'", () => {
+    const fixtures: Array<{ name: string; meta: Record<string, unknown> }> = [
+      { name: "AcpInitializeResult", meta: initResult._meta },
+      { name: "AcpPromptParams", meta: promptParams._meta },
+      { name: "AcpPromptResult", meta: promptResult._meta },
+    ]
+    for (const { name, meta } of fixtures) {
+      expect(Object.keys(meta), `${name}._meta`).toEqual(["kkamak"])
+    }
   })
 })

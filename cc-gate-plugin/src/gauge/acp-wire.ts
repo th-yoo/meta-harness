@@ -5,10 +5,10 @@
 // fixtures in acp-wire.test.ts are the conformance record.
 //
 // SCOPE: a PRIVATE INSTRUMENT PROFILE of the ACP wire, not a
-// general-purpose ACP agent — `_meta.model` is REQUIRED on session/prompt,
-// `session/new.cwd` is accepted-and-ignored (the instrument pins a neutral
-// cwd), and `session/cancel` is answerable as a request. Off-the-shelf
-// editor clients are explicitly out of scope.
+// general-purpose ACP agent — `_meta.kkamak.model` is REQUIRED on
+// session/prompt, `session/new.cwd` is accepted-and-ignored (the instrument
+// pins a neutral cwd), and `session/cancel` is answerable as a request.
+// Off-the-shelf editor clients are explicitly out of scope.
 //
 // Transport-agnostic: the daemon binds it to a Unix socket, and a --stdio
 // flag binds the same dispatcher to stdin/stdout for our own tooling.
@@ -160,12 +160,24 @@ export const GAUGE_ISOLATION: WarmIsolation = {
   thinking: { type: "disabled" },
 }
 
+// ACP extensibility rule (agentclientprotocol.com): "All types in the
+// protocol include a `_meta` field with type `{ [key: string]: unknown }`
+// that implementations can use to attach custom information," but
+// "Implementations MUST NOT add any custom fields at the root of a type
+// that's part of the specification. All possible names are reserved for
+// future protocol versions." Bare keys under `_meta` (`_meta.model`, etc.)
+// would themselves be squatting on that reserved root, so every custom
+// payload here nests under one vendor key, `kkamak` — mirroring the spec's
+// own `"zed.dev/debugMode"` / `agentCapabilities._meta["zed.dev"]`
+// examples. `traceparent` / `tracestate` / `baggage` at `_meta` root are
+// W3C trace-context names and are likewise not ours to take.
+
 export interface AcpInitializeResult {
   protocolVersion: number
   agentCapabilities: { loadSession: false }
   /** §6e instrument fingerprint — the client refuses a daemon whose
    * fingerprint differs from its own (pre-send => law L1 => no-call). */
-  _meta: { envFingerprint: string }
+  _meta: { kkamak: { envFingerprint: string } }
 }
 export interface AcpNewSessionResult { sessionId: string }
 export interface AcpPromptParams {
@@ -174,7 +186,7 @@ export interface AcpPromptParams {
   /** REQUIRED: the daemon never substitutes its own env's model for the
    * caller's — a silent substitution would make the record's `model` stamp
    * a lie (§6e provenance rule). */
-  _meta: { model: string }
+  _meta: { kkamak: { model: string } }
 }
 export interface AcpPromptResult {
   stopReason: "end_turn"
@@ -184,7 +196,7 @@ export interface AcpPromptResult {
    * the requested model, which would make the caller's check a tautology,
    * and never a daemon-side verdict, which would hide the dated-snapshot
    * case from the caller. */
-  _meta: { model: string; canonicalModel: string; callConsumed: true }
+  _meta: { kkamak: { model: string; canonicalModel: string; callConsumed: true } }
 }
 export interface AcpUpdateParams {
   sessionId: string
