@@ -165,7 +165,30 @@ export interface SdkTransportOptions {
   maxTokens?: number
   /** Whole-call SDK timeout in ms; defaults to 60s. */
   timeoutMs?: number
+  /** N2 (anthropic-api provider) addition. Request `system` param.
+   * Absent/empty → no `system` key at all — every pre-N2 caller (none of
+   * which pass this field) is byte-unchanged. */
+  system?: string
 }
+
+/** N2 (send-prompt interface, `anthropic-api` provider) addition — §6e's
+ * wire-send boundary law, `no-call` vs `call-consumed`, surfaced out of
+ * this transport instead of collapsed by `sdkCall`'s `catch {}`.
+ * `model` is the API's OWN echo (`response.model`), not the requested
+ * literal — callers that need the requested literal already have it.
+ * `stopReason` (final-review Important 3, additive): `response.stop_reason`
+ * verbatim, on the `ok` arm only. Nothing in this module inspects it —
+ * every existing caller of `sdkCallOutcome`/`sdkCall`/`callModelSdk*` is
+ * byte-unchanged by its addition (an extra object field nothing reads is
+ * not an observable behavior change). It exists so a caller ABOVE this
+ * layer (the anthropic-api provider, then minimal/llm-acp.ts's `seatCall`)
+ * can tell a reply that hit `max_tokens` apart from one that ended
+ * naturally — `sdkCallOutcome` itself never inspects it because a "was this
+ * truncated" POLICY (retry? throw? accept?) is a caller decision, not a
+ * transport one. */
+export type SdkOutcome =
+  | { ok: true; text: string; model: string; stopReason?: string }
+  | { ok: false; kind: "no-call" | "call-consumed" }
 
 /** Shared call plumbing (auth -> client -> request -> text block
  * extraction) for EVERY gauge-family SDK call: `callModelSdk`
@@ -175,19 +198,43 @@ export interface SdkTransportOptions {
  * seams (KKAMAK_GAUGE_AUTH_TOKEN / KKAMAK_GAUGE_SDK_BASE_URL), same
  * fail-open-on-anything discipline (undefined on ANY failure, never
  * throws), same maxRetries:0 (§4 exactly-1-call), differing only in
- * prompt text + model literal + the per-call knobs in `opts`. */
-export async function sdkCall(
+ * prompt text + model literal + the per-call knobs in `opts`.
+ *
+ * N2 boundary classification (spec §6e, conservative side — when in
+ * doubt, `call-consumed`):
+ *  - no auth token resolvable -> `no-call` (nothing was ever sent).
+ *  - a throw BEFORE `client.messages.create` is entered (client
+ *    construction) -> `no-call`.
+ *  - anything at or after `messages.create` — thrown SDK error, timeout,
+ *    HTTP failure — -> `call-consumed`. A connection error might mean
+ *    nothing was sent, but that is unprovable from out here; the
+ *    conservative reading wins, same call §6e already makes at the wire
+ *    and send-prompt.ts makes at the interface (a throwing provider ->
+ *    `call-consumed`).
+ *  - response returned but no non-empty text block -> `call-consumed` (a
+ *    call was spent; there is just no usable answer). */
+export async function sdkCallOutcome(
   messageText: string,
   model: string,
   env: Record<string, string | undefined>,
   authDeps: AuthTokenDeps = {},
   opts: SdkTransportOptions = {},
-): Promise<string | undefined> {
+): Promise<SdkOutcome> {
+  // Review finding: readAuthToken's "never throws" contract holds today,
+  // but it is not enforced by the type system — a future regression there
+  // must degrade to `no-call` (nothing was sent) rather than propagate as
+  // an uncaught exception out of this "never throws" function.
+  let authToken: string | undefined
   try {
-    const authToken = readAuthToken(env, authDeps)
-    if (!authToken) return undefined
+    authToken = readAuthToken(env, authDeps)
+  } catch {
+    return { ok: false, kind: "no-call" }
+  }
+  if (!authToken) return { ok: false, kind: "no-call" }
 
-    const client = new Anthropic({
+  let client: Anthropic
+  try {
+    client = new Anthropic({
       authToken,
       // Review finding 1: without an explicit null, the SDK falls back to
       // reading ANTHROPIC_API_KEY from the env and would send BOTH
@@ -200,23 +247,54 @@ export async function sdkCall(
       // OAuth bearer tokens require this beta on /v1/messages.
       defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" },
     })
+  } catch {
+    // Construction failure — the boundary law's "before messages.create is
+    // entered" case. Nothing was ever sent.
+    return { ok: false, kind: "no-call" }
+  }
 
+  try {
     const response = await client.messages.create({
       model,
       max_tokens: opts.maxTokens ?? MAX_TOKENS,
       messages: [{ role: "user", content: messageText }],
+      ...(opts.system ? { system: opts.system } : {}),
       ...(opts.schema
         ? { output_config: { format: { type: "json_schema" as const, schema: opts.schema } } }
         : {}),
     })
 
     for (const block of response.content) {
-      if (block.type === "text" && block.text) return block.text
+      if (block.type === "text" && block.text) {
+        return {
+          ok: true,
+          text: block.text,
+          model: response.model,
+          ...(response.stop_reason ? { stopReason: response.stop_reason } : {}),
+        }
+      }
     }
-    return undefined
+    return { ok: false, kind: "call-consumed" }
   } catch {
-    return undefined
+    return { ok: false, kind: "call-consumed" }
   }
+}
+
+/** Back-compat wrapper over `sdkCallOutcome` — BYTE-IDENTICAL observable
+ * behavior to the pre-N2 implementation: `ok` -> the text, either failure
+ * kind -> `undefined`. Every existing caller (`callModelSdk`,
+ * `callModelSdkLabel`, `channel-run.ts`, `hook-cli.ts`) keeps this
+ * two-value contract untouched; only `sdkCallOutcome` (new, N2-only)
+ * exposes the no-call/call-consumed split. */
+export async function sdkCall(
+  messageText: string,
+  model: string,
+  env: Record<string, string | undefined>,
+  authDeps: AuthTokenDeps = {},
+  opts: SdkTransportOptions = {},
+): Promise<string | undefined> {
+  const outcome = await sdkCallOutcome(messageText, model, env, authDeps, opts)
+  return outcome.ok ? outcome.text : undefined
 }
 
 /** ONE refiner derivation over the direct API: returns the model's JSON text

@@ -1130,7 +1130,7 @@ git commit -m "feat(gauge): widen transport literal to agent-sdk-daemon"
 - **`this.closed` is re-checked after EVERY await, not only at entry (round-4 I3).** `ensure()` awaits the SDK package import; `execute()` awaits `ensure`, `setModel` and `awaitClear`. A `close()` landing inside any of those windows must stop the turn. An entry-only check lets `ensure()` finish the import, construct a `Query`, spawn a CLI subprocess and let `execute()` push a prompt — a REAL MODEL CALL and a LEAKED SUBPROCESS on a session the caller already terminated, with `isWarm()` reporting true after `close()`. Every post-await check that finds `closed` tears down what it just built and settles `no-call` (nothing was pushed) or, if the push already happened, `call-consumed`.
 - **Lossless feed.** The input side is a pushable queue with an optional waiting resolver, NOT a bare one-shot promise slot. A single re-armed resolver silently drops the second of two same-tick pushes. `close()` on the pushable CLEARS the queue as well as setting the flag, so messages queued at teardown are not fed into a dying `Query` (round-4 M12).
 - **Exactly TWO resolver slots per turn, written exactly once each.** `turn.notifyCaller` is installed at ENQUEUE (it resolves the caller's `oneShot`) and `turn.settle` is installed by `execute` (it resolves the drain loop's internal wait). They are never the same field: a design that reuses one slot for both loses the queued caller's resolver when `execute` overwrites it, and that caller's promise never settles. Both are fired through the single `finish()` funnel, which is `done`-guarded, so double-settle is impossible.
-- **Recycle is SEQUENCED, not fire-and-forget.** `/clear` is pushed only when the caller asks for it AND the `Query` is not brand-new, and `execute` then WAITS for `SDKConversationResetMessage` (`type: 'conversation_reset'`, sdk.d.ts:3838-3846: *"Emitted by /clear, plan-mode exit, and fresh-session flows"*), which is in the `SDKMessage` union (sdk.d.ts:4019). This is the SDK's own typed proof the recycle landed. An unconfirmed clear within `clearTimeoutMs` destroys the `Query` (the next turn respawns, which is a clean context by construction) and reports `no-call` — nothing was sent to the model.
+- **Recycle is SEQUENCED, not fire-and-forget, and `awaitClear()` waits for BOTH signals, not one.** `/clear` is pushed only when the caller asks for it AND the `Query` is not brand-new, and `execute` then WAITS for `SDKConversationResetMessage` (`type: 'conversation_reset'`, sdk.d.ts:3838-3846: *"Emitted by /clear, plan-mode exit, and fresh-session flows"*), which is in the `SDKMessage` union (sdk.d.ts:4019) — the SDK's own typed proof the recycle landed. Step 1a's token-free gate probe (2026-08-04, `.superpowers/sdd/2026-08-04-acp-warm-daemon/task-4-step1a-report.md`) measured that `/clear` ALSO emits its OWN synthetic local `result` (`num_turns: 0`, `duration_api_ms: 0`, `modelUsage: {}`) immediately after `conversation_reset` — three `result` messages per recycle, not two. Because the ordering between "the reset lands" and "the next turn's prompt is pushed" is not otherwise guaranteed, `awaitClear()` does not return on `conversation_reset` alone: it consumes that synthetic `result` too before resolving, so the frame is always absorbed while `turn.sent === false` (the existing stray-message guard handles it there) and never risks landing after the push, where `route()` would see `sent === true` and settle a live record from an empty-evidence frame. §6e records this as a BINDING sequencing rule and explicitly rejects field-sniffing the synthetic frame (e.g. on `num_turns === 0`) as pinning the design to undocumented fields. An unconfirmed clear within `clearTimeoutMs` destroys the `Query` (the next turn respawns, which is a clean context by construction) and reports `no-call` — nothing was sent to the model.
 - **Every daemon-side wait is capped, including `setModel`.** `setModel` (sdk.d.ts:2327) is an un-timed control round-trip; it is raced against `setModelMs` and a miss is `no-call` + `hardReset()` (nothing was pushed). Without the cap a wedged subprocess hangs `execute()` with NO timer armed — the turn never settles, `turnInFlight()` stays true forever, the idle reaper can never fire, and the host-global daemon is permanently dead.
 - **A SENT turn settles ONLY from its own terminal `result`** (§6e law L7). `api_retry` and the turn timeout mark the turn `doomed` and call `interrupt()`, but do not settle; the terminal `result` does. The drain loop does not advance until then. A message that arrives while `turn.sent === false` belongs to the `/clear` or to a previous turn's tail and is dropped (counted in `strayMessages`) — this includes `api_retry`, which must never poison an unsent turn or interrupt an in-flight `/clear` (round-4 M11). If `interrupt()` hangs past `hardGraceMs`, the whole `Query` + subprocess is destroyed and the generation guard keeps the dying pump away from the next turn.
 - **An UNSENT turn is never interrupted — it is dropped.** `cancel()` on a turn that is `current` but has not yet pushed resolves it `no-call` immediately and takes it out of `execute`'s path. Interrupting there would abort the in-flight `/clear` instead of a turn, leave `done` false, and let `execute` push the prompt anyway a moment later — so a cancel would CAUSE the model call it was asked to prevent (round-4 I11).
@@ -1145,7 +1145,7 @@ Move `hasClaudeCodeCredentials()` / `HAS_CLAUDE_CODE_CREDENTIALS` / `NO_CREDENTI
 
 **Why this is mandatory, not tidiness:** `sseText` is load-bearing. The spawned CLI always sends `stream: true`, and a plain `Response.json(...)` makes it silently fall back to a SECOND, non-streaming request (`gauge-agent-transport.test.ts:67-91`). Every request-count assertion in Tasks 4-7 and 10 is meaningless without an SSE-shaped stub. And `withCaptureStub()` is per-test on purpose (`:107-115`): a killed test's subprocess can land mid-next-test, so a module-level shared `CAPTURED` corrupts unrelated counts. Tests below that need their own capture array build one with `stubServer` directly and follow the same per-test discipline.
 
-**`sseText` gains ONE optional trailing parameter** — `model`, defaulting to the incumbent `"claude-haiku-4-5"` — so a test can make the stub declare a DATED snapshot id in `message_start` and drive the CLI to key `modelUsage` by it. Every existing call site is byte-unchanged. This is the only way to exercise round-4 C1 without a real model call:
+**`sseText` gains ONE optional trailing parameter** — `model`, defaulting to the incumbent `"claude-haiku-4-5"` — so a test can make the stub declare a chosen id in `message_start`. Every existing call site is byte-unchanged. **Correction (Step 1a, 2026-08-04, token-free gate probe, `.superpowers/sdd/2026-08-04-acp-warm-daemon/task-4-step1a-report.md`):** this parameter does NOT "drive the CLI to key `modelUsage` by it", as an earlier draft of this paragraph claimed — the probe measured that on the streaming-input + local-stub driving path these tests use, `modelUsage`'s key tracks the CLIENT-REQUESTED model id regardless of what `message_start` declares. The parameter is kept (tests below use it as `STUB_DECLARED_MODEL`) because it still documents what a realistic SSE stream declares and some tests need SOME value there, but it is NOT a channel for exercising round-4 C1's dated-vs-undated reconciliation. That reconciliation is exercised instead at the pure-function level (the `modelProvenBy` fixture tests) and end-to-end via Task 6's `fakeDaemon`, which fabricates `_meta.model` directly on the ACP wire rather than through this parameter:
 
 ```typescript
 export function sseText(text: string, model = "claude-haiku-4-5"): Response {
@@ -1289,11 +1289,26 @@ import { stubServer } from "./sdk-stub.ts"
 // margin has to exist or a slow host produces a false failure.
 const CLI_TEST_TIMEOUT_MS = 90_000
 const HAIKU = "claude-haiku-4-5"
-// What the real API and this repo's captured transcripts actually key
-// modelUsage by (opencode-plugin/test/fixtures/drivers/claude-code/
-// success.ndjson:22). Step 1a recorded the observed value; use THAT if it
-// differed.
-const HAIKU_DATED = "claude-haiku-4-5-20251001"
+// What the stub DECLARES in message_start. Step 1a (2026-08-04, token-free
+// gate probe, `.superpowers/sdd/2026-08-04-acp-warm-daemon/task-4-step1a-
+// report.md`) measured that on the streaming-input + local-stub driving path
+// these WarmSession tests use, this declared id does NOT propagate into
+// modelUsage's key -- so it must never be read as a prediction of what
+// TurnOutcome.model will be. Kept dated only because most tests below don't
+// assert on the model at all and any string will do; this is what the real
+// API and this repo's captured transcripts declare
+// (opencode-plugin/test/fixtures/drivers/claude-code/success.ndjson:22).
+const STUB_DECLARED_MODEL = "claude-haiku-4-5-20251001"
+// What modelUsage IS ACTUALLY keyed by on THIS driving path (Step 1a,
+// measured 2026-08-04, same report): the client-requested model id,
+// verbatim -- identical to HAIKU. Tests that assert on TurnOutcome.model use
+// THIS constant, never STUB_DECLARED_MODEL. The genuinely-differently-
+// spelled-key case (real API keys modelUsage by a DATED snapshot for an
+// undated request) is proven at the pure-function level by the
+// `modelProvenBy` fixtures above and, end-to-end, by Task 6's `fakeDaemon`
+// (its `model` default IS the dated form) -- neither goes through
+// `sseText`'s `message_start`, so neither is affected by this finding.
+const HAIKU_OBSERVED_KEY = HAIKU
 // §6e/round-4 C3: the turn's timers start at the PUSH while the subprocess
 // is still booting (§6d measured 1.25-1.46s). Every override below uses
 // this floor; only hardGraceMs and queueWaitMs may be small, because
@@ -1304,7 +1319,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
   test("two records reuse one subprocess; the second context is clean; exactly one call each", async () => {
     let n = 0
     const CAPTURED: Array<Record<string, unknown>> = []
-    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText(`ANSWER-${++n}`, HAIKU_DATED) })
+    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText(`ANSWER-${++n}`, STUB_DECLARED_MODEL) })
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url })
     try {
       const r1 = await ws.oneShot("first record prompt", HAIKU, { recycle: true })
@@ -1326,21 +1341,38 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     } finally { ws.close(); cap.stop() }
   }, CLI_TEST_TIMEOUT_MS)
 
-  test("ROUND-4 C1 LOCK: a DATED modelUsage key is evidence for the undated request", async () => {
-    // The single most expensive defect this plan can ship. The real API keys
-    // modelUsage by the dated snapshot id while the deriver requests the
-    // undated alias; a strict-equality proof would report call-consumed for
-    // EVERY honest turn, and Task 9 would spend a whole sized go for zero
-    // records. WarmSession must report the KEY as evidence and let
-    // modelProvenBy reconcile it — not compare, and not echo the request.
-    const cap = stubServer(() => sseText("ANSWER", HAIKU_DATED))
+  test("ROUND-4 C1, RETARGETED (Step 1a, 2026-08-04): WarmSession forwards modelUsage's KEY verbatim, and modelProvenBy accepts it", async () => {
+    // This test used to assert `r.model === HAIKU_DATED` on the theory that
+    // declaring a dated snapshot id in the stub's message_start makes the
+    // real CLI/SDK key modelUsage by that same dated id. Step 1a (token-free
+    // gate probe, `.superpowers/sdd/2026-08-04-acp-warm-daemon/
+    // task-4-step1a-report.md`) measured that this is FALSE on the
+    // streaming-input + local-stub driving path these WarmSession tests use:
+    // modelUsage came back keyed by the UNDATED alias
+    // ("claude-haiku-4-5") regardless of what message_start declared —
+    // `sseText`'s declared id and modelUsage's key are NOT the same channel
+    // here. Asserting the old dated expectation would fail a CORRECT
+    // implementation on every credentialed host, so this test now asserts
+    // the OBSERVED shape: the key WarmSession forwards equals the request,
+    // verbatim, and modelProvenBy still accepts it (the degenerate but
+    // real case of its matching rule).
+    //
+    // The genuinely-differently-spelled-key case this test originally meant
+    // to lock down (a DATED modelUsage key proving an UNDATED request) is
+    // NOT re-derivable through this stub layer per the finding above; it is
+    // covered instead (a) at the pure-function level by the `modelProvenBy`
+    // fixture tests above (`k.startsWith(m + "-")` case), and (b)
+    // end-to-end by Task 6's `fakeDaemon`, whose `model` default IS the
+    // dated form and which fabricates `_meta.model` directly on the ACP
+    // wire rather than through `sseText`'s `message_start` — a channel Step
+    // 1a did not implicate.
+    const cap = stubServer(() => sseText("ANSWER", STUB_DECLARED_MODEL))
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url })
     try {
-      const r = await ws.oneShot("dated key record", HAIKU, { recycle: true })
+      const r = await ws.oneShot("model-evidence record", HAIKU, { recycle: true })
       expect(r.kind).toBe("ok")
       if (r.kind !== "ok") return
-      expect(r.model).toBe(HAIKU_DATED)                      // the KEY, verbatim
-      expect(r.model).not.toBe(HAIKU)                        // NOT the request echoed back
+      expect(r.model).toBe(HAIKU_OBSERVED_KEY)               // the KEY, verbatim — observed undated
       expect(modelProvenBy(r.model, HAIKU, r.canonicalModel)).toBe(true)
     } finally { ws.close(); cap.stop() }
   }, CLI_TEST_TIMEOUT_MS)
@@ -1366,7 +1398,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
 
   test("recycle:false keeps context (ACP multi-prompt session semantics)", async () => {
     const CAPTURED: Array<Record<string, unknown>> = []
-    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", HAIKU_DATED) })
+    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", STUB_DECLARED_MODEL) })
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url })
     try {
       await ws.oneShot("turn one marker", HAIKU, { recycle: true })
@@ -1384,7 +1416,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     // hard timer at t0+12s at the latest. r2 then runs on a warm-or-fresh
     // session with its OWN 8s budget, which covers a respawn. ~22s worst
     // case, well inside the 90s test timeout.
-    const cap = hangFirstServer("ANSWER", HAIKU_DATED)
+    const cap = hangFirstServer("ANSWER", STUB_DECLARED_MODEL)
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { turnTimeoutMs: T, hardGraceMs: 4_000 })
     try {
@@ -1398,7 +1430,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
 
   test("law L6: a 500 (api_retry) is call-consumed and the retry is never consumed as a result", async () => {
     let n = 0
-    const cap = stubServer(() => (++n === 1 ? new Response("boom", { status: 500 }) : sseText("ANSWER", HAIKU_DATED)))
+    const cap = stubServer(() => (++n === 1 ? new Response("boom", { status: 500 }) : sseText("ANSWER", STUB_DECLARED_MODEL)))
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url })
     try {
       const r = await ws.oneShot("retry-provoking record", HAIKU, { recycle: true })
@@ -1434,7 +1466,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     // 6s cap would make the assertion depend on host speed. The cap itself
     // has its own dedicated test below.
     const CAPTURED: Array<Record<string, unknown>> = []
-    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", HAIKU_DATED) })
+    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", STUB_DECLARED_MODEL) })
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { queueWaitMs: 60_000 })
     try {
@@ -1451,7 +1483,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
   test("law L4: a turn still queued at its queue-wait cap resolves no-call, provably unsent", async () => {
     // queueWaitMs is the ONLY short timer here — it measures queue
     // residency, not generation, so it is not bound by CLI_SPAWN_BUDGET_MS.
-    const cap = hangFirstServer("ANSWER", HAIKU_DATED)
+    const cap = hangFirstServer("ANSWER", STUB_DECLARED_MODEL)
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { turnTimeoutMs: T, hardGraceMs: 2_000, queueWaitMs: 500 })
     try {
@@ -1464,7 +1496,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
   }, CLI_TEST_TIMEOUT_MS)
 
   test("cancel(tag) drops only that caller's turn, never the other caller's in-flight turn", async () => {
-    const cap = hangFirstServer("ANSWER", HAIKU_DATED)
+    const cap = hangFirstServer("ANSWER", STUB_DECLARED_MODEL)
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { turnTimeoutMs: T, hardGraceMs: 2_000, queueWaitMs: 60_000 })
     try {
@@ -1493,7 +1525,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     // model call. Waiting for the stub to see A's request is the only
     // observable proof A crossed the send boundary, and the CLI takes
     // 1.25-1.46s to get there.
-    const cap = hangFirstServer("ANSWER", HAIKU_DATED)
+    const cap = hangFirstServer("ANSWER", STUB_DECLARED_MODEL)
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { turnTimeoutMs: T, hardGraceMs: 2_000, queueWaitMs: 60_000 })
     try {
@@ -1517,7 +1549,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     // asked to prevent, and the interrupt() may have aborted the in-flight
     // /clear instead of a turn.
     const CAPTURED: Array<Record<string, unknown>> = []
-    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", HAIKU_DATED) })
+    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", STUB_DECLARED_MODEL) })
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { turnTimeoutMs: T, hardGraceMs: 2_000, queueWaitMs: 60_000 })
     try {
@@ -1552,7 +1584,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     // timer at t0+8s, hardTimer at t0+8.001s; B runs on a fresh Query,
     // pushes at ~t0+8s, reaches the stub ~t0+9.5s as request #2 and is
     // answered — inside B's own 8s budget. ~10s total.
-    const cap = hangFirstServer("ANSWER", HAIKU_DATED)
+    const cap = hangFirstServer("ANSWER", STUB_DECLARED_MODEL)
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { turnTimeoutMs: T, hardGraceMs: 1, queueWaitMs: 60_000 })
     try {
@@ -1566,7 +1598,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
   }, CLI_TEST_TIMEOUT_MS)
 
   test("close() settles every outstanding caller — no hanging promises", async () => {
-    const cap = hangFirstServer("ANSWER", HAIKU_DATED)
+    const cap = hangFirstServer("ANSWER", STUB_DECLARED_MODEL)
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { turnTimeoutMs: 30_000, hardGraceMs: 5_000, queueWaitMs: 60_000 })
     const inflight = ws.oneShot("A", HAIKU, { recycle: true })
@@ -1591,7 +1623,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     // close(). The import is the widest such window (~84ms measured) and
     // this test drives it directly.
     const CAPTURED: Array<Record<string, unknown>> = []
-    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", HAIKU_DATED) })
+    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", STUB_DECLARED_MODEL) })
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url })
     const p = ws.oneShot("must never reach the model", HAIKU, { recycle: true })
     ws.close()                                       // same tick as the enqueue
@@ -1777,6 +1809,12 @@ export class WarmSession {
   private draining = false
   private current: Turn | undefined
   private resetWaiter: ((ok: boolean) => void) | undefined
+  /** True from `conversation_reset` until `/clear`'s OWN synthetic local
+   * `result` (num_turns: 0, modelUsage: {}) has also been consumed —
+   * measured 2026-08-04, Step 1a. `resetWaiter` does not resolve while
+   * this is true, so awaitClear() cannot return before BOTH frames have
+   * landed. */
+  private clearResultPending = false
   private fresh = true
   private closed = false
   private currentModel = ""
@@ -2049,12 +2087,34 @@ export class WarmSession {
     // /clear confirmation. SDKConversationResetMessage (sdk.d.ts:3838-3846:
     // "Emitted by /clear, plan-mode exit, and fresh-session flows"; in the
     // SDKMessage union at sdk.d.ts:4019) is the SDK's OWN typed proof the
-    // recycle landed — we sequence on it instead of trusting "/clear emits
-    // no result", which was only ever an indicative scratch observation.
+    // recycle landed. Step 1a (2026-08-04, token-free gate probe) measured
+    // that /clear ALSO emits its OWN synthetic local `result` (num_turns: 0,
+    // duration_api_ms: 0, modelUsage: {}) immediately after this message —
+    // three `result` frames per recycle, not two — so we do NOT resolve
+    // resetWaiter here. We only mark the reset seen and keep waiting; the
+    // synthetic result is consumed below, and THAT is what lets awaitClear()
+    // return. This guarantees the synthetic frame is always absorbed while
+    // turn.sent === false, never after the next push.
     if (m.type === "conversation_reset") {
-      const w = this.resetWaiter
-      this.resetWaiter = undefined
-      w?.(true)
+      this.clearResultPending = true
+      return
+    }
+
+    if (this.clearResultPending) {
+      // Absorb /clear's own synthetic turn (its system/init, assistant, and
+      // finally its result) here, never as any turn's terminal result. Only
+      // the result frame resolves awaitClear() — the BINDING sequencing
+      // rule (§6e, 2026-08-04): consume BOTH conversation_reset and this
+      // synthetic result before the prompt is pushed. Field-sniffing this
+      // frame (e.g. on num_turns === 0) was explicitly rejected as pinning
+      // the design to undocumented fields; ordering is the only signal used.
+      this.strayMessages++
+      if (m.type === "result") {
+        this.clearResultPending = false
+        const w = this.resetWaiter
+        this.resetWaiter = undefined
+        w?.(true)
+      }
       return
     }
 
@@ -2161,15 +2221,23 @@ export class WarmSession {
     }
   }
 
-  /** Push `/clear` and WAIT for conversation_reset. Nothing has been sent
-   * to the model at this point, so every failure here is law L4. */
+  /** Push `/clear` and WAIT for BOTH `conversation_reset` AND the synthetic
+   * `result` /clear emits on its own heels (measured 2026-08-04, Step 1a —
+   * see route()'s comment on `clearResultPending`). Nothing has been sent
+   * to the model at this point, so every failure here is law L4. Resolving
+   * on `conversation_reset` alone would let that synthetic `result` land
+   * AFTER the caller pushes the next prompt, where `route()` could mistake
+   * it for that turn's real terminal result — the ordering this function
+   * exists to pin down. */
   private async awaitClear(): Promise<boolean> {
     const feed = this.feed
     if (!feed) return false
+    this.clearResultPending = false           // defensive: no stale wait carried over
     const done = new Promise<boolean>((res) => { this.resetWaiter = res })
     const timer = setTimeout(() => {
       const w = this.resetWaiter
       this.resetWaiter = undefined
+      this.clearResultPending = false
       w?.(false)
     }, this.clearTimeoutMs)
     feed.push(userMsg("/clear"))
@@ -2280,7 +2348,7 @@ Record in the SDD progress notes:
 
 (b) **the §6e OPEN DISCREPANCY, resolved by measurement.** Capture the request body of a post-`/clear` warm turn AND of a fresh-spawn one-shot `agentSdkCall` turn under the same option set and the same prompt, and record `messages.length` and total byte size for BOTH. §6e attributes ~423 B of `/clear` echo to the warm lane; §6d's PER-CALLER paragraph (spec line 662) attributes the same ~423 B to the ONE-SHOT lane. **Whichever of the two statements the measurement contradicts is corrected in THIS task's commit** — amend §6e's residue paragraph, or spec line 662, or both, and say which in the commit message. Do not leave the spec self-contradictory past this task.
 
-(c) **the `modelUsage` shape, as OBSERVED, against Step 1a's record.** Print the `modelUsage` object of one warm turn and confirm (i) which key form it uses, (ii) whether `canonicalModel` is populated, and (iii) that `modelProvenBy(key, "claude-haiku-4-5", canonicalModel)` is true. Step 1a recorded this before any code existed; this is the confirmation that `route()` reads the same thing the probe saw. **If the observed key form differs from `HAIKU_DATED` in the tests, update the test constant to the OBSERVED value — do not loosen `modelProvenBy`.** The predicate is the registered rule; the constant is a fixture.
+(c) **the `modelUsage` shape, as OBSERVED, against Step 1a's record.** Print the `modelUsage` object of one warm turn and confirm (i) which key form it uses, (ii) whether `canonicalModel` is populated, and (iii) that `modelProvenBy(key, "claude-haiku-4-5", canonicalModel)` is true. Step 1a recorded this before any code existed; this is the confirmation that `route()` reads the same thing the probe saw. **Step 1a's gate probe (2026-08-04, token-free, `.superpowers/sdd/2026-08-04-acp-warm-daemon/task-4-step1a-report.md`) already found the observed key form is the UNDATED alias `"claude-haiku-4-5"` (`canonicalModel` identical), not the dated snapshot id `sseText`'s `message_start` declares — those two are NOT the same channel on this driving path. Step 1's test bodies above are already calibrated to this: the old single `HAIKU_DATED` constant is split into `STUB_DECLARED_MODEL` (what the stub's `message_start` declares — inert w.r.t. `modelUsage`'s key here) and `HAIKU_OBSERVED_KEY` (what the key actually is, used for every assertion on `TurnOutcome.model`), and the former "ROUND-4 C1 LOCK" test is retargeted accordingly. This step's job is to CONFIRM that split against a fresh run, not to introduce it. Do not loosen `modelProvenBy`**: the predicate already accommodates both forms by construction (`k === m OR k.startsWith(m + "-") OR canonicalModel === m`) and needs no change; the dated form remains valid and is observed on the real-CLI driving path (`opencode-plugin/test/fixtures/drivers/claude-code/success.ndjson:22`) and is still exercised end-to-end by Task 6's `fakeDaemon`, whose `model` default is the dated form. The constants are fixtures calibrated to the mechanism actually driving these tests; the predicate is the registered rule.
 
 Once (b) is measured, tighten the `toBeLessThanOrEqual(2)` guard to the exact observed value in a follow-up commit.
 
@@ -3871,7 +3939,7 @@ A stamp of `agent-sdk` here means the ensure gate or the fingerprint is wrong, N
   - Budget names are single-sourced: no task defines a local `daemonLegMs`, `turnTimeoutMs`, `setModelMs`, `recordBudgetMs` or spawn-floor literal; every one reads `ACP_BUDGET` or `CLI_SPAWN_BUDGET_MS`. The model-proof rule is likewise single-sourced: `modelProvenBy` is DEFINED once (`acp-wire.ts`) and CALLED from exactly two production sites (`warm-session.ts`'s multi-key branch, `transport.ts`'s daemon branch), with a T7 Step 3 grep that fails if a third hand-rolled comparison appears.
 - **Budget arithmetic, re-derived after round 4:** `6 000 + 4 000 + 2 000 + 16 000 + 4 000 = 32 000 = daemonWorstCaseMs` ✓; `daemonLegMs 36 000 > 32 000` ✓ with 4 000 ms of slack for the client's connect + `initialize` + `session/new` preamble (asserted at ≥ 3 000) ✓; `36 000 + 10 000 = 46 000 ≤ 60 000 = recordBudgetMs` ✓; `recordBudgetMs` unchanged from the incumbent `CALL_TIMEOUT_MS` ✓; `turnTimeoutMs 16 000 ≥ CLI_SPAWN_BUDGET_MS 8 000 ≥ the measured 1.25-1.46 s spawn` ✓ (NEW assertion, round-4 C3). Every daemon-side wait is inside the sum: queue, `/clear`, `setModel`, generation, hard grace. **The one item OUTSIDE the sum is `await import("@anthropic-ai/claude-agent-sdk")` (~84 ms measured), and that is now stated rather than glossed (round-4 M4):** the daemon's true worst case is `32 000 + import`, so the literal claim "the client leg exceeds the daemon's worst case" is about the registered legs, not about a pathological module load. The safety property is unaffected — an import slow enough to eat the client's 4 000 ms of slack trips law L2, which is `call-consumed`, a lost retryable record, never a second model call. The CLI spawn is inside `turnTimeoutMs` because the turn's timers start at the push while the subprocess is still coming up, which is exactly why that constant has a floor.
 - **§6e's wire-send boundary law is the plan's structural core**, it is stated exactly ONCE (Task 1), it has NO post-send exception on either side of the wire, and after round 4 its post-send branch is a THREE-STEP decision procedure with no contradiction: boolean `data.callConsumed` first, then a RECOGNIZED numeric code (honoured even with `data` absent), then L2. The previous revision's L2 clause "missing or non-boolean `data.callConsumed` ⇒ call-consumed" directly contradicted L3's "the code is the fallback for a daemon that omitted it", on the one branch that decides between one and two model calls, with no fixture on either side (round-4 I1). L2's clause is now scoped to "neither a recognized code nor a boolean field", and three `fakeDaemon` variants plus three client tests pin all three steps. The law is encoded in the wire (two codes + the authoritative `data.callConsumed`), implemented daemon-side by `consumed(t) === t.sent`, mirrored client-side by a single `sentPrompt` boolean assigned ONLY in the prompt frame's write callback, and enforced by `callModelDerive` — with a test at each layer, including the one that asserts the one-shot endpoint receives ZERO requests after a `call-consumed`, and a wire-level test that an unreachable endpoint after the push answers `ACP_ERR_CALL_CONSUMED`.
-- **The Task 4 skeleton is the design, not a sketch.** The persistent pump exists because `Query` is an AsyncGenerator whose `.return()` fires on any early loop exit. Its `this.q !== q` generation guard exists because `close()` is synchronous while the generator unwinds an I/O tick later, by which time the next turn may already own a new `Query`. The pushable queue exists because a single re-armed resolver drops the second of two same-tick pushes, and its `close()` now CLEARS the queue because `stream()` drains before it consults the flag (round-4 M12). The TWO separate resolver slots (`notifyCaller` at enqueue, `settle` in `execute`) exist because one shared slot loses the queued caller's resolver and hangs that caller forever. `conversation_reset` sequencing exists because "/clear emits no result" was an indicative scratch observation and the SDK ships a typed signal instead. The `setModel` cap exists because the SDK exposes it as an un-timed control round-trip and an uncapped await is the one way to wedge the FIFO with no timer armed. Settling only from a SENT turn's own terminal `result` exists because settling at cancellation time hands the next turn a stale result — while an UNSENT turn is DROPPED rather than interrupted, because interrupting there aborts the in-flight `/clear`, leaves `done` false, and lets `execute` push the prompt anyway, making the cancel the cause of the very model call it was asked to prevent (round-4 I11). `route()`'s `!t.sent` guard now precedes every branch, not just the `result` branch, for the same reason (round-4 M11). `this.closed` is re-checked after EVERY await because an entry-only check let a `close()` during the SDK import be followed by a fresh subprocess spawn and a real push (round-4 I3). Every one of these is covered by a test a wrong implementation cannot pass.
+- **The Task 4 skeleton is the design, not a sketch.** The persistent pump exists because `Query` is an AsyncGenerator whose `.return()` fires on any early loop exit. Its `this.q !== q` generation guard exists because `close()` is synchronous while the generator unwinds an I/O tick later, by which time the next turn may already own a new `Query`. The pushable queue exists because a single re-armed resolver drops the second of two same-tick pushes, and its `close()` now CLEARS the queue because `stream()` drains before it consults the flag (round-4 M12). The TWO separate resolver slots (`notifyCaller` at enqueue, `settle` in `execute`) exist because one shared slot loses the queued caller's resolver and hangs that caller forever. `conversation_reset` sequencing exists because Step 1a's token-free gate probe (2026-08-04) measured that `/clear` does NOT emit no result — it emits its OWN synthetic local `result` (`num_turns: 0`, `duration_api_ms: 0`, `modelUsage: {}`) immediately after `conversation_reset`, three `result` frames per recycle instead of two, and the earlier "no result" framing (a 2026-08-03 indicative scratch observation) is now known to be wrong: `awaitClear()` therefore consumes BOTH the SDK's typed `conversation_reset` signal AND that synthetic `result` before returning, so the frame always lands while `turn.sent === false` and the existing stray-guard absorbs it, rather than risking it settling a live record after the next push. The `setModel` cap exists because the SDK exposes it as an un-timed control round-trip and an uncapped await is the one way to wedge the FIFO with no timer armed. Settling only from a SENT turn's own terminal `result` exists because settling at cancellation time hands the next turn a stale result — while an UNSENT turn is DROPPED rather than interrupted, because interrupting there aborts the in-flight `/clear`, leaves `done` false, and lets `execute` push the prompt anyway, making the cancel the cause of the very model call it was asked to prevent (round-4 I11). `route()`'s `!t.sent` guard now precedes every branch, not just the `result` branch, for the same reason (round-4 M11). `this.closed` is re-checked after EVERY await because an entry-only check let a `close()` during the SDK import be followed by a fresh subprocess spawn and a real push (round-4 I3). Every one of these is covered by a test a wrong implementation cannot pass.
 - **`/clear`-makes-no-model-call is re-locked by request-count assertions rather than trusted, and Step 1a gates the whole mechanism before a line of it is built — now on FOUR conditions, not three.** The fourth is the `modelUsage` shape, because the entire provenance chain turns on those keys and this repo's own captured CLI transcripts key them by the DATED snapshot id while `resolveModelId("haiku")` yields the undated alias (round-4 C1); a strict-equality proof would have returned `undefined` for every honest derivation and turned Task 9's sized go into a full spend for zero records, with the documented `undecided` recovery path prescribing an identical second spend. The `/clear` residue SHAPE is measured and recorded rather than asserted, and Task 4 Step 4 additionally measures the ONE-SHOT lane's bytes so §6e's residue paragraph and §6d's line 662 stop contradicting each other. Every stub in this plan is SSE-shaped; a JSON-bodied stub silently doubles the observed call count. Never-answering stubs use raw `Bun.serve`, not a widened shared helper. `sseText` gained one optional `model` parameter with the incumbent default so a stub can declare a dated id without touching a single existing call site.
 - **Architect review 1 (31 findings: 7 critical, 16 important, 8 minor) applied in full.** The load-bearing ones: the fail-open fallback could spend a second model call per record (now split zero-call vs consumed-call at every layer); §6e contradicted a registered user BINDING (now carries the verbatim 2026-08-04 supersession rulings); the SessionStart hook would have failed `packaging.test.ts:64` (now routed through `hook-cli.ts`); the `WarmSession` skeleton killed its own Query after one turn and dropped every second same-tick push; the daemon would have silently substituted its own model and env; the daemon lane would have sent a different prompt than the §6d-validated lane (shared builder now exported); and an interrupted turn returned truncated text as a derivation.
 - **Architect review 2 (29 findings: 4 critical, 13 important, 12 minor) applied in full.** The load-bearing ones: (C1) `drain()` and `execute()` both wrote `turn.settle`, so every QUEUED caller's `oneShot()` promise was orphaned and the FIFO test would hang — now two write-once slots funnelled through `finish()`; (C2) the 20 s client leg was SHORTER than the 45 s daemon turn timeout, so an ordinary in-flight turn read as `no-call` and the fallback spent a second call — now one `ACP_BUDGET` object with `daemonLegMs > daemonWorstCaseMs` locked by arithmetic tests; (C3) `api_retry` was treated as model activity unconditionally, which contradicted §6e's own rule and its own test — now handled per sdk.d.ts:2839-2852 (and, after round 3, uniformly as consumed once sent); (C4) turns were settled at cancellation time while their terminal `result` was still in flight, poisoning the next turn — now settled only from their own `result`, with `/clear` sequenced on `SDKConversationResetMessage` (sdk.d.ts:3838-3846); (I5) the "model that ran" was the caller's own request echoed back, making the provenance check a tautology — now proven from `modelUsage` keys (sdk.d.ts:4312); (I6) one lock file guarded two different critical sections in two different processes — now `.spawn.lock` and `.bind.lock`; (I7) a fixed 60 s reaper tick could never satisfy its own 1.5 s idle test; (I8) Task 10's `output_config` remedy contradicted Task 10's own env-independence invariant and duplicated coverage that already exists at `gauge-transport.test.ts:163/352/369/485`; (I9) the sketched hanging stub did not type-check against `stubServer`'s synchronous handler; (I10) Task 7's CLI-spawning tests had neither skip-guard nor timeout and asserted a budget bound the design guarantees to exceed; (I11) a REQUIRED `_meta.model` is incompatible with the "standard editor clients" claim, now dropped in favour of an explicit private-profile scope; (I14) the daemon's `env` — a pinned isolation key — was whatever its spawner happened to have, now fingerprinted and checked on `initialize`; (I15) the "exactly two declared exceptions" constraint omitted three real test-file edits; (I16) `session/cancel` interrupted whoever was in flight, including another caller's turn.

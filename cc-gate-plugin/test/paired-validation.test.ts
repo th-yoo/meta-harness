@@ -1281,6 +1281,9 @@ describe("isCliDerived — three-transport world (§6d Step 3a)", () => {
   test("an agent-sdk record is NOT CLI-derived", () => {
     expect(isCliDerived(rec({ derivation: gauge({ transport: "agent-sdk" }) }))).toBe(false)
   })
+  test("an agent-sdk-daemon record is NOT CLI-derived", () => {
+    expect(isCliDerived(rec({ derivation: gauge({ transport: "agent-sdk-daemon" }) }))).toBe(false)
+  })
 })
 
 // ── Task 7: `--pair <baseline>:<shadow>` CLI wiring ─────────────────────
@@ -1305,6 +1308,11 @@ describe("parsePairFlag", () => {
     // pre-boundary record: no transport field at all.
     expect(p.baseline({ derivation: { class: "C" } } as never)).toBe(true)
     expect(p.baseline({ derivation: { transport: "sdk", class: "C" } } as never)).toBe(false)
+  })
+  test("parsePairFlag accepts the §6e literal structurally", () => {
+    const p = parsePairFlag(["--pair", "sdk:agent-sdk-daemon"])!
+    expect(p.shadowTransport).toBe("agent-sdk-daemon")
+    expect(p.baselineLabel).toBe("sdk")
   })
 })
 

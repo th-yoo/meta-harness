@@ -162,9 +162,10 @@ export interface GaugeSensorField {
   transport?: GaugeTransport
 }
 
-/** §6d: a third transport joins the §6c pair. Order is incumbent-first so
- * existing readings that sort by this array do not reshuffle. */
-export const GAUGE_TRANSPORTS = ["cli", "sdk", "agent-sdk"] as const
+/** §6d: a third transport joins the §6c pair. §6e: a fourth, the warm
+ * daemon lane. Order is incumbent-first so existing readings that sort by
+ * this array do not reshuffle. */
+export const GAUGE_TRANSPORTS = ["cli", "sdk", "agent-sdk", "agent-sdk-daemon"] as const
 export type GaugeTransport = (typeof GAUGE_TRANSPORTS)[number]
 
 /** One ndjson sensor line — field names are SCHEMA PARITY with gate-plugin + host/app tags. */

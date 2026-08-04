@@ -10,6 +10,7 @@ import {
   callModelSdk,
   callModelSdkLabel,
   sdkCall,
+  sdkCallOutcome,
 } from "../src/gauge/transport.ts"
 import { buildRefinerPrompt, buildLabelPrompt } from "../src/gauge/refiner.ts"
 import { stubServer, okResponse } from "./sdk-stub.ts"
@@ -437,6 +438,159 @@ describe("sdkCall", () => {
         KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
       })
       expect(out).toBeUndefined()
+    } finally {
+      srv.stop()
+    }
+  })
+})
+
+// ── sdkCallOutcome — N2's outcome-aware core (transport.ts) ──────────────
+// `sdkCall` above is now a thin wrapper over this. These tests exercise the
+// no-call/call-consumed split directly, independent of `anthropic-api.ts`'s
+// isolation mapping (test/anthropic-api.test.ts covers that layer).
+
+describe("sdkCallOutcome", () => {
+  test("no auth token resolvable -> { ok: false, kind: 'no-call' }, WITHOUT any request", async () => {
+    const srv = stubServer(() => okResponse("ok"))
+    try {
+      const outcome = await sdkCallOutcome(
+        "p",
+        "claude-opus-5",
+        { KKAMAK_GAUGE_SDK_BASE_URL: srv.url },
+        { platform: "linux", home: fs.mkdtempSync(path.join(os.tmpdir(), "km-transport-home-")) },
+      )
+      expect(outcome).toEqual({ ok: false, kind: "no-call" })
+      expect(srv.captured.length).toBe(0)
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("server 500 -> { ok: false, kind: 'call-consumed' }, exactly one request (maxRetries 0)", async () => {
+    const srv = stubServer(() => new Response("boom", { status: 500 }))
+    try {
+      const outcome = await sdkCallOutcome("p", "claude-opus-5", {
+        KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+        KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      })
+      expect(outcome).toEqual({ ok: false, kind: "call-consumed" })
+      expect(srv.captured.length).toBe(1)
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("response with no text block -> { ok: false, kind: 'call-consumed' }", async () => {
+    const srv = stubServer(() =>
+      Response.json({
+        id: "msg_stub",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-5",
+        content: [],
+        stop_reason: "refusal",
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 0 },
+      }),
+    )
+    try {
+      const outcome = await sdkCallOutcome("p", "claude-opus-5", {
+        KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+        KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      })
+      expect(outcome).toEqual({ ok: false, kind: "call-consumed" })
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("ok path: { ok: true, text, model, stopReason } where model is response.model, NOT the requested literal", async () => {
+    const srv = stubServer(() =>
+      Response.json({
+        id: "msg_stub",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-5-20260101",
+        content: [{ type: "text", text: "answer" }],
+        stop_reason: "end_turn",
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+    )
+    try {
+      const outcome = await sdkCallOutcome("p", "claude-opus-5", {
+        KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+        KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      })
+      expect(outcome).toEqual({ ok: true, text: "answer", model: "claude-opus-5-20260101", stopReason: "end_turn" })
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("final-review Important 3: response.stop_reason 'max_tokens' is surfaced verbatim on the ok arm (stub simulates a truncated reply)", async () => {
+    const srv = stubServer(() =>
+      Response.json({
+        id: "msg_stub",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-5",
+        content: [{ type: "text", text: "this reply got cut off mid-sen" }],
+        stop_reason: "max_tokens",
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 8192 },
+      }),
+    )
+    try {
+      const outcome = await sdkCallOutcome("p", "claude-opus-5", {
+        KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+        KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      }, {}, { maxTokens: 8192 })
+      // `ok: true` here is DELIBERATE (this layer never adjudicates
+      // truncation, see makeAnthropicApiProvider/seatCall for the caller
+      // that does) -- the assertion is narrowly that `stopReason` carries
+      // the true value through so a caller CAN adjudicate it.
+      expect(outcome).toEqual({
+        ok: true, text: "this reply got cut off mid-sen", model: "claude-opus-5", stopReason: "max_tokens",
+      })
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("a never-responding server -> { ok: false, kind: 'call-consumed' } (SDK timeout, core-level — previously only exercised through the provider layer)", async () => {
+    const srv = Bun.serve({ port: 0, fetch: () => new Promise(() => {}) }) // never responds
+    try {
+      const outcome = await sdkCallOutcome(
+        "p",
+        "claude-opus-5",
+        { KKAMAK_GAUGE_SDK_BASE_URL: `http://localhost:${srv.port}`, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+        {},
+        { timeoutMs: 50 },
+      )
+      expect(outcome).toEqual({ ok: false, kind: "call-consumed" })
+    } finally {
+      srv.stop(true)
+    }
+  }, 10_000)
+
+  test("opts.system present -> request carries `system`; absent -> no `system` key at all", async () => {
+    const srv = stubServer(() => okResponse("ok"))
+    try {
+      await sdkCallOutcome(
+        "p",
+        "claude-opus-5",
+        { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+        {},
+        { system: "be terse" },
+      )
+      expect(srv.captured[0]!.body.system).toBe("be terse")
+
+      await sdkCallOutcome("p", "claude-opus-5", {
+        KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+        KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      })
+      expect("system" in srv.captured[1]!.body).toBe(false)
     } finally {
       srv.stop()
     }
