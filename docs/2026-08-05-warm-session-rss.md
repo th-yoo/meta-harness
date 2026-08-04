@@ -90,6 +90,45 @@ matching the existing seat count) rather than raised to the recommended 8;
 `KKAMAK_ACP_MAX_SESSIONS` env override without a code change. This is what
 `acp-pool.ts`'s `DEFAULT_MAX_SESSIONS = 4` and its comment now reflect.
 
+## MacBook (`yoo-mac`) measurement — 2026-08-05, darwin
+
+Ran per the shared-host caveat below: the WSL2 number does not travel, so
+the cap for this host needed its own read. Host: Intel MacBook, macOS 15,
+16 GB RAM (`hw.memsize`), not idle (Claude Code session + browser running).
+
+**Script portability first:** the committed script was `/proc`-only and on
+darwin every reader silently returned `0`/`[]` — a run would have reported
+0 MB and looked like a measurement. Platform-branched in the same file
+(this branch): `vmRssKb` → `ps -o rss=`, `directChildren` → `ps -axo
+pid=,ppid=` scan (process-level parentage is all darwin exposes and all the
+probe needs), `memAvailableKb` → `vm_stat` free+inactive pages
+(approximation, informational lines only). Linux branch byte-unchanged.
+
+**Headline numbers (one run):**
+
+- **Baseline** — one warm session, settled: **~365 MB total** (host delta
+  37.4 MB + CLI subprocess tree 327.5 MB). Unlike the linux build's single
+  multi-threaded process, the darwin CLI shows a **3-pid subprocess tree**
+  for the first session; later sessions added ~1 new pid each while still
+  costing a full ~330 MB marginal — the tree-sweep method makes no
+  shape assumptions, so the totals stay valid.
+- **Marginal** — sessions 2–4 kept resident: **332.5 / 331.4 / 325.5 MB**
+  per additional session — same ~325–335 MB band as WSL2. Host-process
+  marginal ≤1.2 MB after session 1, same shape.
+- **Recycle (`/clear`)** ×2 on one held session, same pids, no respawn:
+  +1.9 MB then +1.9 MB — flat within the ~2 MB noise band, slightly above
+  the WSL2 readings (+0.9–1.3 MB); same "short soak" caveat applies.
+- **Host memory:** `vm_stat` free+inactive ≈ 6,067 MB before, ≈ 5,483 MB
+  after all sessions closed; total RAM 16,384 MB. No orphan processes
+  (the one "children remaining" pid at exit was gone on immediate re-check
+  — transient teardown, pid-scoped cleanup held).
+
+**Cap ruling for this host (2026-08-05): `KKAMAK_ACP_MAX_SESSIONS` stays
+4.** 4 × 330 MB ≈ 1.3 GB ≈ 22% of this host's ~6 GB reclaimable — workable.
+8 would floor at ~2.7 GB ≈ 45% of reclaimable on a 16 GB machine that also
+runs the dev session itself — not taken. The WSL2 box's "8 is permissible"
+line does NOT transfer here.
+
 ## Concerns / caveats
 
 - **Shared-host caveat.** `MemAvailable` reflects this WSL2 box's state at
