@@ -60,10 +60,14 @@ interface InternalEntry extends PoolEntry {
 }
 
 /** Cap default 4 — MEASURED, not asserted (2026-08-05 controller ruling;
- * RSS report in this workspace: marginal ~330 MB/session, so 4 sessions ≈
- * 1.4 GB ≈ 10% of this host's MemAvailable, matching the seat count; 8 is
- * memory-permissible here too). Env-tunable via KKAMAK_ACP_MAX_SESSIONS —
- * see `parseMaxSessions` for the exact parsing rule. */
+ * RSS report: docs/2026-08-05-warm-session-rss.md — marginal ~330 MB/session,
+ * so 4 sessions ≈ 1.4 GB ≈ 10% of the measurement host's MemAvailable,
+ * matching the seat count; 8 is memory-permissible on that host class too,
+ * reachable via the env override below rather than a raised default). A
+ * different host (see CLAUDE.md's cross-host note) needs its own
+ * measurement before trusting this number — the doc's method travels, the
+ * number does not. Env-tunable via KKAMAK_ACP_MAX_SESSIONS — see
+ * `parseMaxSessions` for the exact parsing rule. */
 const DEFAULT_MAX_SESSIONS = 4
 
 /** Mirrors acp-daemon.ts's own `DEFAULT_IDLE_MS` (15 min production idle
