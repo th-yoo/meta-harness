@@ -23,6 +23,7 @@ import {
 } from "../src/gauge/acp-wire.ts"
 import { envFingerprint } from "../src/gauge/acp-paths.ts"
 import { createDaemonState, createDispatcher } from "../src/gauge/acp-daemon.ts"
+import { REASONING_ISOLATION } from "../src/gauge/send-prompt.ts"
 import { SessionPool, type WarmSessionLike, type WarmConstructOpts } from "../src/gauge/acp-pool.ts"
 import type { TurnOutcome, CancelResult } from "../src/gauge/warm-session.ts"
 
@@ -697,6 +698,76 @@ describe("acp-daemon dispatcher — session/new isolation structural validation"
     } }, (m) => frames.push(m as Record<string, unknown>))
     expect(frames[0]).toMatchObject({ result: { sessionId: expect.any(String) } })
     expect(state.sessions.size).toBe(1)
+  })
+
+  test("full REASONING_ISOLATION is accepted and a session is recorded", async () => {
+    const { pool } = fakeDispatchPool()
+    const state = createDaemonState()
+    const dispatch = createDispatcher(pool, state, "fp")
+    const frames: Array<Record<string, unknown>> = []
+    await dispatch({ id: 1, method: "session/new", params: {
+      cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: REASONING_ISOLATION } },
+    } }, (m) => frames.push(m as Record<string, unknown>))
+    expect(frames[0]).toMatchObject({ result: { sessionId: expect.any(String) } })
+    expect(state.sessions.size).toBe(1)
+  })
+
+  // ── re-review residual (2026-08-05): `settingSources`/`tools` are typed
+  // as the LITERAL EMPTY TUPLE `[]` in WarmIsolation, not `string[]` — an
+  // `Array.isArray` check alone let a crafted non-empty array through,
+  // which is spread raw into `query()` and restores tool access / CLAUDE.md
+  // loading. `thinking.type` is the closed union `"disabled" | "enabled"`,
+  // not any string.
+  test("non-empty tools (e.g. [\"Bash\"]) is rejected with -32602 and no session is recorded", async () => {
+    const { pool } = fakeDispatchPool()
+    const state = createDaemonState()
+    const dispatch = createDispatcher(pool, state, "fp")
+    const frames: Array<Record<string, unknown>> = []
+    const tainted = { ...GAUGE_ISOLATION, tools: ["Bash"] }
+    await dispatch({ id: 1, method: "session/new", params: {
+      cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: tainted } },
+    } }, (m) => frames.push(m as Record<string, unknown>))
+    expect(frames[0]).toMatchObject({ error: { code: -32602 } })
+    expect(state.sessions.size).toBe(0)
+  })
+
+  test("non-empty settingSources (e.g. [\"project\"]) is rejected with -32602 and no session is recorded", async () => {
+    const { pool } = fakeDispatchPool()
+    const state = createDaemonState()
+    const dispatch = createDispatcher(pool, state, "fp")
+    const frames: Array<Record<string, unknown>> = []
+    const tainted = { ...GAUGE_ISOLATION, settingSources: ["project"] }
+    await dispatch({ id: 1, method: "session/new", params: {
+      cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: tainted } },
+    } }, (m) => frames.push(m as Record<string, unknown>))
+    expect(frames[0]).toMatchObject({ error: { code: -32602 } })
+    expect(state.sessions.size).toBe(0)
+  })
+
+  test("thinking.type \"adaptive\" (not in the closed union) is rejected with -32602", async () => {
+    const { pool } = fakeDispatchPool()
+    const state = createDaemonState()
+    const dispatch = createDispatcher(pool, state, "fp")
+    const frames: Array<Record<string, unknown>> = []
+    const tainted = { ...GAUGE_ISOLATION, thinking: { type: "adaptive" } }
+    await dispatch({ id: 1, method: "session/new", params: {
+      cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: tainted } },
+    } }, (m) => frames.push(m as Record<string, unknown>))
+    expect(frames[0]).toMatchObject({ error: { code: -32602 } })
+    expect(state.sessions.size).toBe(0)
+  })
+
+  test("thinking.type garbage string is rejected with -32602", async () => {
+    const { pool } = fakeDispatchPool()
+    const state = createDaemonState()
+    const dispatch = createDispatcher(pool, state, "fp")
+    const frames: Array<Record<string, unknown>> = []
+    const tainted = { ...GAUGE_ISOLATION, thinking: { type: "not-a-real-value" } }
+    await dispatch({ id: 1, method: "session/new", params: {
+      cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: tainted } },
+    } }, (m) => frames.push(m as Record<string, unknown>))
+    expect(frames[0]).toMatchObject({ error: { code: -32602 } })
+    expect(state.sessions.size).toBe(0)
   })
 })
 

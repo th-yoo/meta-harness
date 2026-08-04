@@ -148,15 +148,28 @@ function isWellFormedIsolation(iso: unknown): iso is WarmIsolation {
   if (iso === null || typeof iso !== "object" || Array.isArray(iso)) return false
   const o = iso as Record<string, unknown>
   if (typeof o.systemPrompt !== "string") return false
-  if (!Array.isArray(o.settingSources)) return false
+  // `settingSources` and `tools` are typed as the LITERAL empty tuple `[]`
+  // in WarmIsolation (acp-wire.ts:137-146), not `string[]` — an
+  // `Array.isArray` check alone accepts a crafted `tools: ["Bash"]` or
+  // `settingSources: ["project"]`, which is spread raw into `query()` and
+  // restores tool access / CLAUDE.md loading (per the SDK: `tools: []` is
+  // what disables the built-ins, `settingSources` including `"project"` is
+  // what loads CLAUDE.md) — the exact contamination class this validator
+  // exists to close (re-review residual on final-review Important 1).
+  // Length, not just shape, must be checked.
+  if (!Array.isArray(o.settingSources) || o.settingSources.length !== 0) return false
   if (o.settings === null || typeof o.settings !== "object" || Array.isArray(o.settings)) return false
   if ((o.settings as Record<string, unknown>).autoMemoryEnabled !== false) return false
   if (o.persistSession !== false) return false
   if (o.strictMcpConfig !== true) return false
-  if (!Array.isArray(o.tools)) return false
+  if (!Array.isArray(o.tools) || o.tools.length !== 0) return false
   if (typeof o.title !== "string") return false
   if (o.thinking === null || typeof o.thinking !== "object" || Array.isArray(o.thinking)) return false
-  if (typeof (o.thinking as Record<string, unknown>).type !== "string") return false
+  // `thinking.type` is the closed union `"disabled" | "enabled"`
+  // (acp-wire.ts:145) — a bare `typeof === "string"` check let any string
+  // ("adaptive", garbage) through.
+  const thinkingType = (o.thinking as Record<string, unknown>).type
+  if (thinkingType !== "disabled" && thinkingType !== "enabled") return false
   return true
 }
 
