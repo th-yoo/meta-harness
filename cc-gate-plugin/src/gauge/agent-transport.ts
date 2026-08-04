@@ -73,11 +73,8 @@
 // `thinking` block 40->19 bytes and remove `context_management` entirely
 // (59->0 bytes), a further ~86 bytes at zero cost for a single-shot
 // classifier that never benefits from extended thinking.
-import { query } from "@anthropic-ai/claude-agent-sdk"
-
 export interface AgentSdkOptions {
   schema?: Record<string, unknown>
-  maxTokens?: number
   timeoutMs?: number
 }
 
@@ -102,6 +99,14 @@ export async function agentSdkCall(
   const controller = new AbortController()
   const deadline = setTimeout(() => controller.abort(), opts.timeoutMs ?? CALL_TIMEOUT_MS)
   try {
+    // Finding 3 (perf): `query` costs ~84ms to load transitively, and
+    // hook-cli.ts pulls this module in on EVERY hook event — lazy-load it
+    // here so that tax is only ever paid on the (rare) agent-sdk-routed
+    // call, never on every hook. The existing fail-open contract already
+    // covers a load failure (falls into the catch below, same as any other
+    // failure mode).
+    const { query } = await import("@anthropic-ai/claude-agent-sdk")
+
     // `env` REPLACES the subprocess environment (sdk.d.ts: "this value
     // REPLACES the subprocess environment entirely — it is not merged"), so
     // callers must pass a FULL env. Undefined-valued keys are dropped rather
@@ -127,6 +132,17 @@ export async function agentSdkCall(
       },
     })
     for await (const m of it) {
+      // Finding 2 (measured live, 2026-08-03): on a 5xx, the CLI process
+      // this transport spawns retries INTERNALLY — that retry is call #2,
+      // violating §4/§6d's exactly-one-call-per-prompt rule. Abort via the
+      // same controller the timeout uses the instant a retry is announced,
+      // rather than let it fire; fail-open (undefined) preserves the
+      // invariant — the record stays pending/retryable at the caller, never
+      // a second model call from THIS transport.
+      if (m.type === "system" && m.subtype === "api_retry") {
+        controller.abort()
+        return undefined
+      }
       if (m.type === "result") {
         const text = (m as { result?: unknown }).result
         return typeof text === "string" ? text : undefined

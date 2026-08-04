@@ -1,10 +1,48 @@
 import { describe, test, expect } from "bun:test"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
+import { execFileSync } from "node:child_process"
 import { GAUGE_TRANSPORTS } from "../src/types.ts"
 import { selectTransport } from "../src/gauge/transport.ts"
 import { stubServer, stubServerFor } from "./sdk-stub.ts"
 import { agentSdkCall } from "../src/gauge/agent-transport.ts"
 import { deriveRecord } from "../src/gauge/corpus-replay.ts"
 import type { CorpusRecord } from "../src/gauge/corpus-store.ts"
+
+// Fix-wave finding 4: every test below that spawns the REAL bundled Claude
+// Code CLI (anything that calls agentSdkCall, directly or via deriveRecord's
+// agent-sdk route) needs on-disk Claude Code credentials for that spawned
+// CLI to authenticate with — this repo travels across hosts (WSL2 box,
+// MacBook, CI) and a host with no credentials must SKIP those tests loudly
+// rather than FAIL them (bun test gates merges; a credential-less host
+// failing here is not a real regression). Same credential source
+// transport.ts's `readAuthToken` checks (darwin keychain / linux
+// ~/.claude/.credentials.json) — this is a presence probe only, never reads
+// or logs the token itself.
+function hasClaudeCodeCredentials(): boolean {
+  try {
+    if (process.platform === "darwin") {
+      execFileSync("security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], {
+        encoding: "utf-8",
+        timeout: 5000,
+      })
+      return true
+    }
+    return fs.existsSync(path.join(os.homedir(), ".claude", ".credentials.json"))
+  } catch {
+    return false
+  }
+}
+
+const HAS_CLAUDE_CODE_CREDENTIALS = hasClaudeCodeCredentials()
+const NO_CREDENTIALS_SKIP_REASON =
+  "no on-disk Claude Code credentials found (~/.claude/.credentials.json / macOS keychain) — " +
+  "CLI-spawning agentSdkCall tests require a credentialed host to authenticate the spawned CLI. " +
+  "The measurement host (a host WITH credentials present) MUST still run these, not skip them."
+if (!HAS_CLAUDE_CODE_CREDENTIALS) {
+  console.warn(`SKIPPING CLI-spawning gauge-agent-transport tests: ${NO_CREDENTIALS_SKIP_REASON}`)
+}
 
 describe("GaugeTransport", () => {
   test("three transports are recognized, incumbent order preserved", () => {
@@ -122,7 +160,7 @@ describe("agentSdkCall", () => {
   // actually landed: no `tools` entries, no `output_config` key, and the
   // schema instruction text is present in the outgoing message alongside
   // our prompt marker.
-  test("sends our prompt + schema instruction verbatim, no tools, no output_config", async () => {
+  test.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("sends our prompt + schema instruction verbatim, no tools, no output_config", async () => {
     const { CAPTURED, stub, env } = withCaptureStub()
     try {
       await agentSdkCall("PROBE BODY MARKER", "claude-haiku-4-5", env, { schema: SCHEMA })
@@ -140,7 +178,7 @@ describe("agentSdkCall", () => {
     }
   }, CLI_TEST_TIMEOUT_MS)
 
-  test("BINDING (§6d call-count rule): exactly one model call per query", async () => {
+  test.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("BINDING (§6d call-count rule): exactly one model call per query", async () => {
     const { CAPTURED, stub, env } = withCaptureStub()
     try {
       await agentSdkCall("SINGLE CALL CHECK", "claude-haiku-4-5", env, { schema: SCHEMA })
@@ -160,7 +198,7 @@ describe("agentSdkCall", () => {
   // loudly if a future SDK version reintroduces bulk context injection, even
   // if the specific "MEMORY.md" / "claudeMd" substrings it happens to use
   // change.
-  test("context isolation: no auto-memory/CLAUDE.md bleed, request stays small", async () => {
+  test.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("context isolation: no auto-memory/CLAUDE.md bleed, request stays small", async () => {
     const { CAPTURED, stub, env } = withCaptureStub()
     try {
       await agentSdkCall("ISOLATION PROBE MARKER", "claude-haiku-4-5", env, { schema: SCHEMA })
@@ -189,24 +227,25 @@ describe("agentSdkCall", () => {
     }
   }, CLI_TEST_TIMEOUT_MS)
 
-  test("fail-open: unreachable endpoint resolves undefined, never throws", async () => {
+  test.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("fail-open: unreachable endpoint resolves undefined, never throws", async () => {
     // Wire-capture finding: unlike a plain TCP connect (which fails
     // instantly with ECONNREFUSED — verified with curl against the same
     // port), the spawned CLI does not surface that failure fast; it retries
     // internally and this call is only bounded by our own AbortController
-    // deadline (opts.timeoutMs, default CALL_TIMEOUT_MS = 60_000ms — ~62s
-    // measured end-to-end). No timeoutMs override is passed here on purpose,
-    // to exercise that real default path; the bun test timeout below gives
-    // it enough wall-clock budget to finish instead of being killed early,
-    // which would otherwise misreport this correctly-fail-open call as a
-    // hang.
+    // deadline. Fix-wave finding 7: the DISTINCT fact this test proves
+    // (fail-open on connection refusal) does not require exercising the full
+    // 60s default CALL_TIMEOUT_MS — an explicit short timeoutMs proves the
+    // same fail-open behavior in ~2s instead of the ~62s the default path
+    // measured. The default-constant path itself stays covered by the
+    // sibling "timeout aborts" test below (same abort mechanism, only the
+    // timeoutMs value differs).
     const r = await agentSdkCall("x", "claude-haiku-4-5", {
       ...process.env, ANTHROPIC_BASE_URL: "http://127.0.0.1:9",
-    })
+    }, { timeoutMs: 2000 })
     expect(r).toBeUndefined()
-  }, 65_000)
+  }, 10_000)
 
-  test("timeout aborts and resolves undefined (never hangs the batch)", async () => {
+  test.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("timeout aborts and resolves undefined (never hangs the batch)", async () => {
     // A stub that accepts the connection and never answers is the only way to
     // prove the abort path; without it a hung query would hang this test too,
     // which is exactly the production failure being guarded against.
@@ -222,6 +261,45 @@ describe("agentSdkCall", () => {
       silent.stop(true)
     }
   }, CLI_TEST_TIMEOUT_MS)
+
+  // Fix-wave finding 2 (measured live, 2026-08-03): on a 5xx from
+  // /v1/messages, the CLI process this transport spawns retries
+  // INTERNALLY, announcing the retry as an `SDKAPIRetryMessage`
+  // (`type:'system', subtype:'api_retry'`) in the query() stream BEFORE
+  // re-issuing the request — that re-issued request would be call #2,
+  // violating §4/§6d's exactly-one-call-per-prompt rule. agentSdkCall now
+  // aborts the instant that message arrives instead of letting the retry
+  // fire.
+  test.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)(
+    "BINDING (§6d exactly-one-call): a 500 that would trigger a CLI retry aborts instead — result is undefined, no third request",
+    async () => {
+      let requestCount = 0
+      const stub = stubServer(() => {
+        requestCount++
+        // First request 500s (retryable); if the abort ever failed to land
+        // in time, a second request would get a normal success reply — the
+        // request-count assertion below is what would catch a THIRD request
+        // (i.e. the abort not landing at all).
+        if (requestCount === 1) return new Response("boom", { status: 500 })
+        return sseText('{"channel":"C4"}')
+      })
+      const env = { ...process.env, ANTHROPIC_BASE_URL: stub.url }
+      try {
+        const r = await agentSdkCall("RETRY PROBE MARKER", "claude-haiku-4-5", env, { schema: SCHEMA })
+        // The binding assertion: fail-open, never a fabricated result
+        // synthesized from a retried call.
+        expect(r).toBeUndefined()
+        // The retry request may already be in flight (race, documented in
+        // agent-transport.ts's finding-2 comment) when our abort lands, so a
+        // second request landing here is tolerated — but a THIRD request
+        // would mean the abort never took effect at all.
+        expect(requestCount).toBeLessThanOrEqual(2)
+      } finally {
+        stub.stop()
+      }
+    },
+    CLI_TEST_TIMEOUT_MS,
+  )
 })
 
 // Task 5: prove the seam is actually wired — deriveRecord routes through
@@ -303,7 +381,7 @@ describe("derive routes and stamps by selected transport (§6d split rule)", () 
     expect(agentHits).toBe(0)
   })
 
-  test("KKAMAK_GAUGE_TRANSPORT=agent-sdk: agent endpoint is hit, record stamped agent-sdk", async () => {
+  test.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("KKAMAK_GAUGE_TRANSPORT=agent-sdk: agent endpoint is hit, record stamped agent-sdk", async () => {
     const { out, sdkHits, agentHits } = await routeCase("agent-sdk")
     expect(out?.derivation?.transport).toBe("agent-sdk")
     expect(agentHits).toBeGreaterThan(0)
