@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { WarmSession } from "../src/gauge/warm-session.ts"
+import { WarmSession, selectEvidence } from "../src/gauge/warm-session.ts"
 import { modelProvenBy, CLI_SPAWN_BUDGET_MS } from "../src/gauge/acp-wire.ts"
 import {
-  HAS_CLAUDE_CODE_CREDENTIALS, sseText, silentServer, hangFirstServer, until,
+  HAS_CLAUDE_CODE_CREDENTIALS, sseText, hangFirstServer, until,
 } from "./agent-cli-stub.ts"
 import { stubServer } from "./sdk-stub.ts"
 
@@ -38,6 +38,62 @@ const HAIKU_OBSERVED_KEY = HAIKU
 // neither measures generation.
 const T = CLI_SPAWN_BUDGET_MS       // 8_000
 
+// Review finding 3 (2026-08-04): `route()`'s USE of `modelProvenBy` --
+// i.e. `warm-session.ts`'s `!t.observedModel ⇒ call-consumed` gate, and
+// especially the multi-key branch -- was previously untested anywhere. The
+// retargeted CLI test above only ever observes a SINGLE, MATCHING key
+// (Step 1a: modelUsage's key tracks the client-requested model verbatim on
+// this driving path, regardless of what the stub declares), so it cannot
+// exercise a non-matching or multi-key result no matter what the stub is
+// told to declare. `selectEvidence` is a pure function precisely so these
+// shapes -- fabricated directly, no CLI spawn, no stub -- can be covered
+// at all; this describe block carries NO credentials guard because it
+// spawns nothing.
+describe("selectEvidence (§6e model-evidence selection, pure -- no CLI, no stub)", () => {
+  test("single matching key is accepted as evidence", () => {
+    const usage = { "claude-haiku-4-5": { outputTokens: 5, canonicalModel: "claude-haiku-4-5" } }
+    const e = selectEvidence(usage, HAIKU)
+    expect(e.model).toBe("claude-haiku-4-5")
+    expect(e.canonicalModel).toBe("claude-haiku-4-5")
+  })
+
+  test("single NON-matching key proves nothing: empty evidence, so route() reports call-consumed, never a silent ok", () => {
+    const usage = { "claude-opus-5-20260101": { outputTokens: 5, canonicalModel: "claude-opus-5" } }
+    const e = selectEvidence(usage, HAIKU)
+    expect(e.model).toBe("")
+    expect(e.canonicalModel).toBe("")
+  })
+
+  test("empty modelUsage (the /clear synthetic-result shape, and a genuinely evidence-free result) is empty evidence", () => {
+    expect(selectEvidence({}, HAIKU)).toEqual({ model: "", canonicalModel: "" })
+    expect(selectEvidence(undefined, HAIKU)).toEqual({ model: "", canonicalModel: "" })
+  })
+
+  test("multi-key: an auxiliary model with ZERO output tokens does not block the provable key", () => {
+    // "claude-3-5-haiku-20241022" is a genuinely DIFFERENT model (an older
+    // snapshot, e.g. a title-generation aux call) -- modelProvenBy must
+    // reject it as evidence for a "claude-haiku-4-5" request, unlike a
+    // same-family dated variant.
+    const usage = {
+      "claude-haiku-4-5": { outputTokens: 5, canonicalModel: "claude-haiku-4-5" },
+      "claude-3-5-haiku-20241022": { outputTokens: 0, canonicalModel: "claude-3-5-haiku-20241022" },
+    }
+    const e = selectEvidence(usage, HAIKU)
+    expect(e.model).toBe("claude-haiku-4-5")
+    expect(e.canonicalModel).toBe("claude-haiku-4-5")
+  })
+
+  test("multi-key: an auxiliary model with NONZERO output tokens makes the turn unprovable", () => {
+    const usage = {
+      "claude-haiku-4-5": { outputTokens: 5, canonicalModel: "claude-haiku-4-5" },
+      "claude-3-5-haiku-20241022": { outputTokens: 2, canonicalModel: "claude-3-5-haiku-20241022" },
+    }
+    const e = selectEvidence(usage, HAIKU)
+    expect(e.model).toBe("")
+    expect(e.canonicalModel).toBe("")
+  })
+})
+
 describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)", () => {
   test("two records reuse one subprocess; the second context is clean; exactly one call each", async () => {
     let n = 0
@@ -53,13 +109,16 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
       const m2 = CAPTURED[1] as { messages: unknown[] }
       // THE binding assertion: the first record's text is gone from the
       // second turn's context — that is what "/clear reset the context"
-      // means. The exact MESSAGE COUNT is NOT asserted: §6e registers a
-      // ~423 B `/clear` echo residue whose shape was never measured, and a
-      // hard toBe(1) would fail a correct implementation. Step 1a already
-      // recorded the observed count; pin it here in a follow-up commit.
+      // means. The exact MESSAGE COUNT is now pinned (review finding 7,
+      // 2026-08-04): the streaming-input protocol sends ONE user turn per
+      // request (not a growing history array), and Step 4's measurement
+      // (task-4-report.md) confirmed `messages.length === 1` on both the
+      // warm post-/clear turn and the fresh one-shot turn — the `/clear`
+      // echo residue (~506 B, measured) lives INSIDE that single message's
+      // content blocks, not as extra array entries.
       expect(JSON.stringify(m2.messages)).not.toContain("first record prompt")
       expect(JSON.stringify(m2.messages)).toContain("second record prompt")
-      expect(m2.messages.length).toBeLessThanOrEqual(2)      // bulk-history regression guard
+      expect(m2.messages.length).toBe(1)                     // bulk-history regression guard
       expect(ws.isWarm()).toBe(true)                         // no respawn between records
     } finally { ws.close(); cap.stop() }
   }, CLI_TEST_TIMEOUT_MS)

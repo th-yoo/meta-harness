@@ -889,8 +889,12 @@ facts, and this was registered as an OPEN DISCREPANCY pending measurement,
 per this section's earlier text.
 
 Measured directly (token-free, local SSE stub, identical isolation option
-set and identical prompt text on both sides — `/mnt/d/tmp/task4-step4-
-measure.ts`, not committed, host-local per CLAUDE.md): a `WarmSession`
+set and identical prompt text on both sides —
+`cc-gate-plugin/test/warm-session-measure.ts`, committed and reproducible
+on any host per CLAUDE.md's "reusable scripts / recipes / procedures →
+the repo" rule; corrected from an earlier draft that left this script
+host-local under `/mnt/d/tmp/`, review finding 5, 2026-08-04. Run with
+`cd cc-gate-plugin && bun test/warm-session-measure.ts`): a `WarmSession`
 turn immediately after `/clear` sent a request of **1,651 B** (1 message);
 a fresh one-shot `agentSdkCall` under the same option set and the same
 prompt sent **1,145 B** (1 message). Delta: **506 B** — the `/clear` echo

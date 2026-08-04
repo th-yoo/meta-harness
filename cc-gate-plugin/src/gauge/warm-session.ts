@@ -22,7 +22,7 @@
 // below is erased and costs nothing.
 import os from "node:os"
 import type { Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
-import { ACP_BUDGET, CLI_SPAWN_BUDGET_MS, modelProvenBy } from "./acp-wire.ts"
+import { ACP_BUDGET, CLI_SPAWN_BUDGET_MS, GAUGE_ISOLATION, modelProvenBy } from "./acp-wire.ts"
 
 export type TurnOutcome =
   | { kind: "ok"; text: string; model: string; canonicalModel: string }
@@ -135,6 +135,60 @@ function userMsg(text: string): SDKUserMessage {
 function assistantModel(m: SDKMessage): string {
   const model = (m as { message?: { model?: unknown } }).message?.model
   return typeof model === "string" ? model : ""
+}
+
+export interface ModelEvidence {
+  /** the modelUsage KEY that PROVES the requested model, or "" if none does */
+  model: string
+  canonicalModel: string
+}
+
+/** Pure §6e model-evidence selection, extracted (review finding 3,
+ * 2026-08-04) so `route()`'s USE of `modelProvenBy` — including the
+ * multi-key branch — can be fixture-tested without a CLI spawn. The
+ * multi-key branch is structurally unreachable through any local stub on
+ * the streaming-input driving path these tests use (Step 1a: modelUsage's
+ * key tracks the client-requested model verbatim, regardless of what the
+ * stub declares), so a pure function is the only way to cover it at all.
+ *
+ * `usage` is EVIDENCE, never a verdict (§6e provenance rule): a key that
+ * does not prove `requestedModel` under `modelProvenBy` is never reported,
+ * single-key or multi-key alike — "A successful turn whose result carries
+ * no key proving the requested model under modelProvenBy reports
+ * call-consumed" (§6e design). Single- and multi-key cases are unified
+ * under the same rule rather than trusting an unprovable single key
+ * verbatim, so `route()`'s `!t.observedModel ⇒ call-consumed` gate is the
+ * ONLY place §6e's provenance rule is enforced, not split across two
+ * branches with different strictness. */
+export function selectEvidence(
+  usage: Record<string, { outputTokens?: number; output_tokens?: number; canonicalModel?: string }> | undefined,
+  requestedModel: string,
+): ModelEvidence {
+  const u = usage ?? {}
+  const keys = Object.keys(u)
+  const outOf = (k: string): number => {
+    const e = u[k]
+    return Number(e?.outputTokens ?? e?.output_tokens ?? 0)
+  }
+  if (keys.length === 1 && keys[0]) {
+    const k = keys[0]
+    if (modelProvenBy(k, requestedModel, u[k]?.canonicalModel)) {
+      return { model: k, canonicalModel: u[k]?.canonicalModel ?? "" }
+    }
+    return { model: "", canonicalModel: "" }
+  }
+  if (keys.length > 1) {
+    // An auxiliary model (title/summarizer) must not make an honest turn
+    // unprovable. Pick the key that PROVES the requested model under §6e's
+    // matching rule, and accept it only if every OTHER key recorded zero
+    // output tokens — the evidence still comes from the result, never from
+    // the request.
+    const own = keys.find((k) => modelProvenBy(k, requestedModel, u[k]?.canonicalModel))
+    if (own && keys.filter((k) => k !== own).every((k) => outOf(k) === 0)) {
+      return { model: own, canonicalModel: u[own]?.canonicalModel ?? "" }
+    }
+  }
+  return { model: "", canonicalModel: "" }
 }
 
 /** Race `p` against `ms`; resolves false on timeout, false on rejection.
@@ -262,7 +316,7 @@ export class WarmSession {
         return "unsent-dropped"
       }
       c.doomed = true
-      this.interruptCurrent()
+      this.interruptCurrent(c)
       return "interrupted"
     }
     // A cancel that names nobody must NEVER interrupt whoever happens to be
@@ -317,21 +371,33 @@ export class WarmSession {
   }
 
   /** Fire-and-forget `interrupt()` on the CURRENT generation, but only
-   * `hardReset()` if we are STILL on that generation when the interrupt
-   * promise settles. Found live in this task, same class as runPump's
-   * `this.q !== q` guard (§6e law L7) but a DIFFERENT call path: a turn's
-   * `interrupt()` is called on `this.q` as read AT THAT MOMENT (say Q1),
-   * but its `.catch()` only fires later, asynchronously. With
-   * `hardGraceMs` small, the turn's OWN hardTimer can already have torn
-   * down Q1 and spawned a fresh Q2 for the NEXT turn before Q1's
-   * `interrupt()` rejects — an unconditional `hardReset()` in that stale
-   * `.catch()` would then destroy Q2 out from under a turn that never
-   * touched Q1. Regression-locked by "a hardReset with a turn QUEUED
-   * behind it does not kill the replacement session". */
-  private interruptCurrent(): void {
+   * `hardReset()` if BOTH (a) we are STILL on that generation, AND (b) the
+   * turn that asked for the interrupt hasn't already settled some other
+   * way, when the interrupt promise finally rejects. Found live in this
+   * task, same class as runPump's `this.q !== q` guard (§6e law L7) but a
+   * DIFFERENT call path: a turn's `interrupt()` is called on `this.q` as
+   * read AT THAT MOMENT (say Q1), but its `.catch()` only fires later,
+   * asynchronously.
+   *
+   * The `this.q === q` guard alone is NOT enough (review finding 1,
+   * 2026-08-04): it protects against a hardReset()-then-respawn in
+   * between, but on the WARM path Q1 never dies — turn A's `api_retry`
+   * calls this, A's terminal `result` settles A normally on the SAME Q1,
+   * `drain()` starts turn B which reuses Q1 and pushes (`sent = true`),
+   * and only THEN does A's stale `interrupt()` reject. `this.q === q`
+   * still holds (nobody reset it), so without the second check the delayed
+   * `.catch()` would `hardReset()` Q1 out from under B's live, in-flight
+   * turn — a billed call and a lost record caused by A's own cancel/retry,
+   * with settlement pushed all the way out to B's `hardTimer`
+   * (`turnTimeoutMs + hardGraceMs`) instead of happening promptly.
+   * Regression-locked by "a hardReset with a turn QUEUED behind it does
+   * not kill the replacement session" (the hardReset()-path case) —  the
+   * live-Query case above is plausible but unmeasured, per the finding;
+   * the guard exists because the timing isn't ours to control either way. */
+  private interruptCurrent(t: Turn | undefined): void {
     const q = this.q
     void q?.interrupt().catch(() => {
-      if (this.q === q) this.hardReset()
+      if (this.q === q && t && !t.done) this.hardReset()
     })
   }
 
@@ -392,19 +458,13 @@ export class WarmSession {
       const feed = new Pushable()
       const q = query({
         prompt: feed.stream(),
-        options: {
-          model,
-          systemPrompt: "",
-          settingSources: [],
-          settings: { autoMemoryEnabled: false },
-          persistSession: false,
-          strictMcpConfig: true,
-          tools: [],
-          title: "kkamak-gauge",
-          thinking: { type: "disabled" },
-          cwd: this.cwd,
-          env: subprocessEnv,
-        },
+        // GAUGE_ISOLATION (acp-wire.ts) is the tested, shared §6d/§6e
+        // isolation set (review finding 4, 2026-08-04) — acp-wire.test.ts
+        // locks its value AND proves it is as-const-safe to spread into an
+        // SDK options literal. Hand-duplicating it here would let this
+        // lane silently drift from the one-shot lane it must stay
+        // byte-identical to (the whole basis for §6e's separate bar).
+        options: { ...GAUGE_ISOLATION, model, cwd: this.cwd, env: subprocessEnv },
       })
       if (this.closed) {                       // closed during construction
         try { q.close() } catch { /* nothing more to do */ }
@@ -467,8 +527,17 @@ export class WarmSession {
     // synthetic result is consumed below, and THAT is what lets awaitClear()
     // return. This guarantees the synthetic frame is always absorbed while
     // turn.sent === false, never after the next push.
+    //
+    // Guarded on `this.resetWaiter` (review finding 6, 2026-08-04):
+    // sdk.d.ts:3838-3840 documents conversation_reset as emitted by
+    // `/clear`, plan-mode exit, AND fresh-session flows — not just our own
+    // `/clear` push. `awaitClear()` installs `resetWaiter` before pushing,
+    // so it is set iff we are actually waiting on THIS signal; an
+    // unsolicited reset (nobody awaiting) must not latch
+    // `clearResultPending`, or the next unrelated `result` gets silently
+    // absorbed as stray and a live turn strands until its own timer.
     if (m.type === "conversation_reset") {
-      this.clearResultPending = true
+      if (this.resetWaiter) this.clearResultPending = true
       return
     }
 
@@ -520,7 +589,7 @@ export class WarmSession {
       // settle: law L7 settles from the turn's OWN terminal result, so no
       // trailing message can ever be attributed to the NEXT turn.
       t.doomed = true
-      this.interruptCurrent()
+      this.interruptCurrent(t)
       return
     }
 
@@ -533,42 +602,22 @@ export class WarmSession {
       }
       // EVIDENCE (§6e provenance): the keys of `modelUsage` on the terminal
       // result (sdk.d.ts:4312 success, :4279 error) plus each entry's
-      // `canonicalModel` (sdk.d.ts:1274-1277). `corroboratedModel` is NEVER
-      // consulted here — promoting corroboration to proof when usage is
-      // missing would quietly restore the tautology the rule exists to
-      // remove.
+      // `canonicalModel` (sdk.d.ts:1274-1277), reconciled against the
+      // requested model by the pure `selectEvidence()` (review finding 3 —
+      // extracted so its multi-key branch, structurally unreachable
+      // through any local stub on this driving path, can still be
+      // fixture-tested). `corroboratedModel` is NEVER consulted here —
+      // promoting corroboration to proof when usage is missing would
+      // quietly restore the tautology the rule exists to remove.
       //
       // The match is modelProvenBy, NOT equality: the real API keys this by
       // the DATED snapshot id while the deriver requests the undated alias
       // (opencode-plugin/test/fixtures/drivers/claude-code/success.ndjson:22),
       // so an equality test would report call-consumed for every honest
       // turn and spend a whole sized go for zero records (round-4 C1).
-      const usage = r.modelUsage ?? {}
-      const keys = Object.keys(usage)
-      const outOf = (k: string): number => {
-        const u = usage[k]
-        return Number(u?.outputTokens ?? u?.output_tokens ?? 0)
-      }
-      t.observedModel = ""
-      t.observedCanonical = ""
-      if (keys.length === 1 && keys[0]) {
-        // Single key: it IS the turn's evidence, whatever it is spelled.
-        // The caller reconciles it (Task 7). Reporting it verbatim is what
-        // makes a genuine model divergence detectable at all.
-        t.observedModel = keys[0]
-        t.observedCanonical = usage[keys[0]]?.canonicalModel ?? ""
-      } else if (keys.length > 1) {
-        // An auxiliary model (title/summarizer) must not make an honest
-        // turn unprovable. Pick the key that PROVES the requested model
-        // under §6e's matching rule, and accept it only if every OTHER key
-        // recorded zero output tokens — the evidence still comes from the
-        // result, never from the request.
-        const own = keys.find((k) => modelProvenBy(k, t.model, usage[k]?.canonicalModel))
-        if (own && keys.filter((k) => k !== own).every((k) => outOf(k) === 0)) {
-          t.observedModel = own
-          t.observedCanonical = usage[own]?.canonicalModel ?? ""
-        }
-      }
+      const evidence = selectEvidence(r.modelUsage, t.model)
+      t.observedModel = evidence.model
+      t.observedCanonical = evidence.canonicalModel
 
       const success = r.subtype === "success" && r.is_error !== true && !t.doomed
       if (success && typeof r.result === "string" && r.result) {
@@ -622,12 +671,23 @@ export class WarmSession {
 
   /** ONE turn, start to settle.
    *
-   * ORDER IS LOAD-BEARING: ensure -> setModel cap -> `this.current`
-   * assignment -> awaitClear -> push -> timers. `this.current` is assigned
-   * BEFORE the recycle leg so a `session/cancel` naming this turn can find
-   * it — which is exactly why `cancel()` must DROP an unsent current turn
-   * rather than interrupt it (round-4 I11), and why `route()` ignores every
-   * message while `sent === false` (round-4 M11).
+   * ORDER IS LOAD-BEARING: `this.current` assignment -> ensure -> setModel
+   * cap -> awaitClear -> push -> timers. `this.current` is assigned FIRST,
+   * before `ensure()` even runs (review finding 2, 2026-08-04) — not just
+   * before the recycle leg as an earlier draft had it — so a
+   * `session/cancel` naming this turn can find it for the WHOLE
+   * ensure->setModel->awaitClear window, not only from awaitClear onward.
+   * `void this.drain()` runs synchronously inside `oneShot`'s executor, so
+   * by the time `oneShot()` returns to its caller the turn is already out
+   * of `pending` and into `execute()` — a cancel arriving in the
+   * ensure/setModel gap (~84 ms cold, up to `setModelMs` = 2 000 ms on a
+   * model switch) used to find the tag NOWHERE (not in `pending`, not yet
+   * `current`) and answer `"unknown"`, after which the turn still pushed
+   * and billed. Assigning `this.current` up front is exactly why
+   * `cancel()` must DROP an unsent current turn rather than interrupt it
+   * (round-4 I11), and why `route()` ignores every message while
+   * `sent === false` (round-4 M11) — both already tolerate `current` being
+   * set long before the turn sends.
    *
    * EVERY await is followed by a `this.closed || turn.done` re-check
    * (round-4 I3). Without them a close() landing inside the SDK import is
@@ -636,6 +696,7 @@ export class WarmSession {
   private async execute(turn: Turn): Promise<void> {
     // execute()'s OWN wait slot — never the caller's.
     const settled = new Promise<TurnOutcome>((res) => { turn.settle = res })
+    this.current = turn
 
     if (!(await this.ensure(turn.model))) { this.finish(turn, { kind: "no-call" }); return }
     // Resumed after the package import / Query construction: a close() or a
@@ -654,8 +715,6 @@ export class WarmSession {
       }
       this.currentModel = turn.model
     }
-
-    this.current = turn
 
     // Recycle FIRST and SEQUENCED. Recycle is the CALLER's decision so a
     // multi-prompt ACP session keeps its context.
@@ -694,7 +753,7 @@ export class WarmSession {
     // constructor (round-4 C3).
     turn.timer = setTimeout(() => {
       turn.doomed = true
-      this.interruptCurrent()
+      this.interruptCurrent(turn)
     }, this.turnTimeoutMs)
     turn.hardTimer = setTimeout(() => {
       // interrupt() itself hung. Destroy the Query + subprocess; the pump's
