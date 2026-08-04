@@ -46,6 +46,12 @@ export interface SendPromptOptions {
    * how a haiku call becomes an OpenAI call. */
   provider: ProviderId
   timeoutMs?: number
+  /** Amendment, 2026-08-05, pre-consumption (see the spec's §2 note): request
+   * max_tokens. Absent -> the provider's own default (N2's transport default
+   * is 2048, unchanged); present -> threaded through verbatim. Added ahead
+   * of N5's design-time-seat migration, whose multi-KB replies would be
+   * silently truncated at the 2048 default. */
+  maxTokens?: number
   schema?: Record<string, unknown>
 }
 

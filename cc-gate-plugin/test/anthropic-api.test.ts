@@ -172,6 +172,23 @@ describe("makeAnthropicApiProvider", () => {
     }
   })
 
+  test("maxTokens: absent -> request carries 2048 (byte-unchanged default); present -> the value", async () => {
+    const srv = stubServer(() => apiResponse("ok", "claude-opus-5"))
+    try {
+      const provider = makeAnthropicApiProvider({
+        KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+        KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      })
+      await provider("p1", { model: "claude-opus-5", isolation: GAUGE_ISOLATION, provider: "anthropic-api" })
+      expect(srv.captured[0]!.body.max_tokens).toBe(2048)
+
+      await provider("p2", { model: "claude-opus-5", isolation: GAUGE_ISOLATION, provider: "anthropic-api", maxTokens: 8192 })
+      expect(srv.captured[1]!.body.max_tokens).toBe(8192)
+    } finally {
+      srv.stop()
+    }
+  })
+
   test("thinking { type: 'enabled' } -> no-call, no request arrives (unsupported by this provider)", async () => {
     const srv = stubServer(() => apiResponse("should never be seen", "claude-opus-5"))
     const enabledThinking: WarmIsolation = { ...GAUGE_ISOLATION, thinking: { type: "enabled" } }

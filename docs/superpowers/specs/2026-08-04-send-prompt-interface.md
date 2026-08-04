@@ -49,6 +49,7 @@ export function sendPrompt(
      * selection is how a haiku call silently becomes an OpenAI call. */
     provider: ProviderId
     timeoutMs?: number
+    maxTokens?: number
     schema?: Record<string, unknown>
   },
 ): Promise<SendOutcome>
@@ -57,6 +58,16 @@ export type SendOutcome =
   | { ok: true; text: string; model: string; canonicalModel: string }
   | { ok: false; kind: "no-call" | "call-consumed" }
 ```
+
+**Amendment, 2026-08-05, pre-consumption.** `maxTokens?: number` added to
+`SendPromptOptions`. Reason: the design-time seats (proposer/reviewer/
+revision, N5) produce multi-KB replies; N2's transport defaults `max_tokens`
+to 2048, so migrating those seats without an output-length knob would
+silently truncate them — an instrument downgrade this spec never intended.
+The interface had zero consumers at the time of this amendment, so it is a
+pre-data change, not a breaking one: the provider default stays 2048, so
+every existing gauge-lane request is byte-unchanged when the field is
+absent.
 
 **`SendOutcome` keeps §6e's wire-send boundary law at the top level, not
 buried in a provider.** `no-call` means the prompt bytes never reached the

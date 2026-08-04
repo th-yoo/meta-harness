@@ -42,6 +42,7 @@ export function makeAnthropicApiProvider(
     const model = resolveModelId(opts.model)
     const outcome = await sdkCallOutcome(prompt, model, env, authDeps, {
       timeoutMs: opts.timeoutMs,
+      maxTokens: opts.maxTokens,
       schema: opts.schema,
       system: opts.isolation.systemPrompt || undefined,
     })
