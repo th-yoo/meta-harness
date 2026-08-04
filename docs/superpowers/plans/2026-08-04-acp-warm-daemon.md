@@ -8,6 +8,18 @@
 
 **Tech Stack:** Bun + TypeScript, `@anthropic-ai/claude-agent-sdk` (already a dependency; streaming-input mode), `node:net` Unix domain sockets, hand-rolled newline-delimited JSON-RPC 2.0 conformant to the ACP wire shapes (agentclientprotocol.com — no new runtime dependency; see Task 2 rationale).
 
+> **SUPERSEDED IN PART (2026-08-04, same day).** The DAEMON SHAPE below is a
+> singleton: one `WarmSession` shared by all ACP sessions, so sessions are a
+> recycle key rather than a container. Per user directive, that shape is
+> superseded by [2026-08-04-acp-session-pool.md](2026-08-04-acp-session-pool.md),
+> which makes each session own its `WarmSession` and serves non-gauge callers
+> (proposer, reviewer). **Still current here and reused verbatim by that plan:**
+> Tasks 1-4 (§6e registration, wire subset + budget + `modelProvenBy`, the
+> transport literal, and `WarmSession` itself) and Tasks 7-10 (gauge routing,
+> the ensure hook, the paired validation and the flip gate). **Replaced there:**
+> Task 5's dispatcher and Task 6's client surface. Read the pool plan's §A and
+> §B before implementing Task 5 or 6.
+
 **RISK NOTE, READ BEFORE STARTING.** This plan's central mechanism — a `/clear` user message pushed into a **streaming-input** `Query` producing an `SDKConversationResetMessage` — has never been measured in this repo. The 2026-08-03 figures behind it came from a scratch probe that used neither this amendment's isolation option set nor streaming input. **Task 4 Step 1a is a token-free probe with an explicit STOP-and-report gate, and it is the FIRST thing implemented after Tasks 1-3.** If that probe fails, Tasks 4-10 do not proceed; the correct response is to stop and report, not to improvise a workaround. Step 1a ALSO records the terminal result's `modelUsage` keys, because the whole provenance chain turns on what those keys actually are (round-4 finding C1).
 
 ## Global Constraints
