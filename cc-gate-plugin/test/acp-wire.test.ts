@@ -7,6 +7,32 @@ import type {
   AcpInitializeResult, AcpPromptParams, AcpPromptResult,
 } from "../src/gauge/acp-wire.ts"
 
+// TYPE-LEVEL conformance guard (ACP extensibility rule), independent of any
+// runtime fixture. The runtime test below ("every Acp*'s _meta has no
+// custom key other than 'kkamak'") only catches a REQUIRED field added at
+// `_meta` root — a required addition forces someone to edit the fixture
+// literals, and that edit is what trips the runtime assertion. An OPTIONAL
+// addition (e.g. `_meta: { kkamak: {...}; debug?: boolean }`) types-checks
+// the existing fixtures completely unchanged, so `tsc --noEmit` stays clean
+// and the runtime `Object.keys` check still evaluates to `["kkamak"]` —
+// the exact bare-root violation this node exists to prevent would ship
+// silently. `OnlyKkamak<M>` resolves to `true` iff `M`'s only key is
+// `kkamak`, and to `never` (a type error against `true`) otherwise, so any
+// `Acp*` `_meta` gaining ANY other key — required or optional — fails
+// `tsc --noEmit` here regardless of what the runtime fixtures say. Do NOT
+// delete this block as "unused": deleting it silently reopens the hole
+// described above. Sweep of `Acp*` interfaces in acp-wire.ts confirms only
+// AcpInitializeResult, AcpPromptParams and AcpPromptResult declare a
+// `_meta` field (AcpNewSessionResult and AcpUpdateParams have none) — add a
+// line here for any future one that gains one.
+type OnlyKkamak<M> = Exclude<keyof M, "kkamak"> extends never ? true : never
+const acpInitializeResultMetaIsKkamakOnly: OnlyKkamak<AcpInitializeResult["_meta"]> = true
+const acpPromptParamsMetaIsKkamakOnly: OnlyKkamak<AcpPromptParams["_meta"]> = true
+const acpPromptResultMetaIsKkamakOnly: OnlyKkamak<AcpPromptResult["_meta"]> = true
+void acpInitializeResultMetaIsKkamakOnly
+void acpPromptParamsMetaIsKkamakOnly
+void acpPromptResultMetaIsKkamakOnly
+
 describe("acp-wire framing", () => {
   test("round-trips a request frame", () => {
     const d = new FrameDecoder()
