@@ -687,6 +687,19 @@ per-task reviews + final whole-branch review + one fix wave; commits
 - **State:** main @ `5ae2043`; cc-gate-plugin 1043/0 + opencode-plugin
   1776/1 skip, tsc clean both. Warm-lane activation and any MacBook cap
   raise (needs its own RSS measurement — host-keyed) are open decisions.
+- **2026-08-05 follow-ups (yoo-mac):** (a) darwin re-run found this arc's
+  test sockets exceed darwin's 104B `sun_path` cap — 35 silent
+  no-call-degraded failures, fixed via shared short-name helper w/ hard
+  100B assert, gate-merged `8795db1`; both suites green on darwin incl.
+  ACTIVATED-state proof. (b) MacBook RSS measured (~330 MB/session, same
+  band as WSL2; cap STAYS 4 there, 8 ruled not permissible) and warm lane
+  ACTIVATED on yoo-mac, boundary ts **1785856371528** — yoo-mac seat
+  lines partition into three regimes by ts. (c) COST FINDING: this arc's
+  tests (ACP daemon/warm 110s + agent-sdk CLI-spawn 24s of a ~160s suite)
+  pushed every gated Stop from 26-31s to 151-183s on the dogfood gate —
+  root-caused 2026-08-05, two-tier gate-check plan written
+  (docs/superpowers/plans/2026-08-05-two-tier-gate-check.md, unexecuted;
+  deploy will stamp its own instrument ts in the adoption ledger).
 
 ## R1 — round-1 machine bullet (2026-07-23, office) — REJECT
 

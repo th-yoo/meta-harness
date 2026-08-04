@@ -3,7 +3,7 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ✅ SESSION END 2026-08-05 (`yoo-mac` MacBook) — DARWIN SUITES GREEN (sun_path fix) · WARM LANE ACTIVATED ts 1785856371528 · TASK 8 RETARGETED TO OFFICE
+## ✅ SESSION END 2026-08-05 (`yoo-mac` MacBook) — DARWIN SUITES GREEN (sun_path fix) · WARM LANE ACTIVATED ts 1785856371528 · TASK 8 RETARGETED TO OFFICE · GATE STALL ROOT-CAUSED + TWO-TIER PLAN WRITTEN (unexecuted)
 
 **RESUME PROMPT (office `yoo-dev` — cross-host: git-only transfer):**
 ```
@@ -29,6 +29,27 @@ WHAT MACBOOK SHIPPED (all merged+pushed, 7b-gated where code):
  - DISCOVERY: plan Tasks 6-7 (pv pairing + --pair flag) were ALREADY done
    at office 08-04 (d576d12, 0d44aab, cbac62b) — 08-03 resume block was
    stale. Verified green on darwin; refusal path execute-proven.
+ - GATE STALL ROOT-CAUSED (user report "always stuck with stop hooks"):
+   NOT a hang, NOT warm activation, NOT the agent-sdk transport (live
+   derive stays API SDK, pinned). It is gate.json's check running the
+   FULL 3-suite chain on every cycle-ending Stop, and the ACP arc's tests
+   made that ~6x slower: gate-outcomes durationMs 26-31s through 08-02 ->
+   151-183s from 08-04 (first slow entry PRE-activation, so activation
+   exonerated). Measured split: ACP daemon/warm test files 110s +
+   agent-sdk CLI-spawn tests 24s = ~134s of a ~160s suite; remaining
+   ~880 tests ~25s. Best-practice sweep (Fowler pre/post-integrate split,
+   TIA w/ fallback-to-full, seconds-scale blocking budgets) matches.
+ - FIX PLAN WRITTEN, NOT EXECUTED:
+   docs/superpowers/plans/2026-08-05-two-tier-gate-check.md — 3 tasks:
+   pure decision core in km-crank (marker state machine, package-TIA,
+   slow-file policy regex), scripts/gate-check.ts CLI (dirty-tree hash
+   via temp-index write-tree, detached bg full run, red-marker ->
+   sync full-run debt repayment, KKAMAK_GATE_FULL/NO_BG/COMMANDS seams),
+   deploy (gate.json swap + adoption-ledger INSTRUMENT entry — gated-Stop
+   durationMs never pools across deploy ts). Tier 1 = incumbent check
+   VERBATIM; core/ mechanism untouched; gate.json is committed so the
+   swap reaches office via pull once deployed. Execution choice
+   (SDD vs inline) still owed.
 
 OFFICE DUTY — TASK 8 (§6d pv run, REAL SPEND, needs explicit sized go):
 MacBook is structurally blocked: its store is 198 records ALL
