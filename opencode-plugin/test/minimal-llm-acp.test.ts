@@ -21,6 +21,7 @@ import { seatCall } from "../../minimal/llm-acp.ts"
 import { REASONING_ISOLATION } from "../../cc-gate-plugin/src/gauge/send-prompt.ts"
 import { stubServer } from "../../cc-gate-plugin/test/sdk-stub.ts"
 import { fakeDaemon, type FakeDaemonHandle } from "../../cc-gate-plugin/test/acp-fake-daemon.ts"
+import { shortSock } from "../../cc-gate-plugin/test/sock-path.ts"
 import { envFingerprint } from "../../cc-gate-plugin/src/gauge/acp-paths.ts"
 
 function apiResponse(text: string): Response {
@@ -208,7 +209,9 @@ describe("seatCall", () => {
  * fake daemon it starts in a `finally`, same discipline as
  * cc-gate-plugin/test/anthropic-cli-warm.test.ts. */
 function tempSock(tag: string): string {
-  return path.join(os.tmpdir(), `kkamak-seatcall-${tag}-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.sock`)
+  // Short names via cc-gate-plugin's sock-path.ts: darwin sun_path caps the
+  // socket path at 104B; the old long names failed bind on darwin.
+  return shortSock(`s-${tag}`)
 }
 
 /** A path under an UNWRITABLE parent (root-owned, no sudo in test) so

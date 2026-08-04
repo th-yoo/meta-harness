@@ -23,6 +23,7 @@ import {
 } from "../src/gauge/acp-wire.ts"
 import { envFingerprint } from "../src/gauge/acp-paths.ts"
 import { createDaemonState, createDispatcher } from "../src/gauge/acp-daemon.ts"
+import { shortBase } from "./sock-path.ts"
 import { REASONING_ISOLATION } from "../src/gauge/send-prompt.ts"
 import { SessionPool, type WarmSessionLike, type WarmConstructOpts } from "../src/gauge/acp-pool.ts"
 import type { TurnOutcome, CancelResult } from "../src/gauge/warm-session.ts"
@@ -51,7 +52,8 @@ const HAIKU_OBSERVED_KEY = HAIKU
 /** Every test builds its OWN socket/spawn-log pair under tmpdir. NO TEST MAY
  * EVER TOUCH ~/.config/kkamak/acp-*.sock — the afterEach below asserts it. */
 function tempEndpoint(tag: string) {
-  const base = path.join(tmpdir(), `kkamak-acp-${tag}-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  // Short base via sock-path.ts: darwin sun_path caps the socket path at 104B.
+  const base = shortBase(`d-${tag}`)
   return { sock: `${base}.sock`, spawnLog: `${base}.spawnlog` }
 }
 
