@@ -366,6 +366,20 @@ describe("runPvSample — manifest (R3/R5)", () => {
     const raw = fs.readFileSync(path.join(shadowRoot(cwd), PV_MANIFEST_NAME), "utf-8")
     expect(raw.includes("fix the thing")).toBe(false)
   })
+
+  // Fix-wave finding 8: manifest.arms is OPTIONAL provenance stamped from
+  // the active pairing — on a non-default (sdk baseline, agent-sdk shadow)
+  // run it must carry that pairing, not the absent-means-cli:sdk default.
+  test("a non-default pairing (sdk baseline, agent-sdk shadow) stamps manifest.arms accordingly", () => {
+    const cwd = mkRepo()
+    writeCorpus(cwd, [...cRecs(2, "sdk"), ...notCRecs(2, "sdk")], () => {})
+
+    const summary = runPvSample(cwd, {}, () => {}, undefined, derivedOn("sdk"), "sdk", "agent-sdk")
+    expect(summary).toBeDefined()
+
+    const manifest = readManifest(cwd)
+    expect(manifest.arms).toEqual({ baseline: "sdk", shadow: "agent-sdk" })
+  })
 })
 
 describe("runPvSample -> runDerive integration — the tool's central claim", () => {
@@ -1363,6 +1377,13 @@ describe("runPvCompare --combine — effective-arms mismatch refuses (fail-close
     )
     expect(summary?.combined?.counts.cCli).toBe(4)
     expect(fs.existsSync(path.join(shadowRoot(cwd), PV_COMBINED_NAME))).toBe(true)
+
+    // Fix-wave finding 8: pv-combined.json carries the active (non-default)
+    // pairing as `arms`, not the absent-means-cli:sdk default.
+    const combined = JSON.parse(
+      fs.readFileSync(path.join(shadowRoot(cwd), PV_COMBINED_NAME), "utf-8"),
+    ) as PvCombinedFile
+    expect(combined.arms).toEqual({ baseline: "sdk", shadow: "agent-sdk" })
   })
 
   test("both sides at the (unstated) §6c default still combine — pre-existing behaviour unaffected", () => {

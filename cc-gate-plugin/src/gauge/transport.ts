@@ -243,12 +243,16 @@ export async function callModelSdk(
   })
 }
 
-/** `cls-label`'s (Task 2) blind-label call: the SAME transport plumbing as
- * `callModelSdk`, but `buildLabelPrompt` (the rubric, not the extraction
+/** `cls-label`'s (Task 2) blind-label call: the SAME `sdkCall` plumbing as
+ * `callModelSdk`'s non-agent-sdk path (auth -> client -> request -> text
+ * block extraction), but `buildLabelPrompt` (the rubric, not the extraction
  * prompt) + `LABEL_SCHEMA`, and defaults to the pre-registered labeler
  * literal `claude-opus-5` rather than the refiner's haiku default — the
  * label go is never routed through `KKAMAK_GAUGE_MODEL`, so a stray env
- * var armed for the live refiner can never silently retarget the labeler. */
+ * var armed for the live refiner can never silently retarget the labeler.
+ * §6d note: unlike `callModelSdk`, this call is deliberately NOT env-routed
+ * through `selectTransport` — only the deriver (`callModelSdk`) is subject
+ * to `KKAMAK_GAUGE_TRANSPORT`; labels always go over the direct API SDK. */
 export async function callModelSdkLabel(
   prompt: string,
   floorCheck: string,

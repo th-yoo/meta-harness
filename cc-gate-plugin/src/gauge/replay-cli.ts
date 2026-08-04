@@ -606,7 +606,15 @@ async function main(): Promise<void> {
       return
     }
     const { cwd, reset } = parsePvSampleArgs(stripPairFlag(rest))
-    const summary = runPvSample(cwd, { reset }, (m) => console.log(m), undefined, pairing?.baseline)
+    const summary = runPvSample(
+      cwd,
+      { reset },
+      (m) => console.log(m),
+      undefined,
+      pairing?.baseline,
+      pairing?.baselineLabel ?? "cli",
+      pairing?.shadowTransport ?? "sdk",
+    )
     if (summary === undefined) process.exitCode = 1
     return
   }
