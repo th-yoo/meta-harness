@@ -16,81 +16,114 @@ graph — schedule it as early as its dependencies allow.
 
 ## 1. Node table
 
-`spend` = needs real model tokens. `parallel-safe` = holds no file another
-ready node holds (see §3).
+`spend` = needs real model tokens. **`cost` is a rough wall-clock CLASS, not a
+hop count (review finding E3)** — a critical path measured in equal hops
+misidentifies the bottleneck when `T1` is a docs edit and `T9` is an hour-long
+batch:
+- **D** docs only, minutes
+- **M** a module + unit tests, no subprocess
+- **C** a suite that SPAWNS the bundled CLI (the credential-guarded blocks) —
+  minutes per run, and the dominant build cost in this graph
+- **$** real model spend, own sized go
 
-| id | task | writes | depends on | spend |
-|---|---|---|---|---|
-| **T1** | §6e spec registration | spec md | — | no |
-| **T2** | `acp-wire.ts` (framing, `ACP_BUDGET`, error codes, `modelProvenBy`) | `src/gauge/acp-wire.ts` + its test | T1 | no |
-| **T3** | widen `GAUGE_TRANSPORTS` | `src/types.ts`, `test/gauge-agent-transport.test.ts`, `test/paired-validation.test.ts` | T1, **T4·0 (file-conflict edge, §3 — not a type dependency)** | no |
-| **T4·0** | extract CLI-stub helpers | `test/agent-cli-stub.ts`, `test/gauge-agent-transport.test.ts` | T1 | no |
-| **T4·1a** | **GATE** — `/clear` + `modelUsage` probe | scratch only (`/mnt/d/tmp`) | T4·0 | no |
-| **T4** | `WarmSession` | `src/gauge/warm-session.ts` + its test | T2, T4·1a | no |
-| **T5a** | `acp-paths.ts` (fingerprint, socket, locks) | `src/gauge/acp-paths.ts` + its test | T2 | no |
-| **T5b** | singleton dispatcher — **SKIP on the pool path** (§4) | `src/gauge/acp-daemon.ts` + its test | T4, T5a | no |
-| **S0** | `WarmSession` takes `isolation` | `src/gauge/warm-session.ts`, `test/warm-session.test.ts` | T4 | no |
-| **S1** | profile registry + `isGaugeEligible` | `src/gauge/acp-profiles.ts` + its test | S0 | no |
-| **S2** | `SessionPool` | `src/gauge/acp-pool.ts` + its test | S0, S1 | no |
-| **T2n** | **`_meta.kkamak` namespacing** — every custom `_meta` key nested under a `kkamak` vendor key, per the extensibility page (pool plan §B calls this required; until this node, NO task owned it — review finding D5) | `src/gauge/acp-wire.ts` (the `Acp*` shapes) + its test | T2 | no |
-| **S3** | pooled ACP dispatcher — **CREATES** `acp-daemon.ts` when T5b is skipped (§4), and then also owns T5b's lifecycle scaffolding | `src/gauge/acp-daemon.ts` + its test | S2, T5a, T2n | no |
-| **T6** | `acp-client.ts` + `acp-fake-daemon.ts` + export `buildAgentOutgoingText` | `src/gauge/acp-client.ts`, `test/acp-fake-daemon.ts`, `src/gauge/agent-transport.ts` | T2n, T5a | no |
-| **S4** | session-scoped client API + `DaemonOutcome.profile` | `src/gauge/acp-client.ts`, `test/acp-fake-daemon.ts` | T6, S3 | no |
-| **T7** | route `agent-sdk-daemon`, gauge-eligibility refusal | `src/gauge/transport.ts`, `src/gauge/corpus-replay.ts` | T3, S4, S1 | no |
-| **T8** | SessionStart hook + `liveDerivesOnDaemon` | `src/gauge/transport.ts`, `src/hook-cli.ts`, `hooks/hooks.json` | T7, S4 | no |
-| **P0** | proposer instrument registration | loop spec md, gauntlet ledger | — | no |
-| **P1** | `minimal/llm.ts` → pool | `minimal/llm-acp.ts`, `minimal/llm.ts` | S4, P0 | no |
-| **T9** | paired validation | shadow store, `docs/gauge-pv/*.json` | T7, T8 | **YES — own go** |
-| **T10** | verdict + live flip | `refiner-cli.ts`, tests, ledger, spec | T9 | no |
-| **P2** | judge → pool (optional) | judge-audit | S4 | no |
+| id | task | writes | depends on | cost | spend |
+|---|---|---|---|---|---|
+| **T1** | §6e spec registration | spec md | — | D | no |
+| **T2** | `acp-wire.ts` (framing, `ACP_BUDGET`, error codes, `modelProvenBy`, **`WarmIsolation` + `GAUGE_ISOLATION`**) | `src/gauge/acp-wire.ts` + its test | T1 | M | no |
+| **T3** | widen `GAUGE_TRANSPORTS` | `src/types.ts`, `test/gauge-agent-transport.test.ts`, `test/paired-validation.test.ts` | T1, **T4·0 (file-conflict edge, §3 — not a type dependency)** | M | no |
+| **T4·0** | extract CLI-stub helpers | `test/agent-cli-stub.ts`, `test/gauge-agent-transport.test.ts` | T1 | M | no |
+| **T4·1a** | **GATE** — `/clear` + `modelUsage` probe | scratch only (`/mnt/d/tmp`) | T4·0 | C | no |
+| **T4** | `WarmSession` | `src/gauge/warm-session.ts` + its test | T2, T4·1a | **C** (11 CLI-spawning tests — the single largest build node) | no |
+| **T5a** | `acp-paths.ts` (fingerprint, socket, locks) | `src/gauge/acp-paths.ts` + its test | T2 | M | no |
+| **T5b** | singleton dispatcher — **SKIP on the pool path** (§4); built only on the gauge-only path (§4b) | `src/gauge/acp-daemon.ts` + its test | T4, T5a | C | no |
+| **S0** | `WarmSession` takes `isolation` (type imported from `acp-wire.ts`) | `src/gauge/warm-session.ts`, `test/warm-session.test.ts` | T4 | C | no |
+| **S1** | profile registry + `isGaugeEligible` | `src/gauge/acp-profiles.ts` + its test | **T2** (was S0 — edge removed, §7) | M | no |
+| **S2** | `SessionPool` | `src/gauge/acp-pool.ts` + its test | S0, S1 | M | no |
+| **T2n** | **`_meta.kkamak` namespacing** — every custom `_meta` key nested under a `kkamak` vendor key, per the extensibility page (pool plan §B calls this required; until this node, NO task owned it — review finding D5) | `src/gauge/acp-wire.ts` (the `Acp*` shapes) + its test | T2 | M | no |
+| **S3** | pooled ACP dispatcher — **CREATES** `acp-daemon.ts` when T5b is skipped (§4), and then also owns T5b's lifecycle scaffolding | `src/gauge/acp-daemon.ts` + its test | S2, T5a, T2n | **C** (largest node on the pool path) | no |
+| **T6** | `acp-client.ts` + `acp-fake-daemon.ts` + export `buildAgentOutgoingText` | `src/gauge/acp-client.ts`, `test/acp-fake-daemon.ts`, `src/gauge/agent-transport.ts` | T2n, T5a | M | no |
+| **S4** | session-scoped client API + `DaemonOutcome.profile` | `src/gauge/acp-client.ts`, `test/acp-fake-daemon.ts` | T6, S3 | C | no |
+| **T7** | route `agent-sdk-daemon`, gauge-eligibility refusal | `src/gauge/transport.ts`, `src/gauge/corpus-replay.ts` | T3, S4, S1 | C | no |
+| **T8** | SessionStart hook + `liveDerivesOnDaemon` | `src/gauge/transport.ts`, `src/hook-cli.ts`, `hooks/hooks.json` | T7, S4 | C | no |
+| **P0** | proposer instrument registration | loop spec md, gauntlet ledger | — | D | no |
+| **P1** | `minimal/llm.ts` → pool | `minimal/llm-acp.ts`, `minimal/llm.ts` | S4, P0 | M | no |
+| **T9** | paired validation | shadow store, `docs/gauge-pv/*.json` | T7, T8 | **$** | **YES — own go** |
+| **T10** | verdict + live flip | `refiner-cli.ts`, tests, ledger, spec | T9 | C | no |
+| **P2** | judge → pool (optional) | judge-audit | S4 | M | no |
 
 ---
 
 ## 2. Schedule — layers, each layer's nodes runnable concurrently
 
+Each build node `X` is followed by its own fresh-context review `rX` and, on
+findings, a fix round. **Reviews are shown because they are the schedule's real
+serialization cost (review finding E2)** — on the §6d branch, per-task reviews
+plus fix rounds took materially longer than the builds they gated. They are
+also where the genuine parallelism lives: reviews of independent nodes run
+concurrently even when the builds cannot.
+
 ```
-L0   T1 · P0                    T1 gates ALL code (Post-plan rule 2); P0 is docs
+L0   T1(D) · P0(D)              T1 gates ALL code (Post-plan rule 2)
       │
-L1   T4·0 ◄─ T1                 T2 ◄─ T1                      (2-way)
-      │                          │
-L2   T4·1a ◄─ T4·0              T2n ◄─ T2  ·  T3 ◄─ T1,T4·0   ★ GATE + 2 more
-      │                          │
-L3   T4 ◄─ T2, T4·1a            T5a ◄─ T2                     (2-way)
-      │                          │
-L4   S0 ◄─ T4                   T6 ◄─ T2n, T5a                (2-way)
+L1   T4·0(M) ◄─T1               T2(M) ◄─T1                     2-way
+      │  rT4·0                    rT2
+L2   T4·1a(C) ◄─T4·0    T2n(M) ◄─T2    T3(M) ◄─T1,T4·0         ★ GATE + 2
+      │                   rT2n           rT3
+L3   T4(C) ◄─T2,T4·1a           T5a(M) ◄─T2                    2-way
+      │  rT4                      rT5a
+L4   S0(C) ◄─T4    S1(M) ◄─T2    T6(M) ◄─T2n,T5a               3-way ✦
+      │  rS0         rS1           rT6
+L5   S2(M) ◄─S0,S1
+      │  rS2
+L6   S3(C) ◄─S2,T5a,T2n         ← largest node on the pool path
+      │  rS3
+L7   S4(C) ◄─T6,S3
+      │  rS4
+L8   T7(C) ◄─T3,S4,S1           P1(M) ◄─S4,P0                  2-way
+      │  rT7                      rP1
+L9   T8(C) ◄─T7,S4
+      │  rT8
+L10  T9($) ◄─T7,T8              ← REAL SPEND, own sized go
       │
-L5   S1 ◄─ S0
+L11  T10(C) ◄─T9                ← gated on the §6e bar AND §6's scope question
       │
-L6   S2 ◄─ S0, S1
+L12  RB — whole-branch fresh-context review
       │
-L7   S3 ◄─ S2, T5a, T2n
-      │
-L8   S4 ◄─ T6, S3
-      │
-L9   T7 ◄─ T3, S4, S1           P1 ◄─ S4, P0                  (2-way)
-      │
-L10  T8 ◄─ T7, S4
-      │
-L11  T9 ◄─ T7, T8               ← REAL SPEND, own sized go
-      │
-L12  T10 ◄─ T9                  ← gated on the §6e bar AND the open scope question
+L13  M  — merge via scripts/merge-with-gate.sh + committed
+           docs/reviews/<sha>-acp-session-pool.md   (7b is ARMED)
 ```
 
-Note `T3` sits at L2 rather than L1: its edge to `T4·0` is a FILE conflict, not
-a type dependency (§3), so it cannot start until `T4·0` has landed even though
-nothing it imports comes from there.
+✦ **L4 is 3-wide because the `S0 → S1` edge was DELETED** — see §7. That edge
+existed only because `WarmIsolation` was declared in `warm-session.ts`; moving
+it to `acp-wire.ts` (which both nodes already import) makes S0 and S1
+independent and removes one hop from the LONGEST chain.
 
-**Critical path (13 hops), unchanged by these fixes:**
-`T1 → T4·0 → T4·1a → T4 → S0 → S1 → S2 → S3 → S4 → T7 → T8 → T9 → T10`
+Note `T3` sits at L2, not L1: its edge to `T4·0` is a FILE conflict, not a type
+dependency (§3), so it cannot start until `T4·0` lands even though nothing it
+imports comes from there.
 
-Off it: `T2`, `T2n`, `T3`, `T5a`, `T6`, plus `P0`/`P1`/`P2`.
+**Critical path — 12 build hops (was 13), plus review and merge:**
+`T1 → T4·0 → T4·1a → T4 → S0 → S2 → S3 → S4 → T7 → T8 → T9 → T10 → RB → M`
 
-**Peak concurrency is 2, not 3 (review finding D4).** Every parallel layer
-holds exactly two runnable nodes — L1 {T4·0, T2}, L3 {T4, T5a}, L4 {S0, T6},
-L9 {T7, P1} — and L2's three ({T4·1a, T2n, T3}) is the sole exception, worth
-little because T4·1a is a STOP gate whose failure cancels the other two anyway.
-L5 through L8 are strictly serial: the S-chain's every link consumes the
-previous link's type. **Do not staff this graph expecting fan-out.**
+Off it: `T2`, `T2n`, `T3`, `T5a`, `S1`, `T6`, plus `P0`/`P1`/`P2`.
+
+**Peak build concurrency is 3, and only at L4; everywhere else it is 2 or 1.**
+L5 through L7 remain strictly serial — `S2` needs the pool's profile objects,
+`S3` needs the pool, `S4` needs the dispatcher; those are genuine data
+dependencies with no type-placement trick available. **Do not staff this graph
+expecting fan-out.** The costs say where the time actually goes: seven `C`
+nodes (CLI-spawning suites), one `$` node, and the review chain.
+
+**If the gate fails (review finding E5).** `T4·1a` failing cancels everything
+DOWNSTREAM of it — but `T2`, `T2n`, `T3` and `T5a` are not downstream and may
+already be built. Decide explicitly rather than by default:
+- **`T3` — KEEP.** A fourth transport literal is harmless and independently
+  correct; §6e stays registered as a design that was not realizable.
+- **`T2`, `T2n`, `T5a` — REVERT.** `acp-wire.ts` and `acp-paths.ts` are dead
+  modules without a daemon, and dead code that looks live is how a later
+  reader concludes the lane exists.
+- **`T4·0` — KEEP.** The CLI-stub helper extraction stands on its own and the
+  §6d suite already uses it.
 
 ---
 
@@ -121,6 +154,21 @@ Files block says it *replaces* `acp-daemon.ts`'s singleton design while keeping
 So splitting daemon-plan Task 5 into **T5a (paths — keep) + T5b (dispatcher —
 skip)** removes an entire build-then-rewrite cycle, including its test file.
 
+**But Task 5 is written as ONE SDD task and the split is not free-standing
+(review finding E1).** Its Step 1 writes the tests for `acp-paths.test.ts` AND
+`acp-daemon.test.ts` in a single block, Step 3 says "Implement `acp-paths.ts`
+THEN `acp-daemon.ts`", Step 4 runs both, and Step 5 commits all four files in
+ONE commit. An implementer handed "T5a" therefore has no step list. Before this
+node boundary is real, EDIT daemon-plan Task 5 into two tasks with this exact
+mapping — it is a documentation edit, not a design change:
+
+| new task | takes from Task 5 |
+|---|---|
+| **T5a** | the `acp-paths.test.ts` half of Step 1; the `acp-paths.ts` half of Step 3; Step 2/4 scoped to that file; a commit of `acp-paths.ts` + `acp-paths.test.ts` only |
+| **T5b** | the `acp-daemon.test.ts` half of Step 1; the `acp-daemon.ts` half of Step 3; Step 4's daemon runs plus the hygiene, stray-daemon and import-purity checks; the remaining commit |
+
+Do the edit first, or treat T5 as one node and accept the rewrite.
+
 **The skip is NOT free, and S3 must absorb the difference (review finding
 D1).** S3's Files block says "**modify** `acp-daemon.ts`; **modify**
 `test/acp-daemon.test.ts`" — both written by T5b. Skip T5b and neither file
@@ -148,9 +196,36 @@ the real daemon") needs *a* daemon. Without T5b that is S3, which sits later.
 e2e test into S4's suite, which runs after S3 exists. (The alternative, moving
 all of T6 after S3, costs the L4 parallelism for no gain.)
 
-**If the scope question (§6) resolves toward "gauge only, no pool", this
-inverts**: build T5b, skip S1-S4 entirely, and the graph collapses to
-`T1 → T4·0 → T4·1a → T4 → {T5a,T5b,T6} → T7 → T8 → T9 → T10`.
+### 4b. The gauge-only schedule (if §6's scope question resolves that way)
+
+Half this document's purpose is answering "what if the pool is not needed", so
+that path gets its own schedule rather than a sentence (review finding E4).
+Build T5b, skip S0-S4 and P0-P2 entirely:
+
+```
+L0   T1(D)
+      │
+L1   T4·0(M) ◄─T1        T2(M) ◄─T1                    2-way
+      │                    │
+L2   T4·1a(C) ★GATE      T2n(M)   T3(M) ◄─T1,T4·0      3-way
+      │                    │
+L3   T4(C) ◄─T2,T4·1a    T5a(M) ◄─T2                   2-way
+      │                    │
+L4   T5b(C) ◄─T4,T5a     T6(M) ◄─T2n,T5a               2-way
+      │
+L5   T7(C) ◄─T3,T6,T5b
+      │
+L6   T8(C) ◄─T7
+      │
+L7   T9($) ◄─T7,T8        ← REAL SPEND
+      │
+L8   T10(C) ◄─T9   →   RB → M
+```
+
+**8 build hops instead of 12**, no S-chain, and `T6` keeps its own e2e test
+because `T5b` provides a real daemon. This is the cheaper graph by a wide
+margin — which is why §6's question is worth answering BEFORE `S0` starts, not
+after.
 
 ---
 
@@ -207,6 +282,46 @@ redundancy) have survived every pass; the defects have all been in freshly
 written prose. Prose review has stopped converging here — execute `T1 → T4·0 →
 T4·1a` instead, since that gate is token-free and settles more than a fourth
 pass would.
+
+## 7. The one edge that was deleted (efficiency finding)
+
+`S0 → S1` was never a data dependency. It existed only because `WarmIsolation`
+was declared in `warm-session.ts`, so the profile registry — whose
+`AcpProfile.options` IS a `WarmIsolation` — had to wait for S0.
+
+**Moving the type to `acp-wire.ts`** (daemon plan Task 2), a module both nodes
+already import, makes S0 and S1 independent. Applied to both plans on
+2026-08-04. It removes a hop from the LONGEST chain (`T4 → S0 → S1 → S2`
+becomes `T4 → S0 → S2` with `S1` alongside), taking the build critical path
+from 13 to 12 and giving L4 the graph's only 3-wide layer.
+
+Acknowledged cost: `acp-wire.ts` is named for the wire subset and an SDK option
+slice is not wire. It is already the shared-constants module (`ACP_BUDGET` is
+timing, `modelProvenBy` is model logic), so the price is a loose filename, not
+a cycle. **If anyone later splits that module, re-check that S0 and S1 stay
+independent** — the edge comes back the moment the type moves into either.
+
+No other S-chain edge can be removed this way: `S2` needs the pool's profile
+objects, `S3` needs the pool, `S4` needs the dispatcher. Those are real.
+
+## 5c. Self-review pass 2 (2026-08-04)
+
+1 critical, 3 important, 1 minor; **all applied, plus the §7 edge removal.**
+Unlike the previous three passes, most findings were omissions of PURPOSE
+rather than drift — the document modelled builds only, in node-count units,
+for one of two possible scopes:
+- **E1** — the T5a/T5b split was not executable: Task 5 is one SDD task whose
+  steps interleave both files and end in one commit. §4 now carries the exact
+  step-mapping table required to split it, or says treat T5 as one node.
+- **E2** — reviews and the merge were absent from the schedule though they
+  dominate wall-clock; `rX` nodes plus `RB`/`M` are now shown, with the note
+  that reviews of independent nodes parallelise even when builds do not.
+- **E3** — "13 hops" equated a docs edit with an hour-long spend batch. Nodes
+  now carry cost classes D/M/C/$; seven `C` nodes are where the time goes.
+- **E4** — the gauge-only path had no schedule, though §6 says it is live.
+  §4b now gives it one: 8 build hops instead of 12.
+- **E5** — the gate's failure cost was unstated. Per-node KEEP/REVERT
+  decisions are now recorded for the four nodes that are not downstream of it.
 
 ## 6. What the DAG cannot decide
 

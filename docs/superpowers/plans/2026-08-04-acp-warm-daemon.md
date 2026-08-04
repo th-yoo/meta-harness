@@ -592,6 +592,21 @@ change the instrument and needs its own amendment.
   - Method-name constants: `ACP_INITIALIZE = "initialize"`, `ACP_SESSION_NEW = "session/new"`, `ACP_SESSION_PROMPT = "session/prompt"`, `ACP_SESSION_CANCEL = "session/cancel"`, `ACP_SESSION_UPDATE = "session/update"` (notification).
   - `ACP_BUDGET` — the ONE timing-constant object (Global Constraints table). It lives here, in the module BOTH sides already import, because the client's leg and the daemon's worst case are a single contract: split across two files they drift, and a drift silently converts §6e law L5 into law L2 (a `no-call` that should have been `call-consumed`, i.e. a double model call). `acp-wire.ts` imports nothing but `node:string_decoder`, so `transport.ts` may import it eagerly without putting anything expensive on the hook path.
   - `CLI_SPAWN_BUDGET_MS = 8_000` and `modelProvenBy(...)` — see below. Both live here for the same single-source reason as `ACP_BUDGET`.
+  - **`WarmIsolation` and `GAUGE_ISOLATION`** — the per-session SDK option
+    slice (`systemPrompt`, `settingSources`, `settings`, `persistSession`,
+    `strictMcpConfig`, `tools`, `title`, `thinking`) and the §6d set as its
+    canonical value. They live HERE rather than in `warm-session.ts` for the
+    same single-source reason as `ACP_BUDGET`, and for one scheduling reason
+    worth stating: the pool plan's `S0` (WarmSession takes an isolation) and
+    `S1` (the profile registry, whose `AcpProfile.options` IS a
+    `WarmIsolation`) would otherwise be forced into a chain, S0 → S1, on the
+    project's longest dependency path. Declaring the type in this module —
+    which both already import — makes them independent.
+    Naming tension, acknowledged: this file is "the ACP wire subset" and an
+    SDK option slice is not wire. It is already the shared-constants module
+    (`ACP_BUDGET` is timing, `modelProvenBy` is model logic), so the cost is a
+    slightly loose filename, not a dependency cycle. Do not split it out
+    later without re-checking that S0/S1 stay independent.
   - Instrument error codes — these ARE the call-consumption channel on the wire:
     - `ACP_ERR_NO_CALL = -32000` — §6e law L1/L4: the prompt bytes were never pushed toward the model. `data.callConsumed === false`.
     - `ACP_ERR_CALL_CONSUMED = -32001` — §6e law L2/L5/L6: the prompt bytes were pushed and the turn did not succeed. `data.callConsumed === true`.

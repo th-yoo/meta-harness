@@ -171,22 +171,18 @@ assertions rather than changing any).
 **Interfaces:**
 
 ```typescript
-/** The per-session slice of the SDK option set. `model`, `cwd` and `env` stay
- * separate: they are per-session VALUES, while this is the session's POLICY. */
-export interface WarmIsolation {
-  systemPrompt: string
-  settingSources: []
-  settings: { autoMemoryEnabled: false }
-  persistSession: false
-  strictMcpConfig: true
-  tools: []
-  title: string
-  thinking: { type: "disabled" } | { type: "enabled" }
-}
-
-/** Byte-identical to the literal `ensure()` used before this task. Exported so
- * a test can prove the gauge lane did not move. */
-export const GAUGE_ISOLATION: WarmIsolation
+// `WarmIsolation` and `GAUGE_ISOLATION` are DECLARED IN `acp-wire.ts`
+// (daemon plan Task 2), not here. `WarmIsolation` is the per-session slice of
+// the SDK option set — `model`, `cwd` and `env` stay separate, being
+// per-session VALUES where this is the session's POLICY — and
+// `GAUGE_ISOLATION` is the §6d set as its canonical value, byte-identical to
+// the literal `ensure()` used before this task.
+//
+// They live there so that S0 and S1 do NOT form a chain: S1's
+// `AcpProfile.options` IS a `WarmIsolation`, so declaring the type here would
+// put S1 behind S0 on the project's longest path. Both already import
+// `acp-wire.ts`; see the DAG's §7.
+import { type WarmIsolation, GAUGE_ISOLATION } from "./acp-wire.ts"
 
 export class WarmSession {
   constructor(
@@ -267,17 +263,11 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("a custom isolation reaches the wi
  * `systemPrompt`/`tools` could silently un-isolate the gauge. */
 export interface AcpProfile {
   id: string
-  /** SDK options this profile pins, minus `model`/`env`/`cwd` (per-session). */
-  options: {
-    systemPrompt: string
-    settingSources: []
-    settings: { autoMemoryEnabled: false }
-    persistSession: false
-    strictMcpConfig: true
-    tools: []
-    title: string
-    thinking: { type: "disabled" } | { type: "enabled" }
-  }
+  /** SDK options this profile pins, minus `model`/`env`/`cwd` (per-session).
+   * The type is `WarmIsolation` from `acp-wire.ts` (daemon plan Task 2) — NOT
+   * re-declared here, and not imported from `warm-session.ts`, so that S1 does
+   * not depend on S0. */
+  options: WarmIsolation
   /** Default model when the session does not set one. */
   defaultModel: string
   /** Whether records derived on this profile may carry a gauge transport
