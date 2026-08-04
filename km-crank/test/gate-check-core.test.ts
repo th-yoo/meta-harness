@@ -1,0 +1,166 @@
+import { describe, expect, test } from "bun:test"
+import {
+  parseMarker, decide, suitesForChangedPaths, ccgateFastFiles,
+  slowCcgateTestsForChangedPaths,
+  ALL_SUITES, FALLBACK_SUITES, BG_STALE_MS, type GateBgMarker,
+} from "../src/gate-check-core.ts"
+
+const T1 = "aaaa1111"
+const T2 = "bbbb2222"
+const NOW = 100_000_000
+const mk = (m: Partial<GateBgMarker>): GateBgMarker =>
+  ({ status: "green", tree: T1, startedTs: NOW - 1000, ...m }) as GateBgMarker
+const alive = () => true
+const dead = () => false
+
+describe("parseMarker", () => {
+  test("round-trips a valid marker", () => {
+    const m = mk({ status: "running", pid: 42 })
+    expect(parseMarker(JSON.stringify(m))).toEqual(m)
+  })
+  test("undefined input, malformed JSON, unknown status, missing tree -> undefined", () => {
+    expect(parseMarker(undefined)).toBeUndefined()
+    expect(parseMarker("{nope")).toBeUndefined()
+    expect(parseMarker(JSON.stringify({ status: "purple", tree: T1, startedTs: 1 }))).toBeUndefined()
+    expect(parseMarker(JSON.stringify({ status: "green", startedTs: 1 }))).toBeUndefined()
+  })
+})
+
+describe("decide", () => {
+  test("forceFull wins over everything, even red", () => {
+    expect(decide({ tree: T1, marker: mk({ status: "red" }), pidAlive: alive, forceFull: true, now: NOW }))
+      .toEqual({ mode: "full-sync", reason: "forced" })
+  })
+  test("red marker -> full-sync debt repayment, regardless of tree match", () => {
+    expect(decide({ tree: T2, marker: mk({ status: "red", tree: T1 }), pidAlive: alive, forceFull: false, now: NOW }))
+      .toEqual({ mode: "full-sync", reason: "debt" })
+  })
+  test("running + pid alive + fresh -> tier0, no new spawn", () => {
+    const d = decide({ tree: T2, marker: mk({ status: "running", tree: T1, pid: 7 }), pidAlive: alive, forceFull: false, now: NOW })
+    expect(d).toEqual({ mode: "tier0", suites: FALLBACK_SUITES, spawnBg: false })
+  })
+  test("running + pid alive + startedTs older than BG_STALE_MS -> WEDGED: kill + respawn (amendment a)", () => {
+    const d = decide({
+      tree: T1, marker: mk({ status: "running", tree: T1, pid: 7, startedTs: NOW - BG_STALE_MS - 1 }),
+      pidAlive: alive, forceFull: false, now: NOW,
+    })
+    expect(d).toEqual({ mode: "tier0", suites: FALLBACK_SUITES, spawnBg: true, killPid: 7 })
+  })
+  test("running exactly AT the bound is not yet wedged", () => {
+    const d = decide({
+      tree: T1, marker: mk({ status: "running", tree: T1, pid: 7, startedTs: NOW - BG_STALE_MS }),
+      pidAlive: alive, forceFull: false, now: NOW,
+    })
+    expect(d).toEqual({ mode: "tier0", suites: FALLBACK_SUITES, spawnBg: false })
+  })
+  test("running + pid dead (crash/reboot) -> treated as absent: tier0 + spawn, no killPid", () => {
+    const d = decide({ tree: T1, marker: mk({ status: "running", tree: T1, pid: 7 }), pidAlive: dead, forceFull: false, now: NOW })
+    expect(d).toEqual({ mode: "tier0", suites: FALLBACK_SUITES, spawnBg: true })
+  })
+  test("running with pid ABSENT is malformed-in-effect -> tier0 + spawn", () => {
+    const d = decide({ tree: T1, marker: mk({ status: "running", pid: undefined }), pidAlive: alive, forceFull: false, now: NOW })
+    expect(d).toEqual({ mode: "tier0", suites: FALLBACK_SUITES, spawnBg: true })
+  })
+  test("green + same tree -> tier0, nothing to spawn", () => {
+    expect(decide({ tree: T1, marker: mk({ status: "green", tree: T1 }), pidAlive: alive, forceFull: false, now: NOW }))
+      .toEqual({ mode: "tier0", suites: FALLBACK_SUITES, spawnBg: false })
+  })
+  test("green + different tree -> tier0 + spawn for the new tree", () => {
+    expect(decide({ tree: T2, marker: mk({ status: "green", tree: T1 }), pidAlive: alive, forceFull: false, now: NOW }))
+      .toEqual({ mode: "tier0", suites: FALLBACK_SUITES, spawnBg: true })
+  })
+  test("no marker -> tier0 + spawn", () => {
+    expect(decide({ tree: T1, marker: undefined, pidAlive: alive, forceFull: false, now: NOW }))
+      .toEqual({ mode: "tier0", suites: FALLBACK_SUITES, spawnBg: true })
+  })
+})
+
+describe("suitesForChangedPaths (package-level TIA)", () => {
+  test("maps each known prefix to its suite (doccheck always included)", () => {
+    expect(suitesForChangedPaths(["cc-gate-plugin/src/x.ts"])).toEqual(["ccgate", "doccheck"])
+    expect(suitesForChangedPaths(["opencode-plugin/src/x.ts"])).toEqual(["opencode", "doccheck"])
+    expect(suitesForChangedPaths(["minimal/llm.ts"])).toEqual(["opencode", "doccheck"])
+    expect(suitesForChangedPaths(["gate-plugin/src/x.ts"])).toEqual(["gateplugin", "doccheck"])
+    expect(suitesForChangedPaths(["km-crank/src/x.ts"])).toEqual(["kmcrank", "doccheck"])
+  })
+  test("docs-only / markdown-only changes -> doccheck only", () => {
+    expect(suitesForChangedPaths(["docs/resume.md", "README.md"])).toEqual(["doccheck"])
+  })
+  test("markdown under a TIA package is still doc-only: minimal/HISTORY.md does not drag opencode in", () => {
+    expect(suitesForChangedPaths(["minimal/HISTORY.md"])).toEqual(["doccheck"])
+  })
+  test("minimal/CLAUDE.md is FUNCTIONAL (sha256'd harness slot) -> opencode despite .md", () => {
+    expect(suitesForChangedPaths(["minimal/CLAUDE.md"])).toEqual(["opencode", "doccheck"])
+  })
+  test("unknown path -> FALLBACK_SUITES (incumbent scope — no opencode; amendment c)", () => {
+    expect(suitesForChangedPaths(["term-bench2/store/x.json"])).toEqual(FALLBACK_SUITES)
+    expect(suitesForChangedPaths(["scripts/gate-check.ts"])).toEqual(FALLBACK_SUITES)
+  })
+  test("unknown path + opencode-matched path -> union is ALL_SUITES (fallback never DROPS a TIA pick)", () => {
+    expect(suitesForChangedPaths(["scripts/x.ts", "opencode-plugin/src/y.ts"])).toEqual(ALL_SUITES)
+  })
+  test("union across paths, deduplicated, stable ALL_SUITES order", () => {
+    expect(suitesForChangedPaths(["km-crank/src/a.ts", "cc-gate-plugin/src/b.ts"]))
+      .toEqual(["ccgate", "kmcrank", "doccheck"])
+  })
+  test("empty change list -> doccheck only (nothing to test, doc drift still checked)", () => {
+    expect(suitesForChangedPaths([])).toEqual(["doccheck"])
+  })
+})
+
+describe("slowCcgateTestsForChangedPaths (amendment b)", () => {
+  test("changed slow source pulls its DIRECT value-import consumers (exact lists)", () => {
+    expect(slowCcgateTestsForChangedPaths(["cc-gate-plugin/src/gauge/acp-daemon.ts"]))
+      .toEqual(["test/acp-daemon.test.ts"])
+    expect(slowCcgateTestsForChangedPaths(["cc-gate-plugin/src/gauge/agent-transport.ts"]))
+      .toEqual(["test/acp-client.test.ts", "test/anthropic-cli-warm.test.ts", "test/gauge-agent-transport.test.ts"])
+    expect(slowCcgateTestsForChangedPaths(["cc-gate-plugin/src/gauge/providers/anthropic-cli-warm.ts"]))
+      .toEqual(["test/anthropic-cli-warm.test.ts"])
+    expect(slowCcgateTestsForChangedPaths(["cc-gate-plugin/src/gauge/warm-session.ts"]))
+      .toEqual(["test/acp-pool.test.ts", "test/warm-session.test.ts"])
+    expect(slowCcgateTestsForChangedPaths(["cc-gate-plugin/src/gauge/acp-pool.ts"]))
+      .toEqual(["test/acp-daemon.test.ts", "test/acp-pool.test.ts"])
+  })
+  test("changed slow TEST file pulls itself", () => {
+    expect(slowCcgateTestsForChangedPaths(["cc-gate-plugin/test/warm-session.test.ts"]))
+      .toEqual(["test/warm-session.test.ts"])
+  })
+  test("changed test stubs pull their direct slow consumers (exact lists)", () => {
+    expect(slowCcgateTestsForChangedPaths(["cc-gate-plugin/test/acp-fake-daemon.ts"]))
+      .toEqual(["test/acp-client.test.ts", "test/anthropic-cli-warm.test.ts"])
+    expect(slowCcgateTestsForChangedPaths(["cc-gate-plugin/test/agent-cli-stub.ts"]))
+      .toEqual([
+        "test/acp-client.test.ts", "test/acp-daemon.test.ts",
+        "test/gauge-agent-transport.test.ts", "test/warm-session.test.ts",
+      ])
+  })
+  test("fast files, foreign packages, near-miss basenames pull nothing", () => {
+    expect(slowCcgateTestsForChangedPaths([
+      "cc-gate-plugin/src/gauge/acp-wire.ts",     // fast, not in the slow set
+      "km-crank/src/acp-daemon.ts",               // foreign package
+      "cc-gate-plugin/src/reinject.ts",
+    ])).toEqual([])
+  })
+  test("deduplicated union across paths", () => {
+    expect(slowCcgateTestsForChangedPaths([
+      "cc-gate-plugin/src/gauge/acp-pool.ts", "cc-gate-plugin/test/acp-pool.test.ts",
+    ])).toEqual(["test/acp-daemon.test.ts", "test/acp-pool.test.ts"])
+  })
+})
+
+describe("ccgateFastFiles", () => {
+  test("filters exactly the spawn-heavy files, keeps the rest", () => {
+    const files = [
+      "test/acp-client.test.ts", "test/acp-daemon.test.ts", "test/acp-pool.test.ts",
+      "test/anthropic-cli-warm.test.ts", "test/warm-session.test.ts",
+      "test/gauge-agent-transport.test.ts",
+      "test/acp-wire.test.ts", "test/acp-paths.test.ts", "test/reinject.test.ts",
+    ]
+    expect(ccgateFastFiles(files)).toEqual([
+      "test/acp-wire.test.ts", "test/acp-paths.test.ts", "test/reinject.test.ts",
+    ])
+  })
+  test("empty in, empty out", () => {
+    expect(ccgateFastFiles([])).toEqual([])
+  })
+})
