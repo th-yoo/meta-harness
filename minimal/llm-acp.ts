@@ -13,6 +13,7 @@
  */
 import { registerProvider, sendPrompt, REASONING_ISOLATION } from "../cc-gate-plugin/src/gauge/send-prompt.ts"
 import { makeAnthropicApiProvider } from "../cc-gate-plugin/src/gauge/providers/anthropic-api.ts"
+import type { AuthTokenDeps } from "../cc-gate-plugin/src/gauge/transport.ts"
 
 const PROVIDER_ID = "anthropic-api"
 
@@ -29,6 +30,17 @@ export interface SeatCallOptions {
   /** Full environment for the provider (auth token, base-url test seam).
    * Defaults to `process.env` when absent. */
   env?: Record<string, string | undefined>
+  /** Test seam threaded straight through to `makeAnthropicApiProvider`'s
+   * (transport.ts's `readAuthToken`) second argument — `platform`/`home`/
+   * `exec`. Absent -> `{}`, transport.ts's own default (real `process.platform`
+   * + real keychain/`.credentials.json` lookup), i.e. byte-identical to
+   * before this field existed. Exists because `env` alone cannot force
+   * `readAuthToken`'s branch deterministically: on a real dev machine
+   * (WSL2 or a logged-in MacBook) a real credential is often actually
+   * resolvable, so a test wanting a guaranteed `no-call` needs to pin
+   * `platform`/`home` directly rather than relying on the host's own
+   * filesystem/keychain state. */
+  authDeps?: AuthTokenDeps
   timeoutMs?: number
   maxTokens?: number
 }
@@ -40,13 +52,13 @@ export interface SeatCallOptions {
  * never swallowed.
  *
  * Registers the `anthropic-api` provider on every call, closed over this
- * call's `env`. Re-registering on repeat calls overwrites the previous
+ * call's `env` and `authDeps`. Re-registering on repeat calls overwrites the previous
  * closure — fine, since the registry is a plain `Map.set` and every caller
  * of this module only ever wants the LATEST env anyway (simpler than an
  * idempotence dance for a caller that changes env between calls in tests). */
 export async function seatCall(model: string, prompt: string, opts: SeatCallOptions = {}): Promise<string> {
   const env = opts.env ?? process.env
-  registerProvider(PROVIDER_ID, makeAnthropicApiProvider(env))
+  registerProvider(PROVIDER_ID, makeAnthropicApiProvider(env, opts.authDeps ?? {}))
 
   const outcome = await sendPrompt(prompt, {
     model,

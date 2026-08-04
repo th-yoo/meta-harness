@@ -113,26 +113,28 @@ describe("seatCall", () => {
   }, 10_000)
 
   test("!ok no-call (missing auth token in the provided env) -> rejects with an Error naming the kind", async () => {
-    // No KKAMAK_GAUGE_AUTH_TOKEN in the provided env, and the seat's
-    // SeatCallOptions has no authDeps seam to stub the keychain/home
-    // lookup directly — so HOME is pointed at a fresh empty dir for the
-    // duration of this call (save/restore) to force `readAuthToken`'s
-    // filesystem fallback to fail deterministically, on this (linux)
-    // dev/CI host, without touching real credentials.
+    // No KKAMAK_GAUGE_AUTH_TOKEN in the provided env. `authDeps` pins the
+    // NON-darwin branch (`platform: "linux"`) and an empty temp `home`, so
+    // `readAuthToken` deterministically fails to resolve a token on ANY
+    // host this suite runs on — a real HOME-var override alone would only
+    // reach the linux branch, and would pass for the wrong reason (or
+    // flake) on a MacBook that either lacks a "Claude Code-credentials"
+    // keychain item (exec throws — accidentally still no-call) or, worse,
+    // HAS one (a real token resolves, the call proceeds, and this test
+    // fails outright). Pinning `platform` removes the host dependency
+    // entirely; zero real model calls either way (`srv.captured` stays
+    // empty — the request never fires).
     const srv = stubServer(() => apiResponse("must never be reached"))
-    const prevHome = process.env.HOME
     const emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), "seatcall-no-auth-home-"))
-    process.env.HOME = emptyHome
     try {
       await expect(
         seatCall("claude-opus-5", "hi", {
           env: { KKAMAK_GAUGE_SDK_BASE_URL: srv.url },
+          authDeps: { platform: "linux", home: emptyHome },
         }),
       ).rejects.toThrow(/no-call/)
       expect(srv.captured.length).toBe(0)
     } finally {
-      if (prevHome === undefined) delete process.env.HOME
-      else process.env.HOME = prevHome
       srv.stop()
     }
   })
