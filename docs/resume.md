@@ -3,6 +3,61 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-05 (`yoo-mac` MacBook) — DARWIN SUITES GREEN (sun_path fix) · WARM LANE ACTIVATED ts 1785856371528 · TASK 8 RETARGETED TO OFFICE
+
+**RESUME PROMPT (office `yoo-dev` — cross-host: git-only transfer):**
+```
+Resume kkamak (meta-harness) at office, post-2026-08-05 MacBook session.
+git pull FIRST (main >= 6e16bba), then this block.
+
+WHAT MACBOOK SHIPPED (all merged+pushed, 7b-gated where code):
+ - 8795db1 darwin sun_path fix: AF_UNIX socket paths cap at 104B on
+   darwin; ACP test sockets hit ~121B, 35 tests silently degraded to
+   no-call/fallback. Shared test/sock-path.ts helper, hard 100B assert.
+   Suites now green BOTH hosts (cc-gate 1043/0, opencode 1776/1skip).
+ - probe-models.sh exit-127 fix (stock darwin has no `timeout`).
+ - 1a11046 RSS probe darwin port + MacBook measurement:
+   ~330MB/warm-session (same band as WSL2), recycle flat; MacBook cap
+   STAYS 4, 8 ruled NOT permissible there (16GB host).
+ - WARM LANE ACTIVATED on yoo-mac: KKAMAK_SEAT_PROVIDER=anthropic-cli-warm
+   in ~/.claude/settings.json env, boundary ts 1785856371528 (2026-08-05
+   00:12:51 KST), ledger entry in 2026-08-01-gauntlet-adoption-ledger.md.
+   yoo-mac seat lines now partition into THREE regimes by ts — never pool
+   across. Office NOT activated — its own logged decision; if taken,
+   re-prove suites in the ACTIVATED state first (standing rule).
+ - GA7→GA14 renumber in HISTORY.md (aaa6f16).
+ - DISCOVERY: plan Tasks 6-7 (pv pairing + --pair flag) were ALREADY done
+   at office 08-04 (d576d12, 0d44aab, cbac62b) — 08-03 resume block was
+   stale. Verified green on darwin; refusal path execute-proven.
+
+OFFICE DUTY — TASK 8 (§6d pv run, REAL SPEND, needs explicit sized go):
+MacBook is structurally blocked: its store is 198 records ALL
+transport-absent (CLI-era), zero sdk-derived class-C; F2 means corpus
+never travels. The sdk-derived stratum lives in YOUR store (§6c ran
+there). Steps (plan Task 8, docs/superpowers/plans/2026-08-03-agent-sdk-
+transport.md):
+ 1. Size token-free:
+    bun cc-gate-plugin/src/gauge/replay-cli.ts pv-sample --pair sdk:agent-sdk
+ 2. Report size + model tier (haiku default) to user, get sized go.
+ 3. KKAMAK_GAUGE_TRANSPORT=agent-sdk ... derive <shadow-dir> --go <n>
+    then pv-compare --pair sdk:agent-sdk; wrongTransport MUST be 0.
+ 4. Commit counts to docs/gauge-pv/<hostname>-sdk-vs-agent-sdk-pv-counts.json
+ 5. Task 9 chains immediately, token-free: script-tally verdict vs §6d bar
+    (agreement >= 0.80, missed-C <= ceil(0.10*|C_sdk|)). Task 9's
+    default-flip is DELETED (GA13 amendment c) — pass means per-BATCH-
+    caller opt-in only, live path stays pinned "sdk". Bar-fail is a
+    complete outcome: record split-readings, stop.
+SDD ledger: .superpowers/sdd/2026-08-03-agent-sdk-transport/progress.md
+(MacBook copy; office's own ledger is its local record).
+
+STANDING: premium was 429-walled (haiku OK) at MacBook session end —
+probe before spend: source scripts/probe-models.sh && probe_models
+claude-haiku-4-5 claude-sonnet-5 claude-opus-5 (now darwin-safe too).
+Rules unchanged: sized go before spend · spec-is-law, pre-data amendments
+only · merge-with-gate.sh + docs/reviews artifact · boundary ts on
+instrument changes · F1/F2 · per-task reviews · grep-verify · SITREP.
+```
+
 ## ✅ SESSION END 2026-08-03 late (`yoo-dev` office) — §6d AGENT-SDK TRANSPORT BUILT (T1-T5, pushed, UNMERGED) · 429 ROOT-CAUSED = PER-MODEL-TIER QUOTA · 7b GATE ARMED (3 gated merges) · CHANNEL LADDER + TRANSPORT DEDUP + COMBINE HARD-GATE MERGED — main @ `ef3627d` pushed · branch `agent-sdk-transport` @ `ab9e513` pushed, 13 commits
 
 **RESUME PROMPT (office `yoo-dev`):**
