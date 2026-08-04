@@ -580,6 +580,32 @@ is CLI-family (it drives the bundled `claude` binary), so a SPLIT result here
 is the likely outcome, not a surprise. Split is the default; pooling is the
 exception to be earned.
 
+**OUTCOME (2026-08-04, yoo-dev, post-data): POOLING-PERMITTED — at the bar's
+exact edge.** Artifact: `docs/gauge-pv/yoo-dev-sdk-vs-agent-sdk-pv-counts.json`
+(`arms: {baseline: "sdk", shadow: "agent-sdk"}` disambiguates the legacy
+`cCli`/`cSdk` field names). Sample: 5 sdk-derived C + 5 not-C (the entire
+sdk-C stratum; sdk baseline came from the 109/112 retry batch derived the
+same day). Counts: agreement 4/5 = 0.800 (bar ≥ 0.80 — zero slack), missed-C
+1 = cap 1 (zero slack), sdk-only-C 0, decided 10/10, wrongTransport 0.
+Reading discipline: both margins sit exactly at the boundary on the smallest
+possible stratum, so pooling is PERMITTED but the number carries no cushion —
+a single flipped record would have split it. Split reporting continues
+alongside any pooled reading, per the bar's own terms. The expected-SPLIT
+prediction above was wrong in the pooling direction, which is the honest
+place for it to be wrong. Operational note: one shadow record (the
+4,428-char meta-record whose prompt text is the refiner prompt itself)
+needed 3 agent-arm attempts — the first two rolls emitted `criteria: []`
+which `parseRefinerOutput` rejects (length-0 guard), while the sdk arm's
+`output_config` produced non-empty criteria first try; the declared
+prompt-side-vs-grammar enforcement asymmetry materializing as retryable
+pending, exactly as registered. Per the PER-CALLER ruling, `selectTransport`'s
+default STAYS `"sdk"` and the live path stays pinned; this outcome permits
+batch callers to opt in individually (boundary ts logged in the gauntlet
+ledger when the first one does). The deriver's bar validates the derive
+instrument at haiku — it says nothing about the opus labeler or channel
+verifier, which were never routed (transport.ts documents this) and would
+need their own consideration before riding the agent lane.
+
 **Schema enforcement differs between the arms — declared, not incidental
 (2026-08-03).** The API-SDK arm enforces `DERIVATION_SCHEMA` at the API
 layer via `output_config` (grammar-constrained sampling: the model cannot

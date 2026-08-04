@@ -1,0 +1,55 @@
+{
+  "comparedAt": "2026-08-04T00:44:14.666Z",
+  "hostname": "yoo-dev",
+  "counts": {
+    "cCli": 5,
+    "cSdk": 4,
+    "intersection": 4,
+    "union": 5,
+    "missedC": 1,
+    "sdkOnlyC": 0,
+    "decided": 10,
+    "undecided": 0,
+    "missing": 0,
+    "wrongTransport": 0
+  },
+  "keys": {
+    "cCli": [
+      "[\"/home/th-yoo/z2/meta-harness\",\"305d920c2f49a5d91865af477e08799f0025dc9389b01424e5af758ebbe19f6d\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"a35b483002165617c5b7660e73e57182244dbeed79e088716bbc1b8da526d5f7\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"1ea281e321c2d068aed897eb6c826356995af371a1e935ef3839b3ed9c001fbd\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"05dc4393d2b5041320bced8722dc66799d6ab7d09fbaeaecd0fc13782d860553\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"fdad189a4f67efa24bf56bcdb949e776cfb254687b5955e257b1a62072bb1766\"]"
+    ],
+    "cSdk": [
+      "[\"/home/th-yoo/z2/meta-harness\",\"305d920c2f49a5d91865af477e08799f0025dc9389b01424e5af758ebbe19f6d\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"a35b483002165617c5b7660e73e57182244dbeed79e088716bbc1b8da526d5f7\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"05dc4393d2b5041320bced8722dc66799d6ab7d09fbaeaecd0fc13782d860553\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"fdad189a4f67efa24bf56bcdb949e776cfb254687b5955e257b1a62072bb1766\"]"
+    ],
+    "intersection": [
+      "[\"/home/th-yoo/z2/meta-harness\",\"305d920c2f49a5d91865af477e08799f0025dc9389b01424e5af758ebbe19f6d\"]",
+      "[\"/home/th-yoo/z2/meta-harness\",\"a35b483002165617c5b7660e73e57182244dbeed79e088716bbc1b8da526d5f7\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"05dc4393d2b5041320bced8722dc66799d6ab7d09fbaeaecd0fc13782d860553\"]",
+      "[\"/home/th-yoo/z2/km-play\",\"fdad189a4f67efa24bf56bcdb949e776cfb254687b5955e257b1a62072bb1766\"]"
+    ],
+    "missedC": [
+      "[\"/home/th-yoo/z2/meta-harness\",\"1ea281e321c2d068aed897eb6c826356995af371a1e935ef3839b3ed9c001fbd\"]"
+    ],
+    "sdkOnlyC": [],
+    "undecided": [],
+    "missing": [],
+    "wrongTransport": []
+  },
+  "bar": {
+    "verdict": "POOLING-PERMITTED",
+    "agreement": 0.8,
+    "agreementOk": true,
+    "missedCap": 1,
+    "missedOk": true
+  },
+  "arms": {
+    "baseline": "sdk",
+    "shadow": "agent-sdk"
+  }
+}
