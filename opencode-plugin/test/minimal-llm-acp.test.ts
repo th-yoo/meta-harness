@@ -20,6 +20,8 @@ import path from "node:path"
 import { seatCall } from "../../minimal/llm-acp.ts"
 import { REASONING_ISOLATION } from "../../cc-gate-plugin/src/gauge/send-prompt.ts"
 import { stubServer } from "../../cc-gate-plugin/test/sdk-stub.ts"
+import { fakeDaemon, type FakeDaemonHandle } from "../../cc-gate-plugin/test/acp-fake-daemon.ts"
+import { envFingerprint } from "../../cc-gate-plugin/src/gauge/acp-paths.ts"
 
 function apiResponse(text: string): Response {
   return Response.json({
@@ -195,6 +197,126 @@ describe("seatCall", () => {
       })
       expect(out).toBe("second call")
       expect(srv.captured.length).toBe(2)
+    } finally {
+      srv.stop()
+    }
+  })
+})
+
+/** 2026-08-05 node — KKAMAK_SEAT_PROVIDER wiring. Every test builds its own
+ * temp socket path (never the real `~/.config/kkamak` store) and stops any
+ * fake daemon it starts in a `finally`, same discipline as
+ * cc-gate-plugin/test/anthropic-cli-warm.test.ts. */
+function tempSock(tag: string): string {
+  return path.join(os.tmpdir(), `kkamak-seatcall-${tag}-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.sock`)
+}
+
+/** A path under an UNWRITABLE parent (root-owned, no sudo in test) so
+ * `ensureDaemon`'s own `ensureSocketDir` throws EACCES and returns `false`
+ * WITHOUT ever reaching `spawnDaemonProcess` — the same trick
+ * acp-client.test.ts's "ensureDaemon NEVER throws on an unwritable socket
+ * dir" test uses. This is what lets a warm no-call be exercised here
+ * without actually spawning a real `bun acp-daemon.ts` background process. */
+function unwritableSock(tag: string): string {
+  return `/nonexistent-dir-${tag}/x.sock`
+}
+
+describe("seatCall — KKAMAK_SEAT_PROVIDER (2026-08-05 warm-lane wiring node)", () => {
+  test("1. KKAMAK_SEAT_PROVIDER absent -> default path untouched: no daemon probe, purely HTTP (a broken KKAMAK_ACP_SOCKET is never even read)", async () => {
+    const srv = stubServer(() => apiResponse("default path, no daemon"))
+    try {
+      const out = await seatCall("claude-opus-5", "hi", {
+        env: {
+          KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+          KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+          // Points at a socket under a dir that does not exist and cannot
+          // be created (unwritable parent). If the default path wrongly
+          // still probed/spawned a daemon, `ensureDaemon` would either
+          // throw or hang on this path; the default path must never reach
+          // that code at all, so the call simply succeeds over HTTP.
+          KKAMAK_ACP_SOCKET: unwritableSock("t1"),
+        },
+      })
+      expect(out).toBe("default path, no daemon")
+      expect(srv.captured.length).toBe(1)
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("2. KKAMAK_SEAT_PROVIDER=anthropic-cli-warm + working fake daemon -> warm lane serves the call, zero HTTP requests", async () => {
+    const sock = tempSock("t2-warm-ok")
+    const srv = stubServer(() => apiResponse("must never be reached"))
+    const env = {
+      KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+      KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      KKAMAK_SEAT_PROVIDER: "anthropic-cli-warm",
+      KKAMAK_ACP_SOCKET: sock,
+    }
+    const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "ok", text: "warm lane answer" })
+    try {
+      const out = await seatCall("claude-opus-5", "hi", { env })
+      expect(out).toBe("warm lane answer")
+      expect(srv.captured.length).toBe(0)
+    } finally {
+      fake.stop()
+      srv.stop()
+    }
+  })
+
+  test("3. warm no-call (no daemon reachable) -> api fallback: exactly one HTTP request, caller gets its text", async () => {
+    const srv = stubServer(() => apiResponse("fallback answer"))
+    const env = {
+      KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+      KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      KKAMAK_SEAT_PROVIDER: "anthropic-cli-warm",
+      // Unwritable parent -> ensureDaemon's probe fails AND its spawn path
+      // is refused (EACCES) rather than actually spawning a real daemon
+      // process in the test suite -> daemonCall itself also fails to
+      // connect -> a clean, fast no-call.
+      KKAMAK_ACP_SOCKET: unwritableSock("t3"),
+    }
+    try {
+      const out = await seatCall("claude-opus-5", "hi", { env })
+      expect(out).toBe("fallback answer")
+      expect(srv.captured.length).toBe(1)
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("4. warm call-consumed (fake daemon answers -32001, callConsumed:true) -> THROWS naming call-consumed, ZERO HTTP requests (no-double-spend pin)", async () => {
+    const sock = tempSock("t4-warm-consumed")
+    const srv = stubServer(() => apiResponse("must never be reached"))
+    const env = {
+      KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+      KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      KKAMAK_SEAT_PROVIDER: "anthropic-cli-warm",
+      KKAMAK_ACP_SOCKET: sock,
+    }
+    const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "call-consumed" })
+    try {
+      await expect(seatCall("claude-opus-5", "hi", { env })).rejects.toThrow(/call-consumed/)
+      expect(srv.captured.length).toBe(0)
+    } finally {
+      fake.stop()
+      srv.stop()
+    }
+  })
+
+  test("5. garbage KKAMAK_SEAT_PROVIDER value -> throws naming the value", async () => {
+    const srv = stubServer(() => apiResponse("must never be reached"))
+    try {
+      await expect(
+        seatCall("claude-opus-5", "hi", {
+          env: {
+            KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+            KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+            KKAMAK_SEAT_PROVIDER: "definitely-not-a-real-provider",
+          },
+        }),
+      ).rejects.toThrow(/definitely-not-a-real-provider/)
+      expect(srv.captured.length).toBe(0)
     } finally {
       srv.stop()
     }
