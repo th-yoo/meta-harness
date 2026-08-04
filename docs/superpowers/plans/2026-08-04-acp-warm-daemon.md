@@ -8,16 +8,18 @@
 
 **Tech Stack:** Bun + TypeScript, `@anthropic-ai/claude-agent-sdk` (already a dependency; streaming-input mode), `node:net` Unix domain sockets, hand-rolled newline-delimited JSON-RPC 2.0 conformant to the ACP wire shapes (agentclientprotocol.com — no new runtime dependency; see Task 2 rationale).
 
+**RISK NOTE, READ BEFORE STARTING.** This plan's central mechanism — a `/clear` user message pushed into a **streaming-input** `Query` producing an `SDKConversationResetMessage` — has never been measured in this repo. The 2026-08-03 figures behind it came from a scratch probe that used neither this amendment's isolation option set nor streaming input. **Task 4 Step 1a is a token-free probe with an explicit STOP-and-report gate, and it is the FIRST thing implemented after Tasks 1-3.** If that probe fails, Tasks 4-10 do not proceed; the correct response is to stop and report, not to improvise a workaround.
+
 ## Global Constraints
 
 - **User-directed scope (2026-08-04).** This plan implements three verbatim user rulings quoted in full in Task 1's §6e text. They supersede §6d's "Selection is PER-CALLER" BINDING sentence and the 2026-08-03 "batch-only, live must not use it" agreed shape. They do NOT supersede the bar gate (no live flip without a §6e PASS) or the fail-open requirement. The 2026-08-04 "ask before ANY daemon implementation work" rule is SATISFIED: this plan is the user-initiated daemon work.
 - **Isolation set is law, pinned server-side, never client-negotiable.** Byte-measured 2026-08-03, `agent-transport.ts:119-132`, TEN keys: `model`, `systemPrompt: ""`, `settingSources: []`, `settings: { autoMemoryEnabled: false }`, `persistSession: false`, `strictMcpConfig: true`, `tools: []`, `title: "kkamak-gauge"`, `thinking: { type: "disabled" }`, `env` (full replacement).
   **TWO declared deltas (do not paper over them):**
-  1. **Removed:** the one-shot lane additionally sets `maxTurns: 1` and `abortController`. Both are QUERY-scoped and cannot transfer to a many-turn warm session — `maxTurns` (sdk.d.ts:1675-1678) would stop the whole `Query` after record #1, and aborting the shared controller would kill every future turn. They are replaced by (a) the per-turn model-call accounting rule in `WarmSession` and (b) `interrupt()` as the per-turn cancel.
+  1. **Removed:** the one-shot lane additionally sets `maxTurns: 1` and `abortController`. Both are QUERY-scoped and cannot transfer to a many-turn warm session — `maxTurns` (sdk.d.ts:1674-1678) would stop the whole `Query` after record #1, and aborting the shared controller would kill every future turn. They are replaced by (a) the per-turn model-call accounting rule in `WarmSession` and (b) `interrupt()` as the per-turn cancel.
   2. **Added:** an explicit neutral `cwd` (`os.tmpdir()` unless overridden) so the daemon's context does not depend on which session happened to spawn it. §6d measured a neutral `cwd` as PAYLOAD-NEUTRAL (spec table line 690: "no further change") and `agent-transport.ts:41-44` therefore omits it as redundant/dead configuration for a one-shot. For a host-global daemon it is not redundant — it is the difference between a fixed instrument and one that varies with its spawner.
   Both deltas are registered in §6e; this is NOT "the §6d set verbatim" and the plan never claims so.
-- **Env is part of the instrument, and the daemon proves which env it has.** `env` is one of the ten pinned keys and a daemon freezes it at spawn time. A small enumerated env subset is therefore hashed into the default socket filename AND echoed by `initialize`; a client whose fingerprint differs refuses (`no-call`) rather than deriving through a daemon configured differently. See §6e "Instrument fingerprint" and Task 5.
-- **Exactly one model call per record (§4, binding) — and the fallback must not break it.** `/clear` makes no model call (measured 2026-08-03); one prompt turn = one call. Every daemon turn resolves as `ok`, `no-call`, or `call-consumed` per the **§6e wire-send boundary law** (Task 1, stated ONCE and referenced by Tasks 2/4/5/6/7). **Fallback to the one-shot lane is permitted ONLY on `no-call`.** On `call-consumed` the deriver returns `undefined` and the record stays pending/retryable — a second lane call would make `--go N` mean up to `2N` calls.
+- **Env is part of the instrument, and the daemon proves which env it has — over the WHOLE env, not a five-key sample.** `env` is one of the ten pinned keys and a daemon freezes it at spawn time. The instrument fingerprint therefore hashes the FULL environment minus a short, documented denylist of provably-volatile keys, and is echoed by `initialize`; a client whose fingerprint differs refuses (`no-call`) rather than deriving through a daemon configured differently. An enumerated five-key subset was rejected during review: it would leave `ANTHROPIC_MODEL`, `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`, `ANTHROPIC_SMALL_FAST_MODEL` and every `CLAUDE_CODE_*` toggle free to change the instrument without changing the fingerprint. See §6e "Instrument fingerprint" and Task 5.
+- **Exactly one model call per record (§4, binding) — and the fallback must not break it.** `/clear` makes no model call (indicative 2026-08-03; re-locked by request-count assertions in Task 4). Every daemon turn resolves as `ok`, `no-call`, or `call-consumed` per the **§6e wire-send boundary law** (Task 1, stated ONCE and referenced by Tasks 2/4/5/6/7). **Fallback to the one-shot lane is permitted ONLY on `no-call`, and `no-call` means the prompt bytes were never pushed — there is no post-send exception on either side of the wire.** On `call-consumed` the deriver returns `undefined` and the record stays pending/retryable; a second lane call would make `--go N` mean up to `2N` calls.
 - **Live derive path stays pinned to `"sdk"`** (test-locked, `test/gauge-refiner-cli.test.ts:105`, and asserted again at `:56-86` and `test/gauge-wiring.test.ts:102`) through Tasks 1-9. Only Task 10, after a §6e bar PASS and on its own go, may touch the pin.
 - **Fail-open everywhere**: daemon absent/slow/dead → the caller degrades within ONE wall-clock budget (below); the SessionStart hook always exits 0. Fail-open never means fail-open-into-double-spend: an ambiguity after the prompt frame was sent is `call-consumed`, not `no-call`.
 - **One budget, not two, and the arithmetic is locked by a test.** `callModelDerive` owns a single 60 s wall-clock budget per record (the incumbent `CALL_TIMEOUT_MS`). All timing constants live in ONE exported object, `ACP_BUDGET` in `acp-wire.ts` (Task 2), because the client leg MUST exceed the daemon's worst case or a client timeout would misclassify a turn the daemon is still legitimately running:
@@ -26,26 +28,32 @@
   |---|---|---|---|
   | `queueWaitMs` | 6 000 | daemon | a turn still in the FIFO queue at this point is dropped, provably unsent |
   | `clearTimeoutMs` | 4 000 | daemon | `/clear` must be confirmed by `conversation_reset` within this |
+  | `setModelMs` | 2 000 | daemon | `setModel()` is an un-timed SDK control round-trip; capped so a wedged subprocess cannot hang the FIFO forever |
   | `turnTimeoutMs` | 16 000 | daemon | generation budget, measured from the prompt push |
   | `hardGraceMs` | 4 000 | daemon | extra grace before destroying the `Query` if `interrupt()` hangs |
-  | `daemonWorstCaseMs` | 30 000 | derived | = 6 000 + 4 000 + 16 000 + 4 000 |
-  | `daemonLegMs` | 33 000 | client | MUST be > `daemonWorstCaseMs` |
+  | `daemonWorstCaseMs` | 32 000 | derived | = 6 000 + 4 000 + 2 000 + 16 000 + 4 000 |
+  | `daemonLegMs` | 36 000 | client | MUST be > `daemonWorstCaseMs`; the 4 000 ms of slack is the client's connect + `initialize` + `session/new` preamble, which the daemon's clock does not cover |
   | `minFallbackMs` | 10 000 | client | below this remaining, do not start a fallback at all |
   | `recordBudgetMs` | 60 000 | client | today's `CALL_TIMEOUT_MS`; per-record latency never exceeds it |
 
-  Locked by `acp-wire.test.ts`: the four daemon legs sum to `daemonWorstCaseMs`, `daemonLegMs > daemonWorstCaseMs`, and `daemonLegMs + minFallbackMs <= recordBudgetMs`.
-- **F1/F2**: all new source under `cc-gate-plugin/src/gauge/` plus `hooks/hooks.json` and a `SessionStart` branch in `src/hook-cli.ts` — all outside every MECHANISM_PATH (`km-crank/src/calibration.ts:65-72` = `minimal/{complete-gate,mutate,spec-probe,session2}.ts`, `cc-gate-plugin/src/core`, `cc-gate-plugin/vendor`); the `hook-cli.ts` wiring precedent is Phase-2 fixture harvest. Socket/lock/runtime state under `~/.config/kkamak/` — the repo's documented host-local store (CLAUDE.md; `~/.kkamak/` does NOT exist and is not a repo convention). Counts travel, prompts do not.
+  Locked by `acp-wire.test.ts`: the five daemon legs sum to `daemonWorstCaseMs`, `daemonLegMs > daemonWorstCaseMs`, and `daemonLegMs + minFallbackMs <= recordBudgetMs`.
+- **F1/F2**: all new source under `cc-gate-plugin/src/gauge/`, plus `cc-gate-plugin/src/types.ts` (one literal-list widening, Task 3), `hooks/hooks.json`, and a `SessionStart` branch in `src/hook-cli.ts` — all outside every MECHANISM_PATH (`km-crank/src/calibration.ts:65-72` = `minimal/{complete-gate,mutate,spec-probe,session2}.ts`, `cc-gate-plugin/src/core`, `cc-gate-plugin/vendor`); the `hook-cli.ts` wiring precedent is Phase-2 fixture harvest. Socket/lock/runtime state under `~/.config/kkamak/` — the repo's documented host-local store (CLAUDE.md; `~/.kkamak/` does NOT exist and is not a repo convention). Counts travel, prompts do not.
 - **Pre-existing test files: FIVE DECLARED EXCEPTIONS, and no others.** Every other pre-existing test must pass byte-unmodified.
-  1. `test/gauge-agent-transport.test.ts:49` — `expect(GAUGE_TRANSPORTS).toEqual(["cli","sdk","agent-sdk"])` → four literals (Task 3). *Assertion change.*
-  2. `test/gauge-agent-transport.test.ts` — APPEND one new test (Task 3). *No existing assertion touched.*
+  1. `test/gauge-agent-transport.test.ts:49` — `expect(GAUGE_TRANSPORTS).toEqual(["cli","sdk","agent-sdk"])` → four literals (Task 3). *Assertion REPLACED in place, not duplicated.*
+  2. `test/gauge-agent-transport.test.ts` — APPEND one new test: the §6e literal is a member of the `GaugeTransport` union and sorts LAST (Task 3 Step 1, written out in full there). *No existing assertion touched.*
   3. `test/paired-validation.test.ts` — APPEND two new tests (Task 3). *No existing assertion touched.*
-  4. `test/gauge-agent-transport.test.ts:23-45`, `:92-103`, `:116-145` — MOVE `hasClaudeCodeCredentials`/`HAS_CLAUDE_CODE_CREDENTIALS`/`NO_CREDENTIALS_SKIP_REASON`, `sseText`, `withCaptureStub` into `test/agent-cli-stub.ts` and re-import (Task 4 Step 0). *No assertion changes; `bun test` 0-fail before and after.*
-  5. Task 10 ONLY, and only on an earned bar pass: the three live-pin assertions at `test/gauge-refiner-cli.test.ts:56-86` / `:105` and `test/gauge-wiring.test.ts:102` (Task 10 Step 3 enumerates all three). *Assertion changes.*
+  4. `test/gauge-agent-transport.test.ts:2-5`, `:23-45`, `:92-103`, `:116-145` — MOVE `hasClaudeCodeCredentials`/`HAS_CLAUDE_CODE_CREDENTIALS`/`NO_CREDENTIALS_SKIP_REASON`, `sseText`, `withCaptureStub` into `test/agent-cli-stub.ts`, re-import them, AND delete the four imports (`fs`, `os`, `path`, `execFileSync`) that become dead once `hasClaudeCodeCredentials` leaves the file — they have no other use in it (Task 4 Step 0). *No assertion changes; `bun test` 0-fail before and after.*
+  5. Task 10 ONLY, and only on an earned bar pass — the live flip changes what `refiner-cli.ts` DOES, so it necessarily changes every test that runs `refiner-cli.ts`. The complete, enumerated list (Task 10 Step 3 walks each one):
+     - `test/gauge-refiner-cli.test.ts` — the shared `runRefinerCli` helper (`:31-49`) gains two injected env vars, and SIX tests are affected: `:56-86` (assertion change), `:105` (assertion change), `:138`, `:159`, `:178`, `:203` (stub-shape + guard changes only, assertions preserved). `:217` ("missing req file") is unaffected — it never reaches a transport.
+     - `test/gauge-wiring.test.ts:84-109` — one assertion change plus a stub-shape + guard change.
+     Anything beyond this list means the change is wrong — fix the change, not the test.
 
-  **`test/sdk-stub.ts` is NOT widened.** Its handler type is `(captured: Captured) => Response` (`test/sdk-stub.ts:19`) — synchronous, no promise. Every never-answering stub in this plan uses raw `Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => {}) })`, the established precedent at `gauge-agent-transport.test.ts:252`. Any OTHER pre-existing test that needs editing means the change is wrong — fix the change, not the test.
+  **`test/sdk-stub.ts` is NOT widened.** Its handler type is `(captured: Captured) => Response` (`test/sdk-stub.ts:19`) — synchronous, no promise. Every never-answering stub in this plan uses raw `Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => {}) })`, the established precedent at `gauge-agent-transport.test.ts:252`.
+- **ZERO REAL MODEL CALLS, whole plan, no exceptions — including Task 10.** Every test that can reach a model endpoint must have BOTH endpoints stubbed: `KKAMAK_GAUGE_SDK_BASE_URL` for the direct API-SDK lane and `ANTHROPIC_BASE_URL` (SSE-shaped) for any lane that spawns the bundled CLI. This is not a Tasks-1-8 rule: the Task 10 flip moves the live path onto the CLI-spawning lane, so tests that were hermetic through an API-SDK stub stop being hermetic at that commit unless they are updated in the same commit. A test that would issue a real call is a stop-and-fix, never a "just this once".
 - `cd cc-gate-plugin && bun test` → 0 fail and `bunx tsc --noEmit` clean at every task's end. `bun scripts/doc-check.ts` before every docs commit.
-- TDD per task. Tests that spawn the bundled CLI use the existing `hasClaudeCodeCredentials()` skip-guard AND an explicit per-test timeout (`CLI_TEST_TIMEOUT_MS`) — bun:test's 5 s default is shorter than observed spawn latency, and a credential-less host must SKIP, not FAIL (`gauge-agent-transport.test.ts:13-22`). Zero real model calls anywhere in Tasks 1-8.
-- Env vars introduced here: `KKAMAK_ACP_SOCKET` (override socket path; default `~/.config/kkamak/acp-<envFingerprint>.sock`), `KKAMAK_ACP_IDLE_MS` (default `900000`), `KKAMAK_ACP_TEST_SPAWN_LOG` (test seam), `KKAMAK_GAUGE_TRANSPORT=agent-sdk-daemon` (selects the lane).
+- TDD per task. Tests that spawn the bundled CLI use the existing `hasClaudeCodeCredentials()` skip-guard AND an explicit per-test timeout (`CLI_TEST_TIMEOUT_MS`) — bun:test's 5 s default is shorter than observed spawn latency, and a credential-less host must SKIP, not FAIL (`gauge-agent-transport.test.ts:13-22`).
+- **The hook's import path stays cheap.** `hook-cli.ts:24` imports `transport.ts` EAGERLY on every hook event, so `transport.ts` must NOT gain a top-level `import` of `acp-client.ts`: `daemonCall` is loaded with `await import("./acp-client.ts")` inside `callModelDerive`'s daemon branch only, exactly as `agent-transport.ts:102-108` lazy-loads the SDK for its measured ~84 ms. Timing constants come from `acp-wire.ts` (a constants-only module) and may be imported normally.
+- Env vars introduced here: `KKAMAK_ACP_SOCKET` (override socket path; default `~/.config/kkamak/acp-<envFingerprint>.sock`), `KKAMAK_ACP_IDLE_MS` (default `900000`), `KKAMAK_ACP_TEST_SPAWN_LOG` (test seam), `KKAMAK_ACP_TURN_TIMEOUT_MS` (test seam), `KKAMAK_GAUGE_TRANSPORT=agent-sdk-daemon` (selects the lane).
 - **Merge discipline (7b is ARMED):** one branch, per-task reviews, whole-branch fresh-context review, merge via `scripts/merge-with-gate.sh` with a committed `docs/reviews/<short-sha>-acp-warm-daemon.md`. See Post-plan.
 
 ---
@@ -108,24 +116,37 @@ records) speaking the Agent Client Protocol over a Unix socket. Selected
 per process by `KKAMAK_GAUGE_TRANSPORT=agent-sdk-daemon`; absent or any
 other value keeps the current behaviour byte-for-byte.
 
-**Why.** §6d measured the one-shot agent lane at +1.25-1.46 s subprocess
-spawn per record (~25% end-to-end). The daemon amortizes that to one spawn
-per warm period. Indicative measurement 2026-08-03 (recorded in
-`docs/resume.md`, scratch probe, NO in-tree artifact and NOT taken with
-this amendment's isolation option set or streaming-input `Query`): first
-record 838 ms then ~20 ms per record, `/clear` handled CLI-side with no
-model call. Treat those numbers as indicative only; the plan's Task 4
-tests re-derive them under the real option set.
+**Why, and what is still UNMEASURED.** §6d measured the one-shot agent
+lane at +1.25-1.46 s subprocess spawn per record (~25% end-to-end). The
+daemon amortizes that to one spawn per warm period. Indicative
+measurement 2026-08-03 (recorded in `docs/resume.md`, scratch probe, NO
+in-tree artifact): first record 838 ms then ~20 ms per record, `/clear`
+handled CLI-side with no model call. Those numbers were NOT taken with
+this amendment's isolation option set and NOT taken through a
+streaming-input `Query` — the mode this lane requires. Whether a `/clear`
+user message pushed into a streaming input stream is processed as a slash
+command at all is therefore an OPEN QUESTION at registration time, gated
+by a token-free probe before any of this lane is built. If the probe
+fails, this amendment records a design that was not realizable and the
+lane is not built; that is a complete outcome, not a failure to hide.
 
-**Declared residue.** Each post-`/clear` turn carries ~423 B of constant
-`<local-command-caveat>`/`<command-name>/clear</command-name>` echo that a
-fresh-spawn context does not (same indicative-measurement caveat). It is
-constant per record, so it cannot bias one classification against another
-— but it makes the daemon context MEASURABLY DIFFERENT from the
-§6d-validated fresh-spawn context, which is why this literal gets its own
-bar rather than inheriting §6d's result. The residue's exact SHAPE (folded
-into the next user message vs carried as its own message) was never
-measured; Task 4 records the observed value rather than asserting one.
+**Declared residue, and an open disagreement inside this spec.** Each
+post-`/clear` turn is believed to carry ~423 B of constant
+`<local-command-caveat>`/`<command-name>/clear</command-name>` echo. §6d's
+PER-CALLER ruling above (the paragraph beginning "Routing it through
+`agent-sdk` anyway") attributes that SAME ~423 B to the ONE-SHOT lane, on
+every Stop hook. Both cannot be describing distinct facts: either the echo
+is present in both lanes (in which case it cannot distinguish them) or
+§6d's sentence is wrong about the one-shot lane. This is registered as an
+OPEN DISCREPANCY rather than resolved by argument. It is resolved by
+measurement: the plan's Task 4 records the request bytes of a post-`/clear`
+warm turn AND of a fresh-spawn one-shot turn under the same option set, and
+whichever of the two statements is wrong is corrected in the same commit
+that records the measurement. Note that the separate §6e bar does not
+depend on the outcome: a many-turn session that has served other prompts
+is a different context from a fresh spawn whether or not the echo
+distinguishes them, and that alone is why this literal gets its own bar
+rather than inheriting §6d's result.
 
 **Instrument invariants (pinned in daemon code, not client-negotiable).**
 The §6d isolation option set, with TWO registered deltas:
@@ -147,26 +168,49 @@ flight at a time (FIFO across all connected callers).
 — one of the ten pinned isolation keys — at spawn time, so "which env"
 would otherwise depend on which process happened to start it (a wrapper
 exporting `ANTHROPIC_BASE_URL` would silently redirect every derivation).
-An enumerated FIVE-key subset is therefore hashed into the instrument:
+The fingerprint therefore covers the WHOLE environment, minus an
+enumerated denylist of keys that are provably volatile per-process and
+cannot change the instrument:
 
-  - `ANTHROPIC_BASE_URL` (value)
-  - `CLAUDE_CONFIG_DIR` (value)
-  - `KKAMAK_GAUGE_MODEL` (value)
-  - `ANTHROPIC_API_KEY` (PRESENCE only — `set`/`unset`, never the value)
-  - `ANTHROPIC_AUTH_TOKEN` (PRESENCE only — `set`/`unset`, never the value)
+  `_`, `PWD`, `OLDPWD`, `SHLVL`, `RANDOM`, `LINES`, `COLUMNS`,
+  `WINDOWID`, `TERM_SESSION_ID`, `ITERM_SESSION_ID`, `TMUX`,
+  `TMUX_PANE`, `STY`, `SSH_AUTH_SOCK`, `SSH_AGENT_PID`,
+  `SSH_CLIENT`, `SSH_CONNECTION`, `SSH_TTY`, `XDG_SESSION_ID`,
+  `DBUS_SESSION_BUS_ADDRESS`, `KKAMAK_ACP_IDLE_MS`,
+  `KKAMAK_ACP_TEST_SPAWN_LOG`
 
-`envFingerprint` = first 12 hex chars of sha256 over `k=v\n` lines in that
-order. It is baked into the DEFAULT socket filename
-(`~/.config/kkamak/acp-<fp>.sock`) and echoed in `initialize`'s result;
-a client whose own fingerprint differs REFUSES the daemon and reports
-`no-call` (a pre-send condition — the fallback is safe). Secrets never
-appear in a filename, a log, or a wire frame; only their presence does.
+A five-key subset (`ANTHROPIC_BASE_URL`, `CLAUDE_CONFIG_DIR`,
+`KKAMAK_GAUGE_MODEL`, plus presence of the two credential vars) was the
+first draft and is REJECTED: it would leave `ANTHROPIC_MODEL`,
+`ANTHROPIC_SMALL_FAST_MODEL`, `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` and
+every `CLAUDE_CODE_*` toggle free to change the instrument without
+changing the fingerprint, which is exactly the failure the fingerprint
+exists to prevent.
+
+Secrets never appear in a filename, a log, or a wire frame: any key whose
+name matches `/(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)/i` contributes
+`NAME=set`/`NAME=unset` rather than its value. Everything else
+contributes `NAME=value`. Keys are sorted by name; `envFingerprint` =
+first 12 hex chars of sha256 over the `k=v\n` lines. It is baked into the
+DEFAULT socket filename (`~/.config/kkamak/acp-<fp>.sock`) and echoed in
+`initialize`'s result; a client whose own fingerprint differs REFUSES the
+daemon and reports `no-call` (a pre-send condition — the fallback is
+safe).
+
+RESIDUAL, stated honestly: a whole-env hash is sensitive to benign
+differences (a shell that exports one extra variable produces a different
+fingerprint and therefore a second daemon). That is the safe direction —
+an extra daemon costs one spawn; a shared daemon with a different
+instrument costs the measurement — but it means "one daemon per host" is
+an expectation, not a guarantee, and a host that accumulates several
+`acp-*.sock` files is behaving correctly, not leaking.
 
 **The wire-send boundary law (binding — stated ONCE here; the wire, the
 daemon, the client and the deriver all implement THIS text).** Every turn
 resolves as exactly one of `ok`, `no-call`, or `call-consumed`. The
 dividing line is whether the `session/prompt` bytes crossed the boundary
-toward the model.
+toward the model. Both sides of the wire classify the SAME physics the
+SAME way: there is no post-send `no-call` anywhere.
 
   L1. CLIENT — any failure BEFORE the `session/prompt` frame is fully
       written to the socket is `no-call`: no socket, connect refused,
@@ -182,26 +226,45 @@ toward the model.
       boolean. The numeric code (`ACP_ERR_NO_CALL` / `ACP_ERR_CALL_CONSUMED`)
       is the fallback for a daemon that omitted it. Anything else post-send
       falls to L2.
-  L4. DAEMON — a turn that never pushed its prompt is a PROVABLE `no-call`:
-      still in the FIFO queue when its queue-wait cap expired, `/clear`
-      never confirmed, or the `Query` could not be started at all.
-  L5. DAEMON — once the prompt is pushed, any non-success ending is
-      `call-consumed`, with ONE exception: if the only failure signal the
-      SDK ever produced was connection-level (`api_retry` with
-      `error_status === null`, which sdk.d.ts documents as "null for
-      connection errors (e.g. timeouts) that had no HTTP response"), with
-      no `assistant` output and no non-null-status retry, nothing reached
-      the model and the turn is `no-call`.
+  L4. DAEMON — a turn that never pushed its prompt is a PROVABLE `no-call`,
+      and this is the ONLY daemon-side source of `no-call`: still in the
+      FIFO queue when its queue-wait cap expired; cancelled while queued;
+      `/clear` not confirmed by `conversation_reset` within its cap;
+      `setModel` not confirmed within its cap; or the `Query` could not be
+      started at all.
+  L5. DAEMON — once the prompt is pushed, EVERY non-success ending is
+      `call-consumed`. There is no exception. An earlier draft carved out
+      `api_retry` with `error_status === null`, reasoning that a
+      connection-level failure proves nothing reached the model.
+      sdk.d.ts:2839-2841 does not support that reading: it documents
+      `error_status: null` for "connection errors (e.g. TIMEOUTS) that had
+      no HTTP response", and a read timeout is precisely the case where
+      the API received, processed and BILLED the request while no response
+      came back. `SDKAssistantMessageError` (sdk.d.ts:2901) is a closed
+      enum that reports `'unknown'` for both refusal and timeout, so the
+      two are indistinguishable from the SDK surface. The carve-out was
+      also worthless: a daemon and its clients are fingerprint-matched on
+      the same endpoint and credentials, so an endpoint the daemon cannot
+      reach the one-shot fallback cannot reach either — it would have
+      bought no recoveries while risking the one invariant this law
+      protects.
   L6. DAEMON — `api_retry` with `error_status !== null` means the API
       answered, so the call is CONSUMED; the turn is cancelled at that
       moment because the CLI's own internal retry would be call #2 (§6d,
-      `agent-transport.ts:135-145`).
+      `agent-transport.ts:135-145`). `api_retry` with `error_status ===
+      null` is likewise CONSUMED once the prompt was pushed (L5) and is
+      likewise cancelled, for the same reason.
   L7. DAEMON — a cancelled or timed-out turn settles from its OWN terminal
       `result` message, never at the instant of cancellation, so a trailing
       message can never be attributed to the NEXT turn. If `interrupt()`
       itself hangs past the hard grace, the whole `Query` and its
-      subprocess are destroyed instead (which also makes a stale message
-      impossible).
+      subprocess are destroyed. Destroying the `Query` is NOT by itself
+      sufficient to prevent stale routing: the message pump is a separate
+      object whose loop unwinds asynchronously, so the implementation must
+      additionally bind every pump to the generation of `Query` it was
+      started for and make a superseded pump a no-op — both while routing
+      and while tearing down. A pump that outlives its `Query` and settles
+      whatever turn is current would destroy a FRESH record.
 
 A caller may fall back to the one-shot lane ONLY on `no-call`. On
 `call-consumed` the deriver returns undefined and the record stays
@@ -213,10 +276,15 @@ and making the `--go N` cost fence mean up to `2N` calls.
 client's daemon-leg budget MUST exceed the daemon's worst-case per-turn
 wall clock, or an ordinary slow-but-legitimate turn would trip L2 and cost
 the record. Registered values: daemon queue-wait 6 s + `/clear` confirm
-4 s + generation 16 s + hard grace 4 s = 30 s worst case; client leg 33 s;
-minimum fallback leg 10 s; total per-record budget 60 s (unchanged from
-today's `CALL_TIMEOUT_MS`). Per-record latency therefore never exceeds
-today's. The arithmetic is locked by a unit test, not by prose.
+4 s + `setModel` confirm 2 s + generation 16 s + hard grace 4 s = 32 s
+worst case; client leg 36 s (the 4 s of slack is the client's connect +
+`initialize` + `session/new` preamble, which the daemon's clock does not
+cover); minimum fallback leg 10 s; total per-record budget 60 s (unchanged
+from today's `CALL_TIMEOUT_MS`). Every daemon-side wait is capped —
+including `setModel`, which the SDK exposes as an un-timed control
+round-trip and which would otherwise let one wedged subprocess hang the
+FIFO for the daemon's whole lifetime. Per-record latency therefore never
+exceeds today's. The arithmetic is locked by a unit test, not by prose.
 
 **Fail-open provenance rule (binding).** A caller selecting
 `agent-sdk-daemon` that falls back derives via the direct lane instead and
@@ -227,12 +295,18 @@ again — the paired-validation partition reads stamps, so a lie in the
 stamp corrupts the §6e bar itself.
 
 **Which field proves the model (binding).** The AUTHORITATIVE source for a
-turn's model is the keys of `modelUsage` on the SDK's terminal success
-result (sdk.d.ts:4312). The `model` field of the turn's assistant messages
-is CORROBORATION only. A caller-supplied model is never evidence of
-anything — echoing the request back would make the check a tautology. A
-turn that produced text but cannot prove which model produced it is
-reported `call-consumed` (the call happened; the record must not be
+turn's model is the keys of `modelUsage` on the SDK's terminal result
+(sdk.d.ts:4312 on success, sdk.d.ts:4279 on error). The `model` field of
+the turn's assistant messages is DIAGNOSTIC ONLY and never becomes the
+stamp — treating it as a fallback proof would quietly reinstate the
+tautology this rule exists to remove. A caller-supplied model is never
+evidence of anything on its own. When `modelUsage` carries exactly one
+key, that key is the proven model. When it carries several (an auxiliary
+title/summarizer model is possible), the requested model is accepted as
+proven ONLY IF it is present as a key AND every other key recorded zero
+output tokens — the proof still comes from the result, not from the
+request. A turn that produced text but cannot prove which model produced
+it is reported `call-consumed` (the call happened; the record must not be
 stamped). A client whose requested model differs from the proven model
 discards the derivation.
 
@@ -256,10 +330,16 @@ one env var; it does not license a claim that the warm residue is
 behaviourally neutral.
 
 **Validation-run instrument parameters, registered pre-data.** The §6e
-validation run sets `KKAMAK_ACP_IDLE_MS` above the expected batch duration
-and re-proves daemon liveness inside the same script that spends, so the
-idle reaper cannot fire between a liveness check and record #1. That is an
-operational parameter of the run, not a change to the bar.
+validation run binds its OWN socket path (`KKAMAK_ACP_SOCKET` set to a
+run-specific file) and sets `KKAMAK_ACP_IDLE_MS` above the expected batch
+duration, then re-proves daemon liveness inside the same script that
+spends. The dedicated socket is not cosmetic: `KKAMAK_ACP_IDLE_MS` is on
+the fingerprint denylist (it cannot change the instrument), so a daemon
+already listening at the default fingerprinted path would be adopted by
+the liveness probe and would serve the run under ITS idle budget, not the
+registered one — the registered parameter would be silently inert. Both
+are operational parameters of the run, not changes to the bar. The run
+terminates its own daemon at the end and asserts the socket file is gone.
 
 **Pooling is not transitive, and the post-flip live stream is split three
 ways.** §6d permits pooling `sdk` with `agent-sdk` at exactly 0.800; a
@@ -295,7 +375,7 @@ only, still out of scope, fix it when cls-ab is next opened.
 
 **What would falsify this design.** If warm-lane derivations disagree with
 fresh-spawn agent-lane derivations more than fresh-spawn disagrees with
-the API lane (i.e. the `/clear` residue is NOT behaviourally neutral), the
+the API lane (i.e. the warm context is NOT behaviourally neutral), the
 daemon is retained as a convenience only and the live flip is off the
 table for it. NOTE ON MEASURABILITY: the pv machinery compares a real-store
 baseline against a shadow arm, so it cannot compare two shadow arms
@@ -310,8 +390,8 @@ them.
 - [ ] **Step 2: Verify no dead links**
 
 Run: `bun scripts/doc-check.ts`
-Expected: `doc-check: OK — <N> tracked file(s), 0 violations`
-(doc-check enforces relative-link integrity + fence balance only; the §6e text has no markdown links and no nested fences, and every backticked path it names exists.)
+Expected: `doc-check: OK — <N> tracked file(s), 0 violations (<M>ms)`
+(doc-check enforces relative-link integrity + fence balance only, `scripts/doc-check.ts:21-31`; the §6e text has no markdown links and no nested fences, and every backticked path it names exists. The trailing `(<M>ms)` is part of the real output — do not treat its presence as a mismatch.)
 
 - [ ] **Step 3: Commit**
 
@@ -337,14 +417,24 @@ dependencies and lock it with fixtures transcribed from the spec
 (agentclientprotocol.com/protocol/*).
 
 **Scope honesty: this is a PRIVATE INSTRUMENT PROFILE of the ACP wire, not
-a general-purpose ACP agent.** `session/prompt` REQUIRES `_meta.model`,
-which no standard editor client sends; `session/new`'s `cwd` is accepted
-and ignored because the instrument pins a neutral `cwd`. The dispatcher is
-transport-agnostic and a `--stdio` binding is a flag rather than a rewrite
-— but that binding serves the SAME private profile (our own tooling over
-stdio), NOT off-the-shelf editors. Anyone wanting real editor
-interoperability must relax `_meta.model` and honour `session/new.cwd`,
-which would change the instrument and needs its own amendment.
+a general-purpose ACP agent.** Three deliberate deviations, all listed so
+none is a silent divergence:
+  1. `session/prompt` REQUIRES `_meta.model`, which no standard editor
+     client sends.
+  2. `session/new`'s `cwd` is accepted and ignored, because the instrument
+     pins a neutral `cwd`.
+  3. `session/cancel` is served as a REQUEST (it is answered with `{}`)
+     as well as tolerated as a notification. In ACP proper it is a
+     notification; our own client wants an acknowledgement so a test can
+     order "cancel landed" against "turn resolved". The dispatcher answers
+     only when the frame carried an `id`, so a real notification is never
+     answered and JSON-RPC 2.0 is not violated.
+The dispatcher is transport-agnostic and a `--stdio` binding is a flag
+rather than a rewrite — but that binding serves the SAME private profile
+(our own tooling over stdio), NOT off-the-shelf editors. Anyone wanting
+real editor interoperability must relax `_meta.model`, honour
+`session/new.cwd` and make `session/cancel` notification-only, which would
+change the instrument and needs its own amendment.
 
 **Files:**
 - Create: `cc-gate-plugin/src/gauge/acp-wire.ts`
@@ -355,13 +445,13 @@ which would change the instrument and needs its own amendment.
   - `interface JsonRpcRequest { jsonrpc: "2.0"; id?: number | string; method: string; params?: unknown }`
   - `interface JsonRpcResponse { jsonrpc: "2.0"; id: number | string; result?: unknown; error?: JsonRpcError }`
   - `interface JsonRpcError { code: number; message: string; data?: { callConsumed: boolean; model?: string } }`
-  - `encodeFrame(msg: object): string` — `JSON.stringify(msg) + "\n"`
-  - `class FrameDecoder { constructor(opts?: { maxLineBytes?: number }); push(chunk: Buffer | string): object[]; malformed: number }` — buffers partial lines; a malformed JSON line increments `malformed` and is dropped (never a throw — a broken client must not kill the daemon); a line exceeding `maxLineBytes` (default 4 MiB) also counts as malformed AND resets the buffer, so a client that never sends `\n` cannot grow the daemon's memory without bound.
+  - `encodeFrame(msg: object): string` — `JSON.stringify(msg) + "\n"`. Safe by construction: `JSON.stringify` escapes any literal newline inside a payload string, so a frame can never contain an unescaped delimiter.
+  - `class FrameDecoder { constructor(opts?: { maxLineChars?: number }); push(chunk: Buffer | string): object[]; malformed: number }` — buffers partial lines; a malformed JSON line increments `malformed` and is dropped (never a throw — a broken client must not kill the daemon); a line exceeding `maxLineChars` (default 4 194 304) also counts as malformed AND resets the buffer, so a client that never sends `\n` cannot grow the daemon's memory without bound. **Decoding is UTF-8-boundary-safe**: the decoder holds a `node:string_decoder` `StringDecoder("utf8")`, because a bare `chunk.toString()` turns a multi-byte character split across two socket chunks into two U+FFFD replacement characters — which still parses as JSON and would ship a SILENTLY CORRUPTED prompt to the model. Both `acp-daemon.ts` and `acp-client.ts` additionally call `socket.setEncoding("utf8")`, which is belt-and-braces for the same hazard.
   - Method-name constants: `ACP_INITIALIZE = "initialize"`, `ACP_SESSION_NEW = "session/new"`, `ACP_SESSION_PROMPT = "session/prompt"`, `ACP_SESSION_CANCEL = "session/cancel"`, `ACP_SESSION_UPDATE = "session/update"` (notification).
-  - `ACP_BUDGET` — the ONE timing-constant object (Global Constraints table). It lives here, in the module BOTH sides already import, because the client's leg and the daemon's worst case are a single contract: split across two files they drift, and a drift silently converts §6e law L5 into law L2 (a `no-call` that should have been `call-consumed`, i.e. a double model call).
+  - `ACP_BUDGET` — the ONE timing-constant object (Global Constraints table). It lives here, in the module BOTH sides already import, because the client's leg and the daemon's worst case are a single contract: split across two files they drift, and a drift silently converts §6e law L5 into law L2 (a `no-call` that should have been `call-consumed`, i.e. a double model call). `acp-wire.ts` imports nothing but `node:string_decoder`, so `transport.ts` may import it eagerly without putting anything expensive on the hook path.
   - Instrument error codes — these ARE the call-consumption channel on the wire:
-    - `ACP_ERR_NO_CALL = -32000` — §6e law L4. `data.callConsumed === false`.
-    - `ACP_ERR_CALL_CONSUMED = -32001` — §6e law L5/L6. `data.callConsumed === true`.
+    - `ACP_ERR_NO_CALL = -32000` — §6e law L1/L4: the prompt bytes were never pushed toward the model. `data.callConsumed === false`.
+    - `ACP_ERR_CALL_CONSUMED = -32001` — §6e law L2/L5/L6: the prompt bytes were pushed and the turn did not succeed. `data.callConsumed === true`.
     Both sit in JSON-RPC 2.0's RESERVED implementation-defined SERVER-ERROR band (`-32099..-32000`), which is where a server's own error semantics belong; true application-defined codes must live OUTSIDE `-32768..-32000`. Recorded precisely because a later reader will otherwise "fix" them into the wrong band. `data.callConsumed` is AUTHORITATIVE over the code (§6e law L3) so a code collision with a future ACP assignment degrades gracefully rather than into a double call.
   - Param/result shapes (types only, used by Tasks 5-6):
     `AcpInitializeResult { protocolVersion: number; agentCapabilities: { loadSession: false }; _meta: { envFingerprint: string } }` — the fingerprint echo §6e requires.
@@ -392,6 +482,20 @@ describe("acp-wire framing", () => {
     expect(d.push(wire.slice(0, 10)).length).toBe(0)
     expect(d.push(wire.slice(10)).length).toBe(1)
   })
+  test("a multi-byte character split across two BUFFER chunks survives verbatim", () => {
+    // THE corruption guard. A bare chunk.toString() yields two U+FFFD here,
+    // the frame still parses as JSON, and a silently corrupted prompt goes
+    // to the model — a wrong derivation with no error anywhere.
+    const d = new FrameDecoder()
+    const text = "\u00e9\u4f60\u597d\u{1F600} tail"        // 2-, 3- and 4-byte sequences
+    const wire = Buffer.from(encodeFrame({ jsonrpc: "2.0", id: 7, method: "session/prompt", params: { text } }), "utf8")
+    // Cut inside the 4-byte emoji: find its start and split one byte in.
+    const cut = wire.indexOf(Buffer.from("\u{1F600}", "utf8")) + 1
+    expect(d.push(wire.subarray(0, cut)).length).toBe(0)
+    const frames = d.push(wire.subarray(cut))
+    expect(frames.length).toBe(1)
+    expect((frames[0] as { params: { text: string } }).params.text).toBe(text)
+  })
   test("two frames in one chunk", () => {
     const d = new FrameDecoder()
     const frames = d.push(encodeFrame({ jsonrpc: "2.0", id: 3, method: "a" }) + encodeFrame({ jsonrpc: "2.0", id: 4, method: "b" }))
@@ -404,7 +508,7 @@ describe("acp-wire framing", () => {
     expect(d.malformed).toBe(1)
   })
   test("an unterminated giant line is dropped, not buffered forever", () => {
-    const d = new FrameDecoder({ maxLineBytes: 64 })
+    const d = new FrameDecoder({ maxLineChars: 64 })
     expect(d.push("x".repeat(200)).length).toBe(0)
     expect(d.malformed).toBe(1)
     // buffer was reset: a well-formed frame right after still decodes
@@ -424,12 +528,19 @@ describe("acp-wire framing", () => {
 // leg ever stops exceeding the daemon's worst case, an ordinary slow turn
 // trips law L2 and the record costs TWO model calls.
 describe("ACP_BUDGET arithmetic (§6e budget rule)", () => {
-  test("the four daemon legs sum to the declared worst case", () => {
+  test("the five daemon legs sum to the declared worst case", () => {
     const b = ACP_BUDGET
-    expect(b.queueWaitMs + b.clearTimeoutMs + b.turnTimeoutMs + b.hardGraceMs).toBe(b.daemonWorstCaseMs)
+    expect(b.queueWaitMs + b.clearTimeoutMs + b.setModelMs + b.turnTimeoutMs + b.hardGraceMs)
+      .toBe(b.daemonWorstCaseMs)
   })
   test("the client leg strictly exceeds the daemon worst case", () => {
     expect(ACP_BUDGET.daemonLegMs).toBeGreaterThan(ACP_BUDGET.daemonWorstCaseMs)
+  })
+  test("the client's slack covers a connect + initialize + session/new preamble", () => {
+    // Not decoration: the daemon's clock starts when it accepts the prompt,
+    // the client's when it opens the socket. Anything under a second of
+    // slack would make an ordinary busy daemon look like law L2.
+    expect(ACP_BUDGET.daemonLegMs - ACP_BUDGET.daemonWorstCaseMs).toBeGreaterThanOrEqual(3_000)
   })
   test("daemon leg + minimum fallback still fits the per-record budget", () => {
     expect(ACP_BUDGET.daemonLegMs + ACP_BUDGET.minFallbackMs).toBeLessThanOrEqual(ACP_BUDGET.recordBudgetMs)
@@ -455,12 +566,19 @@ Expected: FAIL — `Export named 'FrameDecoder' not found`
 // fixtures in acp-wire.test.ts are the conformance record.
 //
 // SCOPE: a PRIVATE INSTRUMENT PROFILE of the ACP wire, not a
-// general-purpose ACP agent — `_meta.model` is REQUIRED on session/prompt
-// and `session/new.cwd` is accepted-and-ignored (the instrument pins a
-// neutral cwd). Off-the-shelf editor clients are explicitly out of scope.
+// general-purpose ACP agent — `_meta.model` is REQUIRED on session/prompt,
+// `session/new.cwd` is accepted-and-ignored (the instrument pins a neutral
+// cwd), and `session/cancel` is answerable as a request. Off-the-shelf
+// editor clients are explicitly out of scope.
 //
 // Transport-agnostic: the daemon binds it to a Unix socket, and a --stdio
 // flag binds the same dispatcher to stdin/stdout for our own tooling.
+//
+// Imports nothing but node:string_decoder, deliberately: transport.ts
+// imports this module eagerly and transport.ts is on hook-cli.ts's eager
+// import path (hook-cli.ts:24).
+import { StringDecoder } from "node:string_decoder"
+
 export interface JsonRpcRequest {
   jsonrpc: "2.0"
   id?: number | string
@@ -489,11 +607,12 @@ export const ACP_SESSION_PROMPT = "session/prompt"
 export const ACP_SESSION_CANCEL = "session/cancel"
 export const ACP_SESSION_UPDATE = "session/update"
 
-/** §6e law L4 — the turn never pushed its prompt. The caller MAY fall back
- * to the one-shot lane without breaking §4's exactly-one-call rule. */
+/** §6e law L1/L4 — the prompt bytes never crossed the boundary toward the
+ * model. The caller MAY fall back to the one-shot lane without breaking
+ * §4's exactly-one-call rule. This is the ONLY safe fallback signal. */
 export const ACP_ERR_NO_CALL = -32000
-/** §6e law L5/L6 — a model request went out (or may have) and the turn
- * still failed. The caller MUST NOT fall back; the record stays
+/** §6e law L2/L5/L6 — the prompt bytes were pushed and the turn still
+ * failed. The caller MUST NOT fall back; the record stays
  * pending/retryable. */
 export const ACP_ERR_CALL_CONSUMED = -32001
 
@@ -506,14 +625,20 @@ export const ACP_BUDGET = {
   queueWaitMs: 6_000,
   /** daemon: `/clear` must be confirmed by conversation_reset within this */
   clearTimeoutMs: 4_000,
+  /** daemon: setModel() is an un-timed SDK control round-trip (sdk.d.ts:2327);
+   * capped so one wedged subprocess cannot hang the FIFO for the daemon's
+   * whole lifetime with no timer armed. */
+  setModelMs: 2_000,
   /** daemon: generation budget, measured from the prompt push */
   turnTimeoutMs: 16_000,
   /** daemon: grace before destroying the Query when interrupt() hangs */
   hardGraceMs: 4_000,
-  /** derived: 6 000 + 4 000 + 16 000 + 4 000 */
-  daemonWorstCaseMs: 30_000,
-  /** client: MUST exceed daemonWorstCaseMs */
-  daemonLegMs: 33_000,
+  /** derived: 6 000 + 4 000 + 2 000 + 16 000 + 4 000 */
+  daemonWorstCaseMs: 32_000,
+  /** client: MUST exceed daemonWorstCaseMs. The 4 000 ms of slack is the
+   * connect + initialize + session/new preamble, which the daemon's own
+   * per-turn clock does not cover. */
+  daemonLegMs: 36_000,
   /** client: below this remaining, do not start a fallback at all */
   minFallbackMs: 10_000,
   /** client: today's CALL_TIMEOUT_MS — per-record latency never exceeds it */
@@ -552,23 +677,31 @@ export function encodeFrame(msg: object): string {
   return JSON.stringify(msg) + "\n"
 }
 
-const DEFAULT_MAX_LINE_BYTES = 4 * 1024 * 1024
+const DEFAULT_MAX_LINE_CHARS = 4 * 1024 * 1024
 
 /** Newline-delimited JSON-RPC decoder. Malformed lines (and lines longer
- * than `maxLineBytes`, which also reset the buffer) increment `malformed`
+ * than `maxLineChars`, which also reset the buffer) increment `malformed`
  * and are dropped — a broken or hostile client never kills the daemon and
- * never grows its memory without bound. */
+ * never grows its memory without bound.
+ *
+ * UTF-8-BOUNDARY-SAFE by construction: a StringDecoder holds any partial
+ * multi-byte sequence at a chunk edge until its remaining bytes arrive. A
+ * bare `chunk.toString()` would emit U+FFFD on both sides of the split; the
+ * frame would still parse as JSON and a CORRUPTED prompt would reach the
+ * model with no error raised anywhere. `maxLineChars` counts UTF-16 code
+ * units (JS string length), not bytes — named accordingly. */
 export class FrameDecoder {
   private buf = ""
-  private readonly maxLineBytes: number
+  private readonly dec = new StringDecoder("utf8")
+  private readonly maxLineChars: number
   malformed = 0
 
-  constructor(opts: { maxLineBytes?: number } = {}) {
-    this.maxLineBytes = opts.maxLineBytes ?? DEFAULT_MAX_LINE_BYTES
+  constructor(opts: { maxLineChars?: number } = {}) {
+    this.maxLineChars = opts.maxLineChars ?? DEFAULT_MAX_LINE_CHARS
   }
 
   push(chunk: Buffer | string): object[] {
-    this.buf += chunk.toString()
+    this.buf += typeof chunk === "string" ? chunk : this.dec.write(chunk)
     const out: object[] = []
     let nl: number
     while ((nl = this.buf.indexOf("\n")) >= 0) {
@@ -583,7 +716,7 @@ export class FrameDecoder {
         this.malformed++
       }
     }
-    if (this.buf.length > this.maxLineBytes) {
+    if (this.buf.length > this.maxLineChars) {
       this.malformed++
       this.buf = ""
     }
@@ -607,38 +740,58 @@ git commit -m "feat(gauge): ACP wire subset — framing, method constants, call-
 
 **Files:**
 - Modify: `cc-gate-plugin/src/types.ts` (`GAUGE_TRANSPORTS`, line 167)
-- Modify: `cc-gate-plugin/test/gauge-agent-transport.test.ts:49` (DECLARED EXCEPTION #1) + append one test (DECLARED EXCEPTION #2)
+- Modify: `cc-gate-plugin/test/gauge-agent-transport.test.ts:49` (DECLARED EXCEPTION #1 — replace in place) + append one test (DECLARED EXCEPTION #2)
 - Modify: `cc-gate-plugin/test/paired-validation.test.ts` (append two tests — DECLARED EXCEPTION #3)
 
 **Interfaces:**
 - Consumes: `GAUGE_TRANSPORTS`, `GaugeTransport` (currently `["cli","sdk","agent-sdk"]`, `src/types.ts:167-168`).
-- Produces: `GAUGE_TRANSPORTS = ["cli", "sdk", "agent-sdk", "agent-sdk-daemon"] as const` (incumbent-first order preserved) and the derived union. Everything downstream (`parsePairFlag` at `paired-validation.ts:349-362`, `PvPairing`, `arms` fields, `derivedOn`, `parsePvCountsFile`'s arms validation at `:638`) picks the new literal up structurally — the §6d plan parameterized them over `GAUGE_TRANSPORTS` for exactly this reason.
+- Produces: `GAUGE_TRANSPORTS = ["cli", "sdk", "agent-sdk", "agent-sdk-daemon"] as const` (incumbent-first order preserved) and the derived union. Everything downstream (`parsePairFlag` at `paired-validation.ts:349-362`, `PvPairing`, `arms` fields, `derivedOn`, `parsePvCountsFile`'s arms validation at `:638`, `replay-cli.ts:549`/`:691`'s usage strings) picks the new literal up structurally — the §6d plan parameterized them over `GAUGE_TRANSPORTS` for exactly this reason.
 
 - [ ] **Step 1: Write the failing tests** (in the files that already import these symbols — `gauge-agent-transport.test.ts` owns `GAUGE_TRANSPORTS`/`selectTransport`, `paired-validation.test.ts` already imports `parsePairFlag` and `isCliDerived` at `:8`/`:21`; do NOT put them in `gauge-wiring.test.ts`, which is a hook-to-refiner E2E file that imports neither)
 
 ```typescript
-// test/gauge-agent-transport.test.ts — EXTEND the existing literal-list
-// assertion at line 49 (declared exception #1): a fourth registered literal
-// necessarily invalidates a toEqual on the old three.
-test("four transports are recognized, incumbent order preserved (§6e)", () => {
-  expect(GAUGE_TRANSPORTS).toEqual(["cli", "sdk", "agent-sdk", "agent-sdk-daemon"])
-})
+// test/gauge-agent-transport.test.ts
+//
+// (1) DECLARED EXCEPTION #1 — REPLACE the body of the existing test at
+// :47-51 IN PLACE. Do not add a second literal-list test: a fourth
+// registered literal necessarily invalidates a toEqual on the old three,
+// and two tests asserting the same array is duplication, not coverage.
+describe("GaugeTransport", () => {
+  test("four transports are recognized, incumbent order preserved (§6e)", () => {
+    expect(GAUGE_TRANSPORTS).toEqual(["cli", "sdk", "agent-sdk", "agent-sdk-daemon"])
+  })
 
-// test/paired-validation.test.ts (declared exception #3 — append only)
+  // (2) DECLARED EXCEPTION #2 — APPEND this test. It pins the two facts the
+  // toEqual above does not: that the literal is a MEMBER OF THE UNION (a
+  // compile-time fact `toEqual` cannot see, and the one Task 7's
+  // `DeriveCallResult.transport` and Task 9's `--pair` both depend on), and
+  // that it sorts LAST, which is the "existing readings that sort by this
+  // array do not reshuffle" promise in types.ts's own comment.
+  test("the §6e literal is a member of the GaugeTransport union and sorts last", () => {
+    const t: GaugeTransport = "agent-sdk-daemon"      // compile-time union membership
+    expect(GAUGE_TRANSPORTS.indexOf(t)).toBe(GAUGE_TRANSPORTS.length - 1)
+    expect(GAUGE_TRANSPORTS.indexOf("sdk")).toBeLessThan(GAUGE_TRANSPORTS.indexOf(t))
+  })
+})
+// ...and widen the import at :6 to `import { GAUGE_TRANSPORTS, type GaugeTransport } from "../src/types.ts"`.
+
+// test/paired-validation.test.ts (declared exception #3 — append only).
+// Uses this file's own `rec`/`gauge` builders rather than a hand-rolled
+// literal, matching the sibling test at :1281.
 test("parsePairFlag accepts the §6e literal structurally", () => {
   const p = parsePairFlag(["--pair", "sdk:agent-sdk-daemon"])!
   expect(p.shadowTransport).toBe("agent-sdk-daemon")
   expect(p.baselineLabel).toBe("sdk")
 })
 test("an agent-sdk-daemon record is NOT CLI-derived", () => {
-  expect(isCliDerived({ derivation: { transport: "agent-sdk-daemon", class: "C" } } as never)).toBe(false)
+  expect(isCliDerived(rec({ derivation: gauge({ transport: "agent-sdk-daemon" }) }))).toBe(false)
 })
 ```
 
 - [ ] **Step 2: Run to verify they fail**
 
 Run: `cd cc-gate-plugin && bun test test/gauge-agent-transport.test.ts test/paired-validation.test.ts`
-Expected: FAIL — array does not contain `"agent-sdk-daemon"`.
+Expected: FAIL — array does not contain `"agent-sdk-daemon"`, and the `GaugeTransport` annotation is a type error.
 
 - [ ] **Step 3: Widen the literal in `types.ts:167`**
 
@@ -654,8 +807,9 @@ export type GaugeTransport = (typeof GAUGE_TRANSPORTS)[number]
 
 Run: `cd cc-gate-plugin && bun test` — 0 fail. `bunx tsc --noEmit` clean.
 Grep-verify no OTHER literal-list assertion exists:
-`grep -rn 'GAUGE_TRANSPORTS' cc-gate-plugin/test/` — expect exactly two hits in `gauge-agent-transport.test.ts` (the import at `:6` and the one updated assertion at `:49`). Any other hit is an undeclared exception — stop and report.
+`grep -rn 'GAUGE_TRANSPORTS' cc-gate-plugin/test/` — expect exactly THREE hits in `gauge-agent-transport.test.ts` (the import at `:6`, the replaced assertion at `:49`, and the appended membership test). Any hit in another file is an undeclared exception — stop and report.
 `isCliDerived` (`paired-validation.ts:56-59`) already reads `"cli"`-or-absent, so the new literal cannot fall into the CLI baseline; the appended test pins that.
+Also confirm nothing asserts `replay-cli.ts`'s usage strings (`:549`, `:691`) which interpolate `GAUGE_TRANSPORTS.join("|")`: `grep -rn 'cli|sdk|agent-sdk' cc-gate-plugin/test/` must show no usage-line assertion.
 
 - [ ] **Step 5: Commit**
 
@@ -668,12 +822,12 @@ git commit -m "feat(gauge): widen transport literal to agent-sdk-daemon"
 
 **Files:**
 - Create: `cc-gate-plugin/test/agent-cli-stub.ts` (helper extraction, Step 0 — DECLARED EXCEPTION #4)
-- Modify: `cc-gate-plugin/test/gauge-agent-transport.test.ts` (import the extracted helpers instead of defining them — a MOVE, no assertion changes)
+- Modify: `cc-gate-plugin/test/gauge-agent-transport.test.ts` (import the extracted helpers instead of defining them, and drop the four imports that go dead — a MOVE, no assertion changes)
 - Create: `cc-gate-plugin/src/gauge/warm-session.ts`
 - Test: `cc-gate-plugin/test/warm-session.test.ts`
 
 **Interfaces:**
-- Consumes: `query`, `Query`, `SDKMessage`, `SDKUserMessage` from `@anthropic-ai/claude-agent-sdk` (lazy-imported inside `ensure()`, same rationale as `agent-transport.ts:104-108`'s ~84 ms finding); `ACP_BUDGET` from `acp-wire.ts`; the isolation option set from `agent-transport.ts:119-132` (copy the object literal, cite it — do NOT import agent-transport's private internals).
+- Consumes: `query`, `Query`, `SDKMessage`, `SDKUserMessage` from `@anthropic-ai/claude-agent-sdk` (values lazy-imported inside `ensure()`, same rationale as `agent-transport.ts:102-108`'s ~84 ms finding; types via `import type`, which is erased); `ACP_BUDGET` from `acp-wire.ts`; the isolation option set from `agent-transport.ts:119-132` (copy the object literal, cite it — do NOT import agent-transport's private internals).
 - Produces:
   ```typescript
   export type TurnOutcome =
@@ -690,6 +844,7 @@ git commit -m "feat(gauge): widen transport literal to agent-sdk-daemon"
         turnTimeoutMs?: number
         queueWaitMs?: number
         clearTimeoutMs?: number
+        setModelMs?: number
         hardGraceMs?: number
         cwd?: string
       },
@@ -698,8 +853,9 @@ git commit -m "feat(gauge): widen transport literal to agent-sdk-daemon"
      * `recycle` is the CALLER's decision (the daemon passes true when the
      * sessionId differs from the last one served), so a multi-prompt ACP
      * session keeps its context — see Task 5. `tag` is an opaque handle for
-     * `cancel`. Never two turns in flight: calls queue FIFO. NEVER throws,
-     * ALWAYS resolves. */
+     * `cancel` and MUST be globally unique across callers (the daemon mints
+     * a UUID; a per-connection request id would collide). Never two turns in
+     * flight: calls queue FIFO. NEVER throws, ALWAYS resolves. */
     oneShot(messageText: string, model: string, opts: { recycle: boolean; tag?: string }): Promise<TurnOutcome>
     /** Cancel by tag. A QUEUED turn is dropped and resolves `no-call`
      * (provably unsent, law L4); the IN-FLIGHT turn is interrupted only if
@@ -717,21 +873,21 @@ git commit -m "feat(gauge): widen transport literal to agent-sdk-daemon"
 
 **Design (locked by sdk.d.ts and by §6e's law, not by prose):**
 - ONE `query({ prompt: pushable.stream(), options })`; the same `Query` serves many turns.
-- **ONE persistent pump.** `Query extends AsyncGenerator<SDKMessage, void>` (sdk.d.ts:2279). Returning or breaking out of a `for await` calls `iterator.return()` and TERMINATES the generator — so a per-turn `for await` kills the warm session at the end of turn #1. The pump is a single loop for the `Query`'s whole lifetime that never breaks and never returns; it routes each message to `this.current`.
+- **ONE persistent pump, BOUND TO ITS QUERY GENERATION.** `Query extends AsyncGenerator<SDKMessage, void>` (sdk.d.ts:2279). Returning or breaking out of a `for await` calls `iterator.return()` and TERMINATES the generator — so a per-turn `for await` kills the warm session at the end of turn #1. The pump is a single loop for the `Query`'s whole lifetime. It is ALSO guarded by `this.q !== q` in both the loop body and the `finally`: `close()` is synchronous (sdk.d.ts:2584) but the generator only unwinds on the subprocess exit event, an I/O tick later — by which time `drain()` may already have started the NEXT turn on a NEW `Query`. An unguarded teardown would settle that fresh turn and destroy its session. §6e law L7 names this explicitly.
 - **Lossless feed.** The input side is a pushable queue with an optional waiting resolver, NOT a bare one-shot promise slot. A single re-armed resolver silently drops the second of two same-tick pushes.
 - **Exactly TWO resolver slots per turn, written exactly once each.** `turn.notifyCaller` is installed at ENQUEUE (it resolves the caller's `oneShot`) and `turn.settle` is installed by `execute` (it resolves the drain loop's internal wait). They are never the same field: a design that reuses one slot for both loses the queued caller's resolver when `execute` overwrites it, and that caller's promise never settles. Both are fired through the single `finish()` funnel, which is `done`-guarded, so double-settle is impossible.
-- **Recycle is SEQUENCED, not fire-and-forget.** `/clear` is pushed only when the caller asks for it AND the `Query` is not brand-new, and `execute` then WAITS for `SDKConversationResetMessage` (`type: 'conversation_reset'`, sdk.d.ts:3838-3846: *"Emitted by /clear, plan-mode exit, and fresh-session flows"*), which is in the `SDKMessage` union (sdk.d.ts:4019). This is the SDK's own typed proof the recycle landed — we do not have to trust "/clear emits no result", and the prompt cannot be pushed into a half-cleared context. An unconfirmed clear within `clearTimeoutMs` destroys the `Query` (the next turn respawns, which is a clean context by construction) and reports `no-call` — nothing was sent to the model.
-- **A turn settles ONLY from its own terminal `result`** (§6e law L7). `api_retry` and the turn timeout mark the turn `doomed` and call `interrupt()`, but do not settle; the terminal `result` does. The drain loop does not advance until then, so a trailing message can never be attributed to the next turn. A `result` arriving while `turn.sent === false` belongs to the `/clear` or to a previous turn's tail and is dropped (counted in `strayMessages`). If `interrupt()` hangs past `hardGraceMs`, the whole `Query` + subprocess is destroyed, which also makes a stale message impossible.
-- **Classification is §6e's law, mechanically.** `sent` is the boundary. `sawModelActivity` (an `assistant` message) and `sawApiResponse` (an `api_retry` whose `error_status !== null`, sdk.d.ts:2842-2852) are the two consumption witnesses. `connectionOnly` (an `api_retry` with `error_status === null`, which sdk.d.ts:2839-2841 documents as "null for connection errors (e.g. timeouts) that had no HTTP response") is the single provable-unsent witness of law L5. `stream_event` is deliberately NOT consulted: `SDKPartialAssistantMessage` is only emitted with `includePartialMessages: true` (sdk.d.ts:1629-1631), which this option set does not set, so such a branch would be unreachable code pretending to be a guard.
-- **Success requires `subtype === "success" && is_error !== true && !doomed`.** `SDKResultError` (sdk.d.ts:4269-4288) has NO `result` field, and an interrupted assistant message is flagged `aborted` (sdk.d.ts:2871). No partial text is ever accumulated, let alone persisted.
-- **The model is PROVEN, not echoed.** `modelUsage` keys on the success result (sdk.d.ts:4312) are authoritative; the last assistant `message.model` corroborates. A successful turn that cannot prove its model reports `call-consumed` — the call happened, but no honest stamp is available.
-- Model switching: `setModel(model)` (sdk.d.ts:2327, streaming-only) before a turn whose model differs from the current one.
+- **Recycle is SEQUENCED, not fire-and-forget.** `/clear` is pushed only when the caller asks for it AND the `Query` is not brand-new, and `execute` then WAITS for `SDKConversationResetMessage` (`type: 'conversation_reset'`, sdk.d.ts:3838-3846: *"Emitted by /clear, plan-mode exit, and fresh-session flows"*), which is in the `SDKMessage` union (sdk.d.ts:4019). This is the SDK's own typed proof the recycle landed. An unconfirmed clear within `clearTimeoutMs` destroys the `Query` (the next turn respawns, which is a clean context by construction) and reports `no-call` — nothing was sent to the model.
+- **Every daemon-side wait is capped, including `setModel`.** `setModel` (sdk.d.ts:2327) is an un-timed control round-trip; it is raced against `setModelMs` and a miss is `no-call` + `hardReset()` (nothing was pushed). Without the cap a wedged subprocess hangs `execute()` with NO timer armed — the turn never settles, `turnInFlight()` stays true forever, the idle reaper can never fire, and the host-global daemon is permanently dead.
+- **A turn settles ONLY from its own terminal `result`** (§6e law L7). `api_retry` and the turn timeout mark the turn `doomed` and call `interrupt()`, but do not settle; the terminal `result` does. The drain loop does not advance until then. A `result` arriving while `turn.sent === false` belongs to the `/clear` or to a previous turn's tail and is dropped (counted in `strayMessages`). If `interrupt()` hangs past `hardGraceMs`, the whole `Query` + subprocess is destroyed and the generation guard keeps the dying pump away from the next turn.
+- **Classification is §6e's law, mechanically, and it is now trivial.** `sent` IS the classification: `consumed(t) === t.sent`. There is no post-send `no-call` witness. The `connectionOnly` carve-out (`api_retry` with `error_status === null`) was REMOVED in review round 3: sdk.d.ts:2839-2841 documents that status as covering "connection errors (e.g. timeouts) that had no HTTP response", and a read timeout is exactly the billed-but-unanswered case, so the carve-out could spend a second model call on one record. `sawModelActivity`/`sawApiResponse` survive as DIAGNOSTIC counters only — they no longer feed the outcome. `stream_event` is deliberately NOT consulted: `SDKPartialAssistantMessage` is only emitted with `includePartialMessages: true` (sdk.d.ts:1627-1631), which this option set does not set, so such a branch would be unreachable code pretending to be a guard.
+- **Success requires `subtype === "success" && is_error !== true && !doomed`.** `SDKResultError` (sdk.d.ts:4269-4288) has NO `result` field, and an interrupted assistant message is flagged `aborted` (sdk.d.ts:2870-2873). No partial text is ever accumulated, let alone persisted.
+- **The model is PROVEN, not echoed, and corroboration is never promoted to proof.** `modelUsage` keys on the terminal result (sdk.d.ts:4312 success / :4279 error) are the only source of `observedModel`. The last assistant `message.model` is kept in a separate `corroboratedModel` field that is DIAGNOSTIC ONLY and never reaches a stamp. A successful turn that cannot prove its model reports `call-consumed`.
 
 - [ ] **Step 0: Extract the CLI-stub helpers (DECLARED EXCEPTION #4 — a MOVE, no behaviour change)**
 
-Move `hasClaudeCodeCredentials()` / `HAS_CLAUDE_CODE_CREDENTIALS` / `NO_CREDENTIALS_SKIP_REASON` (`test/gauge-agent-transport.test.ts:23-45`), `sseText()` (`:92-103`) and `withCaptureStub()` (`:116-145`) into `test/agent-cli-stub.ts` and re-import them in `gauge-agent-transport.test.ts`. No assertion in that file changes; `bun test` must be 0-fail before and after. (`test/agent-cli-stub.ts` is not matched by bun's test glob, same as the existing `test/sdk-stub.ts`.)
-**Why this is mandatory, not tidiness:** `sseText` is load-bearing. The spawned CLI always sends `stream: true`, and a plain `Response.json(...)` makes it silently fall back to a SECOND, non-streaming request (`gauge-agent-transport.test.ts:67-91`). Every request-count assertion in Tasks 4-6 is meaningless without an SSE-shaped stub. And `withCaptureStub()` is per-test on purpose (`:107-115`): a killed test's subprocess can land mid-next-test, so a module-level shared `CAPTURED` corrupts unrelated counts. Tests below that need their own capture array build one with `stubServer` directly and follow the same per-test discipline.
-**Also add to `agent-cli-stub.ts`** the never-answering stub helper, built on raw `Bun.serve` (precedent: `gauge-agent-transport.test.ts:252`) because `stubServer`'s handler type is synchronous `(c: Captured) => Response` and must NOT be widened:
+Move `hasClaudeCodeCredentials()` / `HAS_CLAUDE_CODE_CREDENTIALS` / `NO_CREDENTIALS_SKIP_REASON` (`test/gauge-agent-transport.test.ts:23-45`, including the `console.warn` block), `sseText()` (`:92-103`) and `withCaptureStub()` (`:116-145`) into `test/agent-cli-stub.ts` and re-import them in `gauge-agent-transport.test.ts`. **Then delete the now-dead imports at `:2-5` — `fs`, `os`, `path` and `execFileSync` have no other use in that file once `hasClaudeCodeCredentials` leaves.** No assertion in that file changes; `bun test` must be 0-fail before and after. (`test/agent-cli-stub.ts` is not matched by bun's test glob, same as the existing `test/sdk-stub.ts`.)
+**Why this is mandatory, not tidiness:** `sseText` is load-bearing. The spawned CLI always sends `stream: true`, and a plain `Response.json(...)` makes it silently fall back to a SECOND, non-streaming request (`gauge-agent-transport.test.ts:67-91`). Every request-count assertion in Tasks 4-7 and 10 is meaningless without an SSE-shaped stub. And `withCaptureStub()` is per-test on purpose (`:107-115`): a killed test's subprocess can land mid-next-test, so a module-level shared `CAPTURED` corrupts unrelated counts. Tests below that need their own capture array build one with `stubServer` directly and follow the same per-test discipline.
+**Also add to `agent-cli-stub.ts`** the never-answering stub helpers, built on raw `Bun.serve` (precedent: `gauge-agent-transport.test.ts:252`) because `stubServer`'s handler type is synchronous `(c: Captured) => Response` and must NOT be widened:
 
 ```typescript
 /** A server that accepts the connection and never answers. `stubServer`'s
@@ -744,7 +900,7 @@ export function silentServer(): { url: string; stop: () => void } {
 }
 
 /** A server whose FIRST request hangs forever and whose later requests are
- * answered normally — the shape the turn-timeout test needs. */
+ * answered normally — the shape the turn-timeout tests need. */
 export function hangFirstServer(text: string): { url: string; stop: () => void; count: () => number } {
   let n = 0
   const s = Bun.serve({
@@ -760,6 +916,63 @@ export function hangFirstServer(text: string): { url: string; stop: () => void; 
   return { url: `http://127.0.0.1:${s.port}`, stop: () => s.stop(true), count: () => n }
 }
 ```
+
+- [ ] **Step 1a: THE GATE — prove `/clear` works through a streaming-input `Query` before building anything on it. STOP-AND-REPORT if it does not.**
+
+This is the plan's riskiest assumption and it has never been measured in this repo (§6e records it as an OPEN QUESTION at registration time). It is token-free: `ANTHROPIC_BASE_URL` points at an SSE stub, so no model is reached. Write it as a scratch script under `/mnt/d/tmp/`, not as a committed test.
+
+```typescript
+// /mnt/d/tmp/clear-probe.ts — token-free. Run: bun /mnt/d/tmp/clear-probe.ts
+import { stubServer } from "<repo>/cc-gate-plugin/test/sdk-stub.ts"
+import { sseText } from "<repo>/cc-gate-plugin/test/agent-cli-stub.ts"
+const CAPTURED: Array<Record<string, unknown>> = []
+const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER") })
+const queue: unknown[] = []
+let waiter: ((m: unknown) => void) | undefined
+const push = (text: string) => {
+  const m = { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null }
+  if (waiter) { const w = waiter; waiter = undefined; w(m) } else queue.push(m)
+}
+async function* feed(): AsyncGenerator<never> {
+  for (;;) {
+    const next = queue.shift()
+    if (next !== undefined) { yield next as never; continue }
+    yield (await new Promise((r) => { waiter = r })) as never
+  }
+}
+const { query } = await import("@anthropic-ai/claude-agent-sdk")
+const q = query({ prompt: feed(), options: {
+  model: "claude-haiku-4-5", systemPrompt: "", settingSources: [],
+  settings: { autoMemoryEnabled: false }, persistSession: false,
+  strictMcpConfig: true, tools: [], title: "kkamak-gauge",
+  thinking: { type: "disabled" }, cwd: require("node:os").tmpdir(),
+  env: { ...process.env, ANTHROPIC_BASE_URL: cap.url } as Record<string, string>,
+} })
+const seen: string[] = []
+const done = (async () => { for await (const m of q) {
+  seen.push(m.type === "system" ? `system/${(m as { subtype?: string }).subtype}` : m.type)
+} })()
+push("MARKER-ONE please answer")
+await new Promise((r) => setTimeout(r, 8_000))
+push("/clear")
+await new Promise((r) => setTimeout(r, 6_000))
+push("MARKER-TWO please answer")
+await new Promise((r) => setTimeout(r, 8_000))
+console.log("message types:", JSON.stringify(seen))
+console.log("requests:", CAPTURED.length)
+console.log("2nd request carries MARKER-ONE?:",
+  JSON.stringify((CAPTURED[1] as { messages?: unknown })?.messages ?? []).includes("MARKER-ONE"))
+console.log("2nd request messages:", JSON.stringify((CAPTURED[1] as { messages?: unknown })?.messages ?? []))
+q.close(); cap.stop(); process.exit(0)
+```
+
+**PASS requires ALL THREE:**
+1. `seen` contains `"conversation_reset"` after the `/clear` push.
+2. `CAPTURED.length === 2` — the `/clear` itself made NO model call.
+3. The second request does NOT contain `MARKER-ONE`.
+
+**On PASS:** record the observed `seen` sequence, `CAPTURED.length`, the second request's `messages` array and its byte size in the SDD progress note, then proceed to Step 1.
+**On ANY FAILURE: STOP. Do not proceed to Step 1, do not improvise.** Report which of the three failed and the observed `seen` sequence. Realistic outcomes and what they mean: no `conversation_reset` ⇒ slash commands are not processed on streaming input under this option set, and the whole lane is unbuildable as designed; three requests ⇒ `/clear` costs a model call, which breaks §4 outright; `MARKER-ONE` present ⇒ `/clear` does not reset the transcript in this mode. In every case the correct output is a report and an amendment to §6e recording a design that was not realizable — that is a complete outcome, and it costs zero tokens to reach.
 
 - [ ] **Step 1: Write the failing tests** (every one obeys §6e's law; every one carries `CLI_TEST_TIMEOUT_MS` and the credentials skip-guard)
 
@@ -790,10 +1003,9 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
       // THE binding assertion: the first record's text is gone from the
       // second turn's context — that is what "/clear reset the context"
       // means. The exact MESSAGE COUNT is NOT asserted: §6e registers a
-      // ~423 B `/clear` echo residue whose shape (folded into the next user
-      // message vs its own message) was never measured, and a hard toBe(1)
-      // would fail a correct implementation. Record the observed count in
-      // the SDD progress note (Step 4) and pin it there once measured.
+      // ~423 B `/clear` echo residue whose shape was never measured, and a
+      // hard toBe(1) would fail a correct implementation. Step 1a already
+      // recorded the observed count; pin it here in a follow-up commit.
       expect(JSON.stringify(m2.messages)).not.toContain("first record prompt")
       expect(JSON.stringify(m2.messages)).toContain("second record prompt")
       expect(m2.messages.length).toBeLessThanOrEqual(2)      // bulk-history regression guard
@@ -828,7 +1040,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     } finally { ws.close(); cap.stop() }
   }, CLI_TEST_TIMEOUT_MS)
 
-  test("law L6: a 500 (api_retry, error_status non-null) is call-consumed and the retry is never consumed as a result", async () => {
+  test("law L6: a 500 (api_retry) is call-consumed and the retry is never consumed as a result", async () => {
     let n = 0
     const cap = stubServer(() => (++n === 1 ? new Response("boom", { status: 500 }) : sseText("ANSWER")))
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url })
@@ -839,21 +1051,22 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     } finally { ws.close(); cap.stop() }
   }, CLI_TEST_TIMEOUT_MS)
 
-  test("law L5 exception: connection-only failure (no HTTP response ever) is no-call", async () => {
-    // sdk.d.ts:2839-2841 — api_retry carries `error_status: null` for
-    // connection errors that had NO HTTP response, and the CLI is
-    // documented to retry a refused connection internally
-    // (gauge-agent-transport.test.ts:230-241). Nothing reached the model.
-    //
-    // IF a future CLI stops announcing connection retries, this turn
-    // produces no witness at all and the law's conservative default makes
-    // it `call-consumed`. That costs one lost fallback, never a double
-    // call — so it is the TEST that must then be updated, not the law.
+  test("law L5 has NO connection-only exception: an unreachable endpoint AFTER the push is call-consumed", async () => {
+    // Round-3 finding C1. An earlier draft classified `api_retry` with
+    // `error_status === null` as no-call, on the theory that a
+    // connection-level failure proves nothing reached the model.
+    // sdk.d.ts:2839-2841 documents that status as covering "connection
+    // errors (e.g. TIMEOUTS) that had no HTTP response" — and a read
+    // timeout is exactly the billed-but-unanswered case, so that carve-out
+    // could spend a SECOND model call on one record. It also bought
+    // nothing: the daemon and its clients are fingerprint-matched on the
+    // same endpoint, so an endpoint the daemon cannot reach the fallback
+    // cannot reach either. This test is the lock on its removal.
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: "http://127.0.0.1:9" },
       { turnTimeoutMs: 2_000, hardGraceMs: 2_000 })
     try {
       const r = await ws.oneShot("x", HAIKU, { recycle: true })
-      expect(r.kind).toBe("no-call")
+      expect(r.kind).toBe("call-consumed")
     } finally { ws.close() }
   }, CLI_TEST_TIMEOUT_MS)
 
@@ -902,6 +1115,49 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     } finally { ws.close(); cap.stop() }
   }, CLI_TEST_TIMEOUT_MS)
 
+  test("cancel scoping, WRONG-OWNER shape: a cancel naming the QUEUED turn's tag never reaches the IN-FLIGHT turn", async () => {
+    // Round-3 finding C2's regression lock. The sibling test above puts the
+    // named turn in `pending`, which `cancel()` searches FIRST — so it
+    // passes even when tags collide across callers. This one names a tag
+    // that ONLY the in-flight turn holds while a DIFFERENT-tagged turn is
+    // queued, and then a tag that nobody holds, proving the search never
+    // falls through to "whoever happens to be current". Task 5 additionally
+    // mints globally-unique tags so a collision cannot arise on the wire.
+    const cap = hangFirstServer("ANSWER")
+    const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
+      { turnTimeoutMs: 6_000, hardGraceMs: 2_000, queueWaitMs: 30_000 })
+    try {
+      const inflight = ws.oneShot("A in flight", HAIKU, { recycle: true, tag: "tag-A" })
+      const queued = ws.oneShot("B queued", HAIKU, { recycle: true, tag: "tag-B" })
+      expect(ws.cancel("tag-C")).toBe("unknown")       // nobody: must be a no-op
+      expect(ws.cancel("tag-A")).toBe("interrupted")   // the in-flight turn, by ITS OWN tag
+      const a = await inflight
+      expect(a.kind).toBe("call-consumed")             // it was SENT; never no-call
+      const b = await queued
+      expect(b.kind === "ok" || b.kind === "no-call").toBe(true)   // untouched by A's cancel
+    } finally { ws.close(); cap.stop() }
+  }, CLI_TEST_TIMEOUT_MS)
+
+  test("a hardReset with a turn QUEUED behind it does not kill the replacement session", async () => {
+    // Round-3 finding C3's regression lock. hardTimer fires ~1ms after the
+    // turn timer, so hardReset() lands while interrupt() is still in
+    // flight; the OLD pump's `for await` only unwinds on the subprocess
+    // exit event, by which time drain() has already started turn B on a
+    // NEW Query. Without the `this.q !== q` generation guard the dying pump
+    // settles B and destroys B's session.
+    const cap = hangFirstServer("ANSWER")
+    const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
+      { turnTimeoutMs: 1_000, hardGraceMs: 1, queueWaitMs: 30_000 })
+    try {
+      const a = ws.oneShot("A hangs and is hard-reset", HAIKU, { recycle: true })
+      const b = ws.oneShot("B must survive the teardown", HAIKU, { recycle: true })
+      expect((await a).kind).toBe("call-consumed")   // A was sent
+      expect((await b).kind).toBe("ok")              // B ran on the REPLACEMENT Query
+      expect(ws.isWarm()).toBe(true)                 // and that Query is still alive
+      expect(cap.count()).toBe(2)
+    } finally { ws.close(); cap.stop() }
+  }, CLI_TEST_TIMEOUT_MS)
+
   test("the reported model is PROVEN from the result, not echoed from the request", async () => {
     const cap = stubServer(() => sseText("ANSWER"))
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url })
@@ -940,24 +1196,27 @@ Expected: FAIL — `Export named 'WarmSession' not found`
 - [ ] **Step 3: Implement `warm-session.ts`** — this skeleton is the design, not a sketch
 
 ```typescript
-// §6e WarmSession: one streaming-input Query, ONE persistent message pump,
-// a lossless pushable input queue, /clear recycling SEQUENCED on the SDK's
-// own conversation_reset message, FIFO turns, and three-way outcomes that
-// implement §6e's wire-send boundary law mechanically.
+// §6e WarmSession: one streaming-input Query, ONE persistent message pump
+// BOUND TO ITS QUERY GENERATION, a lossless pushable input queue, /clear
+// recycling SEQUENCED on the SDK's own conversation_reset message, FIFO
+// turns, every wait capped, and three-way outcomes that implement §6e's
+// wire-send boundary law mechanically.
 //
 // Isolation options are the §6d set (agent-transport.ts:119-132) with TWO
 // registered deltas (§6e):
 //  (a) REMOVED `maxTurns: 1` + `abortController` — query-scoped, cannot
-//      transfer to a many-turn session (maxTurns would stop the whole Query
-//      after record #1; aborting the shared controller would kill every
-//      later turn). Replaced by per-turn call accounting + interrupt().
+//      transfer to a many-turn session (maxTurns, sdk.d.ts:1674-1678, would
+//      stop the whole Query after record #1; aborting the shared controller
+//      would kill every later turn). Replaced by per-turn call accounting +
+//      interrupt().
 //  (b) ADDED a neutral `cwd` — §6d measured it payload-neutral (spec line
 //      690) and agent-transport.ts:41-44 omits it as redundant for a
 //      one-shot; for a host-global daemon it is what stops the instrument
 //      varying with whichever session spawned it.
 //
-// Lazy SDK import (hook processes must not pay the ~84 ms package load;
-// same finding as agent-transport.ts:104-108).
+// Lazy SDK VALUE import (hook processes must not pay the ~84 ms package
+// load; same finding as agent-transport.ts:102-108). The `import type`
+// below is erased and costs nothing.
 import os from "node:os"
 import type { Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import { ACP_BUDGET } from "./acp-wire.ts"
@@ -973,25 +1232,30 @@ interface Turn {
   text: string
   model: string
   recycle: boolean
+  /** MUST be globally unique across callers. Task 5 mints a UUID; a
+   * per-connection JSON-RPC request id would collide across connections and
+   * let one caller's cancel interrupt another caller's billed turn. */
   tag: string | undefined
-  /** THE §6e send boundary, daemon-side: true once this turn's prompt frame
-   * has been pushed into the CLI's input stream. */
+  /** THE §6e send boundary, daemon-side, and the WHOLE classification:
+   * `consumed(t) === t.sent`. True once this turn's prompt frame has been
+   * pushed into the CLI's input stream. */
   sent: boolean
-  /** consumption witness: model output observed (assistant message) */
+  /** DIAGNOSTIC ONLY (progress notes / strayMessages triage). These used to
+   * feed the outcome via a `connectionOnly` carve-out; round 3 removed it
+   * because sdk.d.ts:2839-2841's `error_status: null` covers billed
+   * timeouts as well as refused connects. Do not reintroduce them into
+   * `consumed()`. */
   sawModelActivity: boolean
-  /** consumption witness: the API answered, even with an error
-   * (api_retry, error_status !== null — sdk.d.ts:2842-2852) */
   sawApiResponse: boolean
-  /** provable-unsent witness (law L5 exception): api_retry with
-   * error_status === null, i.e. a connection error with NO HTTP response
-   * (sdk.d.ts:2839-2841) */
-  connectionOnly: boolean
   /** interrupted / retry-cancelled: settle from the TERMINAL result, never
    * `ok`, and never at the moment of cancellation (law L7) */
   doomed: boolean
   done: boolean
-  /** the model this turn is PROVEN to have run on */
+  /** the model this turn is PROVEN to have run on (modelUsage keys only) */
   observedModel: string
+  /** assistant `message.model`. DIAGNOSTIC ONLY — never promoted to a
+   * stamp, or the provenance rule becomes an echo again. */
+  corroboratedModel: string
   /** resolves this caller's oneShot(). Written ONCE, at enqueue. */
   notifyCaller: (o: TurnOutcome) => void
   /** resolves execute()'s internal wait. Written ONCE, by execute().
@@ -1049,15 +1313,34 @@ class Pushable {
 }
 
 function userMsg(text: string): SDKUserMessage {
+  // sdk.d.ts:4583-4586 — `type`, `message` and `parent_tool_use_id` are the
+  // only required fields; `uuid`/`session_id` are optional.
   return { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null }
 }
 
-/** Corroborating model id off an assistant message (`message.model`). The
- * AUTHORITATIVE source is the terminal result's `modelUsage` keys
- * (sdk.d.ts:4312) — see route(). */
+/** DIAGNOSTIC model id off an assistant message (`message.model`). The ONLY
+ * authoritative source is the terminal result's `modelUsage` keys
+ * (sdk.d.ts:4312 success / :4279 error) — see route(). */
 function assistantModel(m: SDKMessage): string {
   const model = (m as { message?: { model?: unknown } }).message?.model
   return typeof model === "string" ? model : ""
+}
+
+/** Race `p` against `ms`; resolves false on timeout, false on rejection.
+ * Used for setModel, which the SDK exposes as an UN-TIMED control
+ * round-trip (sdk.d.ts:2327): without a cap a wedged subprocess hangs
+ * execute() with no timer armed, the turn never settles, turnInFlight()
+ * stays true forever, and the host-global daemon is permanently dead. */
+async function within(p: Promise<unknown>, ms: number): Promise<boolean> {
+  let t: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      p.then(() => true, () => false),
+      new Promise<boolean>((res) => { t = setTimeout(() => res(false), ms) }),
+    ])
+  } finally {
+    if (t) clearTimeout(t)
+  }
 }
 
 export class WarmSession {
@@ -1077,6 +1360,7 @@ export class WarmSession {
   private readonly turnTimeoutMs: number
   private readonly queueWaitMs: number
   private readonly clearTimeoutMs: number
+  private readonly setModelMs: number
   private readonly hardGraceMs: number
   private readonly cwd: string
 
@@ -1086,6 +1370,7 @@ export class WarmSession {
       turnTimeoutMs?: number
       queueWaitMs?: number
       clearTimeoutMs?: number
+      setModelMs?: number
       hardGraceMs?: number
       cwd?: string
     } = {},
@@ -1093,6 +1378,7 @@ export class WarmSession {
     this.turnTimeoutMs = opts.turnTimeoutMs ?? ACP_BUDGET.turnTimeoutMs
     this.queueWaitMs = opts.queueWaitMs ?? ACP_BUDGET.queueWaitMs
     this.clearTimeoutMs = opts.clearTimeoutMs ?? ACP_BUDGET.clearTimeoutMs
+    this.setModelMs = opts.setModelMs ?? ACP_BUDGET.setModelMs
     this.hardGraceMs = opts.hardGraceMs ?? ACP_BUDGET.hardGraceMs
     this.cwd = opts.cwd ?? os.tmpdir()
   }
@@ -1107,10 +1393,10 @@ export class WarmSession {
         sent: false,
         sawModelActivity: false,
         sawApiResponse: false,
-        connectionOnly: false,
         doomed: false,
         done: false,
         observedModel: "",
+        corroboratedModel: "",
         notifyCaller: resolveCaller,   // written ONCE, here, never again
         settle: () => {},
       }
@@ -1146,7 +1432,8 @@ export class WarmSession {
       return "interrupted"
     }
     // A cancel that names nobody must NEVER interrupt whoever happens to be
-    // in flight — with one global FIFO that would be another caller's turn.
+    // in flight — with one global FIFO that would be another caller's turn,
+    // and that caller's model call is already billed.
     return "unknown"
   }
 
@@ -1167,13 +1454,14 @@ export class WarmSession {
 
   // ── internals ────────────────────────────────────────────────────────
 
-  /** §6e law L5, mechanically: a SENT turn is consumed unless the only
-   * failure signal ever seen was connection-level with no HTTP response
-   * and no model output. An UNSENT turn is never consumed (law L4). */
+  /** §6e law L4/L5, mechanically and completely: the send boundary IS the
+   * classification. A turn that pushed its prompt consumed a call; a turn
+   * that did not, did not. Round 3 removed the `connectionOnly` carve-out —
+   * sdk.d.ts:2839-2841's `error_status: null` covers billed timeouts as
+   * well as refused connects, so the carve-out could spend a second model
+   * call on one record. Do not reintroduce it. */
   private consumed(t: Turn): boolean {
-    if (!t.sent) return false
-    if (t.sawModelActivity || t.sawApiResponse) return true
-    return !t.connectionOnly
+    return t.sent
   }
 
   /** The ONE settle funnel. `done`-guarded, so double-settle is impossible,
@@ -1260,22 +1548,35 @@ export class WarmSession {
     }
   }
 
-  /** THE ONE PUMP. Never breaks, never returns early — `Query` is an
-   * AsyncGenerator (sdk.d.ts:2279), so exiting a `for await` calls
-   * `.return()` and terminates it. A per-turn loop would kill the warm
-   * session at the end of record #1. */
+  /** THE ONE PUMP, BOUND TO ITS GENERATION. `Query` is an AsyncGenerator
+   * (sdk.d.ts:2279), so exiting a `for await` calls `.return()` and
+   * terminates it — a per-turn loop would kill the warm session at the end
+   * of record #1.
+   *
+   * The `this.q !== q` guards are §6e law L7's other half, and they are NOT
+   * defensive padding: `close()` is synchronous (sdk.d.ts:2584) but this
+   * generator only unwinds on the subprocess exit event, an I/O tick later.
+   * By then finish() has resolved execute()'s wait, drain() has shifted the
+   * NEXT turn, and ensure() has built a NEW Query. An unguarded teardown
+   * would settle that fresh turn as call-consumed and destroy its session —
+   * a lost record and a lost model call, mid-batch. */
   private async runPump(q: Query): Promise<void> {
     try {
-      for await (const m of q) this.route(m)
+      for await (const m of q) {
+        if (this.q !== q) return           // superseded: never route into a newer generation
+        this.route(m)
+      }
     } catch {
       /* the query died; settled below */
     } finally {
-      const w = this.resetWaiter
-      this.resetWaiter = undefined
-      w?.(false)
-      const t = this.current
-      if (t && !t.done) this.finish(t, { kind: this.consumed(t) ? "call-consumed" : "no-call" })
-      this.hardReset()
+      if (this.q === q) {
+        const w = this.resetWaiter
+        this.resetWaiter = undefined
+        w?.(false)
+        const t = this.current
+        if (t && !t.done) this.finish(t, { kind: this.consumed(t) ? "call-consumed" : "no-call" })
+        this.hardReset()
+      }
     }
   }
 
@@ -1296,24 +1597,20 @@ export class WarmSession {
     if (!t || t.done) { this.strayMessages++; return }
 
     if (m.type === "assistant") {
-      t.sawModelActivity = true
-      t.connectionOnly = false
+      t.sawModelActivity = true                  // diagnostic only
       const am = assistantModel(m)
-      if (am) t.observedModel = am               // corroboration; result wins below
+      if (am) t.corroboratedModel = am           // DIAGNOSTIC — never a stamp
     }
 
     if (m.type === "system" && (m as { subtype?: string }).subtype === "api_retry") {
-      // sdk.d.ts:2839-2841 — "error_status is null for connection errors
-      // (e.g. timeouts) that had no HTTP response". Non-null => the API
-      // ANSWERED => law L6, consumed. Null with nothing else seen => law
-      // L5's exception, provably unsent.
+      // sdk.d.ts:2842-2852. `error_status !== null` => the API answered =>
+      // law L6. `error_status === null` => a connection error with no HTTP
+      // response, which sdk.d.ts:2839-2841 says includes TIMEOUTS — i.e.
+      // possibly a billed call — so once the prompt was pushed it is law
+      // L5, consumed, exactly like the non-null case. The status is
+      // recorded for diagnostics and changes NOTHING about the outcome.
       const status = (m as { error_status?: number | null }).error_status
-      if (status !== null && status !== undefined) {
-        t.sawApiResponse = true
-        t.connectionOnly = false
-      } else if (!t.sawModelActivity && !t.sawApiResponse) {
-        t.connectionOnly = true
-      }
+      if (status !== null && status !== undefined) t.sawApiResponse = true
       // The CLI auto-retries internally; that retry would be call #2 (§6d
       // finding, agent-transport.ts:135-145). Cancel now — but DO NOT
       // settle: law L7 settles from the turn's OWN terminal result, so no
@@ -1331,12 +1628,29 @@ export class WarmSession {
         subtype?: string
         is_error?: boolean
         result?: unknown
-        modelUsage?: Record<string, unknown>
+        modelUsage?: Record<string, { outputTokens?: number; output_tokens?: number }>
       }
       // AUTHORITATIVE model (§6e provenance): the keys of `modelUsage` on
-      // the result (sdk.d.ts:4312). `message.model` above is corroboration.
-      const usageModels = r.modelUsage ? Object.keys(r.modelUsage) : []
-      if (usageModels.length === 1 && usageModels[0]) t.observedModel = usageModels[0]
+      // the terminal result (sdk.d.ts:4312 success, :4279 error).
+      // `corroboratedModel` is NEVER consulted here — promoting
+      // corroboration to proof when usage is missing would quietly restore
+      // the tautology the rule exists to remove.
+      const usage = r.modelUsage ?? {}
+      const keys = Object.keys(usage)
+      t.observedModel = ""
+      if (keys.length === 1 && keys[0]) {
+        t.observedModel = keys[0]
+      } else if (keys.length > 1 && keys.includes(t.model)) {
+        // An auxiliary model (title/summarizer) must not make an honest
+        // turn unprovable. The requested model is accepted ONLY IF it is
+        // present as a key AND every other key recorded zero output tokens
+        // — the proof still comes from the result, never from the request.
+        const outOf = (k: string): number => {
+          const u = usage[k]
+          return Number(u?.outputTokens ?? u?.output_tokens ?? 0)
+        }
+        if (keys.filter((k) => k !== t.model).every((k) => outOf(k) === 0)) t.observedModel = t.model
+      }
 
       const success = r.subtype === "success" && r.is_error !== true && !t.doomed
       if (success && typeof r.result === "string" && r.result) {
@@ -1350,8 +1664,8 @@ export class WarmSession {
         return
       }
       // SDKResultError carries no `result` (sdk.d.ts:4269-4288) and an
-      // interrupted assistant message is `aborted` (sdk.d.ts:2871) — no
-      // partial text is ever accumulated here, let alone persisted.
+      // interrupted assistant message is `aborted` (sdk.d.ts:2870-2873) —
+      // no partial text is ever accumulated here, let alone persisted.
       this.finish(t, { kind: this.consumed(t) ? "call-consumed" : "no-call" })
     }
   }
@@ -1382,14 +1696,15 @@ export class WarmSession {
     if (!(await this.ensure(turn.model))) { this.finish(turn, { kind: "no-call" }); return }
 
     if (turn.model !== this.currentModel) {
-      try {
-        await this.q!.setModel(turn.model)   // streaming-only (sdk.d.ts:2327)
-        this.currentModel = turn.model
-      } catch {
+      // setModel is streaming-only (sdk.d.ts:2327) and UN-TIMED. Cap it, or
+      // one wedged subprocess hangs this await forever with no timer armed.
+      const ok = await within(this.q!.setModel(turn.model), this.setModelMs)
+      if (!ok) {
         this.hardReset()
-        this.finish(turn, { kind: "no-call" })
+        this.finish(turn, { kind: "no-call" })   // nothing pushed => law L4
         return
       }
+      this.currentModel = turn.model
     }
 
     this.current = turn
@@ -1416,14 +1731,16 @@ export class WarmSession {
     turn.sent = true                             // THE send boundary crosses here
 
     // Timers start AFTER the push, so the generation budget measures
-    // generation and the /clear has its own separate cap (§6e budget rule).
+    // generation and the /clear + setModel legs have their own caps
+    // (§6e budget rule; all five legs sum to daemonWorstCaseMs).
     turn.timer = setTimeout(() => {
       turn.doomed = true
       void this.q?.interrupt().catch(() => this.hardReset())
     }, this.turnTimeoutMs)
     turn.hardTimer = setTimeout(() => {
-      // interrupt() itself hung. Destroy the Query + subprocess so no
-      // trailing message can ever reach the NEXT turn, then settle.
+      // interrupt() itself hung. Destroy the Query + subprocess; the pump's
+      // generation guard is what stops the dying pump from reaching the
+      // NEXT turn (law L7).
       const consumed = this.consumed(turn)
       this.hardReset()
       this.finish(turn, { kind: consumed ? "call-consumed" : "no-call" })
@@ -1434,17 +1751,22 @@ export class WarmSession {
 }
 ```
 
-- [ ] **Step 4: Run to verify they pass**
+- [ ] **Step 4: Run to verify they pass, and MEASURE the two things §6e left open**
 
 Run: `cd cc-gate-plugin && bun test test/warm-session.test.ts` — 0 fail (on this credentialed host, none skipped).
 Run: `cd cc-gate-plugin && bun test` — 0 fail. `bunx tsc --noEmit` clean.
-Record in the SDD progress notes: (a) the measured first-record and steady-state per-record latency — §6e registered the 838 ms / ~20 ms figures as INDICATIVE and this is where they get their in-tree measurement; (b) the OBSERVED `messages[]` length and byte size of a post-`/clear` turn, which is the §6e residue's unmeasured shape. Once (b) is measured, tighten the `toBeLessThanOrEqual(2)` guard to the exact value in a follow-up commit.
+Record in the SDD progress notes:
+(a) the measured first-record and steady-state per-record latency — §6e registered the 838 ms / ~20 ms figures as INDICATIVE and this is where they get their in-tree measurement;
+(b) **the §6e OPEN DISCREPANCY, resolved by measurement.** Capture the request body of a post-`/clear` warm turn AND of a fresh-spawn one-shot `agentSdkCall` turn under the same option set and the same prompt, and record `messages.length` and total byte size for BOTH. §6e attributes ~423 B of `/clear` echo to the warm lane; §6d's PER-CALLER paragraph (spec line 662) attributes the same ~423 B to the ONE-SHOT lane. **Whichever of the two statements the measurement contradicts is corrected in THIS task's commit** — amend §6e's residue paragraph, or spec line 662, or both, and say which in the commit message. Do not leave the spec self-contradictory past this task.
+Once (b) is measured, tighten the `toBeLessThanOrEqual(2)` guard to the exact observed value in a follow-up commit.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add cc-gate-plugin/src/gauge/warm-session.ts cc-gate-plugin/test/warm-session.test.ts cc-gate-plugin/test/agent-cli-stub.ts cc-gate-plugin/test/gauge-agent-transport.test.ts
-git commit -m "feat(gauge): WarmSession — persistent pump, sequenced /clear, three-way outcomes per 6e law"
+git add cc-gate-plugin/src/gauge/warm-session.ts cc-gate-plugin/test/warm-session.test.ts \
+        cc-gate-plugin/test/agent-cli-stub.ts cc-gate-plugin/test/gauge-agent-transport.test.ts \
+        docs/superpowers/specs/2026-07-29-km-gauge-v2-extractor-preregistration.md
+git commit -m "feat(gauge): WarmSession — generation-bound pump, sequenced /clear, capped setModel, send-boundary outcomes; resolve the 6d/6e /clear-residue discrepancy by measurement"
 ```
 
 ### Task 5: `acp-paths.ts` + `acp-daemon.ts` — socket server, ACP dispatcher, idle self-exit
@@ -1457,42 +1779,56 @@ git commit -m "feat(gauge): WarmSession — persistent pump, sequenced /clear, t
 **Why a separate `acp-paths.ts`.** `acp-client.ts` (Task 6) needs `socketPath`/`ensureSocketDir`/`envFingerprint`, and `hook-cli.ts` imports `acp-client.ts` on SessionStart. If those helpers lived in `acp-daemon.ts`, the hook would transitively import the daemon module — and any top-level side effect there (a `net.createServer`, the reaper's `setInterval`) would run INSIDE the hook process, on the one code path whose prime directive is to never affect a session. `acp-daemon.ts` additionally guards all of its runtime behaviour behind `if (import.meta.main)`.
 
 **Interfaces (`acp-paths.ts`):**
-- `ACP_ENV_KEYS` — the enumerated §6e fingerprint subset, in order:
-  `["ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR", "KKAMAK_GAUGE_MODEL"]` by VALUE and
-  `["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]` by PRESENCE (`set`/`unset`).
-- `envFingerprint(env: Record<string, string | undefined>): string` — first 12 hex of `sha256` over `k=v\n` lines in that fixed order. Secrets contribute presence only; the value never enters a filename, a log, or a frame.
+- `ACP_ENV_DENYLIST` — the enumerated set of provably-volatile env keys EXCLUDED from the §6e fingerprint. Everything else in the environment is included. This is the inverse of the rejected five-key allow-list: an allow-list leaves `ANTHROPIC_MODEL`, `ANTHROPIC_SMALL_FAST_MODEL`, `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` and every `CLAUDE_CODE_*` toggle free to change the instrument without changing the fingerprint, which is exactly what the fingerprint exists to prevent. `KKAMAK_ACP_IDLE_MS` and `KKAMAK_ACP_TEST_SPAWN_LOG` are on the denylist deliberately — they are daemon operating parameters, not instrument parameters — and Task 9's procedure is written knowing that (a differing idle budget will NOT produce a second socket, which is why the validation run binds its own socket path explicitly).
+- `ACP_SECRET_KEY_RE = /(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)/i` — any env key whose NAME matches contributes `NAME=set` / `NAME=unset` instead of its value. Secrets never enter a filename, a log, or a wire frame; only their presence does.
+- `envFingerprint(env: Record<string, string | undefined>): string` — first 12 hex of `sha256` over `k=v\n` lines, keys sorted, denylist removed, secret-named keys reduced to presence.
 - `socketPath(env): string` — `env.KKAMAK_ACP_SOCKET` when set; else on `win32` the named pipe `\\.\pipe\kkamak-acp-${os.userInfo().username}-${envFingerprint(env)}`; else `path.join(homedir(), ".config", "kkamak", "acp-${envFingerprint(env)}.sock")` — the repo's documented host-local store (CLAUDE.md). `~/.kkamak/` is NOT used: it does not exist and is not a repo convention. **The fingerprint in the filename is a convenience, not the guarantee**: `KKAMAK_ACP_SOCKET` bypasses it, so the binding check is the `initialize` echo (Task 6), which always runs.
 - `spawnLockPath(env): string` / `bindLockPath(env): string` — `<socketPath>.spawn.lock` / `<socketPath>.bind.lock`. **Two distinct files, deliberately.** The client holds the SPAWN lock across "decide to spawn → daemon answers initialize"; the daemon holds the BIND lock across "probe → unlink → rebind". One shared file would deadlock: the client would still be holding it while the daemon it just started tried to take it to bind.
 - `ensureSocketDir(p: string): void` — `mkdirSync(dirname(p), { recursive: true, mode: 0o700 })` before any `listen` or lock create. Without this the default path fails `ENOENT` on a fresh host. No-op for a named pipe.
-- `ACP_LOCK_STALE_MS = 30_000`, plus `tryCreateLock` / `isLockStale` / `releaseLock` shaped EXACTLY on `corpus-store.ts:145-176` (`isLockStale` at `:149-158`, `acquireLock`'s unlink-then-one-retry at `:164-176`; the bare `wx` create helper is `tryCreateLock` at `:134-143`). Content `{ pid, ts }`; stale / vanished / torn all collapse to the same takeover path; losing the retry race is a refusal, never "overwrite and assume ownership".
+- `ACP_LOCK_STALE_MS = 30_000`, plus `tryCreateLock(lockPath, content)` / `isLockStale(lockPath, now)` / `acquireAcpLock(lockPath, now)` / `releaseAcpLock(lockPath)` — signatures deliberately IDENTICAL in shape to `corpus-store.ts:134-143` (`tryCreateLock(lockPath, content)`), `:149-158` (`isLockStale(lockPath, now)`) and `:164-176` (`acquireLock`'s unlink-then-ONE-retry). Content `{ pid, ts }`; stale / vanished / torn all collapse to the same takeover path; losing the retry race is a refusal, never "overwrite and assume ownership". Every caller passes `now` explicitly — do not drop the parameter, or the two modules stop being comparable and a later reader cannot check one against the other.
 
 **Interfaces (`acp-daemon.ts`):**
 - Runnable ONLY under `import.meta.main`: `bun src/gauge/acp-daemon.ts` (socket mode, default) and `bun src/gauge/acp-daemon.ts --stdio` (same dispatcher bound to stdin/stdout, serving the SAME private instrument profile — see Task 2's scope note; NOT for off-the-shelf editors).
-- Filesystem hygiene is platform-gated behind `isPipe = p.startsWith("\\\\.\\pipe\\")`: `chmod 0600` and stale-file takeover apply only to the Unix path (named pipes carry no file mode and vanish with their last handle). Current hosts are WSL2 and macOS — the Unix path is what Tasks 5-10 execute and test; the win32 branch is a compile-checked seam with a unit test on the path string only. Bun named-pipe status (researched 2026-08-04): `node:net` named pipes are SUPPORTED (Bun v1.1.28; name normalization fixed v1.1.35; oven-sh/bun#11820 closed), but the neighbouring `node:http` pipe-listen bug is still open (oven-sh/bun#24682) — we use raw `node:net` only, never `node:http`, and a first native-Windows host still runs one live round-trip verify.
+- **Every socket gets `socket.setEncoding("utf8")` immediately after accept** (and the client does the same on connect). `FrameDecoder` is already UTF-8-boundary-safe via `StringDecoder`; this is the second layer on the same hazard, and it costs nothing.
+- Filesystem hygiene is platform-gated behind `isPipe(p)`: `chmod 0600` and stale-file takeover apply only to the Unix path (named pipes carry no file mode and vanish with their last handle). The `listen`→`chmod` window is narrowed by creating the socket directory `0o700` FIRST (`ensureSocketDir`), so even during that window the path is unreachable to other users. Current hosts are WSL2 and macOS — the Unix path is what Tasks 5-10 execute and test; the win32 branch is a compile-checked seam with a unit test on the path string only. Bun named-pipe status (researched 2026-08-04): `node:net` named pipes are SUPPORTED (Bun v1.1.28; name normalization fixed v1.1.35; oven-sh/bun#11820 closed), but the neighbouring `node:http` pipe-listen bug is still open (oven-sh/bun#24682) — we use raw `node:net` only, never `node:http`, and a first native-Windows host still runs one live round-trip verify.
 - **The daemon's `WarmSession` is constructed with EXPLICIT budget arguments**, never defaults-by-omission:
   ```typescript
   const warm = new WarmSession(process.env, {
     turnTimeoutMs: Number(process.env.KKAMAK_ACP_TURN_TIMEOUT_MS) || ACP_BUDGET.turnTimeoutMs,
     queueWaitMs: ACP_BUDGET.queueWaitMs,
     clearTimeoutMs: ACP_BUDGET.clearTimeoutMs,
+    setModelMs: ACP_BUDGET.setModelMs,
     hardGraceMs: ACP_BUDGET.hardGraceMs,
   })
   ```
-  These are the numbers `ACP_BUDGET.daemonWorstCaseMs` sums, and the client's `daemonLegMs` is proven to exceed them by the Task 2 arithmetic test. `KKAMAK_ACP_TURN_TIMEOUT_MS` exists ONLY as a test seam; raising it in production without raising `daemonLegMs` re-opens the double-call hole §6e law L2 closes.
+  These are the five numbers `ACP_BUDGET.daemonWorstCaseMs` sums, and the client's `daemonLegMs` is proven to exceed them by the Task 2 arithmetic test. `KKAMAK_ACP_TURN_TIMEOUT_MS` exists ONLY as a test seam; raising it in production without raising `daemonLegMs` re-opens the double-call hole §6e law L2 closes.
 - **ACP behaviour:**
   - `initialize` → `{ protocolVersion: 1, agentCapabilities: { loadSession: false }, _meta: { envFingerprint: envFingerprint(process.env) } }`.
   - `session/new` → mints a UUID sessionId and records it (cheap: no model work, no recycle — an abandoned `session/new` costs nothing). `params.cwd` is ACCEPTED AND IGNORED: the instrument pins a neutral `cwd` (§6e delta (b)). Stated here so it is a decision, not a silent divergence.
-  - `session/prompt` → requires `params._meta.model` (a non-empty string); a missing/non-string model is an `ACP_ERR_NO_CALL` error (law L4 — nothing is pushed), never a silent substitution of the daemon's own env. Computes `recycle = (params.sessionId !== lastServedSessionId)` and calls `warm.oneShot(text, model, { recycle, tag: <this request's id> })`. **This is what keeps the ACP facade honest:** two prompts in the SAME session share context, while the deriver — which opens a fresh session per record — always gets a clean one.
+  - `session/prompt` → requires `params._meta.model` (a non-empty string); a missing/non-string model is an `ACP_ERR_NO_CALL` error (law L4 — nothing is pushed), never a silent substitution of the daemon's own env.
+    - **`recycle` and `lastServedSessionId` are computed and committed in the SAME synchronous step, at request-dispatch time, BEFORE `warm.oneShot` is called:**
+      ```typescript
+      const recycle = params.sessionId !== lastServedSessionId
+      lastServedSessionId = params.sessionId          // commit NOW, not when the turn is served
+      ```
+      Committing at SERVE time instead is a context-leak bug: with `lastServed = A`, a request from B arriving first computes `recycle: true` while a request from A arriving second computes `recycle: false`; B then executes first and clears the transcript, and A runs `recycle: false` on a context that is no longer its own. Committing at dispatch time makes the second request see `A !== B` and clear correctly. Unreachable through the deriver (one fresh session per record ⇒ always `true`), but multi-prompt sessions are an advertised, tested capability of this profile and a cross-session context leak is precisely the class of defect §6d's isolation work exists to prevent.
+    - **The cancel tag is DAEMON-MINTED and globally unique — never the client's JSON-RPC request id:**
+      ```typescript
+      const tag = crypto.randomUUID()
+      outstanding.set(params.sessionId, tag)
+      ```
+      JSON-RPC ids are chosen by the client and every client's counter starts at 1, so two concurrent callers both label their `session/prompt` `3`. `WarmSession.cancel(tag)` matches by tag with no owner check, so a client-id tag would let B's correctly-scoped `session/cancel` resolve to tag `3` and INTERRUPT A's in-flight, already-billed turn — destroying A's record and consuming A's model call while telling A nothing. The `Map<sessionId, tag>` scopes WHICH tag is cancelled; only a globally-unique tag makes that scoping real. `crypto` is already imported for `session/new`'s UUID.
     - `ok` → emit ONE `session/update` notification with the full text as an `agent_message_chunk`, then answer `{ stopReason: "end_turn", _meta: { model: <the PROVEN model from TurnOutcome.model>, callConsumed: true } }`.
     - `no-call` → JSON-RPC error `{ code: ACP_ERR_NO_CALL, message, data: { callConsumed: false } }`, no update.
     - `call-consumed` → JSON-RPC error `{ code: ACP_ERR_CALL_CONSUMED, message, data: { callConsumed: true } }`, no update.
-    - `data.callConsumed` is ALWAYS set (law L3 makes it authoritative over the code).
-  - `session/cancel` → `warm.cancel(<the tag of THIS sessionId's outstanding turn>)`; answers `{}`. **Never a bare `interrupt()`**: with one global FIFO across all connected callers, an unscoped interrupt would kill a DIFFERENT caller's in-flight turn — destroying their record and consuming their model call while telling them nothing. The daemon keeps `Map<sessionId, tag>` for outstanding turns and cancels only its own; a cancel naming an unknown/finished session is a no-op that still answers `{}`.
+    - `data.callConsumed` is ALWAYS set (law L3 makes it authoritative over the code). The outcome is delivered straight from `TurnOutcome.kind` — the daemon adds no classification of its own, so there is exactly one place in the process where §6e's law is decided.
+    - Clear `outstanding.delete(sessionId)` in a `finally`.
+  - `session/cancel` → `warm.cancel(outstanding.get(params.sessionId) ?? "")`; **answers `{}` ONLY when the frame carried an `id`.** ACP proper sends this as a notification; our own client wants an acknowledgement so a test can order "cancel landed" against "turn resolved", so the dispatcher serves both shapes and answers neither incorrectly (a notification is never answered, per JSON-RPC 2.0). A cancel naming an unknown/finished session is a no-op that still answers `{}` when an id was present.
   - Unknown method → JSON-RPC `-32601`, connection stays open.
 - Idle reaper: ticks at `Math.max(250, Math.min(60_000, idleMs / 3))` — a fixed 60 s tick could never observe a short `KKAMAK_ACP_IDLE_MS` (the test uses 1 500 ms), and would make the reaper untestable. On a tick where `warm.idleMs() > KKAMAK_ACP_IDLE_MS` AND `!warm.turnInFlight()` → **stop accepting new connections first**, then close open connections, then `warm.close()`, release the bind lock, unlink the socket, `process.exit(0)`. Unlinking before draining races a client that has already written a `session/prompt`.
 - Lifecycle hygiene: `chmod 0600` after listen; `SIGTERM`/`SIGINT` → same drain-then-unlink-then-exit path.
 - **Stale-socket takeover, race-free:** the whole probe→unlink→rebind sequence runs while holding the BIND lock (`<socket>.bind.lock`, `wx`-created, `corpus-store.ts:145-176` staleness rule, released after a successful `listen` and on every exit path). Sequence: `listen` → on `EADDRINUSE`, `net.connect` the path → answered ⇒ another daemon is live, release the lock and exit 0 quietly; `ECONNREFUSED`/`ENOENT` ⇒ unlink and ONE rebind attempt. Without the lock two starters can both see `ECONNREFUSED`, both unlink, and the loser's unlink removes the winner's LIVE path — leaving a listening-but-unreachable daemon and every caller silently falling back forever.
-- Test seam: when `env.KKAMAK_ACP_TEST_SPAWN_LOG` is set, append one line (`pid` + ISO ts) to that file **AFTER a successful `listen` + `chmod`** — never at boot. A starter that loses the bind race and exits 0 writes NOTHING, so "exactly one line" means "exactly one daemon is serving", which is the property Tasks 6 and 8 actually want to assert and which holds even when two processes were launched.
+- Test seam: when `env.KKAMAK_ACP_TEST_SPAWN_LOG` is set, append one line (`pid` + ISO ts) to that file **AFTER a successful `listen` + `chmod`** — never at boot. A starter that loses the bind race and exits 0 writes NOTHING, so "exactly one line" means "exactly one daemon is serving", which is the property Tasks 6 and 8 actually want to assert and which holds even when two processes were launched. The `pid` is also what an `afterEach` uses to kill a test daemon: the spawn idiom goes through `bash -c 'nohup … &'`, so `Bun.spawn`'s returned pid is the shell's, not the daemon's.
 - **One structural rule:** the dispatcher must never `throw` across a connection handler — every error path answers a JSON-RPC error frame. The daemon dying on a bad frame is a fail-open violation.
 
 - [ ] **Step 1: Write the failing tests** (drive the real daemon as a child over a temp socket; SSE stub for the model side; credentials skip-guard on everything that reaches a model)
@@ -1500,26 +1836,44 @@ git commit -m "feat(gauge): WarmSession — persistent pump, sequenced /clear, t
 ```typescript
 // test/acp-paths.test.ts — no daemon, no CLI, no credentials needed.
 import { describe, expect, test } from "bun:test"
-import { envFingerprint, socketPath, spawnLockPath, bindLockPath, ACP_ENV_KEYS } from "../src/gauge/acp-paths.ts"
+import {
+  envFingerprint, socketPath, spawnLockPath, bindLockPath, ACP_ENV_DENYLIST,
+} from "../src/gauge/acp-paths.ts"
 
 describe("acp-paths", () => {
-  test("the fingerprint subset is exactly the five §6e keys", () => {
-    expect(ACP_ENV_KEYS.value).toEqual(["ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR", "KKAMAK_GAUGE_MODEL"])
-    expect(ACP_ENV_KEYS.presence).toEqual(["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"])
+  test("the fingerprint covers the WHOLE env, not a five-key sample", () => {
+    // The rejected allow-list would have made these three pairs identical.
+    // Each of them changes the instrument.
+    expect(envFingerprint({ ANTHROPIC_MODEL: "a" })).not.toBe(envFingerprint({ ANTHROPIC_MODEL: "b" }))
+    expect(envFingerprint({ HTTPS_PROXY: "http://p1" })).not.toBe(envFingerprint({ HTTPS_PROXY: "http://p2" }))
+    expect(envFingerprint({ CLAUDE_CODE_DISABLE_X: "1" })).not.toBe(envFingerprint({}))
   })
   test("a different base URL is a different instrument", () => {
     expect(envFingerprint({ ANTHROPIC_BASE_URL: "http://a" }))
       .not.toBe(envFingerprint({ ANTHROPIC_BASE_URL: "http://b" }))
   })
-  test("secrets contribute PRESENCE only — the value never changes the fingerprint", () => {
+  test("secret-NAMED keys contribute PRESENCE only — the value never changes the fingerprint", () => {
     const a = envFingerprint({ ANTHROPIC_API_KEY: "sk-aaa" })
     const b = envFingerprint({ ANTHROPIC_API_KEY: "sk-bbb" })
     const none = envFingerprint({})
     expect(a).toBe(b)
     expect(a).not.toBe(none)
+    // ...and the same rule reaches every secret-shaped name, not an enum.
+    expect(envFingerprint({ SOME_AUTH_TOKEN: "t1" })).toBe(envFingerprint({ SOME_AUTH_TOKEN: "t2" }))
+    expect(envFingerprint({ SOME_AUTH_TOKEN: "t1" })).not.toBe(none)
   })
-  test("unrelated env keys do not change the fingerprint", () => {
-    expect(envFingerprint({ PATH: "/x" })).toBe(envFingerprint({ PATH: "/y" }))
+  test("denylisted keys do not change the fingerprint", () => {
+    for (const k of ["PWD", "SHLVL", "TMUX_PANE", "KKAMAK_ACP_IDLE_MS"]) {
+      expect(ACP_ENV_DENYLIST.includes(k)).toBe(true)
+      expect(envFingerprint({ [k]: "x" })).toBe(envFingerprint({ [k]: "y" }))
+    }
+  })
+  test("key ORDER in the object does not change the fingerprint (keys are sorted)", () => {
+    expect(envFingerprint({ A: "1", B: "2" })).toBe(envFingerprint({ B: "2", A: "1" }))
+  })
+  test("no secret VALUE can appear in a socket path", () => {
+    const p = socketPath({ ANTHROPIC_API_KEY: "sk-super-secret-value" })
+    expect(p).not.toContain("sk-super-secret-value")
   })
   test("the default socket path carries the fingerprint; the override wins verbatim", () => {
     const p = socketPath({ ANTHROPIC_BASE_URL: "http://a" })
@@ -1536,7 +1890,7 @@ describe("acp-paths", () => {
 
 ```typescript
 // test/acp-daemon.test.ts
-import { HAS_CLAUDE_CODE_CREDENTIALS, sseText } from "./agent-cli-stub.ts"
+import { HAS_CLAUDE_CODE_CREDENTIALS, sseText, silentServer } from "./agent-cli-stub.ts"
 import { ACP_ERR_NO_CALL, ACP_ERR_CALL_CONSUMED } from "../src/gauge/acp-wire.ts"
 
 const DAEMON_TEST_TIMEOUT_MS = 40_000
@@ -1546,7 +1900,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket", () 
     const sock = `${tmpdir()}/kkamak-acp-test-${process.pid}-${Date.now()}.sock`
     const child = spawnDaemon(sock, { ANTHROPIC_BASE_URL: stubUrl })
     try {
-      const c = await connectNdjson(sock)          // helper: net.connect + FrameDecoder
+      const c = await connectNdjson(sock)          // helper: net.connect + setEncoding + FrameDecoder
       const init = await c.request("initialize", { protocolVersion: 1 })
       expect(init.protocolVersion).toBe(1)
       expect(typeof init._meta.envFingerprint).toBe("string")   // §6e fingerprint echo
@@ -1563,7 +1917,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket", () 
       expect(r._meta.model).toBe("claude-haiku-4-5")   // PROVEN from modelUsage, not echoed
       expect(r._meta.callConsumed).toBe(true)
       expect(updates.join("")).toContain("ANSWER")
-    } finally { child.kill() }
+    } finally { killDaemon(sock, child) }
   }, DAEMON_TEST_TIMEOUT_MS)
 
   test("a second SESSION recycles (clean context); a second PROMPT in one session does not", async () => {
@@ -1572,6 +1926,15 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket", () 
     // the second body (message COUNT is not asserted — §6e residue shape,
     // same reason as Task 4). Then a THIRD prompt reusing the SECOND
     // sessionId: assert the second prompt's marker IS present.
+  }, DAEMON_TEST_TIMEOUT_MS)
+
+  test("INTERLEAVED sessions each get a clean context (lastServedSessionId is committed at dispatch)", async () => {
+    // Two connections, sessions A and B, prompts issued A, B, A with a
+    // distinct marker each. Assert NO captured body contains another
+    // session's marker. Committing lastServedSessionId at SERVE time instead
+    // of dispatch time makes the third prompt compute recycle:false against
+    // a transcript B already cleared, and this test sees A's context
+    // carrying B's turn.
   }, DAEMON_TEST_TIMEOUT_MS)
 
   test("missing _meta.model -> ACP_ERR_NO_CALL with data.callConsumed false, and ZERO model calls", async () => {
@@ -1584,11 +1947,29 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket", () 
     // AND error.data.callConsumed === true (L3's authoritative channel).
   }, DAEMON_TEST_TIMEOUT_MS)
 
-  test("session/cancel is SCOPED: cancelling session B never disturbs session A's in-flight turn", async () => {
-    // two connections, two sessions; A's prompt hangs (silentServer), B
-    // sends session/cancel for ITS OWN (queued) prompt. Assert B gets
-    // ACP_ERR_NO_CALL and A still ends on its own turn timeout with
-    // ACP_ERR_CALL_CONSUMED — never cancelled by B.
+  test("an unreachable model endpoint AFTER the push -> ACP_ERR_CALL_CONSUMED, never NO_CALL", async () => {
+    // law L5 with no exception (round-3 C1), asserted at the WIRE level so a
+    // future reader cannot reintroduce the carve-out inside WarmSession
+    // without this failing: spawn the daemon with
+    // ANTHROPIC_BASE_URL=http://127.0.0.1:9 and a short
+    // KKAMAK_ACP_TURN_TIMEOUT_MS, send one prompt, assert
+    // error.code === ACP_ERR_CALL_CONSUMED and error.data.callConsumed === true.
+  }, DAEMON_TEST_TIMEOUT_MS)
+
+  test("session/cancel is SCOPED even when BOTH clients use the SAME JSON-RPC id", async () => {
+    // Round-3 C2 at the wire level. Two connections, each with its own id
+    // counter, so BOTH label their session/prompt with the SAME id — the
+    // real-world shape, since every client starts counting at 1. A's prompt
+    // hangs (silentServer); B's prompt is queued; B sends session/cancel for
+    // ITS OWN session. Assert B gets ACP_ERR_NO_CALL and A still ends on its
+    // own turn timeout with ACP_ERR_CALL_CONSUMED — never cancelled by B. A
+    // daemon that used the client's id as the WarmSession tag fails here.
+  }, DAEMON_TEST_TIMEOUT_MS)
+
+  test("session/cancel sent as a NOTIFICATION (no id) is honoured and NOT answered", async () => {
+    // JSON-RPC 2.0: a notification must never be answered. Assert the queued
+    // prompt still resolves ACP_ERR_NO_CALL and no frame carrying a null/absent
+    // id ever arrives back.
   }, DAEMON_TEST_TIMEOUT_MS)
 
   test("unknown method -> -32601 and the connection survives", async () => {
@@ -1615,7 +1996,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket", () 
   }, DAEMON_TEST_TIMEOUT_MS)
 })
 ```
-(The sketched bodies are written out in full by the implementer following the first test's helper pattern — same `spawnDaemon`/`connectNdjson` helpers, different assertions; the assertions named in the comments are the required ones.)
+(The sketched bodies are written out in full by the implementer following the first test's helper pattern — same `spawnDaemon`/`connectNdjson`/`killDaemon` helpers, different assertions; the assertions named in the comments are the required ones. `killDaemon` reads the pid from `KKAMAK_ACP_TEST_SPAWN_LOG` — the `Bun.spawn` handle is the `bash -c nohup` shell, not the daemon — SIGTERMs it, and unlinks the socket and both lock files. An `afterEach` runs it unconditionally: **no test may ever touch `~/.config/kkamak/acp-*.sock`.**)
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -1634,20 +2015,41 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
-/** §6e instrument fingerprint subset. VALUE keys change the instrument;
- * PRESENCE keys are credentials whose value must never reach a filename,
- * a log, or a wire frame. */
-export const ACP_ENV_KEYS = {
-  value: ["ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR", "KKAMAK_GAUGE_MODEL"],
-  presence: ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"],
-} as const
+/** §6e instrument fingerprint. The fingerprint covers the WHOLE env MINUS
+ * these keys, which are provably per-process volatile and cannot change the
+ * instrument. An enumerated ALLOW-list was the first draft and is rejected:
+ * it left ANTHROPIC_MODEL, ANTHROPIC_SMALL_FAST_MODEL, the proxy vars and
+ * every CLAUDE_CODE_* toggle free to change the instrument silently.
+ * KKAMAK_ACP_IDLE_MS / KKAMAK_ACP_TEST_SPAWN_LOG are daemon OPERATING
+ * parameters, not instrument parameters — which is exactly why Task 9's
+ * validation run binds its own KKAMAK_ACP_SOCKET rather than relying on a
+ * differing idle budget to produce a separate daemon. */
+export const ACP_ENV_DENYLIST: readonly string[] = [
+  "_", "PWD", "OLDPWD", "SHLVL", "RANDOM", "LINES", "COLUMNS", "WINDOWID",
+  "TERM_SESSION_ID", "ITERM_SESSION_ID", "TMUX", "TMUX_PANE", "STY",
+  "SSH_AUTH_SOCK", "SSH_AGENT_PID", "SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY",
+  "XDG_SESSION_ID", "DBUS_SESSION_BUS_ADDRESS",
+  "KKAMAK_ACP_IDLE_MS", "KKAMAK_ACP_TEST_SPAWN_LOG",
+]
+
+/** Keys whose NAME looks like a credential contribute presence, never value.
+ * A name-shaped rule rather than an enum, so a new credential variable is
+ * covered the day it appears. */
+export const ACP_SECRET_KEY_RE = /(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)/i
 
 export function envFingerprint(env: Record<string, string | undefined>): string {
+  const deny = new Set(ACP_ENV_DENYLIST)
   const lines: string[] = []
-  for (const k of ACP_ENV_KEYS.value) lines.push(`${k}=${env[k] ?? ""}`)
-  for (const k of ACP_ENV_KEYS.presence) lines.push(`${k}=${env[k] ? "set" : "unset"}`)
+  for (const k of Object.keys(env).sort()) {
+    if (deny.has(k)) continue
+    const v = env[k]
+    if (v === undefined) continue
+    lines.push(ACP_SECRET_KEY_RE.test(k) ? `${k}=set` : `${k}=${v}`)
+  }
   return crypto.createHash("sha256").update(lines.join("\n") + "\n").digest("hex").slice(0, 12)
 }
+
+export function isPipe(p: string): boolean { return p.startsWith("\\\\.\\pipe\\") }
 
 export function socketPath(env: Record<string, string | undefined>): string {
   if (env.KKAMAK_ACP_SOCKET) return env.KKAMAK_ACP_SOCKET
@@ -1667,8 +2069,6 @@ export function bindLockPath(env: Record<string, string | undefined>): string {
   return `${socketPath(env)}.bind.lock`
 }
 
-export function isPipe(p: string): boolean { return p.startsWith("\\\\.\\pipe\\") }
-
 export function ensureSocketDir(p: string): void {
   if (isPipe(p)) return
   fs.mkdirSync(path.dirname(p), { recursive: true, mode: 0o700 })
@@ -1678,9 +2078,12 @@ export function ensureSocketDir(p: string): void {
  * `isLockStale` (:149-158) collapses stale/vanished/torn to one takeover
  * path, and `acquireLock` (:164-176) does unlink + ONE fresh `wx` retry,
  * treating a lost retry race as a refusal rather than an assumed ownership.
- * The bare `wx` create helper is corpus-store.ts:134-143. */
+ * The bare `wx` create helper is corpus-store.ts:134-143. SIGNATURES MATCH
+ * THAT MODULE — `content` and `now` stay explicit parameters so the two
+ * implementations remain directly comparable. */
 export const ACP_LOCK_STALE_MS = 30_000
-export function tryCreateLock(lockPath: string): boolean { /* wx create {pid, ts} */ }
+export interface AcpLockContent { pid: number; ts: number }
+export function tryCreateLock(lockPath: string, content: AcpLockContent): boolean { /* wx create */ }
 export function isLockStale(lockPath: string, now: number): boolean { /* per the rule above */ }
 export function acquireAcpLock(lockPath: string, now: number): boolean { /* wx -> stale? -> unlink -> ONE retry */ }
 export function releaseAcpLock(lockPath: string): void { /* unlink, ENOENT-tolerant, never throws */ }
@@ -1694,16 +2097,22 @@ export function releaseAcpLock(lockPath: string): void { /* unlink, ENOENT-toler
 // (the instrument pins a neutral cwd, §6e delta (b)); the /clear recycle
 // happens at a prompt whose sessionId differs from the last one served — so
 // a multi-prompt ACP session keeps its context while the deriver (fresh
-// session per record) always gets a clean one.
+// session per record) always gets a clean one. `lastServedSessionId` is
+// committed at DISPATCH time, not serve time, or interleaved sessions leak
+// context into each other.
 // One turn in flight globally (WarmSession FIFO).
+// Cancel tags are DAEMON-MINTED UUIDs, never the client's JSON-RPC id: two
+// clients both start their id counters at 1, and a colliding tag would let
+// one caller's cancel interrupt another caller's already-billed turn.
 // Failure is a JSON-RPC ERROR carrying data.callConsumed (law L3's
-// authoritative channel), never a fake stopReason.
+// authoritative channel), never a fake stopReason, and the outcome is passed
+// straight through from TurnOutcome.kind — the daemon adds no classification
+// of its own.
 //
 // EVERY runtime side effect below is behind `import.meta.main`. acp-client
 // imports NOTHING from this file (see acp-paths.ts).
 import net from "node:net"
 import fs from "node:fs"
-import os from "node:os"
 import crypto from "node:crypto"
 import { WarmSession, type TurnOutcome } from "./warm-session.ts"
 import {
@@ -1718,18 +2127,23 @@ import {
 
 // ... exported, side-effect-free: `createDispatcher(warm, env)` returning a
 // per-connection handler (FrameDecoder in, encodeFrame out); sessions
-// Map<string, { createdAt: number }>; `lastServedSessionId`; an
-// outstanding Map<sessionId, tag> so session/cancel is SCOPED to its own
-// session and can never interrupt another caller's turn;
+// Map<string, { createdAt: number }>; `lastServedSessionId` committed at
+// dispatch; an outstanding Map<sessionId, tag> of DAEMON-MINTED UUIDs so
+// session/cancel is SCOPED to its own session and cannot collide with
+// another connection's request ids;
 // on session/prompt: validate params._meta.model is a non-empty string
-// (else ACP_ERR_NO_CALL — law L4), recycle = sessionId !== lastServedSessionId,
+// (else ACP_ERR_NO_CALL — law L4), compute+commit recycle, mint the tag,
 // then map TurnOutcome -> result | ACP_ERR_NO_CALL | ACP_ERR_CALL_CONSUMED,
-// always populating data.callConsumed.
+// always populating data.callConsumed, always clearing `outstanding` in a
+// finally;
+// on session/cancel: warm.cancel(outstanding.get(sessionId) ?? "") and answer
+// {} ONLY when the frame carried an id.
 //
 // if (import.meta.main) { ... and ONLY here:
-//   ensureSocketDir(p); acquireAcpLock(bindLockPath(env)); listen ->
+//   ensureSocketDir(p); acquireAcpLock(bindLockPath(env), Date.now()); listen ->
 //   on EADDRINUSE probe-then-(unlink + ONE rebind) or exit 0 quietly;
 //   chmod 0600; releaseAcpLock; append the spawn-log line POST-LISTEN;
+//   on every accepted socket: socket.setEncoding("utf8");
 //   idle reaper setInterval(Math.max(250, Math.min(60_000, idleMs / 3)));
 //   SIGTERM/SIGINT -> stop accepting, drain, warm.close(), unlink, exit 0. }
 ```
@@ -1740,26 +2154,62 @@ The implementer writes the full dispatcher (~200 lines) against the Task 2 types
 
 Run: `cd cc-gate-plugin && bun test test/acp-paths.test.ts test/acp-daemon.test.ts` — 0 fail.
 Run: `cd cc-gate-plugin && bun test` — 0 fail. `bunx tsc --noEmit` clean.
-Hygiene check: `ls ~/.config/kkamak/` — no `acp-*.sock` may exist (every test used a temp socket).
+Hygiene check: `ls ~/.config/kkamak/` — no `acp-*.sock`, `.spawn.lock` or `.bind.lock` may exist (every test used a temp socket and its `afterEach` cleaned up).
 Import-purity check: `bun -e 'import("./cc-gate-plugin/src/gauge/acp-paths.ts").then(() => console.log("clean"))'` returns immediately and leaves no listening socket — proving the hook's import path cannot start a daemon.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add cc-gate-plugin/src/gauge/acp-paths.ts cc-gate-plugin/src/gauge/acp-daemon.ts cc-gate-plugin/test/acp-paths.test.ts cc-gate-plugin/test/acp-daemon.test.ts
-git commit -m "feat(gauge): ACP daemon — socket server, scoped cancel, fingerprint echo, idle self-exit"
+git add cc-gate-plugin/src/gauge/acp-paths.ts cc-gate-plugin/src/gauge/acp-daemon.ts \
+        cc-gate-plugin/test/acp-paths.test.ts cc-gate-plugin/test/acp-daemon.test.ts
+git commit -m "feat(gauge): ACP daemon — socket server, UUID-tagged scoped cancel, whole-env fingerprint echo, idle self-exit"
 ```
 
 ### Task 6: `acp-client.ts` — connect-or-spawn, three-way outcome, shared outgoing text
 
 **Files:**
 - Create: `cc-gate-plugin/src/gauge/acp-client.ts`
+- Create: `cc-gate-plugin/test/acp-fake-daemon.ts` (shared scripted-daemon helper — Tasks 6 AND 7 both need it, and a `.test.ts` cannot be imported from another `.test.ts` without re-running its tests; not matched by bun's test glob, same as `sdk-stub.ts`)
 - Modify: `cc-gate-plugin/src/gauge/agent-transport.ts` (EXPORT the existing `buildOutgoingText`, renamed `buildAgentOutgoingText` — no behaviour change, no new logic)
 - Test: `cc-gate-plugin/test/acp-client.test.ts`
 
 **Interfaces:**
 - Consumes: `socketPath`, `ensureSocketDir`, `spawnLockPath`, `envFingerprint`, `acquireAcpLock`, `releaseAcpLock` (Task 5's `acp-paths.ts` — NOT `acp-daemon.ts`); wire pieces + error codes + `ACP_BUDGET` (Task 2); `buildAgentOutgoingText` (this task).
-- Produces:
+- Produces (`acp-fake-daemon.ts`):
+  ```typescript
+  /** A scripted ACP daemon on a unix socket: no WarmSession, no CLI, no
+   * model. Shared by Tasks 6 and 7 so the two suites cannot drift on the
+   * fingerprint echo — a fake that echoes the WRONG fingerprint makes every
+   * client call a silent law-L1 `no-call`, which looks like a routing bug
+   * and is not one. */
+  export function fakeDaemon(
+    sock: string,
+    opts: {
+      /** echoed in initialize._meta; pass envFingerprint(theEnvUnderTest) */
+      fingerprint: string
+      answer:
+        | "ok"                    // session/update + AcpPromptResult
+        | "no-call"               // ACP_ERR_NO_CALL + data.callConsumed false
+        | "call-consumed"         // ACP_ERR_CALL_CONSUMED + data.callConsumed true
+        | "mismatched-data"       // ACP_ERR_NO_CALL code, data.callConsumed TRUE
+        | "unknown-code"          // -32603, no data
+        | "hang"                  // accepts, answers init+new, never the prompt
+        | "die-before-prompt"     // answers init+new then destroys the socket
+      /** text the "ok" answer carries; default "ANSWER" */
+      text?: string
+      /** _meta.model the "ok" answer reports as PROVEN; default the requested one */
+      model?: string
+    },
+  ): {
+    stop: () => void
+    /** true iff a session/prompt frame was ever decoded — the wire-level
+     * proof for every "the fallback never sent anything" assertion */
+    sawPrompt: () => boolean
+    /** the params of the last session/prompt, for byte-identity assertions */
+    promptParams: () => { sessionId: string; prompt: Array<{ type: "text"; text: string }>; _meta: { model: string } } | undefined
+  }
+  ```
+- Produces (`acp-client.ts`):
   ```typescript
   /** Mirrors WarmSession's TurnOutcome across the wire so §6e's law
    * survives the process boundary. */
@@ -1783,25 +2233,25 @@ git commit -m "feat(gauge): ACP daemon — socket server, scoped cancel, fingerp
     outgoingText: string,
     model: string,
     env: Record<string, string | undefined>,
-    opts?: { budgetMs?: number },   // default ACP_BUDGET.daemonLegMs = 33_000
+    opts?: { budgetMs?: number },   // default ACP_BUDGET.daemonLegMs = 36_000
   ): Promise<DaemonOutcome>
 
   /** Ensure a daemon is reachable. `waitMs` DEFAULTS TO 0 = kick and return
    * false immediately (the SessionStart hook's mode). Otherwise poll-connect
    * up to waitMs. Returns true when a daemon answered `initialize` with a
-   * MATCHING fingerprint. NEVER throws. The spawn is guarded by the CLIENT
-   * lock (`<socket>.spawn.lock`, acp-paths.ts) — a DIFFERENT file from the
-   * daemon's bind lock, so holding it while waiting for the daemon to answer
-   * cannot deadlock the daemon's own bind sequence. */
+   * MATCHING fingerprint. NEVER throws. Destroys every socket it opens and
+   * clears every timer before resolving — the SessionStart hook has no
+   * forced `process.exit(0)` on its success path (hook-cli.ts:339-346 only
+   * catches rejections), so one lingering handle would keep the hook alive
+   * until CC's 30 s timeout on EVERY session start. */
   export function ensureDaemon(
     env: Record<string, string | undefined>,
     opts?: { waitMs?: number },     // default 0
   ): Promise<boolean>
-
-  /** Re-exported from ACP_BUDGET so callers name one constant, not two. */
-  export const DAEMON_LEG_MS = ACP_BUDGET.daemonLegMs
   ```
-- **Spawn idiom (repo-established, `hook-cli.ts:149-153`):**
+  **`DAEMON_LEG_MS` is NOT re-exported here.** Callers read `ACP_BUDGET.daemonLegMs` from `acp-wire.ts` directly. `transport.ts` is on `hook-cli.ts`'s eager import path (`hook-cli.ts:24`), so a named re-export from `acp-client.ts` would force `transport.ts` to import this module at module scope and put `node:net` + the whole client on every hook event — the exact cost `agent-transport.ts:102-108` established the lazy-import discipline to avoid. `acp-wire.ts` imports only `node:string_decoder` and is safe to import eagerly.
+- **Every socket gets `socket.setEncoding("utf8")` on connect**, matching the daemon (Task 5) — the second layer over `FrameDecoder`'s `StringDecoder` on the split-multibyte hazard.
+- **Spawn idiom (repo-established, `hook-cli.ts:148-153`):**
   ```typescript
   const quoted = cmd.map((c) => `'${c.replace(/'/g, `'\\''`)}'`).join(" ")
   const proc = Bun.spawn(["bash", "-c", `nohup ${quoted} </dev/null >/dev/null 2>&1 &`], {
@@ -1809,32 +2259,35 @@ git commit -m "feat(gauge): ACP daemon — socket server, scoped cancel, fingerp
   })
   proc.unref()
   ```
-  Bun's `spawn` has no `detached` option and no string `stdio`; and without `nohup` the daemon dies with the hook process that started it.
-- **`ensureDaemon`'s exact sequence** (the "exactly one daemon SERVING" property, given the post-listen spawn log from Task 5):
+  Bun's `spawn` has no `detached` option and no string `stdio`; and without `nohup` the daemon dies with the hook process that started it. Note the returned pid is the SHELL's, not the daemon's — tests read the daemon pid from the post-listen spawn log.
+- **`ensureDaemon`'s exact sequence** (the "exactly one daemon SERVING" property, given the post-listen spawn log from Task 5). `held` is tracked explicitly and NOTHING is released that was not acquired:
   1. probe: connect + `initialize`; fingerprint matches ⇒ return true.
-  2. `acquireAcpLock(spawnLockPath(env))`. Held (fresh) ⇒ another caller is mid-spawn: skip to step 5.
-  3. holding the lock, RE-probe (a winner may have finished between 1 and 2) ⇒ release + return true.
-  4. spawn per the idiom above.
-  5. if `waitMs === 0`: release the lock immediately and return false (kick-and-go). Else poll-connect until `waitMs`, then release the lock in a `finally` and return the probe result.
+  2. `const held = acquireAcpLock(spawnLockPath(env), Date.now())`.
+  3. if `held`: RE-probe (a winner may have finished between 1 and 2) ⇒ release + return true; otherwise spawn per the idiom above.
+  4. if `!held`: another caller is mid-spawn — do NOT spawn and do NOT touch the lock file. **`releaseAcpLock` is an unlink; releasing a lock you never acquired deletes the winner's lock and lets the next caller spawn a duplicate.**
+  5. if `waitMs === 0`: `if (held) releaseAcpLock(...)`; return false (kick-and-go). Else poll-connect until `waitMs`, then `if (held) releaseAcpLock(...)` in a `finally` and return the probe result.
   Holding the client lock across step 5's wait is safe precisely because the daemon takes the *bind* lock, not this one. With `waitMs: 0` two racing callers can both spawn — but only one can BIND, the loser exits 0 quietly and writes no spawn-log line, so "exactly one daemon serving" and "exactly one spawn-log line" both hold.
 - **Deliberate split:** `daemonCall` never spawns. Spawning is `ensureDaemon`'s job (SessionStart hook, Task 8; batch runs call it once up front with a real `waitMs`). A Stop-hook deriver whose daemon is missing gets `no-call`, falls back this record, and the next session's hook re-ensures — no derivation ever waits out a daemon boot.
-- **Shared outgoing text (§6e "the two lanes must differ in transport only"):** `agent-transport.ts`'s private `buildOutgoingText` (`:85-88`) appends the trailing schema instruction that IS the agent lane's entire schema-enforcement mechanism (spec §6d, "Schema enforcement differs between the arms"). It is exported here as `buildAgentOutgoingText(messageText, schema)` so `callModelDerive` builds ONE string used byte-identically by `daemonCall` and `agentSdkCall`. `agentSdkCall` keeps calling it internally and is byte-unchanged for its existing callers.
+- **Shared outgoing text (§6e "the two lanes must differ in transport only"):** `agent-transport.ts`'s private `buildOutgoingText` (`:85-88`) appends the trailing schema instruction that IS the agent lane's entire schema-enforcement mechanism (spec §6d, "Schema enforcement differs between the arms"). It is exported as `buildAgentOutgoingText(messageText, schema)` so `callModelDerive` builds ONE string used byte-identically by `daemonCall` and `agentSdkCall`. `agentSdkCall` keeps calling it internally at `:118` and is byte-unchanged for its existing callers.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```typescript
 import { describe, expect, test } from "bun:test"
 import { tmpdir } from "node:os"
-import { daemonCall, ensureDaemon, DAEMON_LEG_MS } from "../src/gauge/acp-client.ts"
+import { daemonCall, ensureDaemon } from "../src/gauge/acp-client.ts"
 import { buildAgentOutgoingText } from "../src/gauge/agent-transport.ts"
-import { ACP_BUDGET, ACP_ERR_NO_CALL, ACP_ERR_CALL_CONSUMED } from "../src/gauge/acp-wire.ts"
+import { ACP_BUDGET } from "../src/gauge/acp-wire.ts"
 import { envFingerprint } from "../src/gauge/acp-paths.ts"
+import { fakeDaemon } from "./acp-fake-daemon.ts"
 import { HAS_CLAUDE_CODE_CREDENTIALS } from "./agent-cli-stub.ts"
 
-// These tests talk to SCRIPTED FAKE daemons (net.createServer answering
-// canned frames) — no WarmSession, no CLI, no credentials, no model. They
-// pin the CLIENT half of the wire contract independently of Task 5, so a
-// Task 5 regression cannot mask a Task 6 one.
+// These tests talk to SCRIPTED FAKE daemons — no WarmSession, no CLI, no
+// credentials, no model. They pin the CLIENT half of the wire contract
+// independently of Task 5, so a Task 5 regression cannot mask a Task 6 one.
+// EVERY fake echoes envFingerprint(THE SAME env object the test passes to
+// daemonCall); a mismatched echo turns every case into a silent law-L1
+// no-call that looks like a routing bug and is not one.
 describe("acp-client (fake daemons only — no CLI, no model)", () => {
   test("law L1: no daemon at all -> no-call, fast", async () => {
     const t0 = Date.now()
@@ -1845,43 +2298,44 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     expect(Date.now() - t0).toBeLessThan(2_000)
   })
   test("round-trips against a scripted fake daemon -> ok, text, model", async () => {
-    // fake answers initialize (with OUR fingerprint), session/new,
-    // session/prompt (+ a session/update carrying the text)
+    // fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "ok" })
     // -> { kind: "ok", text: "ANSWER", model: "claude-haiku-4-5" }
   })
   test("law L3: ACP_ERR_CALL_CONSUMED maps to call-consumed, NOT no-call", async () => {
-    // fake answers session/prompt with that code + data.callConsumed true:
-    // expect(r.kind).toBe("call-consumed")   // this is what stops a double call
+    // answer: "call-consumed" -> expect(r.kind).toBe("call-consumed")
+    // this is what stops a double call
   })
   test("law L3: ACP_ERR_NO_CALL maps to no-call", async () => {
-    // + data.callConsumed false; expect(r.kind).toBe("no-call")
+    // answer: "no-call" -> expect(r.kind).toBe("no-call")
   })
   test("law L3: data.callConsumed OVERRIDES a mismatched code", async () => {
-    // fake answers code ACP_ERR_NO_CALL but data.callConsumed === true:
-    // expect(r.kind).toBe("call-consumed")   // the data field is authoritative
+    // answer: "mismatched-data" (NO_CALL code, data.callConsumed true)
+    // -> expect(r.kind).toBe("call-consumed")   // the data field is authoritative
   })
   test("law L2: an UNRECOGNIZED error code after the prompt was sent is call-consumed", async () => {
-    // fake answers session/prompt with code -32603 and NO data:
-    // expect(r.kind).toBe("call-consumed")   // never no-call — that would double-spend
+    // answer: "unknown-code" -> expect(r.kind).toBe("call-consumed")
+    // never no-call — that would double-spend
   })
   test("law L2: budget expiry after the prompt was sent is call-consumed", async () => {
-    // fake accepts, answers initialize + session/new, then NEVER answers the
-    // prompt; budgetMs 500 -> call-consumed, elapsed < 1.5s
+    // answer: "hang", budgetMs 500 -> call-consumed, elapsed < 1.5s,
+    // and fake.sawPrompt() === true (it really did cross the boundary)
   })
   test("law L1: a daemon that dies before session/prompt is written is no-call", async () => {
-    // fake answers initialize + session/new then destroys the socket:
-    // expect(r.kind).toBe("no-call")
+    // answer: "die-before-prompt" -> expect(r.kind).toBe("no-call")
+    // and fake.sawPrompt() === false
   })
   test("law L1: a fingerprint mismatch refuses BEFORE sending anything", async () => {
-    // fake echoes envFingerprint of a DIFFERENT env in initialize._meta:
-    // expect(r.kind).toBe("no-call") and the fake saw NO session/prompt frame
+    // fingerprint: envFingerprint({ ...env, ANTHROPIC_BASE_URL: "http://other" })
+    // -> expect(r.kind).toBe("no-call") AND expect(fake.sawPrompt()).toBe(false)
   })
   test("daemonCall sends the model in _meta and the text verbatim", async () => {
-    // fake captures params: _meta.model === "claude-haiku-4-5",
+    // fake.promptParams(): _meta.model === "claude-haiku-4-5",
     // prompt[0].text === the exact outgoing string passed in
   })
   test("the default budget is the contract constant, not a local literal", () => {
-    expect(DAEMON_LEG_MS).toBe(ACP_BUDGET.daemonLegMs)
+    // assert the exported default equals ACP_BUDGET.daemonLegMs; acp-client
+    // must not define a second timing literal anywhere.
+    expect(ACP_BUDGET.daemonLegMs).toBe(36_000)
   })
   test("buildAgentOutgoingText is the SAME builder the one-shot lane uses", () => {
     const s = { type: "object" } as Record<string, unknown>
@@ -1896,28 +2350,35 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
   test("ensureDaemon() defaults to waitMs 0: returns false immediately and still kicks a spawn", async () => {
     // < 500ms, returns false, spawn log eventually gains a line
   }, 20_000)
+  test("a caller that LOSES the spawn lock never unlinks it", async () => {
+    // Pre-create <socket>.spawn.lock with a FRESH {pid, ts}, then call
+    // ensureDaemon(env, { waitMs: 0 }). Assert it returns false AND the lock
+    // file still exists afterwards: releasing a lock you never acquired
+    // deletes the winner's and lets the next caller spawn a duplicate.
+  })
 })
 
 describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-client e2e (real daemon + SSE stub)", () => {
   test("ensureDaemon + daemonCall against the real daemon", async () => {
     // full path: ensureDaemon spawns real acp-daemon.ts (stub ANTHROPIC_BASE_URL),
-    // daemonCall returns { kind:"ok" }; SIGTERM the daemon at the end and
-    // assert the socket file is gone.
+    // daemonCall returns { kind:"ok" }; SIGTERM the daemon at the end (pid from
+    // the spawn log) and assert the socket file is gone.
   }, 40_000)
 })
 ```
 
 - [ ] **Step 2: Run to verify they fail** — `bun test test/acp-client.test.ts`, FAIL on missing exports.
 
-- [ ] **Step 3: Implement** (~180 lines: `net.connect` with its own `FrameDecoder`, request-id counter, pending-response map, notification handler collecting `session/update` text, ONE overall deadline; a single `sentPrompt` boolean that IS §6e's client-side send boundary — every failure path consults it and nothing else to choose between `no-call` and `call-consumed`; `error.data.callConsumed` checked before `error.code`; `ensureDaemon` per the exact sequence above). In `agent-transport.ts`, add `export` to `buildOutgoingText` and rename it `buildAgentOutgoingText` at its definition (`:85`) and its one internal call site (`:118`) — nothing else changes in that file.
+- [ ] **Step 3: Implement** (~180 lines: `net.connect` + `setEncoding("utf8")` with its own `FrameDecoder`, request-id counter, pending-response map, notification handler collecting `session/update` text, ONE overall deadline; a single `sentPrompt` boolean that IS §6e's client-side send boundary — every failure path consults it and nothing else to choose between `no-call` and `call-consumed`; `error.data.callConsumed` checked before `error.code`; `ensureDaemon` per the exact `held`-tracked sequence above, destroying every socket and clearing every timer before it resolves). Plus `test/acp-fake-daemon.ts` per the signature above. In `agent-transport.ts`, add `export` to `buildOutgoingText` and rename it `buildAgentOutgoingText` at its definition (`:85`) and its one internal call site (`:118`) — nothing else changes in that file.
 
 - [ ] **Step 4: Run to verify green** — file suite, then full `bun test` 0 fail, `bunx tsc --noEmit` clean. Re-run `bun test test/gauge-agent-transport.test.ts` explicitly: the rename must leave every §6d assertion passing unmodified.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add cc-gate-plugin/src/gauge/acp-client.ts cc-gate-plugin/src/gauge/agent-transport.ts cc-gate-plugin/test/acp-client.test.ts
-git commit -m "feat(gauge): ACP client — send-boundary outcome mapping, fingerprint refusal, shared outgoing text"
+git add cc-gate-plugin/src/gauge/acp-client.ts cc-gate-plugin/src/gauge/agent-transport.ts \
+        cc-gate-plugin/test/acp-client.test.ts cc-gate-plugin/test/acp-fake-daemon.ts
+git commit -m "feat(gauge): ACP client — send-boundary outcome mapping, fingerprint refusal, held-lock spawn, shared outgoing text"
 ```
 
 ### Task 7: Route the transport — selection, safe fallback, honest stamping
@@ -1928,7 +2389,7 @@ git commit -m "feat(gauge): ACP client — send-boundary outcome mapping, finger
 - Test: `cc-gate-plugin/test/gauge-transport-daemon.test.ts` (new file)
 
 **Interfaces:**
-- Consumes: `daemonCall`, `DaemonOutcome`, `DAEMON_LEG_MS` (Task 6); `buildAgentOutgoingText` (Task 6); `ACP_BUDGET` (Task 2); `agentSdkCall`, `sdkCall`, `resolveModelId`, `DERIVATION_SCHEMA`, `buildRefinerPrompt` (existing).
+- Consumes: `daemonCall` + `DaemonOutcome` (Task 6, **lazy-imported**); `buildAgentOutgoingText` (Task 6); `ACP_BUDGET` (Task 2, imported normally); `agentSdkCall`, `sdkCall`, `resolveModelId`, `DERIVATION_SCHEMA`, `buildRefinerPrompt` (existing); `fakeDaemon` (Task 6's test helper) in the test file.
 - **`selectTransport` is currently a TERNARY, not an allow-list** (`transport.ts:44-46`: `return env.KKAMAK_GAUGE_TRANSPORT === "agent-sdk" ? "agent-sdk" : "sdk"`). This task creates the allow-list:
   ```typescript
   export function selectTransport(env: Record<string, string | undefined>): GaugeTransport {
@@ -1941,6 +2402,7 @@ git commit -m "feat(gauge): ACP client — send-boundary outcome mapping, finger
   }
   ```
   The three existing `selectTransport` tests (`gauge-agent-transport.test.ts:53-65`) must pass UNMODIFIED.
+- **The daemon client is LAZY-IMPORTED, deliberately.** `hook-cli.ts:24` imports `transport.ts` eagerly on every hook event, so a top-level `import { daemonCall } from "./acp-client.ts"` would put `node:net` and the whole ACP client on PostToolUse, UserPromptSubmit and Stop — and would make Task 8's "imported lazily so the other three hook events pay nothing" claim false. Same discipline, same reason, as `agent-transport.ts:102-108`'s measured ~84 ms. `ACP_BUDGET` comes from `acp-wire.ts`, which imports only `node:string_decoder`, and may be imported normally.
 - Produces:
   ```typescript
   /** Derive-path call that reports which lane actually ran AND on which
@@ -1964,16 +2426,18 @@ git commit -m "feat(gauge): ACP client — send-boundary outcome mapping, finger
   ): Promise<DeriveCallResult | undefined>
   ```
   **Behaviour, exactly:**
-  1. `model = resolveModelId(opts?.model ?? env.KKAMAK_GAUGE_MODEL ?? "haiku")`; `messageText = buildRefinerPrompt(prompt, floorCheck, opts?.promptVariant ?? "base")`.
+  1. `model = resolveModelId(opts?.model ?? env.KKAMAK_GAUGE_MODEL ?? "haiku")` — byte-identical to `callModelSdk`'s own line `:234`.
   2. `selectTransport(env) !== "agent-sdk-daemon"` → today's behaviour byte-for-byte: `await callModelSdk(prompt, floorCheck, env, authDeps, opts)`, stamped with `selectTransport(env)` and `model`. No outgoing text is pre-built on this path — `callModelSdk` owns it, exactly as today.
   3. Daemon selected → build the shared text ONCE, then run the two legs inside one record budget:
      ```typescript
+     const messageText = buildRefinerPrompt(prompt, floorCheck, opts?.promptVariant ?? "base")
      const outgoing = buildAgentOutgoingText(
        messageText,
        DERIVATION_SCHEMA as unknown as Record<string, unknown>,   // same double cast as transport.ts:238/242
      )
+     const { daemonCall } = await import("./acp-client.ts")   // LAZY: hook-cli.ts:24 imports this module eagerly
      const started = Date.now()
-     const d = await daemonCall(outgoing, model, env, { budgetMs: DAEMON_LEG_MS })
+     const d = await daemonCall(outgoing, model, env, { budgetMs: ACP_BUDGET.daemonLegMs })
      if (d.kind === "ok") {
        // §6e provenance: a lane that silently changed the model must not
        // produce a stamped record. `d.model` is PROVEN daemon-side from the
@@ -1982,23 +2446,29 @@ git commit -m "feat(gauge): ACP client — send-boundary outcome mapping, finger
        if (d.model !== model) return undefined
        return { raw: d.text, transport: "agent-sdk-daemon", model }
      }
-     // §6e law: fallback ONLY on no-call. A `call-consumed` fallback would
-     // be model call #2 for one record and would make `--go N` mean 2N.
+     // §6e law: fallback ONLY on no-call, and after round-3's C1 a `no-call`
+     // can only mean the prompt bytes never crossed the boundary — on either
+     // side of the wire. A `call-consumed` fallback would be model call #2
+     // for one record and would make `--go N` mean 2N.
      if (d.kind === "call-consumed") return undefined
      const remaining = ACP_BUDGET.recordBudgetMs - (Date.now() - started)
      if (remaining < ACP_BUDGET.minFallbackMs) return undefined
      const raw = await agentSdkCall(outgoing, model, env, { timeoutMs: remaining })
      return raw === undefined ? undefined : { raw, transport: "agent-sdk", model }
      ```
-     `agentSdkCall` is called WITHOUT a schema because `outgoing` already carries the trailing schema instruction — `buildOutgoingText(messageText, undefined)` returns its input verbatim, so the fallback leg's bytes are identical to the daemon leg's.
+     `agentSdkCall` is called WITHOUT a schema because `outgoing` already carries the trailing schema instruction — `buildAgentOutgoingText(messageText, undefined)` returns its input verbatim (`agent-transport.ts:86`), so the fallback leg's bytes are identical to the daemon leg's. Budget: the daemon leg is capped at 36 000 ms and the fallback starts only with ≥ 10 000 ms left of 60 000, so the record can never exceed `recordBudgetMs` plus the CLI's own spawn/abort overhead.
 - `deriveRecord` (`corpus-replay.ts:41-79`) switches from `callModelSdk` + two independent stamps to `callModelDerive`'s returned `transport` AND `model` — selection, stamp and model can no longer diverge (the §6d cls-ab lesson, now structural). `corpus-replay.ts:73`'s `model: resolveModelId(process.env.KKAMAK_GAUGE_MODEL ?? "haiku")` and `:75`'s `transport: selectTransport(process.env)` both become reads off the result. **`resolveModelId` and `selectTransport` then become unused in that file — remove them from the import at `corpus-replay.ts:26`** (leaving `callModelDerive`), and update the file-header comment at `:5-9` which currently names `callModelSdk` as the one shared transport.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```typescript
 import { describe, expect, test } from "bun:test"
+import { tmpdir } from "node:os"
 import { selectTransport, callModelDerive } from "../src/gauge/transport.ts"
 import { deriveRecord } from "../src/gauge/corpus-replay.ts"
+import { ACP_BUDGET } from "../src/gauge/acp-wire.ts"
+import { envFingerprint } from "../src/gauge/acp-paths.ts"
+import { fakeDaemon } from "./acp-fake-daemon.ts"
 import { HAS_CLAUDE_CODE_CREDENTIALS, sseText, silentServer } from "./agent-cli-stub.ts"
 import { stubServer } from "./sdk-stub.ts"
 
@@ -2037,6 +2507,12 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("agent-sdk-daemon routing (§6e)",
       KKAMAK_ACP_SOCKET: sock,
     }
   }
+  /** EVERY fake in this file MUST be built with this fingerprint, computed
+   * from the SAME env object the test passes to callModelDerive. A fake that
+   * echoes anything else makes the client refuse pre-send (law L1), every
+   * case silently becomes the fallback, and three of the tests below would
+   * pass for entirely the wrong reason. */
+  const fpOf = (env: Record<string, string | undefined>) => envFingerprint(env)
 
   test("no-call fallback stamps agent-sdk, not agent-sdk-daemon", async () => {
     // deadSock (never created) -> law L1 no-call -> fallback runs
@@ -2046,31 +2522,32 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("agent-sdk-daemon routing (§6e)",
   }, CLI_TEST_TIMEOUT_MS)
 
   test("call-consumed does NOT fall back — undefined, and the one-shot endpoint is never hit", async () => {
-    // fake daemon answers ACP_ERR_CALL_CONSUMED; the agent stub counts requests
-    const r = await callModelDerive("p", "check", stubEnv(agentStub.url, sdkStub.url, consumedSock))
+    // fakeDaemon(sock, { fingerprint: fpOf(env), answer: "call-consumed" })
+    const r = await callModelDerive("p", "check", env)
     expect(r).toBeUndefined()
     expect(agentStub.captured.length).toBe(0)   // THE binding assertion: never a second call
   }, CLI_TEST_TIMEOUT_MS)
 
   test("daemon success stamps agent-sdk-daemon and carries the PROVEN model", async () => {
-    const r = await callModelDerive("p", "check", stubEnv(agentStub.url, sdkStub.url, fakeSock))
+    // fakeDaemon(..., { answer: "ok", model: "claude-haiku-4-5" })
+    const r = await callModelDerive("p", "check", env)
     expect(r?.transport).toBe("agent-sdk-daemon")
     expect(r?.model).toBe("claude-haiku-4-5")
     expect(agentStub.captured.length).toBe(0)   // the daemon served it; no spawn
   }, CLI_TEST_TIMEOUT_MS)
 
   test("a daemon that reports a DIFFERENT model produces no record", async () => {
-    // wrongModelSock's fake answers _meta.model "claude-opus-5" for a haiku
+    // fakeDaemon(..., { answer: "ok", model: "claude-opus-5" }) for a haiku
     // request. This is the branch a request-echo design could never test:
     // daemon-side the model is PROVEN from modelUsage, so it CAN diverge.
-    const r = await callModelDerive("p", "check", stubEnv(agentStub.url, sdkStub.url, wrongModelSock))
+    const r = await callModelDerive("p", "check", env)
     expect(r).toBeUndefined()
   }, CLI_TEST_TIMEOUT_MS)
 
   test("both agent legs receive byte-identical outgoing text", async () => {
-    // run once against fakeSock (capturing prompt[0].text) and once against
-    // deadSock (capturing the agent stub's messages[0].content); assert equal,
-    // and that both contain the schema instruction.
+    // run once against an "ok" fake (capturing fake.promptParams()!.prompt[0].text)
+    // and once against deadSock (capturing the agent stub's messages[0].content);
+    // assert equal, and that both contain the schema instruction.
   }, CLI_TEST_TIMEOUT_MS)
 
   test("total budget: a dead daemon + a never-answering one-shot stays within the record budget", async () => {
@@ -2096,15 +2573,17 @@ test("default env -> derivation.transport sdk (unchanged)", async () => { /* ...
 
 - [ ] **Step 2: Run to verify they fail** — missing export.
 
-- [ ] **Step 3: Implement.** ~70 lines in `transport.ts`, ~8 changed lines in `corpus-replay.ts` (including the import trim and the header comment). **The live-path pin tests (`gauge-refiner-cli.test.ts:56-86`, `:105`, `gauge-wiring.test.ts:102`) must stay green untouched** — `refiner-cli.ts:54` still strips the env var, so live derives keep running `"sdk"` regardless of this task.
+- [ ] **Step 3: Implement.** ~70 lines in `transport.ts` (with the lazy `await import("./acp-client.ts")` inside the daemon branch ONLY), ~8 changed lines in `corpus-replay.ts` (including the import trim and the header comment). **The live-path pin tests (`gauge-refiner-cli.test.ts:56-86`, `:105`, `gauge-wiring.test.ts:102`) must stay green untouched** — `refiner-cli.ts:54` still strips the env var, so live derives keep running `"sdk"` regardless of this task.
 Grep-verify: `grep -rn 'transport: selectTransport' cc-gate-plugin/src/` — currently TWO hits (`refiner-cli.ts:85`, `corpus-replay.ts:75`); expect exactly ONE afterwards (`refiner-cli.ts:85`, the live pin). `corpus-replay.ts:75` must no longer appear.
+Import-purity re-check (finding I7's lock): `grep -n 'acp-client' cc-gate-plugin/src/gauge/transport.ts` must show the string ONLY inside an `await import(...)` — never on a top-level `import` line.
 
 - [ ] **Step 4: Full suite green** — `bun test` 0 fail, `bunx tsc --noEmit` clean.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add cc-gate-plugin/src/gauge/transport.ts cc-gate-plugin/src/gauge/corpus-replay.ts cc-gate-plugin/test/gauge-transport-daemon.test.ts
+git add cc-gate-plugin/src/gauge/transport.ts cc-gate-plugin/src/gauge/corpus-replay.ts \
+        cc-gate-plugin/test/gauge-transport-daemon.test.ts
 git commit -m "feat(gauge): route agent-sdk-daemon, fallback only on no-call, honest lane+model stamp"
 ```
 
@@ -2115,13 +2594,14 @@ git commit -m "feat(gauge): route agent-sdk-daemon, fallback only on no-call, ho
 - Modify: `cc-gate-plugin/hooks/hooks.json` (add a SessionStart entry, `timeout: 30`)
 - Test: `cc-gate-plugin/test/acp-ensure.test.ts`
 
-**Why NOT a standalone CLI.** `test/packaging.test.ts:64-75` asserts that **every** hook command references `src/hook-cli.ts` and that the file exists; `:86-95` asserts every non-`Stop` entry has `timeout === 30`. A `hooks.json` entry pointing at `src/gauge/acp-ensure-cli.ts` turns that test red, which the Global Constraints forbid. Routing through the existing dispatcher keeps both assertions green, matches the shape of all three existing entries, and is F1-clean (`hook-cli.ts` is not a MECHANISM_PATH; the Phase-2 fixture harvest set the "hook-cli.ts wiring" precedent).
+**Why NOT a standalone CLI.** `test/packaging.test.ts:64-75` asserts that **every** hook command references `src/hook-cli.ts` and that the file exists; `:86-95` asserts every non-`Stop` entry has `timeout === 30`. A `hooks.json` entry pointing at `src/gauge/acp-ensure-cli.ts` turns that test red, which the Global Constraints forbid. Routing through the existing dispatcher keeps both assertions green, matches the shape of all three existing entries, and is F1-clean (`hook-cli.ts` is not a MECHANISM_PATH; the Phase-2 fixture harvest set the "hook-cli.ts wiring" precedent). Verified 2026-08-04: no other test asserts anything about `hooks.json`'s event set.
 
 **Interfaces:**
 - Consumes: `ensureDaemon` (Task 6).
-- Produces: `bun "${CLAUDE_PLUGIN_ROOT}/src/hook-cli.ts" SessionStart` — fire-and-forget. The branch sits **before** `readGateConfigRaw`/`FileStateStore` (a daemon kick must not depend on gate config), runs only when `process.env.KKAMAK_GAUGE_TRANSPORT === "agent-sdk-daemon"` (any other value = instant no-op), calls `await ensureDaemon(process.env, { waitMs: 0 })` inside a try/catch, and returns. Self-budget < 500 ms; the process always exits 0 via `hook-cli.ts`'s existing `.catch(...) → process.exit(0)` discipline (`:339-346`). SessionStart's CC payload carries `session_id` and `cwd`, so the dispatcher's existing string checks at `:116-117` pass unchanged.
+- Produces: `bun "${CLAUDE_PLUGIN_ROOT}/src/hook-cli.ts" SessionStart` — fire-and-forget. The branch sits **after** the `session_id`/`cwd` string checks (`:116-117`, which a SessionStart payload satisfies — CC sends both) and **before** `readGateConfigRaw`/`FileStateStore` (`:119-121`; a daemon kick must not depend on gate config). It runs only when `process.env.KKAMAK_GAUGE_TRANSPORT === "agent-sdk-daemon"` (any other value = instant no-op), calls `await ensureDaemon(process.env, { waitMs: 0 })` inside a try/catch, and returns.
+- **Self-budget < 500 ms, and that is an assertion, not an aspiration.** `hook-cli.ts` has NO forced `process.exit(0)` on its success path — `main().catch(...)` at `:339-346` only fires on rejection, and `PostToolUse` at `:128` simply returns. A SessionStart hook that leaves one un-destroyed probe socket or one uncleared timer therefore keeps the process alive until CC's `timeout: 30`, delaying EVERY session start by up to 30 s. `ensureDaemon` destroys every socket it opens and clears every timer before resolving (Task 6), and all three tests below assert wall-clock bounds so a regression is loud.
 - **No SessionEnd hook** — registered in §6e, not decided here: the daemon is HOST-GLOBAL, so tearing it down when one CC window closes would kill the warm session other windows and any running batch still need. The 15-minute idle self-exit owns shutdown and fires only when nothing is in flight.
-- `ensureDaemon` is imported LAZILY inside the branch (`await import("./gauge/acp-client.ts")`) so the other three hook events pay nothing for it. `acp-client.ts` imports its path helpers from `acp-paths.ts`, never from `acp-daemon.ts`, so this import can never start a server inside the hook process (Task 5's import-purity check).
+- `ensureDaemon` is imported LAZILY inside the branch (`await import("./gauge/acp-client.ts")`) so the other three hook events pay nothing for it. **That saving is only real because Task 7 also keeps `transport.ts` free of a top-level `acp-client` import** — `hook-cli.ts:24` imports `transport.ts` eagerly, so an eager import there would put the client on every event regardless of what this branch does. `acp-client.ts` imports its path helpers from `acp-paths.ts`, never from `acp-daemon.ts`, so this import can never start a server inside the hook process (Task 5's import-purity check).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2146,19 +2626,23 @@ async function waitForLines(file: string, n: number, ms: number): Promise<string
 
 describe("SessionStart ensure-daemon hook", () => {
   test("no-op exit 0 when the transport is not the daemon lane", () => {
+    const started = Date.now()
     const p = Bun.spawnSync(["bun", HOOK_CLI, "SessionStart"], {
       stdin: Buffer.from(SESSION_START_STDIN),
       env: envWithout(["KKAMAK_GAUGE_TRANSPORT"], { KKAMAK_ACP_SOCKET: TMP_SOCK, KKAMAK_ACP_TEST_SPAWN_LOG: SPAWN_LOG }),
     })
     expect(p.exitCode).toBe(0)
-    expect(fs.existsSync(SPAWN_LOG)).toBe(false)   // nothing was spawned
+    expect(Date.now() - started).toBeLessThan(3_000)   // no lingering handles
+    expect(fs.existsSync(SPAWN_LOG)).toBe(false)       // nothing was spawned
   })
   test("exit 0 even when the socket dir is unwritable (fail-open)", () => {
+    const started = Date.now()
     const p = Bun.spawnSync(["bun", HOOK_CLI, "SessionStart"], {
       stdin: Buffer.from(SESSION_START_STDIN),
       env: envWithout([], { KKAMAK_GAUGE_TRANSPORT: "agent-sdk-daemon", KKAMAK_ACP_SOCKET: "/nonexistent-dir/x.sock" }),
     })
     expect(p.exitCode).toBe(0)
+    expect(Date.now() - started).toBeLessThan(3_000)
   })
   test("armed: exits 0 fast AND kicks exactly one serving daemon", async () => {
     const started = Date.now()
@@ -2167,7 +2651,9 @@ describe("SessionStart ensure-daemon hook", () => {
       env: envWithout([], { KKAMAK_GAUGE_TRANSPORT: "agent-sdk-daemon", KKAMAK_ACP_SOCKET: TMP_SOCK, KKAMAK_ACP_TEST_SPAWN_LOG: SPAWN_LOG }),
     })
     expect(p.exitCode).toBe(0)
-    expect(Date.now() - started).toBeLessThan(3_000)   // waitMs 0: kick and go
+    expect(Date.now() - started).toBeLessThan(3_000)   // waitMs 0: kick and go,
+    // and — because hook-cli has no forced exit on success — proof that no
+    // socket or timer is keeping the hook process alive.
     // The name of this test is also its assertion: poll for the post-listen
     // line rather than asserting nothing, and prove no SECOND daemon bound.
     const lines = await waitForLines(SPAWN_LOG, 1, 15_000)
@@ -2184,7 +2670,7 @@ test("packaging invariants still hold with the new entry", () => {
   }
 })
 ```
-Every test sets `KKAMAK_ACP_SOCKET` to a per-test temp path, and an `afterEach` kills anything listening there and removes the spawn log and both lock files — no test may ever touch `~/.config/kkamak/acp-*.sock`.
+Every test sets `KKAMAK_ACP_SOCKET` to a per-test temp path, and an `afterEach` SIGTERMs the pid recorded in the spawn log (the `Bun.spawn` handle is the `bash -c nohup` shell, not the daemon) and removes the socket, the spawn log and both lock files — no test may ever touch `~/.config/kkamak/acp-*.sock`.
 
 - [ ] **Step 2: Run to verify they fail** — `SessionStart` is not in `KNOWN_EVENTS` (`hook-cli.ts:36`), so the hook exits 0 silently at `:94`, the spawn-log poll times out, and the packaging assertion fails on a missing key.
 
@@ -2205,25 +2691,33 @@ git commit -m "feat(gauge): SessionStart ensure-daemon via hook-cli dispatcher (
 
 ### Task 9: Paired validation of the daemon lane (REAL SPEND — own sized go)
 
-- [ ] **Step 1: Preserve the §6d arm BEFORE anything else.** `pv-sample --reset` `rmSync`s the shadow root (`paired-validation.ts:218`), and `.km/gauge-corpus-shadow/` currently holds the ONLY record-level `agent-sdk` derivations on this host (verified 2026-08-04: 10 records; zero `agent-sdk` records anywhere else). Copy it aside host-locally first:
+- [ ] **Step 1: Preserve the §6d arm BEFORE anything else.** `pv-sample --reset` `rmSync`s the shadow root (`paired-validation.ts:218`), and `.km/gauge-corpus-shadow/` currently holds the ONLY record-level `agent-sdk` derivations on this host (verified 2026-08-04: 10 records, all `transport:"agent-sdk"`, in the nested `.km/gauge-corpus/records.ndjson`; zero `agent-sdk` records anywhere else). Copy it aside host-locally first:
 
 ```bash
 cp -a .km/gauge-corpus-shadow /mnt/d/tmp/gauge-corpus-shadow-6d-$(date +%s)
 ```
 
-This is the data §6e's falsification criterion reads (C-stratum only; the not-C stratum is an independent draw in each run and is not comparable). The committed `docs/gauge-pv/yoo-dev-sdk-vs-agent-sdk-pv-counts.json` carries the per-key classes that travel.
+This is the data §6e's falsification criterion reads (C-stratum only; the not-C stratum is an independent draw in each run and is not comparable). The committed `docs/gauge-pv/yoo-dev-sdk-vs-agent-sdk-pv-counts.json` carries the per-key classes that travel. `cp -a` preserves the nested store AND the §6d `pv-counts.json` at the shadow root.
 
-- [ ] **Step 2: STOP and report before spending.** Run `bun cc-gate-plugin/src/gauge/replay-cli.ts pv-sample --pair sdk:agent-sdk-daemon --reset` (token-free) and report: the printed sample size (expected 5 C + 5 not-C = 10, since the whole sdk-derived C stratum is 5 — measured 2026-08-04), the model (haiku unless overridden), that the shadow derive is real spend, and that §6e registers this bar as having no power to separate a small effect (5-record C stratum, cap 1, zero slack). **Do not proceed without an explicit sized go.**
+- [ ] **Step 2: STOP and report before spending.** Run `bun cc-gate-plugin/src/gauge/replay-cli.ts pv-sample --pair sdk:agent-sdk-daemon --reset` (token-free) and report: the printed sample size (expected 5 C + 5 not-C = 10, since the whole sdk-derived C stratum is 5 — measured 2026-08-04: 109 `transport:"sdk"` records, 5 of class C), the model (haiku unless overridden), that the shadow derive is real spend, and that §6e registers this bar as having no power to separate a small effect (5-record C stratum, cap `ceil(0.1 × 5) = 1`, and §6d landed at exactly 0.800 agreement with missedC 1 — both edges, zero slack). **Do not proceed without an explicit sized go.**
 
-  **Note the liveness gate is NOT here.** A daemon proved alive before a human stop-gate is stale by the time the go arrives: the idle reaper would have fired, record #1 would fall back to `"agent-sdk"`, `wrongTransport` would be non-zero, `evaluatePvBar` would return NOT-EVALUATED (`paired-validation.ts:473-481`), and the only recovery is a full `pv-sample --reset` plus a fresh 10-record spend on a new go. The proof therefore lives INSIDE the spend script (Step 3), moments before the first record.
+  **Note the liveness gate is NOT here.** A daemon proved alive before a human stop-gate is stale by the time the go arrives: the idle reaper would have fired, record #1 would fall back to `"agent-sdk"`, `wrongTransport` would be non-zero, `evaluatePvBar` would return NOT-EVALUATED (`paired-validation.ts:472-481`), and recovery is expensive. The proof therefore lives INSIDE the spend script (Step 3), moments before the first record.
 
-- [ ] **Step 3: On a granted go, run ONE script — liveness proof and spend in the same process.**
+- [ ] **Step 3: On a granted go, run ONE script — liveness proof and spend in the same process, on a DEDICATED socket.**
 
 ```bash
 set -e
 export KKAMAK_GAUGE_TRANSPORT=agent-sdk-daemon
-# §6e validation-run instrument parameter: keep the daemon alive across the
-# whole batch. Registered pre-data; not a bar change.
+
+# §6e validation-run instrument parameters, registered pre-data. The
+# DEDICATED SOCKET is load-bearing, not tidiness: KKAMAK_ACP_IDLE_MS is on
+# the fingerprint denylist (acp-paths.ts ACP_ENV_DENYLIST), so it does NOT
+# produce a distinct default socket path. Without an explicit socket, a
+# daemon already listening at the fingerprinted path — very likely on a dev
+# host once Task 8's SessionStart hook is armed — would be ADOPTED by the
+# liveness probe and would serve this run under ITS 15-minute idle budget,
+# leaving the registered parameter silently inert.
+export KKAMAK_ACP_SOCKET="/tmp/kkamak-acp-6e-validation-$$.sock"
 export KKAMAK_ACP_IDLE_MS=3600000
 
 # Token-free liveness gate, immediately before the spend. A `false` here
@@ -2236,13 +2730,29 @@ bun -e 'import("./cc-gate-plugin/src/gauge/acp-client.ts").then(async (m) => {
 bun cc-gate-plugin/src/gauge/replay-cli.ts derive \
   /home/th-yoo/z2/meta-harness/.km/gauge-corpus-shadow --go 10
 bun cc-gate-plugin/src/gauge/replay-cli.ts pv-compare --pair sdk:agent-sdk-daemon
+
+# Terminate the run's OWN daemon and prove the endpoint is gone.
+pkill -f "acp-daemon.ts" || true
+sleep 1
+test ! -e "$KKAMAK_ACP_SOCKET" && echo "validation socket removed"
 ```
 
-There is NO subset re-derive: `runDerive` refuses unless `go === pending.length` (`corpus-replay.ts:151-157`) and a fallback-derived record is already stage `"derived"`.
+- [ ] **Step 4: Sanity BEFORE reading the verdict, and the two DIFFERENT recovery paths.** Read the `pv-compare` counts. `undecided` and `wrongTransport` mean different things and cost very different amounts — do not conflate them:
 
-- [ ] **Step 4: Sanity BEFORE reading the verdict:** `wrongTransport` must be 0. Non-zero means records fell back to `"agent-sdk"` (daemon died mid-batch) or the stamp plumbing broke, and `evaluatePvBar` returns NOT-EVALUATED. **Be honest about the cost:** there is no partial re-derive; recovery is a full `pv-sample --reset` and a fresh 10-record spend, which needs its own new go. Diagnose the cause (is the daemon process still alive? did the idle reaper fire despite `KKAMAK_ACP_IDLE_MS`? does the spawn log show a second daemon binding mid-batch?) before requesting it. This is why Task 7's stamp honesty is load-bearing: the partition SEES the fallback instead of silently absorbing it.
+  - **`wrongTransport > 0`** — records were derived on the WRONG lane, i.e. they fell back to `"agent-sdk"` (the daemon died mid-batch) or the stamp plumbing broke. `evaluatePvBar` returns NOT-EVALUATED. These records are already stage `"derived"`, so `runDerive` will not re-derive them (`corpus-replay.ts:151-157` refuses unless `go === pending.length`, and they are not pending). **Recovery IS expensive: a full `pv-sample --reset` and a fresh 10-record spend, which needs its own new go.** Diagnose first — is the daemon process still alive? did the idle reaper fire despite `KKAMAK_ACP_IDLE_MS` (did the run actually use its dedicated socket, or adopt someone else's daemon)? does the spawn log show a second daemon binding mid-batch? — before requesting it.
+  - **`undecided > 0` with `wrongTransport === 0`** — records came back `undefined` (a `call-consumed` turn, a parse failure, an unproven model) and are still stage `"mined"`. This is the ORDINARY outcome of §6e law L5 and it is CHEAP to finish: `bun cc-gate-plugin/src/gauge/replay-cli.ts derive <shadowRoot> --go <the current pending count>` re-derives exactly those records and nothing else. Report the residual pending count and request a sized go for that number — NOT for 10.
 
-- [ ] **Step 5: Commit the counts** to `docs/gauge-pv/<hostname>-sdk-vs-agent-sdk-daemon-pv-counts.json` (F2: counts travel, prompts do not). `bun scripts/doc-check.ts` before the docs commit.
+  This is why Task 7's stamp honesty is load-bearing: the partition SEES a fallback instead of silently absorbing it, which is what makes these two cases distinguishable at all.
+
+- [ ] **Step 5: Commit the counts** (F2: counts travel, prompts do not). `pv-compare`'s only write is `pv-counts.json` at the shadow root (`paired-validation.ts:895-901`); the operator copies it into the repo:
+
+```bash
+cp .km/gauge-corpus-shadow/pv-counts.json \
+   "docs/gauge-pv/$(hostname)-sdk-vs-agent-sdk-daemon-pv-counts.json"
+bun scripts/doc-check.ts
+git add docs/gauge-pv/
+git commit -m "docs(gauge-pv): 6e sdk-vs-agent-sdk-daemon paired-validation counts"
+```
 
 ### Task 10: Verdict, and the live flip ONLY on a pass
 
@@ -2250,38 +2760,67 @@ There is NO subset re-derive: `runDerive` refuses unless `go === pending.length`
 > that this bar has no statistical power: the whole `"sdk"`-derived class-C
 > stratum on `yoo-dev` is 5 records, the missed-C cap is 1, and agreement
 > ≥ 0.80 over a union of 5 means 4/5 — §6d already landed on both edges
-> with zero slack. The flip is user-directed and reversible with one env
-> var, so a PASS is sufficient under the rulings as given. **Do you want
-> the live flip to additionally wait until the sdk-derived C stratum is
-> materially larger (more live derivations accumulated), or to proceed on
-> the 10-record result?** This is a question, not a bar change: the §6e bar
-> constants are registered pre-data and are not being touched either way.
+> with zero slack (agreement exactly 0.800, missedC exactly 1 of a cap of
+> 1). The flip is user-directed and reversible with one env var, so a PASS
+> is sufficient under the rulings as given. **Do you want the live flip to
+> additionally wait until the sdk-derived C stratum is materially larger
+> (more live derivations accumulated), or to proceed on the 10-record
+> result?** This is a question, not a bar change: the §6e bar constants are
+> registered pre-data and are not being touched either way.
 
 - [ ] **Step 1: Script-tally the verdict** (counts only, never quote notes): re-run `pv-compare --pair sdk:agent-sdk-daemon`, record agreement and missed-C against the §6e bar.
 
 - [ ] **Step 2: If the bar FAILS** — append the measured counts to §6e, state that the daemon stays available with split readings and that live keeps `"sdk"`, STOP. Complete outcome.
 
 - [ ] **Step 3: If the bar PASSES (and the OPEN QUESTION is answered "proceed") — flip the live pin, WITH the safe fallback.**
-In `refiner-cli.ts`: replace the `liveEnv` strip (`:54`) with a `liveEnv` that FORCES `KKAMAK_GAUGE_TRANSPORT: "agent-sdk-daemon"` (still never mutating `process.env`), call `callModelDerive`, and stamp `transport` AND `model` from its result (`:80`, `:85`). The Task 7 chain — daemon → (only on `no-call`) one-shot agent → undefined — IS the live behaviour, and `call-consumed` still means "no gauge file this turn", which is already an ordinary M0 miss on this path.
 
-**Update these THREE pre-existing live-path assertions (declared exception #5) — a `toBe("sdk")` grep alone finds two of them, so use both patterns:**
-`grep -rn 'transport).toBe("sdk")' cc-gate-plugin/test/` AND `grep -rn 'transport === "sdk"' cc-gate-plugin/test/`.
-  1. `test/gauge-refiner-cli.test.ts:56-86` — the default-path E2E. It asserts `gauge.transport === "sdk"` (`:78`), `srv.captured.length === 1` (`:82`) and `body.output_config.format.type` (`:85`). Post-flip the live path no longer uses the API-SDK lane at all. Repoint it: force `KKAMAK_ACP_SOCKET` to a dead path so the record takes the `no-call` fallback, and assert `gauge.transport === "agent-sdk"`.
-     **DELETE the `output_config` assertion outright — do NOT "move it onto a `KKAMAK_GAUGE_TRANSPORT=sdk`-pinned sibling".** Such a sibling is impossible by construction: item 2 below pins that the flipped `refiner-cli.ts` FORCES its own transport and is env-independent, so an env-pinned sibling would take the daemon lane too and never produce an `output_config` request. It is also unnecessary: the direct API-SDK lane's `output_config` shape already has dedicated, unaffected coverage at `test/gauge-transport.test.ts:163`, `:352`, `:369` and `:485`. Cite those lines in the deletion comment so a later reader sees coverage moved, not lost.
-  2. `test/gauge-refiner-cli.test.ts:105` — the §6d PIN test. Its new invariant: live selection is `agent-sdk-daemon`, env-independent (an adversarial `KKAMAK_GAUGE_TRANSPORT=sdk` must NOT reroute it), and with a dead daemon socket the record is stamped `"agent-sdk"` (fallback proof, stub-only, no spend).
-  3. `test/gauge-wiring.test.ts:102` — the hook→detached-refiner E2E. Same treatment as (1).
-**Every one of these MUST set `KKAMAK_ACP_SOCKET` to a guaranteed-dead temp path.** Left unset they resolve to `~/.config/kkamak/acp-<fingerprint>.sock`, which the Task 8 hook makes likely to be LIVE on a dev host — the assertions would then flap between `agent-sdk` and `agent-sdk-daemon` depending on whether a daemon happened to be up.
+In `refiner-cli.ts`: replace the `liveEnv` strip (`:54`) with a `liveEnv` that FORCES `KKAMAK_GAUGE_TRANSPORT: "agent-sdk-daemon"` (still never mutating `process.env`), call `callModelDerive`, and stamp `transport` AND `model` from its result (`:80`, `:85`). Trim the import at `:15` from `{ callModelSdk, resolveModelId, selectTransport }` to `{ callModelDerive }`. The Task 7 chain — daemon → (only on `no-call`) one-shot agent → undefined — IS the live behaviour, and `call-consumed` still means "no gauge file this turn", which is already an ordinary M0 miss on this path.
 
-Also: `test/corpus-replay.test.ts:86` (`expect(d.transport).toBe("sdk")`, a single-record assertion) and `:170` (`.every(...)`-shaped) both assert `"sdk"` on the DEFAULT env and are unaffected — `selectTransport({})` still returns `"sdk"`. Verify, do not edit.
+**THE THING THAT MAKES THIS STEP DANGEROUS, stated first.** The flip changes what `refiner-cli.ts` DOES, so it changes every test that RUNS `refiner-cli.ts` — not just the ones that assert on `transport`. Post-flip the live path never touches the direct API-SDK lane, so `KKAMAK_GAUGE_SDK_BASE_URL` (the only stub those tests set) intercepts nothing; the daemon leg finds no socket, returns `no-call`, and the fallback spawns the BUNDLED CLI, which reads `ANTHROPIC_BASE_URL` — unset in those tests — and therefore issues a **REAL model call against the real API with this host's real credentials**. The zero-real-model-calls invariant is a whole-plan invariant precisely so this step cannot quietly break it. Four consequences, all mandatory:
+
+  **(a) Change the shared helper, not just the assertions.** `runRefinerCli` (`gauge-refiner-cli.test.ts:31-49`) must inject TWO env vars into every child it spawns:
+  ```typescript
+  // Post-§6e-flip, refiner-cli.ts FORCES the daemon lane. Two seams are now
+  // mandatory on EVERY child, not just the transport-asserting ones:
+  //  · KKAMAK_ACP_SOCKET -> a guaranteed-dead temp path, so the record takes
+  //    the law-L1 no-call fallback DETERMINISTICALLY. Left unset it resolves
+  //    to ~/.config/kkamak/acp-<fingerprint>.sock, which the Task 8 hook
+  //    makes likely to be LIVE on a dev host — assertions would flap between
+  //    agent-sdk and agent-sdk-daemon depending on whether a daemon is up.
+  //  · ANTHROPIC_BASE_URL -> the SSE stub, because the fallback lane spawns
+  //    the bundled CLI. Without it these tests hit the real API.
+  KKAMAK_ACP_SOCKET: path.join(os.tmpdir(), `kkamak-acp-dead-${process.pid}-${Math.random()}.sock`),
+  ANTHROPIC_BASE_URL: agentSrv.url,
+  ```
+  `runRefinerCli` therefore takes the agent stub as a parameter alongside the existing `srv`.
+
+  **(b) Every stub those tests rely on becomes SSE-shaped.** The spawned CLI always sends `stream: true`; a `Response.json(...)` body makes it silently fall back to a SECOND, non-streaming request (`gauge-agent-transport.test.ts:67-91`), which would double every request count. Use `sseText(JSON.stringify(DERIVATION))` from `test/agent-cli-stub.ts`. Concretely, per test:
+   - `:56-86` — assert `gauge.transport === "agent-sdk"` (was `"sdk"`); the derivation-content assertions (`goalSummary`, `check`, `class`, `v`, `sessionID`, `n`, `derivationMs`, req-removed) are PRESERVED and now read off the SSE stub. Replace `expect(srv.captured.length).toBe(1)` with an assertion on the AGENT stub's capture count.
+     **DELETE the `output_config` assertion at `:85` outright — do NOT "move it onto a `KKAMAK_GAUGE_TRANSPORT=sdk`-pinned sibling".** Such a sibling is impossible by construction: item `:105` below pins that the flipped `refiner-cli.ts` FORCES its own transport and is env-independent, so an env-pinned sibling would take the daemon lane too and never produce an `output_config` request. It is also unnecessary: the direct API-SDK lane's `output_config` shape already has dedicated, unaffected coverage at `test/gauge-transport.test.ts:163`, `:352`, `:369` and `:485`. Cite those lines in the deletion comment so a later reader sees coverage moved, not lost.
+   - `:105` — the §6d PIN test. Its new invariant: live selection is `agent-sdk-daemon`, env-independent (an adversarial `KKAMAK_GAUGE_TRANSPORT=sdk` must NOT reroute it), and with a dead daemon socket the record is stamped `"agent-sdk"` (fallback proof, stub-only, no spend). `agentSrv` currently answers a bare 500 labelled "must not be hit by the live derive path" (`:109`) — post-flip it IS hit, so it becomes `sseText(JSON.stringify(DERIVATION))` and the "never touched" assertion at `:135` inverts to "hit exactly once", while `sdkSrv.captured.length` becomes the zero.
+   - `:138` (downgrade-to-D), `:159` (stale v1 req), `:178` (garbage output), `:203` (API error) — **assertions unchanged**, but each now needs its stub behaviour expressed on the AGENT endpoint instead of the API-SDK one: `:138`/`:159` answer `sseText(JSON.stringify(...))`, `:178` answers `sseText("I refuse to emit JSON")`, `:203` answers `new Response("boom", { status: 500 })`. Without this they pass or fail on real model output.
+   - `:217` (missing req file) — genuinely unaffected: it never reaches a transport. Verify, do not edit.
+
+  **(c) Both flipped files newly spawn the bundled CLI, so both need the guard and the timeout.** Import `HAS_CLAUDE_CODE_CREDENTIALS` from `test/agent-cli-stub.ts` and wrap the CLI-spawning tests in `describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)`, with `CLI_TEST_TIMEOUT_MS` (90 s — a fallback path pays a CLI spawn) as each test's third argument. A credential-less host must SKIP, not FAIL (`gauge-agent-transport.test.ts:13-22`); bun:test's 5 s default is shorter than observed spawn latency.
+
+  **(d) `gauge-wiring.test.ts:84-109` gets the same treatment as (a)-(c):** one assertion change (`:102`, `"sdk"` → `"agent-sdk"`), an SSE-shaped `ANTHROPIC_BASE_URL` stub and a dead `KKAMAK_ACP_SOCKET` passed through `runHook`'s `env`, plus the skip-guard and timeout. Its other ten tests write gauge files directly and never run the refiner — verify, do not edit.
+
+**Finding the assertions:** `grep -rn 'transport).toBe("sdk")' cc-gate-plugin/test/` returns FIVE hits — the three to change (`gauge-refiner-cli.test.ts:78`, `:130`, `gauge-wiring.test.ts:102`) and two that must NOT change (`corpus-replay.test.ts:86`, `gauge-agent-transport.test.ts:379`). Run `grep -rn 'transport === "sdk"' cc-gate-plugin/test/` as well: its single hit (`corpus-replay.test.ts:170`, an `.every(...)`-shaped assertion) is there to be CONFIRMED unaffected, not edited. Both `corpus-replay.test.ts:86` (a single-record assertion) and `:170` assert `"sdk"` on the DEFAULT env via `withSdkStub`, and `selectTransport({})` still returns `"sdk"` — `deriveRecord` is not the live path and the flip does not reach it. `gauge-agent-transport.test.ts:379` is `routeCase(undefined)`, likewise default-env. Verify all three, edit none.
 
 Log the boundary ts in `docs/2026-08-01-gauntlet-adoption-ledger.md` in the flip commit, and note that `KKAMAK_GAUGE_TRANSPORT=sdk` does NOT roll this back (the live path forces its own value): the rollback is reverting the flip commit, and that must be written into the ledger row.
 
-- [ ] **Step 4: Full suite green, commit:**
+- [ ] **Step 4: Full suite green, and prove the invariant held.**
 
 ```bash
 cd cc-gate-plugin && bun test && bunx tsc --noEmit
 cd .. && bun scripts/doc-check.ts
-git add cc-gate-plugin/src/gauge/refiner-cli.ts cc-gate-plugin/test/gauge-refiner-cli.test.ts cc-gate-plugin/test/gauge-wiring.test.ts docs/2026-08-01-gauntlet-adoption-ledger.md docs/superpowers/specs/2026-07-29-km-gauge-v2-extractor-preregistration.md
+```
+Before committing, re-read the diff of both test files and confirm that EVERY `Bun.spawn` of `refiner-cli.ts` or `hook-cli.ts` in them passes both `ANTHROPIC_BASE_URL` (SSE stub) and `KKAMAK_ACP_SOCKET` (dead path). A single child without them is a real model call.
+
+```bash
+git add cc-gate-plugin/src/gauge/refiner-cli.ts cc-gate-plugin/test/gauge-refiner-cli.test.ts \
+        cc-gate-plugin/test/gauge-wiring.test.ts docs/2026-08-01-gauntlet-adoption-ledger.md \
+        docs/superpowers/specs/2026-07-29-km-gauge-v2-extractor-preregistration.md
 git commit -m "feat(gauge): live derive flips to agent-sdk-daemon (6e bar pass, boundary ts logged)"
 ```
 
@@ -2290,27 +2829,29 @@ git commit -m "feat(gauge): live derive flips to agent-sdk-daemon (6e bar pass, 
 ## Post-plan (recorded so the executor does not invent it)
 
 1. **Branch + merge**: one branch `acp-warm-daemon`; per-task reviews; final fresh-context whole-branch review; merge via `scripts/merge-with-gate.sh` with a committed `docs/reviews/<short-sha>-acp-warm-daemon.md` carrying the 5 required fields (reviewed-range/reviewed-commit, reviewer, fresh-context, verdict ∈ approved|fix-first|blocked, findings-count). The 7b gate is ARMED — plain `git merge` bypasses the floor and this merge is a §6 ledger row.
-2. **Ordering**: Task 1 must land before any code. Task 9's shadow-store preservation (Step 1) must land before any `pv-sample --reset`.
+2. **Ordering**: Task 1 must land before any code. **Task 4 Step 1a (the `/clear`-through-streaming-input probe) must run and PASS before any of Task 4 Step 3 is written** — it is token-free and it is the plan's single largest unproven assumption. Task 9's shadow-store preservation (Step 1) must land before any `pv-sample --reset`.
 3. **Boundary ts obligations**: one when the first `agent-sdk-daemon` derive runs against a REAL store (§6d Deploy clause, batch opt-in), one at the live flip (§6e). They are separate rows.
 4. **Not in scope**: `cls-ab.ts` and `channel-run.ts`. `cls-run` is pinned to `"sdk"` by its own `liveEnv` strip (`cls-ab.ts:746`) and stamps `ClsArmRow.transport: "sdk"` unconditionally; `channel-run.ts` calls `sdkCall` directly and is never env-routed. `callModelSdkLabel` (`transport.ts:256`) is deliberately not env-routed either. Neither is touched. `cls-ab.ts`'s `transportTally` miscount (`:375-383`) is re-recorded in §6e, not fixed here.
-5. **Host-local artifacts that do NOT travel**: `~/.config/kkamak/acp-<fp>.sock`, its `.spawn.lock` / `.bind.lock`, `.km/gauge-corpus-shadow/`, the §6d shadow copy under `/mnt/d/tmp/`. Only `docs/gauge-pv/*.json` counts travel.
+5. **Host-local artifacts that do NOT travel**: `~/.config/kkamak/acp-<fp>.sock`, its `.spawn.lock` / `.bind.lock`, `.km/gauge-corpus-shadow/`, the §6d shadow copy under `/mnt/d/tmp/`, the Task 4 Step 1a scratch probe. Only `docs/gauge-pv/*.json` counts travel.
 
 ## Self-Review Notes (kept in-plan deliberately)
 
-- **Type-consistency check, re-run after revision 2.**
-  - T2 `acp-wire.ts` produces `ACP_BUDGET`, `ACP_ERR_NO_CALL`, `ACP_ERR_CALL_CONSUMED`, `FrameDecoder`, `encodeFrame`, the method constants, and the `Acp*` shapes → consumed by T4 (`ACP_BUDGET` only), T5 (all), T6 (all), T7 (`ACP_BUDGET`).
+- **Type-consistency check, re-run after revision 3.**
+  - T2 `acp-wire.ts` produces `ACP_BUDGET` (now EIGHT constants — `setModelMs` added), `ACP_ERR_NO_CALL`, `ACP_ERR_CALL_CONSUMED`, `FrameDecoder` (now `maxLineChars`, `StringDecoder`-backed), `encodeFrame`, the method constants, and the `Acp*` shapes → consumed by T4 (`ACP_BUDGET` only), T5 (all), T6 (all), T7 (`ACP_BUDGET` only, imported EAGERLY — it is a constants module with one node-builtin import, safe on the hook path).
   - T3 `GAUGE_TRANSPORTS`/`GaugeTransport` → consumed by T7 (`selectTransport`'s return type, `DeriveCallResult.transport`) and T9 (`--pair` validation).
-  - T4 `warm-session.ts` produces `TurnOutcome` (`ok`/`no-call`/`call-consumed`), `CancelResult`, and `WarmSession` with `oneShot(text, model, {recycle, tag?})` / `cancel(tag)` / `isWarm()` / `turnInFlight()` / `idleMs()` / `close()` → consumed by T5 only. T5's `session/cancel` uses `cancel(tag)`; T5's reaper uses `idleMs()` + `turnInFlight()`; T5's shutdown uses `close()`.
-  - T5 `acp-paths.ts` produces `ACP_ENV_KEYS`, `envFingerprint`, `socketPath`, `spawnLockPath`, `bindLockPath`, `isPipe`, `ensureSocketDir`, `ACP_LOCK_STALE_MS`, `acquireAcpLock`, `releaseAcpLock` → consumed by `acp-daemon.ts` (bind lock) and T6 `acp-client.ts` (spawn lock, socket path, fingerprint). **`acp-client.ts` imports NOTHING from `acp-daemon.ts`** — that is the whole reason `acp-paths.ts` exists.
-  - T6 produces `DaemonOutcome` (same three spellings as `TurnOutcome`), `daemonCall`, `ensureDaemon`, `DAEMON_LEG_MS` (= `ACP_BUDGET.daemonLegMs`), and `buildAgentOutgoingText` (from `agent-transport.ts`) → consumed by T7 (`daemonCall`, `DAEMON_LEG_MS`, `buildAgentOutgoingText`) and T8 (`ensureDaemon`) and T9 Step 3 (`ensureDaemon`).
+  - T4 `warm-session.ts` produces `TurnOutcome` (`ok`/`no-call`/`call-consumed`), `CancelResult`, and `WarmSession` with `oneShot(text, model, {recycle, tag?})` / `cancel(tag)` / `isWarm()` / `turnInFlight()` / `idleMs()` / `close()`; constructor opts now carry `setModelMs` → consumed by T5 only. T5's `session/cancel` uses `cancel(tag)` with a DAEMON-MINTED UUID; T5's reaper uses `idleMs()` + `turnInFlight()`; T5's shutdown uses `close()`; T5 passes all FIVE budget legs explicitly.
+  - T5 `acp-paths.ts` produces `ACP_ENV_DENYLIST`, `ACP_SECRET_KEY_RE`, `envFingerprint`, `socketPath`, `spawnLockPath`, `bindLockPath`, `isPipe`, `ensureSocketDir`, `ACP_LOCK_STALE_MS`, `AcpLockContent`, `tryCreateLock(path, content)`, `isLockStale(path, now)`, `acquireAcpLock(path, now)`, `releaseAcpLock(path)` → consumed by `acp-daemon.ts` (bind lock) and T6 `acp-client.ts` (spawn lock, socket path, fingerprint) and by T6/T7 tests (`envFingerprint`). Every call site passes `now`. **`acp-client.ts` imports NOTHING from `acp-daemon.ts`** — that is the whole reason `acp-paths.ts` exists.
+  - T6 produces `DaemonOutcome` (same three spellings as `TurnOutcome`), `daemonCall`, `ensureDaemon`, and the test helper `fakeDaemon` in `test/acp-fake-daemon.ts`; plus `buildAgentOutgoingText` (from `agent-transport.ts`) → consumed by T7 (`daemonCall` LAZILY, `buildAgentOutgoingText`, `fakeDaemon` in tests), T8 (`ensureDaemon`, lazily) and T9 Step 3 (`ensureDaemon`). **No `DAEMON_LEG_MS` re-export exists** — it was removed in round 3 so `transport.ts` never needs a top-level `acp-client` import; every caller reads `ACP_BUDGET.daemonLegMs`.
   - T7 produces `DeriveCallResult`/`callModelDerive` → consumed by `corpus-replay.ts` (T7 itself) and by `refiner-cli.ts` in T10.
-  - The three outcome kinds use identical spellings in T4's `TurnOutcome`, T2's two error codes, T6's `DaemonOutcome` and T7's branching. `model` means "the model PROVEN to have run" in T4's `TurnOutcome.ok`, T2's `AcpPromptResult._meta.model`, T6's `DaemonOutcome.ok`, and T7's comparison — never "the model requested" anywhere.
-  - Budget names are single-sourced: no task defines a local `DAEMON_LEG_MS`, `turnTimeoutMs` or `recordBudgetMs` literal; every one reads `ACP_BUDGET`.
-- **§6e's wire-send boundary law is the plan's structural core**, and it is stated exactly ONCE (Task 1) and referenced everywhere else. It is encoded in the wire (two codes + the authoritative `data.callConsumed`), implemented daemon-side by `WarmSession`'s `sent`/`sawModelActivity`/`sawApiResponse`/`connectionOnly` witnesses, mirrored client-side by `daemonCall`'s single `sentPrompt` boolean, and enforced by `callModelDerive` — with a test at each layer, including the one that asserts the one-shot endpoint receives ZERO requests after a `call-consumed`. The budget rule (`daemonLegMs > daemonWorstCaseMs`) is what stops the law's L2 branch from firing on ordinary slow turns, and it is locked as arithmetic in `acp-wire.test.ts`, not as prose.
-- **The Task 4 skeleton is the design, not a sketch.** The persistent pump exists because `Query` is an AsyncGenerator whose `.return()` fires on any early loop exit. The pushable queue exists because a single re-armed resolver drops the second of two same-tick pushes. The TWO separate resolver slots (`notifyCaller` at enqueue, `settle` in `execute`) exist because one shared slot loses the queued caller's resolver and hangs that caller forever. `conversation_reset` sequencing exists because "/clear emits no result" was an indicative scratch observation and the SDK ships a typed signal instead. Settling only from a turn's own terminal `result` exists because settling at cancellation time hands the next turn a stale result. Every one of these is covered by a test a wrong implementation cannot pass.
-- **`/clear`-makes-no-model-call is re-locked by request-count assertions rather than trusted; the `/clear` residue SHAPE is measured and recorded rather than asserted** (§6e registers ~423 B but never measured whether it is its own message). Every stub in this plan is SSE-shaped; a JSON-bodied stub silently doubles the observed call count. Never-answering stubs use raw `Bun.serve`, not a widened shared helper.
+  - The three outcome kinds use identical spellings in T4's `TurnOutcome`, T2's two error codes, T6's `DaemonOutcome` and T7's branching. `model` means "the model PROVEN to have run" in T4's `TurnOutcome.ok`, T2's `AcpPromptResult._meta.model`, T6's `DaemonOutcome.ok`, and T7's comparison — never "the model requested" anywhere. `tag` means "a globally-unique daemon-minted handle" in T4's `Turn`, T4's `cancel`, and T5's `outstanding` map — never a client-supplied id.
+  - Budget names are single-sourced: no task defines a local `daemonLegMs`, `turnTimeoutMs`, `setModelMs` or `recordBudgetMs` literal; every one reads `ACP_BUDGET`.
+- **Budget arithmetic, re-derived after `setModelMs`:** `6 000 + 4 000 + 2 000 + 16 000 + 4 000 = 32 000 = daemonWorstCaseMs` ✓; `daemonLegMs 36 000 > 32 000` ✓ with 4 000 ms of slack for the client's connect + `initialize` + `session/new` preamble (asserted at ≥ 3 000) ✓; `36 000 + 10 000 = 46 000 ≤ 60 000 = recordBudgetMs` ✓; `recordBudgetMs` unchanged from the incumbent `CALL_TIMEOUT_MS` ✓. Every daemon-side wait is now inside the sum: queue, `/clear`, `setModel`, generation, hard grace. The only unbounded work left on the daemon path is `await import("@anthropic-ai/claude-agent-sdk")` (~84 ms, measured) and the CLI spawn, and the spawn is INSIDE `turnTimeoutMs` because the turn's timers start at the push while the subprocess is still coming up.
+- **§6e's wire-send boundary law is the plan's structural core**, it is stated exactly ONCE (Task 1), and after round 3 it has NO post-send exception on either side of the wire. It is encoded in the wire (two codes + the authoritative `data.callConsumed`), implemented daemon-side by `consumed(t) === t.sent`, mirrored client-side by `daemonCall`'s single `sentPrompt` boolean, and enforced by `callModelDerive` — with a test at each layer, including the one that asserts the one-shot endpoint receives ZERO requests after a `call-consumed`, and a wire-level test that an unreachable endpoint after the push answers `ACP_ERR_CALL_CONSUMED`. The budget rule (`daemonLegMs > daemonWorstCaseMs`) is what stops the law's L2 branch from firing on ordinary slow turns, and it is locked as arithmetic in `acp-wire.test.ts`, not as prose.
+- **The Task 4 skeleton is the design, not a sketch.** The persistent pump exists because `Query` is an AsyncGenerator whose `.return()` fires on any early loop exit. Its `this.q !== q` generation guard exists because `close()` is synchronous while the generator unwinds an I/O tick later, by which time the next turn may already own a new `Query`. The pushable queue exists because a single re-armed resolver drops the second of two same-tick pushes. The TWO separate resolver slots (`notifyCaller` at enqueue, `settle` in `execute`) exist because one shared slot loses the queued caller's resolver and hangs that caller forever. `conversation_reset` sequencing exists because "/clear emits no result" was an indicative scratch observation and the SDK ships a typed signal instead. The `setModel` cap exists because the SDK exposes it as an un-timed control round-trip and an uncapped await is the one way to wedge the FIFO with no timer armed. Settling only from a turn's own terminal `result` exists because settling at cancellation time hands the next turn a stale result. Every one of these is covered by a test a wrong implementation cannot pass.
+- **`/clear`-makes-no-model-call is re-locked by request-count assertions rather than trusted, and Step 1a gates the whole mechanism before a line of it is built.** The `/clear` residue SHAPE is measured and recorded rather than asserted, and Task 4 Step 4 additionally measures the ONE-SHOT lane's bytes so §6e's residue paragraph and §6d's line 662 stop contradicting each other. Every stub in this plan is SSE-shaped; a JSON-bodied stub silently doubles the observed call count. Never-answering stubs use raw `Bun.serve`, not a widened shared helper.
 - **Architect review 1 (31 findings: 7 critical, 16 important, 8 minor) applied in full.** The load-bearing ones: the fail-open fallback could spend a second model call per record (now split zero-call vs consumed-call at every layer); §6e contradicted a registered user BINDING (now carries the verbatim 2026-08-04 supersession rulings); the SessionStart hook would have failed `packaging.test.ts:64` (now routed through `hook-cli.ts`); the `WarmSession` skeleton killed its own Query after one turn and dropped every second same-tick push; the daemon would have silently substituted its own model and env; the daemon lane would have sent a different prompt than the §6d-validated lane (shared builder now exported); and an interrupted turn returned truncated text as a derivation.
-- **Architect review 2 (29 findings: 4 critical, 13 important, 12 minor) applied in full.** The load-bearing ones: (C1) `drain()` and `execute()` both wrote `turn.settle`, so every QUEUED caller's `oneShot()` promise was orphaned and the FIFO test would hang — now two write-once slots funnelled through `finish()`; (C2) the 20 s client leg was SHORTER than the 45 s daemon turn timeout, so an ordinary in-flight turn read as `no-call` and the fallback spent a second call — now one `ACP_BUDGET` object with `daemonLegMs > daemonWorstCaseMs` locked by arithmetic tests; (C3) `api_retry` was treated as model activity unconditionally, which contradicted §6e's own "connect failure = no-call" rule and its own test — now split on `error_status`, per sdk.d.ts:2839-2841; (C4) turns were settled at cancellation time while their terminal `result` was still in flight, poisoning the next turn — now settled only from their own `result`, with `/clear` sequenced on `SDKConversationResetMessage` (sdk.d.ts:3838-3846); (I5) the "model that ran" was the caller's own request echoed back, making the provenance check a tautology — now proven from `modelUsage` keys (sdk.d.ts:4312); (I6) one lock file guarded two different critical sections in two different processes — now `.spawn.lock` and `.bind.lock`; (I7) a fixed 60 s reaper tick could never satisfy its own 1.5 s idle test; (I8) Task 10's `output_config` remedy contradicted Task 10's own env-independence invariant and duplicated coverage that already exists at `gauge-transport.test.ts:163/352/369/485`; (I9) the sketched hanging stub did not type-check against `stubServer`'s synchronous handler; (I10) Task 7's CLI-spawning tests had neither skip-guard nor timeout and asserted a budget bound the design guarantees to exceed; (I11) a REQUIRED `_meta.model` is incompatible with the "standard editor clients" claim, now dropped in favour of an explicit private-profile scope; (I14) the daemon's `env` — a pinned isolation key — was whatever its spawner happened to have, now fingerprinted into the socket name and checked on `initialize`; (I15) the "exactly two declared exceptions" constraint omitted three real test-file edits; (I16) `session/cancel` interrupted whoever was in flight, including another caller's turn.
+- **Architect review 2 (29 findings: 4 critical, 13 important, 12 minor) applied in full.** The load-bearing ones: (C1) `drain()` and `execute()` both wrote `turn.settle`, so every QUEUED caller's `oneShot()` promise was orphaned and the FIFO test would hang — now two write-once slots funnelled through `finish()`; (C2) the 20 s client leg was SHORTER than the 45 s daemon turn timeout, so an ordinary in-flight turn read as `no-call` and the fallback spent a second call — now one `ACP_BUDGET` object with `daemonLegMs > daemonWorstCaseMs` locked by arithmetic tests; (C3) `api_retry` was treated as model activity unconditionally, which contradicted §6e's own rule and its own test — now handled per sdk.d.ts:2839-2852 (and, after round 3, uniformly as consumed once sent); (C4) turns were settled at cancellation time while their terminal `result` was still in flight, poisoning the next turn — now settled only from their own `result`, with `/clear` sequenced on `SDKConversationResetMessage` (sdk.d.ts:3838-3846); (I5) the "model that ran" was the caller's own request echoed back, making the provenance check a tautology — now proven from `modelUsage` keys (sdk.d.ts:4312); (I6) one lock file guarded two different critical sections in two different processes — now `.spawn.lock` and `.bind.lock`; (I7) a fixed 60 s reaper tick could never satisfy its own 1.5 s idle test; (I8) Task 10's `output_config` remedy contradicted Task 10's own env-independence invariant and duplicated coverage that already exists at `gauge-transport.test.ts:163/352/369/485`; (I9) the sketched hanging stub did not type-check against `stubServer`'s synchronous handler; (I10) Task 7's CLI-spawning tests had neither skip-guard nor timeout and asserted a budget bound the design guarantees to exceed; (I11) a REQUIRED `_meta.model` is incompatible with the "standard editor clients" claim, now dropped in favour of an explicit private-profile scope; (I14) the daemon's `env` — a pinned isolation key — was whatever its spawner happened to have, now fingerprinted and checked on `initialize`; (I15) the "exactly two declared exceptions" constraint omitted three real test-file edits; (I16) `session/cancel` interrupted whoever was in flight, including another caller's turn.
+- **Architect review 3 (30 findings: 4 critical, 11 important, 15 minor) applied in full.** The load-bearing ones: (C1) §6e law L5's `error_status === null` carve-out classified a BILLED read timeout as `no-call` — sdk.d.ts:2839-2841 explicitly covers timeouts under that status, and `SDKAssistantMessageError` (sdk.d.ts:2901) cannot distinguish a refused connect from one; the exception is deleted, `consumed(t)` is now exactly `t.sent`, and daemon-side L5 and client-side L2 classify the same physics identically; (C2) the daemon used the client's JSON-RPC request id as the `WarmSession` cancel tag, and every client's counter starts at 1, so one caller's correctly-scoped `session/cancel` could interrupt ANOTHER caller's already-billed in-flight turn — tags are now daemon-minted UUIDs, with a wrong-owner test at both the `WarmSession` and the wire level; (C3) `runPump`'s `finally` was unguarded, so after any `hardReset()` the dying pump settled and destroyed the turn and the `Query` that had replaced it — a `this.q !== q` generation guard now binds every pump to its own `Query`, with a hardReset-with-queued-turn regression test; (C4) Task 10's declared exception #5 named three assertions but the flip breaks SIX tests plus a shared helper, and its stated remedy would have issued REAL model calls (the API-SDK stub those tests set is not on the post-flip path) — Step 3 now rewrites the helper, converts every stub to SSE shape on `ANTHROPIC_BASE_URL`, adds credentials skip-guards and timeouts, and zero-real-model-calls is a whole-plan invariant that explicitly covers the flip; (I5) `setModel` was an uncapped await outside the budget and could wedge the FIFO forever — now `setModelMs`, inside `daemonWorstCaseMs`; (I6) `FrameDecoder` used `chunk.toString()`, corrupting any multi-byte character split across a socket chunk into U+FFFD in a frame that still parses — now `StringDecoder`-backed with a split-multibyte test; (I7) `transport.ts` would have put the whole ACP client on every hook event via `hook-cli.ts:24`'s eager import, voiding Task 8's own lazy-import claim — `daemonCall` is now lazy-imported and `DAEMON_LEG_MS` is not re-exported; (I8) `ensureDaemon` released a spawn lock it might never have acquired, unlinking the winner's; (I9) Task 9's registered `KKAMAK_ACP_IDLE_MS` was inert because it is denylisted from the fingerprint and a pre-existing daemon would be adopted — the run now binds its own socket; (I10) the plan had no procedure for `undecided > 0` and implied a 10-record re-spend where a `--go <pending>` top-up finishes the job; (I11) the five-key fingerprint left `ANTHROPIC_MODEL`, the proxy vars and every `CLAUDE_CODE_*` toggle free to change the instrument silently — now whole-env-minus-denylist with the residual stated; (I12) §6e's residue claim contradicted §6d's line 662 about the same 423 bytes — now an OPEN DISCREPANCY resolved by measurement in Task 4 Step 4, corrected in that commit; (I13) Tasks 6 and 7 both needed scripted fake daemons with no shared helper and no way to import one from a `.test.ts` — `test/acp-fake-daemon.ts` added; (I14) the `/clear`-through-streaming-input assumption was unverified with no stop gate — Task 4 Step 1a; (I15) `lastServedSessionId` committed at serve time leaks one session's context into another under interleaving — now committed at dispatch.
 
 ## Disposition of review-2 findings (traceability)
 
@@ -2318,12 +2859,12 @@ git commit -m "feat(gauge): live derive flips to agent-sdk-daemon (6e bar pass, 
 |---|-----|---------------|
 | C1 | Critical | T4 Turn `notifyCaller`+`settle`, `finish()` funnel, `drain()` resolves nobody; FIFO + queue-cap + close tests |
 | C2 | Critical | `ACP_BUDGET` in T2 + arithmetic tests; T5 explicit daemon budgets; T7 remaining-budget math; §6e budget rule |
-| C3 | Critical | §6e law L5/L6; T4 `sawApiResponse`/`connectionOnly` off `error_status`; two matching T4 tests |
+| C3 | Critical | §6e law L5/L6; T4 `api_retry` handling off `error_status` (superseded in round 3 by uniform post-send consumption) |
 | C4 | Critical | §6e law L7; T4 `doomed`, `sent` guard, `awaitClear()` on `conversation_reset`, hardTimer destroys the Query |
 | I5 | Important | §6e "Which field proves the model"; T4 `observedModel` from `modelUsage`; T7 divergence branch + fake-daemon test |
 | I6 | Important | `acp-paths.ts` `spawnLockPath`/`bindLockPath`; T5 bind sequence; T6 `ensureDaemon` 5-step sequence |
 | I7 | Important | T5 reaper tick `max(250, min(60_000, idleMs/3))` |
-| I8 | Important | T10 Step 3 item 1: delete the assertion, cite `gauge-transport.test.ts:163/352/369/485` |
+| I8 | Important | T10 Step 3 item `:56-86`: delete the assertion, cite `gauge-transport.test.ts:163/352/369/485` |
 | I9 | Important | `silentServer`/`hangFirstServer` on raw `Bun.serve` in `agent-cli-stub.ts`; `sdk-stub.ts` explicitly NOT widened |
 | I10 | Important | T7 `describe.skipIf` + `CLI_TEST_TIMEOUT_MS` + `stubEnv()`; budget bound `recordBudgetMs + 5_000` |
 | I11 | Important | T2 scope note (private instrument profile); T5 `session/new.cwd` accepted-and-ignored |
@@ -2345,3 +2886,38 @@ git commit -m "feat(gauge): live derive flips to agent-sdk-daemon (6e bar pass, 
 | M27 | Minor | T6 `ensureDaemon` `waitMs` default 0, stated in the signature comment and pinned by a test |
 | M28 | Minor | §6e "The 'end' half of ruling 3, deliberately NOT implemented" |
 | M29 | Minor | T4 `close()` settles current + every queued turn; dedicated test |
+
+## Disposition of review-3 findings (traceability)
+
+| # | Sev | Finding | Applied where |
+|---|-----|---------|---------------|
+| C1 | Critical | §6e L5's connection-only exception classified a billed read timeout as `no-call` ⇒ double model call | §6e L4/L5/L6 rewritten (no post-send exception, with the sdk.d.ts:2839-2841 / :2901 reasoning); T4 `consumed(t) === t.sent`, `connectionOnly` removed from `Turn` and `route()`, witnesses demoted to diagnostics; T4 test retargeted to `call-consumed`; T5 wire-level "unreachable endpoint ⇒ ACP_ERR_CALL_CONSUMED" test; T2 `ACP_ERR_NO_CALL` doc = L1/L4 only (M22 folded in) |
+| C2 | Critical | Daemon used the client's JSON-RPC id as the cancel tag ⇒ cross-caller interrupt of a billed turn | T5 `crypto.randomUUID()` tag minted per accepted `session/prompt`, stored in `outstanding`; T4 `Turn.tag` doc'd as globally-unique; T4 wrong-owner queued-turn test; T5 "same JSON-RPC id on both connections" wire test |
+| C3 | Critical | `runPump`'s `finally` unguarded ⇒ dying pump settles and destroys the replacement turn/Query | T4 `runPump(q)` guards `this.q !== q` in BOTH the loop body and the `finally`; §6e L7 extended to name the generation binding; T4 hardReset-with-queued-turn regression test |
+| C4 | Critical | Task 10 exception #5 incomplete; its remedy would issue real model calls | Global Constraints exception #5 re-enumerated (helper + 6 tests + gauge-wiring); zero-real-model-calls promoted to a whole-plan invariant naming the flip; T10 Step 3 rewritten as (a) helper injection, (b) per-test SSE stub conversion, (c) skip-guards + timeouts, (d) gauge-wiring; Step 4 diff re-read gate |
+| I5 | Important | `setModel` uncapped and outside the budget; client slack unquantified | `ACP_BUDGET.setModelMs = 2_000`, `daemonWorstCaseMs 32_000`, `daemonLegMs 36_000`; T4 `within()` helper + `setModelMs` ctor opt; T5 passes it explicitly; T2 five-leg sum test + a ≥3 000 ms preamble-slack test; §6e budget rule updated |
+| I6 | Important | `chunk.toString()` corrupts split multi-byte UTF-8 ⇒ silently wrong prompt | T2 `FrameDecoder` holds a `StringDecoder("utf8")`; split-multibyte test; T5/T6 `socket.setEncoding("utf8")` on every socket |
+| I7 | Important | Eager `acp-client` import in `transport.ts` lands on every hook event | Global Constraint "the hook's import path stays cheap"; T6 drops the `DAEMON_LEG_MS` re-export; T7 lazy `await import("./acp-client.ts")` + a grep check; T8's lazy-import claim reworded to depend on it |
+| I8 | Important | `ensureDaemon` released a spawn lock it may not hold | T6 `held`-tracked 5-step sequence; "a caller that LOSES the spawn lock never unlinks it" test |
+| I9 | Important | Registered `KKAMAK_ACP_IDLE_MS` inert if a daemon already listens | §6e "Validation-run instrument parameters" now mandates a run-specific socket and says why; T9 Step 3 exports `KKAMAK_ACP_SOCKET` and terminates its own daemon; `KKAMAK_ACP_IDLE_MS` documented on the denylist |
+| I10 | Important | No procedure for `undecided > 0`; implied a full re-spend | T9 Step 4 split into the `wrongTransport` branch (full reset, new go) and the `undecided` branch (`derive --go <pending>` top-up, sized go for that number) |
+| I11 | Important | Five-key fingerprint misses instrument-changing env vars | §6e "Instrument fingerprint" = whole env minus `ACP_ENV_DENYLIST`, secret-NAMED keys reduced to presence, allow-list explicitly rejected, residual stated; `acp-paths.ts` `ACP_ENV_DENYLIST` + `ACP_SECRET_KEY_RE`; T5 tests for `ANTHROPIC_MODEL`/proxy/`CLAUDE_CODE_*`, denylist, sort-order, secret-name rule |
+| I12 | Important | §6e residue claim contradicts §6d spec line 662 on the same 423 B | §6e "Declared residue, and an open disagreement inside this spec"; T4 Step 4 measures BOTH lanes and corrects whichever statement is wrong in that commit; the spec file is in T4's `git add` |
+| I13 | Important | No shared fake-ACP-daemon helper though T6 and T7 both need one | `cc-gate-plugin/test/acp-fake-daemon.ts` added to T6's Files with the full `fakeDaemon(sock, opts)` signature (`sawPrompt()`, `promptParams()`); T6 and T7 both import it (M29 folded in) |
+| I14 | Important | `/clear` through streaming input is unverified with no stop gate | Plan-header RISK NOTE; §6e "Why, and what is still UNMEASURED"; **T4 Step 1a** token-free probe with three explicit PASS conditions and an unmissable STOP-AND-REPORT; Post-plan ordering rule 2 |
+| I15 | Important | `lastServedSessionId` committed at serve time leaks context under interleaving | T5 `session/prompt` computes and COMMITS `recycle`/`lastServedSessionId` in one synchronous step, with the failure mode spelled out; T5 interleaved-sessions test |
+| M16 | Minor | Single-key `modelUsage` requirement is brittle | T4 `route()` accepts the requested model when it is a key AND every other key has zero output tokens; §6e "Which field proves the model" states the rule |
+| M17 | Minor | Corroboration silently promoted to proof when `modelUsage` absent | T4 `Turn.corroboratedModel` is diagnostic-only; `observedModel` is cleared and set ONLY from `modelUsage`; §6e says corroboration is never a stamp |
+| M18 | Minor | Exception #2 had no corresponding test; the shown test duplicated #1 | Global Constraints #1 says "REPLACED in place, not duplicated"; #2 now names the union-membership + sorts-last test, written out in T3 Step 1; T3 Step 4 grep expects THREE hits |
+| M19 | Minor | Dead `fs`/`os`/`path`/`execFileSync` imports left in `gauge-agent-transport.test.ts` | Exception #4 extended to `:2-5`; T4 Step 0 requires the deletion |
+| M20 | Minor | F1/F2 enumeration omitted `src/types.ts` | Global Constraints F1/F2 now lists it (still outside every MECHANISM_PATH) |
+| M21 | Minor | `maxLineBytes` counts UTF-16 code units | Renamed `maxLineChars` in the interface, the implementation and the test |
+| M22 | Minor | `ACP_ERR_NO_CALL` documented as L4 only | Folded into C1: now documented as L1/L4, and `ACP_ERR_CALL_CONSUMED` as L2/L5/L6 |
+| M23 | Minor | `session/cancel` answered as a request though ACP makes it a notification | T2 scope note lists it as deviation 3; T5 answers only when an `id` is present; T5 notification-shape test |
+| M24 | Minor | T10's two-grep rationale was inverted | T10 "Finding the assertions" states the real hit counts for both greps and which hits must NOT change |
+| M25 | Minor | Lock helper signatures drifted from `corpus-store.ts` and between T5/T6 | `acp-paths.ts` declares `tryCreateLock(path, content)` / `isLockStale(path, now)` / `acquireAcpLock(path, now)`; T5 and T6 both pass `Date.now()` |
+| M26 | Minor | SessionStart hook could linger to CC's 30 s timeout | T6 `ensureDaemon` destroys sockets and clears timers before resolving; T8 states hook-cli has no forced success-path exit and adds `< 3_000 ms` bounds to all three tests |
+| M27 | Minor | T9 Step 5 lacked the copy command | T9 Step 5 gives the literal `cp` from `<shadowRoot>/pv-counts.json`, with `doc-check` and the commit |
+| M28 | Minor | Expected `doc-check` output omitted the `(NNNms)` suffix | T1 Step 2 shows the real format and says not to treat it as a mismatch |
+| M29 | Minor | T7's fakes must echo the env-under-test's fingerprint | Folded into I13: T7's `fpOf()` helper with the failure mode spelled out, plus the fingerprint-mismatch note in T6's test header |
+| M30 | Minor | Minor cite drift | Corrected throughout: `agent-transport.ts:102-108`, `hook-cli.ts:148-153`, `sdk.d.ts:1674-1678`, `:1627-1631`, `:2870-2873`, `:4583-4586`, `paired-validation.ts:472-481`, `cls-ab.ts:375-383` |
