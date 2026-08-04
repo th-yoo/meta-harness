@@ -21,6 +21,8 @@ import {
   FrameDecoder, encodeFrame, ACP_ERR_NO_CALL, ACP_ERR_CALL_CONSUMED, CLI_SPAWN_BUDGET_MS,
 } from "../src/gauge/acp-wire.ts"
 import { envFingerprint } from "../src/gauge/acp-paths.ts"
+import { createDaemonState, createDispatcher } from "../src/gauge/acp-daemon.ts"
+import type { WarmSession, TurnOutcome } from "../src/gauge/warm-session.ts"
 
 const DAEMON_TEST_TIMEOUT_MS = 60_000
 const HAIKU = "claude-haiku-4-5"
@@ -220,18 +222,56 @@ describe("acp-daemon wire behaviour (no model reached)", () => {
     try {
       spawnDaemon(e.sock, e.spawnLog, { ANTHROPIC_BASE_URL: cap.url })
       await waitForSpawnLog(e.spawnLog, 1, 15_000)
-      const c = await connectNdjson(e.sock)
-      await c.request("initialize", { protocolVersion: 1 })
-      const s = await c.request("session/new", { cwd: process.cwd(), mcpServers: [] })
 
-      let sawUnexpectedFrame = false
-      // A notification reply would arrive with no `id` and no `method` we
-      // registered a handler for -- watch the raw connection is unnecessary;
-      // instead assert on the ONE observable contract: the prompt settles
-      // NO_CALL and the promise for the cancel itself (a fire-and-forget
-      // notify()) never resolves/rejects anything, because there IS no
-      // promise for a notification.
-      const promptPromise = c.request("session/prompt", {
+      // Round-2 review finding 2 (2026-08-05): the ORIGINAL version of this
+      // test used `connectNdjson`, whose dispatch silently discards any
+      // frame matching neither its "has a numeric id" (response) nor "has
+      // no id AND a registered method handler" (notification) paths -- so
+      // `sawUnexpectedFrame` above was declared, never assigned, and the
+      // `expect` was a tautology that could not fail no matter what the
+      // daemon did. This version watches the RAW decoded frame stream
+      // directly. The one shape that must never appear is a frame with
+      // NEITHER `id` NOR `method`: that is exactly what "answering a
+      // notification" would produce on the wire (JSON.stringify drops an
+      // `id: undefined` key entirely, and a response has no `method`) --
+      // it is not a legal frame under any other circumstance (every
+      // legitimate response carries an id, every legitimate notification
+      // carries a method).
+      const socket = net.connect(e.sock)
+      await new Promise<void>((res, rej) => { socket.once("connect", () => res()); socket.once("error", rej) })
+      socket.setEncoding("utf8")
+      const decoder = new FrameDecoder()
+      let nextId = 1
+      const pending = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>()
+      let illegalFrame: unknown
+
+      socket.on("data", (chunk) => {
+        for (const f of decoder.push(chunk)) {
+          const msg = f as { id?: unknown; method?: unknown; result?: unknown; error?: { code: number; message: string; data?: unknown } }
+          if (msg.id === undefined && msg.method === undefined) illegalFrame = f
+          if (typeof msg.id === "number" && pending.has(msg.id)) {
+            const p = pending.get(msg.id)!
+            pending.delete(msg.id)
+            if (msg.error) p.reject(Object.assign(new Error(msg.error.message), { code: msg.error.code, data: msg.error.data }))
+            else p.resolve(msg.result)
+          }
+        }
+      })
+      const request = (method: string, params?: unknown): Promise<any> => {
+        const id = nextId++
+        return new Promise((resolve, reject) => {
+          pending.set(id, { resolve, reject })
+          socket.write(encodeFrame({ jsonrpc: "2.0", id, method, params }))
+        })
+      }
+      const notify = (method: string, params?: unknown): void => {
+        socket.write(encodeFrame({ jsonrpc: "2.0", method, params }))
+      }
+
+      await request("initialize", { protocolVersion: 1 })
+      const s = await request("session/new", { cwd: process.cwd(), mcpServers: [] })
+
+      const promptPromise = request("session/prompt", {
         sessionId: s.sessionId,
         prompt: [{ type: "text", text: "cancel me" }],
         _meta: { kkamak: { model: HAIKU } },
@@ -239,11 +279,13 @@ describe("acp-daemon wire behaviour (no model reached)", () => {
       // Fire the cancel as a bare notification (no id) immediately, before
       // awaiting the prompt -- races the turn out of `pending`/unsent
       // `current` before it crosses the send boundary.
-      c.notify("session/cancel", { sessionId: s.sessionId })
+      notify("session/cancel", { sessionId: s.sessionId })
 
       await expect(promptPromise).rejects.toMatchObject({ code: ACP_ERR_NO_CALL, data: { callConsumed: false } })
-      expect(sawUnexpectedFrame).toBe(false)
-      c.close()
+      // Give a buggy "answer the notification" frame a moment to arrive.
+      await new Promise((r) => setTimeout(r, 200))
+      expect(illegalFrame).toBeUndefined()
+      socket.destroy()
     } finally { cap.stop() }
   }, DAEMON_TEST_TIMEOUT_MS)
 
@@ -302,6 +344,121 @@ describe("acp-daemon wire behaviour (no model reached)", () => {
     expect(init._meta.kkamak.envFingerprint).toBe(envFingerprint(env))
     c.close()
   }, DAEMON_TEST_TIMEOUT_MS)
+})
+
+// ── dispatcher-level unit tests against a FAKE WarmSession: no daemon
+// process, no CLI, no credentials, no real turn timing -- these exist to
+// pin the `outstanding` bookkeeping semantics precisely and deterministically
+// (round-2 review finding 1, 2026-08-05), which real-CLI timing cannot do
+// reliably. `createDispatcher`'s declared parameter type is the concrete
+// `WarmSession` class, which has private fields, so a plain object literal
+// is not structurally assignable to it without a cast -- the cast is
+// confined to this file and only exercises the dispatcher's OWN
+// bookkeeping, never WarmSession's real internals.
+function fakeWarmSession() {
+  const calls: string[] = []
+  const inflight = new Map<string, (o: TurnOutcome) => void>()
+  const warm = {
+    oneShot(_text: string, _model: string, opts: { recycle: boolean; tag?: string }): Promise<TurnOutcome> {
+      const tag = opts.tag!
+      calls.push(`oneShot:${tag}`)
+      return new Promise<TurnOutcome>((resolve) => { inflight.set(tag, resolve) })
+    },
+    cancel(tag: string): string {
+      calls.push(`cancel:${tag}`)
+      const resolve = inflight.get(tag)
+      if (resolve) { inflight.delete(tag); resolve({ kind: "no-call" }); return "queued-dropped" }
+      return "unknown"
+    },
+  }
+  return {
+    calls,
+    warm: warm as unknown as WarmSession,
+    settle(tag: string, outcome: TurnOutcome) {
+      const resolve = inflight.get(tag)
+      if (!resolve) throw new Error(`settle: no in-flight turn for tag ${tag}`)
+      inflight.delete(tag)
+      resolve(outcome)
+    },
+  }
+}
+
+describe("acp-daemon dispatcher — outstanding-tag bookkeeping (fake WarmSession, no daemon process)", () => {
+  test("two same-session prompts in flight: cancel targets the OLDEST tag, and neither turn's cleanup wipes the other's entry", async () => {
+    const { warm, calls } = fakeWarmSession()
+    const state = createDaemonState()
+    const dispatch = createDispatcher(warm, state, "fp")
+    const frames: Array<Record<string, unknown>> = []
+    const write = (m: object) => frames.push(m as Record<string, unknown>)
+
+    const S = "session-under-test"
+    // Two session/prompt requests for the SAME session, the second fired
+    // before the first has settled -- reproduces the "outstanding[S] gets
+    // overwritten" shape finding 1 describes. Each `dispatch(...)` call
+    // runs synchronously up to (and including) the fake's synchronous
+    // Promise executor before yielding, so by the time each call returns
+    // its tag is already recorded -- no microtask flush needed between them.
+    const p1 = dispatch({ id: 1, method: "session/prompt", params: {
+      sessionId: S, prompt: [{ type: "text", text: "one" }], _meta: { kkamak: { model: "m" } },
+    } }, write)
+    const p2 = dispatch({ id: 2, method: "session/prompt", params: {
+      sessionId: S, prompt: [{ type: "text", text: "two" }], _meta: { kkamak: { model: "m" } },
+    } }, write)
+
+    const oneShotCalls = calls.filter((c) => c.startsWith("oneShot:"))
+    expect(oneShotCalls.length).toBe(2)
+    const tag1 = oneShotCalls[0]!.split(":")[1]!
+    const tag2 = oneShotCalls[1]!.split(":")[1]!
+    expect(tag1).not.toBe(tag2)
+
+    // (a) A cancel while BOTH turns are outstanding must target the OLDER
+    // tag (tag1), never overwrite-and-lose it to tag2. The fake's cancel()
+    // (like WarmSession.cancel) settles the target turn ITSELF, so p1 is
+    // already resolved once this call returns -- no manual settle() needed.
+    await dispatch({ id: 3, method: "session/cancel", params: { sessionId: S } }, write)
+    expect(calls[calls.length - 1]).toBe(`cancel:${tag1}`)
+    await p1
+
+    // (b) turn 2 is STILL outstanding. The buggy `Map<sessionId, tag>`
+    // design deletes the WHOLE key in turn 1's `finally`, so a cancel here
+    // would find "" and silently no-op (finding 1(b)). The fix must still
+    // find tag2.
+    await dispatch({ id: 4, method: "session/cancel", params: { sessionId: S } }, write)
+    expect(calls[calls.length - 1]).toBe(`cancel:${tag2}`)
+    await p2
+
+    // Both prompts settled to a real wire response (not silently dropped).
+    const responses = frames.filter((f) => f.id === 1 || f.id === 2)
+    expect(responses.length).toBe(2)
+  })
+
+  test("cross-session scoping is unaffected by the per-session tag list", async () => {
+    const { warm, calls, settle } = fakeWarmSession()
+    const state = createDaemonState()
+    const dispatch = createDispatcher(warm, state, "fp")
+    const write = () => {}
+
+    const pA = dispatch({ id: 1, method: "session/prompt", params: {
+      sessionId: "A", prompt: [{ type: "text", text: "a" }], _meta: { kkamak: { model: "m" } },
+    } }, write)
+    const pB = dispatch({ id: 2, method: "session/prompt", params: {
+      sessionId: "B", prompt: [{ type: "text", text: "b" }], _meta: { kkamak: { model: "m" } },
+    } }, write)
+    const oneShotCalls = calls.filter((c) => c.startsWith("oneShot:"))
+    const tagA = oneShotCalls[0]!.split(":")[1]!
+    const tagB = oneShotCalls[1]!.split(":")[1]!
+    expect(tagA).not.toBe(tagB)
+
+    // Cancelling B must resolve to B's OWN tag, never A's. The fake's
+    // cancel() (like WarmSession.cancel) settles the target turn itself,
+    // so pB is already resolved after this -- do not call settle() on it.
+    await dispatch({ id: 3, method: "session/cancel", params: { sessionId: "B" } }, write)
+    expect(calls[calls.length - 1]).toBe(`cancel:${tagB}`)
+    await pB
+
+    settle(tagA, { kind: "no-call" })
+    await pA
+  })
 })
 
 // ── model-reaching behaviour: these DO spawn the bundled CLI, so they carry
@@ -391,27 +548,50 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket (reac
       const sA = await cA.request("session/new", { cwd: process.cwd(), mcpServers: [] })
       const sB = await cB.request("session/new", { cwd: process.cwd(), mcpServers: [] })
 
-      // Same global WarmSession FIFO: issue sequentially A, B, A so each
-      // request fully resolves before the next is sent (interleaving here
-      // means DIFFERENT sessions on the shared daemon, not concurrent
-      // in-flight turns).
-      await cA.request("session/prompt", {
+      // Round-2 review finding 3 (2026-08-05): the ORIGINAL version awaited
+      // each request before sending the next, which makes dispatch-time and
+      // serve-time commit of `lastServedSessionId` INDISTINGUISHABLE (every
+      // frame is fully processed, including the underlying WarmSession
+      // turn, before the next one is even sent) -- the exact bug this test
+      // exists to catch could survive it undetected. Firing all three
+      // WITHOUT awaiting between them means all three session/prompt
+      // FRAMES reach the daemon's dispatcher -- and run their synchronous
+      // recycle/lastServedSessionId commit -- well before any of the
+      // underlying model turns settle; WarmSession's single global FIFO
+      // still serializes actual EXECUTION in enqueue order, but dispatch
+      // itself is immediate and races across the two connections.
+      const pA1 = cA.request("session/prompt", {
         sessionId: sA.sessionId, prompt: [{ type: "text", text: "A-MARKER" }],
         _meta: { kkamak: { model: HAIKU } },
       })
-      await cB.request("session/prompt", {
+      const pB1 = cB.request("session/prompt", {
         sessionId: sB.sessionId, prompt: [{ type: "text", text: "B-MARKER" }],
         _meta: { kkamak: { model: HAIKU } },
       })
-      await cA.request("session/prompt", {
+      const pA2 = cA.request("session/prompt", {
         sessionId: sA.sessionId, prompt: [{ type: "text", text: "A-MARKER-2" }],
         _meta: { kkamak: { model: HAIKU } },
       })
+      await Promise.all([pA1, pB1, pA2])
+
       expect(CAPTURED.length).toBe(3)
-      for (const body of CAPTURED) {
-        const s = JSON.stringify((body as { messages: unknown[] }).messages)
-        // no captured body may carry BOTH markers from the other session.
-        if (s.includes("A-MARKER-2")) { expect(s).not.toContain("B-MARKER") }
+      const bodiesText = CAPTURED.map((b) => JSON.stringify((b as { messages: unknown[] }).messages))
+      // Every marker landed in EXACTLY one body -- none lost, none
+      // duplicated across turns. (Frame/dispatch order across the two
+      // connections is not itself guaranteed, so this does not assume
+      // array position.)
+      expect(bodiesText.filter((s) => s.includes("A-MARKER") && !s.includes("A-MARKER-2")).length).toBe(1)
+      expect(bodiesText.filter((s) => s.includes("B-MARKER")).length).toBe(1)
+      expect(bodiesText.filter((s) => s.includes("A-MARKER-2")).length).toBe(1)
+      // UNCONDITIONAL, bidirectional cross-session isolation: no single
+      // captured body may carry BOTH an A-family marker and the B marker
+      // -- catches A leaking into B AND B leaking into A, in either
+      // dispatch order, not just the one direction the original assertion
+      // happened to check.
+      for (const s of bodiesText) {
+        const sawA = s.includes("A-MARKER")       // matches A-MARKER and A-MARKER-2
+        const sawB = s.includes("B-MARKER")
+        expect(sawA && sawB).toBe(false)
       }
       cA.close(); cB.close()
     } finally { cap.stop() }

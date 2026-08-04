@@ -65,9 +65,18 @@ type Write = (msg: object) => void
 
 export interface DaemonState {
   sessions: Map<string, { createdAt: number }>
-  /** sessionId -> the daemon-minted tag for that session's CURRENT
-   * in-flight turn, if any. Scopes session/cancel to its own session. */
-  outstanding: Map<string, string>
+  /** sessionId -> the ordered (oldest-first) list of daemon-minted tags for
+   * that session's turns CURRENTLY outstanding (queued or in flight).
+   * Round-2 review finding 1 (2026-08-05): a single Map<sessionId, tag>
+   * mishandles two same-session prompts in flight at once — the second
+   * prompt's tag would overwrite the first's (a cancel would then hit the
+   * WRONG turn), and the first prompt's `finally` would delete the key
+   * outright, so a cancel arriving while the second turn is still
+   * outstanding would find nothing and silently no-op. An array per
+   * session, with `session/cancel` targeting the OLDEST live tag and each
+   * turn removing only ITS OWN tag on completion, keeps both turns
+   * independently cancellable and never wipes a sibling's entry. */
+  outstanding: Map<string, string[]>
   lastServedSessionId: string | undefined
 }
 
@@ -180,7 +189,9 @@ export function createDispatcher(warm: WarmSession, state: DaemonState, fingerpr
           // the client's JSON-RPC id, which every client starts counting
           // from 1, so two concurrent callers' ids collide routinely.
           const tag = crypto.randomUUID()
-          state.outstanding.set(sessionId, tag)
+          const outstandingForSession = state.outstanding.get(sessionId) ?? []
+          outstandingForSession.push(tag)
+          state.outstanding.set(sessionId, outstandingForSession)
           mayHaveConsumed = true
           try {
             const outcome: TurnOutcome = await warm.oneShot(text, model, { recycle, tag })
@@ -210,13 +221,25 @@ export function createDispatcher(warm: WarmSession, state: DaemonState, fingerpr
             respondError(ACP_ERR_CALL_CONSUMED, "a model call was made but the turn did not complete", { callConsumed: true })
             return
           } finally {
-            state.outstanding.delete(sessionId)
+            // Remove ONLY this turn's own tag — never the whole key — so a
+            // sibling turn for the same session (still queued/in flight)
+            // stays independently cancellable after this one settles.
+            const remaining = state.outstanding.get(sessionId)
+            if (remaining) {
+              const i = remaining.indexOf(tag)
+              if (i >= 0) remaining.splice(i, 1)
+              if (remaining.length === 0) state.outstanding.delete(sessionId)
+            }
           }
         }
 
         case ACP_SESSION_CANCEL: {
           const sessionId = readSessionId(params)
-          const tag = (sessionId && state.outstanding.get(sessionId)) || ""
+          const outstandingForSession = sessionId ? state.outstanding.get(sessionId) : undefined
+          // Target the OLDEST outstanding tag for this session — the turn
+          // closest to (or already) running, and the one a caller sending
+          // a bare "cancel my session" almost always means.
+          const tag = outstandingForSession && outstandingForSession.length > 0 ? outstandingForSession[0]! : ""
           // All four CancelResult values are treated identically on the
           // wire — the caller learns the real outcome from its
           // session/prompt reply (§6e L4/L7 guarantee it lands on the
@@ -402,16 +425,33 @@ async function runSocket(env: Record<string, string | undefined>): Promise<void>
     shuttingDown = true
     if (reaper) clearInterval(reaper)
     // Stop accepting new connections FIRST, then close what is open, then
-    // tear down the session, then release the lock, then unlink the
-    // socket. Unlinking before draining races a client that has already
-    // written a session/prompt; a client torn down between session/new and
-    // session/prompt instead sees its socket close before the prompt frame
-    // was written — law L1, no-call, safe to fall back.
+    // tear down the session, then RE-ACQUIRE the bind lock before
+    // unlinking, then release it, then exit. Unlinking before draining
+    // races a client that has already written a session/prompt; a client
+    // torn down between session/new and session/prompt instead sees its
+    // socket close before the prompt frame was written — law L1, no-call,
+    // safe to fall back.
+    //
+    // Round-2 review finding 4 (2026-08-05, user ruling): the naive
+    // "release lock (already done at listen-time), then unlink" order is
+    // internally inconsistent with this Bun runtime's takeover design
+    // (bindWithTakeover, above) — a starter that wins the bind-lock race
+    // while THIS daemon is draining has its OWN, brand-new, LIVE socket
+    // already bound by the time it releases the lock; this daemon must not
+    // unlink out from under it. Re-acquiring the SAME lock here makes this
+    // daemon's shutdown-unlink just another lock-holder, serialized against
+    // every starter exactly like bindWithTakeover's probe→unlink→rebind is.
+    // Best-effort: if another starter currently holds a FRESH lock, it is
+    // mid-bind — skip the unlink entirely; that starter's own probe (which
+    // will now correctly see this daemon as dead) or a later starter's
+    // takeover handles the stale path.
     server.close()
     for (const s of sockets) { try { s.destroy() } catch { /* ignore */ } }
     warm.close()
-    releaseAcpLock(bindLock)
-    if (!isPipe(sock)) { try { fs.unlinkSync(sock) } catch { /* ignore */ } }
+    if (!isPipe(sock) && acquireAcpLock(bindLock, Date.now())) {
+      try { fs.unlinkSync(sock) } catch { /* ignore */ }
+      releaseAcpLock(bindLock)
+    }
     process.exit(code)
   }
 
