@@ -63,37 +63,58 @@ RULES THAT BIT ME YESTERDAY, IN PRIORITY ORDER:
    changes · per-task reviews · grep-verify · script-tally · SITREP.
 ```
 
-## ✅ SESSION END 2026-08-05 (`yoo-dev` office) — ACP LANE COMPLETE + MERGED to main @ `bbdabe1` · PROPOSER BOUNDARY STAMPED (ts 1785847012141) · WARM LANE BUILT-BUT-UNWIRED
+## ✅ SESSION END 2026-08-05 (`yoo-dev` office) — ACP LANE COMPLETE + MERGED (`bbdabe1`) · WARM LANE WIRED-INACTIVE (`5ae2043`) · PROPOSER BOUNDARY STAMPED (ts 1785847012141)
 
-**RESUME PROMPT (office `yoo-dev`):**
+**RESUME PROMPT (MacBook — cross-host: git is the ONLY transfer; nothing
+host-local from `yoo-dev` exists on this machine):**
 ```
-Resume kkamak (meta-harness), post-2026-08-05. Read docs/resume.md FIRST
-(this top block). The acp-session-pool lane is DONE and MERGED.
+Resume kkamak (meta-harness) on the MacBook, post-2026-08-05. git pull
+FIRST, then read docs/resume.md (this top block) and minimal/HISTORY.md
+GA7 (the full 08-04/05 arc).
 
-STATE: main @ bbdabe1 (+2 docs commits) pushed. Branch acp-session-pool
-merged --no-ff through the 7b gate (review artifact
-docs/reviews/95cfa82-acp-session-pool.md, whole-branch opus review
-0 Critical, all Importants closed). cc-gate-plugin 1043/0, opencode-plugin
-1771/1skip, tsc clean both.
+STATE after pull: main @ 5ae2043. Two gated merges landed 08-05:
+ - bbdabe1 acp-session-pool (review docs/reviews/95cfa82-acp-session-pool.md,
+   opus whole-branch, 0 Critical) — the seats' claude-code driver now runs
+   sendPrompt -> anthropic-api (Messages API) with EXPLICIT
+   REASONING_ISOLATION + maxTokens 8192 + truncation guard.
+ - 5ae2043 wire-warm-lane (docs/reviews/9663129-wire-warm-lane.md) —
+   KKAMAK_SEAT_PROVIDER env gate, DEFAULT OFF, byte-identical default
+   test-pinned. no-call => api fallback in-call; call-consumed => THROW,
+   never fallback.
+Suites at merge: cc-gate-plugin 1043/0, opencode-plugin 1776/1skip, tsc
+clean both. Re-run both on this host before building anything (darwin
+differences are real: the seat no-call test needed a platform seam —
+authDeps in SeatCallOptions — precisely because HOME tricks don't reach
+the keychain branch).
 
-WHAT CHANGED ON MAIN (instrument!): the design-time seats' claude-code
-driver now runs sendPrompt -> anthropic-api (Messages API) with EXPLICIT
-REASONING_ISOLATION + maxTokens 8192 + truncation guard. Boundary ts
-1785847012141 in docs/2026-08-01-gauntlet-adoption-ledger.md — partition
-seat data by it, pre/post must not pool. opencode driver untouched.
+INSTRUMENT: boundary ts 1785847012141
+(docs/2026-08-01-gauntlet-adoption-ledger.md) — proposer/reviewer/revision
+outputs pre/post MUST NOT pool. opencode driver untouched.
 
-BUILT BUT NOT WIRED (next decision, needs its own go): the
-anthropic-cli-warm lane — ACP daemon + SessionPool (cap 4, measured
-~330MB/session, docs/2026-08-05-warm-session-rss.md) + acp-client +
-provider. NO caller registers it. Its value = premium reach via the CLI
-credential pool when the raw API is 429-walled. Wiring = a provider
-registration at the seat call sites + its own boundary entry. MacBook
-needs its own RSS measurement before raising the cap there.
+MACBOOK-SPECIFIC CAUTIONS:
+ 1. Warm-lane activation on THIS host needs its own RSS measurement first
+    (cap is host-class-keyed; WSL2 measured ~330MB/warm session, cap 4 —
+    docs/2026-08-05-warm-session-rss.md; script:
+    cc-gate-plugin/test/warm-session-rss-measure.ts, token-free, stub-only).
+ 2. Activation itself (setting KKAMAK_SEAT_PROVIDER=anthropic-cli-warm
+    anywhere live) is a logged decision: adoption-ledger activation-log
+    entry, §4b precedent. Do not flip casually.
+ 3. The daemon writes under ~/.config/kkamak/ (socket, locks) — host-local,
+    fine, but darwin keychain is the auth source for readAuthToken's
+    darwin branch; the warm lane spawns the CC CLI which needs the 3-piece
+    container-free auth this host already has.
+ 4. The yoo-dev tmux launchers / 429 probes / markers do NOT exist here.
+    Premium-quota state is per-account not per-host — probe before spend:
+    source scripts/probe-models.sh && probe_models claude-haiku-4-5 claude-sonnet-5 claude-opus-5
 
-DEFERRED (ledgered in the merged review artifact): ~25 triaged-OK minors;
-thinking:enabled asymmetry between providers (api no-calls it, warm would
-run it) documented not resolved; session/cancel has no production client;
---stdio daemon mode untested.
+OPEN DECISIONS (all need explicit go): warm-lane activation (per host);
+MacBook RSS measurement (token-free, can run without go per
+distance-to-verdict? NO — it spawns the real CLI; ask); next loop work.
+
+DEFERRED (in the merged artifacts): ~25 triaged-OK minors; thinking:enabled
+provider asymmetry (api no-calls it, warm would run it); session/cancel has
+no production client; --stdio daemon mode untested; compiler-enforced
+fallback exhaustiveness in llm-acp.ts.
 
 Rules unchanged: explicit sized go before spend · spec-is-law, pre-data
 amendments only · merges through scripts/merge-with-gate.sh with a
