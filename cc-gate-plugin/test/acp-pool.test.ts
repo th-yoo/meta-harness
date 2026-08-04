@@ -1,0 +1,330 @@
+// test/acp-pool.test.ts — N3c-ii: SessionPool over a DEPENDENCY-INJECTED
+// fake WarmSession. No CLI, no credentials, zero spend — the pool never
+// drives a turn itself, it only hands out entries and tracks idle/busy.
+//
+// node-n3c-ii-brief.md governs. The 9-test sketch there is adapted 1:1
+// below (numbered in each test's describe/name), plus one extra wiring
+// test against the REAL WarmSession default (construction only — no spawn,
+// so still token-free) proving the pool never omits isolation or a budget
+// leg when it builds a real session.
+import { describe, expect, test } from "bun:test"
+import { GAUGE_ISOLATION, ACP_BUDGET, type WarmIsolation } from "../src/gauge/acp-wire.ts"
+import { REASONING_ISOLATION } from "../src/gauge/send-prompt.ts"
+import { WarmSession } from "../src/gauge/warm-session.ts"
+import { SessionPool, type WarmConstructOpts, type WarmSessionLike } from "../src/gauge/acp-pool.ts"
+
+const ENV: Record<string, string | undefined> = { ...process.env, KKAMAK_ACP_TEST_MARKER: "acp-pool-test" }
+
+/** The DI fake: no CLI, no Query, no network. `turnInFlight` is
+ * test-controlled via `setTurnInFlight` so reap/quiescent tests can force
+ * the "still finishing a pumped turn" state independently of the pool's own
+ * busy/idle bookkeeping (self-review item (d): reap must never close a
+ * turn-in-flight session, checked as its OWN signal, not derived from
+ * busy). */
+class FakeWarm implements WarmSessionLike {
+  closedCount = 0
+  private inFlight = false
+  constructor(
+    readonly env: Record<string, string | undefined>,
+    readonly opts: WarmConstructOpts,
+  ) {}
+  turnInFlight(): boolean {
+    return this.inFlight
+  }
+  setTurnInFlight(v: boolean): void {
+    this.inFlight = v
+  }
+  close(): void {
+    this.closedCount++
+  }
+}
+
+function fakeMakeSession(env: Record<string, string | undefined>, opts: WarmConstructOpts): FakeWarm {
+  return new FakeWarm(env, opts)
+}
+
+function asFake(warm: WarmSessionLike): FakeWarm {
+  return warm as FakeWarm
+}
+
+describe("SessionPool.acquire — concurrency and reuse", () => {
+  test("1. two concurrent acquires (same isolation) get DIFFERENT entries with DIFFERENT warm instances", () => {
+    const pool = new SessionPool(ENV, { makeSession: fakeMakeSession })
+    const now = Date.now()
+    const a = pool.acquire(GAUGE_ISOLATION, now)
+    const b = pool.acquire(GAUGE_ISOLATION, now)
+    expect(a.ok).toBe(true)
+    expect(b.ok).toBe(true)
+    if (!a.ok || !b.ok) return
+    // separate transcripts — the whole point of the pool
+    expect(a.entry.id).not.toBe(b.entry.id)
+    expect(a.entry.warm).not.toBe(b.entry.warm)
+  })
+
+  test("2. acquire -> release -> acquire (same isolation) reuses the SAME warm instance with mustRecycle:true; a brand-new entry has mustRecycle:false", () => {
+    const pool = new SessionPool(ENV, { makeSession: fakeMakeSession })
+    const t0 = Date.now()
+    const first = pool.acquire(GAUGE_ISOLATION, t0)
+    expect(first.ok).toBe(true)
+    if (!first.ok) return
+    // never-used entry: no /clear owed on its first turn (T4's awaitClear
+    // cost is real and must not be paid for nothing)
+    expect(first.mustRecycle).toBe(false)
+
+    pool.release(first.entry.id, t0 + 1)
+    const second = pool.acquire(GAUGE_ISOLATION, t0 + 2)
+    expect(second.ok).toBe(true)
+    if (!second.ok) return
+    expect(second.entry.id).toBe(first.entry.id)
+    expect(second.entry.warm).toBe(first.entry.warm)
+    expect(second.mustRecycle).toBe(true)
+  })
+})
+
+describe("SessionPool.acquire — isolation segregation (C4)", () => {
+  test("3. REASONING and GAUGE acquires never share an entry; the entry handed back always carries the requested isolation", () => {
+    const pool = new SessionPool(ENV, { makeSession: fakeMakeSession })
+    const t0 = Date.now()
+    const g = pool.acquire(GAUGE_ISOLATION, t0)
+    const r = pool.acquire(REASONING_ISOLATION, t0)
+    expect(g.ok).toBe(true)
+    expect(r.ok).toBe(true)
+    if (!g.ok || !r.ok) return
+    expect(g.entry.id).not.toBe(r.entry.id)
+    expect(g.entry.warm).not.toBe(r.entry.warm)
+    expect(g.entry.isolation).toEqual(GAUGE_ISOLATION)
+    expect(r.entry.isolation).toEqual(REASONING_ISOLATION)
+
+    // release both, then prove a GAUGE re-acquire never comes back as the
+    // REASONING entry (a reused entry silently serving a different
+    // isolation is the silent-wrong-system-prompt failure).
+    pool.release(g.entry.id, t0 + 1)
+    pool.release(r.entry.id, t0 + 1)
+    const g2 = pool.acquire(GAUGE_ISOLATION, t0 + 2)
+    expect(g2.ok).toBe(true)
+    if (!g2.ok) return
+    expect(g2.entry.id).toBe(g.entry.id)
+    expect(g2.entry.id).not.toBe(r.entry.id)
+    expect(g2.entry.isolation).toEqual(GAUGE_ISOLATION)
+  })
+
+  test("4. key-order robustness: two deep-equal isolation objects built with different key insertion orders hit the SAME pool key (reuse happens)", () => {
+    const isoA: WarmIsolation = {
+      systemPrompt: "same-policy",
+      settingSources: [],
+      settings: { autoMemoryEnabled: false },
+      persistSession: false,
+      strictMcpConfig: true,
+      tools: [],
+      title: "kkamak-test",
+      thinking: { type: "disabled" },
+    }
+    // same fields, deliberately different insertion order, and a
+    // structurally-fresh object (not the same reference as isoA)
+    const isoB: WarmIsolation = {
+      thinking: { type: "disabled" },
+      tools: [],
+      title: "kkamak-test",
+      strictMcpConfig: true,
+      persistSession: false,
+      settings: { autoMemoryEnabled: false },
+      settingSources: [],
+      systemPrompt: "same-policy",
+    }
+    expect(isoA).toEqual(isoB)
+    expect(isoA).not.toBe(isoB)
+
+    const pool = new SessionPool(ENV, { makeSession: fakeMakeSession })
+    const t0 = Date.now()
+    const first = pool.acquire(isoA, t0)
+    expect(first.ok).toBe(true)
+    if (!first.ok) return
+    pool.release(first.entry.id, t0 + 1)
+
+    const second = pool.acquire(isoB, t0 + 2)
+    expect(second.ok).toBe(true)
+    if (!second.ok) return
+    expect(second.entry.id).toBe(first.entry.id)
+    expect(second.entry.warm).toBe(first.entry.warm)
+    expect(second.mustRecycle).toBe(true)
+  })
+})
+
+describe("SessionPool.acquire — cap", () => {
+  test("5. max entries reached + all busy => pool-exhausted; releasing one makes acquire succeed again", () => {
+    const pool = new SessionPool(ENV, { max: 2, makeSession: fakeMakeSession })
+    const t0 = Date.now()
+    const a = pool.acquire(GAUGE_ISOLATION, t0)
+    const b = pool.acquire(REASONING_ISOLATION, t0)
+    expect(a.ok).toBe(true)
+    expect(b.ok).toBe(true)
+    if (!a.ok || !b.ok) return
+
+    const c = pool.acquire(GAUGE_ISOLATION, t0)
+    expect(c).toEqual({ ok: false, reason: "pool-exhausted" })
+
+    pool.release(a.entry.id, t0 + 1)
+    const d = pool.acquire(GAUGE_ISOLATION, t0 + 2)
+    expect(d.ok).toBe(true)
+    if (!d.ok) return
+    expect(d.entry.id).toBe(a.entry.id) // the freed slot, reused
+  })
+})
+
+describe("KKAMAK_ACP_MAX_SESSIONS parsing (6)", () => {
+  test("'2' is honored — a 3rd concurrent acquire is refused", () => {
+    const pool = new SessionPool({ ...ENV, KKAMAK_ACP_MAX_SESSIONS: "2" }, { makeSession: fakeMakeSession })
+    const t0 = Date.now()
+    expect(pool.acquire(GAUGE_ISOLATION, t0).ok).toBe(true)
+    expect(pool.acquire(GAUGE_ISOLATION, t0).ok).toBe(true)
+    expect(pool.acquire(GAUGE_ISOLATION, t0)).toEqual({ ok: false, reason: "pool-exhausted" })
+  })
+
+  test("absent => default 4 — a 5th concurrent acquire is refused, a 4th is not", () => {
+    const env = { ...ENV }
+    delete env.KKAMAK_ACP_MAX_SESSIONS
+    const pool = new SessionPool(env, { makeSession: fakeMakeSession })
+    const t0 = Date.now()
+    for (let i = 0; i < 4; i++) expect(pool.acquire(GAUGE_ISOLATION, t0).ok).toBe(true)
+    expect(pool.acquire(GAUGE_ISOLATION, t0)).toEqual({ ok: false, reason: "pool-exhausted" })
+  })
+
+  test("chosen rule: '0' CLAMPS to 1 (a pool must always serve at least one session); non-numeric garbage DEFAULTS to 4 (nothing to clamp)", () => {
+    const zeroPool = new SessionPool({ ...ENV, KKAMAK_ACP_MAX_SESSIONS: "0" }, { makeSession: fakeMakeSession })
+    const t0 = Date.now()
+    expect(zeroPool.acquire(GAUGE_ISOLATION, t0).ok).toBe(true)
+    expect(zeroPool.acquire(GAUGE_ISOLATION, t0)).toEqual({ ok: false, reason: "pool-exhausted" })
+
+    const garbagePool = new SessionPool({ ...ENV, KKAMAK_ACP_MAX_SESSIONS: "banana" }, { makeSession: fakeMakeSession })
+    for (let i = 0; i < 4; i++) expect(garbagePool.acquire(GAUGE_ISOLATION, t0).ok).toBe(true)
+    expect(garbagePool.acquire(GAUGE_ISOLATION, t0)).toEqual({ ok: false, reason: "pool-exhausted" })
+  })
+})
+
+describe("SessionPool.reap (7)", () => {
+  test("evicts only idle-past-deadline entries, never one with turnInFlight(), and calls warm.close() exactly once per evicted entry", () => {
+    const pool = new SessionPool(ENV, { sessionIdleMs: 1_000, makeSession: fakeMakeSession })
+    const t0 = 0
+    const a = pool.acquire(GAUGE_ISOLATION, t0)
+    const b = pool.acquire(REASONING_ISOLATION, t0)
+    expect(a.ok).toBe(true)
+    expect(b.ok).toBe(true)
+    if (!a.ok || !b.ok) return
+
+    pool.release(a.entry.id, t0 + 10)
+    pool.release(b.entry.id, t0 + 10)
+    // b's warm reports a turn still finishing (e.g. a stray pump tail) even
+    // though the pool itself has marked the entry idle.
+    asFake(b.entry.warm).setTurnInFlight(true)
+
+    // before sessionIdleMs has elapsed for either: nothing evicted yet
+    expect(pool.reap(t0 + 500)).toEqual([])
+
+    // now a is idle-past-deadline; b is idle-past-deadline TOO by elapsed
+    // time, but its warm still reports turnInFlight() => must survive
+    const evicted = pool.reap(t0 + 2_000)
+    expect(evicted).toEqual([a.entry.id])
+    expect(asFake(a.entry.warm).closedCount).toBe(1)
+    expect(asFake(b.entry.warm).closedCount).toBe(0)
+    expect(pool.size()).toBe(1)
+
+    // once b's turn settles, a later reap evicts it too, closed exactly once
+    asFake(b.entry.warm).setTurnInFlight(false)
+    const evicted2 = pool.reap(t0 + 3_000)
+    expect(evicted2).toEqual([b.entry.id])
+    expect(asFake(b.entry.warm).closedCount).toBe(1)
+    expect(pool.size()).toBe(0)
+
+    // reaping again touches nothing (already evicted, no double-close)
+    expect(pool.reap(t0 + 4_000)).toEqual([])
+    expect(asFake(a.entry.warm).closedCount).toBe(1)
+    expect(asFake(b.entry.warm).closedCount).toBe(1)
+  })
+
+  test("a BUSY entry past the idle deadline is never reaped", () => {
+    const pool = new SessionPool(ENV, { sessionIdleMs: 1_000, makeSession: fakeMakeSession })
+    const t0 = 0
+    const a = pool.acquire(GAUGE_ISOLATION, t0)
+    expect(a.ok).toBe(true)
+    if (!a.ok) return
+    // never released => still busy, however much time passes
+    expect(pool.reap(t0 + 1_000_000)).toEqual([])
+    expect(asFake(a.entry.warm).closedCount).toBe(0)
+  })
+})
+
+describe("SessionPool.quiescent (8)", () => {
+  test("false while any entry is busy or any warm turn is in flight; true after release and settle", () => {
+    const pool = new SessionPool(ENV, { makeSession: fakeMakeSession })
+    const t0 = Date.now()
+    expect(pool.quiescent()).toBe(true) // empty pool
+
+    const a = pool.acquire(GAUGE_ISOLATION, t0)
+    expect(a.ok).toBe(true)
+    if (!a.ok) return
+    expect(pool.quiescent()).toBe(false) // busy
+
+    pool.release(a.entry.id, t0 + 1)
+    expect(pool.quiescent()).toBe(true) // idle, no turn in flight
+
+    asFake(a.entry.warm).setTurnInFlight(true)
+    expect(pool.quiescent()).toBe(false) // idle per the pool, but the warm session is still finishing a pumped turn
+
+    asFake(a.entry.warm).setTurnInFlight(false)
+    expect(pool.quiescent()).toBe(true)
+  })
+})
+
+describe("SessionPool.closeAll (9)", () => {
+  test("closes every warm exactly once, including busy entries (the daemon's shutdown path, which may interrupt)", () => {
+    const pool = new SessionPool(ENV, { makeSession: fakeMakeSession })
+    const t0 = Date.now()
+    const a = pool.acquire(GAUGE_ISOLATION, t0)
+    const b = pool.acquire(REASONING_ISOLATION, t0)
+    expect(a.ok).toBe(true)
+    expect(b.ok).toBe(true)
+    if (!a.ok || !b.ok) return
+
+    pool.release(a.entry.id, t0 + 1) // a idle, b stays busy
+    pool.closeAll()
+    expect(asFake(a.entry.warm).closedCount).toBe(1)
+    expect(asFake(b.entry.warm).closedCount).toBe(1)
+    expect(pool.size()).toBe(0)
+    expect(pool.quiescent()).toBe(true) // nothing left to be busy or in flight
+  })
+})
+
+describe("SessionPool wiring against the REAL WarmSession default (construction only, no spawn, no CLI, zero spend)", () => {
+  test("the default makeSession builds a real WarmSession carrying the requested isolation and the five explicit ACP_BUDGET legs", () => {
+    const pool = new SessionPool(ENV)
+    const now = Date.now()
+    const r = pool.acquire(REASONING_ISOLATION, now)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.entry.warm).toBeInstanceOf(WarmSession)
+    const warm = r.entry.warm as WarmSession
+    // WarmSession construction never spawns (ensure() does, on first
+    // turn), so reading .isolation here costs nothing.
+    expect(warm.isolation).toEqual(REASONING_ISOLATION)
+    // the same real WarmSession never silently serves the gauge isolation
+    expect(warm.isolation).not.toEqual(GAUGE_ISOLATION)
+    pool.closeAll()
+  })
+
+  test("explicit budget legs are never defaults-by-omission — the fake records every leg the pool passed", () => {
+    const pool = new SessionPool(ENV, { makeSession: fakeMakeSession })
+    const now = Date.now()
+    const g = pool.acquire(GAUGE_ISOLATION, now)
+    expect(g.ok).toBe(true)
+    if (!g.ok) return
+    const opts = asFake(g.entry.warm).opts
+    expect(opts).toEqual({
+      isolation: GAUGE_ISOLATION,
+      turnTimeoutMs: ACP_BUDGET.turnTimeoutMs,
+      queueWaitMs: ACP_BUDGET.queueWaitMs,
+      clearTimeoutMs: ACP_BUDGET.clearTimeoutMs,
+      setModelMs: ACP_BUDGET.setModelMs,
+      hardGraceMs: ACP_BUDGET.hardGraceMs,
+    })
+  })
+})
