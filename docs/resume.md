@@ -3,6 +3,65 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-05 later (`yoo-dev` office) — TWO-TIER GATE PLAN ASSESSED: EXECUTE WITH 3 AMENDMENTS (awaiting go) · GATE STALL CONFIRMED BOTH HOSTS
+
+**RESUME PROMPT (either host — git-only transfer):**
+```
+Resume kkamak (meta-harness), post-2026-08-05 office session. git pull
+FIRST, then this block. Main >= 5926817, tree clean. No code changed this
+session — it was read + assess only.
+
+STATE: the full 08-04/05 arc is merged and recorded (minimal/HISTORY.md
+GA14 + the two blocks below this one): seats on sendPrompt/anthropic-api
+(boundary ts 1785847012141), warm lane wired everywhere + ACTIVATED ON
+YOO-MAC ONLY (ts 1785856371528, three regimes on that host — never pool
+seat data across ts). Office NOT activated (own logged decision; re-prove
+suites in activated state first).
+
+THIS SESSION ESTABLISHED:
+ 1. The ~155s gated-Stop stall happens on BOTH hosts (yoo-dev
+    .km/gate-outcomes.ndjson: durationMs 151-158s, host=yoo-dev). The
+    user only FEELS it on the MacBook because dogfood sessions are
+    interactive there; on yoo-dev it burns agent-session Stop hooks.
+ 2. docs/superpowers/plans/2026-08-05-two-tier-gate-check.md ASSESSED:
+    core is sound (mechanism untouched, tier-1 verbatim, debt
+    self-clearing, spawn race structurally prevented). EXECUTE VIA SDD
+    ONLY AFTER 3 pre-execution amendments:
+    a. Wedged-bg liveness bound — "running" marker with startedTs older
+       than ~15min => treat dead, pid-scoped kill, respawn (hung ACP
+       daemon test = alive pid forever = full-check coverage silently
+       stops; no bound exists in the plan).
+    b. Slow-source blind spot — editing acp-daemon.ts etc. gets ZERO
+       blocking coverage (TIA picks ccgate, tier0 excludes exactly the
+       matching tests). Amendment: changed slow-source basenames pull in
+       their matching slow test file(s), targeted not whole-110s.
+    c. Fallback-cost accuracy — ALL_SUITES includes opencode (~47s) which
+       the incumbent check NEVER ran; fallback tier0 is ~80-90s not the
+       claimed 25-45s. Either drop opencode from the fallback set (match
+       incumbent scope) or fix the ledger-note numbers.
+    Minor: runSync dead code; minimal/*.md edits trigger full opencode
+    suite via ^minimal/ TIA rule.
+ 3. NOTHING DISPATCHED — amendments not yet written into the plan, no go
+    given. Next action on "go": write amendments a-c into the plan
+    (pre-execution, it is unexecuted so freely amendable), then SDD
+    3 tasks (full code is in-plan => cheap-tier implementers), deploy
+    Task 3 stamps the instrument note (durationMs never pools across
+    deploy ts; office inherits via pull — config, not env).
+
+OTHER OPEN DUTIES (unchanged from the MacBook block below):
+ - TASK 8 §6d pv run (office store has the sdk stratum; REAL SPEND):
+   size token-free first — bun cc-gate-plugin/src/gauge/replay-cli.ts
+   pv-sample --pair sdk:agent-sdk — report size+tier, get sized go.
+   Task 9 chains token-free; default-flip DELETED (per-batch opt-in only).
+ - Office warm-lane activation: optional, own logged decision.
+ - Premium: 429-walled at last probe (haiku OK) — probe before ANY spend:
+   source scripts/probe-models.sh && probe_models claude-haiku-4-5 claude-sonnet-5 claude-opus-5
+
+Rules: sized go before spend · spec-is-law, pre-data amendments only ·
+merge-with-gate.sh + docs/reviews artifact · boundary ts on instrument
+changes · F1/F2 · per-task reviews · grep-verify · SITREP.
+```
+
 ## ✅ SESSION END 2026-08-05 (`yoo-mac` MacBook) — DARWIN SUITES GREEN (sun_path fix) · WARM LANE ACTIVATED ts 1785856371528 · TASK 8 RETARGETED TO OFFICE · GATE STALL ROOT-CAUSED + TWO-TIER PLAN WRITTEN (unexecuted)
 
 **RESUME PROMPT (office `yoo-dev` — cross-host: git-only transfer):**
