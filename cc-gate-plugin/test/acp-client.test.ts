@@ -150,6 +150,19 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     expect(r.kind).toBe("call-consumed")
   })
 
+  test("law L3(iii)/final-review Important 2: a NON-OBJECT `data` (data: \"false\") with ACP_ERR_NO_CALL does NOT launder into no-call", async () => {
+    const sock = tempSock("nonobjectdata")
+    const env = { ...ENV, KKAMAK_ACP_SOCKET: sock }
+    const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "nonobject-data" })
+    LIVE_FAKES.push(fake)
+    const r = await daemonCall("x", HAIKU, env, ISO)
+    // `data` is present (a string, not an object) -- present-but-malformed
+    // must fall to L2's default (call-consumed), never skip past step (iii)
+    // into the recognized-code (ACP_ERR_NO_CALL) branch. Before the fix
+    // this returned {kind:"no-call"} -- the double-spend direction.
+    expect(r.kind).toBe("call-consumed")
+  })
+
   test("law L2: an UNRECOGNIZED error code after the prompt was sent is call-consumed", async () => {
     const sock = tempSock("unknowncode")
     const env = { ...ENV, KKAMAK_ACP_SOCKET: sock }

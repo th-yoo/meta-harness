@@ -27,6 +27,12 @@ export type FakeAnswer =
   | "no-call-code-no-data"
   | "consumed-code-no-data"
   | "nonboolean-data"
+  /** final-review Important 2: `data` PRESENT but not an object at all (a
+   * string here, deliberately truthy-looking -- "false" -- so a bug that
+   * merely checked truthiness rather than shape would be masked). Paired
+   * with the NO_CALL code to prove the client does not launder this into
+   * no-call by falling through to the code-based branch. */
+  | "nonobject-data"
   | "mismatched-data"
   | "unknown-code"
   | "hang"
@@ -121,6 +127,9 @@ export function fakeDaemon(sock: string, opts: FakeDaemonOpts): FakeDaemonHandle
         return
       case "nonboolean-data":
         write({ jsonrpc: "2.0", id, error: { code: ACP_ERR_NO_CALL, message: "nonboolean data", data: { callConsumed: "false" } } })
+        return
+      case "nonobject-data":
+        write({ jsonrpc: "2.0", id, error: { code: ACP_ERR_NO_CALL, message: "nonobject data", data: "false" } })
         return
       case "mismatched-data":
         write({ jsonrpc: "2.0", id, error: { code: ACP_ERR_NO_CALL, message: "mismatched data", data: { callConsumed: true } } })

@@ -49,11 +49,20 @@ interface PendingEntry {
  * data field means the daemon is not the conforming one step (ii) assumes)
  * falls to L2's default: call-consumed. */
 function classifyPostSendError(code: number, data: unknown): DaemonOutcome {
-  const hasData = typeof data === "object" && data !== null
-  if (hasData) {
-    const cc = (data as { callConsumed?: unknown }).callConsumed
+  // `data` genuinely ABSENT is the only shape eligible for step (ii)'s
+  // code-based fallback below. A non-object `data` (string/number/etc.) is
+  // PRESENT-but-malformed, same as an object missing `callConsumed` — both
+  // must fall to step (iii)'s call-consumed default, never skip past it
+  // into the recognized-code branch (final-review Important 2: the prior
+  // `typeof data === "object"` gate let a non-object `data` slip through as
+  // if it were absent, which can launder a post-send call-consumed failure
+  // into no-call — the double-spend direction).
+  if (data !== undefined) {
+    const isWellFormedObject = typeof data === "object" && data !== null
+    const cc = isWellFormedObject ? (data as { callConsumed?: unknown }).callConsumed : undefined
     if (typeof cc === "boolean") return cc ? { kind: "call-consumed" } : { kind: "no-call" }
-    // `data` present but malformed: NOT eligible for step (ii) either.
+    // `data` present but malformed (non-object, or object without a
+    // boolean `callConsumed`): NOT eligible for step (ii) either.
     return { kind: "call-consumed" }
   }
   if (code === ACP_ERR_NO_CALL) return { kind: "no-call" }
