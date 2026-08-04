@@ -179,6 +179,17 @@ export interface AcpInitializeResult {
    * fingerprint differs from its own (pre-send => law L1 => no-call). */
   _meta: { kkamak: { envFingerprint: string } }
 }
+/** N3c-iii: `session/new` gains the isolation VALUE, required (never
+ * defaulted — the same "no magic selection" rule `AcpPromptParams.model`
+ * already enforces for the model). `cwd`/`mcpServers` stay optional and
+ * ignored (§6e delta (b): the instrument pins a neutral cwd) — unchanged
+ * from today's wire shape, just given a name so `acp-client.ts` can build
+ * its `session/new` params `satisfies` this type. */
+export interface AcpNewSessionParams {
+  cwd?: string
+  mcpServers?: unknown[]
+  _meta: { kkamak: { isolation: WarmIsolation } }
+}
 export interface AcpNewSessionResult { sessionId: string }
 export interface AcpPromptParams {
   sessionId: string

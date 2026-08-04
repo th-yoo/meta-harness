@@ -4,7 +4,7 @@ import {
   ACP_ERR_NO_CALL, ACP_ERR_CALL_CONSUMED, GAUGE_ISOLATION,
 } from "../src/gauge/acp-wire.ts"
 import type {
-  AcpInitializeResult, AcpPromptParams, AcpPromptResult,
+  AcpInitializeResult, AcpNewSessionParams, AcpPromptParams, AcpPromptResult,
 } from "../src/gauge/acp-wire.ts"
 
 // TYPE-LEVEL conformance guard (ACP extensibility rule), independent of any
@@ -21,15 +21,18 @@ import type {
 // `Acp*` `_meta` gaining ANY other key — required or optional — fails
 // `tsc --noEmit` here regardless of what the runtime fixtures say. Do NOT
 // delete this block as "unused": deleting it silently reopens the hole
-// described above. Sweep of `Acp*` interfaces in acp-wire.ts confirms only
-// AcpInitializeResult, AcpPromptParams and AcpPromptResult declare a
+// described above. Sweep of `Acp*` interfaces in acp-wire.ts confirms
+// AcpInitializeResult, AcpNewSessionParams (N3c-iii: gained `_meta` when
+// isolation crossed the wire), AcpPromptParams and AcpPromptResult declare a
 // `_meta` field (AcpNewSessionResult and AcpUpdateParams have none) — add a
 // line here for any future one that gains one.
 type OnlyKkamak<M> = Exclude<keyof M, "kkamak"> extends never ? true : never
 const acpInitializeResultMetaIsKkamakOnly: OnlyKkamak<AcpInitializeResult["_meta"]> = true
+const acpNewSessionParamsMetaIsKkamakOnly: OnlyKkamak<AcpNewSessionParams["_meta"]> = true
 const acpPromptParamsMetaIsKkamakOnly: OnlyKkamak<AcpPromptParams["_meta"]> = true
 const acpPromptResultMetaIsKkamakOnly: OnlyKkamak<AcpPromptResult["_meta"]> = true
 void acpInitializeResultMetaIsKkamakOnly
+void acpNewSessionParamsMetaIsKkamakOnly
 void acpPromptParamsMetaIsKkamakOnly
 void acpPromptResultMetaIsKkamakOnly
 
