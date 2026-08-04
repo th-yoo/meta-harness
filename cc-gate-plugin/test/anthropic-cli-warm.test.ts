@@ -60,6 +60,44 @@ describe("makeAnthropicCliWarmProvider (fake daemons only — no CLI, no model)"
     })
   })
 
+  test("1b. canonicalModel primary branch: a NON-EMPTY daemon canonicalModel passes through verbatim", async () => {
+    // Distinct from BOTH the evidence key and the requested string, so the
+    // primary branch (`outcome.canonicalModel || outcome.model`'s left
+    // side) is exercised, not merely reachable. Proven via the dated-key
+    // prefix rule (modelProvenBy's second branch: key.startsWith(`${requested}-`)).
+    const { env } = envWithFake("canonical-nonempty", "ok", {
+      model: `${HAIKU}-20251001`,
+      canonicalModel: "claude-haiku-4-5-canonical-marker",
+    })
+    const provider = makeAnthropicCliWarmProvider(env)
+    const outcome = await provider("hello", { model: HAIKU, isolation: GAUGE_ISOLATION, provider: "anthropic-cli-warm" })
+    expect(outcome).toEqual({
+      ok: true,
+      text: "ANSWER",
+      model: HAIKU,
+      canonicalModel: "claude-haiku-4-5-canonical-marker", // the daemon's own value, untouched
+    })
+  })
+
+  test("1c. canonicalModel fallback branch: \"\" + a DATED evidence key DIFFERING from the requested string -> canonicalModel = the evidence key, NOT the requested string", async () => {
+    // Test 1 alone cannot distinguish the correct fallback (evidence key)
+    // from a subtly wrong one (requested string) because there the evidence
+    // key EQUALS the requested model. Here the evidence key is dated
+    // ("claude-haiku-4-5-20251001", the fake's own DEFAULT) while the
+    // requested model is undated ("claude-haiku-4-5") -- proven via
+    // modelProvenBy's dated-prefix branch, and the two candidate
+    // canonicalModel values are now observably different.
+    const { env } = envWithFake("canonical-fallback-dated", "ok", { canonicalModel: "" })
+    const provider = makeAnthropicCliWarmProvider(env)
+    const outcome = await provider("hello", { model: HAIKU, isolation: GAUGE_ISOLATION, provider: "anthropic-cli-warm" })
+    expect(outcome).toEqual({
+      ok: true,
+      text: "ANSWER",
+      model: HAIKU, // still the requested literal
+      canonicalModel: `${HAIKU}-20251001`, // the evidence key -- NOT `HAIKU` (the requested string)
+    })
+  })
+
   test("2. modelProvenBy failure: evidence for a DIFFERENT model family -> call-consumed, not ok, not no-call", async () => {
     const { env } = envWithFake("wrong-family", "ok", { model: "claude-opus-4-1", canonicalModel: "" })
     const provider = makeAnthropicCliWarmProvider(env)

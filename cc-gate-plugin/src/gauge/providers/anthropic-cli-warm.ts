@@ -45,21 +45,30 @@ export function makeAnthropicCliWarmProvider(
       const outgoingText = buildAgentOutgoingText(prompt, sendOpts.schema)
 
       reachedDaemonCall = true
-      const outcome = await daemonCall(outgoingText, sendOpts.model, env, {
-        // isolation: daemonCall's REQUIRED opt (N3c-iii), verbatim — never
-        // defaulted, never substituted.
-        isolation: sendOpts.isolation,
-        // timeoutMs -> daemonCall's whole-call budget leg (its own
-        // `budgetMs`, default ACP_BUDGET.daemonLegMs). Absent leaves that
-        // default untouched.
-        ...(sendOpts.timeoutMs === undefined ? {} : { budgetMs: sendOpts.timeoutMs }),
-        // maxTokens: DELIBERATELY IGNORED. There is no CLI-lane equivalent
-        // — the CLI never had an output-length cap, the same reality N5
-        // documented for binPath. This is a spec-visible asymmetry between
-        // providers (anthropic-api DOES thread maxTokens onto max_tokens);
-        // the CLI-warm lane simply has nowhere to put it. Never errors on
-        // it — silently dropped, not rejected.
-      })
+      const outcome = await daemonCall(
+        outgoingText,
+        // model passed VERBATIM, no resolveModelId — the CLI lane never
+        // used it. (anthropic-api.ts DOES resolve; that resolution exists
+        // for the raw Messages API's own alias table, which the CLI/ACP
+        // wire has no equivalent of — nothing here to translate.)
+        sendOpts.model,
+        env,
+        {
+          // isolation: daemonCall's REQUIRED opt (N3c-iii), verbatim — never
+          // defaulted, never substituted.
+          isolation: sendOpts.isolation,
+          // timeoutMs -> daemonCall's whole-call budget leg (its own
+          // `budgetMs`, default ACP_BUDGET.daemonLegMs). Absent leaves that
+          // default untouched.
+          ...(sendOpts.timeoutMs === undefined ? {} : { budgetMs: sendOpts.timeoutMs }),
+          // maxTokens: DELIBERATELY IGNORED. There is no CLI-lane equivalent
+          // — the CLI never had an output-length cap, the same reality N5
+          // documented for binPath. This is a spec-visible asymmetry between
+          // providers (anthropic-api DOES thread maxTokens onto max_tokens);
+          // the CLI-warm lane simply has nowhere to put it. Never errors on
+          // it — silently dropped, not rejected.
+        },
+      )
 
       // no-call / call-consumed pass through UNMODIFIED — daemonCall's own
       // §6e law already did the classification; this provider adds nothing
