@@ -199,6 +199,25 @@ describe("KKAMAK_ACP_MAX_SESSIONS parsing (6)", () => {
     for (let i = 0; i < 4; i++) expect(garbagePool.acquire(GAUGE_ISOLATION, t0).ok).toBe(true)
     expect(garbagePool.acquire(GAUGE_ISOLATION, t0)).toEqual({ ok: false, reason: "pool-exhausted" })
   })
+
+  test("explicit opts.max: NaN falls back to a FINITE cap (parseMaxSessions(env)), never disables the cap", () => {
+    // Review finding (2026-08-04): Math.trunc(NaN) and Math.max(1, NaN) are
+    // both NaN, so an unguarded opts.max path would make every
+    // `entries.length >= this.max` check unconditionally false — unbounded
+    // WarmSession growth, the exact hazard the cap exists to prevent. NaN
+    // is easy for the next node to produce via `Number(someVar)` on a bad
+    // config value, so this pins the explicit-opts path to the SAME
+    // finiteness standard as the env-parsing path (parseMaxSessions),
+    // rather than trusting the caller's number verbatim.
+    const env = { ...ENV }
+    delete env.KKAMAK_ACP_MAX_SESSIONS
+    const pool = new SessionPool(env, { max: NaN, makeSession: fakeMakeSession })
+    const t0 = Date.now()
+    // falls back to parseMaxSessions(env): KKAMAK_ACP_MAX_SESSIONS is unset,
+    // so the default of 4 applies — a finite, enforced cap.
+    for (let i = 0; i < 4; i++) expect(pool.acquire(GAUGE_ISOLATION, t0).ok).toBe(true)
+    expect(pool.acquire(GAUGE_ISOLATION, t0)).toEqual({ ok: false, reason: "pool-exhausted" })
+  })
 })
 
 describe("SessionPool.reap (7)", () => {

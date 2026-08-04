@@ -131,7 +131,15 @@ export class SessionPool {
       makeSession?: (env: Record<string, string | undefined>, warmOpts: WarmConstructOpts) => WarmSessionLike
     } = {},
   ) {
-    this.max = opts.max !== undefined ? Math.max(1, Math.trunc(opts.max)) : parseMaxSessions(env)
+    // Same finiteness standard as parseMaxSessions' env path (review
+    // finding, 2026-08-04): an explicit `opts.max: NaN` — easy for the next
+    // node to produce via `Number(someVar)` on a bad config value — must
+    // fall back to the default, not survive. Unguarded, `Math.trunc(NaN)`
+    // and `Math.max(1, NaN)` are both `NaN`, and every `entries.length >=
+    // this.max` cap check is then unconditionally false: the cap silently
+    // disables and WarmSession growth (~330 MB each) goes unbounded — the
+    // exact hazard the cap exists to prevent.
+    this.max = opts.max !== undefined && Number.isFinite(opts.max) ? Math.max(1, Math.trunc(opts.max)) : parseMaxSessions(env)
     this.sessionIdleMs = opts.sessionIdleMs ?? DEFAULT_SESSION_IDLE_MS
     this.makeSession = opts.makeSession ?? ((e, warmOpts) => new WarmSession(e, warmOpts))
   }
