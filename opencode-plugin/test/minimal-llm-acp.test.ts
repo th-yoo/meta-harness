@@ -1,0 +1,140 @@
+/**
+ * minimal-llm-acp.test.ts — N5 of docs/superpowers/specs/2026-08-04-send-prompt-interface.md.
+ *
+ * `minimal/llm-acp.ts`'s `seatCall` is the wiring seam between the
+ * design-time seats (proposer/reviewer/revision) and the send-prompt
+ * interface: it registers the `anthropic-api` provider (N2) closed over the
+ * caller's env, calls `sendPrompt` with `REASONING_ISOLATION`, and maps the
+ * outcome back onto `llmCall`'s string-or-throw contract.
+ *
+ * ZERO real model calls — every test points `KKAMAK_GAUGE_SDK_BASE_URL` at a
+ * local stub server (`cc-gate-plugin/test/sdk-stub.ts`'s `stubServer`, the
+ * same helper N2's own tests use) and supplies `KKAMAK_GAUGE_AUTH_TOKEN`
+ * directly, which short-circuits the OAuth-token lookup before it ever
+ * touches a keychain or `~/.claude/.credentials.json`.
+ */
+import { describe, expect, test } from "bun:test"
+import { seatCall } from "../../minimal/llm-acp.ts"
+import { REASONING_ISOLATION } from "../../cc-gate-plugin/src/gauge/send-prompt.ts"
+import { stubServer } from "../../cc-gate-plugin/test/sdk-stub.ts"
+
+function apiResponse(text: string): Response {
+  return Response.json({
+    id: "msg_stub",
+    type: "message",
+    role: "assistant",
+    model: "claude-opus-5",
+    content: [{ type: "text", text }],
+    stop_reason: "end_turn",
+    stop_sequence: null,
+    usage: { input_tokens: 1, output_tokens: 1 },
+  })
+}
+
+describe("seatCall", () => {
+  test("ok path: resolves to the stub's text", async () => {
+    const srv = stubServer(() => apiResponse("hello from seat"))
+    try {
+      const out = await seatCall("claude-opus-5", "hi", {
+        env: { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+      })
+      expect(out).toBe("hello from seat")
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("REASONING_ISOLATION is the isolation set: system prompt reaches the wire", async () => {
+    const srv = stubServer(() => apiResponse("ok"))
+    try {
+      await seatCall("claude-opus-5", "hi", {
+        env: { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+      })
+      expect(srv.captured[0]!.body.system).toBe(REASONING_ISOLATION.systemPrompt)
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("prompt and model reach the wire verbatim", async () => {
+    const srv = stubServer(() => apiResponse("ok"))
+    try {
+      await seatCall("claude-sonnet-5", "the exact prompt text", {
+        env: { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+      })
+      const body = srv.captured[0]!.body as { model: string; messages: { role: string; content: string }[] }
+      expect(body.model).toBe("claude-sonnet-5")
+      expect(body.messages[0]!.content).toBe("the exact prompt text")
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("maxTokens: absent -> 8192 default (4x the gauge default, uncapped CLI path replaced)", async () => {
+    const srv = stubServer(() => apiResponse("ok"))
+    try {
+      await seatCall("claude-opus-5", "hi", {
+        env: { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+      })
+      expect(srv.captured[0]!.body.max_tokens).toBe(8192)
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("maxTokens: explicit override threads through", async () => {
+    const srv = stubServer(() => apiResponse("ok"))
+    try {
+      await seatCall("claude-opus-5", "hi", {
+        env: { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+        maxTokens: 1234,
+      })
+      expect(srv.captured[0]!.body.max_tokens).toBe(1234)
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("timeoutMs: explicit override threads through to the transport (slow stub times out)", async () => {
+    const srv = Bun.serve({ port: 0, fetch: () => new Promise(() => {}) }) // never responds
+    try {
+      await expect(
+        seatCall("claude-opus-5", "hi", {
+          env: { KKAMAK_GAUGE_SDK_BASE_URL: `http://localhost:${srv.port}`, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+          timeoutMs: 50,
+        }),
+      ).rejects.toThrow(/call-consumed/)
+    } finally {
+      srv.stop(true)
+    }
+  }, 10_000)
+
+  test("!ok call-consumed (HTTP 500) -> rejects with an Error naming the kind", async () => {
+    const srv = stubServer(() => new Response("boom", { status: 500 }))
+    try {
+      await expect(
+        seatCall("claude-opus-5", "hi", {
+          env: { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+        }),
+      ).rejects.toThrow(/call-consumed/)
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("registerProvider is safe to call across repeat seatCall invocations", async () => {
+    const srv = stubServer(() => apiResponse("second call"))
+    try {
+      await seatCall("claude-opus-5", "first", {
+        env: { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+      })
+      const out = await seatCall("claude-opus-5", "second", {
+        env: { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+      })
+      expect(out).toBe("second call")
+      expect(srv.captured.length).toBe(2)
+    } finally {
+      srv.stop()
+    }
+  })
+})

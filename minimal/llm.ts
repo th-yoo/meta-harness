@@ -2,13 +2,23 @@
  * minimal/llm.ts — shared host-side one-shot LLM runner for the design-time
  * seats (Proposer, Reviewer, revision calls). Extracted from propose.ts.
  *
- * Prompt rides stdin on BOTH drivers: big prompts (>0.5MB) blow Linux's
- * ~128KB per-argv-string limit (E2BIG, observed live at round 2). opencode
- * run appends piped stdin to the message (cli/cmd/run.ts resolveRunInput).
+ * Prompt rides stdin on the opencode driver: big prompts (>0.5MB) blow
+ * Linux's ~128KB per-argv-string limit (E2BIG, observed live at round 2).
+ * opencode run appends piped stdin to the message (cli/cmd/run.ts
+ * resolveRunInput).
+ *
+ * N5 (docs/superpowers/specs/2026-08-04-send-prompt-interface.md): the
+ * `claude-code` branch no longer spawns a CLI — it delegates to
+ * `llm-acp.ts`'s `seatCall`, which drives the send-prompt interface's
+ * `anthropic-api` provider directly over HTTP, with an EXPLICIT isolation
+ * set (`REASONING_ISOLATION`) instead of the CLI's undeclared harness. The
+ * `opencode` branch is untouched — opencode has no send-prompt provider and
+ * is not part of this migration.
  */
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { seatCall } from "./llm-acp.ts"
 
 export const PROPOSER_DRIVERS = {
   "claude-code": { defaultModel: "claude-opus-5" },
@@ -19,15 +29,22 @@ export type ProposerDriverId = keyof typeof PROPOSER_DRIVERS
 export interface LlmCallOptions {
   /** ABSOLUTE path to the driver binary, overriding the ambient-PATH lookup.
    *
-   * This is the seam that makes the CLI drivers testable without spending.
-   * MEASURED 2026-08-04 on Bun 1.3.1: an executable is resolved from the PATH
-   * captured at PROCESS START, NOT from a mutated `process.env.PATH` — a fake
-   * reachable only via a mutated PATH throws ENOENT, while the same fake
-   * resolves fine by absolute path or via an explicit `env`. So a test that
-   * prepends a temp dir to `process.env.PATH` and lets this spawn `"claude"`
-   * runs the REAL CLI, silently and at real cost. Inject the path instead. */
+   * This is the seam that makes the opencode driver testable without
+   * spending. MEASURED 2026-08-04 on Bun 1.3.1: an executable is resolved
+   * from the PATH captured at PROCESS START, NOT from a mutated
+   * `process.env.PATH` — a fake reachable only via a mutated PATH throws
+   * ENOENT, while the same fake resolves fine by absolute path or via an
+   * explicit `env`. So a test that prepends a temp dir to `process.env.PATH`
+   * and lets this spawn `"claude"` runs the REAL CLI, silently and at real
+   * cost. Inject the path instead.
+   *
+   * N5: meaningless on the `claude-code` branch — that branch no longer
+   * spawns a binary (it delegates to `llm-acp.ts`'s `seatCall`, an HTTP
+   * transport). Kept in the type unchanged because the `opencode` branch
+   * still uses it. */
   binPath?: string
-  /** Full environment for the child. Replaces the inherited one when given. */
+  /** Full environment for the child (opencode) or provider (claude-code).
+   * Replaces the inherited one when given. */
   env?: Record<string, string>
 }
 
@@ -46,19 +63,7 @@ export async function llmCall(
   opts: LlmCallOptions = {},
 ): Promise<string> {
   if (driverId === "claude-code") {
-    const proc = Bun.spawn([opts.binPath ?? "claude", "-p", "--model", model, "--output-format", "json"], {
-      stdin: new TextEncoder().encode(prompt),
-      stdout: "pipe",
-      stderr: "pipe",
-      ...(opts.env ? { env: opts.env } : {}),
-    })
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
-    if (exitCode !== 0) throw new Error(`claude call failed (exit ${exitCode}): ${stderr.slice(0, 400)}`)
-    return JSON.parse(stdout).result ?? ""
+    return seatCall(model, prompt, { env: opts.env })
   }
   // opencode, host-side. Isolation mirrors run.ts's container recipe:
   // - XDG_CONFIG_HOME → temp config with ONLY the CC-oauth auth plugin
