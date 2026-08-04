@@ -193,6 +193,12 @@ export class WarmSession {
     env: Record<string, string | undefined>,
     opts?: { /* …every existing option, unchanged… */ isolation?: WarmIsolation },
   )
+  /** The isolation set this session will spawn under. READONLY and declared
+   * (review finding I5): S2's wiring test and S0's default test both need to
+   * read it, and an undeclared test-only accessor bolted onto a hardened file
+   * is how that file starts drifting. Not a getter for mutation — the value
+   * is fixed at construction. */
+  readonly isolation: WarmIsolation
 }
 ```
 
@@ -221,7 +227,7 @@ test("the DEFAULT isolation is the gauge one — omitting the option changes not
   // WarmSession without `isolation` and must keep the exact wire shape the
   // daemon plan's Task 4 tests already pin.
   const ws = new WarmSession(stubEnv())
-  expect(ws.isolationForTest()).toEqual(GAUGE_ISOLATION)
+  expect(ws.isolation).toEqual(GAUGE_ISOLATION)
   ws.close()
 })
 
@@ -281,6 +287,11 @@ export interface AcpProfile {
 }
 
 export const ACP_PROFILES: Record<string, AcpProfile>
+/** THE single source of truth for review finding I2's enforcement. Derived
+ * from ACP_PROFILES — never a second hand-maintained set, because two lists
+ * of "which profiles may write a §6e stamp" is exactly the drift the
+ * `gaugeEligible` flag exists to prevent. An unknown id is NOT eligible. */
+export function isGaugeEligible(profileId: string): boolean
 /** STRICT: an unknown or absent id resolves undefined. It never falls back to
  * a default, because a typo that silently yields the gauge profile would run
  * a proposer's prompt under the gauge's empty system prompt — or worse, mark
@@ -334,6 +345,14 @@ test("an unknown profile id resolves undefined — never a silent default", () =
   expect(resolveProfile("nope")).toBeUndefined()
   expect(resolveProfile(undefined)).toBeUndefined()
 })
+test("isGaugeEligible is derived from the registry, and unknown ids are NOT eligible", () => {
+  // The §6e partition guard (finding I2/C3). One source of truth: this must
+  // agree with the flag for every registered profile, and refuse anything it
+  // does not know rather than defaulting open.
+  for (const [id, p] of Object.entries(ACP_PROFILES)) expect(isGaugeEligible(id)).toBe(p.gaugeEligible)
+  expect(isGaugeEligible("nope")).toBe(false)
+  expect(isGaugeEligible("")).toBe(false)
+})
 ```
 
 - [ ] **Step 2: run — FAIL (module missing).**
@@ -346,8 +365,26 @@ test("an unknown profile id resolves undefined — never a silent default", () =
 **Files:** create `cc-gate-plugin/src/gauge/acp-pool.ts`; test
 `cc-gate-plugin/test/acp-pool.test.ts`.
 
-**Consumes:** `WarmSession` + `TurnOutcome` (daemon plan Task 4, unchanged);
-`AcpProfile` (S1); `ACP_BUDGET` (daemon plan Task 2).
+**Consumes:** `WarmSession` + `WarmIsolation` + `TurnOutcome` — **as amended
+by Task S0**, NOT the daemon plan's original (that version hardcodes its
+isolation literal and cannot serve a non-gauge profile); `AcpProfile` +
+`resolveProfile` (S1); `ACP_BUDGET` (daemon plan Task 2).
+
+**THE WIRING, and it is the point of this task (review finding C4).** S0 gives
+`WarmSession` an `isolation` parameter and S1 defines profiles that carry one;
+nothing joins them until here. `open()` constructs:
+
+```typescript
+new WarmSession(this.env, {
+  isolation: profile.options,   // <- S1's profile becomes S0's parameter
+  cwd,                          // <- the session's own cwd, spec-required
+  // …the five ACP_BUDGET legs, exactly as the daemon's own construction
+})
+```
+
+A pool that omits `isolation` silently serves every profile under the GAUGE
+system prompt — the failure would look like a working daemon producing
+strangely terse proposals, which is why it gets its own test below.
 
 **Produces:**
 
@@ -417,6 +454,16 @@ test("the two refusal reasons are DISTINGUISHABLE — the dispatcher owes differ
   expect(pool.open("gauge", undefined, "/tmp").ok).toBe(true)
   expect(pool.open("gauge", undefined, "/tmp")).toEqual({ ok: false, reason: "pool-exhausted" })
   expect(new SessionPool(env).open("nope", undefined, "/tmp")).toEqual({ ok: false, reason: "unknown-profile" })
+})
+test("a reasoning session's WarmSession carries the REASONING isolation", () => {
+  // finding C4: S0 builds the parameter, S1 defines the options, and this is
+  // the only place they meet. Omitting it runs proposals under the gauge's
+  // empty system prompt and nothing else would catch it.
+  const pool = new SessionPool(env)
+  const r = pool.open("reasoning", undefined, "/tmp")
+  expect(r.ok && r.session.warm.isolation).toEqual(ACP_PROFILES.reasoning!.options)
+  const g = pool.open("gauge", undefined, "/tmp")
+  expect(g.ok && g.session.warm.isolation).toEqual(GAUGE_ISOLATION)
 })
 test("the session's model defaults from its profile", () => {
   const pool = new SessionPool(env)
@@ -577,12 +624,17 @@ its existing `modelProvenBy` check:
 // because this is the only path that writes a §6e transport stamp. Refuse
 // rather than fall back: the call was consumed, and a record stamped from a
 // non-gauge context would silently corrupt the §6e partition.
-if (!GAUGE_ELIGIBLE_PROFILES.has(d.profile)) return undefined
+if (!isGaugeEligible(d.profile)) return undefined
 ```
 
-Test (fake daemon, no model): a daemon answering `ok` with
-`_meta.kkamak.profile = "reasoning"` produces NO record, and the one-shot
-fallback endpoint receives ZERO requests.
+`isGaugeEligible` is imported from `acp-profiles.ts` (S1) — the ONE source of
+truth. Do not build a local set of eligible ids here; two lists drift.
+
+Tests (fake daemon, no model): a daemon answering `ok` with
+`_meta.kkamak.profile = "reasoning"` produces NO record and the one-shot
+fallback endpoint receives ZERO requests; an `ok` with an UNKNOWN profile id
+is likewise refused (`isGaugeEligible` is false for anything it does not
+know); and `profile: "gauge"` still produces a normal stamped record.
 
 - [ ] **Steps 1-5** as the daemon plan's Task 6, with fake-daemon variants
   added for `pool-exhausted` and `unknown-profile`.
@@ -697,7 +749,28 @@ the critical path for either loop.
   gauge". Now: caller applies `DEFAULT_PROFILE_ID` for an ABSENT id, then
   `resolveProfile` (still strict) runs.
 
-**NOT applied, and why:** I4 (the pool cap of 4 is asserted, not measured —
+**Second pass (same day), 2 critical + 3 important, ALL APPLIED.** Every
+critical was introduced by the first pass's own fixes, which is the signature
+of patching without re-reading:
+- **C3** — the I2 enforcement snippet called `GAUGE_ELIGIBLE_PROFILES`, a
+  symbol no task exports. Now `isGaugeEligible()` from S1, derived from
+  `ACP_PROFILES`, with unknown ids refused and a test that it agrees with the
+  flag for every registered profile.
+- **C4** — S0 built the `isolation` parameter and S1 defined profile options,
+  and NOTHING joined them: S2 constructed a `WarmSession` without passing
+  either, and still called Task 4 "unchanged" one section below C1's fix. The
+  wiring is now S2's stated purpose, with a test that a `reasoning` session
+  really carries the reasoning isolation.
+- **I5** — `isolationForTest()` was invented in an S0 test and declared
+  nowhere; now a declared `readonly isolation` field.
+- **I6** — the daemon plan's supersession note claimed Tasks 7-10 were reused
+  "verbatim" while S4 modifies Task 7. That note now separates verbatim
+  (1-3, 8-10) from verbatim-plus-delta (4 and 7).
+- **I7** — S0's edit to `warm-session.test.ts` was declared a "sixth
+  exception" from this document, which the daemon plan's own list forbids.
+  The exception is now declared IN that list, where its implementer reads.
+
+**Still NOT applied, and why:** I4 (the pool cap of 4 is asserted, not measured —
 size it from the RSS of one warm `Query` during the daemon plan's Step 1a
 probe, which already spawns one); the `reasoning` prompt text is still cited
 via the out-of-scope opencode driver instead of quoted; and no task yet owns

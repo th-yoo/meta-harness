@@ -13,12 +13,17 @@
 > recycle key rather than a container. Per user directive, that shape is
 > superseded by [2026-08-04-acp-session-pool.md](2026-08-04-acp-session-pool.md),
 > which makes each session own its `WarmSession` and serves non-gauge callers
-> (proposer, reviewer). **Still current here and reused verbatim by that plan:**
-> Tasks 1-4 (§6e registration, wire subset + budget + `modelProvenBy`, the
-> transport literal, and `WarmSession` itself) and Tasks 7-10 (gauge routing,
-> the ensure hook, the paired validation and the flip gate). **Replaced there:**
-> Task 5's dispatcher and Task 6's client surface. Read the pool plan's §A and
-> §B before implementing Task 5 or 6.
+> (proposer, reviewer). Precisely which parts of THIS plan still stand:
+> **Verbatim** — Tasks 1-3 (§6e registration, the wire subset + budget +
+> `modelProvenBy`, the transport literal) and Tasks 8-10 (the ensure hook, the
+> paired validation, the flip gate).
+> **Verbatim PLUS a delta stated in the pool plan** — Task 4 (`WarmSession`
+> gains ONE additive `isolation` parameter defaulting to the gauge set; pool
+> plan Task S0, which requires every Task 4 test here to keep passing
+> unmodified) and Task 7 (`callModelDerive` gains a gauge-eligibility refusal
+> and reads `DaemonOutcome.profile`; pool plan Task S4).
+> **Replaced** — Task 5's dispatcher and Task 6's client surface.
+> Read the pool plan's §A and §B before implementing Tasks 4-7.
 
 **RISK NOTE, READ BEFORE STARTING.** This plan's central mechanism — a `/clear` user message pushed into a **streaming-input** `Query` producing an `SDKConversationResetMessage` — has never been measured in this repo. The 2026-08-03 figures behind it came from a scratch probe that used neither this amendment's isolation option set nor streaming input. **Task 4 Step 1a is a token-free probe with an explicit STOP-and-report gate, and it is the FIRST thing implemented after Tasks 1-3.** If that probe fails, Tasks 4-10 do not proceed; the correct response is to stop and report, not to improvise a workaround. Step 1a ALSO records the terminal result's `modelUsage` keys, because the whole provenance chain turns on what those keys actually are (round-4 finding C1).
 
@@ -62,6 +67,15 @@
      - `test/gauge-refiner-cli.test.ts` — the shared `runRefinerCli` helper (`:31-49`) gains two injected env vars, and SIX tests are affected: `:56-86` (assertion change **plus** the `srv.captured[0]!` reads at `:83-84`, which the flip empties — round-4 I5), `:105` (assertion change **plus** the `sdkSrv.captured[0]!` read at `:133`, same reason), `:138`, `:159`, `:178`, `:203` (stub-shape + guard changes only, assertions preserved). `:217` ("missing req file") is unaffected — it never reaches a transport.
      - `test/gauge-wiring.test.ts:84-109` — one assertion change, a stub-shape + guard change, **and a raise of `waitFor`'s 5 000 ms default deadline (`:75-82`)**, which now has to cover a detached refiner paying a full CLI spawn (round-4 I5).
      - `test/acp-ensure.test.ts` — created BY this plan (Task 8), so not a pre-existing file and not an exception; but the flip inverts its first test's meaning (the daemon lane stops being opt-in), and Task 10 Step 3 updates it in the same commit. Recorded here so it is not forgotten.
+  6. `test/warm-session.test.ts` — APPEND ONLY, and ONLY when the ACP session
+     pool is being built: pool plan Task S0 parameterises `WarmSession`'s
+     isolation set and appends assertions that `GAUGE_ISOLATION` is the §6d
+     set field-for-field, that omitting the parameter changes nothing, and
+     that a custom `systemPrompt` reaches the wire. *No existing assertion in
+     that file may change* — the whole point of S0 is proving the gauge lane
+     did not move. Declared here rather than in the pool plan because THIS
+     list is the one an implementer of this plan reads, and a second document
+     cannot grant itself an exception to it.
      Anything beyond this list means the change is wrong — fix the change, not the test.
 
   **`test/sdk-stub.ts` is NOT widened.** Its handler type is `(captured: Captured) => Response` (`test/sdk-stub.ts:19`) — synchronous, no promise. Every never-answering stub in this plan uses raw `Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => {}) })`, the established precedent at `gauge-agent-transport.test.ts:252`.
