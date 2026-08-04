@@ -37,16 +37,14 @@ amortisation and a 1.4 s spawn is noise against a proposer call that spends
 minutes generating from a 0.5 MB prompt. That cost argument still stands. Two
 things I missed make the pooled server worth building anyway:
 
-1. **`llmCall`'s two drivers are not equivalent instruments** (`minimal/llm.ts`).
-   The opencode path deliberately replaces the system prompt
-   (`agent.build.prompt` = "careful reasoning assistant… Do not use tools"),
-   runs in an empty `--dir`, and strips the user's global config. The
-   claude-code path is a bare `claude -p --model M --output-format json` —
-   which inherits the FULL Claude Code coding-agent harness, the same ~28k
-   token preamble §6c removed from the gauge for exactly this reason. So the
-   proposer's effective system prompt today depends on which driver ran it,
-   and that has never been declared. A session PROFILE makes the isolation
-   set explicit and identical across drivers.
+1. **The claude-code proposer driver inherits the FULL CC coding-agent
+   harness, undeclared** (`minimal/llm.ts`). It is a bare
+   `claude -p --model M --output-format json`, so the proposer's effective
+   system prompt is Claude Code's own ~28k-token agent preamble — the same
+   one §6c stripped out of the gauge for exactly this reason. Nobody chose
+   that; it is what `claude -p` does by default. A session PROFILE makes the
+   proposer's isolation set an explicit, recorded decision.
+   (The opencode driver is out of scope by user direction, 2026-08-04.)
 2. **Policy centralisation.** Model choice, auth, isolation, premium routing
    and call accounting currently live in four places (`transport.ts`,
    `agent-transport.ts`, `minimal/llm.ts`, the bench drivers). One server with
@@ -457,14 +455,21 @@ Record, pre-data:
 **Files:** modify `cc-gate-plugin/src/gauge/acp-client.ts` consumers via a new
 `minimal/llm-acp.ts`; modify `minimal/llm.ts`; test `minimal/llm-acp.test.ts`.
 
-**The blocker to solve first, stated plainly:** `llmCall` is
-**synchronous** (`Bun.spawnSync`) and its callers (`propose.ts:267`, `:320`,
-`:324`; `review.ts:373`, `:385`) call it synchronously. An ACP client is
-async. So this task either (a) adds an async sibling and migrates the five
-call sites, or (b) keeps `llmCall` sync and does not use the pool. **Choose
-(a)** — but do it as an explicit, reviewed migration, because a
-sync→async change through `propose.ts`'s control flow is where a silent
-behaviour change would hide.
+**The blocker is CLEARED — done 2026-08-04, ahead of this task.**
+`llmCall` was `Bun.spawnSync`; it is now `async` on `Bun.spawn` and returns
+`Promise<string>`, with an `opts: { binPath?, env? }` seam. Only two call
+sites needed `await` (`propose.ts:267`, `:324`); the three callback sites
+were already async-tolerant, because `reviewBullet.call` is typed
+`string | Promise<string>` and awaited at `review.ts:262`. Covered by
+`opencode-plugin/test/minimal-llm.test.ts` (9 tests, fake binary, zero model
+calls). What remains for this task is only the pool routing below.
+
+**A measured trap the seam exists to prevent.** On Bun 1.3.1 an executable is
+resolved from the PATH captured at PROCESS START, not from a mutated
+`process.env.PATH`. A test that prepends a temp dir to `process.env.PATH` and
+spawns `"claude"` therefore runs the REAL CLI — silently, at real cost. That
+happened once while writing these tests. `binPath` (absolute) is the only
+honest fake; an explicit `env` also works.
 
 **Produces:**
 
@@ -487,7 +492,8 @@ export async function llmCallAsync(
 - [ ] **Step 1: Failing tests** — fake daemon: `reasoning` profile requested,
   prompt echoed verbatim, 1 MB prompt survives, and a dead socket falls back
   to `llmCall` (asserted by a spawn counter, not by output).
-- [ ] **Step 2-4:** implement; migrate the five call sites; full suite; tsc.
+- [ ] **Step 2-4:** implement; full suite; tsc. (The call-site migration is
+  already done — see above.)
 - [ ] **Step 5:** commit `feat(minimal): proposer/reviewer via the ACP pool, fail-open to claude -p`.
 
 ### Task P2 (OPTIONAL, own go): judge

@@ -16,15 +16,49 @@ export const PROPOSER_DRIVERS = {
 } as const
 export type ProposerDriverId = keyof typeof PROPOSER_DRIVERS
 
-export function llmCall(driverId: ProposerDriverId, model: string, prompt: string): string {
+export interface LlmCallOptions {
+  /** ABSOLUTE path to the driver binary, overriding the ambient-PATH lookup.
+   *
+   * This is the seam that makes the CLI drivers testable without spending.
+   * MEASURED 2026-08-04 on Bun 1.3.1: an executable is resolved from the PATH
+   * captured at PROCESS START, NOT from a mutated `process.env.PATH` — a fake
+   * reachable only via a mutated PATH throws ENOENT, while the same fake
+   * resolves fine by absolute path or via an explicit `env`. So a test that
+   * prepends a temp dir to `process.env.PATH` and lets this spawn `"claude"`
+   * runs the REAL CLI, silently and at real cost. Inject the path instead. */
+  binPath?: string
+  /** Full environment for the child. Replaces the inherited one when given. */
+  env?: Record<string, string>
+}
+
+/** One host-side design-time model call.
+ *
+ * ASYNC since 2026-08-04. It was `Bun.spawnSync`, which blocks the event loop
+ * for the entire call, and these seats routinely spend minutes in one. Every
+ * call site was already async-tolerant (`reviewBullet.call` is typed
+ * `string | Promise<string>` and awaited at review.ts:262), so this is a
+ * signature change rather than a control-flow change — but it is what lets a
+ * non-blocking transport be substituted for the CLI spawn later. */
+export async function llmCall(
+  driverId: ProposerDriverId,
+  model: string,
+  prompt: string,
+  opts: LlmCallOptions = {},
+): Promise<string> {
   if (driverId === "claude-code") {
-    const proc = Bun.spawnSync(["claude", "-p", "--model", model, "--output-format", "json"], {
+    const proc = Bun.spawn([opts.binPath ?? "claude", "-p", "--model", model, "--output-format", "json"], {
       stdin: new TextEncoder().encode(prompt),
-      maxBuffer: 32 * 1024 * 1024,
+      stdout: "pipe",
+      stderr: "pipe",
+      ...(opts.env ? { env: opts.env } : {}),
     })
-    if (proc.exitCode !== 0)
-      throw new Error(`claude call failed (exit ${proc.exitCode}): ${proc.stderr.toString().slice(0, 400)}`)
-    return JSON.parse(proc.stdout.toString()).result ?? ""
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ])
+    if (exitCode !== 0) throw new Error(`claude call failed (exit ${exitCode}): ${stderr.slice(0, 400)}`)
+    return JSON.parse(stdout).result ?? ""
   }
   // opencode, host-side. Isolation mirrors run.ts's container recipe:
   // - XDG_CONFIG_HOME → temp config with ONLY the CC-oauth auth plugin
@@ -54,19 +88,27 @@ export function llmCall(driverId: ProposerDriverId, model: string, prompt: strin
       },
     }) + "\n",
   )
-  const proc = Bun.spawnSync(["opencode", "run", "--dir", workDir, "--format", "json", "--model", model], {
-    stdin: new TextEncoder().encode(prompt),
-    maxBuffer: 32 * 1024 * 1024,
-    env: { ...process.env, XDG_CONFIG_HOME: join(scratch, "config") },
-  })
-  if (proc.exitCode !== 0)
-    throw new Error(`opencode call failed (exit ${proc.exitCode}): ${proc.stderr.toString().slice(0, 400)}`)
+  const proc = Bun.spawn(
+    [opts.binPath ?? "opencode", "run", "--dir", workDir, "--format", "json", "--model", model],
+    {
+      stdin: new TextEncoder().encode(prompt),
+      stdout: "pipe",
+      stderr: "pipe",
+      env: opts.env ?? { ...process.env, XDG_CONFIG_HOME: join(scratch, "config") },
+    },
+  )
+  const [outText, errText, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
+  if (exitCode !== 0) throw new Error(`opencode call failed (exit ${exitCode}): ${errText.slice(0, 400)}`)
   // --format json = ndjson events; a "text" event fires once per COMPLETED
   // text part (part.time.end gate) carrying the part's full text. Keyed by
   // part.id in case a completed part is re-emitted on a later message update.
   const parts = new Map<string, string>()
   const errors: string[] = []
-  for (const line of proc.stdout.toString().split("\n")) {
+  for (const line of outText.split("\n")) {
     const t = line.trim()
     if (!t.startsWith("{")) continue
     let ev: any
@@ -80,7 +122,7 @@ export function llmCall(driverId: ProposerDriverId, model: string, prompt: strin
   }
   if (parts.size === 0)
     throw new Error(
-      `opencode returned no text${errors.length ? ` — errors: ${errors.join("; ")}` : ` (stderr: ${proc.stderr.toString().slice(0, 400)})`}`,
+      `opencode returned no text${errors.length ? ` — errors: ${errors.join("; ")}` : ` (stderr: ${errText.slice(0, 400)})`}`,
     )
   return [...parts.values()].join("\n")
 }

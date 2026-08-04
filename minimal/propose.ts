@@ -264,7 +264,7 @@ console.error(
 )
 let replyText = ""
 try {
-  replyText = llmCall(driverId, model, prompt)
+  replyText = await llmCall(driverId, model, prompt)
 } catch (e: any) {
   die(String(e?.message ?? e))
 }
@@ -321,7 +321,7 @@ ${OUTPUT_BLOCK}
       }),
     revise: async (p, r) => {
       console.error(`proposer (revision): ${driverId}/${model} — reforming rule, diagnosis frozen`)
-      const reply = llmCall(driverId, model, revisionPrompt(p, r))
+      const reply = await llmCall(driverId, model, revisionPrompt(p, r))
       return (extractJsonObject(reply, PROPOSAL_KEY) as ProposalLike) ?? { action: "abstain", reason: "revision reply unparseable" }
     },
   })
