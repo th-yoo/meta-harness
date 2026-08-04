@@ -329,3 +329,25 @@ Caveat: n=3 loops, one day — provisional, revisit after the next program.
 - **Rollback:** stop using the wrapper (plain `git merge --no-ff`) — the
   checker and wrapper stay in the tree inert; no gate.json or hook state
   to unwind. First 7b-format artifact remains valid history.
+
+## Proposer send-prompt deploy boundary (2026-08-05 KST)
+
+- **Boundary ts: 1785847012141** (2026-08-04T12:36:52Z UTC) — merge of
+  `acp-session-pool` into main @ `bbdabe1` (review artifact
+  `docs/reviews/95cfa82-acp-session-pool.md`).
+- **Instrument change:** the design-time seats (proposer / reviewer /
+  revision, `minimal/propose.ts` + `minimal/review.ts`) `claude-code` driver
+  no longer spawns the CLI. `llmCall` → `seatCall` (`minimal/llm-acp.ts`) →
+  `sendPrompt` with provider `anthropic-api` (Messages API), **explicit
+  `REASONING_ISOLATION`** (closes the undeclared-harness finding: no CC
+  system prompt, no tools, no CLAUDE.md, no auto-memory), `maxTokens` 8192
+  with a hard truncation guard (`stop_reason === "max_tokens"` ⇒ throw,
+  never a silently cut proposal), 300 s timeout. The `opencode` driver is
+  byte-untouched.
+- **NOT metric-neutral** (like §6c, unlike §6b): transport, system prompt,
+  isolation, and output-cap semantics all change. Partition any
+  seat-produced data (proposals, reviews, revisions) by this ts; pre- and
+  post-boundary seat outputs must not pool.
+- **NOT activated:** the `anthropic-cli-warm` lane (ACP daemon/pool) merged
+  in the same range but is UNWIRED — no caller registers it. Wiring it is a
+  future explicit decision with its own boundary entry.
