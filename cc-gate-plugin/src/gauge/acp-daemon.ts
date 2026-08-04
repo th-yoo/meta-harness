@@ -448,9 +448,21 @@ async function runSocket(env: Record<string, string | undefined>): Promise<void>
     server.close()
     for (const s of sockets) { try { s.destroy() } catch { /* ignore */ } }
     warm.close()
-    if (!isPipe(sock) && acquireAcpLock(bindLock, Date.now())) {
-      try { fs.unlinkSync(sock) } catch { /* ignore */ }
-      releaseAcpLock(bindLock)
+    // Review finding: `acquireAcpLock` is not "never throws" — a rethrown
+    // non-EEXIST error (e.g. EACCES on the lock dir) must not skip
+    // `process.exit` below and become an unhandled rejection. Wrapping the
+    // whole acquire+unlink+release block preserves the exact semantics:
+    // lock acquired -> unlink -> release; acquisition failed (false, no
+    // throw) -> skip unlink (unchanged, the `if` is simply not entered);
+    // acquisition throws -> caught here, also skip unlink, shutdown still
+    // proceeds to exit.
+    if (!isPipe(sock)) {
+      try {
+        if (acquireAcpLock(bindLock, Date.now())) {
+          try { fs.unlinkSync(sock) } catch { /* ignore */ }
+          releaseAcpLock(bindLock)
+        }
+      } catch { /* ignore — shutdown must still reach process.exit below */ }
     }
     process.exit(code)
   }

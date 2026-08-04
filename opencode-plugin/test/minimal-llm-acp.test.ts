@@ -14,6 +14,9 @@
  * touches a keychain or `~/.claude/.credentials.json`.
  */
 import { describe, expect, test } from "bun:test"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import { seatCall } from "../../minimal/llm-acp.ts"
 import { REASONING_ISOLATION } from "../../cc-gate-plugin/src/gauge/send-prompt.ts"
 import { stubServer } from "../../cc-gate-plugin/test/sdk-stub.ts"
@@ -108,6 +111,31 @@ describe("seatCall", () => {
       srv.stop(true)
     }
   }, 10_000)
+
+  test("!ok no-call (missing auth token in the provided env) -> rejects with an Error naming the kind", async () => {
+    // No KKAMAK_GAUGE_AUTH_TOKEN in the provided env, and the seat's
+    // SeatCallOptions has no authDeps seam to stub the keychain/home
+    // lookup directly — so HOME is pointed at a fresh empty dir for the
+    // duration of this call (save/restore) to force `readAuthToken`'s
+    // filesystem fallback to fail deterministically, on this (linux)
+    // dev/CI host, without touching real credentials.
+    const srv = stubServer(() => apiResponse("must never be reached"))
+    const prevHome = process.env.HOME
+    const emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), "seatcall-no-auth-home-"))
+    process.env.HOME = emptyHome
+    try {
+      await expect(
+        seatCall("claude-opus-5", "hi", {
+          env: { KKAMAK_GAUGE_SDK_BASE_URL: srv.url },
+        }),
+      ).rejects.toThrow(/no-call/)
+      expect(srv.captured.length).toBe(0)
+    } finally {
+      if (prevHome === undefined) delete process.env.HOME
+      else process.env.HOME = prevHome
+      srv.stop()
+    }
+  })
 
   test("!ok call-consumed (HTTP 500) -> rejects with an Error naming the kind", async () => {
     const srv = stubServer(() => new Response("boom", { status: 500 }))

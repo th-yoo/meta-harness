@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { GAUGE_ISOLATION } from "../src/gauge/acp-wire.ts"
 import {
-  REASONING_ISOLATION, registerProvider, sendPrompt,
+  REASONING_ISOLATION, registerProvider, resolveProvider, sendPrompt,
 } from "../src/gauge/send-prompt.ts"
 import type { SendOutcome, SendPromptOptions } from "../src/gauge/send-prompt.ts"
 
@@ -55,11 +55,29 @@ describe("sendPrompt dispatch", () => {
   })
 
   test("a provider that throws synchronously (not via rejected promise) is also caught", async () => {
+    // A well-typed provider is declared `async`, so a real TypeScript
+    // implementation can never throw synchronously — every throw inside an
+    // async function becomes a rejected promise. The cast below exists only
+    // to simulate a provider that VIOLATES that type contract (a plain,
+    // non-async function slipped past the type system somehow), so this
+    // test still pins `sendPrompt`'s defense-in-depth for that case.
     registerProvider("fake-throws-sync", (() => {
       throw new Error("sync boom")
     }) as unknown as Parameters<typeof registerProvider>[1])
     const result = await sendPrompt("p", { model: "m1", isolation: REASONING_ISOLATION, provider: "fake-throws-sync" })
     expect(result).toEqual({ ok: false, kind: "call-consumed" })
+  })
+})
+
+describe("resolveProvider", () => {
+  test("returns the registered provider function for a known id", () => {
+    const provider = async (): Promise<SendOutcome> => ({ ok: true, text: "x", model: "m", canonicalModel: "m" })
+    registerProvider("fake-resolve-known", provider)
+    expect(resolveProvider("fake-resolve-known")).toBe(provider)
+  })
+
+  test("returns undefined for an unknown id", () => {
+    expect(resolveProvider("no-such-provider-ever-registered")).toBeUndefined()
   })
 })
 

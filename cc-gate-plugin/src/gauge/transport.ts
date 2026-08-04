@@ -210,7 +210,16 @@ export async function sdkCallOutcome(
   authDeps: AuthTokenDeps = {},
   opts: SdkTransportOptions = {},
 ): Promise<SdkOutcome> {
-  const authToken = readAuthToken(env, authDeps)
+  // Review finding: readAuthToken's "never throws" contract holds today,
+  // but it is not enforced by the type system — a future regression there
+  // must degrade to `no-call` (nothing was sent) rather than propagate as
+  // an uncaught exception out of this "never throws" function.
+  let authToken: string | undefined
+  try {
+    authToken = readAuthToken(env, authDeps)
+  } catch {
+    return { ok: false, kind: "no-call" }
+  }
   if (!authToken) return { ok: false, kind: "no-call" }
 
   let client: Anthropic

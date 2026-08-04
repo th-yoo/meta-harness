@@ -111,6 +111,17 @@ describe("acp-paths — ensureSocketDir", () => {
     const sock = path.join(blocker, "sub", "acp-x.sock")
     expect(() => ensureSocketDir(sock)).toThrow()
   })
+  test("MAY throw EACCES — the error class the contract's own comment actually names (unwritable parent)", () => {
+    const parent = tempPath("eacces-parent")
+    fs.mkdirSync(parent, { mode: 0o500 }) // read+execute, no write
+    const sock = path.join(parent, "sub", "acp-x.sock")
+    try {
+      expect(() => ensureSocketDir(sock)).toThrow()
+    } finally {
+      fs.chmodSync(parent, 0o700)
+      fs.rmSync(parent, { recursive: true, force: true })
+    }
+  })
 })
 
 describe("acp-paths — locks (signatures mirror corpus-store.ts)", () => {

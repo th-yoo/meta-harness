@@ -528,6 +528,22 @@ describe("sdkCallOutcome", () => {
     }
   })
 
+  test("a never-responding server -> { ok: false, kind: 'call-consumed' } (SDK timeout, core-level — previously only exercised through the provider layer)", async () => {
+    const srv = Bun.serve({ port: 0, fetch: () => new Promise(() => {}) }) // never responds
+    try {
+      const outcome = await sdkCallOutcome(
+        "p",
+        "claude-opus-5",
+        { KKAMAK_GAUGE_SDK_BASE_URL: `http://localhost:${srv.port}`, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+        {},
+        { timeoutMs: 50 },
+      )
+      expect(outcome).toEqual({ ok: false, kind: "call-consumed" })
+    } finally {
+      srv.stop(true)
+    }
+  }, 10_000)
+
   test("opts.system present -> request carries `system`; absent -> no `system` key at all", async () => {
     const srv = stubServer(() => okResponse("ok"))
     try {
