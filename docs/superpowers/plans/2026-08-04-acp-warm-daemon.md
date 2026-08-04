@@ -1145,7 +1145,7 @@ Move `hasClaudeCodeCredentials()` / `HAS_CLAUDE_CODE_CREDENTIALS` / `NO_CREDENTI
 
 **Why this is mandatory, not tidiness:** `sseText` is load-bearing. The spawned CLI always sends `stream: true`, and a plain `Response.json(...)` makes it silently fall back to a SECOND, non-streaming request (`gauge-agent-transport.test.ts:67-91`). Every request-count assertion in Tasks 4-7 and 10 is meaningless without an SSE-shaped stub. And `withCaptureStub()` is per-test on purpose (`:107-115`): a killed test's subprocess can land mid-next-test, so a module-level shared `CAPTURED` corrupts unrelated counts. Tests below that need their own capture array build one with `stubServer` directly and follow the same per-test discipline.
 
-**`sseText` gains ONE optional trailing parameter** — `model`, defaulting to the incumbent `"claude-haiku-4-5"` — so a test can make the stub declare a DATED snapshot id in `message_start` and drive the CLI to key `modelUsage` by it. Every existing call site is byte-unchanged. This is the only way to exercise round-4 C1 without a real model call:
+**`sseText` gains ONE optional trailing parameter** — `model`, defaulting to the incumbent `"claude-haiku-4-5"` — so a test can make the stub declare a chosen id in `message_start`. Every existing call site is byte-unchanged. **Correction (Step 1a, 2026-08-04, token-free gate probe, `.superpowers/sdd/2026-08-04-acp-warm-daemon/task-4-step1a-report.md`):** this parameter does NOT "drive the CLI to key `modelUsage` by it", as an earlier draft of this paragraph claimed — the probe measured that on the streaming-input + local-stub driving path these tests use, `modelUsage`'s key tracks the CLIENT-REQUESTED model id regardless of what `message_start` declares. The parameter is kept (tests below use it as `STUB_DECLARED_MODEL`) because it still documents what a realistic SSE stream declares and some tests need SOME value there, but it is NOT a channel for exercising round-4 C1's dated-vs-undated reconciliation. That reconciliation is exercised instead at the pure-function level (the `modelProvenBy` fixture tests) and end-to-end via Task 6's `fakeDaemon`, which fabricates `_meta.model` directly on the ACP wire rather than through this parameter:
 
 ```typescript
 export function sseText(text: string, model = "claude-haiku-4-5"): Response {
@@ -1289,11 +1289,26 @@ import { stubServer } from "./sdk-stub.ts"
 // margin has to exist or a slow host produces a false failure.
 const CLI_TEST_TIMEOUT_MS = 90_000
 const HAIKU = "claude-haiku-4-5"
-// What the real API and this repo's captured transcripts actually key
-// modelUsage by (opencode-plugin/test/fixtures/drivers/claude-code/
-// success.ndjson:22). Step 1a recorded the observed value; use THAT if it
-// differed.
-const HAIKU_DATED = "claude-haiku-4-5-20251001"
+// What the stub DECLARES in message_start. Step 1a (2026-08-04, token-free
+// gate probe, `.superpowers/sdd/2026-08-04-acp-warm-daemon/task-4-step1a-
+// report.md`) measured that on the streaming-input + local-stub driving path
+// these WarmSession tests use, this declared id does NOT propagate into
+// modelUsage's key -- so it must never be read as a prediction of what
+// TurnOutcome.model will be. Kept dated only because most tests below don't
+// assert on the model at all and any string will do; this is what the real
+// API and this repo's captured transcripts declare
+// (opencode-plugin/test/fixtures/drivers/claude-code/success.ndjson:22).
+const STUB_DECLARED_MODEL = "claude-haiku-4-5-20251001"
+// What modelUsage IS ACTUALLY keyed by on THIS driving path (Step 1a,
+// measured 2026-08-04, same report): the client-requested model id,
+// verbatim -- identical to HAIKU. Tests that assert on TurnOutcome.model use
+// THIS constant, never STUB_DECLARED_MODEL. The genuinely-differently-
+// spelled-key case (real API keys modelUsage by a DATED snapshot for an
+// undated request) is proven at the pure-function level by the
+// `modelProvenBy` fixtures above and, end-to-end, by Task 6's `fakeDaemon`
+// (its `model` default IS the dated form) -- neither goes through
+// `sseText`'s `message_start`, so neither is affected by this finding.
+const HAIKU_OBSERVED_KEY = HAIKU
 // §6e/round-4 C3: the turn's timers start at the PUSH while the subprocess
 // is still booting (§6d measured 1.25-1.46s). Every override below uses
 // this floor; only hardGraceMs and queueWaitMs may be small, because
@@ -1304,7 +1319,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
   test("two records reuse one subprocess; the second context is clean; exactly one call each", async () => {
     let n = 0
     const CAPTURED: Array<Record<string, unknown>> = []
-    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText(`ANSWER-${++n}`, HAIKU_DATED) })
+    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText(`ANSWER-${++n}`, STUB_DECLARED_MODEL) })
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url })
     try {
       const r1 = await ws.oneShot("first record prompt", HAIKU, { recycle: true })
@@ -1326,21 +1341,38 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     } finally { ws.close(); cap.stop() }
   }, CLI_TEST_TIMEOUT_MS)
 
-  test("ROUND-4 C1 LOCK: a DATED modelUsage key is evidence for the undated request", async () => {
-    // The single most expensive defect this plan can ship. The real API keys
-    // modelUsage by the dated snapshot id while the deriver requests the
-    // undated alias; a strict-equality proof would report call-consumed for
-    // EVERY honest turn, and Task 9 would spend a whole sized go for zero
-    // records. WarmSession must report the KEY as evidence and let
-    // modelProvenBy reconcile it — not compare, and not echo the request.
-    const cap = stubServer(() => sseText("ANSWER", HAIKU_DATED))
+  test("ROUND-4 C1, RETARGETED (Step 1a, 2026-08-04): WarmSession forwards modelUsage's KEY verbatim, and modelProvenBy accepts it", async () => {
+    // This test used to assert `r.model === HAIKU_DATED` on the theory that
+    // declaring a dated snapshot id in the stub's message_start makes the
+    // real CLI/SDK key modelUsage by that same dated id. Step 1a (token-free
+    // gate probe, `.superpowers/sdd/2026-08-04-acp-warm-daemon/
+    // task-4-step1a-report.md`) measured that this is FALSE on the
+    // streaming-input + local-stub driving path these WarmSession tests use:
+    // modelUsage came back keyed by the UNDATED alias
+    // ("claude-haiku-4-5") regardless of what message_start declared —
+    // `sseText`'s declared id and modelUsage's key are NOT the same channel
+    // here. Asserting the old dated expectation would fail a CORRECT
+    // implementation on every credentialed host, so this test now asserts
+    // the OBSERVED shape: the key WarmSession forwards equals the request,
+    // verbatim, and modelProvenBy still accepts it (the degenerate but
+    // real case of its matching rule).
+    //
+    // The genuinely-differently-spelled-key case this test originally meant
+    // to lock down (a DATED modelUsage key proving an UNDATED request) is
+    // NOT re-derivable through this stub layer per the finding above; it is
+    // covered instead (a) at the pure-function level by the `modelProvenBy`
+    // fixture tests above (`k.startsWith(m + "-")` case), and (b)
+    // end-to-end by Task 6's `fakeDaemon`, whose `model` default IS the
+    // dated form and which fabricates `_meta.model` directly on the ACP
+    // wire rather than through `sseText`'s `message_start` — a channel Step
+    // 1a did not implicate.
+    const cap = stubServer(() => sseText("ANSWER", STUB_DECLARED_MODEL))
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url })
     try {
-      const r = await ws.oneShot("dated key record", HAIKU, { recycle: true })
+      const r = await ws.oneShot("model-evidence record", HAIKU, { recycle: true })
       expect(r.kind).toBe("ok")
       if (r.kind !== "ok") return
-      expect(r.model).toBe(HAIKU_DATED)                      // the KEY, verbatim
-      expect(r.model).not.toBe(HAIKU)                        // NOT the request echoed back
+      expect(r.model).toBe(HAIKU_OBSERVED_KEY)               // the KEY, verbatim — observed undated
       expect(modelProvenBy(r.model, HAIKU, r.canonicalModel)).toBe(true)
     } finally { ws.close(); cap.stop() }
   }, CLI_TEST_TIMEOUT_MS)
@@ -1366,7 +1398,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
 
   test("recycle:false keeps context (ACP multi-prompt session semantics)", async () => {
     const CAPTURED: Array<Record<string, unknown>> = []
-    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", HAIKU_DATED) })
+    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", STUB_DECLARED_MODEL) })
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url })
     try {
       await ws.oneShot("turn one marker", HAIKU, { recycle: true })
@@ -1384,7 +1416,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     // hard timer at t0+12s at the latest. r2 then runs on a warm-or-fresh
     // session with its OWN 8s budget, which covers a respawn. ~22s worst
     // case, well inside the 90s test timeout.
-    const cap = hangFirstServer("ANSWER", HAIKU_DATED)
+    const cap = hangFirstServer("ANSWER", STUB_DECLARED_MODEL)
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { turnTimeoutMs: T, hardGraceMs: 4_000 })
     try {
@@ -1398,7 +1430,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
 
   test("law L6: a 500 (api_retry) is call-consumed and the retry is never consumed as a result", async () => {
     let n = 0
-    const cap = stubServer(() => (++n === 1 ? new Response("boom", { status: 500 }) : sseText("ANSWER", HAIKU_DATED)))
+    const cap = stubServer(() => (++n === 1 ? new Response("boom", { status: 500 }) : sseText("ANSWER", STUB_DECLARED_MODEL)))
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url })
     try {
       const r = await ws.oneShot("retry-provoking record", HAIKU, { recycle: true })
@@ -1434,7 +1466,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     // 6s cap would make the assertion depend on host speed. The cap itself
     // has its own dedicated test below.
     const CAPTURED: Array<Record<string, unknown>> = []
-    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", HAIKU_DATED) })
+    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", STUB_DECLARED_MODEL) })
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { queueWaitMs: 60_000 })
     try {
@@ -1451,7 +1483,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
   test("law L4: a turn still queued at its queue-wait cap resolves no-call, provably unsent", async () => {
     // queueWaitMs is the ONLY short timer here — it measures queue
     // residency, not generation, so it is not bound by CLI_SPAWN_BUDGET_MS.
-    const cap = hangFirstServer("ANSWER", HAIKU_DATED)
+    const cap = hangFirstServer("ANSWER", STUB_DECLARED_MODEL)
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { turnTimeoutMs: T, hardGraceMs: 2_000, queueWaitMs: 500 })
     try {
@@ -1464,7 +1496,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
   }, CLI_TEST_TIMEOUT_MS)
 
   test("cancel(tag) drops only that caller's turn, never the other caller's in-flight turn", async () => {
-    const cap = hangFirstServer("ANSWER", HAIKU_DATED)
+    const cap = hangFirstServer("ANSWER", STUB_DECLARED_MODEL)
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { turnTimeoutMs: T, hardGraceMs: 2_000, queueWaitMs: 60_000 })
     try {
@@ -1493,7 +1525,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     // model call. Waiting for the stub to see A's request is the only
     // observable proof A crossed the send boundary, and the CLI takes
     // 1.25-1.46s to get there.
-    const cap = hangFirstServer("ANSWER", HAIKU_DATED)
+    const cap = hangFirstServer("ANSWER", STUB_DECLARED_MODEL)
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { turnTimeoutMs: T, hardGraceMs: 2_000, queueWaitMs: 60_000 })
     try {
@@ -1517,7 +1549,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     // asked to prevent, and the interrupt() may have aborted the in-flight
     // /clear instead of a turn.
     const CAPTURED: Array<Record<string, unknown>> = []
-    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", HAIKU_DATED) })
+    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", STUB_DECLARED_MODEL) })
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { turnTimeoutMs: T, hardGraceMs: 2_000, queueWaitMs: 60_000 })
     try {
@@ -1552,7 +1584,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     // timer at t0+8s, hardTimer at t0+8.001s; B runs on a fresh Query,
     // pushes at ~t0+8s, reaches the stub ~t0+9.5s as request #2 and is
     // answered — inside B's own 8s budget. ~10s total.
-    const cap = hangFirstServer("ANSWER", HAIKU_DATED)
+    const cap = hangFirstServer("ANSWER", STUB_DECLARED_MODEL)
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { turnTimeoutMs: T, hardGraceMs: 1, queueWaitMs: 60_000 })
     try {
@@ -1566,7 +1598,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
   }, CLI_TEST_TIMEOUT_MS)
 
   test("close() settles every outstanding caller — no hanging promises", async () => {
-    const cap = hangFirstServer("ANSWER", HAIKU_DATED)
+    const cap = hangFirstServer("ANSWER", STUB_DECLARED_MODEL)
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url },
       { turnTimeoutMs: 30_000, hardGraceMs: 5_000, queueWaitMs: 60_000 })
     const inflight = ws.oneShot("A", HAIKU, { recycle: true })
@@ -1591,7 +1623,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     // close(). The import is the widest such window (~84ms measured) and
     // this test drives it directly.
     const CAPTURED: Array<Record<string, unknown>> = []
-    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", HAIKU_DATED) })
+    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", STUB_DECLARED_MODEL) })
     const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url })
     const p = ws.oneShot("must never reach the model", HAIKU, { recycle: true })
     ws.close()                                       // same tick as the enqueue
@@ -2316,7 +2348,7 @@ Record in the SDD progress notes:
 
 (b) **the §6e OPEN DISCREPANCY, resolved by measurement.** Capture the request body of a post-`/clear` warm turn AND of a fresh-spawn one-shot `agentSdkCall` turn under the same option set and the same prompt, and record `messages.length` and total byte size for BOTH. §6e attributes ~423 B of `/clear` echo to the warm lane; §6d's PER-CALLER paragraph (spec line 662) attributes the same ~423 B to the ONE-SHOT lane. **Whichever of the two statements the measurement contradicts is corrected in THIS task's commit** — amend §6e's residue paragraph, or spec line 662, or both, and say which in the commit message. Do not leave the spec self-contradictory past this task.
 
-(c) **the `modelUsage` shape, as OBSERVED, against Step 1a's record.** Print the `modelUsage` object of one warm turn and confirm (i) which key form it uses, (ii) whether `canonicalModel` is populated, and (iii) that `modelProvenBy(key, "claude-haiku-4-5", canonicalModel)` is true. Step 1a recorded this before any code existed; this is the confirmation that `route()` reads the same thing the probe saw. **Step 1a's gate probe (2026-08-04, token-free, `.superpowers/sdd/2026-08-04-acp-warm-daemon/task-4-step1a-report.md`) already found the observed key form differs from `HAIKU_DATED`: on the local-stub/streaming-input driving path it is the UNDATED alias `"claude-haiku-4-5"` (`canonicalModel` identical), not the dated snapshot id — update the test constant to that OBSERVED UNDATED value. Do not loosen `modelProvenBy`**: the predicate already accommodates both forms by construction (`k === m OR k.startsWith(m + "-") OR canonicalModel === m`) and needs no change; the dated form remains valid and is observed on the real-CLI driving path (`opencode-plugin/test/fixtures/drivers/claude-code/success.ndjson:22`), which this probe did not re-measure. The constant is a fixture calibrated to the mechanism actually driving these tests; the predicate is the registered rule.
+(c) **the `modelUsage` shape, as OBSERVED, against Step 1a's record.** Print the `modelUsage` object of one warm turn and confirm (i) which key form it uses, (ii) whether `canonicalModel` is populated, and (iii) that `modelProvenBy(key, "claude-haiku-4-5", canonicalModel)` is true. Step 1a recorded this before any code existed; this is the confirmation that `route()` reads the same thing the probe saw. **Step 1a's gate probe (2026-08-04, token-free, `.superpowers/sdd/2026-08-04-acp-warm-daemon/task-4-step1a-report.md`) already found the observed key form is the UNDATED alias `"claude-haiku-4-5"` (`canonicalModel` identical), not the dated snapshot id `sseText`'s `message_start` declares — those two are NOT the same channel on this driving path. Step 1's test bodies above are already calibrated to this: the old single `HAIKU_DATED` constant is split into `STUB_DECLARED_MODEL` (what the stub's `message_start` declares — inert w.r.t. `modelUsage`'s key here) and `HAIKU_OBSERVED_KEY` (what the key actually is, used for every assertion on `TurnOutcome.model`), and the former "ROUND-4 C1 LOCK" test is retargeted accordingly. This step's job is to CONFIRM that split against a fresh run, not to introduce it. Do not loosen `modelProvenBy`**: the predicate already accommodates both forms by construction (`k === m OR k.startsWith(m + "-") OR canonicalModel === m`) and needs no change; the dated form remains valid and is observed on the real-CLI driving path (`opencode-plugin/test/fixtures/drivers/claude-code/success.ndjson:22`) and is still exercised end-to-end by Task 6's `fakeDaemon`, whose `model` default is the dated form. The constants are fixtures calibrated to the mechanism actually driving these tests; the predicate is the registered rule.
 
 Once (b) is measured, tighten the `toBeLessThanOrEqual(2)` guard to the exact observed value in a follow-up commit.
 
