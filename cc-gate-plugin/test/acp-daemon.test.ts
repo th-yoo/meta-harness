@@ -629,6 +629,77 @@ describe("acp-daemon dispatcher — outstanding-tag bookkeeping (fake SessionPoo
   })
 })
 
+// ── session/new isolation validation (fake SessionPool, no daemon process):
+// final-review Important 1 — a shallow `typeof === "object"` check let
+// `{}`, `[]`, and any partial isolation through, and the accepted value is
+// spread RAW into the SDK `query()` options (warm-session.ts:478), so a
+// missing field silently un-isolates the session instead of failing
+// closed. These pin the fix at the wire boundary: malformed shapes must
+// never reach `state.sessions`, and the canonical GAUGE_ISOLATION must
+// still be accepted byte-for-byte.
+describe("acp-daemon dispatcher — session/new isolation structural validation", () => {
+  test("empty object isolation ({}) is rejected with -32602 and no session is recorded", async () => {
+    const { pool } = fakeDispatchPool()
+    const state = createDaemonState()
+    const dispatch = createDispatcher(pool, state, "fp")
+    const frames: Array<Record<string, unknown>> = []
+    await dispatch({ id: 1, method: "session/new", params: {
+      cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: {} } },
+    } }, (m) => frames.push(m as Record<string, unknown>))
+    expect(frames[0]).toMatchObject({ error: { code: -32602 } })
+    expect(state.sessions.size).toBe(0)
+  })
+
+  test("array isolation ([]) is rejected with -32602 and no session is recorded", async () => {
+    const { pool } = fakeDispatchPool()
+    const state = createDaemonState()
+    const dispatch = createDispatcher(pool, state, "fp")
+    const frames: Array<Record<string, unknown>> = []
+    await dispatch({ id: 1, method: "session/new", params: {
+      cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: [] } },
+    } }, (m) => frames.push(m as Record<string, unknown>))
+    expect(frames[0]).toMatchObject({ error: { code: -32602 } })
+    expect(state.sessions.size).toBe(0)
+  })
+
+  test("partial isolation (only systemPrompt) is rejected with -32602 and no session is recorded", async () => {
+    const { pool } = fakeDispatchPool()
+    const state = createDaemonState()
+    const dispatch = createDispatcher(pool, state, "fp")
+    const frames: Array<Record<string, unknown>> = []
+    await dispatch({ id: 1, method: "session/new", params: {
+      cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: { systemPrompt: "x" } } },
+    } }, (m) => frames.push(m as Record<string, unknown>))
+    expect(frames[0]).toMatchObject({ error: { code: -32602 } })
+    expect(state.sessions.size).toBe(0)
+  })
+
+  test("partial isolation missing only settings.autoMemoryEnabled is rejected with -32602", async () => {
+    const { pool } = fakeDispatchPool()
+    const state = createDaemonState()
+    const dispatch = createDispatcher(pool, state, "fp")
+    const frames: Array<Record<string, unknown>> = []
+    const { settings: _omit, ...rest } = GAUGE_ISOLATION
+    await dispatch({ id: 1, method: "session/new", params: {
+      cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: rest } },
+    } }, (m) => frames.push(m as Record<string, unknown>))
+    expect(frames[0]).toMatchObject({ error: { code: -32602 } })
+    expect(state.sessions.size).toBe(0)
+  })
+
+  test("full GAUGE_ISOLATION is accepted and a session is recorded", async () => {
+    const { pool } = fakeDispatchPool()
+    const state = createDaemonState()
+    const dispatch = createDispatcher(pool, state, "fp")
+    const frames: Array<Record<string, unknown>> = []
+    await dispatch({ id: 1, method: "session/new", params: {
+      cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } },
+    } }, (m) => frames.push(m as Record<string, unknown>))
+    expect(frames[0]).toMatchObject({ result: { sessionId: expect.any(String) } })
+    expect(state.sessions.size).toBe(1)
+  })
+})
+
 // ── model-reaching behaviour: these DO spawn the bundled CLI, so they carry
 // the credentials guard.
 describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket (reaches the stubbed model)", () => {

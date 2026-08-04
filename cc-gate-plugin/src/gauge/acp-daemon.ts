@@ -128,13 +128,41 @@ function readModel(params: unknown): string | undefined {
   return typeof m === "string" && m.length > 0 ? m : undefined
 }
 
-/** Presence + typeof check ONLY — no deep field validation. The type guard
- * in acp-wire.test.ts and the caller's own tsc own field-shape correctness;
- * a daemon reaching further into the object to second-guess it would be a
- * duplicate, potentially-divergent authority on the same contract. */
+/** Full structural validation against the `WarmIsolation` interface
+ * (acp-wire.ts), field-for-field. A shallow `typeof iso === "object"` check
+ * (the prior implementation) accepts `{}`, `[]`, and any partial object —
+ * and the accepted value is spread RAW into the SDK `query()` options at
+ * warm-session.ts:478, so a missing `tools`/`settingSources`/`settings`/
+ * `strictMcpConfig` field does not fail closed, it silently restores the
+ * FULL claude-code harness (tools, CLAUDE.md, auto-memory, MCP) — exactly
+ * the instrument contamination §6e isolation exists to prevent (final-review
+ * Important 1). This is therefore a security boundary, not a convenience
+ * check: every field the wider system trusts to be present and pinned must
+ * be verified present and correctly shaped here, not deferred to whatever
+ * happens to read the object next. `Array.isArray` is rejected explicitly
+ * because arrays are `typeof "object"` and satisfy no field access at all
+ * (every property read below would be `undefined`, tripping the same
+ * failure this function exists to catch — checked first for a clearer
+ * reason to reject). */
+function isWellFormedIsolation(iso: unknown): iso is WarmIsolation {
+  if (iso === null || typeof iso !== "object" || Array.isArray(iso)) return false
+  const o = iso as Record<string, unknown>
+  if (typeof o.systemPrompt !== "string") return false
+  if (!Array.isArray(o.settingSources)) return false
+  if (o.settings === null || typeof o.settings !== "object" || Array.isArray(o.settings)) return false
+  if ((o.settings as Record<string, unknown>).autoMemoryEnabled !== false) return false
+  if (o.persistSession !== false) return false
+  if (o.strictMcpConfig !== true) return false
+  if (!Array.isArray(o.tools)) return false
+  if (typeof o.title !== "string") return false
+  if (o.thinking === null || typeof o.thinking !== "object" || Array.isArray(o.thinking)) return false
+  if (typeof (o.thinking as Record<string, unknown>).type !== "string") return false
+  return true
+}
+
 function readIsolation(params: unknown): WarmIsolation | undefined {
   const iso = (params as { _meta?: { kkamak?: { isolation?: unknown } } } | undefined)?._meta?.kkamak?.isolation
-  return iso !== null && iso !== undefined && typeof iso === "object" ? (iso as WarmIsolation) : undefined
+  return isWellFormedIsolation(iso) ? iso : undefined
 }
 
 function readSessionId(params: unknown): string | undefined {
@@ -201,13 +229,14 @@ export function createDispatcher(pool: SessionPool, state: DaemonState, fingerpr
 
         case ACP_SESSION_NEW: {
           // params.cwd is ACCEPTED AND IGNORED (§6e delta (b): the
-          // instrument pins a neutral cwd). Isolation is REQUIRED: presence
-          // + typeof check only (readIsolation's own comment) — a
-          // missing/malformed isolation means nothing CAN be pushed under
-          // any policy, so this is invalid params (-32602), not a
-          // model-call error class: nothing was spent, no
-          // `data.callConsumed` to report. Cheap otherwise — no model work,
-          // no recycle — so an abandoned session/new costs nothing.
+          // instrument pins a neutral cwd). Isolation is REQUIRED: full
+          // structural validation against WarmIsolation, field-for-field
+          // (isWellFormedIsolation's own comment) — a missing/malformed
+          // isolation means nothing CAN be pushed under any policy, so this
+          // is invalid params (-32602), not a model-call error class:
+          // nothing was spent, no `data.callConsumed` to report. Cheap
+          // otherwise — no model work, no recycle — so an abandoned
+          // session/new costs nothing.
           const isolation = readIsolation(params)
           if (!isolation) {
             respondError(-32602, "session/new requires a well-formed _meta.kkamak.isolation")
