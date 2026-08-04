@@ -81,8 +81,12 @@ export interface AgentSdkOptions {
 const CALL_TIMEOUT_MS = 60_000
 
 /** Builds the outgoing message text, appending a terse schema instruction
- * when a schema is given. Never mutates the caller's `messageText`. */
-function buildOutgoingText(messageText: string, schema: Record<string, unknown> | undefined): string {
+ * when a schema is given. Never mutates the caller's `messageText`.
+ *
+ * Exported (Task 6) as the shared outgoing-text builder: §6e "the two lanes
+ * must differ in transport only" — `callModelDerive` builds ONE string used
+ * byte-identically by `daemonCall` and `agentSdkCall`. */
+export function buildAgentOutgoingText(messageText: string, schema: Record<string, unknown> | undefined): string {
   if (!schema) return messageText
   return `${messageText}\n\nRespond with ONLY a JSON object matching this schema, no prose and no markdown fences:\n${JSON.stringify(schema)}`
 }
@@ -115,7 +119,7 @@ export async function agentSdkCall(
     for (const [k, v] of Object.entries(env)) if (v !== undefined) subprocessEnv[k] = v
 
     const it = query({
-      prompt: buildOutgoingText(messageText, opts.schema),
+      prompt: buildAgentOutgoingText(messageText, opts.schema),
       options: {
         model,
         systemPrompt: "",
