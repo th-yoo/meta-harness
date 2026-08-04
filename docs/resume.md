@@ -63,6 +63,80 @@ RULES THAT BIT ME YESTERDAY, IN PRIORITY ORDER:
    changes · per-task reviews · grep-verify · script-tally · SITREP.
 ```
 
+## ✅ SESSION END 2026-08-04 (`yoo-dev` office) — §6d MERGED · §6e REGISTERED + GATE MEASURED · ACP LANE HALF-BUILT on branch `acp-session-pool` (13 commits, 936 tests green, UNPUSHED) · SEND-PROMPT REDESIGN RULED
+
+**RESUME PROMPT (office `yoo-dev`):**
+```
+Resume kkamak (meta-harness), 2026-08-05. Read docs/resume.md FIRST (this
+top block), then the SDD ledger at
+.superpowers/sdd/2026-08-04-acp-session-pool/progress.md — it is the
+authoritative node-by-node record and it names two owed reviews.
+
+STATE: main @ 6c0f1c8 pushed. Branch `acp-session-pool` @ e899efb,
+13 commits, 936 tests + tsc green, tree clean, **NOT PUSHED** — push it
+first, it is the only copy and nothing on it travels until you do.
+
+TWO REVIEWS ARE OWED before any new node. Both nodes are BUILT and GREEN
+but UNREVIEWED, which is the one state the SDD loop forbids carrying
+forward:
+ (a) T2n fix re-review — scoped range `261621c..e899efb` (one test-file
+     commit, cheap tier). The fix added type-level OnlyKkamak guards and
+     the implementer VERIFIED them by injecting an optional `_meta` key
+     and confirming tsc fails while bun test stays green.
+ (b) N1 task review — range `2ecf6d5..261621c` (sendPrompt + registry).
+Use scripts/review-package + task-reviewer-prompt from the
+subagent-driven-development skill; briefs and reports are in
+.superpowers/sdd/2026-08-04-acp-warm-daemon/.
+
+THE DESIGN CHANGED MID-SESSION, on a user ruling: "session ideas for
+proposer, reviewer, judge, refiner ... is just keep-alive." So callers
+must NEVER see an ACP session. docs/superpowers/specs/2026-08-04-send-
+prompt-interface.md is the governing note (~200 lines, deliberately
+short) and it SUPERSEDES Tasks S1-S4/P0-P2 of the session-pool plan with
+nodes N1-N5. N1 is built. N2 (anthropic-api provider wrapping today's
+sdkCall) is next and unblocks N5 with no warm-process machinery.
+
+THE GATE FIRED AND IT PAID FOR ITSELF. T4·1a (token-free probe) measured
+`/clear` on a streaming-input Query: conversation_reset arrives ~10ms
+after the push, costs ZERO HTTP requests, transcript really resets — but
+`/clear` ALSO emits its OWN synthetic local result (num_turns 0,
+modelUsage {}), so three result frames per recycle, not two. Left
+unfixed that settles a live record from an empty-evidence frame on every
+recycle. §6e now carries a BINDING sequencing rule (awaitClear consumes
+BOTH signals); field-sniffing was explicitly rejected. Also measured:
+modelUsage keys UNDATED on this path, so the dated-key assumption from
+round-4 review does NOT hold here — constants split into
+STUB_DECLARED_MODEL / HAIKU_OBSERVED_KEY.
+
+UNRESOLVED, and the first one blocks N5:
+ 1. **Packaging.** cc-gate-plugin/src/ may not import outside its own
+    root (live test self-contained.test.ts; the plugin is copied out of
+    the monorepo on install). The only precedent runs the other way —
+    cc-gate-plugin VENDORS byte-copies of minimal/. minimal/ has no
+    package.json/tsconfig and no workspace link. N1 is reachable (zero
+    deps) but N5 breaks the moment it needs N2's @anthropic-ai/sdk.
+ 2. Pool cap KKAMAK_ACP_MAX_SESSIONS is still an asserted 4; T4's Step-4
+    report now has the RSS data to size it.
+ 3. Which doc owns the proposer's boundary ts (old P0 never resolved it).
+ 4. N4 (OpenAI provider) bills real money — own sized go.
+
+RULES THAT EARNED THEIR KEEP TODAY:
+ · A token-free probe before building beats any amount of plan review.
+   Four architect rounds (31/29/30/26 findings) never found what one
+   5-minute probe did, and each round's fixes generated the next round's
+   criticals.
+ · Reviews of a task's own tests catch tautologies: T4's retargeted test
+   would have passed for a request-ECHOING implementation, the exact
+   thing §6e's provenance rule exists to forbid.
+ · Verify a guard by breaking it deliberately, then reverting.
+ · I ran one unintended real model call today — faked a CLI via
+   process.env.PATH, but Bun resolves argv[0] from the PATH captured at
+   PROCESS START, so it hit the real binary. Inject the path instead.
+ · Explicit sized go before spend · spec-is-law, pre-data amendments
+   only · merges via scripts/merge-with-gate.sh with a committed
+   docs/reviews/<sha>-<slug>.md (7b ARMED).
+```
+
 ## 📡 RELAY → MacBook (`yoo-mac`), handed off 2026-08-03 ~16:50 KST from office
 
 **PASTE THIS ON THE MACBOOK:**
