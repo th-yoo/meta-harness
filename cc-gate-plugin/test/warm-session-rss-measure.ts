@@ -23,6 +23,7 @@
 // across whatever pids are new. Every session this script opens is closed
 // before exit, and cleanup is verified pid-scoped (never pkill -f).
 import fs from "node:fs"
+import { execFileSync } from "node:child_process"
 import { WarmSession } from "../src/gauge/warm-session.ts"
 import { sseText, HAS_CLAUDE_CODE_CREDENTIALS, NO_CREDENTIALS_SKIP_REASON } from "./agent-cli-stub.ts"
 import { stubServer } from "./sdk-stub.ts"
@@ -35,7 +36,24 @@ if (!HAS_CLAUDE_CODE_CREDENTIALS) {
 const HAIKU = "claude-haiku-4-5"
 const HOST_PID = process.pid
 
+// Darwin has no /proc: the original readers silently returned 0/[] there and
+// the whole probe measured 0 MB (caught on the MacBook 2026-08-05). Each
+// reader platform-branches; the linux (/proc) branch is byte-unchanged.
+const IS_DARWIN = process.platform === "darwin"
+
+function psOut(args: string[]): string {
+  try {
+    return execFileSync("ps", args, { encoding: "utf8" })
+  } catch {
+    return ""   // ps exits 1 when the pid is gone -- treat as absent
+  }
+}
+
 function vmRssKb(pid: number): number {
+  if (IS_DARWIN) {
+    const out = psOut(["-o", "rss=", "-p", String(pid)]).trim()
+    return out ? Number(out) : 0   // ps rss is already in KB
+  }
   try {
     const status = fs.readFileSync(`/proc/${pid}/status`, "utf-8")
     const m = status.match(/^VmRSS:\s+(\d+)\s+kB/m)
@@ -45,11 +63,21 @@ function vmRssKb(pid: number): number {
   }
 }
 
-/** Direct children of `pid`, unioned across every thread's own
+/** Direct children of `pid`. Linux: unioned across every thread's own
  * .../task/<tid>/children (a multi-threaded process's children can be
  * reported under a non-leader task; scanning only task/<pid>/children would
- * silently miss some). */
+ * silently miss some). Darwin: `ps -axo pid=,ppid=` scan — process-level
+ * parentage only, which is all darwin exposes and all this probe needs
+ * (children are processes, never bare threads). */
 function directChildren(pid: number): number[] {
+  if (IS_DARWIN) {
+    const out = new Set<number>()
+    for (const line of psOut(["-axo", "pid=,ppid="]).split("\n")) {
+      const [c, p] = line.trim().split(/\s+/).map(Number)
+      if (p === pid && c !== undefined && Number.isInteger(c) && c > 0) out.add(c)
+    }
+    return [...out]
+  }
   const out = new Set<number>()
   let taskDirs: string[] = []
   try {
@@ -122,6 +150,20 @@ function mb(kb: number): string {
 }
 
 function memAvailableKb(): number {
+  if (IS_DARWIN) {
+    // No MemAvailable equivalent; approximate with vm_stat's free +
+    // inactive pages (inactive is reclaimable, same spirit as MemAvailable).
+    // Informational lines only -- no threshold logic reads this.
+    try {
+      const out = execFileSync("vm_stat", { encoding: "utf8" })
+      const page = Number(out.match(/page size of (\d+) bytes/)?.[1] ?? 4096)
+      const free = Number(out.match(/Pages free:\s+(\d+)\./)?.[1] ?? 0)
+      const inactive = Number(out.match(/Pages inactive:\s+(\d+)\./)?.[1] ?? 0)
+      return Math.round(((free + inactive) * page) / 1024)
+    } catch {
+      return 0
+    }
+  }
   const meminfo = fs.readFileSync("/proc/meminfo", "utf-8")
   const m = meminfo.match(/^MemAvailable:\s+(\d+)\s+kB/m)
   return m ? Number(m[1]) : 0
