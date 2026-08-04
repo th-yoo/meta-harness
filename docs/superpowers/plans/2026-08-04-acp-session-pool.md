@@ -107,10 +107,17 @@ session-modes, extensibility) on 2026-08-04.
   contradicted here: the §6e wire-send boundary law, `ACP_BUDGET` arithmetic,
   `CLI_SPAWN_BUDGET_MS`, zero-real-model-calls, the five declared test
   exceptions, F1/F2, doc-check, TDD, and merge via `scripts/merge-with-gate.sh`.
-- **`WarmSession` (daemon plan Task 4) is REUSED UNCHANGED.** It is already
-  the right unit: one `Query`, one transcript, one FIFO, generation-guarded
-  pump, sequenced `/clear`, three-way outcomes. The pool holds N of them. Do
-  not fork or reimplement it.
+- **`WarmSession` (daemon plan Task 4) is reused with EXACTLY ONE ADDITIVE
+  PARAMETER — not unchanged (review finding C1).** It is the right unit (one
+  `Query`, one transcript, one FIFO, generation-guarded pump, sequenced
+  `/clear`, three-way outcomes) and the pool holds N of them, but its
+  `ensure()` HARDCODES the isolation set inline (`systemPrompt: ""`,
+  `tools: []`, `title: "kkamak-gauge"`, `thinking: {type:"disabled"}` —
+  daemon plan Task 4 Step 3). A `reasoning` profile with a real system prompt
+  cannot be expressed through that literal, so profiles are undeliverable
+  until it is parameterised. **Task S0 does exactly that and nothing else.**
+  Do not fork or reimplement `WarmSession`; do not widen the change beyond
+  S0's one parameter.
 - **A session's profile is immutable after `session/new` except through
   `session/set_config_option`.** The isolation option set is chosen from a
   server-side registry of NAMED profiles; a client picks a profile by id, it
@@ -119,15 +126,127 @@ session-modes, extensibility) on 2026-08-04.
 - **The gauge profile is exactly the §6d/§6e isolation set** and is
   fingerprint-bound as today. Other profiles are free to differ, but a
   session's profile id is stamped on every record its turns produce.
-- Pool cap `KKAMAK_ACP_MAX_SESSIONS` (default 4). At the cap, `session/new`
-  answers `-32000` with `_meta.kkamak.reason = "pool-exhausted"` — never a
-  silent queue, because a caller blocked behind an unrelated session is the
-  failure mode this whole redesign exists to remove.
+- **`gaugeEligible` is ENFORCED IN CODE at one named point, not merely
+  declared (review finding I2).** `session/prompt` echoes the serving
+  session's `profile` in `_meta.kkamak.profile`; `DaemonOutcome.ok` carries
+  it; and `callModelDerive` (daemon plan Task 7) REFUSES — returns
+  `undefined`, no stamp, no fallback — when a daemon-lane result reports a
+  profile that is not `gaugeEligible`. A proposal is not a derivation and
+  must never enter the §6e partition, and the only way to guarantee that is a
+  check on the path that writes the stamp. Test: a fake daemon answering
+  `ok` with `profile: "reasoning"` produces NO record.
+- Pool cap `KKAMAK_ACP_MAX_SESSIONS` (default 4, and see the sizing note in
+  S2). At the cap, `session/new` answers **`ACP_ERR_POOL_EXHAUSTED = -32002`**
+  with `_meta.kkamak.reason = "pool-exhausted"` — never a silent queue,
+  because a caller blocked behind an unrelated session is the failure mode
+  this whole redesign exists to remove.
+  **It is -32002, NOT -32000 (review finding C2).** `-32000` is already
+  `ACP_ERR_NO_CALL` and `-32001` already `ACP_ERR_CALL_CONSUMED` (daemon plan
+  Task 2, `acp-wire.ts`). Reusing `-32000` here would hand a `session/new`
+  failure a code whose entire registered meaning is "no MODEL call happened,
+  the fallback is safe" — a §6e law-L3 statement about a request that never
+  involved a prompt. Add `ACP_ERR_POOL_EXHAUSTED` to `acp-wire.ts` beside the
+  other two, and extend that file's existing code test to assert all THREE
+  are distinct and inside the reserved implementation-defined server-error
+  band (`-32099..-32000`).
 - Per-session idle eviction (`KKAMAK_ACP_SESSION_IDLE_MS`, default 900000)
   replaces the daemon-wide reaper for sessions; the daemon still self-exits
   when it holds zero sessions and has been idle for `KKAMAK_ACP_IDLE_MS`.
 
 ---
+
+### Task S0: Parameterise `WarmSession`'s isolation options — one additive change
+
+**Why this is its own task.** Everything below depends on a session choosing
+its option set, and `WarmSession.ensure()` currently hardcodes it (daemon plan
+Task 4 Step 3). This task changes that ONE thing, proves the gauge's bytes did
+not move, and stops. Doing it inside S2 would mix a hardened-file edit into a
+new-file task and make the review of both worse.
+
+**Files:** modify `cc-gate-plugin/src/gauge/warm-session.ts`; modify
+`cc-gate-plugin/test/warm-session.test.ts` (APPEND only — this is a SIXTH
+declared test exception on top of the daemon plan's five, and it adds
+assertions rather than changing any).
+
+**Interfaces:**
+
+```typescript
+/** The per-session slice of the SDK option set. `model`, `cwd` and `env` stay
+ * separate: they are per-session VALUES, while this is the session's POLICY. */
+export interface WarmIsolation {
+  systemPrompt: string
+  settingSources: []
+  settings: { autoMemoryEnabled: false }
+  persistSession: false
+  strictMcpConfig: true
+  tools: []
+  title: string
+  thinking: { type: "disabled" } | { type: "enabled" }
+}
+
+/** Byte-identical to the literal `ensure()` used before this task. Exported so
+ * a test can prove the gauge lane did not move. */
+export const GAUGE_ISOLATION: WarmIsolation
+
+export class WarmSession {
+  constructor(
+    env: Record<string, string | undefined>,
+    opts?: { /* …every existing option, unchanged… */ isolation?: WarmIsolation },
+  )
+}
+```
+
+`ensure()` spreads `this.isolation` (default `GAUGE_ISOLATION`) in place of the
+inline literal. Nothing else in the file changes — not the pump, not the
+generation guard, not `finish()`, not the timers, not the §6e law.
+
+- [ ] **Step 1: Write the failing tests** (append to the existing file)
+
+```typescript
+test("GAUGE_ISOLATION is the §6d set, field for field", () => {
+  expect(GAUGE_ISOLATION).toEqual({
+    systemPrompt: "",
+    settingSources: [],
+    settings: { autoMemoryEnabled: false },
+    persistSession: false,
+    strictMcpConfig: true,
+    tools: [],
+    title: "kkamak-gauge",
+    thinking: { type: "disabled" },
+  })
+})
+
+test("the DEFAULT isolation is the gauge one — omitting the option changes nothing", () => {
+  // The regression guard for §6d/§6e: every existing caller constructs
+  // WarmSession without `isolation` and must keep the exact wire shape the
+  // daemon plan's Task 4 tests already pin.
+  const ws = new WarmSession(stubEnv())
+  expect(ws.isolationForTest()).toEqual(GAUGE_ISOLATION)
+  ws.close()
+})
+
+describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("a custom isolation reaches the wire", () => {
+  test("a non-empty systemPrompt is what the request carries", async () => {
+    // The capability the whole pool plan rests on: a `reasoning` profile is
+    // undeliverable if this literal stays hardcoded (review finding C1).
+    const CAPTURED: Array<Record<string, unknown>> = []
+    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", HAIKU_DATED) })
+    const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url }, {
+      isolation: { ...GAUGE_ISOLATION, systemPrompt: "MARKER-SYSTEM-PROMPT", title: "kkamak-reasoning" },
+    })
+    try {
+      expect((await ws.oneShot("hi", HAIKU, { recycle: true })).kind).toBe("ok")
+      expect(JSON.stringify(CAPTURED[0])).toContain("MARKER-SYSTEM-PROMPT")
+    } finally { ws.close(); cap.stop() }
+  }, CLI_TEST_TIMEOUT_MS)
+})
+```
+
+- [ ] **Step 2:** run — FAIL (`GAUGE_ISOLATION` not exported).
+- [ ] **Step 3:** implement; `ensure()` spreads `this.isolation`.
+- [ ] **Step 4:** `bun test` 0 fail — **every daemon-plan Task 4 test must pass
+  BYTE-UNMODIFIED**; that is the proof the gauge lane did not move. `tsc` clean.
+- [ ] **Step 5:** commit `feat(gauge): WarmSession takes its isolation set, defaulting to the gauge one`.
 
 ### Task S1: Session profiles — the named registry
 
@@ -162,7 +281,14 @@ export interface AcpProfile {
 }
 
 export const ACP_PROFILES: Record<string, AcpProfile>
+/** STRICT: an unknown or absent id resolves undefined. It never falls back to
+ * a default, because a typo that silently yields the gauge profile would run
+ * a proposer's prompt under the gauge's empty system prompt — or worse, mark
+ * its output gauge-eligible. The DEFAULT is applied by the caller, before
+ * resolution, and only for a genuinely absent id (review finding I3). */
 export function resolveProfile(id: string | undefined): AcpProfile | undefined
+/** What `session/new` uses when the client sends no profile at all. */
+export const DEFAULT_PROFILE_ID = "gauge"
 ```
 
 Three profiles ship:
@@ -237,11 +363,16 @@ export interface PooledSession {
 
 export class SessionPool {
   constructor(env: Record<string, string | undefined>, opts?: { max?: number; sessionIdleMs?: number })
-  /** Allocates a session AND its own WarmSession. Returns undefined when the
-   * pool is at capacity — the caller answers pool-exhausted; it never queues,
+  /** Allocates a session AND its own WarmSession.
+   *
+   * Returns a DISCRIMINATED result, not `undefined` (review finding I1): the
+   * dispatcher must answer -32002 for a full pool and -32602 for an unknown
+   * profile, and a bare `undefined` cannot tell those apart. It never queues,
    * because a caller blocked behind an unrelated session is exactly the
    * failure this design removes. */
-  open(profileId: string, model: string | undefined, cwd: string): PooledSession | undefined
+  open(profileId: string, model: string | undefined, cwd: string):
+    | { ok: true; session: PooledSession }
+    | { ok: false; reason: "pool-exhausted" | "unknown-profile" }
   get(id: string): PooledSession | undefined
   /** session/close: settle outstanding turns, close the Query, drop it. */
   close(id: string): boolean
@@ -272,24 +403,27 @@ export class SessionPool {
 ```typescript
 test("two sessions get DIFFERENT WarmSessions", () => {
   const pool = new SessionPool(env)
-  const a = pool.open("gauge", undefined, "/tmp")!
-  const b = pool.open("gauge", undefined, "/tmp")!
-  expect(a.id).not.toBe(b.id)
-  expect(a.warm).not.toBe(b.warm)          // the whole point: separate transcripts
+  const a = pool.open("gauge", undefined, "/tmp")
+  const b = pool.open("gauge", undefined, "/tmp")
+  expect(a.ok && b.ok).toBe(true)
+  expect(a.ok && b.ok && a.session.id !== b.session.id).toBe(true)
+  // the whole point: separate transcripts
+  expect(a.ok && b.ok && a.session.warm !== b.session.warm).toBe(true)
 })
-test("the pool refuses past its cap rather than queueing", () => {
-  const pool = new SessionPool(env, { max: 2 })
-  expect(pool.open("gauge", undefined, "/tmp")).toBeDefined()
-  expect(pool.open("gauge", undefined, "/tmp")).toBeDefined()
-  expect(pool.open("gauge", undefined, "/tmp")).toBeUndefined()   // never a silent wait
-})
-test("an unknown profile id refuses to open a session", () => {
-  expect(new SessionPool(env).open("nope", undefined, "/tmp")).toBeUndefined()
+test("the two refusal reasons are DISTINGUISHABLE — the dispatcher owes different codes", () => {
+  // -32002 pool-exhausted vs -32602 unknown-profile. A bare `undefined`
+  // return made these indistinguishable (review finding I1).
+  const pool = new SessionPool(env, { max: 1 })
+  expect(pool.open("gauge", undefined, "/tmp").ok).toBe(true)
+  expect(pool.open("gauge", undefined, "/tmp")).toEqual({ ok: false, reason: "pool-exhausted" })
+  expect(new SessionPool(env).open("nope", undefined, "/tmp")).toEqual({ ok: false, reason: "unknown-profile" })
 })
 test("the session's model defaults from its profile", () => {
   const pool = new SessionPool(env)
-  expect(pool.open("reasoning", undefined, "/tmp")!.model).toBe("claude-opus-5")
-  expect(pool.open("gauge", undefined, "/tmp")!.model).toBe("claude-haiku-4-5")
+  const r = pool.open("reasoning", undefined, "/tmp")
+  const g = pool.open("gauge", undefined, "/tmp")
+  expect(r.ok && r.session.model).toBe("claude-opus-5")
+  expect(g.ok && g.session.model).toBe("claude-haiku-4-5")
 })
 test("close frees the slot; reap evicts only idle sessions", () => { /* ... */ })
 test("reap does NOT evict a session with a turn in flight", () => { /* ... */ })
@@ -320,7 +454,10 @@ bind lock, stale-socket takeover, the spawn log, `setEncoding("utf8")`, the
   capability advertisement goes in `_meta` per the extensibility page.
 - `session/new` → params `{ cwd (required, absolute), mcpServers (required),
   _meta?: { kkamak?: { profile?: string; model?: string } } }`.
-  Profile defaults to `"gauge"`; unknown profile → `-32602`. `mcpServers`
+  Profile resolution is exactly two steps, in this order (review finding
+  I3): an ABSENT `profile` becomes `DEFAULT_PROFILE_ID`, then
+  `resolveProfile` is called; an id it does not know → `-32602`.
+  `resolveProfile` itself never defaults — see S1. `mcpServers`
   MUST be empty for every shipped profile (`strictMcpConfig: true`,
   `tools: []`); a non-empty list is `-32602` rather than a silent ignore.
   **`cwd` is now HONOURED, not ignored** — it is the session's `WarmSession`
@@ -425,6 +562,28 @@ export function openSession(
 mismatch, unknown profile, pool exhaustion. Callers fall back to their own
 direct path — the fail-open rule is unchanged.
 
+**`DaemonOutcome.ok` gains `profile: string`** — the id of the session that
+actually served the turn, echoed from `_meta.kkamak.profile`. That field is
+what makes review finding I2's enforcement possible, and this task is where it
+enters the client type.
+
+**Gauge-eligibility enforcement (review finding I2) — the one named point.**
+`callModelDerive` (daemon plan Task 7, daemon branch) adds, immediately beside
+its existing `modelProvenBy` check:
+
+```typescript
+// A proposal is not a derivation. `gaugeEligible` is declared in the profile
+// registry (S1) and echoed per turn (S3); THIS is where it is enforced,
+// because this is the only path that writes a §6e transport stamp. Refuse
+// rather than fall back: the call was consumed, and a record stamped from a
+// non-gauge context would silently corrupt the §6e partition.
+if (!GAUGE_ELIGIBLE_PROFILES.has(d.profile)) return undefined
+```
+
+Test (fake daemon, no model): a daemon answering `ok` with
+`_meta.kkamak.profile = "reasoning"` produces NO record, and the one-shot
+fallback endpoint receives ZERO requests.
+
 - [ ] **Steps 1-5** as the daemon plan's Task 6, with fake-daemon variants
   added for `pool-exhausted` and `unknown-profile`.
 
@@ -513,13 +672,37 @@ the critical path for either loop.
 2. **Ordering:** the daemon plan's Task 4 Step 1a probe (the `/clear`-through-
    streaming-input + `modelUsage` gate) must PASS before any of this is built —
    this plan inherits `WarmSession` wholesale and has the same single point of
-   failure. Then S1 → S2 → S3 → S4, then P0 before P1.
+   failure. Then **S0 → S1 → S2 → S3 → S4**, then P0 before P1. S0 is first because
+   every later task needs a `WarmSession` that can carry a profile's options.
 3. **Not in scope:** bench drivers, permanently (§A). `cls-ab` and
    `channel-run` keep their pinned direct paths until someone measures a
    reason to move them.
 4. The gauge's §6e bar, its sized-go gates and its live-flip decision are
    UNCHANGED by this plan. A pooled daemon does not alter what §6e measures;
    it only changes what else can share the process.
+
+## Self-review pass (2026-08-04, by the author, no subagent)
+
+2 critical, 4 important, 3 minor found; **C1, C2, I1, I2, I3 applied above**.
+- **C1** — "`WarmSession` REUSED UNCHANGED" was false: `ensure()` hardcodes
+  the isolation literal, so a `reasoning` profile was undeliverable. Now Task
+  S0, one additive parameter, with `GAUGE_ISOLATION` as the byte-identity proof.
+- **C2** — pool-exhaustion reused `-32000`, already `ACP_ERR_NO_CALL`. Now
+  `ACP_ERR_POOL_EXHAUSTED = -32002` with a three-way distinctness test.
+- **I1** — `open()` collapsed pool-exhausted and unknown-profile into one
+  `undefined` though the dispatcher owes different codes. Now discriminated.
+- **I2** — `gaugeEligible` was declared and never enforced. Now enforced in
+  `callModelDerive` with a named test.
+- **I3** — S1 pinned "never a silent default" while S3 said "defaults to
+  gauge". Now: caller applies `DEFAULT_PROFILE_ID` for an ABSENT id, then
+  `resolveProfile` (still strict) runs.
+
+**NOT applied, and why:** I4 (the pool cap of 4 is asserted, not measured —
+size it from the RSS of one warm `Query` during the daemon plan's Step 1a
+probe, which already spawns one); the `reasoning` prompt text is still cited
+via the out-of-scope opencode driver instead of quoted; and no task yet owns
+the `_meta` → `_meta.kkamak` namespacing that §B calls required. All three are
+cheap and none blocks S0.
 
 ## Open question for the user
 
