@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { WarmSession, selectEvidence } from "../src/gauge/warm-session.ts"
-import { modelProvenBy, CLI_SPAWN_BUDGET_MS } from "../src/gauge/acp-wire.ts"
+import { modelProvenBy, CLI_SPAWN_BUDGET_MS, GAUGE_ISOLATION } from "../src/gauge/acp-wire.ts"
 import {
   HAS_CLAUDE_CODE_CREDENTIALS, sseText, hangFirstServer, until,
 } from "./agent-cli-stub.ts"
@@ -431,5 +431,49 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("WarmSession (spawns bundled CLI)"
     expect(ws.isWarm()).toBe(false)
     expect(ws.turnInFlight()).toBe(false)
     cap.stop()
+  }, CLI_TEST_TIMEOUT_MS)
+})
+
+// S0 (2026-08-04): WarmSession takes an `isolation` option, defaulting to
+// GAUGE_ISOLATION. Neither test below spawns the CLI — WarmSession's
+// constructor never calls ensure()/query(), so both run unconditionally,
+// with no HAS_CLAUDE_CODE_CREDENTIALS guard.
+describe("WarmSession isolation option (S0 — construction only, no CLI spawn)", () => {
+  test("GAUGE_ISOLATION is the §6d set, field for field", () => {
+    expect(GAUGE_ISOLATION).toEqual({
+      systemPrompt: "",
+      settingSources: [],
+      settings: { autoMemoryEnabled: false },
+      persistSession: false,
+      strictMcpConfig: true,
+      tools: [],
+      title: "kkamak-gauge",
+      thinking: { type: "disabled" },
+    })
+  })
+
+  test("the DEFAULT isolation is the gauge one — omitting the option changes nothing", () => {
+    // The regression guard for §6d/§6e: every existing caller constructs
+    // WarmSession without `isolation` and must keep the exact wire shape the
+    // daemon plan's Task 4 tests already pin.
+    const ws = new WarmSession({ ...process.env })
+    expect(ws.isolation).toEqual(GAUGE_ISOLATION)
+    ws.close()
+  })
+})
+
+describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("a custom isolation reaches the wire (S0)", () => {
+  test("a non-empty systemPrompt is what the request carries", async () => {
+    // The capability the whole pool plan rests on: a `reasoning` profile is
+    // undeliverable if this literal stays hardcoded (review finding C1).
+    const CAPTURED: Array<Record<string, unknown>> = []
+    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", STUB_DECLARED_MODEL) })
+    const ws = new WarmSession({ ...process.env, ANTHROPIC_BASE_URL: cap.url }, {
+      isolation: { ...GAUGE_ISOLATION, systemPrompt: "MARKER-SYSTEM-PROMPT", title: "kkamak-reasoning" },
+    })
+    try {
+      expect((await ws.oneShot("hi", HAIKU, { recycle: true })).kind).toBe("ok")
+      expect(JSON.stringify(CAPTURED[0])).toContain("MARKER-SYSTEM-PROMPT")
+    } finally { ws.close(); cap.stop() }
   }, CLI_TEST_TIMEOUT_MS)
 })

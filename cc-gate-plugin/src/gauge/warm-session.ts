@@ -22,7 +22,7 @@
 // below is erased and costs nothing.
 import os from "node:os"
 import type { Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
-import { ACP_BUDGET, CLI_SPAWN_BUDGET_MS, GAUGE_ISOLATION, modelProvenBy } from "./acp-wire.ts"
+import { ACP_BUDGET, CLI_SPAWN_BUDGET_MS, GAUGE_ISOLATION, type WarmIsolation, modelProvenBy } from "./acp-wire.ts"
 
 export type TurnOutcome =
   | { kind: "ok"; text: string; model: string; canonicalModel: string }
@@ -234,6 +234,12 @@ export class WarmSession {
   private readonly setModelMs: number
   private readonly hardGraceMs: number
   private readonly cwd: string
+  /** The isolation set this session will spawn under. READONLY and declared
+   * (review finding I5): S2's wiring test and S0's default test both need to
+   * read it, and an undeclared test-only accessor bolted onto a hardened file
+   * is how that file starts drifting. Not a getter for mutation — the value
+   * is fixed at construction. */
+  readonly isolation: WarmIsolation
 
   constructor(
     private readonly env: Record<string, string | undefined>,
@@ -244,6 +250,7 @@ export class WarmSession {
       setModelMs?: number
       hardGraceMs?: number
       cwd?: string
+      isolation?: WarmIsolation
     } = {},
   ) {
     // §6e instrument invariant / round-4 C3: a turn's timers start at the
@@ -257,6 +264,7 @@ export class WarmSession {
     this.setModelMs = opts.setModelMs ?? ACP_BUDGET.setModelMs
     this.hardGraceMs = opts.hardGraceMs ?? ACP_BUDGET.hardGraceMs
     this.cwd = opts.cwd ?? os.tmpdir()
+    this.isolation = opts.isolation ?? GAUGE_ISOLATION
   }
 
   oneShot(messageText: string, model: string, opts: { recycle: boolean; tag?: string }): Promise<TurnOutcome> {
@@ -458,13 +466,16 @@ export class WarmSession {
       const feed = new Pushable()
       const q = query({
         prompt: feed.stream(),
-        // GAUGE_ISOLATION (acp-wire.ts) is the tested, shared §6d/§6e
-        // isolation set (review finding 4, 2026-08-04) — acp-wire.test.ts
-        // locks its value AND proves it is as-const-safe to spread into an
-        // SDK options literal. Hand-duplicating it here would let this
-        // lane silently drift from the one-shot lane it must stay
-        // byte-identical to (the whole basis for §6e's separate bar).
-        options: { ...GAUGE_ISOLATION, model, cwd: this.cwd, env: subprocessEnv },
+        // this.isolation defaults to GAUGE_ISOLATION (acp-wire.ts), the
+        // tested, shared §6d/§6e isolation set (review finding 4,
+        // 2026-08-04) — acp-wire.test.ts locks its value AND proves it is
+        // as-const-safe to spread into an SDK options literal. Every
+        // existing caller constructs WarmSession without `isolation`, so
+        // this spread is byte-identical to the GAUGE_ISOLATION literal that
+        // was inlined here before (S0). A caller that DOES pass `isolation`
+        // (e.g. a `reasoning` profile) gets its own policy without
+        // disturbing the gauge lane.
+        options: { ...this.isolation, model, cwd: this.cwd, env: subprocessEnv },
       })
       if (this.closed) {                       // closed during construction
         try { q.close() } catch { /* nothing more to do */ }
