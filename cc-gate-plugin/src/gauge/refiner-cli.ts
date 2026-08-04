@@ -12,7 +12,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { parseRefinerOutput } from "./refiner.ts"
-import { callModelSdk, resolveModelId } from "./transport.ts"
+import { callModelSdk, resolveModelId, selectTransport } from "./transport.ts"
 import { validateDerivation } from "./validate.ts"
 import { gaugeDir, writeGaugeFile } from "./files.ts"
 
@@ -38,7 +38,21 @@ async function main(): Promise<void> {
 
   try {
     const started = Date.now()
-    const raw = await callModelSdk(prompt, floorCheck, process.env)
+    // §6d "Selection is PER-CALLER, not a global default": this file is the
+    // LIVE derive path (the Stop-hook's detached child) and MUST stay pinned
+    // to transport "sdk" forever — it runs on haiku, which is not
+    // rate-walled, so routing it through the Agent SDK would only pay
+    // ~1.25s of subprocess spawn + ~423 bytes of /clear echo per Stop hook
+    // for zero benefit. `KKAMAK_GAUGE_TRANSPORT=agent-sdk` is an opt-in for
+    // BATCH callers (corpus-replay.ts) only; if it is ever exported in a
+    // shell profile, tmux launcher, or wrapper that also happens to run this
+    // process, it must NOT silently reroute the live path. Strip it from the
+    // env view used here (never mutate process.env itself) so BOTH the
+    // model call and the stamp below are computed from the same
+    // agent-sdk-incapable source and can never diverge from the pin or from
+    // each other.
+    const liveEnv: Record<string, string | undefined> = { ...process.env, KKAMAK_GAUGE_TRANSPORT: undefined }
+    const raw = await callModelSdk(prompt, floorCheck, liveEnv)
     if (raw === undefined) return
 
     const derivation = parseRefinerOutput(raw)
@@ -65,7 +79,10 @@ async function main(): Promise<void> {
       // alias) so the sensor line names the real instrument.
       model: resolveModelId(process.env.KKAMAK_GAUGE_MODEL ?? "haiku"),
       derivationMs: Date.now() - started,
-      transport: "sdk",
+      // Pinned per the same §6d rule as the call above — computed from
+      // liveEnv, not process.env, so the stamp can never disagree with what
+      // callModelSdk actually did.
+      transport: selectTransport(liveEnv),
     })
   } finally {
     try {

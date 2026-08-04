@@ -277,26 +277,30 @@ green: 783+26+230 tests + doc-check + tsc. Other hosts arm on pull.
 7b process-gate DRAFT spec in tree (docs/superpowers/specs/
 2026-08-03-process-gate-7b-draft.md), 7 user rulings still open.
 
-AGENT-SDK TRANSPORT (§6d) — BUILT, UNMERGED, UNPUSHED. Branch
-`agent-sdk-transport` @ `ab9e513`, 833 tests + tsc green, tree clean,
-PUSHED to origin/agent-sdk-transport (13 commits, tracking set) — the
-branch is recoverable and MacBook-reachable; this GA13/resume pair was
-cherry-picked onto main so a main-only reader sees it without the
-transport work. Tasks 1-5 of
-docs/superpowers/plans/2026-08-03-agent-sdk-transport.md done w/ per-task
-reviews; Tasks 6-9 untouched; Task 8 = the real-spend paired validation,
-needs its own sized go. §6d amended THREE times pre-data (context
-isolation / enforcement asymmetry declared / selection is PER-CALLER) —
-the spec file is the source of truth, the plan's Task-1 block is
-historical. Live path PINNED to "sdk" in code (`ab9e513`) because it runs
-unwalled haiku; agent-sdk is opt-in per BATCH caller only. Measured cost
-vs API SDK: +335 input tokens/record (1.51x) and +1.46s spawn (~25%
-end-to-end). Daemon via `/clear` PROVEN viable (838ms first record then
-~20ms; residue = ~423B constant `/clear` echo per turn) but NOT BUILT —
-batch-only in-process singleton was the agreed shape.
-NOT STARTED: batch singleton · Tasks 6-9 · 2 deferred minors (stale
-comments in agent-transport.ts, see SDD ledger
-.superpowers/sdd/2026-08-03-agent-sdk-transport/progress.md).
+AGENT-SDK TRANSPORT (§6d) — TASKS 1-7 DONE, MERGED TO MAIN 2026-08-04
+(7b-gated, artifact docs/reviews/65626ba-agent-sdk-transport.md).
+**PREMISE MEASURED TRUE 2026-08-04:** agent-sdk lane reaches sonnet AND
+opus while the raw-API OAuth lane 429s them in the same minute — the
+separate-credit claim in §6d is now evidence, not assertion (spec note in
+§6d). Tasks 1-7 of docs/superpowers/plans/2026-08-03-agent-sdk-transport.md
+done w/ per-task reviews + fix rounds; whole-branch opus review (0
+Critical / 5 Important / 7 Minor) → single fix wave, all addressed:
+cls-ab pinned like refiner-cli (provenance can't silently flip), api_retry
+abort guard (CLI 5xx auto-retry measured; exactly-one-call preserved),
+lazy SDK import (hooks no longer pay ~84ms), credential skip-guard
+(credential-less hosts skip loud, not fail), de-CLI'd pv operator surface,
+arms provenance on counts/manifest/combined files. 857 tests + tsc green.
+Tasks 8-9 remain: Task 8 = the real-spend paired validation, NEEDS ITS OWN
+SIZED GO; Task 9 = verdict + per-caller opt-in only if earned. §6d
+amended pre-data (context isolation / enforcement asymmetry incl. retry +
+output-cap notes / selection is PER-CALLER) — spec file is source of
+truth. Live path stays PINNED to "sdk" (unwalled haiku; pin test-locked).
+Measured cost vs API SDK: +335 input tokens/record (1.51x), +1.46s spawn.
+Daemon via `/clear` PROVEN viable but NOT BUILT — **HARD RULE 2026-08-04:
+ask the user before ANY daemon implementation work.**
+Deferred (ruling: fails loud, diagnostic-only): `--pair=x:y` equals form
+unrecognized. SDD ledger:
+.superpowers/sdd/2026-08-03-agent-sdk-transport/progress.md.
 
 QUEUE (GO/ruling before spend): (1) DONE — 7a7b merged (above). (2)
 MacBook lane: pv-sample + counts commit; own classifier lane (sample →

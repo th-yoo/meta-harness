@@ -22,6 +22,8 @@ import os from "node:os"
 import path from "node:path"
 import { execFileSync } from "node:child_process"
 import { buildRefinerPrompt, buildLabelPrompt, type PromptVariant } from "./refiner.ts"
+import { agentSdkCall } from "./agent-transport.ts"
+import type { GaugeTransport } from "../types.ts"
 
 const CALL_TIMEOUT_MS = 60_000
 const MAX_TOKENS = 2048
@@ -33,6 +35,14 @@ const MAX_TOKENS = 2048
  * remapped to a different instrument. */
 export function resolveModelId(model: string): string {
   return model === "haiku" ? "claude-haiku-4-5" : model
+}
+
+/** §6d transport selection. Fail-safe by construction: anything other than
+ * the exact string "agent-sdk" keeps the incumbent SDK path, so a typo in an
+ * env var can never silently retarget an instrument run. "cli" is retired and
+ * deliberately not selectable. */
+export function selectTransport(env: Record<string, string | undefined>): GaugeTransport {
+  return env.KKAMAK_GAUGE_TRANSPORT === "agent-sdk" ? "agent-sdk" : "sdk"
 }
 
 export interface AuthTokenDeps {
@@ -223,17 +233,26 @@ export async function callModelSdk(
 ): Promise<string | undefined> {
   const model = resolveModelId(opts.model ?? env.KKAMAK_GAUGE_MODEL ?? "haiku")
   const messageText = buildRefinerPrompt(prompt, floorCheck, opts.promptVariant ?? "base")
+  if (selectTransport(env) === "agent-sdk") {
+    return agentSdkCall(messageText, model, env, {
+      schema: DERIVATION_SCHEMA as unknown as Record<string, unknown>,
+    })
+  }
   return sdkCall(messageText, model, env, authDeps, {
     schema: DERIVATION_SCHEMA as unknown as Record<string, unknown>,
   })
 }
 
-/** `cls-label`'s (Task 2) blind-label call: the SAME transport plumbing as
- * `callModelSdk`, but `buildLabelPrompt` (the rubric, not the extraction
+/** `cls-label`'s (Task 2) blind-label call: the SAME `sdkCall` plumbing as
+ * `callModelSdk`'s non-agent-sdk path (auth -> client -> request -> text
+ * block extraction), but `buildLabelPrompt` (the rubric, not the extraction
  * prompt) + `LABEL_SCHEMA`, and defaults to the pre-registered labeler
  * literal `claude-opus-5` rather than the refiner's haiku default — the
  * label go is never routed through `KKAMAK_GAUGE_MODEL`, so a stray env
- * var armed for the live refiner can never silently retarget the labeler. */
+ * var armed for the live refiner can never silently retarget the labeler.
+ * §6d note: unlike `callModelSdk`, this call is deliberately NOT env-routed
+ * through `selectTransport` — only the deriver (`callModelSdk`) is subject
+ * to `KKAMAK_GAUGE_TRANSPORT`; labels always go over the direct API SDK. */
 export async function callModelSdkLabel(
   prompt: string,
   floorCheck: string,

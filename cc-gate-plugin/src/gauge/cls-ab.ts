@@ -738,7 +738,13 @@ export async function runClsRun(
       // provenance ONLY (fix-wave F8) — the real, unmodified
       // buildRefinerPrompt, never a re-implementation.
       const promptSha256 = sha256Hex(buildRefinerPrompt(record.prompt, record.floorCheck, variant))
-      const raw = await callModelSdk(record.prompt, record.floorCheck, process.env, {}, {
+      // §6d "route batch callers only after the deriver's bar result is
+      // known": cls-run stamps every row `transport: "sdk"` (ClsArmRow.class
+      // above) unconditionally, so the call it makes must ALSO be pinned to
+      // "sdk" regardless of the ambient env — refiner-cli.ts:54's liveEnv
+      // strip, same rationale, same shape.
+      const liveEnv: Record<string, string | undefined> = { ...process.env, KKAMAK_GAUGE_TRANSPORT: undefined }
+      const raw = await callModelSdk(record.prompt, record.floorCheck, liveEnv, {}, {
         model: modelLiteral,
         promptVariant: variant,
       })

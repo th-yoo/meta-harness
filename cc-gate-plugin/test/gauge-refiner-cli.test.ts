@@ -28,7 +28,13 @@ function writeReq(repo: string, sessionID: string, n: number, prompt: string, fl
   fs.writeFileSync(path.join(dir, `${sessionID}-${n}.req.json`), JSON.stringify(body))
 }
 
-async function runRefinerCli(repo: string, sessionID: string, n: number, srv: SdkStub): Promise<void> {
+async function runRefinerCli(
+  repo: string,
+  sessionID: string,
+  n: number,
+  srv: SdkStub,
+  extraEnv: Record<string, string> = {},
+): Promise<void> {
   const proc = Bun.spawn(["bun", REFINER_CLI, repo, sessionID, String(n)], {
     stdout: "ignore",
     stderr: "ignore",
@@ -36,6 +42,7 @@ async function runRefinerCli(repo: string, sessionID: string, n: number, srv: Sd
       ...(process.env as Record<string, string>),
       KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
       KKAMAK_GAUGE_AUTH_TOKEN: "tok-test",
+      ...extraEnv,
     },
   })
   await proc.exited
@@ -76,6 +83,56 @@ test("E2E: valid stub output → gauge file written w/ transport 'sdk', req remo
   const body = srv.captured[0]!.body
   expect(body.model).toBe("claude-haiku-4-5")
   expect((body.output_config as { format: { type: string } }).format.type).toBe("json_schema")
+})
+
+// §6d PER-CALLER pin regression test (closes the review finding that
+// refiner-cli's transport had no direct coverage): the live derive path
+// (this file) MUST stay pinned to "sdk" even under an adversarial
+// environment that a batch-run wrapper/tmux launcher/shell profile could
+// plausibly export. Two stub servers stand in for the two real endpoints —
+// KKAMAK_GAUGE_SDK_BASE_URL (the direct API-SDK path) and ANTHROPIC_BASE_URL
+// (what the Agent SDK's spawned CLI would hit if the pin were ever removed)
+// — so this test proves routing, not just the stamp: if refiner-cli.ts's
+// liveEnv strip is deleted and `callModelSdk` goes back to reading
+// `process.env` directly, this adversarial KKAMAK_GAUGE_TRANSPORT
+// would flip transport to "agent-sdk", the call would go out over the Agent
+// SDK's spawned CLI (hitting agentSrv, not sdkSrv) instead, and EITHER the
+// stamp/endpoint assertions below fail directly (if this host has on-disk
+// Claude Code credentials for the spawned CLI to use) OR the live derive
+// call fails open with no credentials and no gauge file is ever written,
+// which fails the final `readFileSync` with ENOENT — the pin's removal
+// cannot pass silently either way.
+test("PIN (§6d): adversarial KKAMAK_GAUGE_TRANSPORT=agent-sdk does not reroute the live path — stamped 'sdk', API-SDK endpoint hit, agent endpoint untouched", async () => {
+  const repo = mkRepo()
+  writeReq(repo, "sid-9", 7, "create done.txt", "")
+  const sdkSrv = stubServerFor(DERIVATION)
+  const agentSrv = stubServer(() => new Response("must not be hit by the live derive path", { status: 500 }))
+  // Mutate THIS process's env (not just the spawned child's) to simulate the
+  // real threat: a shell profile / tmux launcher / wrapper that exports
+  // KKAMAK_GAUGE_TRANSPORT=agent-sdk for batch runs and happens to also be
+  // the environment the live Stop hook (and its refiner-cli.ts child) runs
+  // in. runRefinerCli spreads `process.env` into the child by default, so
+  // this alone is enough to prove inheritance is blocked; ANTHROPIC_BASE_URL
+  // is passed via extraEnv since only the child would ever consult it.
+  const prevTransport = process.env.KKAMAK_GAUGE_TRANSPORT
+  process.env.KKAMAK_GAUGE_TRANSPORT = "agent-sdk"
+  try {
+    await runRefinerCli(repo, "sid-9", 7, sdkSrv, { ANTHROPIC_BASE_URL: agentSrv.url })
+  } finally {
+    if (prevTransport === undefined) delete process.env.KKAMAK_GAUGE_TRANSPORT
+    else process.env.KKAMAK_GAUGE_TRANSPORT = prevTransport
+    sdkSrv.stop()
+    agentSrv.stop()
+  }
+
+  const gauge = JSON.parse(fs.readFileSync(path.join(gaugeDir(repo), "sid-9-7.json"), "utf-8"))
+  // The pin: live derivations always stamp "sdk", regardless of the env.
+  expect(gauge.transport).toBe("sdk")
+  // The direct API-SDK endpoint got exactly the one call...
+  expect(sdkSrv.captured.length).toBe(1)
+  expect(sdkSrv.captured[0]!.body.model).toBe("claude-haiku-4-5")
+  // ...and the Agent SDK's endpoint was never touched at all.
+  expect(agentSrv.captured.length).toBe(0)
 })
 
 test("E2E: class C with a path NOT in the prompt → validated down to D pre-persist (downgraded, check null)", async () => {

@@ -44,7 +44,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { parseGateConfig } from "../config.ts"
-import type { GaugePromptClass, GaugeSensorField, SensorLine } from "../types.ts"
+import { GAUGE_TRANSPORTS, type GaugePromptClass, type GaugeSensorField, type SensorLine } from "../types.ts"
 import {
   readCorpus,
   writeCorpus,
@@ -58,7 +58,14 @@ import { mineJsonl, dedupeEarliest } from "./corpus-mine.ts"
 import { runDerive } from "./corpus-replay.ts"
 import { runChannel } from "./channel-run.ts"
 import { runResolve, readSensorLines } from "./state-resolve.ts"
-import { runPvSample, parsePvSampleArgs, runPvCompare, parsePvCompareArgs } from "./paired-validation.ts"
+import {
+  runPvSample,
+  parsePvSampleArgs,
+  runPvCompare,
+  parsePvCompareArgs,
+  parsePairFlag,
+  type PvPairing,
+} from "./paired-validation.ts"
 import {
   runClsSample,
   parseClsSampleArgs,
@@ -528,6 +535,32 @@ export function runReport(cwd: string, log: (m: string) => void): void {
   log(computeReport(cwd).text)
 }
 
+/** Task 7: shared `--pair <baseline>:<shadow>` handling for pv-sample and
+ * pv-compare. Absent flag -> `{ pairing: undefined }` (caller lets
+ * runPvSample/runPvCompare apply the §6c default); present-and-malformed ->
+ * prints the REFUSING line and `refused: true` so the caller exits WITHOUT
+ * ever touching either store (a typo must never fall through to the
+ * default). Present-and-valid -> the parsed `PvPairing`. */
+function resolvePairFlag(args: string[]): { pairing: PvPairing | undefined; refused: boolean } {
+  if (!args.includes("--pair")) return { pairing: undefined, refused: false }
+  const pairing = parsePairFlag(args)
+  if (pairing === undefined) {
+    const raw = args[args.indexOf("--pair") + 1] ?? ""
+    console.error(`REFUSING: --pair ${raw} is not <baseline>:<shadow> over ${GAUGE_TRANSPORTS.join("|")}`)
+    return { pairing: undefined, refused: true }
+  }
+  return { pairing, refused: false }
+}
+
+/** Strips `--pair` and its value token out of an args array so downstream
+ * positional parsers (parsePvSampleArgs/parsePvCompareArgs) never mistake
+ * either token for a positional cwd/--combine value. */
+function stripPairFlag(args: string[]): string[] {
+  const i = args.indexOf("--pair")
+  if (i < 0) return args
+  return [...args.slice(0, i), ...args.slice(i + 2)]
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
   const sub = args[0]
@@ -566,15 +599,35 @@ async function main(): Promise<void> {
   }
 
   if (sub === "pv-sample") {
-    const { cwd, reset } = parsePvSampleArgs(args.slice(1))
-    const summary = runPvSample(cwd, { reset }, (m) => console.log(m))
+    const rest = args.slice(1)
+    const { pairing, refused } = resolvePairFlag(rest)
+    if (refused) {
+      process.exitCode = 1
+      return
+    }
+    const { cwd, reset } = parsePvSampleArgs(stripPairFlag(rest))
+    const summary = runPvSample(
+      cwd,
+      { reset },
+      (m) => console.log(m),
+      undefined,
+      pairing?.baseline,
+      pairing?.baselineLabel ?? "cli",
+      pairing?.shadowTransport ?? "sdk",
+    )
     if (summary === undefined) process.exitCode = 1
     return
   }
 
   if (sub === "pv-compare") {
-    const { cwd, combine } = parsePvCompareArgs(args.slice(1))
-    const summary = runPvCompare(cwd, { combine }, (m) => console.log(m))
+    const rest = args.slice(1)
+    const { pairing, refused } = resolvePairFlag(rest)
+    if (refused) {
+      process.exitCode = 1
+      return
+    }
+    const { cwd, combine } = parsePvCompareArgs(stripPairFlag(rest))
+    const summary = runPvCompare(cwd, { combine, pairing }, (m) => console.log(m))
     if (summary === undefined) process.exitCode = 1
     return
   }
@@ -635,7 +688,7 @@ async function main(): Promise<void> {
   console.error(
     `unknown subcommand: ${sub ?? "(none)"} — usage: replay-cli.ts mine|derive|channel|resolve|report|pv-sample|pv-compare|` +
       "cls-sample|cls-run|cls-label|cls-score [cwd] [--go <n>] [--reset] [--combine <pv-counts.json>] " +
-      "[--arm <name>] [--emit-doc <path>]",
+      `[--arm <name>] [--emit-doc <path>] [--pair <baseline>:<shadow> over ${GAUGE_TRANSPORTS.join("|")}]`,
   )
   process.exitCode = 1
 }

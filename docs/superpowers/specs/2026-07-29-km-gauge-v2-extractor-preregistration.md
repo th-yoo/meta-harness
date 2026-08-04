@@ -527,6 +527,196 @@ transport is buying speed at the cost of the instrument's sensitivity, and the
 correct response is to keep the CLI transport (or fix the prompt under §6c's
 own successor) rather than accept a cheaper but blinder derive path.
 
+## 6d. Amendment (pre-data, 2026-08-03): third derive transport → Agent SDK
+
+**What changes.** A third derive transport, `transport: "agent-sdk"`, using
+`@anthropic-ai/claude-agent-sdk`. Selected per process by
+`KKAMAK_GAUGE_TRANSPORT=agent-sdk`; absent or any other value keeps the
+current `"sdk"` path byte-for-byte. The `"cli"` and `"sdk"` literals and
+their records are untouched.
+
+**Why a third transport rather than a replacement.** The subscription premium
+quota is per model tier (measured 2026-08-03: haiku OK, sonnet/opus 429 on the
+same token in the same second), and Agent-SDK traffic bills a separate
+Agent-SDK credit rather than the premium tier. If the bar below passes, this
+buys premium-model instrument work without an API key. If it fails, we keep
+the incumbent and lose nothing.
+
+**Premise measured TRUE (2026-08-04, yoo-dev, pre-data note — evidence, not a
+bar change).** The separate-pool claim above was asserted from docs when
+registered; it is now measured. Same minute, same OAuth token: raw-API probe
+(`scripts/probe-models.sh`) returned sonnet 429 / opus 429, while `query()`
+with this transport's exact option set returned `subtype: "success"` on both
+`claude-sonnet-5` and `claude-opus-5`. The Agent-SDK lane rides a quota the
+raw-API premium tier does not share. Scope guard: this proves lane
+reachability only — instrument fidelity on this lane is still the bar below
+(Task 8), and the `claude -p` CLI lane was NOT re-measured.
+
+**Known, accepted differences (measured on the wire, not inferred).** The
+Agent SDK sends 2 harness system blocks that `systemPrompt: ""` does not
+remove, enforces schemas via a forced `StructuredOutput` tool rather than
+`output_config`, and wraps the user turn with ~200 characters of
+`<system-reminder>` context. These are exactly what the bar below is measuring
+the effect of — they are not defects to be argued about in advance.
+
+**Call-count rule (binding).** §4's exactly-one-model-call-per-record rule
+holds for this transport too. Task 4 measures calls per `query()` against a
+stub; if a single classification query cannot be made to issue exactly one
+model call, this transport is REJECTED for batch use and the plan stops at
+Task 4. The cost fence sizes `--go N` against N records and must keep meaning
+N calls.
+
+**Pooling bar (reused verbatim from §6c, evaluated on combined counts).**
+- Positive agreement on C: `|C_sdk ∩ C_agent| / |C_sdk ∪ C_agent| >= 0.80`, AND
+- Missed-C cap: records `"sdk"` calls C that `"agent-sdk"` calls not-C,
+  `<= ceil(0.10 × |C_sdk|)`.
+Both hold → the transports may be pooled in one reading, split still reported.
+Either fails → readings stay split by transport for the life of the window,
+and `"agent-sdk"` does NOT become the default.
+
+**Expected outcome stated up front.** The CLI→SDK paired validation on
+`yoo-dev` came back SPLIT (0.625 agreement, missed-C 6 > cap 2). The Agent SDK
+is CLI-family (it drives the bundled `claude` binary), so a SPLIT result here
+is the likely outcome, not a surprise. Split is the default; pooling is the
+exception to be earned.
+
+**Schema enforcement differs between the arms — declared, not incidental
+(2026-08-03).** The API-SDK arm enforces `DERIVATION_SCHEMA` at the API
+layer via `output_config` (grammar-constrained sampling: the model cannot
+emit a non-conforming shape). The agent-sdk arm no longer uses the SDK's
+`outputFormat` — it was measured at 352 bytes of forced `StructuredOutput`
+tool on every request, and the schema instruction is already carried by
+`buildRefinerPrompt`/`buildChannelPrompt` ("Output ONLY a JSON object, no
+prose, no markdown fences" plus the field shape). So the agent arm's
+enforcement is PROMPT-SIDE, with `parseRefinerOutput`/`parseChannelOutput`
+as the backstop (first `{` to last `}`, fence-tolerant, `undefined` on
+anything malformed → record stays pending and retryable, never
+fabricated).
+
+Consequence the bar must not be allowed to hide: the two arms differ in
+whether a non-conforming generation is PREVENTED (API arm) or CAUGHT AFTER
+THE FACT (agent arm). A model that will not emit valid JSON produces a
+constrained-but-valid answer on one arm and an unstamped pending record on
+the other, so the arms can differ in PENDING COUNT as well as in
+classification. When reading the §6d verdict, a disagreement is therefore
+attributable to transport, harness context, OR enforcement mechanism —
+this note exists so a SPLIT result is not misread as a pure transport
+effect.
+
+Two further arm asymmetries, measured 2026-08-04 during the whole-branch
+review and recorded while the pre-data window is open:
+
+- **Retry behaviour.** The bundled CLI auto-retries a 5xx response — measured
+  against a local stub: one `agentSdkCall` produced a second `/v1/messages`
+  request after a 500, which would silently break the binding
+  exactly-one-call rule (the incumbent arm pins `maxRetries: 0`). Guard now
+  in code: `agentSdkCall` aborts the query on the SDK's `api_retry` system
+  message and returns undefined (fail-open; record stays pending/retryable).
+  The abort races a retry request already in flight, so the wire may still
+  see a second request begin — but the transport never consumes its result,
+  and no third request occurs (test-locked at ≤2 with the race documented).
+- **Output cap.** The API arm caps generation at `max_tokens: 2048`; the
+  Agent-SDK `Options` surface exposes no output cap (verified against
+  sdk.d.ts — a draft `maxTokens` option was deleted as unwireable). An
+  over-long generation therefore truncates → parse-fails → stays pending on
+  the API arm only. Same consequence as the enforcement asymmetry above:
+  arms can differ in PENDING COUNT for this reason too.
+
+**Selection is PER-CALLER, not a global default (RULED 2026-08-03, user).**
+The original draft ended with a global default flip once the bar passed.
+That is withdrawn, for a reason that only became visible once the live
+path was measured:
+
+- The LIVE derive path (`refiner-cli.ts`, the detached child the Stop
+  hook spawns) resolves `KKAMAK_GAUGE_MODEL ?? "haiku"` — it runs on
+  **haiku**, and haiku is NOT rate-walled (probed directly 2026-08-03:
+  haiku OK, sonnet 429, opus 429 on the same token in the same second).
+  It therefore has no premium problem for this transport to solve.
+- Routing it through `agent-sdk` anyway would impose ~1.25 s of
+  subprocess spawn plus the ~423-byte `/clear` echo on EVERY Stop hook,
+  buying nothing. A global flip is a pure tax on the one code path whose
+  prime directive is to never affect the session.
+- The premium-blocked work — `cls-label` (opus), the sonnet arms,
+  `channel-smoke` — is ALL batch. That is the only place the lane earns
+  its cost.
+
+BINDING: the live path stays pinned to `transport: "sdk"`. `"agent-sdk"`
+is opt-in per batch caller. `selectTransport(env)` already takes its env
+as a parameter rather than reading `process.env` internally, so per-caller
+selection is a call-site change, not a redesign.
+
+**Deploy.** Boundary ts logged in `docs/2026-08-01-gauntlet-adoption-ledger.md`
+when the first batch caller opts in, per §6b/§6c precedent — required
+because behaviour changes while `pluginVersion` does not. There is no
+global default flip to log, and the §6c split rule still governs every
+reading: `"agent-sdk"` records stay separable from `"sdk"` records
+regardless of which caller produced them.
+
+**Context-isolation requirement (measured on the wire 2026-08-03, binding
+on the implementation).** The Agent SDK injects per-project context into
+every request unless explicitly disabled. Measured against a local stub,
+one classification call:
+
+| config | request | user turn | contents |
+|--------|---------|-----------|----------|
+| `settingSources: []` alone | 10,693 B | 9,627 B | `<system-reminder>` carrying `claudeMd` + the whole auto-memory `MEMORY.md` index |
+| + `settings: { autoMemoryEnabled: false }` | 1,572 B | 506 B | memory gone |
+| + `persistSession:false`, `strictMcpConfig:true`, neutral `cwd` | 1,572 B | 506 B | no further change |
+
+`settings: { autoMemoryEnabled: false }` is therefore MANDATORY for this
+transport, and not for cost reasons: without it the classifier reads this
+project's own memory index — which contains notes on gauge, classification
+and the class-C rules — while judging whether a prompt is class C. A
+paired validation run in that state would measure contamination and report
+it as transport disagreement. `persistSession: false` and
+`strictMcpConfig: true` are also set (no disk writes; no project
+`.mcp.json` / plugin MCP servers / claude.ai connectors loading into the
+session), though both are payload-neutral. A neutral `cwd` is redundant
+once auto-memory is off — both key off the same directory — and
+`excludeDynamicSections` is inert here (docs: applies only to the
+`claude_code` preset form of `systemPrompt`, and it MOVES context into the
+first user message rather than removing it).
+
+**RULED 2026-08-03 (user): keep OAuth, skip `--bare`.** The bundled CLI's
+`--bare` flag ("skip hooks, LSP, plugin sync, attribution, auto-memory,
+background prefetches, keychain reads, CLAUDE.md auto-discovery") does
+remove the email reminder and shrink attribution — measured 1,124 → 1,001
+bytes total, metadata 212 → 176, user turn 494 → 418, email gone. It is
+rejected because it authenticates **strictly** via `ANTHROPIC_API_KEY`
+(OAuth and keychain are never read — confirmed on the wire: the header
+switches from an OAuth bearer to `x-api-key`). Under `--bare` the traffic
+bills API rates, not the Agent-SDK credit pool — which is this
+transport's entire reason to exist. And if an API key is in play, the
+incumbent API SDK dominates on every measured axis (5 ms vs 1,293 ms
+per-call overhead, 342 vs ~1,349 bytes, no harness context, no
+subprocess, no paired validation needed). So `--bare` is not a
+configuration option for this instrument; it is a different lane, and
+that lane is option (b) in the 429 block, not this one.
+
+Consequence, accepted deliberately: the two residuals below stay. They
+are the price of the OAuth/credit-pool lane, not oversights.
+
+**Residual, unavoidable via the documented SDK surface:** a ~369-byte
+`<system-reminder>` carrying the account email address and the current
+date rides on every request. Tested against `settingSources`, `settings`,
+`persistSession`, `strictMcpConfig` and `cwd` — none remove it. Recorded
+so it is a known property of any `"agent-sdk"` record, not a later
+surprise. Net overhead after isolation: 1,572 B vs the API SDK's 342 B
+(~4.6x, ≈75 tokens per record) plus ~1.3 s of subprocess spawn per call.
+
+**Known reporting gap, acknowledged not fixed.** `cls-ab.ts`'s
+`transportTally` (lines ~375-380) buckets records as `if (transport === "sdk")
+sdk++ else cli++`, so any `"agent-sdk"` record it ever sees is counted as CLI.
+That is a display miscount in the classifier A/B report, not a
+transport-selection defect, and `cls-ab.ts` is out of scope for this
+amendment. Recorded here so a later reader does not mistake it for a fresh
+bug; fix it when cls-ab is next opened.
+
+**What would falsify this change.** If the bar passes but Agent-SDK
+derivations cost more wall-clock per record than the API SDK without buying
+premium access (e.g. the credit is exhausted), the transport is retained as
+selectable but not defaulted.
+
 ## 7. Known risks
 
 - Extraction discipline may over-refuse (class-C starvation) — the validity

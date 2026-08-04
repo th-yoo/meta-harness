@@ -6,7 +6,7 @@
 //   daily-count                {date, count} refiner-call cap (fail-closed on corruption)
 import fs from "node:fs"
 import path from "node:path"
-import type { GaugeHorizon, GaugePromptClass } from "../types.ts"
+import type { GaugeHorizon, GaugePromptClass, GaugeTransport } from "../types.ts"
 import type { Downgrade } from "./validate.ts"
 
 /** Persisted gauge file payload — derivation + provenance.
@@ -43,7 +43,7 @@ export interface GaugeFile {
    * rewritten. Deliberately a NEW key (not a widened `model`/`v`): the
    * transport demonstrably changes classifications, and a field doing
    * double duty is how pluginVersion lost producer identity. */
-  transport?: "cli" | "sdk"
+  transport?: GaugeTransport
 }
 
 export function gaugeDir(cwd: string): string {

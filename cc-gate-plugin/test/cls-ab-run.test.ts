@@ -375,6 +375,48 @@ describe("runClsRun — success: model literal + prompt variant per arm", () => 
   })
 })
 
+// §6d PIN regression test — cls-ab.ts fix wave finding 1 (mirrors
+// gauge-refiner-cli.test.ts:105's adversarial-env pattern exactly): cls-run
+// stamps every row `transport: "sdk"` UNCONDITIONALLY (ClsArmRow.transport
+// is the literal type "sdk"), so the call it makes must be pinned to "sdk"
+// too, regardless of the ambient env a batch-run wrapper/tmux
+// launcher/shell profile might export. Two stub servers stand in for the
+// two real endpoints (KKAMAK_GAUGE_SDK_BASE_URL vs ANTHROPIC_BASE_URL) so
+// this proves routing, not just the stamp: if cls-ab's liveEnv strip were
+// ever deleted and `callModelSdk` went back to reading `process.env`
+// directly (in-process, no subprocess spawn — cls-ab is a direct caller,
+// unlike refiner-cli.ts), this adversarial KKAMAK_GAUGE_TRANSPORT would
+// route the call through agentSdkCall's query()-spawned CLI instead of the
+// stubbed sdk endpoint, and the assertions below (sdk endpoint hit exactly
+// 4 times, agent endpoint never touched) would fail.
+describe("runClsRun — §6d PIN: call stays 'sdk' even under an adversarial ambient env", () => {
+  test("KKAMAK_GAUGE_TRANSPORT=agent-sdk in process.env does not reroute cls-run — sdk endpoint hit, agent endpoint untouched, rows stamped 'sdk'", async () => {
+    const cwd = sampledRepo()
+    const sdkSrv = stubServerFor({ goalSummary: "g", class: "C", criteria: ["c1"], check: null, confidence: 0.9 })
+    const agentSrv = stubServer(() => new Response("must not be hit by cls-run", { status: 500 }))
+    const prevTransport = process.env.KKAMAK_GAUGE_TRANSPORT
+    const prevAnth = process.env.ANTHROPIC_BASE_URL
+    process.env.KKAMAK_GAUGE_TRANSPORT = "agent-sdk"
+    process.env.ANTHROPIC_BASE_URL = agentSrv.url
+    let summary: Awaited<ReturnType<typeof runClsRun>>
+    try {
+      summary = await withSdkStub(sdkSrv, () => runClsRun(cwd, "haiku-base", 4, () => {}))
+    } finally {
+      if (prevTransport === undefined) delete process.env.KKAMAK_GAUGE_TRANSPORT
+      else process.env.KKAMAK_GAUGE_TRANSPORT = prevTransport
+      if (prevAnth === undefined) delete process.env.ANTHROPIC_BASE_URL
+      else process.env.ANTHROPIC_BASE_URL = prevAnth
+      agentSrv.stop()
+    }
+    expect(summary).toEqual({ arm: "haiku-base", pending: 4, classified: 4, failed: 0 })
+    expect(sdkSrv.captured.length).toBe(4)
+    expect(agentSrv.captured.length).toBe(0)
+    const rows = readArmFile(cwd, "haiku-base")
+    expect(rows.length).toBe(4)
+    expect(rows.every((r) => r.transport === "sdk")).toBe(true)
+  })
+})
+
 describe("runClsRun — fail-open per record", () => {
   test("transport failure (non-2xx) -> record counted as failed, no row, batch continues", async () => {
     const cwd = sampledRepo()

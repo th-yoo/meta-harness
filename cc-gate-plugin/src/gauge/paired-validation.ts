@@ -34,6 +34,7 @@ import {
   hasLiveCorpusLock,
   type CorpusRecord,
 } from "./corpus-store.ts"
+import { GAUGE_TRANSPORTS, type GaugeTransport } from "../types.ts"
 
 export const SHADOW_DIR_REL = ".km/gauge-corpus-shadow"
 export const PV_MANIFEST_NAME = "pv-manifest.json"
@@ -47,10 +48,21 @@ export function shadowRoot(cwd: string): string {
 /** R2 — "CLI-derived": has a derivation AND its transport is `"cli"` or
  * ABSENT (absent = pre-boundary CLI, per the §6c provenance rule —
  * files.ts:41-46). `transport:"sdk"` records are post-boundary and have no
- * CLI arm to pair with, so they are excluded from sampling entirely. */
+ * CLI arm to pair with, so they are excluded from sampling entirely.
+ * §6d: written as an explicit `"cli"`-or-absent check (not `!== "sdk"`) so a
+ * third transport value (`"agent-sdk"`) does not silently fall into the CLI
+ * baseline arm — `!== "sdk"` was correct only while `"cli"`/`"sdk"` were the
+ * sole values. */
 export function isCliDerived(r: CorpusRecord): boolean {
   if (r.derivation === undefined) return false
-  return r.derivation.transport !== "sdk"
+  return r.derivation.transport === "cli" || r.derivation.transport === undefined
+}
+
+/** §6d: predicate factory for "this record was derived on <transport>".
+ * Reads `derivation.transport` — CorpusRecord has no top-level transport
+ * field (the §6c `isCliDerived` above reads the same path). */
+export function derivedOn(transport: GaugeTransport): (r: CorpusRecord) => boolean {
+  return (r) => r.derivation?.transport === transport
 }
 
 export interface PvStrata {
@@ -62,12 +74,17 @@ export interface PvStrata {
 
 /** Pure stratification over the whole store. Not-C deliberately includes
  * class-less derivations (class is optional on v1 blobs) — "not C" is the
- * plan's literal predicate, not "classified as something else". */
-export function stratify(records: CorpusRecord[]): PvStrata {
+ * plan's literal predicate, not "classified as something else". §6d: the
+ * baseline predicate is injectable — defaults to `isCliDerived` so every
+ * existing (third-party) caller keeps the §6c behaviour byte-for-byte. */
+export function stratify(
+  records: CorpusRecord[],
+  isBaseline: (r: CorpusRecord) => boolean = isCliDerived,
+): PvStrata {
   const c: CorpusRecord[] = []
   const notC: CorpusRecord[] = []
   for (const r of records) {
-    if (!isCliDerived(r)) continue
+    if (!isBaseline(r)) continue
     if (r.derivation!.class === "C") c.push(r)
     else notC.push(r)
   }
@@ -111,13 +128,18 @@ export function resetToMined(r: CorpusRecord): CorpusRecord {
 
 /** Sample manifest (R3/R5) — counts + store keys per stratum ONLY, never
  * prompt text (F2: code-bearing text never travels). `pv-compare` (T2) joins
- * real-vs-shadow classifications on these keys. */
+ * real-vs-shadow classifications on these keys. Fix-wave finding 8: `arms`
+ * is OPTIONAL provenance — which pairing was active when this sample was
+ * taken — stamped by `runPvSample`, absent-means-`{baseline:"cli",
+ * shadow:"sdk"}` (same convention as `PvCountsFile.arms`). Parsed leniently
+ * everywhere it is read: absence never refuses. */
 export interface PvManifest {
   sampledAt: string
   hostname: string
   cCount: number
   notCCount: number
   keys: { c: string[]; notC: string[] }
+  arms?: { baseline: GaugeTransport; shadow: GaugeTransport }
 }
 
 export interface PvSampleSummary {
@@ -153,11 +175,23 @@ export function runPvSample(
   opts: { reset?: boolean },
   log: (m: string) => void,
   rand: () => number = Math.random,
+  isBaseline: (r: CorpusRecord) => boolean = isCliDerived,
+  // Fix-wave finding 5a: `isBaseline` is a bare predicate, so the messages
+  // below could not name which arm was actually sampled ("CLI-derived"
+  // regardless of pairing) — added as its OWN optional trailing param
+  // (rather than swapping `isBaseline`'s type to `PvPairing`) so every
+  // existing caller (3, 4, or 5 positional args) keeps compiling unchanged.
+  baselineLabel: GaugeTransport = "cli",
+  // Fix-wave finding 8: the shadow-side label of the ACTIVE pairing, stamped
+  // into the manifest's optional `arms` field alongside `baselineLabel` —
+  // purely provenance (the shadow side is not derived until later), same
+  // additive-trailing-param shape as `baselineLabel` above.
+  shadowTransport: GaugeTransport = "sdk",
 ): PvSampleSummary | undefined {
   // REAL store: lock-free read path only — never writeCorpus, never its lock.
-  const { c, notC } = stratify(readCorpus(cwd))
+  const { c, notC } = stratify(readCorpus(cwd), isBaseline)
   if (c.length === 0) {
-    log("pv-sample: nothing to validate — the store has no CLI-derived class-C records.")
+    log(`pv-sample: nothing to validate — the store has no matching ${baselineLabel}-derived class-C records.`)
     return undefined
   }
 
@@ -203,6 +237,7 @@ export function runPvSample(
     cCount: c.length,
     notCCount: drawn.length,
     keys: { c: c.map(recordKey), notC: drawn.map(recordKey) },
+    arms: { baseline: baselineLabel, shadow: shadowTransport },
   }
   const dest = path.join(root, PV_MANIFEST_NAME)
   const tmp = dest + ".tmp"
@@ -212,7 +247,7 @@ export function runPvSample(
   // Absolute shadow root in the hint — the derive command runs from anywhere,
   // so a relative path would resolve against the WRONG cwd (fix wave, F4).
   log(
-    `pv-sample: ${c.length} class-C + ${drawn.length} not-C CLI-derived record(s) -> ` +
+    `pv-sample: ${c.length} class-C + ${drawn.length} not-C ${baselineLabel}-derived record(s) -> ` +
       `${SHADOW_DIR_REL} (pending ${sampled.length}; next: derive ${root} --go ${sampled.length})`,
   )
   return { cCount: c.length, notCCount: drawn.length, total: sampled.length }
@@ -288,6 +323,44 @@ export interface PvComparison {
   keys: PvSetKeys
 }
 
+/** §6d: which two transports `comparePvRecords`/`runPvCompare` pair. */
+export interface PvPairing {
+  baseline: (r: CorpusRecord) => boolean
+  /** serializable name of the baseline arm — a predicate cannot be written
+   * into PvCountsFile.arms, so the label travels alongside it. */
+  baselineLabel: GaugeTransport
+  shadowTransport: GaugeTransport
+}
+
+/** The §6c pairing, used as the default everywhere so existing callers and
+ * existing records behave byte-for-byte as before. */
+const PV_DEFAULT_PAIRING: PvPairing = {
+  baseline: isCliDerived,
+  baselineLabel: "cli",
+  shadowTransport: "sdk",
+}
+
+/** Task 7: `--pair <baseline>:<shadow>` CLI flag, both sides must be known
+ * transports. Returns undefined for BOTH absent and malformed/unknown input
+ * — the CALLER (replay-cli.ts) distinguishes those two cases: absent means
+ * "apply the §6c default", malformed means REFUSE, so a typo can never be
+ * silently read as the default and run a §6c pairing labelled as something
+ * else. */
+export function parsePairFlag(args: string[]): PvPairing | undefined {
+  const i = args.indexOf("--pair")
+  if (i < 0) return undefined
+  const [b, s, ...rest] = (args[i + 1] ?? "").split(":")
+  if (rest.length > 0 || !b || !s) return undefined
+  if (!GAUGE_TRANSPORTS.includes(b as never) || !GAUGE_TRANSPORTS.includes(s as never)) return undefined
+  // "cli" MUST map to isCliDerived, not derivedOn("cli"): the 586 pre-boundary
+  // records carry no transport field and isCliDerived counts absent-as-cli
+  // (see isCliDerived above). A strict-equality predicate would give an
+  // explicit `--pair cli:sdk` a silently smaller stratum than the identical
+  // run with the flag omitted.
+  const baseline = b === "cli" ? isCliDerived : derivedOn(b as GaugeTransport)
+  return { baseline, baselineLabel: b as GaugeTransport, shadowTransport: s as GaugeTransport }
+}
+
 /** R3 — the join is MANIFEST-driven: exactly the sampled keys are compared;
  * records outside the manifest in EITHER store are ignored entirely (the
  * real store carries hundreds of unsampled records; a stray shadow record
@@ -297,17 +370,20 @@ export interface PvComparison {
  * - shadow record present but underived (still stage "mined": the shadow
  *   derive failed or has not run) -> `undecided`;
  * - both arms derived but on the WRONG transport — shadow derivation not
- *   `transport:"sdk"`, or the real record no longer isCliDerived ->
- *   `wrongTransport` (a stale pre-boundary checkout deriving the shadow on
- *   CLI would score trivial CLI-vs-CLI agreement while SDK never ran);
+ *   `pairing.shadowTransport`, or the real record no longer satisfies
+ *   `pairing.baseline` -> `wrongTransport` (a stale pre-boundary checkout
+ *   deriving the shadow on the baseline's own transport would score trivial
+ *   self-vs-self agreement while the shadow transport never ran);
  * - both arms derived on the right transports -> `decided`; CLI arm class
  *   from the REAL store's derivation, SDK arm class from the SHADOW store's.
  * Undecided/missing/wrongTransport are excluded from every C set but always
- * REPORTED — never silently dropped. */
+ * REPORTED — never silently dropped. §6d: `pairing` defaults to the §6c
+ * cli-vs-sdk pair, byte-for-byte, so untouched callers are unaffected. */
 export function comparePvRecords(
   manifest: PvManifest,
   realRecords: CorpusRecord[],
   shadowRecords: CorpusRecord[],
+  pairing: PvPairing = PV_DEFAULT_PAIRING,
 ): PvComparison {
   const realByKey = new Map(realRecords.map((r) => [recordKey(r), r] as const))
   const shadowByKey = new Map(shadowRecords.map((r) => [recordKey(r), r] as const))
@@ -336,7 +412,7 @@ export function comparePvRecords(
       keys.undecided.push(k)
       continue
     }
-    if (shadow.derivation.transport !== "sdk" || !isCliDerived(real)) {
+    if (shadow.derivation.transport !== pairing.shadowTransport || !pairing.baseline(real)) {
       keys.wrongTransport.push(k)
       continue
     }
@@ -445,13 +521,19 @@ export function combinePvCounts(a: PvCounts, b: PvCounts): PvCounts {
 /** `pv-counts.json` — the ONLY thing pv-compare ever writes. Counts, per-set
  * record KEYS, bar verdict, hostname + comparedAt — never prompt text
  * (R5/F2: code-bearing text never travels; this file is what gets committed
- * for the cross-host --combine). */
+ * for the cross-host --combine). §6d: `arms` names which two transports were
+ * paired. OPTIONAL — absent means `{baseline:"cli", shadow:"sdk"}` (this
+ * codebase's established absent-means-CLI convention). It MUST stay
+ * optional: `docs/gauge-pv/yoo-dev-pv-counts.json` is already committed
+ * without it, and the pre-existing `--combine` test fixtures build
+ * PvCountsFile-shaped objects without it too. */
 export interface PvCountsFile {
   comparedAt: string
   hostname: string
   counts: PvCounts
   keys: PvSetKeys
   bar: PvBarVerdict
+  arms?: { baseline: GaugeTransport; shadow: GaugeTransport }
 }
 
 const PV_COUNT_FIELDS = [
@@ -483,6 +565,12 @@ export interface PvCountsFileParsed {
   comparedAt: string
   counts: PvCounts
   keys: PvSetKeys
+  /** Task 7: which two transports the OTHER host's run paired. Always
+   * populated — defaulted to `{baseline:"cli", shadow:"sdk"}` when the source
+   * file has no `arms` (the committed §6c artifact predates this field, and
+   * the pre-existing --combine test fixtures build PvCountsFile-shaped
+   * objects without it too; absence must never refuse). */
+  arms: { baseline: GaugeTransport; shadow: GaugeTransport }
 }
 
 /** Set-cardinality identities every honest pv-counts.json satisfies —
@@ -534,41 +622,79 @@ export function parsePvCountsFile(raw: string): PvCountsFileParsed | undefined {
     if (!Array.isArray(v) || v.some((k) => typeof k !== "string")) return undefined
     keys[f] = v as string[]
   }
-  return { hostname: o.hostname, comparedAt: o.comparedAt, counts, keys }
+  // Task 7: `arms` — OPTIONAL, defaults to the §6c pair when absent (never
+  // refuse on absence), but if PRESENT it must actually name two known
+  // transports (a hand-edited/corrupt `arms` must not silently combine under
+  // the wrong label).
+  let arms: { baseline: GaugeTransport; shadow: GaugeTransport }
+  if (o.arms === undefined) {
+    arms = { baseline: PV_DEFAULT_PAIRING.baselineLabel, shadow: PV_DEFAULT_PAIRING.shadowTransport }
+  } else {
+    if (typeof o.arms !== "object" || o.arms === null) return undefined
+    const rawArms = o.arms as Record<string, unknown>
+    const b = rawArms.baseline
+    const s = rawArms.shadow
+    if (typeof b !== "string" || typeof s !== "string") return undefined
+    if (!GAUGE_TRANSPORTS.includes(b as never) || !GAUGE_TRANSPORTS.includes(s as never)) return undefined
+    arms = { baseline: b as GaugeTransport, shadow: s as GaugeTransport }
+  }
+  return { hostname: o.hostname, comparedAt: o.comparedAt, counts, keys, arms }
 }
 
-function renderPvCountsLine(c: PvCounts): string {
+const PV_DEFAULT_ARMS = { baseline: "cli" as GaugeTransport, shadow: "sdk" as GaugeTransport }
+
+// Fix-wave finding 5b: these two render helpers hardcoded "C_cli"/"C_sdk"
+// regardless of the actual pairing while the banner line (renderPvReport,
+// below) was already parameterized on `arms` — interpolate the same `arms`
+// labels in here too. `PvCounts.cCli`/`cSdk` FIELD NAMES stay as-is
+// (back-compat: committed pv-counts.json/pv-combined.json artifacts read
+// these field names); only the rendered TEXT changes.
+function renderPvCountsLine(c: PvCounts, arms: { baseline: GaugeTransport; shadow: GaugeTransport } = PV_DEFAULT_ARMS): string {
   return (
-    `|C_cli| ${c.cCli} · |C_sdk| ${c.cSdk} · |C_cli ∩ C_sdk| ${c.intersection} · ` +
-    `|C_cli ∪ C_sdk| ${c.union} · missed-C ${c.missedC} · sdk-only-C ${c.sdkOnlyC} · ` +
+    `|C_${arms.baseline}| ${c.cCli} · |C_${arms.shadow}| ${c.cSdk} · ` +
+    `|C_${arms.baseline} ∩ C_${arms.shadow}| ${c.intersection} · ` +
+    `|C_${arms.baseline} ∪ C_${arms.shadow}| ${c.union} · missed-C ${c.missedC} · sdk-only-C ${c.sdkOnlyC} · ` +
     `decided ${c.decided} · undecided ${c.undecided} · missing ${c.missing} · ` +
     `wrong-transport ${c.wrongTransport}`
   )
 }
 
 /** Both bar clauses with the arithmetic shown, then the verdict line. */
-function renderPvBarLines(c: PvCounts, bar: PvBarVerdict): string[] {
+function renderPvBarLines(
+  c: PvCounts,
+  bar: PvBarVerdict,
+  arms: { baseline: GaugeTransport; shadow: GaugeTransport } = PV_DEFAULT_ARMS,
+): string[] {
   if (bar.verdict === "NOT-EVALUATED") {
     return [`bar: NOT evaluated — ${bar.reason}`, "verdict: NOT-EVALUATED"]
   }
   return [
     "bar (pre-registered):",
-    `  positive agreement |C_cli ∩ C_sdk| / |C_cli ∪ C_sdk| = ${c.intersection}/${c.union} = ` +
-      `${bar.agreement!.toFixed(3)} ≥ ${PV_AGREEMENT_MIN}? ${bar.agreementOk ? "YES" : "NO"}`,
-    `  missed-C |C_cli \\ C_sdk| = ${c.missedC} ≤ ceil(${PV_MISSED_C_FRAC} × ${c.cCli}) = ` +
+    `  positive agreement |C_${arms.baseline} ∩ C_${arms.shadow}| / |C_${arms.baseline} ∪ C_${arms.shadow}| = ` +
+      `${c.intersection}/${c.union} = ${bar.agreement!.toFixed(3)} ≥ ${PV_AGREEMENT_MIN}? ${bar.agreementOk ? "YES" : "NO"}`,
+    `  missed-C |C_${arms.baseline} \\ C_${arms.shadow}| = ${c.missedC} ≤ ceil(${PV_MISSED_C_FRAC} × ${c.cCli}) = ` +
       `${bar.missedCap}? ${bar.missedOk ? "YES" : "NO"}`,
     `verdict: ${bar.verdict}`,
   ]
 }
 
-/** Human report for one host's comparison. Exported for tests. */
-export function renderPvReport(manifest: PvManifest, c: PvCounts, bar: PvBarVerdict): string {
+/** Human report for one host's comparison. Exported for tests. §6d: `arms`
+ * names which two transports were paired — defaults to the §6c cli-vs-sdk
+ * pair (this function has no access to `PvCountsFile.arms`, which lives on
+ * the OUTER file, not on the `PvCounts`/`PvBarVerdict` it is given; the
+ * caller, `runPvCompare`, passes its `pairing` labels through explicitly). */
+export function renderPvReport(
+  manifest: PvManifest,
+  c: PvCounts,
+  bar: PvBarVerdict,
+  arms: { baseline: GaugeTransport; shadow: GaugeTransport } = { baseline: "cli", shadow: "sdk" },
+): string {
   return [
-    "pv-compare — CLI-vs-SDK transport comparison (§6c pre-registered bar)",
+    `pv-compare — ${arms.baseline}-vs-${arms.shadow} transport comparison (§6c pre-registered bar)`,
     `sample: ${manifest.cCount} C + ${manifest.notCCount} not-C ` +
       `(sampled ${manifest.sampledAt}, host ${manifest.hostname})`,
-    renderPvCountsLine(c),
-    ...renderPvBarLines(c, bar),
+    renderPvCountsLine(c, arms),
+    ...renderPvBarLines(c, bar, arms),
   ].join("\n")
 }
 
@@ -608,6 +734,10 @@ export interface PvCombinedFile {
   local: { hostname: string; counts: PvCounts }
   other: { hostname: string; comparedAt: string; counts: PvCounts }
   combined: { counts: PvCounts; bar: PvBarVerdict }
+  /** Fix-wave finding 8: OPTIONAL provenance, stamped from the active
+   * pairing — absent-means-`{baseline:"cli", shadow:"sdk"}`, same convention
+   * as `PvCountsFile.arms`/`PvManifest.arms`. */
+  arms?: { baseline: GaugeTransport; shadow: GaugeTransport }
 }
 
 /** Values appearing more than once in `keys`, each reported once. */
@@ -627,12 +757,15 @@ function duplicateKeys(keys: string[]): string[] {
  * refusal (CLI exits 1). Refusal order is validate-first: a missing/corrupt
  * manifest, a malformed/self/overlapping --combine file, or duplicate sample
  * keys in a store all refuse with ZERO writes — the artifacts only land on a
- * run that will finish. */
+ * run that will finish. §6d: `opts.pairing` selects which two transports are
+ * compared — defaults to the §6c cli-vs-sdk pair, byte-for-byte, so a caller
+ * that never passes it sees today's behaviour unchanged. */
 export function runPvCompare(
   cwd: string,
-  opts: { combine?: string },
+  opts: { combine?: string; pairing?: PvPairing },
   log: (m: string) => void,
 ): PvCompareSummary | undefined {
+  const pairing = opts.pairing ?? PV_DEFAULT_PAIRING
   const root = shadowRoot(cwd)
 
   // Manifest (R3): the join is manifest-driven — no manifest, no comparison.
@@ -705,6 +838,21 @@ export function runPvCompare(
       )
       return undefined
     }
+    // Task 7: fail closed when the two hosts' EFFECTIVE arms disagree
+    // (cls-combine provisional hard-gate precedent, cls-ab.ts) — otherwise a
+    // `sdk:agent-sdk` run on one host and a `cli:sdk` run on the other would
+    // sum into a single meaningless combined bar. `other.arms` is always
+    // populated (parsePvCountsFile defaults it to cli:sdk when the file
+    // predates this field), so this check applies uniformly whether or not
+    // either side ever wrote an explicit `arms`.
+    if (other.arms.baseline !== pairing.baselineLabel || other.arms.shadow !== pairing.shadowTransport) {
+      log(
+        `REFUSING: --combine — this host's arms (${pairing.baselineLabel}:${pairing.shadowTransport}) ` +
+          `disagree with ${opts.combine}'s arms (${other.arms.baseline}:${other.arms.shadow}); ` +
+          "summing counts from two different transport pairings would produce a meaningless bar.",
+      )
+      return undefined
+    }
   }
 
   // Both stores: lock-free read path only (report precedent — a pure read
@@ -732,8 +880,9 @@ export function runPvCompare(
     }
   }
 
-  const comparison = comparePvRecords(manifest, realRecords, shadowRecords)
+  const comparison = comparePvRecords(manifest, realRecords, shadowRecords, pairing)
   const bar = evaluatePvBar(comparison.counts)
+  const arms = { baseline: pairing.baselineLabel, shadow: pairing.shadowTransport }
 
   const countsFile: PvCountsFile = {
     comparedAt: new Date().toISOString(),
@@ -741,13 +890,14 @@ export function runPvCompare(
     counts: comparison.counts,
     keys: comparison.keys,
     bar,
+    arms,
   }
   const dest = path.join(root, PV_COUNTS_NAME)
   const tmp = dest + ".tmp"
   fs.writeFileSync(tmp, JSON.stringify(countsFile, null, 2) + "\n")
   fs.renameSync(tmp, dest)
 
-  log(renderPvReport(manifest, comparison.counts, bar))
+  log(renderPvReport(manifest, comparison.counts, bar, arms))
   log(`pv-compare: wrote ${PV_COUNTS_NAME} -> ${dest}`)
 
   if (other === undefined) return { counts: comparison.counts, bar }
@@ -762,6 +912,7 @@ export function runPvCompare(
     local: { hostname: countsFile.hostname, counts: comparison.counts },
     other: { hostname: other.hostname, comparedAt: other.comparedAt, counts: other.counts },
     combined: { counts: combinedCounts, bar: combinedBar },
+    arms,
   }
   const combinedDest = path.join(root, PV_COMBINED_NAME)
   const combinedTmp = combinedDest + ".tmp"
@@ -772,10 +923,10 @@ export function runPvCompare(
     [
       "",
       `combine — other host ${other.hostname} (comparedAt ${other.comparedAt}):`,
-      `  this host:  ${renderPvCountsLine(comparison.counts)}`,
-      `  other host: ${renderPvCountsLine(other.counts)}`,
-      `  combined:   ${renderPvCountsLine(combinedCounts)}`,
-      ...renderPvBarLines(combinedCounts, combinedBar).map((l) => `  ${l}`),
+      `  this host:  ${renderPvCountsLine(comparison.counts, arms)}`,
+      `  other host: ${renderPvCountsLine(other.counts, arms)}`,
+      `  combined:   ${renderPvCountsLine(combinedCounts, arms)}`,
+      ...renderPvBarLines(combinedCounts, combinedBar, arms).map((l) => `  ${l}`),
     ].join("\n"),
   )
   log(`pv-compare: wrote ${PV_COMBINED_NAME} -> ${combinedDest}`)
