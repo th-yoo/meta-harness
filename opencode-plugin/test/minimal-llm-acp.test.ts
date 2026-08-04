@@ -152,6 +152,38 @@ describe("seatCall", () => {
     }
   })
 
+  test("final-review Important 3: a reply truncated at maxTokens (stop_reason max_tokens) throws naming truncation + the maxTokens value, never returns the cut-off text", async () => {
+    const srv = stubServer(() =>
+      Response.json({
+        id: "msg_stub",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-5",
+        content: [{ type: "text", text: "this reply was cut off mid-sen" }],
+        stop_reason: "max_tokens",
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1234 },
+      }),
+    )
+    try {
+      let caught: unknown
+      try {
+        await seatCall("claude-opus-5", "hi", {
+          env: { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+          maxTokens: 1234,
+        })
+      } catch (e) {
+        caught = e
+      }
+      expect(caught).toBeInstanceOf(Error)
+      const message = (caught as Error).message
+      expect(message).toMatch(/truncat/i)
+      expect(message).toContain("1234")
+    } finally {
+      srv.stop()
+    }
+  })
+
   test("registerProvider is safe to call across repeat seatCall invocations", async () => {
     const srv = stubServer(() => apiResponse("second call"))
     try {

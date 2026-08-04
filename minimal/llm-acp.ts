@@ -58,16 +58,39 @@ export interface SeatCallOptions {
  * idempotence dance for a caller that changes env between calls in tests). */
 export async function seatCall(model: string, prompt: string, opts: SeatCallOptions = {}): Promise<string> {
   const env = opts.env ?? process.env
-  registerProvider(PROVIDER_ID, makeAnthropicApiProvider(env, opts.authDeps ?? {}))
+  const maxTokens = opts.maxTokens ?? DEFAULT_MAX_TOKENS
+  // final-review Important 3: nothing below `sdkCallOutcome` inspected
+  // `response.stop_reason` before this fix, so a proposer/reviewer reply
+  // truncated at `maxTokens` came back as `{ok:true}` with cut-off text and
+  // was parsed downstream (propose.ts, review.ts) as a COMPLETE answer.
+  // Proposals feed the A/B loop, so a truncated one is a wrong record, not
+  // a missing one. `truncated` is a local closure captured by THIS call's
+  // `onTruncation` (registerProvider already re-registers per call, closing
+  // over this call's env/authDeps — same established pattern, see the
+  // header comment above): `makeAnthropicApiProvider`'s SendOutcome return
+  // value is deliberately untouched by the truncation signal (send-prompt's
+  // reviewed type stays byte-unchanged), so the ONLY way to learn "this
+  // reply was cut off" from out here is this side channel, checked below
+  // BEFORE the reply is ever handed to a caller.
+  let truncated = false
+  registerProvider(PROVIDER_ID, makeAnthropicApiProvider(env, opts.authDeps ?? {}, {
+    onTruncation: () => { truncated = true },
+  }))
 
   const outcome = await sendPrompt(prompt, {
     model,
     isolation: REASONING_ISOLATION,
     provider: PROVIDER_ID,
     timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-    maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+    maxTokens,
   })
 
+  if (truncated) {
+    throw new Error(
+      `seatCall(${model}) truncated: response hit maxTokens=${maxTokens} (stop_reason=max_tokens) — ` +
+      `a truncated reply must never be treated as complete`,
+    )
+  }
   if (outcome.ok) return outcome.text
   throw new Error(`seatCall(${model}) failed: ${outcome.kind}`)
 }

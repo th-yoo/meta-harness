@@ -504,7 +504,7 @@ describe("sdkCallOutcome", () => {
     }
   })
 
-  test("ok path: { ok: true, text, model } where model is response.model, NOT the requested literal", async () => {
+  test("ok path: { ok: true, text, model, stopReason } where model is response.model, NOT the requested literal", async () => {
     const srv = stubServer(() =>
       Response.json({
         id: "msg_stub",
@@ -522,7 +522,37 @@ describe("sdkCallOutcome", () => {
         KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
         KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
       })
-      expect(outcome).toEqual({ ok: true, text: "answer", model: "claude-opus-5-20260101" })
+      expect(outcome).toEqual({ ok: true, text: "answer", model: "claude-opus-5-20260101", stopReason: "end_turn" })
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("final-review Important 3: response.stop_reason 'max_tokens' is surfaced verbatim on the ok arm (stub simulates a truncated reply)", async () => {
+    const srv = stubServer(() =>
+      Response.json({
+        id: "msg_stub",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-5",
+        content: [{ type: "text", text: "this reply got cut off mid-sen" }],
+        stop_reason: "max_tokens",
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 8192 },
+      }),
+    )
+    try {
+      const outcome = await sdkCallOutcome("p", "claude-opus-5", {
+        KKAMAK_GAUGE_SDK_BASE_URL: srv.url,
+        KKAMAK_GAUGE_AUTH_TOKEN: "tok-1",
+      }, {}, { maxTokens: 8192 })
+      // `ok: true` here is DELIBERATE (this layer never adjudicates
+      // truncation, see makeAnthropicApiProvider/seatCall for the caller
+      // that does) -- the assertion is narrowly that `stopReason` carries
+      // the true value through so a caller CAN adjudicate it.
+      expect(outcome).toEqual({
+        ok: true, text: "this reply got cut off mid-sen", model: "claude-opus-5", stopReason: "max_tokens",
+      })
     } finally {
       srv.stop()
     }

@@ -204,4 +204,52 @@ describe("makeAnthropicApiProvider", () => {
       srv.stop()
     }
   })
+
+  test("final-review Important 3: stop_reason 'max_tokens' fires onTruncation, but the RETURNED SendOutcome is unchanged (still ok:true, same 4 fields)", async () => {
+    const srv = stubServer(() =>
+      Response.json({
+        id: "msg_stub",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-5",
+        content: [{ type: "text", text: "cut off mid-sen" }],
+        stop_reason: "max_tokens",
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 8192 },
+      }),
+    )
+    try {
+      const seen: Array<{ stopReason: string }> = []
+      const provider = makeAnthropicApiProvider(
+        { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+        {},
+        { onTruncation: (info) => seen.push(info) },
+      )
+      const outcome = await provider("p", { model: "claude-opus-5", isolation: GAUGE_ISOLATION, provider: "anthropic-api" })
+      expect(seen).toEqual([{ stopReason: "max_tokens" }])
+      // SendOutcome is send-prompt.ts's reviewed type and stays
+      // byte-unchanged: exactly these 4 keys, still ok:true.
+      expect(outcome).toEqual({
+        ok: true, text: "cut off mid-sen", model: "claude-opus-5", canonicalModel: "claude-opus-5",
+      })
+    } finally {
+      srv.stop()
+    }
+  })
+
+  test("stop_reason other than 'max_tokens' never fires onTruncation", async () => {
+    const srv = stubServer(() => apiResponse("complete answer", "claude-opus-5"))
+    try {
+      const seen: Array<{ stopReason: string }> = []
+      const provider = makeAnthropicApiProvider(
+        { KKAMAK_GAUGE_SDK_BASE_URL: srv.url, KKAMAK_GAUGE_AUTH_TOKEN: "tok-1" },
+        {},
+        { onTruncation: (info) => seen.push(info) },
+      )
+      await provider("p", { model: "claude-opus-5", isolation: GAUGE_ISOLATION, provider: "anthropic-api" })
+      expect(seen).toEqual([])
+    } finally {
+      srv.stop()
+    }
+  })
 })

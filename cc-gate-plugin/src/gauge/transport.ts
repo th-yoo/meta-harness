@@ -175,9 +175,19 @@ export interface SdkTransportOptions {
  * wire-send boundary law, `no-call` vs `call-consumed`, surfaced out of
  * this transport instead of collapsed by `sdkCall`'s `catch {}`.
  * `model` is the API's OWN echo (`response.model`), not the requested
- * literal — callers that need the requested literal already have it. */
+ * literal — callers that need the requested literal already have it.
+ * `stopReason` (final-review Important 3, additive): `response.stop_reason`
+ * verbatim, on the `ok` arm only. Nothing in this module inspects it —
+ * every existing caller of `sdkCallOutcome`/`sdkCall`/`callModelSdk*` is
+ * byte-unchanged by its addition (an extra object field nothing reads is
+ * not an observable behavior change). It exists so a caller ABOVE this
+ * layer (the anthropic-api provider, then minimal/llm-acp.ts's `seatCall`)
+ * can tell a reply that hit `max_tokens` apart from one that ended
+ * naturally — `sdkCallOutcome` itself never inspects it because a "was this
+ * truncated" POLICY (retry? throw? accept?) is a caller decision, not a
+ * transport one. */
 export type SdkOutcome =
-  | { ok: true; text: string; model: string }
+  | { ok: true; text: string; model: string; stopReason?: string }
   | { ok: false; kind: "no-call" | "call-consumed" }
 
 /** Shared call plumbing (auth -> client -> request -> text block
@@ -255,7 +265,14 @@ export async function sdkCallOutcome(
     })
 
     for (const block of response.content) {
-      if (block.type === "text" && block.text) return { ok: true, text: block.text, model: response.model }
+      if (block.type === "text" && block.text) {
+        return {
+          ok: true,
+          text: block.text,
+          model: response.model,
+          ...(response.stop_reason ? { stopReason: response.stop_reason } : {}),
+        }
+      }
     }
     return { ok: false, kind: "call-consumed" }
   } catch {

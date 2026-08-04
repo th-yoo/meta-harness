@@ -7,6 +7,26 @@
 import type { SendPromptProvider, SendPromptOptions, SendOutcome } from "../send-prompt.ts"
 import { sdkCallOutcome, resolveModelId, type AuthTokenDeps } from "../transport.ts"
 
+/** final-review Important 3: a third, OPTIONAL constructor argument rather
+ * than a `SendOutcome`/`SendPromptOptions` field. `SendOutcome` is the
+ * reviewed N1 interface type (send-prompt.ts) and stays byte-unchanged by
+ * this fix — truncation policy is provider-factory configuration, not part
+ * of the per-call outcome contract every provider must implement
+ * identically. `onTruncation` is a pure side-effect hook: it does not
+ * change what this provider RETURNS (still exactly `SendOutcome`'s 4 `ok`
+ * fields, see the return statement below) — it exists only so a caller
+ * that built this provider can be told, out of band, that the reply it is
+ * about to receive was cut off. Absent (every gauge-lane caller today) ->
+ * no-op, byte-identical to before this option existed. */
+export interface AnthropicApiProviderOpts {
+  /** Called synchronously, before this provider returns, iff the response's
+   * `stop_reason` was `"max_tokens"` — i.e. the reply was truncated rather
+   * than completing on its own. minimal/llm-acp.ts's `seatCall` is the one
+   * wired caller: it turns this into a thrown Error so a truncated
+   * proposer/reviewer reply is never returned as if it were complete. */
+  onTruncation?: (info: { stopReason: string }) => void
+}
+
 /** `opts.isolation` (a `WarmIsolation` VALUE, acp-wire.ts:137) mapped onto
  * the raw Messages API. Most of `WarmIsolation` has no wire equivalent
  * here and is satisfied by construction rather than by inventing a field
@@ -33,6 +53,7 @@ import { sdkCallOutcome, resolveModelId, type AuthTokenDeps } from "../transport
 export function makeAnthropicApiProvider(
   env: Record<string, string | undefined>,
   authDeps: AuthTokenDeps = {},
+  providerOpts: AnthropicApiProviderOpts = {},
 ): SendPromptProvider {
   return async (prompt: string, opts: SendPromptOptions): Promise<SendOutcome> => {
     if (opts.isolation.thinking.type === "enabled") {
@@ -48,6 +69,14 @@ export function makeAnthropicApiProvider(
     })
 
     if (!outcome.ok) return outcome
+    // final-review Important 3: a side-effect notification only — the
+    // RETURNED SendOutcome is unaffected (still `ok: true` with the
+    // truncated text), because whether a truncated reply is acceptable is
+    // a caller policy, not something this provider is positioned to
+    // decide for every caller. seatCall is the caller that says no.
+    if (outcome.stopReason === "max_tokens") {
+      providerOpts.onTruncation?.({ stopReason: outcome.stopReason })
+    }
     // SendOutcome.model = the requested literal (post-resolveModelId);
     // .canonicalModel = the API's own echo (sdkCallOutcome's `model`,
     // sourced from `response.model`) — the two are deliberately distinct
