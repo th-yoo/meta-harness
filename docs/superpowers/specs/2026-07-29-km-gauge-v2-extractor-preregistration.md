@@ -806,6 +806,71 @@ by a token-free probe before any of this lane is built. If the probe
 fails, this amendment records a design that was not realizable and the
 lane is not built; that is a complete outcome, not a failure to hide.
 
+**Amendment (pre-data, 2026-08-04): Step 1a gate probe result — measured,
+token-free.** The probe above was run today, 2026-08-04, entirely against a
+local SSE stub (`ANTHROPIC_BASE_URL` pinned to it; no real endpoint ever
+reachable) — token-free, per the isolation check recorded in
+`.superpowers/sdd/2026-08-04-acp-warm-daemon/task-4-step1a-report.md`,
+which is the source of every number below. It pushed `MARKER-ONE`, then
+`/clear`, then `MARKER-TWO` into a streaming-input `Query`. Four conditions
+were checked; three PASS, one FAILS, and the FAIL surfaces a fact this spec
+did not previously anticipate.
+
+  1. PASS — `conversation_reset` arrives after the `/clear` push: the push
+     landed at `t+8.01s` and `conversation_reset` was observed at
+     `t+8.02s` — "10 ms later", i.e. a direct, fast response to the push.
+  2. PASS — `/clear` itself makes no model call: `requests: 2` for the
+     whole run (`CAPTURED.length === 2`), exactly the two real turns
+     (`MARKER-ONE`, `MARKER-TWO`) — ZERO HTTP requests are attributable to
+     `/clear`.
+  3. PASS — the transcript really resets: the second request's `messages`
+     does not contain `MARKER-ONE` ("2nd request carries MARKER-ONE?:
+     false").
+  4. FAIL — "every `result`'s `modelUsage` is a non-empty object" does not
+     hold. Pushing `/clear` produces THREE `result` messages across the
+     two real turns, not two: `modelUsage per result:
+     [{"claude-haiku-4-5":{...}}, {}, {"claude-haiku-4-5":{...}}]`. The
+     middle entry is `/clear`'s OWN synthetic local turn — its own fresh
+     `system/init`, an `assistant` message, and a `result` with
+     `num_turns: 0`, `duration_api_ms: 0`, and `modelUsage: {}` — emitted
+     between `conversation_reset` and the next real turn's `system/init`,
+     with zero HTTP requests of its own.
+
+MEASURED FACT, not anticipated by the "Why, and what is still UNMEASURED"
+paragraph above: this paragraph's claim that `/clear` "costs no model
+call" REMAINS TRUE — condition 2 confirms zero HTTP requests — but the
+prior text said nothing about `/clear` emitting a `result` FRAME of its
+own. It does. Any consumer that matches on `type === "result"` alone,
+without a distinguishing check, can be handed this empty-`modelUsage`
+local ack in place of a turn's real terminal result.
+
+BINDING sequencing rule (user ruling, 2026-08-04): `awaitClear()` must
+consume BOTH the `conversation_reset` message AND the synthetic `result`
+that follows it before the prompt is pushed, so that frame is always
+absorbed while `sent === false` and handled by the existing
+stray-message guard/counter — never left free to land after the push,
+where `route()` would see `type === "result"` with `sent === true` and
+settle a live record from a frame carrying no text and no model evidence.
+Field-discriminating the synthetic frame instead (e.g. branching on
+`num_turns === 0` or an empty `modelUsage`) was explicitly REJECTED: it
+pins the design to undocumented SDK fields rather than to the ordering
+the SDK's own event stream already guarantees.
+
+`modelUsage` key observation: both real turns' `modelUsage` were keyed by
+the UNDATED alias `"claude-haiku-4-5"` (`canonicalModel` identical to it),
+not by the dated snapshot id (`claude-haiku-4-5-20251001`) the stub
+declared in `message_start` — under this SDK build
+(`@anthropic-ai/claude-agent-sdk@0.3.220`) and this streaming-input/
+local-stub configuration, the key tracks the client-requested model id,
+not the server-declared one. `modelProvenBy` (the matching rule above)
+stays tolerant of BOTH forms by construction — `k === m OR
+k.startsWith(m + "-") OR usage[k].canonicalModel === m` — and needs no
+change. The dated form remains observed elsewhere in this repo, at
+`opencode-plugin/test/fixtures/drivers/claude-code/success.ndjson:22`, on
+a DIFFERENT driving path (a captured real-CLI transcript, not this
+stub/streaming-input probe); that observation stands on its own and was
+not re-measured here.
+
 **Declared residue, and an open disagreement inside this spec.** Each
 post-`/clear` turn is believed to carry ~423 B of constant
 `<local-command-caveat>`/`<command-name>/clear</command-name>` echo. §6d's
