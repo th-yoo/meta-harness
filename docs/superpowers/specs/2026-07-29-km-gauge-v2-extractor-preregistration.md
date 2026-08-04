@@ -659,9 +659,17 @@ path was measured:
   haiku OK, sonnet 429, opus 429 on the same token in the same second).
   It therefore has no premium problem for this transport to solve.
 - Routing it through `agent-sdk` anyway would impose ~1.25 s of
-  subprocess spawn plus the ~423-byte `/clear` echo on EVERY Stop hook,
-  buying nothing. A global flip is a pure tax on the one code path whose
-  prime directive is to never affect the session.
+  subprocess spawn on EVERY Stop hook, buying nothing. A global flip is a
+  pure tax on the one code path whose prime directive is to never affect
+  the session. **Correction (Task 4, 2026-08-04, measured):** an earlier
+  draft of this sentence also charged the one-shot lane a ~423-byte
+  `/clear` echo. That was wrong and is removed here — the one-shot lane
+  (`agentSdkCall`, what this bullet is about) is a single fresh `query()`
+  per call and never pushes `/clear`, so it cannot carry that residue.
+  Measured directly: a fresh one-shot request under the identical option
+  set is 1,145 B; the echo is a property of the WARM lane's post-`/clear`
+  turns only (§6e below), not this one. See §6e's residue paragraph for
+  the resolved numbers.
 - The premium-blocked work — `cls-label` (opus), the sonnet arms,
   `channel-smoke` — is ALL batch. That is the only place the lane earns
   its cost.
@@ -871,23 +879,40 @@ a DIFFERENT driving path (a captured real-CLI transcript, not this
 stub/streaming-input probe); that observation stands on its own and was
 not re-measured here.
 
-**Declared residue, and an open disagreement inside this spec.** Each
-post-`/clear` turn is believed to carry ~423 B of constant
-`<local-command-caveat>`/`<command-name>/clear</command-name>` echo. §6d's
-PER-CALLER ruling above (the paragraph beginning "Routing it through
-`agent-sdk` anyway") attributes that SAME ~423 B to the ONE-SHOT lane, on
-every Stop hook. Both cannot be describing distinct facts: either the echo
-is present in both lanes (in which case it cannot distinguish them) or
-§6d's sentence is wrong about the one-shot lane. This is registered as an
-OPEN DISCREPANCY rather than resolved by argument. It is resolved by
-measurement: the plan's Task 4 records the request bytes of a post-`/clear`
-warm turn AND of a fresh-spawn one-shot turn under the same option set, and
-whichever of the two statements is wrong is corrected in the same commit
-that records the measurement. Note that the separate §6e bar does not
-depend on the outcome: a many-turn session that has served other prompts
-is a different context from a fresh spawn whether or not the echo
-distinguishes them, and that alone is why this literal gets its own bar
-rather than inheriting §6d's result.
+**Declared residue — RESOLVED by measurement (Task 4, 2026-08-04).** Each
+post-`/clear` turn was believed to carry ~423 B of constant
+`<local-command-caveat>`/`<command-name>/clear</command-name>` echo, and an
+earlier draft of §6d's PER-CALLER ruling above (the paragraph beginning
+"Routing it through `agent-sdk` anyway") attributed that SAME figure to the
+ONE-SHOT lane, on every Stop hook. Both could not be describing distinct
+facts, and this was registered as an OPEN DISCREPANCY pending measurement,
+per this section's earlier text.
+
+Measured directly (token-free, local SSE stub, identical isolation option
+set and identical prompt text on both sides — `/mnt/d/tmp/task4-step4-
+measure.ts`, not committed, host-local per CLAUDE.md): a `WarmSession`
+turn immediately after `/clear` sent a request of **1,651 B** (1 message);
+a fresh one-shot `agentSdkCall` under the same option set and the same
+prompt sent **1,145 B** (1 message). Delta: **506 B** — the `/clear` echo
+(`<local-command-caveat>` + `<command-name>/clear</command-name>` +
+`<local-command-stdout>` blocks), confirmed present verbatim in the warm
+request and verbatim ABSENT from the one-shot request.
+
+**Verdict: §6e's attribution was correct; §6d's sentence was wrong about
+the one-shot lane and is corrected in the same commit as this measurement**
+(see the "Correction (Task 4, 2026-08-04, measured)" note on that
+paragraph above). The one-shot lane is a single fresh `query()` per call
+and never pushes `/clear`, so it structurally cannot carry this residue —
+it only exists on the WARM lane, where a `/clear`-recycled turn's context
+literally contains the SDK's own echo of the `/clear` command it just
+issued. The earlier ~423 B figure was an unmeasured estimate quoted in two
+places under two different (and incompatible) attributions; 506 B (under
+this task's specific option set and prompt) is now the measured,
+in-tree-anchored figure and supersedes both. The separate §6e bar never
+depended on this outcome either way: a many-turn session that has served
+other prompts is a different context from a fresh spawn whether or not the
+echo distinguishes them, and that alone is why this literal gets its own
+bar rather than inheriting §6d's result.
 
 **Instrument invariants (pinned in daemon code, not client-negotiable).**
 The §6d isolation option set, with TWO registered deltas:
