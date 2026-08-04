@@ -88,6 +88,30 @@ function parseMaxSessions(env: Record<string, string | undefined>): number {
   return Math.max(1, Math.trunc(n))
 }
 
+/** N3c-iii ruling (2026-08-04, reopening this file): the pool owns
+ * `KKAMAK_ACP_TURN_TIMEOUT_MS`, not a daemon-side factory — the same class
+ * of env-driven construction policy as `KKAMAK_ACP_MAX_SESSIONS` above, and
+ * a fingerprint-pinned instrument knob (acp-paths.test.ts:69-71). A
+ * daemon-side `makeSession` override was considered and rejected: it would
+ * split budget construction into two authorities (pool default vs. daemon
+ * factory), the exact divergence class the explicit-budgets rule (every leg
+ * named here, never left to a caller's own defaulting) exists to prevent.
+ *
+ * Mirrors acp-daemon.ts's (now-removed) `warmBudgetOpts` EXACTLY,
+ * byte-for-byte in behavior, not `parseMaxSessions`'s stricter
+ * finite-then-clamp rule: `Number(raw) || ACP_BUDGET.turnTimeoutMs`. Unset,
+ * `"0"`, and non-numeric garbage all coerce to a falsy `Number(...)` and
+ * fall through the `||` to the raw constant; any other numeric string is
+ * honored VERBATIM, deliberately unclamped and unvalidated here — that is
+ * `warmBudgetOpts`'s own existing behavior (it never floors to
+ * `CLI_SPAWN_BUDGET_MS` either), and WarmSession's own constructor already
+ * owns that floor (warm-session.ts's `Math.max(CLI_SPAWN_BUDGET_MS, ...)`),
+ * so re-validating here would be a second, potentially divergent authority
+ * on the exact same floor. */
+function parseTurnTimeoutMs(env: Record<string, string | undefined>): number {
+  return Number(env.KKAMAK_ACP_TURN_TIMEOUT_MS) || ACP_BUDGET.turnTimeoutMs
+}
+
 /** Recursive sorted-keys canonicalization, so two separately-constructed
  * `WarmIsolation` literals with different key insertion orders compare
  * equal. Plain `JSON.stringify` is key-order-dependent and would treat
@@ -168,7 +192,7 @@ export class SessionPool {
 
     const warm = this.makeSession(this.env, {
       isolation,
-      turnTimeoutMs: ACP_BUDGET.turnTimeoutMs,
+      turnTimeoutMs: parseTurnTimeoutMs(this.env),
       queueWaitMs: ACP_BUDGET.queueWaitMs,
       clearTimeoutMs: ACP_BUDGET.clearTimeoutMs,
       setModelMs: ACP_BUDGET.setModelMs,

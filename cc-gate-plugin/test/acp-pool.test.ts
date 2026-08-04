@@ -346,4 +346,41 @@ describe("SessionPool wiring against the REAL WarmSession default (construction 
       hardGraceMs: ACP_BUDGET.hardGraceMs,
     })
   })
+
+  // N3c-iii ruling (2026-08-04): the pool, not a daemon-side factory, owns
+  // KKAMAK_ACP_TURN_TIMEOUT_MS — same class of env-driven construction
+  // policy as KKAMAK_ACP_MAX_SESSIONS, and a fingerprint-pinned instrument
+  // knob (acp-paths.test.ts:69-71). Mirrors acp-daemon.ts's warmBudgetOpts
+  // EXACTLY: `Number(env.KKAMAK_ACP_TURN_TIMEOUT_MS) || ACP_BUDGET.turnTimeoutMs`
+  // — absent, "0", or non-numeric garbage all fall through the `||` to the
+  // raw constant (test 11 above already pins the absent case; this pins the
+  // override case, and 0/garbage explicitly, so the two together cover the
+  // whole function).
+  test("12. env.KKAMAK_ACP_TURN_TIMEOUT_MS overrides turnTimeoutMs exactly like warmBudgetOpts; 0/garbage/absent all fall back to the raw ACP_BUDGET constant", () => {
+    const overridden = new SessionPool(
+      { ...ENV, KKAMAK_ACP_TURN_TIMEOUT_MS: "12345" },
+      { makeSession: fakeMakeSession },
+    )
+    const now = Date.now()
+    const o = overridden.acquire(GAUGE_ISOLATION, now)
+    expect(o.ok).toBe(true)
+    if (o.ok) expect(asFake(o.entry.warm).opts.turnTimeoutMs).toBe(12345)
+
+    const zero = new SessionPool({ ...ENV, KKAMAK_ACP_TURN_TIMEOUT_MS: "0" }, { makeSession: fakeMakeSession })
+    const z = zero.acquire(GAUGE_ISOLATION, now)
+    expect(z.ok).toBe(true)
+    if (z.ok) expect(asFake(z.entry.warm).opts.turnTimeoutMs).toBe(ACP_BUDGET.turnTimeoutMs)
+
+    const garbage = new SessionPool({ ...ENV, KKAMAK_ACP_TURN_TIMEOUT_MS: "banana" }, { makeSession: fakeMakeSession })
+    const gp = garbage.acquire(GAUGE_ISOLATION, now)
+    expect(gp.ok).toBe(true)
+    if (gp.ok) expect(asFake(gp.entry.warm).opts.turnTimeoutMs).toBe(ACP_BUDGET.turnTimeoutMs)
+
+    const absentEnv = { ...ENV }
+    delete absentEnv.KKAMAK_ACP_TURN_TIMEOUT_MS
+    const absent = new SessionPool(absentEnv, { makeSession: fakeMakeSession })
+    const a = absent.acquire(GAUGE_ISOLATION, now)
+    expect(a.ok).toBe(true)
+    if (a.ok) expect(asFake(a.entry.warm).opts.turnTimeoutMs).toBe(ACP_BUDGET.turnTimeoutMs)
+  })
 })
