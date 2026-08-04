@@ -603,6 +603,25 @@ attributable to transport, harness context, OR enforcement mechanism —
 this note exists so a SPLIT result is not misread as a pure transport
 effect.
 
+Two further arm asymmetries, measured 2026-08-04 during the whole-branch
+review and recorded while the pre-data window is open:
+
+- **Retry behaviour.** The bundled CLI auto-retries a 5xx response — measured
+  against a local stub: one `agentSdkCall` produced a second `/v1/messages`
+  request after a 500, which would silently break the binding
+  exactly-one-call rule (the incumbent arm pins `maxRetries: 0`). Guard now
+  in code: `agentSdkCall` aborts the query on the SDK's `api_retry` system
+  message and returns undefined (fail-open; record stays pending/retryable).
+  The abort races a retry request already in flight, so the wire may still
+  see a second request begin — but the transport never consumes its result,
+  and no third request occurs (test-locked at ≤2 with the race documented).
+- **Output cap.** The API arm caps generation at `max_tokens: 2048`; the
+  Agent-SDK `Options` surface exposes no output cap (verified against
+  sdk.d.ts — a draft `maxTokens` option was deleted as unwireable). An
+  over-long generation therefore truncates → parse-fails → stays pending on
+  the API arm only. Same consequence as the enforcement asymmetry above:
+  arms can differ in PENDING COUNT for this reason too.
+
 **Selection is PER-CALLER, not a global default (RULED 2026-08-03, user).**
 The original draft ended with a global default flip once the bar passed.
 That is withdrawn, for a reason that only became visible once the live
