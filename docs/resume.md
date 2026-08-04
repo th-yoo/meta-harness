@@ -63,6 +63,44 @@ RULES THAT BIT ME YESTERDAY, IN PRIORITY ORDER:
    changes · per-task reviews · grep-verify · script-tally · SITREP.
 ```
 
+## ✅ SESSION END 2026-08-05 (`yoo-dev` office) — ACP LANE COMPLETE + MERGED to main @ `bbdabe1` · PROPOSER BOUNDARY STAMPED (ts 1785847012141) · WARM LANE BUILT-BUT-UNWIRED
+
+**RESUME PROMPT (office `yoo-dev`):**
+```
+Resume kkamak (meta-harness), post-2026-08-05. Read docs/resume.md FIRST
+(this top block). The acp-session-pool lane is DONE and MERGED.
+
+STATE: main @ bbdabe1 (+2 docs commits) pushed. Branch acp-session-pool
+merged --no-ff through the 7b gate (review artifact
+docs/reviews/95cfa82-acp-session-pool.md, whole-branch opus review
+0 Critical, all Importants closed). cc-gate-plugin 1043/0, opencode-plugin
+1771/1skip, tsc clean both.
+
+WHAT CHANGED ON MAIN (instrument!): the design-time seats' claude-code
+driver now runs sendPrompt -> anthropic-api (Messages API) with EXPLICIT
+REASONING_ISOLATION + maxTokens 8192 + truncation guard. Boundary ts
+1785847012141 in docs/2026-08-01-gauntlet-adoption-ledger.md — partition
+seat data by it, pre/post must not pool. opencode driver untouched.
+
+BUILT BUT NOT WIRED (next decision, needs its own go): the
+anthropic-cli-warm lane — ACP daemon + SessionPool (cap 4, measured
+~330MB/session, docs/2026-08-05-warm-session-rss.md) + acp-client +
+provider. NO caller registers it. Its value = premium reach via the CLI
+credential pool when the raw API is 429-walled. Wiring = a provider
+registration at the seat call sites + its own boundary entry. MacBook
+needs its own RSS measurement before raising the cap there.
+
+DEFERRED (ledgered in the merged review artifact): ~25 triaged-OK minors;
+thinking:enabled asymmetry between providers (api no-calls it, warm would
+run it) documented not resolved; session/cancel has no production client;
+--stdio daemon mode untested.
+
+Rules unchanged: explicit sized go before spend · spec-is-law, pre-data
+amendments only · merges through scripts/merge-with-gate.sh with a
+committed docs/reviews artifact · boundary ts on instrument changes ·
+per-task reviews · grep-verify · SITREP.
+```
+
 ## ✅ SESSION END 2026-08-04 (`yoo-dev` office) — §6d MERGED · §6e REGISTERED + GATE MEASURED · ACP LANE HALF-BUILT on branch `acp-session-pool` (13 commits, 936 tests green, UNPUSHED) · SEND-PROMPT REDESIGN RULED
 
 **RESUME PROMPT (office `yoo-dev`):**
