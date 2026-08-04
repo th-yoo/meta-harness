@@ -117,6 +117,22 @@ interface JsonRpcReply { id?: number | string; result?: unknown; error?: { code:
  * the reason cancel-scoping must be tag-based (round-3 C2). */
 function connectNdjson(sock: string): Promise<{
   request: (method: string, params?: unknown) => Promise<any>
+  /** Writes every frame in ONE `socket.write()` call (2026-08-04 review
+   * finding, same-chunk-cancel fix). Two SEPARATE `request()`/`notify()`
+   * calls in the same synchronous JS tick still issue two SEPARATE socket
+   * writes -- the OS/loopback stack is NOT obligated to deliver them to
+   * the daemon's `data` handler as one chunk, so a caller relying on
+   * "fired back-to-back" for determinism (e.g. a cancel racing a prompt's
+   * send boundary) gets a race, not a guarantee -- measured flaky under
+   * load post-N3c-iii, once a session's own turn spawns its own CLI
+   * subprocess immediately instead of sitting behind a shared queue.
+   * Concatenating the encoded frames into a SINGLE write guarantees they
+   * land in the SAME `data` chunk, hence the SAME synchronous
+   * `decoder.push(chunk)` for-loop pass on the daemon side -- the daemon
+   * never yields to I/O between dispatching frame N and frame N+1 from one
+   * chunk, so ordering (and therefore "cancel sees the still-unsent turn")
+   * is deterministic, not timing-dependent. */
+  requestBatch: (frames: Array<{ method: string; params?: unknown }>) => Array<Promise<any>>
   notify: (method: string, params?: unknown) => void
   onNotification: (method: string, cb: (params: any) => void) => void
   close: () => void
@@ -139,6 +155,17 @@ function connectNdjson(sock: string): Promise<{
             pending.set(id, { resolve: res, reject: rej })
             socket.write(encodeFrame({ jsonrpc: "2.0", id, method, params }))
           })
+        },
+        requestBatch(frames: Array<{ method: string; params?: unknown }>) {
+          let payload = ""
+          const promises = frames.map(({ method, params }) => {
+            const id = nextId++
+            const p = new Promise((res, rej) => { pending.set(id, { resolve: res, reject: rej }) })
+            payload += encodeFrame({ jsonrpc: "2.0", id, method, params })
+            return p
+          })
+          socket.write(payload)   // ONE write -- see the method's own doc comment above
+          return promises
         },
         notify(method: string, params?: unknown) {
           socket.write(encodeFrame({ jsonrpc: "2.0", method, params }))
@@ -312,22 +339,31 @@ describe("acp-daemon wire behaviour (no model reached)", () => {
           socket.write(encodeFrame({ jsonrpc: "2.0", id, method, params }))
         })
       }
-      const notify = (method: string, params?: unknown): void => {
-        socket.write(encodeFrame({ jsonrpc: "2.0", method, params }))
-      }
-
       await request("initialize", { protocolVersion: 1 })
       const s = await request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } } })
 
-      const promptPromise = request("session/prompt", {
-        sessionId: s.sessionId,
-        prompt: [{ type: "text", text: "cancel me" }],
-        _meta: { kkamak: { model: HAIKU } },
+      // 2026-08-04 review finding (same class as the "SAME JSON-RPC id"
+      // cancel-scoping test below): `request()` then `notify()` as two
+      // SEPARATE `socket.write()` calls is not a same-chunk guarantee, and
+      // post-N3c-iii this session's turn spawns its OWN CLI subprocess
+      // immediately (no shared-warm-session queue to hide behind) -- a
+      // split delivery can let the cancel notification land AFTER the send
+      // boundary crosses, flipping this test's expected ACP_ERR_NO_CALL to
+      // ACP_ERR_CALL_CONSUMED nondeterministically. Write BOTH frames in
+      // ONE `socket.write()` so the daemon decodes and dispatches them in
+      // the SAME synchronous for-loop pass -- the cancel is then
+      // guaranteed to run before the turn ever reaches its first real
+      // await (the SDK's dynamic import), long before it sends.
+      const promptId = nextId++
+      const promptPromise = new Promise<any>((resolve, reject) => {
+        pending.set(promptId, { resolve, reject })
       })
-      // Fire the cancel as a bare notification (no id) immediately, before
-      // awaiting the prompt -- races the turn out of `pending`/unsent
-      // `current` before it crosses the send boundary.
-      notify("session/cancel", { sessionId: s.sessionId })
+      const promptFrame = encodeFrame({
+        jsonrpc: "2.0", id: promptId, method: "session/prompt",
+        params: { sessionId: s.sessionId, prompt: [{ type: "text", text: "cancel me" }], _meta: { kkamak: { model: HAIKU } } },
+      })
+      const cancelFrame = encodeFrame({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: s.sessionId } })
+      socket.write(promptFrame + cancelFrame)
 
       await expect(promptPromise).rejects.toMatchObject({ code: ACP_ERR_NO_CALL, data: { callConsumed: false } })
       // Give a buggy "answer the notification" frame a moment to arrive.
@@ -834,13 +870,30 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket (reac
       expect(crossed).toBe(true)
 
       const sB = await cB.request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } } })
-      const bPromise = cB.request("session/prompt", {
-        sessionId: sB.sessionId, prompt: [{ type: "text", text: "B queued" }],
-        _meta: { kkamak: { model: HAIKU } },
-      })
-      // B cancels ITS OWN session, using whatever id its own counter is on
-      // (which, by construction, may equal one of A's ids).
-      await cB.request("session/cancel", { sessionId: sB.sessionId })
+      // 2026-08-04 review finding: post-N3c-iii, B's prompt no longer
+      // queues behind a shared single WarmSession (that used to be an
+      // unbounded window a plain `request()`-then-`request()` pair could
+      // exploit for free) -- B now acquires its OWN pool entry and its OWN
+      // CLI subprocess starts spawning immediately (~1.3s window,
+      // measured). Two SEPARATE socket writes racing that window are not
+      // deterministic under load (measured: 1016/1 in an independent run,
+      // B landing ACP_ERR_CALL_CONSUMED instead of the asserted no-call).
+      // `requestBatch` writes B's session/prompt AND session/cancel in ONE
+      // socket write, so the daemon decodes and dispatches both in the
+      // SAME synchronous for-loop pass -- cancel is guaranteed to run
+      // before B's turn ever reaches its first real await (the SDK's
+      // dynamic import), long before the send boundary. B's own id
+      // counter is still whatever it is at this point (which, by
+      // construction, may equal one of A's ids) -- the scoping must come
+      // from the daemon-minted tag, never the wire id, same as before.
+      const [bPromise, bCancelAckPromise] = cB.requestBatch([
+        { method: "session/prompt", params: {
+          sessionId: sB.sessionId, prompt: [{ type: "text", text: "B cancelled pre-send" }],
+          _meta: { kkamak: { model: HAIKU } },
+        } },
+        { method: "session/cancel", params: { sessionId: sB.sessionId } },
+      ])
+      await bCancelAckPromise
 
       await expect(bPromise).rejects.toMatchObject({ code: ACP_ERR_NO_CALL, data: { callConsumed: false } })
       // A must never be cancelled by B -- it ends on its OWN turn timeout.
