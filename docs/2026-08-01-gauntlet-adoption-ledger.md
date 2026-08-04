@@ -52,6 +52,41 @@ itself (fresh-context critics).
   pinning that the check rejects the drifts it exists to catch. No gap found:
   emission already conformed. Tests only — F1 untouched.
 
+## Warm-lane (`anthropic-cli-warm`) activation log
+
+- **2026-08-05 00:12:51 KST (boundary ts 1785856371528), yoo-mac.local
+  (user-directed: "2 then 1" — RSS measurement first, then activation).**
+  `KKAMAK_SEAT_PROVIDER=anthropic-cli-warm` set in `~/.claude/settings.json`
+  env (all CC sessions on this host — same mechanism as the v2 activation
+  above; grep-verified, JSON validated). From this point the design-time
+  seats (proposer/reviewer/revision via `minimal/llm-acp.ts` `seatCall`)
+  route through the warm lane: ACP daemon + `/clear`-recycled CC CLI
+  subprocesses, CC credential pool. Semantics unchanged from the wiring
+  merge `5ae2043`: warm no-call → one anthropic-api attempt in-call;
+  call-consumed → THROW, never falls back. `opencode` driver untouched.
+- **Precondition evidence, in order:** (1) MacBook RSS measured same
+  session (`docs/2026-08-05-warm-session-rss.md` MacBook section, merged
+  `1a11046`): ~330 MB/warm session marginal, recycle flat; **cap stays 4
+  on this host** — 8 explicitly NOT permissible here (16 GB, ~6 GB
+  reclaimable). No `KKAMAK_ACP_MAX_SESSIONS` override set. (2) Both suites
+  proven in the ACTIVATED state per this ledger's 2026-08-01 standing rule
+  (`KKAMAK_SEAT_PROVIDER=anthropic-cli-warm` set for the run): cc-gate-plugin
+  1043/0, opencode-plugin 1776/1 skip — the exact gap that bit v2
+  activation, closed ahead of the flip this time.
+- **Instrument boundary:** seat outputs pre/post ts **1785856371528** on
+  this host MUST NOT pool (transport changed api → warm CLI; system-prompt
+  isolation nominally same `REASONING_ISOLATION`, but provider asymmetry is
+  declared in the merged artifacts — `thinking:enabled` runs on warm, is
+  no-called on api). This compounds with the 08-05 office boundary
+  1785847012141 (CLI-spawn → api): this host's seat lines now partition
+  into three regimes by ts. Office host: NOT activated — its own logged
+  decision if taken.
+- **No live seat spend at activation.** Verification was suite-level only;
+  premium models were 429-walled at flip (haiku=OK, sonnet/opus=429, probed
+  this session). First live warm seat call will occur whenever the loop
+  next runs a seat on this host; its outcome belongs to normal loop
+  telemetry, not this entry.
+
 ## Gauge fail-loud deploy boundary (2026-08-01)
 
 - **Deployed 2026-08-01 17:05 KST (ts 1785571509000), yoo-mac.local.**
