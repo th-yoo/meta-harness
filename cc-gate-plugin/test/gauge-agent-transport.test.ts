@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test"
-import { GAUGE_TRANSPORTS } from "../src/types.ts"
+import { GAUGE_TRANSPORTS, type GaugeTransport } from "../src/types.ts"
 import { selectTransport } from "../src/gauge/transport.ts"
 import { stubServer, stubServerFor } from "./sdk-stub.ts"
 import { agentSdkCall } from "../src/gauge/agent-transport.ts"
@@ -8,8 +8,14 @@ import type { CorpusRecord } from "../src/gauge/corpus-store.ts"
 import { HAS_CLAUDE_CODE_CREDENTIALS, sseText, withCaptureStub } from "./agent-cli-stub.ts"
 
 describe("GaugeTransport", () => {
-  test("three transports are recognized, incumbent order preserved", () => {
-    expect(GAUGE_TRANSPORTS).toEqual(["cli", "sdk", "agent-sdk"])
+  test("four transports are recognized, incumbent order preserved (§6e)", () => {
+    expect(GAUGE_TRANSPORTS).toEqual(["cli", "sdk", "agent-sdk", "agent-sdk-daemon"])
+  })
+
+  test("the §6e literal is a member of the GaugeTransport union and sorts last", () => {
+    const t: GaugeTransport = "agent-sdk-daemon"      // compile-time union membership
+    expect(GAUGE_TRANSPORTS.indexOf(t)).toBe(GAUGE_TRANSPORTS.length - 1)
+    expect(GAUGE_TRANSPORTS.indexOf("sdk")).toBeLessThan(GAUGE_TRANSPORTS.indexOf(t))
   })
 })
 
