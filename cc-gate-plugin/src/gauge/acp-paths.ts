@@ -103,7 +103,8 @@ export interface AcpLockContent { pid: number; ts: number }
 
 export function tryCreateLock(lockPath: string, content: AcpLockContent): boolean {
   try {
-    fs.mkdirSync(path.dirname(lockPath), { recursive: true })
+    // mode 0o700 only applies on creation — a no-op for an already-existing dir.
+    fs.mkdirSync(path.dirname(lockPath), { recursive: true, mode: 0o700 })
     fs.writeFileSync(lockPath, JSON.stringify(content), { flag: "wx" })
     return true
   } catch (e) {

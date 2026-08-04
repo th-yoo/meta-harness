@@ -59,6 +59,14 @@ export type SendOutcome =
   | { ok: false; kind: "no-call" | "call-consumed" }
 ```
 
+**`SendOutcome` keeps §6e's wire-send boundary law at the top level, not
+buried in a provider.** `no-call` means the prompt bytes never reached the
+model and a caller may retry or fall back; `call-consumed` means they did and
+it must not. That distinction is the whole reason the gauge lane can fail open
+without ever spending twice on one record, and it must survive the
+abstraction. A caller that prefers exceptions wraps this; the interface itself
+never throws.
+
 **Amendment, 2026-08-05, pre-consumption.** `maxTokens?: number` added to
 `SendPromptOptions`. Reason: the design-time seats (proposer/reviewer/
 revision, N5) produce multi-KB replies; N2's transport defaults `max_tokens`
@@ -68,14 +76,6 @@ The interface had zero consumers at the time of this amendment, so it is a
 pre-data change, not a breaking one: the provider default stays 2048, so
 every existing gauge-lane request is byte-unchanged when the field is
 absent.
-
-**`SendOutcome` keeps §6e's wire-send boundary law at the top level, not
-buried in a provider.** `no-call` means the prompt bytes never reached the
-model and a caller may retry or fall back; `call-consumed` means they did and
-it must not. That distinction is the whole reason the gauge lane can fail open
-without ever spending twice on one record, and it must survive the
-abstraction. A caller that prefers exceptions wraps this; the interface itself
-never throws.
 
 ## 3. Providers
 
