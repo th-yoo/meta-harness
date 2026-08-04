@@ -70,7 +70,7 @@ host-local from `yoo-dev` exists on this machine):**
 ```
 Resume kkamak (meta-harness) on the MacBook, post-2026-08-05. git pull
 FIRST, then read docs/resume.md (this top block) and minimal/HISTORY.md
-GA7 (the full 08-04/05 arc).
+GA14 (the full 08-04/05 arc; renumbered from a colliding "GA7" 2026-08-04).
 
 STATE after pull: main @ 5ae2043. Two gated merges landed 08-05:
  - bbdabe1 acp-session-pool (review docs/reviews/95cfa82-acp-session-pool.md,
