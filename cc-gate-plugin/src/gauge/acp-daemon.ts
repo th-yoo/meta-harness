@@ -1,5 +1,12 @@
-// acp-daemon.ts — §6e ACP daemon: one WarmSession behind the ACP wire
-// subset, implementing the §6e wire-send boundary law.
+// acp-daemon.ts — §6e ACP daemon: a SessionPool (acp-pool.ts) of WarmSessions
+// behind the ACP wire subset, implementing the §6e wire-send boundary law.
+//
+// N3c-iii (2026-08-04): rewired off a single `WarmSession` onto the pool.
+// The daemon still mints one ACP session id per REQUEST (session/new is
+// cheap: a UUID plus recording the caller's isolation), but the keep-alive
+// underneath is now a pool of WarmSessions keyed by isolation VALUE — a
+// caller-chosen isolation crosses the wire on session/new instead of the
+// daemon defaulting every session to the one hardcoded gauge isolation.
 //
 // THE ENV CONTRACT (round-4 I2): this process fingerprints and binds from
 // its OWN process.env — envFingerprint(process.env) is what `initialize`
@@ -10,13 +17,16 @@
 // process.env itself. acp-client.ts's ensureDaemon (a later node) passes it
 // explicitly.
 //
-// session/new is cheap (UUID mint) and its `cwd` is accepted-and-IGNORED
-// (the instrument pins a neutral cwd, §6e delta (b)); the /clear recycle
-// happens at a prompt whose sessionId differs from the last one served — so
-// a multi-prompt ACP session keeps its context while the deriver (fresh
-// session per record) always gets a clean one. `lastServedSessionId` is
-// committed at DISPATCH time, not serve time, or interleaved sessions leak
-// context into each other.
+// session/new is cheap (UUID mint + a well-formedness check on the caller's
+// isolation) and its `cwd` is accepted-and-IGNORED (the instrument pins a
+// neutral cwd, §6e delta (b)); the /clear recycle happens when a prompt
+// lands on a pool entry whose last DISPATCH-time occupant was a DIFFERENT
+// session — so a multi-prompt ACP session keeps its context while the
+// deriver (fresh session per record) always gets a clean one, exactly as
+// before, just tracked per pool entry (`lastServedBySessionForEntry`) now
+// that more than one warm entry can exist. Committed at DISPATCH time, not
+// serve time, or interleaved sessions leak context into each other — same
+// reasoning as the pre-pool `lastServedSessionId`, just re-scoped.
 //
 // Cancel tags are DAEMON-MINTED UUIDs, never the client's JSON-RPC id: two
 // clients both start their id counters at 1, and a colliding tag would let
@@ -44,15 +54,17 @@
 import net from "node:net"
 import fs from "node:fs"
 import crypto from "node:crypto"
-import { WarmSession, type TurnOutcome } from "./warm-session.ts"
+import type { TurnOutcome, WarmSession } from "./warm-session.ts"
+import { SessionPool, type WarmSessionLike } from "./acp-pool.ts"
 import {
   socketPath, ensureSocketDir, bindLockPath, envFingerprint, isPipe,
   acquireAcpLock, releaseAcpLock,
 } from "./acp-paths.ts"
 import {
-  FrameDecoder, encodeFrame, ACP_BUDGET,
+  FrameDecoder, encodeFrame,
   ACP_INITIALIZE, ACP_SESSION_NEW, ACP_SESSION_PROMPT, ACP_SESSION_CANCEL, ACP_SESSION_UPDATE,
   ACP_ERR_NO_CALL, ACP_ERR_CALL_CONSUMED,
+  type WarmIsolation,
 } from "./acp-wire.ts"
 
 /** Production idle budget: 15 minutes. `KKAMAK_ACP_IDLE_MS` overrides for
@@ -63,9 +75,24 @@ const DEFAULT_IDLE_MS = 900_000
 
 type Write = (msg: object) => void
 
+/** The daemon's own view of a pooled entry's warm session — SessionPool's
+ * own `WarmSessionLike` (acp-pool.ts) is deliberately narrow to exactly what
+ * the POOL itself calls (reap/quiescent/closeAll); `oneShot`/`cancel` are
+ * never called BY the pool, only by whichever caller acquired the entry,
+ * which from here on is this daemon (acp-pool.ts's own header comment says
+ * as much: "the pool itself never calls" them). `Pick<WarmSession, ...>`
+ * borrows the exact signatures off the concrete class so this type can
+ * never silently drift from WarmSession's real `oneShot`/`cancel` shape.
+ * `PoolEntry.warm` is statically typed `WarmSessionLike`; every real entry
+ * (default `makeSession`, or a DI fake built to match) satisfies this wider
+ * shape structurally at runtime, so the cast at the two call sites below is
+ * safe — the same interface-segregation cast already established in
+ * acp-daemon.test.ts's own `fakeWarmSession` cast to the concrete class. */
+type DispatchableWarm = WarmSessionLike & Pick<WarmSession, "oneShot" | "cancel">
+
 export interface DaemonState {
-  sessions: Map<string, { createdAt: number }>
-  /** sessionId -> the ordered (oldest-first) list of daemon-minted tags for
+  sessions: Map<string, { createdAt: number; isolation: WarmIsolation }>
+  /** sessionId -> the ordered (oldest-first) list of {tag, warm} pairs for
    * that session's turns CURRENTLY outstanding (queued or in flight).
    * Round-2 review finding 1 (2026-08-05): a single Map<sessionId, tag>
    * mishandles two same-session prompts in flight at once — the second
@@ -75,18 +102,39 @@ export interface DaemonState {
    * outstanding would find nothing and silently no-op. An array per
    * session, with `session/cancel` targeting the OLDEST live tag and each
    * turn removing only ITS OWN tag on completion, keeps both turns
-   * independently cancellable and never wipes a sibling's entry. */
-  outstanding: Map<string, string[]>
-  lastServedSessionId: string | undefined
+   * independently cancellable and never wipes a sibling's entry.
+   *
+   * N3c-iii: each entry now also carries WHICH warm (pool entry) the tag
+   * belongs to — with a pool of entries instead of one singleton
+   * WarmSession, a cancel must resolve against the SAME warm the dispatch
+   * that minted the tag used, never a different pool entry's WarmSession
+   * (self-review (b)). */
+  outstanding: Map<string, Array<{ tag: string; warm: DispatchableWarm }>>
+  /** pool entry id -> the sessionId that last DISPATCHED a turn on it.
+   * Replaces the pre-pool `lastServedSessionId` global: with more than one
+   * warm entry alive at once, "was the LAST session to use THIS SPECIFIC
+   * entry the same one asking now" has to be tracked per entry, not
+   * globally, or a second entry's first-ever use would spuriously compare
+   * against an unrelated entry's last session. */
+  lastServedBySessionForEntry: Map<string, string>
 }
 
 export function createDaemonState(): DaemonState {
-  return { sessions: new Map(), outstanding: new Map(), lastServedSessionId: undefined }
+  return { sessions: new Map(), outstanding: new Map(), lastServedBySessionForEntry: new Map() }
 }
 
 function readModel(params: unknown): string | undefined {
   const m = (params as { _meta?: { kkamak?: { model?: unknown } } } | undefined)?._meta?.kkamak?.model
   return typeof m === "string" && m.length > 0 ? m : undefined
+}
+
+/** Presence + typeof check ONLY — no deep field validation. The type guard
+ * in acp-wire.test.ts and the caller's own tsc own field-shape correctness;
+ * a daemon reaching further into the object to second-guess it would be a
+ * duplicate, potentially-divergent authority on the same contract. */
+function readIsolation(params: unknown): WarmIsolation | undefined {
+  const iso = (params as { _meta?: { kkamak?: { isolation?: unknown } } } | undefined)?._meta?.kkamak?.isolation
+  return iso !== null && iso !== undefined && typeof iso === "object" ? (iso as WarmIsolation) : undefined
 }
 
 function readSessionId(params: unknown): string | undefined {
@@ -102,17 +150,17 @@ function readPromptText(params: unknown): string {
 
 /** ONE dispatcher per daemon, not per connection: `state` is shared across
  * every accepted socket because ACP session ids are globally unique
- * (session/new mints a UUID) and there is exactly one WarmSession behind
- * the whole process, so `lastServedSessionId` and `outstanding` must be
- * daemon-global — a per-connection copy would let two connections each
- * believe they own the "last served" slot. `write` IS per-connection:
- * notifications and the eventual response for a given request always go
- * back down the connection that sent it.
+ * (session/new mints a UUID) and there is exactly one SessionPool behind
+ * the whole process, so `lastServedBySessionForEntry` and `outstanding` must
+ * be daemon-global — a per-connection copy would let two connections each
+ * believe they own the "last served" slot for a shared pool entry. `write`
+ * IS per-connection: notifications and the eventual response for a given
+ * request always go back down the connection that sent it.
  *
  * STRUCTURAL RULE: this function must never throw across a connection
  * handler — every branch answers a JSON-RPC result or error frame (or, for
  * a bare notification, nothing) instead of raising. */
-export function createDispatcher(warm: WarmSession, state: DaemonState, fingerprint: string) {
+export function createDispatcher(pool: SessionPool, state: DaemonState, fingerprint: string) {
   return async function handle(frame: unknown, write: Write): Promise<void> {
     const req = frame as { id?: number | string; method?: unknown; params?: unknown }
     const id = req.id
@@ -153,10 +201,20 @@ export function createDispatcher(warm: WarmSession, state: DaemonState, fingerpr
 
         case ACP_SESSION_NEW: {
           // params.cwd is ACCEPTED AND IGNORED (§6e delta (b): the
-          // instrument pins a neutral cwd). Cheap — no model work, no
-          // recycle — so an abandoned session/new costs nothing.
+          // instrument pins a neutral cwd). Isolation is REQUIRED: presence
+          // + typeof check only (readIsolation's own comment) — a
+          // missing/malformed isolation means nothing CAN be pushed under
+          // any policy, so this is invalid params (-32602), not a
+          // model-call error class: nothing was spent, no
+          // `data.callConsumed` to report. Cheap otherwise — no model work,
+          // no recycle — so an abandoned session/new costs nothing.
+          const isolation = readIsolation(params)
+          if (!isolation) {
+            respondError(-32602, "session/new requires a well-formed _meta.kkamak.isolation")
+            return
+          }
           const sessionId = crypto.randomUUID()
-          state.sessions.set(sessionId, { createdAt: Date.now() })
+          state.sessions.set(sessionId, { createdAt: Date.now(), isolation })
           respond({ sessionId })
           return
         }
@@ -165,7 +223,7 @@ export function createDispatcher(warm: WarmSession, state: DaemonState, fingerpr
           const sessionId = readSessionId(params)
           const model = readModel(params)
           // Law L4: a missing/non-string sessionId or model means nothing
-          // CAN be pushed — refuse before WarmSession is touched at all, so
+          // CAN be pushed — refuse before the pool is touched at all, so
           // this is a provably zero-model-call no-call.
           if (!sessionId || !model) {
             respondError(
@@ -175,22 +233,60 @@ export function createDispatcher(warm: WarmSession, state: DaemonState, fingerpr
             )
             return
           }
+          // An UNKNOWN sessionId (never minted by THIS daemon's session/new,
+          // or already forgotten) is likewise a provable no-call — nothing
+          // was ever spent under a session id nobody registered. Fixes the
+          // N3a review's "write-only sessions map" minor: the map is now
+          // read here, for the first time, and a fabricated sessionId no
+          // longer reaches the pool at all, let alone bills a turn.
+          const session = state.sessions.get(sessionId)
+          if (!session) {
+            respondError(ACP_ERR_NO_CALL, "unknown sessionId", { callConsumed: false })
+            return
+          }
           const text = readPromptText(params)
 
-          // §6e: recycle and lastServedSessionId are computed and
+          const acquired = pool.acquire(session.isolation, Date.now())
+          if (!acquired.ok) {
+            // Pool exhaustion: NOTHING was sent to any warm entry, so this
+            // is a provable no-call, same law as every other pre-send
+            // refusal above — just a different JSON-RPC code (§6e's L3 step
+            // (i), `data.callConsumed` boolean, is what the client actually
+            // keys its classification on; the code here is diagnostic).
+            respondError(
+              -32002,
+              "no warm session available (KKAMAK_ACP_MAX_SESSIONS reached)",
+              { callConsumed: false },
+            )
+            return
+          }
+          const { entry, mustRecycle } = acquired
+          const warm = entry.warm as unknown as DispatchableWarm
+
+          // §6e: recycle and lastServedBySessionForEntry are computed and
           // committed in the SAME synchronous step, at dispatch time,
-          // BEFORE warm.oneShot is called. Committing at serve time
-          // instead is a context-leak bug across interleaved sessions
-          // (see this file's header and the brief's worked example).
-          const recycle = sessionId !== state.lastServedSessionId
-          state.lastServedSessionId = sessionId
+          // BEFORE warm.oneShot is called. Committing at serve time instead
+          // is a context-leak bug across interleaved sessions (see this
+          // file's header and the brief's worked example).
+          //
+          // `mustRecycle` alone is the pool's OWN signal ("this entry has
+          // served some turn before, whoever it was") — it says nothing
+          // about WHICH session last used THIS entry, so on its own it
+          // would recycle a session's own SECOND sequential prompt against
+          // itself (the entry it gets back was, of course, "used before").
+          // Recycle only when the entry's history belongs to a DIFFERENT
+          // session than this one; a session picking up its own
+          // just-released entry keeps growing its own context untouched.
+          const lastSessionForEntry = state.lastServedBySessionForEntry.get(entry.id)
+          const recycle = mustRecycle && lastSessionForEntry !== sessionId
+          state.lastServedBySessionForEntry.set(entry.id, sessionId)
 
           // The cancel tag is DAEMON-MINTED and globally unique — never
           // the client's JSON-RPC id, which every client starts counting
           // from 1, so two concurrent callers' ids collide routinely.
           const tag = crypto.randomUUID()
           const outstandingForSession = state.outstanding.get(sessionId) ?? []
-          outstandingForSession.push(tag)
+          outstandingForSession.push({ tag, warm })
           state.outstanding.set(sessionId, outstandingForSession)
           mayHaveConsumed = true
           try {
@@ -221,12 +317,17 @@ export function createDispatcher(warm: WarmSession, state: DaemonState, fingerpr
             respondError(ACP_ERR_CALL_CONSUMED, "a model call was made but the turn did not complete", { callConsumed: true })
             return
           } finally {
+            // Release the entry back to the pool on EVERY path through this
+            // turn (self-review (c)) — the pool cannot know a turn has
+            // settled any other way, and an entry never released is an
+            // entry the pool can never hand to anyone else again.
+            pool.release(entry.id, Date.now())
             // Remove ONLY this turn's own tag — never the whole key — so a
             // sibling turn for the same session (still queued/in flight)
             // stays independently cancellable after this one settles.
             const remaining = state.outstanding.get(sessionId)
             if (remaining) {
-              const i = remaining.indexOf(tag)
+              const i = remaining.findIndex((o) => o.tag === tag)
               if (i >= 0) remaining.splice(i, 1)
               if (remaining.length === 0) state.outstanding.delete(sessionId)
             }
@@ -236,18 +337,22 @@ export function createDispatcher(warm: WarmSession, state: DaemonState, fingerpr
         case ACP_SESSION_CANCEL: {
           const sessionId = readSessionId(params)
           const outstandingForSession = sessionId ? state.outstanding.get(sessionId) : undefined
-          // Target the OLDEST outstanding tag for this session — the turn
-          // closest to (or already) running, and the one a caller sending
-          // a bare "cancel my session" almost always means.
-          const tag = outstandingForSession && outstandingForSession.length > 0 ? outstandingForSession[0]! : ""
+          // Target the OLDEST outstanding {tag, warm} for this session —
+          // the turn closest to (or already) running, and the one a caller
+          // sending a bare "cancel my session" almost always means. The
+          // `warm` reference here is exactly the one THAT dispatch acquired
+          // from the pool — self-review (b): a cancel for this session can
+          // therefore never reach a DIFFERENT pool entry's WarmSession, by
+          // construction, regardless of what the pool has done with any
+          // OTHER entry since.
+          const oldest = outstandingForSession && outstandingForSession.length > 0 ? outstandingForSession[0] : undefined
           // All four CancelResult values are treated identically on the
           // wire — the caller learns the real outcome from its
           // session/prompt reply (§6e L4/L7 guarantee it lands on the
           // right code), never from this ack. A cancel naming an
-          // unknown/finished session is a no-op (warm.cancel returns
-          // "unknown" for an empty/unmatched tag) that still answers `{}`
-          // when an id was present.
-          warm.cancel(tag)
+          // unknown/finished session is a no-op (nothing outstanding to
+          // find) that still answers `{}` when an id was present.
+          if (oldest) oldest.warm.cancel(oldest.tag)
           respond({})
           return
         }
@@ -272,15 +377,13 @@ export function createDispatcher(warm: WarmSession, state: DaemonState, fingerpr
 
 // ── import.meta.main only, below this line ─────────────────────────────
 
-function warmBudgetOpts(env: Record<string, string | undefined>) {
-  return {
-    turnTimeoutMs: Number(env.KKAMAK_ACP_TURN_TIMEOUT_MS) || ACP_BUDGET.turnTimeoutMs,
-    queueWaitMs: ACP_BUDGET.queueWaitMs,
-    clearTimeoutMs: ACP_BUDGET.clearTimeoutMs,
-    setModelMs: ACP_BUDGET.setModelMs,
-    hardGraceMs: ACP_BUDGET.hardGraceMs,
-  }
-}
+// N3c-iii: the direct `new WarmSession(env, warmBudgetOpts(env))` + its
+// env-overridable `turnTimeoutMs` leg are GONE from this file — SessionPool
+// (acp-pool.ts) now owns budget construction for every WarmSession it spawns,
+// including honoring `KKAMAK_ACP_TURN_TIMEOUT_MS` itself (mirrored
+// byte-for-byte off this file's old `warmBudgetOpts`, acp-pool.ts's
+// `parseTurnTimeoutMs`), so a `new SessionPool(env)` here is a complete
+// replacement, not an approximation.
 
 /** DEVIATION FROM THE PLAN TEXT, MEASURED (documented in the N3a report):
  * the brief's sequence is "listen → on EADDRINUSE, probe". Measured on this
@@ -361,10 +464,17 @@ async function runSocket(env: Record<string, string | undefined>): Promise<void>
     return
   }
 
-  const warm = new WarmSession(env, warmBudgetOpts(env))
+  const pool = new SessionPool(env)
   const state = createDaemonState()
-  const dispatch = createDispatcher(warm, state, fingerprint)
+  const dispatch = createDispatcher(pool, state, fingerprint)
   const sockets = new Set<net.Socket>()
+  // Daemon-level activity clock (N3c-iii): the single WarmSession's own
+  // `idleMs()` gate no longer exists — a pool can hold several entries, each
+  // with its own idle clock the pool's own `reap()` already owns. Self-exit
+  // is a DAEMON-level decision (nobody has asked it for anything in a
+  // while), tracked here and updated on every dispatched frame, regardless
+  // of which connection or session it belongs to.
+  let lastActivityAt = Date.now()
 
   const server = net.createServer((socket) => {
     sockets.add(socket)
@@ -376,7 +486,10 @@ async function runSocket(env: Record<string, string | undefined>): Promise<void>
       try { socket.write(encodeFrame(msg)) } catch { /* peer gone */ }
     }
     socket.on("data", (chunk) => {
-      for (const f of decoder.push(chunk)) void dispatch(f, write)
+      for (const f of decoder.push(chunk)) {
+        lastActivityAt = Date.now()
+        void dispatch(f, write)
+      }
     })
     socket.on("close", () => { sockets.delete(socket) })
     socket.on("error", () => { /* a peer reset must never crash the daemon */ })
@@ -447,7 +560,7 @@ async function runSocket(env: Record<string, string | undefined>): Promise<void>
     // takeover handles the stale path.
     server.close()
     for (const s of sockets) { try { s.destroy() } catch { /* ignore */ } }
-    warm.close()
+    pool.closeAll()
     // Review finding: `acquireAcpLock` is not "never throws" — a rethrown
     // non-EEXIST error (e.g. EACCES on the lock dir) must not skip
     // `process.exit` below and become an unhandled rejection. Wrapping the
@@ -471,7 +584,12 @@ async function runSocket(env: Record<string, string | undefined>): Promise<void>
   // use 1.5-8s) and would make the reaper untestable.
   const tickMs = Math.max(250, Math.min(60_000, idleMs / 3))
   reaper = setInterval(() => {
-    if (warm.idleMs() > idleMs && !warm.turnInFlight()) void shutdown(0)
+    // Evict idle POOL ENTRIES first (same cadence, the pool's own idle
+    // budget), THEN decide whether the whole DAEMON should self-exit — same
+    // drain order as before (idle work, then self-exit gate), just with
+    // `pool.quiescent()` replacing the single `!warm.turnInFlight()`.
+    pool.reap(Date.now())
+    if (Date.now() - lastActivityAt > idleMs && pool.quiescent()) void shutdown(0)
   }, tickMs)
 
   process.on("SIGTERM", () => void shutdown(0))
@@ -484,9 +602,9 @@ async function runSocket(env: Record<string, string | undefined>): Promise<void>
  * (EOF) tears the session down directly. */
 async function runStdio(env: Record<string, string | undefined>): Promise<void> {
   const fingerprint = envFingerprint(env)
-  const warm = new WarmSession(env, warmBudgetOpts(env))
+  const pool = new SessionPool(env)
   const state = createDaemonState()
-  const dispatch = createDispatcher(warm, state, fingerprint)
+  const dispatch = createDispatcher(pool, state, fingerprint)
   const decoder = new FrameDecoder()
   const write: Write = (msg) => {
     try { process.stdout.write(encodeFrame(msg)) } catch { /* peer gone (e.g. EPIPE) */ }
@@ -497,7 +615,7 @@ async function runStdio(env: Record<string, string | undefined>): Promise<void> 
     for (const f of decoder.push(chunk)) void dispatch(f, write)
   })
   process.stdin.on("end", () => {
-    warm.close()
+    pool.closeAll()
     process.exit(0)
   })
 }

@@ -19,10 +19,23 @@ import { HAS_CLAUDE_CODE_CREDENTIALS, sseText, hangFirstServer, until } from "./
 import { stubServer } from "./sdk-stub.ts"
 import {
   FrameDecoder, encodeFrame, ACP_ERR_NO_CALL, ACP_ERR_CALL_CONSUMED, CLI_SPAWN_BUDGET_MS,
+  GAUGE_ISOLATION, type WarmIsolation,
 } from "../src/gauge/acp-wire.ts"
 import { envFingerprint } from "../src/gauge/acp-paths.ts"
 import { createDaemonState, createDispatcher } from "../src/gauge/acp-daemon.ts"
-import type { WarmSession, TurnOutcome } from "../src/gauge/warm-session.ts"
+import { SessionPool, type WarmSessionLike, type WarmConstructOpts } from "../src/gauge/acp-pool.ts"
+import type { TurnOutcome, CancelResult } from "../src/gauge/warm-session.ts"
+
+// N3c-iii: session/new now REQUIRES `_meta.kkamak.isolation` (a session
+// mapped to no isolation cannot be recorded, and session/prompt then has
+// nothing to key `pool.acquire()` on). A second, distinct isolation
+// (distinct systemPrompt marker) proves isolation segregation ON THE WIRE
+// for test 1, never inferred.
+const MARKER_ISOLATION: WarmIsolation = {
+  ...GAUGE_ISOLATION,
+  systemPrompt: "REASONING-MARKER-SYSTEM-PROMPT",
+  title: "kkamak-test-marker",
+}
 
 const DAEMON_TEST_TIMEOUT_MS = 60_000
 const HAIKU = "claude-haiku-4-5"
@@ -177,11 +190,46 @@ describe("acp-daemon wire behaviour (no model reached)", () => {
       await waitForSpawnLog(e.spawnLog, 1, 15_000)
       const c = await connectNdjson(e.sock)
       await c.request("initialize", { protocolVersion: 1 })
-      const s = await c.request("session/new", { cwd: process.cwd(), mcpServers: [] })
+      const s = await c.request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } } })
       await expect(c.request("session/prompt", {
         sessionId: s.sessionId,
         prompt: [{ type: "text", text: "hi" }],
         // no _meta at all
+      })).rejects.toMatchObject({ code: ACP_ERR_NO_CALL, data: { callConsumed: false } })
+      expect(cap.captured.length).toBe(0)
+      c.close()
+    } finally { cap.stop() }
+  }, DAEMON_TEST_TIMEOUT_MS)
+
+  test("N3c-iii test 5: session/new without isolation -> -32602, and no session is recorded", async () => {
+    const e = tempEndpoint("newnoiso"); LIVE.push(e)
+    spawnDaemon(e.sock, e.spawnLog)
+    await waitForSpawnLog(e.spawnLog, 1, 15_000)
+    const c = await connectNdjson(e.sock)
+    await c.request("initialize", { protocolVersion: 1 })
+    await expect(c.request("session/new", { cwd: process.cwd(), mcpServers: [] })) // no _meta at all
+      .rejects.toMatchObject({ code: -32602 })
+    await expect(c.request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: {} } })) // isolation absent
+      .rejects.toMatchObject({ code: -32602 })
+    c.close()
+  }, DAEMON_TEST_TIMEOUT_MS)
+
+  test("N3c-iii test 4: unknown sessionId -> ACP_ERR_NO_CALL with data.callConsumed false, and ZERO model calls", async () => {
+    const e = tempEndpoint("unknownsession"); LIVE.push(e)
+    const cap = stubServer(() => sseText("SHOULD-NEVER-BE-CALLED"))
+    try {
+      spawnDaemon(e.sock, e.spawnLog, { ANTHROPIC_BASE_URL: cap.url })
+      await waitForSpawnLog(e.spawnLog, 1, 15_000)
+      const c = await connectNdjson(e.sock)
+      await c.request("initialize", { protocolVersion: 1 })
+      // No session/new was ever called for this id -- a fabricated
+      // sessionId must never reach the pool, let alone bill a turn (the
+      // N3a review's "write-only sessions map" minor: the map is now READ
+      // here for the first time).
+      await expect(c.request("session/prompt", {
+        sessionId: "never-registered-by-session-new",
+        prompt: [{ type: "text", text: "hi" }],
+        _meta: { kkamak: { model: HAIKU } },
       })).rejects.toMatchObject({ code: ACP_ERR_NO_CALL, data: { callConsumed: false } })
       expect(cap.captured.length).toBe(0)
       c.close()
@@ -269,7 +317,7 @@ describe("acp-daemon wire behaviour (no model reached)", () => {
       }
 
       await request("initialize", { protocolVersion: 1 })
-      const s = await request("session/new", { cwd: process.cwd(), mcpServers: [] })
+      const s = await request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } } })
 
       const promptPromise = request("session/prompt", {
         sessionId: s.sessionId,
@@ -346,52 +394,88 @@ describe("acp-daemon wire behaviour (no model reached)", () => {
   }, DAEMON_TEST_TIMEOUT_MS)
 })
 
-// ── dispatcher-level unit tests against a FAKE WarmSession: no daemon
-// process, no CLI, no credentials, no real turn timing -- these exist to
-// pin the `outstanding` bookkeeping semantics precisely and deterministically
-// (round-2 review finding 1, 2026-08-05), which real-CLI timing cannot do
-// reliably. `createDispatcher`'s declared parameter type is the concrete
-// `WarmSession` class, which has private fields, so a plain object literal
-// is not structurally assignable to it without a cast -- the cast is
-// confined to this file and only exercises the dispatcher's OWN
-// bookkeeping, never WarmSession's real internals.
-function fakeWarmSession() {
-  const calls: string[] = []
-  const inflight = new Map<string, (o: TurnOutcome) => void>()
-  const warm = {
-    oneShot(_text: string, _model: string, opts: { recycle: boolean; tag?: string }): Promise<TurnOutcome> {
-      const tag = opts.tag!
-      calls.push(`oneShot:${tag}`)
-      return new Promise<TurnOutcome>((resolve) => { inflight.set(tag, resolve) })
-    },
-    cancel(tag: string): string {
-      calls.push(`cancel:${tag}`)
-      const resolve = inflight.get(tag)
-      if (resolve) { inflight.delete(tag); resolve({ kind: "no-call" }); return "queued-dropped" }
-      return "unknown"
-    },
+// ── dispatcher-level unit tests against a FAKE SessionPool (a real
+// SessionPool with a DI `makeSession`): no daemon process, no CLI, no
+// credentials, no real turn timing -- these exist to pin the `outstanding`
+// bookkeeping semantics precisely and deterministically (round-2 review
+// finding 1, 2026-08-05), which real-CLI timing cannot do reliably.
+//
+// N3c-iii: `createDispatcher`'s declared parameter is now `SessionPool`, a
+// concrete class the pool ALREADY provides a DI seam for (`makeSession`,
+// acp-pool.ts), so unlike the pre-pool single-`WarmSession` version this
+// needs no cast at the dispatcher boundary -- only `FakeDispatchWarm` itself
+// (satisfying `WarmSessionLike` structurally, PLUS the `oneShot`/`cancel`
+// pair the daemon's own `DispatchableWarm` cast reaches for) is hand-rolled,
+// mirroring acp-pool.test.ts's own `FakeWarm` convention.
+class FakeDispatchWarm implements WarmSessionLike {
+  private inflight = new Map<string, (o: TurnOutcome) => void>()
+  constructor(private readonly calls: string[]) {}
+  turnInFlight(): boolean { return false }
+  close(): void {}
+  oneShot(_text: string, _model: string, opts: { recycle: boolean; tag?: string }): Promise<TurnOutcome> {
+    const tag = opts.tag!
+    this.calls.push(`oneShot:${tag}`)
+    return new Promise<TurnOutcome>((resolve) => { this.inflight.set(tag, resolve) })
   }
+  cancel(tag: string): CancelResult {
+    this.calls.push(`cancel:${tag}`)
+    const resolve = this.inflight.get(tag)
+    if (resolve) { this.inflight.delete(tag); resolve({ kind: "no-call" }); return "queued-dropped" }
+    return "unknown"
+  }
+  /** Returns false (never throws) when this instance doesn't own `tag`, so
+   * a caller with several instances can try each one in turn. */
+  trySettle(tag: string, outcome: TurnOutcome): boolean {
+    const resolve = this.inflight.get(tag)
+    if (!resolve) return false
+    this.inflight.delete(tag)
+    resolve(outcome)
+    return true
+  }
+}
+
+/** A fresh `FakeDispatchWarm` per pool entry (matching real pool behaviour:
+ * concurrent acquires of the same isolation get DIFFERENT entries, acp-pool
+ * test 1) sharing one `calls` log for assertion simplicity, plus the raw
+ * `instances` array so a test can prove per-entry ("cross-entry")
+ * separation directly. */
+function fakeDispatchPool() {
+  const calls: string[] = []
+  const instances: FakeDispatchWarm[] = []
+  const pool = new SessionPool({} as Record<string, string | undefined>, {
+    makeSession: (_env: Record<string, string | undefined>, _opts: WarmConstructOpts) => {
+      const w = new FakeDispatchWarm(calls)
+      instances.push(w)
+      return w
+    },
+  })
   return {
+    pool,
     calls,
-    warm: warm as unknown as WarmSession,
+    instances,
     settle(tag: string, outcome: TurnOutcome) {
-      const resolve = inflight.get(tag)
-      if (!resolve) throw new Error(`settle: no in-flight turn for tag ${tag}`)
-      inflight.delete(tag)
-      resolve(outcome)
+      for (const w of instances) if (w.trySettle(tag, outcome)) return
+      throw new Error(`settle: no in-flight turn for tag ${tag}`)
     },
   }
 }
 
-describe("acp-daemon dispatcher — outstanding-tag bookkeeping (fake WarmSession, no daemon process)", () => {
+describe("acp-daemon dispatcher — outstanding-tag bookkeeping (fake SessionPool, no daemon process)", () => {
   test("two same-session prompts in flight: cancel targets the OLDEST tag, and neither turn's cleanup wipes the other's entry", async () => {
-    const { warm, calls } = fakeWarmSession()
+    const { pool, calls } = fakeDispatchPool()
     const state = createDaemonState()
-    const dispatch = createDispatcher(warm, state, "fp")
+    const S = "session-under-test"
+    // N3c-iii: session/prompt now looks up state.sessions, so the session
+    // must be REGISTERED first -- the exact behaviour the N3a review's
+    // "write-only sessions map" minor asked for (test 4 below covers the
+    // unregistered case). Seeded directly (white-box) rather than via a
+    // session/new dispatch: this test's whole point is the OUTSTANDING
+    // bookkeeping, not the session/new flow.
+    state.sessions.set(S, { createdAt: Date.now(), isolation: GAUGE_ISOLATION })
+    const dispatch = createDispatcher(pool, state, "fp")
     const frames: Array<Record<string, unknown>> = []
     const write = (m: object) => frames.push(m as Record<string, unknown>)
 
-    const S = "session-under-test"
     // Two session/prompt requests for the SAME session, the second fired
     // before the first has settled -- reproduces the "outstanding[S] gets
     // overwritten" shape finding 1 describes. Each `dispatch(...)` call
@@ -433,9 +517,11 @@ describe("acp-daemon dispatcher — outstanding-tag bookkeeping (fake WarmSessio
   })
 
   test("cross-session scoping is unaffected by the per-session tag list", async () => {
-    const { warm, calls, settle } = fakeWarmSession()
+    const { pool, calls, settle } = fakeDispatchPool()
     const state = createDaemonState()
-    const dispatch = createDispatcher(warm, state, "fp")
+    state.sessions.set("A", { createdAt: Date.now(), isolation: GAUGE_ISOLATION })
+    state.sessions.set("B", { createdAt: Date.now(), isolation: GAUGE_ISOLATION })
+    const dispatch = createDispatcher(pool, state, "fp")
     const write = () => {}
 
     const pA = dispatch({ id: 1, method: "session/prompt", params: {
@@ -459,6 +545,52 @@ describe("acp-daemon dispatcher — outstanding-tag bookkeeping (fake WarmSessio
     settle(tagA, { kind: "no-call" })
     await pA
   })
+
+  // Brief §4 test 6's "cross-ENTRY case": A and B are both in flight and
+  // BUSY at the moment the other acquires (self-review (b)) -- pool.acquire
+  // never reuses a busy entry (acp-pool.test.ts test 1), so this is exactly
+  // the pool's own "two concurrent acquires get DIFFERENT entries" behavior
+  // reached through the daemon, made concrete: two DISTINCT
+  // FakeDispatchWarm instances, and cancelling B's tag calls `.cancel()`
+  // ONLY on B's own instance, never touching A's.
+  test("cancel for session B never reaches a different pool entry's WarmSession while A is in flight", async () => {
+    const { pool, calls, instances, settle } = fakeDispatchPool()
+    const state = createDaemonState()
+    state.sessions.set("A", { createdAt: Date.now(), isolation: GAUGE_ISOLATION })
+    state.sessions.set("B", { createdAt: Date.now(), isolation: GAUGE_ISOLATION })
+    const dispatch = createDispatcher(pool, state, "fp")
+    const write = () => {}
+
+    const pA = dispatch({ id: 1, method: "session/prompt", params: {
+      sessionId: "A", prompt: [{ type: "text", text: "a" }], _meta: { kkamak: { model: "m" } },
+    } }, write)
+    const pB = dispatch({ id: 2, method: "session/prompt", params: {
+      sessionId: "B", prompt: [{ type: "text", text: "b" }], _meta: { kkamak: { model: "m" } },
+    } }, write)
+    // Two DIFFERENT pool entries were spawned -- both A and B are busy at
+    // the moment the other acquires (pool.acquire never reuses a busy
+    // entry, acp-pool.test.ts test 1), so the "different entry" premise is
+    // concrete here, not merely notional.
+    expect(instances.length).toBe(2)
+    const oneShotCalls = calls.filter((c) => c.startsWith("oneShot:"))
+    const tagA = oneShotCalls[0]!.split(":")[1]!
+    const tagB = oneShotCalls[1]!.split(":")[1]!
+
+    await dispatch({ id: 3, method: "session/cancel", params: { sessionId: "B" } }, write)
+    // Exactly one cancel call happened, and it named B's own tag.
+    expect(calls.filter((c) => c.startsWith("cancel:"))).toEqual([`cancel:${tagB}`])
+    await pB
+
+    // A is STILL pending -- proving B's cancel never reached A's entry.
+    // Only settling A directly (through its own instance) resolves it.
+    let aSettled = false
+    void pA.then(() => { aSettled = true })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(aSettled).toBe(false)
+
+    settle(tagA, { kind: "no-call" })
+    await pA
+  })
 })
 
 // ── model-reaching behaviour: these DO spawn the bundled CLI, so they carry
@@ -474,7 +606,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket (reac
       const init = await c.request("initialize", { protocolVersion: 1 })
       expect(init.protocolVersion).toBe(1)
       expect(init._meta.kkamak.envFingerprint).toBe(envFingerprint(env))
-      const s = await c.request("session/new", { cwd: process.cwd(), mcpServers: [] })
+      const s = await c.request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } } })
       expect(typeof s.sessionId).toBe("string")
       const updates: string[] = []
       c.onNotification("session/update", (p) => updates.push(p.update.content.text))
@@ -495,6 +627,43 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket (reac
     } finally { cap.stop() }
   }, DAEMON_TEST_TIMEOUT_MS)
 
+  test("N3c-iii test 1: two sessions with DIFFERENT isolations never share a warm entry -- the marker system prompt appears ONLY on the marker-isolation session's captured request bodies", async () => {
+    const e = tempEndpoint("isoseg"); LIVE.push(e)
+    const CAPTURED: Array<Record<string, unknown>> = []
+    const cap = stubServer((c) => { CAPTURED.push(c.body); return sseText("ANSWER", STUB_DECLARED_MODEL) })
+    try {
+      spawnDaemon(e.sock, e.spawnLog, { ANTHROPIC_BASE_URL: cap.url })
+      await waitForSpawnLog(e.spawnLog, 1, 15_000)
+      const c = await connectNdjson(e.sock)
+      await c.request("initialize", { protocolVersion: 1 })
+
+      const sGauge = await c.request("session/new", {
+        cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } },
+      })
+      await c.request("session/prompt", {
+        sessionId: sGauge.sessionId, prompt: [{ type: "text", text: "gauge turn" }],
+        _meta: { kkamak: { model: HAIKU } },
+      })
+
+      const sMarker = await c.request("session/new", {
+        cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: MARKER_ISOLATION } },
+      })
+      await c.request("session/prompt", {
+        sessionId: sMarker.sessionId, prompt: [{ type: "text", text: "marker turn" }],
+        _meta: { kkamak: { model: HAIKU } },
+      })
+
+      expect(CAPTURED.length).toBe(2)
+      // Isolation segregation observed ON THE WIRE, not inferred: the
+      // marker system prompt appears in EXACTLY the marker session's own
+      // captured body -- two DIFFERENT pool entries under two DIFFERENT
+      // isolations, never one shared warm entry silently switching policy.
+      expect(JSON.stringify(CAPTURED[0])).not.toContain("REASONING-MARKER-SYSTEM-PROMPT")
+      expect(JSON.stringify(CAPTURED[1])).toContain("REASONING-MARKER-SYSTEM-PROMPT")
+      c.close()
+    } finally { cap.stop() }
+  }, DAEMON_TEST_TIMEOUT_MS)
+
   test("a second SESSION recycles (clean context); a second PROMPT in one session does not", async () => {
     const e = tempEndpoint("recycle"); LIVE.push(e)
     const CAPTURED: Array<Record<string, unknown>> = []
@@ -505,13 +674,13 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket (reac
       const c = await connectNdjson(e.sock)
       await c.request("initialize", { protocolVersion: 1 })
 
-      const s1 = await c.request("session/new", { cwd: process.cwd(), mcpServers: [] })
+      const s1 = await c.request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } } })
       await c.request("session/prompt", {
         sessionId: s1.sessionId, prompt: [{ type: "text", text: "FIRST-MARKER" }],
         _meta: { kkamak: { model: HAIKU } },
       })
 
-      const s2 = await c.request("session/new", { cwd: process.cwd(), mcpServers: [] })
+      const s2 = await c.request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } } })
       await c.request("session/prompt", {
         sessionId: s2.sessionId, prompt: [{ type: "text", text: "SECOND-MARKER" }],
         _meta: { kkamak: { model: HAIKU } },
@@ -545,8 +714,8 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket (reac
       const cB = await connectNdjson(e.sock)
       await cA.request("initialize", { protocolVersion: 1 })
       await cB.request("initialize", { protocolVersion: 1 })
-      const sA = await cA.request("session/new", { cwd: process.cwd(), mcpServers: [] })
-      const sB = await cB.request("session/new", { cwd: process.cwd(), mcpServers: [] })
+      const sA = await cA.request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } } })
+      const sB = await cB.request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } } })
 
       // Round-2 review finding 3 (2026-08-05): the ORIGINAL version awaited
       // each request before sending the next, which makes dispatch-time and
@@ -606,7 +775,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket (reac
       await waitForSpawnLog(e.spawnLog, 1, 15_000)
       const c = await connectNdjson(e.sock)
       await c.request("initialize", { protocolVersion: 1 })
-      const s = await c.request("session/new", { cwd: process.cwd(), mcpServers: [] })
+      const s = await c.request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } } })
       const updates: string[] = []
       c.onNotification("session/update", (p) => updates.push(p.update.content.text))
       await expect(c.request("session/prompt", {
@@ -627,7 +796,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket (reac
     await waitForSpawnLog(e.spawnLog, 1, 15_000)
     const c = await connectNdjson(e.sock)
     await c.request("initialize", { protocolVersion: 1 })
-    const s = await c.request("session/new", { cwd: process.cwd(), mcpServers: [] })
+    const s = await c.request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } } })
     await expect(c.request("session/prompt", {
       sessionId: s.sessionId, prompt: [{ type: "text", text: "never lands" }],
       _meta: { kkamak: { model: HAIKU } },
@@ -648,7 +817,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket (reac
       const cB = await connectNdjson(e.sock)
       await cA.request("initialize", { protocolVersion: 1 })
       await cB.request("initialize", { protocolVersion: 1 })
-      const sA = await cA.request("session/new", { cwd: process.cwd(), mcpServers: [] })
+      const sA = await cA.request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } } })
 
       // A's prompt hangs (the stub's FIRST request never answers). Both
       // connections start their own id counter at 1, so A's session/prompt
@@ -664,7 +833,7 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket (reac
       const crossed = await until(() => cap.count() >= 1, 30_000)
       expect(crossed).toBe(true)
 
-      const sB = await cB.request("session/new", { cwd: process.cwd(), mcpServers: [] })
+      const sB = await cB.request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } } })
       const bPromise = cB.request("session/prompt", {
         sessionId: sB.sessionId, prompt: [{ type: "text", text: "B queued" }],
         _meta: { kkamak: { model: HAIKU } },
@@ -676,6 +845,50 @@ describe.skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)("acp-daemon over unix socket (reac
       await expect(bPromise).rejects.toMatchObject({ code: ACP_ERR_NO_CALL, data: { callConsumed: false } })
       // A must never be cancelled by B -- it ends on its OWN turn timeout.
       await expect(aPromise).rejects.toMatchObject({ code: ACP_ERR_CALL_CONSUMED, data: { callConsumed: true } })
+      cA.close(); cB.close()
+    } finally { cap.stop() }
+  }, DAEMON_TEST_TIMEOUT_MS)
+
+  test("N3c-iii test 3: pool-exhausted (cap 1) -> -32002 with data.callConsumed false, and the stub captured exactly one request", async () => {
+    const e = tempEndpoint("poolexhausted"); LIVE.push(e)
+    const cap = hangFirstServer("ANSWER", STUB_DECLARED_MODEL)
+    try {
+      spawnDaemon(e.sock, e.spawnLog, {
+        ANTHROPIC_BASE_URL: cap.url,
+        KKAMAK_ACP_MAX_SESSIONS: "1",
+        KKAMAK_ACP_TURN_TIMEOUT_MS: String(CLI_SPAWN_BUDGET_MS),
+      })
+      await waitForSpawnLog(e.spawnLog, 1, 15_000)
+      const cA = await connectNdjson(e.sock)
+      const cB = await connectNdjson(e.sock)
+      await cA.request("initialize", { protocolVersion: 1 })
+      await cB.request("initialize", { protocolVersion: 1 })
+      const sA = await cA.request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } } })
+
+      // A's prompt is parked in-flight (the stub's FIRST request never
+      // answers) -- the cap-1 pool's ONE entry is now busy.
+      const aPromise = cA.request("session/prompt", {
+        sessionId: sA.sessionId, prompt: [{ type: "text", text: "A hangs" }],
+        _meta: { kkamak: { model: HAIKU } },
+      })
+      const crossed = await until(() => cap.count() >= 1, 30_000)
+      expect(crossed).toBe(true)
+
+      const sB = await cB.request("session/new", { cwd: process.cwd(), mcpServers: [], _meta: { kkamak: { isolation: GAUGE_ISOLATION } } })
+      // The pool has ONE entry, busy with A -- pool.acquire never queues
+      // (acp-pool.ts's own contract), so B's session/prompt is refused
+      // BEFORE anything is sent: -32002, `data.callConsumed:false` (the
+      // load-bearing wire contract §2 hands off to the client's L3 step
+      // (i) -- boolean data first).
+      await expect(cB.request("session/prompt", {
+        sessionId: sB.sessionId, prompt: [{ type: "text", text: "B never sent" }],
+        _meta: { kkamak: { model: HAIKU } },
+      })).rejects.toMatchObject({ code: -32002, data: { callConsumed: false } })
+      expect(cap.count()).toBe(1)   // still just A's one request -- B never reached the model
+
+      // Tidy shutdown: cancel A rather than wait out its own turn timeout.
+      await cA.request("session/cancel", { sessionId: sA.sessionId })
+      await aPromise.catch(() => {})
       cA.close(); cB.close()
     } finally { cap.stop() }
   }, DAEMON_TEST_TIMEOUT_MS)
