@@ -731,7 +731,7 @@ surprise. Net overhead after isolation: 1,572 B vs the API SDK's 342 B
 (~4.6x, ≈75 tokens per record) plus ~1.3 s of subprocess spawn per call.
 
 **Known reporting gap, acknowledged not fixed.** `cls-ab.ts`'s
-`transportTally` (lines ~375-380) buckets records as `if (transport === "sdk")
+`transportTally` (lines 375-383) buckets records as `if (transport === "sdk")
 sdk++ else cli++`, so any `"agent-sdk"` record it ever sees is counted as CLI.
 That is a display miscount in the classifier A/B report, not a
 transport-selection defect, and `cls-ab.ts` is out of scope for this
@@ -742,6 +742,431 @@ bug; fix it when cls-ab is next opened.
 derivations cost more wall-clock per record than the API SDK without buying
 premium access (e.g. the credit is exhausted), the transport is retained as
 selectable but not defaulted.
+
+## 6e. Amendment (pre-data, 2026-08-04): warm-daemon lane → `agent-sdk-daemon`
+
+**Governing rulings (2026-08-04, user — verbatim).** This amendment exists
+because the user directed it in today's session:
+
+1. "Daemon first. Can we make it ACP server?"
+2. "ACP is just interface not implementation. We do this under interface"
+   — given in response to five objections to taking on the official ACP
+   SDK; the direction is an OWN implementation of the ACP interface.
+3. "I don't want to distinguish batch and daily use. We can hook the start
+   and the end of CC process. On start, connect or instantiate ACP server.
+   ACP server itself has kill timeout, say 15min, on timed out, APC server
+   exit to close the ACP process."
+
+**What these supersede, explicitly.** Ruling 3 is a UNIFIED-LANE
+instruction. It withdraws, as of 2026-08-04: (a) §6d's "Selection is
+PER-CALLER, not a global default" BINDING sentence — "the live path stays
+pinned to `transport: "sdk"`"; and (b) the 2026-08-03 agreed daemon shape
+recorded in `docs/resume.md` — "in-process singleton for BATCH only … Live
+path must NOT use it". The supersession is scoped to THIS lane: the
+`"sdk"` and `"agent-sdk"` literals, their records, and §6d's OUTCOME are
+untouched, and `KKAMAK_GAUGE_TRANSPORT=agent-sdk` remains exactly what §6d
+made it.
+
+**The "end" half of ruling 3, deliberately NOT implemented — registered
+here rather than left in a plan step.** Ruling 3 says "hook the start and
+the end of CC process". Only the START is hooked (a `SessionStart` branch
+that ensures a daemon). No `SessionEnd` hook is added, because the same
+ruling gives the daemon its OWN kill timeout, and a per-session shutdown
+hook would be actively wrong for a HOST-GLOBAL daemon: closing one CC
+window would tear down the warm session other windows and any running
+batch are still using, re-imposing the ~1.25-1.46 s respawn this lane
+exists to remove. The 15-minute idle self-exit owns shutdown, and it is
+strictly safer (it fires only when nothing is in flight). If a future
+reading wants deterministic teardown, the correct shape is a reference
+count over live connections, not a SessionEnd hook — recorded so a later
+reader sees a decision, not an omission. The same reasoning binds
+OPERATIONS: no procedure in this amendment or its plan may terminate
+daemons by pattern-matching the process table (`pkill -f acp-daemon`),
+because that is the host-wide teardown this paragraph rejects. A run that
+starts a daemon terminates THAT daemon, by the pid it recorded.
+
+**What changes.** A fourth derive transport literal, `transport:
+"agent-sdk-daemon"`: the same Agent-SDK lane §6d validated, but through a
+host-global warm daemon (one streaming CLI session, `/clear` between
+records) speaking the Agent Client Protocol over a Unix socket. Selected
+per process by `KKAMAK_GAUGE_TRANSPORT=agent-sdk-daemon`; absent or any
+other value keeps the current behaviour byte-for-byte.
+
+**Why, and what is still UNMEASURED.** §6d measured the one-shot agent
+lane at +1.25-1.46 s subprocess spawn per record (~25% end-to-end). The
+daemon amortizes that to one spawn per warm period. Indicative
+measurement 2026-08-03 (recorded in `docs/resume.md`, scratch probe, NO
+in-tree artifact): first record 838 ms then ~20 ms per record, `/clear`
+handled CLI-side with no model call. Those numbers were NOT taken with
+this amendment's isolation option set and NOT taken through a
+streaming-input `Query` — the mode this lane requires. Whether a `/clear`
+user message pushed into a streaming input stream is processed as a slash
+command at all is therefore an OPEN QUESTION at registration time, gated
+by a token-free probe before any of this lane is built. If the probe
+fails, this amendment records a design that was not realizable and the
+lane is not built; that is a complete outcome, not a failure to hide.
+
+**Declared residue, and an open disagreement inside this spec.** Each
+post-`/clear` turn is believed to carry ~423 B of constant
+`<local-command-caveat>`/`<command-name>/clear</command-name>` echo. §6d's
+PER-CALLER ruling above (the paragraph beginning "Routing it through
+`agent-sdk` anyway") attributes that SAME ~423 B to the ONE-SHOT lane, on
+every Stop hook. Both cannot be describing distinct facts: either the echo
+is present in both lanes (in which case it cannot distinguish them) or
+§6d's sentence is wrong about the one-shot lane. This is registered as an
+OPEN DISCREPANCY rather than resolved by argument. It is resolved by
+measurement: the plan's Task 4 records the request bytes of a post-`/clear`
+warm turn AND of a fresh-spawn one-shot turn under the same option set, and
+whichever of the two statements is wrong is corrected in the same commit
+that records the measurement. Note that the separate §6e bar does not
+depend on the outcome: a many-turn session that has served other prompts
+is a different context from a fresh spawn whether or not the echo
+distinguishes them, and that alone is why this literal gets its own bar
+rather than inheriting §6d's result.
+
+**Instrument invariants (pinned in daemon code, not client-negotiable).**
+The §6d isolation option set, with TWO registered deltas:
+(a) REMOVED — `maxTurns: 1` and `abortController` are query-scoped and
+cannot transfer to a many-turn warm session (`maxTurns` would stop the
+whole `Query` after the first record; aborting the shared controller would
+kill every later turn). They are replaced by per-turn model-call
+accounting plus `interrupt()` as the per-turn cancel.
+(b) ADDED — an explicit neutral `cwd`. §6d measured a neutral `cwd` as
+payload-neutral and therefore redundant for a one-shot; for a host-global
+daemon it is the difference between a fixed instrument and one that varies
+with whichever session spawned it.
+Also pinned: the outgoing text is built by the SAME builder the §6d
+one-shot lane uses, including its trailing schema instruction — the two
+lanes must differ in transport only, never in prompt bytes. One turn in
+flight at a time (FIFO across all connected callers). A turn's generation
+budget is measured from the PUSH while the CLI subprocess is still
+starting, so that budget must always exceed the measured 1.25-1.46 s
+spawn; the registered value is 16 s and no configuration, including a test
+seam, may set it below 8 s.
+
+**Instrument fingerprint (binding).** A daemon freezes its subprocess `env`
+— one of the ten pinned isolation keys — at spawn time, so "which env"
+would otherwise depend on which process happened to start it (a wrapper
+exporting `ANTHROPIC_BASE_URL` would silently redirect every derivation).
+The fingerprint therefore covers the WHOLE environment, minus an
+enumerated denylist of keys that provably cannot change the instrument:
+
+  `_`, `PWD`, `OLDPWD`, `SHLVL`, `RANDOM`, `LINES`, `COLUMNS`,
+  `WINDOWID`, `TERM_SESSION_ID`, `ITERM_SESSION_ID`, `TMUX`,
+  `TMUX_PANE`, `STY`, `SSH_AUTH_SOCK`, `SSH_AGENT_PID`,
+  `SSH_CLIENT`, `SSH_CONNECTION`, `SSH_TTY`, `XDG_SESSION_ID`,
+  `DBUS_SESSION_BUS_ADDRESS`, `KKAMAK_ACP_IDLE_MS`,
+  `KKAMAK_ACP_TEST_SPAWN_LOG`, `KKAMAK_GAUGE_TRANSPORT`,
+  `KKAMAK_ACP_SOCKET`
+
+The denylist has two classes and both are stated so a later reader does
+not "tidy" one into the other:
+  · PER-PROCESS VOLATILE — the shell/terminal/ssh/tmux group above.
+  · NOT AN INSTRUMENT PARAMETER — `KKAMAK_ACP_IDLE_MS` and
+    `KKAMAK_ACP_TEST_SPAWN_LOG` are daemon OPERATING parameters;
+    `KKAMAK_ACP_SOCKET` is an ENDPOINT ADDRESS; and
+    `KKAMAK_GAUGE_TRANSPORT` is a LANE SELECTION. None of the four can
+    change a single byte the daemon sends to the model. Denylisting
+    `KKAMAK_GAUGE_TRANSPORT` is load-bearing rather than cosmetic: after
+    the live flip the derive path FORCES that value into a derived env
+    while the process that started the daemon carries whatever the user's
+    shell had, so keeping it in the hash would make a client and its own
+    daemon permanently unable to match. Denylisting `KKAMAK_ACP_SOCKET` is
+    load-bearing for the same reason in tests and in any run that binds a
+    dedicated socket.
+
+`KKAMAK_ACP_TURN_TIMEOUT_MS` is RULED IN (not denylisted), deliberately:
+it changes when a generation is cut off, which changes which turns produce
+a derivation, which is an instrument property. A daemon running a
+different turn budget is a different instrument and must not be adopted by
+a client expecting the registered one.
+
+Secrets never appear in a filename, a log, or a wire frame: any key whose
+name matches `/(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)/i` contributes
+`NAME=set`/`NAME=unset` rather than its value. Everything else
+contributes `NAME=value`. Keys are sorted by name; `envFingerprint` =
+first 12 hex chars of sha256 over the `k=v\n` lines. It is baked into the
+DEFAULT socket filename (`~/.config/kkamak/acp-<fp>.sock`) and echoed in
+`initialize`'s result; a client whose own fingerprint differs REFUSES the
+daemon and reports `no-call` (a pre-send condition — the fallback is
+safe).
+
+RESIDUAL, stated honestly and with the RIGHT failure mode: a whole-env
+hash is sensitive to benign differences (a shell that exports one extra
+variable produces a different fingerprint). For a process that can SPAWN —
+`ensureDaemon` — that costs one extra daemon, which is the safe direction:
+an extra daemon costs one spawn, a shared daemon with a different
+instrument costs the measurement. For a process that CANNOT spawn — the
+deriver, whose `daemonCall` never spawns by design — a mismatch is NOT an
+extra daemon; it is a permanent, silent `no-call` on every record, i.e.
+100% fallback to the one-shot lane with a correspondingly changed
+`transport` stamp. That asymmetry is why the denylist above rules out
+selection/endpoint/operating keys explicitly instead of leaving them to
+"an extra daemon is harmless". A host that accumulates several
+`acp-*.sock` files is behaving correctly; a deriver that never once
+stamps `agent-sdk-daemon` is a fingerprint bug and must be diagnosed as
+one.
+
+**The wire-send boundary law (binding — stated ONCE here; the wire, the
+daemon, the client and the deriver all implement THIS text).** Every turn
+resolves as exactly one of `ok`, `no-call`, or `call-consumed`. The
+dividing line is whether the `session/prompt` bytes crossed the boundary
+toward the model. Both sides of the wire classify the SAME physics the
+SAME way: there is no post-send `no-call` anywhere.
+
+  L1. CLIENT — any failure BEFORE the `session/prompt` frame is fully
+      written to the socket is `no-call`: no socket, connect refused,
+      socket-dir creation failure, `initialize`/`session/new` failure,
+      env-fingerprint mismatch, write error. "Fully written" means the
+      socket's write callback reported success; a write that errors before
+      that callback cannot have delivered a parseable frame (a partial
+      line is held in the daemon's decoder and never dispatched), so it is
+      `no-call`.
+  L2. CLIENT — any ambiguity AFTER that frame is written is
+      `call-consumed`: client budget expiry, socket closed mid-turn,
+      unparseable response, an error frame carrying NEITHER a recognized
+      instrument code NOR a boolean `data.callConsumed`, or a
+      `data.callConsumed` that is present but not a boolean. The
+      conservative side of an ambiguity is always "consumed"; the cost is
+      one retryable record, and the alternative cost is a second model
+      call.
+  L3. CLIENT — the post-send decision procedure, in this exact order, with
+      no other branches:
+        (i)  `error.data.callConsumed` present AND `typeof === "boolean"`
+             ⇒ AUTHORITATIVE, use it.
+        (ii) otherwise, `error.code === ACP_ERR_NO_CALL` ⇒ `no-call`;
+             `error.code === ACP_ERR_CALL_CONSUMED` ⇒ `call-consumed`.
+             A recognized code with `data` absent is HONOURED — that is
+             what "the numeric code is the fallback for a daemon that
+             omitted it" means, and it is the only reading under which a
+             conforming daemon that omits the optional field does not have
+             its `no-call` silently upgraded.
+        (iii) anything else ⇒ L2 ⇒ `call-consumed`.
+      (Round-4 reconciliation: an earlier draft listed "missing
+      `data.callConsumed`" under L2 while L3 made the code the fallback —
+      a direct contradiction on the one branch that decides between one
+      and two model calls. L2 now scopes its clause to "neither a
+      recognized code nor a boolean field", and step (ii) above is the
+      single authority for a recognized code with no data.)
+  L4. DAEMON — a turn that never pushed its prompt is a PROVABLE `no-call`,
+      and this is the ONLY daemon-side source of `no-call`: still in the
+      FIFO queue when its queue-wait cap expired; cancelled while queued;
+      cancelled after leaving the queue but BEFORE its prompt was pushed;
+      `/clear` not confirmed by `conversation_reset` within its cap;
+      `setModel` not confirmed within its cap; the session was closed
+      before the push; or the `Query` could not be started at all.
+  L5. DAEMON — once the prompt is pushed, EVERY non-success ending is
+      `call-consumed`. There is no exception. An earlier draft carved out
+      `api_retry` with `error_status === null`, reasoning that a
+      connection-level failure proves nothing reached the model.
+      sdk.d.ts:2839-2841 does not support that reading: it documents
+      `error_status: null` for "connection errors (e.g. TIMEOUTS) that had
+      no HTTP response", and a read timeout is precisely the case where
+      the API received, processed and BILLED the request while no response
+      came back. `SDKAssistantMessageError` (sdk.d.ts:2901) is a closed
+      enum that reports `'unknown'` for both refusal and timeout, so the
+      two are indistinguishable from the SDK surface. The carve-out was
+      also worthless: a daemon and its clients are fingerprint-matched on
+      the same endpoint and credentials, so an endpoint the daemon cannot
+      reach the one-shot fallback cannot reach either — it would have
+      bought no recoveries while risking the one invariant this law
+      protects.
+  L6. DAEMON — `api_retry` with `error_status !== null` means the API
+      answered, so the call is CONSUMED; the turn is cancelled at that
+      moment because the CLI's own internal retry would be call #2 (§6d,
+      `agent-transport.ts:135-145`). `api_retry` with `error_status ===
+      null` is likewise CONSUMED once the prompt was pushed (L5) and is
+      likewise cancelled, for the same reason. An `api_retry` arriving
+      while the CURRENT turn has NOT yet pushed its prompt belongs to the
+      recycle leg, not to the turn: it is counted as a stray and MUST NOT
+      poison an unsent turn or interrupt an in-flight `/clear`.
+  L7. DAEMON — a cancelled or timed-out turn that was SENT settles from its
+      OWN terminal `result` message, never at the instant of cancellation,
+      so a trailing message can never be attributed to the NEXT turn. A
+      cancel that arrives while the turn is UNSENT settles immediately as
+      `no-call` (L4) and the turn is never pushed — cancelling a turn must
+      never be the thing that causes it to spend a model call. If
+      `interrupt()` itself hangs past the hard grace, the whole `Query` and
+      its subprocess are destroyed. Destroying the `Query` is NOT by itself
+      sufficient to prevent stale routing: the message pump is a separate
+      object whose loop unwinds asynchronously, so the implementation must
+      additionally bind every pump to the generation of `Query` it was
+      started for and make a superseded pump a no-op — both while routing
+      and while tearing down. A pump that outlives its `Query` and settles
+      whatever turn is current would destroy a FRESH record. For the same
+      reason a session `close()` must be observed after EVERY suspension
+      point inside a turn's execution, not only at its entry: a `close()`
+      that lands while a turn is awaiting the SDK package import would
+      otherwise be followed by a fresh subprocess spawn and a real model
+      call on a session the caller already terminated.
+
+A caller may fall back to the one-shot lane ONLY on `no-call`. On
+`call-consumed` the deriver returns undefined and the record stays
+pending/retryable. Without this split, a fail-open fallback would issue a
+second model call for the same record, breaking §4's exactly-one-call rule
+and making the `--go N` cost fence mean up to `2N` calls.
+
+**Budget rule (binding, and the reason L2 is not a loophole).** The
+client's daemon-leg budget MUST exceed the daemon's worst-case per-turn
+wall clock, or an ordinary slow-but-legitimate turn would trip L2 and cost
+the record. Registered values: daemon queue-wait 6 s + `/clear` confirm
+4 s + `setModel` confirm 2 s + generation 16 s + hard grace 4 s = 32 s
+worst case; client leg 36 s (the 4 s of slack is the client's connect +
+`initialize` + `session/new` preamble, which the daemon's clock does not
+cover); minimum fallback leg 10 s; total per-record budget 60 s (unchanged
+from today's `CALL_TIMEOUT_MS`). Every daemon-side wait is capped —
+including `setModel`, which the SDK exposes as an un-timed control
+round-trip and which would otherwise let one wedged subprocess hang the
+FIFO for the daemon's whole lifetime. The one uncapped item is the lazy
+`import` of the SDK package (~84 ms measured); it sits outside the 32 s
+sum, and an import slow enough to consume the client's slack degrades to
+L2 (`call-consumed`, a lost retryable record), never to a second call.
+Per-record latency therefore never exceeds today's. The arithmetic is
+locked by a unit test, not by prose.
+
+**Fail-open provenance rule (binding).** A caller selecting
+`agent-sdk-daemon` that falls back derives via the direct lane instead and
+the record stamps the transport THAT ACTUALLY RAN, and the model the lane
+actually used. A stamp may therefore differ from the selection; the stamp
+is the truth. Silent mislabeling here is the §6d cls-ab defect all over
+again — the paired-validation partition reads stamps, so a lie in the
+stamp corrupts the §6e bar itself.
+
+**Which field proves the model — SCOPED TO THIS LANE (binding), and the
+asymmetry that scoping registers.** For a turn served by the
+`agent-sdk-daemon` lane, the AUTHORITATIVE evidence of which model ran is
+the keys of `modelUsage` on the SDK's terminal result (sdk.d.ts:4312 on
+success, sdk.d.ts:4279 on error). The `model` field of the turn's
+assistant messages is DIAGNOSTIC ONLY and never becomes evidence —
+treating it as a fallback proof would quietly reinstate the tautology this
+rule exists to remove.
+
+THE MATCHING RULE (binding, and NOT string equality). A `modelUsage` key
+is not required to equal the requested model id, and in practice does not:
+this repo's own captured CLI transcripts key `modelUsage` by the DATED
+snapshot id (`opencode-plugin/test/fixtures/drivers/claude-code/success.ndjson`
+records `"modelUsage":{"claude-haiku-4-5-20251001": …}` for a request that
+named the undated alias), and sdk.d.ts:1274-1277 states outright that the
+key may be a provider-specific id or an alias differing from the canonical
+one. A key `k` therefore PROVES a requested model `m` iff:
+
+    k === m  OR  k.startsWith(m + "-")  OR  usage[k].canonicalModel === m
+
+Naive string equality here would discard EVERY honest derivation and turn
+a sized go into a full spend with zero records — registered explicitly so
+no later reader "simplifies" it back.
+
+When `modelUsage` carries exactly one key, that key (with its
+`canonicalModel`) is the turn's evidence. When it carries several (an
+auxiliary title/summarizer model is possible), the turn is proven for `m`
+only if some key proves `m` under the rule above AND every other key
+recorded zero output tokens — the proof still comes from the result, not
+from the request. A turn that produced text but whose result carries no
+key proving the requested model is reported `call-consumed` (the call
+happened; the record must not be stamped). The `transport` and `model`
+STAMPS written onto the record remain the lane that ran and the resolved
+requested id, exactly as §6c/§6d records already carry them; what this
+rule adds is that a daemon-lane record is only written when the result
+PROVES the lane ran that model.
+
+REGISTERED ASYMMETRY, not an oversight: this rule binds the
+`agent-sdk-daemon` lane only. The `"sdk"` lane returns an API response the
+caller does not inspect for model provenance, and the `"agent-sdk"` lane's
+`agentSdkCall` returns a bare string with no result surface at all
+(`agent-transport.ts:146-149`), so neither can supply this evidence
+without a change to code §6c/§6d already validated and froze. Those two
+lanes keep their §6c/§6d requested-model stamp. Pretending otherwise
+would make this amendment declare a rule two of the three live lanes
+violate on their first record.
+
+**Pooling bar (reused verbatim from §6c/§6d, baseline `"sdk"`).**
+- Positive agreement on C: `|C_sdk ∩ C_daemon| / |C_sdk ∪ C_daemon| >= 0.80`, AND
+- Missed-C cap: records `"sdk"` calls C that `"agent-sdk-daemon"` calls
+  not-C, `<= ceil(0.10 × |C_sdk|)`.
+Both hold → pooling permitted, split still reported. Either fails → the
+literal stays selectable with split readings, and the live flip DOES NOT
+HAPPEN.
+
+**Power limitation, declared pre-data.** On `yoo-dev` the entire
+`"sdk"`-derived class-C stratum is 5 records (measured 2026-08-04: 109
+`transport:"sdk"` records, 5 of class C), so the sample is 5 C + 5 not-C
+and the cap is `ceil(0.5) = 1`. Agreement ≥ 0.80 over a union of 5 means
+4/5. §6d already landed on both edges with zero slack. This bar therefore
+has NO power to separate a small real effect from a single coin flip, and
+that is registered here BEFORE the data rather than argued afterwards. A
+PASS licenses the flip because the flip is user-directed and reversible by
+one env var; it does not license a claim that the warm residue is
+behaviourally neutral.
+
+**Validation-run instrument parameters, registered pre-data.** The §6e
+validation run binds its OWN socket path (`KKAMAK_ACP_SOCKET` set to a
+run-specific file) and sets `KKAMAK_ACP_IDLE_MS` above the expected batch
+duration, then re-proves daemon liveness inside the same script that
+spends. The dedicated socket is not cosmetic: both `KKAMAK_ACP_IDLE_MS`
+and `KKAMAK_ACP_SOCKET` are on the fingerprint denylist (neither can
+change the instrument), so a daemon already listening at the default
+fingerprinted path would be adopted by the liveness probe and would serve
+the run under ITS idle budget, not the registered one — the registered
+parameter would be silently inert. Both are operational parameters of the
+run, not changes to the bar. The run records its daemon's pid (via
+`KKAMAK_ACP_TEST_SPAWN_LOG`, itself denylisted), terminates THAT pid and
+no other process, and asserts the socket file is gone.
+
+**Pooling is not transitive, and the post-flip live stream is split three
+ways.** §6d permits pooling `sdk` with `agent-sdk` at exactly 0.800; a
+§6e pass would permit pooling `sdk` with `agent-sdk-daemon` at ≥ 0.80.
+Neither licenses pooling `agent-sdk` with `agent-sdk-daemon`. After a
+flip, the live derive path emits `"agent-sdk-daemon"` when the daemon
+serves the turn and `"agent-sdk"` when it fell back on a `no-call` — the
+lane is chosen by daemon availability, which is not independent of host
+state or time of day. Every post-flip reading is therefore split THREE
+ways (`sdk` pre-boundary, `agent-sdk-daemon`, `agent-sdk`), and the
+fallback mixture is itself a registered source of variance. A post-flip
+stream in which `agent-sdk-daemon` NEVER appears is not a valid reading of
+this lane at all — it is an ensure-gate or fingerprint defect (see the
+fingerprint residual above and the flip gate below).
+
+**Live flip gate.** The live derive path (refiner-cli.ts) stays pinned to
+`"sdk"` until: (1) this bar passes, (2) the flip ships with the fail-open
+fallback and the wire-send boundary law above, (3) the flip ships with a
+SessionStart ensure gate that fires on exactly the condition under which
+the live path takes the daemon lane — one predicate read by both, not two
+that can drift, because a forced live lane with an opt-in ensure gate
+would produce a 100%-fallback stream that is slower than the pre-flip
+instrument and stamped as a lane this bar never measured — and (4) the
+boundary ts is logged in
+`docs/2026-08-01-gauntlet-adoption-ledger.md` at the flip commit
+— behaviour changes while `pluginVersion` does not. A bar FAIL is a
+complete, successful outcome: the daemon stays available for any caller
+that opts in with split readings, and live keeps `"sdk"`.
+
+**Boundary ts for batch, too.** §6d's Deploy clause requires a boundary ts
+when the first BATCH caller opts in. The §6e validation run (a shadow-store
+derive) is instrument validation, not a production reading, and does NOT
+trigger it. The first `agent-sdk-daemon` derive against a REAL store does,
+whether or not the live flip ever happens.
+
+**Known reporting gap, re-recorded.** `cls-ab.ts`'s `transportTally`
+(lines 375-383, the `if/else` at 379-380 — this is the precise range;
+§6d's own paragraph above says "lines ~375-380" and is corrected to this
+range in the same commit that lands §6e) buckets records as `if
+(transport === "sdk") sdk++ else cli++`. §6d recorded this for
+`"agent-sdk"`; it applies identically to `"agent-sdk-daemon"`, which will
+also be miscounted as CLI in the classifier A/B report. Display miscount
+only, still out of scope, fix it when cls-ab is next opened.
+
+**What would falsify this design.** If warm-lane derivations disagree with
+fresh-spawn agent-lane derivations more than fresh-spawn disagrees with
+the API lane (i.e. the warm context is NOT behaviourally neutral), the
+daemon is retained as a convenience only and the live flip is off the
+table for it. NOTE ON MEASURABILITY: the pv machinery compares a real-store
+baseline against a shadow arm, so it cannot compare two shadow arms
+directly. This criterion is therefore evaluated on the class-C stratum
+ONLY — the same 5 baseline keys appear in both the §6d and §6e samples —
+against the per-key classes recorded in
+`docs/gauge-pv/yoo-dev-sdk-vs-agent-sdk-pv-counts.json`. The not-C stratum
+is an independent random draw in each run and is NOT comparable across
+them.
 
 ## 7. Known risks
 
