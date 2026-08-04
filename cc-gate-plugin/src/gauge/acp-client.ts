@@ -121,6 +121,24 @@ export function daemonCall(
     socket.once("error", () => finish(sentPrompt ? { kind: "call-consumed" } : { kind: "no-call" }))
     socket.once("close", () => finish(sentPrompt ? { kind: "call-consumed" } : { kind: "no-call" }))
 
+    // The connect-wait promise, registered BEFORE `.connect()` is called
+    // below — mirrors `probeOnce`'s ordering. Review finding (round after
+    // 420b2ce): this listener used to be attached inside `run()`, AFTER
+    // `.connect()` had already run, which is the exact same-tick
+    // event-delivery race deviation 1's header comment closes for 'error'
+    // — left open here for 'connect'. The ambient `once("error")` above
+    // already protects the error half regardless of ordering, so only
+    // 'connect' was actually exposed: if bun test 1.3.1 ever delivers
+    // 'connect' before a listener attached on a later line, `run()` would
+    // await forever and the call would burn the full budget against a
+    // HEALTHY daemon before falling back. Attaching here, before
+    // `socket.connect(sock)`, closes that window the same way deviation 1
+    // closes it for 'error'.
+    const connected = new Promise<void>((res, rej) => {
+      socket.once("connect", () => res())
+      socket.once("error", rej)
+    })
+
     // Second layer over FrameDecoder's own StringDecoder on the
     // split-multibyte hazard, matching the daemon (Task 5).
     socket.setEncoding("utf8")
@@ -165,10 +183,7 @@ export function daemonCall(
     })
 
     async function run(): Promise<void> {
-      await new Promise<void>((res, rej) => {
-        socket.once("connect", () => res())
-        socket.once("error", rej)
-      })
+      await connected
 
       const init = (await request(ACP_INITIALIZE, { protocolVersion: 1 })) as AcpInitializeResult | undefined
       if (init?._meta?.kkamak?.envFingerprint !== fp) { finish({ kind: "no-call" }); return }
