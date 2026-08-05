@@ -34,10 +34,17 @@ worktree-fix-cc-host-claude-path = 4 docs commits re-auditing
 docs/techs.md (was frozen at 07-27, missed the whole GA6-GA14 arc):
 2d071d3 Part-1 §L inventory + Part-2 third delta; 19e014e Part-3
 effectiveness ranking; 47b3684 evidence pointers (paths grep-verified);
-dbad121 proven-ineffective table. If review approves: write
-docs/reviews/<sha>-techs-reaudit.md artifact on the branch, then
-scripts/merge-with-gate.sh from main, push, delete branch + worktree.
-If it finds wrong numbers: fix round first.
+dbad121 proven-ineffective table. FACT-CHECK VERDICT (landed 08-06, session end): NOT clean —
+2 findings, both citation/scope errors, ALL quantitative claims verified
+exact against sources. Fix round owed BEFORE merge:
+ (1) techs.md:271 + :357 — "/clear third result frame" is cited to GA13
+     but is a GA14-era find (T4-1a probe, resume 08-04 block); re-cite.
+ (2) techs.md:381 — R1 folded into "post-A1 residual, 8 straight": R1
+     ran on BARE pre-A1; post-A1 streak = R2-R8 (matches the 07-27
+     section's own R5-R8 framing). Retitle/rescope the row.
+Then: artifact docs/reviews/<sha>-techs-reaudit.md on the branch,
+scripts/merge-with-gate.sh from main (merge go already given), push,
+delete branch + worktree fix-cc-host-claude-path.
 
 SESSION FINDINGS (from a 3-agent repo+host evidence sweep, yoo-mac):
  - Warm lane on yoo-mac: armed in settings, ZERO runtime exercise (no
