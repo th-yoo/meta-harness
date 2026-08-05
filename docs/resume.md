@@ -3,6 +3,53 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-05 latest (`yoo-dev` office) — TWO-TIER GATE SHIPPED: amended→reviewed-to-flawless→SDD-executed→merged 8224748→DEPLOYED (instrument ts 1785888548054)
+
+**RESUME PROMPT (either host — git-only transfer):**
+```
+Resume kkamak (meta-harness), post-2026-08-05 two-tier-gate deploy. git pull
+FIRST (main >= 8224748), then this block.
+
+SHIPPED THIS SESSION (full chain, 7b-gated):
+ - Plan amended (a-c + minors) then ralph-looped feature-dev:code-architect
+   to FLAWLESS (2 rounds, ffa1fc8), then SDD-executed: Task 1 core
+   (1906d5a, km-crank/src/gate-check-core.ts), Task 2 CLI (d9ad412,
+   scripts/gate-check.ts), Task 3 deploy (e9fcbf6), final-review hardening
+   (9e3b062: bgMain marker ownership guard, ps pid-identity kill guard,
+   checkTimeoutMs 600000, ledger merge-gate wording fix, tsconfig include).
+   Merge 8224748 via merge-with-gate.sh; artifact
+   docs/reviews/9e3b062-two-tier-gate-check.md (verdict approved,
+   findings-count 9 — 4 Important all fixed, 5 minors deferred, listed there).
+ - gate.json check is NOW `bun scripts/gate-check.ts` (+checkTimeoutMs
+   600000, rounds/gauge unchanged). LIVE-PROVEN yoo-dev: tier0 0.215s
+   (doc-only TIA) / 23s (no-baseline fallback); bg full run lands green
+   ~170s; forced-red debt repayment surfaces stored tail, exits 0, restores
+   green. KKAMAK_GATE_FULL=1 restores incumbent exactly;
+   KKAMAK_GATE_NO_BG=1 suppresses bg spawn.
+ - INSTRUMENT BOUNDARY ts 1785888548054 (2026-08-05 09:09 KST, yoo-dev):
+   gate-outcomes durationMs/checkMs distributions shift + check string
+   changes — NEVER pool across (entry in
+   docs/2026-08-01-gauntlet-adoption-ledger.md). yoo-mac inherits ON PULL
+   (config, not env): its first pulled Stop = fallback (~25-45s) + bg
+   spawn, then doc-only Stops sub-second.
+ - FOUR reality-forced deviations from plan-verbatim code, all reviewed +
+   recorded in the review artifact (git add ':!.km' hard-errors on
+   gitignored paths; runGate KKAMAK_GATE_* env strip; args.txt rmSync x2;
+   KKAMAK_DEV_CHECKS drift-guard append in km-crank/src/trial-verdict.ts —
+   that array must gain the new check string whenever gate.json changes).
+
+OPEN DUTIES (unchanged): Task 8 §6d pv run (office store; REAL SPEND —
+size token-free via replay-cli pv-sample --pair sdk:agent-sdk, then sized
+go; Task 9 chains token-free). Office warm-lane activation optional (own
+logged decision; re-prove suites in activated state first). Premium was
+429-walled — probe before any spend:
+source scripts/probe-models.sh && probe_models claude-haiku-4-5 claude-sonnet-5 claude-opus-5
+
+Rules: sized go before spend · spec-is-law, pre-data amendments only ·
+merge-with-gate.sh + docs/reviews artifact · boundary ts on instrument
+changes · F1/F2 · per-task reviews · grep-verify · SITREP.
+```
+
 ## ✅ SESSION END 2026-08-05 later (`yoo-dev` office) — TWO-TIER GATE PLAN ASSESSED: EXECUTE WITH 3 AMENDMENTS (awaiting go) · GATE STALL CONFIRMED BOTH HOSTS
 
 **RESUME PROMPT (either host — git-only transfer):**
