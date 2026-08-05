@@ -3,6 +3,66 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-05 evening (`yoo-dev`) — FULL-DAY ARC MERGED; CHAIN ARMED POST-REBOOT; 3 USER DECISIONS OPEN
+
+**RESUME PROMPT (either host — git-only transfer):**
+```
+Resume kkamak (meta-harness), post-2026-08-05 evening session. git pull
+FIRST, then this block. Main >= 198184e, tree clean.
+
+MERGED TODAY (all pushed, 7b-gated where code):
+ - Two-tier gate DEPLOYED (merge 8224748, instrument ts 1785888548054):
+   gate.json check = bun scripts/gate-check.ts + checkTimeoutMs 600000.
+   Live-proven; S4 erratum later CONFIRMED ~22x faster Stops (durationMs
+   mean 108733 -> 4943). KKAMAK_DEV_CHECKS drift guard must append on any
+   future check-string change.
+ - Warm lane ACTIVATED office (765dd62, ts 1785892022908) — both hosts
+   now warm; three seat regimes per host, never pool across ts.
+ - cc-gate-plugin 0.2.1 -> 0.3.0 (ffb8d00) + cache recipe: version bump
+   in BOTH jsons + `claude plugin update kkamak@kkamak-local` + restart,
+   in that order. Dogfood session now runs 0.3.0; its FIRST 0.3.0-stamped
+   gate-outcomes line = that repo's instrument boundary (not yet emitted
+   at session end — their ledger duty when it lands).
+ - agent-sdk-transport plan CLOSED (796a103 — Task 8 §6d had already run
+   08-04: POOLING-PERMITTED at exact edge; second stale-resume incident:
+   always check SDD ledger + committed artifacts before dispatching).
+ - C4 nudge-vs-reject experiment PRE-REGISTERED (bfa0572, all 5 rulings
+   closed + architect fixes: response-domain check gate +6 opus, prepend
+   surrogate declared, disobedience metric, manifest subset draw). Budget
+   6x|C4|+66, sized go AFTER base rate lands.
+ - Loop-fix probe program: spec reviewed-to-SOUND 3 rounds (b6f8730),
+   EXECUTED via SDD (merge 1649fe8): P0/P1/E + cause mapping in-spec.
+   VERDICT NO-CONFIG-PASSES — blocker is signal-source PAIRING, not
+   rigor: b2 review-findings viable (sd/mean 1.41) but rides s3
+   1.43/day (245 days); at s1 62.6/day or s2 55.4/day it passes in
+   6-7 days. S4 denominator fix + erratum merged 198184e (found by the
+   kkamak-repo session's independent review — credit recorded).
+
+ARMED ON THIS HOST (re-arm after any reboot):
+ - tmux gaugeverify: bash scripts/channel-chain.sh (probes opus every
+   10min -> channel-smoke --go 14 -> mechanical bar -> channel --go 301;
+   gos granted; durable log .km/channel-chain.log; markers /tmp/kkamak).
+   On completion: report |C4| base rate + exact experiment size, get
+   sized go, then build c4-arms.ts per pre-reg §7.
+ - Watchers (session-local, re-arm if wanted): dogfood pane, first-0.3.0
+   sensor line, chain log.
+
+OPEN USER DECISIONS (nothing self-adopts):
+ 1. Review-loop-as-sensor synthesis design go — numerically motivated
+    (capacity rows 6-7d) + manually demonstrated (other session: ~29
+    findings on demand). Brainstorm -> spec -> plan on go.
+ 2. P2 actuator-binding probe spec + sized go (outcome signal = B2).
+ 3. B3 binarization ruling (one sentence; admits gauge classes as signal).
+
+Premium: opus/sonnet 429-walled all day (haiku OK) — chain self-probes;
+probe before any manual spend:
+source scripts/probe-models.sh && probe_models claude-haiku-4-5 claude-sonnet-5 claude-opus-5
+
+Rules: sized go before spend · spec-is-law, pre-data amendments only ·
+merge-with-gate.sh + docs/reviews artifact · boundary ts on instrument
+changes · F1/F2 · per-task reviews · grep-verify · SITREP.
+```
+
 ## ✅ SESSION 2026-08-05 cont. (`yoo-dev`) — LOOP-FIX PROBE PROGRAM SHIPPED (merge 1649fe8): VERDICT NO-CONFIG-PASSES · CAUSE MAPPING RECORDED · §5 DECISION OWED TO USER
 
 ```
