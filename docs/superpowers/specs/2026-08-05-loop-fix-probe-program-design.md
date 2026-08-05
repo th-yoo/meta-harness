@@ -279,7 +279,7 @@ The only meaningful pairing (b2×s3) needs 245 days at effect 0.30 vs the 14-day
 | D blind to non-breaking defects | foreign to this program (P3: channel ladder + C4 experiment) | no new data — chain armed, opus-walled | **OPEN — in flight elsewhere** |
 | E rigor unaffordable | E table over P0-viable × P1 sources | pairing, not rigor, is the blocker: meaningful b2×s3 = 245 days (FAIL); capacity b2×s1 ≈ 6 days, b2×s2 ≈ 7 days (would PASS) | **REFRAMED**: bars reachable if the findings signal rides a dense cadence |
 
-**Not yet fixed (open register):** (1) P2 actuator-binding probe — spec + sized go owed; (2) B3 binarization ruling; (3) the pairing move itself — auto-fired review passes at commit/Stop cadence (the review-loop-as-sensor synthesis) is now numerically motivated but UNBUILT and needs its own user-ruled design; (4) D's whole program rides the premium wall. Nothing in this section adopts anything (spec §5/§7 stand).
+**Not yet fixed (open register):** (1) P2 actuator-binding probe — spec + sized go owed; (2) B3 binarization ruling — CLOSED 2026-08-05, D vs rest (ruling section below); (3) the pairing move itself — auto-fired review passes at commit/Stop cadence (the review-loop-as-sensor synthesis) is now numerically motivated but UNBUILT and needs its own user-ruled design; (4) D's whole program rides the premium wall. Nothing in this section adopts anything (spec §5/§7 stand).
 
 ### Erratum — S4 rate denominator (2026-08-05, found by the kkamak-repo session's independent review)
 
@@ -294,3 +294,36 @@ S4 content, span-neutral and worth recording: gated-Stop `durationMs`
 mean fell 108,733 → 4,943 ms across the two-tier boundary — the deploy
 made Stops ~22× faster, exactly as its ledger entry predicted. E table
 unaffected (S4 was excluded as non-independent by design).
+
+### B3 binarization ruling — D vs rest (2026-08-05, user-directed "measure and then decide")
+
+Open-register item (2) CLOSED. Measurement (zero model calls, Task-1
+formulas verbatim — `nPerArmBinomial`/`daysToVerdict`, MIN_N=20 floor,
+script committed as `scripts/b3-binarization-measure.ts`, counts from the
+committed P0 json):
+
+- **True carrier cadence measured**: b3.live rides gauge DERIVATIONS, not
+  Stops — 119 `gauge.present` lines / 6.52d trailing window in this
+  repo's gate-outcomes.ndjson = **18.26 gauge events/day** (~27% of the
+  438 Stops). Every earlier b3 cross printed against s1/s2 was
+  capacity-only; this is the real rate.
+- **Floors (minority ≥3 count AND ≥0.1 rate, both provenances)**: pass —
+  D-vs-rest (25.2% live / 42.8% corpus), A1-vs-rest, A1+A2-vs-rest.
+  Fail — C-vs-not-C (0.9% / 5.2%), B+C-vs-rest (6.5% / 9.3%).
+- **Bar at measured cadence**: D-vs-rest needs n/arm 41–42 at d=0.30 →
+  **5 days** (d=0.20 → 10–11 days) — under the 14-day bar with margin.
+
+**Ruling: b3 is binarized as class D vs rest** (criterion exists but
+not extractable — reason "not-extractable"/"out-of-scope" — vs A1/A2/B/C).
+Rationale: the only floor-passing split that measures what a goal-setting
+actuator targets (extraction failure); the A1 variants pass numerically
+but track workload mix (chat share), not agent behavior. Declared
+limitation carried forward: D rate is workload-confounded in any
+non-randomized comparison — arms must be randomized or the confound
+declared per §4.3.
+
+Standing consequences: b3 (D-vs-rest) may now enter E when a config is
+proposed; the pairing that carries it today is gauge-emission cadence
+(measured 18.26/day here), NOT s1 — a future e-table run wanting b3 must
+add the gauge-emission source explicitly rather than reusing s1's rate.
+This ruling adopts no config and arms nothing (§5/§7 stand).
