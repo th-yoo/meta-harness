@@ -56,8 +56,10 @@ import { writeProposerLock, proposerInFlight as lockInFlight } from "./proposer.
 // Minimal module-scoped Bun ambient (this project has no `bun-types` dep — see
 // bench/exec.ts for the same pattern). Covers both exec()'s bash -c calls and
 // runClaudeCodeTextAgent's `claude -p` child — same opts shape (stdout piped,
-// stderr/stdin ignored, cwd optional) suffices for both.
+// stderr/stdin ignored, cwd optional) suffices for both. `which` added for
+// resolveClaudeArgv's default deps (PATH-at-process-start resolution).
 declare const Bun: {
+  which(name: string): string | null
   spawn(
     cmd: string[],
     opts: {
@@ -101,8 +103,44 @@ export type CCSpawnFn = (
   opts: { cwd: string; stdin: "ignore" },
 ) => CCChildProcess
 
+/** Resolve a bare `"claude"` argv[0] to an absolute path at spawn time.
+ *
+ * Why: Bun resolves argv[0] against the PATH captured at PROCESS START, and
+ * the daily km-crank sweep runs under launchd's minimal PATH (no
+ * `~/.local/bin`) — every detached proposer spawn on yoo-mac failed
+ * `Executable not found in $PATH: "claude"` 4/4 days (hook.log
+ * 2026-08-02..05). Resolution lives HERE, in the real spawn seam, not in
+ * argv construction: injected test spawns keep seeing the bare `"claude"`
+ * contract, and the fix applies exactly where the failure does.
+ *
+ * Order: `KKAMAK_CLAUDE_BIN` override → which() → well-known install dirs
+ * (HOME-anchored first) → bare name unchanged (the original error is the
+ * right message when nothing resolves). */
+export function resolveClaudeArgv(
+  argv: string[],
+  env: Record<string, string | undefined> = process.env,
+  deps: { which: (name: string) => string | null; exists: (p: string) => boolean } =
+    { which: (name) => Bun.which(name), exists: (p) => fs.existsSync(p) },
+): string[] {
+  if (argv[0] !== "claude") return argv
+  const rest = argv.slice(1)
+  const override = env.KKAMAK_CLAUDE_BIN
+  if (override) return [override, ...rest]
+  const found = deps.which("claude")
+  if (found) return [found, ...rest]
+  const candidates = [
+    ...(env.HOME ? [path.join(env.HOME, ".local", "bin", "claude")] : []),
+    "/usr/local/bin/claude",
+    "/opt/homebrew/bin/claude",
+  ]
+  for (const c of candidates) {
+    try { if (deps.exists(c)) return [c, ...rest] } catch { /* keep probing */ }
+  }
+  return argv
+}
+
 function defaultCCSpawn(argv: string[], opts: { cwd: string; stdin: "ignore" }): CCChildProcess {
-  return Bun.spawn(argv, { cwd: opts.cwd, stdout: "pipe", stderr: "ignore", stdin: "ignore" })
+  return Bun.spawn(resolveClaudeArgv(argv), { cwd: opts.cwd, stdout: "pipe", stderr: "ignore", stdin: "ignore" })
 }
 
 /** VERIFIED (claude 2.1.207 probe): denying this exact list yields a
@@ -300,7 +338,7 @@ export type CCTaskSpawnFn = (
 ) => CCTaskChild
 
 function defaultCCTaskSpawn(argv: string[], opts: { cwd: string; env: Record<string, string> }): CCTaskChild {
-  return Bun.spawn(argv, {
+  return Bun.spawn(resolveClaudeArgv(argv, opts.env), {
     cwd: opts.cwd,
     env: opts.env,
     stdout: "ignore",
