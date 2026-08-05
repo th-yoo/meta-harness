@@ -19,6 +19,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { nPerArmBinomial, daysToVerdict } from "../km-crank/src/loop-probes.ts"
+import { gateNdjsonPath, readGateLines } from "./p0-signal-variance.ts"
 
 const EFFECTS = [0.10, 0.20, 0.30, 0.40]
 const MIN_N = 20
@@ -41,11 +42,17 @@ for (const r of p1.s2?.repos ?? []) {
 }
 if (typeof p1.s3?.addsPerDay === "number") sources.s3 = p1.s3.addsPerDay
 
-// Measured gauge-emission cadence (the true b3.live carrier).
-const ndPath = path.join(process.cwd(), ".km", "gate-outcomes.ndjson")
-const nd = fs.readFileSync(ndPath, "utf8").split("\n").filter(Boolean)
-  .map((l) => { try { return JSON.parse(l) } catch { return null } })
-  .filter((r): r is { ts: number; gauge?: { present?: boolean } } => r !== null && typeof r.ts === "number")
+// Measured gauge-emission cadence (the true b3.live carrier). Path via
+// p0-signal-variance.ts's home-anchored gateNdjsonPath() — NEVER
+// cwd-relative: worktree .km/ dirs are empty-or-absent (that script's
+// own documented trap), and readGateLines degrades to [] on a missing
+// file instead of crashing.
+const nd = readGateLines(gateNdjsonPath())
+  .map((r) => r as { ts: number; gauge?: { present?: boolean } })
+if (nd.length === 0) {
+  console.error(`no gate lines at ${gateNdjsonPath()} — cannot measure gauge cadence`)
+  process.exit(1)
+}
 const nowTs = Math.max(...nd.map((r) => r.ts))
 const winLo = nowTs - 7 * 86400_000
 const win = nd.filter((r) => r.ts >= winLo)
