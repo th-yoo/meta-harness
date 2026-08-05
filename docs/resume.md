@@ -3,6 +3,69 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-06 (`yoo-mac`) — cc-host PATH FIX MERGED (87d4937) · techs.md RE-AUDIT ON BRANCH (merge go given, fact-check in flight) · NEW STANDING RULE: merges to main need explicit user go
+
+**RESUME PROMPT (either host — git-only):**
+```
+Resume kkamak (meta-harness), post-2026-08-06 yoo-mac session. git pull
+FIRST. Main @ 87d4937; branch worktree-fix-cc-host-claude-path pushed
+with 4 docs commits pending merge (see below).
+
+NEW STANDING RULE (user, 2026-08-06): merges to main require the user's
+EXPLICIT go, every time — a granted fix request is NOT a merge go. Build
+on a branch (worktree when parallel sessions live), review, report, wait.
+7b gate still binds when the go comes.
+
+MERGED (before the rule, kept by user ruling): 87d4937 cc-host PATH fix —
+the daily km-crank sweep (launchd minimal PATH) had failed EVERY detached
+proposer spawn on yoo-mac 4/4 days ('Executable not found in $PATH:
+"claude"', ~/.config/kkamak/runtime/cc/hook.log). Bun resolves argv[0]
+from process-start PATH. Fix: exported resolveClaudeArgv (KKAMAK_CLAUDE_BIN
+-> Bun.which -> ~/.local/bin,/usr/local/bin,/opt/homebrew/bin -> bare) in
+BOTH default spawn seams; injected test spawns unaffected; execute-proven
+under a minimal PATH. Review docs/reviews/42d6199-fix-cc-host-claude-path.md
+(0C/0I). CONSEQUENCE: the warm lane's evidence supply line (daily proposer
+spawns) is unblocked — warm-lane value verdict now actually collectible.
+Deferred note from review: bench/drivers/claude-code.ts also spawns bare
+"claude" (podman context, no failure evidence — untouched).
+
+PENDING MERGE (go GIVEN, awaiting fact-check review verdict): branch
+worktree-fix-cc-host-claude-path = 4 docs commits re-auditing
+docs/techs.md (was frozen at 07-27, missed the whole GA6-GA14 arc):
+2d071d3 Part-1 §L inventory + Part-2 third delta; 19e014e Part-3
+effectiveness ranking; 47b3684 evidence pointers (paths grep-verified);
+dbad121 proven-ineffective table. If review approves: write
+docs/reviews/<sha>-techs-reaudit.md artifact on the branch, then
+scripts/merge-with-gate.sh from main, push, delete branch + worktree.
+If it finds wrong numbers: fix round first.
+
+SESSION FINDINGS (from a 3-agent repo+host evidence sweep, yoo-mac):
+ - Warm lane on yoo-mac: armed in settings, ZERO runtime exercise (no
+   daemon artifacts, all gauge records transport=sdk). Not a defect —
+   seats only fire during loop runs — but the PATH bug above was ALSO
+   silently killing the daily spawns that feed it.
+ - Plugin cache updated 0.2.1 -> 0.3.0 on yoo-mac per the committed
+   recipe (grep-verified). Two 0.3.0-stamped gate-outcomes lines have
+   landed in THIS repo's .km (first at ~ts 1785941813542-1785942297240
+   range) — if the 0.3.0 instrument-boundary ledger duty applies to
+   meta-harness (not just the kkamak dogfood repo), that ts is now
+   determinable and the ledger entry is OWED. Check and stamp.
+ - Two-tier gate on yoo-mac: n=2 fires so far (65.5s then 0s), bg.log
+   0 bytes, marker green — working, barely exercised.
+ - techs.md Part 3 has the effectiveness ranking + proven-ineffective
+   table; the era's named failure shape = evidence-consuming machinery
+   built ahead of its supply; blocker = signal-source PAIRING
+   (review-sensor synthesis is the fix candidate, spec SOUND, unbuilt).
+
+OPEN USER DECISIONS (unchanged from office block below): review-sensor
+synthesis build go · P2 actuator-binding go · C4 sized go after base
+rate (office chain). Premium was 429-walled (haiku OK) — probe first.
+
+Rules: sized go before spend · spec-is-law, pre-data amendments only ·
+merge-with-gate.sh + artifact AND explicit user merge-go · boundary ts
+on instrument changes · F1/F2 · per-task reviews · grep-verify · SITREP.
+```
+
 ## ✅ SESSION END 2026-08-05 evening (`yoo-dev`) — FULL-DAY ARC MERGED; CHAIN ARMED POST-REBOOT; 3 USER DECISIONS OPEN
 
 **RESUME PROMPT (either host — git-only transfer):**
