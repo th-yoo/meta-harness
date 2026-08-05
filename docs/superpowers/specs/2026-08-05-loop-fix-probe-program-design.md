@@ -286,7 +286,7 @@ The only meaningful pairing (b2×s3) needs 245 days at effect 0.30 vs the 14-day
 The committed `yoo-dev-p1-event-density.json` S4 segments divide both
 rates by the full 7-day window, but the post-boundary segment spans only
 ~0.19 days — read literally it claims the two-tier gate cut line emission
-25×, which is false (span-corrected: pre 421/6.81d ≈ 61.9/day, post
+25×, which is false (span-corrected: pre 421/6.81d ≈ 61.8/day, post
 17/0.19d ≈ 88/day — emission ROSE slightly). The committed snapshot is
 left frozen; `scripts/p1-event-density.ts` now emits span-aware
 `spanDays` + per-segment rates so every future run is correct. The real
