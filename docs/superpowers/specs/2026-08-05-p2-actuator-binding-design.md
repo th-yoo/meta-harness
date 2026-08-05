@@ -17,7 +17,10 @@ carry which rule class), not an adoption.
    is a PASSIVE read of the review-sensor stream (companion spec
    2026-08-05-review-sensor-synthesis-design.md) over the P2 window,
    boundary-stamped, descriptive only, moves no bar. No live arm
-   assignment; no live enforcement deploys pre-verdict.
+   assignment; no live enforcement deploys pre-verdict. The shadow
+   reads the stream of the host-checkout the sensor's sized go actually
+   armed (one named host initially); host identity is stamped in every
+   line and reported with the shadow read.
 2. **A3 and A4 are built as bench-harness pieces** (arm substance), not
    live plugin features. Live deployment of any winner is a separate
    post-verdict adoption ruling.
@@ -40,7 +43,11 @@ k = 2 repeats per task per arm.
   and whether -p mode fires hooks at all is unverified. A3's mechanism
   is therefore a CONTAINER-LEVEL SHIM: a wrapper on the command(s) the
   rule governs, placed on the container PATH, enforcing the check at
-  action time (block or transform + explain on stderr). If plan-time
+  action time (block or transform + explain on stderr). The shim is
+  injected PER-ATTEMPT (`podman cp` into A3 containers only) — NEVER
+  baked into the shared TB2 image, which would put the enforcement
+  wrapper on A1/A4's PATH too and destroy A1's unenforced-control
+  status (fresh-review Important 2). If plan-time
   verification shows -p mode does fire Stop/PreToolUse hooks, a hook
   chokepoint may be substituted — recorded as a plan decision, same
   contract (mechanical, cannot be ignored).
@@ -64,7 +71,13 @@ baseline. The rule MUST admit:
 - a transcript/diff grep pattern (A1/A4 compliance detection), and
 - a mechanical check (A3 enforcement),
 
-both pre-registered alongside the rule text. If the loop-1 rule cannot
+both pre-registered alongside the rule text. The grep pattern must
+carry an ANTI-GAMING criterion (fresh-review Minor 3): the marker
+counts only where the rule's behavior can be mechanically co-located
+(e.g. marker must appear in/adjacent to an actual diff hunk, not
+anywhere in transcript prose) — echoing the rule text is not
+compliance; the exact criterion freezes with the pattern at plan
+completion. If the loop-1 rule cannot
 satisfy both, a replacement is chosen and the baseline-continuity claim
 is dropped (recorded, not fudged).
 
@@ -83,8 +96,19 @@ Outcome metrics:
 - compliance(A1) vs compliance(A4): the binding comparison.
 - pass@k(A3) vs pass@k(A1), and cost(A3) vs cost(A1): A3's side-effect
   read (does enforcement hurt task completion?).
+- pass@k(A4) vs pass@k(A1), and cost(A4) vs cost(A1) — reported WITH
+  the re-pass trigger rate (fraction of A4 runs where a re-pass
+  actually fired), because A4 mechanically receives up to +10 turns A1
+  never gets: a pass@k gain with a high trigger rate cannot be
+  attributed to binding vs extra compute, and is reported with exactly
+  that caveat (fresh-review Important 1). A4's oracle score counts the
+  FINAL container state, post re-pass — the re-pass is part of the A4
+  mechanism, not a separate attempt.
 - b2-shadow: the live review-sensor stream over the P2 window, reported
-  descriptively (no bar weight).
+  descriptively (no bar weight) — ALWAYS with its realized n and
+  events/day; a near-empty stream (sensor cadence checkpoint not yet
+  passed) is reported as "shadow n too small, not evidential", never as
+  signal (fresh-review cross-spec finding).
 
 ## 5. Decision rule (pre-registered; user may amend pre-data)
 

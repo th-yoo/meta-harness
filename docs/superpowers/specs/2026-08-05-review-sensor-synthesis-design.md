@@ -47,9 +47,13 @@ gated-Stop cadence, findings-counts emitted as a sensor stream.
   (round-2 note). Therefore the sensor ARMS ONLY IN THE MAIN CHECKOUT:
   arming is gated on cwd == the home-anchored main-checkout path (the
   probe scripts' MAIN_CHECKOUT precedent); a worktree Stop never
-  dispatches. Cap is thus a true per-repo bound. Host-wide spend = sum
-  over armed repos; only THIS repo arms initially (a second repo is its
-  own sized go). Never committed.
+  dispatches. Cap is thus a per-HOST-CHECKOUT bound — NOT global: each
+  host resolves its own `~/z2/meta-harness` with its own gitignored
+  `.km/`, zero shared state (fresh-review Blocker 1); total spend =
+  30/day × (number of armed host-checkouts). **The sized go must NAME
+  every host being armed**; arming a second host or a second repo is
+  its own sized go. Only this repo on ONE named host arms initially.
+  Never committed.
 - **Single-dispatch guarantee:** the claim is an EXCLUSIVE CREATE —
   `fs.openSync(claimPath, "wx")`: exactly one concurrent Stop wins
   (loser gets EEXIST → skip, reason "claim-lost"). Bare atomic-rename
@@ -64,15 +68,29 @@ gated-Stop cadence, findings-counts emitted as a sensor stream.
   accepted, worst case one extra dispatch).
 - **Spawn discipline:** dispatch is a DETACHED fire-and-forget spawn
   issued BEFORE hook-cli.ts's `emit()` (which exits the process
-  synchronously) — the maybeSpawnGauge/maybeSpawnPromptCheck precedent,
-  named here because nothing can run "after" emit().
+  synchronously). Same TECHNIQUE as maybeSpawnGauge /
+  maybeSpawnPromptCheck, but a NEW CALL SITE: those live in the
+  UserPromptSubmit branch; the Stop branch this design extends is
+  currently fully synchronous before its single emit() (fresh-review
+  Minor 5).
+- **Clock discipline:** the 15-min debounce compares wall-clock ts and
+  a backward jump (WSL2 resume skew) could yield a negative delta —
+  treat delta < 0 as "debounce not satisfied" (skip, reason
+  "clock-skew"). The midnight cap reset admits a burst window (up to
+  2×30 straddling midnight) — declared and accepted; the cap is a
+  spend bound, not a rate shaper.
 - **Warm-lane contention:** the sensor acquires a seat with ZERO WAIT
   and lowest priority: no free seat among the 4 → immediate skip line,
   reason "warm-lane-busy", never queues, never evicts a design-time
-  seat. The sensor holds NO standing warm session: at pass completion it
-  CLOSES its session outright (`.close()`, not `pool.release()` —
-  release only marks idle and stays counted against the global cap
-  until the 900 s reap), so it never pins one of the 4
+  seat. The sensor holds NO standing warm session — and the fresh review
+  (Blocker 2) established the current ACP wire has NO per-session
+  close: the daemon `pool.release()`s unconditionally per turn (idle
+  entries stay counted against the global 4-cap until the 900 s reap),
+  and only `session/new|prompt|cancel` exist. Therefore a
+  **`session/close` wire message + daemon handler is a named BUILD
+  PREREQUISITE of this design** (small: evict + close one pool entry);
+  the sensor MUST NOT arm until it exists. At pass completion the
+  sensor sends `session/close`, so it never pins one of the 4
   global pool slots between passes (round-2 note: SessionPool's cap is
   global across isolations, and its 900 s idle reap ≈ the 15-min
   debounce would otherwise keep a sensor seat permanently warm). Skip
@@ -81,8 +99,15 @@ gated-Stop cadence, findings-counts emitted as a sensor stream.
 - **Diff edge cases:** last-pass HEAD not an ancestor of current HEAD
   (rebase/reset) → fall back to merge-base; no merge-base → review
   working-tree-vs-HEAD only and emit the line with `"diffBase":
-  "fallback"`. Diff truncated at a 128 KiB byte ceiling
-  (pre-registered constant; truncation flagged in the line).
+  "fallback"`. Merge in progress (`MERGE_HEAD` present or unmerged
+  `U*` paths in `git status --porcelain`) → SKIP, reason
+  "merge-in-progress" — conflict-marker soup must never contaminate
+  the findings stream, least of all its first-10-lines viability
+  window (fresh-review Important 4). Diff truncated at a 128 KiB byte
+  ceiling (pre-registered constant; truncation flagged in the line —
+  and DECLARED as a diff-size-dependent negative bias on
+  findingsCount: any future cross-regime comparison must check the
+  regimes' diff-size distributions before comparing).
 
 ## 3. Output stream (the new b2 carrier)
 
@@ -116,15 +141,27 @@ gated-Stop cadence, findings-counts emitted as a sensor stream.
 - **Fail-open family rule:** sensor failure never blocks or delays the
   Stop beyond its own dispatch (dispatch is async post-verdict; the Stop
   returns without waiting).
+- **Comparison discipline (fresh-review Important 3):** the 350-event
+  math assumes independent arms; this stream is time-ordered live-work
+  data, so any future two-arm use (e.g. before/after a loop fix) is a
+  non-randomized quasi-experiment — successive passes share
+  session/day/work-mix context. The B3 ruling's requirement carries
+  forward verbatim: **arms must be randomized or the confound declared
+  per probe-program §4.3** before any b2-stream comparison claims a
+  verdict.
 - prompt change / constant change / tier change ⇒ new boundary ts +
   ledger entry (KKAMAK_DEV_CHECKS untouched — sensor, not gate).
 
 ## 5. Activation + cost
 
-- Ships OFF. Armed PER-REPO by env (`KKAMAK_REVIEW_SENSOR=1` precedent:
-  gauge arming), flipped only under a sized go stating the cap math:
-  ≤30 haiku passes/day for this repo, prompt bounded by the 128 KiB
-  diff ceiling.
+- Ships OFF. Armed PER-HOST-CHECKOUT by env (`KKAMAK_REVIEW_SENSOR=1`
+  precedent: gauge arming), flipped only under a sized go that NAMES
+  every host being armed (§2 cap discipline: total spend = 30/day ×
+  armed host-checkouts) and states the cap math — ≤30 haiku passes/day
+  per named host-checkout, prompt bounded by the 128 KiB diff ceiling.
+  Arming is ADDITIONALLY gated on the `session/close` build
+  prerequisite (§2 warm-lane bullet): until that wire message + daemon
+  handler exist, flipping the env is a no-op by design.
 - **Verdict math (count family — corrected per round-1 review finding
   1; the draft wrongly transplanted B3's binomial n/arm=41):**
   nPerArmCount(0.30) = ceil(15.68/0.09) = 175 per arm → 2×175 = **350
