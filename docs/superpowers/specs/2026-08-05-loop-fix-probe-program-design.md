@@ -32,7 +32,7 @@ on every adoption; nothing here self-adopts.
 | P1 event-density counters | C | zero model calls | pre-registered §2 |
 | E computation | E | arithmetic only | defined §3, runs after P0+P1 |
 | P2 actuator-binding probe | A | model spend | contract §4, own spec later |
-| P3 channel program | D | in flight | foreign to this spec (ladder + C4 pre-regs) |
+| P3 channel program | D | in flight | foreign to this spec (ladder + the ladder's C4 nudge-vs-reject pre-regs) |
 
 ## 1. P0 — signal-variance audit (pre-registered)
 
@@ -73,16 +73,25 @@ data — zero model calls):**
   complete/partial pooling. If that leaves n < 10 task-level
   observations with variance, B4 reports UNKNOWN.
 
-**Viability rule (pre-registered, amended per architect finding 4):** a
-signal is VIABLE iff (i) n ≥ 10 existing observations, (ii) its MINORITY
-CLASS (for boolean/categorical signals) has count ≥ 3 — literal nonzero
-variance does not pass a 1-in-478 degenerate skew, which is cause B's own
-shape; for numeric signals, sd/mean ≥ 0.1; and (iii) its per-event
-acquisition cost is stated and bounded (B1: free rider on gated Stops;
-B2: one review dispatch; B3: classifier call; B4: one bench run).
-Signals failing (ii) or (iii) are EXCLUDED from P2's outcome design.
-n < 10 → UNKNOWN, not viable, not excluded — may re-enter when data
-exists.
+**Viability rule (pre-registered, amended per architect findings 4 +
+round-2 N2/N3/N4). One clause per §3 signal family — the two taxonomies
+must not diverge:** a signal is VIABLE iff (i) n ≥ 10 existing
+observations, (ii) its family-specific spread floor holds:
+
+- boolean → minority class count ≥ 3 (literal nonzero variance does not
+  pass a 1-in-478 degenerate skew, which is cause B's own shape);
+- categorical → second-most-frequent class count ≥ 3;
+- count (numeric) → sd/mean ≥ 0.1; if mean = 0 the signal is NON-VIABLE
+  by definition (no events observed), independent of sd;
+- rate → the underlying binary trials have ≥ 3 successes AND ≥ 3
+  failures across the observation set (B4: task-level passes/fails);
+
+and (iii) its per-event acquisition cost is stated and bounded (B1: free
+rider on gated Stops; B2: one review dispatch; B3: classifier call; B4:
+one bench run). The floors (3, 0.1) are pre-registered constants the
+user may amend pre-data, same standing as §3's bar. Signals failing
+(ii) or (iii) are EXCLUDED from P2's outcome design. n < 10 → UNKNOWN,
+not viable, not excluded — may re-enter when data exists.
 
 **Output:** `docs/loop-probes/<hostname>-p0-signal-variance.json` —
 per-signal n, distribution summary (counts per value or
@@ -107,10 +116,11 @@ avoid colliding with the channel ladder's C1-C4; architect finding 13):**
   This PROXIES a per-commit hook source without building it: if S2 wins,
   the hook gets built; the probe itself is `git log` arithmetic.
 - **S3 review passes/day** — count of committed `docs/reviews/*.md` per
-  day, dated by GIT AUTHOR DATE of each file's adding commit
-  (`git log --follow --diff-filter=A --format=%aI -- <file>`; never
-  filesystem mtime — host-local timestamps are the trap this repo's
-  CLAUDE.md names). DECLARED CRUDE: manual dispatches only; a
+  day, dated by GIT AUTHOR DATE of each file's ORIGINAL adding commit
+  (`git log --follow --diff-filter=A --format=%aI -- <file> | tail -1`
+  — tail pins the oldest add when rename/re-add chains emit several
+  lines; never filesystem mtime — host-local timestamps are the trap
+  this repo's CLAUDE.md names). DECLARED CRUDE: manual dispatches only; a
   scheduled-sweep source would multiply this at will, so S3's number is a
   floor, not a ceiling.
 - **S4 post-two-tier turn shift** — gated Stops/day and `durationMs`
@@ -171,21 +181,27 @@ channel exists (e.g. P3's landing).
 - F2: committed artifacts carry counts, stats, dates, keys — never prompt
   or note text.
 - Pooling prohibitions inherited and restated. RULE, not a hand-picked
-  list (architect finding 2 — a fixed list silently rots): before any
-  probe computation over a time window, ENUMERATE every boundary in
-  `docs/2026-08-01-gauntlet-adoption-ledger.md` whose ts falls inside
-  that window and split there. Known boundaries at spec time (the P1
-  window reaches ~2026-07-29, so the starred ones are live in it):
-  1785571509000 (gauge fail-loud — partition by ts, not version),
-  1785684571765 (gauge SDK transport, yoo-mac), *1785711630125 (gauge
-  SDK transport, office — also splits the FOREIGN kkamak stream's 0.2.1
-  lines), *1785727963349 (7a doc-linter floor — changes the `check`
-  grouping key), *1785847012141, *1785856371528, *1785888548054 (check
-  string + durationMs regime), *1785892022908, and the pluginVersion
-  0.2.1→0.3.0 stamp change (ts = first 0.3.0 line in each stream, not yet
-  emitted at spec time). Never across `pluginVersion` stamps; never
-  across hosts; the `~/z2/kkamak` stream is a foreign instrument read for
-  descriptive contrast only.
+  list (architect finding 2; liveness criterion made explicit per
+  round-2 N1): before any probe computation over a time window,
+  enumerate the boundaries from BOTH sources — (a) every entry in
+  `docs/2026-08-01-gauntlet-adoption-ledger.md`, and (b) every
+  `pluginVersion` stamp change observed in the stream being read (the
+  stream self-partitions; a stamp change need not have a ledger entry
+  yet, e.g. 0.2.1→0.3.0 whose first 0.3.0 line had not been emitted at
+  spec time). **A boundary is LIVE iff its ts falls inside the window
+  AND it applies to a stream/host/field this run actually reads** —
+  chronology alone does not make it live. Worked example at spec time
+  (P1 window reaches ~2026-07-29; all streams read here are
+  host=yoo-dev): 1785571509000 (gauge fail-loud) and 1785684571765
+  (SDK transport, yoo-mac) are in-window but NOT live — yoo-mac-only
+  deploy events, no yoo-dev line crosses them; LIVE: 1785711630125
+  (gauge SDK transport, office — also splits the FOREIGN kkamak
+  stream's 0.2.1 lines), 1785727963349 (7a doc-linter floor — changes
+  the `check` grouping key), 1785847012141, 1785856371528,
+  1785888548054 (check string + durationMs regime), 1785892022908.
+  Never across `pluginVersion` stamps; never across hosts; the
+  `~/z2/kkamak` stream is a foreign instrument read for descriptive
+  contrast only.
 - No §4.3 claims from any probe. Probes describe; adoption has its own
   gates.
 
