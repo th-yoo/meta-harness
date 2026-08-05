@@ -44,29 +44,45 @@ eliminated before any probe spends.
 data — zero model calls):**
 
 - **B1 gate-outcomes** — `accepted`, `rounds` length, `gateExhausted`,
-  `durationMs` from `.km/gate-outcomes.ndjson` on this repo, and
-  read-only from `~/z2/kkamak/.km/` as a FOREIGN stream (attribution:
-  lines stamp `pluginVersion`; 0.2.1 lines describe the frozen snapshot —
-  reported separately, never pooled with anything).
-- **B2 review findings** — findings-count and severity mix per review,
-  from committed `docs/reviews/*.md` (`findings-count` field) plus this
-  repo's SDD ledgers (`.superpowers/sdd/*/progress.md` severity lines)
-  and the 2026-08-05 session records (architect reviews: 7, 9, 8-finding
-  rounds). Per-review counts; severity split where recorded.
-- **B3 gauge class/channel distribution** — descriptive import of the
-  corpus report (A1/A2/B/C/D counts by provenance) and, when the armed
-  chain lands them, channel labels. No new classification here.
-- **B4 TB2 band pass@k** — historical pass@k spread over the term-bench2
-  band tasks from the committed store snapshot (loop-1/2/3 artifacts).
-  No new runs.
+  `durationMs` from `.km/gate-outcomes.ndjson` on this repo (office
+  `yoo-dev` stream only — host-local, stated to avoid a silently
+  host-biased set), and read-only from `~/z2/kkamak/.km/` as a FOREIGN
+  stream. Attribution (architect review finding 1): the foreign stream's
+  `pluginVersion:"0.2.1"` lines are NOT one bucket — they split at that
+  repo's SDK-transport boundary ts 1785711630125 (ledger §6c:
+  CLI-transport vs sdk-transport regimes, ledger itself orders SPLIT).
+  Every regime reported separately; nothing pooled.
+- **B2 review findings** — findings-count per review from committed
+  `docs/reviews/*.md` (`findings-count:` field, 10/10 files carry it;
+  grounded value set at spec time: {3, 1, 16, 0, 0, 0, 12, 9, 0, 1} —
+  n=10 exactly, zero margin over the viability n-floor, fragility
+  declared). SDD-ledger severity lines (`.superpowers/sdd/*/progress.md`)
+  are SECONDARY and DESCRIPTIVE ONLY: gitignored/host-local (this repo's
+  own CLAUDE.md rule — not reproducible cross-host) and free-text with
+  ≥4 observed phrasings; they enter no viability computation unless a
+  parse rule is pre-registered first. No other numbers are asserted.
+- **B3 gauge class/channel distribution** — descriptive import of
+  `bun cc-gate-plugin/src/gauge/replay-cli.ts report` output (A1/A2/B/C/D
+  counts by provenance; store under `~/.config/kkamak/`), and, when the
+  armed chain lands them, channel labels. No new classification here.
+- **B4 TB2 band pass@k** — ONLY artifacts with per-task repeat arrays
+  qualify (architect review finding 5): at spec time that is
+  `term-bench2/store/global/candidates/v1/ab-verdict.json` (17 tasks ×
+  k=2) alone. Partial/early-stopped artifacts (`v2`, `v3` partials) and
+  k=1 `score.json` aggregates are EXCLUDED — no k-mixing, no
+  complete/partial pooling. If that leaves n < 10 task-level
+  observations with variance, B4 reports UNKNOWN.
 
-**Viability rule (pre-registered):** a signal is VIABLE iff (i) it shows
-nonzero variance over n ≥ 10 existing observations, and (ii) its
-per-event acquisition cost is stated and bounded (B1: free rider on
-gated Stops; B2: one review dispatch; B3: classifier call; B4: one bench
-run). Signals failing either clause are EXCLUDED from P2's outcome
-design. Fewer than 10 observations → signal reported UNKNOWN, not
-viable, not excluded — it may re-enter when data exists.
+**Viability rule (pre-registered, amended per architect finding 4):** a
+signal is VIABLE iff (i) n ≥ 10 existing observations, (ii) its MINORITY
+CLASS (for boolean/categorical signals) has count ≥ 3 — literal nonzero
+variance does not pass a 1-in-478 degenerate skew, which is cause B's own
+shape; for numeric signals, sd/mean ≥ 0.1; and (iii) its per-event
+acquisition cost is stated and bounded (B1: free rider on gated Stops;
+B2: one review dispatch; B3: classifier call; B4: one bench run).
+Signals failing (ii) or (iii) are EXCLUDED from P2's outcome design.
+n < 10 → UNKNOWN, not viable, not excluded — may re-enter when data
+exists.
 
 **Output:** `docs/loop-probes/<hostname>-p0-signal-variance.json` —
 per-signal n, distribution summary (counts per value or
@@ -83,20 +99,25 @@ data travels (git history travels; `.km` streams are host-local — the
 office host's stream is read here, the MacBook's only if its snapshot was
 committed).
 
-**Sources and their mechanical counts:**
+**Sources and their mechanical counts (ids S1-S4 — renamed from C1-C4 to
+avoid colliding with the channel ladder's C1-C4; architect finding 13):**
 
-- **C1 gated Stops/day** — gate-outcomes lines per day (existing stream).
-- **C2 commits/day** — `git log --since` count on this repo + `~/z2/kkamak`.
-  This PROXIES a per-commit hook source without building it: if C2 wins,
+- **S1 gated Stops/day** — gate-outcomes lines per day (existing stream).
+- **S2 commits/day** — `git log --since` count on this repo + `~/z2/kkamak`.
+  This PROXIES a per-commit hook source without building it: if S2 wins,
   the hook gets built; the probe itself is `git log` arithmetic.
-- **C3 review passes/day** — count of review artifacts + SDD review
-  dispatches per day from committed `docs/reviews/` dates and ledger
-  lines. DECLARED CRUDE: manual dispatches only; a scheduled-sweep source
-  would multiply this at will, so C3's number is a floor, not a ceiling.
-- **C4 post-two-tier turn shift** — gated Stops/day and `durationMs`
+- **S3 review passes/day** — count of committed `docs/reviews/*.md` per
+  day, dated by GIT AUTHOR DATE of each file's adding commit
+  (`git log --follow --diff-filter=A --format=%aI -- <file>`; never
+  filesystem mtime — host-local timestamps are the trap this repo's
+  CLAUDE.md names). DECLARED CRUDE: manual dispatches only; a
+  scheduled-sweep source would multiply this at will, so S3's number is a
+  floor, not a ceiling.
+- **S4 post-two-tier turn shift** — gated Stops/day and `durationMs`
   distribution split at instrument boundary ts 1785888548054 (this repo,
   never pooled across; descriptive read of whether cheap Stops actually
-  shortened turns yet — n will be small, reported as-is).
+  shortened turns yet — 14 post-boundary lines exist at spec time,
+  reported as-is).
 
 **Output:** `docs/loop-probes/<hostname>-p1-event-density.json` —
 events/day per source per repo, window bounds, boundary splits. Committed.
@@ -107,10 +128,22 @@ events/day per source per repo, window bounds, boundary splits. Committed.
 
 For each (signal from P0-viable) × (source from P1): compute days-to-verdict
 for a two-arm comparison at MIN_N = 20/arm across effect sizes
-{0.10, 0.20, 0.30, 0.40} using the source's measured events/day, and the
-signal's measured base rate where binomial. **Config-viability bar
-(pre-registered, user may amend pre-data): days-to-verdict ≤ 14 at effect
-size ≤ 0.30.** Output table appended to this spec + the P0 json. Rigor is
+{0.10, 0.20, 0.30, 0.40}, per signal FAMILY (architect finding 9 — the
+formula must exist for every family that can turn viable):
+
+- boolean signals (B1 `accepted`-like): binomial, measured base rate.
+- count signals (B2 findings/review): two-sample comparison on
+  mean/sd (normal approximation, measured moments); effect size =
+  Cohen-d-style standardized difference.
+- categorical signals (B3 classes): pre-binarized before E — the
+  binarization (which class vs rest) must be declared when the config is
+  proposed; undeclared categorical signals do not enter E.
+- rate signals (B4 pass@k): binomial on task-level pass rate.
+
+**Config-viability bar (pre-registered, user may amend pre-data):
+days-to-verdict ≤ 14, evaluated AT effect size = 0.30 exactly** (the
+{0.10, 0.20, 0.40} columns are reported context, not the bar; architect
+finding 10). Output table appended to this spec + the P0 json. Rigor is
 never lowered: MIN_N and §4.3 discipline stand; only the evidence CHANNEL
 changes.
 
@@ -137,9 +170,20 @@ channel exists (e.g. P3's landing).
 - F1: no mechanism edits anywhere in P0/P1 (read-only probes).
 - F2: committed artifacts carry counts, stats, dates, keys — never prompt
   or note text.
-- Pooling prohibitions inherited and restated: never across
-  `pluginVersion` stamps; never across instrument boundary ts
-  (1785847012141, 1785856371528, 1785888548054, 1785892022908); never
+- Pooling prohibitions inherited and restated. RULE, not a hand-picked
+  list (architect finding 2 — a fixed list silently rots): before any
+  probe computation over a time window, ENUMERATE every boundary in
+  `docs/2026-08-01-gauntlet-adoption-ledger.md` whose ts falls inside
+  that window and split there. Known boundaries at spec time (the P1
+  window reaches ~2026-07-29, so the starred ones are live in it):
+  1785571509000 (gauge fail-loud — partition by ts, not version),
+  1785684571765 (gauge SDK transport, yoo-mac), *1785711630125 (gauge
+  SDK transport, office — also splits the FOREIGN kkamak stream's 0.2.1
+  lines), *1785727963349 (7a doc-linter floor — changes the `check`
+  grouping key), *1785847012141, *1785856371528, *1785888548054 (check
+  string + durationMs regime), *1785892022908, and the pluginVersion
+  0.2.1→0.3.0 stamp change (ts = first 0.3.0 line in each stream, not yet
+  emitted at spec time). Never across `pluginVersion` stamps; never
   across hosts; the `~/z2/kkamak` stream is a foreign instrument read for
   descriptive contrast only.
 - No §4.3 claims from any probe. Probes describe; adoption has its own
