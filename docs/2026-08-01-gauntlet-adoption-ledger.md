@@ -410,8 +410,10 @@ Caveat: n=3 loops, one day — provisional, revisit after the next program.
   The `check` field string also changes, so lines partition cleanly by it.
   Do not pool duration metrics across the boundary. Rounds semantics, block
   semantics, and the sensor-line schema are unchanged.
-- **Merge gate unaffected:** scripts/merge-with-gate.sh still runs full
-  suites synchronously — the post-integrate stage keeps its cost.
+- **Merge gate scope:** scripts/merge-with-gate.sh enforces the review-artifact
+  gate only (check-review-artifact.ts + `git merge --no-ff`) — it never ran
+  full suites. Full-suite proof at merge time comes from the manual pre-merge
+  sanity chain (plan Task 3 Step 5), which keeps its cost.
 - **Office host:** deployed here (`yoo-dev`); `gate.json` is committed so the
   swap travels with git pull — the other host's (`yoo-mac`) first pulled
   session inherits it. Same-repo semantics, no per-host activation needed

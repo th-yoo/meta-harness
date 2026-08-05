@@ -114,6 +114,20 @@ function pidAlive(pid: number): boolean {
   try { process.kill(pid, 0); return true } catch { return false }
 }
 
+/** Portable (darwin+linux, no /proc) identity check before killing a pid we
+ * only hold from a stale marker: pid-reuse means d.killPid may no longer be
+ * our bg process by the time we act on it. `ps` absence or any other
+ * failure degrades to "not identifiable" — never crash the gate, never kill
+ * blind. */
+function isGateCheckProcess(pid: number): boolean {
+  try {
+    const out = execFileSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" })
+    return out.includes("gate-check")
+  } catch {
+    return false
+  }
+}
+
 // ---------- runners ----------
 function runSyncCaptured(cmd: Cmd): { code: number; tail: string } {
   const r = spawnSync(cmd.argv[0]!, cmd.argv.slice(1), {
@@ -149,7 +163,14 @@ function spawnBg(tree: string): void {
   fs.closeSync(log)
 }
 
-/** --bg <tree>: run the full check, write green/red for <tree>. */
+/** --bg <tree>: run the full check, write green/red for <tree>.
+ *
+ * Ownership guard: a stale/orphaned bg writer (e.g. superseded by a respawn
+ * after a wedged-kill, or simply outlived by a newer run) must not clobber a
+ * newer result with its own stale one. Before writing, re-read the marker
+ * and only proceed if it still shows THIS run as the tracked owner
+ * (status "running" with our own pid) — spawnBg spawns this script directly
+ * with bun, so process.pid here IS the pid it recorded. */
 function bgMain(tree: string): never {
   const table = commands()
   const r = spawnSync(table.full.argv[0]!, table.full.argv.slice(1), {
@@ -157,6 +178,11 @@ function bgMain(tree: string): never {
   })
   const out = (r.stdout ?? "") + (r.stderr ?? "")
   const code = r.status ?? 1
+  const owner = readMarker()
+  if (owner?.status !== "running" || owner.pid !== process.pid) {
+    process.stderr.write(`gate-check bg: marker no longer owned (pid ${process.pid}) — result discarded\n`)
+    process.exit(0)
+  }
   writeMarker(code === 0
     ? { status: "green", tree, startedTs: Date.now(), finishedTs: Date.now() }
     : { status: "red", tree, startedTs: Date.now(), finishedTs: Date.now(), outputTail: out.slice(-OUTPUT_TAIL_BYTES) })
@@ -187,11 +213,20 @@ function main(): never {
   if (d.killPid !== undefined) {
     // wedged bg run (amendment a): spawnBg used detached:true, so killPid is
     // a process-GROUP leader — signal the group (negative pid) so the hung
-    // bash/bun grandchildren die too, not just the wrapper. Falls back to
-    // the single pid if the group is already gone. Still pid-scoped
+    // bash/bun grandchildren die too, not just the wrapper. Still pid-scoped
     // (standing rule: never pkill -f).
-    console.log(`gate-check: bg full run wedged (pid ${d.killPid}, started >15min ago) — killing group + respawning`)
-    try { process.kill(-d.killPid) } catch { try { process.kill(d.killPid) } catch { /* died in between */ } }
+    //
+    // pid-reuse hazard: by the time we act on a >15min-old marker, the OS
+    // may have recycled d.killPid for an unrelated process. Verify identity
+    // portably (darwin+linux, no /proc) via `ps -o command=` before
+    // signaling anything; on mismatch or ps failure, skip the kill entirely
+    // and just respawn (treat the tracked run as dead either way).
+    if (isGateCheckProcess(d.killPid)) {
+      console.log(`gate-check: bg full run wedged (pid ${d.killPid}, started >15min ago) — killing group + respawning`)
+      try { process.kill(-d.killPid) } catch { try { process.kill(d.killPid) } catch { /* died in between */ } }
+    } else {
+      console.log(`gate-check: bg full run wedged (pid ${d.killPid}, started >15min ago) — pid no longer identifiable as gate-check, skipping kill + respawning`)
+    }
   }
 
   // tier 0: package-TIA scoped fast suites (+ amendment-b slow pull-in)

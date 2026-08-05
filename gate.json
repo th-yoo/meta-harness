@@ -1,5 +1,6 @@
 {
   "check": "bun scripts/gate-check.ts",
   "rounds": 2,
-  "gauge": true
+  "gauge": true,
+  "checkTimeoutMs": 600000
 }

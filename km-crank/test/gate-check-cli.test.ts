@@ -226,8 +226,14 @@ describe("gate-check CLI", () => {
 
   test("wedged bg run (running + ALIVE pid + stale startedTs): group kill, fresh respawn (amendment a)", async () => {
     const dir = tempRepo()
-    // detached => own process group, same shape as a real spawnBg child
-    const hung = spawn("bun", ["-e", "setTimeout(() => {}, 1_000_000_000)"], { stdio: "ignore", detached: true })
+    // detached => own process group, same shape as a real spawnBg child.
+    // Named gate-check-hung.ts (not a bare `-e` snippet) so `ps -o command=`
+    // contains "gate-check" — matching the real spawnBg shape (`bun
+    // .../gate-check.ts --bg <tree>`) so the pid-identity kill guard
+    // (Finding 3) doesn't skip the kill here as a false mismatch.
+    const hungScript = path.join(dir, "gate-check-hung.ts")
+    fs.writeFileSync(hungScript, "setTimeout(() => {}, 1_000_000_000)")
+    const hung = spawn("bun", [hungScript], { stdio: "ignore", detached: true })
     hung.unref()
     CLEANUP_PIDS.push(hung.pid!)
     fs.mkdirSync(path.join(dir, ".km", "gate-bg"), { recursive: true })

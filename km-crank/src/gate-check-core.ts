@@ -120,7 +120,8 @@ export function suitesForChangedPaths(paths: string[]): SuiteId[] {
 /** Spawn-heavy cc-gate-plugin test files excluded from tier 0. Measured
  * 2026-08-05 (darwin): these files ≈134s of a ≈160s suite (real daemon +
  * CC CLI subprocess spawns, 2s settles). They still run in tier 1 on every
- * background full check, and in the merge gate. ONE regex = one policy site. */
+ * background full check, and in the pre-merge sanity chain. ONE regex = one
+ * policy site. */
 export const SLOW_CCGATE_TEST_RE =
   /(acp-client|acp-daemon|acp-pool|anthropic-cli-warm|warm-session|gauge-agent-transport)\.test\.ts$/
 

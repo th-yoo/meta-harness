@@ -11,5 +11,5 @@
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "../scripts/gate-check.ts"]
 }
