@@ -335,36 +335,40 @@ verdict rows, the adoption ledger, gate-outcomes telemetry.*
 
 ### Moved task outcomes (the product's actual wins)
 
-| # | Technique | Measured effect |
-|---|---|---|
-| 1 | **A2 completion gate** (binding mechanism actuator) | cancel-async 3/10 → **10/10**, p=0.0031 — largest single outcome flip ever measured here; first perfect arm on that task (R10). |
-| 2 | **A1 system-prompt + seed adoption** | 6/20 → **17/20** (30%→85%), p=0.00106 — largest lift in project history; guards clean; still the active base. |
-| 3 | **G1 coverage-guided probe sites + ≥1-kill rule** | headless exhaustion 7/9 → **0/5** (p≈0.02), median 400 s vs 1000–5000 s — turned a structurally-burning gate into healthy verify-fix loops. |
-| 4 | **v9 lesson injection** (certified, not adopted) | sparql 1/10 → **7/10**, p=0.020 — proved prose grip is content-dependent; rejected on a guard, effect real. |
+| # | Technique | Measured effect | Evidence |
+|---|---|---|---|
+| 1 | **A2 completion gate** (binding mechanism actuator) | cancel-async 3/10 → **10/10**, p=0.0031 — largest single outcome flip ever measured here; first perfect arm on that task. | `minimal/HISTORY.md` rows R10 (lift certification) + A2 (adoption, gate-ON guards). |
+| 2 | **A1 system-prompt + seed adoption** | 6/20 → **17/20** (30%→85%), pooled Fisher p=0.00106 — largest lift in project history; guards cdt 3/3 + chess 3/3; still the active base. | `minimal/HISTORY.md` rows SG (arms) + A1 (adoption, commit `4fc9d68`, `minimal/results/adoption-1-verdict.json`). |
+| 3 | **G1 coverage-guided probe sites + ≥1-kill rule** | headless exhaustion 7/9 → **0/5** (p≈0.02), median 400 s vs 1000–5000 s — first healthy verify-fix loops on that artifact class. | `minimal/HISTORY.md` row G1 (pre-registered arms, same-file §6.1→§6.2 seal). |
+| 4 | **v9 lesson injection** (certified, not adopted) | sparql 1/10 → **7/10** same-host, p=0.020 — proved prose grip is content-dependent; rejected on a guard (cgw 1/3 vs 3/3), effect real. | Part 2 (07-23) PROVEN table above; TB2 store v9 score records. |
 
 ### Moved system performance
 
-| # | Technique | Measured effect |
-|---|---|---|
-| 5 | **Two-tier gate check** | gated Stops **~22x faster** (durationMs mean 108,733 → 4,943), both hosts, every cycle-ending Stop. |
-| 6 | **§6c direct-API derive transport** | **~10–40x token cut** per derive (~28k CC-harness tokens → ~0.7–3k), both hosts, every Stop. |
+| # | Technique | Measured effect | Evidence |
+|---|---|---|---|
+| 5 | **Two-tier gate check** | gated Stops **~22x faster** (durationMs mean 108,733 → 4,943), every cycle-ending Stop, both hosts. | Adoption ledger §"Gate check two-tier deploy" (ts 1785888548054); S4 erratum `docs/reviews/e25670f-fix-s4-denominator.md` (merge `198184e`) — the 22x is the CORRECTED number; `.km/gate-outcomes.ndjson` durationMs history. |
+| 6 | **§6c direct-API derive transport** | **~10–40x token cut** per derive (~28k CC-harness tokens → ~0.7–3k), both hosts, every Stop. | Adoption ledger §"Gauge SDK-transport deploy boundary" (ts 1785684571765 / office 1785711630125); `minimal/HISTORY.md` GA12. |
 
 ### Moved decisions (harms prevented — effectiveness of the negative kind)
 
-| # | Technique | Prevented |
-|---|---|---|
-| 7 | **Adoption gate + guards, both directions** | Every bad adoption ever attempted: v3, v8, v9-on-guard, v10, both Gauntlet transplants. Zero bad adoptions have landed — the most consistently effective control in the repo. |
-| 8 | **Token-free wire probes** | 4+ committed-but-wrong verdicts reversed before they misdirected builds (auto-memory contamination, `/clear` third frame, `--bare` billing switch, call-count). |
-| 9 | **pv instrument** | Silent pooling of non-equivalent transports (§6c SPLIT); passed §6d honestly at the edge — one instrument, one honest verdict each way. |
-| 10 | **Fresh-context reviews + execute-proof** | stderr pipe-deadlock, Bun socket-steal, unsound git-hook enforcement, tautological tests, wrong merge-base artifact, duplicate re-implementation — all pre-merge. |
-| 11 | **Forensics-before-verdict** (R9F) | A wrong mechanism adoption ("4/5 lift" was nudge-text; the probe was unsatisfiable) — zero re-trials spent. |
-| 12 | **darwin re-run + activated-state disciplines** | 35 silent no-call-degraded test failures (one root cause) and the v2-activation suite break — both now standing rules with zero repeats. |
+| # | Technique | Prevented | Evidence |
+|---|---|---|---|
+| 7 | **Adoption gate + guards, both directions** | Every bad adoption ever attempted: v3, v8, v9-on-guard, v10, both Gauntlet transplants. Zero bad adoptions have landed. | `minimal/HISTORY.md` rows v3-era loop-2, R-series verdict cells; Part 2 (07-23) "the gate, BOTH directions"; gauntlet ledger table Loops A + D (DROP). |
+| 8 | **Token-free wire probes** | 4+ committed-but-wrong verdicts reversed pre-build: auto-memory contamination (10,693 B → 1,563 B), `/clear` third result frame, `--bare` billing switch, "4 calls" miscount. | `minimal/HISTORY.md` GA13 row (each probe + each reversed verdict named inline). |
+| 9 | **pv instrument** | Silent pooling of non-equivalent transports. §6c: SPLIT, agreement 0.625 < 0.80, missed-C 6 > cap 2. §6d: pooling-permitted at the exact edge (4/5 = 0.800, missed-C 1 = cap 1, wrongTransport 0). | `docs/gauge-pv/yoo-dev-pv-counts.json` + `docs/gauge-pv/yoo-dev-sdk-vs-agent-sdk-pv-counts.json`; extractor pre-registration spec §6c/§6d OUTCOME blocks. |
+| 10 | **Fresh-context reviews + execute-proof** | stderr pipe-deadlock, Bun socket-steal, unsound `pre-merge-commit` enforcement, tautological tests, wrong merge-base artifact (7b gate blocked it live), duplicate re-implementation — all pre-merge. | `minimal/HISTORY.md` GA7/GA13/GA14 rows; adoption ledger §"Process-gate arming boundary" (placement discovery); `docs/reviews/` (13+ artifacts); GA14 review-catch list. |
+| 11 | **Forensics-before-verdict** (R9F) | A wrong mechanism adoption — "4/5 lift" was nudge-text; the docstring mutant was unkillable the whole time. Zero re-trials spent. | `minimal/HISTORY.md` row R9F (`mutate.ts` codeLineSet fix). |
+| 12 | **darwin re-run + activated-state disciplines** | 35 silent no-call-degraded test failures (one root cause: AF_UNIX `sun_path` 104 B cap) and the v2-activation suite break. Both standing rules, zero repeats. | `docs/reviews/81fe22c-fix-darwin-sock-len.md`; adoption ledger v2 activation log (2026-08-01) + warm-lane precondition evidence; `minimal/HISTORY.md` GA14 follow-up (a). |
 
 ### Effective as instruments (enable the rows above)
 
-km-gauge v2 (shadow classes → B3 signal) · gate-outcomes telemetry (root-caused the Stop
-stall from its own durationMs history) · loop-fix probe program (relocated the loop's blocker
-from rigor/density to signal-source pairing — changed the roadmap).
+km-gauge v2 — shadow classes now feed the B3 signal (deploy: HISTORY GA3; binarization:
+`docs/reviews/b6d858f-b3-binarization-ruling.md`) · gate-outcomes telemetry — root-caused the
+Stop stall from its own durationMs history, 26–31 s → 151–183 s regime shift
+(`.km/gate-outcomes.ndjson`; resume 08-05 gate-stall entry) · loop-fix probe program —
+relocated the loop's blocker from rigor/density to signal-source pairing
+(`docs/superpowers/specs/2026-08-05-loop-fix-probe-program-design.md` §Results,
+`docs/loop-probes/yoo-dev-e-table.json`, review `docs/reviews/6fb1c64-loop-probes.md`).
 
 ### Not yet effective, whatever their promise
 
