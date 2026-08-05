@@ -17,7 +17,7 @@
 // `sendPrompt` NEVER throws. Every failure — including a provider that
 // itself throws — comes back as a `SendOutcome`. A caller that prefers
 // exceptions wraps this.
-import type { WarmIsolation } from "./acp-wire.ts"
+import type { WarmIsolation } from "../acp/index.ts"
 
 /** No registry, no lookup: the caller passes an explicit provider id string.
  * Left as `string` (not a closed union) because this module does not know

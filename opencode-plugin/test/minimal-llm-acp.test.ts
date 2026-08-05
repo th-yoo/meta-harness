@@ -22,7 +22,7 @@ import { REASONING_ISOLATION } from "../../cc-gate-plugin/src/gauge/send-prompt.
 import { stubServer } from "../../cc-gate-plugin/test/sdk-stub.ts"
 import { fakeDaemon, type FakeDaemonHandle } from "../../cc-gate-plugin/test/acp-fake-daemon.ts"
 import { shortSock } from "../../cc-gate-plugin/test/sock-path.ts"
-import { envFingerprint } from "../../cc-gate-plugin/src/gauge/acp-paths.ts"
+import { envFingerprint } from "../../cc-gate-plugin/src/acp/acp-paths.ts"
 
 function apiResponse(text: string): Response {
   return Response.json({

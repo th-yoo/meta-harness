@@ -135,8 +135,12 @@ export function ccgateFastFiles(allTestFiles: string[]): string[] {
  * acp-daemon.ts ⇒ TIA picks ccgate ⇒ tier 0 runs ccgate MINUS the
  * acp-daemon tests). Targeted: only the matching file(s), never the whole
  * ~110s slow set. Source basenames + stub consumers grep-verified
- * 2026-08-05 against cc-gate-plugin (sources in src/gauge/ and
- * src/gauge/providers/; stubs in test/). */
+ * 2026-08-05 against cc-gate-plugin (sources in src/acp/ and
+ * src/gauge/providers/; stubs in test/). The ACP sources moved from
+ * src/gauge/ to src/acp/ later the same day; these patterns are
+ * basename-anchored (`(^|\/)name\.ts$`) precisely so a directory move
+ * cannot silently stop them matching — do not re-anchor them to a
+ * directory. */
 // Policy: DIRECT value imports only (one hop, source/stub -> slow test
 // file; `import type` does not count — it cannot break at runtime).
 // Deeper transitive chains (e.g. warm-session.ts -> acp-pool.ts ->

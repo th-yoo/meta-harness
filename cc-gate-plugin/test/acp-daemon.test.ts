@@ -20,13 +20,13 @@ import { stubServer } from "./sdk-stub.ts"
 import {
   FrameDecoder, encodeFrame, ACP_ERR_NO_CALL, ACP_ERR_CALL_CONSUMED, CLI_SPAWN_BUDGET_MS,
   GAUGE_ISOLATION, type WarmIsolation,
-} from "../src/gauge/acp-wire.ts"
-import { envFingerprint } from "../src/gauge/acp-paths.ts"
-import { createDaemonState, createDispatcher } from "../src/gauge/acp-daemon.ts"
+} from "../src/acp/acp-wire.ts"
+import { envFingerprint } from "../src/acp/acp-paths.ts"
+import { createDaemonState, createDispatcher } from "../src/acp/acp-daemon.ts"
 import { shortBase } from "./sock-path.ts"
 import { REASONING_ISOLATION } from "../src/gauge/send-prompt.ts"
-import { SessionPool, type WarmSessionLike, type WarmConstructOpts } from "../src/gauge/acp-pool.ts"
-import type { TurnOutcome, CancelResult } from "../src/gauge/warm-session.ts"
+import { SessionPool, type WarmSessionLike, type WarmConstructOpts } from "../src/acp/acp-pool.ts"
+import type { TurnOutcome, CancelResult } from "../src/acp/warm-session.ts"
 
 // N3c-iii: session/new now REQUIRES `_meta.kkamak.isolation` (a session
 // mapped to no isolation cannot be recorded, and session/prompt then has
@@ -76,7 +76,7 @@ function spawnDaemon(sock: string, spawnLog: string, extra: Record<string, strin
     KKAMAK_ACP_IDLE_MS: idleMs,
     ...extra,
   }
-  const daemon = path.join(import.meta.dir, "..", "src", "gauge", "acp-daemon.ts")
+  const daemon = path.join(import.meta.dir, "..", "src", "acp", "acp-daemon.ts")
   const quoted = ["bun", daemon].map((c) => `'${c.replace(/'/g, `'\\''`)}'`).join(" ")
   const proc = Bun.spawn(["bash", "-c", `nohup ${quoted} </dev/null >/dev/null 2>&1 &`], {
     env, stdout: "ignore", stderr: "ignore",

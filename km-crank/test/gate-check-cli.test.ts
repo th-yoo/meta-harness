@@ -251,8 +251,8 @@ describe("gate-check CLI", () => {
     const dir = tempRepo()
     const r1 = runGate(dir)
     expect(await until(() => marker(dir)?.status === "green", 15_000)).toBe(true)   // green baseline
-    fs.mkdirSync(path.join(dir, "cc-gate-plugin", "src", "gauge"), { recursive: true })
-    fs.writeFileSync(path.join(dir, "cc-gate-plugin", "src", "gauge", "acp-daemon.ts"), "// x")
+    fs.mkdirSync(path.join(dir, "cc-gate-plugin", "src", "acp"), { recursive: true })
+    fs.writeFileSync(path.join(dir, "cc-gate-plugin", "src", "acp", "acp-daemon.ts"), "// x")
     fs.rmSync(path.join(dir, "args.txt"), { force: true })
     const r2 = runGate(dir, { KKAMAK_GATE_NO_BG: "1" })
     expect(r2.status).toBe(0)

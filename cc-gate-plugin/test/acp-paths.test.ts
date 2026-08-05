@@ -7,7 +7,7 @@ import {
   envFingerprint, socketPath, spawnLockPath, bindLockPath, ACP_ENV_DENYLIST,
   ensureSocketDir, isPipe, tryCreateLock, isLockStale, acquireAcpLock, releaseAcpLock,
   ACP_LOCK_STALE_MS,
-} from "../src/gauge/acp-paths.ts"
+} from "../src/acp/acp-paths.ts"
 
 /** Every test builds its OWN path under tmpdir. NO TEST MAY EVER TOUCH
  * ~/.config/kkamak/ — this file only exercises path/hash/lock logic against

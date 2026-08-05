@@ -24,7 +24,7 @@
 // before exit, and cleanup is verified pid-scoped (never pkill -f).
 import fs from "node:fs"
 import { execFileSync } from "node:child_process"
-import { WarmSession } from "../src/gauge/warm-session.ts"
+import { WarmSession } from "../src/acp/warm-session.ts"
 import { sseText, HAS_CLAUDE_CODE_CREDENTIALS, NO_CREDENTIALS_SKIP_REASON } from "./agent-cli-stub.ts"
 import { stubServer } from "./sdk-stub.ts"
 
