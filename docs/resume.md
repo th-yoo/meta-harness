@@ -38,11 +38,18 @@ SHIPPED THIS SESSION (full chain, 7b-gated):
    KKAMAK_DEV_CHECKS drift-guard append in km-crank/src/trial-verdict.ts —
    that array must gain the new check string whenever gate.json changes).
 
-OPEN DUTIES (unchanged): Task 8 §6d pv run (office store; REAL SPEND —
-size token-free via replay-cli pv-sample --pair sdk:agent-sdk, then sized
-go; Task 9 chains token-free). Office warm-lane activation optional (own
-logged decision; re-prove suites in activated state first). Premium was
-429-walled — probe before any spend:
+OPEN DUTIES: Task 8 is DONE — STALE-RESUME CORRECTION 2026-08-05: the §6d
+pv run ALREADY RAN 2026-08-04 at office (counts committed
+docs/gauge-pv/yoo-dev-sdk-vs-agent-sdk-pv-counts.json; spec outcome
+65ac26c: agreement 4/5=0.800, missedC 1<=cap 1, wrongTransport 0 —
+POOLING-PERMITTED at exact bar edge). Task 9 verdict recorded in spec;
+remainder is per-batch opt-in only (boundary ts logged when the first
+batch caller opts in — no action until then). agent-sdk-transport plan
+CLOSED. Second stale-resume incident on that plan — always check the SDD
+ledger + committed artifacts before dispatching plan tasks.
+Office warm-lane activation optional (own logged decision; re-prove
+suites in activated state first). Premium was 429-walled — probe before
+any spend:
 source scripts/probe-models.sh && probe_models claude-haiku-4-5 claude-sonnet-5 claude-opus-5
 
 Rules: sized go before spend · spec-is-law, pre-data amendments only ·
