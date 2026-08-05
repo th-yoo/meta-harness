@@ -370,11 +370,32 @@ relocated the loop's blocker from rigor/density to signal-source pairing
 (`docs/superpowers/specs/2026-08-05-loop-fix-probe-program-design.md` §Results,
 `docs/loop-probes/yoo-dev-e-table.json`, review `docs/reviews/6fb1c64-loop-probes.md`).
 
+### Proven ineffective (tried, measured, did not move outcomes)
+
+*Distinct from the band below: these FAILED on content — wrong hypothesis, wrong channel,
+wrong rule — and the gate caught each one cheaply. That is the system working; they are
+correctly dead and none is a purge candidate because they are already purged.*
+
+| # | Technique | Result | Evidence |
+|---|---|---|---|
+| 1 | Prose-bullet actuator on the post-A1 residual | 8 straight REJECT/ABSTAIN (R1–R8); R7 refuted the placement hypothesis in BOTH channels. Worst effect-per-trial record in the repo; only yield = channel closed, escalation to binding mechanisms. | `minimal/HISTORY.md` rows R1–R8 verdict cells; R8 "prose channel dead". |
+| 2 | Haiku-side evolution (prompt rules + lessons) | v1–v6 prompt candidates all failed; lesson injection 0/2 → 0/2 — capability-bound model, no headroom. Forced the opus pivot. | Part 2 (07-23) DISPROVEN list above; `minimal/HISTORY.md` haiku-era rows. |
+| 3 | Session-carryover marker (C2) | Reward-null (B-side p=1.0) with the A-side DEPRESSED (4/12 vs 7/10, p=0.198) — borderline negative; ships default OFF. | `minimal/HISTORY.md` row C2; Part 2 (07-27) DISPROVEN "marker hygiene as a free win". |
+| 4 | Machine-proposed bullets (R1, R2) | Proposer mandated behavior winners already did — nulls; first calibration points for proposer predictions. | `minimal/HISTORY.md` rows R1 (own `falsify_if` fired) + R2. |
+| 5 | FA1 false-accept probes (RTM + relation/metamorphic) | CLOSED BY MATH: probe effect NULL, remaining arms futile. | `minimal/HISTORY.md` §FA1 header + row. |
+| 6 | Gauntlet mechanism transplants (Loops A, D) | 0 merges: Loop A's null_precedent check satisfiable by construction BOTH rounds (reword only relocated the defect); Loop D's bar clause never engaged (corpus saturated by rejected-ledger near-dups). | Gauntlet ledger table rows A + D; GA10 row. |
+| 7 | All-must-die mutant rule on large artifacts | Structurally unsatisfiable — it was burning the agents, not testing them (C1 headless 7/9 exhausted; rounds were killing 1–3/4 mutants all along). Replaced by G1's coverage-guided + ≥1-kill. | `minimal/HISTORY.md` rows C1 + G1; Part 2 (07-27) DISPROVEN. |
+| 8 | v8 divergence lesson + v10 counterweighted clause | v8's "add ORDER BY" was a dev-data confound (grader order-insensitive) — gated null; v10's counterweight lost to plain clause removal. | Part 2 (07-23) DISPROVEN list above. |
+
 ### Not yet effective, whatever their promise
 
 Warm lane · §6d agent-sdk transport · reinject v2 · fixture harvest · cls-ab · channel
 ladder/C4 · M1v2 · §4.3 trial mode · Path A tournament — zero demonstrated effect to date;
-all await evidence flow (see the 08-06 delta's "built ahead of supply" entry).
+all await evidence flow (see the 08-06 delta's "built ahead of supply" entry). NOT the same
+failure class as the table above: nothing here has failed on content — it is starved, with
+one shared upstream cause (signal-source pairing) and one shared fix candidate
+(review-sensor synthesis). Nothing in this band should be cut before the pairing fix gets
+its shot; everything in the table above already has been.
 
 **Top line:** the two adopted actuators (A1, A2) and the gate that vetted them are the most
 effective techniques in the project; everything else that is effective is either speed
