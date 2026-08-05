@@ -1,5 +1,5 @@
 {
-  "check": "cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test && cd ../km-crank && bun test && cd .. && bun scripts/doc-check.ts",
+  "check": "bun scripts/gate-check.ts",
   "rounds": 2,
   "gauge": true
 }

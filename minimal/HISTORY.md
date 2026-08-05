@@ -700,6 +700,11 @@ per-task reviews + final whole-branch review + one fix wave; commits
   root-caused 2026-08-05, two-tier gate-check plan written
   (docs/superpowers/plans/2026-08-05-two-tier-gate-check.md, unexecuted;
   deploy will stamp its own instrument ts in the adoption ledger).
+- **2026-08-05 follow-up (office `yoo-dev`):** gate.json check swapped to two-tier
+  `scripts/gate-check.ts` — ACP-arc test growth had pushed every gated Stop
+  to ~160s (was 26-31s pre-arc); blocking tier back to ~25-45s, full check
+  unchanged as a background debt gate. Instrument note in the adoption
+  ledger; durationMs never pools across the deploy ts.
 
 ## R1 — round-1 machine bullet (2026-07-23, office) — REJECT
 
