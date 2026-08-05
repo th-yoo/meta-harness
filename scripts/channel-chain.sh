@@ -32,7 +32,9 @@ if ! bun -e "const j=JSON.parse(require('fs').readFileSync('$OUT','utf8')); proc
   exit 1
 fi
 echo "[chain] smoke bar met — firing channel base-rate (--go 301)"
+mkdir -p /tmp/kkamak && touch /tmp/kkamak/gauge-verify.done   # gated-run.sh chain compatibility
 
 bun cc-gate-plugin/src/gauge/replay-cli.ts channel --go 301
 
+touch /tmp/kkamak/channel-base-rate.done
 echo "[chain] DONE $(date -Is) — base-rate run complete; tally + commit are the operator's model-free duties"
