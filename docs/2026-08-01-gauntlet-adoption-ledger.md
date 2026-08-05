@@ -418,3 +418,35 @@ Caveat: n=3 loops, one day — provisional, revisit after the next program.
   swap travels with git pull — the other host's (`yoo-mac`) first pulled
   session inherits it. Same-repo semantics, no per-host activation needed
   (config, not env).
+
+## Warm-lane activation (2026-08-05, office `yoo-dev`)
+
+- **2026-08-05 10:07:02 KST (boundary ts 1785892022908), yoo-dev
+  (user-directed: "activate warm lane on office").**
+  `KKAMAK_SEAT_PROVIDER=anthropic-cli-warm` set in `~/.claude/settings.json`
+  env (all CC sessions on this host — same mechanism as the yoo-mac
+  activation above; grep-verified, JSON validated). Design-time seats
+  (proposer/reviewer/revision via `minimal/llm-acp.ts` `seatCall`) now route
+  through the warm lane: ACP daemon + `/clear`-recycled CC CLI subprocesses,
+  CC credential pool. Semantics unchanged from the wiring merge `5ae2043`:
+  warm no-call → one anthropic-api attempt in-call; call-consumed → THROW,
+  never falls back. `opencode` driver untouched.
+- **Precondition evidence, in order:** (1) WSL2 RSS measured 2026-08-04
+  (`docs/2026-08-05-warm-session-rss.md`): ~330 MB/warm session band,
+  recycle flat; **cap stays 4 (default), no `KKAMAK_ACP_MAX_SESSIONS`
+  override** — opt-up is env-only by that doc's ruling. (2) Both suites
+  proven in the ACTIVATED state per the 2026-08-01 standing rule
+  (`KKAMAK_SEAT_PROVIDER=anthropic-cli-warm` exported for the run):
+  cc-gate-plugin 1043/0, opencode-plugin 1777/1 skip/0 fail.
+- **Instrument boundary:** seat outputs pre/post ts **1785892022908** on
+  this host MUST NOT pool (transport changed api → warm CLI; provider
+  asymmetry as declared in the merged artifacts — `thinking:enabled` runs
+  on warm, is no-called on api). Compounds with this host's 08-05 boundary
+  1785847012141 (CLI-spawn → api): yoo-dev seat lines now partition into
+  THREE regimes by ts, same shape as yoo-mac. Both hosts are now
+  warm-active; their regimes remain host-split as ever (F-rules).
+- **No live seat spend at activation.** Verification was suite-level only
+  (hermetic). Premium 429-walled at flip (haiku=OK, sonnet=429, opus=429,
+  probed this session — same wall as the yoo-mac flip). First live warm
+  seat call occurs whenever the loop next runs a seat here; its outcome
+  belongs to normal loop accounting, not this entry.
