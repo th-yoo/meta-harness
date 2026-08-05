@@ -348,6 +348,13 @@ describe("p1-event-density CLI", () => {
     expect(pre.smallN).toBe(true)
     expect(post.smallN).toBe(true)
     expect(post.durationMs.n).toBe(post.n)
+    // Span-aware denominators (S4 erratum fix): each segment's rate divides
+    // by its OWN window overlap, so the two spans sum to the full window
+    // and a rate n/spanDays reconstructs exactly.
+    expect(pre.spanDays + post.spanDays).toBeCloseTo(7, 6)
+    expect(pre.linesPerDay).toBeCloseTo(pre.n / pre.spanDays, 10)
+    expect(post.linesPerDay).toBeCloseTo(post.n / post.spanDays, 10)
+    expect(post.spanDays).toBeLessThan(1)   // boundary sits hours before now
   })
 
   test("S2's this-repo-labeled entry carries a branch + worktree-fragility note; a differently-labeled entry does not", () => {

@@ -162,9 +162,17 @@ export function buildS4(gateFile: string, windowStart: number, windowEnd: number
   const bounds = segmentBounds([boundary])
   const segments = segs.map((seg: GateLine[], i: number) => {
     const durations = seg.map(l => (typeof l.durationMs === "number" ? l.durationMs : undefined)).filter((x): x is number => typeof x === "number")
+    // Denominator = the segment's ACTUAL overlap with the window, not the
+    // whole 7 days — a boundary hours before run time would otherwise make
+    // the post segment's rate read ~25x too low (foreign-session review
+    // finding, 2026-08-05: committed 2.43/day vs real ~88/day).
+    const lo = Math.max(bounds[i]!.lo ?? windowStart, windowStart)
+    const hi = Math.min(bounds[i]!.hi ?? windowEnd, windowEnd)
+    const spanDays = Math.max((hi - lo) / 86_400_000, 0)
     return {
       index: i, boundaryLo: bounds[i]!.lo, boundaryHi: bounds[i]!.hi,
-      n: seg.length, linesPerDay: seg.length / WINDOW_DAYS,
+      n: seg.length, spanDays,
+      linesPerDay: spanDays > 0 ? seg.length / spanDays : null,
       durationMs: countStats(durations), smallN: seg.length < 10,
     }
   })
