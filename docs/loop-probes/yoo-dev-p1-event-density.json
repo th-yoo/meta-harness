@@ -1,0 +1,166 @@
+{
+  "spec": "docs/superpowers/specs/2026-08-05-loop-fix-probe-program-design.md",
+  "generatedAtTs": 1785904386342,
+  "hostname": "yoo-dev",
+  "window": {
+    "start": 1785299586342,
+    "end": 1785904386342,
+    "days": 7
+  },
+  "s1": {
+    "source": "/home/th-yoo/z2/meta-harness/.km/gate-outcomes.ndjson",
+    "windowStart": 1785299586342,
+    "windowEnd": 1785904386342,
+    "n": 438,
+    "eventsPerDay": 62.57142857142857,
+    "byDay": {
+      "2026-07-29": 17,
+      "2026-07-30": 67,
+      "2026-07-31": 66,
+      "2026-08-02": 32,
+      "2026-08-03": 108,
+      "2026-08-04": 130,
+      "2026-08-05": 18
+    },
+    "boundaries": [
+      1785365222674,
+      1785382986863,
+      1785711630125,
+      1785727963349,
+      1785847012141,
+      1785856371528,
+      1785888548054,
+      1785892022908,
+      1785899174570
+    ],
+    "segments": [
+      {
+        "index": 0,
+        "boundaryLo": null,
+        "boundaryHi": 1785365222674,
+        "n": 13
+      },
+      {
+        "index": 1,
+        "boundaryLo": 1785365222674,
+        "boundaryHi": 1785382986863,
+        "n": 35
+      },
+      {
+        "index": 2,
+        "boundaryLo": 1785382986863,
+        "boundaryHi": 1785711630125,
+        "n": 116
+      },
+      {
+        "index": 3,
+        "boundaryLo": 1785711630125,
+        "boundaryHi": 1785727963349,
+        "n": 61
+      },
+      {
+        "index": 4,
+        "boundaryLo": 1785727963349,
+        "boundaryHi": 1785847012141,
+        "n": 182
+      },
+      {
+        "index": 5,
+        "boundaryLo": 1785847012141,
+        "boundaryHi": 1785856371528,
+        "n": 7
+      },
+      {
+        "index": 6,
+        "boundaryLo": 1785856371528,
+        "boundaryHi": 1785888548054,
+        "n": 7
+      },
+      {
+        "index": 7,
+        "boundaryLo": 1785888548054,
+        "boundaryHi": 1785892022908,
+        "n": 3
+      },
+      {
+        "index": 8,
+        "boundaryLo": 1785892022908,
+        "boundaryHi": 1785899174570,
+        "n": 9
+      },
+      {
+        "index": 9,
+        "boundaryLo": 1785899174570,
+        "boundaryHi": null,
+        "n": 5
+      }
+    ]
+  },
+  "s2": {
+    "windowStart": 1785299586342,
+    "windowEnd": 1785904386342,
+    "sinceIso": "2026-07-29T04:33:06.342Z",
+    "repos": [
+      {
+        "label": "this-repo",
+        "path": "/home/th-yoo/z2/meta-harness/.claude/worktrees/loop-probes",
+        "commits": 387,
+        "commitsPerDay": 55.285714285714285
+      },
+      {
+        "label": "kkamak",
+        "path": "/home/th-yoo/z2/kkamak",
+        "commits": 74,
+        "commitsPerDay": 10.571428571428571
+      }
+    ]
+  },
+  "s3": {
+    "source": "/home/th-yoo/z2/meta-harness/.claude/worktrees/loop-probes/docs/reviews",
+    "windowStart": 1785299586342,
+    "windowEnd": 1785904386342,
+    "filesTotal": 10,
+    "n": 10,
+    "addsPerDay": 1.4285714285714286,
+    "byDay": {
+      "2026-08-03": 4,
+      "2026-08-04": 5,
+      "2026-08-05": 1
+    }
+  },
+  "s4": {
+    "source": "/home/th-yoo/z2/meta-harness/.km/gate-outcomes.ndjson",
+    "windowStart": 1785299586342,
+    "windowEnd": 1785904386342,
+    "boundary": 1785888548054,
+    "boundaryLiveInWindow": true,
+    "segments": [
+      {
+        "index": 0,
+        "boundaryLo": null,
+        "boundaryHi": 1785888548054,
+        "n": 421,
+        "linesPerDay": 60.142857142857146,
+        "durationMs": {
+          "n": 421,
+          "mean": 108733.47505938243,
+          "sd": 1262408.391004921
+        },
+        "smallN": false
+      },
+      {
+        "index": 1,
+        "boundaryLo": 1785888548054,
+        "boundaryHi": null,
+        "n": 17,
+        "linesPerDay": 2.4285714285714284,
+        "durationMs": {
+          "n": 17,
+          "mean": 4942.882352941177,
+          "sd": 9276.10473125946
+        },
+        "smallN": false
+      }
+    ]
+  }
+}
