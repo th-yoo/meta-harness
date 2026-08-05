@@ -66,6 +66,21 @@ export const MAIN_GATE_NDJSON_DEFAULT = path.join(os.homedir(), "z2", "meta-harn
 export const FOREIGN_GATE_NDJSON_DEFAULT = path.join(os.homedir(), "z2", "kkamak", ".km", "gate-outcomes.ndjson")
 export const REVIEWS_DIR_DEFAULT = path.join(process.cwd(), "docs", "reviews")
 export const TB2_VERDICT_DEFAULT = path.join(process.cwd(), "term-bench2", "store", "global", "candidates", "v1", "ab-verdict.json")
+/** B3's replay-cli.ts resolves `.km/gate-outcomes.ndjson` and
+ * `.km/gauge-corpus/records.ndjson` relative to the `[cwd]` ARGUMENT IT IS
+ * GIVEN (state-resolve.ts readSensorLines/readFixtureRefsFor,
+ * corpus-store.ts readCorpus — both `path.join(cwd, REL_PATH)`), defaulting
+ * to the replay-cli PROCESS's own cwd when no positional arg is passed.
+ * Same trap as B1's ndjson read: a worktree's own `.km/` is near-empty, so
+ * the report subprocess must be pointed at the MAIN CHECKOUT explicitly —
+ * home-anchored, mirroring MAIN_GATE_NDJSON_DEFAULT above, NOT
+ * process.cwd()-relative (fix: review of the first P0/P1 commit caught
+ * this — the subprocess spawn's own `cwd:` option only controls where
+ * `bun cc-gate-plugin/src/gauge/replay-cli.ts` itself is resolved from,
+ * which correctly stays the worktree since that's where the script file
+ * lives; the DATA root is a separate, second thing — the script's own
+ * positional `[cwd]` arg). */
+export const MAIN_CHECKOUT_DIR_DEFAULT = path.join(os.homedir(), "z2", "meta-harness")
 
 export function gateNdjsonPath(): string {
   return process.env.KKAMAK_PROBE_GATE_NDJSON ?? MAIN_GATE_NDJSON_DEFAULT
@@ -75,6 +90,9 @@ export function foreignNdjsonPath(): string {
 }
 export function reviewsDirPath(): string {
   return process.env.KKAMAK_PROBE_REVIEWS_DIR ?? REVIEWS_DIR_DEFAULT
+}
+export function replayCliCwd(): string {
+  return process.env.KKAMAK_PROBE_REPLAY_CWD ?? MAIN_CHECKOUT_DIR_DEFAULT
 }
 export function tb2VerdictPath(): string {
   return process.env.KKAMAK_PROBE_TB2_VERDICT ?? TB2_VERDICT_DEFAULT
@@ -249,7 +267,7 @@ export function buildB2(reviewsDir: string) {
   const files = findReviewFiles(reviewsDir)
   const findingsCounts = files.map(f => f.findingsCount).filter((x): x is number => typeof x === "number")
   const stats = countStats(findingsCounts)
-  return { family: "count" as Family, n: stats.n, stats, files, viability: viability("count", stats) }
+  return { family: "count" as Family, source: reviewsDir, n: stats.n, stats, files, viability: viability("count", stats) }
 }
 
 // ---------------------------------------------------------------------
@@ -278,14 +296,24 @@ function classCatStats(c: ClassCounts): CatStats {
 }
 
 export function buildB3(): unknown {
+  // Data-root for the replay-cli report subprocess (see
+  // MAIN_CHECKOUT_DIR_DEFAULT doc comment) — surfaced in EVERY branch below
+  // (including skipped) so a downstream reader can always see which
+  // repository b3's counts (or absence of counts) describe.
+  const dataCwd = replayCliCwd()
   if (process.env.KKAMAK_PROBE_SKIP_B3 === "1") {
-    return { family: "categorical", skipped: true, binarization: "undeclared" }
+    return { family: "categorical", skipped: true, binarization: "undeclared", source: dataCwd }
   }
   let stdout: string
   try {
-    stdout = execFileSync("bun", ["cc-gate-plugin/src/gauge/replay-cli.ts", "report"], { cwd: process.cwd(), encoding: "utf8" })
+    // Positional [cwd] arg = the DATA root replay-cli reads .km/gate
+    // -outcomes.ndjson and .km/gauge-corpus/records.ndjson from; the
+    // spawn's own `cwd:` option stays process.cwd() (the worktree) because
+    // that's where the replay-cli.ts SCRIPT FILE itself lives — two
+    // different "cwd"s, deliberately not conflated.
+    stdout = execFileSync("bun", ["cc-gate-plugin/src/gauge/replay-cli.ts", "report", dataCwd], { cwd: process.cwd(), encoding: "utf8" })
   } catch {
-    return { family: "categorical", skipped: false, error: "replay-cli report failed", binarization: "undeclared" }
+    return { family: "categorical", skipped: false, error: "replay-cli report failed", binarization: "undeclared", source: dataCwd }
   }
   const parsed = parseClassRateLines(stdout)
   const provenance: Record<string, { n: number; stats: CatStats; viability: string }> = {}
@@ -297,7 +325,7 @@ export function buildB3(): unknown {
     const stats = classCatStats(parsed.corpusTranscript)
     provenance.corpusTranscript = { n: stats.n, stats, viability: "UNKNOWN (binarization undeclared)" }
   }
-  return { family: "categorical", skipped: false, binarization: "undeclared", provenance }
+  return { family: "categorical", skipped: false, binarization: "undeclared", source: dataCwd, provenance }
 }
 
 // ---------------------------------------------------------------------

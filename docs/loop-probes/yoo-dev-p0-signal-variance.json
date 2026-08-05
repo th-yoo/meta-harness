@@ -1,6 +1,6 @@
 {
   "spec": "docs/superpowers/specs/2026-08-05-loop-fix-probe-program-design.md",
-  "generatedAtTs": 1785904386322,
+  "generatedAtTs": 1785905230449,
   "hostname": "yoo-dev",
   "b1": {
     "source": "/home/th-yoo/z2/meta-harness/.km/gate-outcomes.ndjson",
@@ -587,6 +587,7 @@
   },
   "b2": {
     "family": "count",
+    "source": "/home/th-yoo/z2/meta-harness/.claude/worktrees/loop-probes/docs/reviews",
     "n": 10,
     "stats": {
       "n": 10,
@@ -651,31 +652,32 @@
     "family": "categorical",
     "skipped": false,
     "binarization": "undeclared",
+    "source": "/home/th-yoo/z2/meta-harness",
     "provenance": {
       "live": {
-        "n": 0,
+        "n": 107,
         "stats": {
-          "n": 0,
+          "n": 107,
           "classes": {
-            "A1": 0,
-            "A2": 0,
-            "B": 0,
-            "C": 0,
-            "D": 0
+            "A1": 38,
+            "A2": 35,
+            "B": 6,
+            "C": 1,
+            "D": 27
           }
         },
         "viability": "UNKNOWN (binarization undeclared)"
       },
       "corpusTranscript": {
-        "n": 0,
+        "n": 407,
         "stats": {
-          "n": 0,
+          "n": 407,
           "classes": {
-            "A1": 0,
-            "A2": 0,
-            "B": 0,
-            "C": 0,
-            "D": 0
+            "A1": 68,
+            "A2": 127,
+            "B": 17,
+            "C": 21,
+            "D": 174
           }
         },
         "viability": "UNKNOWN (binarization undeclared)"

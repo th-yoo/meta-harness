@@ -1,16 +1,16 @@
 {
   "spec": "docs/superpowers/specs/2026-08-05-loop-fix-probe-program-design.md",
-  "generatedAtTs": 1785904386342,
+  "generatedAtTs": 1785905230470,
   "hostname": "yoo-dev",
   "window": {
-    "start": 1785299586342,
-    "end": 1785904386342,
+    "start": 1785300430470,
+    "end": 1785905230470,
     "days": 7
   },
   "s1": {
     "source": "/home/th-yoo/z2/meta-harness/.km/gate-outcomes.ndjson",
-    "windowStart": 1785299586342,
-    "windowEnd": 1785904386342,
+    "windowStart": 1785300430470,
+    "windowEnd": 1785905230470,
     "n": 438,
     "eventsPerDay": 62.57142857142857,
     "byDay": {
@@ -97,28 +97,31 @@
     ]
   },
   "s2": {
-    "windowStart": 1785299586342,
-    "windowEnd": 1785904386342,
-    "sinceIso": "2026-07-29T04:33:06.342Z",
+    "windowStart": 1785300430470,
+    "windowEnd": 1785905230470,
+    "sinceIso": "2026-07-29T04:47:10.470Z",
     "repos": [
       {
         "label": "this-repo",
         "path": "/home/th-yoo/z2/meta-harness/.claude/worktrees/loop-probes",
-        "commits": 387,
-        "commitsPerDay": 55.285714285714285
+        "commits": 388,
+        "commitsPerDay": 55.42857142857143,
+        "branch": "worktree-loop-probes",
+        "note": "counts commits reachable from the CURRENT checkout's branch only (worktree fragility: commits on other branches/worktrees of the same repo, e.g. main after this worktree branched, are not counted here)"
       },
       {
         "label": "kkamak",
         "path": "/home/th-yoo/z2/kkamak",
         "commits": 74,
-        "commitsPerDay": 10.571428571428571
+        "commitsPerDay": 10.571428571428571,
+        "branch": "main"
       }
     ]
   },
   "s3": {
     "source": "/home/th-yoo/z2/meta-harness/.claude/worktrees/loop-probes/docs/reviews",
-    "windowStart": 1785299586342,
-    "windowEnd": 1785904386342,
+    "windowStart": 1785300430470,
+    "windowEnd": 1785905230470,
     "filesTotal": 10,
     "n": 10,
     "addsPerDay": 1.4285714285714286,
@@ -130,8 +133,8 @@
   },
   "s4": {
     "source": "/home/th-yoo/z2/meta-harness/.km/gate-outcomes.ndjson",
-    "windowStart": 1785299586342,
-    "windowEnd": 1785904386342,
+    "windowStart": 1785300430470,
+    "windowEnd": 1785905230470,
     "boundary": 1785888548054,
     "boundaryLiveInWindow": true,
     "segments": [

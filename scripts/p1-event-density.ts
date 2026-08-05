@@ -60,6 +60,21 @@ export function commitsSince(repoPath: string, sinceIso: string): number {
   }
 }
 
+/** `git log` at `repoPath` only sees commits reachable from the CURRENTLY
+ * -checked-out ref at `repoPath` — for the default "this-repo" entry
+ * that's whichever branch/worktree this CLI happens to be run from, not
+ * necessarily `main`. Surfaced as a `branch` field (+ a `note` on the
+ * "this-repo" entry specifically) so a downstream reader can see the
+ * worktree-fragility caveat instead of silently trusting the count.
+ * undefined (not thrown) on any git failure. */
+export function currentBranch(repoPath: string): string | undefined {
+  try {
+    return execFileSync("git", ["-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim()
+  } catch {
+    return undefined
+  }
+}
+
 function byDayTally(tsOrIso: (string | number)[]): Record<string, number> {
   const byDay: Record<string, number> = {}
   for (const x of tsOrIso) {
@@ -101,7 +116,11 @@ export function buildS2(windowStart: number, windowEnd: number) {
   const sinceIso = new Date(windowStart).toISOString()
   const repos = gitDirsFromEnv().map(r => {
     const commits = commitsSince(r.path, sinceIso)
-    return { label: r.label, path: r.path, commits, commitsPerDay: commits / WINDOW_DAYS }
+    const branch = currentBranch(r.path)
+    const note = r.label === "this-repo"
+      ? "counts commits reachable from the CURRENT checkout's branch only (worktree fragility: commits on other branches/worktrees of the same repo, e.g. main after this worktree branched, are not counted here)"
+      : undefined
+    return { label: r.label, path: r.path, commits, commitsPerDay: commits / WINDOW_DAYS, branch, note }
   })
   return { windowStart, windowEnd, sinceIso, repos }
 }

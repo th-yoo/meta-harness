@@ -14,7 +14,7 @@ import os from "node:os"
 import path from "node:path"
 import { tmpdir } from "node:os"
 import { execFileSync, spawnSync } from "node:child_process"
-import { deriveStampBoundaries, parseClassRateLines, SPEC_PATH } from "../../scripts/p0-signal-variance.ts"
+import { deriveStampBoundaries, parseClassRateLines, replayCliCwd, MAIN_CHECKOUT_DIR_DEFAULT, SPEC_PATH } from "../../scripts/p0-signal-variance.ts"
 
 const P0 = path.join(import.meta.dir, "..", "..", "scripts", "p0-signal-variance.ts")
 const P1 = path.join(import.meta.dir, "..", "..", "scripts", "p1-event-density.ts")
@@ -96,6 +96,21 @@ describe("deriveStampBoundaries", () => {
   })
 })
 
+describe("replayCliCwd", () => {
+  test("defaults to MAIN_CHECKOUT_DIR_DEFAULT (home-anchored, NOT process.cwd()-relative), env seam overrides", () => {
+    const prev = process.env.KKAMAK_PROBE_REPLAY_CWD
+    try {
+      delete process.env.KKAMAK_PROBE_REPLAY_CWD
+      expect(replayCliCwd()).toBe(MAIN_CHECKOUT_DIR_DEFAULT)
+      process.env.KKAMAK_PROBE_REPLAY_CWD = "/tmp/some-fixture-repo"
+      expect(replayCliCwd()).toBe("/tmp/some-fixture-repo")
+    } finally {
+      if (prev === undefined) delete process.env.KKAMAK_PROBE_REPLAY_CWD
+      else process.env.KKAMAK_PROBE_REPLAY_CWD = prev
+    }
+  })
+})
+
 describe("parseClassRateLines", () => {
   test("parses both live and corpus-transcript class-rate lines", () => {
     const stdout = [
@@ -168,12 +183,14 @@ describe("p0-signal-variance CLI", () => {
       },
     }))
 
+    const fakeReplayCwd = path.join(cwd, "fake-main-checkout")
     const r = run(P0, cwd, {
       KKAMAK_PROBE_GATE_NDJSON: gateFile,
       KKAMAK_PROBE_FOREIGN_NDJSON: foreignFile,
       KKAMAK_PROBE_REVIEWS_DIR: reviewsDir,
       KKAMAK_PROBE_TB2_VERDICT: tb2File,
       KKAMAK_PROBE_SKIP_B3: "1",
+      KKAMAK_PROBE_REPLAY_CWD: fakeReplayCwd,
     })
     expect(r.status).toBe(0)
 
@@ -203,17 +220,21 @@ describe("p0-signal-variance CLI", () => {
     expect(out.b1Foreign.regimes[1].n).toBe(1)
     expect(out.b1Foreign.regimes[2].n).toBe(2)
 
-    // B2: n=3, exact findings-count values, dates round-tripped.
+    // B2: n=3, exact findings-count values, dates round-tripped, source
+    // discloses which reviews dir was actually read.
     expect(out.b2.n).toBe(3)
+    expect(out.b2.source).toBe(reviewsDir)
     expect(out.b2.stats.mean).toBeCloseTo((2 + 5 + 8) / 3, 10)
     const files = out.b2.files as { file: string; findingsCount: number; addedDateIso: string }[]
     expect(files.map(f => f.findingsCount)).toEqual([2, 5, 8])
     expect(files[0]!.addedDateIso).toContain("2026-07-01")
     expect(out.b2.viability).toBe("UNKNOWN") // n=3 < 10
 
-    // B3: skipped per the env seam.
+    // B3: skipped per the env seam, but `source` still discloses which
+    // data root the (skipped) replay-cli report WOULD have read.
     expect(out.b3.skipped).toBe(true)
     expect(out.b3.family).toBe("categorical")
+    expect(out.b3.source).toBe(fakeReplayCwd)
 
     // B4: pooled candidate-arm trials.
     expect(out.b4.family).toBe("rate")
@@ -241,6 +262,10 @@ describe("p0-signal-variance CLI", () => {
     expect(out.b1.accepted.viability).toBe("UNKNOWN")
     expect(out.b4.n).toBe(0)
     expect(out.b4.error).toBe("file not found")
+    // No KKAMAK_PROBE_REPLAY_CWD override here -> b3.source falls back to
+    // MAIN_CHECKOUT_DIR_DEFAULT (proves the default wiring, not just the
+    // override seam exercised by the other test).
+    expect(out.b3.source).toBe(MAIN_CHECKOUT_DIR_DEFAULT)
   })
 })
 
@@ -323,5 +348,42 @@ describe("p1-event-density CLI", () => {
     expect(pre.smallN).toBe(true)
     expect(post.smallN).toBe(true)
     expect(post.durationMs.n).toBe(post.n)
+  })
+
+  test("S2's this-repo-labeled entry carries a branch + worktree-fragility note; a differently-labeled entry does not", () => {
+    const cwd = mkTmp("loop-probes-p1-s2-")
+    const gateFile = path.join(cwd, "gate.ndjson")
+    writeJsonl(gateFile, [])
+    const reviewsDir = mkReviewsRepo([])
+
+    // KKAMAK_PROBE_GIT_DIRS labels entries by path.basename — naming this
+    // temp repo's dir literally "this-repo" hits the SAME label the
+    // production default uses, hermetically (no real git dirs touched).
+    const parent = mkTmp("loop-probes-p1-s2-repos-")
+    const thisRepoDir = path.join(parent, "this-repo")
+    fs.mkdirSync(thisRepoDir)
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: thisRepoDir })
+    fs.writeFileSync(path.join(thisRepoDir, "f.txt"), "x")
+    execFileSync("git", ["add", "f.txt"], { cwd: thisRepoDir })
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "c"], { cwd: thisRepoDir })
+    const otherRepo = mkGitRepoWithCommits([new Date().toISOString()])
+
+    const r = run(P1, cwd, {
+      KKAMAK_PROBE_GATE_NDJSON: gateFile,
+      KKAMAK_PROBE_REVIEWS_DIR: reviewsDir,
+      KKAMAK_PROBE_GIT_DIRS: `${thisRepoDir}:${otherRepo}`,
+    })
+    expect(r.status).toBe(0)
+    const outFile = path.join(cwd, "docs", "loop-probes", `${os.hostname()}-p1-event-density.json`)
+    const out = JSON.parse(fs.readFileSync(outFile, "utf8"))
+    const repos = out.s2.repos as { label: string; path: string; branch?: string; note?: string }[]
+    const thisRepoEntry = repos.find(x => x.label === "this-repo")!
+    const otherEntry = repos.find(x => x.path === otherRepo)!
+
+    expect(thisRepoEntry.branch).toBe("main")
+    expect(typeof thisRepoEntry.note).toBe("string")
+    expect(thisRepoEntry.note).toContain("worktree fragility")
+    expect(otherEntry.note).toBeUndefined()
+    expect(typeof otherEntry.branch).toBe("string")
   })
 })
