@@ -1,7 +1,8 @@
 # Techniques employed — inventory + evidence status
 
-*Written 2026-07-21; Part 2 re-audited 2026-07-23 (post loops 1–3) and
-**2026-07-27 (gate era — delta section at the end of Part 2; Part 1 gains §K)**. Two purposes:
+*Written 2026-07-21; Part 2 re-audited 2026-07-23 (post loops 1–3),
+**2026-07-27 (gate era — delta section at the end of Part 2; Part 1 gains §K)**, and
+**2026-08-06 (GA/probes era — Part 1 gains §L; third delta at the end)**. Two purposes:
 (1) a map of every technique the project employs and where it came from; (2) an honest audit of
 which are **proven by our own evidence**, which are **disproven**, and which remain **unproven** —
 so nobody (including us) mistakes built-and-runs for validated. Companion docs:
@@ -123,12 +124,33 @@ transfer, memory index).
 | Spec-coverage probe (added 07-27) | RTM-style frozen `requirements.json` per task (from instruction.md only) matched against comment-stripped verify.sh; `requirement-untested` reinject names the gap. First live save same day (FA1 a2). |
 | Relation probes (added 07-27) | Instruction-derived metamorphic/property scripts vs the artifact (oracle-free — the literature's standard weapon for the no-ground-truth channel); desk-validated oracle-pass/degraded-fail; `relation-violated` outcome. |
 
+### L. Instrument, transport, seat + process-gate machinery (GA era, 2026-07-28 → 08-05; added at 08-06 re-audit)
+
+| Technique | What / why |
+|---|---|
+| km-gauge v2 (shadow extractor + refiner) | Stop-time SHADOW measurement of extraction quality — derives a class (A1/A2/C/D) per cycle, never blocks; fail-loud `present:false + offReason` so silence is impossible (GA3, GA11). The §4.3 reward-calibration question's instrument. |
+| Derive transports, per-caller | `selectTransport`: default `"sdk"` (direct Messages API, ~28k CC-harness tokens → ~0.7–3k, GA12); `"agent-sdk"` merged per-caller opt-in with live path PINNED IN CODE + revert-detecting test (GA13); `"agent-sdk-daemon"` literal registered, bar never run (§6e). |
+| Paired-validation (pv) machinery | Standing transport-comparability instrument: stratified C-enriched shadow re-derivation, agreement ≥0.80 + missed-C cap bar, `--pair <baseline>:<shadow>` over ANY two transports, fail-closed cross-host combine, `arms` field disambiguating committed artifacts. |
+| sendPrompt seats interface | Provider registry for the design-time seats (proposer/reviewer/revision): `anthropic-api` default with explicit `REASONING_ISOLATION` + maxTokens truncation guard (a cut proposal THROWS, never passes as complete); callers never see a session. |
+| ACP warm lane | Host-global daemon + `SessionPool` of `/clear`-recycled warm CC CLI subprocesses (Agent-SDK `query()` under the hood) behind `KKAMAK_SEAT_PROVIDER` — premium reach via the CC credential pool during raw-API 429 walls. Send-boundary law: no-call falls back to api once; call-consumed THROWS, never falls back. RSS-sized cap (≈330 MB/session both hosts, cap 4). |
+| Two-tier gate check | `scripts/gate-check.ts`: blocking tier = package-TIA-scoped fast suites (spawn-heavy files excluded by one policy regex); incumbent full check VERBATIM as a detached background run; red marker = debt, repaid by a synchronous full run next gated Stop. `KKAMAK_GATE_FULL=1` restores old behavior exactly. |
+| Process gates 7a/7b | 7a doc-linter floor in the gate check (+ `KKAMAK_DEV_CHECKS` append-only drift guard); 7b merge gate: `merge-with-gate.sh` refuses any merge to main whose range lacks a committed `docs/reviews/<sha>-<slug>.md` artifact with matching range. |
+| Fixture harvest (Phase 2) + sidecars | Block-time dirty-tree snapshot (temp-index `write-tree` → `refs/kkamak/fixtures/`) + km-crank harvest → TB2 fixture task; Phase 1 check-output sidecar (block excerpts → proposer evidence); Phase 3 async prompt-check with `mechanize_instead` rubric key. |
+| Verification-channel ladder + C4 nudge | C1–C4 channel classification of verify evidence; C4 soft nudge built INERT (`channelNudge` absent from gate.json); nudge-vs-reject experiment pre-registered, sized go awaits base rate. |
+| cls-ab classifier 2×2 | Model × prompt classifier A/B tooling (`cls-sample/run/label/score --combine`), pre-registered, 0 labels to date — constants still amendable. |
+| Loop-fix probe program | P0 signal-viability (sd/mean bar) × P1 event-density × E feasibility table over B1–B4 signals and S1–S4 sources — a measured answer to "why doesn't the loop close", replacing the starvation guess with a pairing diagnosis. |
+| Boundary-ts discipline | Every non-metric-neutral instrument change stamps an epoch-ms boundary in the adoption ledger; readings never pool across a boundary (9 stamped boundaries and counting). |
+| Standing rules earned in this era | Activated-state suite proof for env-gated arms · bar-feasibility pre-check before building to a bar · read the dependency's own types, then measure on the wire, then assert · execute-proof over review for enforcement points. |
+
 ### Dormant / rejected-for-now
 
 Phase-0 self-score transport (gate found it undersized) · best-of-N / verify-retry (evaluated,
 deferred per AHE ablations) · SPRT sequential gate (deferred, §7.5) · packer-flip + back-pressure
 (blocked on cgroup bug) · qemu-startup + pytorch-model-recovery env fixes (deferred, band
-unaffected).
+unaffected) · `--bare` Agent-SDK mode (bills API rates — defeats the credit-pool rationale;
+GA13) · git `pre-merge-commit` hook as 7b enforcement (provably unsound: ort merge never
+materializes MERGE_HEAD) · blind-opus gauge anti-over-extraction patch (audit finding stands,
+patch rejected; GA11).
 
 ---
 
@@ -229,3 +251,76 @@ binding actuator went design → lift-certification (p=0.0031) → adoption → 
 same-day grip-fix verification (G1) — so the body works when humans drive the crank; what
 remains unproven is the machine driving it (v11 frozen, §4.3/§4.4 unbuilt) and whether gate
 outcomes can be trusted as its reward signal (false-accept calibration = the gating question).
+
+---
+
+## Part 2 — RE-AUDIT DELTA 2026-08-06 (GA/probes era: instrument + transports + seats + process gates, GA6–GA14 + loop-fix probes)
+
+*The 07-23 and 07-27 sections above are preserved as snapshots. Everything below is the
+2026-07-28 → 08-05 arc (HISTORY.md GA6–GA14 + the loop-fix probe program), audited against the
+repo's own records (adoption ledger, specs, docs/reviews, gate-outcomes telemetry) plus a
+host-runtime evidence sweep on yoo-mac.*
+
+### PROVEN — new since 07-27
+
+| Technique | Evidence |
+|---|---|
+| **Two-tier gate check** | Deployed both hosts (ts 1785888548054); gated-Stop `durationMs` mean **108,733 → 4,943 ms (~22x)**, confirmed by the S4 erratum after a denominator bug was caught and fixed (`198184e`). Same-day plan → SDD → review → merge. |
+| **pv as a transport-comparability instrument, BOTH directions** | §6c cli-vs-sdk returned **SPLIT** (0.625 < 0.80 — the bar fired exactly as pre-registered, readings stay split forever); §6d sdk-vs-agent-sdk returned **POOLING-PERMITTED at the exact bar edge** (4/5 = 0.800, missed-C 1 = cap, wrongTransport 0). One instrument, one honest verdict each way. |
+| **§6c direct-API derive transport** | Adopted default both hosts: ~28k CC-harness tokens per derive → ~0.7–3k, no behavior regression (GA12 boundary ts). |
+| **Wire measurement settles what docs cannot** | Caught the Agent SDK shipping our own auto-memory into every classification (10,693 B → 1,563 B after isolation), the `/clear` third result frame, `--bare`'s silent auth switch to API billing, and the 1-call-per-query answer — each one reversed a written verdict (GA13). |
+| **7b merge gate blocks live** | Mechanically blocked a merge whose artifact named the wrong merge-base (this repo, 08-04 MacBook session) — the floor works on its own author. |
+| **Execute-proof over review for enforcement points** | `pre-merge-commit` hook proven unsound by execution (ort merge never materializes MERGE_HEAD — hook fires blind and passes); no review round had caught it. |
+| **Activated-state suite rule** | Born from v2 activation silently breaking 2 tests (2026-08-01); applied AHEAD of the warm-lane flips on both hosts — zero repeats. |
+| **Cross-platform suite re-run discipline** | First darwin re-run after the ACP merges caught 35 silent failures with ONE root cause (AF_UNIX `sun_path` 104 B cap → dead sockets → tests silently degraded into fallback legs) — a class invisible on the build host. |
+| **Warm-session RSS sizing method** | Process-tree sweep, platform-branched (/proc vs ps/vm_stat), measured ≈330 MB/session on BOTH host classes; recycle flat; caps held at 4 with the 8-cap explicitly refused on the 16 GB host. |
+| **Gauntlet loop as PROCESS** | Fresh-context critics + frozen bars + ≤2 gap rounds: caught real defects in both transplant loops and rejected both candidates on their own bars (0 merges / 2 drops) — EMPLOYED as standing practice for adoption-grade decisions; the transplants themselves died correctly. |
+| **Loop-fix probe program (P0/P1/E)** | Replaced a wrong standing diagnosis with a measured one: B2 review-findings is the ONLY viable signal (sd/mean 1.41), density exists (62.6 Stops/day), and the blocker is **pairing** — the viable signal rides the one starved source (S3, 1.43/day; 245 days) while capacity pairings (b2×s1/s2) would verdict in 6–7 days. |
+| **B3 binarization** | Gauge classes admitted as a signal: D-vs-rest on measured emission cadence 18.26/day — d=0.30 reachable in 5 days. |
+
+### DISPROVEN — new since 07-27
+
+- **"The loop is starved of events"** — STALE diagnosis. S1 62.57 Stops/day, S2 55.43
+  commits/day; the starvation is confined to S3 (review-adds, 1.43/day). Pairing, not density.
+- **"The two-tier gate cut sensor emission ~25x"** — denominator bug (S4 erratum): emission
+  slightly ROSE; the real effect is 22x faster Stops.
+- **"Agent-SDK harness residue changes classifications vs the API SDK"** — §6d pv says
+  pooling-permitted (at the edge, zero slack — kept under per-caller selection anyway).
+- **`--bare` as a residue fix** — authenticates by API key = API billing; defeats the entire
+  credit-pool rationale (GA13, measured on the wire).
+- **Git hooks as merge-gate enforcement** — provably unsound placement (see PROVEN).
+- **Stored gauge C-labels as ground truth** — blind-opus audit: stored C-precision 9/13 ≈ 69%
+  (over-extraction); the correcting patch itself was rejected, the finding stands (GA11).
+- **Resume prose as cross-session state** — two stale-resume incidents on one plan (Tasks 6-7
+  "untouched", Task 8 "not run" — both had already run). SDD ledger + committed artifacts are
+  the truth; resume.md drifts.
+
+### UNPROVEN — the live frontier (2026-08-06)
+
+- **The machine-authored end-to-end win** — STILL the open question from 07-23 and 07-27,
+  unchanged. Now with a measured path: a b2×s1/s2 pairing verdicts in 6–7 days if the
+  review-sensor synthesis (spec SOUND, unbuilt) lands.
+- **Warm lane VALUE** — activated both hosts, `/clear`-recycling proven at the mechanism level,
+  but **zero live seat calls have exercised it** (no daemon artifacts on yoo-mac; the daily
+  proposer spawns that would have driven it failed 4/4 on a PATH bug, fixed `87d4937` —
+  evidence supply restored, verdict pending).
+- **Evidence-consuming machinery built ahead of its supply** (the era's recurring failure
+  shape): reinject v2 (11 runs, verdict OPEN, fixtures=0) · M1v2 corpus floor (official
+  reading 0/0) · cls-ab (0 labels) · channel ladder + C4 (base rate never measured, nudge
+  inert) · fixture harvest (0 organic blocks) · §4.3 trial mode (A/A checkpoint never
+  reached) · Path A seed tournament (no tally committed). Each is individually sound and
+  collectively idle for the same reason: the loop's organic event flow hasn't fed them.
+- **§6e daemon as a DERIVE transport** — literal registered, bar declared powerless pre-data,
+  never run (distinct from the seat lane, which is active).
+- **Review-sensor synthesis + P2 actuator-binding** — specs reviewed-to-SOUND, unbuilt,
+  each needs its own go.
+- (Carried: cross-family judge check unrun; SPRT deferred; mid-arm curtailment unexercised.)
+
+### Scoreboard, one sentence (2026-08-06)
+
+The organs multiplied and every new one is individually proven — the gauge measures, pv
+compares honestly in both directions, the transports are cheap, the process gates block their
+own author, and the two-tier gate gave the loop its cadence back — but the 07-27 headline is
+unchanged: no machine-driven adoption yet, and the probe program has now shown exactly why —
+the one viable signal rides the one starved source, so the next move is pairing (review-sensor
+synthesis), not more rigor and not more machinery.
