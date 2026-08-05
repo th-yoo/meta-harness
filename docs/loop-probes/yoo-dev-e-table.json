@@ -1,0 +1,364 @@
+{
+  "spec": "docs/superpowers/specs/2026-08-05-loop-fix-probe-program-design.md",
+  "generatedAtTs": 1785905971107,
+  "hostname": "yoo-dev",
+  "inputs": {
+    "p0": "/home/th-yoo/z2/meta-harness/.claude/worktrees/loop-probes/docs/loop-probes/yoo-dev-p0-signal-variance.json",
+    "p1": "/home/th-yoo/z2/meta-harness/.claude/worktrees/loop-probes/docs/loop-probes/yoo-dev-p1-event-density.json"
+  },
+  "crosses": [
+    {
+      "signal": "b2",
+      "source": "s1",
+      "family": "count",
+      "p1OrMoments": {
+        "mean": 4.2,
+        "sd": 5.921711464320654
+      },
+      "effects": [
+        {
+          "effect": 0.1,
+          "nPerArm": 1568,
+          "floored": 1568,
+          "daysToVerdict": 51
+        },
+        {
+          "effect": 0.2,
+          "nPerArm": 392,
+          "floored": 392,
+          "daysToVerdict": 13
+        },
+        {
+          "effect": 0.3,
+          "nPerArm": 175,
+          "floored": 175,
+          "daysToVerdict": 6
+        },
+        {
+          "effect": 0.4,
+          "nPerArm": 98,
+          "floored": 98,
+          "daysToVerdict": 4
+        }
+      ],
+      "passesBarAt030": true,
+      "meaningful": false,
+      "reason": "signal does not ride this source today"
+    },
+    {
+      "signal": "b2",
+      "source": "s2:this-repo",
+      "family": "count",
+      "p1OrMoments": {
+        "mean": 4.2,
+        "sd": 5.921711464320654
+      },
+      "effects": [
+        {
+          "effect": 0.1,
+          "nPerArm": 1568,
+          "floored": 1568,
+          "daysToVerdict": 57
+        },
+        {
+          "effect": 0.2,
+          "nPerArm": 392,
+          "floored": 392,
+          "daysToVerdict": 15
+        },
+        {
+          "effect": 0.3,
+          "nPerArm": 175,
+          "floored": 175,
+          "daysToVerdict": 7
+        },
+        {
+          "effect": 0.4,
+          "nPerArm": 98,
+          "floored": 98,
+          "daysToVerdict": 4
+        }
+      ],
+      "passesBarAt030": true,
+      "meaningful": false,
+      "reason": "signal does not ride this source today"
+    },
+    {
+      "signal": "b2",
+      "source": "s2:kkamak",
+      "family": "count",
+      "p1OrMoments": {
+        "mean": 4.2,
+        "sd": 5.921711464320654
+      },
+      "effects": [
+        {
+          "effect": 0.1,
+          "nPerArm": 1568,
+          "floored": 1568,
+          "daysToVerdict": 297
+        },
+        {
+          "effect": 0.2,
+          "nPerArm": 392,
+          "floored": 392,
+          "daysToVerdict": 75
+        },
+        {
+          "effect": 0.3,
+          "nPerArm": 175,
+          "floored": 175,
+          "daysToVerdict": 34
+        },
+        {
+          "effect": 0.4,
+          "nPerArm": 98,
+          "floored": 98,
+          "daysToVerdict": 19
+        }
+      ],
+      "passesBarAt030": false,
+      "meaningful": false,
+      "reason": "signal does not ride this source today"
+    },
+    {
+      "signal": "b2",
+      "source": "s3",
+      "family": "count",
+      "p1OrMoments": {
+        "mean": 4.2,
+        "sd": 5.921711464320654
+      },
+      "effects": [
+        {
+          "effect": 0.1,
+          "nPerArm": 1568,
+          "floored": 1568,
+          "daysToVerdict": 2196
+        },
+        {
+          "effect": 0.2,
+          "nPerArm": 392,
+          "floored": 392,
+          "daysToVerdict": 549
+        },
+        {
+          "effect": 0.3,
+          "nPerArm": 175,
+          "floored": 175,
+          "daysToVerdict": 245
+        },
+        {
+          "effect": 0.4,
+          "nPerArm": 98,
+          "floored": 98,
+          "daysToVerdict": 138
+        }
+      ],
+      "passesBarAt030": false,
+      "meaningful": true
+    },
+    {
+      "signal": "b4",
+      "source": "s1",
+      "family": "rate",
+      "p1OrMoments": {
+        "p1": 0.6470588235294118
+      },
+      "effects": [
+        {
+          "effect": 0.1,
+          "nPerArm": 330,
+          "floored": 330,
+          "daysToVerdict": 11
+        },
+        {
+          "effect": 0.2,
+          "nPerArm": 73,
+          "floored": 73,
+          "daysToVerdict": 3
+        },
+        {
+          "effect": 0.3,
+          "nPerArm": 27,
+          "floored": 27,
+          "daysToVerdict": 1
+        },
+        {
+          "effect": 0.4,
+          "nPerArm": 14,
+          "floored": 20,
+          "daysToVerdict": 1
+        }
+      ],
+      "passesBarAt030": true,
+      "meaningful": false,
+      "reason": "signal does not ride this source today"
+    },
+    {
+      "signal": "b4",
+      "source": "s2:this-repo",
+      "family": "rate",
+      "p1OrMoments": {
+        "p1": 0.6470588235294118
+      },
+      "effects": [
+        {
+          "effect": 0.1,
+          "nPerArm": 330,
+          "floored": 330,
+          "daysToVerdict": 12
+        },
+        {
+          "effect": 0.2,
+          "nPerArm": 73,
+          "floored": 73,
+          "daysToVerdict": 3
+        },
+        {
+          "effect": 0.3,
+          "nPerArm": 27,
+          "floored": 27,
+          "daysToVerdict": 1
+        },
+        {
+          "effect": 0.4,
+          "nPerArm": 14,
+          "floored": 20,
+          "daysToVerdict": 1
+        }
+      ],
+      "passesBarAt030": true,
+      "meaningful": false,
+      "reason": "signal does not ride this source today"
+    },
+    {
+      "signal": "b4",
+      "source": "s2:kkamak",
+      "family": "rate",
+      "p1OrMoments": {
+        "p1": 0.6470588235294118
+      },
+      "effects": [
+        {
+          "effect": 0.1,
+          "nPerArm": 330,
+          "floored": 330,
+          "daysToVerdict": 63
+        },
+        {
+          "effect": 0.2,
+          "nPerArm": 73,
+          "floored": 73,
+          "daysToVerdict": 14
+        },
+        {
+          "effect": 0.3,
+          "nPerArm": 27,
+          "floored": 27,
+          "daysToVerdict": 6
+        },
+        {
+          "effect": 0.4,
+          "nPerArm": 14,
+          "floored": 20,
+          "daysToVerdict": 4
+        }
+      ],
+      "passesBarAt030": true,
+      "meaningful": false,
+      "reason": "signal does not ride this source today"
+    },
+    {
+      "signal": "b4",
+      "source": "s3",
+      "family": "rate",
+      "p1OrMoments": {
+        "p1": 0.6470588235294118
+      },
+      "effects": [
+        {
+          "effect": 0.1,
+          "nPerArm": 330,
+          "floored": 330,
+          "daysToVerdict": 462
+        },
+        {
+          "effect": 0.2,
+          "nPerArm": 73,
+          "floored": 73,
+          "daysToVerdict": 103
+        },
+        {
+          "effect": 0.3,
+          "nPerArm": 27,
+          "floored": 27,
+          "daysToVerdict": 38
+        },
+        {
+          "effect": 0.4,
+          "nPerArm": 14,
+          "floored": 20,
+          "daysToVerdict": 28
+        }
+      ],
+      "passesBarAt030": false,
+      "meaningful": false,
+      "reason": "signal does not ride this source today"
+    }
+  ],
+  "excluded": [
+    {
+      "type": "p0-signal",
+      "label": "b1.accepted",
+      "family": "boolean",
+      "viability": "UNKNOWN",
+      "reason": "viability = UNKNOWN, not VIABLE"
+    },
+    {
+      "type": "p0-signal",
+      "label": "b1.gateExhausted",
+      "family": "boolean",
+      "viability": "UNKNOWN",
+      "reason": "viability = UNKNOWN, not VIABLE"
+    },
+    {
+      "type": "p0-signal",
+      "label": "b1.roundsLength",
+      "family": "count",
+      "viability": "UNKNOWN",
+      "reason": "viability = UNKNOWN, not VIABLE"
+    },
+    {
+      "type": "p0-signal",
+      "label": "b1.durationMs",
+      "family": "count",
+      "viability": "UNKNOWN",
+      "reason": "viability = UNKNOWN, not VIABLE"
+    },
+    {
+      "type": "p0-signal",
+      "label": "b3.live",
+      "family": "categorical",
+      "viability": "UNKNOWN (binarization undeclared)",
+      "reason": "viability = UNKNOWN (binarization undeclared), not VIABLE"
+    },
+    {
+      "type": "p0-signal",
+      "label": "b3.corpusTranscript",
+      "family": "categorical",
+      "viability": "UNKNOWN (binarization undeclared)",
+      "reason": "viability = UNKNOWN (binarization undeclared), not VIABLE"
+    },
+    {
+      "type": "p1-source",
+      "label": "s4",
+      "reason": "boundary-split view of s1 (same ndjson stream re-segmented), not an independent event source"
+    }
+  ],
+  "verdict": {
+    "meaningfulCrosses": 1,
+    "passing": 0,
+    "verdict": "NO-CONFIG-PASSES"
+  }
+}

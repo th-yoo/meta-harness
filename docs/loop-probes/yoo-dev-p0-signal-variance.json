@@ -1,0 +1,698 @@
+{
+  "spec": "docs/superpowers/specs/2026-08-05-loop-fix-probe-program-design.md",
+  "generatedAtTs": 1785905230449,
+  "hostname": "yoo-dev",
+  "b1": {
+    "source": "/home/th-yoo/z2/meta-harness/.km/gate-outcomes.ndjson",
+    "linesTotal": 480,
+    "boundaries": [
+      1785365222674,
+      1785382986863,
+      1785711630125,
+      1785727963349,
+      1785847012141,
+      1785856371528,
+      1785888548054,
+      1785892022908,
+      1785899174570
+    ],
+    "accepted": {
+      "family": "boolean",
+      "n": 5,
+      "stats": {
+        "n": 5,
+        "trueCount": 5,
+        "falseCount": 0
+      },
+      "segments": [
+        {
+          "index": 0,
+          "boundaryLo": null,
+          "boundaryHi": 1785365222674,
+          "n": 55,
+          "stats": {
+            "n": 55,
+            "trueCount": 55,
+            "falseCount": 0
+          }
+        },
+        {
+          "index": 1,
+          "boundaryLo": 1785365222674,
+          "boundaryHi": 1785382986863,
+          "n": 35,
+          "stats": {
+            "n": 35,
+            "trueCount": 35,
+            "falseCount": 0
+          }
+        },
+        {
+          "index": 2,
+          "boundaryLo": 1785382986863,
+          "boundaryHi": 1785711630125,
+          "n": 116,
+          "stats": {
+            "n": 116,
+            "trueCount": 116,
+            "falseCount": 0
+          }
+        },
+        {
+          "index": 3,
+          "boundaryLo": 1785711630125,
+          "boundaryHi": 1785727963349,
+          "n": 61,
+          "stats": {
+            "n": 61,
+            "trueCount": 59,
+            "falseCount": 2
+          }
+        },
+        {
+          "index": 4,
+          "boundaryLo": 1785727963349,
+          "boundaryHi": 1785847012141,
+          "n": 182,
+          "stats": {
+            "n": 182,
+            "trueCount": 179,
+            "falseCount": 3
+          }
+        },
+        {
+          "index": 5,
+          "boundaryLo": 1785847012141,
+          "boundaryHi": 1785856371528,
+          "n": 7,
+          "stats": {
+            "n": 7,
+            "trueCount": 7,
+            "falseCount": 0
+          }
+        },
+        {
+          "index": 6,
+          "boundaryLo": 1785856371528,
+          "boundaryHi": 1785888548054,
+          "n": 7,
+          "stats": {
+            "n": 7,
+            "trueCount": 7,
+            "falseCount": 0
+          }
+        },
+        {
+          "index": 7,
+          "boundaryLo": 1785888548054,
+          "boundaryHi": 1785892022908,
+          "n": 3,
+          "stats": {
+            "n": 3,
+            "trueCount": 3,
+            "falseCount": 0
+          }
+        },
+        {
+          "index": 8,
+          "boundaryLo": 1785892022908,
+          "boundaryHi": 1785899174570,
+          "n": 9,
+          "stats": {
+            "n": 9,
+            "trueCount": 9,
+            "falseCount": 0
+          }
+        },
+        {
+          "index": 9,
+          "boundaryLo": 1785899174570,
+          "boundaryHi": null,
+          "n": 5,
+          "stats": {
+            "n": 5,
+            "trueCount": 5,
+            "falseCount": 0
+          }
+        }
+      ],
+      "viability": "UNKNOWN"
+    },
+    "gateExhausted": {
+      "family": "boolean",
+      "n": 5,
+      "stats": {
+        "n": 5,
+        "trueCount": 0,
+        "falseCount": 5
+      },
+      "segments": [
+        {
+          "index": 0,
+          "boundaryLo": null,
+          "boundaryHi": 1785365222674,
+          "n": 55,
+          "stats": {
+            "n": 55,
+            "trueCount": 0,
+            "falseCount": 55
+          }
+        },
+        {
+          "index": 1,
+          "boundaryLo": 1785365222674,
+          "boundaryHi": 1785382986863,
+          "n": 35,
+          "stats": {
+            "n": 35,
+            "trueCount": 0,
+            "falseCount": 35
+          }
+        },
+        {
+          "index": 2,
+          "boundaryLo": 1785382986863,
+          "boundaryHi": 1785711630125,
+          "n": 116,
+          "stats": {
+            "n": 116,
+            "trueCount": 0,
+            "falseCount": 116
+          }
+        },
+        {
+          "index": 3,
+          "boundaryLo": 1785711630125,
+          "boundaryHi": 1785727963349,
+          "n": 61,
+          "stats": {
+            "n": 61,
+            "trueCount": 0,
+            "falseCount": 61
+          }
+        },
+        {
+          "index": 4,
+          "boundaryLo": 1785727963349,
+          "boundaryHi": 1785847012141,
+          "n": 182,
+          "stats": {
+            "n": 182,
+            "trueCount": 1,
+            "falseCount": 181
+          }
+        },
+        {
+          "index": 5,
+          "boundaryLo": 1785847012141,
+          "boundaryHi": 1785856371528,
+          "n": 7,
+          "stats": {
+            "n": 7,
+            "trueCount": 0,
+            "falseCount": 7
+          }
+        },
+        {
+          "index": 6,
+          "boundaryLo": 1785856371528,
+          "boundaryHi": 1785888548054,
+          "n": 7,
+          "stats": {
+            "n": 7,
+            "trueCount": 0,
+            "falseCount": 7
+          }
+        },
+        {
+          "index": 7,
+          "boundaryLo": 1785888548054,
+          "boundaryHi": 1785892022908,
+          "n": 3,
+          "stats": {
+            "n": 3,
+            "trueCount": 0,
+            "falseCount": 3
+          }
+        },
+        {
+          "index": 8,
+          "boundaryLo": 1785892022908,
+          "boundaryHi": 1785899174570,
+          "n": 9,
+          "stats": {
+            "n": 9,
+            "trueCount": 0,
+            "falseCount": 9
+          }
+        },
+        {
+          "index": 9,
+          "boundaryLo": 1785899174570,
+          "boundaryHi": null,
+          "n": 5,
+          "stats": {
+            "n": 5,
+            "trueCount": 0,
+            "falseCount": 5
+          }
+        }
+      ],
+      "viability": "UNKNOWN"
+    },
+    "roundsLength": {
+      "family": "count",
+      "n": 5,
+      "stats": {
+        "n": 5,
+        "mean": 0.8,
+        "sd": 0.44721359549995804
+      },
+      "segments": [
+        {
+          "index": 0,
+          "boundaryLo": null,
+          "boundaryHi": 1785365222674,
+          "n": 55,
+          "stats": {
+            "n": 55,
+            "mean": 0.7090909090909091,
+            "sd": 0.45836776730155215
+          }
+        },
+        {
+          "index": 1,
+          "boundaryLo": 1785365222674,
+          "boundaryHi": 1785382986863,
+          "n": 35,
+          "stats": {
+            "n": 35,
+            "mean": 0.5142857142857142,
+            "sd": 0.5070925528371099
+          }
+        },
+        {
+          "index": 2,
+          "boundaryLo": 1785382986863,
+          "boundaryHi": 1785711630125,
+          "n": 116,
+          "stats": {
+            "n": 116,
+            "mean": 0.5344827586206896,
+            "sd": 0.5009735649149845
+          }
+        },
+        {
+          "index": 3,
+          "boundaryLo": 1785711630125,
+          "boundaryHi": 1785727963349,
+          "n": 61,
+          "stats": {
+            "n": 61,
+            "mean": 0.4918032786885246,
+            "sd": 0.7216405111427743
+          }
+        },
+        {
+          "index": 4,
+          "boundaryLo": 1785727963349,
+          "boundaryHi": 1785847012141,
+          "n": 182,
+          "stats": {
+            "n": 182,
+            "mean": 0.5164835164835165,
+            "sd": 0.6194390148327419
+          }
+        },
+        {
+          "index": 5,
+          "boundaryLo": 1785847012141,
+          "boundaryHi": 1785856371528,
+          "n": 7,
+          "stats": {
+            "n": 7,
+            "mean": 0.7142857142857143,
+            "sd": 0.48795003647426666
+          }
+        },
+        {
+          "index": 6,
+          "boundaryLo": 1785856371528,
+          "boundaryHi": 1785888548054,
+          "n": 7,
+          "stats": {
+            "n": 7,
+            "mean": 0.2857142857142857,
+            "sd": 0.4879500364742666
+          }
+        },
+        {
+          "index": 7,
+          "boundaryLo": 1785888548054,
+          "boundaryHi": 1785892022908,
+          "n": 3,
+          "stats": {
+            "n": 3,
+            "mean": 0.6666666666666666,
+            "sd": 0.5773502691896258
+          }
+        },
+        {
+          "index": 8,
+          "boundaryLo": 1785892022908,
+          "boundaryHi": 1785899174570,
+          "n": 9,
+          "stats": {
+            "n": 9,
+            "mean": 0.4444444444444444,
+            "sd": 0.5270462766947299
+          }
+        },
+        {
+          "index": 9,
+          "boundaryLo": 1785899174570,
+          "boundaryHi": null,
+          "n": 5,
+          "stats": {
+            "n": 5,
+            "mean": 0.8,
+            "sd": 0.44721359549995804
+          }
+        }
+      ],
+      "viability": "UNKNOWN"
+    },
+    "durationMs": {
+      "family": "count",
+      "n": 5,
+      "stats": {
+        "n": 5,
+        "mean": 2662.8,
+        "sd": 5541.712794795487
+      },
+      "segments": [
+        {
+          "index": 0,
+          "boundaryLo": null,
+          "boundaryHi": 1785365222674,
+          "n": 55,
+          "stats": {
+            "n": 55,
+            "mean": 3577.7272727272725,
+            "sd": 2320.1098509636827
+          }
+        },
+        {
+          "index": 1,
+          "boundaryLo": 1785365222674,
+          "boundaryHi": 1785382986863,
+          "n": 35,
+          "stats": {
+            "n": 35,
+            "mean": 3020.8285714285716,
+            "sd": 2979.9524521050203
+          }
+        },
+        {
+          "index": 2,
+          "boundaryLo": 1785382986863,
+          "boundaryHi": 1785711630125,
+          "n": 116,
+          "stats": {
+            "n": 116,
+            "mean": 4754.267241379311,
+            "sd": 3737.423102847756
+          }
+        },
+        {
+          "index": 3,
+          "boundaryLo": 1785711630125,
+          "boundaryHi": 1785727963349,
+          "n": 61,
+          "stats": {
+            "n": 61,
+            "mean": 461890.8524590164,
+            "sd": 3291484.3928399524
+          }
+        },
+        {
+          "index": 4,
+          "boundaryLo": 1785727963349,
+          "boundaryHi": 1785847012141,
+          "n": 182,
+          "stats": {
+            "n": 182,
+            "mean": 85923.10989010989,
+            "sd": 231903.64635162835
+          }
+        },
+        {
+          "index": 5,
+          "boundaryLo": 1785847012141,
+          "boundaryHi": 1785856371528,
+          "n": 7,
+          "stats": {
+            "n": 7,
+            "mean": 132145.57142857142,
+            "sd": 58347.55046231487
+          }
+        },
+        {
+          "index": 6,
+          "boundaryLo": 1785856371528,
+          "boundaryHi": 1785888548054,
+          "n": 7,
+          "stats": {
+            "n": 7,
+            "mean": 44831.142857142855,
+            "sd": 76585.95633323508
+          }
+        },
+        {
+          "index": 7,
+          "boundaryLo": 1785888548054,
+          "boundaryHi": 1785892022908,
+          "n": 3,
+          "stats": {
+            "n": 3,
+            "mean": 7855.333333333333,
+            "sd": 13415.761824560443
+          }
+        },
+        {
+          "index": 8,
+          "boundaryLo": 1785892022908,
+          "boundaryHi": 1785899174570,
+          "n": 9,
+          "stats": {
+            "n": 9,
+            "mean": 5238.777777777777,
+            "sd": 10257.32222338971
+          }
+        },
+        {
+          "index": 9,
+          "boundaryLo": 1785899174570,
+          "boundaryHi": null,
+          "n": 5,
+          "stats": {
+            "n": 5,
+            "mean": 2662.8,
+            "sd": 5541.712794795487
+          }
+        }
+      ],
+      "viability": "UNKNOWN"
+    }
+  },
+  "b1Foreign": {
+    "source": "/home/th-yoo/z2/kkamak/.km/gate-outcomes.ndjson",
+    "linesTotal": 68,
+    "splitBoundary": 1785711630125,
+    "regimes": [
+      {
+        "key": "0.2.0@0",
+        "n": 10,
+        "accepted": {
+          "n": 10,
+          "trueCount": 10,
+          "falseCount": 0
+        },
+        "gateExhausted": {
+          "n": 10,
+          "trueCount": 0,
+          "falseCount": 10
+        },
+        "roundsLength": {
+          "n": 10,
+          "mean": 1.3,
+          "sd": 0.6749485577105528
+        },
+        "durationMs": {
+          "n": 10,
+          "mean": 64735.6,
+          "sd": 135922.0460371802
+        }
+      },
+      {
+        "key": "0.2.1@0",
+        "n": 51,
+        "accepted": {
+          "n": 51,
+          "trueCount": 51,
+          "falseCount": 0
+        },
+        "gateExhausted": {
+          "n": 51,
+          "trueCount": 0,
+          "falseCount": 51
+        },
+        "roundsLength": {
+          "n": 51,
+          "mean": 0.47058823529411764,
+          "sd": 0.5423261445466402
+        },
+        "durationMs": {
+          "n": 51,
+          "mean": 1100.3529411764705,
+          "sd": 4846.214328002961
+        }
+      },
+      {
+        "key": "0.2.1@1",
+        "n": 7,
+        "accepted": {
+          "n": 7,
+          "trueCount": 7,
+          "falseCount": 0
+        },
+        "gateExhausted": {
+          "n": 7,
+          "trueCount": 0,
+          "falseCount": 7
+        },
+        "roundsLength": {
+          "n": 7,
+          "mean": 0.8571428571428571,
+          "sd": 0.37796447300922725
+        },
+        "durationMs": {
+          "n": 7,
+          "mean": 2071.8571428571427,
+          "sd": 914.4385214566421
+        }
+      }
+    ],
+    "viability": null
+  },
+  "b2": {
+    "family": "count",
+    "source": "/home/th-yoo/z2/meta-harness/.claude/worktrees/loop-probes/docs/reviews",
+    "n": 10,
+    "stats": {
+      "n": 10,
+      "mean": 4.2,
+      "sd": 5.921711464320654
+    },
+    "files": [
+      {
+        "file": "06688fd-cls-combine-hardgate.md",
+        "addedDateIso": "2026-08-03T15:16:10+09:00",
+        "findingsCount": 1
+      },
+      {
+        "file": "1c917fa-transport-dedup.md",
+        "addedDateIso": "2026-08-03T15:03:40+09:00",
+        "findingsCount": 0
+      },
+      {
+        "file": "65626ba-agent-sdk-transport.md",
+        "addedDateIso": "2026-08-04T09:22:48+09:00",
+        "findingsCount": 12
+      },
+      {
+        "file": "81fe22c-fix-darwin-sock-len.md",
+        "addedDateIso": "2026-08-04T23:48:14+09:00",
+        "findingsCount": 0
+      },
+      {
+        "file": "95cfa82-acp-session-pool.md",
+        "addedDateIso": "2026-08-04T21:33:51+09:00",
+        "findingsCount": 16
+      },
+      {
+        "file": "9663129-wire-warm-lane.md",
+        "addedDateIso": "2026-08-04T22:14:26+09:00",
+        "findingsCount": 1
+      },
+      {
+        "file": "9e3b062-two-tier-gate-check.md",
+        "addedDateIso": "2026-08-05T09:48:07+09:00",
+        "findingsCount": 9
+      },
+      {
+        "file": "bac9b28-gate-7b-build.md",
+        "addedDateIso": "2026-08-03T13:48:24+09:00",
+        "findingsCount": 3
+      },
+      {
+        "file": "ca2e689-darwin-rss-measure.md",
+        "addedDateIso": "2026-08-05T00:11:59+09:00",
+        "findingsCount": 0
+      },
+      {
+        "file": "d213353-gauge-channel-ladder.md",
+        "addedDateIso": "2026-08-03T14:39:39+09:00",
+        "findingsCount": 0
+      }
+    ],
+    "viability": "VIABLE"
+  },
+  "b3": {
+    "family": "categorical",
+    "skipped": false,
+    "binarization": "undeclared",
+    "source": "/home/th-yoo/z2/meta-harness",
+    "provenance": {
+      "live": {
+        "n": 107,
+        "stats": {
+          "n": 107,
+          "classes": {
+            "A1": 38,
+            "A2": 35,
+            "B": 6,
+            "C": 1,
+            "D": 27
+          }
+        },
+        "viability": "UNKNOWN (binarization undeclared)"
+      },
+      "corpusTranscript": {
+        "n": 407,
+        "stats": {
+          "n": 407,
+          "classes": {
+            "A1": 68,
+            "A2": 127,
+            "B": 17,
+            "C": 21,
+            "D": 174
+          }
+        },
+        "viability": "UNKNOWN (binarization undeclared)"
+      }
+    }
+  },
+  "b4": {
+    "family": "rate",
+    "arm": "candidate",
+    "source": "/home/th-yoo/z2/meta-harness/.claude/worktrees/loop-probes/term-bench2/store/global/candidates/v1/ab-verdict.json",
+    "n": 34,
+    "stats": {
+      "successes": 22,
+      "failures": 12
+    },
+    "viability": "VIABLE"
+  }
+}

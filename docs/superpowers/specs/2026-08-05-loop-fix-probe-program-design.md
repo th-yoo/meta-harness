@@ -211,3 +211,72 @@ Cannot fix anything by itself — it selects which fixes earn a build.
 Cannot lower rigor bars (E changes the channel, not the bar). Cannot
 adopt: every next step (P2 spec, hook build, sweep scheduler, synthesis
 design) is a separate user-ruled go.
+
+## Results — office run 2026-08-05 (appended per §3; data: docs/loop-probes/yoo-dev-*.json)
+
+### P0 viability, per signal
+
+- **b1.accepted** — UNKNOWN (latest-segment n=5, trueCount=5, falseCount=0)
+- **b1.gateExhausted** — UNKNOWN (latest-segment n=5, trueCount=0, falseCount=5)
+- **b1.roundsLength** — UNKNOWN (latest-segment n=5, mean=0.8, sd=0.44721359549995804 ≈0.45)
+- **b1.durationMs** — UNKNOWN (latest-segment n=5, mean=2662.8, sd=5541.712794795487 ≈5541.71)
+- **b2 review findings** — VIABLE (count family, n=10, mean=4.2, sd=5.921711464320654 ≈5.92)
+- **b3.live** — UNKNOWN (binarization undeclared) (n=107, classes A1=38, A2=35, B=6, C=1, D=27)
+- **b3.corpusTranscript** — UNKNOWN (binarization undeclared) (n=407, classes A1=68, A2=127, B=17, C=21, D=174)
+- **b4 TB2 band pass@k (arm=candidate)** — VIABLE (rate family, n=34, successes=22, failures=12 → 22/34)
+
+### P1 events/day, per source
+
+- **s1 gated Stops/day** — eventsPerDay = 62.57142857142857 ≈62.57 (n=438 over 7-day window 2026-07-29→2026-08-05)
+- **s2 commits/day, per repo**:
+  - this-repo (worktree-loop-probes branch): commitsPerDay = 55.42857142857143 ≈55.43 (388 commits)
+  - kkamak (main branch): commitsPerDay = 10.571428571428571 ≈10.57 (74 commits)
+- **s3 review passes/day** — addsPerDay = 1.4285714285714286 ≈1.43 (10 files over the window; byDay 2026-08-03:4, 2026-08-04:5, 2026-08-05:1)
+- **s4 post-two-tier turn shift (note)** — boundary ts 1785888548054, live in window: pre-boundary segment n=421, linesPerDay=60.142857142857146 ≈60.14, durationMs mean=108733.47505938243 ≈108733.48 sd=1262408.391004921 ≈1262408.39; post-boundary segment n=17, linesPerDay=2.4285714285714284 ≈2.43, durationMs mean=4942.882352941177 ≈4942.88 sd=9276.10473125946 ≈9276.10
+
+### E table — days-to-verdict by signal × source × effect size
+
+| signal | source | days@0.10 | days@0.20 | days@0.30 | days@0.40 | meaningful | passesBarAt030 |
+|---|---|---|---|---|---|---|---|
+| b2 | s1 | 51 | 13 | 6 | 4 | false | true |
+| b2 | s2:this-repo | 57 | 15 | 7 | 4 | false | true |
+| b2 | s2:kkamak | 297 | 75 | 34 | 19 | false | false |
+| b2 | s3 | 2196 | 549 | 245 | 138 | true | false |
+| b4 | s1 | 11 | 3 | 1 | 1 | false | true |
+| b4 | s2:this-repo | 12 | 3 | 1 | 1 | false | true |
+| b4 | s2:kkamak | 63 | 14 | 6 | 4 | false | true |
+| b4 | s3 | 462 | 103 | 38 | 28 | false | false |
+
+b2 crosses (count family): p1OrMoments mean=4.2, sd=5.921711464320654 ≈5.92. b4 crosses (rate family): p1OrMoments p1=0.6470588235294118 ≈0.65. Only b2×s3 is `meaningful`; its `reason` field is absent (meaningful=true) — all other crosses carry `"reason": "signal does not ride this source today"`. b1 and b3 signals are excluded from E entirely (viability UNKNOWN, per §3's P0-viable-only input); s4 is excluded as a boundary-split view of s1, not an independent source.
+
+### Verdict (verbatim from yoo-dev-e-table.json)
+
+```json
+{
+  "meaningfulCrosses": 1,
+  "passing": 0,
+  "verdict": "NO-CONFIG-PASSES"
+}
+```
+
+The only meaningful pairing (b2×s3) needs 245 days at effect 0.30 vs the 14-day bar.
+
+### Caveats (final-review items, declared)
+
+(a) P0 b1 top-level n/stats reflect the LATEST SEGMENT only (linesTotal 480, latest regime n=5) — read `segments[]` in `docs/loop-probes/yoo-dev-p0-signal-variance.json` for history across all 10 segments (n ranging 3–182 per segment).
+
+(b) B4 pools all 34 repeat-array trials (p1≈0.647), not task-level pass@k (≈13/17) — taxonomy note, verdict-neutral today since every b4 cross is capacity-only (passesBarAt030=true but meaningful=false for every b4 row).
+
+§5 decision: presented to the user by the controller; this spec records data, not the adoption choice.
+
+### Cause mapping — what proved effective, what is fixed, what remains open (2026-08-05, controller record)
+
+| cause (defect) | options probed | verdict from data | status |
+|---|---|---|---|
+| A actuator doesn't bind | NOT probed (P2 was gated on P0) | historical only: prose ignored 7/8 (loop-1) | **OPEN — P2 now unblocked**: outcome signal = B2; needs its own spec + sized go |
+| B constant outcome | B1 gate-outcomes / B2 review findings / B3 gauge classes / B4 TB2 trials | B1 ineffective (UNKNOWN latest regime n=5; historical 1% minority is the defect itself); **B2 EFFECTIVE** (VIABLE, sd/mean 1.41); B3 admissible only after a declared binarization; B4 viable but no source emits bench cadence | **PARTIALLY FIXED**: one real signal exists (B2). B3 ruling + B4 cadence source open |
+| C event starvation | S1 Stops / S2 commits / S3 review-adds / S4 turn-shift | diagnosis STALE: S1 = 62.57/day, S2 = 55.43/day (dense). The starved source is S3 = 1.43/day — exactly the one carrying the viable signal | **REFRAMED**: density exists; the viable signal rides the wrong source |
+| D blind to non-breaking defects | foreign to this program (P3: channel ladder + C4 experiment) | no new data — chain armed, opus-walled | **OPEN — in flight elsewhere** |
+| E rigor unaffordable | E table over P0-viable × P1 sources | pairing, not rigor, is the blocker: meaningful b2×s3 = 245 days (FAIL); capacity b2×s1 ≈ 6 days, b2×s2 ≈ 7 days (would PASS) | **REFRAMED**: bars reachable if the findings signal rides a dense cadence |
+
+**Not yet fixed (open register):** (1) P2 actuator-binding probe — spec + sized go owed; (2) B3 binarization ruling; (3) the pairing move itself — auto-fired review passes at commit/Stop cadence (the review-loop-as-sensor synthesis) is now numerically motivated but UNBUILT and needs its own user-ruled design; (4) D's whole program rides the premium wall. Nothing in this section adopts anything (spec §5/§7 stand).
