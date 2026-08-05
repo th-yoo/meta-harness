@@ -78,6 +78,7 @@ export const KKAMAK_DEV_CHECKS: readonly string[] = [
   "cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test",
   "cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test && cd ../km-crank && bun test",
   "cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test && cd ../km-crank && bun test && cd .. && bun scripts/doc-check.ts",
+  "bun scripts/gate-check.ts",
 ]
 
 const DAY_MS = 24 * 60 * 60 * 1000

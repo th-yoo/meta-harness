@@ -386,3 +386,35 @@ Caveat: n=3 loops, one day — provisional, revisit after the next program.
 - **NOT activated:** the `anthropic-cli-warm` lane (ACP daemon/pool) merged
   in the same range but is UNWIRED — no caller registers it. Wiring it is a
   future explicit decision with its own boundary entry.
+
+## Gate check two-tier deploy (2026-08-05, office `yoo-dev`)
+
+- **Deployed 09:09 KST (ts 1785888548054), office `yoo-dev`.** `gate.json`
+  check swapped from the inline 3-suite string to `bun scripts/gate-check.ts`
+  (design: docs/superpowers/plans/2026-08-05-two-tier-gate-check.md). Blocking
+  tier = package-TIA-scoped fast suites (spawn-heavy cc-gate files excluded,
+  policy regex `SLOW_CCGATE_TEST_RE` in km-crank/src/gate-check-core.ts;
+  changed slow-covered sources pull their matching slow test files back into
+  the blocking tier); conservative fallback runs the incumbent-scope suite
+  set (opencode excluded from fallback — it runs only when TIA selects it);
+  a wedged background run (running marker >15 min old with a live pid) is
+  pid-kill respawned; incumbent full check runs VERBATIM as a detached
+  background run; a red background result blocks the next gated Stop with a
+  synchronous full-run repayment. `KKAMAK_GATE_FULL=1` restores the
+  incumbent behavior exactly.
+- **INSTRUMENT BOUNDARY: gate-outcomes `durationMs`/`checkMs` distributions
+  shift at this ts** (~160s gated Stops drop to ~25-45s typical — including
+  conservative-fallback Stops, whose suite set matches the incumbent scope;
+  Stops whose TIA picks opencode or a slow pull-in add roughly the cost of
+  those suites/files, e.g. opencode ~47s; debt-repayment Stops run ~3min).
+  The `check` field string also changes, so lines partition cleanly by it.
+  Do not pool duration metrics across the boundary. Rounds semantics, block
+  semantics, and the sensor-line schema are unchanged.
+- **Merge gate scope:** scripts/merge-with-gate.sh enforces the review-artifact
+  gate only (check-review-artifact.ts + `git merge --no-ff`) — it never ran
+  full suites. Full-suite proof at merge time comes from the manual pre-merge
+  sanity chain (plan Task 3 Step 5), which keeps its cost.
+- **Office host:** deployed here (`yoo-dev`); `gate.json` is committed so the
+  swap travels with git pull — the other host's (`yoo-mac`) first pulled
+  session inherits it. Same-repo semantics, no per-host activation needed
+  (config, not env).
