@@ -268,3 +268,15 @@ The only meaningful pairing (b2×s3) needs 245 days at effect 0.30 vs the 14-day
 (b) B4 pools all 34 repeat-array trials (p1≈0.647), not task-level pass@k (≈13/17) — taxonomy note, verdict-neutral today since every b4 cross is capacity-only (passesBarAt030=true but meaningful=false for every b4 row).
 
 §5 decision: presented to the user by the controller; this spec records data, not the adoption choice.
+
+### Cause mapping — what proved effective, what is fixed, what remains open (2026-08-05, controller record)
+
+| cause (defect) | options probed | verdict from data | status |
+|---|---|---|---|
+| A actuator doesn't bind | NOT probed (P2 was gated on P0) | historical only: prose ignored 7/8 (loop-1) | **OPEN — P2 now unblocked**: outcome signal = B2; needs its own spec + sized go |
+| B constant outcome | B1 gate-outcomes / B2 review findings / B3 gauge classes / B4 TB2 trials | B1 ineffective (UNKNOWN latest regime n=5; historical 1% minority is the defect itself); **B2 EFFECTIVE** (VIABLE, sd/mean 1.41); B3 admissible only after a declared binarization; B4 viable but no source emits bench cadence | **PARTIALLY FIXED**: one real signal exists (B2). B3 ruling + B4 cadence source open |
+| C event starvation | S1 Stops / S2 commits / S3 review-adds / S4 turn-shift | diagnosis STALE: S1 = 62.57/day, S2 = 55.43/day (dense). The starved source is S3 = 1.43/day — exactly the one carrying the viable signal | **REFRAMED**: density exists; the viable signal rides the wrong source |
+| D blind to non-breaking defects | foreign to this program (P3: channel ladder + C4 experiment) | no new data — chain armed, opus-walled | **OPEN — in flight elsewhere** |
+| E rigor unaffordable | E table over P0-viable × P1 sources | pairing, not rigor, is the blocker: meaningful b2×s3 = 245 days (FAIL); capacity b2×s1 ≈ 6 days, b2×s2 ≈ 7 days (would PASS) | **REFRAMED**: bars reachable if the findings signal rides a dense cadence |
+
+**Not yet fixed (open register):** (1) P2 actuator-binding probe — spec + sized go owed; (2) B3 binarization ruling; (3) the pairing move itself — auto-fired review passes at commit/Stop cadence (the review-loop-as-sensor synthesis) is now numerically motivated but UNBUILT and needs its own user-ruled design; (4) D's whole program rides the premium wall. Nothing in this section adopts anything (spec §5/§7 stand).
