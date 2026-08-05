@@ -26,7 +26,10 @@ the channel base-rate run (`replay-cli channel --go 301`, opus, instrument
 smoke-verified at bar ≥9/12 + nudge proof BEFORE labeling — enforced
 mechanically by `channel-chain.sh`). Population size |C4| is unknown
 pre-data by construction. If |C4| < 10 the experiment is VOID for power and
-only the base rate is reported (pre-declared, mirrors §6d power clause).
+only the base rate is reported (pre-declared, mirrors §6d power clause). When 10 ≤ |C4| < 20 the
+"subset" overlaps most or all of the population — the tier-sensitivity
+read degrades toward "same population, different model" and is reported
+with that caveat; it moves no bar either way (§5 last bullet).
 
 ## 3. Design — three arms, corpus replay, F2
 
@@ -62,27 +65,57 @@ the acknowledged proxy. **k = 1 response per arm per prompt (ruling 5)** —
 single-draw noise acknowledged; the design-doc-only consequence and the
 opus subset are the declared protections.
 
+**Injection surrogate (architect review 2026-08-05, finding 2):** the
+nudge/reject text is delivered by PREPENDING it as its own leading block
+to the user message, above the prompt text, via the corpus-replay SDK
+transport. Production delivers the nudge as hook `additionalContext`
+inside a live CC session — a channel corpus replay cannot reproduce. Same
+TEXT, proxy delivery channel: declared limitation, and it applies equally
+to all three arms' comparability claims.
+
 Then one classification call per response (same channel classifier, opus —
 the smoke-verified instrument, byte-unchanged; ruling 3 explicitly rejects
 extending it): does the RESPONSE state a falsifiable completion criterion
-(maps C1/C2/C3) or none (C4)?
+(maps C2/C3 — this refinement call can never emit C1, which is stamped
+deterministically upstream only) or none (C4)?
 
-**Total calls: 6 × |C4| + 60** — per C4 prompt: 3 haiku responses +
-3 opus classifications; plus the opus subset: 10 × 3 responses +
-10 × 3 classifications (all opus). Sized go computed and reported after
-the base-rate run lands; no spend before that go.
+**Response-domain check (architect review finding 1 — REQUIRED gate):**
+`buildChannelPrompt` frames its input as a "coding-agent task prompt" and
+was smoke-verified on prompt-shaped items only; this experiment feeds it
+RESPONSE-shaped text (restated goals, prose, work product) — out of the
+verified domain. Before any experiment call: a 6-item hand-labeled
+RESPONSE-SHAPED known-answer check (2 restate-with-criterion → expect
+C2/C3, 2 freeform work-product without criterion → expect C4, 2 traps),
+bar ≥5/6. Fails → the classifier is not valid on responses; the
+experiment BLOCKS pending an instrument decision (its own ruling). This
+adds 6 opus calls. A residual shape-bias risk (long work-product vs short
+restatement) is declared even on a pass.
+
+**Opus subset draw (architect review finding 4 — replaces "seeded from
+record ordering"):** real random draw, `cls-ab.ts` `drawNotC` precedent —
+Fisher-Yates over the C4 key list; reproducibility comes from the
+MANIFEST, never from a seed: the drawn keys are written to
+`docs/gauge-channel/<hostname>-c4-subset.json` and committed BEFORE the
+first response call (keys are hashes — F2-clean, same convention as the
+committed pv manifests).
+
+**Total calls: 6 × |C4| + 66** — per C4 prompt: 3 haiku responses +
+3 opus classifications; the opus subset: 10 × 3 responses + 10 × 3
+classifications; the response-domain check: 6 opus. Sized go computed and
+reported after the base-rate run lands; no spend before that go.
 
 ## 4. Outcome metrics (mechanical, pre-registered)
 
-- **conversion(arm)** = fraction of arm responses classified C1/C2/C3
-  (criterion established).
+- **conversion(arm)** = fraction of arm responses classified C2/C3
+  (criterion established; the refinement call never emits C1).
 - **disobedience(reject)** (ruling 3, replacing the original work-loss —
   which was vacuous: an OBEDIENT reject always refuses by construction) =
   fraction of reject-arm responses that ignored the refuse instruction,
   detected MECHANICALLY, zero model calls: a response disobeys iff it
-  lacks all three demanded markers `(1)`/`(2)`/`(3)` OR contains a fenced
-  code block (``` ) — i.e. it started doing work instead of restating.
-  Crude by declaration; counts only.
+  contains FEWER THAN 3 of the demanded markers `(1)`/`(2)`/`(3)`
+  (i.e. missing any one of them counts), OR contains a fenced code block
+  (``` ) — i.e. it started doing work instead of restating. Crude by
+  declaration; counts only.
 - **Over-refusal cost is explicitly OUT OF SCOPE here** (ruling 3): every
   prompt in the population is already C4-labeled, so this experiment
   cannot observe reject firing on a good prompt. That cost lives in the
@@ -121,7 +154,16 @@ the base-rate run lands; no spend before that go.
    disobedience cap), §5.
 5. k: **k=1**, single-draw noise acknowledged.
 
-## 7. What this experiment cannot do
+## 7. Implementation binding (named pre-build — architect finding 8)
+
+The 3-arm runner is `cc-gate-plugin/src/gauge/c4-arms.ts` + a
+`replay-cli.ts c4-arms` subcommand, inheriting `channel-run.ts`'s
+discipline verbatim: cost fence (`--go` must equal the exact planned call
+count, refusal is zero-effect), store lock, F2 (prompt/response text
+stays host-local; counts + key hashes travel), script-tally output json
+under `docs/gauge-channel/`. Built only under the sized go.
+
+## 8. What this experiment cannot do
 
 Cannot measure live-session conversion (corpus replay only; live arming
 data comes later via the ladder spec's own over-refusal window). Cannot

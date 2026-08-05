@@ -14,7 +14,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OUT="docs/gauge-channel/$(hostname)-channel-smoke.json"
-mkdir -p docs/gauge-channel
+mkdir -p docs/gauge-channel .km
+# Durable trace INSIDE the script (architect review 2026-08-05 finding 5):
+# a --go fence refusal must survive tmux death; .km/ is host-local durable
+# (never /tmp — WSL2-volatile). Launch-line tee is optional belt+braces.
+exec > >(tee -a ".km/channel-chain.log") 2>&1
 
 echo "[chain] armed $(date -Is) — probing opus every 10min"
 while true; do
