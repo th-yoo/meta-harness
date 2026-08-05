@@ -280,3 +280,17 @@ The only meaningful pairing (b2×s3) needs 245 days at effect 0.30 vs the 14-day
 | E rigor unaffordable | E table over P0-viable × P1 sources | pairing, not rigor, is the blocker: meaningful b2×s3 = 245 days (FAIL); capacity b2×s1 ≈ 6 days, b2×s2 ≈ 7 days (would PASS) | **REFRAMED**: bars reachable if the findings signal rides a dense cadence |
 
 **Not yet fixed (open register):** (1) P2 actuator-binding probe — spec + sized go owed; (2) B3 binarization ruling; (3) the pairing move itself — auto-fired review passes at commit/Stop cadence (the review-loop-as-sensor synthesis) is now numerically motivated but UNBUILT and needs its own user-ruled design; (4) D's whole program rides the premium wall. Nothing in this section adopts anything (spec §5/§7 stand).
+
+### Erratum — S4 rate denominator (2026-08-05, found by the kkamak-repo session's independent review)
+
+The committed `yoo-dev-p1-event-density.json` S4 segments divide both
+rates by the full 7-day window, but the post-boundary segment spans only
+~0.19 days — read literally it claims the two-tier gate cut line emission
+25×, which is false (span-corrected: pre 421/6.81d ≈ 61.8/day, post
+17/0.19d ≈ 88/day — emission ROSE slightly). The committed snapshot is
+left frozen; `scripts/p1-event-density.ts` now emits span-aware
+`spanDays` + per-segment rates so every future run is correct. The real
+S4 content, span-neutral and worth recording: gated-Stop `durationMs`
+mean fell 108,733 → 4,943 ms across the two-tier boundary — the deploy
+made Stops ~22× faster, exactly as its ledger entry predicted. E table
+unaffected (S4 was excluded as non-independent by design).
