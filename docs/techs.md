@@ -324,3 +324,54 @@ own author, and the two-tier gate gave the loop its cadence back — but the 07-
 unchanged: no machine-driven adoption yet, and the probe program has now shown exactly why —
 the one viable signal rides the one starved source, so the next move is pairing (review-sensor
 synthesis), not more rigor and not more machinery.
+
+---
+
+## Part 3 — Effectiveness ranking (added 2026-08-06)
+
+*Ranked by demonstrated outcome impact — measured effect size or harms concretely prevented —
+cost ignored (that's a different ranking). Sources: the Part-2 audits above, HISTORY.md
+verdict rows, the adoption ledger, gate-outcomes telemetry.*
+
+### Moved task outcomes (the product's actual wins)
+
+| # | Technique | Measured effect |
+|---|---|---|
+| 1 | **A2 completion gate** (binding mechanism actuator) | cancel-async 3/10 → **10/10**, p=0.0031 — largest single outcome flip ever measured here; first perfect arm on that task (R10). |
+| 2 | **A1 system-prompt + seed adoption** | 6/20 → **17/20** (30%→85%), p=0.00106 — largest lift in project history; guards clean; still the active base. |
+| 3 | **G1 coverage-guided probe sites + ≥1-kill rule** | headless exhaustion 7/9 → **0/5** (p≈0.02), median 400 s vs 1000–5000 s — turned a structurally-burning gate into healthy verify-fix loops. |
+| 4 | **v9 lesson injection** (certified, not adopted) | sparql 1/10 → **7/10**, p=0.020 — proved prose grip is content-dependent; rejected on a guard, effect real. |
+
+### Moved system performance
+
+| # | Technique | Measured effect |
+|---|---|---|
+| 5 | **Two-tier gate check** | gated Stops **~22x faster** (durationMs mean 108,733 → 4,943), both hosts, every cycle-ending Stop. |
+| 6 | **§6c direct-API derive transport** | **~10–40x token cut** per derive (~28k CC-harness tokens → ~0.7–3k), both hosts, every Stop. |
+
+### Moved decisions (harms prevented — effectiveness of the negative kind)
+
+| # | Technique | Prevented |
+|---|---|---|
+| 7 | **Adoption gate + guards, both directions** | Every bad adoption ever attempted: v3, v8, v9-on-guard, v10, both Gauntlet transplants. Zero bad adoptions have landed — the most consistently effective control in the repo. |
+| 8 | **Token-free wire probes** | 4+ committed-but-wrong verdicts reversed before they misdirected builds (auto-memory contamination, `/clear` third frame, `--bare` billing switch, call-count). |
+| 9 | **pv instrument** | Silent pooling of non-equivalent transports (§6c SPLIT); passed §6d honestly at the edge — one instrument, one honest verdict each way. |
+| 10 | **Fresh-context reviews + execute-proof** | stderr pipe-deadlock, Bun socket-steal, unsound git-hook enforcement, tautological tests, wrong merge-base artifact, duplicate re-implementation — all pre-merge. |
+| 11 | **Forensics-before-verdict** (R9F) | A wrong mechanism adoption ("4/5 lift" was nudge-text; the probe was unsatisfiable) — zero re-trials spent. |
+| 12 | **darwin re-run + activated-state disciplines** | 35 silent no-call-degraded test failures (one root cause) and the v2-activation suite break — both now standing rules with zero repeats. |
+
+### Effective as instruments (enable the rows above)
+
+km-gauge v2 (shadow classes → B3 signal) · gate-outcomes telemetry (root-caused the Stop
+stall from its own durationMs history) · loop-fix probe program (relocated the loop's blocker
+from rigor/density to signal-source pairing — changed the roadmap).
+
+### Not yet effective, whatever their promise
+
+Warm lane · §6d agent-sdk transport · reinject v2 · fixture harvest · cls-ab · channel
+ladder/C4 · M1v2 · §4.3 trial mode · Path A tournament — zero demonstrated effect to date;
+all await evidence flow (see the 08-06 delta's "built ahead of supply" entry).
+
+**Top line:** the two adopted actuators (A1, A2) and the gate that vetted them are the most
+effective techniques in the project; everything else that is effective is either speed
+(two-tier gate, §6c transport) or error-prevention (probes, reviews, pv, forensics).
