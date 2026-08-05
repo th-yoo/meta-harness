@@ -3,6 +3,30 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION 2026-08-05 cont. (`yoo-dev`) — LOOP-FIX PROBE PROGRAM SHIPPED (merge 1649fe8): VERDICT NO-CONFIG-PASSES · CAUSE MAPPING RECORDED · §5 DECISION OWED TO USER
+
+```
+Probe program (spec docs/superpowers/specs/2026-08-05-loop-fix-probe-
+program-design.md, reviewed-to-SOUND 3 rounds; results + cause mapping
+appended in-spec; artifact docs/reviews/6fb1c64-loop-probes.md):
+ - P0: viable signals = B2 review findings (n=10, sd/mean 1.41) + B4 TB2
+   trials (22/34, capacity-only). B1 gate-outcomes UNKNOWN (latest regime
+   n=5 post-0.3.0-stamp 1785899174570); B3 needs binarization ruling.
+ - P1: S1 62.57 Stops/day, S2 55.43/10.57 commits/day, S3 1.43
+   review-adds/day — starvation diagnosis STALE; density exists.
+ - E: NO-CONFIG-PASSES — meaningful b2×s3 = 245 days vs 14-day bar;
+   capacity b2×s1/s2 ≈ 6-7 days WOULD pass. Blocker = pairing, not rigor.
+OPEN DECISIONS (user rules, nothing self-adopts):
+ 1. Review-loop-as-sensor synthesis design (auto-fired review passes at
+    commit/Stop cadence — numerically motivated now) — needs design go.
+ 2. P2 actuator-binding probe spec (outcome signal = B2) — needs spec+go.
+ 3. B3 binarization ruling (cheap, admits gauge classes as a signal).
+Also this session: two-tier gate deployed (ts 1785888548054), warm lane
+activated office (ts 1785892022908), plugin 0.3.0 cache recipe, C4
+nudge-vs-reject pre-reg registered (chain still opus-walled in tmux
+gaugeverify), agent-sdk plan closed (stale-resume caught).
+```
+
 ## ✅ SESSION END 2026-08-05 latest (`yoo-dev` office) — TWO-TIER GATE SHIPPED: amended→reviewed-to-flawless→SDD-executed→merged 8224748→DEPLOYED (instrument ts 1785888548054)
 
 **RESUME PROMPT (either host — git-only transfer):**
