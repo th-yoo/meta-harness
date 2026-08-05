@@ -32,10 +32,15 @@ Band: the loop-1 TB2 haiku band (14 tasks; band list frozen in
 (TB2 baseline rule: baseline/candidate/production share the model),
 k = 2 repeats per task per arm.
 
-- **A1 prose bullet** (control; exists): the rule as a harness-slot
-  bullet (`/app/CLAUDE.md`, minimal/ kernel mechanism, sha256'd).
-  Measured prior: 7/8 ignored (loop-1, opus tier — tier difference
-  declared; this run re-baselines on haiku).
+- **A1 prose bullet** (control; exists): the rule as a bullet in TB2's
+  OWN workspace-file harness — delivered via the bench harness store
+  (`assembleAgentsMd` + `--pin`, sha256'd as `harnessHash` in
+  record.ts), landing in the container's `/app/CLAUDE.md`
+  (flawless-round finding 6: NOT the minimal/ kernel's separate
+  `--harness` mechanism — same shape, different subsystem; minimal/ is
+  cited only as the shape precedent). Measured prior: 7/8 ignored
+  (loop-1, opus tier — tier difference declared; this run re-baselines
+  on haiku).
 - **A3 binding middleware** (build): the rule enforced mechanically at a
   container chokepoint. NOT CC hooks — the TB2 claude-code driver is a
   one-shot `claude -p` batch process with no settings.json/hook

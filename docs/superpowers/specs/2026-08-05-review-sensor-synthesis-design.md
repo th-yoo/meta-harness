@@ -69,10 +69,13 @@ gated-Stop cadence, findings-counts emitted as a sensor stream.
 - **Spawn discipline:** dispatch is a DETACHED fire-and-forget spawn
   issued BEFORE hook-cli.ts's `emit()` (which exits the process
   synchronously). Same TECHNIQUE as maybeSpawnGauge /
-  maybeSpawnPromptCheck, but a NEW CALL SITE: those live in the
-  UserPromptSubmit branch; the Stop branch this design extends is
-  currently fully synchronous before its single emit() (fresh-review
-  Minor 5).
+  maybeSpawnPromptCheck, but a NEW CALL SITE in the Stop branch —
+  which is NOT spawn-free today (flawless-round finding 3): an armed
+  gate-check can itself spawnBg() a detached child while computing the
+  same Stop's decision. The sensor adds a SECOND detached child per
+  gated Stop; no resource conflict — different classes (bg gate rerun
+  vs one warm-lane call), and the sensor's zero-wait/skip discipline
+  absorbs any warm-lane contention.
 - **Clock discipline:** the 15-min debounce compares wall-clock ts and
   a backward jump (WSL2 resume skew) could yield a negative delta —
   treat delta < 0 as "debounce not satisfied" (skip, reason
@@ -88,9 +91,16 @@ gated-Stop cadence, findings-counts emitted as a sensor stream.
   entries stay counted against the global 4-cap until the 900 s reap),
   and only `session/new|prompt|cancel` exist. Therefore a
   **`session/close` wire message + daemon handler is a named BUILD
-  PREREQUISITE of this design** (small: evict + close one pool entry);
-  the sensor MUST NOT arm until it exists. At pass completion the
-  sensor sends `session/close`, so it never pins one of the 4
+  PREREQUISITE of this design**; the sensor MUST NOT arm until it
+  exists. Its mechanics are non-trivial and are specified here, not
+  hand-waved (flawless-round finding 2): the pool is keyed by
+  isolation value, not session id, so the handler must reverse-look-up
+  the pool entry via the daemon's existing
+  `lastServedBySessionForEntry` map AND apply a busy guard mirroring
+  `reap()`'s discipline — never close an entry with a turn in flight
+  or one since reacquired by another caller; a close that loses that
+  race degrades to a no-op (the 900 s reap remains the backstop). At
+  pass completion the sensor sends `session/close`, so it never pins one of the 4
   global pool slots between passes (round-2 note: SessionPool's cap is
   global across isolations, and its 900 s idle reap ≈ the 15-min
   debounce would otherwise keep a sensor seat permanently warm). Skip
@@ -103,11 +113,15 @@ gated-Stop cadence, findings-counts emitted as a sensor stream.
   `U*` paths in `git status --porcelain`) → SKIP, reason
   "merge-in-progress" — conflict-marker soup must never contaminate
   the findings stream, least of all its first-10-lines viability
-  window (fresh-review Important 4). Diff truncated at a 128 KiB byte
-  ceiling (pre-registered constant; truncation flagged in the line —
-  and DECLARED as a diff-size-dependent negative bias on
-  findingsCount: any future cross-regime comparison must check the
-  regimes' diff-size distributions before comparing).
+  window (fresh-review Important 4). Diff truncated at the nearest HUNK
+  BOUNDARY at or below the 128 KiB ceiling (pre-registered constant;
+  truncation flagged in the line) — hunk-aligned so the reviewer never
+  sees code cut mid-body. The bias is declared in BOTH directions
+  (flawless-round finding 4): undercounting (dropped hunks reviewed by
+  nobody) and, had truncation been byte-aligned, spurious findings on
+  malformed tails — hunk alignment removes the second, the first
+  remains: any future cross-regime comparison must check the regimes'
+  diff-size distributions before comparing.
 
 ## 3. Output stream (the new b2 carrier)
 
@@ -123,7 +137,10 @@ gated-Stop cadence, findings-counts emitted as a sensor stream.
 - Counts, shas, stats only — NEVER finding text in the stream (F2).
 - Full finding text → host-local side file
   `.km/review-findings-text/<ts>.json`, gitignored, referenced by ts —
-  for human reading and for a future A4-style actuator, not for pooling.
+  for human reading and for a future A4-style actuator, not for
+  pooling. Retention: the dispatch prunes side files beyond the newest
+  500 (≈17 days at full cap) before writing; the ndjson stream itself
+  is never pruned (append-only precedent: check-output.ndjson).
 - Skipped dispatches (debounce, cap, warm-lane unavailable, dispatch
   error) emit `{"ts":..,"skipped":true,"reason":".."}` lines so cadence
   remains auditable. Skips are not observations.
@@ -151,6 +168,16 @@ gated-Stop cadence, findings-counts emitted as a sensor stream.
   verdict.
 - prompt change / constant change / tier change ⇒ new boundary ts +
   ledger entry (KKAMAK_DEV_CHECKS untouched — sensor, not gate).
+- **Boundary-liveness OVERRIDE for this stream (flawless-round finding
+  1):** the plugin's whole-package `pluginVersion` (stamped on every
+  line) bumps for unrelated subsystems (gauge, prompt-check, …); a
+  `pluginVersion`-only change UNACCOMPANIED by a review-sensor
+  prompt/constant/tier change is NOT a live boundary for this stream —
+  otherwise routine bumps would fragment the regime and structurally
+  defeat the §5 accumulation math (350 events, first-10-lines
+  viability). This narrows probe-program §6(b) for this stream
+  specifically; the sensor's own changes (previous bullet) remain
+  boundaries, and the ledger entry for each records which.
 
 ## 5. Activation + cost
 
@@ -194,4 +221,6 @@ gated-Stop cadence, findings-counts emitted as a sensor stream.
 F1: no mechanism edits outside the sensor itself. F2: committed/streamed
 artifacts carry counts, stats, shas, ts — never prompt/finding text.
 Boundary-liveness rule of probe-program §6 applies to every future read
-of this stream.
+of this stream, subject to §4's pluginVersion-bump carve-out
+(pluginVersion-only bumps unaccompanied by a sensor prompt/constant/tier
+change are not live boundaries here).
