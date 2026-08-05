@@ -363,3 +363,54 @@ test("runTextAgent: never throws even if spawnFn itself throws", async () => {
   expect(text).toBeNull()
   expect(logs.some((l) => l.level === "warn")).toBe(true)
 })
+
+// ---------------------------------------------------------------------------
+// resolveClaudeArgv — the darwin/launchd PATH fix (hook.log 2026-08-02..05:
+// "Executable not found in $PATH: claude", 4/4 daily failures on yoo-mac).
+// Bare "claude" resolves via the PATH captured at PROCESS START (Bun), which
+// in launchd/cron contexts lacks ~/.local/bin. The REAL default spawns
+// resolve argv[0] at spawn time; injected test spawns still see "claude".
+// ---------------------------------------------------------------------------
+import { resolveClaudeArgv } from "../src/adapters/claude-code/cc-host.ts"
+
+const REST = ["-p", "x", "--session-id", "s"]
+const noWhich = (_n: string) => null
+const noExists = (_p: string) => false
+
+test("resolveClaudeArgv: KKAMAK_CLAUDE_BIN override wins over which and probes", () => {
+  const out = resolveClaudeArgv(["claude", ...REST], { KKAMAK_CLAUDE_BIN: "/opt/x/claude", HOME: "/h" },
+    { which: (_n) => "/from/which/claude", exists: (_p) => true })
+  expect(out).toEqual(["/opt/x/claude", ...REST])
+})
+
+test("resolveClaudeArgv: which() hit is used when no override", () => {
+  const out = resolveClaudeArgv(["claude", ...REST], { HOME: "/h" },
+    { which: (n) => (n === "claude" ? "/from/which/claude" : null), exists: noExists })
+  expect(out).toEqual(["/from/which/claude", ...REST])
+})
+
+test("resolveClaudeArgv: which() miss falls to well-known probes, HOME-anchored first", () => {
+  const probed: string[] = []
+  const out = resolveClaudeArgv(["claude", ...REST], { HOME: "/Users/u" },
+    { which: noWhich, exists: (p) => { probed.push(p); return p === "/Users/u/.local/bin/claude" } })
+  expect(out).toEqual(["/Users/u/.local/bin/claude", ...REST])
+  expect(probed[0]).toBe("/Users/u/.local/bin/claude")
+})
+
+test("resolveClaudeArgv: everything misses -> bare argv unchanged (original error surfaces)", () => {
+  const argv = ["claude", ...REST]
+  expect(resolveClaudeArgv(argv, { HOME: "/h" }, { which: noWhich, exists: noExists })).toEqual(argv)
+})
+
+test("resolveClaudeArgv: non-claude argv[0] is never touched", () => {
+  const argv = ["/already/resolved/claude", ...REST]
+  expect(resolveClaudeArgv(argv, {}, { which: (_n) => "/x/claude", exists: (_p) => true })).toEqual(argv)
+})
+
+test("resolveClaudeArgv: missing HOME skips the HOME probe without throwing", () => {
+  const probed: string[] = []
+  const out = resolveClaudeArgv(["claude", ...REST], {},
+    { which: noWhich, exists: (p) => { probed.push(p); return false } })
+  expect(out[0]).toBe("claude")
+  expect(probed.every((p) => !p.startsWith("undefined"))).toBe(true)
+})
