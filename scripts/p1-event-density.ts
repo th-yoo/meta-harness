@@ -18,7 +18,9 @@
  * Env overrides (test seam ONLY — production omits all of these):
  *   KKAMAK_PROBE_GATE_NDJSON, KKAMAK_PROBE_REVIEWS_DIR,
  *   KKAMAK_PROBE_GIT_DIRS (colon-separated repo paths — replaces the
- *   default [this repo, ~/z2/kkamak] pair used for S2 commits/day).
+ *   default [this repo, ~/z2/kkamak] pair used for S2 commits/day),
+ *   KKAMAK_PROBE_NOW_TS (epoch-ms — freezes windowEnd for deterministic
+ *   fixtures; absent/invalid -> Date.now()).
  */
 import fs from "node:fs"
 import os from "node:os"
@@ -184,7 +186,13 @@ export function buildS4(gateFile: string, windowStart: number, windowEnd: number
 // ---------------------------------------------------------------------
 
 function main(): void {
-  const windowEnd = Date.now()
+  // KKAMAK_PROBE_NOW_TS: test seam ONLY (production omits it) — freezes
+  // the window end so fixtures built relative to a fixed "now" stay
+  // deterministic against the fixed S4_BOUNDARY. Added after the
+  // wall-clock time bomb of 348cd5c's own test (post.spanDays < 1
+  // expired one calendar day after commit).
+  const nowSeam = Number(process.env.KKAMAK_PROBE_NOW_TS)
+  const windowEnd = Number.isFinite(nowSeam) && nowSeam > 0 ? nowSeam : Date.now()
   const windowStart = windowEnd - WINDOW_MS
   const gateFile = gateNdjsonPath()
   const reviewsDir = reviewsDirPath()
