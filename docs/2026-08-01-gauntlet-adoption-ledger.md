@@ -538,8 +538,9 @@ five architect rounds recorded in
 - Gated-Stop `durationMs` MUST NOT pool across it — tier-0 selection cost changed for every Stop that
   selects `kmcrank`, and for every fallback Stop. This host only, for now:
   the change is live wherever `scripts/gate-check.ts` is the code being run,
-  which is this worktree immediately and `main` at merge. Record the merge
-  sha here when it lands.
+  which was the worktree immediately and `main` from merge **`c6879f8`**
+  (2026-08-06). Main-checkout Stops run the narrowed tier-0 from that commit
+  onward; suite on merged main 3298 pass / 1 skip / 0 fail.
 - **Accepted coverage loss, stated rather than discovered later.** On the
   fallback path pull-ins do not fire (`gate-check.ts`, `changed === undefined`
   ⇒ empty pull-in list — the deliberate ruling at
