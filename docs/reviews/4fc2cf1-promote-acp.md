@@ -4,7 +4,10 @@ reviewed-range: e63d9202fda5cef282327992daf45a3ec284fb49..4fc2cf1
 reviewer: fresh-context opus whole-branch reviewer + two scoped reviewers
 fresh-context: true
 verdict: approved
-findings-count: 5 (0 Critical, 0 Important, 5 Minor — 3 fixed, 2 deferred)
+findings-count: 5
+
+Breakdown: 0 Critical, 0 Important, 5 Minor — 3 fixed in `4fc2cf1`, 2 deferred
+(listed at the end of this artifact).
 
 Two independent pieces on this branch, plus two merges from main.
 
