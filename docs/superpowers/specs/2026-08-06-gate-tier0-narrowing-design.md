@@ -24,13 +24,14 @@ invokes it.
 | `FALLBACK_SUITES` union | **≈ 29.7 s** | ccgate+gateplugin+kmcrank+doccheck |
 
 Live evidence from `.km/gate-outcomes.ndjson` (this repo, `pluginVersion`
-0.3.0 regime, 2026-08-05 22:15 → 2026-08-06 10:04):
+0.3.0 regime, 2026-08-05 22:15 → 2026-08-06 10:11):
 
 - fast Stops: 212, 226, 270, 331 ms
 - slow Stops: 23800, 24027, 24185, 24482, 25357, **37430** ms
+- **debt-repayment Stops: 133452, 160319, 166587 ms**
 
-The two populations correspond exactly to doc-only selections versus
-everything else. There is no middle.
+Three populations, not two. The third is the one a user actually feels, and
+§2.1 explains how a Stop enters it.
 
 ## 2. Root cause
 
@@ -63,6 +64,46 @@ package.json              -> ccgate, gateplugin, kmcrank, doccheck      (29.7 s)
 The fallback surface is large and everyday: `scripts/`, `term-bench2/`,
 `evidence/`, `resource-profiles/`, root files. Editing the gate's own script
 costs ~30 s per Stop.
+
+### 2.1 TIA only applies when a GREEN marker exists — and the sync-full tier
+
+The path-based narrowing above is **conditional**, which the cost table alone
+hides (`scripts/gate-check.ts:233-235`):
+
+```js
+const base = marker?.status === "green" ? marker.tree : undefined
+const changed = base ? changedPathsSince(base, tree) : undefined
+const suites = changed !== undefined ? suitesForChangedPaths(changed) : [...d.suites]
+```
+
+With no green marker to diff against there are no changed paths, so TIA is
+skipped entirely and `d.suites` — `FALLBACK_SUITES`, ≈29.7 s — runs. That is
+the state on a first Stop in a fresh worktree, after any red, and after any
+tree change with no completed background run. **The ~30 s fallback is
+therefore the default, not the exception**, and the per-path table in §2 is
+the best case rather than the typical one.
+
+Above that sits a third tier. `decide()`
+(`km-crank/src/gate-check-core.ts:69-71`) returns `full-sync` in exactly two
+cases: `forceFull`, and **`marker.status === "red"` — debt repayment**. A
+full-sync Stop runs the whole tier-1 chain in the foreground: measured
+133-167 s.
+
+Normal full runs are NOT synchronous. `spawnBg` detaches them
+(`scripts/gate-check.ts:154-161`) and they write the marker themselves —
+`green` on exit 0, `red` otherwise (`:143-145`). So the only way to a ~160 s
+Stop is a background full run that went red, after which **every** subsequent
+Stop pays synchronously until a full run goes green again.
+
+Observed live on 2026-08-06: a worktree created without `bun install` made
+`cc-gate-plugin`'s imports fail, the background full run went red, and the
+next two Stops cost 160 s and 167 s each. The failure was environmental, not
+a code defect — but the tail cost is identical either way.
+
+**This matters for D1-D3.** Narrowing tier 0 lowers the common case; it does
+nothing for the tail, which is governed by how often tier 0 or the background
+run goes red and how much repayment costs. A narrower tier 0 that goes red
+more often can be worse overall.
 
 **Why the earlier ~5 s figure did not generalize.** The two-tier deploy
 measured `durationMs` 108733 → 4943 and reported ≈22× faster Stops. That is
@@ -97,6 +138,24 @@ promote-acp review (`docs/reviews/4fc2cf1-promote-acp.md`). TIA maps it to
 `ccgate`, whose fast list excludes the ACP tests, so a rename in that seam
 file has zero blocking coverage. A directory-qualified `SLOW_SOURCE_TO_TESTS`
 rule fixes it. Include here because it is the same file and the same pass.
+
+**D6 — should debt repayment stay synchronous?** New, raised by §2.1's
+measurement. Today a red marker makes the next Stop pay 133-167 s in the
+foreground. The argument for keeping it: a red full run means something is
+genuinely broken, and continuing to let turns through on a stale green is the
+failure mode the gate exists to prevent. The argument against: the repayment
+is indiscriminate — an environmental failure (missing `node_modules`, a flaky
+spawn test, a wedged daemon) costs three minutes per Stop until something
+goes green, and the person paying usually cannot tell why. Options:
+(a) keep sync — correctness first, status quo; (b) repay in the background
+while tier 0 still blocks on its own result, so a red marker degrades
+throughput rather than stopping it; (c) keep sync but only for a red whose
+`outputTail` indicates a real test failure, treating load/spawn errors as
+retry-worthy. Recommendation: **(a) for now** — (b) reopens exactly the
+stale-green hole the two-tier design closed, and (c) needs a classifier
+nobody has specified. Revisit only with measured red-cause data: how many
+reds are environmental versus real. That data does not exist yet, and the
+first step is recording `outputTail` causes rather than guessing.
 
 **D5 — measurement boundary.** Any of D1-D4 changes what `durationMs` means.
 A boundary ts must be stamped in
