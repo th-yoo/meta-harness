@@ -121,6 +121,21 @@ describe("slowCcgateTestsForChangedPaths (amendment b)", () => {
     expect(slowCcgateTestsForChangedPaths(["cc-gate-plugin/src/gauge/acp-pool.ts"]))
       .toEqual(["test/acp-daemon.test.ts", "test/acp-pool.test.ts"])
   })
+  test("CURRENT layout: src/acp/ paths match the same basename-anchored regexes (exact lists)", () => {
+    // The ACP sources actually live here post-promotion (2026-08-06). These
+    // cases are the ones that prove the module-doc's claim ("sources in
+    // src/acp/...") true — the gauge/-path cases above are kept alongside
+    // them to prove the basename anchoring is genuinely path-agnostic, not
+    // because src/gauge/acp-daemon.ts etc. still exist.
+    expect(slowCcgateTestsForChangedPaths(["cc-gate-plugin/src/acp/acp-daemon.ts"]))
+      .toEqual(["test/acp-daemon.test.ts"])
+    expect(slowCcgateTestsForChangedPaths(["cc-gate-plugin/src/acp/acp-pool.ts"]))
+      .toEqual(["test/acp-daemon.test.ts", "test/acp-pool.test.ts"])
+    expect(slowCcgateTestsForChangedPaths(["cc-gate-plugin/src/acp/warm-session.ts"]))
+      .toEqual(["test/acp-pool.test.ts", "test/warm-session.test.ts"])
+    expect(slowCcgateTestsForChangedPaths(["cc-gate-plugin/src/acp/acp-client.ts"]))
+      .toEqual(["test/acp-client.test.ts"])
+  })
   test("changed slow TEST file pulls itself", () => {
     expect(slowCcgateTestsForChangedPaths(["cc-gate-plugin/test/warm-session.test.ts"]))
       .toEqual(["test/warm-session.test.ts"])

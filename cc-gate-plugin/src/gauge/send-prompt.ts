@@ -14,6 +14,15 @@
 // point: N2 proves this interface against a transport that already works,
 // so when N3's warm path misbehaves the interface is not also on trial.
 //
+// The `WarmIsolation` import below pulls from `../acp/index.ts`, the ACP
+// barrel that value-re-exports `acp-client.ts` among other things. That
+// import MUST stay `import type` — `import type` is fully erased, so no
+// value from the barrel (and therefore nothing from acp-client.ts) enters
+// this module's runtime graph. If it is ever widened to a value import,
+// the isolation above is broken even though this comment would otherwise
+// look satisfied — so treat the `type` keyword there as load-bearing, not
+// cosmetic.
+//
 // `sendPrompt` NEVER throws. Every failure — including a provider that
 // itself throws — comes back as a `SendOutcome`. A caller that prefers
 // exceptions wraps this.
