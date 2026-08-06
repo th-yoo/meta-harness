@@ -271,7 +271,19 @@ export async function runOnce(
         lastPassHead: diff.headSha,
         ...nextCapState(state, now),
       }
-      fs.writeFileSync(statePath, JSON.stringify(newState))
+      // Atomic write (state.ts:87-93 StateStore.save precedent): a torn
+      // write here, paired with readState's tolerant undefined-on-corrupt
+      // fallback, would make the NEXT Stop see no state at all ->
+      // shouldDispatch {go:true} unconditionally -> silently bypasses both
+      // the debounce window and the 30/day cap for that dispatch. Write to
+      // a pid+random-suffixed tmp file in the same dir, then rename — POSIX
+      // rename is atomic, so a reader never observes a partial file.
+      const tmpStatePath = path.join(
+        kmDir,
+        `.${path.basename(statePath)}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`,
+      )
+      fs.writeFileSync(tmpStatePath, JSON.stringify(newState))
+      fs.renameSync(tmpStatePath, statePath)
     } finally {
       // Close-not-release (spec §2): a session was established for THIS
       // outcome (kind === "ok"), so it is closed here regardless of
