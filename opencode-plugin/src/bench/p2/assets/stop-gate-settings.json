@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "test -s /app/DONE-CHECK.txt || { echo 'Rule violation: before finishing you must independently verify your work - run at least one concrete check command against the actual artifacts (tests, a build, or direct inspection of produced output) and write the command(s) you ran and their observed result to /app/DONE-CHECK.txt. Your own reasoning does not count as verification. That file does not yet exist or is empty - do this before finishing.' 1>&2; exit 1; }"
+            "command": "test -s /app/DONE-CHECK.txt || { echo 'Rule violation: before finishing you must independently verify your work - run at least one concrete check command against the actual artifacts (tests, a build, or direct inspection of produced output) and write the command(s) you ran and their observed result to /app/DONE-CHECK.txt. Your own reasoning does not count as verification. That file does not yet exist or is empty - do this before finishing.' 1>&2; exit 2; }"
           }
         ]
       }

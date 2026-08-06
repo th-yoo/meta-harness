@@ -139,3 +139,85 @@ source, which no longer exists.
 2 of 4 authorized `claude-haiku-4-5` calls used (Probe A's live call +
 Probe B's `--max-turns` live call). Probe B's `--help` grep and the
 negative-control unknown-flag call are free (no model invocation).
+
+## Probe C (blocking consequence, post-C1 fix)
+
+Final whole-branch review finding C1 (confidence 95): the A3 arm's
+`assets/stop-gate-settings.json` shipped with `exit 1` in its Stop-hook
+command. Claude Code hook semantics block a Stop event on **exit 2** only
+(stderr fed back to the agent as continuation instructions); exit 1 is
+non-blocking (agent stops normally, stderr shown to the user only) — see
+`cc-gate-plugin/src/output.ts`'s `exit2-stderr` mode (`exitCode: 2`) and
+`cc-gate-plugin/src/hook-cli.ts:10-11`. As shipped, the A3 arm never
+blocked. Fixed to `exit 2` in the same commit as this probe (Part 1 of the
+C1 fix wave). This probe verifies the CORRECTED asset actually blocks,
+using the exact container/auth recipe from Probe A/B above
+(`prepareClaudeCodeAuth()`, `sandbox.ts`'s argv builders, the claude-code
+driver's `buildArgv` shape) — real spend, 1 of the 2 remaining authorized
+`claude-haiku-4-5` calls (2 already consumed by Probe A/B above; this is
+call 3 of the total 4-call budget).
+
+Container: `mh-p2-probec-run-1786024920924-3063` (removed at end of probe
+via `podman rm -f -t 0`; auth temp dir shredded and removed by
+`prepareClaudeCodeAuth()`'s returned `cleanup()` — verified post-run: no
+`p2-probe*`/`p2-probec*` container remains, no non-test
+`mh-bench-cc-auth-*` temp dir newer than the probe remains).
+
+Settings copied into the container were the repo's actual (post-fix)
+`opencode-plugin/src/bench/p2/assets/stop-gate-settings.json` via
+`buildCpToArgv` (not a hand-typed inline copy) — `cat` of the in-container
+file confirmed it contains `exit 2` and does not contain `exit 1` before
+the model call.
+
+| # | Command | Exit code |
+|---|---|---|
+| 1 | `podman create --name <c> --init -v <auth mounts (/root/.claude.json ro, /root/.claude rw)> -e IS_SANDBOX=1 -w /app localhost/mh-bench:latest sleep infinity` | 0 |
+| 2 | `podman start <c>` | 0 |
+| 3 | `podman exec <c> mkdir -p /app/.claude` | 0 |
+| 4 | `podman cp opencode-plugin/src/bench/p2/assets/stop-gate-settings.json <c>:/app/.claude/settings.json` | 0 |
+| 5 | `podman exec <c> cat /app/.claude/settings.json` (verify: contains `exit 2`, does not contain `exit 1`) | 0 |
+| 6 | `podman exec -e IS_SANDBOX=1 -w /app <c> claude -p "reply with the word ok" --output-format stream-json --verbose --model claude-haiku-4-5 --dangerously-skip-permissions` | 0 |
+| 7 | `podman exec <c> ls -la /app/DONE-CHECK.txt` | 0 |
+| 8 | `podman rm -f -t 0 <c>` | 0 |
+| 9 | `podman ps -a --filter name=<c>` (post-rm check) | 0, empty |
+
+**Marker present: YES.** `/app/DONE-CHECK.txt` exists after the run (`ls
+-la` exit 0) even though the instruction given ("reply with the word ok")
+never asked the agent to write it — the file only appeared because the
+Stop-hook blocked the first stop attempt and fed the rule text back as
+continuation instructions, and the agent then acted to satisfy the gate.
+
+NDJSON event-type counts from command #6's stdout (types only, no
+content, per F2): 38 lines total — `system`: 26, `assistant`: 7, `user`:
+3, `rate_limit_event`: 1, `result`: 1 (`num_turns: 4`, `subtype:
+"success"`). Contrast with Probe A/B's control shape above (immediate
+stop: 8 lines, `num_turns: 1`, one `assistant`/`text` pair, no
+DONE-CHECK.txt requirement in that hook's config) — Probe C's run took 4
+turns and interleaved `system` events (hook feedback) with
+`assistant`/`user` pairs, consistent with at least one Stop block-and-
+reprompt cycle before the agent satisfied the gate and the run reached
+`result`/`success`.
+
+**Verdict C: the CORRECTED (`exit 2`) Stop-gate DOES block** — the run did
+not terminate at the first Stop (`num_turns: 4` vs. the 1-turn control
+shape), and `/app/DONE-CHECK.txt` exists post-run despite an instruction
+that never mentioned it. The A3 binding mechanism is live after the C1
+fix; not a no-op.
+
+### Probe C cleanup
+
+| Command | Exit code |
+|---|---|
+| `podman rm -f -t 0 mh-p2-probec-run-1786024920924-3063` | 0 |
+| `podman ps -a --filter name=p2-probe` (post-rm check) | 0, empty list |
+| `prepareClaudeCodeAuth()` cleanup (Keychain-exported `.credentials.json` shred + per-run temp dir `rm -rf`) | ran, no error |
+
+No containers named `p2-probe*`/`p2-probec*` remain on the host after this
+probe.
+
+### Probe C spend
+
+1 of the remaining 2 authorized `claude-haiku-4-5` calls used (Task 6's
+granted ≤4-call probe budget: 2 consumed by Probe A/B, 1 consumed here —
+3 of 4 total; 1 call remains unspent/unneeded, this probe's single call
+was sufficient to observe the blocking effect).
