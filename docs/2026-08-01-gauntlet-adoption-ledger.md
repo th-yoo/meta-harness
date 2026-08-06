@@ -541,6 +541,30 @@ five architect rounds recorded in
   which was the worktree immediately and `main` from merge **`c6879f8`**
   (2026-08-06). Main-checkout Stops run the narrowed tier-0 from that commit
   onward; suite on merged main 3298 pass / 1 skip / 0 fail.
+- **ACCEPTANCE IS CONFOUNDED — three instrument changes inside ~100 minutes
+  on this host.** Recorded now so nobody later reads a clean before/after out
+  of this window:
+  1. `1785990600996` (~13:30) — this entry, tier-0 narrowed.
+  2. plugin `0.3.0 → 0.4.0` deployed (`4d27981`, ~15:0x) — a version-keyed
+     cache refresh, so gated-Stop lines change `pluginVersion` mid-window.
+  3. `1785996709580` (~15:11) — review-sensor effective boundary, adding a
+     second detached child to every qualifying main-checkout Stop.
+
+  The post-D3 gate cycles available at time of writing are **n=4**, and they
+  straddle #2: `33374 ms` at `pv 0.3.0`, then `13744 / 16068 / 225 ms` at
+  `pv 0.4.0`. The three `0.4.0` values are consistent with the narrowing
+  (~13.7 s ccgate, 0.2 s doc-only); the `33374 ms` outlier is unexplained by
+  selection — neither `ccgate` alone (~13 s) nor the post-narrowing fallback
+  (~14.4 s) predicts it — and the leading hypothesis is CPU contention with a
+  concurrent tier-1 background run, which every measurement in Passes A/B/C
+  was taken without. **One sample, so a hypothesis, not a finding.**
+
+  Consequence for the acceptance step: correlating `durationMs` against the
+  per-Stop suite log is necessary but NOT sufficient here. It must also
+  segment on `pluginVersion`, on marker state (a `"running"` marker means a
+  concurrent bg run competing for CPU), and on whether the sensor was live.
+  Any D3 effect claimed from this window without those splits is
+  uninterpretable.
 - **Accepted coverage loss, stated rather than discovered later.** On the
   fallback path pull-ins do not fire (`gate-check.ts`, `changed === undefined`
   ⇒ empty pull-in list — the deliberate ruling at
