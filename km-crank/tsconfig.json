@@ -11,5 +11,5 @@
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true
   },
-  "include": ["src", "test", "../scripts/gate-check.ts", "../scripts/p0-signal-variance.ts", "../scripts/p1-event-density.ts", "../scripts/e-table.ts"]
+  "include": ["src", "test", "../scripts/gate-check.ts", "../scripts/p0-signal-variance.ts", "../scripts/p1-event-density.ts", "../scripts/e-table.ts", "../scripts/p2-tally.ts"]
 }
