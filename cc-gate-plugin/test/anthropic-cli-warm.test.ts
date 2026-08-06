@@ -180,11 +180,25 @@ describe("makeAnthropicCliWarmProvider (fake daemons only — no CLI, no model)"
     expect(withMaxTokens).toEqual(withoutMaxTokens)
   })
 
-  test("9. no registration side effect: importing/constructing the provider leaves the registry empty", () => {
-    // makeAnthropicCliWarmProvider has already been imported (and called, in
-    // every test above) by this point in the file — if the module or the
-    // factory had any registerProvider side effect, it would already have
-    // fired. resolveProvider must still be undefined for this id.
-    expect(resolveProvider("anthropic-cli-warm")).toBeUndefined()
+  test("9. no registration side effect: constructing the provider changes nothing in the registry", () => {
+    // Order-independent by construction, unlike the old "must be undefined"
+    // form: `resolveProvider` for this id is process-global (send-prompt.ts's
+    // module-level `registry` Map), and `bun test` runs every test file in
+    // one process — opencode-plugin/test/minimal-llm-acp.test.ts legitimately
+    // registers this exact id (via minimal/llm-acp.ts's seatCall) and never
+    // unregisters it, so whether this id already resolves to something by
+    // the time this test runs depends on which OTHER files ran first. That
+    // is not this test's business either way. What IS this test's business:
+    // does constructing the provider, here, add or change a registration?
+    // `before`/`after` bracket exactly one synchronous
+    // `makeAnthropicCliWarmProvider` call with no `await` between them, so
+    // no other test file's code can run in the gap — whatever the registry
+    // already holds for this id (undefined, or another file's function) is
+    // irrelevant; only a `registerProvider` call triggered by THIS
+    // construction could move `after` away from `before`.
+    const before = resolveProvider("anthropic-cli-warm")
+    makeAnthropicCliWarmProvider(ENV)
+    const after = resolveProvider("anthropic-cli-warm")
+    expect(after).toBe(before)
   })
 })
