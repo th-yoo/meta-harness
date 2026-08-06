@@ -3,44 +3,58 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ⏸ SESSION PAUSE 2026-08-06 evening (`yoo-mac`) — P2 SDD: TASKS 1-5 COMPLETE + REVIEWED, TASK 6 IN FLIGHT, SPEND GO PENDING
+## ✅ SESSION END 2026-08-07 (`yoo-mac`) — P2 SDD RUN COMPLETE: 6 TASKS + FINAL REVIEW + C1 FIX WAVE, BRANCH READY · TWO USER DECISIONS PENDING (merge go, spend go)
 
-**RESUME PROMPT (either host — branch `worktree-p2-actuator-binding` pushed):**
+**RESUME PROMPT (either host — branch `worktree-p2-actuator-binding` @ `51f1327` pushed):**
 ```
-Resume P2 actuator-binding SDD run. git pull + fetch FIRST. Branch
-worktree-p2-actuator-binding (origin, tip 05608fe) = Tasks 1-5 built,
-per-task fresh reviews ALL Approved, fix rounds closed. NOT merged to
-main (explicit-merge-go rule stands). Plan:
-docs/superpowers/plans/2026-08-06-p2-actuator-binding.md (carries the
-2026-08-06 PRE-DATA AMENDMENT — anti-gaming excludes DONE-CHECK-path
-commands — and the work-queue PRODUCTION NOTE, both user-ruled).
+Resume P2 actuator-binding. git pull + fetch FIRST. The SDD BUILD is
+DONE — do not re-dispatch any task. Branch worktree-p2-actuator-binding
+(origin, 51f1327) holds Tasks 1-6, all per-task fresh reviews Approved,
+2 fix rounds closed, final whole-branch review + fix wave + scoped
+re-review complete. NOT merged to main. NO bench spend has occurred
+(probe budget 3/4 haiku consumed, that is all).
 
-STATE: T1 probe (2/4 haiku): hooks FIRE in-container -> A3 = settings
-copy-in; --max-turns accepted, enforcement unverified -> double-carried.
-T2 rule.ts (amended predicate, pinned sha). T3 a4-review.ts (warm lane,
-close-in-finally judged sound). T4 p2-run (3 arms, fences; errors[]
-annotation channel judged safe). T5 p2-tally (bars verbatim, stopBlocks
-proxy cosmetic). Band=14, k=2: --go 28 (a1) / 28 (a3) / 56 (a4).
-Results naming: docs/loop-probes/p2/<hostname>-p2-<arm>-results.json.
+THE FINAL REVIEW'S CATCH (C1, Critical — read before citing A3 numbers
+anywhere): assets/stop-gate-settings.json shipped `exit 1`; CC hooks
+only BLOCK a Stop on exit 2 (in-repo precedent: cc-gate-plugin
+exit2-stderr delivery). A3 was a silent no-op as built — the sized go
+would have measured a stock harness on 28 executions. Fixed exit 1->2
+(726da92), drift test pins the exit code, plan carries a PRE-DATA
+CORRECTION block. PROBE C then LIVE-PROVED blocking: num_turns 4 vs
+1-turn control, DONE-CHECK.txt produced unprompted, 26 system events =
+block/reprompt cycles (docs/loop-probes/p2/PROBE.md, F2 counts only).
+Also in force: PRE-DATA AMENDMENT (anti-gaming excludes DONE-CHECK-path
+commands — the echo-writer loophole) + work-queue PRODUCTION NOTE.
 
-TASK 6 was IN FLIGHT at pause (isolated worktree
-agent-abba8921a93451a18, yoo-mac host-local): drift test added+green,
-READINESS.md + report + commit outstanding. If that worktree is gone or
-stale: re-dispatch Task 6 per plan §Task 6 + the two folded pre-go
-duties (drift test — may already be committed — and results-naming pin).
+PENDING USER DECISIONS, independent:
+ 1. MERGE GO: merge worktree-p2-actuator-binding to main via
+    scripts/merge-with-gate.sh + docs/reviews artifact (write it from
+    the final-review + re-review records; range merge-base..51f1327).
+ 2. SPEND GO per docs/loop-probes/p2/READINESS.md: <=112 container
+    executions (a1 --go 28 / a3 --go 28 / a4 --go 56), <=28 A4 warm-lane
+    review calls, all claude-haiku-4-5, est 5.9h base / <=7.8h ceiling
+    serial tmux. Caveat recorded: estimate does not model A3's real
+    block-reprompt turn cost (ceiling, not point). Probe models first;
+    results files docs/loop-probes/p2/<hostname>-p2-<arm>-results.json;
+    then bun scripts/p2-tally.ts -> committed verdict json; adoption =
+    separate ruling per plan §5 (routing bar: compliance >=0.75 AND
+    pass@k drop <=0.15 vs A1).
 
-THEN: task-6 review -> merge task branch -> FINAL whole-branch review
-(most capable model) -> present sized-go table to user. SPEND NEEDS THE
-EXPLICIT SIZED GO: ~112 container executions + <=28 A4 review calls +
-2 remaining probe-budget haiku calls, est. ~7-8h serial (4.2min/attempt
-basis, exact table in READINESS.md when Task 6 lands). Deferred minors
-for final review: env/isolation threading assert (T3), boundary-case
-tests (T5), PROBE.md deviation-log note (T1).
+Deferred minors (all triaged stay-deferred at final review): env/
+isolation threading assert (T3), T5 boundary cases, PROBE.md deviation
+note (T1), READINESS a4 container-label nit, ruleSha digest pin (done in
+fix round), Probe-A control imperfectly matched (noted sufficient).
+SDD ledger: .superpowers/sdd/2026-08-06-p2-actuator-binding/progress.md
+(yoo-mac host-local; kept until run verdict, then delete per skill).
 
-Rules: explicit user go before merge to main AND before spend ·
-spec-is-law (amendment window closes at first run datum) · isolated
-worktrees per implementer (lineage-merge first — they branch from main)
-· F1/F2 · probe models before premium.
+Process facts worth keeping: implementer isolation worktrees branch from
+origin/main — lineage-merge worktree-p2-actuator-binding FIRST (two
+agents hit this); Stop-hook gate races with shared-worktree implementers
+= 4th instance of the global-state defect shape -> isolation rule stands.
+
+Rules: explicit user go before main merge AND before spend · spec-is-law
+(amendment window closes at FIRST RUN DATUM — still open) · F1/F2 ·
+probe models before premium · boundary ts on instrument changes.
 ```
 
 ## ✅ SESSION END 2026-08-06 late (`yoo-dev`, `side` restarted) — SENSOR DEPLOYMENT BUG DIAGNOSED · ARMING WEDGED THE GATE, FIXED (`6121e53`) · D3 ACCEPTANCE CONFOUND RECORDED

@@ -706,6 +706,42 @@ per-task reviews + final whole-branch review + one fix wave; commits
   unchanged as a background debt gate. Instrument note in the adoption
   ledger; durationMs never pools across the deploy ts.
 
+## GA15 — P2 actuator-binding probe: BUILT + FULLY REVIEWED, spend pending (2026-08-06/07, yoo-mac) — first fully isolated-worktree SDD run
+
+- **What:** the three-carrier rule-delivery experiment (plan
+  `docs/superpowers/plans/2026-08-06-p2-actuator-binding.md`, spec
+  `2026-08-05-p2-actuator-binding-design.md`): A1 prose harness bullet vs
+  A3 in-container binding Stop-gate vs A4 host-side haiku review +
+  bounded re-pass, same frozen `looks_done`-family rule, band 14 × k=2,
+  mechanical compliance predicate, pre-registered routing bar
+  (compliance ≥0.75 AND pass@k drop ≤0.15 vs A1). Built as `p2-run`
+  subcommand + `p2-tally`, store-isolated (`docs/loop-probes/p2/`),
+  cost-fenced (`--go` exact-count refusal).
+- **Verdict:** NONE YET — build complete, ZERO bench spend; sized go
+  pending (≤112 executions + ≤28 review calls, est 5.9-7.8h haiku,
+  `docs/loop-probes/p2/READINESS.md`). Probe budget 3/4 consumed.
+- **Two pre-data instrument saves, both by fresh-context review:**
+  (a) Task-2 review reproduced the anti-gaming predicate self-satisfying
+  via its own file-writing command (`echo prose > DONE-CHECK.txt`) —
+  user-ruled AMENDMENT excludes DONE-CHECK-path commands from the match
+  set; (b) **final whole-branch review C1 (Critical): the A3 Stop-gate
+  shipped `exit 1`, which does NOT block a CC Stop — only exit 2 does**
+  (in-repo `exit2-stderr` precedent was the tell). A3 was a silent no-op;
+  28 executions would have measured a stock harness and returned a false
+  mechanism-negative. Fixed + PROBE C live-proved blocking (num_turns 4
+  vs 1-turn control, unprompted DONE-CHECK.txt). Three earlier reviews
+  had each verified a different correct property of the same asset
+  (prose fidelity, text drift, fence math) — only the whole-branch pass
+  asked whether the mechanism was ever proven. Probe-the-consequence,
+  not just the capability, joins the standing lessons.
+- **Process firsts:** every implementer from Task 3 on ran in its OWN
+  git worktree (ruling after the Stop-hook gate raced a shared-worktree
+  implementer's RED-phase test — 4th instance of the global-state defect
+  shape); per-task fresh reviews all Approved with 2 fix rounds, ~7
+  triaged deferred minors, one unrequested implementer self-pause
+  (resumed clean). Branch `worktree-p2-actuator-binding` @ `51f1327`
+  pushed, UNMERGED (explicit-merge-go rule).
+
 ## R1 — round-1 machine bullet (2026-07-23, office) — REJECT
 
 - **Evidence:** 1 failing traj (thin; proposer self-flagged low confidence).
