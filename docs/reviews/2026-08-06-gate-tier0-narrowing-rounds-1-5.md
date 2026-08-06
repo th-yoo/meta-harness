@@ -1,10 +1,10 @@
-# Review record — gate tier-0 narrowing design + plan, rounds 1-4
+# Review record — gate tier-0 narrowing design + plan, rounds 1-5
 
-reviewed-commit: 8666161
-reviewer: fresh-context code-architect (opus), four independent rounds
+reviewed-commit: a2661db
+reviewer: fresh-context code-architect (opus), five independent rounds
 fresh-context: true
 verdict: changes-requested
-findings-count: 61
+findings-count: 79
 
 Not a merge artifact — the branch carries no code. This exists because both
 documents cite "review round 1/2" corrections, and those citations are
@@ -193,16 +193,71 @@ matches no predicted selection, so acceptance was unfalsifiable.
   `Cmd.cwd` key-set mismatch, and the `scripts/`-path expected-effect gap
   (~0.7 s) with a segmentation instruction so a null there is legible.
 
-## Status after four rounds
+## Round 5 — against revision 5 (2 Critical, 5 Important, 8 Minor)
 
-**Not flawless.** Revision 5 is unreviewed. Every round so far has found
-defects the previous fold introduced, and round 4 landed exactly where round
-3 predicted (Task 1's generalisation, Task 6's open question) — so the
-prediction skill is real and the defect supply is not yet exhausted.
+- **D2 was never priced, and it is worth 0.02 s.** Four rounds argued its
+  correctness; none costed it. For a `scripts/foo.ts` change: today's
+  fallback 29.67 s → 15.07 s after **D3 alone** → 15.05 s after D3+D2. D2's
+  entire effect is dropping the `gateplugin` row. For `scripts/gate-check.ts`
+  it changes nothing, because D3's rules are guardless and `kmcrank` is
+  already in `FALLBACK_SUITES`. Against that: a resolution-semantics change
+  to `TIA_MAP`, two moved pins, a re-pinned invariant, and a deliberate
+  coverage reduction. Withdrawn.
+- **The `Cmd.cwd` agreement test was unimplementable and dangerous.**
+  `scripts/gate-check.ts` exports nothing and calls `main()` at module scope,
+  so importing it from a km-crank test re-enters the gate, spawns `bun test`
+  in km-crank, recurses, and exits the outer suite via `process.exit(0)` — a
+  green gate from a partially-run suite. Replaced by deriving `Cmd.cwd` from
+  the map in the wiring task.
+- **`scanFailed` must be per-`Cmd`, not per-`CommandTable`**: with two
+  packages scanned, a km-crank readdir failure would otherwise suppress
+  *ccgate's* append while its argv is a correctly-narrowed fast list — the
+  exact hole amendment b exists to close. Must be set in the `catch`, never
+  inferred from `all.length === 0`.
+- **`slowPull` at `gate-check.ts:236` and the log at `:237` were unspecified**
+  under suite-keyed pull-ins, and Task 5's acceptance depends on that log.
+- **Task 4 edits the check gating the session doing the edit**, with no
+  escape route stated (`scripts/km-panic.sh`).
+- Step 2's "VERBATIM" seeding contradicted the per-rule guard step and would
+  redden a test the Verification note then misdiagnoses; "per-rule guard
+  honoured" was not testable in Task 1, inviting a placeholder rule in
+  production code.
+- **Confirmed against the code:** Task 1's "no existing assertion changes"
+  claim genuinely holds — the outer guard and per-rule guards are
+  input-equivalent, `continue` semantics survive, and the wrappers reproduce
+  `:111-181` exactly.
+- **Also surfaced: a live defect in deployed code.** On the degraded readdir
+  path, ccgate's `["bun","test"]` plus the append becomes
+  `bun test test/acp-daemon.test.ts` — the whole suite collapses to one file.
+  Worth landing regardless of D3.
 
-What has converged: the decision set shrank monotonically (D1, D4, D8
-withdrawn; D2, D3 survive four rounds unchallenged on their merits), and
-round 4's Criticals were all residue and under-specification rather than
-"this decision is wrong". What has not: no round has yet returned clean, and
-the two documents have been restructured four times, which is itself the
-mechanism generating new defects.
+## Disposition in revision 6
+
+- **D2 withdrawn**, Task 3 deleted, `TIA_MAP` untouched. Plan is four tasks
+  and one decision (D3).
+- `Cmd.cwd` agreement test replaced by derivation; `scanFailed` scoped to
+  `Cmd` and set in the `catch`, with the never-serialized fact commented;
+  `:236` deletion and the `:237` log format specified and pinned; panic-path
+  note added; "verbatim" reworded to seed lists but require guards; per-rule
+  test moved to Task 2; the expected-effect note marked unobservable until
+  the wiring task; caching instruction dropped; citations fixed.
+- D3's residual loss restated at full width (every fallback Stop, not only
+  session-final).
+
+## Status after five rounds
+
+Round 5's own verdict: fix the task text in place — edits, not restructuring
+— then **stop reviewing and execute**, because "the residual defect supply
+after these is in the 'wrong line number in a citation' band" and a sixth
+round will find citation offsets.
+
+The arc: five decisions became one. D1, D2, D4 and D8 were each withdrawn for
+a reason found in the code — coverage that tier 1 cannot provide, a price of
+0.02 s, two in-code policies, and a multi-host gate wedge. D3 alone survived
+every round on its merits, and it is the one with the measured 88 % share.
+
+What remains true: revision 6 is itself unreviewed, and every prior fold
+introduced something. The difference is that the remaining surface is one
+decision and four tasks of task-text, and round 5 verified the one structural
+claim that mattered (Task 1 preserves every existing assertion). Further
+review rounds now cost more than they return.

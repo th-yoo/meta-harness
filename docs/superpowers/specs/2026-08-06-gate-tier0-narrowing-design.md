@@ -1,14 +1,14 @@
 # Gate tier-0 narrowing — design (2026-08-06)
 
-**Status:** design, unexecuted. **Revision 5**, after four architect rounds.
+**Status:** design, unexecuted. **Revision 6**, after five architect rounds.
 Round 1 invalidated D1's original safety argument; round 2 invalidated
 revision 2's fix for it and killed D8; round 3 killed D1 itself; round 4
-killed D4 and showed the governing rule was overstated. **What survives is
-D2 and D3.** Reviews:
-`docs/reviews/2026-08-06-gate-tier0-narrowing-rounds-1-4.md`.
+killed D4 and showed the governing rule was overstated; **round 5 priced D2
+at 0.02 s and killed it**. **What survives is D3 alone.** Reviews:
+`docs/reviews/2026-08-06-gate-tier0-narrowing-rounds-1-5.md`.
 
 **Decision index:** **D1 opencode narrowing — WITHDRAWN (round 3)** ·
-D2 fallback mapping · D3 kmcrank narrowing · **D4 `index.ts` coverage — WITHDRAWN (round 4)** ·
+**D2 fallback mapping — WITHDRAWN (round 5)** · D3 kmcrank narrowing · **D4 `index.ts` coverage — WITHDRAWN (round 4)** ·
 D5 boundary ts (requirement) · D6 sync debt repayment (keep) · D7 concurrent
 suites (deferred) · **D8 opencode in tier 1 — WITHDRAWN**.
 
@@ -160,7 +160,7 @@ decisive and is recorded so it is not re-proposed:
 - It also lengthens the `"running"` window, increasing fallback frequency.
 
 **D1 — narrow `opencode`. WITHDRAWN (round 3).** The withdrawal reason is
-structural and worth keeping, because it yields the rule that governs D2-D4.
+structural and worth keeping, because it yields the rule that governs D3.
 
 The pull-in is **edge-triggered on the diff since the green marker**:
 `changed = changedPathsSince(marker.tree, tree)` (`gate-check.ts:233-234`).
@@ -178,7 +178,8 @@ Revision 3 justified D1 on input-scoping precisely to avoid appealing to tier
 1; round 3 showed that is what breaks it, because the *baseline* depends on
 tier 1 even when the coverage does not.
 
-**The resulting rule, the durable finding of this arc:** narrowing a suite
+**The rule, the durable finding of this arc** (it governs D3, and it is what
+killed D1): narrowing a suite
 is *admissible* only if that suite runs in `table.full`. `ccgate` and
 `kmcrank` do; `opencode` does not, so it cannot be narrowed by this mechanism
 at all. Making it narrowable needs per-suite "last ran against tree X"
@@ -204,9 +205,11 @@ closes:
    `"running"` window, no later Stop repays the debt, and
    `merge-with-gate.sh` runs no tests. Today that Stop runs `kmcrank` whole.
 
-So D3 does lose coverage in a reachable scenario. It is accepted knowingly:
-the loss is one deferred detection on a session-final Stop, against ~14 s on
-every kmcrank Stop. Recorded here so it is not later discovered as a
+So D3 does lose coverage in reachable scenarios, accepted knowingly. Stated
+at full width: on the fallback path — which §2.1 calls the dominant trigger —
+`gate-check-cli.test.ts` is skipped on *every* such Stop, with rescue
+deferred to the next Stop's bg spawn; and on a session-final Stop there is no
+next Stop at all. Against that: ~14 s off every kmcrank-selected Stop. Recorded here so it is not later discovered as a
 surprise.
 
 **Superseded text (kept only to show what was withdrawn):**
@@ -231,14 +234,30 @@ seven `src/bench/*` modules (two further imports are `import type`, which the
 amendment-b policy at `gate-check-core.ts:144-146` explicitly does not
 count). 2.25 s does not justify that rule surface.
 
-**D2 — map the unmapped directories.** `^scripts/` must map to `kmcrank`
-**and** `ccgate` — three ccgate tests drive files under `scripts/`
-(`escape-hatch.test.ts:13` → `km-panic.sh`; `fixture-ref.test.ts:187` and
-`corpus-store.test.ts:270` → `km-sensors-sync.sh`). **This requires changing
-`TIA_MAP`'s record type**: entries are `{ re; suite }` singular resolved by
-`.find` (§2), so two entries sharing a regex would silently yield only the
-first. Unknown blast radius stays on the fallback; `FALLBACK_SUITES` is never
-narrowed.
+**D2 — map the unmapped directories. WITHDRAWN (round 5).** Four rounds
+argued D2's *correctness* (it must map to `ccgate` as well as `kmcrank`, or
+it deletes coverage of `km-panic.sh` and `km-sensors-sync.sh`). No round
+priced it. Priced against §1 Pass A, for a `scripts/foo.ts` change on the
+TIA-active path:
+
+| state | selection | cost |
+|---|---|---|
+| today | fallback: ccgate 13.1 + gateplugin 0.02 + kmcrank 16.5 + doccheck 0.05 | 29.67 s |
+| after D3 alone | same selection, kmcrank narrowed | **15.07 s** |
+| after D3 + D2 | ccgate 13.1 + kmcrank 1.9 + doccheck 0.05 | **15.05 s** |
+
+**D2's whole effect is dropping the `gateplugin` row: 0.02 s.** Everything
+else in that column is D3. And for `scripts/gate-check.ts` — the path most
+exercised while implementing any of this — D2 changes nothing at all, because
+D3's pull-in rules carry no package guard and `kmcrank` is already in
+`FALLBACK_SUITES`.
+
+Against 0.02 s — two orders of magnitude inside the n=1 spread §1 declares —
+D2 costs a resolution-semantics change to `TIA_MAP`, the single table
+governing all suite selection; two pinned assertions moved plus a re-pin of
+the only conservative-union test; and a deliberate coverage reduction
+(`gateplugin` dropped for `scripts/`) running against "when uncertain, run
+MORE". Not worth it. `TIA_MAP` stays singular.
 
 **D3 — narrow `kmcrank`.** Exclude `gate-check-cli.test.ts` (13.9 s of
 15.8 s) with pull-ins on `^scripts/gate-check\.ts$` and
@@ -298,10 +317,8 @@ every row on one basis first.
 | concurrent, after D3 | max(13.1, 0.02, 1.9, 0.05) = **13.1 s** |
 
 Concurrency is worth **13.2 s today** (29.7 → 16.5) and **≈2 s after D3**
-(15.1 → 13.1). The rows are "after D3", not "after D1-D4": D1 is withdrawn,
-`FALLBACK_SUITES` contains no opencode, D2 changes selection frequency rather
-than this selection's cost, and D4 only fires when ccgate is already
-selected. Concurrency buys nothing for single-suite selections. **Prerequisite if taken up:**
+(15.1 → 13.1). The rows are "after D3": D1, D2, D4 and D8 are all withdrawn,
+`FALLBACK_SUITES` contains no opencode, D2 and D4 are withdrawn. Concurrency buys nothing for single-suite selections. **Prerequisite if taken up:**
 `runSyncCaptured` writes each suite's output to `process.stdout` (`:137`),
 which the check runner captures as the block reason; concurrent suites
 interleave it into an unreadable message. Per-suite buffering lands first.
@@ -352,7 +369,7 @@ interleave it into an unreadable message. Per-suite buffering lands first.
   CLI-observable, which is why `gate-check-cli.test.ts:250-261` works.
 - Re-measure with the Pass B method only; append as a new dated pass.
 - **The live stream is home-anchored.** Read it via `gateNdjsonPath()` /
-  `MAIN_GATE_NDJSON_DEFAULT` (`scripts/p0-signal-variance.ts:83-87`), which
+  `MAIN_GATE_NDJSON_DEFAULT` (`scripts/p0-signal-variance.ts:65` (`gateNdjsonPath` at `:83-87`)), which
   resolves under `~/z2/meta-harness`. A bare relative `.km/gate-outcomes.ndjson`
   read from a worktree is a different, near-empty file — the exact error
   `scripts/b3-binarization-measure.ts:46-53` records as "NEVER cwd-relative".
@@ -366,6 +383,7 @@ interleave it into an unreadable message. Per-suite buffering lands first.
 
 ## 6. Non-goals
 
+- **Mapping `scripts/` in `TIA_MAP`** (D2 withdrawn, round 5) — 0.02 s.
 - **Narrowing `opencode` at all** (D1 withdrawn, round 3). Requires marker
   provenance or D8; neither is designed.
 - **Closing the `src/acp/index.ts` tier-0 gap** (D4 withdrawn, round 4). It
