@@ -515,7 +515,12 @@ five architect rounds recorded in
   apparent saving; the honest statement is that tier-0 km-crank is now
   1.20 s, and the excluded file is whatever it is at the time it runs.
   Derived fallback selection: ccgate 13.1 + gateplugin 0.02 + kmcrank 1.20 +
-  doccheck 0.05 ≈ **14.4 s**, against ≈29.7 s pre.
+  doccheck 0.05 ≈ **14.4 s**, against ≈29.7 s pre. **This sum mixes Pass A**
+  (ccgate/gateplugin/doccheck, whole-suite wall clock) **with Pass C**
+  (kmcrank, per-file JUnit reporter) **— the spec's §1 declares the passes
+  not interchangeable and never pooled, so 14.4 s is directional, not a
+  clean single-basis measurement** (same mixing defect the spec's §3 flags
+  for its D7 table).
 - **Instrument boundary: ts 1785990600996. SECOND boundary on this host
   today** — the review-sensor arming above stamped **1785988568548** at
   12:56, 34 minutes earlier. The two are independent and must both be

@@ -134,9 +134,9 @@ const SLOW_CCGATE_TEST_RE =
 export const SLOW_KMCRANK_TEST_RE = /(^|\/)gate-check-cli\.test\.ts$/
 
 /** Suite id -> the package directory its tests live under. Only the suites
- * that currently need it (pull-in self-matching below; Task 3's `Cmd.cwd`
- * derivation) are populated — this is not a claim that every SuiteId has
- * (or needs) an entry.
+ * that currently need it (pull-in self-matching below; `scripts/gate-check.ts`'s
+ * `scanFastArgv`-derived `Cmd.cwd`/`Cmd.argv`) are populated — this is not a
+ * claim that every SuiteId has (or needs) an entry.
  *
  * DOUBLE DUTY, one map, two consumers: (1) here in `pullInsFor`, presence
  * drives the self-pull regex (a changed slow test file pulls itself); (2)
@@ -157,9 +157,9 @@ export const PKG_DIR: Partial<Record<SuiteId, string>> = {
  * suite's tier-0 run. `guard`, when present, is a path prefix a change must
  * also satisfy — e.g. a package prefix, so the same source basename can't
  * false-positive across packages sharing this table. Guardless rules are
- * legitimate (Task 2 adds the first one, a `scripts/…` -> km-crank test
- * mapping that by construction can't be package-prefixed); this task does
- * not add one. */
+ * legitimate: kmcrank's rules below are the guardless case, a `scripts/…`
+ * -> km-crank test mapping that by construction can't be package-prefixed,
+ * since `scripts/gate-check.ts` and this module live outside `km-crank/`. */
 interface PullInRule {
   re: RegExp
   tests: string[]
@@ -204,8 +204,9 @@ const CCGATE_GUARD = /^cc-gate-plugin\//
 // "run the whole suite" into "run only the appended file" — the exact
 // class of bug the `scanFailed` degradation guard in scripts/gate-check.ts
 // exists to prevent, reintroduced by a policy-side mistake instead of a
-// scan-side one.
-const SUITE_POLICY: Partial<Record<SuiteId, SuitePolicy>> = {
+// scan-side one. Pinned by a test (every SUITE_POLICY key is also a PKG_DIR
+// key) in gate-check-core.test.ts — exported for that reason.
+export const SUITE_POLICY: Partial<Record<SuiteId, SuitePolicy>> = {
   ccgate: {
     slowTestRe: SLOW_CCGATE_TEST_RE,
     rules: [

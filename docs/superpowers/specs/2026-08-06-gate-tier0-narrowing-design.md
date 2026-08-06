@@ -1,6 +1,7 @@
 # Gate tier-0 narrowing — design (2026-08-06)
 
-**Status:** design, unexecuted. **Revision 7** — D3 implemented and measured; five architect rounds.
+**Status:** D3 implemented and measured (2026-08-06); D1/D2/D4/D8 withdrawn,
+D5-D7 unchanged. **Revision 7** — five architect rounds.
 Round 1 invalidated D1's original safety argument; round 2 invalidated
 revision 2's fix for it and killed D8; round 3 killed D1 itself; round 4
 killed D4 and showed the governing rule was overstated; **round 5 priced D2
@@ -56,7 +57,11 @@ record.
 (15.8 s / 13.9 s) because this work added 15 tests, most of them CLI tests
 inside the excluded file — so the apparent saving is inflated and the honest
 figure is the absolute one: km-crank tier-0 is now 1.20 s. Derived fallback
-selection ≈ **14.4 s** (13.1 + 0.02 + 1.20 + 0.05) against ≈29.7 s.
+selection ≈ **14.4 s** (13.1 + 0.02 + 1.20 + 0.05) against ≈29.7 s — **this
+sum mixes Pass A (ccgate 13.1, gateplugin 0.02, doccheck 0.05) with Pass C
+(kmcrank 1.20); §1 rules the passes not interchangeable and never pooled, so
+read 14.4 s as directional, not a clean single-basis measurement (same
+mixing defect §3 flags for the D7 table).**
 
 Live stream, `.km/gate-outcomes.ndjson`, 0.3.0 regime, 2026-08-05 22:15 →
 2026-08-06 10:11: fast Stops 212/226/270/331 ms; slow Stops
@@ -363,8 +368,9 @@ interleave it into an unreadable message. Per-suite buffering lands first.
   every narrowed suite, or editing that file selects the suite and skips it.
 - **A pull-in does not select its suite.** The runner iterates `suites` only
   (`gate-check.ts:239-250`). D3's rules work because `kmcrank` is in
-  `FALLBACK_SUITES` and in `TIA_MAP` for `^scripts/` after D2 — not because a
-  pull-in forces selection. Any future cross-package rule must check this.
+  `FALLBACK_SUITES` — not because a pull-in forces selection. (`TIA_MAP` has
+  no `^scripts/` entry: D2, which would have added one, was withdrawn.) Any
+  future cross-package rule must check this.
 - **Coverage constraint, stated precisely:** no test file may end up running
   in *fewer situations where it could newly fail* than today. Narrowing a
   suite while pulling the file back on changes to its inputs and itself
@@ -375,9 +381,8 @@ interleave it into an unreadable message. Per-suite buffering lands first.
 ## 5. Verification
 
 - `km-crank/test/gate-check-core.test.ts` unit-tests selection and pull-in.
-  `:97` and `:100` pin present `scripts/` behaviour and change under D2 —
-  expected, recorded, and `:99-101`'s invariant ("fallback never DROPS a TIA
-  pick") must be re-pinned with a path that is *still* unknown after D2.
+  `:97` and `:100` pin present `scripts/` behaviour; D2 (which would have
+  changed it) is withdrawn, so no re-pin is needed.
 - Fast-list computation is **not** observable through `KKAMAK_GATE_COMMANDS`
   (`gate-check.ts:61-65` returns the seam JSON verbatim and never calls
   `realCommands()`). Unit-test it directly; only the pull-in *append* is

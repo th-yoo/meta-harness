@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   parseMarker, decide, suitesForChangedPaths, fastFiles, fastArgvSuffix, pullInsFor,
-  ALL_SUITES, FALLBACK_SUITES, BG_STALE_MS, type GateBgMarker,
+  ALL_SUITES, FALLBACK_SUITES, BG_STALE_MS, PKG_DIR, SUITE_POLICY, type GateBgMarker,
 } from "../src/gate-check-core.ts"
 
 const T1 = "aaaa1111"
@@ -212,6 +212,19 @@ describe("fastFiles (suite-keyed, ported from the retired ccgateFastFiles)", () 
   test("a suite with no configured slowTestRe (e.g. doccheck) is unfiltered — no narrowing means no-op", () => {
     const files = ["test/a.test.ts", "test/b.test.ts"]
     expect(fastFiles("doccheck", files)).toEqual(files)
+  })
+})
+
+describe("SUITE_POLICY / PKG_DIR invariant (gate-check-core.ts:197-207)", () => {
+  test("every SUITE_POLICY key is also a PKG_DIR key — a suite only gets " +
+    "pull-in rules if scripts/gate-check.ts's scanFastArgv gives it an " +
+    "ENUMERATED fast-file Cmd.argv (never a bare [\"bun\",\"test\"]); " +
+    "otherwise a pull-in append would silently collapse the whole suite " +
+    "to the appended file(s), the same class of bug the scanFailed guard " +
+    "exists to prevent, reintroduced from the policy side", () => {
+    for (const suite of Object.keys(SUITE_POLICY)) {
+      expect(PKG_DIR).toHaveProperty(suite)
+    }
   })
 })
 
