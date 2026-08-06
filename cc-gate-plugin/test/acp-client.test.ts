@@ -61,12 +61,25 @@ function killDaemonByPid(sock: string, spawnLog: string): void {
   }
 }
 
+/** Leak check is a DELTA against what was already listening, not absolute
+ * emptiness. `~/.config/kkamak` is shared with the live host, and since the
+ * review-sensor was armed (2026-08-06, ledger ts 1785996709580) it drives the
+ * ACP warm lane, so a real `acp-<fp>.sock` is routinely present while tests
+ * run. An absolute `toEqual([])` fails every test in this file on an armed
+ * host and wedges the gate that runs them (observed: 72 failures from one
+ * pre-existing socket). The delta still catches what this guards — production
+ * code ignoring `KKAMAK_ACP_SOCKET` and falling back to the default
+ * fingerprint-derived path, which appears as a NEW file during a test. */
+const acpDir = () => path.join(process.env.HOME ?? "", ".config", "kkamak")
+const acpSocksNow = (): string[] =>
+  fs.existsSync(acpDir()) ? fs.readdirSync(acpDir()).filter((f) => f.startsWith("acp-")) : []
+const PRE_EXISTING = new Set(acpSocksNow())
+const newAcpSocks = (): string[] => acpSocksNow().filter((f) => !PRE_EXISTING.has(f))
+
 afterEach(() => {
   while (LIVE_FAKES.length) { const f = LIVE_FAKES.pop()!; try { f.stop() } catch { /* ignore */ } }
   while (LIVE_DAEMONS.length) { const d = LIVE_DAEMONS.pop()!; killDaemonByPid(d.sock, d.spawnLog) }
-  const dir = path.join(process.env.HOME ?? "", ".config", "kkamak")
-  const leaked = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.startsWith("acp-")) : []
-  expect(leaked).toEqual([])
+  expect(newAcpSocks()).toEqual([])
 })
 
 async function waitForLines(file: string, n: number, ms: number): Promise<string[]> {
@@ -328,9 +341,7 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     const ok = await ensureDaemon(env, { waitMs: 10_000 })
     expect(ok).toBe(true)
     expect(fs.existsSync(sock)).toBe(true)
-    const dir = path.join(process.env.HOME ?? "", ".config", "kkamak")
-    const leaked = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.startsWith("acp-")) : []
-    expect(leaked).toEqual([])
+    expect(newAcpSocks()).toEqual([])
   }, 30_000)
 
   test("ensureDaemon() defaults to waitMs 0: returns false immediately and still kicks a spawn", async () => {

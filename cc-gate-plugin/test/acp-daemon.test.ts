@@ -198,13 +198,23 @@ function connectNdjson(sock: string): Promise<{
 }
 
 const LIVE: Array<{ sock: string; spawnLog: string }> = []
+
+const acpDir = () => path.join(process.env.HOME ?? "", ".config", "kkamak")
+const acpSocksNow = (): string[] =>
+  fs.existsSync(acpDir()) ? fs.readdirSync(acpDir()).filter((f) => f.startsWith("acp-")) : []
+const PRE_EXISTING = new Set(acpSocksNow())
+const newAcpSocks = (): string[] => acpSocksNow().filter((f) => !PRE_EXISTING.has(f))
+
 afterEach(() => {
   while (LIVE.length) { const e = LIVE.pop()!; killDaemon(e.sock, e.spawnLog) }
-  // The hygiene invariant, asserted rather than hoped for.
-  const home = process.env.HOME ?? ""
-  const dir = path.join(home, ".config", "kkamak")
-  const leaked = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.startsWith("acp-")) : []
-  expect(leaked).toEqual([])
+  // The hygiene invariant, asserted rather than hoped for — as a DELTA
+  // against what was already listening, not absolute emptiness.
+  // `~/.config/kkamak` is shared with the live host, and since the
+  // review-sensor was armed (2026-08-06, ledger ts 1785996709580) it drives
+  // the ACP warm lane, so a real `acp-<fp>.sock` is routinely present while
+  // tests run. Absolute emptiness fails every test here on an armed host and
+  // wedges the gate that runs them. A genuine leak is still a NEW file.
+  expect(newAcpSocks()).toEqual([])
 })
 
 // ── wire-level behaviour: no model is ever reached, so NO credentials

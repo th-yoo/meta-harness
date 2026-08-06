@@ -31,10 +31,30 @@ const ENV: Record<string, string | undefined> = { ...process.env, KKAMAK_ACP_TES
 
 const LIVE_FAKES: FakeDaemonHandle[] = []
 
+/** Sockets under ~/.config/kkamak that were ALREADY there before this file
+ * ran. The leak check is a DELTA against this, not an absolute emptiness
+ * assertion.
+ *
+ * Why: that directory is shared with the live host. Since the review-sensor
+ * was armed (2026-08-06, ledger ts 1785996709580) it drives the ACP warm
+ * lane, so a real `acp-<fp>.sock` is routinely listening while tests run —
+ * and an absolute `toEqual([])` then fails every test in this file on any
+ * armed host, wedging the gate that runs them. Observed live: 72 failures
+ * from one pre-existing socket.
+ *
+ * The delta preserves the check exactly. What it guards is production code
+ * ignoring `KKAMAK_ACP_SOCKET` and falling back to the default
+ * fingerprint-derived path; such a leak is a NEW file appearing during a
+ * test, which this still catches. It only stops blaming this file for
+ * sockets it never created. */
+const dirOf = () => path.join(process.env.HOME ?? "", ".config", "kkamak")
+const acpSocksNow = (): string[] =>
+  fs.existsSync(dirOf()) ? fs.readdirSync(dirOf()).filter((f) => f.startsWith("acp-")) : []
+const PRE_EXISTING = new Set(acpSocksNow())
+
 afterEach(() => {
   while (LIVE_FAKES.length) { const f = LIVE_FAKES.pop()!; try { f.stop() } catch { /* ignore */ } }
-  const dir = path.join(process.env.HOME ?? "", ".config", "kkamak")
-  const leaked = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.startsWith("acp-")) : []
+  const leaked = acpSocksNow().filter((f) => !PRE_EXISTING.has(f))
   expect(leaked).toEqual([])
 })
 
