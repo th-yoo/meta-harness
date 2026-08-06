@@ -56,6 +56,36 @@ fails loudly pointing somewhere else.
  - cc-gate-plugin: "no ACP sockets on the host" broken by arming a
    consumer of the ACP lane (fixed 6121e53)
 
+TB2 BATCH — SIZED, NOT STARTED. Model policy (user, 2026-08-06): use the
+LATEST — sonnet-5 and opus-5 now; HAIKU'S LATEST IS STILL 4-5. Consequence:
+the haiku baseline account-global-v0-baseline-haiku (43 tasks, k=1,
+pass_rate 0.279) is ALREADY on the current model and stays VALID — no
+re-baseline for haiku work. Sonnet/opus baselines ARE invalidated
+(baseline/candidate/production must share the model), so any opus-5 run
+needs a fresh baseline first.
+
+Wall-clock, computed from recorded `elapsed` in term-bench2/results-archive
+and results/ (SERIAL; mean per attempt, tail dominated by the 600s agent cap):
+  haiku-4-5   43 tasks k=1  =  3.0 h measured   (median 1.7 min, mean 4.2)
+  sonnet-4-6  43 tasks k=1  =  3.5 h measured
+  opus-4-8    26 tasks k=3  = 12.3 h measured   (median 4.9 min, mean 9.5)
+Extrapolations: loop1-band (14) x k=5 ~ 5 h · loop1 (43) x k=2 ~ 6 h ·
+opus-5 Cat-A (26) x k=3 ~ 12 h PLUS ~12 h fresh baseline ~ 24 h total.
+An `ab` run is ~2x (two arms).
+
+RECOMMENDATION: haiku path first — cheaper, baseline still valid, and 27.9%
+pass is the signal band where actuator lift is visible. Opus-5 answers a
+different question (frontier harness quality) and carries the near-ceiling
+risk that made openssl a bad target. --parallel is effectively unavailable
+here: it forbids shared oauth (needs ANTHROPIC_API_KEY) and load-aware
+packing is blocked by broken WSL2 cgroup capture (--no-pack-measured).
+GATE FIRST, free: source scripts/probe-models.sh && probe_models
+claude-haiku-4-5 claude-sonnet-5 claude-opus-5 — quotas are PER TIER, so
+opus can be 429-walled while haiku runs. Launch in tmux, never setsid.
+Stale default worth fixing when convenient: DEFAULT_BENCH_MODEL in
+opencode-plugin/src/bench/paths.ts:28 still says claude-sonnet-4-6 (every
+documented invocation passes --model explicitly, so it is inert).
+
 OPEN (unchanged from the block below): TB2 batch (probe models first);
 kkamak install-verification runbook (needs the credential-mount ruling —
 its Linux container variant mounts live ~/.claude RW and rotates the real
