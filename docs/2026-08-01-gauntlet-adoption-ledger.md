@@ -579,3 +579,13 @@ five architect rounds recorded in
   re-dates from it. Standing lesson (memory hardened): MERGING IS NOT
   DEPLOYING — any cc-gate-plugin code merge needs a version bump in the
   same change; verify via the installed cache dir, never repo source.
+
+- **EFFECTIVE BOUNDARY CONFIRMED (2026-08-06 15:11 KST): the sensor's
+  real first regime opens at ts 1785996709580** (first stream line,
+  pluginVersion 0.4.0). Live-proven same minute with two manual runner
+  dispatches against a real 2-line working-tree diff: (1) cold start →
+  correct "warm-lane-busy" skip (zero-wait seat, daemon not yet up);
+  (2) warm → FULL PASS — findingsCount 0, exact diffStat, haiku
+  3399 ms, atomic state write, side file, and `closeSession →
+  {closed:true}` proving the session/close verb end-to-end. The 7-day
+  cadence checkpoint dates from 1785996709580 → due 2026-08-13.
