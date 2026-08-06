@@ -34,7 +34,7 @@ import {
   type RunOneP2AttemptFn,
   type RunA4ReviewFn,
 } from "../src/bench/p2/cmd-p2.ts"
-import { P2_RULE_TEXT, ruleSha } from "../src/bench/p2/rule.ts"
+import { P2_RULE_TEXT, ruleSha, DONE_CHECK_PATH } from "../src/bench/p2/rule.ts"
 import type { A4ReviewResult } from "../src/bench/p2/a4-review.ts"
 import { BenchError } from "../src/bench/util.ts"
 import type { BenchPaths } from "../src/bench/paths.ts"
@@ -460,4 +460,32 @@ test("runOneP2Attempt: compliance bit false — DONE-CHECK shares nothing with a
 test("runOneP2Attempt: compliance bit false — DONE-CHECK.txt absent entirely", async () => {
   const { result } = await callRunOneP2Attempt("a1", { catSequence: [MISSING_DONE_CHECK] }, async () => undefined)
   expect(result.compliant).toBe(false)
+})
+
+// ── A3 carrier-content drift guard (task-6-brief.md deferred item 1;
+// progress.md Task 4 minor deferred, DEADLINE before Task 6 sized-go) ──────
+//
+// P2's premise is "same rule content, three carriers" (rule.ts header):
+// A1 embeds P2_RULE_TEXT verbatim in the harness markdown, A4 re-states it
+// via buildReinjectInstruction (already asserted above, `joined).toContain
+// (P2_RULE_TEXT)`), but A3 speaks through a SEPARATE, hand-authored asset
+// (assets/stop-gate-settings.json's shell-embedded hook message) that has
+// no structural tie back to rule.ts — nothing previously caught the asset
+// drifting out of sync with the frozen rule text. This test reads the
+// asset directly (not through cmd-p2.ts) and pins its hook message to the
+// two load-bearing fragments so an edit to either file that breaks parity
+// fails CI, without demanding byte-identical prose (the asset is allowed
+// to phrase the rule differently — Task 4's review judged the paraphrase
+// sound — only the DONE-CHECK path and the "does not count as
+// verification" clause are pinned, per the brief's literal minimum).
+
+test("A3 carrier: stop-gate-settings.json's hook message pins the frozen rule's load-bearing fragments", () => {
+  const raw = fs.readFileSync(
+    path.join(import.meta.dirname, "../src/bench/p2/assets/stop-gate-settings.json"),
+    "utf-8",
+  )
+  const settings = JSON.parse(raw)
+  const hookMessage: string = settings.hooks.Stop[0].hooks[0].command
+  expect(hookMessage).toContain(DONE_CHECK_PATH)
+  expect(hookMessage).toContain("does not count as verification")
 })
