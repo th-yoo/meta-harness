@@ -73,7 +73,11 @@ export function truncateDiff(diff: string, ceilingBytes: number = DIFF_CEILING_B
   const buf = Buffer.from(diff, "utf8")
   if (buf.length <= ceilingBytes) return { text: diff, truncated: false }
 
-  // Find the last hunk/file boundary marker at or before ceiling (prefer file boundaries)
+  // Find the last boundary marker of EITHER kind at or below the ceiling —
+  // a file-header marker (`\ndiff --git`) or a hunk marker (`\n@@`). Both
+  // scans always run: a multi-file diff whose bulk sits in a later file
+  // must not be cut at that file's header when a later hunk boundary (its
+  // own, or a subsequent file's) still fits within the ceiling.
   const diffGitMarker = Buffer.from("\ndiff --git")
   const hunkMarker = Buffer.from("\n@@")
   let lastDiffGitByte = -1, lastHunkByte = -1, idx = 0
@@ -83,17 +87,13 @@ export function truncateDiff(diff: string, ceilingBytes: number = DIFF_CEILING_B
     idx++
   }
 
-  // Only consider hunk boundaries if they come BEFORE the first file boundary,
-  // or if there's no file boundary within the ceiling
-  if (lastDiffGitByte < 0) {
-    idx = 0
-    while ((idx = buf.indexOf(hunkMarker, idx)) >= 0) {
-      if (idx <= ceilingBytes) lastHunkByte = idx
-      idx++
-    }
+  idx = 0
+  while ((idx = buf.indexOf(hunkMarker, idx)) >= 0) {
+    if (idx <= ceilingBytes) lastHunkByte = idx
+    idx++
   }
 
-  const cutByteOffset = lastDiffGitByte >= 0 ? lastDiffGitByte : lastHunkByte
+  const cutByteOffset = Math.max(lastDiffGitByte, lastHunkByte)
   if (cutByteOffset > 0) {
     return { text: buf.slice(0, cutByteOffset + 1).toString("utf8"), truncated: true }
   }
@@ -177,31 +177,34 @@ export function passLine(args: {
   pluginVersion: string | undefined
   host: string
 }): string {
-  const counts = { highCount: 0, medCount: 0, lowCount: 0 }
+  const severityCounts = { high: 0, med: 0, low: 0 }
   for (const f of args.findings) {
-    if (f.severity === "high") counts.highCount++
-    else if (f.severity === "med") counts.medCount++
-    else if (f.severity === "low") counts.lowCount++
+    if (f.severity === "high") severityCounts.high++
+    else if (f.severity === "med") severityCounts.med++
+    else if (f.severity === "low") severityCounts.low++
   }
 
   const obj: Record<string, unknown> = {
     ts: args.ts,
-    ...counts,
-    filesChanged: args.diffStat.files,
-    insertions: args.diffStat.insertions,
-    deletions: args.diffStat.deletions,
+    findingsCount: args.findings.length,
+    severityCounts,
+    diffStat: {
+      files: args.diffStat.files,
+      insertions: args.diffStat.insertions,
+      deletions: args.diffStat.deletions,
+    },
     baseSha: args.baseSha,
     headSha: args.headSha,
     truncated: args.truncated,
     diffBase: args.diffBase,
     model: args.model,
     durationMs: args.durationMs,
-    host: args.host,
   }
 
   if (args.pluginVersion !== undefined) {
     obj.pluginVersion = args.pluginVersion
   }
+  obj.host = args.host
 
   return JSON.stringify(obj)
 }
@@ -209,13 +212,14 @@ export function passLine(args: {
 export function skipLine(args: { ts: number; reason: SkipReason; pluginVersion: string | undefined; host: string }): string {
   const obj: Record<string, unknown> = {
     ts: args.ts,
+    skipped: true,
     reason: args.reason,
-    host: args.host,
   }
 
   if (args.pluginVersion !== undefined) {
     obj.pluginVersion = args.pluginVersion
   }
+  obj.host = args.host
 
   return JSON.stringify(obj)
 }

@@ -253,7 +253,13 @@ describe("truncateDiff", () => {
     expect(result.truncated).toBe(true)
   })
 
-  test("cuts at 'diff --git' boundary", () => {
+  test("cuts at the LAST boundary of either kind — file2's own header outruns file1's diff --git marker", () => {
+    // file2's header fits within the ceiling but its hunk body does not:
+    // the last boundary at/below ceiling is file2's own hunk marker (byte
+    // 282), which is later than file1->file2's diff --git marker (byte
+    // 249). Finding-2 fix: cut at the LATER of the two, so file2's header
+    // is preserved (more content survives) while its hunk body is still
+    // correctly excluded (hunk-aligned — never cut mid-hunk-body).
     const file1 = "diff --git a/file1.ts b/file1.ts\n@@ -1,3 +1,3 @@\n" + "a".repeat(200)
     const file2 = "\ndiff --git a/file2.ts b/file2.ts\n@@ -1,3 +1,3 @@\n" + "b".repeat(200)
     const diff = file1 + file2
@@ -262,8 +268,43 @@ describe("truncateDiff", () => {
 
     expect(result.truncated).toBe(true)
     expect(result.text).toContain("file1.ts")
-    // Should not include file2
-    expect(result.text).not.toContain("file2.ts")
+    // file2's header now survives (previously dropped entirely)...
+    expect(result.text).toContain("file2.ts")
+    // ...but its hunk body is still excluded — cut lands before "@@" of file2.
+    expect(result.text).not.toContain("b".repeat(200))
+    expect(Buffer.byteLength(result.text, "utf8")).toBeLessThanOrEqual(ceiling)
+  })
+
+  test("finding-2 regression: bulk-in-later-file diff is not cut at that file's header when its hunks fit", () => {
+    // Small file1 (a few hundred bytes) + a large multi-hunk file2 whose
+    // hunks extend past the ceiling. The old bug: once ANY diff --git
+    // marker was found at/below the ceiling, hunk boundaries were never
+    // scanned at all — so the cut landed at file2's HEADER, dropping
+    // hunks that actually fit within the budget. Fixed behavior: scan
+    // both marker kinds unconditionally and cut at the last one that
+    // fits — so file2's header AND at least one of its hunks survive.
+    const file1 = "diff --git a/small.ts b/small.ts\n@@ -1,3 +1,3 @@\n" + "s".repeat(300)
+    const hunkBody = "h".repeat(2000)
+    const file2Header = "\ndiff --git a/big.ts b/big.ts\n"
+    const file2Hunk1 = `@@ -1,50 +1,50 @@\n${hunkBody}\n`
+    const file2Hunk2 = `@@ -100,50 +100,50 @@\n${hunkBody}\n`
+    const file2Hunk3 = `@@ -200,50 +200,50 @@\n${hunkBody}\n`
+    const diff = file1 + file2Header + file2Hunk1 + file2Hunk2 + file2Hunk3
+    // Ceiling sits after file2's header and first hunk, but before the
+    // full diff — well above file1's size alone.
+    const ceiling = file1.length + file2Header.length + file2Hunk1.length + 200
+    expect(ceiling).toBeLessThan(Buffer.byteLength(diff, "utf8"))
+
+    const result = truncateDiff(diff, ceiling)
+
+    expect(result.truncated).toBe(true)
+    expect(result.text).toContain("big.ts")
+    expect(result.text).toContain("@@ -1,50 +1,50 @@")
+    expect(result.text).toContain(hunkBody) // at least one full file2 hunk survives
+    // Cut well above file1's size alone — file2 content made it in.
+    expect(result.text.length).toBeGreaterThan(file1.length + file2Header.length)
+    const resultBytes = Buffer.byteLength(result.text, "utf8")
+    expect(resultBytes).toBeLessThanOrEqual(ceiling)
   })
 
   test("cuts at '@@' line boundary", () => {
@@ -474,10 +515,9 @@ describe("passLine", () => {
     })
 
     const parsed = JSON.parse(line)
-    // F2 spec: counts per severity
-    expect(parsed.highCount).toBe(2)
-    expect(parsed.medCount).toBe(1)
-    expect(parsed.lowCount).toBe(3)
+    // F2 spec: counts per severity, plus the total findingsCount
+    expect(parsed.findingsCount).toBe(6)
+    expect(parsed.severityCounts).toEqual({ high: 2, med: 1, low: 3 })
   })
 
   test("model key present and equals passed value", () => {
@@ -519,12 +559,9 @@ describe("passLine", () => {
     const keys = Object.keys(parsed)
     const allowedKeys = [
       "ts",
-      "highCount",
-      "medCount",
-      "lowCount",
-      "filesChanged",
-      "insertions",
-      "deletions",
+      "findingsCount",
+      "severityCounts",
+      "diffStat",
       "baseSha",
       "headSha",
       "truncated",
@@ -538,6 +575,10 @@ describe("passLine", () => {
     for (const key of keys) {
       expect(allowedKeys).toContain(key)
     }
+
+    // Nested objects (spec §3 sample shape) — not flattened.
+    expect(Object.keys(parsed.severityCounts as object).sort()).toEqual(["high", "low", "med"])
+    expect(Object.keys(parsed.diffStat as object).sort()).toEqual(["deletions", "files", "insertions"])
   })
 
   test("pluginVersion undefined omitted from output", () => {
@@ -572,6 +613,7 @@ describe("skipLine", () => {
     const parsed = JSON.parse(line)
     expect(parsed.ts).toBe(1234567890000)
     expect(parsed.reason).toBe("debounce")
+    expect(parsed.skipped).toBe(true)
   })
 
   test("all skip reasons emitted correctly", () => {
@@ -597,6 +639,7 @@ describe("skipLine", () => {
       })
       const parsed = JSON.parse(line)
       expect(parsed.reason).toBe(reason)
+      expect(parsed.skipped).toBe(true)
     }
   })
 
@@ -610,7 +653,7 @@ describe("skipLine", () => {
 
     const parsed = JSON.parse(line) as Record<string, unknown>
     const keys = Object.keys(parsed)
-    const allowedKeys = ["ts", "reason", "pluginVersion", "host"]
+    const allowedKeys = ["ts", "skipped", "reason", "pluginVersion", "host"]
 
     for (const key of keys) {
       expect(allowedKeys).toContain(key)
