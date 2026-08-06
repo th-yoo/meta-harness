@@ -1,37 +1,57 @@
 # Gate tier-0 narrowing — design (2026-08-06)
 
-**Status:** design, unexecuted. No code changed. Decisions D1-D5 below are the
-user's; this file records the measurement and the options, not the ruling.
+**Status:** design, unexecuted. No code changed. D1-D4 were approved
+2026-08-06; **architect review round 1 invalidated D1's safety argument**
+(§2.2) and added D8, which D1 now depends on. Treat D1 as re-opened.
+
+**Decision index:** D1 opencode narrowing (blocked on D8) · D2 fallback
+mapping · D3 kmcrank narrowing · D4 `index.ts` coverage · D5 boundary ts
+(requirement, not a choice) · D6 sync debt repayment (keep) · D7 concurrent
+suites (deferred) · D8 opencode in tier 1 (**new, blocks D1**).
 
 **Problem statement:** the two-tier gate is deployed and working as designed,
 but its blocking tier is not seconds-scale for any change that touches code.
-Doc-only Stops are sub-second; code Stops cost 13-30s, and the most common
-non-package path costs ~30s.
+Doc-only Stops are sub-second; code Stops cost 13-30 s, and the most common
+selection costs ~30 s.
 
 ## 1. What was measured
 
-Host `yoo-dev`, 2026-08-06, single samples each, repo at `6417b7a`. Timed by
-running each tier-0 suite exactly as `scripts/gate-check.ts`'s command table
-invokes it.
+Two measurement passes exist. **They are not interchangeable and must not be
+pooled.** Both are recorded; the JUnit pass is the basis for all per-file
+claims and for any before/after comparison.
 
-| tier-0 suite | wall time | narrowed? |
-|---|---|---|
-| `doccheck` | 0.05 s | n/a — always runs |
-| `gateplugin` | 0.02 s | n/a — trivially small |
-| `ccgate` (fast list) | **13.1 s** | yes — 50 of 56 files |
-| `kmcrank` | **16.5 s** | **no — whole suite** |
-| `opencode` | **30.0 s** | **no — whole suite** |
-| `FALLBACK_SUITES` union | **≈ 29.7 s** | ccgate+gateplugin+kmcrank+doccheck |
+**Pass A — whole-suite wall clock**, host `yoo-dev`, repo `6417b7a`, single
+samples, each suite invoked exactly as `scripts/gate-check.ts`'s command
+table does:
+
+| tier-0 suite | wall time |
+|---|---|
+| `doccheck` | 0.05 s |
+| `gateplugin` | 0.02 s |
+| `ccgate` (fast list) | 13.1 s |
+| `kmcrank` | 16.5 s |
+| `opencode` | 30.0 s |
+| `FALLBACK_SUITES` union | ≈29.7 s |
+
+**Pass B — per-file, JUnit reporter** (`bun test --reporter=junit`), repo
+`487d104`, single samples. Totals differ from Pass A by 10-20 % (reporter
+overhead, load, cold caches); that spread is itself a reason not to claim
+small deltas from n=1.
+
+| suite | total | dominant file | share |
+|---|---|---|---|
+| `opencode` | 36.0 s / 182 suites | `test/minimal-relations-desk.test.ts` **31.5 s** | **88 %** |
+| `kmcrank` | 15.8 s / 65 suites | `test/gate-check-cli.test.ts` **13.9 s** | **88 %** |
+| `ccgate` (fast list) | 14.4 s / 50 files | `cli.test.ts` 5.2 s, `init-cli` 2.6 s, `sensor-contract` 1.5 s | diffuse, top 3 = 65 % |
 
 Live evidence from `.km/gate-outcomes.ndjson` (this repo, `pluginVersion`
 0.3.0 regime, 2026-08-05 22:15 → 2026-08-06 10:11):
 
 - fast Stops: 212, 226, 270, 331 ms
-- slow Stops: 23800, 24027, 24185, 24482, 25357, **37430** ms
-- **debt-repayment Stops: 133452, 160319, 166587 ms**
+- slow Stops: 23800, 24027, 24185, 24482, 25357, 37430 ms
+- debt-repayment Stops: 133452, 160319, 166587 ms
 
-Three populations, not two. The third is the one a user actually feels, and
-§2.1 explains how a Stop enters it.
+Three populations. §2.1 explains the third.
 
 ## 2. Root cause
 
@@ -45,8 +65,7 @@ suite**, not file → tests:
 ```
 
 Only `ccgate` is then narrowed to a file list (`ccgateFastFiles` +
-`SLOW_CCGATE_TEST_RE`). Every other suite runs in full. So a one-line change
-under `opencode-plugin/` runs all 1688 opencode tests.
+`SLOW_CCGATE_TEST_RE`, `:125-128`). Every other suite runs in full.
 
 Anything matching no entry unions `FALLBACK_SUITES`. Verified selections:
 
@@ -61,177 +80,200 @@ term-bench2/runner.ts     -> ccgate, gateplugin, kmcrank, doccheck      (29.7 s)
 package.json              -> ccgate, gateplugin, kmcrank, doccheck      (29.7 s)
 ```
 
-The fallback surface is large and everyday: `scripts/`, `term-bench2/`,
-`evidence/`, `resource-profiles/`, root files. Editing the gate's own script
-costs ~30 s per Stop.
+### 2.1 TIA is green-marker-conditional; the sync-full tier
 
-### 2.1 TIA only applies when a GREEN marker exists — and the sync-full tier
-
-The path-based narrowing above is **conditional**, which the cost table alone
-hides (`scripts/gate-check.ts:233-235`):
+Path narrowing is **conditional** (`scripts/gate-check.ts:233-236`):
 
 ```js
 const base = marker?.status === "green" ? marker.tree : undefined
 const changed = base ? changedPathsSince(base, tree) : undefined
 const suites = changed !== undefined ? suitesForChangedPaths(changed) : [...d.suites]
+const slowPull = changed !== undefined ? slowCcgateTestsForChangedPaths(changed) : []
 ```
 
-With no green marker to diff against there are no changed paths, so TIA is
-skipped entirely and `d.suites` — `FALLBACK_SUITES`, ≈29.7 s — runs. That is
-the state on a first Stop in a fresh worktree, after any red, and after any
-tree change with no completed background run. **The ~30 s fallback is
-therefore the default, not the exception**, and the per-path table in §2 is
-the best case rather than the typical one.
+With no green marker there are no changed paths, so TIA is skipped and
+`FALLBACK_SUITES` (≈29.7 s) runs.
 
-Above that sits a third tier. `decide()`
-(`km-crank/src/gate-check-core.ts:69-71`) returns `full-sync` in exactly two
-cases: `forceFull`, and **`marker.status === "red"` — debt repayment**. A
-full-sync Stop runs the whole tier-1 chain in the foreground: measured
-133-167 s.
+**Corrected in review round 1:** `base` is set whenever the marker is green
+**regardless of tree** — a green marker for an older tree still enables TIA
+(`decide()` at `gate-check-core.ts:81-85` returns tier0 for that case). An
+earlier draft of this spec claimed otherwise. The dominant real trigger for
+the fallback is a **`"running"` marker**: any Stop landing while the detached
+tier-1 child from the previous Stop is still going — a ~160 s window — sees
+`status: "running"`, not green, and falls back.
 
-Normal full runs are NOT synchronous. `spawnBg` detaches them
-(`scripts/gate-check.ts:154-161`) and they write the marker themselves —
-`green` on exit 0, `red` otherwise (`:143-145`). So the only way to a ~160 s
-Stop is a background full run that went red, after which **every** subsequent
-Stop pays synchronously until a full run goes green again.
+Above that sits a third tier. `decide()` (`:69-71`) returns `full-sync` in
+exactly two cases: `forceFull`, and **`marker.status === "red"` — debt
+repayment**, which runs the whole tier-1 chain in the foreground: measured
+133-167 s. Normal full runs are detached (`spawnBg`, `gate-check.ts:154-161`)
+and write the marker themselves — `green` on exit 0, `red` otherwise
+(`:186-188`, the bg path; `:143-145` is the separate synchronous path).
 
-Observed live on 2026-08-06: a worktree created without `bun install` made
-`cc-gate-plugin`'s imports fail, the background full run went red, and the
-next two Stops cost 160 s and 167 s each. The failure was environmental, not
-a code defect — but the tail cost is identical either way.
+Observed live 2026-08-06: a worktree created without `bun install` made
+`cc-gate-plugin`'s imports fail, the background run went red, and the next
+two Stops cost 160 s and 167 s. Environmental, not a code defect — the tail
+cost is identical either way.
 
-**This matters for D1-D3.** Narrowing tier 0 lowers the common case; it does
-nothing for the tail, which is governed by how often tier 0 or the background
-run goes red and how much repayment costs. A narrower tier 0 that goes red
-more often can be worse overall.
+### 2.2 `opencode` runs in exactly one place (review round 1, Critical)
 
-**Why the earlier ~5 s figure did not generalize.** The two-tier deploy
-measured `durationMs` 108733 → 4943 and reported ≈22× faster Stops. That is
-accurate for the window it measured, which was doc-heavy. The mechanism
-works; the claim simply was not a statement about code Stops, and nothing in
-tier 0 was ever going to make a 13 s suite seconds-scale.
+- **Tier 1 does not run it.** `table.full` (`gate-check.ts:56-57`) is
+  `cc-gate-plugin`, `gate-plugin`, `km-crank`, `doc-check`. No opencode.
+- **The fallback does not run it.** `FALLBACK_SUITES`
+  (`gate-check-core.ts:22`) is the same four, deliberately — the comment at
+  `:17-21` records that the incumbent check never ran opencode and that
+  adding it would cost every no-baseline Stop.
+- **`merge-with-gate.sh` runs no tests at all** — only
+  `check-review-artifact.ts` (`:16`).
+
+So opencode tests execute automatically **only** when TIA is active AND a
+changed path matched `^opencode-plugin/` or `^minimal/`. Tier 0 is not the
+fast path for them; it is the *only* path.
+
+Two consequences, both decision-changing:
+
+1. **Excluding an opencode test from tier 0 deletes it from automation**, it
+   does not defer it. The "excluded files still run in tier 1" argument —
+   true for ccgate and kmcrank — is false for opencode. D1 cannot proceed on
+   that reasoning; hence **D8**.
+2. **D1's headline number comes from the exceptional path.** Since the
+   fallback excludes opencode, the 30-36 s opencode cost is only ever paid on
+   TIA-active Stops that touched `opencode-plugin/` or `minimal/`. It is a
+   real cost, but it is not on the path §2.1 identifies as most common, and
+   D1 should not be ranked first on that number alone.
+
+### 2.3 Exclusions are unconditional; pull-ins are not (review round 1, Critical)
+
+The fast list is baked into the command table (`gate-check.ts:36-49`) and
+applies on **every** run. `slowPull` is empty whenever `changed === undefined`
+(`:236`). So on any no-green-marker Stop, a suite runs its fast list with
+**no pull-in able to restore anything**.
+
+This is already true for ccgate today: the fallback — whose stated purpose is
+"when uncertain, run more" — runs ccgate *minus* the six slow ACP tests, and
+cannot pull them back. Extending exclusions to more suites extends this hole.
+
+**Binding rule for any implementation:** when `changed === undefined`, use the
+suite's **un-narrowed** argv. Exclusion must be conditional on the same signal
+the pull-in is conditional on, or the fallback runs strictly less than the
+targeted path — the opposite of fail-safe.
 
 ## 3. Decisions
 
-**D1 — narrow `opencode`.** Largest single tier-0 cost (30 s) with no
-exclusion list. Options: (a) mirror the `ccgateFastFiles` +
-`SLOW_OPENCODE_TEST_RE` pattern, excluding the spawn-heavy files, kept in
-tier 1; (b) leave it and accept 30 s for `opencode-plugin/` and `minimal/`
-edits. Recommendation: (a) — the pattern already exists and generalizes
-directly; the measurement work is identifying which opencode files dominate.
+**D8 — put `opencode` in tier 1? (NEW, blocks D1.)** Today no automated path
+runs opencode except TIA-selected tier 0 (§2.2). Options: (a) add
+`opencode-plugin` to `table.full`, making the background run the genuine net
+the design claims, then D1's exclusion is a deferral rather than a deletion;
+(b) leave tier 1 as-is and drop D1; (c) leave tier 1 as-is and take D1 anyway,
+accepting that the desk test runs nowhere automatic. **Recommendation: (a).**
+It costs the *background* run ~36 s, which is the tier that is allowed to be
+slow, and it removes an existing coverage gap rather than creating one. Note
+the cost: `table.full` is currently "incumbent check VERBATIM" by deliberate
+choice, and (a) ends that property — which is a change to what tier 1 means,
+not a tuning knob. (c) is not recommended and must not be taken silently.
 
-**D2 — shrink the fallback.** Currently any unmapped path unions three
-suites. Options: (a) add explicit `TIA_MAP` entries for the known unmapped
-directories (`^scripts/` → `kmcrank`, `^term-bench2/` → its own or none);
-(b) reduce `FALLBACK_SUITES` itself; (c) leave conservative. Recommendation:
-(a) — it is additive, leaves the conservative default intact for genuinely
-unknown paths, and takes the commonest slow case from ~30 s to ~16.5 s.
-**(b) is the risky one:** the fallback exists so an unrecognised path cannot
-silently skip coverage. Narrowing the default rather than mapping known
-paths trades that safety for latency.
+**D1 — narrow `opencode`.** BLOCKED on D8. If D8 takes (a): exclude
+`minimal-relations-desk.test.ts` (31.5 s) with a pull-in on `^minimal/tasks/`
+— verified adequate, that file reads only from `minimal/tasks`. Any second
+exclusion needs its own pull-in derived from that file's actual imports;
+`bench-cmd-ab.test.ts` imports nine `src/bench/*` modules and is **not**
+covered by the `minimal/tasks` rule. If D8 takes (b) or (c), D1 is withdrawn
+or its safety argument must be restated honestly.
 
-**D3 — narrow `kmcrank`** (16.5 s) with the same pattern as D1. Lower payoff
-than D1; do it in the same pass or not at all, since it is the same code.
+**D2 — map the unmapped directories.** Add `TIA_MAP` entries for directories
+whose blast radius is known, leaving genuinely unknown paths on the
+fallback. **Corrected in review round 1:** `^scripts/` cannot map to
+`kmcrank` alone — three ccgate tests drive files under `scripts/`
+(`escape-hatch.test.ts:13` → `km-panic.sh`; `fixture-ref.test.ts:187` and
+`corpus-store.test.ts:270` → `km-sensors-sync.sh`). It must map to `kmcrank`
+**and** `ccgate`, or be split by filename. Never narrow `FALLBACK_SUITES`
+itself.
 
-**D4 — `src/acp/index.ts` tier-0 coverage.** Deferred minor from the
-promote-acp review (`docs/reviews/4fc2cf1-promote-acp.md`). TIA maps it to
-`ccgate`, whose fast list excludes the ACP tests, so a rename in that seam
-file has zero blocking coverage. A directory-qualified `SLOW_SOURCE_TO_TESTS`
-rule fixes it. Include here because it is the same file and the same pass.
+**D3 — narrow `kmcrank`.** Exclude `gate-check-cli.test.ts` (13.9 s of
+15.8 s) with pull-ins on `^scripts/gate-check\.ts$` and
+`(^|/)gate-check-core\.ts$`. The pull-in is load-bearing: without it, edits to
+the gate itself lose their most direct coverage. Subject to §2.3's binding
+rule — otherwise the fallback silently drops the gate's own end-to-end test.
 
-**D6 — should debt repayment stay synchronous?** New, raised by §2.1's
-measurement. Today a red marker makes the next Stop pay 133-167 s in the
-foreground. The argument for keeping it: a red full run means something is
-genuinely broken, and continuing to let turns through on a stale green is the
-failure mode the gate exists to prevent. The argument against: the repayment
-is indiscriminate — an environmental failure (missing `node_modules`, a flaky
-spawn test, a wedged daemon) costs three minutes per Stop until something
-goes green, and the person paying usually cannot tell why. Options:
-(a) keep sync — correctness first, status quo; (b) repay in the background
-while tier 0 still blocks on its own result, so a red marker degrades
-throughput rather than stopping it; (c) keep sync but only for a red whose
-`outputTail` indicates a real test failure, treating load/spawn errors as
-retry-worthy. Recommendation: **(a) for now** — (b) reopens exactly the
-stale-green hole the two-tier design closed, and (c) needs a classifier
-nobody has specified. Revisit only with measured red-cause data: how many
-reds are environmental versus real. That data does not exist yet, and the
-first step is recording `outputTail` causes rather than guessing.
+**D4 — close the `src/acp/index.ts` coverage gap.** **Corrected in review
+round 1:** the pull-in target is **`test/anthropic-cli-warm.test.ts`**, not
+`acp-client.test.ts`. The latter imports `src/acp/acp-client.ts` and
+`acp-wire.ts` directly (as `index.ts:11-13` explicitly permits for tests), so
+it stays green when a barrel export is renamed and would close nothing. The
+only runtime consumer of the barrel is
+`src/gauge/providers/anthropic-cli-warm.ts:10`; `send-prompt.ts:29` is
+`import type` and cannot break at runtime.
 
-**D7 — run tier-0 suites concurrently?** DEFERRED until D1-D4 is deployed and
-measured. Today they are serial: `scripts/gate-check.ts:239-250` is a
-`for (const s of suites)` loop over `runSyncCaptured`, which is `spawnSync`
-(`:131-138`). Nothing in tier 0 is async; the only backgrounded thing in the
-whole design is the detached tier-1 child (`spawn` + `detached` + `unref`).
-So a multi-suite selection costs the SUM of its suites, not the max.
+**D5 — measurement boundary.** Not a decision. Any of D1-D4 changes what
+`durationMs` means; a boundary ts goes in
+`docs/2026-08-01-gauntlet-adoption-ledger.md` at deploy and gated-Stop
+durations never pool across it. **Corollary from review round 1:** §1's
+measurement tables are a dated record. Post-change numbers are **appended**
+as a new dated pass, never written over Pass A or Pass B.
 
-The lever is real but is largely consumed by D1-D3:
+**D6 — keep debt repayment synchronous.** A red full run means something is
+genuinely broken, and letting turns through on a stale green is the failure
+the two-tier design exists to prevent. The cost is that repayment is
+indiscriminate: an environmental failure costs ~160 s per Stop until
+something goes green. Revisit only with measured red-cause data (how many
+reds are environmental vs real), which does not exist yet.
 
-| fallback selection | cost |
+**D7 — concurrent tier-0 suites.** DEFERRED until D1-D4 is deployed and
+measured. Tier 0 is serial: `gate-check.ts:239-250` loops `runSyncCaptured`,
+which is `spawnSync` (`:132-139`). Nothing in tier 0 is async; only the
+tier-1 child is detached. A multi-suite selection costs the SUM.
+
+| fallback selection | cost (Pass A basis) |
 |---|---|
 | today, serial | 13.1 + 0.02 + 16.5 + 0.05 = **29.7 s** |
-| serial, after D3 narrows kmcrank | 13.1 + 0.02 + 1.9 + 0.05 = **15.1 s** |
+| serial, after D3 | 13.1 + 0.02 + 1.9 + 0.05 = **15.1 s** |
 | concurrent, after D1-D4 | max(13.1, 1.9, …) = **13.1 s** |
 
-≈14.6 s of value today, ≈2 s after the narrowing lands — because `ccgate`
-then dominates and it is the diffuse suite this plan does not narrow. And
-concurrency buys **nothing** for single-suite selections, which is what every
-successful TIA narrowing produces. Sequencing therefore matters: doing D7
-first would bank most of the win and make D1-D3 look marginal, while doing it
-after makes D7 look marginal. The narrowing is the more durable fix — it
-removes work rather than overlapping it — so it goes first.
-
-**Blocking prerequisite if D7 is ever taken up:** `runSyncCaptured` writes
-each suite's combined output to `process.stdout` (`:136`), and the check
-runner captures that stream as the block reason handed back to the agent.
-Concurrent suites would interleave those writes and make a failure message
-unreadable. Per-suite output buffering must land BEFORE any parallelism, not
-alongside it.
-
-**D5 — measurement boundary.** Any of D1-D4 changes what `durationMs` means.
-A boundary ts must be stamped in
-`docs/2026-08-01-gauntlet-adoption-ledger.md` at deploy, and gated-Stop
-durations must never pool across it — same rule as every prior instrument
-change. This is not optional and is not a decision, only a reminder.
+≈14.6 s of value today, ≈2 s after the narrowing — `ccgate` then dominates
+and this plan does not narrow it. Concurrency buys **nothing** for
+single-suite selections, which is what successful TIA produces. Sequencing
+matters: D7 first would bank most of the win and make D1-D3 look marginal;
+after, D7 looks marginal. Narrowing removes work rather than overlapping it,
+so it goes first. **Blocking prerequisite if taken up:** `runSyncCaptured`
+writes each suite's output to `process.stdout` (`:137`), which the check
+runner captures as the block reason; concurrent suites interleave it into an
+unreadable failure message. Per-suite buffering lands first.
 
 ## 4. Constraints
 
-- **`gate.json`'s `check` string does not change.** It is already
-  `bun scripts/gate-check.ts`, which is the last entry of
-  `KKAMAK_DEV_CHECKS` (`km-crank/src/trial-verdict.ts:77-82`). All work here
-  is internal to `gate-check-core.ts` / `gate-check.ts`, so **no
-  `KKAMAK_DEV_CHECKS` append is required** and the append-only drift guard in
-  `trial-verdict.test.ts:199` stays green untouched. (An earlier session note
-  claimed this change carried a drift-guard obligation — it does not.)
-- `cc-gate-plugin/src/core/` and `cc-gate-plugin/vendor/` are
-  MECHANISM_PATHS. `km-crank/src/` is not among them, so editing
-  `gate-check-core.ts` triggers no calibration staleness.
-- **One policy site.** `SLOW_CCGATE_TEST_RE`'s comment states the rule: one
-  regex, one policy site. Any new exclusion follows the same shape rather
-  than scattering per-suite conditionals through `gate-check.ts`.
-- **Tier 1 remains the net.** Narrowing tier 0 trades blocking coverage for
-  latency; the background full run and the pre-merge sanity chain are what
-  make that safe. No change here may weaken either.
-- **Fail-safe direction.** When selection is uncertain, run more, not less.
-  A narrowing bug that skips a suite is silent; one that runs an extra suite
-  is merely slow.
+- **`gate.json`'s `check` string MUST NOT change.** Already
+  `bun scripts/gate-check.ts`, the last entry of `KKAMAK_DEV_CHECKS`
+  (`km-crank/src/trial-verdict.ts:77-82`). No append is required or
+  permitted; the drift guard at `trial-verdict.test.ts:199` stays green
+  untouched.
+- **MECHANISM_PATHS** (`km-crank/src/calibration.ts:65-72`) is
+  `minimal/complete-gate.ts`, `minimal/mutate.ts`, `minimal/spec-probe.ts`,
+  `minimal/session2.ts`, `cc-gate-plugin/src/core`, `cc-gate-plugin/vendor`.
+  Editing any stales the calibration registry. **Note the four `minimal/`
+  entries** — D1 touches `minimal/`-adjacent policy, so the list matters.
+  Nothing in this design edits those files.
+- **Exclusion and pull-in must share one condition** (§2.3). Never exclude
+  unconditionally while restoring conditionally.
+- **Fail-safe direction.** When selection is uncertain, run MORE.
+- **One policy site.** Follow `SLOW_CCGATE_TEST_RE`'s stated rule.
+- **Tier 1 changes only via D8**, deliberately and once.
 
 ## 5. Verification
 
-- `km-crank/test/gate-check-core.test.ts` already unit-tests suite selection
-  and slow-source pull-in over explicit path fixtures; every D1-D4 rule gets
-  a case there, asserting over **current** paths.
-- Re-measure each tier-0 suite after the change, same method as §1, and
-  record the new table in the adoption-ledger entry alongside the boundary ts.
-- The honest acceptance test is the live stream: after deploy, the slow
-  population in `.km/gate-outcomes.ndjson` should separate into a new,
-  lower band. Do not claim an improvement from a single Stop.
+- `km-crank/test/gate-check-core.test.ts` unit-tests suite selection and
+  pull-in over explicit path fixtures; every rule gets a case asserting over
+  **current** paths. Note `:97` and `:100` pin the present `scripts/`
+  behaviour and will change under D2 — that is expected, and the change is
+  recorded rather than quietly edited.
+- Re-measure with the **Pass B method only**, append as a new dated pass.
+- The acceptance test is the live stream: the slow population should separate
+  into a new lower band. Do not claim improvement from a single Stop, and
+  remember the tail is governed by debt repayment, which nothing here touches.
 
-## 6. Out of scope
+## 6. Non-goals
 
-- Anything that changes what tier 1 runs.
-- Parallelising suites within tier 0 — now tracked as **D7**, deferred with
-  the arithmetic showing why it goes after the narrowing rather than instead
-  of it.
-- The stale comment at `cc-gate-plugin/src/acp/acp-paths.ts:2-4` (claims
-  `hook-cli.ts` imports `acp-client.ts`; it does not). Unrelated, noted so it
-  is not folded in opportunistically.
+- `ccgate` stays ≈14 s — diffuse, no dominant file. After this work that is
+  the tier-0 floor for `cc-gate-plugin` changes.
+- Debt repayment stays synchronous (D6).
+- Concurrency (D7, deferred with arithmetic).
+- `cc-gate-plugin/src/acp/acp-paths.ts:2-4`'s stale comment (claims
+  `hook-cli.ts` imports `acp-client.ts`; it does not). Unrelated.
