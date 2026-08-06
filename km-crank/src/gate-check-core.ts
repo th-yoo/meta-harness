@@ -129,6 +129,37 @@ export function ccgateFastFiles(allTestFiles: string[]): string[] {
   return allTestFiles.filter((f) => !SLOW_CCGATE_TEST_RE.test(f))
 }
 
+/** Suite id -> the package directory its tests live under. Only the suites
+ * that currently need it (pull-in self-matching below; Task 3's `Cmd.cwd`
+ * derivation) are populated — this is not a claim that every SuiteId has
+ * (or needs) an entry. */
+export const PKG_DIR: Partial<Record<SuiteId, string>> = {
+  ccgate: "cc-gate-plugin",
+  kmcrank: "km-crank",
+}
+
+/** A pull-in rule: a changed path matching `re` pulls `tests` into its
+ * suite's tier-0 run. `guard`, when present, is a path prefix a change must
+ * also satisfy — e.g. a package prefix, so the same source basename can't
+ * false-positive across packages sharing this table. Guardless rules are
+ * legitimate (Task 2 adds the first one, a `scripts/…` -> km-crank test
+ * mapping that by construction can't be package-prefixed); this task does
+ * not add one. */
+interface PullInRule {
+  re: RegExp
+  tests: string[]
+  guard?: RegExp
+}
+
+interface SuitePolicy {
+  /** Spawn-heavy test files excluded from this suite's tier 0. Absent means
+   * this suite has no narrowing, so its self-pull step is a no-op. */
+  slowTestRe?: RegExp
+  rules: PullInRule[]
+}
+
+const CCGATE_GUARD = /^cc-gate-plugin\//
+
 /** Amendment b: slow-source pull-in. A changed slow-covered source must
  * pull its MATCHING slow test file(s) into tier 0 — otherwise the one
  * suite that tests the change is exactly the one excluded (edit
@@ -147,33 +178,58 @@ export function ccgateFastFiles(allTestFiles: string[]): string[] {
 // acp-daemon.test.ts) are deliberately NOT chased: full closure would pull
 // most of the ~110s slow set and defeat "targeted"; the bg debt gate is
 // the stated safety net for that depth.
-const SLOW_SOURCE_TO_TESTS: Array<{ re: RegExp; tests: string[] }> = [
-  { re: /(^|\/)acp-client\.ts$/, tests: ["test/acp-client.test.ts"] },
-  { re: /(^|\/)acp-daemon\.ts$/, tests: ["test/acp-daemon.test.ts"] },
-  { re: /(^|\/)acp-pool\.ts$/, tests: ["test/acp-daemon.test.ts", "test/acp-pool.test.ts"] },
-  { re: /(^|\/)anthropic-cli-warm\.ts$/, tests: ["test/anthropic-cli-warm.test.ts"] },
-  { re: /(^|\/)warm-session\.ts$/, tests: ["test/acp-pool.test.ts", "test/warm-session.test.ts"] },
-  { re: /(^|\/)agent-transport\.ts$/, tests: [
-    "test/acp-client.test.ts", "test/anthropic-cli-warm.test.ts", "test/gauge-agent-transport.test.ts",
-  ] },
-  // test stubs — direct value consumers among the SLOW files only
-  // (anthropic-api.test.ts also imports agent-cli-stub but is fast — it
-  // already runs in every ccgate tier 0):
-  { re: /(^|\/)acp-fake-daemon\.ts$/, tests: ["test/acp-client.test.ts", "test/anthropic-cli-warm.test.ts"] },
-  { re: /(^|\/)agent-cli-stub\.ts$/, tests: [
-    "test/acp-client.test.ts", "test/acp-daemon.test.ts",
-    "test/gauge-agent-transport.test.ts", "test/warm-session.test.ts",
-  ] },
-]
+const SUITE_POLICY: Partial<Record<SuiteId, SuitePolicy>> = {
+  ccgate: {
+    slowTestRe: SLOW_CCGATE_TEST_RE,
+    rules: [
+      { re: /(^|\/)acp-client\.ts$/, tests: ["test/acp-client.test.ts"], guard: CCGATE_GUARD },
+      { re: /(^|\/)acp-daemon\.ts$/, tests: ["test/acp-daemon.test.ts"], guard: CCGATE_GUARD },
+      { re: /(^|\/)acp-pool\.ts$/, tests: ["test/acp-daemon.test.ts", "test/acp-pool.test.ts"], guard: CCGATE_GUARD },
+      { re: /(^|\/)anthropic-cli-warm\.ts$/, tests: ["test/anthropic-cli-warm.test.ts"], guard: CCGATE_GUARD },
+      { re: /(^|\/)warm-session\.ts$/, tests: ["test/acp-pool.test.ts", "test/warm-session.test.ts"], guard: CCGATE_GUARD },
+      { re: /(^|\/)agent-transport\.ts$/, tests: [
+        "test/acp-client.test.ts", "test/anthropic-cli-warm.test.ts", "test/gauge-agent-transport.test.ts",
+      ], guard: CCGATE_GUARD },
+      // test stubs — direct value consumers among the SLOW files only
+      // (anthropic-api.test.ts also imports agent-cli-stub but is fast — it
+      // already runs in every ccgate tier 0):
+      { re: /(^|\/)acp-fake-daemon\.ts$/, tests: ["test/acp-client.test.ts", "test/anthropic-cli-warm.test.ts"], guard: CCGATE_GUARD },
+      { re: /(^|\/)agent-cli-stub\.ts$/, tests: [
+        "test/acp-client.test.ts", "test/acp-daemon.test.ts",
+        "test/gauge-agent-transport.test.ts", "test/warm-session.test.ts",
+      ], guard: CCGATE_GUARD },
+    ],
+  },
+}
 
-export function slowCcgateTestsForChangedPaths(paths: string[]): string[] {
+/** SUITE-KEYED pull-in: returns only `suite`'s own test paths, never a flat
+ * union across suites — a flat union would leak e.g. a km-crank test path
+ * into the ccgate argv, and `bun test` treats positionals as path filters
+ * (a non-matching filter wastes the run or exits non-zero). A suite absent
+ * from SUITE_POLICY has no narrowing and pulls nothing. */
+export function pullInsFor(suite: SuiteId, paths: string[]): string[] {
+  const policy = SUITE_POLICY[suite]
+  if (!policy) return []
+  const pkgDir = PKG_DIR[suite]
+  const selfPullRe = pkgDir ? new RegExp(`^${pkgDir}/((?:test|src)/.*\\.test\\.ts)$`) : undefined
   const out = new Set<string>()
   for (const p of paths) {
-    if (!/^cc-gate-plugin\//.test(p)) continue
-    // a changed slow TEST file pulls itself (test/ or a future src/-colocated one)
-    const tm = p.match(/^cc-gate-plugin\/((?:test|src)\/.*\.test\.ts)$/)
-    if (tm && SLOW_CCGATE_TEST_RE.test(p)) { out.add(tm[1]!); continue }
-    for (const m of SLOW_SOURCE_TO_TESTS) if (m.re.test(p)) for (const t of m.tests) out.add(t)
+    // a changed slow TEST file pulls itself (test/ or a future src/-colocated
+    // one), per-suite via PKG_DIR rather than a hardcoded ccgate anchor
+    if (selfPullRe && policy.slowTestRe) {
+      const tm = p.match(selfPullRe)
+      if (tm && policy.slowTestRe.test(p)) { out.add(tm[1]!); continue }
+    }
+    for (const rule of policy.rules) {
+      if (rule.guard && !rule.guard.test(p)) continue
+      if (rule.re.test(p)) for (const t of rule.tests) out.add(t)
+    }
   }
   return [...out].sort()
+}
+
+/** Back-compat wrapper — scripts/gate-check.ts's only pull-in consumer,
+ * kept so it compiles untouched. Equivalent to `pullInsFor("ccgate", paths)`. */
+export function slowCcgateTestsForChangedPaths(paths: string[]): string[] {
+  return pullInsFor("ccgate", paths)
 }

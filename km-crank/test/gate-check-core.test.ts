@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   parseMarker, decide, suitesForChangedPaths, ccgateFastFiles,
-  slowCcgateTestsForChangedPaths,
+  slowCcgateTestsForChangedPaths, pullInsFor,
   ALL_SUITES, FALLBACK_SUITES, BG_STALE_MS, type GateBgMarker,
 } from "../src/gate-check-core.ts"
 
@@ -160,6 +160,22 @@ describe("slowCcgateTestsForChangedPaths (amendment b)", () => {
     expect(slowCcgateTestsForChangedPaths([
       "cc-gate-plugin/src/gauge/acp-pool.ts", "cc-gate-plugin/test/acp-pool.test.ts",
     ])).toEqual(["test/acp-daemon.test.ts", "test/acp-pool.test.ts"])
+  })
+})
+
+describe("pullInsFor (suite-keyed pull-in)", () => {
+  test("ccgate behaviour unchanged when driven through the suite-keyed function (same fixtures as amendment b)", () => {
+    expect(pullInsFor("ccgate", ["cc-gate-plugin/src/gauge/acp-daemon.ts"]))
+      .toEqual(["test/acp-daemon.test.ts"])
+    expect(pullInsFor("ccgate", ["cc-gate-plugin/src/acp/acp-pool.ts"]))
+      .toEqual(["test/acp-daemon.test.ts", "test/acp-pool.test.ts"])
+    expect(pullInsFor("ccgate", ["cc-gate-plugin/test/warm-session.test.ts"]))
+      .toEqual(["test/warm-session.test.ts"])
+    expect(pullInsFor("ccgate", ["km-crank/src/acp-daemon.ts"])).toEqual([])
+  })
+  test("suite-keyed, never a flat union: a suite with no configured policy pulls nothing, even for paths that pull for another suite", () => {
+    expect(pullInsFor("kmcrank", ["cc-gate-plugin/src/gauge/acp-daemon.ts"])).toEqual([])
+    expect(pullInsFor("opencode", ["cc-gate-plugin/test/warm-session.test.ts"])).toEqual([])
   })
 })
 
