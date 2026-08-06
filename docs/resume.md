@@ -3,6 +3,96 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-06 (`yoo-dev`, `side` session) — TIER-0 NARROWED FOR kmcrank (merge `c6879f8`, boundary ts 1785990600996) · ACP PROMOTED TO `src/acp/` · kkamak 0.4.1 SHIPPED
+
+**RESUME PROMPT (either host — git-only transfer):**
+```
+Resume kkamak (meta-harness), post-2026-08-06 `side` session. git pull
+FIRST. Main >= 77a3209, tree clean. Ran concurrently with the
+review-sensor session below — read BOTH 08-06 blocks.
+
+MERGED TODAY BY THIS SESSION (7b-gated, artifacts committed):
+ - ACP SUBSYSTEM PROMOTED (merge 6417b7a): six modules moved
+   cc-gate-plugin/src/gauge/ -> src/acp/ behind index.ts (5 exports:
+   ensureDaemon, daemonCall, DaemonOutcome, WarmIsolation,
+   modelProvenBy). Zero outbound repo coupling; 3 inbound call sites,
+   one type-only. Stage ONE of extraction to its own npm package —
+   NAME DECIDED: @th-yoo/cc-api-daemon (npm + github both free,
+   checked). Stage two = git mv + package.json. WART left on purpose:
+   GAUGE_ISOLATION still lives in acp-wire.ts; move it caller-side
+   before publish. It stayed INSIDE the plugin dir deliberately —
+   `claude plugin install` copies only the plugin dir, so a top-level
+   acp/ is unreachable from the installed copy until published.
+ - GATE TIER-0 NARROWED, D3 (merge c6879f8, ledger sha recorded,
+   artifact docs/reviews/4fbca97-gate-tier0-narrowing.md):
+   km-crank/test/gate-check-cli.test.ts (13.9s of 15.8s) leaves the
+   BLOCKING tier, pulled back when scripts/gate-check.ts or
+   gate-check-core.ts (basename-anchored) or the file itself changes.
+   MEASURED: km-crank tier-0 15.8s -> 1.20s; fallback ~29.7s -> ~14.4s.
+   BOUNDARY ts 1785990600996 — gated-Stop durationMs NEVER pools across
+   it, and THIS HOST HAS TWO BOUNDARIES TODAY (review-sensor arming
+   1785988568548 is 34 min earlier). Main-checkout durationMs after
+   c6879f8 carries BOTH; attributing a shift to either alone is a
+   confound. Both ledger entries cross-reference each other.
+ - Live defect fixed on the way: degraded-readdir produced a bare
+   ["bun","test"] argv then appended a pull-in to it, collapsing a whole
+   suite to ONE file. Partial scans are now discarded.
+
+FOUR DECISIONS WITHDRAWN during 5 architect rounds — reasons recorded so
+they are NOT re-proposed (spec §3 + docs/reviews/2026-08-06-gate-tier0-
+narrowing-rounds-1-5.md, 79 findings):
+ - D1 narrow opencode: table.full does NOT run opencode, and the green
+   marker advances via tiers that never ran it — exclusion DELETES
+   coverage, cannot be rescued by a pull-in. THE RULE: narrowing a suite
+   is admissible only if that suite runs in table.full (necessary, NOT
+   sufficient — tier-1 rescue is spawn-conditional, content-raced, and
+   absent on a session-final Stop).
+ - D2 map scripts/ in TIA_MAP: priced at 0.02s. Four rounds argued its
+   correctness; none costed it until round 5.
+ - D4 close the src/acp/index.ts tier-0 gap: violates the basename-
+   anchoring AND one-hop policies at gate-check-core.ts:138-149 — it is
+   the documented two-hop deferral, not a gap.
+ - D8 opencode into table.full: table.full is ALSO the synchronous
+   debt-repayment command, and minimal-relations-desk.test.ts spawns
+   python3 at module scope + tmux + needs host rdflib. On a host lacking
+   them the bg run goes red and can NEVER go green -> every Stop pays
+   ~200s forever. Multi-host repo = unclearable gate wedge.
+
+ACCEPTED COVERAGE LOSS (stated, not discovered later): on the fallback
+path pull-ins do not fire (deliberate ruling, 2026-08-05-two-tier-gate-
+check.md:919), so the excluded file does not run in the blocking tier
+there. Same trade already shipped for ccgate 2026-08-05, where the six
+exclusions are ~98s of a 111.6s suite; D3 applies it to one 13.9s file.
+
+PRODUCTION SIBLING (~/z2/kkamak): 0.4.1 SHIPPED + tagged v0.4.1, all
+seven 0.4.0 known-issues resolved. docs/install-verification.md is
+UNEXECUTED — installability unproven by deliberate ruling. Before anyone
+runs it: it drives a real model turn (spend) and its Linux container
+variant mounts live ~/.claude READ-WRITE, rotating the real oauth
+refresh token. Use ANTHROPIC_API_KEY or a temp-dir credential copy.
+
+OPEN FROM THIS SESSION: (1) kkamak install-verification runbook
+(deferred, see hazard above). (2) ACP extraction stage two to
+@th-yoo/cc-api-daemon. (3) Acceptance measurement for D3 — correlate
+live durationMs against gate-check.ts's per-Stop suite log, NOT a raw
+before/after; the recorded 23.8-25.4s band matches no predicted
+selection and is unattributed. (4) Worktree
+.claude/worktrees/gate-tier0-narrowing kept, branch merged — safe to
+remove.
+
+HOST HYGIENE FIXED: ~/.bashrc, ~/.profile, uv.env.fish carried
+benchmark-fixture leakage (8x SPECIAL_FILE, dead /app/sqlite + /sqlite
+PATH entries, a source of a deleted ~/mh-capture tree printing an error
+on every shell). Removed; /app/{c4_sample,logs,varsea} (811M of TB2 task
+fixtures written to the HOST around Jul 8-9 by unsandboxed task setup)
+deleted. Backups /mnt/d/tmp/dotfile-backup-20260805/.
+
+Standing rules unchanged: sized go before spend · EXPLICIT MERGE GO ·
+spec-is-law · merge-with-gate.sh + docs/reviews artifact (findings-count
+must be a BARE INTEGER — the 7b gate rejects prose) · boundary ts on
+instrument changes · F1/F2 · per-task reviews · grep-verify · SITREP.
+```
+
 ## ✅ SESSION END 2026-08-06 (`yoo-dev`) — REVIEW-SENSOR BUILT+ARMED (boundary 1785988568548) · B3 RULED D-vs-REST · SPECS+PLAN FLAWLESS · P2 SPEC WAITING ON PLAN
 
 **RESUME PROMPT (either host — git-only transfer):**

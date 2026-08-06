@@ -997,3 +997,60 @@ One auto-chained run (user-approved single go): harvest → proposer → gate.
   test time bomb defused (`e63d920`, KKAMAK_PROBE_NOW_TS seam); sibling
   session's ACP promotion to `src/acp/` merged under it (`6417b7a`) — the
   sensor is that public surface's first non-gauge consumer.
+
+## Gate tier-0 narrowed for kmcrank (2026-08-06, yoo-dev `side`) — D3 shipped, four sibling decisions withdrawn
+
+Companion to the review-sensor entry above; both landed the same day on the
+same host, 34 minutes apart, and their instrument boundaries must not be
+conflated.
+
+- **Shipped (merge `c6879f8`, boundary ts `1785990600996`, artifact
+  `docs/reviews/4fbca97-gate-tier0-narrowing.md`).**
+  `km-crank/test/gate-check-cli.test.ts` — 13.9 s of km-crank's 15.8 s, an
+  end-to-end CLI drive with multi-second `until()` waits — leaves the
+  BLOCKING tier, and is pulled back when `scripts/gate-check.ts` changes,
+  when `gate-check-core.ts` changes (basename-anchored), or when the file
+  itself changes. Measured: km-crank tier-0 **15.8 s → 1.20 s**; derived
+  fallback selection ≈29.7 s → ≈14.4 s.
+- **The durable rule, extracted the hard way:** narrowing a suite is
+  admissible only if that suite runs in `table.full` — and that is
+  **necessary, not sufficient**. Tier-1 rescue is spawn-conditional (no bg
+  run on a live fresh `"running"` marker, which is the dominant fallback
+  trigger), content-raced (`bgMain` runs the live worktree, writes green for
+  a pre-computed tree), and absent on a session-final Stop.
+- **Four decisions withdrawn across five architect rounds** (79 findings,
+  `docs/reviews/2026-08-06-gate-tier0-narrowing-rounds-1-5.md`). Each died to
+  something found in the code, not to taste: **D1** narrow opencode —
+  `table.full` does not run it AND the green marker advances via tiers that
+  never ran it, so exclusion deletes coverage rather than deferring it, and
+  no pull-in can rescue it; **D2** map `scripts/` — priced at 0.02 s, and
+  nobody priced it until round 5 (four rounds argued only its correctness);
+  **D4** close the `src/acp/index.ts` gap — violates the basename-anchoring
+  and one-hop policies written into the file it modifies, so it is the
+  documented two-hop deferral, not a gap; **D8** opencode into `table.full` —
+  that command is also the SYNCHRONOUS debt-repayment path, and the suite
+  spawns `python3` at module scope plus `tmux` and needs host `rdflib`, so on
+  any host lacking them the bg run goes red and can never go green: every
+  Stop pays ~200 s forever. Multi-host repo ⇒ unclearable gate wedge.
+- **Method note worth keeping.** Every fold introduced new defects: round 2
+  killed round 1's fix, round 3 killed round 2's, round 4 caught residue that
+  would have *reinstated* D1, round 5 found the unpriced decision. What
+  converged was the decision set (5 → 1), not the prose. The plan shrank from
+  7 tasks to 4 and shipped clean — 0 Critical, 0 Important at whole-branch
+  review, which differentially tested the refactor across 1390 tracked paths
+  and 5000 random subsets for zero behavioural mismatch.
+- **A live defect fixed on the way:** the degraded-readdir path produced a
+  bare `["bun","test"]` argv and then appended a pull-in to it, collapsing a
+  whole suite into a single file. Partial scans are now discarded, so any
+  scan anomaly degrades to "run everything for that package".
+- **Accepted loss, recorded not discovered:** on the fallback path pull-ins
+  do not fire (the deliberate 2026-08-05 ruling), so the excluded file does
+  not run in the blocking tier there. The same trade already shipped for
+  ccgate, where six exclusions are ~98 s of a 111.6 s suite; D3 adds one
+  13.9 s file to that pattern.
+- **Same-day context:** the ACP subsystem was promoted to
+  `cc-gate-plugin/src/acp/` behind an explicit 5-export surface (merge
+  `6417b7a`) — stage one of extraction to `@th-yoo/cc-api-daemon`; the
+  review-sensor above is that surface's first non-gauge consumer. Production
+  sibling `~/z2/kkamak` shipped 0.4.1 with all seven 0.4.0 known-issues
+  resolved; its install-verification runbook stays unexecuted by ruling.
