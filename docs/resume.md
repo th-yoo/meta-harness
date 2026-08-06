@@ -3,6 +3,46 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ⏸ SESSION PAUSE 2026-08-06 evening (`yoo-mac`) — P2 SDD: TASKS 1-5 COMPLETE + REVIEWED, TASK 6 IN FLIGHT, SPEND GO PENDING
+
+**RESUME PROMPT (either host — branch `worktree-p2-actuator-binding` pushed):**
+```
+Resume P2 actuator-binding SDD run. git pull + fetch FIRST. Branch
+worktree-p2-actuator-binding (origin, tip 05608fe) = Tasks 1-5 built,
+per-task fresh reviews ALL Approved, fix rounds closed. NOT merged to
+main (explicit-merge-go rule stands). Plan:
+docs/superpowers/plans/2026-08-06-p2-actuator-binding.md (carries the
+2026-08-06 PRE-DATA AMENDMENT — anti-gaming excludes DONE-CHECK-path
+commands — and the work-queue PRODUCTION NOTE, both user-ruled).
+
+STATE: T1 probe (2/4 haiku): hooks FIRE in-container -> A3 = settings
+copy-in; --max-turns accepted, enforcement unverified -> double-carried.
+T2 rule.ts (amended predicate, pinned sha). T3 a4-review.ts (warm lane,
+close-in-finally judged sound). T4 p2-run (3 arms, fences; errors[]
+annotation channel judged safe). T5 p2-tally (bars verbatim, stopBlocks
+proxy cosmetic). Band=14, k=2: --go 28 (a1) / 28 (a3) / 56 (a4).
+Results naming: docs/loop-probes/p2/<hostname>-p2-<arm>-results.json.
+
+TASK 6 was IN FLIGHT at pause (isolated worktree
+agent-abba8921a93451a18, yoo-mac host-local): drift test added+green,
+READINESS.md + report + commit outstanding. If that worktree is gone or
+stale: re-dispatch Task 6 per plan §Task 6 + the two folded pre-go
+duties (drift test — may already be committed — and results-naming pin).
+
+THEN: task-6 review -> merge task branch -> FINAL whole-branch review
+(most capable model) -> present sized-go table to user. SPEND NEEDS THE
+EXPLICIT SIZED GO: ~112 container executions + <=28 A4 review calls +
+2 remaining probe-budget haiku calls, est. ~7-8h serial (4.2min/attempt
+basis, exact table in READINESS.md when Task 6 lands). Deferred minors
+for final review: env/isolation threading assert (T3), boundary-case
+tests (T5), PROBE.md deviation-log note (T1).
+
+Rules: explicit user go before merge to main AND before spend ·
+spec-is-law (amendment window closes at first run datum) · isolated
+worktrees per implementer (lineage-merge first — they branch from main)
+· F1/F2 · probe models before premium.
+```
+
 ## ✅ SESSION END 2026-08-06 late (`yoo-dev`, `side` restarted) — SENSOR DEPLOYMENT BUG DIAGNOSED · ARMING WEDGED THE GATE, FIXED (`6121e53`) · D3 ACCEPTANCE CONFOUND RECORDED
 
 **RESUME PROMPT (either host — git-only transfer):**
