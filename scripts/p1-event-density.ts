@@ -184,7 +184,13 @@ export function buildS4(gateFile: string, windowStart: number, windowEnd: number
 // ---------------------------------------------------------------------
 
 function main(): void {
-  const windowEnd = Date.now()
+  // KKAMAK_PROBE_NOW_TS: test seam ONLY (production omits it) — freezes
+  // the window end so fixtures built relative to a fixed "now" stay
+  // deterministic against the fixed S4_BOUNDARY. Added after the
+  // wall-clock time bomb of 348cd5c's own test (post.spanDays < 1
+  // expired one calendar day after commit).
+  const nowSeam = Number(process.env.KKAMAK_PROBE_NOW_TS)
+  const windowEnd = Number.isFinite(nowSeam) && nowSeam > 0 ? nowSeam : Date.now()
   const windowStart = windowEnd - WINDOW_MS
   const gateFile = gateNdjsonPath()
   const reviewsDir = reviewsDirPath()
