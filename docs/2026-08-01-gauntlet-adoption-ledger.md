@@ -451,6 +451,40 @@ Caveat: n=3 loops, one day — provisional, revisit after the next program.
   seat call occurs whenever the loop next runs a seat here; its outcome
   belongs to normal loop accounting, not this entry.
 
+- **2026-08-06 12:56:08 KST (boundary ts 1785988568548), yoo-dev
+  (user sized go: "go" — arms host yoo-dev ONLY, this repo's main
+  checkout).** Review-loop-as-sensor ARMED: `KKAMAK_REVIEW_SENSOR=1` set
+  in this repo's `.claude/settings.local.json` env (gitignored →
+  host-local; per-host arming preserved — yoo-mac stays OFF, arming it is
+  its own sized go). Mechanism merged 062baf0 + 75a5305 (artifacts
+  docs/reviews/f8e3b46-review-sensor.md,
+  docs/reviews/6815e90-fix-sensor-maxbuffer.md; spec
+  docs/superpowers/specs/2026-08-05-review-sensor-synthesis-design.md,
+  FLAWLESS).
+- **Instrument identity:** NEW instrument, stream
+  `.km/review-findings.ndjson` (spec §3 nested schema). Reviewer =
+  claude-haiku-4-5 on the ACP warm lane (zero-wait, close-not-release
+  via the new `session/close` verb). Frozen prompt sha256
+  `a19f6f85d69250520b9e33d7a8fd82353a5106e7762ba2798e5c837498294c36`.
+  Constants: 15-min debounce, 30/day cap (per this host-checkout; total
+  spend = 30/day × armed checkouts = 30/day today), 128 KiB hunk-aligned
+  diff ceiling, side-file keep-500.
+- **Pooling prohibitions:** this stream NEVER pools with the human-flow
+  `docs/reviews/` findings-counts P0 measured (different reviewer tier +
+  unit); pluginVersion-only bumps are NOT live boundaries for this
+  stream (spec §4 carve-out); sensor prompt/constant/tier changes ARE
+  (each stamps a new ts here). Any two-arm comparison over this stream
+  must randomize or declare the quasi-experiment confound (spec §4).
+- **Cadence checkpoint (pre-registered):** after 7 calendar days armed,
+  realized events/day is read from the stream; ≥25/day → 14-day d=0.30
+  bar reachable, proceed; <25/day → constants return to the user for
+  amendment (new boundary ts). Nothing self-adjusts.
+- **No spend at flip.** Sensor dispatches only on gated Stops in the
+  main checkout of sessions STARTED after this entry (settings env reads
+  at session start); worktree Stops never dispatch. First line lands on
+  the first post-restart gated Stop; its ts opens the stream's first
+  regime.
+
 ## 2026-08-06 — INSTRUMENT: tier-0 narrowed for `kmcrank` (D3), boundary ts 1785990600996
 
 Plan `docs/superpowers/plans/2026-08-06-gate-tier0-narrowing.md` (revision 6),
@@ -482,8 +516,21 @@ five architect rounds recorded in
   1.20 s, and the excluded file is whatever it is at the time it runs.
   Derived fallback selection: ccgate 13.1 + gateplugin 0.02 + kmcrank 1.20 +
   doccheck 0.05 ≈ **14.4 s**, against ≈29.7 s pre.
-- **Instrument boundary: ts 1785990600996.** Gated-Stop `durationMs` MUST
-  NOT pool across it — tier-0 selection cost changed for every Stop that
+- **Instrument boundary: ts 1785990600996. SECOND boundary on this host
+  today** — the review-sensor arming above stamped **1785988568548** at
+  12:56, 34 minutes earlier. The two are independent and must both be
+  honoured when reading this host's gated-Stop stream:
+  - *theirs* changes what a Stop DOES (dispatches a detached review
+    runner), and by its own entry applies only to **main-checkout** Stops
+    in sessions started after 12:56 — "worktree Stops never dispatch";
+  - *mine* changes what a Stop RUNS (tier-0 selection cost), wherever
+    `scripts/gate-check.ts` is the code executing — this worktree
+    immediately, `main` at merge.
+  So main-checkout `durationMs` after merge carries BOTH changes, and a
+  before/after attributed to either alone is a confound. This entry's
+  Pass C measurements are unaffected: they are `bun test` suite timings
+  taken in a worktree, where their sensor does not dispatch.
+- Gated-Stop `durationMs` MUST NOT pool across it — tier-0 selection cost changed for every Stop that
   selects `kmcrank`, and for every fallback Stop. This host only, for now:
   the change is live wherever `scripts/gate-check.ts` is the code being run,
   which is this worktree immediately and `main` at merge. Record the merge

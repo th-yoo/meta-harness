@@ -94,7 +94,7 @@ test("closeEntry on unknown id is a safe no-op", () => {
 })
 ```
 
-Adapt helper names to what `acp-pool.test.ts` actually defines — read the file first; its fakes already expose close-call counting and `turnInFlight` control.
+NOTE: `mkPool`/`ISO_A` in the sketches are placeholders for the file's REAL idiom — there is no pool factory helper at all: the file constructs pools inline (`new SessionPool(ENV, { makeSession: fakeMakeSession })`, optionally `{ max: N }`) and uses `GAUGE_ISOLATION`/`REASONING_ISOLATION` as isolation values, with fakes that already expose close-call counting and `turnInFlight` control. Read the file first and write the new tests in its inline style; the sketch fixes behaviors and assertion shapes only.
 
 - [ ] **Step 2: Run to verify fail** — `cd cc-gate-plugin && bun test test/acp-pool.test.ts` → FAIL (`closeEntry is not a function`).
 
@@ -153,7 +153,10 @@ Flesh these out against the harness's real helper names — the file already bui
 
 ```ts
 case ACP_SESSION_CLOSE: {
-  const sessionId = readSessionIdParam(msg) // reuse the file's existing param-reading style
+  // Dispatcher locals per createDispatcher's real shape: `params` is in
+  // scope, `readSessionId(params)` is the file's existing helper, and
+  // `respond` is a ONE-ARG closure over the request id.
+  const sessionId = readSessionId(params)
   let entryId: string | undefined
   for (const [eid, sid] of state.lastServedBySessionForEntry) {
     if (sid === sessionId) { entryId = eid; break }
@@ -164,7 +167,7 @@ case ACP_SESSION_CLOSE: {
   if (result.closed && entryId !== undefined) {
     state.lastServedBySessionForEntry.delete(entryId)
   }
-  respond(msg.id, result) // file's existing response helper
+  respond(result)
   return
 }
 ```
@@ -185,7 +188,7 @@ case ACP_SESSION_CLOSE: {
 
 - [ ] **Step 1: Failing tests** — extend `acp-client.test.ts` (it has a fake-daemon harness, `test/acp-fake-daemon.ts`): (a) `daemonCall` outcome carries the sessionId the fake daemon issued; (b) `closeSession` sends a `session/close` frame with that id and resolves the daemon's result; (c) `closeSession` against a dead socket resolves `{closed:false, reason:"unreachable"}` without throwing.
 - [ ] **Step 2: Run to verify fail.**
-- [ ] **Step 3: Implement** — thread the sessionId already tracked inside `daemonCall`'s promise into its resolutions; `closeSession` follows `probeOnce`'s minimal connect-send-await-response shape. Add to `acp-fake-daemon.ts` a `session/close` echo. Export from `index.ts`:
+- [ ] **Step 3: Implement** — `sessionId` is a `const` inside `run()`'s nested async fn, NOT visible to the outer promise's ambient handlers (socket error/close, budget timeout): thread it into the `finish({kind:"ok", ...})` resolution inside `run()` (the only branch the sensor consumes); non-ok outcomes may leave `sessionId` undefined — document that on the type. `closeSession` follows `probeOnce`'s minimal connect-send-await-response shape. Add to `acp-fake-daemon.ts` a `session/close` echo. Export from `index.ts`:
 
 ```ts
 /** Close the pool entry that served a session (review-sensor spec §2:
@@ -213,6 +216,7 @@ export const DEBOUNCE_MS = 15 * 60 * 1000
 export const DAILY_CAP = 30
 export const DIFF_CEILING_BYTES = 128 * 1024
 export const SIDE_FILE_KEEP = 500
+export const MODEL = "claude-haiku-4-5" // spec §3 line shape stamps it; §1 ruling 2 fixes it
 export const MAIN_CHECKOUT_DIR = path.join(os.homedir(), "z2", "meta-harness") // probe-script precedent
 
 export interface SensorState { lastPassTs: number; lastPassHead: string; dayKey: string; dayCount: number }
@@ -222,6 +226,12 @@ export type SkipReason = "debounce" | "cap" | "clock-skew" | "claim-lost"
 /** Gate decision. dayKey = local YYYY-MM-DD of `now` (midnight reset, burst accepted by spec). */
 export function shouldDispatch(state: SensorState | undefined, now: number):
   { go: true } | { go: false; reason: "debounce" | "cap" | "clock-skew" }
+
+/** The state the runner persists after a COMPLETED pass: same-day ->
+ * dayCount+1, new local day -> {dayKey: today, dayCount: 1}. Owns the
+ * day-rollover computation so the runner never freehands a dayKey that
+ * could diverge from shouldDispatch's internal one. */
+export function nextCapState(state: SensorState | undefined, now: number): { dayKey: string; dayCount: number }
 
 /** Hunk-aligned truncation: cut at the LAST hunk/file header boundary
  * ("diff --git " or "@@ " line start) at or below the ceiling.
@@ -237,8 +247,9 @@ export function reviewPromptSha(): string
  * Anything unparseable -> undefined (runner emits skip "bad-review-output"). */
 export function parseFindings(text: string): { findings: Array<{ severity: "high" | "med" | "low"; file: string; line: number }> } | undefined
 
-/** ndjson line builders — counts only, F2. */
-export function passLine(args: { ts: number; findings: Array<{severity: string}>; diffStat: { files: number; insertions: number; deletions: number }; baseSha: string; headSha: string; truncated: boolean; diffBase: "range" | "merge-base" | "fallback"; durationMs: number; pluginVersion: string | undefined; host: string }): string
+/** ndjson line builders — counts only, F2. `model` is REQUIRED (spec §3's
+ * line sample stamps "model":"claude-haiku-4-5"; callers pass MODEL). */
+export function passLine(args: { ts: number; findings: Array<{severity: string}>; diffStat: { files: number; insertions: number; deletions: number }; baseSha: string; headSha: string; truncated: boolean; diffBase: "range" | "merge-base" | "fallback"; model: string; durationMs: number; pluginVersion: string | undefined; host: string }): string
 export function skipLine(args: { ts: number; reason: SkipReason; pluginVersion: string | undefined; host: string }): string
 ```
 
@@ -257,9 +268,10 @@ DIFF:
 
 - [ ] **Step 1: Failing tests** — hermetic, table-driven:
   - `shouldDispatch`: undefined state → go; delta < 15 min → debounce; negative delta → clock-skew; dayCount 29 → go, 30 → cap; dayKey rollover resets count (compute dayKey from injected `now` values one minute either side of local midnight).
+  - `nextCapState`: undefined state → {today, 1}; same dayKey → count+1; different dayKey → {today, 1}; its dayKey for a given `now` equals the one `shouldDispatch` used (cross-check via the midnight-straddle values).
   - `truncateDiff`: small diff untouched; synthetic multi-hunk diff > ceiling cuts exactly at a `diff --git `/`@@ ` boundary ≤ ceiling with `truncated: true`; a single hunk larger than the ceiling degrades to header-only + truncated.
   - `parseFindings`: bare JSON, fenced JSON, junk → undefined, wrong-shaped severity → undefined.
-  - `passLine`/`skipLine`: JSON.parse round-trip; passLine severityCounts counted correctly; NO field carries finding text (assert the serialized line does not contain a sentinel string planted in a hypothetical `note` field — i.e. the builder accepts no text fields at all, enforced by the type).
+  - `passLine`/`skipLine`: JSON.parse round-trip; passLine severityCounts counted correctly; emitted `model` key present and equal to the passed value; F2 key-allowlist assertion — `Object.keys(JSON.parse(line))` is a subset of the exact declared field set (no text-bearing key can exist because the builder's type accepts none).
 - [ ] **Step 2: Run to verify fail.** — `bun test test/review-sensor-core.test.ts`
 - [ ] **Step 3: Implement** exactly the surface above; keep every function under ~30 lines.
 - [ ] **Step 4: Run to verify pass.**
@@ -306,7 +318,7 @@ Mechanics (spec §2 diff edge cases, verbatim order): merge-in-progress check fi
 - Test: extend `cc-gate-plugin/test/review-sensor-core.test.ts` only for the pure helper below; the runner's end-to-end path is covered by Task 7's spawn test + the ACP fakes (no live model call in tests, ever).
 
 **Interfaces:**
-- Consumes: Task 3 `ensureDaemon`/`daemonCall`/`closeSession` (import from `../acp/index.ts` ONLY), Task 4 core, Task 5 `assembleDiff`.
+- Consumes: Task 3 `ensureDaemon`/`daemonCall`/`closeSession` + existing `modelProvenBy` (all imported from `../acp/index.ts` ONLY), Task 4 core (incl. `MODEL`, `nextCapState`), Task 5 `assembleDiff`.
 - Produces: `bun cc-gate-plugin/src/review-sensor/runner.ts <repoDir>` — the detached entry point. Also exports `runOnce(deps)` with injected deps `{ now(): number; call: typeof daemonCall; close: typeof closeSession; ensure: typeof ensureDaemon }` for testability.
 
 Flow (each guard emits its skip line via core builders and exits 0 — fail-open, exit code never matters to the Stop):
@@ -316,11 +328,15 @@ state = read .km/review-sensor-state.json (tolerant: missing/corrupt -> undefine
 d = shouldDispatch(state, now)          -> skip line on {go:false}
 stale-claim cleanup + openSync(claim, "wx")  -> "claim-lost" on EEXIST
 diff = assembleDiff(repo, state?.lastPassHead) -> "merge-in-progress" / silent exit on empty
-ensure + daemonCall(prompt, "claude-haiku-4-5", env, { isolation: REVIEW_SENSOR_ISOLATION, budgetMs })
+ensure + daemonCall(prompt, MODEL, env, { isolation: REVIEW_SENSOR_ISOLATION, budgetMs })
   -> pool-exhausted / transport failure => "warm-lane-busy"
+modelProvenBy(outcome.model, MODEL, outcome.canonicalModel) false => "bad-review-output"
+  // daemonCall forwards model evidence UNVERIFIED by design — every direct
+  // caller must reconcile it (anthropic-cli-warm.ts precedent; skipping this
+  // reinstates the request-echo tautology the interface forbids)
 parseFindings -> undefined => "bad-review-output"
-append passLine to .km/review-findings.ndjson; write side file; prune side files beyond SIDE_FILE_KEEP
-write new state {lastPassTs: now, lastPassHead: HEAD, dayKey, dayCount+1}
+append passLine (model: MODEL) to .km/review-findings.ndjson; write side file; prune beyond SIDE_FILE_KEEP
+write new state {lastPassTs: now, lastPassHead: HEAD, ...nextCapState(state, now)}
 closeSession(outcome.sessionId, env)    // best-effort; result ignored beyond a log line
 unlink claim (finally)
 ```
@@ -344,7 +360,7 @@ unlink claim (finally)
 
 **Interfaces:**
 - Consumes: nothing from runner at runtime (it only builds the command string).
-- Produces: `maybeSpawnReviewSensor(args: { cwd: string; env: Record<string, string | undefined>; spawn: (cmd: string) => void }): boolean` — returns whether it spawned. Mirrors `maybeSpawnPromptCheck`'s injected-spawn pattern exactly (read `prompt-check-spawn.ts` first and copy its structure).
+- Produces: `maybeSpawnReviewSensor(args: { cwd: string; env: Record<string, string | undefined>; spawn: (cmd: string[]) => void; mainCheckoutDir?: string }): boolean` — returns whether it spawned. `spawn` takes a `string[]` argv — the REAL shape both `maybeSpawnPromptCheck` (`prompt-check-spawn.ts`) and `maybeSpawnGauge` use, so hook-cli's existing `(cmd) => { const quoted = cmd.map(...) }` closure pattern reuses verbatim. `mainCheckoutDir` defaults to `MAIN_CHECKOUT_DIR` (test seam only).
 
 Gate, in order (all must hold): `env.KKAMAK_REVIEW_SENSOR === "1"`; `path.resolve(cwd) === MAIN_CHECKOUT_DIR` (worktree Stops never dispatch); then `spawn(...)` the runner with nohup-detached bash exactly like hook-cli's existing two spawns. The `session/close` build prerequisite is satisfied structurally (Tasks 1-3 precede this in the same package); the env default-off IS the fail-closed arming state the spec demands.
 
@@ -362,7 +378,7 @@ Gate, in order (all must hold): `env.KKAMAK_REVIEW_SENSOR === "1"`; `path.resolv
 
 - [ ] **Step 1:** repo root `bun test` (all packages' tests the root config reaches) — green.
 - [ ] **Step 2:** `cd cc-gate-plugin && bunx tsc --noEmit` (+ km-crank, opencode-plugin if the repo's doc-check/tsc convention covers them) — clean.
-- [ ] **Step 3:** grep-verify F2: `grep -rn "note\|text" cc-gate-plugin/src/review-sensor/core.ts` — line builders expose no text-bearing field.
+- [ ] **Step 3:** F2 key-allowlist verify (a bare `grep "text"` false-positives on `truncateDiff`'s legitimate return shape): `bun -e 'import {passLine, skipLine} from "./cc-gate-plugin/src/review-sensor/core.ts"; ...'` — build one passLine + one skipLine with sentinel inputs, assert `Object.keys(JSON.parse(line))` ⊆ the declared field sets and that no value contains a planted sentinel finding-text string. (Task 4's committed tests already assert this; this step is the independent re-run at gate time.)
 - [ ] **Step 4:** Report READY-TO-ARM to the user: prompt sha256 (from `reviewPromptSha()`), constants table, and the sized-go template the spec demands (named host, 30/day cap math). **Do NOT set KKAMAK_REVIEW_SENSOR anywhere. Do NOT write the ledger entry — that happens at activation with the real boundary ts.**
 
 ---

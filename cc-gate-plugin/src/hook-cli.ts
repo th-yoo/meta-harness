@@ -23,6 +23,7 @@ import { maybeSpawnGauge } from "./gauge/spawn.ts"
 import { decideNudge, NUDGE_TIMEOUT_MS } from "./gauge/nudge.ts"
 import { sdkCall } from "./gauge/transport.ts"
 import { maybeSpawnPromptCheck } from "./prompt-check-spawn.ts"
+import { maybeSpawnReviewSensor } from "./review-sensor-spawn.ts"
 import { shadowEvaluateAtStop } from "./gauge/shadow.ts"
 import { applyReinjectVariant, pickReinjectVariant } from "./reinject.ts"
 import { appendCheckOutput, buildCheckOutputRecord } from "./sidecar.ts"
@@ -333,6 +334,23 @@ async function main(): Promise<void> {
   const armed = decision.kind === "block"
     ? { ...decision, evidence: applyReinjectVariant(decision.evidence, arm, decision.rawOut) }
     : decision
+
+  // review-sensor (spec 2026-08-05): detached BEFORE emit(); second detached
+  // child on a gated Stop alongside gate-check's own spawnBg — declared, no
+  // conflict.
+  maybeSpawnReviewSensor({
+    cwd,
+    env: process.env as Record<string, string | undefined>,
+    spawn: (cmd) => {
+      const quoted = cmd.map((c) => `'${c.replace(/'/g, `'\\''`)}'`).join(" ")
+      const proc = Bun.spawn(["bash", "-c", `nohup ${quoted} </dev/null >/dev/null 2>&1 &`], {
+        stdout: "ignore",
+        stderr: "ignore",
+      })
+      proc.unref()
+    },
+  })
+
   await emit(buildStopOutput(armed, mode))
 }
 

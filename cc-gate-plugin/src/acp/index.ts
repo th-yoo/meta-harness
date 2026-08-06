@@ -28,6 +28,11 @@
 /** The daemon lifecycle: ensure one is listening, then send it a turn. */
 export { ensureDaemon, daemonCall, type DaemonOutcome } from "./acp-client.ts"
 
+/** Close the pool entry that served a session (review-sensor spec §2:
+ * close-not-release). First consumer outside src/gauge/: the review
+ * sensor. Deliberate widening of the public surface. */
+export { closeSession } from "./acp-client.ts"
+
 /** Isolation is a VALUE that crosses the wire on session/new, not an id. */
 export type { WarmIsolation } from "./acp-wire.ts"
 

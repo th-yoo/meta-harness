@@ -450,7 +450,7 @@ class FakeDispatchWarm implements WarmSessionLike {
   private inflight = new Map<string, (o: TurnOutcome) => void>()
   constructor(private readonly calls: string[]) {}
   turnInFlight(): boolean { return false }
-  close(): void {}
+  close(): void { this.calls.push("close") }
   oneShot(_text: string, _model: string, opts: { recycle: boolean; tag?: string }): Promise<TurnOutcome> {
     const tag = opts.tag!
     this.calls.push(`oneShot:${tag}`)
@@ -770,6 +770,80 @@ describe("acp-daemon dispatcher — session/new isolation structural validation"
     } }, (m) => frames.push(m as Record<string, unknown>))
     expect(frames[0]).toMatchObject({ error: { code: -32602 } })
     expect(state.sessions.size).toBe(0)
+  })
+})
+
+// ── session/close (fake SessionPool, no daemon process): review-sensor
+// build prerequisite. The daemon reverse-looks-up the pool entry that last
+// served this sessionId (state.lastServedBySessionForEntry) and forwards to
+// pool.closeEntry(entryId) — always a RESPONSE, never an error frame, so a
+// lost close race is a no-op by spec (task-2-brief.md §Interfaces).
+describe("acp-daemon dispatcher — session/close", () => {
+  test("session/close closes the entry that served the session", async () => {
+    const { pool, calls, settle } = fakeDispatchPool()
+    const state = createDaemonState()
+    const S = "session-under-test"
+    state.sessions.set(S, { createdAt: Date.now(), isolation: GAUGE_ISOLATION })
+    const dispatch = createDispatcher(pool, state, "fp")
+    const frames: Array<Record<string, unknown>> = []
+    const write = (m: object) => frames.push(m as Record<string, unknown>)
+
+    // Dispatch a prompt so lastServedBySessionForEntry maps entry->session,
+    // then settle it so the entry is released back to the pool (idle) —
+    // closeEntry refuses a busy entry (task 1's own guard), so a same-turn
+    // close would only ever exercise the busy path, not this one.
+    const p1 = dispatch({ id: 1, method: "session/prompt", params: {
+      sessionId: S, prompt: [{ type: "text", text: "one" }], _meta: { kkamak: { model: "m" } },
+    } }, write)
+    const oneShotCalls = calls.filter((c) => c.startsWith("oneShot:"))
+    expect(oneShotCalls.length).toBe(1)
+    const tag = oneShotCalls[0]!.split(":")[1]!
+    settle(tag, { kind: "no-call" })
+    await p1
+    expect(pool.size()).toBe(1) // still pooled — release, not close
+
+    await dispatch({ id: 2, method: "session/close", params: { sessionId: S } }, write)
+    expect(frames.find((f) => f.id === 2)).toMatchObject({ result: { closed: true } })
+    expect(calls).toContain("close")
+    expect(pool.size()).toBe(0)
+  })
+
+  test("session/close for an unknown session responds closed:false unknown-session", async () => {
+    const { pool } = fakeDispatchPool()
+    const state = createDaemonState()
+    const dispatch = createDispatcher(pool, state, "fp")
+    const frames: Array<Record<string, unknown>> = []
+    const write = (m: object) => frames.push(m as Record<string, unknown>)
+
+    await dispatch({ id: 1, method: "session/close", params: { sessionId: "never-served-anything" } }, write)
+    expect(frames[0]).toMatchObject({ result: { closed: false, reason: "unknown-session" } })
+  })
+
+  test("session/close while the entry is busy responds closed:false busy (pool guard)", async () => {
+    const { pool, calls } = fakeDispatchPool()
+    const state = createDaemonState()
+    const S = "session-under-test-busy"
+    state.sessions.set(S, { createdAt: Date.now(), isolation: GAUGE_ISOLATION })
+    const dispatch = createDispatcher(pool, state, "fp")
+    const frames: Array<Record<string, unknown>> = []
+    const write = (m: object) => frames.push(m as Record<string, unknown>)
+
+    // Fire the prompt but never settle it -- the entry stays busy.
+    const p1 = dispatch({ id: 1, method: "session/prompt", params: {
+      sessionId: S, prompt: [{ type: "text", text: "hangs" }], _meta: { kkamak: { model: "m" } },
+    } }, write)
+    const oneShotCalls = calls.filter((c) => c.startsWith("oneShot:"))
+    expect(oneShotCalls.length).toBe(1)
+
+    await dispatch({ id: 2, method: "session/close", params: { sessionId: S } }, write)
+    expect(frames.find((f) => f.id === 2)).toMatchObject({ result: { closed: false, reason: "busy" } })
+    expect(calls).not.toContain("close")
+
+    // Clean up the still-outstanding turn so the test doesn't leave a
+    // dangling promise -- cancel settles it, same as the sibling
+    // outstanding-tag-bookkeeping tests above.
+    await dispatch({ id: 3, method: "session/cancel", params: { sessionId: S } }, write)
+    await p1
   })
 })
 
