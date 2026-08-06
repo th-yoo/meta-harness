@@ -15,7 +15,7 @@ import {
 } from "./acp-paths.ts"
 import {
   FrameDecoder, encodeFrame, ACP_BUDGET,
-  ACP_INITIALIZE, ACP_SESSION_NEW, ACP_SESSION_PROMPT, ACP_SESSION_UPDATE,
+  ACP_INITIALIZE, ACP_SESSION_NEW, ACP_SESSION_PROMPT, ACP_SESSION_UPDATE, ACP_SESSION_CLOSE,
   ACP_ERR_NO_CALL, ACP_ERR_CALL_CONSUMED,
   type AcpInitializeResult, type AcpNewSessionParams, type AcpNewSessionResult,
   type AcpPromptParams, type AcpPromptResult, type WarmIsolation,
@@ -24,11 +24,23 @@ import {
 /** Mirrors WarmSession's TurnOutcome across the wire so §6e's law survives
  * the process boundary. `model`/`canonicalModel` are the daemon's EVIDENCE
  * (the modelUsage key and its canonicalModel), forwarded verbatim — the
- * caller reconciles them with modelProvenBy. */
+ * caller reconciles them with modelProvenBy.
+ *
+ * `sessionId` (review-sensor Task 3, additive — no existing consumer
+ * breaks) is set when a session was established over the wire, so a caller
+ * can later `closeSession` it (close-not-release). In THIS implementation
+ * it is populated ONLY on the `ok` branch: it is a `const` scoped inside
+ * `run()`'s nested async fn (below), invisible to the outer promise's
+ * ambient handlers (socket error/close, the budget timer) and to
+ * `run().catch()`'s post-send error classification — both of those sit
+ * outside `run()`'s closure. A `no-call`/`call-consumed` outcome can
+ * therefore leave `sessionId` undefined even when a session actually WAS
+ * established before the failure; treat its absence there as "not
+ * threaded", never as "no session existed". */
 export type DaemonOutcome =
-  | { kind: "ok"; text: string; model: string; canonicalModel: string }
-  | { kind: "no-call" }
-  | { kind: "call-consumed" }
+  | { kind: "ok"; text: string; model: string; canonicalModel: string; sessionId?: string }
+  | { kind: "no-call"; sessionId?: string }
+  | { kind: "call-consumed"; sessionId?: string }
 
 interface PendingEntry {
   resolve: (v: unknown) => void
@@ -252,6 +264,7 @@ export function daemonCall(
         text: lastUpdateText ?? "",
         model: result?._meta?.kkamak?.model ?? "",
         canonicalModel: result?._meta?.kkamak?.canonicalModel ?? "",
+        sessionId,
       })
     }
 
@@ -309,6 +322,61 @@ function probeOnce(sock: string, fp: string, timeoutMs: number): Promise<boolean
 
 const PROBE_TIMEOUT_MS = 2_000
 const POLL_INTERVAL_MS = 100
+
+/** Close the pool entry that served `sessionId` (review-sensor spec §2:
+ * close-not-release). Follows `probeOnce`'s minimal
+ * connect-send-await-response shape exactly: construct-then-connect with
+ * every listener attached before `.connect()`, socket destroyed and timer
+ * cleared before resolving on every path. Close is best-effort by spec —
+ * `session/close` is ALWAYS answered (never a JSON-RPC error, per
+ * acp-wire.ts's ACP_SESSION_CLOSE contract), and the pool's own idle reap
+ * is the backstop for whatever this call cannot reach. NEVER throws: any
+ * transport failure at all (no daemon, connection refused, malformed or
+ * missing response, budget expiry) resolves `{closed:false,
+ * reason:"unreachable"}` rather than rejecting. */
+export function closeSession(
+  sessionId: string,
+  env: Record<string, string | undefined>,
+  opts?: { budgetMs?: number },
+): Promise<{ closed: boolean; reason?: string }> {
+  const budgetMs = opts?.budgetMs ?? PROBE_TIMEOUT_MS
+  const sock = socketPath(env)
+
+  return new Promise((resolve) => {
+    let settled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const socket = new net.Socket()
+    const finish = (result: { closed: boolean; reason?: string }): void => {
+      if (settled) return
+      settled = true
+      if (timer) { clearTimeout(timer); timer = undefined }
+      try { socket.destroy() } catch { /* ignore */ }
+      resolve(result)
+    }
+    timer = setTimeout(() => finish({ closed: false, reason: "unreachable" }), budgetMs)
+    socket.once("error", () => finish({ closed: false, reason: "unreachable" }))
+    socket.setEncoding("utf8")
+    const decoder = new FrameDecoder()
+    socket.on("data", (chunk) => {
+      for (const f of decoder.push(chunk)) {
+        const msg = f as { id?: number; result?: { closed?: unknown; reason?: unknown } }
+        if (msg.id === 1 && msg.result) {
+          const closed = msg.result.closed === true
+          const reason = typeof msg.result.reason === "string" ? msg.result.reason : undefined
+          finish(reason === undefined ? { closed } : { closed, reason })
+        }
+      }
+    })
+    socket.once("connect", () => {
+      try {
+        socket.write(encodeFrame({ jsonrpc: "2.0", id: 1, method: ACP_SESSION_CLOSE, params: { sessionId } }))
+      } catch {
+        finish({ closed: false, reason: "unreachable" })
+      }
+    })
+    socket.connect(sock)
+  })
+}
 
 async function pollUntil(sock: string, fp: string, waitMs: number): Promise<boolean> {
   const deadline = Date.now() + waitMs

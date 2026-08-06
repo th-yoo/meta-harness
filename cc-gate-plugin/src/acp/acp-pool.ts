@@ -227,6 +227,21 @@ export class SessionPool {
     e.lastReleasedAt = now
   }
 
+  /** Close ONE idle entry and remove it (sensor close-not-release,
+   * review-sensor spec §2): refuses busy or turn-in-flight entries —
+   * same ground-truth guards as reap(); a refusal degrades to the 900 s
+   * reap backstop. Unknown ids are a safe no-op (double-close must never
+   * throw into the daemon's dispatch path). */
+  closeEntry(id: string): { closed: boolean; reason?: "unknown-id" | "busy" | "turn-in-flight" } {
+    const e = this.entries.find((e) => e.id === id)
+    if (!e) return { closed: false, reason: "unknown-id" }
+    if (e.busy) return { closed: false, reason: "busy" }
+    if (e.warm.turnInFlight()) return { closed: false, reason: "turn-in-flight" }
+    e.warm.close()
+    this.entries = this.entries.filter((x) => x.id !== id)
+    return { closed: true }
+  }
+
   /** Evict idle entries past `sessionIdleMs` (warm.close()); NEVER one with
    * `warm.turnInFlight()` — a busy entry is skipped by the `!e.busy` check
    * alone under the pool's own protocol (acquire sets busy, release clears

@@ -17,7 +17,7 @@ import crypto from "node:crypto"
 import {
   FrameDecoder, encodeFrame,
   ACP_INITIALIZE, ACP_SESSION_NEW, ACP_SESSION_PROMPT, ACP_SESSION_CANCEL, ACP_SESSION_UPDATE,
-  ACP_ERR_NO_CALL, ACP_ERR_CALL_CONSUMED,
+  ACP_SESSION_CLOSE, ACP_ERR_NO_CALL, ACP_ERR_CALL_CONSUMED,
 } from "../src/acp/acp-wire.ts"
 
 export type FakeAnswer =
@@ -81,12 +81,19 @@ export interface FakeDaemonHandle {
    * `daemonCall` sent `_meta.kkamak.isolation` deep-equal to what the
    * caller passed. */
   sessionNewParams: () => FakeSessionNewParams | undefined
+  /** review-sensor Task 3: the params of the last session/close frame, so a
+   * client test can assert `closeSession` sent the sessionId it was given.
+   * This fake always echoes `{closed:true}` — it has no notion of a real
+   * pool entry to refuse, unlike the real daemon's unknown/busy cases
+   * (those are covered against the real dispatcher in acp-daemon.test.ts). */
+  closeParams: () => { sessionId: string } | undefined
 }
 
 export function fakeDaemon(sock: string, opts: FakeDaemonOpts): FakeDaemonHandle {
   let sawPromptFlag = false
   let captured: FakePromptParams | undefined
   let capturedSessionNew: FakeSessionNewParams | undefined
+  let capturedClose: { sessionId: string } | undefined
 
   // Fresh socket path per test (tempEndpoint-shaped), but tolerate a stale
   // leftover file the same way acp-daemon.ts's own takeover logic does.
@@ -206,6 +213,13 @@ export function fakeDaemon(sock: string, opts: FakeDaemonOpts): FakeDaemonHandle
             if (id !== undefined) write({ jsonrpc: "2.0", id, result: {} })
             break
           }
+          case ACP_SESSION_CLOSE: {
+            const p = params as { sessionId?: unknown } | undefined
+            const sessionId = typeof p?.sessionId === "string" ? p.sessionId : ""
+            capturedClose = { sessionId }
+            if (id !== undefined) write({ jsonrpc: "2.0", id, result: { closed: true } })
+            break
+          }
           default:
             if (id !== undefined) write({ jsonrpc: "2.0", id, error: { code: -32601, message: `unknown method: ${method}` } })
         }
@@ -227,5 +241,6 @@ export function fakeDaemon(sock: string, opts: FakeDaemonOpts): FakeDaemonHandle
     sawPrompt: () => sawPromptFlag,
     promptParams: () => captured,
     sessionNewParams: () => capturedSessionNew,
+    closeParams: () => capturedClose,
   }
 }

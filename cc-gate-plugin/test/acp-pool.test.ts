@@ -313,6 +313,64 @@ describe("SessionPool.closeAll (9)", () => {
   })
 })
 
+describe("SessionPool.closeEntry (review-sensor §2)", () => {
+  test("closes and removes an idle entry; warm.close() is called exactly once", () => {
+    const pool = new SessionPool(ENV, { makeSession: fakeMakeSession })
+    const t0 = Date.now()
+    const a = pool.acquire(GAUGE_ISOLATION, t0)
+    expect(a.ok).toBe(true)
+    if (!a.ok) return
+    const id = a.entry.id
+
+    pool.release(id, t0 + 1)
+    const r = pool.closeEntry(id)
+    expect(r.closed).toBe(true)
+    expect(r.reason).toBeUndefined()
+    expect(pool.size()).toBe(0)
+    expect(asFake(a.entry.warm).closedCount).toBe(1)
+  })
+
+  test("refuses a busy entry (not released)", () => {
+    const pool = new SessionPool(ENV, { makeSession: fakeMakeSession })
+    const t0 = Date.now()
+    const a = pool.acquire(GAUGE_ISOLATION, t0)
+    expect(a.ok).toBe(true)
+    if (!a.ok) return
+    const id = a.entry.id
+
+    // no release — still busy
+    const r = pool.closeEntry(id)
+    expect(r).toEqual({ closed: false, reason: "busy" })
+    expect(pool.size()).toBe(1)
+    expect(asFake(a.entry.warm).closedCount).toBe(0)
+  })
+
+  test("refuses an idle entry with turnInFlight() => true (turn still finishing)", () => {
+    const pool = new SessionPool(ENV, { makeSession: fakeMakeSession })
+    const t0 = Date.now()
+    const a = pool.acquire(GAUGE_ISOLATION, t0)
+    expect(a.ok).toBe(true)
+    if (!a.ok) return
+    const id = a.entry.id
+
+    pool.release(id, t0 + 1)
+    // idle per the pool, but the warm session reports a turn still in flight
+    asFake(a.entry.warm).setTurnInFlight(true)
+
+    const r = pool.closeEntry(id)
+    expect(r).toEqual({ closed: false, reason: "turn-in-flight" })
+    expect(pool.size()).toBe(1)
+    expect(asFake(a.entry.warm).closedCount).toBe(0)
+  })
+
+  test("unknown id is a safe no-op (double-close must never throw)", () => {
+    const pool = new SessionPool(ENV, { makeSession: fakeMakeSession })
+    const r = pool.closeEntry("nonexistent-id")
+    expect(r).toEqual({ closed: false, reason: "unknown-id" })
+    expect(pool.size()).toBe(0)
+  })
+})
+
 describe("SessionPool wiring against the REAL WarmSession default (construction only, no spawn, no CLI, zero spend)", () => {
   test("the default makeSession builds a real WarmSession carrying the requested isolation and the five explicit ACP_BUDGET legs", () => {
     const pool = new SessionPool(ENV)

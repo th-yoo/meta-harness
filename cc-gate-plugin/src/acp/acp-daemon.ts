@@ -63,6 +63,7 @@ import {
 import {
   FrameDecoder, encodeFrame,
   ACP_INITIALIZE, ACP_SESSION_NEW, ACP_SESSION_PROMPT, ACP_SESSION_CANCEL, ACP_SESSION_UPDATE,
+  ACP_SESSION_CLOSE,
   ACP_ERR_NO_CALL, ACP_ERR_CALL_CONSUMED,
   type WarmIsolation,
 } from "./acp-wire.ts"
@@ -396,6 +397,30 @@ export function createDispatcher(pool: SessionPool, state: DaemonState, fingerpr
           // find) that still answers `{}` when an id was present.
           if (oldest) oldest.warm.cancel(oldest.tag)
           respond({})
+          return
+        }
+
+        case ACP_SESSION_CLOSE: {
+          // review-sensor build prerequisite: reverse-lookup the pool entry
+          // that last DISPATCHED a turn for this sessionId
+          // (state.lastServedBySessionForEntry, entryId -> sessionId) and
+          // hand it to the pool's own close-not-release guard
+          // (SessionPool.closeEntry, task 1). An unknown sessionId — never
+          // served by this daemon, or already closed — is a no-op by the
+          // same law as session/cancel's own ack: ALWAYS a response, never
+          // an error frame.
+          const sessionId = readSessionId(params)
+          let entryId: string | undefined
+          for (const [eid, sid] of state.lastServedBySessionForEntry) {
+            if (sid === sessionId) { entryId = eid; break }
+          }
+          const result = entryId === undefined
+            ? { closed: false, reason: "unknown-session" }
+            : pool.closeEntry(entryId)
+          if (result.closed && entryId !== undefined) {
+            state.lastServedBySessionForEntry.delete(entryId)
+          }
+          respond(result)
           return
         }
 

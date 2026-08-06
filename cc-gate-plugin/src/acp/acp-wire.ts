@@ -46,6 +46,13 @@ export const ACP_SESSION_NEW = "session/new"
 export const ACP_SESSION_PROMPT = "session/prompt"
 export const ACP_SESSION_CANCEL = "session/cancel"
 export const ACP_SESSION_UPDATE = "session/update"
+/** review-sensor build prerequisite: the sensor's close-not-release
+ * discipline (SessionPool.closeEntry, acp-pool.ts) needs a wire verb to
+ * reach it from a client. Request params `{ sessionId: string }`; response
+ * result `{ closed: boolean; reason?: string }` — ALWAYS a response, never
+ * an error frame, so a lost close race (unknown/busy/in-flight session) is
+ * a no-op by spec, same as `session/cancel`'s own ack. */
+export const ACP_SESSION_CLOSE = "session/close"
 
 /** §6e law L1/L4 — the prompt bytes never crossed the boundary toward the
  * model. The caller MAY fall back to the one-shot lane without breaking
