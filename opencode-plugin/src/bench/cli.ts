@@ -10,6 +10,7 @@ import { cmdPrep } from "./cmd-prep.ts"
 import { cmdOracle } from "./cmd-oracle.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
 import { cmdRun, type CmdRunArgs } from "./cmd-run.ts"
+import { cmdP2, type CmdP2Args } from "./p2/cmd-p2.ts"
 import { cmdTaskLoad, type CmdTaskLoadArgs } from "./cmd-task-load.ts"
 import { cmdAb, type CmdAbArgs } from "./cmd-ab.ts"
 import { cmdScreen, type CmdScreenArgs } from "./cmd-screen.ts"
@@ -54,6 +55,13 @@ commands:
   task-load   [--tasks TASK [TASK ...]] [--task-file PATH] [--all]
               [--results-file PATH] [--cpu-budget N] [--mem-budget MB]
               (read-only: declared footprint + timeouts + co-run preview)
+  p2-run      --arm a1|a3|a4 (--tasks TASK [TASK ...] | --task-file PATH)
+              --k N --results-file PATH --go N [--model ID]
+              (P2 actuator-binding probe — never the stock run path; fences:
+               --results-file required + must resolve under
+               docs/loop-probes/p2/, --go must equal the exact planned
+               container-execution count (tasks × k, ×2 for a4's potential
+               re-pass); never writes term-bench2/store/**)
   ab          --layer L --candidate vN [--tasks TASK [TASK ...]] [--task-file PATH]
               [--all] [--split-file PATH] [--model ID] [--variant V] [--k N]
               [--layers global|account|project] [--agent NAME] [--alpha F]
@@ -482,6 +490,73 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
       const v = argv[i + 1]
       if (v === undefined || !(DRIVER_IDS as readonly string[]).includes(v)) return null
       out.driver = v
+      i += 2
+      continue
+    }
+    return null
+  }
+  return out
+}
+
+/** Syntactic-only parser for `p2-run` — mirrors parseRunArgs's shape.
+ * Deliberately does NOT enforce the business-rule fences (results-file
+ * required, path under docs/loop-probes/p2/, --go arithmetic match): those
+ * are cmdP2's OWN contract (p2/cmd-p2.ts's header), exercised directly by
+ * test/p2-cmd.test.ts against `cmdP2`, not against this CLI-syntax layer.
+ * Only `--arm`'s enum is validated here (same pattern as --layers/
+ * --staging/--driver above) since a malformed enum value is a parse error,
+ * not a business rule. */
+function parseP2Args(argv: string[]): CmdP2Args | null {
+  const out: CmdP2Args = {}
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a === "--arm") {
+      const v = argv[i + 1]
+      if (v !== "a1" && v !== "a3" && v !== "a4") return null
+      out.arm = v
+      i += 2
+      continue
+    }
+    if (a === "--tasks") {
+      const r = consumeTasksList(argv, i)
+      if (r === null) return null
+      out.tasks = r.vals
+      i = r.next
+      continue
+    }
+    if (a === "--task-file") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.taskFile = v
+      i += 2
+      continue
+    }
+    if (a === "--k") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.k = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--results-file") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.resultsFile = v
+      i += 2
+      continue
+    }
+    if (a === "--go") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.go = Number(v)
+      i += 2
+      continue
+    }
+    if (a === "--model") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      out.model = v
       i += 2
       continue
     }
@@ -1899,6 +1974,15 @@ export async function main(argv: string[]): Promise<number> {
           runArgs.pressureGate = buildPressureGate(runArgs)
         }
         await cmdRun(paths, runArgs)
+        return 0
+      }
+      case "p2-run": {
+        const p2Args = parseP2Args(subArgs)
+        if (p2Args === null) {
+          printUsage()
+          return 2
+        }
+        await cmdP2(paths, p2Args)
         return 0
       }
       case "task-load": {
