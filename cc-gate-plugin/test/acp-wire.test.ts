@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test"
 import {
   FrameDecoder, encodeFrame, ACP_BUDGET, CLI_SPAWN_BUDGET_MS, modelProvenBy,
   ACP_ERR_NO_CALL, ACP_ERR_CALL_CONSUMED, GAUGE_ISOLATION,
-} from "../src/gauge/acp-wire.ts"
+} from "../src/acp/acp-wire.ts"
 import type {
   AcpInitializeResult, AcpNewSessionParams, AcpPromptParams, AcpPromptResult,
-} from "../src/gauge/acp-wire.ts"
+} from "../src/acp/acp-wire.ts"
 
 // TYPE-LEVEL conformance guard (ACP extensibility rule), independent of any
 // runtime fixture. The runtime test below ("every Acp*'s _meta has no

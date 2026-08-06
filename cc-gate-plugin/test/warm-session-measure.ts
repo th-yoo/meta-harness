@@ -10,11 +10,11 @@
 // glob (no `describe`/`test` calls) — same convention as sdk-stub.ts and
 // agent-cli-stub.ts. Run with:
 //   cd cc-gate-plugin && bun test/warm-session-measure.ts
-import { WarmSession } from "../src/gauge/warm-session.ts"
+import { WarmSession } from "../src/acp/warm-session.ts"
 import { agentSdkCall } from "../src/gauge/agent-transport.ts"
 import { sseText } from "./agent-cli-stub.ts"
 import { stubServer } from "./sdk-stub.ts"
-import { modelProvenBy } from "../src/gauge/acp-wire.ts"
+import { modelProvenBy } from "../src/acp/acp-wire.ts"
 
 const HAIKU = "claude-haiku-4-5"
 const PROMPT = "measure this record's request bytes"

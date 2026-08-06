@@ -8,10 +8,10 @@
 // so still token-free) proving the pool never omits isolation or a budget
 // leg when it builds a real session.
 import { describe, expect, test } from "bun:test"
-import { GAUGE_ISOLATION, ACP_BUDGET, type WarmIsolation } from "../src/gauge/acp-wire.ts"
+import { GAUGE_ISOLATION, ACP_BUDGET, type WarmIsolation } from "../src/acp/acp-wire.ts"
 import { REASONING_ISOLATION } from "../src/gauge/send-prompt.ts"
-import { WarmSession } from "../src/gauge/warm-session.ts"
-import { SessionPool, type WarmConstructOpts, type WarmSessionLike } from "../src/gauge/acp-pool.ts"
+import { WarmSession } from "../src/acp/warm-session.ts"
+import { SessionPool, type WarmConstructOpts, type WarmSessionLike } from "../src/acp/acp-pool.ts"
 
 const ENV: Record<string, string | undefined> = { ...process.env, KKAMAK_ACP_TEST_MARKER: "acp-pool-test" }
 

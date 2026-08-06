@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { GAUGE_ISOLATION } from "../src/gauge/acp-wire.ts"
+import { GAUGE_ISOLATION } from "../src/acp/acp-wire.ts"
 import {
   REASONING_ISOLATION, registerProvider, resolveProvider, sendPrompt,
 } from "../src/gauge/send-prompt.ts"

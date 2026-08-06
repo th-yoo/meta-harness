@@ -7,9 +7,8 @@
 // N5-established pattern as N2 (anthropic-api.ts): import this factory and
 // wire it at the call site.
 import type { SendPromptProvider, SendPromptOptions, SendOutcome } from "../send-prompt.ts"
-import { ensureDaemon, daemonCall } from "../acp-client.ts"
+import { ensureDaemon, daemonCall, modelProvenBy } from "../../acp/index.ts"
 import { buildAgentOutgoingText } from "../agent-transport.ts"
-import { modelProvenBy } from "../acp-wire.ts"
 
 export function makeAnthropicCliWarmProvider(
   env: Record<string, string | undefined>,

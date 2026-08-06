@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { WarmSession, selectEvidence } from "../src/gauge/warm-session.ts"
-import { modelProvenBy, CLI_SPAWN_BUDGET_MS, GAUGE_ISOLATION } from "../src/gauge/acp-wire.ts"
+import { WarmSession, selectEvidence } from "../src/acp/warm-session.ts"
+import { modelProvenBy, CLI_SPAWN_BUDGET_MS, GAUGE_ISOLATION } from "../src/acp/acp-wire.ts"
 import {
   HAS_CLAUDE_CODE_CREDENTIALS, sseText, hangFirstServer, until,
 } from "./agent-cli-stub.ts"

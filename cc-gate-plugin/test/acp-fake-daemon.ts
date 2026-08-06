@@ -18,7 +18,7 @@ import {
   FrameDecoder, encodeFrame,
   ACP_INITIALIZE, ACP_SESSION_NEW, ACP_SESSION_PROMPT, ACP_SESSION_CANCEL, ACP_SESSION_UPDATE,
   ACP_ERR_NO_CALL, ACP_ERR_CALL_CONSUMED,
-} from "../src/gauge/acp-wire.ts"
+} from "../src/acp/acp-wire.ts"
 
 export type FakeAnswer =
   | "ok"
