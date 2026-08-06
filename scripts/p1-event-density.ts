@@ -18,7 +18,9 @@
  * Env overrides (test seam ONLY — production omits all of these):
  *   KKAMAK_PROBE_GATE_NDJSON, KKAMAK_PROBE_REVIEWS_DIR,
  *   KKAMAK_PROBE_GIT_DIRS (colon-separated repo paths — replaces the
- *   default [this repo, ~/z2/kkamak] pair used for S2 commits/day).
+ *   default [this repo, ~/z2/kkamak] pair used for S2 commits/day),
+ *   KKAMAK_PROBE_NOW_TS (epoch-ms — freezes windowEnd for deterministic
+ *   fixtures; absent/invalid -> Date.now()).
  */
 import fs from "node:fs"
 import os from "node:os"
