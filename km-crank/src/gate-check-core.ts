@@ -122,12 +122,8 @@ export function suitesForChangedPaths(paths: string[]): SuiteId[] {
  * CC CLI subprocess spawns, 2s settles). They still run in tier 1 on every
  * background full check, and in the pre-merge sanity chain. ONE regex = one
  * policy site. */
-export const SLOW_CCGATE_TEST_RE =
+const SLOW_CCGATE_TEST_RE =
   /(acp-client|acp-daemon|acp-pool|anthropic-cli-warm|warm-session|gauge-agent-transport)\.test\.ts$/
-
-export function ccgateFastFiles(allTestFiles: string[]): string[] {
-  return allTestFiles.filter((f) => !SLOW_CCGATE_TEST_RE.test(f))
-}
 
 /** Spawn-heavy km-crank test file excluded from tier 0. Measured 2026-08-06:
  * gate-check-cli.test.ts is an end-to-end CLI drive with multi-second
@@ -140,7 +136,18 @@ export const SLOW_KMCRANK_TEST_RE = /(^|\/)gate-check-cli\.test\.ts$/
 /** Suite id -> the package directory its tests live under. Only the suites
  * that currently need it (pull-in self-matching below; Task 3's `Cmd.cwd`
  * derivation) are populated — this is not a claim that every SuiteId has
- * (or needs) an entry. */
+ * (or needs) an entry.
+ *
+ * DOUBLE DUTY, one map, two consumers: (1) here in `pullInsFor`, presence
+ * drives the self-pull regex (a changed slow test file pulls itself); (2)
+ * in `scripts/gate-check.ts`'s `realCommands()`, presence is what a suite
+ * needs to get its `Cmd.cwd` derived AND its argv turned from bare
+ * `["bun","test"]` into an enumerated fast-file list via `fastFiles()`. A
+ * third entry added here later for reason (1) alone would, if
+ * `gate-check.ts` is ever changed to iterate this map rather than call
+ * `fastFiles`/`Cmd.cwd` derivation explicitly per suite, silently convert
+ * that suite's argv into a file list too — read both call sites before
+ * adding an entry. */
 export const PKG_DIR: Partial<Record<SuiteId, string>> = {
   ccgate: "cc-gate-plugin",
   kmcrank: "km-crank",
@@ -251,8 +258,13 @@ export function pullInsFor(suite: SuiteId, paths: string[]): string[] {
   return [...out].sort()
 }
 
-/** Back-compat wrapper — scripts/gate-check.ts's only pull-in consumer,
- * kept so it compiles untouched. Equivalent to `pullInsFor("ccgate", paths)`. */
-export function slowCcgateTestsForChangedPaths(paths: string[]): string[] {
-  return pullInsFor("ccgate", paths)
+/** SUITE-KEYED fast-list filter: drops `suite`'s spawn-heavy test files
+ * (per `SUITE_POLICY[suite].slowTestRe`) from a scanned file list. A suite
+ * with no configured `slowTestRe` (no narrowing) returns the list
+ * unfiltered — generalises the old ccgate-only `ccgateFastFiles`, which
+ * this replaces, to any suite Task 1/2 gave a policy. */
+export function fastFiles(suite: SuiteId, allTestFiles: string[]): string[] {
+  const slowRe = SUITE_POLICY[suite]?.slowTestRe
+  if (!slowRe) return allTestFiles
+  return allTestFiles.filter((f) => !slowRe.test(f))
 }
