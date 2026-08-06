@@ -961,3 +961,39 @@ One auto-chained run (user-approved single go): harvest → proposer → gate.
   human-preemption rules). **DONE 2026-07-26: `gate-plugin/` shipped
   (commits ec41938..6f39449) after C1/C2 verdicts — marker default OFF per
   C2, mutation probe deferred to v2, sensor ndjson = daily grader input.**
+
+## Review-sensor ARMED (2026-08-06, yoo-dev) — the b2 pairing fix deployed
+
+- **Why (loop-fix probe program verdict, merge `1649fe8`):** the loop's one
+  VIABLE outcome signal — b2 review findings-count (sd/mean 1.41) — rode s3
+  manual review cadence at 1.43/day = 245 days to a d=0.30 verdict vs the
+  14-day bar. NO-CONFIG-PASSES; blocker = signal-source PAIRING, not rigor.
+  Fix = move the signal onto gated-Stop cadence: auto-fired review passes.
+- **Built (SDD, 8 tasks, merge `062baf0` + maxBuffer item `75a5305`):**
+  `session/close` ACP wire verb (SessionPool.closeEntry + daemon handler +
+  client closeSession — close-not-release so a sensor seat never pins the
+  4-cap warm pool), sensor core (15-min debounce / 30-day cap / clock-skew
+  guard / hunk-aligned byte-exact 128 KiB truncation / frozen prompt sha
+  `a19f6f85…294c36` / F2 counts-only line builders), git-diff ladder
+  (range/merge-base/fallback + merge-in-progress guard), detached runner
+  (wx claim, zero-wait haiku warm seat, modelProvenBy gate, atomic state
+  write), Stop-branch spawn gated on env + main-checkout cwd. Spec + plan
+  both reviewed-to-FLAWLESS pre-build; 7 Important/Critical caught in
+  SDD reviews (incl. a cap day-rollover permanent-wedge the green tests
+  missed, and a spec-§3 line-schema drift the whole-branch review caught).
+- **Armed (sized go, boundary ts `1785988568548`, ledger `e1d5d1c`):**
+  `KKAMAK_REVIEW_SENSOR=1` in this repo's `.claude/settings.local.json`,
+  yoo-dev ONLY (host-local file; yoo-mac arming = its own sized go).
+  Stream `.km/review-findings.ndjson` — NEW instrument, never pools with
+  the human-flow docs/reviews counts P0 measured.
+- **Pre-registered checkpoint (due 2026-08-13):** realized events/day from
+  the stream ≥25 → the 14-day bar is reachable (350 count-family events at
+  d=0.30 ≈ 12-14 days); <25 → constants return to the user, new boundary
+  ts. Nothing self-adjusts. If it holds: distance-to-verdict for any future
+  actuator comparison drops 245 days → ~2 weeks — the loop's evidence
+  channel problem, closed by construction pending cadence proof.
+- **Same-day context:** B3 binarized D-vs-rest on measured basis (merge
+  `8c53f46`, gauge-emission cadence 18.3/day ≠ s1's 62.6); P1 wall-clock
+  test time bomb defused (`e63d920`, KKAMAK_PROBE_NOW_TS seam); sibling
+  session's ACP promotion to `src/acp/` merged under it (`6417b7a`) — the
+  sensor is that public surface's first non-gauge consumer.

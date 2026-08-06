@@ -3,6 +3,67 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-06 (`yoo-dev`) — REVIEW-SENSOR BUILT+ARMED (boundary 1785988568548) · B3 RULED D-vs-REST · SPECS+PLAN FLAWLESS · P2 SPEC WAITING ON PLAN
+
+**RESUME PROMPT (either host — git-only transfer):**
+```
+Resume kkamak (meta-harness), post-2026-08-06 review-sensor arming.
+git pull FIRST, then this block. Main >= e1d5d1c, tree clean (except
+host-local .claude/settings.local.json env flip on yoo-dev).
+
+MERGED TODAY (all pushed, 7b-gated where code):
+ - B3 binarization RULED: D vs rest (merge 8c53f46, user "measure and
+   then decide"; scripts/b3-binarization-measure.ts). KEY: b3 rides
+   gauge EMISSIONS ~18.3/day, NEVER s1's 62.6 — future e-tables must
+   add the gauge-emission source explicitly.
+ - Review-sensor + P2 actuator-binding SPECS reviewed-to-FLAWLESS
+   (e010c44; 32 findings over 3 independent architects). P2 key rulings:
+   band (c) TB2-primary + PASSIVE live shadow; A3 = container PATH shim
+   (claude -p fires NO hooks); A1 = TB2 assembleAgentsMd/--pin, NOT
+   minimal/ kernel; rule text freezes at plan completion.
+ - P1 test time bomb defused (merge e63d920): 348cd5c asserted
+   wall-clock spanDays<1, expired next day, failed main for everyone
+   (caught by 'side' session). KKAMAK_PROBE_NOW_TS seam + frozen
+   fixture. LESSON (memorized): never assert Date.now()-relative
+   fixtures against fixed timestamps.
+ - 'side' session's ACP promotion merged (6417b7a): subsystem now at
+   cc-gate-plugin/src/acp/ behind index.ts; sensor = first non-gauge
+   consumer of that surface.
+ - REVIEW-SENSOR BUILT (plan 507a11d FLAWLESS; SDD 8 tasks; merge
+   062baf0 + maxBuffer 75a5305; artifacts docs/reviews/
+   f8e3b46-review-sensor.md + 6815e90-fix-sensor-maxbuffer.md):
+   session/close ACP verb, close-not-release warm seat, F2 counts-only
+   stream, ships-OFF gate. SDD reviews caught 7 Important/Critical
+   (cap rollover permanent-wedge, spec-§3 schema drift, truncation
+   dropping fitting hunks, UTF-16-vs-byte ceiling, O(N²) scan,
+   non-atomic state write).
+ - ARMED yoo-dev (sized go; boundary ts 1785988568548; ledger e1d5d1c):
+   KKAMAK_REVIEW_SENSOR=1 in .claude/settings.local.json (HOST-LOCAL —
+   yoo-mac stays OFF, its arming = own sized go). Takes effect only in
+   sessions STARTED post-flip → RESTART CC sessions in this checkout.
+   Stream .km/review-findings.ndjson; prompt sha a19f6f85…294c36;
+   NEVER pool with docs/reviews human-flow counts.
+
+DUE 2026-08-13 — pre-registered cadence checkpoint: realized events/day
+from the stream ≥25 → 14-day d=0.30 bar reachable (245d → ~2wk); <25 →
+constants back to user, new boundary ts. Nothing self-adjusts.
+
+ARMED ON yoo-dev (re-arm after reboot): tmux gaugeverify runs
+scripts/channel-chain.sh (opus probe 10min → smoke --go 14 → bar →
+channel --go 301; gos granted; log .km/channel-chain.log). Opus
+429-walled ~2 days. On DONE: report |C4| + exact size (6x|C4|+66),
+sized go, build c4-arms.ts per pre-reg §7. Dogfood first 0.3.0
+gate-outcomes line LANDED ts 1785930930213 (their ledger duty).
+
+OPEN: (1) P2 implementation plan (spec FLAWLESS; writing-plans → build
+A3 shim + A4 review-actuator → bench sized go vs exact table ≤112 runs).
+(2) C4 experiment (chain-blocked). (3) First-line verification + 08-13
+checkpoint. Standing rules: sized go before spend · EXPLICIT MERGE GO
+every merge (recorded 08-06) · spec-is-law · merge-with-gate.sh +
+docs/reviews artifact · boundary ts on instrument changes · F1/F2 ·
+per-task reviews · grep-verify · SITREP.
+```
+
 ## ✅ SESSION END 2026-08-06 (`yoo-mac`) — cc-host PATH FIX MERGED (87d4937) · techs.md RE-AUDIT ON BRANCH (merge go given, fact-check in flight) · NEW STANDING RULE: merges to main need explicit user go
 
 **RESUME PROMPT (either host — git-only):**
