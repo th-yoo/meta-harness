@@ -1,4 +1,7 @@
-import { test, expect, describe } from "bun:test"
+import { test, expect, describe, afterEach } from "bun:test"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import {
   shouldDispatch,
   nextCapState,
@@ -13,6 +16,7 @@ import {
   MODEL,
   type SensorState,
 } from "../src/review-sensor/core.ts"
+import { pruneSideFiles } from "../src/review-sensor/runner.ts"
 
 describe("shouldDispatch", () => {
   test("undefined state → go: true", () => {
@@ -623,5 +627,43 @@ describe("skipLine", () => {
 
     const parsed = JSON.parse(line)
     expect("pluginVersion" in parsed).toBe(false)
+  })
+})
+
+describe("pruneSideFiles", () => {
+  const CLEANUP: string[] = []
+  afterEach(() => {
+    for (const d of CLEANUP.splice(0)) fs.rmSync(d, { recursive: true, force: true })
+  })
+
+  test("7 fake files, keep 5 -> the 2 oldest (by name = ts) removed", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "review-sensor-side-"))
+    CLEANUP.push(dir)
+
+    const tsList = [1000, 1001, 1002, 1003, 1004, 1005, 1006]
+    for (const ts of tsList) {
+      fs.writeFileSync(path.join(dir, `${ts}.json`), JSON.stringify({ ts }))
+    }
+
+    pruneSideFiles(dir, 5)
+
+    const remaining = fs.readdirSync(dir).sort()
+    expect(remaining).toEqual(["1002.json", "1003.json", "1004.json", "1005.json", "1006.json"])
+  })
+
+  test("fewer files than keep -> no-op", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "review-sensor-side-"))
+    CLEANUP.push(dir)
+
+    fs.writeFileSync(path.join(dir, "1000.json"), "{}")
+    fs.writeFileSync(path.join(dir, "1001.json"), "{}")
+
+    pruneSideFiles(dir, 5)
+
+    expect(fs.readdirSync(dir).sort()).toEqual(["1000.json", "1001.json"])
+  })
+
+  test("missing directory -> no-op, never throws", () => {
+    expect(() => pruneSideFiles(path.join(os.tmpdir(), "review-sensor-side-does-not-exist"), 5)).not.toThrow()
   })
 })
