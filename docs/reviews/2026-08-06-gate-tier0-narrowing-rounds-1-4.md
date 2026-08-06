@@ -1,10 +1,10 @@
-# Review record — gate tier-0 narrowing design + plan, rounds 1-3
+# Review record — gate tier-0 narrowing design + plan, rounds 1-4
 
-reviewed-commit: 66f6e9b
-reviewer: fresh-context code-architect (opus), three independent rounds
+reviewed-commit: 8666161
+reviewer: fresh-context code-architect (opus), four independent rounds
 fresh-context: true
 verdict: changes-requested
-findings-count: 43
+findings-count: 61
 
 Not a merge artifact — the branch carries no code. This exists because both
 documents cite "review round 1/2" corrections, and those citations are
@@ -149,12 +149,60 @@ matches no predicted selection, so acceptance was unfalsifiable.
   opencode host caveat, Task 2's commit-message ordering, and retirement of
   the ccgate-shaped exports in Task 6.
 
-## Status after three rounds
+## Round 4 — against revision 4 (4 Critical, 6 Important, 8 Minor)
 
-**Not flawless.** Rounds 2 and 3 each found defects introduced by the
-previous round's fold, and revision 4 has not been reviewed. The trend is
-favourable — round 1 invalidated a decision's premise, round 2 invalidated
-the fix, round 3 invalidated the decision itself, and revision 4 removes it
-rather than defending it a fourth time — but a fourth round should be assumed
-to find fold-induced defects, most likely around Task 1's generalisation and
-Task 6's open question.
+- **D1 residue would have reinstated D1.** Task 6 Step 4 still said "add CLI
+  cases for a `minimal/tasks/` change appending the desk test" — that rule IS
+  D1, and no task in revision 4 created it. An implementer would have added it
+  to make their own test pass, with no opencode `slowTestRe` gating it.
+- **The suite-keyed pull-in return type was never specified**, though the
+  disposition section of this record claimed it was folded. A flat union
+  appends each suite's files to every other suite's argv; a non-matching
+  `bun test` positional can exit non-zero, which `gate-check.ts:246-249` turns
+  into a blocked Stop.
+- **Nothing created the suite→package-dir map.** Revision 4 fixed the
+  attribution sentence in the consumer task and never added the instruction
+  to the producer task.
+- **Task 6 Step 3's "open question" was a false dilemma.** Marking
+  *degradation* (`scanFailed: true`) rather than *narrowing* makes absence of
+  the flag mean "append normally", so the seam fixture is unaffected and
+  `gate-check-cli.test.ts:260` stays green. The `doccheck` objection was
+  fabricated — `doccheck` has no `slowTestRe`, hence no rules.
+- **The governing rule is necessary, not sufficient.** Tier-1 rescue is
+  spawn-conditional (`decide` returns `spawnBg: false` on a live fresh
+  `"running"` marker), content-raced (`bgMain` runs against the live worktree
+  and writes green for a pre-computed tree), and absent on a session-final
+  Stop. D3 does lose one deferred detection.
+- **D4 violates two policies written into the file it modifies**
+  (`gate-check-core.ts:138-143` "do not re-anchor them to a directory";
+  `:144-149` one-hop direct value imports, deeper chains "deliberately NOT
+  chased … the bg debt gate is the stated safety net"). D4's chain is two
+  hops and its rule must be directory-anchored on a file whose purpose is to
+  be moved. Under the recorded policy D4 is the documented deferral, not a gap.
+
+## Disposition in revision 5
+
+- **D4 withdrawn.** Plan reduced to D2 + D3, five tasks.
+- Governing rule restated as *admissible, necessary-not-sufficient*, with the
+  three rescue-chain gaps and D3's accepted residual loss recorded.
+- All D1 residue purged, including the `minimal/tasks/` CLI-test instruction.
+- Task 1 now creates the map and pins `pullInsFor(suite, paths)`.
+- Task 4 Step 3 resolved: mark degradation, not narrowing.
+- Folded: port-then-remove for the wrapper tests, baselines as lower bounds,
+  readdirSync 2→4 (not tripled), the second-package self-pull moved to Task 2,
+  `Cmd.cwd` key-set mismatch, and the `scripts/`-path expected-effect gap
+  (~0.7 s) with a segmentation instruction so a null there is legible.
+
+## Status after four rounds
+
+**Not flawless.** Revision 5 is unreviewed. Every round so far has found
+defects the previous fold introduced, and round 4 landed exactly where round
+3 predicted (Task 1's generalisation, Task 6's open question) — so the
+prediction skill is real and the defect supply is not yet exhausted.
+
+What has converged: the decision set shrank monotonically (D1, D4, D8
+withdrawn; D2, D3 survive four rounds unchallenged on their merits), and
+round 4's Criticals were all residue and under-specification rather than
+"this decision is wrong". What has not: no round has yet returned clean, and
+the two documents have been restructured four times, which is itself the
+mechanism generating new defects.

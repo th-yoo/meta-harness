@@ -1,13 +1,14 @@
 # Gate tier-0 narrowing — design (2026-08-06)
 
-**Status:** design, unexecuted. **Revision 4**, after three architect rounds.
+**Status:** design, unexecuted. **Revision 5**, after four architect rounds.
 Round 1 invalidated D1's original safety argument; round 2 invalidated
-revision 2's fix for it and killed D8; round 3 killed D1 itself. What
-survives is D2, D3, D4. Reviews:
-`docs/reviews/2026-08-06-gate-tier0-narrowing-rounds-1-3.md`.
+revision 2's fix for it and killed D8; round 3 killed D1 itself; round 4
+killed D4 and showed the governing rule was overstated. **What survives is
+D2 and D3.** Reviews:
+`docs/reviews/2026-08-06-gate-tier0-narrowing-rounds-1-4.md`.
 
 **Decision index:** **D1 opencode narrowing — WITHDRAWN (round 3)** ·
-D2 fallback mapping · D3 kmcrank narrowing · D4 `index.ts` coverage ·
+D2 fallback mapping · D3 kmcrank narrowing · **D4 `index.ts` coverage — WITHDRAWN (round 4)** ·
 D5 boundary ts (requirement) · D6 sync debt repayment (keep) · D7 concurrent
 suites (deferred) · **D8 opencode in tier 1 — WITHDRAWN**.
 
@@ -177,13 +178,36 @@ Revision 3 justified D1 on input-scoping precisely to avoid appealing to tier
 1; round 3 showed that is what breaks it, because the *baseline* depends on
 tier 1 even when the coverage does not.
 
-**The resulting rule, which is the durable finding of this review arc:**
-narrowing a suite is safe **iff that suite runs in `table.full`**. `ccgate`
-and `kmcrank` do, so D3 and D4 stand. `opencode` does not, so it cannot be
-narrowed by this mechanism at all. Making it narrowable needs either
-per-suite "last ran against tree X" provenance on the marker, or opencode in
-whatever tier writes green — which is D8, refused above as a gate wedge.
-Neither is designed; both are out of scope here.
+**The resulting rule, the durable finding of this arc:** narrowing a suite
+is *admissible* only if that suite runs in `table.full`. `ccgate` and
+`kmcrank` do; `opencode` does not, so it cannot be narrowed by this mechanism
+at all. Making it narrowable needs per-suite "last ran against tree X"
+provenance on the marker, or opencode in whatever tier writes green (D8,
+refused above as a gate wedge). Neither is designed.
+
+**Necessary, not sufficient — round 4.** Do not read "runs in `table.full`"
+as "a regression will be caught and surfaced". Traced against the code, the
+rescue chain is bg-run-red → marker red → *the next* gated Stop pays
+`full-sync` (133-167 s). Three gaps in that chain, none of which this design
+closes:
+
+1. **Spawn-conditional.** `decide` returns `spawnBg: false` on a live, fresh
+   `"running"` marker (`gate-check-core.ts:79`) — the very state §2.1 names
+   the dominant fallback trigger. On that Stop the excluded file is skipped
+   *and* no tier-1 run is keyed to that tree.
+2. **Content-raced.** `bgMain` runs `table.full` against the live worktree
+   (`gate-check.ts:176-178`) and writes green for the `tree` computed before
+   the spawn. "Green for tree T" does not mean the excluded file passed *at*
+   T. It fails safe (bg content ⊇ T), but it is not the guarantee the phrase
+   suggests.
+3. **No terminal rescue.** If the last Stop of a session lands in the
+   `"running"` window, no later Stop repays the debt, and
+   `merge-with-gate.sh` runs no tests. Today that Stop runs `kmcrank` whole.
+
+So D3 does lose coverage in a reachable scenario. It is accepted knowingly:
+the loss is one deferred detection on a session-final Stop, against ~14 s on
+every kmcrank Stop. Recorded here so it is not later discovered as a
+surprise.
 
 **Superseded text (kept only to show what was withdrawn):**
 Exclude `minimal-relations-desk.test.ts` (31.5 s of 36.0 s) with a pull-in on
@@ -223,13 +247,27 @@ edits to the gate itself lose their most direct coverage. **These rules must
 carry no package-prefix guard** — that is the point of making the guard
 per-rule (§4).
 
-**D4 — close the `src/acp/index.ts` gap.** Pull-in target is
-**`test/anthropic-cli-warm.test.ts`**, not `acp-client.test.ts`: the latter
-imports `src/acp/acp-client.ts` and `acp-wire.ts` directly (which
-`index.ts:11-13` permits for tests), so it stays green when a barrel export
-is renamed. The barrel's only runtime consumer is
-`src/gauge/providers/anthropic-cli-warm.ts:10`; `send-prompt.ts:29` is
-`import type` and cannot break at runtime.
+**D4 — close the `src/acp/index.ts` gap. WITHDRAWN (round 4).** The rule
+would violate two policies written into the very file it modifies:
+
+- `gate-check-core.ts:138-143`: the pull-in patterns are basename-anchored
+  *"precisely so a directory move cannot silently stop them matching — **do
+  not re-anchor them to a directory**."* D4 needs
+  `^cc-gate-plugin/src/acp/index\.ts$` because `index.ts` is a generic
+  basename — directory-anchored, on a file whose stated purpose
+  (`src/acp/index.ts:8-9`) is to make a later extraction "a directory move
+  plus a package.json". The rule would silently stop matching at exactly the
+  moment it was written for.
+- `gate-check-core.ts:144-149`: *"DIRECT value imports only (one hop) …
+  Deeper transitive chains are deliberately NOT chased … the bg debt gate is
+  the stated safety net for that depth."* D4's chain is `index.ts` →
+  `anthropic-cli-warm.ts` → `anthropic-cli-warm.test.ts` — two hops. Under
+  the recorded policy this is **not a gap; it is the documented deferral.**
+
+The `index.ts` seam genuinely has no tier-0 blocking coverage, and that
+remains true and recorded. Closing it needs a deliberate amendment to both
+policies, which is a larger design change than the gap justifies — the bg
+debt gate is the stated net, as for every other two-hop chain.
 
 **D5 — measurement boundary.** Not a decision. A boundary ts goes in
 `docs/2026-08-01-gauntlet-adoption-ledger.md` at deploy; gated-Stop
@@ -278,10 +316,10 @@ interleave it into an unreadable message. Per-suite buffering lands first.
   plan's "byte-identical string" constraint
   (`2026-08-05-two-tier-gate-check.md:15`) still holds.
 - **MECHANISM_PATHS** (`km-crank/src/calibration.ts:65-72`):
-  `minimal/complete-gate.ts`, `minimal/mutate.ts`, `minimal/spec-probe.ts`,
-  `minimal/session2.ts`, `cc-gate-plugin/src/core`, `cc-gate-plugin/vendor`.
-  Never edited. This design writes policy *about* `minimal/` paths and
-  touches none of those files.
+  `minimal/{complete-gate,mutate,spec-probe,session2}.ts`,
+  `cc-gate-plugin/src/core`, `cc-gate-plugin/vendor`. Never edited. Nothing
+  in revision 5 references `minimal/` at all (that was D1 residue); the
+  constraint is retained only because the files exist.
 - **The package-prefix guard is per-RULE, not per-suite.**
   `slowCcgateTestsForChangedPaths` early-continues on
   `!/^cc-gate-plugin\//` (`:172`), which is what makes
@@ -330,6 +368,9 @@ interleave it into an unreadable message. Per-suite buffering lands first.
 
 - **Narrowing `opencode` at all** (D1 withdrawn, round 3). Requires marker
   provenance or D8; neither is designed.
+- **Closing the `src/acp/index.ts` tier-0 gap** (D4 withdrawn, round 4). It
+  is the documented two-hop deferral; closing it needs an amendment to two
+  in-code policies.
 - The stale "~47s" opencode estimate in `gate-check-core.ts:17-21`
   (measured 30.0/36.0 s). Observed, not fixed here — it sits in a comment
   whose conclusion is unaffected.
