@@ -450,3 +450,62 @@ Caveat: n=3 loops, one day — provisional, revisit after the next program.
   probed this session — same wall as the yoo-mac flip). First live warm
   seat call occurs whenever the loop next runs a seat here; its outcome
   belongs to normal loop accounting, not this entry.
+
+## 2026-08-06 — INSTRUMENT: tier-0 narrowed for `kmcrank` (D3), boundary ts 1785990600996
+
+Plan `docs/superpowers/plans/2026-08-06-gate-tier0-narrowing.md` (revision 6),
+spec `docs/superpowers/specs/2026-08-06-gate-tier0-narrowing-design.md`,
+five architect rounds recorded in
+`docs/reviews/2026-08-06-gate-tier0-narrowing-rounds-1-5.md`.
+
+- **What changed.** `km-crank/test/gate-check-cli.test.ts` is excluded from
+  the blocking tier and pulled back when its covered sources
+  (`^scripts/gate-check\.ts$`, basename-anchored `(^|/)gate-check-core\.ts$`)
+  or the file itself change. The ccgate-shaped policy became a per-suite
+  table (`SUITE_POLICY`, `PKG_DIR`, per-rule optional guards, suite-keyed
+  `pullInsFor`), and `scripts/gate-check.ts` computes fast lists and appends
+  pull-ins per suite. `gate.json`'s `check` string is UNCHANGED
+  (`bun scripts/gate-check.ts`), so no `KKAMAK_DEV_CHECKS` append — the
+  drift guard at `trial-verdict.test.ts:199` stays green untouched.
+  `table.full` is UNCHANGED, so tier 1 still runs the incumbent chain.
+- **Measured, same method both sides** (JUnit reporter, `yoo-dev`, n=1):
+
+  | | pre (repo `487d104`) | post (repo `440b232`) |
+  |---|---|---|
+  | km-crank full suite | 15.8 s | 20.03 s |
+  | `gate-check-cli.test.ts` | 13.9 s (88 %) | 18.82 s |
+  | **km-crank tier-0** | **15.8 s** | **1.20 s** |
+
+  The full suite and the excluded file both GREW because this work added 15
+  tests, most of them CLI tests inside the excluded file. That inflates the
+  apparent saving; the honest statement is that tier-0 km-crank is now
+  1.20 s, and the excluded file is whatever it is at the time it runs.
+  Derived fallback selection: ccgate 13.1 + gateplugin 0.02 + kmcrank 1.20 +
+  doccheck 0.05 ≈ **14.4 s**, against ≈29.7 s pre.
+- **Instrument boundary: ts 1785990600996.** Gated-Stop `durationMs` MUST
+  NOT pool across it — tier-0 selection cost changed for every Stop that
+  selects `kmcrank`, and for every fallback Stop. This host only, for now:
+  the change is live wherever `scripts/gate-check.ts` is the code being run,
+  which is this worktree immediately and `main` at merge. Record the merge
+  sha here when it lands.
+- **Accepted coverage loss, stated rather than discovered later.** On the
+  fallback path pull-ins do not fire (`gate-check.ts`, `changed === undefined`
+  ⇒ empty pull-in list — the deliberate ruling at
+  `2026-08-05-two-tier-gate-check.md:919`), so `gate-check-cli.test.ts` does
+  not run in the blocking tier there. Rescue is the background tier-1 run,
+  which is spawn-conditional, content-raced, and absent on a session-final
+  Stop. This is the same trade already shipped for `ccgate` on 2026-08-05,
+  where the six excluded files are ~98 s of a 111.6 s suite; D3 applies it to
+  one 13.9 s file.
+- **Withdrawn during review, recorded so they are not re-proposed:** D1
+  (narrow `opencode` — tier 1 does not run it, so exclusion deletes coverage
+  rather than deferring it), D2 (map `scripts/` in `TIA_MAP` — priced at
+  0.02 s), D4 (close the `src/acp/index.ts` gap — violates the
+  basename-anchoring and one-hop policies at `gate-check-core.ts:138-149`),
+  D8 (`opencode` into `table.full` — puts a module-scope `python3` + `tmux` +
+  `rdflib` dependency on the synchronous debt-repayment path, an unclearable
+  wedge on any host lacking them).
+- **One live defect fixed on the way:** the degraded-readdir path previously
+  produced a bare `["bun","test"]` argv and then appended a pull-in to it,
+  collapsing a whole suite to one file. Partial scans are now discarded, so
+  any scan anomaly degrades to "run everything for that package".

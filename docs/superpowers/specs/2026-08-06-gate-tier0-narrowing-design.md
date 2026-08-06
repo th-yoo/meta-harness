@@ -1,6 +1,6 @@
 # Gate tier-0 narrowing — design (2026-08-06)
 
-**Status:** design, unexecuted. **Revision 6**, after five architect rounds.
+**Status:** design, unexecuted. **Revision 7** — D3 implemented and measured; five architect rounds.
 Round 1 invalidated D1's original safety argument; round 2 invalidated
 revision 2's fix for it and killed D8; round 3 killed D1 itself; round 4
 killed D4 and showed the governing rule was overstated; **round 5 priced D2
@@ -43,6 +43,20 @@ reason not to claim small deltas from n=1.
 | `opencode` | 36.0 s / 182 suites | `test/minimal-relations-desk.test.ts` **31.5 s** | **88 %** |
 | `kmcrank` | 15.8 s / 65 suites | `test/gate-check-cli.test.ts` **13.9 s** | **88 %** |
 | `ccgate` (fast list) | 14.4 s / 50 files | `cli.test.ts` 5.2 s, `init-cli` 2.6 s, … | diffuse, top 3 = 65 % |
+
+**Pass C — post-change, JUnit reporter**, repo `440b232`, n=1, same method
+as Pass B. Appended, not substituted: Passes A and B are the pre-change
+record.
+
+| suite | full | tier-0 |
+|---|---|---|
+| `kmcrank` | 20.03 s / 67 suites | **1.20 s** |
+
+`gate-check-cli.test.ts` is 18.82 s of that 20.03 s. Both grew against Pass B
+(15.8 s / 13.9 s) because this work added 15 tests, most of them CLI tests
+inside the excluded file — so the apparent saving is inflated and the honest
+figure is the absolute one: km-crank tier-0 is now 1.20 s. Derived fallback
+selection ≈ **14.4 s** (13.1 + 0.02 + 1.20 + 0.05) against ≈29.7 s.
 
 Live stream, `.km/gate-outcomes.ndjson`, 0.3.0 regime, 2026-08-05 22:15 →
 2026-08-06 10:11: fast Stops 212/226/270/331 ms; slow Stops
@@ -259,7 +273,8 @@ the only conservative-union test; and a deliberate coverage reduction
 (`gateplugin` dropped for `scripts/`) running against "when uncertain, run
 MORE". Not worth it. `TIA_MAP` stays singular.
 
-**D3 — narrow `kmcrank`.** Exclude `gate-check-cli.test.ts` (13.9 s of
+**D3 — narrow `kmcrank`. IMPLEMENTED 2026-08-06**, commits
+`9d83de0..440b232`, boundary ts `1785990600996` (adoption ledger). Exclude `gate-check-cli.test.ts` (13.9 s of
 15.8 s) with pull-ins on `^scripts/gate-check\.ts$` and
 `(^|/)gate-check-core\.ts$`, plus a self-pull. Load-bearing: without them,
 edits to the gate itself lose their most direct coverage. **These rules must
