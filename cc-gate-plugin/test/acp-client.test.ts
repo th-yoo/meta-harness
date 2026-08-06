@@ -16,7 +16,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import fs from "node:fs"
 import path from "node:path"
 import { tmpdir } from "node:os"
-import { daemonCall, ensureDaemon } from "../src/acp/acp-client.ts"
+import { daemonCall, ensureDaemon, closeSession } from "../src/acp/acp-client.ts"
 import { buildAgentOutgoingText } from "../src/gauge/agent-transport.ts"
 import { ACP_BUDGET, modelProvenBy, GAUGE_ISOLATION, type WarmIsolation } from "../src/acp/acp-wire.ts"
 import { envFingerprint, spawnLockPath, tryCreateLock } from "../src/acp/acp-paths.ts"
@@ -100,6 +100,11 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     expect(r.text).toBe("ANSWER")
     expect(r.model).toBe("claude-haiku-4-5-20251001")
     expect(modelProvenBy(r.model, HAIKU, r.canonicalModel)).toBe(true)
+    // Task 3: the `ok` outcome carries the sessionId the fake daemon issued
+    // on session/new — the same id the fake recorded off the session/prompt
+    // frame, proving daemonCall threads the SAME id it sent, not a fresh one.
+    expect(r.sessionId).toBeTruthy()
+    expect(r.sessionId).toBe(fake.promptParams()?.sessionId)
   })
 
   test("law L3(i): ACP_ERR_CALL_CONSUMED maps to call-consumed, NOT no-call", async () => {
@@ -259,6 +264,25 @@ describe("acp-client (fake daemons only — no CLI, no model)", () => {
     // routes it here; this test verifies that by observation, per the
     // brief's own instruction ("verify by test, not by new code").
     expect(r.kind).toBe("no-call")
+  })
+
+  test("closeSession sends a session/close frame with the given sessionId and resolves the daemon's result", async () => {
+    const sock = tempSock("close-ok")
+    const env = { ...ENV, KKAMAK_ACP_SOCKET: sock }
+    const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer: "ok" })
+    LIVE_FAKES.push(fake)
+    const r = await closeSession("some-session-id", env)
+    expect(r).toEqual({ closed: true })
+    expect(fake.closeParams()).toEqual({ sessionId: "some-session-id" })
+  })
+
+  test("closeSession against a dead socket resolves {closed:false, reason:\"unreachable\"} without throwing", async () => {
+    const t0 = Date.now()
+    const r = await closeSession("some-session-id", {
+      ...process.env, KKAMAK_ACP_SOCKET: `${tmpdir()}/nope-close-${Date.now()}.sock`,
+    })
+    expect(r).toEqual({ closed: false, reason: "unreachable" })
+    expect(Date.now() - t0).toBeLessThan(2_000)
   })
 
   test("the default budget is the contract constant, not a local literal", () => {
