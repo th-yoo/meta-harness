@@ -170,4 +170,26 @@ describe("assembleDiff", () => {
 
     expect(result).toBeUndefined()
   })
+
+  test("diff larger than 1 MiB survives (maxBuffer regression)", () => {
+    const dir = initRepo()
+
+    // Generate ~800 KB of unique lines
+    const lines1 = Array.from({ length: 10000 }, (_, i) => `line ${i}: ${"x".repeat(80)}\n`)
+    const content1 = lines1.join("")
+
+    const c1 = commit(dir, "large.txt", content1, "c1: ~800KB")
+
+    // Generate ~1.5 MB of different unique lines
+    const lines2 = Array.from({ length: 20000 }, (_, i) => `different line ${i}: ${"y".repeat(80)}\n`)
+    const content2 = lines2.join("")
+
+    commit(dir, "large.txt", content2, "c2: ~1.5MB")
+
+    const result = assembleDiff(dir, c1)
+
+    expect(result).toBeDefined()
+    expect(result!.diff.length).toBeGreaterThan(1024 * 1024) // > 1 MiB
+    expect(result!.diffStat.insertions).toBeGreaterThan(0)
+  })
 })
