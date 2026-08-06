@@ -4,10 +4,20 @@
 
 **Repo:** `~/z2/meta-harness`. **Branch:** `worktree-gate-tier0-narrowing`.
 **Spec:** `docs/superpowers/specs/2026-08-06-gate-tier0-narrowing-design.md`.
-**Reviews:** `docs/reviews/2026-08-06-gate-tier0-narrowing-rounds-1-2.md`.
+**Reviews:** `docs/reviews/2026-08-06-gate-tier0-narrowing-rounds-1-3.md`.
 
-**Revision 3.** Round 1 killed D1's original safety argument; round 2 killed
-revision 2's fix for it, and killed D8. Net effect on this plan:
+**Revision 4.** Round 1 killed D1's original safety argument; round 2 killed
+revision 2's fix for it and killed D8; **round 3 killed D1 itself**. Task 5
+is deleted and `opencode` is out of scope. What remains is D2, D3, D4. Net
+effect on this plan:
+
+- **`opencode` cannot be narrowed by this mechanism.** The pull-in is
+  edge-triggered on the diff since the green marker, and the green marker is
+  written by `runFullSync`/`bgMain` running `table.full`, which excludes
+  opencode. So a `minimal/tasks/` edit can be baked behind the baseline
+  without opencode ever running, after which the pull-in never fires. The
+  governing rule: **narrowing a suite is safe iff that suite runs in
+  `table.full`.** `ccgate` and `kmcrank` do; `opencode` does not.
 
 - **No task keys on `changed === undefined`.** Revision 2's "un-narrow on the
   fallback" rule is withdrawn: `FALLBACK_SUITES` is the same four commands
@@ -16,13 +26,11 @@ revision 2's fix for it, and killed D8. Net effect on this plan:
   most one Stop of deferral that the already-running bg run covers. The prior
   executed plan had ruled this deliberate
   (`2026-08-05-two-tier-gate-check.md:919`).
-- **D8 is withdrawn**, so `table.full` is untouched and Task 5 is unblocked
-  on a different argument (input-scoping, spec D1).
+- **D8 is withdrawn**, so `table.full` is untouched.
 
-**Goal:** cut tier-0 blocking latency on the TIA-active path for `kmcrank`
-and `opencode`, shrink the fallback's *selection* surface, and close the
-`src/acp/index.ts` gap — with no test file running in fewer situations where
-it could newly fail.
+**Goal:** cut tier-0 blocking latency on the TIA-active path for `kmcrank`,
+shrink the fallback's *selection* surface, and close the `src/acp/index.ts`
+gap — without narrowing any suite that `table.full` does not run.
 
 ## Measured baseline (Pass B — JUnit, repo `487d104`, yoo-dev, n=1)
 
@@ -34,8 +42,11 @@ it could newly fail.
 
 **Architecture:** no new mechanism. `ccgate` already pairs an exclusion regex
 with an amendment-b pull-in; this generalises that to a per-suite table.
-Coverage is preserved by **input-scoped pull-ins plus self-pulls**, never by
-appeal to tier 1 — tier 1 does not run opencode at all (spec §2.2).
+Coverage on the TIA-active path is preserved by input-scoped pull-ins plus
+self-pulls; **on the fallback path it is preserved by tier 1**, which is
+legitimate here because every suite this plan narrows (`ccgate`, `kmcrank`)
+runs in `table.full`. That rescue is exactly what `opencode` lacks, which is
+why D1 is withdrawn.
 
 **Tech Stack:** Bun + TypeScript. Logic in `km-crank/src/gate-check-core.ts`,
 wiring in `scripts/gate-check.ts`, tests in
@@ -50,10 +61,12 @@ wiring in `scripts/gate-check.ts`, tests in
   constraint still holds.
 - **No task may key on `changed === undefined`** (the fallback path). Spec
   §2.3.
-- **Coverage constraint, precisely:** no test file may end up running in
-  *fewer situations where it could newly fail* than today. A narrowed suite
-  must pull the file back on changes to its inputs AND on changes to the file
-  itself. Blanket exclusion fails this.
+- **Coverage constraint, precisely:** a narrowed suite must pull the excluded
+  file back on changes to its inputs AND on changes to the file itself, and
+  the suite **must run in `table.full`** so the fallback path — where pull-ins
+  do not fire (spec §2.3) — still reaches it. Both halves are required; the
+  second is what D1 could not satisfy. Do not read this as "runs in at least
+  as many situations", which no narrowing can satisfy.
 - **MECHANISM_PATHS** (`km-crank/src/calibration.ts:65-72`) —
   `minimal/{complete-gate,mutate,spec-probe,session2}.ts`,
   `cc-gate-plugin/src/core`, `cc-gate-plugin/vendor` — never edited.
@@ -61,6 +74,11 @@ wiring in `scripts/gate-check.ts`, tests in
 - `bun test` green in `km-crank`, `cc-gate-plugin`, `opencode-plugin` and
   `bunx tsc --noEmit` clean at the end of EVERY task. Baselines: km-crank
   **327**, cc-gate-plugin **1043**, opencode-plugin **1694** (12 skip).
+  **Host caveat:** the opencode suite needs `python3`, `tmux` and host
+  `rdflib` (`minimal-relations-desk.test.ts:17,57,72,103`) — the same
+  fragility that killed D8. On a host lacking them, record that this suite
+  could not be run rather than reporting a false green; no task in this plan
+  touches `opencode-plugin`, so its result is informational here.
 - **Fresh worktree? `bun install` in each package first** — there is no root
   `package.json`. A depless worktree fails as "Unhandled error between
   tests", which reads like a code defect and is not one.
@@ -84,10 +102,12 @@ wiring in `scripts/gate-check.ts`, tests in
   `^cc-gate-plugin/((?:test|src)/.*\.test\.ts)$`, pinned by
   `gate-check-core.test.ts:139-142`. Key it off the suite→package-dir map so
   a changed excluded test file pulls itself in for *every* narrowed suite.
-  Without this, editing `gate-check-cli.test.ts` or
-  `minimal-relations-desk.test.ts` selects the suite and skips the file you
-  just edited — verbatim the failure `gate-check-core.ts:132-137` exists to
-  prevent.
+  Without this, editing `gate-check-cli.test.ts` selects `kmcrank` and skips
+  the file you just edited — verbatim the failure `gate-check-core.ts:132-137`
+  exists to prevent. **Keep the existing gate on `slowTestRe`** (`:175`): the
+  self-pull must fire only for suites that are actually narrowed, or every
+  changed `.test.ts` in every mapped package starts appending single-file
+  filters to un-narrowed argvs.
 - [ ] **Step 4:** tests — ccgate behaviour identical on existing fixtures;
   per-rule guard honoured; self-pull works for a second package.
 - [ ] **Step 5:** green + commit.
@@ -111,9 +131,10 @@ editing in THIS task. If one does, semantics changed — stop and report.
   `km-crank/test/gate-check-cli.test.ts`, with a test.
 - [ ] **Step 4:** note in the commit message that these pull-ins only fire
   when `kmcrank` is selected — a pull-in does not select its own suite
-  (`gate-check.ts:239-250` iterates `suites`). That holds here because
-  `kmcrank` is in `FALLBACK_SUITES` and, after Task 3, in `TIA_MAP` for
-  `^scripts/`.
+  (`gate-check.ts:239-250` iterates `suites`). At the time THIS task commits,
+  that holds because `kmcrank` is in `FALLBACK_SUITES`; Task 3 later adds the
+  `^scripts/` TIA entry. Do not write the commit message as though Task 3 has
+  already landed.
 - [ ] **Step 5:** green + commit.
 
 **Expected:** kmcrank-selected Stops ≈15.8 s → ≈1.9 s; full when the gate's
@@ -123,16 +144,23 @@ own sources or that test file change.
 
 - [ ] **Step 1: change `TIA_MAP`'s record type first.** Entries are
   `{ re; suite: SuiteId }` singular resolved by `.find` (`:98`, `:112`) —
-  first match wins. Two entries sharing a regex would silently yield only
-  one. Make the entry carry a suite **list** (or make selection collect all
-  matches) before adding anything.
+  first match wins. Two entries sharing a regex would silently yield only one.
+  **Prefer a suite list per entry over "collect all matches"**: the latter
+  repeals the documented "first match wins, one suite per path" property
+  (`gate-check-core.ts:88-97`, restated in spec §2), which other rules rely
+  on. If you take it anyway, update that module comment in the same commit.
 - [ ] **Step 2:** add `^scripts/` → **`kmcrank` AND `ccgate`**. Not kmcrank
   alone: `cc-gate-plugin/test/escape-hatch.test.ts:13` drives
   `scripts/km-panic.sh`; `test/fixture-ref.test.ts:187` and
   `test/corpus-store.test.ts:270` assert over `scripts/km-sensors-sync.sh`.
-- [ ] **Step 3:** any further entry must be justified in a comment from what
-  actually imports that directory. Unknown blast radius **stays on the
-  fallback**; never narrow `FALLBACK_SUITES`.
+- [ ] **Step 3:** record what the entry **drops**, not only what it adds.
+  Today `scripts/` unions `FALLBACK_SUITES`, which includes `gateplugin`;
+  after this entry it does not. Verified at plan time that `gate-plugin/` has
+  zero references to `scripts/`, so the drop is defensible — but "Uncertain ⇒
+  run MORE" makes an unrecorded reduction unresolvable for the implementer.
+  Any further entry must be justified in a comment from what actually imports
+  that directory. Unknown blast radius **stays on the fallback**; never narrow
+  `FALLBACK_SUITES`.
 - [ ] **Step 4: two pinned assertions change, and one invariant must be
   re-pinned.** `gate-check-core.test.ts:97` (`["scripts/gate-check.ts"]` ==
   `FALLBACK_SUITES`) and `:100` both move. `:99-101` is named "fallback never
@@ -156,51 +184,41 @@ own sources or that test file change.
   `index.ts` files.
 - [ ] **Step 3:** green + commit.
 
-## Task 5 — D1: narrow `opencode`
-
-Unblocked: D8 is withdrawn and this no longer relies on tier 1.
-
-- [ ] **Step 1:** `SLOW_OPENCODE_TEST_RE` matching
-  `minimal-relations-desk.test.ts` **only**. The comment must carry the
-  measurement (31.5 s of 36.0 s) and the *full* cause: spawns `python3` at
-  module scope (`:17`), spawns `tmux` (`:57`, `:72`), requires host `rdflib`
-  (`:103`).
-- [ ] **Step 2:** pull-in `^minimal/tasks/` →
-  `["test/minimal-relations-desk.test.ts"]`. **This is the whole safety
-  argument** — tier 1 does not run opencode (spec §2.2), so nothing catches
-  this file later. Verified adequate in review round 1: the test reads only
-  from `minimal/tasks` (`TASKS` at `:10`; every fixture, oracle and relation
-  path under it) and imports no `opencode-plugin/src` module.
-- [ ] **Step 3:** confirm Task 1 Step 3's self-pull covers
-  `opencode-plugin/test/minimal-relations-desk.test.ts`, with a test.
-- [ ] **Step 4: do NOT exclude `bench-cmd-ab.test.ts`** (2.25 s). It
-  value-imports seven `src/bench/*` modules (two more are `import type`,
-  which the amendment-b policy at `gate-check-core.ts:144-146` does not
-  count). 2.25 s does not justify that rule surface; revision 1 excluded it
-  with no pull-in at all, which is the defect this step prevents.
-- [ ] **Step 5:** green + commit.
-
-**Expected:** opencode-selected Stops ≈36 s → ≈4.5 s.
-
 ## Task 6 — wire the command table
 
 **Files:** `scripts/gate-check.ts`, `km-crank/test/gate-check-cli.test.ts`
 
 - [ ] **Step 1:** generalise the fast-list computation (`:36-49`), which
   hardcodes package dir `"cc-gate-plugin"` and scan roots `["test","src"]`.
-  Add an explicit suite→package-dir map (`opencode` → `opencode-plugin`,
-  `kmcrank` → `km-crank`) — the same map Task 1 Step 3 keys the self-pull
-  off. Re-verify the guard comment at `:32-35` per package: confirmed at plan
+  The suite→package-dir map is **defined in `gate-check-core.ts` by Task 1**
+  and imported here — not introduced in this task, and not a second copy.
+  A third copy of the same strings already exists as `Cmd.cwd` (`:49-53`);
+  derive from the map or assert they agree, so a package rename cannot
+  desynchronise them silently. Only `ccgate` and `kmcrank` need entries;
+  `opencode` is out of scope, and `gateplugin`/`doccheck` are not narrowed. Re-verify the guard comment at `:32-35` per package: confirmed at plan
   time that neither package has `.test.ts` outside `test/`, nor nested
   `node_modules` under `src/`. This triples the recursive `readdirSync` on
   every Stop — measure it; if not negligible, cache per tree hash.
 - [ ] **Step 2:** replace the hardcoded `s === "ccgate"` (`:242-244`) with
   the general form: append each selected suite's pull-ins to its argv.
-- [ ] **Step 3: guard the degraded case.** `:41-45` degrades to `all = []` on
-  readdir failure, giving `argv = ["bun","test"]` — correctly fail-safe. But
-  appending a pull-in to that yields `bun test <one-file>`, running **only**
-  that file. This inversion exists for ccgate today; do not replicate it.
-  Append pull-ins only when the fast list is non-empty.
+- [ ] **Step 3: guard the degraded case — OPEN IMPLEMENTATION QUESTION,
+  decide deliberately and record the choice.** `:41-45` degrades to
+  `all = []` on readdir failure, giving `argv = ["bun","test"]` — correctly
+  fail-safe. Appending a pull-in to that yields `bun test <one-file>`, running
+  **only** that file. The obvious guard ("append only when the fast list is
+  non-empty") is **not expressible for a seam table**: `commands()`
+  (`:61-65`) returns the seam JSON verbatim and never calls `realCommands()`,
+  so under every CLI test there is no fast list at all. Two implementations
+  diverge and both look like compliance:
+  (a) an explicit flag set in `realCommands()` — the seam fixture
+  (`gate-check-cli.test.ts:47-51`) lacks it, so the append stops firing and
+  the existing amendment-b assertion at `:260` goes red;
+  (b) a heuristic on argv shape — passes `:250-261` only by accident and
+  means the wrong thing for `doccheck`'s two-element argv.
+  **Do not silently rewrite the fixture to make (a) pass** — that would delete
+  the only end-to-end proof that pull-ins reach argv. Pick one, state why in
+  the commit message, and if the fixture must change, change it as a declared
+  decision with the assertion preserved.
 - [ ] **Step 4: test at the right level.** `KKAMAK_GATE_COMMANDS`
   (`:61-65`) returns the seam JSON verbatim and never calls `realCommands()`,
   so a fast list is **not** observable at CLI level — the argv under test is
@@ -209,12 +227,25 @@ Unblocked: D8 is withdrawn and this no longer relies on tier 1.
   `commands()` — the mechanism `gate-check-cli.test.ts:250-261` already
   exercises. Add CLI cases for a `minimal/tasks/` change appending the desk
   test, and for a changed excluded test file appending itself.
-- [ ] **Step 5:** green + commit.
+- [ ] **Step 5: retire the ccgate-shaped exports.** Task 1 kept
+  `SLOW_CCGATE_TEST_RE` / `ccgateFastFiles` / `slowCcgateTestsForChangedPaths`
+  as wrappers so earlier tasks would not churn. Now that every caller is on
+  the generalised form, remove them and their tests, or ccgate's policy is
+  expressed twice — violating the one-policy-site rule this plan inherits.
+- [ ] **Step 6:** green + commit.
 
 ## Task 7 — measure, stamp the boundary, deploy
 
 - [ ] **Step 1:** re-measure with the **Pass B (JUnit) method only** — never
-  mixing bases. Record as a **new dated pass appended** to spec §1; do not
+  mixing bases. Read the live stream via `gateNdjsonPath()` /
+  `MAIN_GATE_NDJSON_DEFAULT` (`scripts/p0-signal-variance.ts:83-87`), which is
+  **home-anchored**: a bare relative `.km/gate-outcomes.ndjson` read from a
+  worktree is a different, near-empty file
+  (`scripts/b3-binarization-measure.ts:46-53` records this as "NEVER
+  cwd-relative"). Also correlate durations with `gate-check.ts:237`'s
+  per-Stop suite log — the recorded 23.8-25.4 s band matches no predicted
+  selection, and until it is attributed no post-change shift can be assigned
+  to D3. Record as a **new dated pass appended** to spec §1; do not
   overwrite Pass A or Pass B, which are dated records of the pre-change state.
 - [ ] **Step 2:** append an INSTRUMENT entry to
   `docs/2026-08-01-gauntlet-adoption-ledger.md` — what changed, before/after
@@ -229,9 +260,9 @@ The tail is governed by red-marker debt repayment (133-167 s), untouched here.
 
 ## Sequencing
 
-Task 1 first. Tasks 2-5 are independent of each other but all touch
+Task 1 first. Tasks 2-4 are independent of each other but all touch
 `gate-check-core.ts` and its test file — **run them serially**, not in
-parallel worktrees. Task 6 needs 1-5; Task 7 needs 6.
+parallel worktrees. Task 6 needs 1-4; Task 7 needs 6.
 
 Merge via `scripts/merge-with-gate.sh` with a committed review artifact whose
 `findings-count` is a **bare integer** — the 7b gate rejects the prose form.

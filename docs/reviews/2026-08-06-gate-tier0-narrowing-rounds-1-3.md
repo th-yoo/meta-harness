@@ -1,10 +1,10 @@
-# Review record — gate tier-0 narrowing design + plan, rounds 1-2
+# Review record — gate tier-0 narrowing design + plan, rounds 1-3
 
-reviewed-commit: d61f2fe
-reviewer: fresh-context code-architect (opus), two independent rounds
+reviewed-commit: 66f6e9b
+reviewer: fresh-context code-architect (opus), three independent rounds
 fresh-context: true
 verdict: changes-requested
-findings-count: 27
+findings-count: 43
 
 Not a merge artifact — the branch carries no code. This exists because both
 documents cite "review round 1/2" corrections, and those citations are
@@ -95,3 +95,66 @@ seven value imports, not nine.
 Round 2's own summary of the most load-bearing correction — decide whether
 the fallback's exclusion is a defect at all, and price it — is what revision 3
 acts on: it is not a defect, and the documents say so with the citation.
+
+## Round 3 — against revision 3 (2 Critical, 6 Important, 8 Minor)
+
+Round 3 killed D1, which revisions 1-3 had each tried to save with a different
+argument.
+
+- **The pull-in is edge-triggered on the diff since the green marker, and the
+  green marker is advanced by tiers that never run opencode.**
+  `changed = changedPathsSince(marker.tree, tree)` (`gate-check.ts:233-234`);
+  the marker is written by `runFullSync` (`:143-145`) and `bgMain`
+  (`:186-188`), both running `table.full`, which excludes opencode. Three
+  documented routes bake a `minimal/tasks/` edit behind the baseline without
+  opencode running: debt repayment, `KKAMAK_GATE_FULL=1`, and the pruned-tree
+  fallback whose bg run writes green for the new tree. After any of them the
+  pull-in never fires again and the desk test never runs — where today that
+  Stop runs the whole suite. The self-pull leg dies the same way. Coverage
+  lost permanently, not deferred.
+- **Task 6's degraded-case guard is unsatisfiable as written**: the predicate
+  "fast list is non-empty" does not exist for a seam table, because
+  `commands()` returns the seam JSON verbatim and never calls
+  `realCommands()`. Both natural implementations either break the only CLI
+  test of the pull-in mechanism or mean the wrong thing for `doccheck`.
+
+Also: the absolute coverage constraint was violated by the plan's own D3/D4,
+which rely on tier-1 rescue while the architecture line claimed rescue is
+"never by appeal to tier 1"; Task 1's self-pull depended on a map Task 6
+introduced two tasks later, conflating a scan root with a path prefix and
+duplicating `Cmd.cwd`; the generalised pull-in's return type was never
+specified as suite-keyed, so a flat union would append each suite's files to
+every other suite's argv; D7's "≈14.6 s" was D3's serial value, not
+concurrency's (13.2 s today), and its table pooled Pass A and Pass B against
+§1's own prohibition; the acceptance instrument was cited as a cwd-relative
+path when the stream is home-anchored, and the observed 23.8-25.4 s band
+matches no predicted selection, so acceptance was unfalsifiable.
+
+## Disposition in revision 4
+
+- **D1 withdrawn.** Task 5 deleted; `opencode` out of scope.
+- **The durable rule extracted:** narrowing a suite is safe **iff that suite
+  runs in `table.full`**. `ccgate` and `kmcrank` do; `opencode` does not.
+  Making opencode narrowable needs marker provenance or D8, neither designed.
+- Coverage constraint restated as two required halves (input+self pull-in,
+  AND the suite runs in `table.full`), replacing the absolute form no
+  narrowing could satisfy.
+- Task 6 Step 3 converted into a declared open implementation question with
+  both options and an explicit prohibition on silently rewriting the fixture.
+- Folded: map ownership and the `Cmd.cwd` third copy, self-pull gated on
+  `slowTestRe`, suite-keyed pull-in signature, D7 arithmetic corrected with a
+  "today, concurrent" row and its pass-pooling flagged, home-anchored stream
+  path, acceptance correlation against `gate-check.ts:237`, `^scripts/`
+  dropping `gateplugin` recorded, `TIA_MAP` list-vs-collect-all ruling, the
+  opencode host caveat, Task 2's commit-message ordering, and retirement of
+  the ccgate-shaped exports in Task 6.
+
+## Status after three rounds
+
+**Not flawless.** Rounds 2 and 3 each found defects introduced by the
+previous round's fold, and revision 4 has not been reviewed. The trend is
+favourable — round 1 invalidated a decision's premise, round 2 invalidated
+the fix, round 3 invalidated the decision itself, and revision 4 removes it
+rather than defending it a fourth time — but a fourth round should be assumed
+to find fold-induced defects, most likely around Task 1's generalisation and
+Task 6's open question.
