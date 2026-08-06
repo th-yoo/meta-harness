@@ -157,6 +157,36 @@ nobody has specified. Revisit only with measured red-cause data: how many
 reds are environmental versus real. That data does not exist yet, and the
 first step is recording `outputTail` causes rather than guessing.
 
+**D7 — run tier-0 suites concurrently?** DEFERRED until D1-D4 is deployed and
+measured. Today they are serial: `scripts/gate-check.ts:239-250` is a
+`for (const s of suites)` loop over `runSyncCaptured`, which is `spawnSync`
+(`:131-138`). Nothing in tier 0 is async; the only backgrounded thing in the
+whole design is the detached tier-1 child (`spawn` + `detached` + `unref`).
+So a multi-suite selection costs the SUM of its suites, not the max.
+
+The lever is real but is largely consumed by D1-D3:
+
+| fallback selection | cost |
+|---|---|
+| today, serial | 13.1 + 0.02 + 16.5 + 0.05 = **29.7 s** |
+| serial, after D3 narrows kmcrank | 13.1 + 0.02 + 1.9 + 0.05 = **15.1 s** |
+| concurrent, after D1-D4 | max(13.1, 1.9, …) = **13.1 s** |
+
+≈14.6 s of value today, ≈2 s after the narrowing lands — because `ccgate`
+then dominates and it is the diffuse suite this plan does not narrow. And
+concurrency buys **nothing** for single-suite selections, which is what every
+successful TIA narrowing produces. Sequencing therefore matters: doing D7
+first would bank most of the win and make D1-D3 look marginal, while doing it
+after makes D7 look marginal. The narrowing is the more durable fix — it
+removes work rather than overlapping it — so it goes first.
+
+**Blocking prerequisite if D7 is ever taken up:** `runSyncCaptured` writes
+each suite's combined output to `process.stdout` (`:136`), and the check
+runner captures that stream as the block reason handed back to the agent.
+Concurrent suites would interleave those writes and make a failure message
+unreadable. Per-suite output buffering must land BEFORE any parallelism, not
+alongside it.
+
 **D5 — measurement boundary.** Any of D1-D4 changes what `durationMs` means.
 A boundary ts must be stamped in
 `docs/2026-08-01-gauntlet-adoption-ledger.md` at deploy, and gated-Stop
@@ -199,8 +229,9 @@ change. This is not optional and is not a decision, only a reminder.
 ## 6. Out of scope
 
 - Anything that changes what tier 1 runs.
-- Parallelising suites within tier 0 — a different mechanism with its own
-  failure modes; measure the narrowing first.
+- Parallelising suites within tier 0 — now tracked as **D7**, deferred with
+  the arithmetic showing why it goes after the narrowing rather than instead
+  of it.
 - The stale comment at `cc-gate-plugin/src/acp/acp-paths.ts:2-4` (claims
   `hook-cli.ts` imports `acp-client.ts`; it does not). Unrelated, noted so it
   is not folded in opportunistically.
