@@ -3,6 +3,70 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-06 late (`yoo-dev`, `side` restarted) — SENSOR DEPLOYMENT BUG DIAGNOSED · ARMING WEDGED THE GATE, FIXED (`6121e53`) · D3 ACCEPTANCE CONFOUND RECORDED
+
+**RESUME PROMPT (either host — git-only transfer):**
+```
+Resume kkamak (meta-harness), post-2026-08-06 late. git pull FIRST.
+Main >= 6121e53. Short block — the D3/ACP/kkamak arc is the block below
+this one; this covers only what happened after the restart.
+
+1. REVIEW-SENSOR WAS ARMED BUT COULD NOT FIRE — diagnosed here, fixed by
+   the sibling session (4d27981 + erratum d78ab5e). Cause: the gate runs
+   the INSTALLED plugin, and plugin.json stayed 0.3.0, so the
+   version-keyed cache never refreshed and the executing copy predated
+   the sensor merge. Env gate, cwd gate and wiring were all correct.
+   Sensor now LIVE-PROVEN, effective boundary ts 1785996709580 (4457ce8).
+   The 08-13 checkpoint re-dates from that line; the old arming ts
+   1785988568548 is VOID.
+   RULE (memorised): MERGING IS NOT DEPLOYING — any cc-gate-plugin code
+   merge needs a version bump in the SAME change. Verify by ls-ing the
+   installed cache dir, never by re-reading repo source.
+
+2. ARMING THE SENSOR THEN WEDGED THE GATE — fixed here (6121e53).
+   The sensor drives the ACP warm lane, so a real acp-<fp>.sock is
+   routinely listening under ~/.config/kkamak while tests run. Four
+   assertions in cc-gate-plugin/test/{acp-client,acp-daemon,
+   anthropic-cli-warm}.test.ts asserted that directory holds NO acp-*
+   files at all. One pre-existing socket => 72 failures in the suite
+   gate.json runs => EVERY Stop in the main checkout blocked. Fixed by
+   baselining sockets at file load and asserting no NEW ones appear;
+   the leak it actually guards (production ignoring KKAMAK_ACP_SOCKET)
+   is still caught. ANYONE ARMING THE SENSOR ON yoo-mac NEEDS 6121e53
+   FIRST or they hit the same wedge.
+
+3. D3 ACCEPTANCE IS CONFOUNDED (0a03c00) — three instrument changes in
+   ~100 min on this host: tier-0 narrowing 1785990600996, the 0.3.0->
+   0.4.0 plugin deploy (shifts pluginVersion mid-window), sensor live
+   1785996709580. Post-D3 cycles n=4 straddling the plugin boundary:
+   33374ms @0.3.0, then 13744/16068/225ms @0.4.0. The 0.4.0 values match
+   the narrowing; the 33374ms outlier matches NO selection — hypothesis
+   is CPU contention with a concurrent tier-1 run, ONE sample, not a
+   finding. Acceptance must segment on pluginVersion, marker state and
+   sensor-live, not just selection.
+
+RECURRING DEFECT SHAPE, three instances in one day — worth watching for:
+an assertion about GLOBAL state that holds only while nothing else uses
+the resource, which a legitimate second user then falsifies, and which
+fails loudly pointing somewhere else.
+ - kkamak: "provider registry is empty" broken by another test file
+   registering (fixed 3881178 there)
+ - km-crank: "spanDays < 1" broken by the clock passing midnight (fixed
+   e63d920 by the sibling session)
+ - cc-gate-plugin: "no ACP sockets on the host" broken by arming a
+   consumer of the ACP lane (fixed 6121e53)
+
+OPEN (unchanged from the block below): TB2 batch (probe models first);
+kkamak install-verification runbook (needs the credential-mount ruling —
+its Linux container variant mounts live ~/.claude RW and rotates the real
+oauth refresh token); ACP extraction stage two to @th-yoo/cc-api-daemon;
+D3 acceptance correlation once enough post-boundary cycles exist.
+
+Standing rules unchanged: sized go before spend · EXPLICIT MERGE GO ·
+merge-with-gate.sh + docs/reviews artifact (findings-count = BARE
+INTEGER) · boundary ts on instrument changes · F1/F2 · grep-verify.
+```
+
 ## ✅ SESSION END 2026-08-06 (`yoo-dev`, `side` session) — TIER-0 NARROWED FOR kmcrank (merge `c6879f8`, boundary ts 1785990600996) · ACP PROMOTED TO `src/acp/` · kkamak 0.4.1 SHIPPED
 
 **RESUME PROMPT (either host — git-only transfer):**

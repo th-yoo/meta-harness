@@ -1054,3 +1054,48 @@ conflated.
   review-sensor above is that surface's first non-gauge consumer. Production
   sibling `~/z2/kkamak` shipped 0.4.1 with all seven 0.4.0 known-issues
   resolved; its install-verification runbook stays unexecuted by ruling.
+
+## Arming the sensor wedged the gate (2026-08-06 late, yoo-dev `side`) — two deployment lessons in one afternoon
+
+Immediate sequel to the two entries above; both failures sat between "merged"
+and "actually running", which is where this repo keeps getting caught.
+
+- **The sensor was armed but could not fire.** Env gate, cwd gate and wiring
+  were all correct; the gate runs the **installed** plugin, and
+  `plugin.json` had stayed at `0.3.0`, so the version-keyed cache never
+  refreshed and the executing copy predated the sensor merge entirely.
+  Diagnosed by `ls`-ing the installed cache dir and grepping the installed
+  `hook-cli.ts` — repo source looked correct throughout, which is exactly why
+  reading it proved nothing. Fixed by the sibling session (`4d27981`, erratum
+  `d78ab5e`); sensor now live-proven, effective boundary ts `1785996709580`.
+  **The expensive part was never the outage.** That sensor carries a
+  pre-registered 7-day cadence checkpoint; left alone it would have reported
+  0 events/day and been read as "cadence bar unreachable" — a deployment bug
+  laundered into a measurement result. Rule memorised: **merging is not
+  deploying**; a plugin code merge needs the version bump in the same change.
+- **Then arming it wedged the gate** (fixed `6121e53`). The sensor drives the
+  ACP warm lane, so a real `acp-<fp>.sock` is routinely listening under
+  `~/.config/kkamak` while tests run. Four assertions across
+  `cc-gate-plugin/test/{acp-client,acp-daemon,anthropic-cli-warm}.test.ts`
+  asserted that directory holds **no** `acp-*` files at all — a host-global
+  claim. One pre-existing socket failed **72 tests** in the very suite
+  `gate.json` runs, so every Stop in the main checkout blocked. Fixed by
+  baselining at file load and asserting no NEW socket appears, which
+  preserves the real guard (production ignoring `KKAMAK_ACP_SOCKET` and
+  falling back to the default path) while dropping the false one.
+- **The shape worth naming, three instances in one day.** An assertion about
+  GLOBAL state that holds only while nothing else uses the resource; a
+  legitimate second user falsifies it; and it fails loudly while pointing
+  somewhere else entirely. (1) kkamak's "provider registry is empty", broken
+  by another test file registering. (2) km-crank's `spanDays < 1`, broken by
+  the clock passing midnight. (3) this one, "no ACP sockets on the host",
+  broken by arming a consumer of the ACP lane. All three were written as
+  hygiene invariants and were correct when written. The fix in each case was
+  the same: assert a **delta** against observed baseline, not an absolute
+  about shared state.
+- **Consequence for the D3 acceptance measurement** (`0a03c00`): three
+  instrument changes landed on this host inside ~100 minutes — the tier-0
+  narrowing (`1785990600996`), the `0.3.0 → 0.4.0` plugin deploy which shifts
+  `pluginVersion` mid-window, and the sensor going live (`1785996709580`).
+  Any D3 effect claimed from this window without segmenting on all three is
+  uninterpretable. Recorded before anyone reads a clean before/after out of it.
