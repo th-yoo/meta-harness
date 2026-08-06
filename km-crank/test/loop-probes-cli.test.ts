@@ -278,13 +278,19 @@ describe("p0-signal-variance CLI", () => {
 describe("p1-event-density CLI", () => {
   test("wires S1-S4 into a valid output json with known computed values", () => {
     const cwd = mkTmp("loop-probes-p1-")
-    const now = Date.now()
+    // FROZEN "now" = S4_BOUNDARY + 4 h, injected via the CLI's
+    // KKAMAK_PROBE_NOW_TS seam. The original Date.now()-relative fixture
+    // was a wall-clock time bomb: segment membership and post.spanDays
+    // drifted as real time passed the fixed boundary (failed one calendar
+    // day after 348cd5c landed). Frozen, the geometry is eternal: the
+    // 0-days-ago line lands post-boundary (span 4 h), 1/3/5/6-days-ago
+    // land pre-boundary.
+    const now = 1785888548054 + 4 * 3600 * 1000
     const day = 24 * 3600 * 1000
 
     // S1/S4: 6 lines inside the 7-day window, spread across 3 distinct
-    // UTC days; all with ts well past S4_BOUNDARY (2026-08-05T00:09Z) so
-    // they land in S4's post-boundary segment. 2 lines further in the
-    // past (9 days ago) must NOT be counted (outside the window).
+    // UTC days. 2 lines further in the past (9 days ago) must NOT be
+    // counted (outside the window).
     const gateFile = path.join(cwd, "gate.ndjson")
     writeJsonl(gateFile, [
       { ts: now - 9 * day, accepted: true, durationMs: 1 }, // outside window
@@ -312,6 +318,7 @@ describe("p1-event-density CLI", () => {
       KKAMAK_PROBE_GATE_NDJSON: gateFile,
       KKAMAK_PROBE_REVIEWS_DIR: reviewsDir,
       KKAMAK_PROBE_GIT_DIRS: `${repoA}:${repoB}`,
+      KKAMAK_PROBE_NOW_TS: String(now),
     })
     expect(r.status).toBe(0)
 
@@ -338,13 +345,13 @@ describe("p1-event-density CLI", () => {
     expect(out.s3.filesTotal).toBe(3)
     expect(out.s3.addsPerDay).toBeCloseTo(2 / 7, 10)
 
-    // S4: boundary (2026-08-05T00:09Z) sits only a few hours before "now"
-    // in this environment's clock, so the fixture's 0-days-ago line lands
-    // post-boundary and the rest (1/3/5/6 days ago) land pre-boundary.
-    // Both segments are small-n (< 10) either way.
+    // S4: with the frozen now (= boundary + 4 h), the 0-days-ago line
+    // lands post-boundary and the 1/3/5/6-days-ago lines land
+    // pre-boundary — deterministic geometry, no wall-clock dependence.
     expect(out.s4.segments).toHaveLength(2)
     const [pre, post] = out.s4.segments
-    expect(pre.n + post.n).toBe(6)
+    expect(pre.n).toBe(5)
+    expect(post.n).toBe(1)
     expect(pre.smallN).toBe(true)
     expect(post.smallN).toBe(true)
     expect(post.durationMs.n).toBe(post.n)
@@ -354,7 +361,7 @@ describe("p1-event-density CLI", () => {
     expect(pre.spanDays + post.spanDays).toBeCloseTo(7, 6)
     expect(pre.linesPerDay).toBeCloseTo(pre.n / pre.spanDays, 10)
     expect(post.linesPerDay).toBeCloseTo(post.n / post.spanDays, 10)
-    expect(post.spanDays).toBeLessThan(1)   // boundary sits hours before now
+    expect(post.spanDays).toBeCloseTo(4 / 24, 6)   // exactly the frozen 4 h overlap
   })
 
   test("S2's this-repo-labeled entry carries a branch + worktree-fragility note; a differently-labeled entry does not", () => {
