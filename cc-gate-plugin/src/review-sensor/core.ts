@@ -70,31 +70,40 @@ export function nextCapState(state: SensorState | undefined, now: number): { day
 }
 
 export function truncateDiff(diff: string, ceilingBytes: number = DIFF_CEILING_BYTES): { text: string; truncated: boolean } {
-  const byteLen = Buffer.byteLength(diff, "utf8")
-  if (byteLen <= ceilingBytes) return { text: diff, truncated: false }
+  const buf = Buffer.from(diff, "utf8")
+  if (buf.length <= ceilingBytes) return { text: diff, truncated: false }
 
-  // Find all boundary positions (char index) and their byte lengths
-  let lastDiffGitIdx = -1, lastHunkIdx = -1
-  for (let i = 0; i < diff.length - 10; i++) {
-    const bytesSoFar = Buffer.byteLength(diff.slice(0, i + 1), "utf8")
-    if (bytesSoFar > ceilingBytes) break
-    if (diff[i] === "\n" && diff.slice(i + 1, i + 11) === "diff --git") {
-      lastDiffGitIdx = i
-    } else if (diff[i] === "\n" && diff[i + 1] === "@" && diff[i + 2] === "@") {
-      lastHunkIdx = i
+  // Find the last hunk/file boundary marker at or before ceiling (prefer file boundaries)
+  const diffGitMarker = Buffer.from("\ndiff --git")
+  const hunkMarker = Buffer.from("\n@@")
+  let lastDiffGitByte = -1, lastHunkByte = -1, idx = 0
+
+  while ((idx = buf.indexOf(diffGitMarker, idx)) >= 0) {
+    if (idx <= ceilingBytes) lastDiffGitByte = idx
+    idx++
+  }
+
+  // Only consider hunk boundaries if they come BEFORE the first file boundary,
+  // or if there's no file boundary within the ceiling
+  if (lastDiffGitByte < 0) {
+    idx = 0
+    while ((idx = buf.indexOf(hunkMarker, idx)) >= 0) {
+      if (idx <= ceilingBytes) lastHunkByte = idx
+      idx++
     }
   }
 
-  if (lastDiffGitIdx > 0) {
-    return { text: diff.slice(0, lastDiffGitIdx + 1), truncated: true }
-  }
-  if (lastHunkIdx > 0) {
-    return { text: diff.slice(0, lastHunkIdx + 1), truncated: true }
+  const cutByteOffset = lastDiffGitByte >= 0 ? lastDiffGitByte : lastHunkByte
+  if (cutByteOffset > 0) {
+    return { text: buf.slice(0, cutByteOffset + 1).toString("utf8"), truncated: true }
   }
 
-  // No boundary found; truncate at byte position
-  const truncated = Buffer.from(diff, "utf8").slice(0, ceilingBytes).toString("utf8")
-  return { text: truncated, truncated: true }
+  // No boundary found; truncate at byte position, backing off past continuation bytes
+  let end = ceilingBytes
+  while (end > 0 && (buf[end]! & 0xc0) === 0x80) {
+    end--
+  }
+  return { text: buf.slice(0, end).toString("utf8"), truncated: true }
 }
 
 const FROZEN_PROMPT_TEMPLATE = `kkamak review sensor. Review ONLY the diff below for defects a

@@ -292,6 +292,22 @@ describe("truncateDiff", () => {
     const resultBytes = Buffer.byteLength(result.text, "utf8")
     expect(resultBytes).toBeLessThanOrEqual(ceiling)
   })
+
+  test("fallback truncation (no boundary within ceiling) backs off from continuation bytes", () => {
+    // Create a diff where the first boundary is BEYOND the ceiling
+    // Multi-byte content fills the ceiling space
+    const padding = "中".repeat(50) // 150 bytes of CJK
+    const diff = padding + "\ndiff --git a/file.ts b/file.ts\n@@ -1,1 +1,1 @@\nmore"
+    const ceiling = 80 // Smaller than padding; first boundary is way beyond
+
+    const result = truncateDiff(diff, ceiling)
+
+    expect(result.truncated).toBe(true)
+    const resultBytes = Buffer.byteLength(result.text, "utf8")
+    expect(resultBytes).toBeLessThanOrEqual(ceiling)
+    // Verify no U+FFFD replacement character from splitting multi-byte
+    expect(result.text).not.toContain("�")
+  })
 })
 
 describe("buildReviewPrompt and reviewPromptSha", () => {
