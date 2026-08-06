@@ -562,3 +562,20 @@ five architect rounds recorded in
   produced a bare `["bun","test"]` argv and then appended a pull-in to it,
   collapsing a whole suite to one file. Partial scans are now discarded, so
   any scan anomaly degrades to "run everything for that package".
+
+- **ERRATUM (2026-08-06, caught by the side session): boundary ts
+  1785988568548 marks an arming that NEVER TOOK EFFECT.** The gate runs
+  the INSTALLED plugin; the version-keyed cache held the 0.3.0 snapshot
+  (gitCommitSha ffb8d00), an ancestor of the sensor merge 062baf0 — env,
+  cwd, and restarts were all correct, but review-sensor-spawn.ts did not
+  exist in the executing code. Zero dispatches occurred; the 2026-08-13
+  cadence checkpoint dated from that ts is VOID (it would have misread a
+  deployment bug as a failed measurement). Fix deployed: cc-gate-plugin
+  0.3.0 → 0.4.0 (commit 4d27981, both jsons), `claude plugin update
+  kkamak@kkamak-local` run, installed 0.4.0 verified to carry the sensor.
+  **The instrument's REAL first regime opens at the first gated Stop of a
+  session restarted after this update** — that line's ts supersedes
+  1785988568548 as the effective boundary; the 7-day cadence checkpoint
+  re-dates from it. Standing lesson (memory hardened): MERGING IS NOT
+  DEPLOYING — any cc-gate-plugin code merge needs a version bump in the
+  same change; verify via the installed cache dir, never repo source.
