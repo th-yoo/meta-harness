@@ -488,4 +488,13 @@ test("A3 carrier: stop-gate-settings.json's hook message pins the frozen rule's 
   const hookMessage: string = settings.hooks.Stop[0].hooks[0].command
   expect(hookMessage).toContain(DONE_CHECK_PATH)
   expect(hookMessage).toContain("does not count as verification")
+  // C1 (final whole-branch review, confidence 95): CC Stop-hook semantics
+  // block ONLY on exit 2 (stderr fed back to the agent as continuation
+  // instructions); exit 1 is non-blocking (agent stops, stderr goes to the
+  // user only) — see cc-gate-plugin/src/output.ts's exit2-stderr mode
+  // (exitCode: 2) and hook-cli.ts:10-11 for the in-repo precedent. Pin the
+  // exit code so a regression to exit 1 (a silent no-op for the A3 arm)
+  // fails CI.
+  expect(hookMessage).toContain("exit 2")
+  expect(hookMessage).not.toContain("exit 1")
 })
