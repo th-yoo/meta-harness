@@ -108,6 +108,23 @@ itself (fresh-context critics).
   producer-identity item exists to close; recorded here because it is the
   second time today a shared artifact could not say which code produced it.
 
+## meta-harness gate-outcomes plugin-version boundaries, yoo-mac (2026-08-06)
+
+- **Recorded per the deploy rule ("merging is not deploying") and the 08-06
+  resume duty:** this repo's `.km/gate-outcomes.ndjson` on yoo-mac.local now
+  partitions into three `pluginVersion` regimes, measured from the lines
+  themselves:
+  `0.2.1` n=52, ts ≤ 1785880160767 · **`0.3.0` first line ts 1785941618740**
+  (2026-08-05 23:53 KST; the 08-05 23:52 cache update) · **`0.4.0` first
+  line ts 1786009358289** (2026-08-06 18:42 KST; cache updated same day,
+  session restarted — 0.2.1 and 0.3.0 dirs both `.orphaned_at`).
+- Partition by `pluginVersion` stamp (it moved this time — unlike the
+  08-01 boundary above, no ts-only partitioning needed). The 0.3.0 regime
+  is n=2 on this repo/host and spans the two-tier-gate era already marked
+  by the check-string change; treat it as too thin to read alone.
+- The D3-confound segmentation rule (0a03c00) applies unchanged: segment
+  on pluginVersion AND marker state AND sensor-live, never selection alone.
+
 ## Program seal (2026-08-01)
 
 Method: self-applying Gauntlet Loop — orchestrator lead, builder subagents
