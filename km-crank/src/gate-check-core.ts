@@ -122,12 +122,58 @@ export function suitesForChangedPaths(paths: string[]): SuiteId[] {
  * CC CLI subprocess spawns, 2s settles). They still run in tier 1 on every
  * background full check, and in the pre-merge sanity chain. ONE regex = one
  * policy site. */
-export const SLOW_CCGATE_TEST_RE =
+const SLOW_CCGATE_TEST_RE =
   /(acp-client|acp-daemon|acp-pool|anthropic-cli-warm|warm-session|gauge-agent-transport)\.test\.ts$/
 
-export function ccgateFastFiles(allTestFiles: string[]): string[] {
-  return allTestFiles.filter((f) => !SLOW_CCGATE_TEST_RE.test(f))
+/** Spawn-heavy km-crank test file excluded from tier 0. Measured 2026-08-06:
+ * gate-check-cli.test.ts is an end-to-end CLI drive with multi-second
+ * `until()` waits — 13.9s of km-crank's ≈15.8s suite. Basename-anchored for
+ * the same reason as the pull-in rules below (a future directory move must
+ * not silently stop this matching). ONE regex = one policy site (mirrors
+ * SLOW_CCGATE_TEST_RE). */
+export const SLOW_KMCRANK_TEST_RE = /(^|\/)gate-check-cli\.test\.ts$/
+
+/** Suite id -> the package directory its tests live under. Only the suites
+ * that currently need it (pull-in self-matching below; `scripts/gate-check.ts`'s
+ * `scanFastArgv`-derived `Cmd.cwd`/`Cmd.argv`) are populated — this is not a
+ * claim that every SuiteId has (or needs) an entry.
+ *
+ * DOUBLE DUTY, one map, two consumers: (1) here in `pullInsFor`, presence
+ * drives the self-pull regex (a changed slow test file pulls itself); (2)
+ * in `scripts/gate-check.ts`'s `realCommands()`, presence is what a suite
+ * needs to get its `Cmd.cwd` derived AND its argv turned from bare
+ * `["bun","test"]` into an enumerated fast-file list via `fastFiles()`. A
+ * third entry added here later for reason (1) alone would, if
+ * `gate-check.ts` is ever changed to iterate this map rather than call
+ * `fastFiles`/`Cmd.cwd` derivation explicitly per suite, silently convert
+ * that suite's argv into a file list too — read both call sites before
+ * adding an entry. */
+export const PKG_DIR: Partial<Record<SuiteId, string>> = {
+  ccgate: "cc-gate-plugin",
+  kmcrank: "km-crank",
 }
+
+/** A pull-in rule: a changed path matching `re` pulls `tests` into its
+ * suite's tier-0 run. `guard`, when present, is a path prefix a change must
+ * also satisfy — e.g. a package prefix, so the same source basename can't
+ * false-positive across packages sharing this table. Guardless rules are
+ * legitimate: kmcrank's rules below are the guardless case, a `scripts/…`
+ * -> km-crank test mapping that by construction can't be package-prefixed,
+ * since `scripts/gate-check.ts` and this module live outside `km-crank/`. */
+interface PullInRule {
+  re: RegExp
+  tests: string[]
+  guard?: RegExp
+}
+
+interface SuitePolicy {
+  /** Spawn-heavy test files excluded from this suite's tier 0. Absent means
+   * this suite has no narrowing, so its self-pull step is a no-op. */
+  slowTestRe?: RegExp
+  rules: PullInRule[]
+}
+
+const CCGATE_GUARD = /^cc-gate-plugin\//
 
 /** Amendment b: slow-source pull-in. A changed slow-covered source must
  * pull its MATCHING slow test file(s) into tier 0 — otherwise the one
@@ -147,33 +193,111 @@ export function ccgateFastFiles(allTestFiles: string[]): string[] {
 // acp-daemon.test.ts) are deliberately NOT chased: full closure would pull
 // most of the ~110s slow set and defeat "targeted"; the bg debt gate is
 // the stated safety net for that depth.
-const SLOW_SOURCE_TO_TESTS: Array<{ re: RegExp; tests: string[] }> = [
-  { re: /(^|\/)acp-client\.ts$/, tests: ["test/acp-client.test.ts"] },
-  { re: /(^|\/)acp-daemon\.ts$/, tests: ["test/acp-daemon.test.ts"] },
-  { re: /(^|\/)acp-pool\.ts$/, tests: ["test/acp-daemon.test.ts", "test/acp-pool.test.ts"] },
-  { re: /(^|\/)anthropic-cli-warm\.ts$/, tests: ["test/anthropic-cli-warm.test.ts"] },
-  { re: /(^|\/)warm-session\.ts$/, tests: ["test/acp-pool.test.ts", "test/warm-session.test.ts"] },
-  { re: /(^|\/)agent-transport\.ts$/, tests: [
-    "test/acp-client.test.ts", "test/anthropic-cli-warm.test.ts", "test/gauge-agent-transport.test.ts",
-  ] },
-  // test stubs — direct value consumers among the SLOW files only
-  // (anthropic-api.test.ts also imports agent-cli-stub but is fast — it
-  // already runs in every ccgate tier 0):
-  { re: /(^|\/)acp-fake-daemon\.ts$/, tests: ["test/acp-client.test.ts", "test/anthropic-cli-warm.test.ts"] },
-  { re: /(^|\/)agent-cli-stub\.ts$/, tests: [
-    "test/acp-client.test.ts", "test/acp-daemon.test.ts",
-    "test/gauge-agent-transport.test.ts", "test/warm-session.test.ts",
-  ] },
-]
+//
+// INVARIANT (the mirror image of PKG_DIR's double-duty warning above): a
+// suite may be given `rules` here ONLY if its `Cmd.argv` in
+// scripts/gate-check.ts is an ENUMERATED fast-file list, never a bare
+// `["bun","test"]`. `pullInsFor` returns rule-derived tests independent of
+// PKG_DIR/Cmd shape — it has no way to know or check what a suite's argv
+// looks like. A suite added here with pull-in rules while its Cmd stays
+// literal `["bun","test"]` would have the pull-in append silently convert
+// "run the whole suite" into "run only the appended file" — the exact
+// class of bug the `scanFailed` degradation guard in scripts/gate-check.ts
+// exists to prevent, reintroduced by a policy-side mistake instead of a
+// scan-side one. Pinned by a test (every SUITE_POLICY key is also a PKG_DIR
+// key) in gate-check-core.test.ts — exported for that reason.
+export const SUITE_POLICY: Partial<Record<SuiteId, SuitePolicy>> = {
+  ccgate: {
+    slowTestRe: SLOW_CCGATE_TEST_RE,
+    rules: [
+      { re: /(^|\/)acp-client\.ts$/, tests: ["test/acp-client.test.ts"], guard: CCGATE_GUARD },
+      { re: /(^|\/)acp-daemon\.ts$/, tests: ["test/acp-daemon.test.ts"], guard: CCGATE_GUARD },
+      { re: /(^|\/)acp-pool\.ts$/, tests: ["test/acp-daemon.test.ts", "test/acp-pool.test.ts"], guard: CCGATE_GUARD },
+      { re: /(^|\/)anthropic-cli-warm\.ts$/, tests: ["test/anthropic-cli-warm.test.ts"], guard: CCGATE_GUARD },
+      { re: /(^|\/)warm-session\.ts$/, tests: ["test/acp-pool.test.ts", "test/warm-session.test.ts"], guard: CCGATE_GUARD },
+      { re: /(^|\/)agent-transport\.ts$/, tests: [
+        "test/acp-client.test.ts", "test/anthropic-cli-warm.test.ts", "test/gauge-agent-transport.test.ts",
+      ], guard: CCGATE_GUARD },
+      // test stubs — direct value consumers among the SLOW files only
+      // (anthropic-api.test.ts also imports agent-cli-stub but is fast — it
+      // already runs in every ccgate tier 0):
+      { re: /(^|\/)acp-fake-daemon\.ts$/, tests: ["test/acp-client.test.ts", "test/anthropic-cli-warm.test.ts"], guard: CCGATE_GUARD },
+      { re: /(^|\/)agent-cli-stub\.ts$/, tests: [
+        "test/acp-client.test.ts", "test/acp-daemon.test.ts",
+        "test/gauge-agent-transport.test.ts", "test/warm-session.test.ts",
+      ], guard: CCGATE_GUARD },
+    ],
+  },
+  kmcrank: {
+    slowTestRe: SLOW_KMCRANK_TEST_RE,
+    rules: [
+      // Guardless (the first such rule — see the PullInRule doc comment
+      // above): scripts/gate-check.ts and gate-check-core.ts live OUTSIDE
+      // km-crank/, so a package-prefix guard would make these rules dead
+      // code. That is the whole point — editing the gate's own entry point
+      // or its pure-logic module must pull km-crank's end-to-end CLI test
+      // back into tier 0, or the gate loses its most direct coverage of
+      // itself. gate-check-core.ts is matched basename-anchored per the
+      // convention documented above; do not re-anchor it to a directory.
+      { re: /^scripts\/gate-check\.ts$/, tests: ["test/gate-check-cli.test.ts"] },
+      { re: /(^|\/)gate-check-core\.ts$/, tests: ["test/gate-check-cli.test.ts"] },
+    ],
+  },
+}
 
-export function slowCcgateTestsForChangedPaths(paths: string[]): string[] {
+/** SUITE-KEYED pull-in: returns only `suite`'s own test paths, never a flat
+ * union across suites — a flat union would leak e.g. a km-crank test path
+ * into the ccgate argv, and `bun test` treats positionals as path filters
+ * (a non-matching filter wastes the run or exits non-zero). A suite absent
+ * from SUITE_POLICY has no narrowing and pulls nothing. */
+export function pullInsFor(suite: SuiteId, paths: string[]): string[] {
+  const policy = SUITE_POLICY[suite]
+  if (!policy) return []
+  const pkgDir = PKG_DIR[suite]
+  const selfPullRe = pkgDir ? new RegExp(`^${pkgDir}/((?:test|src)/.*\\.test\\.ts)$`) : undefined
   const out = new Set<string>()
   for (const p of paths) {
-    if (!/^cc-gate-plugin\//.test(p)) continue
-    // a changed slow TEST file pulls itself (test/ or a future src/-colocated one)
-    const tm = p.match(/^cc-gate-plugin\/((?:test|src)\/.*\.test\.ts)$/)
-    if (tm && SLOW_CCGATE_TEST_RE.test(p)) { out.add(tm[1]!); continue }
-    for (const m of SLOW_SOURCE_TO_TESTS) if (m.re.test(p)) for (const t of m.tests) out.add(t)
+    // a changed slow TEST file pulls itself (test/ or a future src/-colocated
+    // one), per-suite via PKG_DIR rather than a hardcoded ccgate anchor
+    if (selfPullRe && policy.slowTestRe) {
+      const tm = p.match(selfPullRe)
+      if (tm && policy.slowTestRe.test(p)) { out.add(tm[1]!); continue }
+    }
+    for (const rule of policy.rules) {
+      if (rule.guard && !rule.guard.test(p)) continue
+      if (rule.re.test(p)) for (const t of rule.tests) out.add(t)
+    }
   }
   return [...out].sort()
+}
+
+/** SUITE-KEYED fast-list filter: drops `suite`'s spawn-heavy test files
+ * (per `SUITE_POLICY[suite].slowTestRe`) from a scanned file list. A suite
+ * with no configured `slowTestRe` (no narrowing) returns the list
+ * unfiltered — generalises the old ccgate-only `ccgateFastFiles`, which
+ * this replaces, to any suite Task 1/2 gave a policy. */
+export function fastFiles(suite: SuiteId, allTestFiles: string[]): string[] {
+  const slowRe = SUITE_POLICY[suite]?.slowTestRe
+  if (!slowRe) return allTestFiles
+  return allTestFiles.filter((f) => !slowRe.test(f))
+}
+
+/** Pure decision half of scripts/gate-check.ts's scanFastArgv: given what a
+ * (possibly partial) directory scan collected and whether ANY root of it
+ * failed, return the fast-file suffix for that suite's tier-0 argv.
+ *
+ * `scanFailed` degrades the WHOLE scan, not just the root that threw: if
+ * one root (e.g. test/) read fine and contributed to `all` but another
+ * (e.g. src/) threw, keeping test/'s partial results would produce an argv
+ * that LOOKS correctly narrowed but is silently missing whatever the
+ * failed root would have added — and scripts/gate-check.ts's main() also
+ * skips the pull-in append whenever scanFailed is set, so a changed
+ * slow-covered file under the failed root would land in neither the fast
+ * list nor the append: zero tier-0 coverage for it. So `scanFailed: true`
+ * here always returns `[]` (the caller prepends `["bun","test"]`, i.e. run
+ * everything for that package) regardless of what `all` collected —
+ * factored out of the fs-touching scan loop specifically so this discard
+ * decision is unit-testable without a real filesystem. */
+export function fastArgvSuffix(suite: SuiteId, all: string[], scanFailed: boolean): string[] {
+  return scanFailed ? [] : fastFiles(suite, all)
 }

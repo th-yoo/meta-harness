@@ -14,8 +14,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { execFileSync, spawnSync, spawn } from "node:child_process"
 import {
-  decide, parseMarker, suitesForChangedPaths, ccgateFastFiles,
-  slowCcgateTestsForChangedPaths,
+  decide, parseMarker, suitesForChangedPaths, fastArgvSuffix, pullInsFor, PKG_DIR,
   type GateBgMarker, type SuiteId,
 } from "../km-crank/src/gate-check-core.ts"
 
@@ -25,31 +24,79 @@ const MARKER = path.join(BG_DIR, "state.json")
 const OUTPUT_TAIL_BYTES = 4096
 
 // ---------- command table (real, or test-seam override) ----------
-interface Cmd { cwd: string; argv: string[] }
+interface Cmd {
+  cwd: string
+  argv: string[]
+  /** DEGRADATION flag, never NARROWING — see scanFastArgv(). Lives on the
+   * per-Cmd entry (NOT on CommandTable): with two packages scanned, a
+   * km-crank readdir failure must not suppress ccgate's pull-in append
+   * while ccgate's own argv is a correctly-narrowed fast list — that would
+   * open the exact coverage hole amendment b exists to close. Absence
+   * (including the common case: this field simply doesn't exist on an
+   * object) means "append normally", which is what keeps the
+   * KKAMAK_GATE_COMMANDS seam fixture (cwd/argv only, no such field) safe:
+   * `undefined` is falsy, so the pull-in append still fires there. That
+   * safety only holds because realCommands()'s output is NEVER serialized
+   * — commands() below either JSON.parses the seam file (a fixture some
+   * test wrote, never this function's return value) or calls
+   * realCommands() fresh in-process. The flag is therefore process-local
+   * by construction; it can never round-trip through the seam and silently
+   * flip meaning. */
+  scanFailed?: boolean
+}
 interface CommandTable { suites: Record<SuiteId, Cmd>; full: Cmd }
 
-function realCommands(): CommandTable {
-  // Scan test/ AND src/ recursively: bare `bun test` (the full check)
-  // discovers .test.ts anywhere in the package, so a src/-colocated test
-  // must not silently drop out of tier 0. None exist today (verified
-  // 2026-08-05) — this is the guard for when one lands.
-  const fast: string[] = (() => {
-    const all: string[] = []
-    for (const root of ["test", "src"]) {
-      const abs = path.join(cwd, "cc-gate-plugin", root)
-      let entries: string[] = []
-      try { entries = fs.readdirSync(abs, { recursive: true }) as string[] } catch { continue }
-      // foreign repo / missing dirs -> empty list; suite selection won't pick ccgate anyway
-      for (const e of entries) if (e.endsWith(".test.ts")) all.push(`${root}/${e}`)
+/** Scan `pkgDir`'s test/ and src/ recursively for `.test.ts` files and turn
+ * them into `suite`'s tier-0 argv via `fastArgvSuffix()`. Shared by ccgate
+ * and kmcrank (the two suites PKG_DIR covers — see its doc comment for the
+ * double-duty this map plays here vs. in pullInsFor).
+ *
+ * Scan test/ AND src/ recursively: bare `bun test` (the full check)
+ * discovers .test.ts anywhere in the package, so a src/-colocated test must
+ * not silently drop out of tier 0. Neither package has one today, nor any
+ * nested node_modules under src/ that recursive readdir could snag
+ * (verified 2026-08-06 for both cc-gate-plugin and km-crank) — this is the
+ * guard for when one lands.
+ *
+ * scanFailed tracks whether ANY root threw (a genuine readdir failure —
+ * both roots are confirmed to exist in this repo today, so a catch firing
+ * here is anomalous, not a benign "foreign repo / missing dir"), never
+ * inferred from `all.length === 0` (a package with genuinely zero test
+ * files produces that same empty list without any failure at all). The
+ * fs-touching loop here only collects `all` + `scanFailed`; the actual
+ * "discard on any failure, even a partial one" decision is pure and lives
+ * in `fastArgvSuffix()` (gate-check-core.ts) — see its doc comment for why
+ * a narrowed-but-incomplete `all` would be unsafe. */
+function scanFastArgv(suite: SuiteId, pkgDir: string): Cmd {
+  const all: string[] = []
+  let scanFailed = false
+  for (const root of ["test", "src"]) {
+    const abs = path.join(cwd, pkgDir, root)
+    let entries: string[] = []
+    try {
+      entries = fs.readdirSync(abs, { recursive: true }) as string[]
+    } catch {
+      scanFailed = true
+      continue
     }
-    return ccgateFastFiles(all)
-  })()
+    for (const e of entries) if (e.endsWith(".test.ts")) all.push(`${root}/${e}`)
+  }
+  return { cwd: pkgDir, argv: ["bun", "test", ...fastArgvSuffix(suite, all, scanFailed)], scanFailed }
+}
+
+function realCommands(): CommandTable {
   return {
     suites: {
-      ccgate: { cwd: "cc-gate-plugin", argv: ["bun", "test", ...fast] },
+      // Literal fallbacks (not `!`): PKG_DIR is edited in a different file
+      // (gate-check-core.ts) than this one, and a `!` assertion type-checks
+      // clean even after a key is renamed away there — it would only fail
+      // at runtime, as `path.join(cwd, undefined, root)`, on every single
+      // Stop. A `??` fallback instead degrades a stale/renamed map entry
+      // back to today's literal cwd, never wedges the gate.
+      ccgate: scanFastArgv("ccgate", PKG_DIR.ccgate ?? "cc-gate-plugin"),
       opencode: { cwd: "opencode-plugin", argv: ["bun", "test"] },
       gateplugin: { cwd: "gate-plugin", argv: ["bun", "test"] },
-      kmcrank: { cwd: "km-crank", argv: ["bun", "test"] },
+      kmcrank: scanFastArgv("kmcrank", PKG_DIR.kmcrank ?? "km-crank"),
       doccheck: { cwd: ".", argv: ["bun", "scripts/doc-check.ts"] },
     },
     // Tier 1 = incumbent check VERBATIM (plan Global Constraints).
@@ -229,19 +276,37 @@ function main(): never {
     }
   }
 
-  // tier 0: package-TIA scoped fast suites (+ amendment-b slow pull-in)
+  // tier 0: package-TIA scoped fast suites (+ amendment-b slow pull-in,
+  // suite-keyed via pullInsFor — no longer a single flat ccgate-only list)
   const base = marker?.status === "green" ? marker.tree : undefined
   const changed = base ? changedPathsSince(base, tree) : undefined
   const suites = changed !== undefined ? suitesForChangedPaths(changed) : [...d.suites]
-  const slowPull = changed !== undefined ? slowCcgateTestsForChangedPaths(changed) : []
-  console.log(`gate-check: tier0 suites [${suites.join(", ")}]${slowPull.length ? ` + slow pull-in [${slowPull.join(", ")}]` : ""} (tree ${tree.slice(0, 8)})`)
+  const pullIns = new Map<SuiteId, string[]>()
+  if (changed !== undefined) {
+    for (const s of suites) {
+      const p = pullInsFor(s, changed)
+      if (p.length > 0) pullIns.set(s, p)
+    }
+  }
+  // Pinned log format — Task 4's acceptance measurement correlates against
+  // this exact line: "suite:file" pairs, accumulated across ALL suites (in
+  // suite order) rather than one flat ccgate-only list.
+  const pullLog = [...pullIns.entries()].flatMap(([s, files]) => files.map((f) => `${s}:${f}`))
+  console.log(`gate-check: tier0 suites [${suites.join(", ")}]${pullLog.length ? ` + slow pull-in [${pullLog.join(", ")}]` : ""} (tree ${tree.slice(0, 8)})`)
 
   for (const s of suites) {
+    const suiteCmd = table.suites[s]
     // amendment b: changed slow-covered sources append their matching slow
-    // test files to the ccgate argv (fast list never contains them — no dupes)
-    const cmd = s === "ccgate" && slowPull.length > 0
-      ? { cwd: table.suites.ccgate.cwd, argv: [...table.suites.ccgate.argv, ...slowPull] }
-      : table.suites[s]
+    // test files to their suite's argv (fast list never contains them — no
+    // dupes). Skipped when scanFailed is set on THIS Cmd: scanFailed means
+    // argv already degraded to bare ["bun","test"] (run everything, the
+    // safe fallback), and appending a pull-in on top of that would FILTER
+    // it down to just the appended file(s) — see Cmd.scanFailed's doc
+    // comment for why that would reopen amendment b's coverage hole.
+    const pull = pullIns.get(s)
+    const cmd = pull && pull.length > 0 && !suiteCmd.scanFailed
+      ? { cwd: suiteCmd.cwd, argv: [...suiteCmd.argv, ...pull] }
+      : suiteCmd
     const { code } = runSyncCaptured(cmd)
     if (code !== 0) {
       console.error(`gate-check: tier0 suite '${s}' FAILED — blocking`)
