@@ -193,6 +193,18 @@ const CCGATE_GUARD = /^cc-gate-plugin\//
 // acp-daemon.test.ts) are deliberately NOT chased: full closure would pull
 // most of the ~110s slow set and defeat "targeted"; the bg debt gate is
 // the stated safety net for that depth.
+//
+// INVARIANT (the mirror image of PKG_DIR's double-duty warning above): a
+// suite may be given `rules` here ONLY if its `Cmd.argv` in
+// scripts/gate-check.ts is an ENUMERATED fast-file list, never a bare
+// `["bun","test"]`. `pullInsFor` returns rule-derived tests independent of
+// PKG_DIR/Cmd shape — it has no way to know or check what a suite's argv
+// looks like. A suite added here with pull-in rules while its Cmd stays
+// literal `["bun","test"]` would have the pull-in append silently convert
+// "run the whole suite" into "run only the appended file" — the exact
+// class of bug the `scanFailed` degradation guard in scripts/gate-check.ts
+// exists to prevent, reintroduced by a policy-side mistake instead of a
+// scan-side one.
 const SUITE_POLICY: Partial<Record<SuiteId, SuitePolicy>> = {
   ccgate: {
     slowTestRe: SLOW_CCGATE_TEST_RE,
@@ -267,4 +279,24 @@ export function fastFiles(suite: SuiteId, allTestFiles: string[]): string[] {
   const slowRe = SUITE_POLICY[suite]?.slowTestRe
   if (!slowRe) return allTestFiles
   return allTestFiles.filter((f) => !slowRe.test(f))
+}
+
+/** Pure decision half of scripts/gate-check.ts's scanFastArgv: given what a
+ * (possibly partial) directory scan collected and whether ANY root of it
+ * failed, return the fast-file suffix for that suite's tier-0 argv.
+ *
+ * `scanFailed` degrades the WHOLE scan, not just the root that threw: if
+ * one root (e.g. test/) read fine and contributed to `all` but another
+ * (e.g. src/) threw, keeping test/'s partial results would produce an argv
+ * that LOOKS correctly narrowed but is silently missing whatever the
+ * failed root would have added — and scripts/gate-check.ts's main() also
+ * skips the pull-in append whenever scanFailed is set, so a changed
+ * slow-covered file under the failed root would land in neither the fast
+ * list nor the append: zero tier-0 coverage for it. So `scanFailed: true`
+ * here always returns `[]` (the caller prepends `["bun","test"]`, i.e. run
+ * everything for that package) regardless of what `all` collected —
+ * factored out of the fs-touching scan loop specifically so this discard
+ * decision is unit-testable without a real filesystem. */
+export function fastArgvSuffix(suite: SuiteId, all: string[], scanFailed: boolean): string[] {
+  return scanFailed ? [] : fastFiles(suite, all)
 }

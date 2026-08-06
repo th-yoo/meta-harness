@@ -14,7 +14,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { execFileSync, spawnSync, spawn } from "node:child_process"
 import {
-  decide, parseMarker, suitesForChangedPaths, fastFiles, pullInsFor, PKG_DIR,
+  decide, parseMarker, suitesForChangedPaths, fastArgvSuffix, pullInsFor, PKG_DIR,
   type GateBgMarker, type SuiteId,
 } from "../km-crank/src/gate-check-core.ts"
 
@@ -47,9 +47,9 @@ interface Cmd {
 interface CommandTable { suites: Record<SuiteId, Cmd>; full: Cmd }
 
 /** Scan `pkgDir`'s test/ and src/ recursively for `.test.ts` files and turn
- * them into `suite`'s tier-0 argv, narrowed by fastFiles(). Shared by
- * ccgate and kmcrank (the two suites PKG_DIR covers — see its doc comment
- * for the double-duty this map plays here vs. in pullInsFor).
+ * them into `suite`'s tier-0 argv via `fastArgvSuffix()`. Shared by ccgate
+ * and kmcrank (the two suites PKG_DIR covers — see its doc comment for the
+ * double-duty this map plays here vs. in pullInsFor).
  *
  * Scan test/ AND src/ recursively: bare `bun test` (the full check)
  * discovers .test.ts anywhere in the package, so a src/-colocated test must
@@ -58,18 +58,15 @@ interface CommandTable { suites: Record<SuiteId, Cmd>; full: Cmd }
  * (verified 2026-08-06 for both cc-gate-plugin and km-crank) — this is the
  * guard for when one lands.
  *
- * scanFailed (live defect fix, not new behavior): on a genuine readdir
- * failure both roots are confirmed to exist in this repo today, so a catch
- * firing here is anomalous, not a benign "foreign repo / missing dir" —
- * `all` degrades to whatever it already collected (often `[]`), which
- * degrades argv to bare `["bun","test"]` (run everything, the safe
- * fallback). Marking scanFailed lets main() skip the pull-in append for
- * THIS Cmd: appending a pulled-in file path on top of a bare `["bun",
- * "test"]` would turn "run everything" into "run only that one file" —
- * `bun test` treats positionals as filters — silently narrowing the safe
- * fallback into the exact single-file hole amendment b exists to close.
- * Never inferred from `all.length === 0`: a package with genuinely zero
- * test files produces that same empty list without any failure at all. */
+ * scanFailed tracks whether ANY root threw (a genuine readdir failure —
+ * both roots are confirmed to exist in this repo today, so a catch firing
+ * here is anomalous, not a benign "foreign repo / missing dir"), never
+ * inferred from `all.length === 0` (a package with genuinely zero test
+ * files produces that same empty list without any failure at all). The
+ * fs-touching loop here only collects `all` + `scanFailed`; the actual
+ * "discard on any failure, even a partial one" decision is pure and lives
+ * in `fastArgvSuffix()` (gate-check-core.ts) — see its doc comment for why
+ * a narrowed-but-incomplete `all` would be unsafe. */
 function scanFastArgv(suite: SuiteId, pkgDir: string): Cmd {
   const all: string[] = []
   let scanFailed = false
@@ -84,16 +81,22 @@ function scanFastArgv(suite: SuiteId, pkgDir: string): Cmd {
     }
     for (const e of entries) if (e.endsWith(".test.ts")) all.push(`${root}/${e}`)
   }
-  return { cwd: pkgDir, argv: ["bun", "test", ...fastFiles(suite, all)], scanFailed }
+  return { cwd: pkgDir, argv: ["bun", "test", ...fastArgvSuffix(suite, all, scanFailed)], scanFailed }
 }
 
 function realCommands(): CommandTable {
   return {
     suites: {
-      ccgate: scanFastArgv("ccgate", PKG_DIR.ccgate!),
+      // Literal fallbacks (not `!`): PKG_DIR is edited in a different file
+      // (gate-check-core.ts) than this one, and a `!` assertion type-checks
+      // clean even after a key is renamed away there — it would only fail
+      // at runtime, as `path.join(cwd, undefined, root)`, on every single
+      // Stop. A `??` fallback instead degrades a stale/renamed map entry
+      // back to today's literal cwd, never wedges the gate.
+      ccgate: scanFastArgv("ccgate", PKG_DIR.ccgate ?? "cc-gate-plugin"),
       opencode: { cwd: "opencode-plugin", argv: ["bun", "test"] },
       gateplugin: { cwd: "gate-plugin", argv: ["bun", "test"] },
-      kmcrank: scanFastArgv("kmcrank", PKG_DIR.kmcrank!),
+      kmcrank: scanFastArgv("kmcrank", PKG_DIR.kmcrank ?? "km-crank"),
       doccheck: { cwd: ".", argv: ["bun", "scripts/doc-check.ts"] },
     },
     // Tier 1 = incumbent check VERBATIM (plan Global Constraints).

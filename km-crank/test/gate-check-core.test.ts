@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
-  parseMarker, decide, suitesForChangedPaths, fastFiles, pullInsFor,
+  parseMarker, decide, suitesForChangedPaths, fastFiles, fastArgvSuffix, pullInsFor,
   ALL_SUITES, FALLBACK_SUITES, BG_STALE_MS, type GateBgMarker,
 } from "../src/gate-check-core.ts"
 
@@ -212,5 +212,24 @@ describe("fastFiles (suite-keyed, ported from the retired ccgateFastFiles)", () 
   test("a suite with no configured slowTestRe (e.g. doccheck) is unfiltered — no narrowing means no-op", () => {
     const files = ["test/a.test.ts", "test/b.test.ts"]
     expect(fastFiles("doccheck", files)).toEqual(files)
+  })
+})
+
+describe("fastArgvSuffix (scanFastArgv's pure decision half — review fix)", () => {
+  test("scanFailed=false: behaves exactly like fastFiles, narrowed normally", () => {
+    expect(fastArgvSuffix("ccgate", ["test/acp-wire.test.ts", "test/acp-daemon.test.ts"], false))
+      .toEqual(["test/acp-wire.test.ts"])
+  })
+  test("scanFailed=true DISCARDS whatever was collected, even a non-empty partial scan — the MEDIUM fix: " +
+    "a partial failure (one root threw, the other read fine and contributed real fast files) must not " +
+    "produce a narrowed-looking-but-incomplete argv", () => {
+    expect(fastArgvSuffix("ccgate", ["test/acp-wire.test.ts", "test/reinject.test.ts"], true))
+      .toEqual([])
+  })
+  test("scanFailed=true with an empty partial scan also discards to [] (same outcome, degenerate input)", () => {
+    expect(fastArgvSuffix("ccgate", [], true)).toEqual([])
+  })
+  test("scanFailed=true for a suite with no slowTestRe still discards to [] — the flag wins regardless of policy", () => {
+    expect(fastArgvSuffix("doccheck", ["test/a.test.ts"], true)).toEqual([])
   })
 })
