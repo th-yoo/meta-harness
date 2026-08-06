@@ -48,7 +48,8 @@ export function shouldDispatch(state: SensorState | undefined, now: number): { g
     return { go: false, reason: "debounce" }
   }
 
-  if (state.dayCount >= DAILY_CAP) {
+  const today = getDayKey(now)
+  if (state.dayKey === today && state.dayCount >= DAILY_CAP) {
     return { go: false, reason: "cap" }
   }
 
@@ -69,20 +70,30 @@ export function nextCapState(state: SensorState | undefined, now: number): { day
 }
 
 export function truncateDiff(diff: string, ceilingBytes: number = DIFF_CEILING_BYTES): { text: string; truncated: boolean } {
-  if (diff.length <= ceilingBytes) return { text: diff, truncated: false }
-  const truncated = diff.slice(0, ceilingBytes)
-  const findLastBoundary = (marker: string) => {
-    let pos = -1, idx = 0
-    while ((idx = truncated.indexOf(marker, idx)) >= 0) {
-      pos = idx
-      idx++
+  const byteLen = Buffer.byteLength(diff, "utf8")
+  if (byteLen <= ceilingBytes) return { text: diff, truncated: false }
+
+  // Find all boundary positions (char index) and their byte lengths
+  let lastDiffGitIdx = -1, lastHunkIdx = -1
+  for (let i = 0; i < diff.length - 10; i++) {
+    const bytesSoFar = Buffer.byteLength(diff.slice(0, i + 1), "utf8")
+    if (bytesSoFar > ceilingBytes) break
+    if (diff[i] === "\n" && diff.slice(i + 1, i + 11) === "diff --git") {
+      lastDiffGitIdx = i
+    } else if (diff[i] === "\n" && diff[i + 1] === "@" && diff[i + 2] === "@") {
+      lastHunkIdx = i
     }
-    return pos
   }
-  const lastDiffGit = findLastBoundary("\ndiff --git")
-  if (lastDiffGit > 0) return { text: truncated.slice(0, lastDiffGit + 1), truncated: true }
-  const lastHunk = findLastBoundary("\n@@")
-  if (lastHunk > 0) return { text: truncated.slice(0, lastHunk + 1), truncated: true }
+
+  if (lastDiffGitIdx > 0) {
+    return { text: diff.slice(0, lastDiffGitIdx + 1), truncated: true }
+  }
+  if (lastHunkIdx > 0) {
+    return { text: diff.slice(0, lastHunkIdx + 1), truncated: true }
+  }
+
+  // No boundary found; truncate at byte position
+  const truncated = Buffer.from(diff, "utf8").slice(0, ceilingBytes).toString("utf8")
   return { text: truncated, truncated: true }
 }
 

@@ -58,11 +58,12 @@ describe("shouldDispatch", () => {
   })
 
   test("dayCount 29 → go", () => {
-    const now = 1000000000
+    const now = Date.now()
+    const todayKey = new Date(now).toLocaleDateString("en-CA")
     const state = {
       lastPassTs: now - DEBOUNCE_MS - 1000,
       lastPassHead: "abc123",
-      dayKey: "2026-08-06",
+      dayKey: todayKey,
       dayCount: 29,
     }
     const result = shouldDispatch(state, now)
@@ -70,11 +71,12 @@ describe("shouldDispatch", () => {
   })
 
   test("dayCount 30 → cap", () => {
-    const now = 1000000000
+    const now = Date.now()
+    const todayKey = new Date(now).toLocaleDateString("en-CA")
     const state = {
       lastPassTs: now - DEBOUNCE_MS - 1000,
       lastPassHead: "abc123",
-      dayKey: "2026-08-06",
+      dayKey: todayKey,
       dayCount: 30,
     }
     const result = shouldDispatch(state, now)
@@ -82,14 +84,55 @@ describe("shouldDispatch", () => {
   })
 
   test("dayCount > 30 → cap", () => {
-    const now = 1000000000
+    const now = Date.now()
+    const todayKey = new Date(now).toLocaleDateString("en-CA")
     const state = {
       lastPassTs: now - DEBOUNCE_MS - 1000,
       lastPassHead: "abc123",
-      dayKey: "2026-08-06",
+      dayKey: todayKey,
       dayCount: 31,
     }
     const result = shouldDispatch(state, now)
+    expect(result).toEqual({ go: false, reason: "cap" })
+  })
+
+  test("dayKey rollover resets cap: dayCount 30 from yesterday → one minute after midnight → go", () => {
+    // Set up: one minute after local midnight
+    const date = new Date()
+    date.setHours(0, 1, 0, 0)
+    const afterMidnightMs = date.getTime()
+
+    // State from yesterday with count at 30
+    const yesterday = new Date(afterMidnightMs - 86400000)
+    const yesterdayKey = yesterday.toLocaleDateString("en-CA")
+
+    const state = {
+      lastPassTs: afterMidnightMs - DEBOUNCE_MS - 1000,
+      lastPassHead: "abc123",
+      dayKey: yesterdayKey,
+      dayCount: 30,
+    }
+
+    const result = shouldDispatch(state, afterMidnightMs)
+    expect(result).toEqual({ go: true })
+  })
+
+  test("dayKey same-day cap check: one minute before midnight with dayCount 30 → cap", () => {
+    // Set up: one minute before local midnight
+    const date = new Date()
+    date.setHours(23, 59, 0, 0)
+    const beforeMidnightMs = date.getTime()
+
+    const todayKey = date.toLocaleDateString("en-CA")
+
+    const state = {
+      lastPassTs: beforeMidnightMs - DEBOUNCE_MS - 1000,
+      lastPassHead: "abc123",
+      dayKey: todayKey,
+      dayCount: 30,
+    }
+
+    const result = shouldDispatch(state, beforeMidnightMs)
     expect(result).toEqual({ go: false, reason: "cap" })
   })
 })
@@ -235,6 +278,19 @@ describe("truncateDiff", () => {
     const result = truncateDiff("")
     expect(result.text).toBe("")
     expect(result.truncated).toBe(false)
+  })
+
+  test("multi-byte UTF-8 content respects byte ceiling (not char length)", () => {
+    // CJK character 中 is 3 bytes in UTF-8; repeat to create large byte count
+    const cjkLine = "中".repeat(100) // 300 bytes
+    const diff =
+      "diff --git a/file.ts b/file.ts\n@@ -1,5 +1,5 @@\n" + cjkLine + "\n@@ -10,5 +10,5 @@\nmore"
+    const ceiling = 150 // Much smaller than total byte size
+    const result = truncateDiff(diff, ceiling)
+
+    expect(result.truncated).toBe(true)
+    const resultBytes = Buffer.byteLength(result.text, "utf8")
+    expect(resultBytes).toBeLessThanOrEqual(ceiling)
   })
 })
 
