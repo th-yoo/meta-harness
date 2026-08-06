@@ -64,6 +64,27 @@ re-baseline for haiku work. Sonnet/opus baselines ARE invalidated
 (baseline/candidate/production must share the model), so any opus-5 run
 needs a fresh baseline first.
 
+4. P2 IMPLEMENTATION PLAN COMMITTED (1ffbf86, minimal session) —
+   docs/superpowers/plans/2026-08-06-p2-actuator-binding.md, 6 tasks.
+   RULE FROZE AT THAT COMMIT (spec §3): DONE-CHECK verification rule,
+   looks_done family (v8 verbatim gone -> continuity scoped to MODE,
+   recorded); grep + anti-gaming (file must name a command that RAN) +
+   A3 stop-gate check frozen with it. Key recon facts: agents edit via
+   TOOL calls -> PATH shims can't see them -> A3 = in-container
+   .claude/settings.json Stop-hook gate, gated on Task 1's probe (does
+   claude -p fire hooks in-container? <=4 haiku calls; negative =
+   recorded USER decision point). New p2-run subcommand (never stock
+   run path), --results-file under docs/loop-probes/p2/ + --go fences.
+   SIZED-GO TABLE: <=112 bench executions + <=28 review + <=4 probe
+   haiku calls, ~4-6h tmux. Tasks 2-5 spend-free build.
+   OPEN: (a) execution-approach choice (subagent-driven vs inline),
+   (b) the sized go itself before Task 1 probe + arms.
+
+STANDING OPEN (unchanged): channel chain tmux gaugeverify opus-walled
+(~2 days; on DONE -> |C4| -> C4 sized go); sensor 7-day cadence
+checkpoint from ts 1785996709580 (due 2026-08-13, >=25 events/day);
+yoo-mac sensor arming = own sized go + pull >=6121e53 first.
+
 Wall-clock, computed from recorded `elapsed` in term-bench2/results-archive
 and results/ (SERIAL; mean per attempt, tail dominated by the 600s agent cap):
   haiku-4-5   43 tasks k=1  =  3.0 h measured   (median 1.7 min, mean 4.2)
