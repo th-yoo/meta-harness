@@ -10,11 +10,18 @@ export interface DiffResult {
   diffBase: "range" | "merge-base" | "fallback"
 }
 
+/** execFileSync's default maxBuffer is 1 MiB — a diff bigger than that
+ * would throw, get swallowed to undefined, and silently become "" while
+ * its shortstat companion still reported nonzero counts (final-review
+ * arming-checklist item). 16 MiB covers any realistic accumulated diff;
+ * the 128 KiB prompt ceiling truncates downstream regardless. */
+const GIT_MAX_BUFFER = 16 * 1024 * 1024
+
 /** Run git, returning trimmed-nothing stdout on success or undefined on ANY
  * failure (nonzero exit, missing binary, etc). Never throws. */
 function safeExec(args: string[], repoDir: string): string | undefined {
   try {
-    return execFileSync("git", args, { cwd: repoDir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+    return execFileSync("git", args, { cwd: repoDir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: GIT_MAX_BUFFER })
   } catch {
     return undefined
   }
