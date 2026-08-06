@@ -129,6 +129,14 @@ export function ccgateFastFiles(allTestFiles: string[]): string[] {
   return allTestFiles.filter((f) => !SLOW_CCGATE_TEST_RE.test(f))
 }
 
+/** Spawn-heavy km-crank test file excluded from tier 0. Measured 2026-08-06:
+ * gate-check-cli.test.ts is an end-to-end CLI drive with multi-second
+ * `until()` waits — 13.9s of km-crank's ≈15.8s suite. Basename-anchored for
+ * the same reason as the pull-in rules below (a future directory move must
+ * not silently stop this matching). ONE regex = one policy site (mirrors
+ * SLOW_CCGATE_TEST_RE). */
+export const SLOW_KMCRANK_TEST_RE = /(^|\/)gate-check-cli\.test\.ts$/
+
 /** Suite id -> the package directory its tests live under. Only the suites
  * that currently need it (pull-in self-matching below; Task 3's `Cmd.cwd`
  * derivation) are populated — this is not a claim that every SuiteId has
@@ -198,6 +206,21 @@ const SUITE_POLICY: Partial<Record<SuiteId, SuitePolicy>> = {
         "test/acp-client.test.ts", "test/acp-daemon.test.ts",
         "test/gauge-agent-transport.test.ts", "test/warm-session.test.ts",
       ], guard: CCGATE_GUARD },
+    ],
+  },
+  kmcrank: {
+    slowTestRe: SLOW_KMCRANK_TEST_RE,
+    rules: [
+      // Guardless (the first such rule — see the PullInRule doc comment
+      // above): scripts/gate-check.ts and gate-check-core.ts live OUTSIDE
+      // km-crank/, so a package-prefix guard would make these rules dead
+      // code. That is the whole point — editing the gate's own entry point
+      // or its pure-logic module must pull km-crank's end-to-end CLI test
+      // back into tier 0, or the gate loses its most direct coverage of
+      // itself. gate-check-core.ts is matched basename-anchored per the
+      // convention documented above; do not re-anchor it to a directory.
+      { re: /^scripts\/gate-check\.ts$/, tests: ["test/gate-check-cli.test.ts"] },
+      { re: /(^|\/)gate-check-core\.ts$/, tests: ["test/gate-check-cli.test.ts"] },
     ],
   },
 }

@@ -174,8 +174,25 @@ describe("pullInsFor (suite-keyed pull-in)", () => {
     expect(pullInsFor("ccgate", ["km-crank/src/acp-daemon.ts"])).toEqual([])
   })
   test("suite-keyed, never a flat union: a suite with no configured policy pulls nothing, even for paths that pull for another suite", () => {
-    expect(pullInsFor("kmcrank", ["cc-gate-plugin/src/gauge/acp-daemon.ts"])).toEqual([])
     expect(pullInsFor("opencode", ["cc-gate-plugin/test/warm-session.test.ts"])).toEqual([])
+  })
+  test("kmcrank: a changed slow TEST file pulls itself (second-package self-pull, Task 1 Step 5)", () => {
+    expect(pullInsFor("kmcrank", ["km-crank/test/gate-check-cli.test.ts"]))
+      .toEqual(["test/gate-check-cli.test.ts"])
+  })
+  test("kmcrank: guardless pull-ins for the gate's own entry point and pure-logic module (no package prefix)", () => {
+    expect(pullInsFor("kmcrank", ["scripts/gate-check.ts"]))
+      .toEqual(["test/gate-check-cli.test.ts"])
+    expect(pullInsFor("kmcrank", ["km-crank/src/gate-check-core.ts"]))
+      .toEqual(["test/gate-check-cli.test.ts"])
+  })
+  test("per-rule guard: a scripts/gate-check.ts change pulls the km-crank test while ccgate's guarded rules stay inert for the same path", () => {
+    expect(pullInsFor("kmcrank", ["scripts/gate-check.ts"]))
+      .toEqual(["test/gate-check-cli.test.ts"])
+    expect(pullInsFor("ccgate", ["scripts/gate-check.ts"])).toEqual([])
+  })
+  test("kmcrank pulls nothing for paths outside its own rules, including another suite's slow-covered path", () => {
+    expect(pullInsFor("kmcrank", ["cc-gate-plugin/src/gauge/acp-daemon.ts"])).toEqual([])
   })
 })
 
