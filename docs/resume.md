@@ -3,6 +3,45 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION 2026-08-07 (`yoo-dev` minimal, SITREP-only close) — THREE DECISIONS QUEUED · CHAIN LIKELY FALSE-WALLED
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness), 2026-08-07. git pull FIRST, then the
+yoo-mac P2 block below (its content stands — do not re-dispatch the
+SDD build). Main >= 1b8b12b.
+
+THREE PENDING USER DECISIONS (nothing proceeds without them):
+ 1. P2 MERGE GO — branch worktree-p2-actuator-binding @ 51f1327
+    (pushed): merge via scripts/merge-with-gate.sh; write the
+    docs/reviews artifact from the final-review + re-review records
+    (range merge-base..51f1327). Includes the C1 exit-1->2 fix that
+    saved A3 from being a silent no-op.
+ 2. P2 SPEND GO — per docs/loop-probes/p2/READINESS.md: <=112
+    executions (a1 --go 28 / a3 --go 28 / a4 --go 56) + <=28 A4
+    warm-lane review calls, haiku, est 5.9h / <=7.8h ceiling, serial
+    tmux; then bun scripts/p2-tally.ts -> committed verdict; adoption
+    separate (bar: compliance >=0.75 AND pass@k drop <=0.15 vs A1).
+ 3. CHAIN PROBE-TRANSPORT FIX GO — chain (tmux gaugeverify, alive,
+    "walled" ~2 days) probes opus via probe_models = BARE SDK; measured
+    2026-08-06 ([[probe-429-transport-scoped]]): 429 is per-TRANSPORT,
+    the CLI/agent-SDK lane serves opus while bare SDK 429s. Channel
+    smoke/run ride the agent-SDK transport -> the wall does not apply
+    to the chain's own spend: FALSE-WALLED. Fix = swap the chain's
+    probe to the agent-lane probe (query() + GAUGE_ISOLATION, break on
+    first system/api_retry/result frame), kill + re-arm tmux; it
+    likely fires immediately (smoke 14 + channel 301 gos stand).
+
+STATE: sensor stream healthy (day-1: 2 passes, 7 debounce, 5
+warm-lane-busy — contention real, non-blocking; checkpoint due
+2026-08-13, >=25 events/day from ts 1785996709580). Dogfood 0.3.0/0.4.0
+boundaries recorded (98ed283). techs-reaudit merged (f767dd7).
+
+Rules: sized/merge/spend gos explicit · spec-is-law (P2 amendment
+window closes at FIRST RUN DATUM — still open) · F1/F2 · boundary ts ·
+probe models on the RIGHT transport before premium · SITREP.
+```
+
 ## ✅ SESSION END 2026-08-07 (`yoo-mac`) — P2 SDD RUN COMPLETE: 6 TASKS + FINAL REVIEW + C1 FIX WAVE, BRANCH READY · TWO USER DECISIONS PENDING (merge go, spend go)
 
 **RESUME PROMPT (either host — branch `worktree-p2-actuator-binding` @ `51f1327` pushed):**
