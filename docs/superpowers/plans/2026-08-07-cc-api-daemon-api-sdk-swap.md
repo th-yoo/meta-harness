@@ -1095,6 +1095,26 @@ Adjust the test to the ported modules' real surface. Do not adjust the modules t
 Run: `bun test test/e2e.test.ts`
 Expected: PASS
 
+- [ ] **Step 4a: Re-enable everything Task 1 skipped (gate-debt paydown)**
+
+Task 1 (`bfddddd`) landed green partly by skipping 10 tests across three sites. That is legitimate — they needed a backend that did not exist yet — but a gate makes skipping the path of least resistance, so the debt is paid off here, explicitly, not left to intention. Each site carries an inline re-enable note; this step is what makes it a gated requirement.
+
+| Site | Why it was skipped | Action now |
+|---|---|---|
+| `test/acp-client.test.ts:403` `describe.skip("acp-client e2e (real daemon + SSE stub)")` | dispatches a real turn through a spawned daemon; needed `ApiSession` | drop `.skip`; it now runs against `ApiSession` + the local stub. Do NOT restore the CLI-credentials gate — this backend needs no CLI |
+| `test/acp-daemon.test.ts:907` `describe.skip("acp-daemon over unix socket (reaches the stubbed model)")` | same | same |
+| `test/acp-daemon.test.ts:343` `test.skip("session/cancel sent as a NOTIFICATION …")` | Task 1's placeholder threw synchronously and settled before the cancel notification was processed; a real backend has a first-await point | drop `.skip`. `ApiSession.drain` awaits `sendOne`, so the cancel now has a real window. **If it still fails, that is a finding about `cancel`, not a reason to re-skip** |
+
+Also convert the two `skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)` gates that Task 1 turned into unconditional skips: they must not come back. Credentials are irrelevant on this backend, and a credentials-conditional test is one that silently does not run in CI.
+
+- [ ] **Step 4b: Verify the skip count is zero**
+
+Run: `grep -rn "\.skip\|skipIf" test/`
+Expected: no output. If any skip survives, it needs a written reason in the commit message naming the task that will remove it — an unexplained skip under a green gate is indistinguishable from a passing test.
+
+Run: `bun test`
+Expected: PASS with `0 skip`.
+
 - [ ] **Step 5: Confirm zero spend**
 
 Run: `grep -rn "api.anthropic.com" test/`
