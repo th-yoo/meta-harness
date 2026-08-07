@@ -184,7 +184,11 @@ Delete the whole `export const GAUGE_ISOLATION: WarmIsolation = { … }` block (
 
 - [ ] **Step 3: Fix the resulting `warm-session.ts` references**
 
-`acp-pool.ts` and `acp-daemon.ts` both `import … from "./warm-session.ts"`, which does not exist here. Replace with imports from `./session-contract.ts` (created in Task 2). Until Task 2 lands, comment out the pool's default `makeSession` and leave the parameter required — the ported pool tests all inject a fake, so they still pass.
+`acp-pool.ts` and `acp-daemon.ts` both `import … from "./warm-session.ts"`, which does not exist here.
+
+**Every task must end green** — the repo is gated on `bun test`, so a task that lands with a broken import or a red suite blocks its own commit. Therefore create `src/session-contract.ts` NOW, in this task, with the full contents given in Task 2 Step 3, and point both files at it. Also comment out the pool's default `makeSession` and leave the parameter required — the ported pool tests all inject a fake, so they pass without a backend.
+
+Task 2 then adds the contract's own tests and re-points the daemon's `DispatchableWarm` alias. Splitting it that way keeps each commit green; the original split did not.
 
 - [ ] **Step 4: Strip `src/types.ts`**
 
@@ -197,12 +201,15 @@ Delete `ensureDaemon` (`call.ts:131-136`) and `closeSession` (`call.ts:142-151`)
 - [ ] **Step 6: Run the ported tests**
 
 Run: `bun test`
-Expected: PASS for `acp-wire`, `acp-paths`, `acp-pool`, `acp-client`, `acp-daemon`, `call`. If `acp-daemon.test.ts` fails on a `Pick<WarmSession, …>` type reference, that is Task 2's job — note it and continue.
+Expected: PASS, all files. `acp-daemon.ts`'s `Pick<WarmSession, …>` alias must be re-pointed at `DispatchableSession` here rather than left for Task 2 — the gate blocks a red commit, so nothing may be deferred past the commit that breaks it.
 
 - [ ] **Step 7: Typecheck**
 
 Run: `bunx tsc --noEmit`
-Expected: clean, except any `warm-session.ts` reference left for Task 2.
+Expected: clean. Zero `warm-session.ts` references remain.
+
+Run: `grep -rn "warm-session" src/`
+Expected: no output.
 
 - [ ] **Step 8: Commit**
 
