@@ -228,6 +228,27 @@ reduced to the single-call leaf now that the real client is present."
 
 ### Task 2: Backend-neutral session contract
 
+> **SCOPE REDUCED — Task 1 (`bfddddd`) absorbed half of this task.** The gate
+> forced `session-contract.ts` to land in Task 1 (a broken import cannot
+> commit), and the daemon re-point came with it. So:
+>
+> - **Step 3 (write `session-contract.ts`)** — already done in Task 1. Read the
+>   file as it stands and confirm it matches the block below verbatim; if it
+>   drifted, reconcile now and say which version won and why.
+> - **Step 5 (re-point the daemon)** — already done in Task 1. Verify only:
+>   `grep -rn "DispatchableWarm\|Pick<WarmSession" src/` must return nothing.
+> - **Steps 1, 2, 4, 6, 7 stand as written.**
+>
+> What actually remains is one deliverable: `test/session-contract.test.ts`,
+> proving a minimal object satisfies `DispatchableSession` structurally. Thin,
+> but it stays its own commit — it is the only thing pinning the contract
+> against silent drift once two implementations exist, and Task 4's `ApiSession`
+> is written against it.
+>
+> Adjust Step 7's `git add` list accordingly: `src/session-contract.ts`,
+> `src/acp-daemon.ts` and `src/acp-pool.ts` are already committed, so the
+> commit is the test file alone.
+
 `acp-daemon.ts:92` types dispatch as `Pick<WarmSession, "oneShot" | "cancel">` — borrowed off a concrete agent-SDK class that does not exist in this package. Re-express it as an interface both backends satisfy.
 
 **Files:**
