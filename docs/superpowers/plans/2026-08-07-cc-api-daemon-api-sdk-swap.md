@@ -1165,8 +1165,10 @@ Also convert the two `skipIf(!HAS_CLAUDE_CODE_CREDENTIALS)` gates that Task 1 tu
 
 - [ ] **Step 4b: Verify the skip count is zero**
 
-Run: `grep -rn "\.skip\|skipIf" test/`
-Expected: no output. If any skip survives, it needs a written reason in the commit message naming the task that will remove it — an unexplained skip under a green gate is indistinguishable from a passing test.
+Run: `grep -rn "\.skip\|skipIf\|\.todo" test/`
+Expected: no output. If any survives, it needs a written reason in the commit message naming the task that will remove it — an unexplained non-running test under a green gate is indistinguishable from a passing one.
+
+**`.todo` is in this grep deliberately.** Task 6 (`668777c`) converted two tests from `.skip` to `test.todo` with an excellent written rationale, and noted in-line that `.todo` does not match the original `\.skip\|skipIf` check. That reasoning was sound and the documentation is exemplary — but a `.todo` test does not run, exactly like a `.skip` test, so a check that counts one and not the other measures the marker rather than the thing. Counting both keeps the ledger honest. The two current `.todo`s are accounted for by Task 9 below; they are the only permitted exceptions until it lands.
 
 Run: `bun test`
 Expected: PASS with `0 skip`.
@@ -1321,6 +1323,34 @@ case and the client refuses pre-send (no-call, nothing sent) rather than
 timing out first and billing the record twice on retry. Additive and
 optional: daemons and clients that predate the field are unaffected."
 ```
+
+---
+
+### Task 9: A yield point before the send boundary (NEEDS A RULING FIRST)
+
+**Do not start this without an explicit decision — it is a behavioural change, not a fix.**
+
+Task 6 found, by running the test rather than reasoning about it, that `ApiSession.drain` has no yield point between dequeuing a turn and crossing the send boundary:
+
+```
+this.pending.shift()  →  turn.sent = true  →  sendOne(...)      // all synchronous
+                                                    ↑ first real await is inside
+                                                      client.messages.create()
+```
+
+A `session/cancel` arriving in the **same socket chunk** as its `session/prompt` is decoded in the same synchronous `for (const f of decoder.push(chunk))` pass, but `drain` has already crossed the boundary by then. The turn is sent and billed; the client gets `call-consumed` where it asked for a pre-send cancel.
+
+Upstream `WarmSession` passed the same test only because its first await was a dynamic `import("@anthropic-ai/claude-agent-sdk")` sitting *before* the send boundary — an accidental yield, not a designed one.
+
+**Why this needs a ruling rather than a patch.** The two daemons now share a wire protocol but differ in observable cancel semantics, and the difference costs money: a client that cancels fast enough to preempt on the agent-SDK backend gets billed on this one. That is exactly the class of divergence the fork decision assumed would not happen ("internals may diverge freely — only the wire must agree"). It turns out a purely internal scheduling detail is externally observable through `no-call` vs `call-consumed`.
+
+Three options:
+
+1. **Add the yield** — `await Promise.resolve()` (or a scheduler yield) immediately before `turn.sent = true`, giving the decode loop's queued cancel a turn to run. Cheapest. Risk: 4c/4d's passing FIFO and `queueWaitMs` tests pin the current synchronous ordering, and a yield reorders when `current` is observable. Those tests must be re-read, not just re-run.
+2. **Accept the divergence and document it** — the daemons differ; `no-call` on a same-chunk cancel is not guaranteed on this backend. Cheapest in code, and honest, but it makes the two implementations non-substitutable for any client that relies on pre-send cancel.
+3. **Make it a protocol fact** — report the guarantee (or its absence) in `initialize`'s `_meta.kkamak`, alongside Task 8's `daemonWorstCaseMs`, so a client can know rather than assume. Most work; also the only option under which a client can behave correctly against either daemon without knowing which it got.
+
+When this lands, both `test.todo`s at `test/acp-daemon.test.ts:378` and `:1174` are re-enabled and Step 4b's grep must return nothing.
 
 ---
 
