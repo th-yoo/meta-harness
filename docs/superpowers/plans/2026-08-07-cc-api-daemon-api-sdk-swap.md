@@ -58,17 +58,70 @@ directions in one repo, which is a coordination question, not a technical one.
 
 ---
 
-## Architectural decision this plan encodes (confirm before Task 1)
+## Architecture: RULED — fork (option B), 2026-08-07
 
-The registered plan (`docs/resume.md:222-233`, merge `6417b7a`) called stage two a **`git mv` + package.json** — extracting the *same* daemon. This plan is not that, because the stated intent is `acp − agent-sdk + api-sdk`: a daemon with a **different backend**. That changes move-vs-fork.
+The registered plan (`docs/resume.md:222-233`, merge `6417b7a`) called stage two a **`git mv` + package.json** — extracting the *same* daemon. This is not that: the intent is `acp − agent-sdk + api-sdk`, a daemon with a **different backend**.
 
-Naively you get two ~1900-line copies of the agnostic core, one per backend, and they drift. The `makeSession` seam already rules that out:
+**Ruled: `cc-api-daemon` forks the core. `meta-harness` is not modified and takes no dependency on this package.**
 
-**The package ships the agnostic core plus `ApiSession` as the default backend. `meta-harness` keeps its `WarmSession` (agent SDK, deployed, serves opus) and injects it through `makeSession`.** One copy of the core, two session implementations, each in the repo that needs it.
+The reason the fork is safe here — and this is the load-bearing insight, not a concession:
 
-That requires `makeSession` to be reachable from the daemon's entry point (today the daemon constructs the pool itself). Task 5 threads it.
+> **kkamak is an ACP *client*. It does not need the daemon's code, only the daemon's protocol.**
 
-**This goes beyond the literal formula and needs a yes before Task 1.** The alternative — a standalone fork that duplicates the core — is cheaper today and rots. Also unresolved and NOT blocking Tasks 1-7: whether meta-harness eventually consumes this package at all, and publishing (`claude plugin install` copies only the plugin dir, so a top-level `acp/` is unreachable from the installed copy until published).
+Two implementations of one wire protocol, talking over a unix socket, is what protocols are for. The coupling is **protocol-level, not code-level**. Daemon internals (pool sizing, budgets, session mechanics, cancel semantics) may diverge freely — they are private to each implementation. Only the wire must agree: frame encoding, method names (`initialize`, `session/new`, `session/prompt`, `session/cancel`, `session/close`, `session/update`), error codes (`-32000` no-call, `-32001` call-consumed), and the param/result shapes in `acp-wire.ts`.
+
+Deferred, not cancelled: converging to a shared core later stays cheap as long as the forked files keep their names and structure. Revisit once the api daemon actually runs.
+
+### The one hazard the fork does NOT make safe
+
+`ACP_BUDGET`'s own comment warns that splitting the budget across files silently converts a `call-consumed` into a `no-call` — two model calls billed for one record. Under the fork, **the two halves of that inequality now live in different repos**: kkamak's client budget constant, and this daemon's `daemonWorstCaseMs` (which Task 3 changes from 32 000 to 26 000). Nothing checks it at runtime.
+
+`AcpInitializeResult` already carries a `_meta.kkamak` envelope for exactly this kind of thing:
+
+```ts
+export interface AcpInitializeResult {
+  protocolVersion: number
+  agentCapabilities: { loadSession: false }
+  _meta: { kkamak: { envFingerprint: string } }
+}
+```
+
+**Fix, added as Task 8:** the daemon reports `daemonWorstCaseMs` in that envelope; the client asserts its own budget exceeds it and refuses pre-send (`no-call`, law L1) if not. Additive and backward-compatible — an older client ignoring the field is exactly as safe as it is today. This turns a silent cross-repo drift into a loud, checked, protocol-level contract, and it is the thing that makes the fork defensible rather than merely cheap.
+
+## Singleton semantics — read before Tasks 4 and 5
+
+The daemon is a singleton shared by every kkamak instance on the host. Two consequences the plan must honour.
+
+### It is a singleton PER ENVIRONMENT FINGERPRINT, not one per host
+
+`acp-paths.ts:73-78`:
+
+```ts
+export function socketPath(env) {
+  const fp = envFingerprint(env)            // sha256 of all non-denylisted env, secrets as "KEY=set"
+  return path.join(os.homedir(), ".config", "kkamak", `acp-${fp}.sock`)
+}
+```
+
+The fingerprint is **in the socket filename**. Clients whose environments differ in any non-denylisted variable resolve a *different* socket and get a *different* daemon. `initialize` then re-checks the fingerprint and the client refuses a mismatch pre-send (`no-call`).
+
+So "every kkamak instance shares one daemon" holds only for instances with identical env. This is what stops a client carrying a different `ANTHROPIC_*` credential from being silently served by a daemon holding someone else's — which matters more on this backend than upstream, because `ApiSession` resolves auth from the **daemon's** env, not the caller's. Do not weaken the fingerprint, and do not add anything to `ACP_ENV_DENYLIST` without understanding that it merges two previously-separate daemons.
+
+### `recycle` becomes a privacy AND billing guard, not a nicety
+
+`acp-daemon.ts:306-336`:
+
+```ts
+const { entry, mustRecycle } = acquired
+const recycle = mustRecycle && lastSessionForEntry !== sessionId
+const outcome = await warm.oneShot(text, model, { recycle, tag })
+```
+
+The pool reuses an idle entry whose isolation is deep-equal — **across clients**. `recycle` is what clears the carried-over conversation when the entry last served a *different* session.
+
+Upstream, a missed recycle means a CLI subprocess retains context. On this backend it is sharper and directly billed: `ApiSession.history` is the literal `messages` array, so a missed recycle **puts another kkamak instance's prompts and replies into this client's HTTP request body**, sends them to the API, and pays input tokens for them.
+
+Task 4c already implements `recycle: true → history = []`. Given the singleton, that is a security property and needs its own test — added as Task 4c Step 3a below. Do not treat it as covered by the history tests.
 
 ---
 
@@ -735,6 +788,39 @@ Expected: FAIL — `s.oneShot is not a function`
   }
 ```
 
+- [ ] **Step 3a: Cross-client leak test (singleton safety — do not skip)**
+
+The daemon is shared by every kkamak instance with the same env fingerprint, and the pool hands one idle entry to whichever client asks next. This test asserts that a recycled entry carries nothing across. A failure here is one project's prompts being sent to the API inside another project's request and billed to it.
+
+```ts
+test("a recycled session leaks nothing from the previous client", async () => {
+  const s = new ApiSession(stubEnv(), warmOpts())
+  respondWith({ content: [{ type: "text", text: "alpha-reply" }], model: "claude-haiku-4-5" })
+  await s.oneShot("SECRET-FROM-CLIENT-A", "claude-haiku-4-5", { recycle: false })
+
+  // the pool hands this same entry to a different session -> recycle: true
+  respondWith({ content: [{ type: "text", text: "beta-reply" }], model: "claude-haiku-4-5" })
+  await s.oneShot("client-B-prompt", "claude-haiku-4-5", { recycle: true })
+
+  const sent = JSON.stringify(lastRequestBody())
+  expect(sent).not.toContain("SECRET-FROM-CLIENT-A")
+  expect(sent).not.toContain("alpha-reply")
+  expect(lastRequestBody().messages).toEqual([{ role: "user", content: "client-B-prompt" }])
+  s.close()
+})
+
+test("close() drops history so a reaped entry cannot resurrect it", async () => {
+  const s = new ApiSession(stubEnv(), warmOpts())
+  respondWith({ content: [{ type: "text", text: "r" }], model: "claude-haiku-4-5" })
+  await s.oneShot("SECRET", "claude-haiku-4-5", { recycle: false })
+  s.close()
+  expect((s as unknown as { history: unknown[] }).history).toEqual([])
+})
+```
+
+Run: `bun test test/api-session.test.ts -t "leak"`
+Expected: PASS (Task 4b's `close()` already empties `history`; Task 4c's `recycle` already clears it — this pins both against regression).
+
 - [ ] **Step 4: Widen `sendOne` to take a message array**
 
 `sendOne` currently builds `messages: [{role:"user", content: outgoingText}]` internally. Add `opts.messages?: Array<{role:"user"|"assistant"; content:string}>` and use it when present, falling back to the single-message shape otherwise so `test/call.test.ts` stays byte-unchanged.
@@ -1057,6 +1143,111 @@ waitMs and closeSession are real now; the no-socket/no-daemon claims are
 gone. Adds the makeSession backend seam, the send boundary's location, and
 the history-advances-only-on-ok rule."
 ```
+
+---
+
+### Task 8: Publish the daemon's budget on the wire
+
+Under the fork, kkamak's client budget and this daemon's `daemonWorstCaseMs` live in different repos with nothing checking `client > daemon`. A drift converts a `call-consumed` into a `no-call` — the client concludes nothing was sent and retries, so one record is billed twice. Make the contract checkable at runtime.
+
+**Files:**
+- Modify: `src/acp-wire.ts` (`AcpInitializeResult`), `src/acp-daemon.ts` (initialize handler), `src/acp-client.ts` (initialize response handling)
+- Modify: `test/acp-wire.test.ts`, `test/acp-client.test.ts`
+
+**Interfaces:**
+- Consumes: `ACP_BUDGET` (Task 3), `AcpInitializeResult` (Task 1)
+- Produces: `AcpInitializeResult._meta.kkamak.daemonWorstCaseMs?: number`
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// test/acp-client.test.ts
+test("a daemon whose worst case exceeds the client budget is refused pre-send", async () => {
+  const env = fakeDaemonEnv({
+    initializeMeta: { kkamak: { envFingerprint: fpOf(env), daemonWorstCaseMs: 999_000 } },
+  })
+  const out = await daemonCall("x", "claude-haiku-4-5", env, { isolation: ISO })
+  expect(out.kind).toBe("no-call")   // law L1: refused before anything was sent
+})
+
+test("a daemon that omits the field is accepted — older daemons stay compatible", async () => {
+  const env = fakeDaemonEnv({ initializeMeta: { kkamak: { envFingerprint: fpOf(env) } } })
+  expect(await ensureDaemon(env, { waitMs: 2_000 })).toBe(true)
+})
+```
+
+- [ ] **Step 2: Run and watch the first fail**
+
+Run: `bun test test/acp-client.test.ts -t "worst case"`
+Expected: FAIL — the client currently ignores the field and proceeds.
+
+- [ ] **Step 3: Widen the result type**
+
+```ts
+// acp-wire.ts
+export interface AcpInitializeResult {
+  protocolVersion: number
+  agentCapabilities: { loadSession: false }
+  _meta: {
+    kkamak: {
+      envFingerprint: string
+      /** The daemon's own worst-case turn budget. ADDITIVE and OPTIONAL: a
+       * daemon that predates this field is exactly as safe as it was, and a
+       * client that ignores it is too. Present so the
+       * `clientBudget > daemonWorstCase` contract survives the two sides
+       * living in separate repos — a drift there bills one record twice. */
+      daemonWorstCaseMs?: number
+    }
+  }
+}
+```
+
+- [ ] **Step 4: Report it from the daemon**
+
+In `acp-daemon.ts`'s `initialize` handler, add `daemonWorstCaseMs: ACP_BUDGET.daemonWorstCaseMs` alongside the existing `envFingerprint`.
+
+- [ ] **Step 5: Enforce it in the client**
+
+In `acp-client.ts`, immediately after the existing fingerprint check (same refusal path, same `no-call` classification — nothing has been sent yet):
+
+```ts
+const dw = init._meta?.kkamak?.daemonWorstCaseMs
+if (typeof dw === "number" && dw >= clientBudgetMs) {
+  // Pre-send refusal, law L1. Proceeding would let the client time out
+  // BEFORE the daemon does, report no-call for a turn the daemon may still
+  // deliver, and bill the record twice on retry.
+  return { kind: "no-call" }
+}
+```
+
+- [ ] **Step 6: Run the tests**
+
+Run: `bun test && bunx tsc --noEmit`
+Expected: both clean.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/acp-wire.ts src/acp-daemon.ts src/acp-client.ts test/
+git commit -m "publish daemonWorstCaseMs on initialize; client refuses a too-slow daemon
+
+The client-budget > daemon-worst-case contract used to hold because both
+numbers lived in one object. Forked from meta-harness, they now live in
+separate repos with nothing checking them. The daemon reports its own worst
+case and the client refuses pre-send (no-call, nothing sent) rather than
+timing out first and billing the record twice on retry. Additive and
+optional: daemons and clients that predate the field are unaffected."
+```
+
+---
+
+## Open question this plan does NOT answer: who starts the singleton
+
+`acp-client.ts:402 spawnDaemonProcess` spawns via `Bun.spawn(["bash","-c","nohup … &"])`, and `acp-client.ts:392` resolves the daemon entry point by **sibling path** inside the plugin tree. A standalone package has no such sibling. `ensureDaemon` connects-or-spawns; `daemonCall` never spawns.
+
+So before this daemon can serve a kkamak client, someone must decide how it gets launched and how a client finds its entry point — an installed binary on `PATH`, a `bunx` invocation, a systemd/launchd unit, or a `SessionStart` hook. Cross-host matters here too: transfer is git-only, and this must work on both `yoo-dev` (WSL2) and `yoo-mac` (darwin).
+
+Not blocking Tasks 1-8, which build and test the daemon in-process. Blocking any real kkamak-to-daemon use. Decide it before wiring a live client.
 
 ---
 
