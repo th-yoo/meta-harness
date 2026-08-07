@@ -1006,6 +1006,27 @@ this.makeSession = opts.makeSession ?? ((e, warmOpts) => new ApiSession(e, warmO
 
 `acp-daemon.ts` constructs its `SessionPool` internally. Add an optional `makeSession` to the daemon's own options and pass it straight through, so a host that wants a different backend supplies one at the top. Default stays `ApiSession` via the pool.
 
+- [ ] **Step 4a: Delete the duplicate in-process client (do this BEFORE Step 5)**
+
+As of Task 4a the package contains **two complete implementations of the same three names**:
+
+```
+src/call.ts        daemonCall, ensureDaemon, closeSession   in-process, currently EXPORTED by index.ts
+src/acp-client.ts  daemonCall, closeSession, ensureDaemon   the real ACP client, currently unexported
+```
+
+Task 1 Step 5 was supposed to delete the `call.ts` trio and did not — with `index.ts` still exporting them, deleting would have broken the build and turned the commit red. The gate made duplication cheap and deletion expensive. That is understandable and it is now debt: shipping both means the public surface is the old single-process library while the daemon it is named for sits unreachable behind it.
+
+Resolve it here, in this order, so no intermediate state is red:
+
+1. Point `index.ts` at `./acp-client.ts` for `ensureDaemon`, `daemonCall`, `closeSession` (Step 5 does this — do it first).
+2. Delete `daemonCall`, `ensureDaemon` and `closeSession` from `src/call.ts`. `sendOne` is all that remains there; it is the leaf `ApiSession` calls.
+3. **Reconcile the signatures.** `acp-client.ts`'s `daemonCall` is not shape-compatible with `call.ts`'s — it takes the client-side options and returns `DaemonOutcome` with a `sessionId`, and `ensureDaemon` takes a real `waitMs` because there is now a daemon to wait for. Update `scripts/smoke.ts`, which calls the old shapes and will not compile otherwise.
+4. Verify: `grep -rn "from \"./call.ts\"" src/` — only `api-session.ts` (importing `sendOne`) should appear.
+
+Run: `bun test && bunx tsc --noEmit`
+Expected: both clean. `scripts/smoke.ts` is not covered by the suite — typecheck is what catches it, so do not skip the tsc run.
+
 - [ ] **Step 5: Rewrite `src/index.ts`**
 
 ```ts
