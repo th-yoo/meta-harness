@@ -1091,19 +1091,33 @@ Prove client → unix socket → daemon → `ApiSession` → stubbed HTTP, with 
 
 - [ ] **Step 1: Write the failing test**
 
+**CORRECTION — `serveDaemon` does not exist.** `acp-daemon.ts` exports only
+`DaemonState`, `createDaemonState` and `createDispatcher`; every runtime side
+effect is behind `import.meta.main`, so the daemon is a *script*, not a
+callable. Do not invent a `serveDaemon` to satisfy this test.
+
+Use the real path instead: `ensureDaemon(env, {waitMs})` connect-or-spawns via
+`acp-client.ts:395`'s `DAEMON_ENTRY = path.join(import.meta.dir,
+"acp-daemon.ts")` — sibling resolution inside the package's own `src/`, spawned
+as `bun <path>`, which travels with the package into `node_modules`. That makes
+the e2e exercise the actual launch path rather than a test-only entry point.
+
+Give each test its own socket directory so a spawned daemon cannot outlive it
+into another test, and kill the spawned process in `afterEach` — a daemon that
+survives the run wedges the next one on a stale socket.
+
 ```ts
 // test/e2e.test.ts
 import { test, expect, afterEach } from "bun:test"
 import { ensureDaemon, daemonCall, closeSession } from "../src/index.ts"
-import { serveDaemon } from "../src/acp-daemon.ts"
 import { ISO, stubEnv, respondWith } from "./helpers.ts"
 
-let stop: (() => Promise<void>) | undefined
-afterEach(async () => { await stop?.(); stop = undefined })
+let cleanup: (() => void) | undefined
+afterEach(() => { cleanup?.(); cleanup = undefined })
 
-test("a turn round-trips client -> socket -> daemon -> ApiSession -> stub", async () => {
+test("a turn round-trips client -> socket -> spawned daemon -> ApiSession -> stub", async () => {
   const env = { ...stubEnv(), KKAMAK_ACP_SOCKET_DIR: `/tmp/cc-api-daemon-e2e-${crypto.randomUUID()}` }
-  stop = await serveDaemon(env)
+  // connect-or-spawn: this is what actually starts the daemon in production
   expect(await ensureDaemon(env, { waitMs: 5_000 })).toBe(true)
 
   respondWith({ content: [{ type: "text", text: "pong" }], model: "claude-haiku-4-5-20251001" })
