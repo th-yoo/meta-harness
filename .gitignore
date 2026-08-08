@@ -16,3 +16,12 @@ term-bench2/leaderboard/cache/
 
 # km-panic escape hatch (host-local, never commit a disabled gate)
 gate.json.disabled
+
+# Agent worktrees: nested git repos, host-local by construction. Left
+# visible to `git add -A`, each one makes gate-check's dirtyTreeId() emit
+# "warning: adding embedded git repository" — noise that flooded the 4096-
+# byte block-reason tail and hid a real test failure (2026-08-08) — and
+# folds worktree content into the tree hash, so an edit under a worktree
+# reads as a repo change to tier-0 suite selection. Branches are unaffected:
+# ignoring the checkout never touches the refs it points at.
+.claude/worktrees/
