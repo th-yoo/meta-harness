@@ -113,14 +113,96 @@ describe("env pinning", () => {
     await daemonCall("hi again", MODEL, secondEnv, { isolation })
 
     expect(seenEnvs.length).toBe(2)
-    // The underlying package call received the FIRST env both times, not
-    // whatever each caller passed.
-    expect(seenEnvs[0]).toBe(firstEnv)
-    expect(seenEnvs[1]).toBe(firstEnv)
+    // The underlying package call received the FIRST env's CONTENT both
+    // times, not whatever each caller passed. Content equality, not
+    // reference identity: pinnedEnv snapshots (`{ ...env }`) rather than
+    // holding onto the caller's own object, so this is deliberately
+    // `toEqual`, not `toBe`.
+    expect(seenEnvs[0]).toEqual(firstEnv)
+    expect(seenEnvs[1]).toEqual(firstEnv)
     expect(envFingerprint(seenEnvs[0]!)).toBe(envFingerprint(seenEnvs[1]!))
     // And it differs from what the SECOND caller's own env would have
     // fingerprinted to, proving this isn't a coincidence of equal content.
     expect(envFingerprint(seenEnvs[1]!)).not.toBe(envFingerprint(secondEnv))
+  })
+
+  test("pinning SNAPSHOTS the env — mutating the caller's original object after first use does not drift the pinned content", async () => {
+    const seenEnvs: Array<Record<string, string | undefined>> = []
+    resetAcpClientSingleton({
+      daemonCall: async (_text, _model, env) => {
+        seenEnvs.push(env)
+        return { kind: "no-call" } satisfies DaemonOutcome
+      },
+    })
+    const isolation = { title: "t", tools: [] } as unknown as Parameters<typeof daemonCall>[3]["isolation"]
+
+    // The realistic first caller is `process.env` — a live object the rest
+    // of the process goes on mutating. Simulate that here: mutate the SAME
+    // object instance after it has already been pinned.
+    const liveEnv: Record<string, string | undefined> = { HOME: "/tmp/live", MARKER: "before" }
+    await daemonCall("hi", MODEL, liveEnv, { isolation })
+    liveEnv.MARKER = "after-mutation"
+    await daemonCall("hi again", MODEL, liveEnv, { isolation })
+
+    expect(seenEnvs.length).toBe(2)
+    // Had this module held a REFERENCE, both calls would have observed
+    // "after-mutation" (the mutation happened on the same object both
+    // calls were handed). A snapshot freezes the first call's content.
+    expect(seenEnvs[0]!.MARKER).toBe("before")
+    expect(seenEnvs[1]!.MARKER).toBe("before")
+  })
+
+  test("a mismatched later env produces a console.error diagnostic, and the pinned env still wins", async () => {
+    resetAcpClientSingleton({
+      daemonCall: async () => ({ kind: "no-call" }) satisfies DaemonOutcome,
+    })
+    const isolation = { title: "t", tools: [] } as unknown as Parameters<typeof daemonCall>[3]["isolation"]
+
+    const originalConsoleError = console.error
+    const errorCalls: unknown[][] = []
+    console.error = (...args: unknown[]) => {
+      errorCalls.push(args)
+    }
+    try {
+      const firstEnv = { HOME: "/tmp/first", MARKER: "one" }
+      await daemonCall("hi", MODEL, firstEnv, { isolation })
+      expect(errorCalls.length).toBe(0) // first use pins silently, nothing to compare against yet
+
+      const mismatchedEnv = { HOME: "/tmp/second", MARKER: "two" }
+      await daemonCall("hi again", MODEL, mismatchedEnv, { isolation })
+    } finally {
+      console.error = originalConsoleError
+    }
+
+    expect(errorCalls.length).toBe(1)
+    const message = String(errorCalls[0]![0])
+    expect(message).toContain("acp-client-singleton")
+    expect(message).toContain("env mismatch")
+    expect(message).toContain(envFingerprint({ HOME: "/tmp/first", MARKER: "one" }))
+    expect(message).toContain(envFingerprint({ HOME: "/tmp/second", MARKER: "two" }))
+  })
+
+  test("a REPEATED matching env produces no diagnostic", async () => {
+    resetAcpClientSingleton({
+      daemonCall: async () => ({ kind: "no-call" }) satisfies DaemonOutcome,
+    })
+    const isolation = { title: "t", tools: [] } as unknown as Parameters<typeof daemonCall>[3]["isolation"]
+
+    const originalConsoleError = console.error
+    const errorCalls: unknown[][] = []
+    console.error = (...args: unknown[]) => {
+      errorCalls.push(args)
+    }
+    try {
+      const env = { HOME: "/tmp/same", MARKER: "x" }
+      await daemonCall("hi", MODEL, env, { isolation })
+      // A DIFFERENT object, same content — must not be treated as a mismatch.
+      await daemonCall("hi again", MODEL, { HOME: "/tmp/same", MARKER: "x" }, { isolation })
+    } finally {
+      console.error = originalConsoleError
+    }
+
+    expect(errorCalls.length).toBe(0)
   })
 
   test("ensureDaemon and daemonCall/closeSession share the same pinned env", async () => {
@@ -150,9 +232,10 @@ describe("env pinning", () => {
 
     expect(envFingerprint(seenByEnsure[0]!)).toBe(envFingerprint(seenByCall[0]!))
     expect(envFingerprint(seenByCall[0]!)).toBe(envFingerprint(seenByClose[0]!))
-    // All three literally received the FIRST caller's env object.
-    expect(seenByCall[0]).toBe(firstCallerEnv)
-    expect(seenByClose[0]).toBe(firstCallerEnv)
+    // All three received the FIRST caller's env CONTENT (a snapshot, not
+    // the same object — see the snapshot-vs-reference test above).
+    expect(seenByCall[0]).toEqual(firstCallerEnv)
+    expect(seenByClose[0]).toEqual(firstCallerEnv)
   })
 })
 

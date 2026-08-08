@@ -51,6 +51,7 @@ import {
   ensureDaemon as pkgEnsureDaemon,
   daemonCall as pkgDaemonCall,
   closeSession as pkgCloseSession,
+  envFingerprint,
   type DaemonOutcome,
   type WarmIsolation,
 } from "@th-yoo/cc-api-daemon"
@@ -91,7 +92,23 @@ let ensureInFlight: Promise<boolean> | undefined
  * clean in-flight slot, and most tests need fakes so `bun test` never
  * spawns a real daemon or reads real credentials). Call with no argument to
  * restore the real package functions; call with a partial override to
- * inject fakes for the functions a given test cares about. */
+ * inject fakes for the functions a given test cares about.
+ *
+ * NON-OPTIONAL for any test that routes through this singleton: call this
+ * in `beforeEach`/`afterEach`, not just once at the top of the file. `bun
+ * test` does NOT reset the module registry between test FILES by default —
+ * a `capturedEnv` pinned by whichever test happened to run first stays
+ * pinned for every test file that imports this module afterward in the
+ * same `bun test` process. Concretely: if a future test routes through this
+ * singleton the way `test/review-sensor-runner-daemon.test.ts` currently
+ * routes through the package's trio DIRECTLY (bypassing this module, so it
+ * is NOT at risk today), an earlier file's leftover `capturedEnv` would
+ * silently redirect that test's `ensureDaemon` probe away from its own
+ * `tempEnv`-scoped fake discovery file. `ensureDaemon`'s probe-miss
+ * fallback is to SPAWN A REAL DAEMON PROCESS — exactly the outcome that
+ * test's own header and the package's CLAUDE.md both treat as
+ * non-negotiable never-happens-in-`bun test`. This comment exists so that
+ * refactor does not silently reintroduce a real daemon spawn into the gate. */
 export function resetAcpClientSingleton(injected?: Partial<AcpClientSingletonDeps>): void {
   deps = injected ? { ...packageDeps, ...injected } : packageDeps
   capturedEnv = undefined
@@ -104,9 +121,42 @@ export function resetAcpClientSingleton(injected?: Partial<AcpClientSingletonDep
  * signature-compatible with the package's) but ignored in favor of the
  * captured one. That is the point: it is precisely the "whatever env this
  * particular call site happens to be holding" divergence that fragments
- * consumers onto different daemons. */
+ * consumers onto different daemons.
+ *
+ * SNAPSHOTTED, not referenced (`{ ...env }`, not `capturedEnv = env`): the
+ * realistic caller is `process.env`, which the process goes on mutating
+ * for the rest of its life (a derived var set later, a credential
+ * refreshed). A REFERENCE would let the "pinned" content silently drift
+ * out from under the very stability guarantee this module exists to
+ * provide — "captured once" (module header) means the CONTENT is frozen at
+ * first use, not that this module merely remembers which object to keep
+ * re-reading. A snapshot also makes the mismatch check below meaningful:
+ * comparing against a moving target would make `envFingerprint(capturedEnv)`
+ * itself unstable, which defeats the point of computing it.
+ *
+ * SILENT override would be its own hazard once a second real call site
+ * exists in one process (the module header names anthropic-cli-warm.ts as
+ * exactly that future consumer): "first wins" is correct and stays, but a
+ * later caller handing this a DELIBERATELY different env (an isolated
+ * HOME, a derived var) with no way to ever notice the redirect is not.
+ * Diagnostic only, never throws — matches runner.ts:305's own
+ * logged-not-inspected `console.error` style: a caller cannot opt out of
+ * "first wins" by handing this a different env, but it CAN see, after the
+ * fact, that its env was overridden and by how much the fingerprints
+ * differed. */
 function pinnedEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
-  if (capturedEnv === undefined) capturedEnv = env
+  if (capturedEnv === undefined) {
+    capturedEnv = { ...env }
+    return capturedEnv
+  }
+  const incomingFp = envFingerprint(env)
+  const pinnedFp = envFingerprint(capturedEnv)
+  if (incomingFp !== pinnedFp) {
+    console.error(
+      `acp-client-singleton: env mismatch — pinned fingerprint ${pinnedFp}, caller passed ${incomingFp}; ` +
+        `keeping the pinned env (first-use wins, see module header) rather than the caller's own`,
+    )
+  }
   return capturedEnv
 }
 
