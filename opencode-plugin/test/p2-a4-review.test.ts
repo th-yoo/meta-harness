@@ -24,7 +24,7 @@ import {
   runA4Review,
 } from "../src/bench/p2/a4-review.ts"
 import { P2_RULE_TEXT } from "../src/bench/p2/rule.ts"
-import type { DaemonOutcome } from "../../cc-gate-plugin/src/acp/index.ts"
+import type { DaemonOutcome } from "@th-yoo/cc-api-daemon"
 
 // ── constants ────────────────────────────────────────────────────────────
 

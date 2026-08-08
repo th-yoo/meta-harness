@@ -11,10 +11,33 @@
  * exercise it entirely through the injected `deps` seam. Task 4 wires the
  * default (real) deps at the actual call site.
  *
- * The ACP warm lane is imported ONLY from `cc-gate-plugin/src/acp/index.ts`
- * — that file's own header states this is the sole sanctioned entry point
- * ("production code outside src/acp/ imports from THIS FILE, never from a
- * module inside src/acp/ directly").
+ * The ACP warm lane is imported from the published `@th-yoo/cc-api-daemon`
+ * package, not from `cc-gate-plugin/src/acp/index.ts` — deliberately, not by
+ * omission. A4 pins `A4_MODEL` to haiku (below), and the package's own
+ * `routeBackend` sends every `*haiku*` model to its per-session `api` lane
+ * (`ApiSession`), which bypasses the session pool entirely. The in-repo
+ * `cc-gate-plugin/src/acp/` client's pool is capped at 4 warm slots; routing
+ * A4's haiku traffic through the package instead keeps it off that ceiling
+ * rather than competing with every other pooled consumer for one of the 4.
+ *
+ * KNOWN LIMITATION, package-level, not fixable from this file: the api lane
+ * (`call.ts`'s `sendOne`, reached via `ApiSession.drain`) hardcodes
+ * `DEFAULT_MAX_TOKENS = 2_048` for every turn. Neither `daemonCall`'s opts
+ * (`{ isolation, budgetMs? }`) nor the ACP wire's `session/prompt` params
+ * carry a `maxTokens` field, so nothing in this file — or any other
+ * consumer of the package — can raise that cap. `buildA4ReviewPrompt` asks
+ * for `{"complied": bool, "requiredEdits": [...]}` with no bound on
+ * `requiredEdits`; a reply whose JSON would exceed 2048 output tokens
+ * truncates mid-object, `parseA4Review` fails to parse it, `runA4Review`
+ * returns `undefined`, and the caller treats that as `reviewFailed` and
+ * skips the re-pass. This fails safe (no crash, no corrupted state) but
+ * SILENTLY — nothing here distinguishes "reviewer found no issues" from
+ * "reviewer's output got cut off". Since A4 (host-side review + reinject)
+ * is one arm in a carrier comparison, a silent truncation would make that
+ * arm under-perform for an instrumentation reason rather than a real one,
+ * biasing the comparison. Watch for this in P2 results — e.g. reviewFailed
+ * runs worth inspecting for a truncated tail — rather than assuming every
+ * reviewFailed reflects the reviewer actually failing to review.
  *
  * close-not-release: like the review sensor (acp-client.ts's own doc:
  * "Close the pool entry that served a session (review-sensor spec §2:
@@ -25,7 +48,7 @@
  * turns out to prove the wrong model or fail to parse: the session was
  * created and consumed either way, so it must not leak.
  */
-import { ensureDaemon, daemonCall, closeSession, modelProvenBy, type WarmIsolation } from "../../../../cc-gate-plugin/src/acp/index.ts"
+import { ensureDaemon, daemonCall, closeSession, modelProvenBy, type WarmIsolation } from "@th-yoo/cc-api-daemon"
 import { P2_RULE_TEXT } from "./rule.ts"
 
 /** Frozen review model (plan §Arms) — haiku, not the model under review. */
