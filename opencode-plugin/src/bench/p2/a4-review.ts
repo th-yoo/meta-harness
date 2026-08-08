@@ -20,6 +20,25 @@
  * A4's haiku traffic through the package instead keeps it off that ceiling
  * rather than competing with every other pooled consumer for one of the 4.
  *
+ * KNOWN LIMITATION, package-level, not fixable from this file: the api lane
+ * (`call.ts`'s `sendOne`, reached via `ApiSession.drain`) hardcodes
+ * `DEFAULT_MAX_TOKENS = 2_048` for every turn. Neither `daemonCall`'s opts
+ * (`{ isolation, budgetMs? }`) nor the ACP wire's `session/prompt` params
+ * carry a `maxTokens` field, so nothing in this file — or any other
+ * consumer of the package — can raise that cap. `buildA4ReviewPrompt` asks
+ * for `{"complied": bool, "requiredEdits": [...]}` with no bound on
+ * `requiredEdits`; a reply whose JSON would exceed 2048 output tokens
+ * truncates mid-object, `parseA4Review` fails to parse it, `runA4Review`
+ * returns `undefined`, and the caller treats that as `reviewFailed` and
+ * skips the re-pass. This fails safe (no crash, no corrupted state) but
+ * SILENTLY — nothing here distinguishes "reviewer found no issues" from
+ * "reviewer's output got cut off". Since A4 (host-side review + reinject)
+ * is one arm in a carrier comparison, a silent truncation would make that
+ * arm under-perform for an instrumentation reason rather than a real one,
+ * biasing the comparison. Watch for this in P2 results — e.g. reviewFailed
+ * runs worth inspecting for a truncated tail — rather than assuming every
+ * reviewFailed reflects the reviewer actually failing to review.
+ *
  * close-not-release: like the review sensor (acp-client.ts's own doc:
  * "Close the pool entry that served a session (review-sensor spec §2:
  * close-not-release)"), an A4 review session is used exactly once and then
