@@ -3,6 +3,48 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-08 (`yoo-mac` "minimal" session, cleared) — P2 MERGED TO MAIN (`17d164c`) · DECISION 1 OF 3 DONE
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness), post-2026-08-08. git pull FIRST.
+Main >= ff74112 (sibling sessions active: review-sensor test pins,
+tier-1 opencode coverage fix, Loop D merge-state forensics in the
+gauntlet ledger — read git log since 17d164c before assuming state).
+
+P2 IS MERGED (decision 1 executed 08-07 with user go): merge 17d164c
+via 7b gate, artifact docs/reviews/51f1327-p2-actuator-binding.md,
+branch deleted, P2 suites re-proven on main (81/0 + 27/0), SDD ledger
+copied to main-checkout .superpowers/sdd/2026-08-06-p2-actuator-binding/
+(yoo-mac host-local; delete after the run verdict). Do NOT re-dispatch
+any P2 build task; the build is done and reviewed. C1 lesson stands:
+probe the CONSEQUENCE, not just the capability.
+
+REMAINING DECISIONS (were 2 and 3 in the 08-07 SITREP block below):
+ A. P2 BENCH SPEND GO — docs/loop-probes/p2/READINESS.md: <=112
+    container executions (a1 --go 28 / a3 --go 28 / a4 --go 56) + <=28
+    A4 warm-lane review calls, claude-haiku-4-5, est 5.9h / <=7.8h
+    ceiling (A3 block-reprompt cost unmodeled — ceiling not point),
+    serial tmux. Results docs/loop-probes/p2/<hostname>-p2-<arm>-
+    results.json, then bun scripts/p2-tally.ts -> committed verdict.
+    Adoption separate (bar: compliance >=0.75 AND pass@k drop <=0.15
+    vs A1). PRE-DATA AMENDMENT WINDOW CLOSES AT FIRST RUN DATUM.
+ B. CHAIN PROBE-TRANSPORT FIX GO — office tmux: 429 is per-TRANSPORT,
+    chain false-walled on bare-SDK probe while agent-SDK lane serves
+    opus; swap probe to agent-lane, re-arm (smoke 14 + channel 301 gos
+    stand).
+STANDING OPENS: TB2 batch (haiku first, probe on the RIGHT transport),
+yoo-mac sensor arming go (prereqs met: >=6121e53 pulled, 0.4.0 cache),
+C4 after base rate, sensor 08-13 checkpoint (>=25 events/day from ts
+1785996709580), unified-ACP-daemon plan (docs only, unexecuted).
+
+Rules: explicit user go before main merges AND spend · spec-is-law,
+pre-data amendments only · 7b merge gate + artifact · F1/F2 · boundary
+ts on instrument changes · isolated worktrees per implementer
+(lineage-merge first — they branch from origin/main) · probe models on
+the right transport · SITREP.
+```
+
 ## ✅ SESSION 2026-08-07 (`yoo-dev` minimal, SITREP-only close) — THREE DECISIONS QUEUED · CHAIN LIKELY FALSE-WALLED
 
 **RESUME PROMPT:**
