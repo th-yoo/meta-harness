@@ -9,6 +9,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { tmpdir } from "node:os"
 import { execFileSync, spawn, spawnSync } from "node:child_process"
+import { realCommands } from "../../scripts/gate-check.ts"
 
 const GATE_CHECK = path.join(import.meta.dir, "..", "..", "scripts", "gate-check.ts")
 const CLEANUP: string[] = []
@@ -320,4 +321,39 @@ describe("gate-check CLI", () => {
     const args = fs.readFileSync(path.join(dir, "args.txt"), "utf8")
     expect(args).not.toContain("test/acp-daemon.test.ts")   // append skipped: no filter narrowing
   }, 30_000)
+})
+
+describe("realCommands() — tier-1 full command (2026-08-08 blind-spot regression)", () => {
+  // Calls the REAL realCommands(), not a re-typed copy of its argv string —
+  // a plain substring check on a hand-copied literal would pass even if the
+  // real command drifted, since it'd just be comparing the test's own copy
+  // against itself. Parsing the actual returned `cd <dir> && bun test`
+  // sequence structurally means this only passes if realCommands() itself
+  // still runs opencode-plugin's suite, in the right place in the chain.
+  test("full.argv's bash -c script runs `bun test` in opencode-plugin, between cc-gate-plugin and gate-plugin", () => {
+    const table = realCommands()
+    expect(table.full.argv[0]).toBe("bash")
+    expect(table.full.argv[1]).toBe("-c")
+    const script = table.full.argv[2]!
+    let cwd = "."
+    const dirsRunningBunTest: string[] = []
+    for (const step of script.split(" && ")) {
+      const cdMatch = step.match(/^cd (\S+)$/)
+      if (cdMatch) { cwd = path.normalize(path.join(cwd, cdMatch[1])); continue }
+      if (step === "bun test") dirsRunningBunTest.push(cwd)
+    }
+    // Before the 2026-08-08 fix, this was
+    // ["cc-gate-plugin", "gate-plugin", "km-crank"] — opencode-plugin
+    // simply never appeared. Pin the full ordered sequence (not just
+    // `.toContain`) so a future reorder that puts opencode-plugin somewhere
+    // that never actually runs (e.g. after a step that already failed and
+    // short-circuited the `&&` chain) still fails this test.
+    expect(dirsRunningBunTest).toEqual(["cc-gate-plugin", "opencode-plugin", "gate-plugin", "km-crank"])
+  })
+
+  test("full.argv's bash -c script still ends with doc-check from repo root (unaffected by the opencode-plugin insertion)", () => {
+    const table = realCommands()
+    const script = table.full.argv[2]!
+    expect(script.trim().endsWith("cd .. && bun scripts/doc-check.ts")).toBe(true)
+  })
 })

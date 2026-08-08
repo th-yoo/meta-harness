@@ -14,11 +14,23 @@ export type SuiteId = "ccgate" | "opencode" | "gateplugin" | "kmcrank" | "docche
 
 export const ALL_SUITES: SuiteId[] = ["ccgate", "opencode", "gateplugin", "kmcrank", "doccheck"]
 
-/** Conservative-fallback scope = the incumbent check's scope (amendment c).
- * opencode is deliberately absent: the incumbent gate never ran it, and
- * putting it in the fallback would add ~47s to every no-baseline Stop.
- * opencode still runs when TIA matches opencode-plugin/ or functional
- * minimal/ paths — blocking coverage the incumbent never had. */
+/** Conservative-fallback scope = the ORIGINAL incumbent check's scope
+ * (amendment c) — ccgate + gateplugin + kmcrank + doccheck, i.e. what the
+ * pre-two-tier gate always ran. opencode is deliberately absent here even
+ * though it was ADDED to tier 1's `full` command (scripts/gate-check.ts,
+ * 2026-08-08, closing the blind-spot where a cc-gate-plugin-only commit that
+ * broke opencode-plugin was invisible to both tiers indefinitely): this
+ * list is a different, cost-conscious tradeoff, not a mirror of `full`'s
+ * argv. Measured 2026-08-08, `cd opencode-plugin && bun test` alone takes
+ * ~45s — adding it here would tax it onto every no-baseline tier-0 Stop.
+ * That tax buys little: TIA already runs opencode precisely when
+ * opencode-plugin/ or functional minimal/ paths change (below), and the
+ * fallback-triggering cases (no green marker yet, or a genuinely
+ * unrecognized changed path) are still bounded by tier 1's background
+ * full-sync — which DOES now cover opencode-plugin — on the very next
+ * tree-changing Stop. So omission here costs latency-to-detection, not
+ * permanent blindness; keep it out unless that latency proves unacceptable
+ * in practice. */
 export const FALLBACK_SUITES: SuiteId[] = ["ccgate", "gateplugin", "kmcrank", "doccheck"]
 
 /** Wedged-bg liveness bound (amendment a): a "running" marker older than

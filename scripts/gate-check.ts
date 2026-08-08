@@ -84,7 +84,7 @@ function scanFastArgv(suite: SuiteId, pkgDir: string): Cmd {
   return { cwd: pkgDir, argv: ["bun", "test", ...fastArgvSuffix(suite, all, scanFailed)], scanFailed }
 }
 
-function realCommands(): CommandTable {
+export function realCommands(): CommandTable {
   return {
     suites: {
       // Literal fallbacks (not `!`): PKG_DIR is edited in a different file
@@ -99,9 +99,19 @@ function realCommands(): CommandTable {
       kmcrank: scanFastArgv("kmcrank", PKG_DIR.kmcrank ?? "km-crank"),
       doccheck: { cwd: ".", argv: ["bun", "scripts/doc-check.ts"] },
     },
-    // Tier 1 = incumbent check VERBATIM (plan Global Constraints).
+    // Tier 1 = incumbent check VERBATIM (plan Global Constraints), PLUS
+    // opencode-plugin (deviation, 2026-08-08): the incumbent's original
+    // command never ran opencode-plugin's suite at all, so a commit that
+    // touches only e.g. cc-gate-plugin/ paths — which TIA correctly scopes
+    // to the ccgate suite at tier 0 — had NO tier that ever ran
+    // opencode-plugin's tests. Tier 0 skips it (out of TIA scope) and tier 1
+    // skipped it too (omitted here). A break in opencode-plugin caused by
+    // such a commit was invisible to the gate indefinitely, not just until
+    // the next opencode-plugin-touching commit. opencode-plugin has a real
+    // suite (it already runs at tier 0 when its own paths change) so it
+    // belongs in the one command meant to cover everything.
     full: { cwd: ".", argv: ["bash", "-c",
-      "cd cc-gate-plugin && bun test && cd ../gate-plugin && bun test && cd ../km-crank && bun test && cd .. && bun scripts/doc-check.ts"] },
+      "cd cc-gate-plugin && bun test && cd ../opencode-plugin && bun test && cd ../gate-plugin && bun test && cd ../km-crank && bun test && cd .. && bun scripts/doc-check.ts"] },
   }
 }
 
@@ -318,4 +328,12 @@ function main(): never {
   process.exit(0)
 }
 
-main()
+// Guarded (not a bare call): this module is now also imported directly by
+// km-crank/test/gate-check-cli.test.ts to unit-test realCommands()'s actual
+// output (the tier-1 full-command regression test) without spawning a
+// subprocess or running any real suite. import.meta.main is true only when
+// Bun runs this file as the entry point (the real Stop-hook invocation and
+// every existing subprocess-spawning CLI test), so that behavior is
+// unchanged; a plain `import` for the realCommands binding must NOT run the
+// gate.
+if (import.meta.main) main()
