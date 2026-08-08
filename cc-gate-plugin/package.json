@@ -13,6 +13,6 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",
     "@anthropic-ai/sdk": "^0.115.0",
-    "@th-yoo/cc-api-daemon": "git+https://github.com/th-yoo/cc-api-daemon.git#469456b02f27f219b4baf0294e3cbeffe67cff3d"
+    "@th-yoo/cc-api-daemon": "git+https://github.com/th-yoo/cc-api-daemon.git#f99bcd689ec002cb0a2f12a3bf3430ac024e4485"
   }
 }
