@@ -3,6 +3,65 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ❌ RETRACTION 2026-08-08 (`yoo-mac`) — "CHAIN FALSE-WALLED" WAS WRONG · DECISION B IS WITHDRAWN, NOT PENDING
+
+**Do not queue, re-propose, or execute the "chain probe-transport fix".** It rests
+on a false premise. Applying it would fire smoke 14 + channel 301 opus calls into
+a live 429.
+
+**The false claim** (08-07 block below, decision 3; restated as decision B in the
+08-08 block): *"Channel smoke/run ride the agent-SDK transport → the wall does not
+apply to the chain's own spend."*
+
+**What the code actually does** (traced 2026-08-08 at `2b4efdb`):
+
+| chain step | call path | transport |
+|---|---|---|
+| `scripts/channel-smoke.ts:28` | `callChannelModel` (`channel-run.ts:90`) → `sdkCall` | **bare SDK** |
+| `replay-cli channel --go 301` | `runChannel` (`channel-run.ts:143`), same file — imports `sdkCall` only | **bare SDK** |
+| `probe_models` (`scripts/probe-models.sh`) | bare `@anthropic-ai/sdk`, `maxRetries:0` | **bare SDK** |
+
+- `transport.ts:289` `sdkCall` has **no transport dispatch** — straight to
+  `sdkCallOutcome` → `new Anthropic({… maxRetries: 0})` (`:237`, `:257`).
+- The `selectTransport(env) === "agent-sdk"` branch is `transport.ts:314`,
+  **inside `callModelSdk`** — the *refiner* path. `selectTransport` callers are
+  `refiner-cli.ts:85`, `corpus-replay.ts:75`, and that line. `channel-run.ts` is
+  **not** among them. The source says it at `transport.ts:332`: *"only the deriver
+  (`callModelSdk`) is subject"*.
+- The channel path is bare SDK **unconditionally — no env escape.**
+
+```mermaid
+flowchart LR
+  P[probe_models] -->|bare SDK maxRetries:0| Q[opus quota: bare-SDK lane]
+  S[channel-smoke] --> CM[callChannelModel] --> SC[sdkCall]
+  R[replay-cli channel] --> RC[runChannel] --> SC
+  SC -->|bare SDK maxRetries:0| Q
+  RF[callModelSdk refiner] -->|selectTransport agent-sdk| A[opus quota: agent-SDK lane]
+```
+
+**Verdict:** probe and batch ride the **same** lane. The probe is already
+transport-faithful. The 429 genuinely blocks the chain — **walled, not
+false-walled.** The ~2-day stall was real. Nothing code-side unblocks it; the
+actual unblock is opus quota recovery on the bare-SDK lane.
+
+**Why the proposed fix was harmful, not merely useless:** it is the exact failure
+`scripts/probe-models.sh` documents in its own header — *"a retrying or CLI-shaped
+probe reports 'clear' falsely because it rides a different quota than a bare-SDK
+batch"* — a violation that "cost a stalled chain" once already. An agent-lane probe
+would report clear while the bare-SDK batch stayed walled, then fire 315 calls.
+
+**What survives:** the 2026-08-06 measurement ([[probe-429-transport-scoped]], 429
+is per-TRANSPORT) is correct and stands. Only the inference — that the *chain*
+rides the agent lane — was wrong. The standing rule "probe models on the RIGHT
+transport" is unchanged and is what caught this.
+
+**Knock-on:** C4 stays chain-blocked. Any claim that this fix would unblock C4 is
+void.
+
+**Standing lesson, second instance after P2's C1:** probe the CONSEQUENCE, not the
+capability. C1 = a hook that could exit but could not block. This = a lane that
+could serve opus but that the chain never calls.
+
 ## ✅ SESSION END 2026-08-08 (`yoo-mac` "minimal" session, cleared) — P2 MERGED TO MAIN (`17d164c`) · DECISION 1 OF 3 DONE
 
 **RESUME PROMPT:**
@@ -29,10 +88,12 @@ REMAINING DECISIONS (were 2 and 3 in the 08-07 SITREP block below):
     results.json, then bun scripts/p2-tally.ts -> committed verdict.
     Adoption separate (bar: compliance >=0.75 AND pass@k drop <=0.15
     vs A1). PRE-DATA AMENDMENT WINDOW CLOSES AT FIRST RUN DATUM.
- B. CHAIN PROBE-TRANSPORT FIX GO — office tmux: 429 is per-TRANSPORT,
-    chain false-walled on bare-SDK probe while agent-SDK lane serves
-    opus; swap probe to agent-lane, re-arm (smoke 14 + channel 301 gos
-    stand).
+ B. RETRACTED 2026-08-08 — was "CHAIN PROBE-TRANSPORT FIX GO". Premise
+    false: channel-smoke and replay-cli channel both ride the BARE SDK
+    (channel-run.ts -> sdkCall; no selectTransport dispatch), same lane
+    as probe_models. Chain is WALLED, not false-walled. Do NOT execute
+    the swap — it would fire 315 opus calls into a live 429. See the
+    RETRACTION block at the top of this file. C4 stays chain-blocked.
 STANDING OPENS: TB2 batch (haiku first, probe on the RIGHT transport),
 yoo-mac sensor arming go (prereqs met: >=6121e53 pulled, 0.4.0 cache),
 C4 after base rate, sensor 08-13 checkpoint (>=25 events/day from ts
@@ -45,7 +106,7 @@ ts on instrument changes · isolated worktrees per implementer
 the right transport · SITREP.
 ```
 
-## ✅ SESSION 2026-08-07 (`yoo-dev` minimal, SITREP-only close) — THREE DECISIONS QUEUED · CHAIN LIKELY FALSE-WALLED
+## ✅ SESSION 2026-08-07 (`yoo-dev` minimal, SITREP-only close) — THREE DECISIONS QUEUED · ~~CHAIN LIKELY FALSE-WALLED~~ (decision 3 RETRACTED 2026-08-08 — see the RETRACTION block at top; text below kept verbatim as the record, do NOT act on its item 3)
 
 **RESUME PROMPT:**
 ```
@@ -64,7 +125,9 @@ THREE PENDING USER DECISIONS (nothing proceeds without them):
     warm-lane review calls, haiku, est 5.9h / <=7.8h ceiling, serial
     tmux; then bun scripts/p2-tally.ts -> committed verdict; adoption
     separate (bar: compliance >=0.75 AND pass@k drop <=0.15 vs A1).
- 3. CHAIN PROBE-TRANSPORT FIX GO — chain (tmux gaugeverify, alive,
+ 3. [RETRACTED 2026-08-08 — FALSE PREMISE, DO NOT EXECUTE; kept verbatim
+    as the record. The chain rides the BARE SDK, same lane as its probe.]
+    CHAIN PROBE-TRANSPORT FIX GO — chain (tmux gaugeverify, alive,
     "walled" ~2 days) probes opus via probe_models = BARE SDK; measured
     2026-08-06 ([[probe-429-transport-scoped]]): 429 is per-TRANSPORT,
     the CLI/agent-SDK lane serves opus while bare SDK 429s. Channel
