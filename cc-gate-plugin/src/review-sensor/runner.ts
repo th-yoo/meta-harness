@@ -41,7 +41,7 @@ import {
   closeSession,
   modelProvenBy,
   type WarmIsolation,
-} from "../acp/index.ts"
+} from "@th-yoo/cc-api-daemon"
 import { readPluginVersion } from "../sensor-append.ts"
 
 /** review-sensor's isolation profile — copies GAUGE_ISOLATION's shape
@@ -288,11 +288,16 @@ export async function runOnce(
       // Close-not-release (spec §2): a session was established for THIS
       // outcome (kind === "ok"), so it is closed here regardless of
       // whether the pass above went on to count as a real observation
-      // (bad-review-output still established a session) — pinning one of
-      // the 4 global warm-lane slots on an unproven/unparseable turn would
-      // be exactly the contention close-not-release exists to avoid. The
-      // 900s reap remains the backstop for whatever this call can't
-      // reach; result is logged, never inspected for control flow.
+      // (bad-review-output still established a session) — releasing
+      // daemon-side session state promptly rather than leaving it to age
+      // out. review-sensor's model (MODEL, core.ts) is claude-haiku-4-5,
+      // which @th-yoo/cc-api-daemon's routeBackend sends to the `api` lane:
+      // ApiSession answers per-session and is never pooled, so there is no
+      // warm-lane slot here to pin and no pool-exhaustion error this close
+      // avoids — that rationale applied to the old CLI-backed WarmSession
+      // pool, not this client. The 900s reap remains the backstop for
+      // whatever this call can't reach; result is logged, never inspected
+      // for control flow.
       if (outcome.sessionId) {
         try {
           const result = await deps.close(outcome.sessionId, env)
