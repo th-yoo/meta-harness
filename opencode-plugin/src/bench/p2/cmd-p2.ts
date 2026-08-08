@@ -39,19 +39,40 @@
  * EXISTING `errors: string[]` field — already the per-attempt string slot
  * parallel to `rewards`/`elapsed`/`turns` — as the compact per-attempt
  * "label" (annotation) channel: a JSON string encoding
- * `{arm, ruleSha, compliant, reprompted, reviewFailed, error}` for every
+ * `{arm, ruleSha, compliant, reprompted, reviewFailed, error, judgeComplied,
+ * rulePreReview}` for every
  * attempt (unlike cmd-run.ts's sparse use of `errors`, which only pushes
  * "setup_failed" and otherwise leaves it unpushed — p2-run pushes exactly
  * one entry per attempt, keeping `errors.length === rewards.length`
- * strictly, so Task 5's tally can zip the two arrays 1:1). F2 holds: only
- * counts/booleans/a content-hash/an error-classification string, never
- * transcript or finding text.
+ * strictly, so Task 5's tally can zip the two arrays 1:1). F2 holds for the
+ * results file: only counts/booleans/a content-hash/an error-classification
+ * string, never transcript or finding text.
+ *
+ * PRE-DATA AMENDMENT 2026-08-08 — judge-vs-rule logging. `judgeComplied`
+ * (the a4 judge's verdict) and `rulePreReview` (`isCompliant` on the SAME
+ * evidence, pre-re-pass) join the annotation. They measure a thing the run
+ * as designed left unmeasured: the judge only GATES the re-pass, while the
+ * scored metric is the deterministic rule — so nothing recorded the judge's
+ * reliability, and the load-bearing cell (judge says complied, rule says
+ * not: a deserved re-pass that never fires) left no trace at all. Both are
+ * booleans; F2 is unaffected.
+ *
+ * The evidence SIDECAR (`judgeEvidencePath`) is the F2 exception and is
+ * scoped deliberately — see the amendment block in the plan. It holds the
+ * bounded evidence struct (DONE-CHECK content, bash-command list, workspace
+ * file names), which is agent-authored container output, not a transcript
+ * (a4-review.ts: "The reviewer sees only this bounded evidence, never the
+ * whole transcript") and not finding text. It exists because scoring a
+ * stronger judge tier offline needs the identical inputs; a hash cannot be
+ * replayed. It is written ONLY for a4, only under docs/loop-probes/p2/, and
+ * never enters term-bench2/store/**.
  */
 import { dirname, join, resolve, sep } from "node:path"
 import { podman, withTimeout } from "../exec.ts"
 import type { ExecFn } from "../staging.ts"
 import { stageTaskRuntime } from "../staging.ts"
 import { buildCreateArgv, buildStartArgv, buildExecArgv, buildCpToArgv, buildRmArgv } from "../sandbox.ts"
+import { appendFileSync, mkdirSync } from "node:fs"
 import { BENCH_IMAGE, DEFAULT_BENCH_MODEL, apiKeyEnv, containerName, type BenchPaths } from "../paths.ts"
 import { selectTasks, taskTimeouts } from "../tasks.ts"
 import { copyTests, runVerifier } from "../verifier.ts"
@@ -152,6 +173,22 @@ export interface P2AttemptResult {
    * undefined) — no re-pass fires in that case (brief bullet 2's a4 spec).
    * Always false for a1/a3. */
   reviewFailed: boolean
+  /** PRE-DATA AMENDMENT 2026-08-08 — judge-vs-rule logging. The a4 judge's
+   * verdict as returned by `runReview`: `null` when no judge ran (a1/a3) or
+   * the call failed. NOT the same construct as `compliant`, which is the
+   * deterministic `isCompliant` rule — the judge only gates the re-pass. */
+  judgeComplied: boolean | null
+  /** The rule verdict on `evidence1` — the SAME evidence the judge saw,
+   * evaluated BEFORE any re-pass. `null` for a1/a3. Distinct from
+   * `compliant`, which for a fired re-pass is the POST-re-pass verdict; in
+   * that branch the pre-review value is otherwise discarded, which is
+   * exactly the branch the 2x2 needs. */
+  rulePreReview: boolean | null
+  /** The bounded evidence handed to the judge, retained so a stronger judge
+   * tier can be scored against the same inputs offline — zero containers,
+   * zero re-runs. `undefined` for a1/a3. Never written to the results
+   * `errors[]` label (see `attemptLabel`); the sidecar carries it. */
+  judgeEvidence: A4Evidence | undefined
 }
 
 export type RunA4ReviewFn = typeof runA4Review
@@ -204,6 +241,9 @@ export async function runOneP2Attempt(
     compliant: false,
     reprompted: false,
     reviewFailed: false,
+    judgeComplied: null,
+    rulePreReview: null,
+    judgeEvidence: undefined,
   })
 
   try {
@@ -272,15 +312,25 @@ export async function runOneP2Attempt(
     let compliant = false
     let reprompted = false
     let reviewFailed = false
+    // PRE-DATA AMENDMENT 2026-08-08 (judge-vs-rule logging): null until an
+    // a4 judge actually runs.
+    let judgeComplied: boolean | null = null
+    let rulePreReview: boolean | null = null
+    let judgeEvidence: A4Evidence | undefined
 
     if (arm === "a4") {
       const evidence1 = await gatherEvidence(name, output.events, execFn)
+      judgeEvidence = evidence1
+      // Evaluated ONCE, before the branch, so the re-pass path records the
+      // pre-review verdict instead of silently dropping it.
+      rulePreReview = isCompliant(evidence1.doneCheck, evidence1.bashCommands)
       const review: A4ReviewResult | undefined = await runReview(evidence1, env)
+      judgeComplied = review === undefined ? null : review.complied
       if (review === undefined) {
         reviewFailed = true
-        compliant = isCompliant(evidence1.doneCheck, evidence1.bashCommands)
+        compliant = rulePreReview
       } else if (review.complied) {
-        compliant = isCompliant(evidence1.doneCheck, evidence1.bashCommands)
+        compliant = rulePreReview
       } else {
         reprompted = true
         // Double-carrier turn cap (Task 1 probe deviation note: --max-turns
@@ -314,7 +364,7 @@ export async function runOneP2Attempt(
     } catch (e) {
       const msg = e instanceof BenchError ? e.message : (e as Error).message
       log(`  copy-tests failed: ${msg}`)
-      return { ...fail("setup_failed"), compliant, reprompted, reviewFailed }
+      return { ...fail("setup_failed"), compliant, reprompted, reviewFailed, judgeComplied, rulePreReview, judgeEvidence }
     }
     const reward = await runVerifier(paths, name, task, verifierTimeout)
     const elapsed = round1((Date.now() - taskStart) / 1000)
@@ -327,6 +377,9 @@ export async function runOneP2Attempt(
       compliant,
       reprompted,
       reviewFailed,
+      judgeComplied,
+      rulePreReview,
+      judgeEvidence,
     }
   } finally {
     await execFn(buildRmArgv(name))
@@ -358,7 +411,10 @@ export interface CmdP2Deps {
  * reuse). JSON so Task 5's tally can parse it without a bespoke format. */
 function attemptLabel(
   arm: P2Arm,
-  result: Pick<P2AttemptResult, "compliant" | "reprompted" | "reviewFailed" | "error">,
+  result: Pick<
+    P2AttemptResult,
+    "compliant" | "reprompted" | "reviewFailed" | "error" | "judgeComplied" | "rulePreReview"
+  >,
 ): string {
   return JSON.stringify({
     arm,
@@ -367,7 +423,20 @@ function attemptLabel(
     reprompted: result.reprompted,
     reviewFailed: result.reviewFailed,
     error: result.error,
+    // PRE-DATA AMENDMENT 2026-08-08 — judge-vs-rule 2x2. Verdicts only; the
+    // evidence rides the sidecar so errors[] stays a compact annotation.
+    judgeComplied: result.judgeComplied,
+    rulePreReview: result.rulePreReview,
   })
+}
+
+/** PRE-DATA AMENDMENT 2026-08-08 — sidecar beside the arm's results file
+ * holding, per a4 attempt, the bounded evidence the judge saw plus both
+ * verdicts. Exists so a stronger judge tier can be scored against identical
+ * inputs offline: zero containers, zero re-runs. Written ONLY when a judge
+ * actually ran (a4); a1/a3 produce no file. */
+export function judgeEvidencePath(resultsFile: string): string {
+  return resultsFile.replace(/-results\.json$/, "-judge-evidence.ndjson")
 }
 
 /**
@@ -463,6 +532,29 @@ export async function cmdP2(paths: BenchPaths, args: CmdP2Args, deps: CmdP2Deps 
       taskAgg[task]!.elapsed.push(result.elapsed)
       taskAgg[task]!.turns.push(result.turns)
       taskAgg[task]!.errors.push(attemptLabel(arm, result))
+      // PRE-DATA AMENDMENT 2026-08-08 — append-per-attempt so a killed run
+      // still leaves every completed attempt's evidence on disk (same
+      // durability reasoning as `flush("in_progress")` directly below).
+      if (result.judgeEvidence !== undefined) {
+        const sidecar = judgeEvidencePath(resultsFile)
+        // The first attempt can land before writeRunResults has created the
+        // results directory.
+        mkdirSync(dirname(sidecar), { recursive: true })
+        appendFileSync(
+          sidecar,
+          JSON.stringify({
+            arm,
+            task,
+            k: ki,
+            ruleSha: ruleSha(),
+            judgeComplied: result.judgeComplied,
+            rulePreReview: result.rulePreReview,
+            reprompted: result.reprompted,
+            reviewFailed: result.reviewFailed,
+            evidence: result.judgeEvidence,
+          }) + "\n",
+        )
+      }
       flush("in_progress")
     }
   }
