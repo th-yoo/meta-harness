@@ -11,10 +11,14 @@
  * exercise it entirely through the injected `deps` seam. Task 4 wires the
  * default (real) deps at the actual call site.
  *
- * The ACP warm lane is imported ONLY from `cc-gate-plugin/src/acp/index.ts`
- * — that file's own header states this is the sole sanctioned entry point
- * ("production code outside src/acp/ imports from THIS FILE, never from a
- * module inside src/acp/ directly").
+ * The ACP warm lane is imported from the published `@th-yoo/cc-api-daemon`
+ * package, not from `cc-gate-plugin/src/acp/index.ts` — deliberately, not by
+ * omission. A4 pins `A4_MODEL` to haiku (below), and the package's own
+ * `routeBackend` sends every `*haiku*` model to its per-session `api` lane
+ * (`ApiSession`), which bypasses the session pool entirely. The in-repo
+ * `cc-gate-plugin/src/acp/` client's pool is capped at 4 warm slots; routing
+ * A4's haiku traffic through the package instead keeps it off that ceiling
+ * rather than competing with every other pooled consumer for one of the 4.
  *
  * close-not-release: like the review sensor (acp-client.ts's own doc:
  * "Close the pool entry that served a session (review-sensor spec §2:
@@ -25,7 +29,7 @@
  * turns out to prove the wrong model or fail to parse: the session was
  * created and consumed either way, so it must not leak.
  */
-import { ensureDaemon, daemonCall, closeSession, modelProvenBy, type WarmIsolation } from "../../../../cc-gate-plugin/src/acp/index.ts"
+import { ensureDaemon, daemonCall, closeSession, modelProvenBy, type WarmIsolation } from "@th-yoo/cc-api-daemon"
 import { P2_RULE_TEXT } from "./rule.ts"
 
 /** Frozen review model (plan §Arms) — haiku, not the model under review. */
