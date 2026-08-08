@@ -35,13 +35,14 @@ import {
   type SkipReason,
 } from "./core.ts"
 import { assembleDiff } from "./git-diff.ts"
-import {
-  ensureDaemon,
-  daemonCall,
-  closeSession,
-  modelProvenBy,
-  type WarmIsolation,
-} from "@th-yoo/cc-api-daemon"
+import { modelProvenBy, type WarmIsolation } from "@th-yoo/cc-api-daemon"
+// The trio comes from the process-wide singleton, not the package directly
+// (acp-client-singleton.ts's header explains the fingerprint-fragmentation
+// hazard this avoids): every consumer in this process must reach the same
+// daemon, which requires every consumer to funnel through the same pinned
+// env rather than each calling `ensureDaemon` with whatever env object it
+// happens to be holding.
+import { ensureDaemon, daemonCall, closeSession } from "../acp-client-singleton.ts"
 import { readPluginVersion } from "../sensor-append.ts"
 
 /** review-sensor's isolation profile — copies GAUGE_ISOLATION's shape
