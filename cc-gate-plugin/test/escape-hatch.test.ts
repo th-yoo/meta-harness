@@ -41,11 +41,32 @@ async function stop(repo: string, sessionId: string): Promise<{ stdout: string; 
   return { stdout, exitCode }
 }
 
+/** `km-panic.sh status` shells out to `claude plugin list` (km-panic.sh:66)
+ * with no timeout, so this test's runtime is set by an EXTERNAL CLI's
+ * startup: ~0.7s on an idle host, measured 4.5s under 6-way concurrency.
+ * The gate runs tier-0 synchronously while a detached tier-1 bg run
+ * (gate-check.ts spawnBg) executes the same suite, so two copies of this
+ * file spawn `claude` at once — that pushed the status test past bun's
+ * 5000ms default timeout and blocked the gate (5002.84ms, 2026-08-08).
+ *
+ * Stub `claude` on PATH for every panic() call: no test here asserts on the
+ * plugin line (only that status prints "gate" and exits 0), so the real
+ * binary bought nothing but latency and a host dependency — km-panic
+ * already tolerates `claude` being absent entirely (`2>/dev/null`, `||
+ * echo "kkamak not installed"`), which is exactly what a credential-less
+ * or claude-less CI runner sees. Fix the flake at the test boundary, not
+ * with a bigger timeout: a longer deadline would only make the same
+ * unbounded spawn fail more slowly. */
+const STUB_BIN = fs.mkdtempSync(path.join(os.tmpdir(), "km-panic-stubbin-"))
+fs.writeFileSync(path.join(STUB_BIN, "claude"), "#!/bin/bash\necho 'kkamak (local)'\n")
+fs.chmodSync(path.join(STUB_BIN, "claude"), 0o755)
+
 async function panic(repo: string, ...args: string[]): Promise<{ stdout: string; exitCode: number }> {
   const proc = Bun.spawn(["bash", PANIC, ...args], {
     cwd: repo,
     stdout: "pipe",
     stderr: "pipe",
+    env: { ...process.env, PATH: `${STUB_BIN}:${process.env.PATH ?? ""}` },
   })
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout as ReadableStream<Uint8Array>).text(),
