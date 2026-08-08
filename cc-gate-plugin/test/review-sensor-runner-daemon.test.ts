@@ -185,4 +185,49 @@ describe("review-sensor runner wired to the REAL @th-yoo/cc-api-daemon client", 
     expect(await waitForLines(spawnLog, 1, 100)).toEqual([])
     expect(fs.existsSync(spawnLog)).toBe(false)
   })
+
+  test("runOnce, with the fake daemon reporting apiStopReason: \"max_tokens\" over the wire (v0.5.0 surface-truncation), skips with output-truncated — proves the field survives the REAL wire round-trip, not just the fake-deps unit tests", async () => {
+    const { dir } = repoWithPendingDiff()
+    const p = kmPaths(dir)
+    const FIXED_TS = 1_800_000_000_001
+
+    const env = tempEnv("runner-daemon-truncation")
+    const spawnLog = path.join(env.HOME!, "spawnlog")
+    env.ACP_TEST_SPAWN_LOG = spawnLog
+    LIVE_DAEMONS.push({ spawnLog })
+
+    const fake = await fakeDaemon(env, {
+      fingerprint: envFingerprint(env),
+      answer: "ok",
+      // Deliberately well-formed JSON — proves runner.ts's truncation
+      // check fires off the wire's apiStopReason field itself, not off a
+      // parse failure it happens to also cause.
+      text: JSON.stringify({ findings: [] }),
+      apiStopReason: "max_tokens",
+    })
+    LIVE_FAKES.push(fake)
+    expect(readDiscovery(env)).toBeTruthy()
+
+    const deps: RunnerDeps = {
+      now: () => FIXED_TS,
+      call: daemonCall,
+      close: closeSession,
+      ensure: ensureDaemon,
+    }
+
+    await runOnce(dir, env, deps)
+
+    const lines = readLines(p.streamPath)
+    expect(lines.length).toBe(1)
+    const line = lines[0]!
+    expect(line.skipped).toBe(true)
+    expect(line.reason).toBe("output-truncated")
+    expect("findingsCount" in line).toBe(false)
+
+    // The session established for this "ok"-but-truncated outcome is still
+    // closed (close-not-release), same as any other "ok" outcome.
+    const closed = fake.closeParams()
+    expect(closed?.sessionId).toBeTruthy()
+    expect(closed?.sessionId).toBe(fake.promptParams()?.sessionId)
+  })
 })

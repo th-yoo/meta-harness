@@ -237,6 +237,19 @@ export async function runOnce(
         return
       }
 
+      // Truncation check BEFORE parseFindings, deliberately: a reply cut
+      // off by the api lane's maxTokens cap fails to parse too, so parsing
+      // first would fold this specific, actionable signal into the
+      // generic "bad-review-output" bucket the caller can't tell apart
+      // from "the model returned junk". Branch on the SPECIFIC value
+      // `"max_tokens"`, never on presence/absence — `stopReason` absent
+      // means UNKNOWN (the agent lane has no equivalent value), never
+      // "not truncated" (core.ts's own doc comment on `SkipReason`).
+      if (outcome.stopReason === "max_tokens") {
+        emitSkip("output-truncated")
+        return
+      }
+
       const parsed = parseFindings(outcome.text)
       if (parsed === undefined) {
         emitSkip("bad-review-output")
