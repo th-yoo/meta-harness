@@ -3,6 +3,81 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-08b (`yoo-mac`, post-clear resume) — DECISION B RETRACTED (not done — WITHDRAWN) · MAIN `06f7be1` · QUEUE BELOW IS THE LIVE ONE
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness), post-2026-08-08b. git pull FIRST. Main
+>= 06f7be1. Check `git branch --show-current` — sibling sessions share
+this checkout and merge to main on their own gos.
+
+WHAT CLOSED THIS SESSION (do not re-open):
+ - Decision B (chain probe-transport fix) is RETRACTED, not pending and
+   not done. Premise was false: channel-smoke + replay-cli channel BOTH
+   ride the bare SDK (channel-run.ts:35 imports sdkCall only; sdkCall
+   transport.ts:289 has no dispatch), same lane as probe_models. Chain
+   is WALLED, not false-walled. Merged 06f7be1, artifact
+   docs/reviews/d3c3a40-chain-false-walled-retraction.md (approved, 0
+   findings, independent trace). DO NOT re-queue the probe swap — it
+   would fire smoke 14 + channel 301 opus calls into a live 429. See
+   the RETRACTION block below.
+ - Bookkeeping: acp-decouple-swap pushed then merged to main by a
+   sibling (2b4efdb, artifact 8cd568e-acp-decouple-swap-lane-b.md);
+   52963ae rode along. Nothing outstanding.
+
+LIVE QUEUE (nothing proceeds without an explicit go):
+ A. P2 BENCH SPEND — docs/loop-probes/p2/READINESS.md: <=112 container
+    executions (a1 --go 28 / a3 --go 28 / a4 --go 56) + <=28 A4 warm-
+    lane review calls, claude-haiku-4-5, est 5.9h / <=7.8h ceiling (A3
+    block-reprompt cost unmodeled — ceiling not point), serial tmux.
+    Results docs/loop-probes/p2/<hostname>-p2-<arm>-results.json, then
+    bun scripts/p2-tally.ts -> committed verdict. Adoption is a SEPARATE
+    ruling (bar: compliance >=0.75 AND pass@k drop <=0.15 vs A1).
+    PRE-DATA AMENDMENT WINDOW STILL OPEN — closes at the first run
+    datum. Deferring is not a cost here: it keeps that window open.
+    HOST NOTE (measured 08-08 on yoo-mac): 15-min load 10.33, ~99 MB
+    free pages, 83 GiB free, podman 4 vCPU/8 GiB machine already up.
+    Runner is SERIAL (cmd-p2.ts:441 for-loop + await) so peak is ONE
+    container, not 112 — the cost is 6-8h of duration on a loaded
+    laptop, not peak. Options: run on yoo-dev instead (spec-clean —
+    armResultsPath uses os.hostname(), files just get yoo-dev names);
+    or reclaim 8.5 GB of dangling images first (podman system df says
+    100% reclaimable, 0 active — NEVER prune -a, that kills mh-bench
+    4.44 GB and forces a rebuild). UNEXPLAINED, diagnose before timing
+    a 6h run: com.apple.Virtualization.VirtualMachine at 78.8% CPU with
+    ZERO containers running.
+ B. YOO-MAC SENSOR ARMING — prereqs met (>=6121e53 pulled, plugin cache
+    0.4.0). RECOMMEND DEFERRING PAST 2026-08-13. Sensor is armed on
+    yoo-dev ONLY (KKAMAK_REVIEW_SENSOR=1, host-local settings.local.json,
+    boundary ts 1785988568548 / effective 1785996709580). The 08-13
+    checkpoint reads >=25 events/day; whether that is per-host or
+    system-wide is NOT stated in the pre-registration. Resolve that
+    ambiguity BEFORE arming a second host, or arm after 08-13 and keep
+    the window single-host clean.
+ C. TB2 BATCH — haiku first (its baseline is still valid). Probe on the
+    RIGHT transport before any premium spend.
+ D. C4 — still CHAIN-BLOCKED, and the retraction confirms nothing
+    code-side frees it. Only opus quota recovery on the BARE-SDK lane
+    unblocks the chain. Sized go waits on |C4| base rate.
+ E. SENSOR 08-13 CHECKPOINT — due 2026-08-13, >=25 events/day from ts
+    1785996709580. Nothing self-adjusts; <25 sends constants back to
+    the user with a new boundary ts.
+ F. UNIFIED-ACP-DAEMON — spec + plan exist, unexecuted.
+
+IN FLIGHT ELSEWHERE (do not collide): a sibling session is replacing
+@cc-gate-plugin/acp with ~/z2/cc-api-daemon. Use your OWN worktree for
+anything touching cc-gate-plugin; docs-only work is safe anywhere.
+
+Rules: explicit user go before ANY merge to main AND ANY spend ·
+spec-is-law, pre-data amendments only, recorded · merges via
+scripts/merge-with-gate.sh + docs/reviews artifact (7b) · F1/F2 ·
+boundary ts on instrument changes · per-task fresh-context reviews;
+implementer subagents get their OWN worktree and lineage-merge first ·
+probe models on the RIGHT transport · probe the CONSEQUENCE, not the
+capability (two instances now: P2's C1 exit-1-vs-2, and decision B's
+lane that served opus but that the chain never called) · SITREP.
+```
+
 ## ❌ RETRACTION 2026-08-08 (`yoo-mac`) — "CHAIN FALSE-WALLED" WAS WRONG · DECISION B IS WITHDRAWN, NOT PENDING
 
 **Do not queue, re-propose, or execute the "chain probe-transport fix".** It rests
