@@ -191,9 +191,17 @@ describe("runOnce", () => {
 
     expect(fs.existsSync(p.statePath)).toBe(false)
     expect(fs.existsSync(p.claimPath)).toBe(false)
-    // Documented behavior (runner.ts:287-296): close-not-release is scoped
-    // to kind === "ok" only. A session carried by a "call-consumed" outcome
-    // is left for the daemon's own 900s reap, not closed here.
+    // Structural consequence of the code, not something runner.ts explicitly
+    // discusses for this case: the close-not-release `finally` (runner.ts:
+    // 287-296) is nested inside the `try` that only runs when outcome.kind
+    // === "ok" (the emitSkip+return above happens first for every other
+    // kind), so a session carried by a "call-consumed" outcome is never
+    // reached by that finally at all — it's left for the daemon's own 900s
+    // reap by omission, not by a stated decision. runner.ts:287-296's own
+    // 900s-reap mention is about a close() TRANSPORT failure on the "ok"
+    // path, not this case. Flagging as a candidate to revisit (closeSession
+    // already tolerates an unknown/invalid sessionId) rather than treating
+    // this as proven-intentional design.
     expect(closeCalls).toEqual([])
   })
 })
