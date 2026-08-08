@@ -1,0 +1,63 @@
+{
+  "task": "sparql-university",
+  "driver": "claude-code",
+  "model": "claude-opus-5",
+  "review": {
+    "driver": "claude-code",
+    "model": "claude-opus-5",
+    "maxRounds": 1,
+    "trail": [
+      {
+        "round": 0,
+        "bullet": "When a task states selection criteria and separately specifies what to output, first write out each output field and each criterion as separate quoted spec clauses; do not let a criterion restrict an output field unless that field's own wording restricts it.",
+        "review": {
+          "verdict": "fail",
+          "violations": [
+            "duplicate: failed"
+          ],
+          "layer1": {
+            "pass": true,
+            "violations": []
+          },
+          "checks": {
+            "category": {
+              "pass": true,
+              "category": "requirement-analysis",
+              "quote": "first write out each output field and each criterion as separate quoted spec clauses"
+            },
+            "domain_swap": {
+              "pass": true,
+              "swapped_bullet": "When a chess problem states which moves qualify for consideration (e.g. only moves by pieces currently defended) and separately states what to report (e.g. the destination square of the best such move), first write out each reported field and each qualifying condition as separate quoted spec clauses; do not let a qualifying condition narrow a reported field unless that field's own wording narrows it."
+            },
+            "behavior_level": {
+              "pass": true,
+              "restatement": "Before answering, the agent transcribes the output spec and the selection spec as separate verbatim clauses and refuses to carry a selection condition into an output field whose own text does not carry it."
+            },
+            "duplicate": {
+              "pass": false,
+              "match": "When a task selects items qualifying by a condition on some attribute yet must output that attribute's values, enforce the condition as a membership gate via a separate existence check—do not filter the projected/output attribute by it, or you drop legitimate values the criterion never restricted."
+            },
+            "mechanize_instead": {
+              "pass": true,
+              "command": ""
+            }
+          },
+          "confidence": 0.82
+        }
+      }
+    ]
+  },
+  "records": [
+    "sparql-university-2026-07-23T09-51-21-456Z.json"
+  ],
+  "evidence": {
+    "fails": 8,
+    "passes": 2,
+    "suspectDropped": 0
+  },
+  "analysis": "## Analysis\n\n**Verifier truth:** grades against HELD-OUT `/tests/university_graph_test.ttl`, not `/app/...`. Reference tuple `(\"Alex Dimakis\",\"US, ES, CH\")` — CH and US NOT EU. So `?countries` must list **all** work countries, unrestricted by the EU selection criterion.\n\n**Failure split (8 fails):**\n- 6/8 (a2,a3,a4,a5,a6,a9): applied EU filter to the *projected* `?country` variable → dropped non-EU countries. All wrote things like \"I'll interpret countries as EU countries, consistent with criterion 2.\"\n- 2/8 (a1,a10): projection correct, failed on held-out generalization (`STRSTARTS(?role,\"Professor of\")` + OPTIONAL/!BOUND graduation logic).\n\n**Divergence:** passers (a7,a8) explicitly re-read the output clause on its own — a7: \"lists all countries where the professor currently works in... including non-EU ones.\" Failers collapsed selection clause and output clause into one reading. Nobody validated on held-out; that not the split.\n\n**Dominant class:** requirement-analysis interpretation lock-in — selection criterion leaked into output spec.\n\n**Rejection check (rule 8):** R2 (`1e93189412739dd0`) targeted same *symptom* but as a query-construction recipe (\"membership gate via existence check\") — dies to rule 3b domain-swap and was gated on a 9/10 base with no headroom. This bullet is a different fix-class (emit separated spec clauses before coding), domain-swappable, and base here is bare at 2/10 — big headroom.\n\n{\"action\":\"propose\",\"reason\":\"Six of eight failures leaked a selection criterion into a projected output field; passers diverged by re-reading the output clause independently, and the verifier's reference confirms the output field is unrestricted by that criterion.\",\"bullet\":{\"text\":\"When a task states selection criteria and separately specifies what to output, first write out each output field and each criterion as separate quoted spec clauses; do not let a criterion restrict an output field unless that field's own wording restricts it.\",\"evidence\":[\"sparql-university-2026-07-23T09-51-21-456Z.json#a2\",\"sparql-university-2026-07-23T09-51-21-456Z.json#a3\",\"sparql-university-2026-07-23T09-51-21-456Z.json#a4\",\"sparql-university-2026-07-23T09-51-21-456Z.json#a5\",\"sparql-university-2026-07-23T09-51-21-456Z.json#a6\",\"sparql-university-2026-07-23T09-51-21-456Z.json#a9\"]},\"predictions\":{\"expect_improve\":\"Attempts that would otherwise narrow the reported values to the qualifying subset will emit the output clause separately, see it carries no restriction, and report the full unrestricted set — flipping the 6/8 criterion-leak failures.\",\"expect_unchanged_guards\":\"Bullet only adds a pre-coding spec-enumeration step; it changes no implementation behavior and costs a few lines, so tasks with single-clause or already-separated specs behave identically.\",\"falsify_if\":\"Candidate pass rate is at or below baseline in A/B, indicating the dominant fault is held-out generalization (over-specific string/optional-value assumptions, as in a1/a10) rather than criterion-into-output leakage.\"}}",
+  "proposal": {
+    "action": "abstain",
+    "reason": "Any behavior-level restatement of the frozen scope-leak diagnosis reproduces rejected lesson r2-scope-leak, whose rejection was a null-on-adopted-base (no headroom, class already covered) rather than trigger-overreach, so rule 8's narrower-variant exception does not apply."
+  }
+}

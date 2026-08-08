@@ -1,0 +1,24 @@
+{
+  "task": "headless-terminal",
+  "driver": "claude-code",
+  "model": "claude-opus-5",
+  "review": {
+    "driver": "claude-code",
+    "model": "claude-opus-5",
+    "maxRounds": 1,
+    "trail": []
+  },
+  "records": [
+    "headless-terminal-2026-07-23T15-47-49-507Z.json"
+  ],
+  "evidence": {
+    "fails": 4,
+    "passes": 6,
+    "suspectDropped": 0
+  },
+  "analysis": "Analysis:\n\n**Coverage not the gap.** Failers a1/a6/a7/a8 self-verified same surface as passers: basic command, interactive shell flag, python REPL, Ctrl-C/Ctrl-D, bashrc sourcing. a7 even checked bashrc marker + exit 130; a8 checked full-screen `less` + `clear`. Passers a2/a3/a5/a9 tested no more. So \"verify harder\" bullet has no mechanism.\n\n**Split tracks implementation config, not process.** Clean 7/7 partition:\n\n| arm | screen layer | TERM | outcome |\n|---|---|---|---|\n| a1, a6, a7, a8 | pyte in send path | xterm-256color | FAIL 4/4 |\n| a5, a9, a10 | pyte (a9 in reader thread) | linux | PASS 3/3 |\n| a2, a3, a4 | raw byte buffer, no pyte | xterm-256color | PASS 3/3 |\n\npyte alone not fatal, xterm-256color alone not fatal — only the pair. That is terminal-emulator-library × terminal-type interaction (bash under `xterm*` emits OSC title + bracketed-paste + color prompt; grader also drives `vim`, much heavier escape traffic). Domain mechanic. Contract confirms tests never read screen at all — every assert is external side effect (file on disk, HTTP 200), so the failing component is pure added surface sitting in the required write path.\n\n**Secondary, non-dominant:** a6 alone returns early from drain (`if got_any: break` at 50ms idle), ignoring `wait_sec=5` on the background-server case. Explains 1/4, different fix. Heterogeneous with the other 3.\n\nAny bullet strong enough to flip a1/a6/a7/a8 must either name the emulator/TERM pair (domain — forbidden by rule 3 + domain-swap test) or prescribe code structure (\"keep optional layer out of required path\" — WHAT the code does, forbidden by 3b). Behavior-level process bullet has no evidence-supported mechanism here; failers' iteration loop, reproduction, and completion checks matched passers'.\n\n{\"action\":\"abstain\",\"reason\":\"Fail/pass split partitions perfectly on a terminal-emulator-library × TERM configuration interaction (pyte-in-send-path + xterm-256color fails 4/4; pyte+TERM=linux and stdlib-only pass 6/6), which is domain knowledge, while failers' self-verification coverage, iteration discipline, and completion checks were indistinguishable from passers' — leaving no behavior-level gap to attack.\"}",
+  "proposal": {
+    "action": "abstain",
+    "reason": "Fail/pass split partitions perfectly on a terminal-emulator-library × TERM configuration interaction (pyte-in-send-path + xterm-256color fails 4/4; pyte+TERM=linux and stdlib-only pass 6/6), which is domain knowledge, while failers' self-verification coverage, iteration discipline, and completion checks were indistinguishable from passers' — leaving no behavior-level gap to attack."
+  }
+}

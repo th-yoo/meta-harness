@@ -1,0 +1,24 @@
+{
+  "task": "headless-terminal",
+  "driver": "claude-code",
+  "model": "claude-opus-5",
+  "review": {
+    "driver": "claude-code",
+    "model": "claude-opus-5",
+    "maxRounds": 1,
+    "trail": []
+  },
+  "records": [
+    "headless-terminal-2026-07-23T15-47-49-507Z.json"
+  ],
+  "evidence": {
+    "fails": 4,
+    "passes": 6,
+    "suspectDropped": 0
+  },
+  "analysis": "Look at evidence hard.\n\nContract asserts on side effects: file created by redirect, file absent after Ctrl-C, vim `:wq` writing file, `~/.bashrc` export visible in fresh terminal, background `&` job serving HTTP after 5s.\n\nFailures a1/a6/a7/a8 vs passes a2/a3/a4/a5/a9/a10 — checked every candidate discriminator:\n\n- shell flags: `-i` vs `-i -l` — both sides both ways (a2 passes with `-l`)\n- pyte vs raw buffer — both sides both ways (a5/a9/a10 pyte, pass)\n- kill signal on close — mixed\n- honoring `wait_sec` vs early idle-settle break — only a6 clearly breaks it (matters for background-job test), not the other three\n- bashrc verification — a7 did real `/root/.bashrc` marker test and still failed; a5/a9 skipped it and passed\n\nNo single mechanism spans the four fails. Fixes differ per attempt (one is wait-semantics, others are elsewhere). Rule 2 fires.\n\nClosest coherent class me could name — \"failers verified via convenient stand-in (interactive-flag echo, `$HOME` echo, temp-HOME rc, `less` instead of real editor) instead of real trigger path\" — is the reproduction category already killed at gate as R3 (`976ba00fdcc55467`, 6/10 vs 3/10, negative direction). Rule 8 forbids re-deriving.\n\n{\"action\":\"abstain\",\"reason\":\"Failing attempts have heterogeneous root causes (wait_sec early-return, close/signal handling, screen-read semantics) with no shared mechanism, and the only class-level story available — proxy verification instead of the real trigger path — is a near-duplicate of already-rejected R3 reproduction bullet 976ba00fdcc55467.\"}",
+  "proposal": {
+    "action": "abstain",
+    "reason": "Failing attempts have heterogeneous root causes (wait_sec early-return, close/signal handling, screen-read semantics) with no shared mechanism, and the only class-level story available — proxy verification instead of the real trigger path — is a near-duplicate of already-rejected R3 reproduction bullet 976ba00fdcc55467."
+  }
+}

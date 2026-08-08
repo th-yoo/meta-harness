@@ -1,0 +1,24 @@
+{
+  "task": "sparql-university",
+  "driver": "claude-code",
+  "model": "claude-opus-5",
+  "review": {
+    "driver": "claude-code",
+    "model": "claude-opus-5",
+    "maxRounds": 1,
+    "trail": []
+  },
+  "records": [
+    "sparql-university-2026-07-23T09-51-21-456Z.json"
+  ],
+  "evidence": {
+    "fails": 8,
+    "passes": 2,
+    "suspectDropped": 0
+  },
+  "analysis": "Look at evidence:\n\n**Gaps in failing attempts:**\n- **A (6 attempts: a2,a3,a4,a5,a6,a9)** — applied EU-country selection filter to the *projected* `?countries` binding, so output listed only EU countries. Reference rows (`\"GR, US\"`, `\"US, ES, CH\"`) prove countries column not restricted to selection criterion. Both passers (a7,a8) bound `?country` unfiltered and gated EU via separate `FILTER EXISTS`. Biggest by count.\n- **B (a1,a9,a10)** — role prefix `\"Professor of\"` instead of `\"Professor\"`; brittle on held-out roles.\n- **C (a1,a10)** — `OPTIONAL`+`!BOUND(?grad)` vs `FILTER NOT EXISTS { grad <= ref }` graduation semantics.\n\nGap A dominant. But gap A **is** rejected lesson `candidate-r2-scope-leak` (sha 1e93189412739dd0) — same mechanism, same task, same trigger (\"selection condition on attribute that is also output → gate via separate existence check, do not filter projected attribute\"). Rule 8 blocks re-derivation; that rejection was not trigger-overreach, it was null-on-base.\n\nRemaining gaps B and C are smaller, and heterogeneous with different fixes (string-prefix strictness vs multi-valued-property aggregation semantics) — both also fixable only by SPARQL/domain mechanics, which rules 3/3b forbid. Note a1 and a10 got gap A *right* and still failed, so A alone would not flip all failers anyway.\n\nAbstain.\n\n{\"action\":\"abstain\",\"reason\":\"Dominant gap (EU filter leaking onto the projected countries binding, 6 of 8 failers) is a near-duplicate of already-rejected lesson candidate-r2-scope-leak on the same task, and the residual gaps (role-prefix strictness, graduation-date aggregation semantics) are heterogeneous and only fixable with domain-level query mechanics.\"}",
+  "proposal": {
+    "action": "abstain",
+    "reason": "Dominant gap (EU filter leaking onto the projected countries binding, 6 of 8 failers) is a near-duplicate of already-rejected lesson candidate-r2-scope-leak on the same task, and the residual gaps (role-prefix strictness, graduation-date aggregation semantics) are heterogeneous and only fixable with domain-level query mechanics."
+  }
+}
