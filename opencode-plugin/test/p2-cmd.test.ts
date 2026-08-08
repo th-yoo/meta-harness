@@ -506,18 +506,31 @@ test("A3 carrier: stop-gate-settings.json's hook message pins the frozen rule's 
 })
 
 // ── judge-vs-rule logging (pre-data amendment 2026-08-08) ──────────────────
-// The a4 judge's `complied` verdict gates the bounded re-pass, but the
-// metric p2-tally scores is `isCompliant` — a deterministic rule
-// (rule.ts:117), NOT the judge. So the judge's reliability is unmeasured by
-// the run as designed. These pin the two values needed to build the 2x2
-// (judge verdict x rule verdict on the SAME evidence the judge saw), which
-// is obtainable ONLY during the run: no baseline exists (docs/loop-probes/p2
+// The a4 judge's `complied` verdict gates the bounded re-pass; the metric
+// p2-tally scores is `isCompliant` (rule.ts:117), never the judge. These
+// tests pin the per-attempt record needed to audit the judge afterwards,
+// obtainable ONLY during the run: no baseline exists (docs/loop-probes/p2
 // holds no results json; `complied` appears in no committed record).
 //
-// The load-bearing cell is judge=complied / rule=false: a deserved re-pass
-// that never fires. `compliant` alone cannot expose it, because in that
-// branch `compliant` IS the rule verdict on evidence1 and the judge's
-// disagreement leaves no trace.
+// What the pre-existing fields already reveal, and what they do not:
+//   reprompted=false, reviewFailed=false  => judge said complied, and
+//     `compliant` IS the pre-review rule verdict. So judge=T/rule=F (the
+//     missed re-pass) was ALREADY inferable — these fields make it
+//     explicit rather than reconstructed, nothing more.
+//   reprompted=true                       => judge said not-complied, and
+//     `compliant` is the POST-re-pass verdict; the pre-review value was
+//     overwritten. A DESERVED re-pass and a SPURIOUS one (judge flagged
+//     work the rule accepted, burning up to A4_TURN_CAP turns) were
+//     indistinguishable. `rulePreReview` is what separates them.
+//
+// Neither signal is ground truth. `isCompliant` is a mechanical proxy
+// (>=8-char substring overlap) with failure modes in both directions — it
+// was already fooled once, hence the 2026-08-06 anti-gaming amendment. So
+// judge-vs-rule measures AGREEMENT BETWEEN TWO FALLIBLE PROXIES, not
+// judge accuracy. Establishing accuracy requires re-judging the retained
+// evidence with a stronger tier across the FULL set, then human
+// adjudication where the tiers disagree — which is what the sidecar
+// (`judgeEvidencePath`) exists to make possible at all.
 
 test("runOneP2Attempt: a4 records the judge verdict and the pre-review rule verdict separately (missed-re-pass cell: judge says complied, rule says not)", async () => {
   const fakeReview: RunA4ReviewFn = async () => ({ complied: true, requiredEdits: [] })
@@ -525,8 +538,10 @@ test("runOneP2Attempt: a4 records the judge verdict and the pre-review rule verd
   expect(result.reprompted).toBe(false)
   expect(result.judgeComplied).toBe(true)
   expect(result.rulePreReview).toBe(false)
-  // `compliant` cannot distinguish this from an honest agreement — that is
-  // exactly why the two fields above are recorded.
+  // This cell was already inferable (reprompted=false + reviewFailed=false
+  // implies judge=complied, and `compliant` is then the rule verdict). The
+  // fields make it explicit; the cell they genuinely rescue is the
+  // re-pass branch below.
   expect(result.compliant).toBe(false)
 })
 

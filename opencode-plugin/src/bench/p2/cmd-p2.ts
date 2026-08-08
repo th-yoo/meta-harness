@@ -48,24 +48,37 @@
  * results file: only counts/booleans/a content-hash/an error-classification
  * string, never transcript or finding text.
  *
- * PRE-DATA AMENDMENT 2026-08-08 — judge-vs-rule logging. `judgeComplied`
- * (the a4 judge's verdict) and `rulePreReview` (`isCompliant` on the SAME
- * evidence, pre-re-pass) join the annotation. They measure a thing the run
- * as designed left unmeasured: the judge only GATES the re-pass, while the
- * scored metric is the deterministic rule — so nothing recorded the judge's
- * reliability, and the load-bearing cell (judge says complied, rule says
- * not: a deserved re-pass that never fires) left no trace at all. Both are
- * booleans; F2 is unaffected.
+ * PRE-DATA AMENDMENT 2026-08-08 — judge-audit logging. `judgeComplied` (the
+ * a4 judge's verdict) and `rulePreReview` (`isCompliant` on the SAME
+ * evidence, pre-re-pass) join the annotation; both are booleans, F2
+ * unaffected. Scope, stated precisely:
+ *  - `judgeComplied` is DERIVABLE from (reprompted, reviewFailed) — it is
+ *    recorded to be explicit rather than reconstructed, not because it is
+ *    new information.
+ *  - `rulePreReview` IS new, and only in the re-pass branch: once a re-pass
+ *    fires, `compliant` becomes the POST-re-pass verdict and the pre-review
+ *    value was previously overwritten. Without it a DESERVED re-pass and a
+ *    SPURIOUS one (the judge flagging work the rule accepted, spending up
+ *    to A4_TURN_CAP turns) are indistinguishable — and a4's cost model is
+ *    entirely "one bounded re-pass per attempt".
  *
- * The evidence SIDECAR (`judgeEvidencePath`) is the F2 exception and is
- * scoped deliberately — see the amendment block in the plan. It holds the
- * bounded evidence struct (DONE-CHECK content, bash-command list, workspace
- * file names), which is agent-authored container output, not a transcript
- * (a4-review.ts: "The reviewer sees only this bounded evidence, never the
- * whole transcript") and not finding text. It exists because scoring a
- * stronger judge tier offline needs the identical inputs; a hash cannot be
- * replayed. It is written ONLY for a4, only under docs/loop-probes/p2/, and
- * never enters term-bench2/store/**.
+ * These two do NOT establish that the judge is right. `isCompliant` is a
+ * mechanical proxy (>=8-char substring overlap) with failure modes in both
+ * directions — it was already fooled once, hence the 2026-08-06 anti-gaming
+ * amendment. Judge-vs-rule is therefore agreement between two fallible
+ * proxies, not judge accuracy.
+ *
+ * The evidence SIDECAR (`judgeEvidencePath`) is what makes judge accuracy
+ * answerable AT ALL: re-judging the retained evidence with a stronger tier
+ * across the full set, then human adjudication only where the tiers
+ * disagree. A hash cannot be replayed, so nothing weaker substitutes. It is
+ * the F2 exception (bounded evidence struct: DONE-CHECK content,
+ * bash-command list, workspace file names) — agent-authored container
+ * output, explicitly not a transcript (a4-review.ts: "The reviewer sees
+ * only this bounded evidence, never the whole transcript") and not finding
+ * text, written ONLY for a4, only under docs/loop-probes/p2/, never
+ * entering term-bench2/store/**. See the plan's amendment block; it needs a
+ * user ruling.
  */
 import { dirname, join, resolve, sep } from "node:path"
 import { podman, withTimeout } from "../exec.ts"
