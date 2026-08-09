@@ -19,12 +19,14 @@
 > `models/list` via unbilled REST rather than `supportedModels()`, and the
 > `WebSocket.send()` send-boundary hazard.
 >
-> **What is superseded:** Tasks 1–8's direction of travel. Bringing the proven
-> result back into the deployed `cc-gate-plugin` is now a PORT of working code,
-> not a from-scratch build — and it still requires the Task 12 discipline
-> (boundary timestamp, explicit merge go, plugin version bump in the same
-> change). Tasks 9–11 (the WebSocket transport swap of cc-gate-plugin's own
-> client and daemon) remain unbuilt in either repo.
+> **What is superseded:** Tasks 1–8's direction of travel — and, as of
+> 2026-08-09, the port-back question entirely. It was closed by DELETION, not
+> porting: `cc-gate-plugin/src/acp/` was removed (merge `c1564c5`, artifact
+> `docs/reviews/c883206-acp-dir-retirement.md`) and `@th-yoo/cc-api-daemon`
+> (pin `baee1c4`, v0.5.0) is the sole ACP implementation, consumed as a
+> package. It carries the WebSocket transport itself, so Tasks 9–11 are moot.
+> No task in this plan remains executable against this repo; the document is
+> kept for the Measured Parameters and the four rulings above.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
