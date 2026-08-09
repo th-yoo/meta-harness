@@ -39,19 +39,53 @@
  * EXISTING `errors: string[]` field — already the per-attempt string slot
  * parallel to `rewards`/`elapsed`/`turns` — as the compact per-attempt
  * "label" (annotation) channel: a JSON string encoding
- * `{arm, ruleSha, compliant, reprompted, reviewFailed, error}` for every
+ * `{arm, ruleSha, compliant, reprompted, reviewFailed, error, judgeComplied,
+ * rulePreReview}` for every
  * attempt (unlike cmd-run.ts's sparse use of `errors`, which only pushes
  * "setup_failed" and otherwise leaves it unpushed — p2-run pushes exactly
  * one entry per attempt, keeping `errors.length === rewards.length`
- * strictly, so Task 5's tally can zip the two arrays 1:1). F2 holds: only
- * counts/booleans/a content-hash/an error-classification string, never
- * transcript or finding text.
+ * strictly, so Task 5's tally can zip the two arrays 1:1). F2 holds for the
+ * results file: only counts/booleans/a content-hash/an error-classification
+ * string, never transcript or finding text.
+ *
+ * PRE-DATA AMENDMENT 2026-08-08 — judge-audit logging. `judgeComplied` (the
+ * a4 judge's verdict) and `rulePreReview` (`isCompliant` on the SAME
+ * evidence, pre-re-pass) join the annotation; both are booleans, F2
+ * unaffected. Scope, stated precisely:
+ *  - `judgeComplied` is DERIVABLE from (reprompted, reviewFailed) — it is
+ *    recorded to be explicit rather than reconstructed, not because it is
+ *    new information.
+ *  - `rulePreReview` IS new, and only in the re-pass branch: once a re-pass
+ *    fires, `compliant` becomes the POST-re-pass verdict and the pre-review
+ *    value was previously overwritten. Without it a DESERVED re-pass and a
+ *    SPURIOUS one (the judge flagging work the rule accepted, spending up
+ *    to A4_TURN_CAP turns) are indistinguishable — and a4's cost model is
+ *    entirely "one bounded re-pass per attempt".
+ *
+ * These two do NOT establish that the judge is right. `isCompliant` is a
+ * mechanical proxy (>=8-char substring overlap) with failure modes in both
+ * directions — it was already fooled once, hence the 2026-08-06 anti-gaming
+ * amendment. Judge-vs-rule is therefore agreement between two fallible
+ * proxies, not judge accuracy.
+ *
+ * The evidence SIDECAR (`judgeEvidencePath`) is what makes judge accuracy
+ * answerable AT ALL: re-judging the retained evidence with a stronger tier
+ * across the full set, then human adjudication only where the tiers
+ * disagree. A hash cannot be replayed, so nothing weaker substitutes. It is
+ * the F2 exception (bounded evidence struct: DONE-CHECK content,
+ * bash-command list, workspace file names) — agent-authored container
+ * output, explicitly not a transcript (a4-review.ts: "The reviewer sees
+ * only this bounded evidence, never the whole transcript") and not finding
+ * text, written ONLY for a4, only under docs/loop-probes/p2/, never
+ * entering term-bench2/store/**. See the plan's amendment block; it needs a
+ * user ruling.
  */
 import { dirname, join, resolve, sep } from "node:path"
 import { podman, withTimeout } from "../exec.ts"
 import type { ExecFn } from "../staging.ts"
 import { stageTaskRuntime } from "../staging.ts"
 import { buildCreateArgv, buildStartArgv, buildExecArgv, buildCpToArgv, buildRmArgv } from "../sandbox.ts"
+import { appendFileSync } from "node:fs"
 import { BENCH_IMAGE, DEFAULT_BENCH_MODEL, apiKeyEnv, containerName, type BenchPaths } from "../paths.ts"
 import { selectTasks, taskTimeouts } from "../tasks.ts"
 import { copyTests, runVerifier } from "../verifier.ts"
@@ -61,7 +95,7 @@ import { writeRunResults, type TaskAgg } from "../results.ts"
 import { claudeCodeDriver } from "../drivers/claude-code.ts"
 import type { AgentDriver } from "../drivers/types.ts"
 import type { TrajEvent } from "../../harness-store.ts"
-import { BenchError, die, log, pyFixed } from "../util.ts"
+import { BenchError, die, log, pyFixed, writeTextAtomic } from "../util.ts"
 import { P2_RULE_TEXT, ruleSha, isCompliant, bashCommandsFromEvents } from "./rule.ts"
 import {
   runA4Review,
@@ -158,6 +192,22 @@ export interface P2AttemptResult {
    * something other than a parsed A4ReviewResult) — no re-pass fires in
    * that case (brief bullet 2's a4 spec). Always false for a1/a3. */
   reviewFailed: boolean
+  /** PRE-DATA AMENDMENT 2026-08-08 — judge-vs-rule logging. The a4 judge's
+   * verdict as returned by `runReview`: `null` when no judge ran (a1/a3) or
+   * the call failed. NOT the same construct as `compliant`, which is the
+   * deterministic `isCompliant` rule — the judge only gates the re-pass. */
+  judgeComplied: boolean | null
+  /** The rule verdict on `evidence1` — the SAME evidence the judge saw,
+   * evaluated BEFORE any re-pass. `null` for a1/a3. Distinct from
+   * `compliant`, which for a fired re-pass is the POST-re-pass verdict; in
+   * that branch the pre-review value is otherwise discarded, which is
+   * exactly the branch the 2x2 needs. */
+  rulePreReview: boolean | null
+  /** The bounded evidence handed to the judge, retained so a stronger judge
+   * tier can be scored against the same inputs offline — zero containers,
+   * zero re-runs. `undefined` for a1/a3. Never written to the results
+   * `errors[]` label (see `attemptLabel`); the sidecar carries it. */
+  judgeEvidence: A4Evidence | undefined
   /** True iff `reviewFailed` was specifically a truncation
    * (`runA4Review`/`isA4ReviewTruncated` — a4-review.ts's header,
    * surface-truncation v0.5.0): the api lane's fixed maxTokens cap cut the
@@ -220,6 +270,9 @@ export async function runOneP2Attempt(
     compliant: false,
     reprompted: false,
     reviewFailed: false,
+    judgeComplied: null,
+    rulePreReview: null,
+    judgeEvidence: undefined,
     reviewTruncated: false,
   })
 
@@ -289,14 +342,28 @@ export async function runOneP2Attempt(
     let compliant = false
     let reprompted = false
     let reviewFailed = false
+    // PRE-DATA AMENDMENT 2026-08-08 (judge-vs-rule logging): null until an
+    // a4 judge actually runs.
+    let judgeComplied: boolean | null = null
+    let rulePreReview: boolean | null = null
+    let judgeEvidence: A4Evidence | undefined
     let reviewTruncated = false
 
     if (arm === "a4") {
       const evidence1 = await gatherEvidence(name, output.events, execFn)
+      judgeEvidence = evidence1
+      // Evaluated ONCE, before the branch, so the re-pass path records the
+      // pre-review verdict instead of silently dropping it.
+      rulePreReview = isCompliant(evidence1.doneCheck, evidence1.bashCommands)
       const review = await runReview(evidence1, env)
+      // A TRUNCATED reply carries no usable verdict — A4ReviewTruncated has
+      // no `complied` at all — so it records null exactly like the
+      // undefined failure. Recording a verdict parsed from a cut-off reply
+      // would put a fabricated row in the judge-vs-rule table.
+      judgeComplied = review === undefined || isA4ReviewTruncated(review) ? null : review.complied
       if (review === undefined) {
         reviewFailed = true
-        compliant = isCompliant(evidence1.doneCheck, evidence1.bashCommands)
+        compliant = rulePreReview
       } else if (isA4ReviewTruncated(review)) {
         // The reviewer's own reply was cut off by the api lane's maxTokens
         // cap (a4-review.ts's header) — this is STILL a review failure (no
@@ -305,9 +372,9 @@ export async function runOneP2Attempt(
         // junk" when P2's results are read.
         reviewFailed = true
         reviewTruncated = true
-        compliant = isCompliant(evidence1.doneCheck, evidence1.bashCommands)
+        compliant = rulePreReview
       } else if (review.complied) {
-        compliant = isCompliant(evidence1.doneCheck, evidence1.bashCommands)
+        compliant = rulePreReview
       } else {
         reprompted = true
         // Double-carrier turn cap (Task 1 probe deviation note: --max-turns
@@ -341,7 +408,16 @@ export async function runOneP2Attempt(
     } catch (e) {
       const msg = e instanceof BenchError ? e.message : (e as Error).message
       log(`  copy-tests failed: ${msg}`)
-      return { ...fail("setup_failed"), compliant, reprompted, reviewFailed, reviewTruncated }
+      return {
+        ...fail("setup_failed"),
+        compliant,
+        reprompted,
+        reviewFailed,
+        reviewTruncated,
+        judgeComplied,
+        rulePreReview,
+        judgeEvidence,
+      }
     }
     const reward = await runVerifier(paths, name, task, verifierTimeout)
     const elapsed = round1((Date.now() - taskStart) / 1000)
@@ -355,6 +431,9 @@ export async function runOneP2Attempt(
       reprompted,
       reviewFailed,
       reviewTruncated,
+      judgeComplied,
+      rulePreReview,
+      judgeEvidence,
     }
   } finally {
     await execFn(buildRmArgv(name))
@@ -392,7 +471,16 @@ export interface CmdP2Deps {
  * extra key it doesn't look for. */
 function attemptLabel(
   arm: P2Arm,
-  result: Pick<P2AttemptResult, "compliant" | "reprompted" | "reviewFailed" | "reviewTruncated" | "error">,
+  result: Pick<
+    P2AttemptResult,
+    | "compliant"
+    | "reprompted"
+    | "reviewFailed"
+    | "reviewTruncated"
+    | "error"
+    | "judgeComplied"
+    | "rulePreReview"
+  >,
 ): string {
   return JSON.stringify({
     arm,
@@ -402,7 +490,41 @@ function attemptLabel(
     reviewFailed: result.reviewFailed,
     reviewTruncated: result.reviewTruncated,
     error: result.error,
+    // PRE-DATA AMENDMENT 2026-08-08 — judge-vs-rule 2x2. Verdicts only; the
+    // evidence rides the sidecar so errors[] stays a compact annotation.
+    judgeComplied: result.judgeComplied,
+    rulePreReview: result.rulePreReview,
   })
+}
+
+/** PRE-DATA AMENDMENT 2026-08-08 — sidecar beside the arm's results file
+ * holding, per a4 attempt, the bounded evidence the judge saw plus both
+ * verdicts. Exists so a stronger judge tier can be scored against identical
+ * inputs offline: zero containers, zero re-runs. Written ONLY when a judge
+ * actually ran (a4); a1/a3 produce no file.
+ *
+ * DEFECT FIX: `resolveP2ResultsFile` only enforces that `--results-file`
+ * resolves UNDER `docs/loop-probes/p2/`, never that it ends in
+ * `-results.json`. The old code did `resultsFile.replace(/-results\.json$/,
+ * ...)` unconditionally — on a non-conforming name the regex simply doesn't
+ * match, `.replace()` no-ops, and this function silently returns the
+ * RESULTS file's own path. Every "sidecar" write then lands inside the
+ * results JSON instead, and the next `writeRunResults` (atomic temp+rename,
+ * full overwrite) destroys it — total, silent evidence loss with no error
+ * anywhere. Fail loudly instead, naming the offending path, matching this
+ * file's other `die()` fences (`resolveP2ResultsFile`, the `--go`/`--arm`/
+ * `--k` checks in `cmdP2` below). */
+export function judgeEvidencePath(resultsFile: string): string {
+  const sidecar = resultsFile.replace(/-results\.json$/, "-judge-evidence.ndjson")
+  if (sidecar === resultsFile) {
+    die(
+      `p2-run: --results-file "${resultsFile}" does not end in "-results.json" — cannot derive the judge-` +
+        `evidence sidecar path safely from it. Left as-is, evidence rows would silently land inside the ` +
+        `results file itself and be destroyed by the next atomic overwrite. Use the documented convention: ` +
+        `<hostname>-p2-<arm>-results.json.`,
+    )
+  }
+  return sidecar
 }
 
 /**
@@ -437,6 +559,35 @@ export async function cmdP2(paths: BenchPaths, args: CmdP2Args, deps: CmdP2Deps 
       `p2-run: --go ${args.go === undefined ? "(missing)" : args.go} does not match the planned execution count ` +
         `for ${tasks.length} task(s) × k=${k} on arm ${arm} — expected --go ${expectedGo}. Refusing (zero effect).`,
     )
+  }
+
+  // DEFECT FIX (sidecar lifecycle): the results file is fully OVERWRITTEN
+  // every run (writeRunResults -> writeJsonAtomic's temp+rename), and there
+  // is no `--resume` — cmdP2 always starts `taskAgg` empty. So re-running
+  // against the same `--results-file` after a crash yields a clean, correct
+  // results.json. The evidence sidecar did NOT get that treatment: it was
+  // opened with `appendFileSync` and never reset, so a killed-and-restarted
+  // invocation against the SAME `--results-file` would silently interleave
+  // stale rows from the aborted run with the new run's rows, with no run-id
+  // to tell them apart. READINESS.md documents a FIXED per-host/per-arm
+  // filename and estimates a4 at up to ~7.8h serial wall-clock, so an
+  // operator restart against that same name is the expected case, not an
+  // exotic one. Truncate the sidecar fresh here, once, before any attempt
+  // runs — mirroring the results file's own overwrite semantics rather than
+  // stamping a run-id, since the sidecar's field schema is a pending-ruling
+  // F2 exception this fix must not widen.
+  //
+  // Scoped to a4 ONLY: only a4 attempts ever produce judge evidence
+  // (`result.judgeEvidence !== undefined` below is a4-exclusive), so a1/a3
+  // never write this file at all today. An UNCONDITIONAL truncate-at-start
+  // would create a stray empty `-judge-evidence.ndjson` file for every a1/a3
+  // run — an artifact that never existed before this fix, for arms that
+  // have no evidence to reset. Gating on `arm === "a4"` keeps that absence
+  // intact. `judgeEvidencePath` also fails loudly here (see its own doc
+  // comment) on a non-conforming `--results-file`, so that failure now
+  // surfaces BEFORE any container work, like every other cmdP2 fence.
+  if (arm === "a4") {
+    writeTextAtomic(judgeEvidencePath(resultsFile), "")
   }
 
   const model = args.model || DEFAULT_BENCH_MODEL
@@ -498,6 +649,37 @@ export async function cmdP2(paths: BenchPaths, args: CmdP2Args, deps: CmdP2Deps 
       taskAgg[task]!.elapsed.push(result.elapsed)
       taskAgg[task]!.turns.push(result.turns)
       taskAgg[task]!.errors.push(attemptLabel(arm, result))
+      // PRE-DATA AMENDMENT 2026-08-08 — append-per-attempt so a killed run
+      // still leaves every completed attempt's evidence on disk (same
+      // durability reasoning as `flush("in_progress")` directly below). The
+      // sidecar file itself was already truncated fresh above (a4-only), so
+      // no per-attempt mkdir is needed here.
+      if (result.judgeEvidence !== undefined) {
+        const sidecar = judgeEvidencePath(resultsFile)
+        appendFileSync(
+          sidecar,
+          JSON.stringify({
+            arm,
+            task,
+            k: ki,
+            ruleSha: ruleSha(),
+            judgeComplied: result.judgeComplied,
+            rulePreReview: result.rulePreReview,
+            reprompted: result.reprompted,
+            reviewFailed: result.reviewFailed,
+            // DEFECT FIX: the committed results file carries both
+            // `judgeComplied` and `reviewTruncated` (attemptLabel above), so
+            // a reader can tell "the judge said no" from "the judge's own
+            // reply was cut off mid-object by the api lane's token cap". The
+            // sidecar carried `reviewFailed` but not this distinction, so a
+            // consumer treating the sidecar as self-contained (its stated
+            // purpose — offline re-judging without the results file) lost
+            // it. Boolean, so it stays inside F2's letter.
+            reviewTruncated: result.reviewTruncated,
+            evidence: result.judgeEvidence,
+          }) + "\n",
+        )
+      }
       flush("in_progress")
     }
   }

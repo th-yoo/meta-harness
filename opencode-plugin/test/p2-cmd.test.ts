@@ -28,6 +28,7 @@ import {
   runOneP2Attempt,
   expectedGoCount,
   resolveP2ResultsFile,
+  judgeEvidencePath,
   buildA1HarnessMd,
   type CmdP2Args,
   type P2AttemptResult,
@@ -219,6 +220,9 @@ function okResult(overrides: Partial<P2AttemptResult> = {}): P2AttemptResult {
     reprompted: false,
     reviewFailed: false,
     reviewTruncated: false,
+    judgeComplied: null,
+    rulePreReview: null,
+    judgeEvidence: undefined,
     ...overrides,
   }
 }
@@ -340,6 +344,8 @@ function makeFakeExecFn(opts: { catSequence: (Partial<ExecResult> | undefined)[]
   }
   return { execFn, calls }
 }
+
+const EVIDENCE = { doneCheck: "I ran the suite", bashCommands: ["bun test x.test.ts"], workspaceFiles: ["main.py"] }
 
 const COMPLIANT_DONE_CHECK = { rc: 0, stdout: "I ran bun test x.test.ts and it passed cleanly" }
 const NONCOMPLIANT_DONE_CHECK = { rc: 0, stdout: "Everything looks correct to me" }
@@ -522,4 +528,264 @@ test("A3 carrier: stop-gate-settings.json's hook message pins the frozen rule's 
   // fails CI.
   expect(hookMessage).toContain("exit 2")
   expect(hookMessage).not.toContain("exit 1")
+})
+
+// ── judge-vs-rule logging (pre-data amendment 2026-08-08) ──────────────────
+// The a4 judge's `complied` verdict gates the bounded re-pass; the metric
+// p2-tally scores is `isCompliant` (rule.ts:117), never the judge. These
+// tests pin the per-attempt record needed to audit the judge afterwards,
+// obtainable ONLY during the run: no baseline exists (docs/loop-probes/p2
+// holds no results json; `complied` appears in no committed record).
+//
+// What the pre-existing fields already reveal, and what they do not:
+//   reprompted=false, reviewFailed=false  => judge said complied, and
+//     `compliant` IS the pre-review rule verdict. So judge=T/rule=F (the
+//     missed re-pass) was ALREADY inferable — these fields make it
+//     explicit rather than reconstructed, nothing more.
+//   reprompted=true                       => judge said not-complied, and
+//     `compliant` is the POST-re-pass verdict; the pre-review value was
+//     overwritten. A DESERVED re-pass and a SPURIOUS one (judge flagged
+//     work the rule accepted, burning up to A4_TURN_CAP turns) were
+//     indistinguishable. `rulePreReview` is what separates them.
+//
+// Neither signal is ground truth. `isCompliant` is a mechanical proxy
+// (>=8-char substring overlap) with failure modes in both directions — it
+// was already fooled once, hence the 2026-08-06 anti-gaming amendment. So
+// judge-vs-rule measures AGREEMENT BETWEEN TWO FALLIBLE PROXIES, not
+// judge accuracy. Establishing accuracy requires re-judging the retained
+// evidence with a stronger tier across the FULL set, then human
+// adjudication where the tiers disagree — which is what the sidecar
+// (`judgeEvidencePath`) exists to make possible at all.
+
+test("runOneP2Attempt: a4 records the judge verdict and the pre-review rule verdict separately (missed-re-pass cell: judge says complied, rule says not)", async () => {
+  const fakeReview: RunA4ReviewFn = async () => ({ complied: true, requiredEdits: [] })
+  const { result } = await callRunOneP2Attempt("a4", { catSequence: [NONCOMPLIANT_DONE_CHECK] }, fakeReview)
+  expect(result.reprompted).toBe(false)
+  expect(result.judgeComplied).toBe(true)
+  expect(result.rulePreReview).toBe(false)
+  // This cell was already inferable (reprompted=false + reviewFailed=false
+  // implies judge=complied, and `compliant` is then the rule verdict). The
+  // fields make it explicit; the cell they genuinely rescue is the
+  // re-pass branch below.
+  expect(result.compliant).toBe(false)
+})
+
+test("runOneP2Attempt: a4 re-pass branch still records the PRE-review rule verdict, not the post-re-pass one", async () => {
+  const fakeReview: RunA4ReviewFn = async () => ({ complied: false, requiredEdits: ["run the suite"] })
+  const { result } = await callRunOneP2Attempt(
+    "a4",
+    { catSequence: [NONCOMPLIANT_DONE_CHECK, COMPLIANT_DONE_CHECK] },
+    fakeReview,
+  )
+  expect(result.reprompted).toBe(true)
+  expect(result.judgeComplied).toBe(false)
+  // evidence1 was non-compliant; the re-pass fixed it. Without this field the
+  // pre-review verdict is discarded in exactly the branch that matters.
+  expect(result.rulePreReview).toBe(false)
+  expect(result.compliant).toBe(true)
+})
+
+test("runOneP2Attempt: a4 agreement cell — judge and rule both say compliant", async () => {
+  const fakeReview: RunA4ReviewFn = async () => ({ complied: true, requiredEdits: [] })
+  const { result } = await callRunOneP2Attempt("a4", { catSequence: [COMPLIANT_DONE_CHECK] }, fakeReview)
+  expect(result.judgeComplied).toBe(true)
+  expect(result.rulePreReview).toBe(true)
+})
+
+test("runOneP2Attempt: a4 review failure records judgeComplied null but still records the rule verdict", async () => {
+  const fakeReview: RunA4ReviewFn = async () => undefined
+  const { result } = await callRunOneP2Attempt("a4", { catSequence: [NONCOMPLIANT_DONE_CHECK] }, fakeReview)
+  expect(result.reviewFailed).toBe(true)
+  expect(result.judgeComplied).toBe(null)
+  expect(result.rulePreReview).toBe(false)
+})
+
+test("runOneP2Attempt: a1 and a3 record both judge fields as null (no judge runs)", async () => {
+  const never: RunA4ReviewFn = async () => {
+    throw new Error("runReview must not be called for a1/a3")
+  }
+  for (const arm of ["a1", "a3"] as const) {
+    const { result } = await callRunOneP2Attempt(arm, { catSequence: [COMPLIANT_DONE_CHECK] }, never)
+    expect(result.judgeComplied).toBe(null)
+    expect(result.rulePreReview).toBe(null)
+  }
+})
+
+test("runOneP2Attempt: a4 returns the exact evidence the judge saw, so a stronger judge can be replayed offline with zero containers", async () => {
+  let seen: unknown
+  const fakeReview: RunA4ReviewFn = async (evidence) => {
+    seen = evidence
+    return { complied: true, requiredEdits: [] }
+  }
+  const { result } = await callRunOneP2Attempt("a4", { catSequence: [NONCOMPLIANT_DONE_CHECK] }, fakeReview)
+  expect(result.judgeEvidence).toEqual(seen as never)
+  expect(result.judgeEvidence?.doneCheck).toBe(NONCOMPLIANT_DONE_CHECK.stdout)
+  expect(result.judgeEvidence?.bashCommands).toEqual(["bun test x.test.ts"])
+})
+
+test("cmdP2: the per-attempt annotation carries the judge verdict and the pre-review rule verdict", async () => {
+  const { paths, resultsFile } = setup(["t1"])
+  const args: CmdP2Args = { arm: "a4", tasks: ["t1"], k: 1, go: 2, resultsFile }
+  await cmdP2(paths, args, {
+    runOneAttempt: async () =>
+      okResult({ compliant: false, judgeComplied: true, rulePreReview: false, judgeEvidence: EVIDENCE }),
+  })
+  const written = JSON.parse(fs.readFileSync(resultsFile, "utf-8"))
+  const annotation = JSON.parse(written.tasks.t1.errors[0])
+  expect(annotation.judgeComplied).toBe(true)
+  expect(annotation.rulePreReview).toBe(false)
+  // the evidence itself never bloats errors[] — the sidecar carries it
+  expect(annotation.judgeEvidence).toBeUndefined()
+})
+
+test("judgeEvidencePath: derives an ndjson sidecar beside the arm's results file", () => {
+  expect(judgeEvidencePath("/x/docs/loop-probes/p2/h-p2-a4-results.json")).toBe(
+    "/x/docs/loop-probes/p2/h-p2-a4-judge-evidence.ndjson",
+  )
+})
+
+test("cmdP2: a4 appends one sidecar line per attempt carrying the evidence the judge saw plus both verdicts", async () => {
+  const { paths, resultsFile } = setup(["t1"])
+  const sidecar = judgeEvidencePath(resultsFile)
+  if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar)
+  const args: CmdP2Args = { arm: "a4", tasks: ["t1"], k: 2, go: 4, resultsFile }
+  await cmdP2(paths, args, {
+    runOneAttempt: async () =>
+      okResult({ compliant: false, judgeComplied: true, rulePreReview: false, judgeEvidence: EVIDENCE }),
+  })
+  const lines = fs.readFileSync(sidecar, "utf-8").trim().split("\n")
+  expect(lines.length).toBe(2)
+  const row = JSON.parse(lines[0]!)
+  expect(row.task).toBe("t1")
+  expect(row.arm).toBe("a4")
+  expect(row.judgeComplied).toBe(true)
+  expect(row.rulePreReview).toBe(false)
+  expect(row.evidence).toEqual(EVIDENCE)
+  expect(row.ruleSha).toBe(ruleSha())
+})
+
+test("cmdP2: a1 writes NO sidecar (no judge ran)", async () => {
+  const { paths, resultsFile } = setup(["t1"])
+  const sidecar = judgeEvidencePath(resultsFile)
+  if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar)
+  const args: CmdP2Args = { arm: "a1", tasks: ["t1"], k: 1, go: 1, resultsFile }
+  await cmdP2(paths, args, { runOneAttempt: async () => okResult() })
+  expect(fs.existsSync(sidecar)).toBe(false)
+})
+
+test("runOneP2Attempt: a4 truncated review records judgeComplied null — a cut-off reply carries no usable verdict", async () => {
+  // Merge-resolution decision (2026-08-09): the truncation arm and the
+  // judge-audit fields landed from two branches and had to be reconciled.
+  // A4ReviewTruncated has no `complied` at all, so recording a verdict here
+  // would mean inventing one — a fabricated row in the judge-vs-rule table,
+  // and precisely the "instrumentation failure folded into a real one"
+  // confusion that reviewTruncated exists to prevent. Truncation records
+  // null, exactly like the undefined failure.
+  const fakeReview: RunA4ReviewFn = async () => ({ truncated: true }) as never
+  const { result, calls } = await callRunOneP2Attempt("a4", { catSequence: [NONCOMPLIANT_DONE_CHECK] }, fakeReview)
+  expect(result.reviewTruncated).toBe(true)
+  expect(result.reviewFailed).toBe(true)
+  expect(result.judgeComplied).toBe(null)
+  // the rule verdict is still recorded — it never depended on the judge
+  expect(result.rulePreReview).toBe(false)
+  expect(result.reprompted).toBe(false)
+  expect(calls.filter((c) => c.includes("fake-agent")).length).toBe(1) // no re-pass
+})
+
+// ── sidecar lifecycle fixes (data-integrity defects) ───────────────────────
+//
+// The results file is fully OVERWRITTEN every run (writeJsonAtomic's
+// temp+rename, no --resume flag exists), so a re-invocation against the
+// same --results-file after a crash yields a clean, correct file. Before
+// this fix the sidecar did NOT get that treatment — it was opened with
+// `appendFileSync` and never truncated, so stale rows from an aborted
+// invocation would silently interleave with a restarted run's rows. This
+// matters concretely for P2: READINESS.md documents a FIXED per-host/
+// per-arm results-file name and estimates the a4 arm at up to ~7.8h serial
+// wall-clock, so an operator restarting a killed run against the same
+// filename is the expected case, not an exotic one.
+
+test("cmdP2: a second invocation against the same --results-file leaves the sidecar containing ONLY the second run's rows (no stale interleave from an aborted first run)", async () => {
+  const { paths, resultsFile } = setup(["t1"])
+  const sidecar = judgeEvidencePath(resultsFile)
+  if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar)
+
+  // First "run" (simulating a since-aborted invocation): 2 attempts worth
+  // of rows land on disk.
+  const firstArgs: CmdP2Args = { arm: "a4", tasks: ["t1"], k: 2, go: 4, resultsFile }
+  await cmdP2(paths, firstArgs, {
+    runOneAttempt: async () =>
+      okResult({ compliant: false, judgeComplied: true, rulePreReview: false, judgeEvidence: EVIDENCE }),
+  })
+  expect(fs.readFileSync(sidecar, "utf-8").trim().split("\n").length).toBe(2)
+
+  // Second invocation against the SAME --results-file (the restart case) —
+  // only 1 attempt this time.
+  const secondArgs: CmdP2Args = { arm: "a4", tasks: ["t1"], k: 1, go: 2, resultsFile }
+  await cmdP2(paths, secondArgs, {
+    runOneAttempt: async () =>
+      okResult({ compliant: true, judgeComplied: false, rulePreReview: true, judgeEvidence: EVIDENCE }),
+  })
+  const lines = fs.readFileSync(sidecar, "utf-8").trim().split("\n")
+  expect(lines.length).toBe(1) // NOT 3 — the stale first-run row must be gone
+  const row = JSON.parse(lines[0]!)
+  expect(row.judgeComplied).toBe(false) // the second run's row, not the first's
+  expect(row.rulePreReview).toBe(true)
+})
+
+test("cmdP2: an a1/a3 run (no evidence produced) leaves no stray sidecar file on disk, even though the arm never writes one", async () => {
+  const { paths, resultsFile } = setup(["t1"])
+  const sidecar = judgeEvidencePath(resultsFile)
+  if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar)
+  const args: CmdP2Args = { arm: "a3", tasks: ["t1"], k: 1, go: 1, resultsFile }
+  await cmdP2(paths, args, { runOneAttempt: async () => okResult() })
+  // A blind truncate-at-start (unconditional on arm) would have created an
+  // empty sidecar file here that never existed before this fix — a1/a3
+  // never produce judge evidence, so no sidecar should exist at all.
+  expect(fs.existsSync(sidecar)).toBe(false)
+})
+
+test("cmdP2: a truncated review's sidecar row carries reviewTruncated: true, so an offline consumer treating the sidecar as self-contained can still distinguish it from a plain judge failure", async () => {
+  const { paths, resultsFile } = setup(["t1"])
+  const sidecar = judgeEvidencePath(resultsFile)
+  if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar)
+  const args: CmdP2Args = { arm: "a4", tasks: ["t1"], k: 1, go: 2, resultsFile }
+  await cmdP2(paths, args, {
+    runOneAttempt: async () =>
+      okResult({
+        compliant: false,
+        reviewFailed: true,
+        reviewTruncated: true,
+        judgeComplied: null,
+        rulePreReview: false,
+        judgeEvidence: EVIDENCE,
+      }),
+  })
+  const lines = fs.readFileSync(sidecar, "utf-8").trim().split("\n")
+  expect(lines.length).toBe(1)
+  const row = JSON.parse(lines[0]!)
+  expect(row.reviewFailed).toBe(true)
+  expect(row.reviewTruncated).toBe(true)
+})
+
+test("cmdP2: a non-conforming --results-file name (doesn't end in -results.json) fails loudly instead of silently writing evidence into the results file", async () => {
+  const { paths } = setup(["t1"])
+  const badResultsFile = path.join(paths.metaRoot, "docs", "loop-probes", "p2", "test.json")
+  let called = false
+  const args: CmdP2Args = { arm: "a4", tasks: ["t1"], k: 1, go: 2, resultsFile: badResultsFile }
+  await expect(
+    cmdP2(paths, args, {
+      runOneAttempt: async () => {
+        called = true
+        return okResult({ judgeEvidence: EVIDENCE })
+      },
+    }),
+  ).rejects.toThrow(BenchError)
+  expect(called).toBe(false) // fenced BEFORE any container work, like the other cmdP2 fences
+  // the results file itself must not have absorbed evidence rows
+  expect(fs.existsSync(badResultsFile)).toBe(false)
+})
+
+test("judgeEvidencePath: a non-conforming path throws instead of silently returning the results-file path unchanged", () => {
+  expect(() => judgeEvidencePath("/x/docs/loop-probes/p2/test.json")).toThrow(BenchError)
 })
