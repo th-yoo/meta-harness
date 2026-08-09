@@ -8,8 +8,9 @@ checklist. **No arm has been run. Nothing self-adopts.**
 ## RE-DERIVATION 2026-08-09 (pre-data amendment — window still open, no run datum exists)
 
 A4's transport AND lane changed after this report was written; re-derived
-against main `febb5cd`. **Counts, `--go` values, invocation lines and the
-wall-clock estimate are UNCHANGED.** What changed:
+against main `febb5cd`. **Counts, `--go` values and the wall-clock
+estimate are UNCHANGED** (the invocation lines' ENTRY POINT was wrong and
+is corrected — item 6). What changed:
 
 1. **Transport:** `a4-review.ts` now calls `@th-yoo/cc-api-daemon` (pin
    `baee1c4`, v0.5.0), not the retired `cc-gate-plugin/src/acp/` client
@@ -44,7 +45,18 @@ wall-clock estimate are UNCHANGED.** What changed:
    bash commands / DONE-CHECK content / workspace filenames verbatim —
    F2 exception explicitly ruled FOR by the user 2026-08-09. Host-side
    logging only; no model-call or count change.
-6. **Checklist re-verified on main `febb5cd`:** `opencode-plugin` bun test
+6. **Entry-point correction (found at launch, 2026-08-09, PRE-DATA):** the
+   original invocation lines called `bun opencode-plugin/src/bench/cli.ts`
+   — but `cli.ts` is a library (exports `main()`, never self-invokes):
+   that command exits 0 in ~1 s having done NOTHING. The real entry is
+   `bun term-bench2/runner.ts` (imports `main`, `process.exit(await
+   main(argv))`). Lines below corrected. Verified live with a deliberate
+   wrong `--go 1`: the fence dies pre-container ("expected --go 28",
+   "Refusing (zero effect)") — parser + fence proven, zero spend. A
+   garbage all-zero verdict json written by `p2-tally.ts` during the
+   no-op launch was deleted (tally does NOT die on missing results files
+   — run it only after all three results files exist).
+7. **Checklist re-verified on main `febb5cd`:** `opencode-plugin` bun test
    → **1887 pass, 1 skip, 0 fail** (4952 expects, 117 files, 45.27s);
    `bunx tsc --noEmit` clean; `km-crank` **372 pass, 0 fail** (post
    src/acp-retirement policy prune). The stale counts in the checklist
@@ -88,7 +100,7 @@ wall-clock estimate are UNCHANGED.** What changed:
 | a4 (first pass + ≤1 re-pass/attempt) | 28 + ≤28 = ≤56 container executions | `--go 56` |
 | a4 review calls | ≤28 haiku api-lane calls (unpooled — see RE-DERIVATION 2026-08-09; "warm-lane" wording below is the superseded 08-07 snapshot) | n/a (no `--go` — see Global Constraints; review calls are host-side, not container executions) |
 | **total (base + worst-case re-pass)** | **≤112 bench container executions** | 28 + 28 + 56 |
-| **+ review calls** | **≤28 haiku warm-lane calls** | |
+| **+ review calls** | **≤28 haiku api-lane calls** | |
 | **+ probe (already spent)** | **2 of ≤4 haiku calls** | |
 
 ## Planned invocation lines (exact, results-file convention verified)
@@ -103,13 +115,13 @@ override needed; matches Task 5's default exactly).
 ```
 # Task 1 probe: ALREADY DONE (2/4 spent, docs/loop-probes/p2/PROBE.md) — no further probe calls planned.
 
-bun opencode-plugin/src/bench/cli.ts p2-run --arm a1 \
+bun term-bench2/runner.ts p2-run --arm a1 \
   --task-file term-bench2/splits/loop1-band.txt --k 2 \
   --model anthropic/claude-haiku-4-5 \
   --results-file docs/loop-probes/p2/yoo-mac.local-p2-a1-results.json \
   --go 28
 
-bun opencode-plugin/src/bench/cli.ts p2-run --arm a3 \
+bun term-bench2/runner.ts p2-run --arm a3 \
   --task-file term-bench2/splits/loop1-band.txt --k 2 \
   --model anthropic/claude-haiku-4-5 \
   --results-file docs/loop-probes/p2/yoo-mac.local-p2-a3-results.json \
@@ -121,7 +133,7 @@ bun opencode-plugin/src/bench/cli.ts p2-run --arm a3 \
 # fresh spawn below carries ACP_IDLE_MS. Then verify it is up:
 cd cc-gate-plugin && ACP_IDLE_MS=7200000 bun -e 'import("@th-yoo/cc-api-daemon").then(async m => { const ok = await m.ensureDaemon(process.env, { waitMs: 15000 }); console.log("daemon up:", ok); process.exit(ok ? 0 : 1) })' && cd ..
 
-ACP_IDLE_MS=7200000 bun opencode-plugin/src/bench/cli.ts p2-run --arm a4 \
+ACP_IDLE_MS=7200000 bun term-bench2/runner.ts p2-run --arm a4 \
   --task-file term-bench2/splits/loop1-band.txt --k 2 \
   --model anthropic/claude-haiku-4-5 \
   --results-file docs/loop-probes/p2/yoo-mac.local-p2-a4-results.json \
