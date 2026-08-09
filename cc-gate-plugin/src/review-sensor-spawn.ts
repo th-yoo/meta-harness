@@ -39,10 +39,13 @@ export function maybeSpawnReviewSensor(input: MaybeSpawnReviewSensorInput): bool
     const { cwd, env, spawn, mainCheckoutDir = MAIN_CHECKOUT_DIR } = input
 
     if (env.KKAMAK_REVIEW_SENSOR !== "1") return false
+    // Resolve BOTH sides — an unresolved anchor (trailing slash, relative
+    // path from a future caller) would silently fail closed on every Stop.
+    const anchor = path.resolve(mainCheckoutDir)
     const resolved = path.resolve(cwd)
-    if (resolved !== mainCheckoutDir && !resolved.startsWith(mainCheckoutDir + path.sep)) return false
+    if (resolved !== anchor && !resolved.startsWith(anchor + path.sep)) return false
 
-    spawn(["bun", RUNNER_CLI, mainCheckoutDir])
+    spawn(["bun", RUNNER_CLI, anchor])
     return true
   } catch {
     return false
