@@ -455,15 +455,21 @@ export async function runOneP2Attempt(
       judgeEvidence,
     }
   } finally {
-    await execFn(buildRmArgv(name))
-    // Auth teardown last (cmd-run.ts precedent): shreds the exported
-    // credential copy + removes the temp dir; must run whether the attempt
-    // succeeded, failed, or threw — and even when prepareAuth succeeded but
-    // create/start did not.
+    // rm guarded in its own try/finally (cmd-run.ts:380-389 precedent):
+    // Bun.spawn throws synchronously on a missing binary, and a teardown
+    // throw must never skip the credential shred below.
     try {
-      auth?.cleanup()
-    } catch {
-      // best-effort — teardown failure must never mask the attempt result.
+      await execFn(buildRmArgv(name))
+    } finally {
+      // Auth teardown last (cmd-run.ts precedent): shreds the exported
+      // credential copy + removes the temp dir; must run whether the
+      // attempt succeeded, failed, or threw — and even when prepareAuth
+      // succeeded but create/start/rm did not.
+      try {
+        auth?.cleanup()
+      } catch {
+        // best-effort — teardown failure must never mask the attempt result.
+      }
     }
   }
 }

@@ -857,6 +857,35 @@ test("runOneP2Attempt: create argv carries the driver's auth mounts AND auth env
   expect(cleanups.length).toBe(1)
 })
 
+test("runOneP2Attempt: driver auth env WINS over apiKeyEnv() on collision; passthrough keys survive", async () => {
+  const base = makeFakeDriver()
+  const driver: AgentDriver = {
+    ...base,
+    prepareAuth: () => ({
+      mounts: [],
+      env: { FAKE_API_KEY: "from-auth" },
+      cleanup: () => {},
+    }),
+  }
+  const prevCollide = process.env.FAKE_API_KEY
+  const prevPass = process.env.OTHERPROVIDER_API_KEY
+  process.env.FAKE_API_KEY = "from-host"
+  process.env.OTHERPROVIDER_API_KEY = "host-passthrough"
+  try {
+    const { calls } = await callWithDriver(driver)
+    const create = calls.find((c) => c[1] === "create")!
+    const joined = create.join(" ")
+    expect(joined).toContain("-e FAKE_API_KEY=from-auth")
+    expect(joined).not.toContain("from-host")
+    expect(joined).toContain("-e OTHERPROVIDER_API_KEY=host-passthrough")
+  } finally {
+    if (prevCollide === undefined) delete process.env.FAKE_API_KEY
+    else process.env.FAKE_API_KEY = prevCollide
+    if (prevPass === undefined) delete process.env.OTHERPROVIDER_API_KEY
+    else process.env.OTHERPROVIDER_API_KEY = prevPass
+  }
+})
+
 test("runOneP2Attempt: prepareAuth throwing → setup_failed before any container create", async () => {
   const base = makeFakeDriver()
   const throwing: AgentDriver = {
