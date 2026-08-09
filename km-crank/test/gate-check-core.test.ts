@@ -109,44 +109,28 @@ describe("suitesForChangedPaths (package-level TIA)", () => {
 
 describe("pullInsFor('ccgate', ...) — amendment b, exact lists (ported from the retired slowCcgateTestsForChangedPaths)", () => {
   test("changed slow source pulls its DIRECT value-import consumers (exact lists)", () => {
-    expect(pullInsFor("ccgate", ["cc-gate-plugin/src/gauge/acp-daemon.ts"]))
-      .toEqual(["test/acp-daemon.test.ts"])
     expect(pullInsFor("ccgate", ["cc-gate-plugin/src/gauge/agent-transport.ts"]))
-      .toEqual(["test/acp-client.test.ts", "test/anthropic-cli-warm.test.ts", "test/gauge-agent-transport.test.ts"])
+      .toEqual(["test/anthropic-cli-warm.test.ts", "test/gauge-agent-transport.test.ts"])
     expect(pullInsFor("ccgate", ["cc-gate-plugin/src/gauge/providers/anthropic-cli-warm.ts"]))
       .toEqual(["test/anthropic-cli-warm.test.ts"])
-    expect(pullInsFor("ccgate", ["cc-gate-plugin/src/gauge/warm-session.ts"]))
-      .toEqual(["test/acp-pool.test.ts", "test/warm-session.test.ts"])
-    expect(pullInsFor("ccgate", ["cc-gate-plugin/src/gauge/acp-pool.ts"]))
-      .toEqual(["test/acp-daemon.test.ts", "test/acp-pool.test.ts"])
   })
-  test("CURRENT layout: src/acp/ paths match the same basename-anchored regexes (exact lists)", () => {
-    // The ACP sources actually live here post-promotion (2026-08-06). These
-    // cases are the ones that prove the module-doc's claim ("sources in
-    // src/acp/...") true — the gauge/-path cases above are kept alongside
-    // them to prove the basename anchoring is genuinely path-agnostic, not
-    // because src/gauge/acp-daemon.ts etc. still exist.
-    expect(pullInsFor("ccgate", ["cc-gate-plugin/src/acp/acp-daemon.ts"]))
-      .toEqual(["test/acp-daemon.test.ts"])
-    expect(pullInsFor("ccgate", ["cc-gate-plugin/src/acp/acp-pool.ts"]))
-      .toEqual(["test/acp-daemon.test.ts", "test/acp-pool.test.ts"])
-    expect(pullInsFor("ccgate", ["cc-gate-plugin/src/acp/warm-session.ts"]))
-      .toEqual(["test/acp-pool.test.ts", "test/warm-session.test.ts"])
-    expect(pullInsFor("ccgate", ["cc-gate-plugin/src/acp/acp-client.ts"]))
-      .toEqual(["test/acp-client.test.ts"])
+  test("retired src/acp/ sources: no rule matches their basenames anymore (exact no-pull-in)", () => {
+    // src/acp/ was deleted from cc-gate-plugin (retired in favor of the
+    // @th-yoo/cc-api-daemon package, 2026-08-09) along with its pull-in
+    // rules above — confirm pullInsFor doesn't resurrect the now-deleted
+    // test paths for these basenames.
+    expect(pullInsFor("ccgate", ["cc-gate-plugin/src/acp/acp-daemon.ts"])).toEqual([])
+    expect(pullInsFor("ccgate", ["cc-gate-plugin/src/acp/acp-pool.ts"])).toEqual([])
+    expect(pullInsFor("ccgate", ["cc-gate-plugin/src/acp/warm-session.ts"])).toEqual([])
+    expect(pullInsFor("ccgate", ["cc-gate-plugin/src/acp/acp-client.ts"])).toEqual([])
   })
   test("changed slow TEST file pulls itself", () => {
-    expect(pullInsFor("ccgate", ["cc-gate-plugin/test/warm-session.test.ts"]))
-      .toEqual(["test/warm-session.test.ts"])
+    expect(pullInsFor("ccgate", ["cc-gate-plugin/test/gauge-agent-transport.test.ts"]))
+      .toEqual(["test/gauge-agent-transport.test.ts"])
   })
   test("changed test stubs pull their direct slow consumers (exact lists)", () => {
-    expect(pullInsFor("ccgate", ["cc-gate-plugin/test/acp-fake-daemon.ts"]))
-      .toEqual(["test/acp-client.test.ts", "test/anthropic-cli-warm.test.ts"])
     expect(pullInsFor("ccgate", ["cc-gate-plugin/test/agent-cli-stub.ts"]))
-      .toEqual([
-        "test/acp-client.test.ts", "test/acp-daemon.test.ts",
-        "test/gauge-agent-transport.test.ts", "test/warm-session.test.ts",
-      ])
+      .toEqual(["test/gauge-agent-transport.test.ts"])
   })
   test("fast files, foreign packages, near-miss basenames pull nothing", () => {
     expect(pullInsFor("ccgate", [
@@ -157,8 +141,8 @@ describe("pullInsFor('ccgate', ...) — amendment b, exact lists (ported from th
   })
   test("deduplicated union across paths", () => {
     expect(pullInsFor("ccgate", [
-      "cc-gate-plugin/src/gauge/acp-pool.ts", "cc-gate-plugin/test/acp-pool.test.ts",
-    ])).toEqual(["test/acp-daemon.test.ts", "test/acp-pool.test.ts"])
+      "cc-gate-plugin/src/gauge/agent-transport.ts", "cc-gate-plugin/test/agent-cli-stub.ts",
+    ])).toEqual(["test/anthropic-cli-warm.test.ts", "test/gauge-agent-transport.test.ts"])
   })
 })
 
@@ -193,13 +177,11 @@ describe("pullInsFor (suite-keyed pull-in)", () => {
 describe("fastFiles (suite-keyed, ported from the retired ccgateFastFiles)", () => {
   test("ccgate: filters exactly the spawn-heavy files, keeps the rest", () => {
     const files = [
-      "test/acp-client.test.ts", "test/acp-daemon.test.ts", "test/acp-pool.test.ts",
-      "test/anthropic-cli-warm.test.ts", "test/warm-session.test.ts",
-      "test/gauge-agent-transport.test.ts",
-      "test/acp-wire.test.ts", "test/acp-paths.test.ts", "test/reinject.test.ts",
+      "test/anthropic-cli-warm.test.ts", "test/gauge-agent-transport.test.ts",
+      "test/reinject.test.ts", "test/anthropic-api.test.ts",
     ]
     expect(fastFiles("ccgate", files)).toEqual([
-      "test/acp-wire.test.ts", "test/acp-paths.test.ts", "test/reinject.test.ts",
+      "test/reinject.test.ts", "test/anthropic-api.test.ts",
     ])
   })
   test("ccgate: empty in, empty out", () => {
@@ -230,13 +212,13 @@ describe("SUITE_POLICY / PKG_DIR invariant (gate-check-core.ts:197-207)", () => 
 
 describe("fastArgvSuffix (scanFastArgv's pure decision half — review fix)", () => {
   test("scanFailed=false: behaves exactly like fastFiles, narrowed normally", () => {
-    expect(fastArgvSuffix("ccgate", ["test/acp-wire.test.ts", "test/acp-daemon.test.ts"], false))
-      .toEqual(["test/acp-wire.test.ts"])
+    expect(fastArgvSuffix("ccgate", ["test/reinject.test.ts", "test/anthropic-cli-warm.test.ts"], false))
+      .toEqual(["test/reinject.test.ts"])
   })
   test("scanFailed=true DISCARDS whatever was collected, even a non-empty partial scan — the MEDIUM fix: " +
     "a partial failure (one root threw, the other read fine and contributed real fast files) must not " +
     "produce a narrowed-looking-but-incomplete argv", () => {
-    expect(fastArgvSuffix("ccgate", ["test/acp-wire.test.ts", "test/reinject.test.ts"], true))
+    expect(fastArgvSuffix("ccgate", ["test/reinject.test.ts", "test/anthropic-api.test.ts"], true))
       .toEqual([])
   })
   test("scanFailed=true with an empty partial scan also discards to [] (same outcome, degenerate input)", () => {

@@ -135,7 +135,7 @@ export function suitesForChangedPaths(paths: string[]): SuiteId[] {
  * background full check, and in the pre-merge sanity chain. ONE regex = one
  * policy site. */
 const SLOW_CCGATE_TEST_RE =
-  /(acp-client|acp-daemon|acp-pool|anthropic-cli-warm|warm-session|gauge-agent-transport)\.test\.ts$/
+  /(anthropic-cli-warm|gauge-agent-transport)\.test\.ts$/
 
 /** Spawn-heavy km-crank test file excluded from tier 0. Measured 2026-08-06:
  * gate-check-cli.test.ts is an end-to-end CLI drive with multi-second
@@ -193,12 +193,12 @@ const CCGATE_GUARD = /^cc-gate-plugin\//
  * acp-daemon.ts ⇒ TIA picks ccgate ⇒ tier 0 runs ccgate MINUS the
  * acp-daemon tests). Targeted: only the matching file(s), never the whole
  * ~110s slow set. Source basenames + stub consumers grep-verified
- * 2026-08-05 against cc-gate-plugin (sources in src/acp/ and
- * src/gauge/providers/; stubs in test/). The ACP sources moved from
- * src/gauge/ to src/acp/ later the same day; these patterns are
- * basename-anchored (`(^|\/)name\.ts$`) precisely so a directory move
- * cannot silently stop them matching — do not re-anchor them to a
- * directory. */
+ * 2026-08-05 against cc-gate-plugin (sources in src/gauge/providers/;
+ * stubs in test/). src/acp/ was retired in favor of the @th-yoo/cc-api-daemon
+ * package, so its former sources and stubs no longer have pull-in rules
+ * here. These patterns are basename-anchored (`(^|\/)name\.ts$`)
+ * precisely so a directory move cannot silently stop them matching — do
+ * not re-anchor them to a directory. */
 // Policy: DIRECT value imports only (one hop, source/stub -> slow test
 // file; `import type` does not count — it cannot break at runtime).
 // Deeper transitive chains (e.g. warm-session.ts -> acp-pool.ts ->
@@ -222,22 +222,14 @@ export const SUITE_POLICY: Partial<Record<SuiteId, SuitePolicy>> = {
   ccgate: {
     slowTestRe: SLOW_CCGATE_TEST_RE,
     rules: [
-      { re: /(^|\/)acp-client\.ts$/, tests: ["test/acp-client.test.ts"], guard: CCGATE_GUARD },
-      { re: /(^|\/)acp-daemon\.ts$/, tests: ["test/acp-daemon.test.ts"], guard: CCGATE_GUARD },
-      { re: /(^|\/)acp-pool\.ts$/, tests: ["test/acp-daemon.test.ts", "test/acp-pool.test.ts"], guard: CCGATE_GUARD },
       { re: /(^|\/)anthropic-cli-warm\.ts$/, tests: ["test/anthropic-cli-warm.test.ts"], guard: CCGATE_GUARD },
-      { re: /(^|\/)warm-session\.ts$/, tests: ["test/acp-pool.test.ts", "test/warm-session.test.ts"], guard: CCGATE_GUARD },
       { re: /(^|\/)agent-transport\.ts$/, tests: [
-        "test/acp-client.test.ts", "test/anthropic-cli-warm.test.ts", "test/gauge-agent-transport.test.ts",
+        "test/anthropic-cli-warm.test.ts", "test/gauge-agent-transport.test.ts",
       ], guard: CCGATE_GUARD },
       // test stubs — direct value consumers among the SLOW files only
       // (anthropic-api.test.ts also imports agent-cli-stub but is fast — it
       // already runs in every ccgate tier 0):
-      { re: /(^|\/)acp-fake-daemon\.ts$/, tests: ["test/acp-client.test.ts", "test/anthropic-cli-warm.test.ts"], guard: CCGATE_GUARD },
-      { re: /(^|\/)agent-cli-stub\.ts$/, tests: [
-        "test/acp-client.test.ts", "test/acp-daemon.test.ts",
-        "test/gauge-agent-transport.test.ts", "test/warm-session.test.ts",
-      ], guard: CCGATE_GUARD },
+      { re: /(^|\/)agent-cli-stub\.ts$/, tests: ["test/gauge-agent-transport.test.ts"], guard: CCGATE_GUARD },
     ],
   },
   kmcrank: {
