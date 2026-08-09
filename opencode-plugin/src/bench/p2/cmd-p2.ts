@@ -63,7 +63,13 @@ import type { AgentDriver } from "../drivers/types.ts"
 import type { TrajEvent } from "../../harness-store.ts"
 import { BenchError, die, log, pyFixed } from "../util.ts"
 import { P2_RULE_TEXT, ruleSha, isCompliant, bashCommandsFromEvents } from "./rule.ts"
-import { runA4Review, buildReinjectInstruction, A4_TURN_CAP, type A4Evidence, type A4ReviewResult } from "./a4-review.ts"
+import {
+  runA4Review,
+  buildReinjectInstruction,
+  isA4ReviewTruncated,
+  A4_TURN_CAP,
+  type A4Evidence,
+} from "./a4-review.ts"
 
 export type P2Arm = "a1" | "a3" | "a4"
 
@@ -149,9 +155,19 @@ export interface P2AttemptResult {
    * `complied: false`). Always false for a1/a3. */
   reprompted: boolean
   /** True iff a4's review call itself failed (runA4Review returned
-   * undefined) — no re-pass fires in that case (brief bullet 2's a4 spec).
-   * Always false for a1/a3. */
+   * something other than a parsed A4ReviewResult) — no re-pass fires in
+   * that case (brief bullet 2's a4 spec). Always false for a1/a3. */
   reviewFailed: boolean
+  /** True iff `reviewFailed` was specifically a truncation
+   * (`runA4Review`/`isA4ReviewTruncated` — a4-review.ts's header,
+   * surface-truncation v0.5.0): the api lane's fixed maxTokens cap cut the
+   * reviewer's own reply off (`stopReason === "max_tokens"`), never a
+   * proxy for "the model returned junk". Always implies `reviewFailed`;
+   * always false for a1/a3 and whenever `reviewFailed` is false. Recorded
+   * distinctly so P2's results don't fold an instrumentation failure into
+   * a real one — see a4-review.ts's header for why that matters for a
+   * carrier comparison. */
+  reviewTruncated: boolean
 }
 
 export type RunA4ReviewFn = typeof runA4Review
@@ -204,6 +220,7 @@ export async function runOneP2Attempt(
     compliant: false,
     reprompted: false,
     reviewFailed: false,
+    reviewTruncated: false,
   })
 
   try {
@@ -272,12 +289,22 @@ export async function runOneP2Attempt(
     let compliant = false
     let reprompted = false
     let reviewFailed = false
+    let reviewTruncated = false
 
     if (arm === "a4") {
       const evidence1 = await gatherEvidence(name, output.events, execFn)
-      const review: A4ReviewResult | undefined = await runReview(evidence1, env)
+      const review = await runReview(evidence1, env)
       if (review === undefined) {
         reviewFailed = true
+        compliant = isCompliant(evidence1.doneCheck, evidence1.bashCommands)
+      } else if (isA4ReviewTruncated(review)) {
+        // The reviewer's own reply was cut off by the api lane's maxTokens
+        // cap (a4-review.ts's header) — this is STILL a review failure (no
+        // re-pass fires, same as the undefined branch), but recorded
+        // distinctly so it doesn't get folded into "the model returned
+        // junk" when P2's results are read.
+        reviewFailed = true
+        reviewTruncated = true
         compliant = isCompliant(evidence1.doneCheck, evidence1.bashCommands)
       } else if (review.complied) {
         compliant = isCompliant(evidence1.doneCheck, evidence1.bashCommands)
@@ -314,7 +341,7 @@ export async function runOneP2Attempt(
     } catch (e) {
       const msg = e instanceof BenchError ? e.message : (e as Error).message
       log(`  copy-tests failed: ${msg}`)
-      return { ...fail("setup_failed"), compliant, reprompted, reviewFailed }
+      return { ...fail("setup_failed"), compliant, reprompted, reviewFailed, reviewTruncated }
     }
     const reward = await runVerifier(paths, name, task, verifierTimeout)
     const elapsed = round1((Date.now() - taskStart) / 1000)
@@ -327,6 +354,7 @@ export async function runOneP2Attempt(
       compliant,
       reprompted,
       reviewFailed,
+      reviewTruncated,
     }
   } finally {
     await execFn(buildRmArgv(name))
@@ -355,10 +383,16 @@ export interface CmdP2Deps {
 }
 
 /** Compact per-attempt annotation (this file's header — the `errors[]`
- * reuse). JSON so Task 5's tally can parse it without a bespoke format. */
+ * reuse). JSON so Task 5's tally can parse it without a bespoke format.
+ * `reviewTruncated` (surface-truncation v0.5.0, a4-review.ts's header) is
+ * an ADDITIVE field alongside the original four — any existing reader
+ * that only checks `compliant`/`reprompted`/`reviewFailed`/`error` (e.g.
+ * scripts/p2-tally.ts's `parseAttemptAnnotation`, which validates via a
+ * `typeof` check on each of exactly those four keys) is unaffected by an
+ * extra key it doesn't look for. */
 function attemptLabel(
   arm: P2Arm,
-  result: Pick<P2AttemptResult, "compliant" | "reprompted" | "reviewFailed" | "error">,
+  result: Pick<P2AttemptResult, "compliant" | "reprompted" | "reviewFailed" | "reviewTruncated" | "error">,
 ): string {
   return JSON.stringify({
     arm,
@@ -366,6 +400,7 @@ function attemptLabel(
     compliant: result.compliant,
     reprompted: result.reprompted,
     reviewFailed: result.reviewFailed,
+    reviewTruncated: result.reviewTruncated,
     error: result.error,
   })
 }

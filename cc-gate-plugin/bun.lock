@@ -7,7 +7,7 @@
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.3.220",
         "@anthropic-ai/sdk": "^0.115.0",
-        "@th-yoo/cc-api-daemon": "git+https://github.com/th-yoo/cc-api-daemon.git#f99bcd689ec002cb0a2f12a3bf3430ac024e4485",
+        "@th-yoo/cc-api-daemon": "git+https://github.com/th-yoo/cc-api-daemon.git#baee1c4b394c03e7b7d2a72ac40b38cbadfdd5cb",
       },
       "devDependencies": {
         "@tsconfig/node22": "^22.0.0",
@@ -46,7 +46,7 @@
 
     "@stablelib/base64": ["@stablelib/base64@1.0.1", "", {}, "sha512-1bnPQqSxSuc3Ii6MhBysoWCg58j97aUjuCSZrGSmDxNqtytIi0k8utUenAwTZN4V5mXXYGsVUI9zeBqy+jBOSQ=="],
 
-    "@th-yoo/cc-api-daemon": ["@th-yoo/cc-api-daemon@github:th-yoo/cc-api-daemon#f99bcd6", { "dependencies": { "@anthropic-ai/claude-agent-sdk": "^0.3.220", "@anthropic-ai/sdk": "^0.115.0", "@types/ws": "^8.18.1", "ws": "^8.21.2" } }, "th-yoo-cc-api-daemon-f99bcd6", "sha512-68nu/d2DHi4xPP83LWXaNVwbV/lONQ1wX433qsX5JKo5qGc1idti7kNmhTvj6OY3QzCQUIj361j0AC2AIV0x0w=="],
+    "@th-yoo/cc-api-daemon": ["@th-yoo/cc-api-daemon@github:th-yoo/cc-api-daemon#baee1c4", { "dependencies": { "@anthropic-ai/claude-agent-sdk": "^0.3.220", "@anthropic-ai/sdk": "^0.115.0", "@types/ws": "^8.18.1", "ws": "^8.21.2" } }, "th-yoo-cc-api-daemon-baee1c4", "sha512-XzUMfdNatVtp1yTE34jYm9zci2RD9wI3R8090ecX3yb3ZPQIoEE6awbfX19oEnS77zmFsZQuXFBiSpTHygjVTg=="],
 
     "@tsconfig/node22": ["@tsconfig/node22@22.0.5", "", {}, "sha512-hLf2ld+sYN/BtOJjHUWOk568dvjFQkHnLNa6zce25GIH+vxKfvTgm3qpaH6ToF5tu/NN0IH66s+Bb5wElHrLcw=="],
 

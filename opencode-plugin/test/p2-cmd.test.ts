@@ -218,6 +218,7 @@ function okResult(overrides: Partial<P2AttemptResult> = {}): P2AttemptResult {
     compliant: true,
     reprompted: false,
     reviewFailed: false,
+    reviewTruncated: false,
     ...overrides,
   }
 }
@@ -248,7 +249,7 @@ test("cmdP2: a3 — runOneAttempt receives the stock harness UNCHANGED (no appen
   expect(harnessSeen[0]).not.toContain(P2_RULE_TEXT)
 })
 
-test("cmdP2: writes results with label 'p2-<arm>' and per-attempt annotation carrying arm/ruleSha/compliant/reprompted/reviewFailed", async () => {
+test("cmdP2: writes results with label 'p2-<arm>' and per-attempt annotation carrying arm/ruleSha/compliant/reprompted/reviewFailed/reviewTruncated", async () => {
   const { paths, resultsFile } = setup(["t1"])
   const args: CmdP2Args = { arm: "a4", tasks: ["t1"], k: 1, go: 2, resultsFile }
   await cmdP2(paths, args, {
@@ -266,6 +267,19 @@ test("cmdP2: writes results with label 'p2-<arm>' and per-attempt annotation car
   expect(annotation.compliant).toBe(false)
   expect(annotation.reprompted).toBe(true)
   expect(annotation.reviewFailed).toBe(false)
+  expect(annotation.reviewTruncated).toBe(false)
+})
+
+test("cmdP2: per-attempt annotation carries reviewTruncated: true when the fake runOneAttempt reports it (surface-truncation v0.5.0)", async () => {
+  const { paths, resultsFile } = setup(["t1"])
+  const args: CmdP2Args = { arm: "a4", tasks: ["t1"], k: 1, go: 2, resultsFile }
+  await cmdP2(paths, args, {
+    runOneAttempt: async () => okResult({ compliant: false, reprompted: false, reviewFailed: true, reviewTruncated: true }),
+  })
+  const written = JSON.parse(fs.readFileSync(resultsFile, "utf-8"))
+  const annotation = JSON.parse(written.tasks.t1.errors[0])
+  expect(annotation.reviewFailed).toBe(true)
+  expect(annotation.reviewTruncated).toBe(true)
 })
 
 // ── runOneP2Attempt dispatch (real container lifecycle, fake execFn/driver) ─
@@ -436,10 +450,21 @@ test("runOneP2Attempt: a4 with complied:false fires exactly ONE re-pass carrying
   expect(result.compliant).toBe(true)
 })
 
-test("runOneP2Attempt: a4 review failure (undefined) fires NO re-pass, records reviewFailed", async () => {
+test("runOneP2Attempt: a4 review failure (undefined) fires NO re-pass, records reviewFailed but NOT reviewTruncated", async () => {
   const fakeReview: RunA4ReviewFn = async () => undefined
   const { result, calls } = await callRunOneP2Attempt("a4", { catSequence: [NONCOMPLIANT_DONE_CHECK] }, fakeReview)
   expect(result.reviewFailed).toBe(true)
+  expect(result.reviewTruncated).toBe(false)
+  expect(result.reprompted).toBe(false)
+  expect(calls.filter((c) => c.includes("fake-agent")).length).toBe(1) // no re-pass
+  expect(result.compliant).toBe(false) // evidence1 was non-compliant, no re-pass to fix it
+})
+
+test("runOneP2Attempt: a4 review TRUNCATED ({truncated: true}) fires NO re-pass, records BOTH reviewFailed and reviewTruncated — distinguishable from a plain junk-output failure (surface-truncation v0.5.0)", async () => {
+  const fakeReview: RunA4ReviewFn = async () => ({ truncated: true })
+  const { result, calls } = await callRunOneP2Attempt("a4", { catSequence: [NONCOMPLIANT_DONE_CHECK] }, fakeReview)
+  expect(result.reviewFailed).toBe(true)
+  expect(result.reviewTruncated).toBe(true)
   expect(result.reprompted).toBe(false)
   expect(calls.filter((c) => c.includes("fake-agent")).length).toBe(1) // no re-pass
   expect(result.compliant).toBe(false) // evidence1 was non-compliant, no re-pass to fix it

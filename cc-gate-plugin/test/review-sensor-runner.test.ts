@@ -18,6 +18,14 @@ import { execFileSync } from "node:child_process"
 import { runOnce, type RunnerDeps } from "../src/review-sensor/runner.ts"
 import { MODEL } from "../src/review-sensor/core.ts"
 import type { DaemonOutcome } from "../src/acp/index.ts"
+// The stopReason field (surface-truncation, v0.5.0) lives on the PACKAGE's
+// DaemonOutcome, not the untouched in-repo `../src/acp/index.ts` one
+// (`../src/acp/` is byte-identical by hard constraint) — runner.ts's
+// RunnerDeps.call is actually `typeof daemonCall` from
+// acp-client-singleton.ts, which re-exports the package's client, so a
+// fake constructed with the package's own type below is exactly what
+// production code hands it.
+import type { DaemonOutcome as PackageDaemonOutcome } from "@th-yoo/cc-api-daemon"
 
 const CLEANUP: string[] = []
 afterEach(() => {
@@ -203,5 +211,97 @@ describe("runOnce", () => {
     // already tolerates an unknown/invalid sessionId) rather than treating
     // this as proven-intentional design.
     expect(closeCalls).toEqual([])
+  })
+
+  test('ok outcome with stopReason "max_tokens" -> SKIP line (output-truncated), even though the text itself would parse fine — proves truncation is checked BEFORE parseFindings, not as a fallback after it fails', async () => {
+    const { dir } = repoWithPendingDiff()
+    const p = kmPaths(dir)
+
+    const closeCalls: string[] = []
+    const deps: RunnerDeps = {
+      now: () => Date.now(),
+      call: async (): Promise<PackageDaemonOutcome> => ({
+        kind: "ok",
+        // Deliberately well-formed JSON that `parseFindings` would accept
+        // on its own — the point of this test is that the stopReason
+        // check pre-empts parsing entirely, not that parsing happens to
+        // fail on truncated text.
+        text: JSON.stringify({ findings: [] }),
+        model: MODEL,
+        canonicalModel: MODEL,
+        sessionId: "sess-trunc",
+        stopReason: "max_tokens",
+      }),
+      close: async (sessionId) => {
+        closeCalls.push(sessionId)
+        return { closed: true }
+      },
+      ensure: async () => true,
+    }
+
+    await runOnce(dir, {}, deps)
+
+    const lines = readLines(p.streamPath)
+    expect(lines.length).toBe(1)
+    expect(lines[0]!.skipped).toBe(true)
+    expect(lines[0]!.reason).toBe("output-truncated")
+    expect("findingsCount" in lines[0]!).toBe(false) // never a pass line
+
+    expect(fs.existsSync(p.statePath)).toBe(false) // ok-but-truncated never advances state
+    expect(fs.existsSync(p.claimPath)).toBe(false)
+    // A session WAS established on this "ok" outcome, so close-not-release
+    // still applies — truncation is a content classification of an "ok"
+    // outcome, not a different outcome kind.
+    expect(closeCalls).toEqual(["sess-trunc"])
+  })
+
+  test('ok outcome with stopReason undefined (absent, e.g. the agent lane) and junk text -> the GENERIC bad-review-output reason, never output-truncated — absent means unknown, not "not truncated", but it also never means "truncated"', async () => {
+    const { dir } = repoWithPendingDiff()
+    const p = kmPaths(dir)
+
+    const deps: RunnerDeps = {
+      now: () => Date.now(),
+      call: async (): Promise<PackageDaemonOutcome> => ({
+        kind: "ok",
+        text: "not json at all",
+        model: MODEL,
+        canonicalModel: MODEL,
+        sessionId: "sess-junk",
+        // stopReason intentionally omitted.
+      }),
+      close: async () => ({ closed: true }),
+      ensure: async () => true,
+    }
+
+    await runOnce(dir, {}, deps)
+
+    const lines = readLines(p.streamPath)
+    expect(lines.length).toBe(1)
+    expect(lines[0]!.reason).toBe("bad-review-output")
+  })
+
+  test('ok outcome with stopReason "end_turn" (a real, non-truncating value) and junk text -> bad-review-output, not output-truncated — only the exact string "max_tokens" triggers truncation', async () => {
+    const { dir } = repoWithPendingDiff()
+    const p = kmPaths(dir)
+
+    const deps: RunnerDeps = {
+      now: () => Date.now(),
+      call: async (): Promise<PackageDaemonOutcome> => ({
+        kind: "ok",
+        text: "not json at all",
+        model: MODEL,
+        canonicalModel: MODEL,
+        sessionId: "sess-junk-2",
+        stopReason: "end_turn",
+      }),
+      close: async () => ({ closed: true }),
+      ensure: async () => true,
+    }
+
+    await runOnce(dir, {}, deps)
+
+    const lines = readLines(p.streamPath)
+    expect(lines.length).toBe(1)
+    expect(lines[0]!.reason).toBe("bad-review-output")
   })
 })

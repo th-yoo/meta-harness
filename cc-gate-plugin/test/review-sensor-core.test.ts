@@ -15,6 +15,7 @@ import {
   DAILY_CAP,
   MODEL,
   type SensorState,
+  type SkipReason,
 } from "../src/review-sensor/core.ts"
 import { pruneSideFiles } from "../src/review-sensor/runner.ts"
 
@@ -617,18 +618,23 @@ describe("skipLine", () => {
   })
 
   test("all skip reasons emitted correctly", () => {
-    const reasons: Array<
-      "debounce" | "cap" | "clock-skew" | "claim-lost" | "merge-in-progress" | "warm-lane-busy" | "bad-review-output" | "dispatch-error"
-    > = [
-      "debounce",
-      "cap",
-      "clock-skew",
-      "claim-lost",
-      "merge-in-progress",
-      "warm-lane-busy",
-      "bad-review-output",
-      "dispatch-error",
-    ]
+    // A `Record<SkipReason, true>` rather than a hand-copied literal array:
+    // if core.ts's SkipReason union ever gains (or loses) a member without
+    // a matching edit here, `bunx tsc --noEmit` fails on a missing/excess
+    // key — a REAL exhaustiveness check the type system enforces, not a
+    // copy that can silently drift out of sync with the implementation.
+    const REASON_MEMBERSHIP: Record<SkipReason, true> = {
+      debounce: true,
+      cap: true,
+      "clock-skew": true,
+      "claim-lost": true,
+      "merge-in-progress": true,
+      "warm-lane-busy": true,
+      "bad-review-output": true,
+      "output-truncated": true,
+      "dispatch-error": true,
+    }
+    const reasons = Object.keys(REASON_MEMBERSHIP) as SkipReason[]
 
     for (const reason of reasons) {
       const line = skipLine({
