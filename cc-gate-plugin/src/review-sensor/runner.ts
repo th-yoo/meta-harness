@@ -46,11 +46,11 @@ import { ensureDaemon, daemonCall, closeSession } from "../acp-client-singleton.
 import { readPluginVersion } from "../sensor-append.ts"
 
 /** review-sensor's isolation profile — copies GAUGE_ISOLATION's shape
- * (acp-wire.ts) with a distinct marker `title`, per index.ts's own
- * extraction-wart note (:20-26): an isolation VALUE belongs to the
- * consumer, not the ACP layer, so it is declared here on the caller side.
- * Same sibling relationship as REASONING_ISOLATION in
- * src/gauge/send-prompt.ts. */
+ * (src/gauge/send-prompt.ts, formerly src/acp/acp-wire.ts before that dir
+ * retired in favor of @th-yoo/cc-api-daemon) with a distinct marker
+ * `title`: an isolation VALUE belongs to the consumer, not the ACP layer,
+ * so it is declared here on the caller side. Same sibling relationship as
+ * REASONING_ISOLATION in src/gauge/send-prompt.ts. */
 export const REVIEW_SENSOR_ISOLATION: WarmIsolation = {
   systemPrompt: "",
   settingSources: [],

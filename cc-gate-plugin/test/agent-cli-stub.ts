@@ -1,8 +1,12 @@
 // Shared CLI-spawning stub helpers for gauge agent-sdk-transport tests.
 // Extracted from gauge-agent-transport.test.ts (Task 4 Step 0, DECLARED
-// EXCEPTION #4) so later test files (warm-session.test.ts, acp-wire.test.ts,
-// etc.) can reuse them without duplicating the credentials probe or the
-// SSE-shaped stub. NOT matched by bun's test glob — same as sdk-stub.ts.
+// EXCEPTION #4). Surviving consumers (grep-verified 2026-08-09, post
+// src/acp/ retirement): gauge-agent-transport.test.ts (HAS_CLAUDE_CODE_
+// CREDENTIALS, sseText, withCaptureStub) and anthropic-api.test.ts
+// (silentServer). warm-session.test.ts and acp-wire.test.ts, the consumers
+// this comment used to cite, are gone from this repo — that machinery now
+// lives in the @th-yoo/cc-api-daemon package's own test/agent-cli-stub.ts.
+// NOT matched by bun's test glob — same as sdk-stub.ts.
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -34,7 +38,11 @@ function hasClaudeCodeCredentials(): boolean {
 }
 
 export const HAS_CLAUDE_CODE_CREDENTIALS = hasClaudeCodeCredentials()
-export const NO_CREDENTIALS_SKIP_REASON =
+// Fix-wave finding 3 (2026-08-09): grep-verified zero repo-wide import
+// consumers of this constant — un-exported (was `export const`) rather than
+// deleted outright, since it still has an internal consumer immediately
+// below (the console.warn message).
+const NO_CREDENTIALS_SKIP_REASON =
   "no on-disk Claude Code credentials found (~/.claude/.credentials.json / macOS keychain) — " +
   "CLI-spawning agentSdkCall tests require a credentialed host to authenticate the spawned CLI. " +
   "The measurement host (a host WITH credentials present) MUST still run these, not skip them."
@@ -136,34 +144,11 @@ export function silentServer(): { url: string; stop: () => void } {
   return { url: `http://127.0.0.1:${s.port}`, stop: () => s.stop(true) }
 }
 
-/** A server whose FIRST request hangs forever and whose later requests are
- * answered normally — the shape the turn-timeout tests need. */
-export function hangFirstServer(text: string, model = "claude-haiku-4-5"): { url: string; stop: () => void; count: () => number } {
-  let n = 0
-  const s = Bun.serve({
-    port: 0,
-    fetch: async (req) => {
-      const body = await req.text()
-      if (!body) return new Response(null, { status: 200 })   // HEAD /api/hello probe
-      n++
-      if (n === 1) return new Promise<Response>(() => {})
-      return sseText(text, model)
-    },
-  })
-  return { url: `http://127.0.0.1:${s.port}`, stop: () => s.stop(true), count: () => n }
-}
-
-/** Poll `pred` until true or `ms` elapses; returns pred()'s final value.
- * REQUIRED by the cancel/close tests: "the turn has been SENT" is only
- * observable as "the stub received the request", and the CLI subprocess
- * takes 1.25-1.46 s to get there. A test that cancels or closes before
- * that point is testing a different branch than it claims to
- * (round-4 C3/I11). */
-export async function until(pred: () => boolean, ms: number): Promise<boolean> {
-  const deadline = Date.now() + ms
-  while (Date.now() < deadline) {
-    if (pred()) return true
-    await new Promise((r) => setTimeout(r, 25))
-  }
-  return pred()
-}
+// Fix-wave finding 3 (2026-08-09): `hangFirstServer` and `until` (formerly
+// here) were grep-verified to have zero repo-wide consumers — the tests
+// that used them (warm-session.test.ts's cancel/close tests etc.) moved to
+// @th-yoo/cc-api-daemon's own test/agent-cli-stub.ts with the src/acp/
+// retirement — and were deleted. If a future local test needs a
+// hang-first-request stub or a poll-until helper, recover them from git
+// history (pre-deletion, retrievable at SHA 2a5e873) rather than
+// reintroducing dead exports speculatively.

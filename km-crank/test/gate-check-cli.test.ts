@@ -252,13 +252,13 @@ describe("gate-check CLI", () => {
     const dir = tempRepo()
     const r1 = runGate(dir)
     expect(await until(() => marker(dir)?.status === "green", 15_000)).toBe(true)   // green baseline
-    fs.mkdirSync(path.join(dir, "cc-gate-plugin", "src", "acp"), { recursive: true })
-    fs.writeFileSync(path.join(dir, "cc-gate-plugin", "src", "acp", "acp-daemon.ts"), "// x")
+    fs.mkdirSync(path.join(dir, "cc-gate-plugin", "src", "gauge", "providers"), { recursive: true })
+    fs.writeFileSync(path.join(dir, "cc-gate-plugin", "src", "gauge", "providers", "anthropic-cli-warm.ts"), "// x")
     fs.rmSync(path.join(dir, "args.txt"), { force: true })
     const r2 = runGate(dir, { KKAMAK_GATE_NO_BG: "1" })
     expect(r2.status).toBe(0)
     const args = fs.readFileSync(path.join(dir, "args.txt"), "utf8")
-    expect(args).toContain("ccgate test/acp-daemon.test.ts")
+    expect(args).toContain("ccgate test/anthropic-cli-warm.test.ts")
   }, 30_000)
 
   test("a changed EXCLUDED test file appends itself to its own suite's argv (self-pull)", async () => {
@@ -266,12 +266,12 @@ describe("gate-check CLI", () => {
     const r1 = runGate(dir)
     expect(await until(() => marker(dir)?.status === "green", 15_000)).toBe(true)   // green baseline
     fs.mkdirSync(path.join(dir, "cc-gate-plugin", "test"), { recursive: true })
-    fs.writeFileSync(path.join(dir, "cc-gate-plugin", "test", "warm-session.test.ts"), "// x")
+    fs.writeFileSync(path.join(dir, "cc-gate-plugin", "test", "gauge-agent-transport.test.ts"), "// x")
     fs.rmSync(path.join(dir, "args.txt"), { force: true })
     const r2 = runGate(dir, { KKAMAK_GATE_NO_BG: "1" })
     expect(r2.status).toBe(0)
     const args = fs.readFileSync(path.join(dir, "args.txt"), "utf8")
-    expect(args).toContain("ccgate test/warm-session.test.ts")
+    expect(args).toContain("ccgate test/gauge-agent-transport.test.ts")
   }, 30_000)
 
   test("pull-in log line pins the 'suite:file' format, accumulated across MULTIPLE suites (Task 4's acceptance measurement correlates against this exact line)", async () => {
@@ -279,8 +279,8 @@ describe("gate-check CLI", () => {
     const r1 = runGate(dir)
     expect(await until(() => marker(dir)?.status === "green", 15_000)).toBe(true)   // green baseline
     // ccgate pull-in: a slow-covered source.
-    fs.mkdirSync(path.join(dir, "cc-gate-plugin", "src", "acp"), { recursive: true })
-    fs.writeFileSync(path.join(dir, "cc-gate-plugin", "src", "acp", "acp-daemon.ts"), "// x")
+    fs.mkdirSync(path.join(dir, "cc-gate-plugin", "src", "gauge", "providers"), { recursive: true })
+    fs.writeFileSync(path.join(dir, "cc-gate-plugin", "src", "gauge", "providers", "anthropic-cli-warm.ts"), "// x")
     // kmcrank pull-in: the guardless gate-entry-point rule (Task 2).
     fs.mkdirSync(path.join(dir, "scripts"), { recursive: true })
     fs.writeFileSync(path.join(dir, "scripts", "gate-check.ts"), "// x")
@@ -288,15 +288,15 @@ describe("gate-check CLI", () => {
     const r2 = runGate(dir, { KKAMAK_GATE_NO_BG: "1" })
     expect(r2.status).toBe(0)
     const out = (r2.stdout ?? "") + (r2.stderr ?? "")
-    expect(out).toContain("+ slow pull-in [ccgate:test/acp-daemon.test.ts, kmcrank:test/gate-check-cli.test.ts]")
+    expect(out).toContain("+ slow pull-in [ccgate:test/anthropic-cli-warm.test.ts, kmcrank:test/gate-check-cli.test.ts]")
   }, 30_000)
 
   test("scanFailed on a Cmd suppresses its pull-in append (degradation, not narrowing) — a real readdir failure must not silently FILTER a scan-degraded 'run everything' argv down to just the pulled-in file", async () => {
     const dir = tempRepo()
     const r1 = runGate(dir)
     expect(await until(() => marker(dir)?.status === "green", 15_000)).toBe(true)   // green baseline, writes fake.ts
-    fs.mkdirSync(path.join(dir, "cc-gate-plugin", "src", "acp"), { recursive: true })
-    fs.writeFileSync(path.join(dir, "cc-gate-plugin", "src", "acp", "acp-daemon.ts"), "// x")   // would pull-in for ccgate
+    fs.mkdirSync(path.join(dir, "cc-gate-plugin", "src", "gauge", "providers"), { recursive: true })
+    fs.writeFileSync(path.join(dir, "cc-gate-plugin", "src", "gauge", "providers", "anthropic-cli-warm.ts"), "// x")   // would pull-in for ccgate
     fs.rmSync(path.join(dir, "args.txt"), { force: true })
     // Hand-build a command table (bypassing writeCommands) with ccgate's Cmd
     // carrying scanFailed: true, simulating realCommands()'s readdirSync
@@ -319,7 +319,7 @@ describe("gate-check CLI", () => {
     expect(r2.status).toBe(0)
     expect(ran(dir)).toContain("ccgate")
     const args = fs.readFileSync(path.join(dir, "args.txt"), "utf8")
-    expect(args).not.toContain("test/acp-daemon.test.ts")   // append skipped: no filter narrowing
+    expect(args).not.toContain("test/anthropic-cli-warm.test.ts")   // append skipped: no filter narrowing
   }, 30_000)
 })
 

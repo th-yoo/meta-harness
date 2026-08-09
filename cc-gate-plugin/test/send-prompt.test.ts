@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { GAUGE_ISOLATION } from "../src/acp/acp-wire.ts"
 import {
-  REASONING_ISOLATION, registerProvider, resolveProvider, sendPrompt,
+  GAUGE_ISOLATION, REASONING_ISOLATION, registerProvider, resolveProvider, sendPrompt,
 } from "../src/gauge/send-prompt.ts"
 import type { SendOutcome, SendPromptOptions } from "../src/gauge/send-prompt.ts"
 
@@ -95,5 +94,31 @@ describe("REASONING_ISOLATION", () => {
   test("has a title distinct from GAUGE_ISOLATION's", () => {
     expect(REASONING_ISOLATION.title).not.toBe(GAUGE_ISOLATION.title)
     expect(REASONING_ISOLATION.title.length).toBeGreaterThan(0)
+  })
+})
+
+// The per-session SDK-option slice. GAUGE_ISOLATION must stay byte-identical
+// to the option literal inlined in agent-transport.ts's agentSdkCall
+// (agent-transport.ts:119-132 is the authority) — that equality is what a
+// later node's test proves against the live call site; this only locks the
+// value declared here.
+describe("WarmIsolation / GAUGE_ISOLATION (§6d/§6e gauge isolation set)", () => {
+  test("matches the agent-transport.ts option literal field-for-field", () => {
+    expect(GAUGE_ISOLATION).toEqual({
+      systemPrompt: "",
+      settingSources: [],
+      settings: { autoMemoryEnabled: false },
+      persistSession: false,
+      strictMcpConfig: true,
+      tools: [],
+      title: "kkamak-gauge",
+      thinking: { type: "disabled" },
+    })
+  })
+  test("is as-const-safe to spread into an SDK options literal", () => {
+    const options = { ...GAUGE_ISOLATION, model: "claude-haiku-4-5", cwd: "/x", env: {} }
+    expect(options.title).toBe("kkamak-gauge")
+    expect(options.model).toBe("claude-haiku-4-5")
+    expect(options.thinking).toEqual({ type: "disabled" })
   })
 })

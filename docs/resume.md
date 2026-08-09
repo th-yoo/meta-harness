@@ -16,8 +16,9 @@ WHAT LANDED (do not redo):
    dogfood plugin is cc-gate-plugin (loaded as kkamak@kkamak-local from
    ~/.claude/settings.json -> path /Users/yoo/z2/meta-harness/cc-gate-plugin).
    ~/z2/kkamak is a DIFFERENT standalone gate with no model-calling code.
-   Zero runtime imports of cc-gate-plugin/src/acp/ remain; that dir is kept,
-   still tested, purely historical now.
+   Zero runtime imports of cc-gate-plugin/src/acp/ remain; dir DELETED
+   (acp-dir-retirement, 2026-08-09); @th-yoo/cc-api-daemon is the sole implementation;
+   GAUGE_ISOLATION moved to cc-gate-plugin/src/gauge/send-prompt.ts.
  - cc-api-daemon: v0.2.0 decoupled from kkamak (ACP_* env vars, ~/.config/acpd/,
    acp/models/list — all with back-compat aliases); v0.3.0 ./testing subpath
    (WebSocket fakeDaemon + tempEnv + reaper) and exported routeBackend/
@@ -71,7 +72,7 @@ ASSIGNED TO THE SIBLING (not me): scripts/p2-tally.ts does not aggregate the new
 
 RETAINED BY DESIGN, do not "finish": gauntlet-sa-review-bar and
  gauntlet-sd-proposer-gap are DROP verdicts kept for audit/reopen (ledger
- docs/2026-08-01-gauntlet-adoption-ledger.md). cc-gate-plugin/src/acp/ stays.
+ docs/2026-08-01-gauntlet-adoption-ledger.md).
 
 RULES: explicit go before any merge to main and any spend · 7b gate +
  committed docs/reviews artifact (compute SHAs with git rev-parse, never by
