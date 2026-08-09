@@ -85,7 +85,7 @@ import { podman, withTimeout } from "../exec.ts"
 import type { ExecFn } from "../staging.ts"
 import { stageTaskRuntime } from "../staging.ts"
 import { buildCreateArgv, buildStartArgv, buildExecArgv, buildCpToArgv, buildRmArgv } from "../sandbox.ts"
-import { appendFileSync, mkdirSync } from "node:fs"
+import { appendFileSync } from "node:fs"
 import { BENCH_IMAGE, DEFAULT_BENCH_MODEL, apiKeyEnv, containerName, type BenchPaths } from "../paths.ts"
 import { selectTasks, taskTimeouts } from "../tasks.ts"
 import { copyTests, runVerifier } from "../verifier.ts"
@@ -95,7 +95,7 @@ import { writeRunResults, type TaskAgg } from "../results.ts"
 import { claudeCodeDriver } from "../drivers/claude-code.ts"
 import type { AgentDriver } from "../drivers/types.ts"
 import type { TrajEvent } from "../../harness-store.ts"
-import { BenchError, die, log, pyFixed } from "../util.ts"
+import { BenchError, die, log, pyFixed, writeTextAtomic } from "../util.ts"
 import { P2_RULE_TEXT, ruleSha, isCompliant, bashCommandsFromEvents } from "./rule.ts"
 import {
   runA4Review,
@@ -501,9 +501,30 @@ function attemptLabel(
  * holding, per a4 attempt, the bounded evidence the judge saw plus both
  * verdicts. Exists so a stronger judge tier can be scored against identical
  * inputs offline: zero containers, zero re-runs. Written ONLY when a judge
- * actually ran (a4); a1/a3 produce no file. */
+ * actually ran (a4); a1/a3 produce no file.
+ *
+ * DEFECT FIX: `resolveP2ResultsFile` only enforces that `--results-file`
+ * resolves UNDER `docs/loop-probes/p2/`, never that it ends in
+ * `-results.json`. The old code did `resultsFile.replace(/-results\.json$/,
+ * ...)` unconditionally — on a non-conforming name the regex simply doesn't
+ * match, `.replace()` no-ops, and this function silently returns the
+ * RESULTS file's own path. Every "sidecar" write then lands inside the
+ * results JSON instead, and the next `writeRunResults` (atomic temp+rename,
+ * full overwrite) destroys it — total, silent evidence loss with no error
+ * anywhere. Fail loudly instead, naming the offending path, matching this
+ * file's other `die()` fences (`resolveP2ResultsFile`, the `--go`/`--arm`/
+ * `--k` checks in `cmdP2` below). */
 export function judgeEvidencePath(resultsFile: string): string {
-  return resultsFile.replace(/-results\.json$/, "-judge-evidence.ndjson")
+  const sidecar = resultsFile.replace(/-results\.json$/, "-judge-evidence.ndjson")
+  if (sidecar === resultsFile) {
+    die(
+      `p2-run: --results-file "${resultsFile}" does not end in "-results.json" — cannot derive the judge-` +
+        `evidence sidecar path safely from it. Left as-is, evidence rows would silently land inside the ` +
+        `results file itself and be destroyed by the next atomic overwrite. Use the documented convention: ` +
+        `<hostname>-p2-<arm>-results.json.`,
+    )
+  }
+  return sidecar
 }
 
 /**
@@ -538,6 +559,35 @@ export async function cmdP2(paths: BenchPaths, args: CmdP2Args, deps: CmdP2Deps 
       `p2-run: --go ${args.go === undefined ? "(missing)" : args.go} does not match the planned execution count ` +
         `for ${tasks.length} task(s) × k=${k} on arm ${arm} — expected --go ${expectedGo}. Refusing (zero effect).`,
     )
+  }
+
+  // DEFECT FIX (sidecar lifecycle): the results file is fully OVERWRITTEN
+  // every run (writeRunResults -> writeJsonAtomic's temp+rename), and there
+  // is no `--resume` — cmdP2 always starts `taskAgg` empty. So re-running
+  // against the same `--results-file` after a crash yields a clean, correct
+  // results.json. The evidence sidecar did NOT get that treatment: it was
+  // opened with `appendFileSync` and never reset, so a killed-and-restarted
+  // invocation against the SAME `--results-file` would silently interleave
+  // stale rows from the aborted run with the new run's rows, with no run-id
+  // to tell them apart. READINESS.md documents a FIXED per-host/per-arm
+  // filename and estimates a4 at up to ~7.8h serial wall-clock, so an
+  // operator restart against that same name is the expected case, not an
+  // exotic one. Truncate the sidecar fresh here, once, before any attempt
+  // runs — mirroring the results file's own overwrite semantics rather than
+  // stamping a run-id, since the sidecar's field schema is a pending-ruling
+  // F2 exception this fix must not widen.
+  //
+  // Scoped to a4 ONLY: only a4 attempts ever produce judge evidence
+  // (`result.judgeEvidence !== undefined` below is a4-exclusive), so a1/a3
+  // never write this file at all today. An UNCONDITIONAL truncate-at-start
+  // would create a stray empty `-judge-evidence.ndjson` file for every a1/a3
+  // run — an artifact that never existed before this fix, for arms that
+  // have no evidence to reset. Gating on `arm === "a4"` keeps that absence
+  // intact. `judgeEvidencePath` also fails loudly here (see its own doc
+  // comment) on a non-conforming `--results-file`, so that failure now
+  // surfaces BEFORE any container work, like every other cmdP2 fence.
+  if (arm === "a4") {
+    writeTextAtomic(judgeEvidencePath(resultsFile), "")
   }
 
   const model = args.model || DEFAULT_BENCH_MODEL
@@ -601,12 +651,11 @@ export async function cmdP2(paths: BenchPaths, args: CmdP2Args, deps: CmdP2Deps 
       taskAgg[task]!.errors.push(attemptLabel(arm, result))
       // PRE-DATA AMENDMENT 2026-08-08 — append-per-attempt so a killed run
       // still leaves every completed attempt's evidence on disk (same
-      // durability reasoning as `flush("in_progress")` directly below).
+      // durability reasoning as `flush("in_progress")` directly below). The
+      // sidecar file itself was already truncated fresh above (a4-only), so
+      // no per-attempt mkdir is needed here.
       if (result.judgeEvidence !== undefined) {
         const sidecar = judgeEvidencePath(resultsFile)
-        // The first attempt can land before writeRunResults has created the
-        // results directory.
-        mkdirSync(dirname(sidecar), { recursive: true })
         appendFileSync(
           sidecar,
           JSON.stringify({
@@ -618,6 +667,15 @@ export async function cmdP2(paths: BenchPaths, args: CmdP2Args, deps: CmdP2Deps 
             rulePreReview: result.rulePreReview,
             reprompted: result.reprompted,
             reviewFailed: result.reviewFailed,
+            // DEFECT FIX: the committed results file carries both
+            // `judgeComplied` and `reviewTruncated` (attemptLabel above), so
+            // a reader can tell "the judge said no" from "the judge's own
+            // reply was cut off mid-object by the api lane's token cap". The
+            // sidecar carried `reviewFailed` but not this distinction, so a
+            // consumer treating the sidecar as self-contained (its stated
+            // purpose — offline re-judging without the results file) lost
+            // it. Boolean, so it stays inside F2's letter.
+            reviewTruncated: result.reviewTruncated,
             evidence: result.judgeEvidence,
           }) + "\n",
         )

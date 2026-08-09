@@ -691,3 +691,101 @@ test("runOneP2Attempt: a4 truncated review records judgeComplied null — a cut-
   expect(result.reprompted).toBe(false)
   expect(calls.filter((c) => c.includes("fake-agent")).length).toBe(1) // no re-pass
 })
+
+// ── sidecar lifecycle fixes (data-integrity defects) ───────────────────────
+//
+// The results file is fully OVERWRITTEN every run (writeJsonAtomic's
+// temp+rename, no --resume flag exists), so a re-invocation against the
+// same --results-file after a crash yields a clean, correct file. Before
+// this fix the sidecar did NOT get that treatment — it was opened with
+// `appendFileSync` and never truncated, so stale rows from an aborted
+// invocation would silently interleave with a restarted run's rows. This
+// matters concretely for P2: READINESS.md documents a FIXED per-host/
+// per-arm results-file name and estimates the a4 arm at up to ~7.8h serial
+// wall-clock, so an operator restarting a killed run against the same
+// filename is the expected case, not an exotic one.
+
+test("cmdP2: a second invocation against the same --results-file leaves the sidecar containing ONLY the second run's rows (no stale interleave from an aborted first run)", async () => {
+  const { paths, resultsFile } = setup(["t1"])
+  const sidecar = judgeEvidencePath(resultsFile)
+  if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar)
+
+  // First "run" (simulating a since-aborted invocation): 2 attempts worth
+  // of rows land on disk.
+  const firstArgs: CmdP2Args = { arm: "a4", tasks: ["t1"], k: 2, go: 4, resultsFile }
+  await cmdP2(paths, firstArgs, {
+    runOneAttempt: async () =>
+      okResult({ compliant: false, judgeComplied: true, rulePreReview: false, judgeEvidence: EVIDENCE }),
+  })
+  expect(fs.readFileSync(sidecar, "utf-8").trim().split("\n").length).toBe(2)
+
+  // Second invocation against the SAME --results-file (the restart case) —
+  // only 1 attempt this time.
+  const secondArgs: CmdP2Args = { arm: "a4", tasks: ["t1"], k: 1, go: 2, resultsFile }
+  await cmdP2(paths, secondArgs, {
+    runOneAttempt: async () =>
+      okResult({ compliant: true, judgeComplied: false, rulePreReview: true, judgeEvidence: EVIDENCE }),
+  })
+  const lines = fs.readFileSync(sidecar, "utf-8").trim().split("\n")
+  expect(lines.length).toBe(1) // NOT 3 — the stale first-run row must be gone
+  const row = JSON.parse(lines[0]!)
+  expect(row.judgeComplied).toBe(false) // the second run's row, not the first's
+  expect(row.rulePreReview).toBe(true)
+})
+
+test("cmdP2: an a1/a3 run (no evidence produced) leaves no stray sidecar file on disk, even though the arm never writes one", async () => {
+  const { paths, resultsFile } = setup(["t1"])
+  const sidecar = judgeEvidencePath(resultsFile)
+  if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar)
+  const args: CmdP2Args = { arm: "a3", tasks: ["t1"], k: 1, go: 1, resultsFile }
+  await cmdP2(paths, args, { runOneAttempt: async () => okResult() })
+  // A blind truncate-at-start (unconditional on arm) would have created an
+  // empty sidecar file here that never existed before this fix — a1/a3
+  // never produce judge evidence, so no sidecar should exist at all.
+  expect(fs.existsSync(sidecar)).toBe(false)
+})
+
+test("cmdP2: a truncated review's sidecar row carries reviewTruncated: true, so an offline consumer treating the sidecar as self-contained can still distinguish it from a plain judge failure", async () => {
+  const { paths, resultsFile } = setup(["t1"])
+  const sidecar = judgeEvidencePath(resultsFile)
+  if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar)
+  const args: CmdP2Args = { arm: "a4", tasks: ["t1"], k: 1, go: 2, resultsFile }
+  await cmdP2(paths, args, {
+    runOneAttempt: async () =>
+      okResult({
+        compliant: false,
+        reviewFailed: true,
+        reviewTruncated: true,
+        judgeComplied: null,
+        rulePreReview: false,
+        judgeEvidence: EVIDENCE,
+      }),
+  })
+  const lines = fs.readFileSync(sidecar, "utf-8").trim().split("\n")
+  expect(lines.length).toBe(1)
+  const row = JSON.parse(lines[0]!)
+  expect(row.reviewFailed).toBe(true)
+  expect(row.reviewTruncated).toBe(true)
+})
+
+test("cmdP2: a non-conforming --results-file name (doesn't end in -results.json) fails loudly instead of silently writing evidence into the results file", async () => {
+  const { paths } = setup(["t1"])
+  const badResultsFile = path.join(paths.metaRoot, "docs", "loop-probes", "p2", "test.json")
+  let called = false
+  const args: CmdP2Args = { arm: "a4", tasks: ["t1"], k: 1, go: 2, resultsFile: badResultsFile }
+  await expect(
+    cmdP2(paths, args, {
+      runOneAttempt: async () => {
+        called = true
+        return okResult({ judgeEvidence: EVIDENCE })
+      },
+    }),
+  ).rejects.toThrow(BenchError)
+  expect(called).toBe(false) // fenced BEFORE any container work, like the other cmdP2 fences
+  // the results file itself must not have absorbed evidence rows
+  expect(fs.existsSync(badResultsFile)).toBe(false)
+})
+
+test("judgeEvidencePath: a non-conforming path throws instead of silently returning the results-file path unchanged", () => {
+  expect(() => judgeEvidencePath("/x/docs/loop-probes/p2/test.json")).toThrow(BenchError)
+})
