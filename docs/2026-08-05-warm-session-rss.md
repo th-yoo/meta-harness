@@ -3,8 +3,14 @@
 **Provenance:** transcribed from the acp-session-pool branch's host-local
 `.superpowers/sdd/2026-08-04-acp-warm-daemon/rss-measurement-report.md`
 (gitignored, does not travel — CLAUDE.md: "cross-host transfer is git-only").
-This file is the durable copy; `cc-gate-plugin/src/gauge/acp-pool.ts`'s
-`DEFAULT_MAX_SESSIONS` comment cites this path, not the `.superpowers` one.
+This file is the durable copy; the `DEFAULT_MAX_SESSIONS` comment that cites
+this path now lives in `@th-yoo/cc-api-daemon`'s `src/acp-pool.ts` (the
+package is the sole implementation post-2026-08-09 src/acp retirement). The
+path this section used to cite, `cc-gate-plugin/src/gauge/acp-pool.ts`, was
+already wrong even pre-branch — the file actually lived at
+`cc-gate-plugin/src/acp/acp-pool.ts`, retrievable at
+`git show 2a5e873:cc-gate-plugin/src/acp/acp-pool.ts`; that whole directory
+is gone now regardless, superseded by the package.
 
 **Status:** measured, token-free, zero real model calls.
 `KKAMAK_ACP_MAX_SESSIONS` had been an *asserted* 4 since it was first written
@@ -89,7 +95,9 @@ retrospectively justified by this measurement (1.4 GB ≈ 10% headroom,
 matching the existing seat count) rather than raised to the recommended 8;
 8 remains memory-permissible on this host class and is reachable via the
 `KKAMAK_ACP_MAX_SESSIONS` env override without a code change. This is what
-`acp-pool.ts`'s `DEFAULT_MAX_SESSIONS = 4` and its comment now reflect.
+`@th-yoo/cc-api-daemon`'s `src/acp-pool.ts`'s `DEFAULT_MAX_SESSIONS = 4` and
+its comment now reflect (formerly the in-repo `cc-gate-plugin/src/acp/acp-pool.ts`,
+retired 2026-08-09 — see the provenance note at the top of this file).
 
 ## MacBook (`yoo-mac`) measurement — 2026-08-05, darwin
 

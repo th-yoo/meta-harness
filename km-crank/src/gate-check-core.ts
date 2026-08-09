@@ -129,11 +129,15 @@ export function suitesForChangedPaths(paths: string[]): SuiteId[] {
   return ALL_SUITES.filter((s) => picked.has(s))
 }
 
-/** Spawn-heavy cc-gate-plugin test files excluded from tier 0. Measured
- * 2026-08-05 (darwin): these files ≈134s of a ≈160s suite (real daemon +
- * CC CLI subprocess spawns, 2s settles). They still run in tier 1 on every
- * background full check, and in the pre-merge sanity chain. ONE regex = one
- * policy site. */
+/** Spawn-heavy cc-gate-plugin test files excluded from tier 0. Historical
+ * measurement 2026-08-05 (darwin): six files ≈134s of a ≈160s suite (real
+ * daemon + CC CLI subprocess spawns, 2s settles). That measurement PREDATES
+ * the 2026-08-09 src/acp retirement — 4 of those 6 files no longer exist;
+ * the slow set today is only anthropic-cli-warm + gauge-agent-transport, and
+ * it has NOT been re-measured since the retirement (the ≈134s/≈160s figures
+ * are stale and should not be quoted as current). They still run in tier 1
+ * on every background full check, and in the pre-merge sanity chain. ONE
+ * regex = one policy site. */
 const SLOW_CCGATE_TEST_RE =
   /(anthropic-cli-warm|gauge-agent-transport)\.test\.ts$/
 
@@ -192,13 +196,22 @@ const CCGATE_GUARD = /^cc-gate-plugin\//
  * suite that tests the change is exactly the one excluded (edit
  * acp-daemon.ts ⇒ TIA picks ccgate ⇒ tier 0 runs ccgate MINUS the
  * acp-daemon tests). Targeted: only the matching file(s), never the whole
- * ~110s slow set. Source basenames + stub consumers grep-verified
- * 2026-08-05 against cc-gate-plugin (sources in src/gauge/providers/;
- * stubs in test/). src/acp/ was retired in favor of the @th-yoo/cc-api-daemon
- * package, so its former sources and stubs no longer have pull-in rules
- * here. These patterns are basename-anchored (`(^|\/)name\.ts$`)
- * precisely so a directory move cannot silently stop them matching — do
- * not re-anchor them to a directory. */
+ * ~110s slow set. Source basenames + stub consumers RE-VERIFIED 2026-08-09
+ * (the 2026-08-05 grep-verified claim was stale — the import graph moved
+ * twice since, most recently the src/acp/ retirement) by grepping
+ * cc-gate-plugin/test/anthropic-cli-warm.test.ts's imports against
+ * cc-gate-plugin/src: it imports src/gauge/providers/anthropic-cli-warm.ts
+ * and src/gauge/agent-transport.ts (both covered by the rules below), plus
+ * src/gauge/send-prompt.ts and src/acp-client-singleton.ts, which have NO
+ * pull-in rule here. That gap is deliberate, not an oversight missed by
+ * this pass: this table stays unexpanded for those two, and the
+ * GAUGE_ISOLATION lock they carry is instead exercised by the always-fast
+ * send-prompt.test.ts, which already runs in tier 0. src/acp/ was retired
+ * in favor of the @th-yoo/cc-api-daemon package, so its former sources and
+ * stubs no longer have pull-in rules here. These patterns are
+ * basename-anchored (`(^|\/)name\.ts$`) precisely so a directory move
+ * cannot silently stop them matching — do not re-anchor them to a
+ * directory. */
 // Policy: DIRECT value imports only (one hop, source/stub -> slow test
 // file; `import type` does not count — it cannot break at runtime).
 // Deeper transitive chains (e.g. warm-session.ts -> acp-pool.ts ->
