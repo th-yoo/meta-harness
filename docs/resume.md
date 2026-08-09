@@ -62,10 +62,11 @@ OPEN — ALL NEED YOUR GO:
      runner.ts calls ensureDaemon(waitMs:0) then daemonCall immediately, so the
      daemon is reaped right as the next cycle fires and the call lands no-call.
      Armed as-is it emits skips, not reviews. Fix both first.
- (d) NOTHING HAS RUN LIVE. The daemon was started once (pid 88054, 127.0.0.1,
-     ~/.config/acpd/) with NO model call, and idle-reaped. Every claim is
-     test-verified, never production-verified. Smallest closer: one
-     claude-haiku-4-5 call (cc-api-daemon has scripts/smoke.ts). REAL SPEND.
+ (d) CLOSED 2026-08-09 (user go): first live production call through the
+     package succeeded — scripts/smoke.ts @ baee1c4, outcome ok, text "ok",
+     model claude-haiku-4-5-20251001, provenance true (recorded in
+     docs/reviews/c883206-acp-dir-retirement.md). One call, api lane; the
+     warm/pool lane is still never production-exercised.
 
 ASSIGNED TO THE SIBLING (not me): scripts/p2-tally.ts does not aggregate the new
  reviewTruncated field, so truncation counts need a manual grep of errors[].
