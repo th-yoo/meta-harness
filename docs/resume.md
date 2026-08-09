@@ -60,12 +60,18 @@ OPEN — ALL NEED YOUR GO:
      verified one-liner); p2-tally still does not aggregate reviewTruncated
      (sibling's gap — manual grep after the run). BENCH SPEND STILL NEEDS
      ITS OWN GO; amendment window open until first datum.
- (c) REVIEW-SENSOR ARMING — recommend NOT yet. Two live blockers: the worktree
-     gate (cwd must equal ~/z2/meta-harness) yields ~2 passes/day against a
-     >=25/day bar; and DEFAULT_IDLE_MS (900_000) == DEBOUNCE_MS (900_000) while
-     runner.ts calls ensureDaemon(waitMs:0) then daemonCall immediately, so the
-     daemon is reaped right as the next cycle fires and the call lands no-call.
-     Armed as-is it emits skips, not reviews. Fix both first.
+ (c) BLOCKERS FIXED 2026-08-09 (merge ae6a2f6, artifact docs/reviews/
+     2749fd5-sensor-arming-fix.md, opus review 0 code defects): arming gate
+     widened to inside-the-checkout (separator-anchored prefix; runner always
+     handed MAIN_CHECKOUT_DIR); runner now ensure(waitMs: ENSURE_WAIT_MS 15s)
+     instead of the structurally-no-call zero-wait. SENSOR STILL OFF (user:
+     not yet). Before an arming go, answer the reviewer's two caveats:
+     (1) signal semantics — sensor reviews MAIN checkout diffs only; clean
+     main = spawn with no line, stale main diff = up to 30 near-duplicate
+     reviews/day — define what counts toward the >=25/day bar; (2) env
+     reach — KKAMAK_REVIEW_SENSOR=1 in main's settings.local.json does not
+     reach sessions launched fresh in a worktree (process-inherit or
+     user-level env needed).
  (d) CLOSED 2026-08-09 (user go): first live production call through the
      package succeeded — scripts/smoke.ts @ baee1c4, outcome ok, text "ok",
      model claude-haiku-4-5-20251001, provenance true (recorded in
