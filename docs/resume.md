@@ -3,6 +3,81 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-09 (`yoo-mac`) — ACP MIGRATION COMPLETE · MAIN `77c070d` · cc-api-daemon v0.5.0
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness) + cc-api-daemon, post-2026-08-09. git pull FIRST
+in BOTH repos. meta-harness main >= 77c070d; ~/z2/cc-api-daemon main >= baee1c4
+(v0.5.0). Sibling sessions share this checkout — check `git branch --show-current`.
+
+WHAT LANDED (do not redo):
+ - The dogfood plugin is FULLY MIGRATED onto @th-yoo/cc-api-daemon. NOTE: the
+   dogfood plugin is cc-gate-plugin (loaded as kkamak@kkamak-local from
+   ~/.claude/settings.json -> path /Users/yoo/z2/meta-harness/cc-gate-plugin).
+   ~/z2/kkamak is a DIFFERENT standalone gate with no model-calling code.
+   Zero runtime imports of cc-gate-plugin/src/acp/ remain; that dir is kept,
+   still tested, purely historical now.
+ - cc-api-daemon: v0.2.0 decoupled from kkamak (ACP_* env vars, ~/.config/acpd/,
+   acp/models/list — all with back-compat aliases); v0.3.0 ./testing subpath
+   (WebSocket fakeDaemon + tempEnv + reaper) and exported routeBackend/
+   ACP_BUDGET/envFingerprint; v0.4.0 maxTokens passthrough; v0.5.0 truncation
+   surfaced (DaemonOutcome.ok.stopReason).
+ - meta-harness: opencode gate blind spot closed; runOnce regression net;
+   singleton ACP client (one daemon per plugin process); review-sensor, P2 a4-review
+   and the gauge cli-warm provider all swapped; budget-floor guard;
+   truncation-aware consumers.
+
+CRITICAL SEMANTICS to not get wrong:
+ - DaemonOutcome.ok.stopReason is OPTIONAL. ABSENT MEANS UNKNOWN, never "not
+   truncated" (the agent lane reports nothing). Branch on === "max_tokens".
+ - routeBackend: only models matching haiku take the unpooled api lane.
+   sonnet/opus/fable CANNOT (bare SDK 429s) and stay on the 4-slot pool.
+   DEFAULT_MAX_SESSIONS is still 4 in BOTH pools; ACP_MAX_SESSIONS is env-tunable.
+ - Raising maxTokens is budget-bound: turnTimeoutMs 16_000 and
+   AUTH_RESOLVE_BUDGET_MS 10_000, so past ~2000 output tokens you trade a
+   truncation for a call-consumed TIMEOUT (worse). Detection was the fix.
+ - Test isolation: discoveryPath falls back to os.homedir() when env.HOME is
+   absent, and a fake's stop() DELETES the discovery file — a test without a
+   throwaway HOME can kill a live daemon's entry. Use tempEnv +
+   cleanupTempHomes/reapDaemons + resetAcpClientSingleton in afterEach.
+ - DO NOT run cc-gate-plugin and opencode-plugin suites CONCURRENTLY on this
+   host — it produces false failures (real-daemon e2e ~21s; a 5002ms subprocess
+   timeout signature). Run them serially.
+
+OPEN — ALL NEED YOUR GO:
+ (a) F2 RULING on branch p2-sidecar-fix (pushed, 5 ahead of main, NOT merged).
+     It contains the sibling's p2-judge-logging PLUS my 3 sidecar integrity
+     fixes. Their own plan doc says verbatim "F2 EXCEPTION — EXPLICIT, AND
+     NEEDING THE USER'S RULING": the judge-evidence sidecar stores DONE-CHECK
+     file content, bash-command list and workspace filenames VERBATIM; F2
+     permits only counts/booleans/hash/error-string. Rule FOR -> merge as-is.
+     Rule AGAINST -> the sidecar WRITE needs gating/removal, not just fixing.
+ (b) P2 READINESS IS STALE. A4's transport AND lane both changed. Re-derive
+     before any bench spend go.
+ (c) REVIEW-SENSOR ARMING — recommend NOT yet. Two live blockers: the worktree
+     gate (cwd must equal ~/z2/meta-harness) yields ~2 passes/day against a
+     >=25/day bar; and DEFAULT_IDLE_MS (900_000) == DEBOUNCE_MS (900_000) while
+     runner.ts calls ensureDaemon(waitMs:0) then daemonCall immediately, so the
+     daemon is reaped right as the next cycle fires and the call lands no-call.
+     Armed as-is it emits skips, not reviews. Fix both first.
+ (d) NOTHING HAS RUN LIVE. The daemon was started once (pid 88054, 127.0.0.1,
+     ~/.config/acpd/) with NO model call, and idle-reaped. Every claim is
+     test-verified, never production-verified. Smallest closer: one
+     claude-haiku-4-5 call (cc-api-daemon has scripts/smoke.ts). REAL SPEND.
+
+ASSIGNED TO THE SIBLING (not me): scripts/p2-tally.ts does not aggregate the new
+ reviewTruncated field, so truncation counts need a manual grep of errors[].
+
+RETAINED BY DESIGN, do not "finish": gauntlet-sa-review-bar and
+ gauntlet-sd-proposer-gap are DROP verdicts kept for audit/reopen (ledger
+ docs/2026-08-01-gauntlet-adoption-ledger.md). cc-gate-plugin/src/acp/ stays.
+
+RULES: explicit go before any merge to main and any spend · 7b gate +
+ committed docs/reviews artifact (compute SHAs with git rev-parse, never by
+ hand) · for cc-api-daemon "done" means merged to origin/main, not a branch.
+```
+
 ## ✅ SESSION END 2026-08-08b (`yoo-mac`, post-clear resume) — DECISION B RETRACTED (not done — WITHDRAWN) · MAIN `06f7be1` · QUEUE BELOW IS THE LIVE ONE
 
 **RESUME PROMPT:**
