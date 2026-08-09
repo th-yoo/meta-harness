@@ -31,9 +31,10 @@ assumption about tree depth.
 
 Every request the spawned CLI makes is intercepted by `ANTHROPIC_BASE_URL`
 pointing at a local `Bun.serve` stub — zero real model calls per run.
-Script (committed, reusable): `cc-gate-plugin/test/warm-session-rss-measure.ts`,
-run via `cd cc-gate-plugin && bun test/warm-session-rss-measure.ts`. It
-measures, in order: (1) baseline (one session, warm + settled 2s), (2)
+Script (retired with src/acp/ retirement; retrievable at pre-deletion SHA 2a5e873
+via `git show 2a5e873:cc-gate-plugin/test/warm-session-rss-measure.ts`): was
+`cc-gate-plugin/test/warm-session-rss-measure.ts`, run via `cd cc-gate-plugin && bun test/warm-session-rss-measure.ts`.
+It measures, in order: (1) baseline (one session, warm + settled 2s), (2)
 marginal (4 sessions opened sequentially, kept resident together), (3)
 recycle effect (`/clear` ×2 on one held-open session), then closes
 everything and verifies pid-scoped cleanup (SIGTERM then SIGKILL fallback,
