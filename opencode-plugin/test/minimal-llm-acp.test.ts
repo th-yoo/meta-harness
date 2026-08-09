@@ -326,6 +326,22 @@ describe("seatCall — KKAMAK_SEAT_PROVIDER (2026-08-05 warm-lane wiring node)",
     // there — `readDiscovery` returning undefined and no `.config/acpd` dir
     // ever appearing is the same proof "no daemon probe" always was, just
     // aimed at the new client's own artifact instead of the old socket.
+    //
+    // That discovery-file check alone is not sufficient, though: it runs
+    // immediately after `seatCall` resolves, and if the default path ever
+    // DID regress into reaching `ensureDaemon`, the no-daemon leg returns
+    // near-instantly (`readDiscovery` -> undefined -> `{kind:"no-call"}` in
+    // milliseconds) while `spawnDaemonProcess` is a detached, un-awaited
+    // `Bun.spawn(...).unref()` — a real cold start (loading
+    // @anthropic-ai/sdk, ws) takes far longer than the window between that
+    // spawn call and this test's assertions. The HTTP fallback would still
+    // succeed AND the discovery checks would still read empty at assertion
+    // time, a near-deterministic false pass, not a rare race — all while a
+    // real `bun acp-daemon.ts` carrying this host's ambient credentials
+    // (`tempEnv`'s own `...process.env`) sits orphaned for the full 900s
+    // idle budget. Same spawn-log backstop test 2 below uses, wired BEFORE
+    // the call: poll it after and assert it STAYS empty, so a regression is
+    // both detected and (via `reapDaemons()` in `afterEach`) cleaned up.
     const srv = stubServer(() => apiResponse("default path, no daemon"))
     const env = tempEnv("t1-default")
     env.KKAMAK_GAUGE_SDK_BASE_URL = srv.url
@@ -338,12 +354,17 @@ describe("seatCall — KKAMAK_SEAT_PROVIDER (2026-08-05 warm-lane wiring node)",
     // along here and defeat "absent" outright. Force it undefined so this
     // test's premise holds on every host, not just ones with a clean shell.
     env.KKAMAK_SEAT_PROVIDER = undefined
+    const spawnLog = path.join(env.HOME!, "spawnlog")
+    env.ACP_TEST_SPAWN_LOG = spawnLog
+    LIVE_DAEMONS.push({ spawnLog })
     try {
       const out = await seatCall("claude-opus-5", "hi", { env })
       expect(out).toBe("default path, no daemon")
       expect(srv.captured.length).toBe(1)
       expect(readDiscovery(env)).toBeUndefined()
       expect(fs.existsSync(path.join(env.HOME!, ".config", "acpd"))).toBe(false)
+      expect(await waitForLines(spawnLog, 1, 100)).toEqual([])
+      expect(fs.existsSync(spawnLog)).toBe(false)
     } finally {
       srv.stop()
     }
