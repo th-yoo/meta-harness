@@ -5,6 +5,51 @@ merged (`worktree-p2-actuator-binding`, HEAD `05608fe`). This report computes
 the EXACT sized-go table for the user's go and records the readiness
 checklist. **No arm has been run. Nothing self-adopts.**
 
+## RE-DERIVATION 2026-08-09 (pre-data amendment — window still open, no run datum exists)
+
+A4's transport AND lane changed after this report was written; re-derived
+against main `febb5cd`. **Counts, `--go` values, invocation lines and the
+wall-clock estimate are UNCHANGED.** What changed:
+
+1. **Transport:** `a4-review.ts` now calls `@th-yoo/cc-api-daemon` (pin
+   `baee1c4`, v0.5.0), not the retired `cc-gate-plugin/src/acp/` client
+   (dir deleted from main `c1564c5`).
+2. **Lane:** the package's `routeBackend` sends every `*haiku*` model to
+   the UNPOOLED per-session api lane (`ApiSession`) — NOT the 4-slot warm
+   pool. Every "warm-lane" claim below is superseded: A4's ≤28 review
+   calls are **api-lane** calls and never compete for pool slots. The
+   `KKAMAK_SEAT_PROVIDER` checklist item is superseded by the same change
+   (seat provider is not on this path). **Live-proven 2026-08-09:** the
+   first production call through this exact lane succeeded (smoke,
+   claude-haiku-4-5, provenance true —
+   `docs/reviews/c883206-acp-dir-retirement.md`).
+3. **Truncation (v0.5.0):** the api lane hardcodes `DEFAULT_MAX_TOKENS`
+   2048; a reply cut off by it now returns `stopReason === "max_tokens"`,
+   recorded per attempt as `reviewTruncated` (folded into `reviewFailed`,
+   no re-pass fires). KNOWN GAP (assigned to sibling, still open):
+   `scripts/p2-tally.ts` does NOT aggregate `reviewTruncated` — after the
+   run, grep the a4 results file for it manually before reading
+   `reviewFailedCount` as "reviewer actually failed".
+4. **Idle-reap trap (NEW operational requirement):** `runA4Review` uses
+   `ensureDaemon(waitMs: 0)` — a cold daemon lands `no-call` →
+   `reviewFailed`, silently biasing the a4 arm. Daemon idle budget is 15
+   min (`DEFAULT_IDLE_MS`), and task timeouts run to the 1 h/task floor,
+   so a slow attempt can outlive the daemon between reviews. REQUIRED for
+   the a4 arm: pre-start the daemon before the run AND export
+   `ACP_IDLE_MS` ≥ the task-timeout ceiling (e.g. `7200000`) in the tmux
+   env. `ACP_IDLE_MS` is on the fingerprint denylist
+   (package `acp-paths.ts:58`), so raising it still discovers the same
+   daemon.
+5. **Sidecar (merge `4d4c66a`):** the a4 judge-evidence sidecar now writes
+   bash commands / DONE-CHECK content / workspace filenames verbatim —
+   F2 exception explicitly ruled FOR by the user 2026-08-09. Host-side
+   logging only; no model-call or count change.
+6. **Checklist re-verified on main `febb5cd`:** `opencode-plugin` bun test
+   → **1887 pass, 1 skip, 0 fail** (4952 expects, 117 files, 45.27s);
+   `bunx tsc --noEmit` clean; `km-crank` **372 pass, 0 fail** (post
+   src/acp-retirement policy prune). The stale counts in the checklist
+   below are the 08-07 snapshot, kept for the audit trail.
+
 ## Band + counts (verified against the repo)
 
 - Band file: `term-bench2/splits/loop1-band.txt` — **14 lines** (`wc -l`).
@@ -41,7 +86,7 @@ checklist. **No arm has been run. Nothing self-adopts.**
 | a1 | 14 tasks × k=2 = 28 container executions | `--go 28` |
 | a3 | 14 tasks × k=2 = 28 container executions | `--go 28` |
 | a4 (first pass + ≤1 re-pass/attempt) | 28 + ≤28 = ≤56 container executions | `--go 56` |
-| a4 review calls | ≤28 haiku warm-lane calls | n/a (no `--go` — see Global Constraints; review calls are host-side, not container executions) |
+| a4 review calls | ≤28 haiku api-lane calls (unpooled — see RE-DERIVATION 2026-08-09; "warm-lane" wording below is the superseded 08-07 snapshot) | n/a (no `--go` — see Global Constraints; review calls are host-side, not container executions) |
 | **total (base + worst-case re-pass)** | **≤112 bench container executions** | 28 + 28 + 56 |
 | **+ review calls** | **≤28 haiku warm-lane calls** | |
 | **+ probe (already spent)** | **2 of ≤4 haiku calls** | |
@@ -70,7 +115,13 @@ bun opencode-plugin/src/bench/cli.ts p2-run --arm a3 \
   --results-file docs/loop-probes/p2/yoo-mac.local-p2-a3-results.json \
   --go 28
 
-bun opencode-plugin/src/bench/cli.ts p2-run --arm a4 \
+# a4 ONLY: pre-start the daemon WITH the raised idle budget (RE-DERIVATION
+# item 4). If a daemon is already running it was spawned with the default
+# 15-min idle — reap it first (kill the pid in ~/.config/acpd/) so the
+# fresh spawn below carries ACP_IDLE_MS. Then verify it is up:
+cd cc-gate-plugin && ACP_IDLE_MS=7200000 bun -e 'import("@th-yoo/cc-api-daemon").then(async m => { const ok = await m.ensureDaemon(process.env, { waitMs: 15000 }); console.log("daemon up:", ok); process.exit(ok ? 0 : 1) })' && cd ..
+
+ACP_IDLE_MS=7200000 bun opencode-plugin/src/bench/cli.ts p2-run --arm a4 \
   --task-file term-bench2/splits/loop1-band.txt --k 2 \
   --model anthropic/claude-haiku-4-5 \
   --results-file docs/loop-probes/p2/yoo-mac.local-p2-a4-results.json \
@@ -143,9 +194,13 @@ Source: `docs/resume.md` line 90 — `haiku-4-5 43 tasks k=1 = 3.0 h measured
       `49c43d9`), both pre-dating any run datum. `rule.ts`'s
       `isCompliant`/`referencesDoneCheckPath` implement the exclusion;
       covered by `opencode-plugin/test/p2-rule.test.ts`.
-- [x] Warm lane armed for A4's review calls: `KKAMAK_SEAT_PROVIDER` key
+- [x] ~~Warm lane armed for A4's review calls: `KKAMAK_SEAT_PROVIDER` key
       **present** in `~/.claude/settings.json`'s `env` block (value not
-      reproduced here — presence check only, per scope).
+      reproduced here — presence check only, per scope).~~ SUPERSEDED
+      2026-08-09: A4 reviews ride the package's unpooled api lane, not the
+      seat provider — replaced by the live smoke proof (RE-DERIVATION
+      item 2) plus the daemon pre-start + `ACP_IDLE_MS` requirement
+      (item 4).
 - [x] Store isolation + cost fences tested:
       `opencode-plugin/test/p2-cmd.test.ts` — `resolveP2ResultsFile`
       (outside `docs/loop-probes/p2/` dies), `cmdP2` wrong-`--go` dies
@@ -164,7 +219,7 @@ apply them to any data, since none exists yet).
 ## Bottom line
 
 - Total planned bench container executions: **≤112** (28 + 28 + ≤56).
-- Total planned A4 review calls: **≤28** (haiku, warm lane).
+- Total planned A4 review calls: **≤28** (haiku, unpooled api lane — RE-DERIVATION 2026-08-09).
 - Probe budget: 2 of ≤4 already spent (Task 1), 0 further probe calls
   planned.
 - Estimated wall-clock: **≈5.9 h base, ≤≈7.8 h worst case**, serial, tmux

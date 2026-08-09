@@ -52,8 +52,14 @@ OPEN — ALL NEED YOUR GO:
      verbatim (explicit F2 exception). p2-sidecar-fix merged as-is to main
      (merge 4d4c66a; artifact docs/reviews/68d3b6c-p2-judge-logging-plus-
      sidecar-fix.md was already on the branch), branch deleted.
- (b) P2 READINESS IS STALE. A4's transport AND lane both changed. Re-derive
-     before any bench spend go.
+ (b) RE-DERIVED 2026-08-09 (READINESS.md "RE-DERIVATION 2026-08-09"):
+     counts/--go/wall-clock UNCHANGED (<=112 exec, <=28 review calls,
+     ~5.9-7.8h); A4 reviews ride the package's unpooled api lane
+     (live-proven by the smoke), NOT the warm lane; NEW a4 requirement:
+     pre-start daemon + ACP_IDLE_MS=7200000 (idle-reap trap, doc'd with a
+     verified one-liner); p2-tally still does not aggregate reviewTruncated
+     (sibling's gap — manual grep after the run). BENCH SPEND STILL NEEDS
+     ITS OWN GO; amendment window open until first datum.
  (c) REVIEW-SENSOR ARMING — recommend NOT yet. Two live blockers: the worktree
      gate (cwd must equal ~/z2/meta-harness) yields ~2 passes/day against a
      >=25/day bar; and DEFAULT_IDLE_MS (900_000) == DEBOUNCE_MS (900_000) while
