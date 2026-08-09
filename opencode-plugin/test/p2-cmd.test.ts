@@ -789,3 +789,143 @@ test("cmdP2: a non-conforming --results-file name (doesn't end in -results.json)
 test("judgeEvidencePath: a non-conforming path throws instead of silently returning the results-file path unchanged", () => {
   expect(() => judgeEvidencePath("/x/docs/loop-probes/p2/test.json")).toThrow(BenchError)
 })
+
+// ---- Container auth wiring (2026-08-09). The first live P2 launch burned
+// a1 entirely as `agent_no_output`: runOneP2Attempt created containers with
+// `mounts: []` + `apiKeyEnv()` only, dropping everything the driver's
+// prepareAuth() provides (oauth credential mounts, onboarding claude.json,
+// and IS_SANDBOX=1 — without which the CC CLI refuses
+// --dangerously-skip-permissions as root, exiting rc=1 with an EMPTY stdout
+// that classifyAttempt reads as "done"). These tests pin the cmd-run.ts
+// lifecycle mirror: prepareAuth before create, mounts+env on the create
+// argv, cleanup in the teardown path, prepareAuth failure = setup_failed
+// before any container work.
+
+function makeAuthProbeDriver(): { driver: AgentDriver; cleanups: number[] } {
+  const cleanups: number[] = []
+  const base = makeFakeDriver()
+  const driver: AgentDriver = {
+    ...base,
+    prepareAuth: () => ({
+      mounts: [{ host: "/host/auth-dir", container: "/root/.claude", ro: false }],
+      env: { IS_SANDBOX: "1" },
+      cleanup: () => {
+        cleanups.push(1)
+      },
+    }),
+  }
+  return { driver, cleanups }
+}
+
+async function callWithDriver(
+  driver: AgentDriver,
+): Promise<{ result: P2AttemptResult; calls: string[][] }> {
+  const { paths } = setup(["t1"])
+  mockVerifierAndStaging(1)
+  try {
+    const { execFn, calls } = makeFakeExecFn({ catSequence: [COMPLIANT_DONE_CHECK] })
+    const result = await runOneP2Attempt(
+      paths,
+      "t1",
+      "a1",
+      "anthropic/claude-haiku-4-5",
+      "stock harness",
+      60,
+      60,
+      driver,
+      execFn,
+      async () => {},
+      {},
+      async () => undefined,
+    )
+    return { result, calls }
+  } finally {
+    restoreVerifier()
+    restoreStaging()
+  }
+}
+
+test("runOneP2Attempt: create argv carries the driver's auth mounts AND auth env; cleanup runs after teardown", async () => {
+  const { driver, cleanups } = makeAuthProbeDriver()
+  const { result, calls } = await callWithDriver(driver)
+  expect(result.error).toBe("")
+  const create = calls.find((c) => c[1] === "create")
+  expect(create).toBeDefined()
+  const joined = create!.join(" ")
+  expect(joined).toContain("-v /host/auth-dir:/root/.claude")
+  expect(joined).toContain("-e IS_SANDBOX=1")
+  expect(cleanups.length).toBe(1)
+})
+
+test("runOneP2Attempt: driver auth env WINS over apiKeyEnv() on collision; passthrough keys survive", async () => {
+  const base = makeFakeDriver()
+  const driver: AgentDriver = {
+    ...base,
+    prepareAuth: () => ({
+      mounts: [],
+      env: { FAKE_API_KEY: "from-auth" },
+      cleanup: () => {},
+    }),
+  }
+  const prevCollide = process.env.FAKE_API_KEY
+  const prevPass = process.env.OTHERPROVIDER_API_KEY
+  process.env.FAKE_API_KEY = "from-host"
+  process.env.OTHERPROVIDER_API_KEY = "host-passthrough"
+  try {
+    const { calls } = await callWithDriver(driver)
+    const create = calls.find((c) => c[1] === "create")!
+    const joined = create.join(" ")
+    expect(joined).toContain("-e FAKE_API_KEY=from-auth")
+    expect(joined).not.toContain("from-host")
+    expect(joined).toContain("-e OTHERPROVIDER_API_KEY=host-passthrough")
+  } finally {
+    if (prevCollide === undefined) delete process.env.FAKE_API_KEY
+    else process.env.FAKE_API_KEY = prevCollide
+    if (prevPass === undefined) delete process.env.OTHERPROVIDER_API_KEY
+    else process.env.OTHERPROVIDER_API_KEY = prevPass
+  }
+})
+
+test("runOneP2Attempt: prepareAuth throwing → setup_failed before any container create", async () => {
+  const base = makeFakeDriver()
+  const throwing: AgentDriver = {
+    ...base,
+    prepareAuth: () => {
+      throw new BenchError("keychain export failed")
+    },
+  }
+  const { result, calls } = await callWithDriver(throwing)
+  expect(result.error).toBe("setup_failed")
+  expect(calls.find((c) => c[1] === "create")).toBeUndefined()
+})
+
+test("runOneP2Attempt: auth cleanup runs even when bring-up fails after prepareAuth", async () => {
+  const { driver, cleanups } = makeAuthProbeDriver()
+  const { paths } = setup(["t1"])
+  mockVerifierAndStaging(1)
+  try {
+    const failingExec: ExecFn = async (argv: string[]): Promise<ExecResult> => {
+      if (argv[1] === "create") return { rc: 1, stdout: "", stderr: "boom", timedOut: false }
+      return { rc: 0, stdout: "", stderr: "", timedOut: false }
+    }
+    const result = await runOneP2Attempt(
+      paths,
+      "t1",
+      "a1",
+      "anthropic/claude-haiku-4-5",
+      "stock harness",
+      60,
+      60,
+      driver,
+      failingExec,
+      async () => {},
+      {},
+      async () => undefined,
+    )
+    expect(result.error).toBe("setup_failed")
+    expect(cleanups.length).toBe(1)
+  } finally {
+    restoreVerifier()
+    restoreStaging()
+  }
+})

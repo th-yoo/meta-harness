@@ -90,6 +90,7 @@ import { BENCH_IMAGE, DEFAULT_BENCH_MODEL, apiKeyEnv, containerName, type BenchP
 import { selectTasks, taskTimeouts } from "../tasks.ts"
 import { copyTests, runVerifier } from "../verifier.ts"
 import { runAgent, defaultSleep, type SleepFn } from "../agent-run.ts"
+import type { AgentAuthMounts } from "../agent-auth.ts"
 import { assembleAgentsMd, harnessMeta } from "../record.ts"
 import { writeRunResults, type TaskAgg } from "../results.ts"
 import { claudeCodeDriver } from "../drivers/claude-code.ts"
@@ -235,6 +236,7 @@ export type RunOneP2AttemptFn = (
   sleepFn: SleepFn,
   env: Record<string, string | undefined>,
   runReview: RunA4ReviewFn,
+  prepareAuthFn?: () => AgentAuthMounts,
 ) => Promise<P2AttemptResult>
 
 /**
@@ -259,6 +261,7 @@ export async function runOneP2Attempt(
   sleepFn: SleepFn = defaultSleep,
   env: Record<string, string | undefined> = process.env,
   runReview: RunA4ReviewFn = runA4Review,
+  prepareAuthFn: () => AgentAuthMounts = () => driver.prepareAuth(),
 ): Promise<P2AttemptResult> {
   const name = containerName(task, `p2-${arm}`)
   const taskStart = Date.now()
@@ -276,8 +279,21 @@ export async function runOneP2Attempt(
     reviewTruncated: false,
   })
 
+  // Driver auth material (2026-08-09, post-first-launch fix): prepared fresh
+  // per container lifecycle and torn down in the outer `finally` below,
+  // exactly cmd-run.ts's runTaskOnce pattern. The original `mounts: []` +
+  // `apiKeyEnv()` create dropped everything prepareAuth() provides — oauth
+  // credential mounts, the onboarding claude.json, and IS_SANDBOX=1, without
+  // which the CC CLI refuses --dangerously-skip-permissions as root and
+  // exits rc=1 with an EMPTY stdout that classifyAttempt can only read as
+  // "done" (turns=0) — which silently burned the entire first a1 arm as
+  // `agent_no_output`. A missing-credential BenchError from prepareAuth()
+  // is caught by the same bring-up catch as create/start failures
+  // (fail-fast setup_failed, no container work).
+  let auth: AgentAuthMounts | undefined
   try {
     try {
+      auth = prepareAuthFn()
       const createResult = await execFn(
         buildCreateArgv({
           image: BENCH_IMAGE,
@@ -285,9 +301,12 @@ export async function runOneP2Attempt(
           // No /tb or /mh mount (env-fidelity fix, mirrors cmd-run.ts's own
           // agent containers) — everything an attempt needs arrives via
           // `podman cp` (stageTaskRuntime, the a3 settings copy-in below,
-          // verifier.ts's copyTests).
-          mounts: [],
-          env: apiKeyEnv(),
+          // verifier.ts's copyTests). The ONLY mounts are the driver's own
+          // auth mounts (credentials + onboarding file).
+          mounts: [...auth.mounts],
+          // apiKeyEnv() passthrough first, the driver's auth env spread last
+          // so it wins on collision (cmd-run.ts:237 precedent).
+          env: { ...apiKeyEnv(), ...(auth.env ?? {}) },
           network: true,
           workdir: "/app",
         }),
@@ -436,7 +455,22 @@ export async function runOneP2Attempt(
       judgeEvidence,
     }
   } finally {
-    await execFn(buildRmArgv(name))
+    // rm guarded in its own try/finally (cmd-run.ts:380-389 precedent):
+    // Bun.spawn throws synchronously on a missing binary, and a teardown
+    // throw must never skip the credential shred below.
+    try {
+      await execFn(buildRmArgv(name))
+    } finally {
+      // Auth teardown last (cmd-run.ts precedent): shreds the exported
+      // credential copy + removes the temp dir; must run whether the
+      // attempt succeeded, failed, or threw — and even when prepareAuth
+      // succeeded but create/start/rm did not.
+      try {
+        auth?.cleanup()
+      } catch {
+        // best-effort — teardown failure must never mask the attempt result.
+      }
+    }
   }
 }
 
