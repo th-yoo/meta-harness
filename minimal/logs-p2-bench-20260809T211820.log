@@ -1,0 +1,15 @@
+=== P2 BENCH RUN START 2026-08-09 21:18:20 KST host=yoo-mac.local main=1467bf4
+=== ARM a1 START 2026-08-09 21:18:20
+=== ARM a1 EXIT rc=0 2026-08-09 21:18:21
+=== ARM a3 START 2026-08-09 21:18:21
+=== ARM a3 EXIT rc=0 2026-08-09 21:18:22
+=== A4 DAEMON PRESTART 2026-08-09 21:18:22
+daemon up: true
+=== A4 DAEMON PRESTART EXIT rc=0 2026-08-09 21:18:23
+=== ARM a4 START 2026-08-09 21:18:23
+=== ARM a4 EXIT rc=0 2026-08-09 21:18:23
+=== TALLY START 2026-08-09 21:18:23
+shadow n too small, not evidential
+p2-tally: wrote /Users/yoo/z2/meta-harness/docs/loop-probes/p2/yoo-mac.local-p2-verdict.json
+=== TALLY EXIT rc=0 2026-08-09 21:18:23
+=== P2 BENCH RUN DONE 2026-08-09 21:18:24 KST
