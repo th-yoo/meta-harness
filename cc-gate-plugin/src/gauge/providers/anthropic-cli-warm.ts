@@ -1,13 +1,46 @@
 // anthropic-cli-warm.ts — N3c-iv of
 // docs/superpowers/specs/2026-08-04-send-prompt-interface.md (§3 provider
-// table, §5 row anthropic-cli-warm): wraps the reviewed ACP client
-// (acp-client.ts: `ensureDaemon`, `daemonCall`) as a `SendPromptProvider`.
-// Sessions stay internal to `daemonCall` (user ruling, spec §4) — this
-// module never sees one. Ships NO registration side effect — same
-// N5-established pattern as N2 (anthropic-api.ts): import this factory and
-// wire it at the call site.
+// table, §5 row anthropic-cli-warm): wraps the ACP warm lane as a
+// `SendPromptProvider`. Sessions stay internal to `daemonCall` (user ruling,
+// spec §4) — this module never sees one. Ships NO registration side effect —
+// same N5-established pattern as N2 (anthropic-api.ts): import this factory
+// and wire it at the call site.
+//
+// gauge-cliwarm-swap: this file was the LAST cc-gate-plugin consumer still on
+// the in-repo `../../acp/index.ts` client — docs/reviews/a499848-acp-budget-
+// floor-guard.md named it explicitly as the reason that review's own floor
+// guard scoped down to the DEFAULT margin only ("the planned guard would
+// have pinned a cliff no consumer can currently reach"). `ensureDaemon`/
+// `daemonCall` now come from `../../acp-client-singleton.ts`, not the
+// published package directly — same reasoning as review-sensor/runner.ts
+// (see that file's header and acp-client-singleton.ts's own module doc,
+// which names THIS file as the future second consumer): one plugin process
+// must funnel every consumer through ONE pinned env so everyone reaches the
+// SAME daemon, rather than each call site fingerprinting its own env and
+// fragmenting onto N daemons at ~330MB RSS each. `modelProvenBy` has no env/
+// daemon coupling, so it still comes straight from the package, matching
+// runner.ts's own import split.
+//
+// THE BUDGETMS FLOOR (live the moment this file left the old client, which
+// had no such check): the package's client refuses to send at all — resolves
+// `{kind:"no-call"}`, NEVER throws — when the daemon's advertised
+// `daemonWorstCaseMs` is >= the call's own `budgetMs`
+// (node_modules/@th-yoo/cc-api-daemon/src/acp-client.ts, the "Task 8"
+// comment block in `run()`). `sendOpts.timeoutMs` maps verbatim onto
+// `budgetMs` below, so any caller passing `timeoutMs <=
+// ACP_BUDGET.daemonWorstCaseMs` gets a PERMANENT, SILENT no-call on every
+// call, forever — no exception, no log, nothing but a stream of skips.
+// review-sensor/runner.ts and a4-review.ts both dodge this by omitting
+// `budgetMs` entirely (the package's own default, `ACP_BUDGET.clientBudgetMs`
+// = 36 000, clears the floor with margin — see acp-package-surface.test.ts's
+// floor-guard test). THIS file is the one caller that passes an explicit
+// budget (`sendOpts.timeoutMs`), so it is the one place the floor is
+// actually reachable; the guard below reads the floor live off
+// `ACP_BUDGET.daemonWorstCaseMs` (never a hardcoded 32000) and fails loudly
+// instead of degrading silently.
 import type { SendPromptProvider, SendPromptOptions, SendOutcome } from "../send-prompt.ts"
-import { ensureDaemon, daemonCall, modelProvenBy } from "../../acp/index.ts"
+import { ensureDaemon, daemonCall } from "../../acp-client-singleton.ts"
+import { modelProvenBy, ACP_BUDGET } from "@th-yoo/cc-api-daemon"
 import { buildAgentOutgoingText } from "../agent-transport.ts"
 
 export function makeAnthropicCliWarmProvider(
@@ -27,6 +60,28 @@ export function makeAnthropicCliWarmProvider(
     // spent. This is the whole boundary the wrap exists to keep honest.
     let reachedDaemonCall = false
     try {
+      // BUDGETMS FLOOR GUARD (gauge-cliwarm-swap) — checked BEFORE
+      // `ensureDaemon`/`daemonCall` are ever touched: below the floor, the
+      // package's client refuses to send regardless of daemon state (see
+      // this file's header), so there is nothing to gain by even probing.
+      // `<=` matches the package's own refusal condition (`dw >= budgetMs`)
+      // exactly — equality is already a failure there, so this must not use
+      // `<`. Short-circuits to the SAME `{kind:"no-call"}` classification
+      // `daemonCall` itself would eventually produce, but LOUD: a caller
+      // misconfigured this low sees exactly why, and with what value against
+      // what floor, instead of a silent, permanent stream of skips. This
+      // check precedes `reachedDaemonCall = true`, so the send-boundary law
+      // above is unaffected — nothing was spent, this is honestly no-call.
+      if (sendOpts.timeoutMs !== undefined && sendOpts.timeoutMs <= ACP_BUDGET.daemonWorstCaseMs) {
+        console.error(
+          `anthropic-cli-warm: timeoutMs=${sendOpts.timeoutMs}ms <= ACP_BUDGET.daemonWorstCaseMs=` +
+            `${ACP_BUDGET.daemonWorstCaseMs}ms — the daemon client refuses to send under this floor ` +
+            `and would resolve {kind:"no-call"} on EVERY call, silently, forever. Raise timeoutMs ` +
+            `strictly above the floor.`,
+        )
+        return { ok: false, kind: "no-call" }
+      }
+
       // Fire-and-forget by default (`ensureWaitMs` undefined -> 0): a
       // missing daemon means THIS call lands no-call and falls back, while
       // the spawn warms for the NEXT call — the plan's deliberate split; do
@@ -57,8 +112,11 @@ export function makeAnthropicCliWarmProvider(
           // defaulted, never substituted.
           isolation: sendOpts.isolation,
           // timeoutMs -> daemonCall's whole-call budget leg (its own
-          // `budgetMs`, default ACP_BUDGET.daemonLegMs). Absent leaves that
-          // default untouched.
+          // `budgetMs`, default ACP_BUDGET.clientBudgetMs = 36 000 — the
+          // package's constant, not the old client's `daemonLegMs`). Absent
+          // leaves that default untouched; when PRESENT, the guard above has
+          // already proven it clears ACP_BUDGET.daemonWorstCaseMs, so
+          // nothing further to check here.
           ...(sendOpts.timeoutMs === undefined ? {} : { budgetMs: sendOpts.timeoutMs }),
           // maxTokens: DELIBERATELY IGNORED. There is no CLI-lane equivalent
           // — the CLI never had an output-length cap, the same reality N5
