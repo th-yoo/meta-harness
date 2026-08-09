@@ -21,7 +21,16 @@ export interface MaybeSpawnReviewSensorInput {
 /**
  * Arming gate (ships OFF by default): both must hold —
  * KKAMAK_REVIEW_SENSOR === "1" (env-only kill switch, fail-closed default)
- * and cwd resolves to the main checkout (worktree Stops never dispatch).
+ * and cwd resolves to INSIDE the main checkout: the root itself, any
+ * subdir, or a worktree under `.claude/worktrees/` (which live under the
+ * root). Widened 2026-08-09 from exact equality — that gate yielded ~2
+ * passes/day against the >=25/day bar, because sessions run in worktrees
+ * and subdirs and their Stops are the clock ticks the sensor needs. The
+ * runner is ALWAYS handed `mainCheckoutDir`, never the triggering cwd:
+ * state, claim and diff stay in the single main-checkout debounce domain
+ * regardless of which session's Stop fired (runner.ts trusts its argv per
+ * its own header). The prefix check is separator-anchored so a sibling
+ * like `<root>-backup` never matches.
  * Whole-function fail-open: any error is swallowed and treated as "did not
  * spawn" — review-sensor problems must never touch a session.
  */
@@ -30,9 +39,10 @@ export function maybeSpawnReviewSensor(input: MaybeSpawnReviewSensorInput): bool
     const { cwd, env, spawn, mainCheckoutDir = MAIN_CHECKOUT_DIR } = input
 
     if (env.KKAMAK_REVIEW_SENSOR !== "1") return false
-    if (path.resolve(cwd) !== mainCheckoutDir) return false
+    const resolved = path.resolve(cwd)
+    if (resolved !== mainCheckoutDir && !resolved.startsWith(mainCheckoutDir + path.sep)) return false
 
-    spawn(["bun", RUNNER_CLI, cwd])
+    spawn(["bun", RUNNER_CLI, mainCheckoutDir])
     return true
   } catch {
     return false

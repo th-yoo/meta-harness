@@ -297,3 +297,36 @@ describe("runOnce", () => {
     expect(lines[0]!.reason).toBe("bad-review-output")
   })
 })
+
+// ---- Daemon boot-wait (2026-08-09): zero-wait seat acquisition made the
+// sensor structurally no-call — DEBOUNCE_MS (15 min) equals the daemon's
+// idle reap budget, so on every post-debounce cycle the daemon had JUST
+// been reaped, ensure(waitMs: 0) returned before the fresh spawn was
+// ready, and the call landed no-call ("warm-lane-busy" skip). The sensor
+// is a detached child with no session waiting on it: blocking on boot is
+// free, so it waits ENSURE_WAIT_MS.
+import { ENSURE_WAIT_MS } from "../src/review-sensor/runner.ts"
+
+test("ensure is called with the boot-wait budget, never zero-wait", async () => {
+  const { dir } = repoWithPendingDiff()
+  const ensureCalls: Array<{ waitMs: number }> = []
+  const deps: RunnerDeps = {
+    now: () => 1_800_000_000_000,
+    call: async (): Promise<DaemonOutcome> => ({
+      kind: "ok",
+      text: JSON.stringify({ findings: [] }),
+      model: MODEL,
+      canonicalModel: MODEL,
+      sessionId: "sess-wait",
+    }),
+    close: async () => ({ closed: true }),
+    ensure: async (_env, opts) => {
+      ensureCalls.push({ waitMs: (opts as { waitMs: number }).waitMs })
+      return true
+    },
+  }
+  await runOnce(dir, {}, deps)
+  expect(ensureCalls.length).toBe(1)
+  expect(ensureCalls[0]!.waitMs).toBe(ENSURE_WAIT_MS)
+  expect(ENSURE_WAIT_MS).toBeGreaterThan(0)
+})

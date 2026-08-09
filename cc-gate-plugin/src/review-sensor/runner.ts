@@ -117,6 +117,11 @@ function readState(statePath: string): SensorState | undefined {
   }
 }
 
+/** Daemon boot-wait budget for `ensure` (see the call site's comment for
+ * why zero-wait was structurally wrong here). 15 s comfortably covers a
+ * cold daemon spawn (observed ~1-2 s) without approaching DEBOUNCE_MS. */
+export const ENSURE_WAIT_MS = 15_000
+
 export interface RunnerDeps {
   now(): number
   call: typeof daemonCall
@@ -211,11 +216,17 @@ export async function runOnce(
     const { text: truncatedDiff, truncated } = truncateDiff(diff.diff)
     const prompt = buildReviewPrompt(truncatedDiff)
 
-    // Zero-wait seat acquisition (spec §2 warm-lane bullet): kick the
-    // daemon and proceed regardless of what `ensure` returns, matching
-    // anthropic-cli-warm.ts's precedent — a missing daemon means THIS
-    // call lands no-call and skips, while the spawn warms for next time.
-    await deps.ensure(env, { waitMs: 0 })
+    // Boot-wait seat acquisition (changed 2026-08-09; was zero-wait): the
+    // spec's original "kick and proceed, the spawn warms for NEXT time"
+    // rationale is structurally false here — DEBOUNCE_MS (15 min) equals
+    // the daemon's idle reap budget, so on every post-debounce cycle the
+    // daemon has JUST been reaped, and a zero-wait ensure lands THIS call
+    // no-call ("warm-lane-busy" skip) every single time: armed, the
+    // sensor emitted skips, not reviews. Unlike anthropic-cli-warm.ts
+    // (whose zero-wait precedent has a session actively waiting on it),
+    // this runner is a detached child nothing waits on — blocking on a
+    // daemon boot is free, so it waits.
+    await deps.ensure(env, { waitMs: ENSURE_WAIT_MS })
 
     const started = deps.now()
     const outcome = await deps.call(prompt, MODEL, env, { isolation: REVIEW_SENSOR_ISOLATION })
