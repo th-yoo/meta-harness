@@ -8,18 +8,20 @@
 // pooling and warm subprocesses are provider-internal from here down.
 //
 // THIS MODULE SHIPS NO PROVIDER. `anthropic-api` / `anthropic-cli-warm` /
-// `openai` are N2/N3/N4. It must not import any provider module,
-// `warm-session.ts`, `acp-client.ts` or `@anthropic-ai/sdk`, and must not
-// spawn anything — its tests register FAKE providers. That isolation is the
-// point: N2 proves this interface against a transport that already works,
-// so when N3's warm path misbehaves the interface is not also on trial.
+// `openai` are N2/N3/N4. It must not import any provider module, the
+// package's warm-session or acp-client internals, or `@anthropic-ai/sdk`,
+// and must not spawn anything — its tests register FAKE providers. That
+// isolation is the point: N2 proves this interface against a transport that
+// already works, so when N3's warm path misbehaves the interface is not
+// also on trial.
 //
 // The `WarmIsolation` import below pulls from `@th-yoo/cc-api-daemon`, the
 // external package's barrel. That import MUST stay `import type` — `import
 // type` is fully erased, so no value from the barrel enters this module's
-// runtime graph. This matters MORE now than it did against the local
-// `../acp/index.ts` barrel it replaces: this package's `index.ts`
-// value-exports `ApiSession` and `listModels`, and THEIR import chain
+// runtime graph. This matters MORE now than it did against the local acp
+// dir's barrel it replaces (formerly `src/acp/index.ts`, now retired in
+// favor of the package): this package's `index.ts` value-exports
+// `ApiSession` and `listModels`, and THEIR import chain
 // (`index.ts` -> `api-session.ts` -> `call.ts` -> `client.ts`) does a
 // TOP-LEVEL `import Anthropic from "@anthropic-ai/sdk"`. A value import from
 // this barrel — even one that only ever touches `WarmIsolation` at the type
@@ -111,6 +113,23 @@ export async function sendPrompt(prompt: string, opts: SendPromptOptions): Promi
     // at the interface boundary instead of the wire boundary.
     return { ok: false, kind: "call-consumed" }
   }
+}
+
+/** The §6d/§6e gauge isolation set — byte-identical to the option literal
+ * inlined in agent-transport.ts's agentSdkCall (see :119-132 there for the
+ * authority; a lock test proves that equality). Formerly declared in
+ * `src/acp/acp-wire.ts`; moved here because the `@th-yoo/cc-api-daemon`
+ * package's acp-wire.ts doc comment forbids the package from exporting
+ * GAUGE_ISOLATION — it stays a caller-side constant. */
+export const GAUGE_ISOLATION: WarmIsolation = {
+  systemPrompt: "",
+  settingSources: [],
+  settings: { autoMemoryEnabled: false },
+  persistSession: false,
+  strictMcpConfig: true,
+  tools: [],
+  title: "kkamak-gauge",
+  thinking: { type: "disabled" },
 }
 
 /** Same isolation shell as GAUGE_ISOLATION (no tools, no setting sources,

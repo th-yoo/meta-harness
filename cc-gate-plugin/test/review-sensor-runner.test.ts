@@ -17,15 +17,7 @@ import path from "node:path"
 import { execFileSync } from "node:child_process"
 import { runOnce, type RunnerDeps } from "../src/review-sensor/runner.ts"
 import { MODEL } from "../src/review-sensor/core.ts"
-import type { DaemonOutcome } from "../src/acp/index.ts"
-// The stopReason field (surface-truncation, v0.5.0) lives on the PACKAGE's
-// DaemonOutcome, not the untouched in-repo `../src/acp/index.ts` one
-// (`../src/acp/` is byte-identical by hard constraint) — runner.ts's
-// RunnerDeps.call is actually `typeof daemonCall` from
-// acp-client-singleton.ts, which re-exports the package's client, so a
-// fake constructed with the package's own type below is exactly what
-// production code hands it.
-import type { DaemonOutcome as PackageDaemonOutcome } from "@th-yoo/cc-api-daemon"
+import type { DaemonOutcome } from "@th-yoo/cc-api-daemon"
 
 const CLEANUP: string[] = []
 afterEach(() => {
@@ -220,7 +212,7 @@ describe("runOnce", () => {
     const closeCalls: string[] = []
     const deps: RunnerDeps = {
       now: () => Date.now(),
-      call: async (): Promise<PackageDaemonOutcome> => ({
+      call: async (): Promise<DaemonOutcome> => ({
         kind: "ok",
         // Deliberately well-formed JSON that `parseFindings` would accept
         // on its own — the point of this test is that the stopReason
@@ -261,7 +253,7 @@ describe("runOnce", () => {
 
     const deps: RunnerDeps = {
       now: () => Date.now(),
-      call: async (): Promise<PackageDaemonOutcome> => ({
+      call: async (): Promise<DaemonOutcome> => ({
         kind: "ok",
         text: "not json at all",
         model: MODEL,
@@ -286,7 +278,7 @@ describe("runOnce", () => {
 
     const deps: RunnerDeps = {
       now: () => Date.now(),
-      call: async (): Promise<PackageDaemonOutcome> => ({
+      call: async (): Promise<DaemonOutcome> => ({
         kind: "ok",
         text: "not json at all",
         model: MODEL,
