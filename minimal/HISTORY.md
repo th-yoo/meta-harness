@@ -1135,3 +1135,59 @@ and "actually running", which is where this repo keeps getting caught.
   `pluginVersion` mid-window, and the sensor going live (`1785996709580`).
   Any D3 effect claimed from this window without segmenting on all three is
   uninterpretable. Recorded before anyone reads a clean before/after out of it.
+
+## P2 bench: two launches, two burns, zero data (2026-08-09/10, yoo-mac) — the "silent done" shape, twice
+
+First-ever live P2 spend attempt (arms a1/a3/a4, ≤112 container executions,
+haiku). Both launches produced structurally valid results files full of
+garbage; both root causes were invisible to every test because every suite
+fakes the exec seam, and both were caught only by reading the LIVE run.
+
+- **Launch 0 (the no-op that almost wasn't caught).** READINESS's invocation
+  lines called `bun opencode-plugin/src/bench/cli.ts` — a LIBRARY whose
+  `main()` is exported but never self-invoked. All three arms "completed" in
+  4 seconds, rc=0, zero containers; `p2-tally` then happily wrote an
+  all-zero verdict, because it does not die on missing results files.
+  Corrected pre-data (`10baf37`): the entry point is
+  `bun term-bench2/runner.ts`. Proven with a deliberate wrong `--go 1`
+  (fence refused pre-container, zero effect). **Rule: tally only when all
+  three results files exist; an rc=0 sized-go that returns in seconds is a
+  no-op, not a fast win.**
+- **Launch 1: container auth never wired.** `runOneP2Attempt` created
+  containers with `mounts: []` — dropping the oauth credential mount, the
+  onboarding claude.json, and `IS_SANDBOX=1`. Without that env var the CC
+  CLI refuses `--dangerously-skip-permissions` as root: rc=1, message on
+  STDERR only, stdout EMPTY — and `classifyAttempt` reads stdout only, so
+  empty classifies **"done"**, turns=0, `agent_no_output`, no retry, no loud
+  anything. The whole a1 arm burned as no-ops (zero token spend — the CLI
+  never reached the API). Fixed by mirroring cmd-run.ts's auth lifecycle
+  (merge `59fa76d`, artifact `05e3d1d-p2-container-auth-fix.md`), validated
+  live (turns=27, compliant). cmd-p2 had mirrored cmd-run's create SHAPE but
+  not its auth LIFECYCLE — the seam every test fakes is exactly where the
+  two diverged.
+- **Launch 2: the host oauth token expired mid-run** (00:57 KST, ~2.2h in).
+  a1 ran real until then (turns~29, rewards landing); the a1 tail + ALL of
+  a3/a4 burned as auth refusals — 69 "NOT retrying" lines, again zero token
+  spend. The per-attempt keychain export means every attempt AFTER expiry
+  fails identically; serial arms turn one expiry into two dead arms. The
+  monitor tripwire (`turns=0`) never fired because the auth path prints no
+  `turns=` line at all — **the failure mode changed its log signature and
+  the tripwire was pattern-matched to the previous failure**. Results
+  deleted, rerun held by user (standing rule: re-run infra noise, don't
+  engineer expiry prevention).
+- **The shape worth naming (rhymes with 08-06's delta-vs-absolute entry):**
+  a classifier that reads one channel (stdout) treats "process failed before
+  producing anything" as "process finished having done nothing" — and every
+  downstream layer (results schema, tally, monitor) faithfully launders the
+  silence into well-formed zeros. Both burns are the same defect class at
+  different layers. Recorded hardening candidates (deferred, in the 05e3d1d
+  artifact): rc!=0 + empty stdout should classify transient or a distinct
+  `agent_hard_fail`, never "done"; a4's re-pass ignores rc entirely; and on
+  linux hosts prepareClaudeCodeAuth mounts the operator's real `~/.claude`
+  (including memory that NAMES P2) rw into agent containers — needs a ruling
+  before any WSL-host P2 run.
+- **Net cost:** ~150 container executions, ~3.5h wall clock, ~30 real haiku
+  calls' worth of a1 work (the only genuine model spend, and the only real
+  data — discarded with the rest for a clean rerun). Machinery is now
+  live-proven end-to-end: staging, agent, verifier, review daemon pre-start,
+  results plumbing all worked in launch 2's clean window.

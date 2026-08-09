@@ -3,6 +3,80 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-09b/10 (`yoo-mac`) — src/acp DELETED · FOUR ITEMS CLOSED · BENCH TWICE BURNED, RERUN ON HOLD · MAIN `59fa76d`+
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness), post-2026-08-10. git pull FIRST. Main >= 59fa76d
+(plus this doc's own commit). cc-api-daemon UNCHANGED at baee1c4 (v0.5.0) —
+no package work this session. Sibling sessions share this checkout.
+
+WHAT LANDED (do not redo), all merged to main with committed review artifacts:
+ - src/acp mirror DELETED (merge c1564c5, artifact c883206-acp-dir-retirement
+   .md). @th-yoo/cc-api-daemon (pin baee1c4) is the SOLE ACP implementation.
+   GAUGE_ISOLATION lives in cc-gate-plugin/src/gauge/send-prompt.ts (package
+   deliberately does NOT export it); its lock-vs-agent-transport test sits in
+   send-prompt.test.ts (fast tier). km-crank TIA tables pruned of deleted-file
+   rules. "cc-gate-plugin/src/acp/ stays" retention REVERSED by user ruling.
+ - Item (a) F2: user ruled FOR — sidecar stores bash commands/DONE-CHECK
+   content/filenames verbatim, explicit exception. p2-sidecar-fix merged
+   4d4c66a.
+ - Item (d): FIRST LIVE CALL through the package succeeded (smoke.ts, haiku,
+   provenance true — in the c883206 artifact). Api lane only; warm/pool lane
+   still never production-exercised.
+ - Item (c) sensor blockers FIXED (merge ae6a2f6, artifact 2749fd5-sensor-
+   arming-fix.md): arming gate widened to inside-the-checkout (runner always
+   handed MAIN_CHECKOUT_DIR); ensure(waitMs: ENSURE_WAIT_MS 15s) replaced the
+   structurally-no-call zero-wait (DEBOUNCE_MS == daemon idle budget).
+   SENSOR STILL OFF — user held arming.
+ - Item (b) P2: READINESS re-derived (RE-DERIVATION block: api lane not warm,
+   ACP_IDLE_MS=7200000 + daemon pre-start required for a4, counts/--go
+   unchanged) + entry-point corrected (bench cli.ts is a LIBRARY that exits 0
+   doing NOTHING — the real entry is `bun term-bench2/runner.ts`).
+ - P2 container-auth fix (merge 59fa76d, artifact 05e3d1d-p2-container-auth-
+   fix.md): runOneP2Attempt now threads driver.prepareAuth() into container
+   create (oauth mounts + onboarding json + IS_SANDBOX=1), mirrors
+   cmd-run.ts's lifecycle, guarded rm so the credential shred always runs.
+   Validated live: turns=27/29, reward=1.
+
+BENCH: TWICE LAUNCHED, TWICE BURNED, ZERO USABLE DATA, RERUN ON HOLD (user).
+ - Launch 1 (21:21 KST): every attempt turns=0 agent_no_output — the missing
+   container auth above. Zero token spend (CLI died pre-API: without
+   IS_SANDBOX=1, --dangerously-skip-permissions is refused as root, stderr-
+   only, empty stdout classifies "done").
+ - Launch 2 (22:47-01:44 KST, on the fix): a1 ran REAL (turns~29, rewards,
+   4 passes in 13 clean attempts) until the HOST OAUTH TOKEN EXPIRED 00:57
+   KST mid-run — a1 tail + ALL of a3/a4 burned as auth refusals (69 "NOT
+   retrying" lines). Zero token spend on burned attempts.
+ - ALL results/verdict/judge-evidence sidecar files DELETED — p2-tally does
+   NOT die on missing files, it writes an all-zero verdict; never run it
+   without all three results files present.
+ - RERUN CHECKLIST (needs its own go): fresh token window (claude /login;
+   check keychain expiresAt covers ~6h), launch via the READINESS invocation
+   lines (term-bench2/runner.ts entry, ACP_IDLE_MS + daemon pre-start for
+   a4), tmux detached, monitor tripwire MUST include "NOT retrying" (auth
+   failures print no turns= line and land as agent_no_output in results —
+   the LOG carries the distinction, not the results file).
+
+KNOWN GAPS recorded in 05e3d1d artifact (deferred, not blockers):
+ - classifyAttempt reads stdout only: rc!=0 + empty stdout still classifies
+   "done" — the silent shape both burns shared. Hardening candidate.
+ - a4 re-pass ignores rc entirely (same shape).
+ - linux-host prepareClaudeCodeAuth mounts the operator's REAL ~/.claude rw
+   into agent containers (memory leaks in!) — needs a ruling before any
+   WSL/linux-host P2 run. Darwin unaffected (temp-dir creds only).
+ - p2-tally still does not aggregate reviewTruncated (sibling's item).
+
+OPEN — NEED USER GO: bench rerun #3 · sensor arming (two caveats to answer
+ first: what counts toward the >=25/day bar when the sensor only diffs the
+ MAIN checkout; how KKAMAK_REVIEW_SENSOR=1 reaches worktree-launched
+ sessions) · TB2 batch · C4 after base rate.
+
+RULES unchanged: explicit go before any merge to main and any spend · 7b gate
+ + committed docs/reviews artifact (SHAs via git rev-parse) · cc-api-daemon
+ "done" = merged to origin/main.
+```
+
 ## ✅ SESSION END 2026-08-09 (`yoo-mac`) — ACP MIGRATION COMPLETE · MAIN `77c070d` · cc-api-daemon v0.5.0
 
 **RESUME PROMPT:**
