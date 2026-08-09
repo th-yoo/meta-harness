@@ -47,13 +47,11 @@ CRITICAL SEMANTICS to not get wrong:
    timeout signature). Run them serially.
 
 OPEN — ALL NEED YOUR GO:
- (a) F2 RULING on branch p2-sidecar-fix (pushed, 5 ahead of main, NOT merged).
-     It contains the sibling's p2-judge-logging PLUS my 3 sidecar integrity
-     fixes. Their own plan doc says verbatim "F2 EXCEPTION — EXPLICIT, AND
-     NEEDING THE USER'S RULING": the judge-evidence sidecar stores DONE-CHECK
-     file content, bash-command list and workspace filenames VERBATIM; F2
-     permits only counts/booleans/hash/error-string. Rule FOR -> merge as-is.
-     Rule AGAINST -> the sidecar WRITE needs gating/removal, not just fixing.
+ (a) CLOSED 2026-08-09: user ruled F2 FOR — the judge-evidence sidecar may
+     store bash commands, DONE-CHECK file content and workspace filenames
+     verbatim (explicit F2 exception). p2-sidecar-fix merged as-is to main
+     (merge 4d4c66a; artifact docs/reviews/68d3b6c-p2-judge-logging-plus-
+     sidecar-fix.md was already on the branch), branch deleted.
  (b) P2 READINESS IS STALE. A4's transport AND lane both changed. Re-derive
      before any bench spend go.
  (c) REVIEW-SENSOR ARMING — recommend NOT yet. Two live blockers: the worktree
