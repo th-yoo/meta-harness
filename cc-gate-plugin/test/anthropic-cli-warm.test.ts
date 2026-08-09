@@ -1,77 +1,135 @@
 // test/anthropic-cli-warm.test.ts — N3c-iv: `makeAnthropicCliWarmProvider`
-// (src/gauge/providers/anthropic-cli-warm.ts) wraps the reviewed ACP client
-// (acp-client.ts: `ensureDaemon`, `daemonCall`) as a `SendPromptProvider`.
-// Fake daemons only (test/acp-fake-daemon.ts) — no WarmSession, no CLI, no
-// credentials, no model, zero spend. Mirrors acp-client.test.ts's tempSock /
-// LIVE_FAKES / afterEach discipline so a leaked socket under
-// ~/.config/kkamak fails loudly rather than silently.
+// (src/gauge/providers/anthropic-cli-warm.ts) wraps the ACP warm lane as a
+// `SendPromptProvider`. Fake daemons only — no WarmSession, no CLI, no
+// credentials, no model, zero spend.
+//
+// gauge-cliwarm-swap: ported off the OLD in-repo unix-socket stack (this
+// file used to isolate via `KKAMAK_ACP_SOCKET` + `test/acp-fake-daemon.ts`'s
+// unix-socket fake). Both mechanisms are dead against the client
+// `anthropic-cli-warm.ts` now uses: `KKAMAK_ACP_SOCKET` is RETIRED upstream
+// (on `@th-yoo/cc-api-daemon`'s fingerprint denylist, no implementation
+// reads it), and the new client speaks WebSocket, which the in-repo unix
+// fake cannot serve. This file now uses the package's OWN published test
+// machinery (`@th-yoo/cc-api-daemon/testing`) — the same `fakeDaemon` the
+// package's own suite and `test/review-sensor-runner-daemon.test.ts` use —
+// over a real loopback WebSocket, plus `tempEnv` for a throwaway `HOME` per
+// test.
+//
+// ISOLATION IS NOT OPTIONAL (package CLAUDE.md + task brief): `discoveryPath`
+// falls back to the REAL `os.homedir()` when `env.HOME` is absent, and a
+// fake's `stop()` DELETES the discovery file it published. This host runs a
+// live daemon with a populated `~/.config/acpd/` — an ungoverned env here
+// could read, and on cleanup DELETE, that daemon's own discovery entry. The
+// file's old socket-name leak check (retired with the socket) is replaced
+// below by a delta check against the REAL `~/.config/acpd/` (see
+// `PRE_EXISTING_REAL_ACPD`), checked in both directions: no new file
+// appeared, and nothing pre-existing (including the live daemon's own entry)
+// went missing.
 import { afterEach, describe, expect, test } from "bun:test"
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
-import { tmpdir } from "node:os"
 import { makeAnthropicCliWarmProvider } from "../src/gauge/providers/anthropic-cli-warm.ts"
 import { buildAgentOutgoingText } from "../src/gauge/agent-transport.ts"
 import { GAUGE_ISOLATION, type WarmIsolation } from "../src/acp/acp-wire.ts"
 import { resolveProvider } from "../src/gauge/send-prompt.ts"
-import { envFingerprint } from "../src/acp/acp-paths.ts"
-import { fakeDaemon, type FakeDaemonHandle } from "./acp-fake-daemon.ts"
-import { shortSock } from "./sock-path.ts"
+import { resetAcpClientSingleton } from "../src/acp-client-singleton.ts"
+import { ACP_BUDGET, envFingerprint } from "@th-yoo/cc-api-daemon"
+import {
+  fakeDaemon,
+  tempEnv,
+  cleanupTempHomes,
+  reapDaemons,
+  readDiscovery,
+  waitForLines,
+  discoveryPath,
+  LIVE_DAEMONS,
+  type FakeDaemonHandle,
+} from "@th-yoo/cc-api-daemon/testing"
 
 const HAIKU = "claude-haiku-4-5"
 
-// Short names via sock-path.ts: darwin sun_path caps the path at 104B.
-function tempSock(tag: string): string {
-  return shortSock(`w-${tag}`)
-}
-
-/** The base env every fake-daemon test starts from. Every fake in this file
- * is built with `envFingerprint(ENV_with_socket)` so the fake's echo can
- * never silently disagree with what the client fingerprints. */
-const ENV: Record<string, string | undefined> = { ...process.env, KKAMAK_ACP_TEST_MARKER: "anthropic-cli-warm-test" }
-
 const LIVE_FAKES: FakeDaemonHandle[] = []
 
-/** Sockets under ~/.config/kkamak that were ALREADY there before this file
- * ran. The leak check is a DELTA against this, not an absolute emptiness
- * assertion.
- *
- * Why: that directory is shared with the live host. Since the review-sensor
- * was armed (2026-08-06, ledger ts 1785996709580) it drives the ACP warm
- * lane, so a real `acp-<fp>.sock` is routinely listening while tests run —
- * and an absolute `toEqual([])` then fails every test in this file on any
- * armed host, wedging the gate that runs them. Observed live: 72 failures
- * from one pre-existing socket.
- *
- * The delta preserves the check exactly. What it guards is production code
- * ignoring `KKAMAK_ACP_SOCKET` and falling back to the default
- * fingerprint-derived path; such a leak is a NEW file appearing during a
- * test, which this still catches. It only stops blaming this file for
- * sockets it never created. */
-const dirOf = () => path.join(process.env.HOME ?? "", ".config", "kkamak")
-const acpSocksNow = (): string[] =>
-  fs.existsSync(dirOf()) ? fs.readdirSync(dirOf()).filter((f) => f.startsWith("acp-")) : []
-const PRE_EXISTING = new Set(acpSocksNow())
+/** The REAL host's discovery dir — deliberately `os.homedir()`, never any
+ * test env's `HOME` — mirrors exactly the fallback path `discoveryPath`
+ * itself takes when an env's `HOME` is absent (acp-paths.ts). Nothing this
+ * file does should ever touch it; the delta below proves that, in both
+ * directions, every test. */
+const REAL_ACPD_DIR = path.join(os.homedir(), ".config", "acpd")
+const realAcpdFilesNow = (): string[] =>
+  fs.existsSync(REAL_ACPD_DIR) ? fs.readdirSync(REAL_ACPD_DIR).filter((f) => f.startsWith("acp-")) : []
+const PRE_EXISTING_REAL_ACPD = new Set(realAcpdFilesNow())
 
 afterEach(() => {
-  while (LIVE_FAKES.length) { const f = LIVE_FAKES.pop()!; try { f.stop() } catch { /* ignore */ } }
-  const leaked = acpSocksNow().filter((f) => !PRE_EXISTING.has(f))
+  while (LIVE_FAKES.length) {
+    const f = LIVE_FAKES.pop()!
+    try {
+      f.stop()
+    } catch {
+      /* ignore */
+    }
+  }
+  // Defensive backstop (matches review-sensor-runner-daemon.test.ts's own
+  // precedent): if `ensureDaemon` ever fell through to actually spawning a
+  // real daemon, this reaps it by pid rather than leaving it alive for the
+  // full 900s idle budget.
+  reapDaemons()
+  cleanupTempHomes()
+  // Every consumer routing through the singleton (this file now does, via
+  // anthropic-cli-warm.ts) must reset it between tests, or a `capturedEnv`
+  // pinned by an earlier test — or an earlier FILE in the same `bun test`
+  // process — silently redirects a later test's `ensureDaemon`/`daemonCall`
+  // away from ITS OWN `tempEnv`-scoped fake (acp-client-singleton.ts's own
+  // header explains why in detail).
+  resetAcpClientSingleton()
+
+  // The replacement for the old socket-leak delta check (retired with
+  // KKAMAK_ACP_SOCKET): the analogous hazard on this client is the REAL
+  // host's ~/.config/acpd/ (see this file's header). Both directions
+  // checked — a NEW file appearing is exactly what a mis-homed fake would
+  // leave behind; a PRE-EXISTING file (including the live daemon's own
+  // acp-40b79c7ed346.json) going MISSING is exactly what a mis-homed fake's
+  // `stop()` would do to it.
+  const nowFiles = new Set(realAcpdFilesNow())
+  const leaked = [...nowFiles].filter((f) => !PRE_EXISTING_REAL_ACPD.has(f))
   expect(leaked).toEqual([])
+  const missing = [...PRE_EXISTING_REAL_ACPD].filter((f) => !nowFiles.has(f))
+  expect(missing).toEqual([])
 })
 
-/** The fake daemon is already listening BEFORE the provider is called, so
- * `ensureDaemon`'s step-1 probe succeeds immediately and nothing is ever
- * spawned — every test here is zero-CLI, zero-spend by construction. */
-function envWithFake(tag: string, answer: Parameters<typeof fakeDaemon>[1]["answer"], fakeOpts: Partial<Parameters<typeof fakeDaemon>[1]> = {}) {
-  const sock = tempSock(tag)
-  const env = { ...ENV, KKAMAK_ACP_SOCKET: sock }
-  const fake = fakeDaemon(sock, { fingerprint: envFingerprint(env), answer, ...fakeOpts })
+/** The fake daemon is already listening — and its discovery file already
+ * published — BEFORE the provider is ever called, so `ensureDaemon`'s
+ * step-1 probe succeeds immediately and nothing is ever spawned: every test
+ * here is zero-CLI, zero-spend, zero-real-daemon by construction. Every env
+ * comes from `tempEnv` (throwaway `HOME`) — never a bare `{...process.env}`
+ * spread, which is the exact pattern that made the OLD version of this file
+ * a live-daemon hazard. */
+async function envWithFake(
+  tag: string,
+  answer: Parameters<typeof fakeDaemon>[1]["answer"],
+  fakeOpts: Partial<Parameters<typeof fakeDaemon>[1]> = {},
+): Promise<{ env: Record<string, string | undefined>; fake: FakeDaemonHandle }> {
+  const env = tempEnv(tag)
+  const fake = await fakeDaemon(env, { fingerprint: envFingerprint(env), answer, ...fakeOpts })
   LIVE_FAKES.push(fake)
+  expect(readDiscovery(env)).toBeTruthy()
   return { env, fake }
 }
 
 describe("makeAnthropicCliWarmProvider (fake daemons only — no CLI, no model)", () => {
   test("1. ok path end-to-end: UNDATED evidence key for the requested undated model -> ok, model=requested, canonicalModel per rule", async () => {
-    const { env } = envWithFake("ok-undated", "ok", { model: HAIKU, canonicalModel: "" })
+    const { env } = await envWithFake("ok-undated", "ok", { model: HAIKU, canonicalModel: "" })
+
+    // Defensive, matching review-sensor-runner-daemon.test.ts's own
+    // precedent: SHOULD never be written to (the fake's discovery is
+    // already published, so ensureDaemon's probe finds it immediately) — if
+    // that assumption were ever wrong, this makes the fallback spawn
+    // loggable and reapable instead of a silent 900s-idle leak.
+    const spawnLog = path.join(env.HOME!, "spawnlog")
+    env.ACP_TEST_SPAWN_LOG = spawnLog
+    LIVE_DAEMONS.push({ spawnLog })
+
     const provider = makeAnthropicCliWarmProvider(env)
     const outcome = await provider("hello", { model: HAIKU, isolation: GAUGE_ISOLATION, provider: "anthropic-cli-warm" })
     expect(outcome).toEqual({
@@ -80,6 +138,10 @@ describe("makeAnthropicCliWarmProvider (fake daemons only — no CLI, no model)"
       model: HAIKU, // requested literal
       canonicalModel: HAIKU, // daemon's canonicalModel was "" -> falls back to the evidence key
     })
+
+    // No real daemon was ever spawned.
+    expect(await waitForLines(spawnLog, 1, 100)).toEqual([])
+    expect(fs.existsSync(spawnLog)).toBe(false)
   })
 
   test("1b. canonicalModel primary branch: a NON-EMPTY daemon canonicalModel passes through verbatim", async () => {
@@ -87,7 +149,7 @@ describe("makeAnthropicCliWarmProvider (fake daemons only — no CLI, no model)"
     // primary branch (`outcome.canonicalModel || outcome.model`'s left
     // side) is exercised, not merely reachable. Proven via the dated-key
     // prefix rule (modelProvenBy's second branch: key.startsWith(`${requested}-`)).
-    const { env } = envWithFake("canonical-nonempty", "ok", {
+    const { env } = await envWithFake("canonical-nonempty", "ok", {
       model: `${HAIKU}-20251001`,
       canonicalModel: "claude-haiku-4-5-canonical-marker",
     })
@@ -109,7 +171,7 @@ describe("makeAnthropicCliWarmProvider (fake daemons only — no CLI, no model)"
     // requested model is undated ("claude-haiku-4-5") -- proven via
     // modelProvenBy's dated-prefix branch, and the two candidate
     // canonicalModel values are now observably different.
-    const { env } = envWithFake("canonical-fallback-dated", "ok", { canonicalModel: "" })
+    const { env } = await envWithFake("canonical-fallback-dated", "ok", { canonicalModel: "" })
     const provider = makeAnthropicCliWarmProvider(env)
     const outcome = await provider("hello", { model: HAIKU, isolation: GAUGE_ISOLATION, provider: "anthropic-cli-warm" })
     expect(outcome).toEqual({
@@ -121,35 +183,35 @@ describe("makeAnthropicCliWarmProvider (fake daemons only — no CLI, no model)"
   })
 
   test("2. modelProvenBy failure: evidence for a DIFFERENT model family -> call-consumed, not ok, not no-call", async () => {
-    const { env } = envWithFake("wrong-family", "ok", { model: "claude-opus-4-1", canonicalModel: "" })
+    const { env } = await envWithFake("wrong-family", "ok", { model: "claude-opus-4-1", canonicalModel: "" })
     const provider = makeAnthropicCliWarmProvider(env)
     const outcome = await provider("hello", { model: HAIKU, isolation: GAUGE_ISOLATION, provider: "anthropic-cli-warm" })
     expect(outcome).toEqual({ ok: false, kind: "call-consumed" })
   })
 
   test("3a. daemon no-call maps through unchanged", async () => {
-    const { env } = envWithFake("nocall", "no-call")
+    const { env } = await envWithFake("nocall", "no-call")
     const provider = makeAnthropicCliWarmProvider(env)
     const outcome = await provider("x", { model: HAIKU, isolation: GAUGE_ISOLATION, provider: "anthropic-cli-warm" })
     expect(outcome).toEqual({ ok: false, kind: "no-call" })
   })
 
   test("3b. daemon call-consumed maps through unchanged", async () => {
-    const { env } = envWithFake("consumed", "call-consumed")
+    const { env } = await envWithFake("consumed", "call-consumed")
     const provider = makeAnthropicCliWarmProvider(env)
     const outcome = await provider("x", { model: HAIKU, isolation: GAUGE_ISOLATION, provider: "anthropic-cli-warm" })
     expect(outcome).toEqual({ ok: false, kind: "call-consumed" })
   })
 
   test("4. -32002 pool-exhausted from the fake -> no-call (wire-contract regression, through daemonCall's own L3 step-i)", async () => {
-    const { env } = envWithFake("pool-exhausted", "pool-exhausted")
+    const { env } = await envWithFake("pool-exhausted", "pool-exhausted")
     const provider = makeAnthropicCliWarmProvider(env)
     const outcome = await provider("x", { model: HAIKU, isolation: GAUGE_ISOLATION, provider: "anthropic-cli-warm" })
     expect(outcome).toEqual({ ok: false, kind: "no-call" })
   })
 
   test("5. schema present -> captured prompt carries buildAgentOutgoingText's trailing instruction; absent -> bare prompt", async () => {
-    const { env, fake } = envWithFake("schema", "ok")
+    const { env, fake } = await envWithFake("schema", "ok")
     const provider = makeAnthropicCliWarmProvider(env)
     const schema = { type: "object", properties: { ok: { type: "boolean" } } }
 
@@ -162,7 +224,7 @@ describe("makeAnthropicCliWarmProvider (fake daemons only — no CLI, no model)"
   })
 
   test("6. isolation passed through deep-equal (fake asserts _meta.kkamak.isolation)", async () => {
-    const { env, fake } = envWithFake("isolation", "ok")
+    const { env, fake } = await envWithFake("isolation", "ok")
     const provider = makeAnthropicCliWarmProvider(env)
     const customIsolation: WarmIsolation = {
       ...GAUGE_ISOLATION, systemPrompt: "CLI-WARM-PROVIDER-ISOLATION-MARKER", title: "kkamak-cli-warm-test",
@@ -173,18 +235,42 @@ describe("makeAnthropicCliWarmProvider (fake daemons only — no CLI, no model)"
     expect(fake.sessionNewParams()?._meta?.kkamak?.isolation).not.toEqual(GAUGE_ISOLATION)
   })
 
-  test("7. timeoutMs mapping is observable: short timeout + hanging fake -> call-consumed within budget, not the default leg", async () => {
-    const { env, fake } = envWithFake("timeout", "hang")
-    const provider = makeAnthropicCliWarmProvider(env)
-    const t0 = Date.now()
-    const outcome = await provider("x", { model: HAIKU, isolation: GAUGE_ISOLATION, provider: "anthropic-cli-warm", timeoutMs: 500 })
-    expect(outcome).toEqual({ ok: false, kind: "call-consumed" })
-    expect(Date.now() - t0).toBeLessThan(1_500) // well under ACP_BUDGET.daemonLegMs (36_000)
-    expect(fake.sawPrompt()).toBe(true) // it really did cross the send boundary
+  test("7. timeoutMs mapping is observable: an ABOVE-floor budget threads verbatim onto daemonCall's budgetMs; omitted leaves it unset", async () => {
+    // The old version of this test proved the mapping by racing a SHORT
+    // timeoutMs (500ms) against a hanging fake daemon over the real wire.
+    // That race is no longer reachable: gauge-cliwarm-swap Task 2 added a
+    // floor guard to anthropic-cli-warm.ts that short-circuits to `no-call`
+    // for ANY `timeoutMs <= ACP_BUDGET.daemonWorstCaseMs` (32_000) BEFORE
+    // ensureDaemon/daemonCall are ever invoked (see that file's header) —
+    // exercising the wire-level mapping now requires a value ABOVE the
+    // floor, and this suite should not pay a real 32s+ wait per run just to
+    // prove a pass-through assignment. This test instead intercepts the
+    // REAL `daemonCall` the provider invokes via the singleton's own
+    // injectable seam (`resetAcpClientSingleton`) — the wire-level
+    // wait-for-a-real-timeout behavior is the PACKAGE's own concern,
+    // already covered by its own suite, not something this file re-proves.
+    const seenOpts: Array<{ budgetMs?: number }> = []
+    resetAcpClientSingleton({
+      ensureDaemon: async () => true,
+      daemonCall: async (_text, _model, _env, opts) => {
+        seenOpts.push(opts)
+        return { kind: "ok", text: "ANSWER", model: HAIKU, canonicalModel: "" }
+      },
+    })
+    const provider = makeAnthropicCliWarmProvider(tempEnv("timeout-mapping"))
+
+    const aboveFloor = ACP_BUDGET.daemonWorstCaseMs + 4_000
+    await provider("x", {
+      model: HAIKU, isolation: GAUGE_ISOLATION, provider: "anthropic-cli-warm", timeoutMs: aboveFloor,
+    })
+    expect(seenOpts[0]?.budgetMs).toBe(aboveFloor)
+
+    await provider("x", { model: HAIKU, isolation: GAUGE_ISOLATION, provider: "anthropic-cli-warm" })
+    expect(seenOpts[1]?.budgetMs).toBeUndefined()
   })
 
   test("8. maxTokens ignored: passing it changes NOTHING on the wire (session/new + prompt frames byte-stable)", async () => {
-    const { env, fake } = envWithFake("maxtokens", "ok")
+    const { env, fake } = await envWithFake("maxtokens", "ok")
     const provider = makeAnthropicCliWarmProvider(env)
 
     // `sessionId` itself is minted fresh PER CALL by the daemon (spec §4:
@@ -217,8 +303,89 @@ describe("makeAnthropicCliWarmProvider (fake daemons only — no CLI, no model)"
     // irrelevant; only a `registerProvider` call triggered by THIS
     // construction could move `after` away from `before`.
     const before = resolveProvider("anthropic-cli-warm")
-    makeAnthropicCliWarmProvider(ENV)
+    makeAnthropicCliWarmProvider(tempEnv("registry"))
     const after = resolveProvider("anthropic-cli-warm")
     expect(after).toBe(before)
+  })
+})
+
+describe("budgetMs floor guard (gauge-cliwarm-swap Task 2 — live now that this file left the old client)", () => {
+  test("timeoutMs AT the floor (ACP_BUDGET.daemonWorstCaseMs) short-circuits to no-call BEFORE the daemon is ever touched, and logs a diagnostic naming the value and the floor", async () => {
+    // `<=` mirrors the package's own refusal condition (`dw >= budgetMs`)
+    // exactly — equality is already a failure there, so the boundary value
+    // itself (not floor-1) is what proves the guard's comparison operator is
+    // right, not just its ballpark.
+    const { env, fake } = await envWithFake("floor-guard-at-floor", "ok")
+    const provider = makeAnthropicCliWarmProvider(env)
+
+    const originalConsoleError = console.error
+    const errorCalls: unknown[][] = []
+    console.error = (...args: unknown[]) => {
+      errorCalls.push(args)
+    }
+    let outcome: Awaited<ReturnType<typeof provider>>
+    try {
+      outcome = await provider("x", {
+        model: HAIKU,
+        isolation: GAUGE_ISOLATION,
+        provider: "anthropic-cli-warm",
+        timeoutMs: ACP_BUDGET.daemonWorstCaseMs,
+      })
+    } finally {
+      console.error = originalConsoleError
+    }
+
+    expect(outcome).toEqual({ ok: false, kind: "no-call" })
+    // Never even reached the wire: the fake would have answered "ok" for
+    // real (session/new -> session/prompt), so either having happened here
+    // would prove the guard did NOT short-circuit before ensureDaemon.
+    expect(fake.sessionNewParams()).toBeUndefined()
+    expect(fake.sawPrompt()).toBe(false)
+
+    expect(errorCalls.length).toBe(1)
+    const message = String(errorCalls[0]![0])
+    expect(message).toContain("anthropic-cli-warm")
+    expect(message).toContain(String(ACP_BUDGET.daemonWorstCaseMs))
+  })
+
+  test("timeoutMs strictly ABOVE the floor does not trigger the guard: reaches the wire normally", async () => {
+    const { env, fake } = await envWithFake("floor-guard-above", "ok")
+    const provider = makeAnthropicCliWarmProvider(env)
+    const outcome = await provider("x", {
+      model: HAIKU,
+      isolation: GAUGE_ISOLATION,
+      provider: "anthropic-cli-warm",
+      timeoutMs: ACP_BUDGET.daemonWorstCaseMs + 1,
+    })
+    expect(outcome.ok).toBe(true)
+    expect(fake.sawPrompt()).toBe(true)
+  })
+
+  test("timeoutMs omitted entirely never triggers the guard (undefined is not <= the floor)", async () => {
+    const { env, fake } = await envWithFake("floor-guard-omitted", "ok")
+    const provider = makeAnthropicCliWarmProvider(env)
+    const outcome = await provider("x", { model: HAIKU, isolation: GAUGE_ISOLATION, provider: "anthropic-cli-warm" })
+    expect(outcome.ok).toBe(true)
+    expect(fake.sawPrompt()).toBe(true)
+  })
+})
+
+describe("HOME isolation (gauge-cliwarm-swap Task 3 — the live-daemon-safety guard)", () => {
+  test("negative: discoveryPath(env) for this file's envs never resolves under the real host's os.homedir()", () => {
+    // The exact hazard the task brief names: `discoveryPath` (acp-paths.ts)
+    // falls back to `os.homedir()` when `env.HOME` is absent, and a fake's
+    // `stop()` DELETES the discovery file it published — so an ungoverned
+    // env here could read, and on cleanup DELETE, the live daemon's own
+    // discovery entry on this host. Every env this file hands to
+    // ensureDaemon/daemonCall/fakeDaemon comes from `tempEnv`, which always
+    // sets a throwaway `HOME` — this proves that structurally, not just by
+    // convention (the file's own `PRE_EXISTING_REAL_ACPD` delta check in
+    // `afterEach` is the runtime backstop; this is the static proof).
+    const env = tempEnv("home-safety-check")
+    expect(env.HOME).toBeTruthy()
+    expect(env.HOME).not.toBe(os.homedir())
+    const dp = discoveryPath(env)
+    expect(dp.startsWith(os.homedir())).toBe(false)
+    expect(dp.startsWith(env.HOME!)).toBe(true)
   })
 })
