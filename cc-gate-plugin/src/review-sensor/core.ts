@@ -16,6 +16,18 @@ export interface SensorState {
   dayCount: number
 }
 
+/** "output-truncated" (surface-truncation, @th-yoo/cc-api-daemon v0.5.0) is
+ * distinct from "bad-review-output": both start from a `parseFindings`
+ * failure, but "output-truncated" fires when the daemon's own
+ * `stopReason === "max_tokens"` proves the api lane's fixed output cap cut
+ * the reply off mid-object — a fix there is "bound the output or raise the
+ * cap". "bad-review-output" remains for every OTHER parse failure (junk
+ * text, wrong shape) — a fix there is "fix the prompt". Runner.ts checks
+ * the specific `"max_tokens"` value BEFORE attempting to parse, since a
+ * truncated reply fails to parse too and would otherwise fall through to
+ * the generic reason first. `stopReason` absent means UNKNOWN (the agent
+ * lane has no equivalent value), never "not truncated" — never branch on
+ * presence/absence, only on the exact string. */
 export type SkipReason =
   | "debounce"
   | "cap"
@@ -24,6 +36,7 @@ export type SkipReason =
   | "merge-in-progress"
   | "warm-lane-busy"
   | "bad-review-output"
+  | "output-truncated"
   | "dispatch-error"
 
 function getDayKey(now: number): string {

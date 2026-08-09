@@ -35,13 +35,14 @@ import {
   type SkipReason,
 } from "./core.ts"
 import { assembleDiff } from "./git-diff.ts"
-import {
-  ensureDaemon,
-  daemonCall,
-  closeSession,
-  modelProvenBy,
-  type WarmIsolation,
-} from "../acp/index.ts"
+import { modelProvenBy, type WarmIsolation } from "@th-yoo/cc-api-daemon"
+// The trio comes from the process-wide singleton, not the package directly
+// (acp-client-singleton.ts's header explains the fingerprint-fragmentation
+// hazard this avoids): every consumer in this process must reach the same
+// daemon, which requires every consumer to funnel through the same pinned
+// env rather than each calling `ensureDaemon` with whatever env object it
+// happens to be holding.
+import { ensureDaemon, daemonCall, closeSession } from "../acp-client-singleton.ts"
 import { readPluginVersion } from "../sensor-append.ts"
 
 /** review-sensor's isolation profile — copies GAUGE_ISOLATION's shape
@@ -236,6 +237,19 @@ export async function runOnce(
         return
       }
 
+      // Truncation check BEFORE parseFindings, deliberately: a reply cut
+      // off by the api lane's maxTokens cap fails to parse too, so parsing
+      // first would fold this specific, actionable signal into the
+      // generic "bad-review-output" bucket the caller can't tell apart
+      // from "the model returned junk". Branch on the SPECIFIC value
+      // `"max_tokens"`, never on presence/absence — `stopReason` absent
+      // means UNKNOWN (the agent lane has no equivalent value), never
+      // "not truncated" (core.ts's own doc comment on `SkipReason`).
+      if (outcome.stopReason === "max_tokens") {
+        emitSkip("output-truncated")
+        return
+      }
+
       const parsed = parseFindings(outcome.text)
       if (parsed === undefined) {
         emitSkip("bad-review-output")
@@ -288,11 +302,16 @@ export async function runOnce(
       // Close-not-release (spec §2): a session was established for THIS
       // outcome (kind === "ok"), so it is closed here regardless of
       // whether the pass above went on to count as a real observation
-      // (bad-review-output still established a session) — pinning one of
-      // the 4 global warm-lane slots on an unproven/unparseable turn would
-      // be exactly the contention close-not-release exists to avoid. The
-      // 900s reap remains the backstop for whatever this call can't
-      // reach; result is logged, never inspected for control flow.
+      // (bad-review-output still established a session) — releasing
+      // daemon-side session state promptly rather than leaving it to age
+      // out. review-sensor's model (MODEL, core.ts) is claude-haiku-4-5,
+      // which @th-yoo/cc-api-daemon's routeBackend sends to the `api` lane:
+      // ApiSession answers per-session and is never pooled, so there is no
+      // warm-lane slot here to pin and no pool-exhaustion error this close
+      // avoids — that rationale applied to the old CLI-backed WarmSession
+      // pool, not this client. The 900s reap remains the backstop for
+      // whatever this call can't reach; result is logged, never inspected
+      // for control flow.
       if (outcome.sessionId) {
         try {
           const result = await deps.close(outcome.sessionId, env)

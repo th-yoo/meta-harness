@@ -22,9 +22,10 @@ import {
   parseA4Review,
   buildReinjectInstruction,
   runA4Review,
+  isA4ReviewTruncated,
 } from "../src/bench/p2/a4-review.ts"
 import { P2_RULE_TEXT } from "../src/bench/p2/rule.ts"
-import type { DaemonOutcome } from "../../cc-gate-plugin/src/acp/index.ts"
+import type { DaemonOutcome } from "@th-yoo/cc-api-daemon"
 
 // ── constants ────────────────────────────────────────────────────────────
 
@@ -242,6 +243,77 @@ test("runA4Review: reviewer text is junk (fails parseA4Review) -> undefined", as
   }
   const result = await runA4Review(EVIDENCE, ENV, deps)
   expect(result).toBeUndefined()
+})
+
+// ── runA4Review truncation (surface-truncation, v0.5.0) ─────────────────
+
+test('runA4Review: stopReason "max_tokens" -> {truncated: true}, even though the text itself would parse fine — proves the check runs BEFORE parseA4Review, not as a fallback after it fails', async () => {
+  const deps = {
+    ensure: async () => true,
+    // Deliberately well-formed JSON that parseA4Review would accept on its
+    // own — the point is that the stopReason check pre-empts parsing
+    // entirely, not that parsing happens to fail on truncated text.
+    call: async () => okOutcome('{"complied": true, "requiredEdits": []}', { stopReason: "max_tokens" }),
+    close: async () => ({ closed: true }),
+  }
+  const result = await runA4Review(EVIDENCE, ENV, deps)
+  expect(result).toEqual({ truncated: true })
+  expect(isA4ReviewTruncated(result)).toBe(true)
+})
+
+test('runA4Review: stopReason "max_tokens" with genuinely truncated (unparseable) text -> {truncated: true}, not the generic undefined', async () => {
+  const deps = {
+    ensure: async () => true,
+    call: async () => okOutcome('{"complied": false, "requiredEdits": ["write DONE-CHE', { stopReason: "max_tokens" }),
+    close: async () => ({ closed: true }),
+  }
+  const result = await runA4Review(EVIDENCE, ENV, deps)
+  expect(result).toEqual({ truncated: true })
+})
+
+test("runA4Review: close is still called (close-not-release) when the outcome is truncated", async () => {
+  const closed: Array<{ sessionId: string }> = []
+  const deps = {
+    ensure: async () => true,
+    call: async () => okOutcome('{"complied": true, "requiredEdits": []}', { stopReason: "max_tokens", sessionId: "sess-trunc" }),
+    close: async (sessionId: string) => {
+      closed.push({ sessionId })
+      return { closed: true }
+    },
+  }
+  const result = await runA4Review(EVIDENCE, ENV, deps)
+  expect(result).toEqual({ truncated: true })
+  expect(closed).toEqual([{ sessionId: "sess-trunc" }])
+})
+
+test('runA4Review: stopReason absent (undefined) with junk text -> plain undefined, NEVER {truncated: true} — absent means unknown, not "not truncated" nor "truncated"', async () => {
+  const deps = {
+    ensure: async () => true,
+    call: async () => okOutcome("not json at all"), // no stopReason opt passed -> undefined
+    close: async () => ({ closed: true }),
+  }
+  const result = await runA4Review(EVIDENCE, ENV, deps)
+  expect(result).toBeUndefined()
+  expect(isA4ReviewTruncated(result)).toBe(false)
+})
+
+test('runA4Review: stopReason "end_turn" (a real, non-truncating value) with junk text -> undefined, not {truncated: true} — only the exact string "max_tokens" triggers the truncation branch', async () => {
+  const deps = {
+    ensure: async () => true,
+    call: async () => okOutcome("not json at all", { stopReason: "end_turn" }),
+    close: async () => ({ closed: true }),
+  }
+  const result = await runA4Review(EVIDENCE, ENV, deps)
+  expect(result).toBeUndefined()
+})
+
+// ── isA4ReviewTruncated ───────────────────────────────────────────────────
+
+test("isA4ReviewTruncated: true only for {truncated: true}, false for a parsed result and for undefined", () => {
+  expect(isA4ReviewTruncated({ truncated: true })).toBe(true)
+  expect(isA4ReviewTruncated({ complied: true, requiredEdits: [] })).toBe(false)
+  expect(isA4ReviewTruncated({ complied: false, requiredEdits: ["x"] })).toBe(false)
+  expect(isA4ReviewTruncated(undefined)).toBe(false)
 })
 
 test("runA4Review: pool-exhausted (daemon no-call) -> undefined, no close attempted (no session)", async () => {

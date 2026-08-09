@@ -11,10 +11,52 @@
  * exercise it entirely through the injected `deps` seam. Task 4 wires the
  * default (real) deps at the actual call site.
  *
- * The ACP warm lane is imported ONLY from `cc-gate-plugin/src/acp/index.ts`
- * — that file's own header states this is the sole sanctioned entry point
- * ("production code outside src/acp/ imports from THIS FILE, never from a
- * module inside src/acp/ directly").
+ * The ACP warm lane is imported from the published `@th-yoo/cc-api-daemon`
+ * package, not from `cc-gate-plugin/src/acp/index.ts` — deliberately, not by
+ * omission. A4 pins `A4_MODEL` to haiku (below), and the package's own
+ * `routeBackend` sends every `*haiku*` model to its per-session `api` lane
+ * (`ApiSession`), which bypasses the session pool entirely. The in-repo
+ * `cc-gate-plugin/src/acp/` client's pool is capped at 4 warm slots; routing
+ * A4's haiku traffic through the package instead keeps it off that ceiling
+ * rather than competing with every other pooled consumer for one of the 4.
+ *
+ * KNOWN LIMITATION, package-level, not fixable from this file: the api lane
+ * (`call.ts`'s `sendOne`, reached via `ApiSession.drain`) hardcodes
+ * `DEFAULT_MAX_TOKENS = 2_048` for every turn. Neither `daemonCall`'s opts
+ * (`{ isolation, budgetMs? }`) nor the ACP wire's `session/prompt` params
+ * carry a `maxTokens` field, so nothing in this file — or any other
+ * consumer of the package — can raise that cap. `buildA4ReviewPrompt` asks
+ * for `{"complied": bool, "requiredEdits": [...]}` with no bound on
+ * `requiredEdits`; a reply whose JSON would exceed 2048 output tokens
+ * truncates mid-object and `parseA4Review` fails to parse it. Raising the
+ * cap is not the fix here either (`ACP_BUDGET.turnTimeoutMs` is
+ * budget-bound — past ~2000 output tokens a truncation just becomes a
+ * `call-consumed` timeout instead, strictly worse).
+ *
+ * UPDATE (@th-yoo/cc-api-daemon v0.5.0, surface-truncation plan): this is
+ * now DETECTABLE, not just failsafe. `daemonCall`'s `ok` arm carries an
+ * optional `stopReason`, read off the wire's own `_meta.kkamak.
+ * apiStopReason`; `"max_tokens"` proves THIS turn's reply was cut off by
+ * the cap. `runA4Review` checks that SPECIFIC value — before attempting
+ * `parseA4Review`, since a truncated reply fails to parse too and parsing
+ * first would fold this signal into the same generic bucket as "the
+ * reviewer returned junk" — and returns `{ truncated: true }` instead of
+ * `undefined` in that case (see `runA4Review`'s own doc comment for the
+ * three-way return shape). `undefined` is now reserved for every OTHER
+ * failure (junk output, unproven model, no-call, call-consumed, thrown
+ * exception); a `stopReason` that is absent or any value other than the
+ * literal `"max_tokens"` (including `undefined` for the agent lane, which
+ * has no equivalent value) means UNKNOWN, never "not truncated" — this
+ * file never treats absence as proof of completion.
+ *
+ * cmd-p2.ts's caller records this distinction as `reviewTruncated` in
+ * `P2AttemptResult` (still folded into `reviewFailed` too — no re-pass
+ * fires either way — but now separable when reading P2's results). Since
+ * A4 (host-side review + reinject) is one arm in a carrier comparison, an
+ * un-separated truncation would make that arm under-perform for an
+ * instrumentation reason rather than a real one, biasing the comparison.
+ * Watch `reviewTruncated` in P2 results rather than treating every
+ * `reviewFailed` as the reviewer actually failing to review.
  *
  * close-not-release: like the review sensor (acp-client.ts's own doc:
  * "Close the pool entry that served a session (review-sensor spec §2:
@@ -25,7 +67,7 @@
  * turns out to prove the wrong model or fail to parse: the session was
  * created and consumed either way, so it must not leak.
  */
-import { ensureDaemon, daemonCall, closeSession, modelProvenBy, type WarmIsolation } from "../../../../cc-gate-plugin/src/acp/index.ts"
+import { ensureDaemon, daemonCall, closeSession, modelProvenBy, type WarmIsolation } from "@th-yoo/cc-api-daemon"
 import { P2_RULE_TEXT } from "./rule.ts"
 
 /** Frozen review model (plan §Arms) — haiku, not the model under review. */
@@ -68,6 +110,24 @@ export interface A4Evidence {
 export interface A4ReviewResult {
   complied: boolean
   requiredEdits: string[]
+}
+
+/** `runA4Review`'s DISTINCT truncation signal (surface-truncation, v0.5.0
+ * — see this file's header). Never confusable with `A4ReviewResult` (no
+ * `complied`/`requiredEdits`) or with the generic `undefined` failure —
+ * `isA4ReviewTruncated` is the one place that tells the three apart. */
+export interface A4ReviewTruncated {
+  truncated: true
+}
+
+/** Narrows `runA4Review`'s return union down to the truncation arm. The
+ * single place this file (and its callers) should ever check for
+ * truncation, so no call site duplicates the `"truncated" in review`
+ * shape check. */
+export function isA4ReviewTruncated(
+  review: A4ReviewResult | A4ReviewTruncated | undefined,
+): review is A4ReviewTruncated {
+  return review !== undefined && "truncated" in review
 }
 
 /**
@@ -159,11 +219,27 @@ ${items}`
 /**
  * The live A4 review call: `ensureDaemon` (zero-wait — a missing daemon
  * lands `no-call` below rather than blocking this call on a boot) ->
- * `daemonCall` -> `modelProvenBy` check -> `parseA4Review` -> `closeSession`
- * (best effort, `finally`, only when a session was actually created).
- * Undefined on ANY failure along the way (unproven model, junk reply,
- * no-call, call-consumed, or a thrown exception) — the caller records
- * `reviewFailed` in that case and skips the re-pass (plan §Task 4).
+ * `daemonCall` -> `modelProvenBy` check -> truncation check ->
+ * `parseA4Review` -> `closeSession` (best effort, `finally`, only when a
+ * session was actually created).
+ *
+ * Three-way return (surface-truncation, v0.5.0 — see this file's header):
+ *  - `A4ReviewResult` on a successful parse.
+ *  - `{ truncated: true }` (`A4ReviewTruncated`, check with
+ *    `isA4ReviewTruncated`) when `outcome.stopReason === "max_tokens"` —
+ *    checked BEFORE `parseA4Review` runs, since a truncated reply fails to
+ *    parse too and parsing first would fold this into the generic
+ *    `undefined` bucket below, indistinguishable from "the model returned
+ *    junk". `stopReason` absent (or any value other than the literal
+ *    `"max_tokens"`) means UNKNOWN — the agent lane has no equivalent
+ *    value — never "not truncated"; this file branches on the specific
+ *    string, never on presence/absence.
+ *  - `undefined` on every OTHER failure along the way (unproven model,
+ *    junk reply, no-call, call-consumed, or a thrown exception) — the
+ *    caller records `reviewFailed` in that case (and ALSO on the
+ *    truncated arm — no re-pass fires either way) and skips the re-pass
+ *    (plan §Task 4).
+ *
  * `deps` lets tests inject fakes for `daemonCall`/`ensureDaemon`/
  * `closeSession`; defaulting to the real imports keeps the production call
  * site (Task 4) a single import, not a wiring exercise.
@@ -172,7 +248,7 @@ export async function runA4Review(
   evidence: A4Evidence,
   env: Record<string, string | undefined>,
   deps: { call?: typeof daemonCall; ensure?: typeof ensureDaemon; close?: typeof closeSession } = {},
-): Promise<A4ReviewResult | undefined> {
+): Promise<A4ReviewResult | A4ReviewTruncated | undefined> {
   const call = deps.call ?? daemonCall
   const ensure = deps.ensure ?? ensureDaemon
   const close = deps.close ?? closeSession
@@ -188,6 +264,15 @@ export async function runA4Review(
     sessionIdToClose = outcome.sessionId
 
     if (!modelProvenBy(outcome.model, A4_MODEL, outcome.canonicalModel)) return undefined
+
+    // Truncation check BEFORE parseA4Review, deliberately: a reply cut off
+    // by the api lane's maxTokens cap fails to parse too, so parsing first
+    // would fold this specific, actionable signal into the same
+    // `undefined` bucket as every other failure. Branch on the SPECIFIC
+    // value `"max_tokens"`, never on presence/absence — see this
+    // function's own doc comment and the file header for why absence
+    // means unknown, never "not truncated".
+    if (outcome.stopReason === "max_tokens") return { truncated: true }
 
     return parseA4Review(outcome.text)
   } catch {
