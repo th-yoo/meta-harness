@@ -648,3 +648,22 @@ five architect rounds recorded in
   doc-check). Effective on the installed plugin at the first session
   started after `claude plugin update` picks up 0.4.1 — verify via the
   installed cache dir, never repo source.
+
+- **§4.3 A/A MACHINERY TRIAL STARTED (2026-08-10, yoo-dev — first trial
+  enrollment in project history):** `trialId v16-2026-08-10T03:11:17.510Z`,
+  store `meta-harness/.kkamak/global` (project-global), baseline v7,
+  candidate v16 BYTE-IDENTICAL (A/A per spec §9 design falsification;
+  verified system===baseline and playbook===baseline at start). rewardMode
+  gate-outcomes, minSessions 5, T_MAX 28d. Expected verdict: KEEP-by-tie
+  once the three floors fill (MIN_N=20 cycles, ≥5 sessions/arm, E_MIN=5
+  block events/arm — blocks ≈1/day here are the pacing floor). Any other
+  outcome = machinery broken, no real trial until fixed + rerun clean.
+  Resolution fires on km-crank scheduled runs. Metric-neutral by
+  construction (identical content), no instrument boundary.
+
+- **FIXTURE_ALLOWED_REPOS += meta-harness (2026-08-10, user ruling "go with
+  1 and 3"):** first harvest executed same commit — newest organic ref
+  (this host's own gate-check module-not-found block, 2026-08-09 23:36 UTC)
+  → `term-bench2/tasks/harvested-meta-harness-20260809-233612` (task dir
+  47M — repo-tree snapshot; COMMIT DECISION HELD, see resume). 18 more
+  eligible refs; batch harvesting awaits the size ruling.

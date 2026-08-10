@@ -18,8 +18,15 @@ import { renderTaskToml, renderDockerfile, renderTestSh, renderInstruction, TEST
 
 /** Reviewed one-way door: a repo basename must be listed here before it can
  * ever be harvested. NO CLI bypass flag exists — adding an entry is itself
- * the explicit per-repo inclusion ruling. */
-export const FIXTURE_ALLOWED_REPOS: string[] = []
+ * the explicit per-repo inclusion ruling.
+ *
+ * meta-harness: RULED IN 2026-08-10 (user go, "go with 1 and 3"). Rationale:
+ * the 19 organic fixture-refs are this repo's own blocked cycles; converting
+ * our own failure evidence into TB2 fixture tasks is the phase's designed
+ * purpose, and the harvest path strips `.km` + secrets recursively before
+ * anything is materialized. Other repos (kkamak, km-play, squad) remain
+ * excluded until their own rulings. */
+export const FIXTURE_ALLOWED_REPOS: string[] = ["meta-harness"]
 
 export class HarvestRefusal extends Error {}
 
