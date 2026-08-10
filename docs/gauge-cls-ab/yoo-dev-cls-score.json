@@ -1,0 +1,86 @@
+{
+  "scoredAt": "2026-08-10T03:49:13.524Z",
+  "hostname": "yoo-dev",
+  "sample": {
+    "cCount": 16,
+    "notCCount": 16,
+    "total": 32,
+    "transportCounts": {
+      "c": {
+        "cli": 16,
+        "sdk": 0
+      },
+      "notC": {
+        "cli": 16,
+        "sdk": 0
+      }
+    },
+    "manifestSampledAt": "2026-08-03T03:37:08.777Z",
+    "manifestKeysHash": "ee8e636edaaced8526bd9213429cb356ee9611e48a3e9050cb6ddf035d98a2e2"
+  },
+  "expectedArms": [
+    "haiku-base",
+    "haiku-patched",
+    "sonnet-base",
+    "sonnet-patched"
+  ],
+  "absentArms": [
+    "sonnet-base",
+    "sonnet-patched"
+  ],
+  "provisional": true,
+  "arms": [
+    {
+      "arm": "haiku-base",
+      "totalKeys": 32,
+      "presentKeys": 32,
+      "missingKeys": 0,
+      "complete": true,
+      "counts": {
+        "tp": 12,
+        "fp": 2,
+        "fn": 0,
+        "tn": 18
+      },
+      "metrics": {
+        "precision": 0.8571428571428571,
+        "recall": 1,
+        "f1": 0.9230769230769231
+      },
+      "mixedPrompt": true,
+      "mismatchedRows": 0
+    },
+    {
+      "arm": "haiku-patched",
+      "totalKeys": 32,
+      "presentKeys": 32,
+      "missingKeys": 0,
+      "complete": true,
+      "counts": {
+        "tp": 12,
+        "fp": 2,
+        "fn": 0,
+        "tn": 18
+      },
+      "metrics": {
+        "precision": 0.8571428571428571,
+        "recall": 1,
+        "f1": 0.9230769230769231
+      },
+      "mixedPrompt": true,
+      "mismatchedRows": 0
+    }
+  ],
+  "decision": {
+    "verdict": "INCUMBENT-STAYS",
+    "incumbentArm": "haiku-base",
+    "winnerArm": "haiku-base",
+    "f1Winner": 0.9230769230769231,
+    "f1Incumbent": 0.9230769230769231,
+    "marginAchieved": 0,
+    "missedCWinner": 0,
+    "missedCIncumbent": 0,
+    "reason": "the incumbent is itself the argmax(F1) arm",
+    "scope": "per-host"
+  }
+}
