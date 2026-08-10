@@ -405,6 +405,22 @@ entries, kkamak dogfood-log, the adoption ledger, `.km` streams on two repos, do
   reinject v2 / cls-ab / M1v2 / channel-ladder C4 still starved — the pairing fix is their
   shared unblock.)
 
+**CORRECTION, same day (user-prompted re-measurement):** the carried line above repeated the
+08-06 starvation claim WITHOUT re-measuring — and a stream count on yoo-dev refutes a third of
+it. Measured 2026-08-10: **§4.3 trial mode's activation precondition is MET** (590
+gate-outcome rows; last-14 active days average ~49 real-work cycles/day vs the ≥10 bar — the
+registered A/A machinery trial is runnable now, human-go by design); **cls-ab is NOT
+data-starved** (32 records sampled, 0 labels — blocked on a labeling session, not collection);
+**fixture harvest is NOT starved** (19 organic fixture-refs vs 0 at GA7 — mine → TB2 tasks is
+runnable token-free); **B3's cadence is proven** (69 gauge-present rows since the 08-05
+boundary, D=34 vs rest=35 — waiting on a trial to consume it, not on data). Still genuinely
+starved: §4.4 reinject blocks (15 events, v0=12/v1=3 — the rare event is the block itself),
+b2 review-findings (14 real dispatches ≈ 3/day vs the ≥25/day checkpoint bar, with 15
+warm-lane-busy skips recoverable post-`ae6a2f6`; sd/mean 1.51 replicates the 1.41 viability
+reading), and M1v2's class-C (live C=2 of 69, ~3% — the single-use redesign round is still
+the lever). The original line stands above as the record of the drift; the lesson is the
+08-06 delta's own rule applied to ourselves: re-measure before carrying a starvation claim.
+
 ### Scoreboard, one sentence (2026-08-10)
 
 The system now improves OTHER codebases under its own gate — the subject arc shipped a public
@@ -508,3 +524,10 @@ effective techniques in the project; everything else that is effective is either
   dispatched tasks, zero rework, and every catch that mattered came from the out-of-band
   layer. If it holds at n>2 repos it belongs in the process top tier; today it is one subject
   and one supervisor.
+- **"Not yet effective" band, re-measured 08-10 (see the delta's CORRECTION):** the band's
+  shared-cause claim ("all await evidence flow… one shared upstream cause") is now FALSE for
+  three members — §4.3 trial mode (activation precondition met, A/A runnable on human-go),
+  cls-ab (32 records await a labeling session), fixture harvest (19 organic refs await a
+  token-free mine). Their blocker is a DECISION each, not supply. The pairing diagnosis
+  still holds for b2-dependent members (reinject-v2 verdict power, C4 base rate) and for
+  M1v2's class-C starvation.
