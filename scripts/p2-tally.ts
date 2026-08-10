@@ -67,6 +67,11 @@ export interface AttemptAnnotation {
   reprompted: boolean
   reviewFailed: boolean
   error: string
+  /** ff8dbb8/083aa07 instrumentation-failure flags. OPTIONAL in the parse
+   * (absent on annotations written by older encoders — treated as false,
+   * never as a parse failure) so a mixed-era results file still tallies. */
+  reviewTruncated: boolean
+  rePassHardFail: boolean
 }
 
 /** Tolerant parse of one cmd-p2.ts `errors[]` entry — malformed/non-JSON
@@ -90,7 +95,14 @@ export function parseAttemptAnnotation(raw: string | undefined): AttemptAnnotati
     typeof o.reviewFailed === "boolean" &&
     typeof o.error === "string"
   ) {
-    return { compliant: o.compliant, reprompted: o.reprompted, reviewFailed: o.reviewFailed, error: o.error }
+    return {
+      compliant: o.compliant,
+      reprompted: o.reprompted,
+      reviewFailed: o.reviewFailed,
+      error: o.error,
+      reviewTruncated: o.reviewTruncated === true,
+      rePassHardFail: o.rePassHardFail === true,
+    }
   }
   return undefined
 }
@@ -182,6 +194,17 @@ export function computeA3StopBlocks(doc: P2ResultsDoc): number {
 export interface A4Extra {
   rePassRate: number
   reviewFailedCount: number
+  /** Attempts whose review reply was cut off by the api lane's maxTokens
+   * cap (`reviewTruncated` — always implies `reviewFailed`): an
+   * instrumentation failure, not a model verdict. Surfaced in the verdict
+   * so A4's compliance/reviewFailed numbers are never read without knowing
+   * how many of them are the lane's fault (closes the recorded
+   * "manual grep after the run" gap). */
+  reviewTruncatedCount: number
+  /** Attempts whose fired re-pass exec itself died (`rePassHardFail`,
+   * ff8dbb8): compliance degraded to the pass-1 verdict — same
+   * instrumentation-failure family, same reason to surface. */
+  rePassHardFailCount: number
 }
 
 /** rePassRate = fraction of a4 attempts whose one bounded re-pass
@@ -192,6 +215,8 @@ export function computeA4Extra(doc: P2ResultsDoc): A4Extra {
   let n = 0
   let reprompted = 0
   let reviewFailed = 0
+  let reviewTruncated = 0
+  let rePassHardFail = 0
   for (const agg of Object.values(doc.tasks ?? {})) {
     const rewards = agg.rewards ?? []
     const errors = agg.errors ?? []
@@ -200,9 +225,16 @@ export function computeA4Extra(doc: P2ResultsDoc): A4Extra {
       const parsed = parseAttemptAnnotation(errors[i])
       if (parsed?.reprompted) reprompted += 1
       if (parsed?.reviewFailed) reviewFailed += 1
+      if (parsed?.reviewTruncated) reviewTruncated += 1
+      if (parsed?.rePassHardFail) rePassHardFail += 1
     }
   }
-  return { rePassRate: n > 0 ? reprompted / n : 0, reviewFailedCount: reviewFailed }
+  return {
+    rePassRate: n > 0 ? reprompted / n : 0,
+    reviewFailedCount: reviewFailed,
+    reviewTruncatedCount: reviewTruncated,
+    rePassHardFailCount: rePassHardFail,
+  }
 }
 
 /** Pre-registered decision rule (plan §Global Constraints / spec §5):
