@@ -690,3 +690,20 @@ five architect rounds recorded in
   arm assignment — sessions before this ts never carried either. Sensor
   readings pool across this boundary only for metrics the injection cannot
   touch; anything behavior-shaped partitions here.
+
+- **cc-api-daemon PIN BUMP 0.7.0 → 0.8.0 (2026-08-10, yoo-dev, boundary ts
+  1786345076047):** both consumers re-pinned `ca41bd7` → `33f74db`;
+  cc-gate-plugin 0.4.1 → 0.4.2 same change. 0.8.0 = lane parity: agent-lane
+  `stopReason` (from the terminal result message), wire
+  `_meta.kkamak.schema` enforced STRUCTURALLY on both lanes (api
+  output_config / agent outputFormat via the injected StructuredOutput
+  tool; never prompt-text emulation — the cls-ab wrong-verdict mechanism,
+  banned at the wire), schema folded into the pool acquire key (review
+  amendment 6b — mixed schema/no-schema workloads segregate instead of
+  permanently refusing), maxTokens loud-reject pinned honest (env knob
+  declared-but-unconsumed in readable source), A4 context residue measured
+  at 226 B on this package's own DEFAULT_ISOLATION. Consumers here send
+  neither schema nor rely on agent-lane stopReason → turn-level behavior
+  and every metric stream unaffected; boundary recorded for provenance.
+  Full gate green post-bump (1892 tests + doc-check). Deploy effective at
+  first session after the cache picks up 0.4.2.
