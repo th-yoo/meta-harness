@@ -30,12 +30,30 @@ export const FIXTURE_ALLOWED_REPOS: string[] = ["meta-harness"]
 
 export class HarvestRefusal extends Error {}
 
+/** Validity-probe result: did the environment image build, and what did the
+ * harvested check exit with inside a fresh container? */
+export interface ProbeOutcome {
+  buildOk: boolean
+  checkExitCode?: number
+  output: string
+}
+
+export type FixtureProber = (a: { envDir: string; check: string }) => Promise<ProbeOutcome>
+
 export interface HarvestOptions {
   repoPath: string
   outDir: string
   allowedRepos: string[]
   refName?: string
   taskName?: string
+  /** Validity probe (47M ruling 2026-08-10): when set, the assembled fixture
+   * is built and its check run in a fresh container BEFORE the harvest is
+   * accepted. A check that PASSES there is vacuous — reward 1 with zero
+   * agent work, the harvested failure class did not survive
+   * re-materialization (e.g. stale host node_modules) — and is refused.
+   * When unset, no probe runs (library callers / tests own their gating;
+   * the CLI defaults to the podman prober, `--skip-probe` to opt out). */
+  prober?: FixtureProber
 }
 
 const AGENT_TIMEOUT_SEC = 900
@@ -208,35 +226,87 @@ export async function harvestFixture(opts: HarvestOptions): Promise<string> {
     renderInstruction({ check: ref.check, prompt: promptContext, excerpt: join.excerpt }),
   )
 
+  // Validity probe — refusals must leave nothing behind: a half-materialized
+  // task dir would block the next harvest of the same ref (M7 collision).
+  let probe: { checkExitCode: number } | undefined
+  if (opts.prober) {
+    let outcome: ProbeOutcome
+    try {
+      outcome = await opts.prober({ envDir, check: ref.check })
+    } catch (err) {
+      fs.rmSync(taskDir, { recursive: true, force: true })
+      throw err
+    }
+    if (!outcome.buildOk) {
+      fs.rmSync(taskDir, { recursive: true, force: true })
+      throw new HarvestRefusal(
+        `harvest refused: environment image build failed during the validity probe.\n${outcome.output}`,
+      )
+    }
+    if (outcome.checkExitCode === 0) {
+      fs.rmSync(taskDir, { recursive: true, force: true })
+      throw new HarvestRefusal(
+        `harvest refused: fixture is vacuous — check ${JSON.stringify(ref.check)} PASSES in a fresh ` +
+        `container (reward 1 with zero agent work). The harvested failure class did not survive ` +
+        `re-materialization (host-state failures like stale node_modules cannot be harvested from a tree).`,
+      )
+    }
+    probe = { checkExitCode: outcome.checkExitCode ?? 1 }
+  }
+
   const fixtureJson = {
     ...join,
     ...promptContext,
     generatedAt: new Date().toISOString(),
     repoPath: repoBasename,
+    ...(probe !== undefined ? { probe } : {}),
   }
   fs.writeFileSync(path.join(taskDir, "fixture.json"), JSON.stringify(fixtureJson, null, 2) + "\n")
 
   return taskDir
 }
 
-function parseArgs(argv: string[]): { repoPath: string; ref?: string; out?: string; name?: string } {
+/** Default CLI prober: podman-build the environment/, run the check in a
+ * fresh container, always remove the probe image. Blocking is fine — the
+ * CLI is interactive and the build is the point. */
+export async function podmanProber(a: { envDir: string; check: string }): Promise<ProbeOutcome> {
+  const tag = `kkamak-fixture-probe-${process.pid}`
+  const build = Bun.spawnSync(["podman", "build", "-t", tag, a.envDir])
+  if (build.exitCode !== 0) {
+    return { buildOk: false, output: `${build.stdout?.toString() ?? ""}${build.stderr?.toString() ?? ""}` }
+  }
+  try {
+    const run = Bun.spawnSync(["podman", "run", "--rm", tag, "bash", "-lc", `cd /app && ${a.check}`])
+    return {
+      buildOk: true,
+      checkExitCode: run.exitCode ?? 1,
+      output: `${run.stdout?.toString() ?? ""}${run.stderr?.toString() ?? ""}`,
+    }
+  } finally {
+    Bun.spawnSync(["podman", "rmi", "-f", tag])
+  }
+}
+
+function parseArgs(argv: string[]): { repoPath: string; ref?: string; out?: string; name?: string; skipProbe: boolean } {
   const args = [...argv]
   const repoPath = args.shift()
   if (!repoPath) {
     throw new Error(
-      "usage: bun km-crank/src/harvest-cli.ts <repoPath> [--ref <fixtureRef>] [--out <tasksDir>] [--name <taskName>]",
+      "usage: bun km-crank/src/harvest-cli.ts <repoPath> [--ref <fixtureRef>] [--out <tasksDir>] [--name <taskName>] [--skip-probe]",
     )
   }
   let ref: string | undefined
   let out: string | undefined
   let name: string | undefined
+  let skipProbe = false
   for (let i = 0; i < args.length; i++) {
     const a = args[i]
     if (a === "--ref") ref = args[++i]
     else if (a === "--out") out = args[++i]
     else if (a === "--name") name = args[++i]
+    else if (a === "--skip-probe") skipProbe = true
   }
-  return { repoPath, ref, out, name }
+  return { repoPath, ref, out, name, skipProbe }
 }
 
 // This repo's root (km-crank/src -> km-crank -> meta-harness), same
@@ -248,13 +318,14 @@ const DEFAULT_OUT_DIR = path.join(META_REPO_ROOT, "term-bench2", "tasks")
 // precedent as crank.ts:485: an unguarded harvest here would fire git
 // archive / tar subprocesses every time `bun test` imports this module.
 if (import.meta.main) {
-  const { repoPath, ref, out, name } = parseArgs(process.argv.slice(2))
+  const { repoPath, ref, out, name, skipProbe } = parseArgs(process.argv.slice(2))
   harvestFixture({
     repoPath: path.resolve(repoPath),
     outDir: out ? path.resolve(out) : DEFAULT_OUT_DIR,
     allowedRepos: FIXTURE_ALLOWED_REPOS,
     refName: ref,
     taskName: name,
+    prober: skipProbe ? undefined : podmanProber,
   })
     .then((taskDir) => {
       console.log(taskDir)

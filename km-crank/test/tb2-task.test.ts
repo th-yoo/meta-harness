@@ -27,6 +27,31 @@ describe("renderDockerfile", () => {
     expect(df).toContain("COPY repo/ /app/")
     expect(df).toContain("WORKDIR /app")
   })
+  test("python3 in the toolchain — repo scripts shell out to it; without it the check fails for image reasons, not harvested ones", () => {
+    expect(df).toContain("python3")
+  })
+  test("initializes a git repo and commits the tree — checks that shell out to git need .git (47M probe defect 1)", () => {
+    expect(df).toContain("git init")
+    expect(df).toContain("git commit")
+    // identity must be GLOBAL: repo-local config only covers /app, but test
+    // suites create scratch repos and run bare `git merge` — without an
+    // ambient identity those die "unable to auto-detect email" (exit 128)
+    // before writing MERGE_HEAD, a failure class a dev host never sees
+    expect(df).toContain("git config --global user.email")
+    expect(df).toContain("git config --global user.name")
+    // commit happens after the tree lands
+    expect(df.indexOf("COPY repo/ /app/")).toBeLessThan(df.indexOf("git init"))
+  })
+  test("installs every package.json dir, not just the root — monorepo roots may have no package.json (47M probe defect 2)", () => {
+    expect(df).toContain("-name package.json")
+    expect(df).toContain("*/node_modules/*")
+    expect(df).toContain("bun install --frozen-lockfile || bun install")
+    // no bare root-only install line left behind
+    expect(df).not.toMatch(/RUN bun install --frozen-lockfile \|\| bun install \|\| true\n/)
+  })
+  test("git commit precedes dependency install so node_modules never enters the commit", () => {
+    expect(df.indexOf("git commit")).toBeLessThan(df.indexOf("-name package.json"))
+  })
 })
 
 describe("renderTestSh", () => {

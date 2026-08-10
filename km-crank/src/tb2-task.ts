@@ -39,12 +39,20 @@ mcp_servers = []
 
 export function renderDockerfile(_a: Record<string, never>): string {
   return `FROM ubuntu:24.04
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates unzip git && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates unzip git python3 && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:\${PATH}"
 WORKDIR /app
 COPY repo/ /app/
-RUN bun install --frozen-lockfile || bun install || true
+# The materialized tree is a git-archive extract with no .git — checks that
+# shell out to git (e.g. gate-check's dirtyTreeId) die on "not a git
+# repository" without this. Commit BEFORE installing so node_modules never
+# enters the commit even when the tree ships no .gitignore.
+RUN git config --global user.email fixture@kkamak && git config --global user.name kkamak-fixture && git init -q && git add -A && git commit -qm "capture-time tree"
+# Monorepo roots may have no package.json (a root \`bun install\` silently
+# no-ops), so install every package dir; per-dir failures are tolerated —
+# a flaky registry must not brick the build, the agent can re-run install.
+RUN for d in $(find . -maxdepth 2 -name package.json -not -path '*/node_modules/*' -exec dirname {} \\;); do (cd "$d" && (bun install --frozen-lockfile || bun install)) || true; done
 `
 }
 

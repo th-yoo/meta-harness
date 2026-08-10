@@ -290,4 +290,52 @@ describe("harvestFixture", () => {
       .rejects.toThrow(/check/)
     expect(fs.readdirSync(out)).toEqual(before)
   })
+
+  // Validity probe (47M ruling 2026-08-10): a fixture whose check PASSES in a
+  // fresh container is vacuous (reward 1 with zero agent work) — the harvested
+  // failure class did not survive re-materialization (e.g. stale host
+  // node_modules). The probe must refuse it and leave nothing behind.
+  test("probe: vacuous fixture (check exits 0 in container) is refused and the task dir removed", async () => {
+    const dir = scratchRepo()
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    await expect(harvestFixture({
+      repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)], taskName: "vacuous-task",
+      prober: async () => ({ buildOk: true, checkExitCode: 0, output: "all green" }),
+    })).rejects.toThrow(/vacuous/)
+    expect(fs.existsSync(path.join(out, "vacuous-task"))).toBe(false)
+  })
+
+  test("probe: image build failure is refused and the task dir removed", async () => {
+    const dir = scratchRepo()
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    await expect(harvestFixture({
+      repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)], taskName: "buildfail-task",
+      prober: async () => ({ buildOk: false, output: "build exploded" }),
+    })).rejects.toThrow(/build/)
+    expect(fs.existsSync(path.join(out, "buildfail-task"))).toBe(false)
+  })
+
+  test("probe: genuinely failing check keeps the task dir and records the probe in fixture.json", async () => {
+    const dir = scratchRepo()
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    let seen: { envDir: string; check: string } | undefined
+    const taskDir = await harvestFixture({
+      repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)],
+      prober: async (a) => { seen = { envDir: a.envDir, check: a.check }; return { buildOk: true, checkExitCode: 1, output: "1 fail" } },
+    })
+    expect(fs.existsSync(taskDir)).toBe(true)
+    // prober was pointed at the materialized environment/ and the record's check
+    expect(seen?.envDir).toBe(path.join(taskDir, "environment"))
+    expect(seen?.check).toBe("exit 1")
+    const fx = JSON.parse(fs.readFileSync(path.join(taskDir, "fixture.json"), "utf-8"))
+    expect(fx.probe).toEqual({ checkExitCode: 1 })
+  })
+
+  test("probe: no prober option -> no probe, fixture.json carries no probe field", async () => {
+    const dir = scratchRepo()
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    const taskDir = await harvestFixture({ repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)] })
+    const fx = JSON.parse(fs.readFileSync(path.join(taskDir, "fixture.json"), "utf-8"))
+    expect(fx.probe).toBeUndefined()
+  })
 })
