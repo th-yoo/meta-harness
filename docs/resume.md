@@ -3,6 +3,70 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-11 (`yoo-mac` "minimal") — SENSOR RULINGS RECORDED + CHECKPOINT READER SHIPPED · TALLY GAP CLOSED · UNION EXPORTED · MAIN `c160461` PUSHED
+
+**RESUME PROMPT:**
+```
+Resume meta-harness, post-2026-08-11 (yoo-mac minimal session). git pull
+FIRST, then bun install BOTH plugin dirs. Main >= c160461, pushed.
+
+WHAT LANDED (4 merges/commits, do not redo):
+ - SENSOR RULINGS (user, recorded in the sensor spec §5 BEFORE any number
+   was computed — 2c51d07): (1) the >=25/day bar counts DISTINCT
+   (baseSha,headSha) pass lines per calendar day; stale-diff repeats
+   collapse to one/day; reader-side, no boundary ts. (2) the worktree
+   env-reach gap is deliberately NOT fixed mid-window — folds into the
+   08-13 constants amendment as ONE instrument change.
+ - CHECKPOINT READER (merge 5bdb88c, artifact 7a2fec8-sensor-checkpoint-
+   reader.md, 0 findings): the 08-13 reading is now ONE COMMAND on the
+   armed host: `bun scripts/sensor-checkpoint.ts` (defaults pinned to the
+   pre-registration: stream .km/review-findings.ndjson, since boundary ts
+   1785996709580, bar 25; echoes overrides; prints the pre-registered
+   consequence on a miss). p2-tally's computeB2Shadow deliberately
+   untouched — different pre-registration.
+ - P2-TALLY GAP CLOSED (merge 18f584e, artifact 1f7c3b3-p2-tally-
+   truncation.md, 0 findings): a4 verdict json now carries
+   reviewTruncatedCount + rePassHardFailCount; absent fields parse as
+   false (legacy lines keep their compliant bit, test-pinned). The
+   "manual grep after the run" note is obsolete.
+ - A/A UNION: yoo-mac snapshot exported (c160461, 132 gate-outcome lines,
+   Aug 3 -> now). FOUND: yoo-dev's snapshot is STALE SINCE JUL 31 — every
+   trial-arms row lives only in yoo-dev's host-local .km/. FIRST DUTY OF
+   THE NEXT YOO-DEV SESSION: km-sensors-sync.sh export + commit + push.
+   yoo-mac has NO trial-arms stream yet — correct, not broken: enrollment
+   fires at SessionStart and no yoo-mac session has started since the
+   pull that brought the 08-10 dispatch hooks. Restarting yoo-mac
+   sessions begins two-host accumulation toward the floors.
+ - Bookkeeping: p2-judge-logging + resume-08-08-queue confirmed merged by
+   yoo-dev sessions; worktrees/branches cleaned both sides.
+   unified-ACP-daemon confirmed CLOSED (INDEX.md:65 — shipped in
+   ~/z2/cc-api-daemon, port-back closed by deletion); it was never a live
+   queue item, drop it from any list.
+
+PROCESS NOTES (both mine, both re-proving standing rules): the 7b gate
+BLOCKED a review artifact whose long SHAs I typed by hand (rev-parse
+rule works); a blanket `git add -A` after a worktree bun install swept a
+stray bun.lock stamp into a reviewed range — add named files only.
+
+OPEN — NEED USER RULING/GO:
+ - P2 rerun #3 (yoo-mac; needs go + fresh token window — keychain
+   expiresAt must cover ~6h). Verdict now reports truncation natively.
+ - 08-13 SENSOR CHECKPOINT (yoo-dev, 2 days): pull, run
+   `bun scripts/sensor-checkpoint.ts`, export snapshot. Expected <25/day
+   -> constants amendment session (debounce is the big lever: 7 of 12
+   day-1 skips; then reach = user-level env; cap; yoo-mac arming can
+   ride the same new boundary ts).
+ - TB2 batch (re-check baseline budget-identity tuple first — no-spend).
+ - ~/.claude rw-mount ruling (blocks linux-host P2 only).
+ - C4 (still bare-SDK 429-walled; lift-watcher on yoo-dev was stopped —
+   re-arm if wanted).
+
+Rules unchanged: explicit merge/spend/sized gos · 7b gate + artifact
+(SHAs via git rev-parse, never by hand) · pull => bun install both
+plugin dirs · merging != deploying · own worktree per implementer, add
+NAMED files only · probe the CONSEQUENCE · SITREP.
+```
+
 ## ✅ SESSION END 2026-08-10b (`yoo-dev`) — FIRST ORGANIC A/A ENROLLMENT · 47M FIXTURE RULED + HARVEST HARDENED · SILENT-DONE SHIPPED · MAIN `ff8dbb8` PUSHED
 
 **RESUME PROMPT:**

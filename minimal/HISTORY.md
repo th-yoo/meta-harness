@@ -1208,3 +1208,37 @@ fakes the exec seam, and both were caught only by reading the LIVE run.
   blocks WSL-host P2): linux `prepareClaudeCodeAuth` rw-mounts the
   operator's real `~/.claude` (including memory that NAMES P2) into agent
   containers.
+
+## Sensor cadence checkpoint: rulings + reader (2026-08-11, yoo-mac) — the 08-13 reading locked before the number exists
+
+Instrument-governance entry, zero spend, zero trials. The 2749fd5 arming
+review's two caveats — open since 08-06 — were both resolved by user ruling
+and the resolution was machined, not just recorded.
+
+- **Ruling 1 (what counts):** one event toward the ≥25/day bar = one pass
+  line with a DISTINCT `(baseSha, headSha)` pair within its calendar day;
+  repeat reviews of an unchanged main diff collapse to one per day; skip
+  lines never count. Reader-side only — stream/constants untouched, no
+  boundary ts. Ruled and committed (`2c51d07`) explicitly BEFORE either
+  counting method was evaluated against the collected data, so the 08-13
+  reading cannot be definition-shopped after the fact.
+- **Ruling 2 (env reach):** the worktree gap (armed env never reaches
+  fresh worktree sessions) is deliberately NOT fixed mid-window; it folds
+  into the 08-13 constants amendment — at ~3/day realized the bar fails
+  and constants return to the user anyway, so reach + debounce/cap + the
+  new boundary ts land as ONE instrument change instead of two.
+- **Reader shipped (merge `5bdb88c`, artifact
+  `7a2fec8-sensor-checkpoint-reader.md`, 0 findings, TDD 10 tests):**
+  `bun scripts/sensor-checkpoint.ts` = the whole checkpoint. Defaults
+  pinned to the pre-registration (boundary ts `1785996709580`, bar 25)
+  and echoed in output; day semantics byte-match the sensor's own
+  `getDayKey`; malformed/torn lines surfaced, never silently dropped or
+  counted; `computeB2Shadow` untouched (different pre-registration).
+- **Same session:** p2-tally aggregation gap closed (merge `18f584e` —
+  a4 verdict carries `reviewTruncatedCount`/`rePassHardFailCount`;
+  legacy annotations keep their compliant bit); A/A union finding —
+  yoo-dev snapshot stale since Jul 31, ALL trial-arms rows host-local
+  there; yoo-mac side exported (`c160461`, 132 lines). Process: the 7b
+  gate blocked a hand-typed-SHA artifact exactly as designed, and a
+  blanket `add -A` after a worktree install swept a stray bun.lock line
+  into a reviewed range — add named files only.
