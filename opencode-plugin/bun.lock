@@ -1,12 +1,11 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "opencode-meta-harness",
       "dependencies": {
         "@opencode-ai/plugin": "^1.17.14",
-        "@th-yoo/cc-api-daemon": "git+https://github.com/th-yoo/cc-api-daemon.git#baee1c4b394c03e7b7d2a72ac40b38cbadfdd5cb",
+        "@th-yoo/cc-api-daemon": "git+https://github.com/th-yoo/cc-api-daemon.git#ca41bd77eae2c470da5893952505bf096242595b",
       },
       "devDependencies": {
         "@tsconfig/node22": "^22.0.0",
@@ -65,7 +64,7 @@
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
-    "@th-yoo/cc-api-daemon": ["@th-yoo/cc-api-daemon@github:th-yoo/cc-api-daemon#baee1c4", { "dependencies": { "@anthropic-ai/claude-agent-sdk": "^0.3.220", "@anthropic-ai/sdk": "^0.115.0", "@types/ws": "^8.18.1", "ws": "^8.21.2" } }, "th-yoo-cc-api-daemon-baee1c4", "sha512-XzUMfdNatVtp1yTE34jYm9zci2RD9wI3R8090ecX3yb3ZPQIoEE6awbfX19oEnS77zmFsZQuXFBiSpTHygjVTg=="],
+    "@th-yoo/cc-api-daemon": ["@th-yoo/cc-api-daemon@github:th-yoo/cc-api-daemon#ca41bd7", { "dependencies": { "@anthropic-ai/claude-agent-sdk": "^0.3.220", "@anthropic-ai/sdk": "^0.115.0", "@types/ws": "^8.18.1", "ws": "^8.21.2" } }, "th-yoo-cc-api-daemon-ca41bd7"],
 
     "@tsconfig/node22": ["@tsconfig/node22@22.0.5", "", {}, "sha512-hLf2ld+sYN/BtOJjHUWOk568dvjFQkHnLNa6zce25GIH+vxKfvTgm3qpaH6ToF5tu/NN0IH66s+Bb5wElHrLcw=="],
 

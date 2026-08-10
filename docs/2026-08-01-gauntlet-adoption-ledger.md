@@ -630,3 +630,21 @@ five architect rounds recorded in
   3399 ms, atomic state write, side file, and `closeSession →
   {closed:true}` proving the session/close verb end-to-end. The 7-day
   cadence checkpoint dates from 1785996709580 → due 2026-08-13.
+
+- **cc-api-daemon PIN BUMP 0.5.0 → 0.7.0 (2026-08-10, yoo-dev, boundary ts
+  1786327038587):** both consumers (`cc-gate-plugin`, `opencode-plugin`)
+  re-pinned `baee1c4` → `ca41bd7`; cc-gate-plugin 0.4.0 → 0.4.1 in the same
+  change (merging-is-not-deploying rule). What 0.7.0 carries: elastic pool
+  floor/ceil (`ACP_MIN_SESSIONS`, retention-only, default 0), one-per-tick
+  reap throttle (UNCONDITIONAL — this is the one behavior delta reaching
+  floor-0 consumers: idle warm entries now drain one per reaper tick instead
+  of all at once; worst case (max−1)×tick longer residency), acquire-miss
+  reclaim (closes the pool-exhausted window the throttle opens), and
+  `ACP_SESSION_IDLE_MS` entry-TTL wiring (default unchanged 900s). With both
+  knobs unset — this host's state — turn-level outcomes, sensor line
+  semantics, checkMs, and every metric stream are unaffected: no stream
+  reads pool size or drain timing. Boundary recorded for residency-profile
+  honesty, not metric partitioning. Full gate green post-bump (1892 tests +
+  doc-check). Effective on the installed plugin at the first session
+  started after `claude plugin update` picks up 0.4.1 — verify via the
+  installed cache dir, never repo source.
