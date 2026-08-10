@@ -2,7 +2,8 @@
 
 *Written 2026-07-21; Part 2 re-audited 2026-07-23 (post loops 1–3),
 **2026-07-27 (gate era — delta section at the end of Part 2; Part 1 gains §K)**, and
-**2026-08-06 (GA/probes era — Part 1 gains §L; third delta at the end)**. Two purposes:
+**2026-08-06 (GA/probes era — Part 1 gains §L; third delta at the end)**, and
+**2026-08-10 (package/dogfood era — Part 1 gains §M; fourth delta + Part 3 addendum)**. Two purposes:
 (1) a map of every technique the project employs and where it came from; (2) an honest audit of
 which are **proven by our own evidence**, which are **disproven**, and which remain **unproven** —
 so nobody (including us) mistakes built-and-runs for validated. Companion docs:
@@ -141,6 +142,19 @@ transfer, memory index).
 | Loop-fix probe program | P0 signal-viability (sd/mean bar) × P1 event-density × E feasibility table over B1–B4 signals and S1–S4 sources — a measured answer to "why doesn't the loop close", replacing the starvation guess with a pairing diagnosis. |
 | Boundary-ts discipline | Every non-metric-neutral instrument change stamps an epoch-ms boundary in the adoption ledger; readings never pool across a boundary (9 stamped boundaries and counting). |
 | Standing rules earned in this era | Activated-state suite proof for env-gated arms · bar-feasibility pre-check before building to a bar · read the dependency's own types, then measure on the wire, then assert · execute-proof over review for enforcement points. |
+
+### M. Package, dogfood-subject + probe machinery (2026-08-07 → 08-10; added at 08-10 re-audit)
+
+| Technique | What / why |
+|---|---|
+| Package extraction + SHA-pin consumption | `@th-yoo/cc-api-daemon` = the SOLE ACP implementation (`src/acp` deleted 08-09, merge `c1564c5`); consumers pin an exact commit SHA, so package pushes never reach them. Upgrade = deliberate pin bump + full gate + plugin version bump + ledger boundary ts in ONE change (0.5.0→0.7.0 done 08-10, ts 1786327038587). |
+| Subject-session supervision (brief-and-verify) | Driving a live CC session via tmux as the implementer: briefs carry the measured constraints and hazards the subject cannot see (budget floors, 429-transport facts, redaction rules); the subject implements under its own armed gate; the supervisor verifies OUT-OF-BAND (adversarial probes, credential-less CI, independent test reruns) and never trusts a self-reported number it didn't reproduce. Subject reports to FILES, never panes (pane greps echo your own instructions — 6 false positives). |
+| Subject-planned, supervisor-reviewed design | The planning variant: the subject writes the implementation plan against its own code (freshest knowledge), the brief delegates open decisions with recommendation-required, the supervisor verifies the plan's quoted code line-by-line against source before any build go. Caught nothing false in 2/2 uses; the subject's C2 retention-only design beat both options the brief offered. |
+| Gate fast-lane test split | Slow CLI-spawn suites behind an opt-OUT env flag (`ACP_GATE_FAST`, née `KKAMAK_GATE_FAST`) set ONLY in gate.json's check string; bare `bun test` and CI always run everything; deliberate carve-outs pinned by comment (the ~1s credential-precedence guard runs in the fast lane forever). Subject-repo gated Stops 76.5s → 14.8s. |
+| Elastic warm pool (floor/ceil) | Retention-only floor — never pre-spawns; exempts the `floor` most-recently-released idle entries from TTL eviction, so a floored entry always carries an isolation real traffic used. Unconditional one-per-tick shrink + acquire-miss reclaim (closes the pool-exhausted starvation window the throttle opens) + `ACP_SESSION_IDLE_MS` entry-TTL wiring. Floor never blocks daemon self-exit. |
+| Zero-spend live probes as acceptance evidence | Real daemon + real `claude` CLI children against a localhost stub, run OUTSIDE the test harness before "works" is claimed: pool lifecycle, floor-retention timeline (children 2→1, retained 6x past TTL), credential precedence under the real credentialed HOME. Complement, not substitute, for hermetic suites — they catch what suites faking the exec seam structurally cannot. |
+| Billing-lane guard | `authLane()` boot-time disclosure + e2e abort condition: an `ANTHROPIC_API_KEY` in env silently flips the haiku bare-SDK route from subscription to metered pay-go (credential precedence puts the key first). Made observable in the daemon's own stderr; never silent. |
+| Silent-done hardening (recorded, pending) | The two-burn defect class: a classifier reading ONE channel (stdout) launders "died before producing anything" into "done"; every downstream layer (results schema, tally, monitor) faithfully propagates well-formed zeros. Hardening candidates recorded in the 05e3d1d artifact: rc!=0 + empty stdout ≠ done; a4 re-pass must read rc; tally refuses on missing results files; tripwires must cover the NEW failure mode's log signature, not the previous one's. |
 
 ### Dormant / rejected-for-now
 
@@ -327,6 +341,78 @@ synthesis), not more rigor and not more machinery.
 
 ---
 
+## Part 2 — RE-AUDIT DELTA 2026-08-10 (package/dogfood era: ACP migration, cc-api-daemon subject arc, P2 burns, pool build)
+
+*The 07-23, 07-27 and 08-06 sections above are preserved as snapshots. This delta covers
+2026-08-06 → 08-10: review-sensor arm/wedge/fix/hold, gate tier-0 narrowing, the ACP package
+migration (src/acp deleted; `@th-yoo/cc-api-daemon` 0.2.0 → 0.7.0), the cc-api-daemon
+dogfood-subject arc (unified daemon merge, credential lock, gate split, elastic pool), the P2
+launch burns, and today's warm-lane production proof. Sources: HISTORY.md GA15 + the 08-06/08-10
+entries, kkamak dogfood-log, the adoption ledger, `.km` streams on two repos, docs/reviews.*
+
+### PROVEN — new since 08-06
+
+| Technique | Evidence |
+|---|---|
+| **Completion gate on a NON-kkamak subject repo** | First armed dogfood outside the family: cc-api-daemon. One 3-round blocked cycle (verify-failed ×2 → 20 min of fixes → accepted) caught 18 failing tests — all in the §6e spend-boundary suite — before a Stop shipped them. `gateExhausted` never fired across 28 cycles. |
+| **Brief-and-verify subject supervision** | 5 dispatched tasks (unified-daemon merge 5 commits, credential-precedence lock, gate split, pool plan, pool build 8 commits): subject implemented all under its own gate, first-round accepts; supervisor's out-of-band layer caught what the subject could not — the unlocked precedence claim (probe thrown away), the plan's acquire-starvation hole, the fast-lane carve-out need. Division held: constraints travel in briefs, verification is out-of-band. |
+| **Gate fast-lane split transfers** | Subject-repo gated Stops 76.5s → 14.8s (5.2x) with CI still running all 247–322 tests; the 1s credential guard carved into the fast lane deliberately; CI wall-clock unchanged post-split (2m30s → 2m23s) proving the flag never leaked into CI. |
+| **Measured-before-build settles blocking unknowns free** | Both of the unified-daemon spec's blockers closed by reading, zero spend: haiku-via-bare-SDK bills SUBSCRIPTION (credential-resolution chain read, no org key in env) and agent-lane peak concurrency = 2 (consumer grep: gauge serial + sensor debounced, no `Promise.all` over `daemonCall` anywhere). A third spec item (adaptive pool min=0/idle-reap) was found ALREADY BUILT — the spec was written against stale knowledge of its own codebase. |
+| **Zero-spend live probes close the suite/production gap** | Three probes, zero tokens: credential precedence under real HOME (fake key sent, `authorization: null` — the adversarial case no green suite covers); pool lifecycle (2 real children under cap, retention, self-exit sweep); floor timeline (TTL eviction at the wired 4s, one-per-tick, floored child retained 6x past TTL). Each promoted a hermetic claim to an observed one. |
+| **Warm lane production-exercised** | The 08-06 "zero live seat calls" gap closed 08-10: one real opus turn through the pinned 0.7.0 package — `ensureDaemon` 107ms → pooled WarmSession → `ok` in 4.3s, `canonical=claude-opus-5`, subscription lane, child retained. Mechanism now production-proven end-to-end; ORGANIC seat traffic still zero (see UNPROVEN). |
+| **P2 machinery live-proven under burn** | Launch 2's clean window ran a1 REAL (turns~29, rewards landing, 4 passes / 13 clean attempts): staging, agent, verifier, review-daemon pre-start, results plumbing all worked. The burns were environment (auth wiring, token expiry), not machinery. |
+| **Reading the live run catches what every suite cannot** | Both P2 burn root causes (missing `IS_SANDBOX=1` → stderr-only refusal → empty stdout → "done"; mid-run token expiry → no `turns=` line at all) were invisible to every test because every suite fakes the exec seam — and both were caught only by reading the live run. The silent-done class is now named, with hardening candidates recorded. |
+
+### DISPROVEN — new since 08-06
+
+- **"Gate green ⇒ CI green"** — the subject repo's earlier run: gate accepted 9/9 while GitHub
+  Actions was red on three of them (tests green locally for a reason unrelated to what they
+  assert — host credentials). Recorded as a LIMIT, not a defect: a check command cannot observe
+  a dependence on its own environment; it IS the environment. More checks sharing an
+  environment add no coverage. Fix class stolen from the subject: an explicit
+  credential-scrubbed run as its own CI step.
+- **"The sensor stream distinguishes a passing gate from a dead one"** — it cannot (dogfood
+  correction `aec746a`): the stream appends only on cycle COMPLETION, so a frozen stream is
+  consistent with idle, blocking, and dead alike. 105 minutes of silence was mis-called "gate
+  stopped enforcing" before a forced Stop produced a full blocked cycle within seconds. Force a
+  Stop; never sample. (Cost two opposite wrong calls in one session.)
+- **"Monitor tripwires transfer across failure modes"** — launch 2's tripwire (`turns=0`) was
+  pattern-matched to launch 1's signature; the auth-expiry mode prints no `turns=` line at all
+  and sailed past it. A tripwire covers the failure modes it was written against, nothing else.
+- **"Structurally valid results files are run truth"** — both burns produced well-formed
+  results full of garbage; `p2-tally` happily wrote an all-zero verdict over missing files. The
+  LOG carries the distinction; tally only when every results file exists.
+
+### UNPROVEN — the live frontier (2026-08-10)
+
+- **The machine-authored end-to-end win** — UNCHANGED since 07-23, three audits running. The
+  measured path (b2×s1/s2 pairing) is now BUILT but not armed: review-sensor merged, blockers
+  fixed (`ae6a2f6`), arming held by user (two caveats open: what counts toward the ≥25/day bar
+  when the sensor only diffs the main checkout; how the env flag reaches worktree sessions).
+  The 08-13 checkpoint re-dates from whenever arming lands.
+- **P2's actual question** (which carrier binds rules: prose bullet vs in-container stop-gate
+  vs host review + re-pass) — machinery live-proven, ZERO data; rerun #3 needs a fresh token
+  window, the "NOT retrying" tripwire, and its own go. On a linux host it ALSO needs the
+  `~/.claude` rw-mount ruling (operator memory naming P2 leaks into agent containers).
+- **Warm lane ORGANIC value** — mechanism production-proven (today's probe) but no organic
+  seat call has ridden it; the elastic-pool knobs (`ACP_MIN_SESSIONS`, `ACP_SESSION_IDLE_MS`)
+  are live in 0.7.0 with a named first consumer (P2's a4 review daemon: floor=1 + 2h idle)
+  that has not yet run.
+- **Silent-done hardening** — recorded, not built: rc!=0+empty-stdout classification, a4
+  re-pass rc, tally refusal. The class has now burned two launches; a third burn on the same
+  shape would be a process failure, not bad luck.
+- (Carried: cross-family judge check unrun; SPRT deferred; mid-arm curtailment unexercised;
+  reinject v2 / cls-ab / M1v2 / channel-ladder C4 still starved — the pairing fix is their
+  shared unblock.)
+
+### Scoreboard, one sentence (2026-08-10)
+
+The system now improves OTHER codebases under its own gate — the subject arc shipped a public
+package (7 versions, CI green throughout) with the supervisor catching exactly the classes the
+subject structurally cannot see — but the machine-authored win is unchanged at three audits
+old, its measured fix (sensor pairing) is built-and-held, and its bench instrument (P2) is
+live-proven with zero data: every remaining blocker is now a decision or a rerun, not a build.
+
 ## Part 3 — Effectiveness ranking (added 2026-08-06)
 
 *Ranked by demonstrated outcome impact — measured effect size or harms concretely prevented —
@@ -400,3 +486,25 @@ its shot; everything in the table above already has been.
 **Top line:** the two adopted actuators (A1, A2) and the gate that vetted them are the most
 effective techniques in the project; everything else that is effective is either speed
 (two-tier gate, §6c transport) or error-prevention (probes, reviews, pv, forensics).
+
+### Part 3 addendum (2026-08-10)
+
+*The 08-06 ranking above stands. Movements since, without rewriting the snapshot:*
+
+- **"Moved system performance" gains a row:** subject-repo gate fast-lane split — gated Stops
+  76.5s → 14.8s (5.2x), every Stop in cc-api-daemon, CI coverage unchanged (proof: CI
+  wall-clock flat across the split). Same medicine as row 5, second patient.
+- **"Harms prevented" gains three:** (a) the credential-precedence regression lock with
+  boolean-projection assertions — closes a public-repo leak class where the failing test would
+  itself print the leaked token; (b) the acquire-starvation hole caught at PLAN review, fixed
+  as Task 4b before any build; (c) the billing-lane guard (`authLane` + boot log + e2e abort) —
+  a stray `ANTHROPIC_API_KEY` can no longer silently flip the haiku route to metered spend.
+- **"Not yet effective" band, movements:** warm lane EXITS the band at the mechanism level
+  (production-exercised 08-10, one real opus turn, subscription lane) — organic value still
+  pending; P2 moves from "spec SOUND, unbuilt" through built → live-proven → twice-burned →
+  rerun-held; review-sensor moves from unbuilt to built-and-held (arming = user decision).
+  Everything else in the band is unchanged and still shares the one upstream cause (pairing).
+- **New entrant to watch, not yet rankable:** brief-and-verify subject supervision — five
+  dispatched tasks, zero rework, and every catch that mattered came from the out-of-band
+  layer. If it holds at n>2 repos it belongs in the process top tier; today it is one subject
+  and one supervisor.
