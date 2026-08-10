@@ -667,3 +667,26 @@ five architect rounds recorded in
   → `term-bench2/tasks/harvested-meta-harness-20260809-233612` (task dir
   47M — repo-tree snapshot; COMMIT DECISION HELD, see resume). 18 more
   eligible refs; batch harvesting awaits the size ruling.
+
+- **A/A CATCH + RULING (a) ENACTED (2026-08-10, yoo-dev, boundary ts
+  1786332446406):** the v16 A/A (above) caught a wiring gap within the
+  hour — exposure rows are written ONLY by the CC adapter's SessionStart
+  seam, which was (1) not wired as a hook in this repo and (2) role-gated
+  with no role configured, so organic sessions could NEVER enroll: floors
+  structurally unfillable, guaranteed T_MAX rollback. §9's design
+  falsification working as designed — machinery gap found before any real
+  candidate's 28-day slot burned. v16 ABANDONED (km-panic trial-off,
+  baseline v7 restored). User ruled (a): wire organic enrollment. Enacted:
+  `install.ts --role mh-build` → SessionStart/UserPromptSubmit/PreToolUse/
+  PostToolUse/Stop hooks in `.claude/settings.json` (paths rewritten to
+  `${CLAUDE_PROJECT_DIR}` — committed, host-portable; yoo-mac inherits on
+  pull, no per-host step) + `env.MH_ROLE=mh-build` + command stubs. Fresh
+  A/A STARTED post-wiring: `trialId v17-2026-08-10T03:27:07.982Z`,
+  baseline v7, byte-identical arms. Enrollment PROVEN hermetically (fake
+  SessionStart → exposure row with v17 trialId + arm, compose injected;
+  probe row deleted before any real data). INSTRUMENT BOUNDARY: from the
+  first post-wiring session, every new CC session here receives injected
+  harness context (project-global system 366 chars + role system) and an
+  arm assignment — sessions before this ts never carried either. Sensor
+  readings pool across this boundary only for metrics the injection cannot
+  touch; anything behavior-shaped partitions here.
