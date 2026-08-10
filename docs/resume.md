@@ -3,6 +3,90 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-10 (`yoo-dev`) — cc-api-daemon 0.5.0→0.8.0 ARC · cls-ab CLOSED · A/A v17 LIVE · MAIN `a1fb822`+
+
+**RESUME PROMPT:**
+```
+Resume meta-harness (yoo-dev), post-2026-08-10-evening. git pull FIRST, then
+`bun install` in BOTH cc-gate-plugin/ AND opencode-plugin/ (pins moved twice
+today — a pull without installs leaves the gate RED on module-not-found; bit
+this session's first Stop).
+
+THIS SESSION ENROLLS IN THE A/A TRIAL. §4.3 trial v17-2026-08-10T03:27:07.982Z
+is LIVE on this repo's project-global store (baseline v7, byte-identical arms).
+CC dispatch hooks + MH_ROLE=mh-build are committed in .claude/settings.json
+(boundary ts 1786332446406): every session started after that ts gets injected
+harness context (project-global system 366ch + role system) and an arm via
+SessionStart; exposure rows land in .km/trial-arms.ndjson. Expected verdict
+KEEP-by-tie; resolution fires on km-crank scheduled scans; floors = 20 cycles /
+5 sessions/arm / 5 blocks/arm (~1-2 weeks organic). v16 was abandoned same day
+— it caught its own wiring gap (organic sessions could never enroll) within an
+hour; that catch + fix is the ledger entry at ts 1786332446406.
+
+WHAT LANDED TODAY (all pushed, do not redo):
+ - cc-api-daemon (public, CI green throughout): 0.6.0 elastic pool floor/ceil
+   (ACP_MIN_SESSIONS retention-only floor, one-per-tick shrink, acquire-miss
+   reclaim) · 0.7.0 ACP_SESSION_IDLE_MS entry-TTL wiring (was hardwired 900s)
+   · 0.8.0 LANE PARITY (14 commits): agent-lane stopReason (comes from the
+   terminal RESULT message, not the assistant message — SDK type is
+   runtime-null there), wire _meta.kkamak.schema enforced STRUCTURALLY on both
+   lanes (api output_config / agent outputFormat via injected StructuredOutput
+   tool; prompt-text emulation BANNED and test-pinned), schema folded into the
+   pool acquire key (review amendment 6b — closes a permanent-refusal hole for
+   mixed schema/no-schema workloads), maxTokens loud-reject pinned honest
+   (CLAUDE_CODE_MAX_OUTPUT_TOKENS = declared-but-unconsumed in readable
+   source), context residue measured 226B. Pool live-proven with real claude
+   children (zero spend); warm lane PRODUCTION-EXERCISED (1 real opus turn,
+   subscription, 4.3s) — the standing "never production-exercised" gap is
+   CLOSED.
+ - Pins: meta-harness consumers 0.5.0→0.7.0 (e25b150) →0.8.0 (a1fb822);
+   cc-gate-plugin plugin 0.4.0→0.4.1→0.4.2. VERIFY INSTALLED CACHE picked up
+   0.4.2 at this session's start (version-keyed cache; merging ≠ deploying).
+   Consumers send neither schema nor agent stopReason → behavior-identical.
+ - cls-ab 2×2 CLOSED, verdict INCUMBENT-STAYS (haiku-base stays production
+   classifier). Labels 32/32 blind opus via Amendment 1 (agent-sdk transport —
+   callModelSdkLabel had HARDWIRED the walled bare-SDK path). Haiku arms
+   IDENTICAL on the C boundary (P .857 R 1.0 F1 .923 — the anti-over-extraction
+   patch moved NOTHING). Sonnet arms structurally incomplete via Amendment 2
+   (--transport agent-sdk): 5 records emit A1+criteria:[] which the parser
+   rejects — CORRECTION (user-caught): that is a PATH effect, not a sonnet
+   property (haiku also fails 1/3 of those records on the agent path; the two
+   lanes carried schema differently — the exact asymmetry 0.8.0 now bans).
+   F8 mixedPrompt scorer bug REPAIRED (was vacuously true on every arm).
+   Sonnet-via-sdk stays untestable while the 429 wall stands.
+ - techs.md re-audited (§M package/dogfood era + fourth delta + Part-3
+   addendum) + same-day correction: §4.3/cls-ab/fixture-harvest/B3 were NOT
+   data-starved (measured); re-measure before carrying a starvation claim.
+ - Fixture harvest UNSHADOWED: FIXTURE_ALLOWED_REPOS += meta-harness (ruling),
+   first organic task harvested = term-bench2/tasks/harvested-meta-harness-
+   20260809-233612 (47M, UNCOMMITTED — size ruling held; 18 more refs wait).
+
+STANDING WALLS/WATCHES:
+ - opus/sonnet bare-SDK 429 wall STILL UP (~7 days). Lift-watcher was stopped
+   at session end — re-arm if needed. On lift: sonnet-via-sdk 5-call
+   diagnostic settles the cls-ab path-vs-model question.
+ - Review-sensor ARMED on yoo-dev (KKAMAK_REVIEW_SENSOR=1 in
+   settings.local.json — host-local; yoo-mac's resume says OFF, that is
+   yoo-mac's own state). ~3 real dispatches/day vs the ≥25/day checkpoint bar
+   — the "what counts" caveat is still the user's open ruling.
+
+OPEN — NEED USER RULING/GO: 47M fixture commit policy (commit as-is vs
+ tree-ref vs prune) · silent-done hardening (rc!=0+empty-stdout≠done;
+ p2-tally refusal; ~small task) · P2 rerun #3 (yoo-mac; on THIS host needs
+ the ~/.claude rw-mount ruling first) · sensor ≥25/day caveats · TB2 batch
+ (re-check baseline budget-identity tuple first — many boundaries since seal).
+
+Subject session cc-api-0 (tmux, cc-api-daemon cwd): idle, post-push, context
+recently cleared. Brief-and-verify pattern: briefs at /mnt/d/tmp/cc-api-*.md,
+reports appended to /mnt/d/tmp/cc-api-merge-status.md; subject writes FILES
+never panes.
+
+Rules unchanged: explicit merge/spend/sized gos · gate can't be sampled
+(force a Stop) · pull ⇒ bun install both plugin dirs · merging ≠ deploying
+(verify installed cache) · read the dependency's own types THEN measure ·
+boundary ts on instrument changes · re-measure before carrying claims.
+```
+
 ## ✅ SESSION END 2026-08-09b/10 (`yoo-mac`) — src/acp DELETED · FOUR ITEMS CLOSED · BENCH TWICE BURNED, RERUN ON HOLD · MAIN `59fa76d`+
 
 **RESUME PROMPT:**
