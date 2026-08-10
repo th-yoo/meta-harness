@@ -1242,3 +1242,20 @@ and the resolution was machined, not just recorded.
   gate blocked a hand-typed-SHA artifact exactly as designed, and a
   blanket `add -A` after a worktree install swept a stray bun.lock line
   into a reviewed range — add named files only.
+- **RERUN #3 (2026-08-11, yoo-mac, user go) — the machinery finally paid
+  out, then user-paused.** Launched 00:24 KST on `ef7f422` (hardened
+  classifiers + tally refusal live). Zero auth burns, zero silent-dones
+  across the whole night — both prior failure classes stayed extinct under
+  the `ff8dbb8` contract test. **a1 = the first clean P2 arm ever:** 28/28
+  real attempts, pass 7/14 (0.500), compliance 25/28 (0.893), one honest
+  timeout, committed as data (`dac0d14`). a3 reached 21/28 (12 passes —
+  running AHEAD of a1's pass rate) before the user paused at 06:47 KST:
+  SIGSTOP on the runner + exec client, `podman pause` on the container —
+  caught in staging, so no model call was severed. a4 never started; the
+  keychain token (expires 08:10 KST) would have crossed mid-a4, and the
+  pause converts that from a burn into a scheduling choice. Resume/abort/
+  restart procedures + frozen pids live in resume.md's LIVE STATE block.
+  Lesson banked from the night as a whole: the burns were never the
+  benchmark's noise — they were the harness's own silent-done shape, and
+  once that shape was closed the very next run produced arm-grade data on
+  the first try.

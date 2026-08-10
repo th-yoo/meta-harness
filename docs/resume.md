@@ -3,6 +3,55 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ⏸ LIVE STATE 2026-08-11 06:47 KST (`yoo-mac`) — P2 RERUN #3 RUNNING, USER-PAUSED MID-a3
+
+```
+P2 bench rerun #3 (user go, launched 00:24 KST on main ef7f422, tmux
+session p2-bench, log minimal/logs-p2-bench-20260811T002452.log) is
+PAUSED, not dead — frozen 06:47 KST on user instruction. HOST-LOCAL:
+frozen processes + paused container do NOT survive a reboot; if this
+state is gone, treat a3 as partial and see RESTART below.
+
+DATA SO FAR (zero auth burns, zero silent-dones all night — the ff8dbb8
+hardening held):
+ - a1 COMPLETE + COMMITTED (dac0d14): 28/28 real attempts, pass 7/14
+   (0.500), compliance 25/28 (0.893), 27 clean + 1 timeout. First clean
+   P2 arm ever.
+ - a3 PARTIAL 21/28 (12 passes so far — outrunning a1), results file
+   docs/loop-probes/p2/yoo-mac.local-p2-a3-results.json valid
+   per-attempt, UNCOMMITTED. Attempt 22 (db-wal-recovery) frozen in
+   STAGING (apt-get) — no model call was in flight at pause.
+ - a4 NOT STARTED.
+
+FROZEN PIECES (all must be released together):
+ - bun runner pid 86896 (p2-run --arm a3) — SIGSTOP
+ - podman exec client pid 19784 — SIGSTOP
+ - container 59c0ea90da21 (mh-db-wal-recovery-p2-a3-1786398455855-9418)
+   — `podman pause`
+ - tmux session p2-bench holds the pipeline (script + tee waiting).
+
+RESUME (in this order):
+  /opt/podman/bin/podman unpause 59c0ea90da21
+  kill -CONT 19784 86896
+ Caveats: (1) in-container step timeouts count WALL CLOCK — a long pause
+ likely burns attempt 22 as a loud setup_failed/timeout (one-attempt
+ casualty, then the arm continues). (2) check keychain token first
+ (expiresAt was 08:10 KST at pause; a4 needs ~3h — a fresh `claude
+ /login` before resuming is the sure thing; post-expiry attempts now
+ fail-fast as auth, not silently).
+
+ABORT instead: tmux kill-session -t p2-bench; podman unpause + rm -f the
+ container; keep a1 (committed) + a3 partial as data; a3/a4 need a fresh
+ sized go to re-run (go fence wants full counts — no partial resume
+ across process death).
+
+RESTART FROM SCRATCH (if host rebooted): a1 is done and committed — do
+ NOT re-run it without a ruling (its 28 executions are spent); a3/a4
+ rerun needs its own go. Scratchpad script is tmp-cleaned on reboot;
+ reconstruct from READINESS invocation lines (term-bench2/runner.ts
+ entry, ACP_IDLE_MS=7200000 + daemon pre-start for a4).
+```
+
 ## ✅ SESSION END 2026-08-11 (`yoo-mac` "minimal") — SENSOR RULINGS RECORDED + CHECKPOINT READER SHIPPED · TALLY GAP CLOSED · UNION EXPORTED · MAIN `c160461` PUSHED
 
 **RESUME PROMPT:**
