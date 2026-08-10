@@ -306,4 +306,31 @@ for (const id of DRIVER_IDS) {
       expect(argv).toContain(kase.buildArgv.variantOk)
     })
   }
+
+  // ── 8. silent-done hardening (P2 launch-1 burn, 2026-08-09/10) ───────
+  // A process that failed before producing ANYTHING (rc!=0, stdout empty,
+  // message on stderr only — e.g. CC refusing --dangerously-skip-permissions
+  // without IS_SANDBOX=1) must never classify "done": every downstream layer
+  // launders that silence into well-formed zeros. When stdout is empty the
+  // classifier must consult stderr for the auth/transient split.
+
+  test(`[${id}] classifyAttempt: rc!=0 + EMPTY stdout + unmatched stderr -> transient, never done`, () => {
+    const result: ExecResult = {
+      rc: 1,
+      stdout: "",
+      stderr: "cannot use --dangerously-skip-permissions when running as root without IS_SANDBOX",
+      timedOut: false,
+    }
+    expect(driver.classifyAttempt(result)).toBe("transient")
+  })
+
+  test(`[${id}] classifyAttempt: rc!=0 + EMPTY stdout + auth message on STDERR -> auth (fail-fast, no retry burn)`, () => {
+    const result: ExecResult = {
+      rc: 1,
+      stdout: "",
+      stderr: "OAuth token expired. Please run /login (authentication_failed)",
+      timedOut: false,
+    }
+    expect(driver.classifyAttempt(result)).toBe("auth")
+  })
 }

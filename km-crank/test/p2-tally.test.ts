@@ -342,7 +342,11 @@ describe("p2-tally CLI", () => {
     expect(out.b2Shadow.windowEnd).toBeGreaterThanOrEqual(runStartTs)
   })
 
-  test("missing arm results files -> tolerant zeros, never crashes", () => {
+  // Silent-done hardening (launch-0 rule, minimal/HISTORY.md 2026-08-09/10):
+  // "tally only when all three results files exist" — an rc=0 sized-go that
+  // produced no results files is a no-op, and a tolerant all-zero verdict
+  // laundered exactly that into a structurally-valid answer once already.
+  test("missing arm results files -> REFUSES with non-zero exit, no verdict written (silent-done hardening)", () => {
     const cwd = mkTmp("p2-tally-missing-")
     const outFile = path.join(cwd, "verdict.json")
     const r = run(cwd, {
@@ -352,14 +356,36 @@ describe("p2-tally CLI", () => {
       KKAMAK_P2_REVIEW_FINDINGS_NDJSON: path.join(cwd, "does-not-exist.ndjson"),
       KKAMAK_P2_VERDICT_OUT: outFile,
     })
-    expect(r.status).toBe(0)
-    const out = JSON.parse(fs.readFileSync(outFile, "utf8"))
-    expect(out.arms.a1).toEqual({ n: 0, compliance: 0, passAtK: 0, meanTurns: 0, meanElapsedSec: 0 })
-    expect(out.arms.a3.stopBlocks).toBe(0)
-    expect(out.arms.a4.rePassRate).toBe(0)
-    expect(out.b2Shadow.realizedN).toBe(0)
-    expect(out.b2Shadow.evidential).toBe(false)
-    expect(out.bars.a3earnsRouting).toBe(false) // compliance 0 < 0.75 bar
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain("does-not-exist-a1.json")
+    expect(r.stderr).toContain("does-not-exist-a3.json")
+    expect(r.stderr).toContain("does-not-exist-a4.json")
+    expect(fs.existsSync(outFile)).toBe(false)
+  })
+
+  test("ONE missing arm results file -> refuses and names exactly the missing one", () => {
+    const cwd = mkTmp("p2-tally-missing-one-")
+    const runStartIso = new Date(2_000_000_000_000).toISOString()
+    const doc: P2ResultsDoc = {
+      k: 1, model: "claude-haiku-4-5", timestamp: runStartIso, harness: { ruleSha: "deadbeef" },
+      tasks: { t1: { rewards: [1], turns: [1], elapsed: [1], errors: [ann(true)] } },
+    }
+    const a1File = path.join(cwd, "a1.json")
+    const a3File = path.join(cwd, "a3.json")
+    fs.writeFileSync(a1File, JSON.stringify(doc))
+    fs.writeFileSync(a3File, JSON.stringify(doc))
+    const outFile = path.join(cwd, "verdict.json")
+    const r = run(cwd, {
+      KKAMAK_P2_A1_RESULTS: a1File,
+      KKAMAK_P2_A3_RESULTS: a3File,
+      KKAMAK_P2_A4_RESULTS: path.join(cwd, "does-not-exist-a4.json"),
+      KKAMAK_P2_REVIEW_FINDINGS_NDJSON: path.join(cwd, "does-not-exist.ndjson"),
+      KKAMAK_P2_VERDICT_OUT: outFile,
+    })
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain("does-not-exist-a4.json")
+    expect(r.stderr).not.toContain("a1.json missing")
+    expect(fs.existsSync(outFile)).toBe(false)
   })
 
   test("disagreeing k/model/ruleSha across present arms -> hard die, non-zero exit", () => {
@@ -375,12 +401,16 @@ describe("p2-tally CLI", () => {
     }
     const a1File = path.join(cwd, "a1.json")
     const a3File = path.join(cwd, "a3.json")
+    const a4File = path.join(cwd, "a4.json")
     writeResultsDoc(a1File, a1)
     writeResultsDoc(a3File, a3)
+    // all three files must EXIST under the silent-done refusal — the
+    // mismatch under test is ruleSha, so a4 just mirrors a1's config
+    writeResultsDoc(a4File, a1)
     const r = run(cwd, {
       KKAMAK_P2_A1_RESULTS: a1File,
       KKAMAK_P2_A3_RESULTS: a3File,
-      KKAMAK_P2_A4_RESULTS: path.join(cwd, "does-not-exist-a4.json"),
+      KKAMAK_P2_A4_RESULTS: a4File,
       KKAMAK_P2_REVIEW_FINDINGS_NDJSON: path.join(cwd, "does-not-exist.ndjson"),
       KKAMAK_P2_VERDICT_OUT: path.join(cwd, "verdict.json"),
     })

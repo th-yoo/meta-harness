@@ -226,6 +226,15 @@ function classifyAttempt(result: ExecResult): AttemptClass {
   const hadActivity = out.includes('"type":"tool_use"')
   const hadErrorEvent = /"subtype":"error/.test(out) || out.includes('"is_error":true')
 
+  // Silent-done hardening (P2 launch-1 burn): rc!=0 with an EMPTY stdout is
+  // a process that failed before producing anything — CC's pre-flight
+  // refusals (e.g. --dangerously-skip-permissions as root without
+  // IS_SANDBOX=1) print to STDERR only. Classify from stderr; anything
+  // unmatched is still transient, never "done".
+  if (result.rc !== 0 && !hadActivity && out.trim() === "") {
+    return AUTH_ERROR_RE.test(result.stderr || "") ? "auth" : "transient"
+  }
+
   const isAuth = (hadErrorEvent || result.rc !== 0) && !hadActivity && AUTH_ERROR_RE.test(out)
   if (isAuth) return "auth"
 

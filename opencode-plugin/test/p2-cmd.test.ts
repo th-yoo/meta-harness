@@ -220,6 +220,7 @@ function okResult(overrides: Partial<P2AttemptResult> = {}): P2AttemptResult {
     reprompted: false,
     reviewFailed: false,
     reviewTruncated: false,
+    rePassHardFail: false,
     judgeComplied: null,
     rulePreReview: null,
     judgeEvidence: undefined,
@@ -306,9 +307,12 @@ function makeFakeDriver(): AgentDriver {
     harness: { kind: "workspace-file", filename: "FAKE.md" },
     parseOutput: (stdout: string): AgentRunOutput => {
       if (stdout === REPASS_STDOUT) return { turnCount: 3, toolUsage: {}, events: REPASS_EVENTS }
+      if (stdout === "") return { turnCount: 0, toolUsage: {}, events: [] }
       return { turnCount: 5, toolUsage: {}, events: FIRST_PASS_EVENTS }
     },
-    classifyAttempt: () => "done",
+    // Mirrors the hardened real drivers: rc!=0 is never "done" (silent-done
+    // hardening) — lets re-pass hard-fail tests drive the detection path.
+    classifyAttempt: (r) => (r.rc !== 0 ? "transient" : "done"),
     prepareAuth: () => ({ mounts: [], cleanup: () => {} }),
     versionArgv: ["fake-agent", "--version"],
   }
@@ -320,7 +324,12 @@ function makeFakeDriver(): AgentDriver {
  * post-re-pass evidence-gathering see a DIFFERENT DONE-CHECK content on its
  * SECOND cat call (simulating the agent writing/fixing the file only
  * during the re-pass). */
-function makeFakeExecFn(opts: { catSequence: (Partial<ExecResult> | undefined)[] }): {
+function makeFakeExecFn(opts: {
+  catSequence: (Partial<ExecResult> | undefined)[]
+  /** When set, the re-pass agent exec (the `--max-turns` call) hard-fails:
+   * rc=1, EMPTY stdout, stderr-only message — the silent-done shape. */
+  rePassHardFails?: boolean
+}): {
   execFn: ExecFn
   calls: string[][]
 } {
@@ -338,6 +347,9 @@ function makeFakeExecFn(opts: { catSequence: (Partial<ExecResult> | undefined)[]
     }
     if (argv.includes("fake-agent")) {
       const isRePass = argv.includes("--max-turns")
+      if (isRePass && opts.rePassHardFails) {
+        return { rc: 1, stdout: "", stderr: "auth refusal on stderr only", timedOut: false }
+      }
       return { rc: 0, stdout: isRePass ? REPASS_STDOUT : FIRST_PASS_STDOUT, stderr: "", timedOut: false }
     }
     return { rc: 0, stdout: "", stderr: "", timedOut: false }
@@ -454,6 +466,43 @@ test("runOneP2Attempt: a4 with complied:false fires exactly ONE re-pass carrying
 
   // post-re-pass compliance uses the SECOND (post-re-pass) DONE-CHECK read
   expect(result.compliant).toBe(true)
+})
+
+test("runOneP2Attempt: a4 re-pass HARD-FAILS (rc!=0, empty stdout) -> rePassHardFail:true, compliance falls back to final container state (silent-done hardening)", async () => {
+  const review: A4ReviewResult = { complied: false, requiredEdits: ["run the actual test suite"] }
+  const fakeReview: RunA4ReviewFn = async () => review
+  const { paths } = setup(["t1"])
+  mockVerifierAndStaging(1)
+  try {
+    const { execFn, calls } = makeFakeExecFn({
+      catSequence: [NONCOMPLIANT_DONE_CHECK, NONCOMPLIANT_DONE_CHECK],
+      rePassHardFails: true,
+    })
+    const driver = makeFakeDriver()
+    const result = await runOneP2Attempt(
+      paths, "t1", "a4", "anthropic/claude-haiku-4-5", "stock harness", 60, 60,
+      driver, execFn, async () => {}, {}, fakeReview,
+    )
+    expect(result.reprompted).toBe(true) // the re-pass DID fire
+    expect(result.rePassHardFail).toBe(true) // ...and its death is recorded, not laundered
+    expect(result.compliant).toBe(false) // final state unchanged by a dead re-pass
+    expect(calls.filter((c) => c.includes("fake-agent")).length).toBe(2)
+  } finally {
+    restoreVerifier()
+    restoreStaging()
+  }
+})
+
+test("runOneP2Attempt: a4 fired re-pass that runs normally records rePassHardFail:false", async () => {
+  const review: A4ReviewResult = { complied: false, requiredEdits: ["run the actual test suite"] }
+  const fakeReview: RunA4ReviewFn = async () => review
+  const { result } = await callRunOneP2Attempt(
+    "a4",
+    { catSequence: [NONCOMPLIANT_DONE_CHECK, COMPLIANT_DONE_CHECK] },
+    fakeReview,
+  )
+  expect(result.reprompted).toBe(true)
+  expect(result.rePassHardFail).toBe(false)
 })
 
 test("runOneP2Attempt: a4 review failure (undefined) fires NO re-pass, records reviewFailed but NOT reviewTruncated", async () => {

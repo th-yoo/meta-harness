@@ -219,6 +219,15 @@ export interface P2AttemptResult {
    * a real one — see a4-review.ts's header for why that matters for a
    * carrier comparison. */
   reviewTruncated: boolean
+  /** Silent-done hardening (P2 launches 0-2, minimal/HISTORY.md): true iff
+   * a4's fired re-pass exec itself hard-failed — timed out, or classified
+   * auth/transient (which since the same hardening includes rc!=0 with an
+   * EMPTY stdout). The compliance verdict still reads the FINAL container
+   * state (a dead re-pass leaves pass-1 state, so `compliant` degrades to
+   * the pass-1 verdict naturally) — this flag keeps that row from being
+   * read as "the re-pass ran and changed nothing". Always false for a1/a3
+   * and for unfired re-passes. */
+  rePassHardFail: boolean
 }
 
 export type RunA4ReviewFn = typeof runA4Review
@@ -277,6 +286,7 @@ export async function runOneP2Attempt(
     rulePreReview: null,
     judgeEvidence: undefined,
     reviewTruncated: false,
+    rePassHardFail: false,
   })
 
   // Driver auth material (2026-08-09, post-first-launch fix): prepared fresh
@@ -367,6 +377,7 @@ export async function runOneP2Attempt(
     let rulePreReview: boolean | null = null
     let judgeEvidence: A4Evidence | undefined
     let reviewTruncated = false
+    let rePassHardFail = false
 
     if (arm === "a4") {
       const evidence1 = await gatherEvidence(name, output.events, execFn)
@@ -409,6 +420,16 @@ export async function runOneP2Attempt(
           String(A4_TURN_CAP),
         ]
         const rePassResult = await execFn(buildExecArgv(name, withTimeout(rePassArgv, agentTimeout), { workdir: "/app" }))
+        // Silent-done hardening: the original code read rePassResult.stdout
+        // and NOTHING else — a re-pass that died before producing anything
+        // (rc!=0/empty stdout, timeout) parsed to zero events and its
+        // silence was laundered into the compliance verdict. Classify it
+        // like any attempt and record the death loudly.
+        const rePassClass = rePassResult.timedOut ? "transient" : driver.classifyAttempt(rePassResult)
+        if (rePassClass !== "done") {
+          rePassHardFail = true
+          log(`  [a4] re-pass HARD-FAILED (${rePassResult.timedOut ? "timeout" : rePassClass}, rc=${rePassResult.rc}) — compliance falls back to final container state`)
+        }
         const rePassParsed = driver.parseOutput(rePassResult.stdout || "")
         // Post-re-pass compliance (brief bullet 3): re-gather DONE-CHECK
         // content from the FINAL container state, union bash commands from
@@ -433,6 +454,7 @@ export async function runOneP2Attempt(
         reprompted,
         reviewFailed,
         reviewTruncated,
+        rePassHardFail,
         judgeComplied,
         rulePreReview,
         judgeEvidence,
@@ -450,6 +472,7 @@ export async function runOneP2Attempt(
       reprompted,
       reviewFailed,
       reviewTruncated,
+      rePassHardFail,
       judgeComplied,
       rulePreReview,
       judgeEvidence,
@@ -511,6 +534,7 @@ function attemptLabel(
     | "reprompted"
     | "reviewFailed"
     | "reviewTruncated"
+    | "rePassHardFail"
     | "error"
     | "judgeComplied"
     | "rulePreReview"
@@ -523,6 +547,7 @@ function attemptLabel(
     reprompted: result.reprompted,
     reviewFailed: result.reviewFailed,
     reviewTruncated: result.reviewTruncated,
+    rePassHardFail: result.rePassHardFail,
     error: result.error,
     // PRE-DATA AMENDMENT 2026-08-08 — judge-vs-rule 2x2. Verdicts only; the
     // evidence rides the sidecar so errors[] stays a compact annotation.
@@ -710,6 +735,7 @@ export async function cmdP2(paths: BenchPaths, args: CmdP2Args, deps: CmdP2Deps 
             // purpose — offline re-judging without the results file) lost
             // it. Boolean, so it stays inside F2's letter.
             reviewTruncated: result.reviewTruncated,
+            rePassHardFail: result.rePassHardFail,
             evidence: result.judgeEvidence,
           }) + "\n",
         )

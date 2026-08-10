@@ -145,6 +145,13 @@ function classifyAttempt(result: ExecResult): AttemptClass {
   const hadErrorEvent = out.includes('"type":"error"')
   const hadActivity = out.includes('"type":"step_finish"') || out.includes('"type":"tool_use"')
 
+  // Silent-done hardening (P2 launch-1 burn, cross-driver contract): rc!=0
+  // with an EMPTY stdout failed before producing anything — the message, if
+  // any, is on stderr. Never "done".
+  if (result.rc !== 0 && !hadActivity && out.trim() === "") {
+    return AUTH_ERROR_RE.test(result.stderr || "") ? "auth" : "transient"
+  }
+
   const isAuth = (hadErrorEvent || result.rc !== 0) && !hadActivity && AUTH_ERROR_RE.test(out)
   if (isAuth) return "auth"
 

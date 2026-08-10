@@ -339,6 +339,18 @@ function isString(v: unknown): v is string {
 }
 
 function main(): void {
+  // Silent-done hardening (launch-0 rule, minimal/HISTORY.md 2026-08-09/10):
+  // tally ONLY when all three arm results files exist. An rc=0 sized-go that
+  // wrote no results files is a no-op, not a fast win — and the previous
+  // tolerant read laundered exactly that into a structurally-valid all-zero
+  // verdict once already. The per-file reads below stay tolerant of
+  // MALFORMED content; existence is the hard bar.
+  const missing = (["a1", "a3", "a4"] as P2Arm[]).map((a) => armResultsPath(a)).filter((p) => !fs.existsSync(p))
+  if (missing.length > 0) {
+    console.error(`p2-tally: refusing — missing arm results file(s):\n  ${missing.join("\n  ")}`)
+    process.exit(1)
+  }
+
   const docs: Record<P2Arm, P2ResultsDoc> = {
     a1: readResultsDoc(armResultsPath("a1")),
     a3: readResultsDoc(armResultsPath("a3")),
