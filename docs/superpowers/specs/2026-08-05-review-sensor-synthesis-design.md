@@ -205,6 +205,29 @@ gated-Stop cadence, findings-counts emitted as a sensor stream.
   instrument-constant change, so it stamps a new boundary ts (this is
   deliberately NOT called a "pre-data" amendment: cadence data exists
   by then; only the user gate makes it legal). Nothing self-adjusts.
+- **CHECKPOINT-READING RULING (user, 2026-08-11, recorded BEFORE any
+  events/day number was computed — the reviewer's caveat (1) from
+  `docs/reviews/2749fd5-sensor-arming-fix.md`, resolved):** one event
+  toward the ≥25/day bar = one pass line with a **distinct
+  `(baseSha, headSha)` pair** within that calendar day. Repeat reviews
+  of an unchanged main diff collapse to ONE event — a stale uncommitted
+  diff parked on main cannot vacuously satisfy the bar at cap rate
+  (30/day of the same diff = 1 event). Skip lines never count (they
+  already never did). This is a READER-side rule: the stream, the
+  sensor, and its constants are untouched — no boundary ts. The
+  definition was ruled on principle before either counting method was
+  evaluated against the data, precisely so the reading cannot be chosen
+  post-hoc.
+- **ENV-REACH RULING (user, 2026-08-11 — the reviewer's caveat (2),
+  resolved by scheduling):** the worktree gap (`KKAMAK_REVIEW_SENSOR=1`
+  in the main checkout's `settings.local.json` never reaches sessions
+  launched fresh in a worktree, so their Stops pass the widened cwd
+  gate but arrive unarmed) is NOT fixed mid-window. It folds into the
+  08-13 checkpoint's constants amendment: at ~3/day realized the bar
+  fails and the constants return to the user anyway, so reach-widening
+  (user-level env on the armed host), any debounce/cap change, and the
+  resulting single new boundary ts all land together in one instrument
+  change instead of two. Until then the undercount stands, recorded.
 
 ## 6. What this is NOT
 

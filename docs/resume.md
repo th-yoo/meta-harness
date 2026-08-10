@@ -64,8 +64,13 @@ STANDING WALLS/WATCHES (unchanged from the block below): bare-SDK 429 wall
 OPEN — NEED USER RULING/GO: P2 rerun #3 (yoo-mac, or THIS host needs the
  ~/.claude rw-mount ruling — prepareClaudeCodeAuth mounts the operator's
  real ~/.claude incl. memory that NAMES P2 rw into agent containers) ·
- sensor ≥25/day "what counts" caveats · TB2 batch (re-check baseline
- budget-identity tuple first).
+ ~~sensor ≥25/day "what counts" caveats~~ RULED 2026-08-11 (yoo-mac
+ minimal session, recorded in the sensor spec §5 before any number was
+ computed): bar counts DISTINCT (baseSha,headSha) pass lines/day —
+ stale-diff repeats collapse to one, reader-side, no boundary ts; env
+ reach (worktree gap) deliberately NOT fixed mid-window — folds into
+ the 08-13 constants amendment as one instrument change ·
+ TB2 batch (re-check baseline budget-identity tuple first).
 
 Rules unchanged: explicit merge/spend/sized gos · gate can't be sampled
 (force a Stop) · pull ⇒ bun install both plugin dirs · merging ≠ deploying ·
