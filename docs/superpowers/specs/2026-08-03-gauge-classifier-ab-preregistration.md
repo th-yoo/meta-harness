@@ -404,3 +404,40 @@ permanently visible in the committed counts.
 - Emitted counts: `docs/gauge-cls-ab/yoo-dev-cls-score.json` (provisional
   flag true solely from the structurally-incomplete sonnet arms; F8 drift
   check green on all four arms).
+
+### CORRECTION to the OUTCOME above (2026-08-10, same day, user-caught)
+
+The OUTCOME block's "sonnet DISQUALIFIED on schema conformance" ATTRIBUTED TO
+THE MODEL what a 5-call diagnostic then showed to be a PATH effect the model
+merely participates in. The user's challenge: the two lanes differ in more
+than transport — the sdk path carries the schema OUT-OF-BAND
+(`output_config` structured outputs) while the agent path APPENDS THE RAW
+SCHEMA JSON AS PROMPT TEXT (`buildAgentOutgoingText`), so sonnet answered a
+different prompt than haiku did. Verified against the code, then measured:
+
+- `DERIVATION_SCHEMA`'s own comment already names the designed
+  interpretation: structured outputs cannot express `minItems`, so empty
+  arrays are legal on BOTH paths and a parse-reject is "an M0 miss, never a
+  wrong record" — a MISS, not a disqualification. The OUTCOME's "haiku pads
+  criteria" framing was wrong: nothing forces it on either path.
+- Diagnostic (haiku through the AGENT path on the 3 unique failing
+  records): one of three REJECTED with the identical signature — A1,
+  `criteria: []` — on a record haiku completed on the sdk path. A
+  WITHIN-MODEL transport effect, single specimen. On the other two, haiku
+  filled criteria where sonnet emptied them 28/28 (n=1 per record — noise,
+  not a model claim).
+- This is the first measured specimen of GA13's DECLARED enforcement
+  asymmetry ("the arms can differ in PENDING COUNT") — consistent with the
+  §6d pv verdict, which measured classification agreement on conforming
+  outputs, not completion rates.
+
+**What stands, on corrected grounds:** verdict INCUMBENT-STAYS is
+unchanged — no arm cleared the ≥0.10 F1 bar over the incumbent, and the
+sonnet arms are NOT-EVALUABLE on the only lane currently available to them.
+**What is withdrawn:** any claim about sonnet-the-model's schema
+conformance. The decisive test (sonnet via the sdk path's structured
+outputs) stays untestable while the 429 wall stands; if it lifts, 5 calls
+settle it. The parse-rejects were the agent lane's declared catch-vs-
+prevent asymmetry doing exactly what Amendment 2's honesty bounds
+predicted — bounds this author wrote and then failed to apply to his own
+conclusion.
