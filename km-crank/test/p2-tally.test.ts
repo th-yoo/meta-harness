@@ -45,8 +45,17 @@ function mkTmp(prefix: string): string {
   return dir
 }
 
-function ann(compliant: boolean, reprompted = false, reviewFailed = false, error = ""): string {
-  return JSON.stringify({ arm: "a1", ruleSha: "deadbeef", compliant, reprompted, reviewFailed, error })
+function ann(
+  compliant: boolean,
+  reprompted = false,
+  reviewFailed = false,
+  error = "",
+  reviewTruncated = false,
+  rePassHardFail = false,
+): string {
+  return JSON.stringify({
+    arm: "a1", ruleSha: "deadbeef", compliant, reprompted, reviewFailed, error, reviewTruncated, rePassHardFail,
+  })
 }
 
 // ---------------------------------------------------------------------
@@ -57,6 +66,7 @@ describe("parseAttemptAnnotation", () => {
   test("parses cmd-p2.ts's exact encoding", () => {
     expect(parseAttemptAnnotation(ann(true, false, false, ""))).toEqual({
       compliant: true, reprompted: false, reviewFailed: false, error: "",
+      reviewTruncated: false, rePassHardFail: false,
     })
   })
   test("undefined input -> undefined", () => {
@@ -158,7 +168,43 @@ describe("computeA4Extra", () => {
     expect(extra.reviewFailedCount).toBe(1)
   })
   test("empty -> zeros", () => {
-    expect(computeA4Extra({ tasks: {} })).toEqual({ rePassRate: 0, reviewFailedCount: 0 })
+    expect(computeA4Extra({ tasks: {} })).toEqual({
+      rePassRate: 0, reviewFailedCount: 0, reviewTruncatedCount: 0, rePassHardFailCount: 0,
+    })
+  })
+
+  // ff8dbb8/083aa07 instrumentation-failure fields — previously grep-only
+  // (the recorded "sibling's gap"): a truncated review reply and a dead
+  // re-pass exec must reach the committed verdict as counts, or an
+  // instrumentation failure reads as a real arm result.
+  test("counts reviewTruncated and rePassHardFail attempts", () => {
+    const doc: P2ResultsDoc = {
+      tasks: {
+        taskA: {
+          rewards: [1, 0, 1], turns: [5, 6, 7], elapsed: [10, 12, 14],
+          errors: [
+            ann(true, false, true, "", true),        // truncated (implies reviewFailed)
+            ann(false, true, false, "", false, true), // re-pass fired but exec died
+            ann(true),                                // clean
+          ],
+        },
+      },
+    }
+    const extra = computeA4Extra(doc)
+    expect(extra.reviewTruncatedCount).toBe(1)
+    expect(extra.rePassHardFailCount).toBe(1)
+  })
+
+  test("annotations WITHOUT the new fields (older encoder) count as false, not as parse failures", () => {
+    const legacy = JSON.stringify({ arm: "a4", ruleSha: "deadbeef", compliant: true, reprompted: false, reviewFailed: false, error: "" })
+    const doc: P2ResultsDoc = {
+      tasks: { t: { rewards: [1], turns: [1], elapsed: [1], errors: [legacy] } },
+    }
+    const extra = computeA4Extra(doc)
+    expect(extra.reviewTruncatedCount).toBe(0)
+    expect(extra.rePassHardFailCount).toBe(0)
+    // and the line still parses — compliance is not degraded by field absence
+    expect(computeArmStats(doc).compliance).toBe(1)
   })
 })
 
