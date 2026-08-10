@@ -13,21 +13,23 @@
  *     Deliberately minimal so no host MCP/other config leaks into the
  *     container; written to a fresh temp dir every run.
  *  2. `.credentials.json` (ro) — the source credential the container-side
- *     plugin reads:
- *       - linux (WSL) host: the file already exists at `~/.claude/.credentials.json`
- *         — mount the real `~/.claude` dir directly, read-only.
- *       - darwin host: no `.credentials.json` on disk (Keychain-only) — export
- *         it at runtime via `security find-generic-password -s "Claude
- *         Code-credentials" -w` into a throwaway 700/600 temp dir and mount
- *         THAT, read-only.
+ *     plugin reads. Both platforms copy it into a throwaway 700/600 shadow
+ *     dir holding ONLY that file and mount THAT, read-only — the real
+ *     `~/.claude` (memory, transcripts, history: operator context an agent
+ *     under test must never read) is never mounted:
+ *       - linux (WSL) host: copied from the on-disk `~/.claude/.credentials.json`.
+ *       - darwin host: no `.credentials.json` on disk (Keychain-only) — exported
+ *         at runtime via `security find-generic-password -s "Claude
+ *         Code-credentials" -w`.
  *  3. The opencode data dir (rw) — auth.json. Unchanged from before this
  *     helper existed; folded in here so cmd-run.ts has ONE mount list to
  *     merge (see this module's callers) instead of two.
  *
- * Security: the darwin-exported `.credentials.json` carries a live refresh
- * token. It is written mode 600 inside a mode-700 dir under the OS temp
- * root, mounted read-only into the container, and shredded (overwritten,
- * then the whole temp root removed) by the returned `cleanup()`.
+ * Security: the shadow `.credentials.json` (linux copy or darwin Keychain
+ * export) carries a live refresh token. It is written mode 600 inside a
+ * mode-700 dir under the OS temp root, mounted read-only into the container,
+ * and shredded (overwritten, then the whole temp root removed) by the
+ * returned `cleanup()`.
  *
  * Concurrency: every container mounts the SAME rw opencode-data dir
  * (auth.json lives there), and the plugin rotates the refresh token on
@@ -53,6 +55,23 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { BenchError } from "./util.ts"
+
+/**
+ * Fresh 0700 dir under `tmpRoot` holding ONLY `.credentials.json` (0600) —
+ * the one file a container needs from `~/.claude`. The real dir (memory,
+ * session transcripts, history.jsonl — operator context an agent under test
+ * must never read) never crosses the mount boundary; both platforms and both
+ * prepare* exports below go through here.
+ */
+function writeShadowClaudeDir(tmpRoot: string, creds: string | Buffer): { claudeDir: string; credsPath: string } {
+  const claudeDir = join(tmpRoot, "claude")
+  mkdirSync(claudeDir, { recursive: true })
+  chmodSync(claudeDir, 0o700)
+  const credsPath = join(claudeDir, ".credentials.json")
+  writeFileSync(credsPath, creds)
+  chmodSync(credsPath, 0o600)
+  return { claudeDir, credsPath }
+}
 
 export interface AgentAuthMount {
   host: string
@@ -121,8 +140,9 @@ function cleanupTmp(tmpRoot: string): void {
 
 /**
  * Builds the three mounts described in this module's header and a
- * `cleanup()` that removes every temp artifact created along the way (never
- * the real host `~/.claude` — on linux that's mounted directly, not copied).
+ * `cleanup()` that removes every temp artifact created along the way (the
+ * real host `~/.claude` is never mounted nor touched — only its
+ * `.credentials.json` is copied into the per-run shadow dir).
  *
  * Throws `BenchError` with an actionable message if there is no credential
  * to mount: on linux when `~/.claude/.credentials.json` doesn't exist, on
@@ -154,14 +174,12 @@ export function prepareAgentAuthMounts(opts: PrepareAgentAuthMountsOpts = {}): A
   let shredPath: string | undefined
 
   if (platform === "linux") {
-    const realClaudeDir = join(home, ".claude")
-    if (!existsSync(join(realClaudeDir, ".credentials.json"))) {
+    const realCredsPath = join(home, ".claude", ".credentials.json")
+    if (!existsSync(realCredsPath)) {
       cleanupTmp(tmpRoot)
-      throw new BenchError(
-        `prepareAgentAuthMounts: ${join(realClaudeDir, ".credentials.json")} not found. ${ACTIONABLE_AUTH_MSG}`,
-      )
+      throw new BenchError(`prepareAgentAuthMounts: ${realCredsPath} not found. ${ACTIONABLE_AUTH_MSG}`)
     }
-    claudeHost = realClaudeDir
+    ;({ claudeDir: claudeHost, credsPath: shredPath } = writeShadowClaudeDir(tmpRoot, readFileSync(realCredsPath)))
   } else if (platform === "darwin") {
     let creds: string
     try {
@@ -171,14 +189,7 @@ export function prepareAgentAuthMounts(opts: PrepareAgentAuthMountsOpts = {}): A
       cleanupTmp(tmpRoot)
       throw new BenchError(`prepareAgentAuthMounts: Keychain export failed. ${ACTIONABLE_AUTH_MSG}`)
     }
-    const claudeDir = join(tmpRoot, "claude")
-    mkdirSync(claudeDir, { recursive: true })
-    chmodSync(claudeDir, 0o700)
-    const credsPath = join(claudeDir, ".credentials.json")
-    writeFileSync(credsPath, creds + "\n")
-    chmodSync(credsPath, 0o600)
-    claudeHost = claudeDir
-    shredPath = credsPath
+    ;({ claudeDir: claudeHost, credsPath: shredPath } = writeShadowClaudeDir(tmpRoot, creds + "\n"))
   } else {
     cleanupTmp(tmpRoot)
     throw new BenchError(`prepareAgentAuthMounts: unsupported platform "${platform}" (expected "linux" or "darwin")`)
@@ -301,15 +312,18 @@ export function readOauthExpiresAt(opts: ReadOauthExpiresAtOpts = {}): number | 
  *    key straight from its own env var (paths.ts's `apiKeyEnv()` already
  *    forwards it into the container create env; this function just needs to
  *    skip the Keychain/`.credentials.json` dance).
- *  - otherwise: linux mounts the real `~/.claude` dir RW at `/root/.claude`
- *    (CC rotates its oauth refresh token on refresh ~8h + writes settings on use — same
- *    "must be RW" rationale as opencode's data-dir mount above); darwin
- *    exports the Keychain item (`security find-generic-password -s "Claude
- *    Code-credentials" -w`) into a fresh 0700 temp dir / 0600 file and mounts
- *    THAT rw at `/root/.claude`, shredding it in `cleanup()`. The refresh
- *    token CC rotates to inside the container is therefore silently
- *    discarded on darwin (never written back to the real Keychain) — fine
- *    for a single task-length run, not a durable multi-run credential store.
+ *  - otherwise: both platforms build a fresh 0700 shadow dir / 0600
+ *    `.credentials.json` (linux copies the on-disk file, darwin exports the
+ *    Keychain item via `security find-generic-password -s "Claude
+ *    Code-credentials" -w`) and mount THAT rw at `/root/.claude`, shredding
+ *    it in `cleanup()`. RW because CC rotates its oauth refresh token on
+ *    refresh ~8h + writes settings on use — same rationale as opencode's
+ *    data-dir mount above. The real `~/.claude` (memory, transcripts,
+ *    history) is never mounted: an agent under test must not read operator
+ *    context, and the container must not write into the host dir. The
+ *    refresh token CC rotates to inside the container is therefore silently
+ *    discarded (never written back to the real file/Keychain) — fine for a
+ *    single task-length run, not a durable multi-run credential store.
  *  - ALWAYS (both branches, and the API-key path too): a `/root/.claude.json`
  *    file mount with `{"hasCompletedOnboarding":true}` — CC's headless
  *    first-run gate; verified live (this task's fixture captures) that a
@@ -354,14 +368,12 @@ export function prepareClaudeCodeAuth(opts: PrepareClaudeCodeAuthOpts = {}): Age
   let shredPath: string | undefined
 
   if (platform === "linux") {
-    const realClaudeDir = join(home, ".claude")
-    if (!existsSync(join(realClaudeDir, ".credentials.json"))) {
+    const realCredsPath = join(home, ".claude", ".credentials.json")
+    if (!existsSync(realCredsPath)) {
       cleanupTmp(tmpRoot)
-      throw new BenchError(
-        `prepareClaudeCodeAuth: ${join(realClaudeDir, ".credentials.json")} not found. ${ACTIONABLE_AUTH_MSG}`,
-      )
+      throw new BenchError(`prepareClaudeCodeAuth: ${realCredsPath} not found. ${ACTIONABLE_AUTH_MSG}`)
     }
-    claudeHost = realClaudeDir
+    ;({ claudeDir: claudeHost, credsPath: shredPath } = writeShadowClaudeDir(tmpRoot, readFileSync(realCredsPath)))
   } else if (platform === "darwin") {
     let creds: string
     try {
@@ -371,14 +383,7 @@ export function prepareClaudeCodeAuth(opts: PrepareClaudeCodeAuthOpts = {}): Age
       cleanupTmp(tmpRoot)
       throw new BenchError(`prepareClaudeCodeAuth: Keychain export failed. ${ACTIONABLE_AUTH_MSG}`)
     }
-    const claudeDir = join(tmpRoot, "claude")
-    mkdirSync(claudeDir, { recursive: true })
-    chmodSync(claudeDir, 0o700)
-    const credsPath = join(claudeDir, ".credentials.json")
-    writeFileSync(credsPath, creds + "\n")
-    chmodSync(credsPath, 0o600)
-    claudeHost = claudeDir
-    shredPath = credsPath
+    ;({ claudeDir: claudeHost, credsPath: shredPath } = writeShadowClaudeDir(tmpRoot, creds + "\n"))
   } else {
     cleanupTmp(tmpRoot)
     throw new BenchError(`prepareClaudeCodeAuth: unsupported platform "${platform}" (expected "linux" or "darwin")`)

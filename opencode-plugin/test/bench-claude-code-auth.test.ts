@@ -54,21 +54,46 @@ test("prepareClaudeCodeAuth: API key path never invokes execFn (no Keychain acce
   expect(called).toBe(false)
 })
 
-// ── linux — real ~/.claude mounted rw ──────────────────────────────────────
+// ── linux — shadow dir (darwin parity): only .credentials.json travels ────
 
-test("prepareClaudeCodeAuth: linux — mounts real ~/.claude RW (not ro) at /root/.claude when .credentials.json is present", () => {
+test("prepareClaudeCodeAuth: linux — mounts a shadow dir (0700, cred 0600) RW at /root/.claude, never the real ~/.claude", () => {
+  const home = tmpDir()
+  fs.mkdirSync(path.join(home, ".claude", "projects"), { recursive: true })
+  fs.writeFileSync(path.join(home, ".claude", ".credentials.json"), '{"fake":"cred"}')
+  fs.writeFileSync(path.join(home, ".claude", "projects", "memory.md"), "P2 design — must not leak")
+
+  const { mounts, cleanup } = prepareClaudeCodeAuth({ platform: "linux", home, env: {} })
+  try {
+    const claudeMount = mounts.find((m) => m.container === "/root/.claude")!
+    expect(claudeMount.ro).toBe(false) // CC rotates its oauth refresh token + writes settings
+    expect(claudeMount.host).not.toBe(path.join(home, ".claude")) // per-run shadow, not the real dir
+
+    const credsPath = path.join(claudeMount.host, ".credentials.json")
+    expect(fs.readFileSync(credsPath, "utf-8")).toBe('{"fake":"cred"}')
+    expect(fs.readdirSync(claudeMount.host)).toEqual([".credentials.json"]) // nothing else travels
+
+    const dirMode = fs.statSync(claudeMount.host).mode & 0o777
+    const fileMode = fs.statSync(credsPath).mode & 0o777
+    expect(dirMode).toBe(0o700)
+    expect(fileMode).toBe(0o600)
+  } finally {
+    cleanup()
+  }
+})
+
+test("prepareClaudeCodeAuth: linux — cleanup shreds the copied credential and removes the shadow dir, real ~/.claude untouched", () => {
   const home = tmpDir()
   fs.mkdirSync(path.join(home, ".claude"), { recursive: true })
   fs.writeFileSync(path.join(home, ".claude", ".credentials.json"), '{"fake":"cred"}')
 
   const { mounts, cleanup } = prepareClaudeCodeAuth({ platform: "linux", home, env: {} })
-  try {
-    const claudeMount = mounts.find((m) => m.container === "/root/.claude")!
-    expect(claudeMount.host).toBe(path.join(home, ".claude"))
-    expect(claudeMount.ro).toBe(false) // CC rotates its oauth refresh token + writes settings
-  } finally {
-    cleanup()
-  }
+  const claudeMount = mounts.find((m) => m.container === "/root/.claude")!
+  expect(fs.existsSync(claudeMount.host)).toBe(true)
+
+  cleanup()
+
+  expect(fs.existsSync(claudeMount.host)).toBe(false)
+  expect(fs.readFileSync(path.join(home, ".claude", ".credentials.json"), "utf-8")).toBe('{"fake":"cred"}')
 })
 
 test("prepareClaudeCodeAuth: linux — throws actionable BenchError when ~/.claude/.credentials.json is missing", () => {

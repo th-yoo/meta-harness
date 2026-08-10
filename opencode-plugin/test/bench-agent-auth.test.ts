@@ -29,18 +29,23 @@ test("prepareAgentAuthMounts: minimal opencode config content is exactly the plu
   }
 })
 
-test("prepareAgentAuthMounts: linux — mounts real ~/.claude (ro) when .credentials.json is present, plus opencode-data (rw)", () => {
+test("prepareAgentAuthMounts: linux — mounts a shadow dir (ro, only .credentials.json) at /root/.claude, plus opencode-data (rw)", () => {
   const home = tmpDir()
-  fs.mkdirSync(path.join(home, ".claude"), { recursive: true })
+  fs.mkdirSync(path.join(home, ".claude", "projects"), { recursive: true })
   fs.writeFileSync(path.join(home, ".claude", ".credentials.json"), '{"fake":"cred"}')
+  fs.writeFileSync(path.join(home, ".claude", "projects", "memory.md"), "P2 design — must not leak")
 
   const { mounts, cleanup } = prepareAgentAuthMounts({ platform: "linux", home })
   try {
     expect(mounts).toHaveLength(3)
 
     const claudeMount = mounts.find((m) => m.container === "/root/.claude")!
-    expect(claudeMount.host).toBe(path.join(home, ".claude"))
+    expect(claudeMount.host).not.toBe(path.join(home, ".claude")) // per-run shadow, not the real dir
     expect(claudeMount.ro).toBe(true)
+    expect(fs.readFileSync(path.join(claudeMount.host, ".credentials.json"), "utf-8")).toBe('{"fake":"cred"}')
+    expect(fs.readdirSync(claudeMount.host)).toEqual([".credentials.json"]) // nothing else travels
+    expect(fs.statSync(claudeMount.host).mode & 0o777).toBe(0o700)
+    expect(fs.statSync(path.join(claudeMount.host, ".credentials.json")).mode & 0o777).toBe(0o600)
 
     const ocDataMount = mounts.find((m) => m.container === "/root/.local/share/opencode")!
     expect(ocDataMount.host).toBe(path.join(home, ".local", "share", "opencode"))

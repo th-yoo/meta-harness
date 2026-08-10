@@ -170,13 +170,19 @@ WHAT LANDED (3 commits, ALL PUSHED, do not redo):
  - /mh-score good recorded this session (the "blocked by hook ✓" notice is
    the designed token-free path, not an error).
 
-STANDING WALLS/WATCHES (unchanged from the block below): bare-SDK 429 wall
- (~7d; cc-api-daemon IS the workaround lane — user reconfirmed); review-
+STANDING WALLS/WATCHES: ~~bare-SDK 429 wall~~ WATCH DROPPED (user ruling
+ 2026-08-11: bare-SDK no-key transport is haiku-only by tier DESIGN — the
+ opus/sonnet 429 is permanent lane behavior, not a lifting wall;
+ cc-api-daemon + ACP daemon = complete workaround; residue = TB2 gate's
+ false-WALLED bare-SDK probe, folded into the TB2 batch pre-step); review-
  sensor armed on yoo-dev ~3/day vs ≥25 bar.
 
-OPEN — NEED USER RULING/GO: P2 rerun #3 (yoo-mac, or THIS host needs the
- ~/.claude rw-mount ruling — prepareClaudeCodeAuth mounts the operator's
- real ~/.claude incl. memory that NAMES P2 rw into agent containers) ·
+OPEN — NEED USER RULING/GO: P2 rerun #3 (yoo-mac; ~~or THIS host needs the
+ ~/.claude rw-mount ruling~~ RULED 2026-08-11: shadow-dir darwin parity —
+ writeShadowClaudeDir() in agent-auth.ts, both prepare* exports + the
+ minimal/run.ts kernel mount a per-run 0700/0600 dir holding ONLY
+ .credentials.json, never the real ~/.claude; live-proven both drivers on
+ WSL, hello-fs reward=1 each, exit-shred verified — WSL P2 unblocked) ·
  ~~sensor ≥25/day "what counts" caveats~~ RULED 2026-08-11 (yoo-mac
  minimal session, recorded in the sensor spec §5 before any number was
  computed): bar counts DISTINCT (baseSha,headSha) pass lines/day —

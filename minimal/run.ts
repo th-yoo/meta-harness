@@ -22,7 +22,7 @@
  *         (+ one <task>-<startedAt>-aN.traj.ndjson per attempt)
  */
 import { createHash } from "node:crypto"
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { hostname, tmpdir } from "node:os"
 import { basename, join, resolve } from "node:path"
 import { runCompletionGate } from "./complete-gate.ts"
@@ -442,24 +442,30 @@ const harness = harnessPath
   : null
 
 // --- auth (linux host; same recipes as TB2 agent-auth.ts) ---
-// claude-code (prepareClaudeCodeAuth): ~/.claude mounts RW (CC rotates its
-// oauth refresh token + writes settings on use); /root/.claude.json is CC's
-// headless first-run onboarding gate — without it CC exits before ever
+// claude-code (prepareClaudeCodeAuth): the shadow dir mounts RW (CC rotates
+// its oauth refresh token + writes settings on use); /root/.claude.json is
+// CC's headless first-run onboarding gate — without it CC exits before ever
 // reaching the model; IS_SANDBOX=1 is required for CC to accept
 // --dangerously-skip-permissions while running as container root.
 // opencode (prepareAgentAuthMounts): a temp config dir with the
 // opencode-claude-auth plugin mounts RW at /root/.config/opencode (opencode
 // writes a .gitignore + plugin cache there at startup — ro = 0-turn exit),
-// ~/.claude RO (the auth plugin only reads the credential), and the real
-// ~/.local/share/opencode RW.
+// the shadow dir RO (the auth plugin only reads the credential), and the
+// real ~/.local/share/opencode RW.
 const home = process.env["HOME"] ?? die("no $HOME")
 const authTmp = mkdtempSync(join(tmpdir(), "minimal-auth-"))
-// Credential source dir mounted as /root/.claude. linux: the real ~/.claude
-// (.credentials.json on disk). darwin: no file — CC stores oauth in the
-// Keychain; export it into a throwaway 700/600 dir (same recipe as TB2's
-// prepareAgentAuthMounts, opencode-plugin/src/bench/agent-auth.ts).
-let claudeHost = join(home, ".claude")
-if (!existsSync(join(claudeHost, ".credentials.json"))) {
+// Credential source dir mounted as /root/.claude — ALWAYS a per-run 700/600
+// shadow dir holding ONLY .credentials.json (same recipe as TB2's
+// writeShadowClaudeDir, opencode-plugin/src/bench/agent-auth.ts). The real
+// ~/.claude is never mounted: it carries operator memory/transcripts an
+// agent under test must never read, and RW would let the container write
+// into the host dir. linux: copy the on-disk file. darwin: no file — CC
+// stores oauth in the Keychain; export it at runtime.
+const realCredsPath = join(home, ".claude", ".credentials.json")
+let credsBytes: Buffer | string
+if (existsSync(realCredsPath)) {
+  credsBytes = readFileSync(realCredsPath)
+} else {
   if (process.platform !== "darwin")
     die(`~/.claude/.credentials.json not found — run \`claude /login\` on the host first`)
   const { execFileSync } = await import("node:child_process")
@@ -468,13 +474,24 @@ if (!existsSync(join(claudeHost, ".credentials.json"))) {
     creds = execFileSync("security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], { encoding: "utf-8" }).trim()
   } catch { /* fall through to die below */ }
   if (!creds) die(`no ~/.claude/.credentials.json and Keychain export failed — run \`claude /login\` on the host first`)
-  const claudeDir = join(authTmp, "claude")
-  mkdirSync(claudeDir, { recursive: true })
-  chmodSync(claudeDir, 0o700)
-  writeFileSync(join(claudeDir, ".credentials.json"), creds + "\n")
-  chmodSync(join(claudeDir, ".credentials.json"), 0o600)
-  claudeHost = claudeDir
+  credsBytes = creds + "\n"
 }
+const claudeHost = join(authTmp, "claude")
+mkdirSync(claudeHost, { recursive: true })
+chmodSync(claudeHost, 0o700)
+const shadowCredsPath = join(claudeHost, ".credentials.json")
+writeFileSync(shadowCredsPath, credsBytes)
+chmodSync(shadowCredsPath, 0o600)
+// Shred the live refresh-token copy on any exit (normal, die(), or signal —
+// the SIGINT/SIGTERM handlers below end in process.exit, which fires "exit").
+process.on("exit", () => {
+  try {
+    writeFileSync(shadowCredsPath, "0".repeat(statSync(shadowCredsPath).size))
+  } catch { /* already gone */ }
+  try {
+    rmSync(authTmp, { recursive: true, force: true })
+  } catch { /* best-effort */ }
+})
 const containerArgs: string[] = []
 if (driverId === "claude-code") {
   const onboardingPath = join(authTmp, "claude.json")
