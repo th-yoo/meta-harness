@@ -340,6 +340,17 @@ export async function callModelSdkLabel(
 ): Promise<string | undefined> {
   const model = resolveModelId(opts.model ?? "claude-opus-5")
   const messageText = buildLabelPrompt(prompt, floorCheck)
+  // cls-ab Amendment 1 (2026-08-10, pre-data): the SAME per-caller §6d
+  // transport branch callModelSdk has above. This function previously
+  // hardwired the bare-SDK path, which the per-model-tier 429 wall blocks
+  // for the opus labeler while the agent lane serves it — the exact
+  // asymmetry measured 2026-08-06 and re-confirmed on the first label go.
+  // The labeler MODEL stays the §2.3 literal either way.
+  if (selectTransport(env) === "agent-sdk") {
+    return agentSdkCall(messageText, model, env, {
+      schema: LABEL_SCHEMA as unknown as Record<string, unknown>,
+    })
+  }
   return sdkCall(messageText, model, env, authDeps, {
     schema: LABEL_SCHEMA as unknown as Record<string, unknown>,
   })

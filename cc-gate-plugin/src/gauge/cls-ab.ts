@@ -62,7 +62,7 @@ import {
   type PromptVariant,
   type ClsLabel,
 } from "./refiner.ts"
-import { callModelSdk, callModelSdkLabel } from "./transport.ts"
+import { callModelSdk, callModelSdkLabel, selectTransport } from "./transport.ts"
 import { sha256Hex } from "./corpus-mine.ts"
 import type { GaugePromptClass } from "../types.ts"
 
@@ -592,6 +592,10 @@ export interface ClsLabelRow {
    * output) — fix-wave F8 provenance, same discipline as `ClsArmRow`. */
   promptSha256: string
   ts: string
+  /** Amendment 1 (2026-08-10): which transport carried the label call.
+   * ABSENT = "sdk" (the pre-amendment shape) — same additive-provenance
+   * discipline as `GaugeSensorField.transport` (absent = cli era). */
+  transport?: "sdk" | "agent-sdk"
 }
 
 /** Missing/unreadable file -> []. Malformed lines are skipped silently
@@ -861,6 +865,12 @@ export async function runClsLabel(
         model: CLS_LABEL_MODEL_LITERAL,
         promptSha256,
         ts: new Date().toISOString(),
+        // Amendment 1 provenance: stamp the transport that actually carried
+        // this label call (per-caller §6d selection, same env read the
+        // transport layer itself uses — never a second selection rule).
+        // Narrowed exactly the way callModelSdkLabel branches: anything
+        // other than "agent-sdk" took the sdk path.
+        transport: selectTransport(process.env) === "agent-sdk" ? "agent-sdk" : "sdk",
       })
     }
 

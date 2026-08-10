@@ -293,3 +293,41 @@ production refiner prompt or model as a side effect of running this
 experiment. No claim that a winning arm is more "correct" than the
 incumbent — only that it agrees with the blind opus labels more, within
 the registered margin, at no cost in missed-C.
+
+## Amendment 1 — labeler transport (2026-08-10, PRE-DATA, boundary ts 1786333049922)
+
+**Status when registered: labels.ndjson = 0 rows** (the §2.2 constants-freeze
+trigger — the first label — has not occurred; this amendment is inside the
+registered amendment window). Arm files: also 0 rows each.
+
+**Forcing evidence:** the first authorized label go (2026-08-10,
+`cls-label --go 32`) returned 0/32 — every call refused HTTP 429
+`rate_limit_error` on the bare-SDK transport (raw probe confirmed the exact
+status). This is the per-model-tier wall first measured 2026-08-06 (haiku
+serves; sonnet/opus 429 on bare SDK while the CLI/agent-SDK lane serves all
+three) — four days standing. `callModelSdkLabel` HARDWIRES the bare-SDK
+path: unlike `callModelSdk` (the derive path), it never consults
+`selectTransport`, so the labeler cannot reach the unwalled lane at all.
+
+**Amendment:** `callModelSdkLabel` gains the SAME per-caller transport
+branch `callModelSdk` already has — `KKAMAK_GAUGE_TRANSPORT=agent-sdk`
+routes the label call through `agentSdkCall` (§6d transport: reviewed,
+pv-validated sdk↔agent-sdk POOLING-PERMITTED, GA13 context isolation
+applied). The labeler MODEL literal is unchanged (`claude-opus-5`, §2.3 —
+never routed through `KKAMAK_GAUGE_MODEL`). Label rows gain an optional
+`transport` field ("sdk" when absent — the pre-amendment shape), same
+additive-provenance discipline as `GaugeSensorField.transport`.
+
+**Honesty bounds, stated now:** (1) the §6d pv pooling verdict was measured
+on haiku DERIVE calls, not the opus labeler — transport equivalence for the
+labeler is assumed-with-grounding, not measured; if the 2×2 verdict lands
+within its margin of the adopt bar, this assumption gets named in the
+verdict doc. (2) GA13's enforcement asymmetry applies: the agent lane
+CATCHES non-conforming output at the parser rather than PREVENTING it, so
+labeler pending-counts may differ from what the sdk lane would have
+produced. (3) All 32 labels will ride ONE transport (agent-sdk) — no
+mixed-transport label set, so no within-labels split to reason about.
+
+**Not amended:** the four ARM transports. Arms measure candidate classifier
+configurations against the PRODUCTION transport selection; sonnet arms stay
+walled until the wall lifts or their own amendment with its own reasoning.
