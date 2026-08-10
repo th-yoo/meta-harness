@@ -1191,3 +1191,20 @@ fakes the exec seam, and both were caught only by reading the LIVE run.
   data — discarded with the rest for a clean rerun). Machinery is now
   live-proven end-to-end: staging, agent, verifier, review daemon pre-start,
   results plumbing all worked in launch 2's clean window.
+- **HARDENING SHIPPED (2026-08-10, yoo-dev, `ff8dbb8` — closes the deferred
+  candidates above):** (1) both drivers' `classifyAttempt` now treat rc!=0 +
+  no-activity + EMPTY stdout by consulting STDERR — AUTH_ERROR_RE match
+  classifies `auth` (fail-fast; launch 2's expiry class), anything else
+  `transient` (bounded retries, visible marks; launch 1's IS_SANDBOX class)
+  — never `done`; pinned as a cross-driver contract test so future drivers
+  inherit it. (2) a4's re-pass exec is classified like any attempt (timeout
+  included); a dead re-pass records `rePassHardFail:true` in the results
+  annotation + judge sidecar with a loud log line — compliance still reads
+  final container state, so it degrades to the pass-1 verdict instead of
+  silently pretending the re-pass ran. (3) `p2-tally` refuses (exit 1,
+  names the missing files, writes no verdict) unless ALL THREE arm results
+  files exist — the launch-0 rule codified; malformed-content reads stay
+  tolerant, existence is the hard bar. NOT covered (needs its own ruling,
+  blocks WSL-host P2): linux `prepareClaudeCodeAuth` rw-mounts the
+  operator's real `~/.claude` (including memory that NAMES P2) into agent
+  containers.

@@ -3,6 +3,77 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-10b (`yoo-dev`) — FIRST ORGANIC A/A ENROLLMENT · 47M FIXTURE RULED + HARVEST HARDENED · SILENT-DONE SHIPPED · MAIN `ff8dbb8` PUSHED
+
+**RESUME PROMPT:**
+```
+Resume meta-harness (yoo-dev), post-2026-08-10b (same-day follow-on to the
+0.8.0-arc session below). git pull FIRST, then bun install BOTH plugin dirs.
+Main = ff8dbb8, pushed. WSL restarted mid-session once — detached podman
+work died silently; state was re-verified, nothing carried on assumption.
+
+A/A v17: FIRST ORGANIC ENROLLMENT LANDED — this session's SessionStart wrote
+row 1 of .km/trial-arms.ndjson (arm=trial, forced:false, layer
+project-global). Machinery live-proven; verdict still KEEP-by-tie expected,
+floors 20 cycles / 5 sessions/arm / 5 blocks/arm.
+
+WHAT LANDED (3 commits, ALL PUSHED, do not redo):
+ - 47M fixture RULED + DELETED: null-agent probe (podman build + run check,
+   zero model tokens) proved the first harvest INVALID — 4 failure classes
+   unmasked one at a time chasing green: (1) git-archive tree has no .git →
+   gate-check dies pre-test; (2) root has no package.json → root bun install
+   no-ops, subdir deps never install (+ python3 missing for km-panic.sh);
+   (3) no ambient git identity → suite-created `git merge` dies exit 128
+   BEFORE MERGE_HEAD (a class no dev host sees; the test's conflicted=true
+   sanity passed for the WRONG reason); (4) STRUCTURAL: km-crank
+   calibration.test.ts compares committed coveredMechanismRev against real
+   `git log -1 -- <mechanism paths>` — a single-synthetic-commit image can
+   never match. Dir deleted; reproducible from
+   refs/kkamak/fixtures/1786318572180-39b387ee-r1.
+ - `7bea27f` fix(harvest): Dockerfile git init+commit under --global
+   identity + per-package install loop + python3; validity PROBER (CLI
+   default, --skip-probe opt-out): podman build + in-container check —
+   build-fail or exit-0 (vacuous) refuses the harvest and removes the task
+   dir; probe exit code recorded in fixture.json. KNOWN LIMIT, live-proven:
+   no failure-CLASS matching — a fixture failing for environmental reasons
+   is still accepted.
+ - `22fafbc` feat(harvest): RULING C (user go; option A history-preserving
+   materialization REJECTED — size + secrets-in-git-history leak past the
+   worktree-only strip). UNHARVESTABLE_CHECKS = ["bun scripts/gate-check.ts"]
+   — reviewed-constant one-way door like FIXTURE_ALLOWED_REPOS, no bypass
+   flag; explicit --ref refuses, auto-pick skips, all-impure = loud
+   no-eligible. CONSEQUENCE: the 18 waiting refs are mostly gate-check
+   blocks — expect few/zero eligible; harvest feeds on tree-pure checks only.
+ - `ff8dbb8` fix(bench): SILENT-DONE HARDENING (all 3 deferred candidates):
+   (H1) both drivers' classifyAttempt — rc!=0 + no-activity + EMPTY stdout
+   consults STDERR (auth match → fail-fast "auth", else "transient"), never
+   "done"; pinned as a cross-driver CONTRACT test. (H2) a4 re-pass exec now
+   classified like any attempt; dead re-pass → rePassHardFail:true in
+   annotation + judge sidecar + loud log (compliance still reads final
+   container state — degrades to pass-1 verdict naturally). (H3) p2-tally
+   REFUSES (exit 1, names files, no verdict) unless all three arm results
+   files exist — launch-0 rule codified; the old tolerant-zeros test flipped
+   to expect refusal deliberately.
+ - /mh-score good recorded this session (the "blocked by hook ✓" notice is
+   the designed token-free path, not an error).
+
+STANDING WALLS/WATCHES (unchanged from the block below): bare-SDK 429 wall
+ (~7d; cc-api-daemon IS the workaround lane — user reconfirmed); review-
+ sensor armed on yoo-dev ~3/day vs ≥25 bar.
+
+OPEN — NEED USER RULING/GO: P2 rerun #3 (yoo-mac, or THIS host needs the
+ ~/.claude rw-mount ruling — prepareClaudeCodeAuth mounts the operator's
+ real ~/.claude incl. memory that NAMES P2 rw into agent containers) ·
+ sensor ≥25/day "what counts" caveats · TB2 batch (re-check baseline
+ budget-identity tuple first).
+
+Rules unchanged: explicit merge/spend/sized gos · gate can't be sampled
+(force a Stop) · pull ⇒ bun install both plugin dirs · merging ≠ deploying ·
+read types then measure · boundary ts · re-measure before carrying claims ·
+detached long-runs need tmux (WSL restart killed a setsid probe this
+session, again).
+```
+
 ## ✅ SESSION END 2026-08-10 (`yoo-dev`) — cc-api-daemon 0.5.0→0.8.0 ARC · cls-ab CLOSED · A/A v17 LIVE · MAIN `a1fb822`+
 
 **RESUME PROMPT:**

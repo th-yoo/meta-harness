@@ -3,7 +3,8 @@
 *Written 2026-07-21; Part 2 re-audited 2026-07-23 (post loops 1–3),
 **2026-07-27 (gate era — delta section at the end of Part 2; Part 1 gains §K)**, and
 **2026-08-06 (GA/probes era — Part 1 gains §L; third delta at the end)**, and
-**2026-08-10 (package/dogfood era — Part 1 gains §M; fourth delta + Part 3 addendum)**. Two purposes:
+**2026-08-10 (package/dogfood era — Part 1 gains §M; fourth delta + Part 3 addendum; Part 4
+external-alignment check added same day)**. Two purposes:
 (1) a map of every technique the project employs and where it came from; (2) an honest audit of
 which are **proven by our own evidence**, which are **disproven**, and which remain **unproven** —
 so nobody (including us) mistakes built-and-runs for validated. Companion docs:
@@ -154,7 +155,8 @@ transfer, memory index).
 | Elastic warm pool (floor/ceil) | Retention-only floor — never pre-spawns; exempts the `floor` most-recently-released idle entries from TTL eviction, so a floored entry always carries an isolation real traffic used. Unconditional one-per-tick shrink + acquire-miss reclaim (closes the pool-exhausted starvation window the throttle opens) + `ACP_SESSION_IDLE_MS` entry-TTL wiring. Floor never blocks daemon self-exit. |
 | Zero-spend live probes as acceptance evidence | Real daemon + real `claude` CLI children against a localhost stub, run OUTSIDE the test harness before "works" is claimed: pool lifecycle, floor-retention timeline (children 2→1, retained 6x past TTL), credential precedence under the real credentialed HOME. Complement, not substitute, for hermetic suites — they catch what suites faking the exec seam structurally cannot. |
 | Billing-lane guard | `authLane()` boot-time disclosure + e2e abort condition: an `ANTHROPIC_API_KEY` in env silently flips the haiku bare-SDK route from subscription to metered pay-go (credential precedence puts the key first). Made observable in the daemon's own stderr; never silent. |
-| Silent-done hardening (recorded, pending) | The two-burn defect class: a classifier reading ONE channel (stdout) launders "died before producing anything" into "done"; every downstream layer (results schema, tally, monitor) faithfully propagates well-formed zeros. Hardening candidates recorded in the 05e3d1d artifact: rc!=0 + empty stdout ≠ done; a4 re-pass must read rc; tally refuses on missing results files; tripwires must cover the NEW failure mode's log signature, not the previous one's. |
+| Silent-done hardening (SHIPPED 08-10, `ff8dbb8`) | The two-burn defect class: a classifier reading ONE channel (stdout) launders "died before producing anything" into "done"; every downstream layer (results schema, tally, monitor) faithfully propagates well-formed zeros. Shipped: rc!=0 + empty stdout consults STDERR (auth → fail-fast, else transient, never "done") as a cross-driver CONTRACT test; a4 re-pass classified like any attempt (`rePassHardFail` in annotation + sidecar); tally refuses unless all three results files exist. Still open: tripwires must cover the NEW failure mode's log signature, not the previous one's (per-run discipline, not code). |
+| Fixture validity probe + tree-purity ruling (08-10) | Null-agent probe (podman build + in-container check, zero model tokens) gates every harvest: build-fail or vacuous-pass (exit 0) refuses and removes the task dir. Live-proven on the first organic fixture — 4 invalid classes unmasked serially (no .git; root-install no-op + no python3; no ambient git identity → `git merge` dies pre-MERGE_HEAD; history-coupled calibration test unfixable from any tree snapshot). Ruling C: `UNHARVESTABLE_CHECKS` one-way door (gate-check ruled un-harvestable — only tree-pure checks harvest); option A (history-preserving materialization) rejected on secrets-in-git-history grounds. KNOWN LIMIT, live-proven: probe has no failure-CLASS matching — environmental failures still accepted. |
 
 ### Dormant / rejected-for-now
 
@@ -400,7 +402,9 @@ entries, kkamak dogfood-log, the adoption ledger, `.km` streams on two repos, do
   that has not yet run.
 - **Silent-done hardening** — recorded, not built: rc!=0+empty-stdout classification, a4
   re-pass rc, tally refusal. The class has now burned two launches; a third burn on the same
-  shape would be a process failure, not bad luck.
+  shape would be a process failure, not bad luck. **[CLOSED same day, `ff8dbb8`: all three
+  candidates built TDD, cross-driver contract test pins the classifier invariant; the line
+  stands as the record. Effect on live outcomes unproven until P2 rerun #3 exercises it.]**
 - (Carried: cross-family judge check unrun; SPRT deferred; mid-arm curtailment unexercised;
   reinject v2 / cls-ab / M1v2 / channel-ladder C4 still starved — the pairing fix is their
   shared unblock.)
@@ -531,3 +535,91 @@ effective techniques in the project; everything else that is effective is either
   token-free mine). Their blocker is a DECISION each, not supply. The pairing diagnosis
   still holds for b2-dependent members (reinject-v2 verdict power, C4 base rate) and for
   M1v2's class-C starvation.
+
+### Part 3 addendum (2026-08-10b, evening session)
+
+*Same-day movements after the addendum above; snapshot untouched:*
+
+- **"Harms prevented" gains two:** (a) the fixture validity probe — its null-agent run
+  killed an invalid 47M fixture BEFORE commit and unmasked four failure classes serially
+  (three fixed in the environment renderer, one structural), where a blind commit would have
+  shipped a permanently-reward-0 task and ~18 more like it; (b) ruling C
+  (`UNHARVESTABLE_CHECKS` one-way door) — closes the whole junk-harvest class for
+  history-coupled checks mechanically, same pattern as the repo allowlist. Both are
+  error-prevention tier (rows 7–12 family), not outcome movers.
+- **Silent-done hardening SHIPPED** (`ff8dbb8`, all three deferred candidates, TDD, the
+  classifier invariant pinned as a cross-driver CONTRACT test) — moves from "recorded,
+  pending" to built; stays UNRANKED for effect until P2 rerun #3 gives it a live failure to
+  catch. Its design lesson is already banked: a tripwire covers only the failure modes it
+  was written against, so the fix classifies by CHANNEL (stderr consulted when stdout is
+  silent), not by signature.
+- **§4.3 A/A first ORGANIC enrollment landed** (row 1 of `.km/trial-arms.ndjson`, arm=trial,
+  forced:false) — the trial moves from "runnable on human-go" to actively enrolling; verdict
+  machinery now just needs its floors (20 cycles / 5 sessions / 5 blocks per arm).
+- **Fixture harvest's 08-10 "runnable token-free" line needs a haircut:** post-ruling-C, the
+  19 waiting refs are mostly gate-check blocks — expect few/zero eligible. The harvest lane
+  is healthy but its FEED is now correctly narrower; organic tree-pure blocks are the supply.
+
+## Part 4 — External alignment check (2026-08-10, web sweep)
+
+*Question asked: is the Part-3 effectiveness ranking aligned with academic + industrial state
+of the art? Method: two Parallel-Search sweeps (harness/verification/mutation/eval-rigor;
+memory-learning/eval-critique), excerpts only, no deep fetches. Verdict: **strongly aligned;
+ahead on the measurement axis; two deliberate divergences.** Sources cited inline — re-verify
+before load-bearing reuse; excerpts were not adversarially checked.*
+
+### Convergent — our ranking reproduces the field's findings
+
+- **Ranking #1–#2 = the 2026 "harness effect."** Industry now names what our top tier
+  measures: same model swings 16–36pp on harness alone (HAL 3/2026: Opus 42% generic
+  scaffold vs 78% Claude Code harness; Terminal-Bench 2.0 comparison: default 77% vs
+  tuned-CLAUDE.md 92%). Fowler's guides-vs-sensors taxonomy maps 1:1 onto A1 (guide,
+  feedforward) and A2 (sensor, feedback); our effect sizes (30→85pp; 3/10→10/10) are the
+  same magnitude as the published harness swings. Harness > model choice is the field's
+  stated "highest-leverage optimization" — the ranking put binding actuators on top before
+  the term existed. (agentmarketcap.ai 4/2026 scaffolding-vs-model; codex.danielvaughan.com
+  harness-effect; martinfowler.com/articles/harness-engineering.html)
+- **"Verification beats generation" = our prose→binding escalation.** CRITIC (ICLR 2024)
+  line — self-correction is reliable only with EXTERNAL execution feedback; "run the code,"
+  never "let me check my work" — is R2–R8 null vs R10 p=0.0031, independently reproduced.
+  Runtime verification gating is now load-bearing production infra (>50% of surveyed agent
+  teams per the 2026 LLM-as-judge survey).
+- **Playbook memory = ACE (ICLR 2026), independent convergence.** ACE: contexts as evolving
+  playbooks, delta bullet updates (never full rewrites — "context collapse"), reflector/
+  curator roles, +10.6% agents / +17.1% AppWorld from execution feedback alone, no labels.
+  Structurally our playbook.json + bullet counters + one-component-per-edit + proposer
+  (both descend from the same Dynamic-Cheatsheet lineage AHE drew on). ACE also confirms
+  prompt-REWRITING loses (beats GEPA by ~12pp) — matches v1–v6 and AHE's own ablation.
+  (arxiv 2510.04618)
+- **Gate-above-memory ordering validated.** The ACL 2026 experience-following study finds
+  memory's failure modes are error propagation + misaligned replay; evaluator-GATED
+  addition/deletion beats add-all; "future task evaluations serve as free quality labels."
+  That is our adoption gate + helpful/harmful counters + rejected ledger, and it is why
+  ranking the vetting gate as load-bearing over raw injection is correct per the field too.
+  (arxiv 2505.16067 / ACL 2026)
+- **G1 mutation probes = industrial SOTA.** Meta's mutation-guided TestGen-LLM (FSE) and
+  AdverTest's adversarial test-vs-mutant agents (arxiv 2602.08146) use mutation kills as
+  the test-quality signal — our G1 sites + ≥1-kill; the literature's equivalent-mutant
+  numbers (4–39%) already back the 100%-kill-is-an-anti-pattern rule we encoded.
+
+### Ahead — the claimed edge is corroborated
+
+Statistical discipline (paired McNemar, pre-registration, provable-null power accounting,
+regression guards) exceeds common practice in BOTH camps: 2026 benchmark-critique
+literature is only now demanding harness-metadata separation and flagging scaffold-driven
+score inflation (BenchLM treats composite scores as "model-floor estimates"); academic agent
+evals still rarely pre-register or pair. The doc's one-sentence summary ("wrapped in a
+statistical measurement discipline they lack") survives the sweep unmodified.
+
+### Divergent — deliberate, and each carries a known cost
+
+- **Test-time compute scaling / PRM-guided search** (Snell ICLR 2025 wave; best-of-N +
+  process reward models) — the one major SOTA lever with zero local evidence. Deferred per
+  AHE's ablations (`explicitly-not-now.md`); partially covered in spirit (the verify-fix
+  loop IS test-time compute with a deterministic verifier), but the search-with-reward-model
+  form is untried here. Revisit trigger: a capability-bound residual that binding gates
+  cannot move.
+- **LLM-as-judge as runtime gate** — industry leans judge-models at runtime; we use
+  deterministic verifiers (tests, mutants) with judges only for diagnosis/a4 review. The
+  field's measured ~5–7% same-family judge inflation supports the conservatism — and names
+  the same unrun check we carry (cross-family judge, open since 07-21).
