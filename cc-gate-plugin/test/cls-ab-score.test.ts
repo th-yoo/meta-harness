@@ -38,7 +38,10 @@ import {
   type ClsManifest,
   type ClsMetricValue,
   type ClsScoreFile,
+  CLS_RECORDS_NAME,
 } from "../src/gauge/cls-ab.ts"
+import { buildRefinerPrompt, buildLabelPrompt } from "../src/gauge/refiner.ts"
+import { sha256Hex } from "../src/gauge/corpus-mine.ts"
 
 function mkRepo(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "km-cls-ab-score-"))
@@ -461,41 +464,46 @@ describe("runClsScore", () => {
     const { keys } = setupBasicExperiment(cwd)
     const root = clsAbRoot(cwd)
 
+    // F8 repaired: this test writes records.ndjson below, so every row must
+    // carry its variant's CORRECT expected sha or the drift flag fires.
+    // prompt/floorCheck are constant across keys here, so one sha per variant.
+    const shaBase = sha256Hex(buildRefinerPrompt("x", "y", "base"))
+    const shaPatched = sha256Hex(buildRefinerPrompt("x", "y", "patched"))
     // incumbent haiku-base: predicts C for c1,c2,n2 (correct) + c3 (extra FP)
     writeNdjson(path.join(root, clsArmFileName("haiku-base")), [
-      armRow("c1", "C"),
-      armRow("c2", "C"),
-      armRow("c3", "C"),
-      armRow("c4", "B"),
-      armRow("n1", "B"),
-      armRow("n2", "C"),
-      armRow("n3", "B"),
-      armRow("n4", "B"),
+      armRow("c1", "C", { promptSha256: shaBase }),
+      armRow("c2", "C", { promptSha256: shaBase }),
+      armRow("c3", "C", { promptSha256: shaBase }),
+      armRow("c4", "B", { promptSha256: shaBase }),
+      armRow("n1", "B", { promptSha256: shaBase }),
+      armRow("n2", "C", { promptSha256: shaBase }),
+      armRow("n3", "B", { promptSha256: shaBase }),
+      armRow("n4", "B", { promptSha256: shaBase }),
     ])
     // sonnet-patched: perfect prediction of the actual-C set {c1,c2,n2}
     writeNdjson(path.join(root, clsArmFileName("sonnet-patched")), [
-      armRowFor("sonnet-patched", "c1", "C"),
-      armRowFor("sonnet-patched", "c2", "C"),
-      armRowFor("sonnet-patched", "c3", "B"),
-      armRowFor("sonnet-patched", "c4", "B"),
-      armRowFor("sonnet-patched", "n1", "B"),
-      armRowFor("sonnet-patched", "n2", "C"),
-      armRowFor("sonnet-patched", "n3", "B"),
-      armRowFor("sonnet-patched", "n4", "B"),
+      armRowFor("sonnet-patched", "c1", "C", { promptSha256: shaPatched }),
+      armRowFor("sonnet-patched", "c2", "C", { promptSha256: shaPatched }),
+      armRowFor("sonnet-patched", "c3", "B", { promptSha256: shaPatched }),
+      armRowFor("sonnet-patched", "c4", "B", { promptSha256: shaPatched }),
+      armRowFor("sonnet-patched", "n1", "B", { promptSha256: shaPatched }),
+      armRowFor("sonnet-patched", "n2", "C", { promptSha256: shaPatched }),
+      armRowFor("sonnet-patched", "n3", "B", { promptSha256: shaPatched }),
+      armRowFor("sonnet-patched", "n4", "B", { promptSha256: shaPatched }),
     ])
     // sonnet-base: INCOMPLETE — missing n4
     writeNdjson(path.join(root, clsArmFileName("sonnet-base")), [
-      armRowFor("sonnet-base", "c1", "C"),
-      armRowFor("sonnet-base", "c2", "B"),
-      armRowFor("sonnet-base", "c3", "B"),
-      armRowFor("sonnet-base", "c4", "B"),
-      armRowFor("sonnet-base", "n1", "B"),
-      armRowFor("sonnet-base", "n2", "C"),
-      armRowFor("sonnet-base", "n3", "B"),
+      armRowFor("sonnet-base", "c1", "C", { promptSha256: shaBase }),
+      armRowFor("sonnet-base", "c2", "B", { promptSha256: shaBase }),
+      armRowFor("sonnet-base", "c3", "B", { promptSha256: shaBase }),
+      armRowFor("sonnet-base", "c4", "B", { promptSha256: shaBase }),
+      armRowFor("sonnet-base", "n1", "B", { promptSha256: shaBase }),
+      armRowFor("sonnet-base", "n2", "C", { promptSha256: shaBase }),
+      armRowFor("sonnet-base", "n3", "B", { promptSha256: shaBase }),
     ])
     // haiku-patched: never run — file absent entirely
 
-    // records.ndjson (T1 output, never read by the scorer) — present in a
+    // records.ndjson (T1 output; F8-repaired scorer READS it for drift) — in a
     // real experiment dir; must survive byte-identical (minor fix 2).
     const recordsPath = path.join(root, "records.ndjson")
     fs.writeFileSync(recordsPath, keys.map((k) => JSON.stringify({ key: k, prompt: "x", floorCheck: "y" })).join("\n") + "\n")
@@ -570,8 +578,9 @@ describe("runClsScore", () => {
           "mismatchedRows",
         ].sort(),
       )
-      // fixtures all share ONE promptSha256 and match their own arm's
-      // expected model/promptVariant literal -> neither flag ever fires.
+      // rows carry their variant's CORRECT expected sha (F8 repaired) and
+      // match their own arm's expected model/promptVariant literal ->
+      // neither flag fires.
       expect(arm.mixedPrompt).toBe(false)
       expect(arm.mismatchedRows).toBe(0)
     }
@@ -1021,15 +1030,32 @@ describe("runClsScore --combine — combined provisional hard-gate", () => {
     expect(logs.some((l) => /WARNING: PROVISIONAL/.test(l) && /other host/i.test(l))).toBe(true)
   })
 
-  test("local run provisional (mixed prompt hash) -> combined provisional true + WARNING naming local", () => {
+  test("local run provisional (drifted prompt hash) -> combined provisional true + WARNING naming local", () => {
     const cwd = mkRepo()
     setupBasicExperiment(cwd)
     writeAllFourCleanArms(cwd)
     const root = clsAbRoot(cwd)
-    // re-write haiku-base with a mixed promptSha256 -> local provisional (F8).
+    // F8 repaired: the drift check needs sampled records to rebuild expected
+    // prompts — write them, stamp every arm's rows with its variant's
+    // correct expected sha, then make ONE haiku-base row stale.
+    writeNdjson(
+      path.join(root, CLS_RECORDS_NAME),
+      CLS_CLEAN_PREDS.map(([k]) => ({ key: k, prompt: "x", floorCheck: "y" })),
+    )
+    const shaOf = (variant: "base" | "patched") => sha256Hex(buildRefinerPrompt("x", "y", variant))
+    for (const arm of CLS_ALL_ARM_NAMES) {
+      const variant = parseClsArmName(arm)!.variant
+      writeNdjson(
+        path.join(root, clsArmFileName(arm)),
+        CLS_CLEAN_PREDS.map(([k, c]) => armRowFor(arm, k, c, { promptSha256: shaOf(variant) })),
+      )
+    }
+    // re-write haiku-base with ONE drifted promptSha256 -> local provisional (F8).
     writeNdjson(
       path.join(root, clsArmFileName("haiku-base")),
-      CLS_CLEAN_PREDS.map(([k, c], i) => armRowFor("haiku-base", k, c, { promptSha256: i === 0 ? "hash-other" : "hash-default" })),
+      CLS_CLEAN_PREDS.map(([k, c], i) =>
+        armRowFor("haiku-base", k, c, { promptSha256: i === 0 ? "stale-hash" : shaOf("base") }),
+      ),
     )
     const otherPath = path.join(cwd, "other-cls-score.json")
     fs.writeFileSync(otherPath, otherHostFile("other-host", allFourOtherArms()))
@@ -1065,19 +1091,27 @@ describe("runClsScore --combine — combined provisional hard-gate", () => {
 // ── runClsScore provenance warnings (fix-wave F8/F9) ──────────────────────
 
 describe("runClsScore — provenance warnings (mixed prompt hash / model-variant mismatch)", () => {
-  test("F8: rows within one arm carrying differing promptSha256 -> mixedPrompt true + stdout warning + provisional", () => {
+  /** F8 repaired (2026-08-10): drift semantics. Fixture writes REAL sampled
+   * records and stamps each row with the sha the CURRENT builder produces
+   * for that record — except one row, which carries a stale hash (as if the
+   * record text or the rubric changed after the run). Only that row drifts. */
+  test("F8 repaired: one row's promptSha256 differing from the current record's expected build -> mixedPrompt true + warning + provisional", () => {
     const cwd = mkRepo()
-    setupBasicExperiment(cwd)
+    const { keys } = setupBasicExperiment(cwd)
     const root = clsAbRoot(cwd)
+    const records = keys.map((k) => ({ key: k, prompt: `prompt for ${k}`, floorCheck: `check-${k}` }))
+    writeNdjson(path.join(root, CLS_RECORDS_NAME), records)
+    const shaFor = (k: string) =>
+      sha256Hex(buildRefinerPrompt(`prompt for ${k}`, `check-${k}`, "base"))
     writeNdjson(path.join(root, clsArmFileName("haiku-base")), [
-      armRowFor("haiku-base", "c1", "C", { promptSha256: "hash-A" }),
-      armRowFor("haiku-base", "c2", "C", { promptSha256: "hash-B" }), // differs
-      armRowFor("haiku-base", "c3", "B", { promptSha256: "hash-A" }),
-      armRowFor("haiku-base", "c4", "B", { promptSha256: "hash-A" }),
-      armRowFor("haiku-base", "n1", "B", { promptSha256: "hash-A" }),
-      armRowFor("haiku-base", "n2", "C", { promptSha256: "hash-A" }),
-      armRowFor("haiku-base", "n3", "B", { promptSha256: "hash-A" }),
-      armRowFor("haiku-base", "n4", "B", { promptSha256: "hash-A" }),
+      armRowFor("haiku-base", "c1", "C", { promptSha256: shaFor("c1") }),
+      armRowFor("haiku-base", "c2", "C", { promptSha256: "stale-hash-from-old-rubric" }), // drifted
+      armRowFor("haiku-base", "c3", "B", { promptSha256: shaFor("c3") }),
+      armRowFor("haiku-base", "c4", "B", { promptSha256: shaFor("c4") }),
+      armRowFor("haiku-base", "n1", "B", { promptSha256: shaFor("n1") }),
+      armRowFor("haiku-base", "n2", "C", { promptSha256: shaFor("n2") }),
+      armRowFor("haiku-base", "n3", "B", { promptSha256: shaFor("n3") }),
+      armRowFor("haiku-base", "n4", "B", { promptSha256: shaFor("n4") }),
     ])
     const logs: string[] = []
     const result = runClsScore(cwd, {}, (m) => logs.push(m))
@@ -1085,10 +1119,32 @@ describe("runClsScore — provenance warnings (mixed prompt hash / model-variant
     const haikuBase = result!.arms.find((a) => a.arm === "haiku-base")!
     expect(haikuBase.mixedPrompt).toBe(true)
     expect(result!.provisional).toBe(true)
-    expect(logs.some((l) => /WARNING/.test(l) && /mixed/i.test(l) && /haiku-base/.test(l))).toBe(true)
+    expect(logs.some((l) => /WARNING/.test(l) && /drift/i.test(l) && /haiku-base/.test(l))).toBe(true)
   })
 
-  test("F8: labels.ndjson carrying differing promptSha256 -> stdout warning (no dedicated field)", () => {
+  /** THE ANTI-VACUITY PIN (the repaired check's reason to exist): a complete
+   * arm whose rows all carry their own record's CORRECT expected sha — 8
+   * DISTINCT hash values, which the pre-repair check flagged as mixed on
+   * every real run — must NOT fire the flag. */
+  test("F8 repaired: distinct-but-correct per-record hashes -> mixedPrompt false (vacuity regression pin)", () => {
+    const cwd = mkRepo()
+    const { keys } = setupBasicExperiment(cwd)
+    const root = clsAbRoot(cwd)
+    const records = keys.map((k) => ({ key: k, prompt: `prompt for ${k}`, floorCheck: `check-${k}` }))
+    writeNdjson(path.join(root, CLS_RECORDS_NAME), records)
+    const shaFor = (k: string) =>
+      sha256Hex(buildRefinerPrompt(`prompt for ${k}`, `check-${k}`, "base"))
+    const rows = keys.map((k) => armRowFor("haiku-base", k, "B", { promptSha256: shaFor(k) }))
+    expect(new Set(rows.map((r) => r.promptSha256)).size).toBe(8) // genuinely distinct
+    writeNdjson(path.join(root, clsArmFileName("haiku-base")), rows)
+    const logs: string[] = []
+    const result = runClsScore(cwd, {}, (m) => logs.push(m))
+    expect(result).toBeDefined()
+    expect(result!.arms.find((a) => a.arm === "haiku-base")!.mixedPrompt).toBe(false)
+    expect(logs.some((l) => /drift/i.test(l) && /haiku-base/.test(l))).toBe(false)
+  })
+
+  test("F8 repaired: labels row drifting from the current record's expected build -> stdout warning (no dedicated field)", () => {
     const cwd = mkRepo()
     const root = clsAbRoot(cwd)
     fs.mkdirSync(root, { recursive: true })
@@ -1101,13 +1157,17 @@ describe("runClsScore — provenance warnings (mixed prompt hash / model-variant
       transportCounts: { c: { cli: 1, sdk: 0 }, notC: { cli: 1, sdk: 0 } },
     }
     fs.writeFileSync(path.join(root, CLS_MANIFEST_NAME), JSON.stringify(manifest, null, 2) + "\n")
+    writeNdjson(path.join(root, CLS_RECORDS_NAME), [
+      { key: "c1", prompt: "p-c1", floorCheck: "f-c1" },
+      { key: "n1", prompt: "p-n1", floorCheck: "f-n1" },
+    ])
     writeNdjson(path.join(root, CLS_LABELS_NAME), [
-      labelRow("c1", "C", { promptSha256: "hash-A" }),
-      labelRow("n1", "not-C", { promptSha256: "hash-B" }),
+      labelRow("c1", "C", { promptSha256: sha256Hex(buildLabelPrompt("p-c1", "f-c1")) }), // correct
+      labelRow("n1", "not-C", { promptSha256: "stale-hash" }), // drifted
     ])
     const logs: string[] = []
     runClsScore(cwd, {}, (m) => logs.push(m))
-    expect(logs.some((l) => /WARNING/.test(l) && /mixed/i.test(l) && /labels/i.test(l))).toBe(true)
+    expect(logs.some((l) => /WARNING/.test(l) && /drift/i.test(l) && /labels/i.test(l))).toBe(true)
   })
 
   test("F9: rows whose model/promptVariant does not match the arm filename's expected literal -> mismatchedRows counted + reported + provisional", () => {

@@ -1,5 +1,5 @@
 {
-  "scoredAt": "2026-08-10T03:49:13.524Z",
+  "scoredAt": "2026-08-10T03:59:50.237Z",
   "hostname": "yoo-dev",
   "sample": {
     "cCount": 16,
@@ -47,7 +47,7 @@
         "recall": 1,
         "f1": 0.9230769230769231
       },
-      "mixedPrompt": true,
+      "mixedPrompt": false,
       "mismatchedRows": 0
     },
     {
@@ -67,7 +67,7 @@
         "recall": 1,
         "f1": 0.9230769230769231
       },
-      "mixedPrompt": true,
+      "mixedPrompt": false,
       "mismatchedRows": 0
     }
   ],

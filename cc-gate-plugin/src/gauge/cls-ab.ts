@@ -1251,9 +1251,13 @@ export interface ClsScoreArmEntry {
   complete: boolean
   counts: { tp: number; fp: number; fn: number; tn: number }
   metrics: { precision: ClsMetricValue; recall: ClsMetricValue; f1: ClsMetricValue }
-  /** fix-wave F8 — true iff this arm's rows do not all share ONE
-   * `promptSha256` (i.e. at least one row was built from different prompt
-   * text than the others). Warned on stdout too; see `runClsScore`. */
+  /** fix-wave F8, REPAIRED 2026-08-10 — true iff ≥1 of this arm's rows has
+   * a `promptSha256` differing from the sha of the prompt the CURRENT
+   * builder produces from the CURRENT sampled record (drift between run
+   * time and score time; a row whose key has no sampled record counts).
+   * The original all-rows-share-one-hash check was vacuously true for
+   * every arm (each row's hash covers its own record's text). Field name
+   * kept for emitted-doc shape stability. Warned on stdout too. */
   mixedPrompt: boolean
   /** fix-wave F9 — count of this arm's rows whose `model`/`promptVariant`
    * does not match the arm filename's expected literals (e.g. a
@@ -1384,10 +1388,30 @@ export function manifestKeysHash(keys: string[]): string {
   return sha256Hex(JSON.stringify([...keys].sort()))
 }
 
-/** Distinct `promptSha256` values among a set of rows, ignoring rows with no
- * hash at all (fix-wave F8 — tolerates pre-F8 fixtures/rows). */
-function distinctPromptHashes(rows: { promptSha256?: string }[]): Set<string> {
-  return new Set(rows.map((r) => r.promptSha256).filter((h): h is string => typeof h === "string"))
+/** F8 REPAIRED (2026-08-10, user go "fix the mixedPrompt bug"): the original
+ * check — "all rows share ONE promptSha256" — was VACUOUSLY TRUE for every
+ * arm with ≥2 records, because each row's hash covers the full built prompt
+ * INCLUDING that record's own prompt text, so hashes always differ across
+ * records by construction. Every complete run would have stayed provisional
+ * forever, and the test fixtures (which shared one literal hash) encoded the
+ * wrong assumption, which is why the suite never caught it.
+ *
+ * The repaired semantics implement F8's actual intent — DRIFT detection: a
+ * row is drifted iff its stored `promptSha256` differs from the sha of the
+ * prompt the CURRENT builder would produce from the CURRENT stored record
+ * (i.e. the record text, the rubric/template, or the variant literal changed
+ * between run time and score time). A row whose key has no sampled record is
+ * drifted too (it cannot be verified). Rows with no hash at all are
+ * tolerated as before (pre-F8 rows). */
+function countDriftedRows(
+  rows: { key: string; promptSha256?: string }[],
+  expectedShaForKey: (key: string) => string | undefined,
+): number {
+  return rows.filter((r) => {
+    if (typeof r.promptSha256 !== "string") return false // pre-F8 row, tolerated
+    const expected = expectedShaForKey(r.key)
+    return expected === undefined || r.promptSha256 !== expected
+  }).length
 }
 
 /** Count of `armRows` whose `model`/`promptVariant` does not match the arm
@@ -1692,15 +1716,47 @@ export function runClsScore(
   let anyMixedOrMismatched = false
   const mixedPromptByArm = new Map<string, boolean>()
   const mismatchedByArm = new Map<string, number>()
+  // F8 repaired drift check needs the sampled records to rebuild each row's
+  // expected prompt. An entirely ABSENT/empty records.ndjson skips the check
+  // (logged) rather than flagging everything: labels completeness already
+  // gates scoring, and records.ndjson is host-local alongside the arm files
+  // — production scoring always has it; only fixtures may not.
+  const driftRecords = readSampledRecords(cwd)
+  const driftRecByKey = new Map(driftRecords.map((r) => [r.key, r]))
+  const armShaCache = new Map<string, string>() // `${variant}\n${key}` -> sha
+  const expectedArmShaFor = (variant: PromptVariant) => (key: string): string | undefined => {
+    const rec = driftRecByKey.get(key)
+    if (!rec) return undefined
+    const cacheKey = `${variant}\n${key}`
+    let sha = armShaCache.get(cacheKey)
+    if (!sha) {
+      // The REAL builders, never a re-implementation — byte-identical to
+      // cls-run's own provenance stamp.
+      sha = sha256Hex(buildRefinerPrompt(rec.prompt, rec.floorCheck, variant))
+      armShaCache.set(cacheKey, sha)
+    }
+    return sha
+  }
+  if (driftRecords.length === 0) {
+    log("cls-score: F8 drift check SKIPPED — records.ndjson absent/empty; row provenance unverifiable this run.")
+  }
   for (const arm of presentArms) {
     const rows = armRowsByName.get(arm)!
-    const mixed = distinctPromptHashes(rows).size > 1
+    const variant = parseClsArmName(arm)?.variant
+    const drifted =
+      driftRecords.length === 0 || variant === undefined
+        ? 0
+        : countDriftedRows(rows, expectedArmShaFor(variant))
+    const mixed = drifted > 0
     const mismatched = countMismatchedRows(arm, rows)
     mixedPromptByArm.set(arm, mixed)
     mismatchedByArm.set(arm, mismatched)
     if (mixed) {
       anyMixedOrMismatched = true
-      log(`cls-score: WARNING — arm ${arm} has rows built from DIFFERING prompt text (mixed promptSha256).`)
+      log(
+        `cls-score: WARNING — arm ${arm} has ${drifted} row(s) whose promptSha256 does not match the ` +
+          "prompt the CURRENT record + builder would produce (drift between run time and score time).",
+      )
     }
     if (mismatched > 0) {
       anyMixedOrMismatched = true
@@ -1710,9 +1766,19 @@ export function runClsScore(
       )
     }
   }
-  const labelsMixed = distinctPromptHashes(labelRows).size > 1
+  const labelDrifted =
+    driftRecords.length === 0
+      ? 0
+      : countDriftedRows(labelRows, (key) => {
+          const rec = driftRecByKey.get(key)
+          return rec ? sha256Hex(buildLabelPrompt(rec.prompt, rec.floorCheck)) : undefined
+        })
+  const labelsMixed = labelDrifted > 0
   if (labelsMixed) {
-    log("cls-score: WARNING — labels.ndjson has rows built from DIFFERING prompt text (mixed promptSha256).")
+    log(
+      `cls-score: WARNING — labels.ndjson has ${labelDrifted} row(s) whose promptSha256 does not match ` +
+        "the prompt the CURRENT record + builder would produce (drift between run time and score time).",
+    )
   }
 
   const decisionRaw = evaluateClsDecision(metrics)
