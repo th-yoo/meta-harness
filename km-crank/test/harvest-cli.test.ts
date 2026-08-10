@@ -338,4 +338,41 @@ describe("harvestFixture", () => {
     const fx = JSON.parse(fs.readFileSync(path.join(taskDir, "fixture.json"), "utf-8"))
     expect(fx.probe).toBeUndefined()
   })
+
+  // Ruling C (2026-08-10): history-coupled checks (gate-check's calibration
+  // drift guard reads real `git log` history) can never pass in a
+  // single-synthetic-commit image — such fixtures fail environmentally
+  // forever. They are ruled un-harvestable; only tree-pure checks harvest.
+  test("ruling C: explicit --ref to an un-harvestable check refuses before materialization, nothing created", async () => {
+    const dir = scratchRepoWithCheck("bun scripts/gate-check.ts")
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    const before = fs.readdirSync(out)
+    await expect(harvestFixture({
+      repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)],
+      refName: "refs/kkamak/fixtures/100-scratch-r1",
+    })).rejects.toThrow(/un-harvestable|history/)
+    expect(fs.readdirSync(out)).toEqual(before)
+  })
+
+  test("ruling C: auto-pick skips un-harvestable records and selects an older tree-pure one", async () => {
+    const dir = scratchRepo()
+    // append a NEWER record with a history-coupled check; auto-pick must
+    // fall through to the older tree-pure `exit 1` record
+    const refsPath = path.join(dir, ".km", "fixture-refs.ndjson")
+    const pure = JSON.parse(fs.readFileSync(refsPath, "utf-8").trim())
+    const impure = { ...pure, ts: 999, round: 2, check: "bun scripts/gate-check.ts", ref: "refs/kkamak/fixtures/999-scratch-r2" }
+    fs.writeFileSync(refsPath, [JSON.stringify(pure), JSON.stringify(impure)].join("\n") + "\n")
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    const taskDir = await harvestFixture({ repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)] })
+    const fx = JSON.parse(fs.readFileSync(path.join(taskDir, "fixture.json"), "utf-8"))
+    expect(fx.ref.ref).toBe("refs/kkamak/fixtures/100-scratch-r1")
+    expect(fx.ref.check).toBe("exit 1")
+  })
+
+  test("ruling C: all records un-harvestable -> no-eligible error, not a silent pick", async () => {
+    const dir = scratchRepoWithCheck("bun scripts/gate-check.ts")
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "out-"))
+    await expect(harvestFixture({ repoPath: dir, outDir: out, allowedRepos: [path.basename(dir)] }))
+      .rejects.toThrow(/no eligible/)
+  })
 })

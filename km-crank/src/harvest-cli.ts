@@ -28,6 +28,16 @@ import { renderTaskToml, renderDockerfile, renderTestSh, renderInstruction, TEST
  * excluded until their own rulings. */
 export const FIXTURE_ALLOWED_REPOS: string[] = ["meta-harness"]
 
+/** Ruling C (2026-08-10, user go): history-coupled checks are un-harvestable.
+ * gate-check's calibration drift guard compares committed calibration.json
+ * against `git log -1 -- <mechanism paths>` — REAL repo history. A fixture
+ * image materializes the captured tree as one synthetic commit, so that
+ * test fails environmentally in every container, forever: the fixture never
+ * goes vacuous but never reproduces the harvested failure either (probed
+ * live, 4 unmasked failure classes deep). Only tree-pure checks harvest;
+ * editing this list is itself the per-check ruling — no bypass flag. */
+export const UNHARVESTABLE_CHECKS: string[] = ["bun scripts/gate-check.ts"]
+
 export class HarvestRefusal extends Error {}
 
 /** Validity-probe result: did the environment image build, and what did the
@@ -106,17 +116,28 @@ function utcStamp(ts: number): string {
 }
 
 /** refName selects by exact `ref` string (any record, including bailed —
- * an explicit ask overrides the auto-pick safety filter). Otherwise: newest
- * (max ts) record with no `bail` and a non-empty treeSha. Bailed records are
- * never auto-picked. */
+ * an explicit ask overrides the auto-pick safety filter, but NOT ruling C:
+ * an un-harvestable check is structurally broken, not merely risky).
+ * Otherwise: newest (max ts) record with no `bail`, a non-empty treeSha,
+ * and a tree-pure check. Bailed and un-harvestable records are never
+ * auto-picked. */
 function selectRef(records: FixtureRefRecord[], refName?: string): FixtureRefRecord {
   if (refName !== undefined) {
     const found = records.find((r) => r.ref === refName)
     if (!found) throw new Error(`no fixture-ref record found with ref === ${JSON.stringify(refName)}`)
+    if (UNHARVESTABLE_CHECKS.includes(found.check.trim())) {
+      throw new HarvestRefusal(
+        `harvest refused: check ${JSON.stringify(found.check)} is ruled un-harvestable (ruling C, ` +
+        `2026-08-10) — it is history-coupled and can never reproduce from a tree snapshot. ` +
+        `Editing UNHARVESTABLE_CHECKS in km-crank/src/harvest-cli.ts is itself the per-check ruling.`,
+      )
+    }
     return found
   }
-  const eligible = records.filter((r) => !r.bail && r.treeSha)
-  if (eligible.length === 0) throw new Error("no eligible fixture-ref records (all bailed or missing treeSha)")
+  const eligible = records.filter((r) => !r.bail && r.treeSha && !UNHARVESTABLE_CHECKS.includes(r.check.trim()))
+  if (eligible.length === 0) {
+    throw new Error("no eligible fixture-ref records (all bailed, missing treeSha, or un-harvestable checks)")
+  }
   return eligible.reduce((best, r) => (r.ts > best.ts ? r : best))
 }
 
