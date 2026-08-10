@@ -1,0 +1,277 @@
+{
+  "label": "p2-a1",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "harness": {
+    "layers": "global",
+    "account_active": "v0",
+    "project_active": "v0",
+    "agent": "",
+    "pins": {},
+    "arm": "a1",
+    "ruleSha": "f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65"
+  },
+  "k": 2,
+  "timestamp": "2026-08-10T15:24:52.712Z",
+  "n_pass": 7,
+  "n_total": 14,
+  "pass_rate": 0.5,
+  "tasks": {
+    "extract-elf": {
+      "rewards": [
+        1,
+        1
+      ],
+      "elapsed": [
+        157,
+        300.2
+      ],
+      "turns": [
+        31,
+        39
+      ],
+      "errors": [
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    },
+    "llm-inference-batching-scheduler": {
+      "rewards": [
+        0,
+        0
+      ],
+      "elapsed": [
+        742,
+        627.3
+      ],
+      "turns": [
+        98,
+        70
+      ],
+      "errors": [
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    },
+    "sqlite-with-gcov": {
+      "rewards": [
+        1,
+        1
+      ],
+      "elapsed": [
+        83.9,
+        84.5
+      ],
+      "turns": [
+        16,
+        19
+      ],
+      "errors": [
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    },
+    "write-compressor": {
+      "rewards": [
+        0,
+        0
+      ],
+      "elapsed": [
+        419.7,
+        490.5
+      ],
+      "turns": [
+        70,
+        75
+      ],
+      "errors": [
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    },
+    "kv-store-grpc": {
+      "rewards": [
+        1,
+        1
+      ],
+      "elapsed": [
+        53.2,
+        49.9
+      ],
+      "turns": [
+        14,
+        13
+      ],
+      "errors": [
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    },
+    "merge-diff-arc-agi-task": {
+      "rewards": [
+        1,
+        0
+      ],
+      "elapsed": [
+        141.2,
+        103.2
+      ],
+      "turns": [
+        34,
+        23
+      ],
+      "errors": [
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    },
+    "large-scale-text-editing": {
+      "rewards": [
+        0,
+        0
+      ],
+      "elapsed": [
+        929,
+        1121.4
+      ],
+      "turns": [
+        37,
+        82
+      ],
+      "errors": [
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    },
+    "path-tracing": {
+      "rewards": [
+        0,
+        0
+      ],
+      "elapsed": [
+        950.5,
+        904.1
+      ],
+      "turns": [
+        63,
+        75
+      ],
+      "errors": [
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    },
+    "constraints-scheduling": {
+      "rewards": [
+        1,
+        1
+      ],
+      "elapsed": [
+        51.4,
+        72.9
+      ],
+      "turns": [
+        5,
+        5
+      ],
+      "errors": [
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":false,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":false,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    },
+    "tune-mjcf": {
+      "rewards": [
+        0,
+        0
+      ],
+      "elapsed": [
+        462.2,
+        942.9
+      ],
+      "turns": [
+        36,
+        0
+      ],
+      "errors": [
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":false,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"timeout\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    },
+    "distribution-search": {
+      "rewards": [
+        1,
+        1
+      ],
+      "elapsed": [
+        715.4,
+        945.1
+      ],
+      "turns": [
+        18,
+        45
+      ],
+      "errors": [
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    },
+    "db-wal-recovery": {
+      "rewards": [
+        0,
+        0
+      ],
+      "elapsed": [
+        123.2,
+        124.7
+      ],
+      "turns": [
+        31,
+        32
+      ],
+      "errors": [
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    },
+    "prove-plus-comm": {
+      "rewards": [
+        1,
+        1
+      ],
+      "elapsed": [
+        124.3,
+        53.6
+      ],
+      "turns": [
+        32,
+        10
+      ],
+      "errors": [
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    },
+    "openssl-selfsigned-cert": {
+      "rewards": [
+        0,
+        0
+      ],
+      "elapsed": [
+        58.2,
+        63.1
+      ],
+      "turns": [
+        11,
+        17
+      ],
+      "errors": [
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a1\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    }
+  },
+  "status": "complete",
+  "driver": "claude-code",
+  "maxAgentTimeout": 0,
+  "timeoutRecording": false
+}
