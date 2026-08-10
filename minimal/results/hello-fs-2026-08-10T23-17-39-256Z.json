@@ -1,0 +1,37 @@
+{
+  "task": "hello-fs",
+  "driver": "claude-code",
+  "model": "claude-opus-5",
+  "image": "localhost/mh-bench:latest",
+  "host": "yoo-dev",
+  "startedAt": "2026-08-10T23:17:39.256Z",
+  "k": 1,
+  "parallel": 1,
+  "sampling": null,
+  "system": null,
+  "harness": null,
+  "completeGate": null,
+  "probes": null,
+  "thenTask": null,
+  "marker": false,
+  "stopFutile": null,
+  "stoppedFutile": null,
+  "rewards": [
+    1
+  ],
+  "passRate": 1,
+  "trials": [
+    {
+      "attempt": 1,
+      "reward": 1,
+      "turns": 3,
+      "elapsedSec": 5.44,
+      "agentExitCode": 0,
+      "timedOut": false,
+      "suspect": false,
+      "resultText": "Created `/app/greeting.txt` containing the single line `hello kernel` (with a trailing newline, the standard text-file convention).",
+      "trajFile": "hello-fs-2026-08-10T23-17-39-256Z-a1.traj.ndjson",
+      "agentStderr": ""
+    }
+  ]
+}
