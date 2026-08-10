@@ -645,7 +645,7 @@ async function main(): Promise<void> {
   }
 
   if (sub === "cls-run") {
-    const { cwd, arm, go, unknownFlag } = parseClsRunArgs(args.slice(1))
+    const { cwd, arm, go, transport, unknownFlag } = parseClsRunArgs(args.slice(1))
     if (unknownFlag !== undefined) {
       console.error(`cls-run: unknown flag ${unknownFlag}`)
       process.exitCode = 1
@@ -656,7 +656,7 @@ async function main(): Promise<void> {
       process.exitCode = 1
       return
     }
-    const summary = await runClsRun(cwd, arm, go, (m) => console.log(m))
+    const summary = await runClsRun(cwd, arm, go, (m) => console.log(m), transport ? { transport } : {})
     if (summary === undefined) process.exitCode = 1
     return
   }

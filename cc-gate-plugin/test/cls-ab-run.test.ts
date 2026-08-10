@@ -157,12 +157,14 @@ describe("parseClsRunArgs", () => {
       cwd: "/some/dir",
       arm: "haiku-base",
       go: 3,
+      transport: undefined,
       unknownFlag: undefined,
     })
     expect(parseClsRunArgs([])).toEqual({
       cwd: process.cwd(),
       arm: undefined,
       go: undefined,
+      transport: undefined,
       unknownFlag: undefined,
     })
   })
@@ -173,8 +175,29 @@ describe("parseClsRunArgs", () => {
       cwd: "/some/dir",
       arm: undefined,
       go: undefined,
+      transport: undefined,
       unknownFlag: "--typo",
     })
+  })
+
+  // Amendment 2 (2026-08-10): explicit per-invocation transport flag.
+  test("--transport agent-sdk accepted exactly; any other value refused as unknown", () => {
+    expect(parseClsRunArgs(["/d", "--arm", "sonnet-base", "--go", "2", "--transport", "agent-sdk"])).toEqual({
+      cwd: "/d",
+      arm: "sonnet-base",
+      go: 2,
+      transport: "agent-sdk",
+      unknownFlag: undefined,
+    })
+    // fail-safe: a typo'd transport must refuse, never silently pin sdk
+    // while the operator believes agent-sdk ran (selectTransport's own
+    // exact-literal discipline).
+    const typo = parseClsRunArgs(["/d", "--arm", "sonnet-base", "--transport", "agentsdk"])
+    expect(typo.transport).toBeUndefined()
+    expect(typo.unknownFlag).toBe("--transport agentsdk")
+    const missing = parseClsRunArgs(["/d", "--transport"])
+    expect(missing.transport).toBeUndefined()
+    expect(missing.unknownFlag).toBe("--transport (missing)")
   })
 })
 

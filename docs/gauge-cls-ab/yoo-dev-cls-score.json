@@ -1,5 +1,5 @@
 {
-  "scoredAt": "2026-08-10T03:59:50.237Z",
+  "scoredAt": "2026-08-10T04:21:03.595Z",
   "hostname": "yoo-dev",
   "sample": {
     "cCount": 16,
@@ -24,10 +24,7 @@
     "sonnet-base",
     "sonnet-patched"
   ],
-  "absentArms": [
-    "sonnet-base",
-    "sonnet-patched"
-  ],
+  "absentArms": [],
   "provisional": true,
   "arms": [
     {
@@ -66,6 +63,46 @@
         "precision": 0.8571428571428571,
         "recall": 1,
         "f1": 0.9230769230769231
+      },
+      "mixedPrompt": false,
+      "mismatchedRows": 0
+    },
+    {
+      "arm": "sonnet-base",
+      "totalKeys": 32,
+      "presentKeys": 29,
+      "missingKeys": 3,
+      "complete": false,
+      "counts": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "tn": 0
+      },
+      "metrics": {
+        "precision": "n/a",
+        "recall": "n/a",
+        "f1": "n/a"
+      },
+      "mixedPrompt": false,
+      "mismatchedRows": 0
+    },
+    {
+      "arm": "sonnet-patched",
+      "totalKeys": 32,
+      "presentKeys": 30,
+      "missingKeys": 2,
+      "complete": false,
+      "counts": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "tn": 0
+      },
+      "metrics": {
+        "precision": "n/a",
+        "recall": "n/a",
+        "f1": "n/a"
       },
       "mixedPrompt": false,
       "mismatchedRows": 0

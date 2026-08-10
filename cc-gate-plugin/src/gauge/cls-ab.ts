@@ -570,7 +570,11 @@ export interface ClsArmRow {
   class: GaugePromptClass
   model: string
   promptVariant: PromptVariant
-  transport: "sdk"
+  /** Amendment 2 (2026-08-10): widened from the "sdk" literal — sonnet arms
+   * may run via the §6d agent lane under an EXPLICIT `--transport agent-sdk`
+   * flag (429-wall bypass, user-directed). Always records the transport the
+   * call ACTUALLY took; the no-flag default remains pinned "sdk". */
+  transport: "sdk" | "agent-sdk"
   /** sha256 of the EXACT built prompt text sent (`buildRefinerPrompt`'s
    * output) — fix-wave F8 provenance. Hash only, never the prompt text
    * itself (F2). Lets `cls-score` detect a row whose prompt text drifted
@@ -684,6 +688,7 @@ export async function runClsRun(
   arm: string,
   go: number | undefined,
   log: (m: string) => void,
+  opts: { transport?: "agent-sdk" } = {},
 ): Promise<ClsRunSummary | undefined> {
   const parsed = parseClsArmName(arm)
   if (!parsed) {
@@ -742,12 +747,17 @@ export async function runClsRun(
       // provenance ONLY (fix-wave F8) — the real, unmodified
       // buildRefinerPrompt, never a re-implementation.
       const promptSha256 = sha256Hex(buildRefinerPrompt(record.prompt, record.floorCheck, variant))
-      // §6d "route batch callers only after the deriver's bar result is
-      // known": cls-run stamps every row `transport: "sdk"` (ClsArmRow.class
-      // above) unconditionally, so the call it makes must ALSO be pinned to
-      // "sdk" regardless of the ambient env — refiner-cli.ts:54's liveEnv
-      // strip, same rationale, same shape.
-      const liveEnv: Record<string, string | undefined> = { ...process.env, KKAMAK_GAUGE_TRANSPORT: undefined }
+      // Default: cls-run pins the call to "sdk" regardless of ambient env
+      // (refiner-cli.ts:54's liveEnv strip — a stray env var must never
+      // silently retarget an arm). Amendment 2 (2026-08-10): an EXPLICIT
+      // `--transport agent-sdk` invocation routes through the §6d agent
+      // lane instead (429-wall bypass, user-directed); the row below stamps
+      // whichever transport the call ACTUALLY took, never a fiction.
+      const chosenTransport: "sdk" | "agent-sdk" = opts.transport ?? "sdk"
+      const liveEnv: Record<string, string | undefined> = {
+        ...process.env,
+        KKAMAK_GAUGE_TRANSPORT: chosenTransport === "agent-sdk" ? "agent-sdk" : undefined,
+      }
       const raw = await callModelSdk(record.prompt, record.floorCheck, liveEnv, {}, {
         model: modelLiteral,
         promptVariant: variant,
@@ -766,7 +776,7 @@ export async function runClsRun(
         class: derivation.class,
         model: modelLiteral,
         promptVariant: variant,
-        transport: "sdk",
+        transport: chosenTransport,
         promptSha256,
         ts: new Date().toISOString(),
       })
@@ -894,9 +904,16 @@ export async function runClsLabel(
  * pushed into `positional` — see `parseClsSampleArgs`'s doc for why. */
 export function parseClsRunArgs(
   args: string[],
-): { cwd: string; arm: string | undefined; go: number | undefined; unknownFlag: string | undefined } {
+): {
+  cwd: string
+  arm: string | undefined
+  go: number | undefined
+  transport: "agent-sdk" | undefined
+  unknownFlag: string | undefined
+} {
   let arm: string | undefined
   let go: number | undefined
+  let transport: "agent-sdk" | undefined
   let unknownFlag: string | undefined
   const positional: string[] = []
   for (let i = 0; i < args.length; i++) {
@@ -906,13 +923,21 @@ export function parseClsRunArgs(
     } else if (args[i] === "--go") {
       go = Number(args[i + 1])
       i++
+    } else if (args[i] === "--transport") {
+      // Amendment 2: only the EXACT literal "agent-sdk" is accepted — any
+      // other value is a refusal upstream (fail-safe, selectTransport's own
+      // discipline: a typo must never silently retarget an arm).
+      const v = args[i + 1]
+      if (v === "agent-sdk") transport = "agent-sdk"
+      else unknownFlag ??= `--transport ${v ?? "(missing)"}`
+      i++
     } else if (args[i]!.startsWith("--")) {
       unknownFlag ??= args[i]
     } else {
       positional.push(args[i]!)
     }
   }
-  return { cwd: positional[0] ?? process.cwd(), arm, go, unknownFlag }
+  return { cwd: positional[0] ?? process.cwd(), arm, go, transport, unknownFlag }
 }
 
 /** `cls-label [cwd] --go <n>` arg parsing. `unknownFlag` — fix-wave F17,

@@ -331,3 +331,76 @@ mixed-transport label set, so no within-labels split to reason about.
 **Not amended:** the four ARM transports. Arms measure candidate classifier
 configurations against the PRODUCTION transport selection; sonnet arms stay
 walled until the wall lifts or their own amendment with its own reasoning.
+
+## Amendment 2 — sonnet arm transport (2026-08-10, PRE-DATA for those arms, user-directed)
+
+**Status when registered: arm-sonnet-base.ndjson and arm-sonnet-patched.ndjson
+= 0 rows each** (pre-data for the artifacts this amendment governs). Labels
+and both haiku arms are complete and untouched.
+
+**Forcing evidence + directive:** the bare-SDK per-model-tier 429 wall has
+held ~7 days (measured 08-06, re-probed 429 at 2026-08-10 13:01); the sonnet
+arms cannot run on the production transport for as long as it stands. The
+user directed (2026-08-10): run them via the unwalled agent lane now rather
+than wait.
+
+**Amendment:** `cls-run` gains an explicit per-invocation `--transport
+agent-sdk` flag (never ambient env — the arm pin stays fail-safe: without
+the flag, cls-run still STRIPS `KKAMAK_GAUGE_TRANSPORT` and pins "sdk"
+exactly as before). With the flag, the call routes through `agentSdkCall`
+(§6d) and the row's `transport` field records the ACTUAL transport
+("agent-sdk"), never a fiction. `ClsArmRow.transport` widens from the "sdk"
+literal accordingly.
+
+**Honesty bounds, stated now — STRONGER than Amendment 1's:**
+(1) The four arms are now TRANSPORT-ASYMMETRIC: haiku arms measured the
+production sdk transport, sonnet arms will measure agent-sdk. Any
+haiku-vs-sonnet comparison in the §3 decision carries transport as a
+CONFOUND, bounded only by the §6d pv verdict (pooling-permitted at the
+exact bar edge, 4/5 = 0.800, measured on haiku DERIVE calls — neither
+sonnet nor arm-shaped). (2) If the §3 decision turns on a sonnet arm
+beating a haiku arm within ~the pv bar's own slack, the verdict doc MUST
+name the transport asymmetry as an alternative explanation and the adopt
+bar's ≥0.10 F1 margin is the only thing standing between the confound and
+a wrong adoption. (3) Per-row `transport` provenance makes the asymmetry
+permanently visible in the committed counts.
+
+## OUTCOME (2026-08-10, yoo-dev) — INCUMBENT-STAYS; 4-arm decision NOT-EVALUABLE; sonnet DISQUALIFIED on schema conformance
+
+- **Labels:** 32/32, blind claude-opus-5 via agent-sdk (Amendment 1).
+  Ground truth: C=12, not-C=20. Stored-nominal C confirmed 12/16 (75% —
+  replicates GA11's over-extraction finding on the frozen sample); stored
+  not-C confirmed 16/16 (the false-C problem is one-sided).
+- **haiku-base / haiku-patched:** both complete (32/32), IDENTICAL confusion
+  counts — TP 12, FP 2, FN 0, TN 18 → P 0.857, R 1.000, F1 0.923. Identical
+  C-sets; the 6/32 row-level disagreements are all within not-C classes.
+  **The anti-over-extraction patch moved NOTHING on the C boundary for
+  haiku on this sample.**
+- **sonnet-base / sonnet-patched (via agent-sdk, Amendment 2):**
+  STRUCTURALLY INCOMPLETE — 29/32 and 30/32; the 5 missing records failed
+  **28/28 attempts** across two days' batches and manual probes. Root
+  cause, verified with raw output: on those prompts sonnet deterministically
+  emits `class:"A1"` with `criteria: []` — semantically defensible
+  (no-eval-needed ⇒ nothing to verify) but the registered parser
+  (`refiner.ts:209`) requires non-empty criteria unconditionally. Both
+  prompt variants affected. A probe WITHOUT the appended schema instruction
+  flipped one record to A2-with-criteria — the conformance failure is
+  specific to the real path.
+- **Relaxing the parser to admit sonnet was CONSIDERED AND REFUSED** — a
+  mid-experiment instrument change to accommodate one candidate arm is
+  tuning the bar to the candidate. The parser is the production contract;
+  failing it on ~15% of a representative sample is a REAL disqualification
+  for a production classifier seat regardless of any F1 it might have
+  scored.
+- **§3 decision as registered:** all-four-arms evaluation NOT-EVALUABLE
+  (two arms incomplete). Within the evaluable set the incumbent is itself
+  argmax(F1). **Verdict: INCUMBENT-STAYS — haiku-base remains the
+  production classifier.** The Amendment 2 transport asymmetry never
+  entered the decision: sonnet disqualified before any cross-model
+  comparison was made.
+- **Spend:** 32 opus labels + 65 haiku + ~92 sonnet attempts (incl. 28 on
+  the 5 non-conforming records) + 5 diagnostic probes — all short
+  classification calls, subscription lane.
+- Emitted counts: `docs/gauge-cls-ab/yoo-dev-cls-score.json` (provisional
+  flag true solely from the structurally-incomplete sonnet arms; F8 drift
+  check green on all four arms).
