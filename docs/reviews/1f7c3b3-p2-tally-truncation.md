@@ -1,6 +1,6 @@
 # Review artifact — p2-tally-truncation (aggregate reviewTruncated + rePassHardFail)
 
-reviewed-range: 2c51d0704ffcb45845172a95a949c2e37cea20d0..1f7c3b3f4519c8cd3fd7dfe57bd3a3cfd15c9c3d
+reviewed-range: 2c51d0784d2b86c1f759c82ace03c7b3070edc00..1f7c3b361b60780dd8ae014827d00b201a4c23a7
 reviewer: fresh-context-code-reviewer
 fresh-context: true
 verdict: approved
