@@ -366,8 +366,11 @@ test("cmdRun: k>1 runs the task k times, aggregating pass@k", async () => {
 
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
   const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  let lines: string[]
   try {
     await cmdRun(paths, { tasks: ["a"], k: 3, resultsFile, layers: "none" }, fake, fakeExec)
+    // capture BEFORE mockRestore — bun's restore clears mock.calls
+    lines = logSpy.mock.calls.map((c) => String(c[0]))
   } finally {
     errSpy.mockRestore()
     logSpy.mockRestore()
@@ -377,6 +380,16 @@ test("cmdRun: k>1 runs the task k times, aggregating pass@k", async () => {
   expect(final.tasks.a.rewards).toEqual([0, 1, 0])
   expect(final.n_pass).toBe(1) // pass@k: any reward==1 counts the task as passed
   expect(final.n_total).toBe(1)
+
+  // Summary line labels both metrics correctly: the attempt tally is NOT
+  // called pass@k (1 pass / 3 attempts here), and true task-level pass@k
+  // (any-of-k, 1/1 tasks) prints alongside it. Regression: the old line
+  // printed `pass@3: 1/3`, mislabeling attempt-rate as pass@k.
+  const summary = lines.find((l) => l.includes("attempts:"))
+  expect(summary).toBeDefined()
+  expect(summary!).toContain("attempts: 1/3")
+  expect(summary!).toContain("pass@3: 1/1")
+  expect(lines.some((l) => l.includes("pass@3: 1/3"))).toBe(false)
 })
 
 // ── --enforce-resources threading (default OFF) ───────────────────────────

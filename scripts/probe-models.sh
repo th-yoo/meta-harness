@@ -13,6 +13,15 @@
 # could run; a retrying or CLI-shaped probe reports "clear" falsely because
 # it rides a different quota than a bare-SDK batch.
 #
+# THE INVERSE HOLDS TOO (false-WALLED, fired 2026-08-06): quotas are per
+# TRANSPORT as well as per tier — bare-SDK opus/sonnet 429 while the
+# CLI/agent-SDK lane serves all three (permanent lane design per the
+# 2026-08-11 ruling, not a lifting wall). So THIS probe gating a CLI-shaped
+# batch (TB2 --driver opencode|claude-code) reports WALLED falsely and
+# blocks work that could run. CLI-shaped spenders gate on
+# scripts/probe-acp.sh (probe_acp_models) instead; this script is only for
+# bare-SDK spenders (channel chain: channel-run.ts sdkCall).
+#
 # Usage:
 #   source scripts/probe-models.sh
 #   probe_models claude-haiku-4-5 claude-sonnet-5   # prints "<model>=OK|ERR<code>"

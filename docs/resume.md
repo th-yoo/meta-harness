@@ -78,7 +78,10 @@ committed LOCALLY and NOT PUSHED. Everything below is measurement.
    TB2 runs --driver claude-code, which is CLI-shaped. It therefore reports
    false-WALLED and would have blocked an opus-5 batch that could have
    proceeded. probe-models.sh:11-14 documents only the false-CLEAR inverse.
-   NOT fixed here by ruling — check it at TB2 batch pre-step.
+   FIXED 2026-08-11 (TB2 pre-step): the "GATE FIRST" prescription further
+   down now points TB2 batches at probe_acp_models (scripts/probe-acp.sh,
+   9745db6) and probe-models.sh's header documents the false-WALLED
+   direction. Channel-chain probe untouched (genuinely bare-SDK, walled).
    EXCEPTION already on record (2026-08-07): the CHANNEL CHAIN is genuinely
    walled, not false-walled — channel-run.ts callChannelModel -> plain
    sdkCall is bare-SDK end-to-end at CHANNEL_MODEL="claude-opus-5".
@@ -122,10 +125,16 @@ the millisecond figures above may carry CPU contention — same confound as
 the D3 33374ms outlier. The OK/FITS verdicts hold regardless (2429ms against
 a ~14540ms budget is ~6x margin); the exact ms do not.
 
-OPEN: push 9745db6 (needs go) · TB2 model/split/k still unanswered — opus-5
-is AVAILABLE on TB2's lane, so its cost is the ~24h fresh-baseline-plus-run
-and near-ceiling-null risk, never the 429 · whether to fix the gate line
-here and in probe-models.sh's header · a TB2-exact one-task probe.
+OPEN: push 9745db6 (needs go) · ~~TB2 model/split/k~~ ANSWERED+RUNNING
+2026-08-11 (sibling session): band 14 × k=5 haiku store-writing run live on
+yoo-dev tmux tb2-band, identity flags matched to the 07-16/07-19 re-baseline
+stamp ({3600, recordTimeouts:true, enforce-resources}); opus-5 stays the
+later question (~24h fresh-baseline + near-ceiling-null risk, never the
+429) · ~~gate line fix~~ DONE 2026-08-11 (resume.md "GATE FIRST" now
+prescribes probe_acp_models for TB2; probe-models.sh header documents
+false-WALLED + scopes itself to bare-SDK spenders) · ~~TB2-exact one-task
+probe~~ MOOT — the live band run is the probe (30+ clean attempts, 0 auth
+errors).
 
 WATCH — this session was bitten by it: it opened on e44d059 (2026-08-06) and
 ran across a 5-day gap while sibling sessions advanced the checkout 147
@@ -895,9 +904,12 @@ different question (frontier harness quality) and carries the near-ceiling
 risk that made openssl a bad target. --parallel is effectively unavailable
 here: it forbids shared oauth (needs ANTHROPIC_API_KEY) and load-aware
 packing is blocked by broken WSL2 cgroup capture (--no-pack-measured).
-GATE FIRST, free: source scripts/probe-models.sh && probe_models
-claude-haiku-4-5 claude-sonnet-5 claude-opus-5 — quotas are PER TIER, so
-opus can be 429-walled while haiku runs. Launch in tmux, never setsid.
+GATE FIRST, free — ON THE BATCH'S OWN LANE (fixed 2026-08-11; the old
+bare-SDK probe_models gate here was false-WALLED for TB2: TB2 drivers are
+CLI-shaped, and bare-SDK opus/sonnet 429 is permanent lane design, not the
+batch's quota): source scripts/probe-acp.sh && probe_acp_models <models> —
+probe_models (bare SDK) stays correct ONLY for bare-SDK spenders (channel
+chain). Quotas are PER TIER AND PER TRANSPORT. Launch in tmux, never setsid.
 Stale default worth fixing when convenient: DEFAULT_BENCH_MODEL in
 opencode-plugin/src/bench/paths.ts:28 still says claude-sonnet-4-6 (every
 documented invocation passes --model explicitly, so it is inert).

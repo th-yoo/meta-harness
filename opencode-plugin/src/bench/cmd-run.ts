@@ -911,8 +911,18 @@ export async function cmdRun(
   }
   console.log("=".repeat(60))
   if (totalRuns > 0) {
-    const pct = (100 * totalPass) / totalRuns
-    console.log(`pass@${k}: ${totalPass}/${totalRuns}  (${pyFixed(pct, 1)}%)`)
+    // Two distinct metrics, labeled apart: the per-attempt tally is NOT
+    // pass@k (mislabeling it once contaminated a harvest read); pass@k is
+    // task-level any-of-k.
+    const taskPassed = new Map<string, boolean>()
+    for (const r of results) taskPassed.set(r.task, (taskPassed.get(r.task) ?? false) || r.reward === 1)
+    const nTasks = taskPassed.size
+    const nTasksPassed = [...taskPassed.values()].filter(Boolean).length
+    const attemptPct = (100 * totalPass) / totalRuns
+    const taskPct = (100 * nTasksPassed) / nTasks
+    console.log(
+      `attempts: ${totalPass}/${totalRuns} pass (${pyFixed(attemptPct, 1)}%) · pass@${k}: ${nTasksPassed}/${nTasks} tasks (${pyFixed(taskPct, 1)}%)`,
+    )
   }
 
   if (resultsFile) {
