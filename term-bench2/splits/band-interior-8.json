@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "seed": 42,
+  "source": "band-interior-8.txt",
+  "folds": [
+    [
+      "merge-diff-arc-agi-task",
+      "extract-elf",
+      "llm-inference-batching-scheduler",
+      "tune-mjcf"
+    ],
+    [
+      "distribution-search",
+      "kv-store-grpc",
+      "prove-plus-comm",
+      "large-scale-text-editing"
+    ]
+  ],
+  "activeFold": 0,
+  "rotatedAt": null,
+  "band": [0.2, 0.8],
+  "sentinels": [],
+  "passRates": {
+    "merge-diff-arc-agi-task": 0.8,
+    "extract-elf": 0.6,
+    "llm-inference-batching-scheduler": 0.6,
+    "tune-mjcf": 0.2,
+    "distribution-search": 0.8,
+    "kv-store-grpc": 0.6,
+    "prove-plus-comm": 0.6,
+    "large-scale-text-editing": 0.4
+  },
+  "excluded": []
+}
