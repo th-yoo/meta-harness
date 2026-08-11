@@ -52,6 +52,88 @@ RESTART FROM SCRATCH (if host rebooted): a1 is done and committed — do
  entry, ACP_IDLE_MS=7200000 + daemon pre-start for a4).
 ```
 
+## ✅ SESSION END 2026-08-11 (`yoo-dev`) — 429 IS PER-TRANSPORT, NOT PER-ACCOUNT · ACP/CLI PROBE SHIPPED (`9745db6`, LOCAL) · THE TB2 GATE PROBES THE WRONG LANE
+
+**RESUME PROMPT (either host — git-only transfer):**
+```
+Resume meta-harness, post-2026-08-11 yoo-dev probe session. git pull FIRST.
+This session made NO merges and changed no product code — one script,
+committed LOCALLY and NOT PUSHED. Everything below is measurement.
+
+1. 429 IS PER-TRANSPORT AS WELL AS PER-TIER. Measured same-minute, one
+   account, one token, yoo-dev:
+     BARE-SDK (@anthropic-ai/sdk, scripts/probe-models.sh)
+       haiku-4-5=OK  sonnet-5=ERR429  opus-5=ERR429
+     ACP/CLI  (@anthropic-ai/claude-agent-sdk query())
+       haiku-4-5=OK  sonnet-5=OK      opus-5=OK
+   Both confounds ruled out: bare-SDK re-probed 429 concurrently (NOT
+   time-scoped), and model identity came from modelUsage/canonicalModel
+   rather than being assumed from a success (NOT a silent fallback).
+   CONSEQUENCE: a 429 verdict is never an account fact. Name the transport.
+   Per the standing user ruling this is permanent lane design (bare-SDK is
+   haiku-only), not a wall that lifts — the watch stays DROPPED.
+
+2. THE TB2 GATE PROBES THE WRONG LANE. The gate prescribed further down
+   this file says to run probe_models (bare SDK) before a TB2 batch, but
+   TB2 runs --driver claude-code, which is CLI-shaped. It therefore reports
+   false-WALLED and would have blocked an opus-5 batch that could have
+   proceeded. probe-models.sh:11-14 documents only the false-CLEAR inverse.
+   NOT fixed here by ruling — check it at TB2 batch pre-step.
+   EXCEPTION already on record (2026-08-07): the CHANNEL CHAIN is genuinely
+   walled, not false-walled — channel-run.ts callChannelModel -> plain
+   sdkCall is bare-SDK end-to-end at CHANNEL_MODEL="claude-opus-5".
+   Swapping ITS probe to the agent lane without routing the payload would
+   fire 315 opus calls into a 429ing lane.
+
+3. SHIPPED scripts/probe-acp.sh (commit 9745db6, LOCAL, NOT PUSHED, needs a
+   push go). Two sourceable functions, both LIVE-VERIFIED on this host:
+     probe_acp_models  — transport only, no daemon, no discovery file, no
+                         pool seat. Safe while the live lane serves.
+                         haiku=OK 2429ms.
+     probe_acp_daemon  — discovery + fingerprint handshake + session/new +
+                         pool seat + setModel. haiku ok 781ms, opus-5 ok
+                         3111ms, setModel exercised on the switch.
+   Bound to the package's stable exports (DEFAULT_ISOLATION, ACP_BUDGET),
+   NOT plugin-internal paths — an earlier revision imported GAUGE_ISOLATION
+   by path and broke outright at extraction.
+
+4. daemonCall CANNOT REPORT A 429. warm-session reads api_retry.error_status
+   as a diagnostic then collapses every failure to call-consumed/no-call, so
+   a 429, a turn-budget expiry and a setModel failure are indistinguishable
+   at that surface. probe_acp_models reads the frame directly.
+
+ACP SOURCE OF TRUTH IS NOW ~/z2/cc-api-daemon (local HEAD 33f74db == the pin
+in cc-gate-plugin/package.json, verified). Read ACP line numbers THERE — the
+subsystem left this repo and every pre-extraction cite is dead.
+
+ISOLATION TRAP, MEASURED — read before writing any daemon probe/test:
+KKAMAK_ACP_SOCKET is IN ACP_ENV_DENYLIST, so binding a private socket does
+NOT fork the daemon fingerprint (socket-only kept host fp 5d99637bd3db;
+KKAMAK_ACP_TEST_MARKER forked it to 9dfa3abacb95). A socket-isolated probe
+shares the HOST's ~/.config/acpd/ discovery file and DELETES it on stop. Use
+the MARKER. Do NOT copy the package's tempEnv() for a live probe — it also
+overrides HOME, which hides real credentials.
+BY DESIGN, NOT A BUG: a probe daemon self-exits but leaves its discovery
+entry behind (acp-daemon has no unlink; readDiscovery is structural-only and
+ensureDaemon takes over a dead entry). Do not wait for it to vanish.
+
+CONTENTION CAVEAT: a TB2 bench was reported running during this session, so
+the millisecond figures above may carry CPU contention — same confound as
+the D3 33374ms outlier. The OK/FITS verdicts hold regardless (2429ms against
+a ~14540ms budget is ~6x margin); the exact ms do not.
+
+OPEN: push 9745db6 (needs go) · TB2 model/split/k still unanswered — opus-5
+is AVAILABLE on TB2's lane, so its cost is the ~24h fresh-baseline-plus-run
+and near-ceiling-null risk, never the 429 · whether to fix the gate line
+here and in probe-models.sh's header · a TB2-exact one-task probe.
+
+WATCH — this session was bitten by it: it opened on e44d059 (2026-08-06) and
+ran across a 5-day gap while sibling sessions advanced the checkout 147
+commits and +734 lines of this file. It carried that stale HEAD as "current"
+for its whole length. Re-read the top block; assert a delta, never a
+remembered baseline.
+```
+
 ## ✅ SESSION END 2026-08-11 (`yoo-mac` "minimal") — SENSOR RULINGS RECORDED + CHECKPOINT READER SHIPPED · TALLY GAP CLOSED · UNION EXPORTED · MAIN `c160461` PUSHED
 
 **RESUME PROMPT:**

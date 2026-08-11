@@ -1259,3 +1259,69 @@ and the resolution was machined, not just recorded.
   benchmark's noise — they were the harness's own silent-done shape, and
   once that shape was closed the very next run produced arm-grade data on
   the first try.
+
+## 429 is per-TRANSPORT (2026-08-11, `yoo-dev`) — a gate that reported WALLED for a lane that was wide open
+
+The question was "is opus-5 quota-blocked?" The honest answer turned out to
+depend on a word nobody was saying: *through what*.
+
+- **The measurement.** Same minute, one account, one oauth token, two lanes:
+  bare-SDK (`@anthropic-ai/sdk` `messages.create`, what `scripts/probe-models.sh`
+  drives) returned `sonnet-5=ERR429  opus-5=ERR429`; the CLI-shaped lane
+  (`@anthropic-ai/claude-agent-sdk` `query()`, what the warm lane drives)
+  returned **OK for all three**. Two confounds were ruled out before the claim
+  was allowed to stand: bare-SDK was re-probed *concurrently* and still 429ed
+  (so not time-scoped), and model identity was taken from
+  `modelUsage`/`canonicalModel` rather than inferred from a success (so not a
+  silent fallback to a cheaper model). **Quotas are per tier AND per transport.
+  A 429 verdict is never an account fact.**
+- **The defect it exposed.** `docs/resume.md` prescribed the bare-SDK probe as
+  *the* gate before a TB2 batch — but TB2 runs `--driver claude-code`, which is
+  CLI-shaped. The gate would have reported WALLED and blocked an opus-5 batch
+  that could have run. `probe-models.sh:11-14` had documented only the
+  *false-CLEAR* direction (a CLI probe wrongly clearing a bare-SDK batch); the
+  **false-WALLED inverse was undocumented, and it is the one that fired.** The
+  chain check that followed matters as much: the channel chain is genuinely
+  walled, because `channel-run.ts callChannelModel` is bare-SDK end-to-end —
+  swapping *its* probe to the agent lane would have been the false-CLEAR
+  failure, firing 315 opus calls into a 429ing lane.
+- **ACP end to end, not just the transport.** A `query()` probe proves the lane,
+  not the subsystem. A real `ensureDaemon` + `daemonCall` run confirmed opus-5
+  through the daemon (haiku 781ms, opus-5 3111ms) with `setModel()` exercised on
+  the haiku→opus switch and model proven over the wire each time. Worth noting
+  the daemon reports the **dated** id (`claude-haiku-4-5-20251001`) where raw
+  `query()` reports the undated alias — exactly why `modelProvenBy` is a prefix
+  match and not equality.
+- **A surface that cannot answer the question asked of it.** `daemonCall` reads
+  `api_retry.error_status` as a *diagnostic* and then collapses every failure to
+  `call-consumed`/`no-call`. A 429, a turn-budget expiry and a `setModel` failure
+  are indistinguishable there. Any probe that needs the status must read the
+  frame itself.
+- **The isolation trap, measured rather than reasoned.** `KKAMAK_ACP_SOCKET` is
+  IN `ACP_ENV_DENYLIST`, so binding a private socket does **not** fork the daemon
+  fingerprint: socket-only kept the host fp `5d99637bd3db` while
+  `KKAMAK_ACP_TEST_MARKER` forked it to `9dfa3abacb95`. A socket-isolated probe
+  would have shared the **host's** `~/.config/acpd/` discovery file and deleted
+  it on stop. The package's own `tempEnv()` is the wrong template for a *live*
+  probe for the opposite reason — it overrides `HOME`, which hides the real
+  credentials. Marker-only forks identity while keeping auth.
+- **Shipped:** `scripts/probe-acp.sh` (`9745db6`, local, unpushed) — both lanes,
+  live-verified, bound to the package's stable exports. Its first revision
+  imported `GAUGE_ISOLATION` by plugin-internal path and **broke outright** when
+  the ACP subsystem was extracted to `@th-yoo/cc-api-daemon`; the lesson is
+  bound into the file. ACP line numbers now live at `~/z2/cc-api-daemon`
+  (HEAD `33f74db` == the pin), never in this repo.
+- **Not a bug, recorded so nobody waits on it:** a probe daemon self-exits but
+  leaves its discovery entry behind — `acp-daemon` has no unlink, `readDiscovery`
+  is documented structural-only, and `ensureDaemon` takes over a dead entry.
+
+**The meta-lesson, and this session was the victim of it.** The session opened
+on `e44d059` (2026-08-06) and ran across a five-day gap; sibling sessions in the
+same checkout advanced main **147 commits** and added **734 lines** to
+`resume.md` underneath it. It carried that stale HEAD as "current" for its whole
+length and framed every recommendation against a state that no longer existed —
+the same defect shape logged three times on 2026-08-06 (registry-is-empty,
+spanDays<1, no-ACP-sockets), now in its slowest and least visible form: not a
+resource a second user touched, but a *baseline* a second user moved. The
+countermeasure is unchanged and was applied at the end: assert a delta against a
+re-read baseline, never a remembered one.
