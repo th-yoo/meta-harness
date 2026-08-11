@@ -5,7 +5,7 @@
  * diagnosis frozen (docs/2026-07-24-proposer-review-loop.md). */
 import { reviewBullet, reviewLoop, extractJsonObject, type ProposalLike } from "../../minimal/review.ts"
 import type { HarnessHost } from "./host.ts"
-import type { RejectedEntry } from "./harness-store.ts"
+import { isFormOnlyReject, type RejectedEntry } from "./harness-store.ts"
 
 const REVISE_ROUNDS = 1
 
@@ -69,7 +69,10 @@ export async function reviewAddedBullets(a: {
   reviewModel?: string
 }): Promise<BulletReviewOutcome[]> {
   if (a.bullets.length === 0) return []
-  const rejected = ledgerText(a.ledger)
+  // Form-only rejects are rephrase-eligible (see isFormOnlyReject) — they
+  // must not appear in the duplicate-check comparison set, or the rephrase
+  // the proposer prompt invites gets killed as "duplicate" of its ancestor.
+  const rejected = ledgerText(a.ledger.filter((e) => !isFormOnlyReject(e)))
   const call = async (prompt: string): Promise<string> => {
     const reply = await a.host.runTextAgent({
       title: `[meta-harness] review ${a.scope}`,
@@ -90,8 +93,13 @@ export async function reviewAddedBullets(a: {
       revise: async (p, r) => {
         // Layer-1 fails are deterministic and cheap to detect — free-fail
         // fast with NO LLM call, matching reviewBullet's own free-fail path
-        // (minimal/review.ts). Only rubric fails spend a revision round.
-        if (!r.layer1.pass)
+        // (minimal/review.ts) — EXCEPT form-only fails: form is the one
+        // violation class fixable by pure rephrasing, so it gets the same
+        // single revision round rubric fails get (revisionPrompt states the
+        // two accepted shapes). Word-cap/leak keep the free-fail: rephrasing
+        // a leak risks laundering the leaked content instead of removing it.
+        const formOnly = !r.layer1.pass && r.layer1.violations.every((v) => v.startsWith("form:"))
+        if (!r.layer1.pass && !formOnly)
           return { action: "abstain", reason: `layer-1 free-fail: ${r.violations.join("; ")}` }
         const reply = await call(revisionPrompt(p, r.violations, rejected))
         return (

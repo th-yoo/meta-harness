@@ -1957,6 +1957,17 @@ export interface RejectedEntry {
   source: "review-gate"
 }
 
+/**
+ * A ledger entry rejected ONLY on bullet form ("When …"/"Do not … until …"
+ * phrasing). Its IDEA passed every content check, so it is rephrase-eligible:
+ * the proposer prompt invites a rephrase (propose.ts ledgerSection) and the
+ * review duplicate check must NOT compare candidates against it — otherwise
+ * every invited rephrase dies as "duplicate" of its own rejected ancestor.
+ */
+export function isFormOnlyReject(e: RejectedEntry): boolean {
+  return e.violations.length > 0 && e.violations.every((v) => v.startsWith("form:"))
+}
+
 export function readRejectedLedger(root: string): RejectedEntry[] {
   const j = readJson<unknown>(path.join(root, "rejected.json"), [])
   return Array.isArray(j) ? (j as RejectedEntry[]) : []

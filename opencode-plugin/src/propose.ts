@@ -52,6 +52,8 @@ import {
   validateEnvPolicy,
   readRejectedLedger,
   appendRejectedLedger,
+  isFormOnlyReject,
+  type RejectedEntry,
   type StoreLayer,
   type Playbook,
   type PlaybookOp,
@@ -439,27 +441,39 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
         scope: layer.scope,
       })
       const failed = outcomes.filter((o) => !o.staged)
-      if (failed.length > 0) {
-        for (const f of failed) {
-          appendRejectedLedger(layer.root, {
-            rejectedAt: new Date().toISOString().slice(0, 10),
-            scope: layer.scope,
-            version,
-            bullet: f.bullet,
-            violations: f.violations,
-            source: "review-gate",
-          })
-        }
+      for (const f of failed) {
+        appendRejectedLedger(layer.root, {
+          rejectedAt: new Date().toISOString().slice(0, 10),
+          scope: layer.scope,
+          version,
+          bullet: f.bullet,
+          violations: f.violations,
+          source: "review-gate",
+        })
+      }
+      const stagedCount = outcomes.length - failed.length
+      if (stagedCount === 0) {
         await host.log("info", `review-gate ${layer.scope}: REJECTED ${failed.length}/${outcomes.length} added bullet(s) — no candidate, no trial`)
         await host.notify(`Proposer ${layer.scope}: review-rejected (${failed[0]!.violations[0] ?? "violations"}) — recorded in ledger`, "warning", 10_000)
         return "applied"
       }
-      // staged (possibly revised): write revised texts back into the ops,
-      // then RE-DERIVE the playbook from opsBase (same base applyPlaybookOps
-      // used above) so the staged content — playbook.json AND system.md —
-      // carries the revised text, all BEFORE createCandidate.
-      addedOps.forEach((o, i) => { o.text = outcomes[i]!.bullet })
-      newPlaybook = applyPlaybookOps(opsBase!, ops)
+      // PARTIAL ACCEPT: the gate is per-bullet, so acceptance is per-bullet
+      // too — failed adds are ledgered above and DROPPED from the ops;
+      // survivors proceed to a candidate. (All-or-nothing here discarded
+      // proven survivors for three straight live cycles, 2026-08-11.)
+      if (failed.length > 0) {
+        await host.log("info", `review-gate ${layer.scope}: REJECTED ${failed.length}/${outcomes.length} added bullet(s) — proceeding with ${stagedCount} survivor(s)`)
+        await host.notify(`Proposer ${layer.scope}: review passed ${stagedCount}/${outcomes.length} added bullets — rejected ones recorded in ledger`, "warning", 10_000)
+      }
+      // staged (possibly revised): write revised texts back into surviving
+      // ops, drop failed adds, then RE-DERIVE the playbook from opsBase
+      // (same base applyPlaybookOps used above) so the staged content —
+      // playbook.json AND system.md — carries the revised text, all BEFORE
+      // createCandidate.
+      addedOps.forEach((o, i) => { if (outcomes[i]!.staged) o.text = outcomes[i]!.bullet })
+      const failedOps = new Set<PlaybookOp>(addedOps.filter((_, i) => !outcomes[i]!.staged))
+      const effectiveOps = ops.filter((o) => !failedOps.has(o))
+      newPlaybook = applyPlaybookOps(opsBase!, effectiveOps)
       system = renderPlaybook(newPlaybook)
     } else {
       await host.log("info", `review-gate ${layer.scope}: skipped (no added bullets)`)
@@ -948,12 +962,27 @@ ${blocks.join("\n\n")}
   const ledgerSection = (() => {
     const ledger = readRejectedLedger(layer.root)
     if (ledger.length === 0) return ""
-    const lines = ledger.map((e) => `- [${e.rejectedAt} ${e.version}] ${e.bullet}\n  violations: ${e.violations.join("; ")}`)
-    return `## Bullets the review gate REJECTED before any experiment — do NOT re-derive or rephrase
+    // Form-only rejections are split out: the IDEA passed every content
+    // check and died purely on phrasing, so "do NOT re-derive" would discard
+    // a harvest-matching rule — those entries invite a rephrase instead.
+    const line = (e: RejectedEntry) => `- [${e.rejectedAt} ${e.version}] ${e.bullet}\n  violations: ${e.violations.join("; ")}`
+    const formOnly = ledger.filter(isFormOnlyReject)
+    const content = ledger.filter((e) => !isFormOnlyReject(e))
+    const contentBlock = content.length
+      ? `## Bullets the review gate REJECTED before any experiment — do NOT re-derive or rephrase
 
-${lines.join("\n")}
+${content.map(line).join("\n")}
 
 `
+      : ""
+    const formBlock = formOnly.length
+      ? `## Bullets the review gate rejected ONLY for phrasing — the idea is fine; REPHRASE into "When <trigger>, <action>." or "Do not <action> until <condition>." if you still judge it the right fix
+
+${formOnly.map(line).join("\n")}
+
+`
+      : ""
+    return contentBlock + formBlock
   })()
 
   const relSystem = path.relative(worktree, stagingSystem)
@@ -1046,7 +1075,7 @@ ENDOFENVPOLICY
     : `{"failures":[{"sessionID":"<id from a trajectory above>","taxonomy":"<one label from the list>","rootCause":"<2-5 sentences>","firstUnrecoverableStep":"<quote the offending event>"}]}`
 
   const writeMain = playbook
-    ? `**Required** — write your playbook edits (≤3 ops; each new/updated bullet should reflect a diagnosed root cause; include \`generality\` on \`add\`/\`update\` — \`universal\`|\`vendor\`|\`model\` — and \`slice\` when tagging \`vendor\` or \`model\`):
+    ? `**Required** — write your playbook edits (≤3 ops; each new/updated bullet should reflect a diagnosed root cause; include \`generality\` on \`add\`/\`update\` — \`universal\`|\`vendor\`|\`model\` — and \`slice\` when tagging \`vendor\` or \`model\`). Each new/updated bullet's text MUST take one of two forms — a trigger ("When <trigger>, <action>.") or a hard-gate ("Do not <action> until <condition>.") — no other phrasing passes review:
 \`\`\`bash
 cat > "${relOps}" << 'ENDOFOPS'
 {"ops":[{"op":"add","text":"<new behavioral rule>","generality":"universal"},{"op":"update","id":"b2","text":"<revised rule>","generality":"vendor","slice":"<vendor id>"},{"op":"delete","id":"b5"}]}

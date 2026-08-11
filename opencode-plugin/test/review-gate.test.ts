@@ -86,6 +86,49 @@ test("layer-1 fail (over 60 words) free-fails without calling the LLM", async ()
   expect(rec.prompts.length).toBe(0)
 })
 
+// 1b. Layer-1 FORM-ONLY fail → one revision round (not a free-fail): the
+// violation class cheapest to fix by rephrasing gets the same single shot
+// rubric fails already get. Word-cap/leak fails keep the free-fail path
+// (test 1) — rephrasing a leak risks laundering it instead of removing it.
+const FORM_ONLY_BULLET =
+  "Never populate a required output with guessed values instead of reading the real source."
+
+test("layer-1 form-only fail spends one revision round and can stage the revised text", async () => {
+  const rec: Rec = { prompts: [] }
+  const host = fakeHost(rec, [REVISE_REPLY_PASS, PASS_CHECKS])
+  const [outcome] = await reviewAddedBullets({
+    host, bullets: [FORM_ONLY_BULLET], ledger: [], ...BASE,
+  })
+  expect(outcome!.staged).toBe(true)
+  expect(outcome!.bullet).toBe(REVISED_BULLET)
+  expect(outcome!.trail.length).toBe(2)
+  // exactly 2 LLM calls: the revision + the revised bullet's rubric re-review
+  // (round 1's form fail is still detected free, with no LLM call)
+  expect(rec.prompts.length).toBe(2)
+  expect(rec.prompts[0]!).toContain(FORM_ONLY_BULLET)
+})
+
+// 1c. The duplicate check's rejected list must EXCLUDE form-only ledger
+// entries: those ideas are explicitly rephrase-eligible (the proposer prompt
+// invites it), so comparing a rephrase against its own form-rejected
+// ancestor would deadlock — every invited rephrase dies as "duplicate".
+// Content-rejected entries stay in the list.
+test("duplicate check's rejected list excludes form-only ledger entries", async () => {
+  const rec: Rec = { prompts: [] }
+  const host = fakeHost(rec, [PASS_CHECKS])
+  const ledger = [
+    ledgerEntry({
+      bullet: "Always copy a damaged artifact to scratch before touching it.",
+      violations: [`form: neither trigger ("When …, …") nor hard-gate ("Do not … until …")`],
+    }),
+    ledgerEntry({ bullet: "When a retry loop exceeds three attempts, escalate to a human.", violations: ["duplicate: matches existing harness line"] }),
+  ]
+  await reviewAddedBullets({ host, bullets: [GOOD_BULLET], ledger, ...BASE })
+  expect(rec.prompts.length).toBe(1)
+  expect(rec.prompts[0]!).toContain("When a retry loop exceeds three attempts, escalate to a human.")
+  expect(rec.prompts[0]!).not.toContain("Always copy a damaged artifact to scratch before touching it.")
+})
+
 // 2. Layer-1 pass + rubric pass → staged=true, bullet unchanged.
 test("layer-1 pass + rubric pass stages the bullet unchanged", async () => {
   const rec: Rec = { prompts: [] }

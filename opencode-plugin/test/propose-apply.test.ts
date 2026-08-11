@@ -666,12 +666,13 @@ test("review gate 2: added bullet final-fails → NO candidate, NO trial, ledger
   const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
 
   const b = stagingBase()
-  // No "When …"/"Do not … until …" trigger form → layer1 free-fails without
-  // any LLM call, so this reaches "final-fail" deterministically (no revision
-  // is attempted for a layer1 fail — review-gate.ts's revise() abstains
-  // immediately on a layer1 violation).
+  // Over the 60-word cap → layer1 free-fails without any LLM call, so this
+  // reaches "final-fail" deterministically. (A FORM-only layer1 fail no
+  // longer free-fails — review-gate.ts's revise() spends one revision round
+  // on those — so a non-form violation is the no-LLM route here.)
+  const overCap = "When " + Array(70).fill("word").join(" ")
   fs.writeFileSync(path.join(b, "project-role-v2-ops.json"),
-    JSON.stringify({ ops: [{ op: "add", text: "generic rule with no trigger form" }] }))
+    JSON.stringify({ ops: [{ op: "add", text: overCap }] }))
 
   const rec: Rec = { notes: [], logs: [] }
   const res = await applyStagedArtifact(noLlmHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
@@ -681,11 +682,48 @@ test("review gate 2: added bullet final-fails → NO candidate, NO trial, ledger
   expect(readTrial(root)).toBeNull()
   const ledger = readRejectedLedger(root)
   expect(ledger.length).toBe(1)
-  expect(ledger[0]!.bullet).toBe("generic rule with no trigger form")
+  expect(ledger[0]!.bullet).toBe(overCap)
   expect(ledger[0]!.source).toBe("review-gate")
   expect(ledger[0]!.scope).toBe("project-role")
   expect(ledger[0]!.violations.length).toBeGreaterThan(0)
   expect(rec.notes.some((n) => n.includes("review-rejected"))).toBe(true)
+})
+
+// review gate 2b (partial accept): one add passes review, one free-fails →
+// the candidate IS created carrying only the survivor; the failure is
+// ledgered. All-or-nothing discarded proven survivors for three straight
+// live cycles (2026-08-11) — the gate is per-bullet, so acceptance is too.
+test("review gate 2b: mixed outcomes → candidate with surviving bullet only, failure ledgered", async () => {
+  const root = path.join(home, "stores", "rg-partial")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const GOOD = "When a check contradicts the specification, verify the artifact against it before declaring done."
+  const overCap = "When " + Array(70).fill("word").join(" ")
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "project-role-v2-ops.json"),
+    JSON.stringify({ ops: [{ op: "add", text: GOOD }, { op: "add", text: overCap }] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  // GOOD: layer1 passes → one rubric call (REVIEW_PASS). overCap: word-cap
+  // layer1 free-fail, no LLM call, no revision.
+  const res = await applyStagedArtifact(
+    scriptedHost(rec, [REVIEW_PASS]),
+    descriptor({ layer, version: "v2", playbookMode: true }),
+  )
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).toContain("v2")
+  const pb = JSON.parse(fs.readFileSync(candidatePath(root, "v2", "playbook.json"), "utf-8"))
+  const texts = pb.bullets.map((x: { text: string }) => x.text)
+  expect(texts).toContain(GOOD)
+  expect(texts).not.toContain(overCap)
+  const ledger = readRejectedLedger(root)
+  expect(ledger.length).toBe(1)
+  expect(ledger[0]!.bullet).toBe(overCap)
+  expect(rec.notes.some((n) => n.includes("1/2"))).toBe(true)
 })
 
 test("review gate 3: a bullet revised by review replaces the original text in the staged playbook", async () => {
