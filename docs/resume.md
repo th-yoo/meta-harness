@@ -112,11 +112,34 @@ KNOWN ARTIFACTS in the data (note in any write-up): a3 meanElapsedSec
 the 38h freeze; attempt-22 auth casualty reward=0 also lives in a3
 db-wal-recovery run 1); prove-plus-comm graded pre-3483f14 in ALL arms
 (uniform — arm-relative claims unaffected).
-ADOPTION = SEPARATE USER RULING, not taken: which arm(s) route, given
-a3's +0.214 pass@2 at tied compliance vs a4's cheaper turns but
-bar-edge compliance. b2Shadow realizedN=0 (window had no review-sensor
-stream on this host — expected, sensor unarmed here).
-Worktree /Users/yoo/z2/mh-p2-ef7f422 KEPT until the adoption ruling.
+ADOPTION RULING 2026-08-13 (user, morning after tally) — ROUTE a3:
+ - a3 ADOPTED for rule-delivery routing. Basis: pre-registered bar
+   cleared with headroom on both components (honoring the locked bar =
+   the anti-definition-shopping rule, 2c51d07 precedent); dominance
+   profile >= a1 on every axis, tax +1.3 mean turns ~ zero; mechanism
+   live (3 stopBlocks); a3's 0.893 compliance INCLUDES the attempt-22
+   auth casualty (tied a1 carrying a handicap); binding-gate class
+   already lift-certified once (R10/A2 p=0.0031) — same-direction
+   replication, not first sighting.
+ - HONESTY BOUNDS (never cite past these): pass@2 edge is DIRECTIONAL
+   ONLY — McNemar exact b=4,c=1 p=0.375, k=2/14 underpowered by
+   construction; the v18 post-mortem forbids minting verdicts from this
+   margin class. Scope: haiku, k=2, loop1-band only.
+ - a4 DECLINED at bar edge: compliance 21/28 = 0.7500 exactly, Wilson
+   95% CI ~[0.57, 0.87] SPANS the bar; vs a1/a3 25/28 Fisher p~0.16
+   uncertified; zero pass gain; rePassRate 1.0 + computeBonusCaveat
+   make future gains unattributable; expensive carrier (2x executions
+   + 28 review calls + daemon dependency). MACHINERY KEPT — the 28-row
+   judge-evidence sidecar supports a free offline judge-vs-rule audit
+   before a4 is ever reconsidered.
+ - Both-arms REJECTED (installs a permanent attribution confound —
+   one-variable-arm method); defer REJECTED (re-litigating a
+   pre-registered bar after data = definition shopping; wrong bars get
+   amended for the NEXT experiment, not retroactively).
+b2Shadow realizedN=0 (no review-sensor stream on this host — expected,
+sensor unarmed here). Worktree mh-p2-ef7f422 removed post-ruling; SDD
+ledger .superpowers/sdd/2026-08-06-p2-actuator-binding/ deleted per
+skill (kept-until-verdict condition met).
 
 UPDATE 2026-08-12 19:30 KST — RULING 1(a) TAKEN + a3 COMPLETE (user go 19:04):
   Resumed frozen a3 (podman unpause + kill -CONT). a3 FINISHED 19:23,
