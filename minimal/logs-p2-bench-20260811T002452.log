@@ -443,3 +443,67 @@ Results written → /Users/yoo/z2/meta-harness/docs/loop-probes/p2/yoo-mac.local
 === P2 a3: db-wal-recovery ===
   -- run 1/2 --
   staging (runtime): db-wal-recovery...
+  claude-code run (timeout=900s, attempt 1/4)...
+  authentication error — the model credential was rejected (a missing/expired claude-code session). Refresh it (run `claude /login` on the host), or set ANTHROPIC_API_KEY. NOT retrying.
+  verifier (timeout=900s)...
+  [a3] reward=0  compliant=false  elapsed=131236.7s
+Results written → /Users/yoo/z2/meta-harness/docs/loop-probes/p2/yoo-mac.local-p2-a3-results.json
+  -- run 2/2 --
+  staging (runtime): db-wal-recovery...
+  claude-code run (timeout=900s, attempt 1/4)...
+  claude-code done in 118.7s, turns=42
+  verifier (timeout=900s)...
+  [a3] reward=0  compliant=true  elapsed=157.0s
+Results written → /Users/yoo/z2/meta-harness/docs/loop-probes/p2/yoo-mac.local-p2-a3-results.json
+
+=== P2 a3: prove-plus-comm ===
+  -- run 1/2 --
+  staging (runtime): prove-plus-comm...
+  claude-code run (timeout=900s, attempt 1/4)...
+  claude-code done in 49.0s, turns=16
+  verifier (timeout=900s)...
+  [a3] reward=1  compliant=true  elapsed=76.5s
+Results written → /Users/yoo/z2/meta-harness/docs/loop-probes/p2/yoo-mac.local-p2-a3-results.json
+  -- run 2/2 --
+  staging (runtime): prove-plus-comm...
+  claude-code run (timeout=900s, attempt 1/4)...
+  claude-code done in 58.0s, turns=20
+  verifier (timeout=900s)...
+  [a3] reward=1  compliant=true  elapsed=91.3s
+Results written → /Users/yoo/z2/meta-harness/docs/loop-probes/p2/yoo-mac.local-p2-a3-results.json
+
+=== P2 a3: openssl-selfsigned-cert ===
+  -- run 1/2 --
+  staging (runtime): openssl-selfsigned-cert...
+  staging (runtime): openssl-selfsigned-cert base image is python:3.13-slim-bookworm (approximated by the shared bench image)
+  claude-code run (timeout=900s, attempt 1/4)...
+  claude-code done in 53.4s, turns=17
+  verifier (timeout=900s)...
+  [a3] reward=1  compliant=true  elapsed=93.5s
+Results written → /Users/yoo/z2/meta-harness/docs/loop-probes/p2/yoo-mac.local-p2-a3-results.json
+  -- run 2/2 --
+  staging (runtime): openssl-selfsigned-cert...
+  staging (runtime): openssl-selfsigned-cert base image is python:3.13-slim-bookworm (approximated by the shared bench image)
+  claude-code run (timeout=900s, attempt 1/4)...
+  claude-code done in 66.8s, turns=16
+  verifier (timeout=900s)...
+  [a3] reward=0  compliant=true  elapsed=102.1s
+Results written → /Users/yoo/z2/meta-harness/docs/loop-probes/p2/yoo-mac.local-p2-a3-results.json
+Results written → /Users/yoo/z2/meta-harness/docs/loop-probes/p2/yoo-mac.local-p2-a3-results.json
+
+P2 a3: done — results at /Users/yoo/z2/meta-harness/docs/loop-probes/p2/yoo-mac.local-p2-a3-results.json
+=== ARM a3 EXIT rc=0 2026-08-12 19:23:37
+=== A4 DAEMON PRESTART 2026-08-12 19:23:37
+daemon up: true
+=== A4 DAEMON PRESTART EXIT rc=0 2026-08-12 19:23:38
+=== ARM a4 START 2026-08-12 19:23:38
+[kkamak] WARNING: account store stranded at old path (migration may have failed earlier):
+  Old path (has evolved content): /Users/yoo/.config/meta-harness
+  New path (exists): /Users/yoo/.config/kkamak
+  Remediation: move the old directory to the new location manually, or set KKAMAK_HOME and retry
+P2 a4: 14 task(s) × k=2, model=anthropic/claude-haiku-4-5 (--go 56)
+Results file: /Users/yoo/z2/meta-harness/docs/loop-probes/p2/yoo-mac.local-p2-a4-results.json  (store writes disabled — p2 never touches term-bench2/store/**)
+
+=== P2 a4: extract-elf ===
+  -- run 1/2 --
+  staging (runtime): extract-elf...

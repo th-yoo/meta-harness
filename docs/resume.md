@@ -92,9 +92,32 @@ own worktree per implementer · merging != deploying · probe the
 CONSEQUENCE, not the capability · SITREP style.
 ```
 
-## ⏸ LIVE STATE 2026-08-11 06:47 KST (`yoo-mac`) — P2 RERUN #3 RUNNING, USER-PAUSED MID-a3
+## ✅ P2 RERUN #3 COMPLETE 2026-08-13 01:06 KST (`yoo-mac`) — ALL THREE ARMS + TALLY, ZERO BURNS IN a4
 
 ```
+FINAL (committed with this update): verdict docs/loop-probes/p2/
+yoo-mac.local-p2-verdict.json —
+  a1 prose:     compliance 0.893  pass@2 0.500  meanTurns 35.8
+  a3 stop-gate: compliance 0.893  pass@2 0.714  meanTurns 37.1  stopBlocks 3
+  a4 review:    compliance 0.750  pass@2 0.500  meanTurns 27.3  rePassRate 1.0
+BARS: a3earnsRouting=true AND a4earnsRouting=true (compliance bar 0.75,
+pass-drop bar 0.15). a4 sits EXACTLY on the compliance bar. Verdict's own
+computeBonusCaveat: a4 pass@k gains not attributable binding-vs-+turns.
+a4 arm ran CLEAN end-to-end: 0 auth, 0 reviewFailed, 0 reviewTruncated,
+0 rePassHardFail. Launched 21:56 from the ef7f422 worktree (podman VM
+clock resynced first — 70min sleep skew caught pre-launch), finished
+01:05, results auto-copied to main, tally rc=0.
+KNOWN ARTIFACTS in the data (note in any write-up): a3 meanElapsedSec
+5135 is PAUSE-INFLATED (attempt 22 recorded 131236s wall clock across
+the 38h freeze; attempt-22 auth casualty reward=0 also lives in a3
+db-wal-recovery run 1); prove-plus-comm graded pre-3483f14 in ALL arms
+(uniform — arm-relative claims unaffected).
+ADOPTION = SEPARATE USER RULING, not taken: which arm(s) route, given
+a3's +0.214 pass@2 at tied compliance vs a4's cheaper turns but
+bar-edge compliance. b2Shadow realizedN=0 (window had no review-sensor
+stream on this host — expected, sensor unarmed here).
+Worktree /Users/yoo/z2/mh-p2-ef7f422 KEPT until the adoption ruling.
+
 UPDATE 2026-08-12 19:30 KST — RULING 1(a) TAKEN + a3 COMPLETE (user go 19:04):
   Resumed frozen a3 (podman unpause + kill -CONT). a3 FINISHED 19:23,
   28/28 rows, COMMITTED with this update: pass@2 10/14 (0.714) vs a1

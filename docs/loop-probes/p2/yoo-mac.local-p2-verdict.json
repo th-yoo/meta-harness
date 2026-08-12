@@ -1,0 +1,50 @@
+{
+  "spec": "docs/superpowers/specs/2026-08-05-p2-actuator-binding-design.md",
+  "ruleSha": "f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65",
+  "band": "loop1-band",
+  "k": 2,
+  "model": "anthropic/claude-haiku-4-5",
+  "arms": {
+    "a1": {
+      "n": 28,
+      "compliance": 0.8928571428571429,
+      "passAtK": 0.5,
+      "meanTurns": 35.75,
+      "meanElapsedSec": 389.0928571428572
+    },
+    "a3": {
+      "n": 28,
+      "compliance": 0.8928571428571429,
+      "passAtK": 0.7142857142857143,
+      "meanTurns": 37.07142857142857,
+      "meanElapsedSec": 5135.0821428571435,
+      "stopBlocks": 3
+    },
+    "a4": {
+      "n": 28,
+      "compliance": 0.75,
+      "passAtK": 0.5,
+      "meanTurns": 27.321428571428573,
+      "meanElapsedSec": 404.77142857142854,
+      "rePassRate": 1,
+      "reviewFailedCount": 0,
+      "reviewTruncatedCount": 0,
+      "rePassHardFailCount": 0
+    }
+  },
+  "bars": {
+    "a3earnsRouting": true,
+    "a4earnsRouting": true,
+    "complianceBar": 0.75,
+    "passDropBar": 0.15
+  },
+  "computeBonusCaveat": "a4 pass@k gains with high rePassRate are not attributable to binding vs +10 turns",
+  "b2Shadow": {
+    "host": "yoo-mac.local",
+    "realizedN": 0,
+    "eventsPerDay": 0,
+    "evidential": false,
+    "windowStart": 1786375492712,
+    "windowEnd": 1786550748117
+  }
+}
