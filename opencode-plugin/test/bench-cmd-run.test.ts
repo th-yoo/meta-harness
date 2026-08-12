@@ -2249,3 +2249,7 @@ test("run --parallel: args.canLaunch absent by default — schedule() gets undef
   }
   expect(capturedCanLaunch).toBeUndefined()
 })
+
+test("DEFAULT_BENCH_MODEL pins the current latest sonnet (model policy: latest tier models; a bump here is a deliberate instrument change, not drift)", () => {
+  expect(DEFAULT_BENCH_MODEL).toBe("anthropic/claude-sonnet-5")
+})
