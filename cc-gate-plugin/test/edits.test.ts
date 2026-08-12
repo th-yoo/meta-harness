@@ -199,3 +199,55 @@ test("all EDIT_TOOLS trigger edited:true", () => {
     expect(result.edited).toBe(true)
   }
 })
+
+// -- A1 cycle-tagging: touched-path accumulation (2026-08-13) ------------
+
+import { TOUCHED_PATHS_CAP } from "../src/types.ts"
+
+test("edit with path records it in touchedPaths", () => {
+  const r = handlePostToolUse(INITIAL_STATE, "Write", "/repo/src/a.ts")
+  expect(r.edited).toBe(true)
+  expect(r.touchedPaths).toEqual(["/repo/src/a.ts"])
+  expect(r.touchedTruncated).toBeUndefined()
+})
+
+test("edit without path still arms, records nothing", () => {
+  const r = handlePostToolUse(INITIAL_STATE, "Edit")
+  expect(r.edited).toBe(true)
+  expect(r.touchedPaths).toBeUndefined()
+})
+
+test("non-edit tool with path records nothing and does not arm", () => {
+  const r = handlePostToolUse(INITIAL_STATE, "Bash", "/repo/src/a.ts")
+  expect(r).toBe(INITIAL_STATE)
+})
+
+test("duplicate path is not re-added", () => {
+  const s1 = handlePostToolUse(INITIAL_STATE, "Edit", "/repo/a.ts")
+  const s2 = handlePostToolUse(s1, "Edit", "/repo/a.ts")
+  expect(s2.touchedPaths).toEqual(["/repo/a.ts"])
+})
+
+test("cap: path #201 is dropped and touchedTruncated is set", () => {
+  let s: CcGateState = { ...INITIAL_STATE }
+  for (let i = 0; i < TOUCHED_PATHS_CAP; i++) {
+    s = handlePostToolUse(s, "Edit", `/repo/f${i}.ts`)
+  }
+  expect(s.touchedPaths?.length).toBe(TOUCHED_PATHS_CAP)
+  expect(s.touchedTruncated).toBeUndefined()
+  const over = handlePostToolUse(s, "Edit", "/repo/overflow.ts")
+  expect(over.touchedPaths?.length).toBe(TOUCHED_PATHS_CAP)
+  expect(over.touchedPaths).not.toContain("/repo/overflow.ts")
+  expect(over.touchedTruncated).toBe(true)
+  // truncation is sticky and idempotent
+  const again = handlePostToolUse(over, "Edit", "/repo/overflow2.ts")
+  expect(again.touchedTruncated).toBe(true)
+  expect(again.touchedPaths?.length).toBe(TOUCHED_PATHS_CAP)
+})
+
+test("legacy state without touched fields still accumulates from scratch", () => {
+  const legacy = { ...INITIAL_STATE, edited: true } as CcGateState
+  delete (legacy as unknown as Record<string, unknown>).touchedPaths
+  const r = handlePostToolUse(legacy, "Write", "/repo/x.ts")
+  expect(r.touchedPaths).toEqual(["/repo/x.ts"])
+})

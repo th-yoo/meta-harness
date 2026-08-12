@@ -27,6 +27,13 @@ export function buildSensorLine(
     // ever supplies it (accept/exhaust points), so every other caller
     // (and every pre-amendment line) is byte-identical.
     checkMs?: number[]
+    // A1 cycle-tagging amendment (2026-08-13) — same spread-only-when-
+    // defined discipline; suppliers are the cycle-CLOSING lines only
+    // (stop.ts accept/exhaust, prompt.ts interrupted). A skippedStop
+    // diagnostic line never carries them. Booleans only — a raw path
+    // must never reach this builder.
+    implOnly?: boolean
+    sameTurnCoEdit?: boolean
   },
 ): SensorLine {
   return {
@@ -45,5 +52,7 @@ export function buildSensorLine(
     ...(args.pluginVersion !== undefined ? { pluginVersion: args.pluginVersion } : {}),
     ...(args.skippedStop !== undefined ? { skippedStop: args.skippedStop } : {}),
     ...(args.checkMs !== undefined ? { checkMs: args.checkMs } : {}),
+    ...(args.implOnly !== undefined ? { implOnly: args.implOnly } : {}),
+    ...(args.sameTurnCoEdit !== undefined ? { sameTurnCoEdit: args.sameTurnCoEdit } : {}),
   }
 }

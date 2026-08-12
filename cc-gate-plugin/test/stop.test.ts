@@ -426,3 +426,102 @@ test("block decision carries rawOut from the failing check", async () => {
   expect(r.decision.kind).toBe("block")
   if (r.decision.kind === "block") expect(r.decision.rawOut).toBe("the raw tail")
 })
+
+// -- A1 cycle-tagging: cycle-closing lines carry derived booleans ---------
+
+test("accepted line carries implOnly for an impl-only cycle; no raw path on the line", async () => {
+  const state: CcGateState = {
+    ...INITIAL_STATE,
+    edited: true,
+    touchedPaths: ["/repo/src/a.ts", "/repo/src/b.ts"],
+  }
+  const deps = fakeDeps({ results: [{ code: 0, out: "ok" }] })
+  const result = await handleStop(state, input, gateJson(), deps)
+
+  expect(result.sensor?.implOnly).toBe(true)
+  expect(result.sensor?.sameTurnCoEdit).toBe(false)
+  // privacy line: serialized sensor line must not contain any touched path
+  const json = JSON.stringify(result.sensor)
+  expect(json).not.toContain("/repo/src/a.ts")
+  expect(json).not.toContain("a.ts")
+})
+
+test("exhausted line carries sameTurnCoEdit for a co-edit cycle", async () => {
+  const state: CcGateState = {
+    ...INITIAL_STATE,
+    edited: true,
+    gating: true,
+    round: 2,
+    outcomes: ["verify-failed", "verify-failed"],
+    cycleStartedAt: 1000,
+    touchedPaths: ["/repo/src/a.ts", "/repo/test/a.test.ts"],
+  }
+  const deps = fakeDeps({ results: [{ code: 1, out: "boom" }] })
+  const result = await handleStop(state, input, gateJson(), deps)
+
+  expect(result.decision.kind).toBe("allow-exhausted")
+  expect(result.sensor?.sameTurnCoEdit).toBe(true)
+  expect(result.sensor?.implOnly).toBe(false)
+})
+
+test("no touched paths -> fields ABSENT on the accepted line", async () => {
+  const state: CcGateState = { ...INITIAL_STATE, edited: true }
+  const deps = fakeDeps({ results: [{ code: 0, out: "ok" }] })
+  const result = await handleStop(state, input, gateJson(), deps)
+
+  expect(result.sensor).toBeDefined()
+  expect("implOnly" in (result.sensor as object)).toBe(false)
+  expect("sameTurnCoEdit" in (result.sensor as object)).toBe(false)
+})
+
+test("truncated set -> fields ABSENT even with paths present", async () => {
+  const state: CcGateState = {
+    ...INITIAL_STATE,
+    edited: true,
+    touchedPaths: ["/repo/src/a.ts"],
+    touchedTruncated: true,
+  }
+  const deps = fakeDeps({ results: [{ code: 0, out: "ok" }] })
+  const result = await handleStop(state, input, gateJson(), deps)
+
+  expect("implOnly" in (result.sensor as object)).toBe(false)
+})
+
+test("testPathPattern override in gate.json reclassifies", async () => {
+  const state: CcGateState = {
+    ...INITIAL_STATE,
+    edited: true,
+    touchedPaths: ["/repo/checks/a.ts", "/repo/src/b.ts"],
+  }
+  const deps = fakeDeps({ results: [{ code: 0, out: "ok" }] })
+  const result = await handleStop(
+    state, input, gateJson({ testPathPattern: "/checks/" }), deps)
+
+  expect(result.sensor?.sameTurnCoEdit).toBe(true)
+})
+
+test("cycle-tag state resets with the cycle: accepted result state is INITIAL", async () => {
+  const state: CcGateState = {
+    ...INITIAL_STATE,
+    edited: true,
+    touchedPaths: ["/repo/src/a.ts"],
+  }
+  const deps = fakeDeps({ results: [{ code: 0, out: "ok" }] })
+  const result = await handleStop(state, input, gateJson(), deps)
+
+  expect(result.state.touchedPaths).toBeUndefined()
+  expect(result.state.touchedTruncated).toBeUndefined()
+})
+
+test("block (mid-cycle) preserves touchedPaths for the cycle's later rounds", async () => {
+  const state: CcGateState = {
+    ...INITIAL_STATE,
+    edited: true,
+    touchedPaths: ["/repo/src/a.ts"],
+  }
+  const deps = fakeDeps({ results: [{ code: 1, out: "fail" }] })
+  const result = await handleStop(state, input, gateJson(), deps)
+
+  expect(result.decision.kind).toBe("block")
+  expect(result.state.touchedPaths).toEqual(["/repo/src/a.ts"])
+})

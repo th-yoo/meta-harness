@@ -123,8 +123,18 @@ async function main(): Promise<void> {
 
   if (event === "PostToolUse") {
     const toolName = typeof rec.tool_name === "string" ? rec.tool_name : ""
+    // A1 cycle-tagging: the edited path rides tool_input.file_path on CC's
+    // PostToolUse payload (same extraction the kkamak kernel confirmed
+    // against a captured payload). Absent/malformed → undefined; the
+    // handler still arms, it just records no path.
+    const ti = rec.tool_input
+    const filePath =
+      typeof ti === "object" && ti !== null &&
+      typeof (ti as Record<string, unknown>).file_path === "string"
+        ? ((ti as Record<string, unknown>).file_path as string)
+        : undefined
     const state = store.load(sessionId)
-    const next = handlePostToolUse(state, toolName)
+    const next = handlePostToolUse(state, toolName, filePath)
     if (next !== state) store.save(sessionId, next)
     return
   }

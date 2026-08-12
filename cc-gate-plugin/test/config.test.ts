@@ -127,3 +127,23 @@ test("parseGateConfig: sensor respects custom value and defaults to .km/gate-out
   const cDefault = parseGateConfig(`{"check": "cmd"}`)
   expect(cDefault!.sensor).toBe(".km/gate-outcomes.ndjson")
 })
+
+// -- A1 cycle-tagging: testPathPattern parse discipline -------------------
+
+import { parseGateConfig as pgc } from "../src/config.ts"
+
+test("testPathPattern: valid string kept", () => {
+  const cfg = pgc(JSON.stringify({ check: "x", testPathPattern: "^checks/" }))
+  expect(cfg?.testPathPattern).toBe("^checks/")
+})
+
+test("testPathPattern: malformed regex dropped, config still parses", () => {
+  const cfg = pgc(JSON.stringify({ check: "x", testPathPattern: "([" }))
+  expect(cfg).toBeDefined()
+  expect(cfg?.testPathPattern).toBeUndefined()
+})
+
+test("testPathPattern: non-string dropped", () => {
+  const cfg = pgc(JSON.stringify({ check: "x", testPathPattern: 7 }))
+  expect(cfg?.testPathPattern).toBeUndefined()
+})

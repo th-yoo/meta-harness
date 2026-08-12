@@ -222,3 +222,19 @@ test("concurrent-write safety: interleaved load->modify->save is last-writer-win
   expect(loaded.round).toBe(2)
   expect(loaded.failStreak).toBe(2)
 })
+
+// -- A1 cycle-tagging: isInitialState hardening (checkMs precedent) -------
+
+import { isInitialState as isInit2, INITIAL_STATE as INIT2 } from "../src/types.ts"
+
+test("state carrying only touchedPaths is NOT initial (save() must not rmSync it)", () => {
+  expect(isInit2({ ...INIT2, touchedPaths: ["/repo/a.ts"] })).toBe(false)
+})
+
+test("state carrying only touchedTruncated is NOT initial", () => {
+  expect(isInit2({ ...INIT2, touchedTruncated: true })).toBe(false)
+})
+
+test("empty touchedPaths array still reads initial", () => {
+  expect(isInit2({ ...INIT2, touchedPaths: [] })).toBe(true)
+})
