@@ -121,6 +121,41 @@ UPDATE 2026-08-12 19:30 KST — RULING 1(a) TAKEN + a3 COMPLETE (user go 19:04):
   Adoption bar after tally = SEPARATE ruling: compliance >=0.75 AND
   pass@k drop <=0.15 vs a1. Verdict must note uniform pre-3483f14
   prove-plus-comm grading bias (arm-relative claims unaffected).
+  DIRECTIONAL (no verdict math, k=2): a3 wins 4 discordant tasks
+  (llm-inference, large-scale-text-editing, tune-mjcf, openssl),
+  a1 wins 1 (extract-elf); compliance tied 25/28 both arms.
+
+SAME-SESSION FINDINGS (library window, committed aac94be era — these
+must travel, host memory does not):
+ 1. A/A YOO-MAC ENROLLMENT IS STRUCTURALLY IMPOSSIBLE, not pending.
+    Trial v17-2026-08-10T03:27 state lives in yoo-dev's HOST-LOCAL
+    .kkamak project store (gitignored — never travels). yoo-mac's
+    SessionStart hook is HEALTHY (probed manually: rc=0, bootstraps
+    stores, injects 366-char project-global system) and correctly
+    no-ops with no live trial on this host. The 08-12 close line
+    "the next session here should enroll" was wrong. CONSEQUENCE:
+    the A/A floors (5 sessions/arm etc.) accumulate on yoo-dev ONLY.
+    NEEDS A YOO-DEV RULING — options:
+      (a) accept single-host A/A (floors reachable on yoo-dev alone;
+          two-host union only matters post-A/A for real trials);
+      (b) transfer trial state cross-host (extend km-sensors-sync to
+          carry trial registration — new machinery, F2 review needed);
+      (c) register a second same-spec trial on yoo-mac (two trialIds —
+          verdict engine treats them separately; pooling would need a
+          pre-data amendment).
+    Recommend (a) for the A/A machinery test; decide (b) vs (c) only
+    before the FIRST REAL trial.
+ 2. TB2 BAND BASELINE VALID ON YOO-MAC: committed snapshot v0
+    score.json = 14 sessions, anthropic/claude-haiku-4-5, tuple
+    {min 3600, max 3600, enforce-resources true} — matches current
+    recipe + model policy (haiku latest = 4-5). Band-scale haiku batch
+    on this host needs ONLY a sized go, no re-baseline. (yoo-mac's
+    host-local store v0 = 1 stampless junk session — ignore; the
+    43-task 0.279 account baseline is yoo-dev host-local.)
+ 3. HOUSEKEEPING (aac94be): 11 merged local branches deleted
+    (gauntlet-sa/sd DROP branches kept by design), mh-cert worktree
+    removed, July closed-experiment logs + stale loop2/3 splits
+    deleted (tracked ones removed via commit — git history preserves).
 
 UPDATE 2026-08-12 (yoo-mac session close): PAUSE SURVIVED 26h+ (pids
 still T, container still Paused, tmux alive — verified 08-12 evening).
