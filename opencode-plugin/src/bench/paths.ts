@@ -25,7 +25,7 @@ export const BENCH_IMAGE = "localhost/mh-bench:latest"
  * the CLI gate check the wrong key var for whichever site didn't get
  * updated. Import this everywhere a default model is needed instead of
  * inlining the literal again. */
-export const DEFAULT_BENCH_MODEL = "anthropic/claude-sonnet-4-6"
+export const DEFAULT_BENCH_MODEL = "anthropic/claude-sonnet-5"
 
 export interface BenchPaths {
   /** repo root — the dir containing both "term-bench2" and ".git" */
