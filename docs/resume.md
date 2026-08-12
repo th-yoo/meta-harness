@@ -34,6 +34,30 @@ feed crank #3's propose; margin-rule now can't mint noise-rejects.
 ## ⏸ LIVE STATE 2026-08-11 06:47 KST (`yoo-mac`) — P2 RERUN #3 RUNNING, USER-PAUSED MID-a3
 
 ```
+UPDATE 2026-08-12 (yoo-mac session close): PAUSE SURVIVED 26h+ (pids
+still T, container still Paused, tmux alive — verified 08-12 evening).
+NEW CONFOUND FOUND BEFORE RESUME, needs a ruling:
+  3483f14 (landed 08-12, AFTER a1/a3 launched) fixes the runner
+  hardcoding /app as agent workdir + verifier cwd — prove-plus-comm
+  (band task 13/14) was MIS-GRADED under the old code (3 of 4 clean
+  proofs scored 0 per the commit body). a1 ran prove-plus-comm on the
+  OLD instrument. a3 has NOT reached it (paused at task 12,
+  db-wal-recovery). MECHANICS THAT DECIDE THE FIX: the frozen a3 bun
+  process holds the ef7f422 module graph IN MEMORY — resumed, it grades
+  prove-plus-comm identically to a1 regardless of the pulled tree. Only
+  a4 (fresh process) would pick up the new code.
+  RECOMMENDED (cheapest internally-valid): resume frozen a3 as-is, then
+  launch a4 from a worktree pinned at ef7f422 (git worktree add
+  /tmp-ish ef7f422; run the a4 invocation from THERE with cwd inside
+  it; results file path stays the main checkout's docs/loop-probes/p2/)
+  → ALL THREE arms on one instrument; note in the verdict that
+  prove-plus-comm grading is pre-3483f14 for every arm (uniform bias,
+  arm-relative claims unaffected).
+  ALTERNATIVES: abort + full re-run on new code (correct absolute
+  grading, costs re-running a1's 28 + a3's 21 spent executions — needs
+  its own sized go) · resume a4 on new code (CONFOUNDED on
+  prove-plus-comm between arms — do not pick silently).
+
 P2 bench rerun #3 (user go, launched 00:24 KST on main ef7f422, tmux
 session p2-bench, log minimal/logs-p2-bench-20260811T002452.log) is
 PAUSED, not dead — frozen 06:47 KST on user instruction. HOST-LOCAL:
