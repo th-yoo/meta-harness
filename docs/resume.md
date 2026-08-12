@@ -31,6 +31,61 @@ IF INCONCLUSIVE/REJECT: per-task tally + trajs (all saved this time)
 feed crank #3's propose; margin-rule now can't mint noise-rejects.
 ```
 
+## ✅ SESSION END 2026-08-13 (`yoo-mac`) — P2 RERUN #3 CLOSED END-TO-END: a3 ROUTED (ruling) · a4 DECLINED · ZERO BURNS · MAIN `3a54ab3`+
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness), post-2026-08-13 yoo-mac P2-close session.
+git pull FIRST; main >= 3a54ab3. Pins unchanged — bun install both
+plugin dirs only if pins moved.
+
+P2 IS CLOSED. Do not re-open, re-run, or re-litigate:
+ - Full arc this session: ruling 1(a) taken (resume frozen a3 + a4 from
+   ef7f422-pinned worktree) -> a3 complete (ecc2c06) -> chained new-code
+   a4 killed pre-model-call -> a4 clean from the pinned worktree
+   (c1a2e06, 0 burns) -> tally -> ADOPTION RULING: ROUTE a3 (d0d18ee).
+ - Verdict: a1 0.893/0.500 · a3 0.893/0.714 (3 stopBlocks) ·
+   a4 0.750/0.500 (rePassRate 1.0). Honesty bounds IN the ruling text:
+   a3 pass edge directional-only (McNemar b=4,c=1 p=0.375); a4 declined
+   at bar-edge (Wilson CI spans 0.75), machinery + judge-evidence KEPT
+   for a free offline judge-vs-rule audit; scope haiku/k=2/loop1-band;
+   prove-plus-comm pre-3483f14 in all arms (uniform).
+ - Cleanup done: worktree removed, P2 SDD ledger deleted, daemon
+   self-reaped, stale 08-11 tripwire monitor stopped, run logs committed
+   (logs-p2-bench-20260811T002452.log + logs-p2-a4-worktree-*.log).
+ - NEXT P2-CLASS WORK: wiring a3's stop-gate mechanism into the
+   production loop as the rule-delivery carrier = its own design + go.
+
+ALSO LANDED THIS SESSION (do not redo):
+ - DEFAULT_BENCH_MODEL sonnet-4-6 -> sonnet-5 (gated merge a4d4b51,
+   artifact 32ebccd-fix-default-bench-model.md, pin test; 2 advisory
+   findings recorded — doc examples lacking --model exist, model is
+   stamped per record so attributable).
+ - Library-window findings (bed7233): A/A yoo-mac enrollment
+   STRUCTURALLY IMPOSSIBLE (trial state is yoo-dev host-local; hook
+   probed healthy) — ruling options (a) accept single-host A/A
+   [recommended] / (b) sync trial state / (c) mirror trial, decide
+   before FIRST REAL trial; TB2 band baseline VALID on yoo-mac (tuple
+   {3600,3600,enforce} + haiku-4-5 current) — band batch = sized go
+   only; housekeeping aac94be (11 merged branches, mh-cert worktree,
+   July logs/splits removed — history preserves).
+
+OPEN — NEED USER GO/RULING:
+ - yoo-dev TODAY: 08-13 sensor checkpoint (bun scripts/
+   sensor-checkpoint.ts) + crank-2 ab verdict read (v20 vs v17,
+   .kkamak/global/candidates/v20/ab-verdict.json) + km-sensors-sync
+   export (snapshot stale since Jul 31).
+ - a3 production wiring design (above) · TB2 band batch (sized go) ·
+   A/A trial-state ruling · ~/.claude rw-mount (linux P2 only) ·
+   C4 (429-walled, permanent lane design).
+
+RULES: explicit go before any merge to main and any spend · 7b gate +
+committed docs/reviews artifact (bare-field format — list dashes BLOCK
+the checker; SHAs via git rev-parse) · suites serial · pull => bun
+install both plugin dirs · merging != deploying · add NAMED files only ·
+probe the CONSEQUENCE · SITREP.
+```
+
 ## ✅ SESSION END 2026-08-12 (`yoo-mac` "minimal", cleared) — P2 PAUSE VERIFIED INTACT · HOLD STANDS · MAIN SYNCED
 
 **RESUME PROMPT:**
