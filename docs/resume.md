@@ -3,6 +3,34 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ⏳ LIVE STATE 2026-08-12 ~17:00 KST (`yoo-dev`) — CRANK-2 AB RUNNING (v20 vs v17)
+
+```
+tmux tb2-ab-v20 · log /mnt/d/tmp/tb2-ab-v20-20260812.log · launched 14:50
+KST on main ed11c56 · A/B account-global v20 vs active v17, split
+live-7-v20.json (held-in: distribution-search, prove-plus-comm,
+llm-inference, path-tracing; held-out: merge-diff, extract-elf,
+kv-store-grpc), k=7, --save-all-traj, mid-p gate LIVE. 98 attempts,
+ETA ~24:00 KST. Token refreshed 16:40 (8h — covers the run).
+
+At 16:46: distribution-search 6/7 pairs, discordant v20 1 / v17 0,
+0 auth errors.
+
+VERDICT lands in .kkamak/global/candidates/v20/ab-verdict.json (final;
+ab-verdict.partial.json while running). Read the per-task table with the
+metric labels straight (attempts vs pass@k) and elapsed-per-pair FIRST.
+
+IF DEAD/WEDGED: uniform ~900.1s bilateral zeros = expired credential →
+/login, strip poisoned tasks from partial's taskResults (backup first),
+relaunch same command + --resume. Reap orphans: podman ps -a + rm -f.
+Full recipe in memory loop-crank1-v18-verdict + the 08-11/12 session
+block below.
+
+IF WON (accept): /mh-activate account v20 needs its own user go.
+IF INCONCLUSIVE/REJECT: per-task tally + trajs (all saved this time)
+feed crank #3's propose; margin-rule now can't mint noise-rejects.
+```
+
 ## ⏸ LIVE STATE 2026-08-11 06:47 KST (`yoo-mac`) — P2 RERUN #3 RUNNING, USER-PAUSED MID-a3
 
 ```
