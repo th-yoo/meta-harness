@@ -1325,3 +1325,84 @@ spanDays<1, no-ACP-sockets), now in its slowest and least visible form: not a
 resource a second user touched, but a *baseline* a second user moved. The
 countermeasure is unchanged and was applied at the end: assert a delta against a
 re-read baseline, never a remembered one.
+
+## The gate caught nothing; review caught two (2026-08-11/12, `yoo-dev`) — dogfooding kkamak on kkamak, and what a green streak is evidence of
+
+The public plugin had never emitted a sensor line. Every number in kkamak's
+own dogfood log — 71 lines across three version regimes — came from the
+private `cc-gate-plugin` research build, and the log itself said so. Closing
+that gap needed a session where the released plugin was the only gate
+present, which is harder than it sounds: both implementations resolve `root`
+from the same hook-payload `cwd` and both default to
+`.km/gate-outcomes.ndjson`, so installing them side by side means two Stop
+hooks appending to one file. The answer was an isolated `CLAUDE_CONFIG_DIR`
+holding `kkamak@kkamak` and nothing else, pointed at a throwaway worktree.
+Thirteen cycles later the gap was closed and the interesting result was not
+the one being looked for.
+
+**The scoreboard.** Across 13 cycles the gate caught **zero real defects and
+one false positive**. Three independent architect reviews found **two genuine
+defects**, both in code the gate had already accepted with a fully green
+suite. The second is the one that matters: the fix for the first defect
+closed the A-slow/B-fast interleaving and left A-fast/B-slow unguarded,
+reproducing the *identical* headline symptom — a later unrelated turn
+exhausting with zero blocks issued. Its author had written a genuine,
+non-circular test for the ordering they thought of. No test existed for the
+mirror image, because nobody thought of it.
+
+**Why the suite could not have caught it.** For both concurrency changes the
+implementation and its tests were authored in the same turn, and a test
+written to match an implementation passes by construction. The check proves
+"nothing already pinned broke" — which it genuinely did, a breaking
+`StateStore` port signature rippled through kernel and both adapters against
+319 pre-existing tests that could have failed. It cannot prove "the new code
+is right", and it cannot pin what nobody considered. Same shape as the
+2026-08-07 finding that a check cannot observe the environment it runs in.
+
+**The one block, and what it actually was.** Cycle 9 produced
+`["verify-failed","accepted"]` — the first block-then-accept ever observed on
+the rewritten kernel, unmanufactured, arising from the fix for the
+review-found defects. But the failing check was a **false positive**:
+`test/imports.test.ts` scans raw source with a regex and is not
+comment-aware, so the prose `from "old and merely / slow"` inside a doc
+comment read as an import. It was resolved by **rewording the comment**, not
+by fixing the scanner. That is gate-avoidance pressure in the shape the
+`cc-api-daemon` entry documented — except operator-produced, under the very
+gate being measured, and it would have gone unrecorded had the commit body
+not said so plainly. Filed in kkamak's known-issues; only the comment moved.
+
+**Two runbook premises died on contact with execution.** `install-verification.md`
+had never been run. Running it for 0.4.1 found five defects, three of which
+would each independently produce a false "the release is broken" reading —
+including that an isolated config re-roots *credential* lookup on Linux too
+(the file claimed otherwise), and that headless `claude -p` needs
+`--permission-mode acceptEdits` or the write is auto-denied, the gate never
+arms, and no sensor line is written at all. Two more were the operator's own
+overclaims, corrected the next morning: a credential **symlink** does not
+survive a token refresh (CC unlinks and rewrites; measured overnight, the
+isolated copy expired while the real one moved on seven hours later), and
+`claude auth status` reports **presence, not validity** — a nine-hours-expired
+credential still read `loggedIn: true`, exit 0.
+
+**And the premise underneath all of them.** The file described itself as "the
+procedure a maintainer runs after pushing the tag, to prove the release is
+installable." It does not test a tag. `claude plugin marketplace add` clones
+the **default branch**, and the cache directory is named from `plugin.json`'s
+`version` field. A clone taken while `main` sat five commits past `v0.4.1`
+checked out `main` — and still produced a `.../0.4.1/` path. So the 0.4.1
+verification proved `main@aec746a` installable, not the tagged tree; it held
+only because those five commits were docs-only. 0.4.2 was therefore verified
+first and the *verified commit* tagged. The user asked the question that
+surfaced it — "isn't it good tag after test?" — against a plan that had the
+order backwards.
+
+**The meta-lesson.** Every substantive correction this session came from
+*executing* a procedure or *reviewing* code. Not one came from a check
+passing, and the single time a check failed it was wrong. A green gate is a
+real but narrow claim, and the failure mode is treating its silence as
+coverage — which is exactly how a concurrency fix shipped twice while
+reproducing the bug it existed to eliminate. Raw evidence preserved at
+`evidence/kkamak-sensors/yoo-dev/kkamak-selfgate-0.4.1-dogfood.gate-outcomes.ndjson`;
+`pluginVersion` alone cannot attribute it, since the two implementations'
+version spaces overlap on `0.4.0` and `0.4.1` — only the single-emitter
+isolation can.

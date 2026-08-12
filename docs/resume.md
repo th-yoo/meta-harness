@@ -52,6 +52,81 @@ RESTART FROM SCRATCH (if host rebooted): a1 is done and committed — do
  entry, ACP_IDLE_MS=7200000 + daemon pre-start for a4).
 ```
 
+## ✅ SESSION END 2026-08-12 (`yoo-dev`) — kkamak 0.4.1 VERIFIED + 0.4.2 RELEASED · FIRST PUBLIC-PLUGIN DOGFOOD (13 CYCLES) · THE GATE CAUGHT 0 REAL DEFECTS, REVIEW CAUGHT 2
+
+**RESUME PROMPT (either host — git-only transfer):**
+```
+Resume meta-harness, post-2026-08-12 kkamak release session. git pull FIRST.
+This session was kkamak-side; meta-harness got exactly one commit (8cae4e3,
+sensor evidence). Nothing here is lab machinery.
+
+1. TWO RELEASES CUT, in the right order the second time.
+   - 0.4.1: install-verification runbook EXECUTED for the first time ever
+     (it had never been run). That execution found FIVE defects in the
+     runbook itself, three of which would each independently produce a
+     false "the release is broken" reading. Fixed, then the GitHub Release
+     was cut — #4 verify BEFORE #3 release.
+   - 0.4.2: FileStateStore concurrency work + doc fixes. Verified FIRST,
+     then tagged the verified commit, then released. kkamak main = 96d5833,
+     v0.4.2 is Latest, CI green.
+
+2. THE RUNBOOK NEVER TESTED THE TAG IT CLAIMED TO. Measured: `claude plugin
+   marketplace add` clones the repo's DEFAULT BRANCH, and the cache dir is
+   named from plugin.json's `version` field, not from any tag. A clone taken
+   while main was 5 commits past v0.4.1 checked out main, not the tag, and
+   still produced a .../0.4.1/ cache path. So the 0.4.1 verification proved
+   main-at-aec746a installable, NOT the tagged tree — it held only because
+   those 5 commits were docs-only. Corrected in the runbook; the rule is
+   verify main, then tag the verified commit.
+
+3. THE FINDING WORTH CARRYING. Across 13 gate cycles on the public plugin
+   the gate caught ZERO real defects and ONE false positive. THREE
+   independent architect reviews found TWO genuine defects — both in code
+   the gate had already accepted with a fully green suite, and the second
+   one REPRODUCED THE EXACT BUG the first fix existed to eliminate (the
+   mirror-image interleaving, untested because its author only thought of
+   one ordering). A check-command gate evidences "nothing already pinned
+   broke"; it cannot pin what nobody thought of. Written into kkamak's
+   dogfood-log with the scoreboard attached, not just argued here.
+
+4. FileStateStore CONCURRENCY GAP CLOSED — deferred since 2026-07-30 on a
+   stated condition ("revisit once the adapters exist") that had quietly
+   come due. Compare-and-swap + advisory lock with pid-liveness reclamation
+   + a retry when a human-preemption reset loses the race. 319 -> 331 tests.
+
+5. CC ISOLATED-CONFIG GOTCHAS, all measured (see memory
+   cc-isolated-config-auth): a credential SYMLINK does NOT survive a token
+   refresh (CC unlinks and rewrites, leaving a frozen copy — observed
+   overnight, isolated copy expired while the real one moved on 7h later);
+   `claude auth status` reports PRESENCE not VALIDITY (a 9-hours-expired
+   credential still read loggedIn:true, exit 0); an isolated config needs
+   `hasCompletedOnboarding` seeded or it runs the login flow; and isolation
+   STRIPS THE PLUGIN ECOSYSTEM, so plugin-provided agent types
+   (code-architect) are unavailable inside the gated session.
+
+6. EVIDENCE PRESERVED: 13-cycle stream at
+   evidence/kkamak-sensors/yoo-dev/kkamak-selfgate-0.4.1-dogfood.gate-outcomes.ndjson
+   (8cae4e3, pushed). .km/ is gitignored and host-local; the worktree and
+   isolated config were torn down, so this is the only surviving copy.
+   READING CAVEAT: pluginVersion alone does NOT identify the
+   implementation — cc-gate-plugin shipped 0.4.0/0.4.1/0.4.2 and the public
+   plugin ships 0.4.0/0.4.1, so the spaces OVERLAP. Attribution comes from
+   the single-emitter isolation, not the stamp. Do NOT pool this file with
+   the others in that directory; they are a different implementation.
+
+7. FILED, NOT FIXED (kkamak known-issues): test/imports.test.ts's scanner is
+   a regex over raw source, not comment-aware, so prose in a doc comment can
+   read as an import. It failed a real cycle; the fix was to REWORD THE
+   COMMENT, not the scanner — gate-avoidance pressure, operator-produced,
+   under the very gate being measured. Same root cause as the 0.4.0 review's
+   "import scan cannot prove itself", running the other direction.
+
+LIVE ON THIS BOX: tmux `tb2-ab` — the sibling's ab step (candidate v18,
+band-interior-8, k=5, --resume), untouched all session. Dogfood teardown is
+complete: session killed, worktree + branches removed, isolated config
+deleted, credential shredded, real ~/.claude untouched.
+```
+
 ## ✅ SESSION END 2026-08-11 (`yoo-dev`) — 429 IS PER-TRANSPORT, NOT PER-ACCOUNT · ACP/CLI PROBE SHIPPED (`9745db6`, LOCAL) · THE TB2 GATE PROBES THE WRONG LANE
 
 **RESUME PROMPT (either host — git-only transfer):**
