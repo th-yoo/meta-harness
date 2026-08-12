@@ -95,6 +95,33 @@ CONSEQUENCE, not the capability · SITREP style.
 ## ⏸ LIVE STATE 2026-08-11 06:47 KST (`yoo-mac`) — P2 RERUN #3 RUNNING, USER-PAUSED MID-a3
 
 ```
+UPDATE 2026-08-12 19:30 KST — RULING 1(a) TAKEN + a3 COMPLETE (user go 19:04):
+  Resumed frozen a3 (podman unpause + kill -CONT). a3 FINISHED 19:23,
+  28/28 rows, COMMITTED with this update: pass@2 10/14 (0.714) vs a1
+  7/14; compliance 25/28 (0.893); attempt 22 = predicted one-attempt
+  auth casualty (pre-pause container credential expired 08-11 08:10;
+  loud, NOT retrying, recorded agent_no_output reward=0); 2 honest
+  timeouts (write-compressor r2, large-scale-text-editing r2).
+  prove-plus-comm [1,1] graded under the OLD in-memory module graph —
+  consistent with a1 as the ruling requires.
+  CHAINED a4 KILLED in staging (log-watcher killed tmux p2-bench ~2s
+  after its "=== P2 a4" marker; ZERO model calls; orphan container
+  reaped; stray empty a4 judge-evidence sidecar deleted). The chained
+  a4 would have run NEW code = the confounded arm 1(a) rejects.
+  a4 PENDING, staged for home launch (~21:30, must start by ~23:00 —
+  token expires 08-13 02:47 KST; run ≈3-3.5h):
+    worktree /Users/yoo/z2/mh-p2-ef7f422 @ ef7f422, deps installed
+    (pin = 0.8.0 era, same instrument as a1/a3); launch script
+    p2-a4-run.sh there (daemon reap + ACP_IDLE_MS=7200000 prestart +
+    --go 56 + auto-copy results to main checkout + p2-tally); fence
+    probe passed (--go 1 refused "expected --go 56", zero spend).
+    LAUNCH: tmux new-session -d -s p2-a4 'bash /Users/yoo/z2/mh-p2-ef7f422/p2-a4-run.sh'
+    Results write to the WORKTREE docs/loop-probes/p2/ (metaRoot fence
+    follows source location), script copies to main for tally.
+  Adoption bar after tally = SEPARATE ruling: compliance >=0.75 AND
+  pass@k drop <=0.15 vs a1. Verdict must note uniform pre-3483f14
+  prove-plus-comm grading bias (arm-relative claims unaffected).
+
 UPDATE 2026-08-12 (yoo-mac session close): PAUSE SURVIVED 26h+ (pids
 still T, container still Paused, tmux alive — verified 08-12 evening).
 NEW CONFOUND FOUND BEFORE RESUME, needs a ruling:

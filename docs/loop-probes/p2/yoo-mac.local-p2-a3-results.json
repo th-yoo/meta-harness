@@ -13,9 +13,9 @@
   },
   "k": 2,
   "timestamp": "2026-08-10T18:26:51.302Z",
-  "n_pass": 8,
-  "n_total": 11,
-  "pass_rate": 0.7273,
+  "n_pass": 10,
+  "n_total": 14,
+  "pass_rate": 0.7143,
   "tasks": {
     "extract-elf": {
       "rewards": [
@@ -214,9 +214,63 @@
         "{\"arm\":\"a3\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
         "{\"arm\":\"a3\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
       ]
+    },
+    "db-wal-recovery": {
+      "rewards": [
+        0,
+        0
+      ],
+      "elapsed": [
+        131236.7,
+        157
+      ],
+      "turns": [
+        0,
+        42
+      ],
+      "errors": [
+        "{\"arm\":\"a3\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":false,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"agent_no_output\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a3\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    },
+    "prove-plus-comm": {
+      "rewards": [
+        1,
+        1
+      ],
+      "elapsed": [
+        76.5,
+        91.3
+      ],
+      "turns": [
+        16,
+        20
+      ],
+      "errors": [
+        "{\"arm\":\"a3\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a3\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
+    },
+    "openssl-selfsigned-cert": {
+      "rewards": [
+        1,
+        0
+      ],
+      "elapsed": [
+        93.5,
+        102.1
+      ],
+      "turns": [
+        17,
+        16
+      ],
+      "errors": [
+        "{\"arm\":\"a3\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}",
+        "{\"arm\":\"a3\",\"ruleSha\":\"f731ece57c798a43e1863aebfa5a11dec0b71bf08ac814ae35642c5c202bcf65\",\"compliant\":true,\"reprompted\":false,\"reviewFailed\":false,\"reviewTruncated\":false,\"rePassHardFail\":false,\"error\":\"\",\"judgeComplied\":null,\"rulePreReview\":null}"
+      ]
     }
   },
-  "status": "in_progress",
+  "status": "complete",
   "driver": "claude-code",
   "maxAgentTimeout": 0,
   "timeoutRecording": false
