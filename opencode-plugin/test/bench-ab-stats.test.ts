@@ -2,6 +2,7 @@ import { test, expect } from "bun:test"
 import {
   pairedRunStats,
   mcnemarExactOneSided,
+  mcnemarMidPOneSided,
   bootstrapTaskCi,
   futilityStop,
   decide,
@@ -166,6 +167,32 @@ test("decide: legacy mode (null held-out) never accepts", () => {
 
 // ── additions: TS-specific risks ─────────────────────────────────────────
 
+// ── mid-p McNemar (power fix, 2026-08-12): the exact one-sided test is
+// deliberately conservative at the small discordant counts our k=5-7 abs
+// produce, making accept structurally unreachable (v18 crank post-mortem).
+// mid-p subtracts HALF the probability of the observed count — standard
+// correction, same false-positive control in practice, real power gain.
+
+test("mcnemarMidPOneSided: mid-p = exact − 0.5·P(X=b)", () => {
+  // b=6,c=0: exact = (1/2)^6 = 0.015625; P(X=6)=0.015625 → mid-p = 0.0078125
+  expect(mcnemarMidPOneSided(6, 0)).toBeCloseTo(0.0078125, 10)
+  // b=4,c=6 (v18's held-out, candidate side): exact P(X>=4|n=10)... reversed
+  // call as decide() does: (c,b)=(6,4): exact = P(X>=6|n=10) = 0.376953125,
+  // P(X=6)=210/1024 → mid-p = 0.376953125 − 0.1025390625 = 0.2744140625
+  expect(mcnemarMidPOneSided(6, 4)).toBeCloseTo(0.2744140625, 10)
+  // n=0 → 1.0 (same convention as exact)
+  expect(mcnemarMidPOneSided(0, 0)).toBe(1.0)
+})
+
+test("decide uses mid-p: a 15/6 discordant held-in win now accepts (exact would too-conservatively pass p=.05 only at wider margins)", () => {
+  // b=15,c=6,n=21: exact P(X>=15) = 0.0392 — accept either way; the pinned
+  // point is that decide()'s printed p matches MID-P (0.0392 − 0.5·0.0259
+  // = 0.0262), locking which test feeds the gate.
+  const { decision, reasons } = decide(ps(15, 6, 0.2), ps(1, 1, 0.0), DEFAULT_DECISION_CONFIG)
+  expect(decision).toBe("accept")
+  expect(reasons[0]).toContain("p=0.026")
+})
+
 test("mcnemar: large-n BigInt guard stays finite and in (0,1)", () => {
   const p = mcnemarExactOneSided(60, 40)
   expect(Number.isFinite(p)).toBe(true)
@@ -189,7 +216,8 @@ test("bootstrapTaskCi: different seeds usually produce different CIs", () => {
 test("decide: reasons formatting locks pySigned/pyFixed integration", () => {
   const { reasons } = decide(ps(6, 0, 0.2), null, DEFAULT_DECISION_CONFIG)
   // 1/64 = 0.015625 -> ".3f" = 0.016
-  expect(reasons[0]).toBe("held-in: delta=+0.200 p=0.016 (b=6,c=0,n=6)")
+  // mid-p (power fix): 6/0 exact 0.015625 − 0.5·0.015625 = 0.0078125 → ".3f" 0.008
+  expect(reasons[0]).toBe("held-in: delta=+0.200 p=0.008 (b=6,c=0,n=6)")
 })
 
 // ── pairedSpeedStats (W1a: time-to-resolve) ──────────────────────────────

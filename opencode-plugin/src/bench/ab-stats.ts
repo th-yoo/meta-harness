@@ -152,6 +152,30 @@ export function mcnemarExactOneSided(b: number, c: number): number {
 }
 
 /**
+ * Mid-p variant: exact tail MINUS half the probability of the observed count
+ * — p = P(X > b) + 0.5·P(X = b) under Binomial(n, ½). The exact test is
+ * known-conservative at the small discordant counts k=5-7 abs produce (the
+ * v18 crank's accept bar was ~7-0 discordant — structurally unreachable);
+ * mid-p restores power while keeping false-positive control in practice
+ * (standard correction — Lancaster 1961; Fagerland/Lydersen/Laake 2013
+ * recommend it for McNemar specifically). decide() feeds on this; the exact
+ * form above stays exported for report-only consumers and the test vectors.
+ */
+export function mcnemarMidPOneSided(b: number, c: number): number {
+  const n = b + c
+  if (n === 0) return 1.0
+
+  const bigN = BigInt(n)
+  let strictTail = 0n
+  for (let k = b + 1; k <= n; k++) {
+    strictTail += binomialCoefficient(bigN, BigInt(k))
+  }
+  const atObs = binomialCoefficient(bigN, BigInt(b))
+  const denom = 1n << bigN
+  return bigRatioToNumber(strictTail, denom) + 0.5 * bigRatioToNumber(atObs, denom)
+}
+
+/**
  * num/den as a `number`, for arbitrarily large BigInt num/den (num <= den).
  * A fixed decimal scale (e.g. `* 10n**18n`) underflows to exactly 0 once the
  * true ratio is smaller than the scale's resolution — which happens well
@@ -327,7 +351,7 @@ export function decide(
   cfg: DecisionConfig,
 ): Decision {
   const reasons: string[] = []
-  const pIn = mcnemarExactOneSided(heldIn.b, heldIn.c)
+  const pIn = mcnemarMidPOneSided(heldIn.b, heldIn.c)
   const pInRev = mcnemarExactOneSided(heldIn.c, heldIn.b)
   reasons.push(
     `held-in: delta=${pySigned(heldIn.delta, 3)} p=${pyFixed(pIn, 3)} ` +
@@ -346,7 +370,7 @@ export function decide(
     return { decision: "inconclusive", reasons }
   }
 
-  const pHoRev = mcnemarExactOneSided(heldOut.c, heldOut.b)
+  const pHoRev = mcnemarMidPOneSided(heldOut.c, heldOut.b)
   reasons.push(
     `held-out: delta=${pySigned(heldOut.delta, 3)} p_active=${pyFixed(pHoRev, 3)} ` +
       `(b=${heldOut.b},c=${heldOut.c},n=${heldOut.nPairs})`,

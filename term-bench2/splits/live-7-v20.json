@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "seed": 42,
+  "source": "band-interior-8.json minus wall-censored (tune-mjcf, large-scale-text-editing) plus diagnosis-source path-tracing",
+  "folds": [
+    [
+      "merge-diff-arc-agi-task",
+      "extract-elf",
+      "kv-store-grpc"
+    ],
+    [
+      "distribution-search",
+      "prove-plus-comm",
+      "llm-inference-batching-scheduler",
+      "path-tracing"
+    ]
+  ],
+  "activeFold": 0,
+  "rotatedAt": null,
+  "band": [0.2, 0.8],
+  "sentinels": [],
+  "passRates": {
+    "merge-diff-arc-agi-task": 0.8,
+    "extract-elf": 0.6,
+    "kv-store-grpc": 0.6,
+    "distribution-search": 0.8,
+    "prove-plus-comm": 0.6,
+    "llm-inference-batching-scheduler": 0.6,
+    "path-tracing": 0.0
+  },
+  "excluded": ["tune-mjcf", "large-scale-text-editing"],
+  "notes": "Power-trio split (2026-08-12): wall-censored tasks out (7-8 of 10 runs at the timeout wall = lottery pairs); llm-inference + path-tracing deliberately HELD-IN — v18's harm site and v20's premature-termination diagnosis source must be recorded+autopsiable, and held-out never records. path-tracing passRate 0.0 is outside the band by design (diagnosis-source floor: any candidate win there is pure b-signal)."
+}
