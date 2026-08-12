@@ -1406,3 +1406,73 @@ reproducing the bug it existed to eliminate. Raw evidence preserved at
 `pluginVersion` alone cannot attribute it, since the two implementations'
 version spaces overlap on `0.4.0` and `0.4.1` — only the single-emitter
 isolation can.
+
+## Loop crank #1: minted, gated, explained (2026-08-11→12, `yoo-dev`) — the first full cycle, and the instrument was the finding
+
+The production loop (TB2, account-global layer) completed its first
+end-to-end crank: store-writing band diet (14 tasks × k=5, 70 attempts, 0
+auth errors) → proposer → review gate → candidate v18 (one bullet, b7:
+"budget stated + below quality threshold → switch approach") → paired ab on
+an 8-task interior split → verdict → post-mortem. Every stage fired in
+production for the first time. The headline is not the candidate — it's what
+minting one forced the loop to reveal about itself.
+
+**Getting a candidate out took four propose cycles and three live defect
+fixes** (f913b30). The review gate free-failed EVERY layer-1 violation with
+no revision round — including form, the one class fixable by pure
+rephrasing, while harder rubric violations got a revision shot. The
+duplicate check compared candidates against the entire rejected ledger, so
+the rephrase the prompt itself invited was killed as a duplicate of its own
+form-rejected ancestor. And staging was all-or-nothing: cycle 3 passed 1 of
+2 bullets and threw the survivor away. Each defect was invisible until the
+loop was actually cranked — the machinery had passed every test it had ever
+been given.
+
+**The ab verdict said "reject: held-out regression." The post-mortem says
+the verdict text carried its own refutation.** delta −0.10 at
+p_active=0.377 — the reject fired on a fixed point-estimate margin
+(`delta < −0.05`), not on evidence; one discordant pair of 20 erased it.
+Underneath: v17's own test-retest drift across one day (band run vs ab
+arm-A) equals the entire claimed effect profile, so k=5 on a
+by-construction-borderline band measures noise. Two of the operator's own
+confident intermediate claims — "within-arm time bimodality proves b7's
+semantics," "the reshuffle's structure proves a real effect" — died against
+v17's own data on iteration 2 of a 3-iteration analysis loop. The
+code-architect audit (63 calls, every artifact at source) then found what
+self-review had missed: the deciding fold's regression was carried by ONE
+task; and two measurement-noise sources were living inside the ab itself —
+prove-plus-comm graded 3 of 4 clean, recompiling, admit-free proofs as
+failed because the runner hardcoded /app as verifier cwd while the task's
+Dockerfile seeds /workspace (a grading lottery, both arms); kv-store
+failures were process-lifecycle bugs, one agent wrapping its own server in
+`timeout 20` and declaring victory.
+
+**Fixes shipped (3483f14):** reject now demands significance — the margin
+became an accept-veto yielding inconclusive, because a reject is permanent
+(it feeds the do-not-re-derive ledger) and must not be minted from noise;
+`taskWorkdir()` honors the task Dockerfile's WORKDIR for agent, solve.sh,
+and verifier in both run and oracle paths; v18's verdict was re-derived
+under the corrected rule (reject → inconclusive, original preserved). The
+overnight OAuth death mid-ab produced its own recipe: uniform ~900.1s
+bilateral zeros = expired-credential signature; /login + strip the poisoned
+task from the partial + `--resume` recovered cleanly.
+
+**Crank #2 closed the arc (v20, staged 13:37):** with the ledger feeds
+mended and v18's honest status restored, the proposer — unprompted — pruned
+b5 on its own harmful:5 counter, rephrased the form-rejected fabrication
+bullet into a run-state trigger ("about to report a count/size/state → run
+one command scoped to that question"), and derived b8 as the old lesson's
+correct inversion ("do not abandon a measurably-matching lead until
+implemented and measured"). Both bullets condition on the agent's own run
+state, not task vocabulary — the exact defect class the v18 post-mortem
+identified, fixed by the loop's own next iteration rather than by operator
+injection. Whether they survive a gate is crank #2's ab (pending sized go:
+9 tasks — interior-8 + write-compressor, the diagnosis-source task v18's
+band never re-tested — k=5, --save-all-traj).
+
+**The meta-lesson mirrors the kkamak entry above:** the gate's green (and
+red) are narrow claims. A reject verdict read as "candidate is bad" was
+actually "instrument under-powered + margin rule too eager + two grading
+bugs" — and the only way that surfaced was refusing to spend on the next
+experiment before the last one was explained. Analysis of owned data beat
+the planned A/A control run to the answer, at zero token cost.

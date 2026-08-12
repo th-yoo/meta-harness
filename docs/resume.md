@@ -52,6 +52,62 @@ RESTART FROM SCRATCH (if host rebooted): a1 is done and committed — do
  entry, ACP_IDLE_MS=7200000 + daemon pre-start for a4).
 ```
 
+## ✅ SESSION 2026-08-11→12 (`yoo-dev`) — LOOP CRANK #1 COMPLETE (v18 minted→gated→explained) · CRANK #2 STAGED (v20) · FOUR INSTRUMENT FIXES
+
+**RESUME PROMPT (either host — git-only transfer):**
+```
+Resume meta-harness, post-2026-08-12 crank session. git pull FIRST, bun
+install BOTH plugin dirs. Last verified here: main 3483f14+docs, gate exit 0.
+
+CRANK #1 — the first complete self-improvement cycle EVER, all stages live:
+band diet (14×k=5, 33/70 attempt-rate, 10/14 pass@5, 0 auth errors) →
+propose (4 cycles; 3 loop defects found live and fixed TDD: form-only
+free-fail D1-D4, ledger-duplicate deadlock, all-or-nothing accept — f913b30)
+→ v18 minted (b7 budget/threshold bullet) → ab on band-interior-8 k=5
+(1c73e83 split; survived a mid-run OAuth death: strip-partial + --resume,
+backup /mnt/d/tmp/ab-partial-backup-poisoned.json) → verdict + full
+post-mortem (ralph 3-iter + code-architect 63-call audit).
+
+POST-MORTEM VERDICT (memory: loop-crank1-v18-verdict): the "reject" was a
+MARGIN ARTIFACT — delta −0.10 at p_active=0.377, own verdict carried the
+null; one pair-flip of 20 erased it. Causal stack: underpowered k=5 on
+borderline band (v17 test-retest drift = whole claimed effect) ·
+llm-inference alone carried the sign · TWO measurement-noise sources found
+INSIDE the ab (prove-plus-comm: 3/4 clean proofs graded fail — WORKDIR
+/workspace vs hardcoded /app cwd; kv-store: process-lifecycle bugs) · b7's
+real defect = per-incident lesson universalized across cost structures ·
+OOD eval (no diagnosis-source task in the band). Two of the operator's own
+confident intermediate claims died under iteration — analyze-before-spend
+(user call) was what caught them.
+
+FIXES SHIPPED (3483f14, gate exit 0): decide() reject now DEMANDS
+significance (margin = accept-veto → inconclusive; dilution-crux fixtures
+updated) · taskWorkdir() honors task Dockerfile WORKDIR for agent container
++ solve.sh + verifier in cmd-run AND cmd-oracle (corpus sweep: prove-plus-
+comm /workspace, fix-git, sanitize-git-repo) · v18 ab-verdict re-derived
+under the fixed rule (reject→inconclusive "cannot accept"; original in
+ab-verdict.json.pre-amendment-margin-rule.bak) · earlier: summary-line
+metric labels (attempts vs pass@k, e7e360f).
+
+CRANK #2 — v20 STAGED (13:37 KST), qualitatively past v18: proposer PRUNED
+b5 on its own harmful:5 counter, and derived two RUN-STATE-conditioned
+bullets (new-b7 "measure before you report a count/size/state"; b8 "do not
+abandon a measurably-matching lead until implemented+measured" — the old-b7
+lesson inverted, exactly the shape the post-mortem called for, NOT operator
+-injected). v19 = A/A control dir (byte-copy of v17, meta.json says never
+activate; A/A run DEMOTED to optional after the analysis).
+
+NEXT — NEEDS SIZED GO: ab v20-vs-v17, proposed 9 tasks (band-interior-8 +
+write-compressor held-in, closes the OOD gap) × k=5 × 2 arms = 90 attempts
+~10-11h serial tmux, --save-all-traj, /login immediately before launch
+(8h token vs run length — crank-1's ab died mid-run at ~05:00 on exactly
+this; uniform ~900.1s bilateral zeros = the expired-credential signature).
+
+Rules unchanged + new: elapsed-per-pair in ab-verdict = cheapest mechanism
+probe · test-retest drift before believing any k=5 effect · reject is
+permanent so it must be significant · verifier cwd = task WORKDIR.
+```
+
 ## ✅ SESSION END 2026-08-12 (`yoo-dev`) — kkamak 0.4.1 VERIFIED + 0.4.2 RELEASED · FIRST PUBLIC-PLUGIN DOGFOOD (13 CYCLES) · THE GATE CAUGHT 0 REAL DEFECTS, REVIEW CAUGHT 2
 
 **RESUME PROMPT (either host — git-only transfer):**
