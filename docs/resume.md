@@ -31,6 +31,67 @@ IF INCONCLUSIVE/REJECT: per-task tally + trajs (all saved this time)
 feed crank #3's propose; margin-rule now can't mint noise-rejects.
 ```
 
+## ✅ SESSION END 2026-08-12 (`yoo-mac` "minimal", cleared) — P2 PAUSE VERIFIED INTACT · HOLD STANDS · MAIN SYNCED
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness), yoo-mac "minimal", post-2026-08-12 clear.
+git pull FIRST, bun install BOTH plugin dirs. Sibling sessions share this
+checkout — check git branch/log before assuming state.
+
+FIRST THING: the ⏸ P2 PAUSE block directly below this one. P2 rerun #3
+is USER-PAUSED mid-a3 and the user said WAIT (08-12 evening) — do NOT
+resume without an explicit go. Verified intact 08-12 18:49 KST: runner
+pid 86896 + exec pid 19784 both stat T, container 59c0ea90da21 Paused,
+tmux p2-bench alive. Re-verify all four before anything else; if gone
+(reboot), the pause block's RESTART section governs.
+
+FACTS ESTABLISHED THIS SESSION (trust, don't re-derive):
+ - The tmux pipeline script CHAINS a3 -> daemon pre-start -> a4 -> tally
+   automatically (scratchpad p2-bench-run.sh of session c42492ad, tmp —
+   dead on reboot). Resume is EXACTLY two commands, in order:
+     /opt/podman/bin/podman unpause 59c0ea90da21
+     kill -CONT 19784 86896
+   then babysit the log (minimal/logs-p2-bench-20260811T002452.log;
+   tripwire "NOT retrying"). Attempt 22 burns as a loud timeout (wall
+   clock ran during the pause) — known one-attempt casualty.
+ - TOKEN: yoo-mac keychain expiresAt was 08-13 02:47 KST. Remaining work
+   ~4.5h worst case. If now past ~22:00 KST 08-12 or the token is
+   expired: `claude /login` BEFORE resuming (post-expiry attempts
+   fail-fast as auth — hardening holds, but the arm still burns).
+ - a1 reference numbers for the eventual verdict: pass@2 7/14 (0.500),
+   compliance 25/28 (0.893), committed dac0d14. Adoption bar: compliance
+   >=0.75 AND pass@k drop <=0.15 vs a1 — SEPARATE ruling after tally.
+ - After the run: commit a3+a4 results + the tally verdict json
+   (truncation counts are native now); judge-evidence sidecar rides
+   docs/loop-probes/p2/ per the 08-09 F2 ruling.
+
+ELSEWHERE LIVE (not this host's to touch):
+ - crank-2 ab (v20 vs v17) on yoo-dev, ETA was ~24:00 KST 08-12 —
+   verdict in .kkamak/global/candidates/v20/ab-verdict.json; a win needs
+   the user's own /mh-activate account v20 go.
+ - SENSOR CHECKPOINT DUE 2026-08-13 on yoo-dev: pull, then
+   `bun scripts/sensor-checkpoint.ts` (reader is the ruling — distinct
+   (baseSha,headSha)/day), then km-sensors-sync.sh export (yoo-dev
+   snapshot stale since Jul 31 — ALL trial-arms rows are host-local
+   there). Expected <25/day -> constants amendment: debounce (7 of 12
+   day-1 skips) > reach (user-level env) > cap; yoo-mac arming can ride
+   the same new boundary ts.
+
+STANDING OPENS: TB2 batch (re-check baseline budget-identity tuple
+first, no-spend) · ~/.claude rw-mount ruling (blocks linux-host P2
+only) · C4 (bare-SDK 429-walled) · A/A yoo-mac enrollment starts only
+with sessions started AFTER the 08-10 hooks pull (this clear qualifies —
+the next session here should enroll; check .km/trial-arms.ndjson gains
+a row).
+
+RULES: explicit user go before ANY merge to main and ANY spend (resume
+of a paused spend = spend) · 7b gate + docs/reviews artifact, SHAs via
+git rev-parse NEVER by hand · git add NAMED files only in worktrees ·
+own worktree per implementer · merging != deploying · probe the
+CONSEQUENCE, not the capability · SITREP style.
+```
+
 ## ⏸ LIVE STATE 2026-08-11 06:47 KST (`yoo-mac`) — P2 RERUN #3 RUNNING, USER-PAUSED MID-a3
 
 ```
