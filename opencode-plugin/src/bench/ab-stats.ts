@@ -351,12 +351,20 @@ export function decide(
     `held-out: delta=${pySigned(heldOut.delta, 3)} p_active=${pyFixed(pHoRev, 3)} ` +
       `(b=${heldOut.b},c=${heldOut.c},n=${heldOut.nPairs})`,
   )
-  const hoRegress =
-    heldOut.delta < -cfg.nonregressMargin ||
-    (heldOut.delta < 0 && pHoRev <= cfg.hoGuardAlpha)
-  if (hoRegress) {
+  // Reject is permanent (feeds the do-not-re-derive ledger), so it demands
+  // statistical support — a point estimate past the margin alone proved to
+  // fire on pure noise (v18 crank: delta −0.10 at p_active=0.377, erased by
+  // a single pair-flip of 20). The margin therefore only VETOES accept.
+  const hoRegressSignificant = heldOut.delta < 0 && pHoRev <= cfg.hoGuardAlpha
+  if (hoRegressSignificant) {
     reasons.push("held-out regression")
     return { decision: "reject", reasons }
+  }
+
+  const hoMarginVeto = heldOut.delta < -cfg.nonregressMargin
+  if (hoMarginVeto) {
+    reasons.push("held-out margin regression (not significant) — cannot accept")
+    return { decision: "inconclusive", reasons }
   }
 
   if (winIn) {

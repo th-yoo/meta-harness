@@ -130,6 +130,30 @@ test("decide: rejects on held-out regression despite a held-in win", () => {
   expect(decision).toBe("reject")
 })
 
+// Margin-only held-out regression (point estimate past the margin but NOT
+// statistically supported) must not hard-reject — reject feeds the permanent
+// do-not-re-derive ledger, and the v18 crank proved this fires on pure noise
+// (delta −0.10 at p_active=0.377; one pair-flip of 20 erased it). The margin
+// still BLOCKS accept; the verdict is inconclusive.
+test("decide: margin-only held-out regression (not significant) → inconclusive, not reject", () => {
+  // v18's actual numbers: held-in b=4,c=3 (+0.05); held-out b=4,c=6 (−0.10), p_active≈0.377
+  const { decision, reasons } = decide(ps(4, 3, 0.05), ps(4, 6, -0.1), DEFAULT_DECISION_CONFIG)
+  expect(decision).toBe("inconclusive")
+  expect(reasons.some((r) => r.includes("not significant"))).toBe(true)
+})
+
+test("decide: margin-only held-out regression still blocks an otherwise-significant accept", () => {
+  // held-in 6/0 would accept; held-out delta −0.08 at p_active=0.25 must veto
+  const { decision } = decide(ps(6, 0, 0.2), ps(0, 2, -0.08), DEFAULT_DECISION_CONFIG)
+  expect(decision).toBe("inconclusive")
+})
+
+test("decide: statistically supported held-out regression still hard-rejects", () => {
+  // c=5,b=0 → p_active = 1/32 ≈ 0.031 ≤ 0.05 → real regression, reject
+  const { decision } = decide(ps(4, 3, 0.05), ps(0, 5, -0.15), DEFAULT_DECISION_CONFIG)
+  expect(decision).toBe("reject")
+})
+
 test("decide: inconclusive when held-in win is not significant (p=5/16)", () => {
   const { decision } = decide(ps(3, 1, 0.1), ps(1, 1, 0.0), DEFAULT_DECISION_CONFIG)
   expect(decision).toBe("inconclusive")

@@ -36,7 +36,7 @@ import { buildCreateArgv, buildStartArgv, buildExecArgv, buildRmArgv, buildCpToA
 import { BENCH_IMAGE, apiKeyEnv, containerName, DEFAULT_BENCH_MODEL, useKeyOnlyForParallel, type BenchPaths } from "./paths.ts"
 import type { AgentAuthMounts } from "./agent-auth.ts"
 import { selectTasks, taskTimeouts, enforcedResources, packingFootprints, escalateResources } from "./tasks.ts"
-import { stageTaskRuntime } from "./staging.ts"
+import { stageTaskRuntime, taskWorkdir } from "./staging.ts"
 import type { StagingMode } from "./cmd-oracle.ts"
 import { copyTests, runVerifier } from "./verifier.ts"
 import { readSelfScore, SELF_CHECK_INSTRUCTION, SELF_CHECK_MARKER } from "./self-score.ts"
@@ -189,6 +189,10 @@ export async function runTaskOnce(
   const sessionId = `bench-${task}-${Math.floor(Date.now() / 1000)}-${randomBytes(3).toString("hex")}`
   const taskStart = Date.now()
   const name = containerName(task, "run")
+  // Task Dockerfile's WORKDIR (default /app) — the agent's container cwd AND
+  // the verifier's exec cwd, so relative-path graders resolve where the task
+  // image would put them (2026-08-12 prove-plus-comm fix, staging.ts).
+  const workdir = taskWorkdir(paths, task)
   const failResult = (error: RunTaskResult["error"]): RunTaskResult => ({
     sessionId,
     reward: 0,
@@ -236,7 +240,7 @@ export async function runTaskOnce(
           // no-op for the default driver.
           env: { ...apiKeyEnv(), ...(auth.env ?? {}) },
           network: true,
-          workdir: "/app",
+          workdir,
           resources,
         }),
       )
@@ -258,7 +262,7 @@ export async function runTaskOnce(
       log(`  container bring-up failed: ${msg}`)
       return failResult("setup_failed")
     }
-    await execFn(buildExecArgv(name, ["mkdir", "-p", "/app", "/tests", "/logs/verifier"]))
+    await execFn(buildExecArgv(name, ["mkdir", "-p", "/app", "/tests", "/logs/verifier", workdir]))
 
     if (staging === "scripts") {
       log(`  setup_deps.sh (${task})...`)
@@ -350,7 +354,7 @@ export async function runTaskOnce(
       log(`  copy-tests failed: ${msg}`)
       return failResult("setup_failed")
     }
-    const reward = await runVerifier(paths, name, task, verifierTimeout)
+    const reward = await runVerifier(paths, name, task, verifierTimeout, execFn, workdir)
     // Phase-0 self-check: only when the harness carries the instruction (else
     // zero overhead + byte-identical behavior). Read BEFORE the container is
     // removed in `finally`.

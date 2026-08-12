@@ -600,6 +600,31 @@ function resolveCopyStep(paths: BenchPaths, task: string, src: string, dst: stri
  * syntax outside FROM/ENV/COPY/RUN and the known-ignorable lifecycle
  * directives) — "fail loud, not silent skip" per the task brief.
  */
+/**
+ * The task Dockerfile's FINAL WORKDIR (default /app) — the cwd the task's
+ * own image would give both the agent and any relative-path grader.
+ * 2026-08-12 prove-plus-comm finding: its Dockerfile seeds
+ * /workspace/plus_comm.v under `WORKDIR /workspace`, but the runner
+ * hardcoded /app for the container workdir AND the verifier exec, so
+ * `os.path.exists("plus_comm.v")` graded from the wrong directory — 3 of 4
+ * clean proofs scored passed:false. Missing/unreadable Dockerfile → /app
+ * (never a new crash mode on the verifier path).
+ */
+export function taskWorkdir(paths: BenchPaths, task: string): string {
+  let text: string
+  try {
+    text = readFileSync(join(paths.tbRoot, task, "environment", "Dockerfile"), "utf-8")
+  } catch {
+    return DEFAULT_CWD
+  }
+  let cwd = DEFAULT_CWD
+  for (const raw of text.split("\n")) {
+    const m = raw.trim().match(/^WORKDIR\s+(.+)$/i)
+    if (m) cwd = resolveWorkdir(m[1]!, cwd)
+  }
+  return cwd
+}
+
 export function parseTaskDockerfile(paths: BenchPaths, task: string): TaskStaging {
   const dfPath = join(paths.tbRoot, task, "environment", "Dockerfile")
   let text: string

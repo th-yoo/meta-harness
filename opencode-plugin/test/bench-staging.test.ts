@@ -22,7 +22,7 @@ import * as path from "node:path"
 import * as os from "node:os"
 import { makeBenchPaths } from "../src/bench/paths.ts"
 import type { BenchPaths } from "../src/bench/paths.ts"
-import { parseTaskDockerfile, stageTaskRuntime, execNetStep, STAGING_MAX_ATTEMPTS, type StagingStep } from "../src/bench/staging.ts"
+import { parseTaskDockerfile, stageTaskRuntime, execNetStep, taskWorkdir, STAGING_MAX_ATTEMPTS, type StagingStep } from "../src/bench/staging.ts"
 import { buildExecArgv, buildCpToArgv } from "../src/bench/sandbox.ts"
 import { cmdOracle, type RunOneOracleTask } from "../src/bench/cmd-oracle.ts"
 import { main } from "../src/bench/cli.ts"
@@ -1177,4 +1177,38 @@ test("execNetStep: non-transient failure (real dep error) — NO retry, returns 
   const res = await execNetStep(execFn, ["bash", "-c", "apt"], "apt install nonexistent-pkg", noSleep)
   expect(res.rc).toBe(100)
   expect(calls).toBe(1) // a genuine dep error must not waste retries
+})
+
+// ── taskWorkdir — the verifier/agent cwd must honor the task Dockerfile ────
+// (2026-08-12 prove-plus-comm finding: Dockerfile WORKDIR /workspace seeds
+// /workspace/plus_comm.v; the bench hardcoded /app for BOTH the agent's
+// container workdir and the verifier exec, so relative-path graders looked in
+// the wrong directory — 3 of 4 clean proofs scored passed:false.)
+
+test("taskWorkdir: no WORKDIR directive → /app default", () => {
+  const dir = tmpDir()
+  mkdirSync(path.join(dir, "t", "environment"), { recursive: true })
+  writeFileSync(path.join(dir, "t", "environment", "Dockerfile"), "FROM ubuntu:24.04\nRUN echo hi\n")
+  expect(taskWorkdir(fakeBenchPaths(dir), "t")).toBe("/app")
+})
+
+test("taskWorkdir: absolute WORKDIR wins (prove-plus-comm shape)", () => {
+  const dir = tmpDir()
+  mkdirSync(path.join(dir, "t", "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, "t", "environment", "Dockerfile"),
+    "FROM coqorg/coq:8.18\nWORKDIR /workspace\nCOPY partial_proof.v /workspace/plus_comm.v\n",
+  )
+  expect(taskWorkdir(fakeBenchPaths(dir), "t")).toBe("/workspace")
+})
+
+test("taskWorkdir: relative WORKDIR chains against the previous cwd; missing Dockerfile → /app", () => {
+  const dir = tmpDir()
+  mkdirSync(path.join(dir, "t", "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, "t", "environment", "Dockerfile"),
+    "FROM ubuntu:24.04\nWORKDIR /app\nWORKDIR john/src\n",
+  )
+  expect(taskWorkdir(fakeBenchPaths(dir), "t")).toBe("/app/john/src")
+  expect(taskWorkdir(fakeBenchPaths(dir), "no-such-task")).toBe("/app")
 })

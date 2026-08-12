@@ -263,8 +263,12 @@ test("sentinel dilution: pooled would accept but fold-only rejects (crux vector)
   const pooledDecision = decide(hiStats, hoPooledStats, cfg)
 
   expect(pooledDecision.decision).toBe("accept") // what the OLD pooled gate would wrongly do
-  expect(foldDecision.decision).toBe("reject") // what the stratified gate correctly does
-  expect(foldDecision.reasons.some((r) => r.includes("held-out regression"))).toBe(true)
+  // Stratified gate blocks the dilution-laundered accept. Post-f913b30 margin
+  // fix: a 1-of-18 discordant regression (p=0.5) is NOT statistically
+  // supported, so the block is "cannot accept" (inconclusive), not a
+  // ledger-grade reject.
+  expect(foldDecision.decision).toBe("inconclusive")
+  expect(foldDecision.reasons.some((r) => r.includes("cannot accept"))).toBe(true)
 })
 
 test("sentinel-only regression forces reject", () => {
@@ -320,8 +324,10 @@ test("abDecision: fold-only wiring rejects marginal regression despite sentinel 
   expect(pooled.delta).toBeGreaterThanOrEqual(-cfg.nonregressMargin) // pooled "fixes" it away — the bug
   expect(ho!.delta).toBeLessThan(-cfg.nonregressMargin) // fold-only still shows the regression
 
-  expect(decision).toBe("reject")
-  expect(reasons.some((r) => r.includes("held-out regression"))).toBe(true)
+  // Same post-f913b30 semantics as the crux-vector test above: the fold-only
+  // margin veto blocks accept without a statistically unsupported reject.
+  expect(decision).toBe("inconclusive")
+  expect(reasons.some((r) => r.includes("cannot accept"))).toBe(true)
   expect(hoSentinel).not.toBeNull()
   expect(hoSentinel!.delta).toBe(0.0) // sentinels themselves concordant
 })

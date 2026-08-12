@@ -37,7 +37,7 @@ import {
 } from "./sandbox.ts"
 import { BENCH_IMAGE, containerName, type BenchPaths } from "./paths.ts"
 import { selectTasks, taskTimeouts, enforcedResources } from "./tasks.ts"
-import { stageTaskRuntime, type ExecFn } from "./staging.ts"
+import { taskWorkdir, stageTaskRuntime, type ExecFn } from "./staging.ts"
 import { copyTests, runVerifier } from "./verifier.ts"
 import { BenchError, log, pyFixed, writeJsonAtomic } from "./util.ts"
 
@@ -70,6 +70,11 @@ export async function runOneOracleTask(
 ): Promise<OracleTaskResult> {
   const name = containerName(task, "oracle")
   const taskStart = Date.now()
+  // Task Dockerfile's WORKDIR — same honor as runTaskOnce (2026-08-12
+  // prove-plus-comm fix): solve.sh and the verifier run where the task
+  // image's own cwd would put them. setup_deps.sh keeps its fixed /app
+  // generator contract (WORKDIR env var) unchanged.
+  const workdir = taskWorkdir(paths, task)
   try {
     try {
       const createResult = await execFn(
@@ -81,7 +86,7 @@ export async function runOneOracleTask(
             { host: paths.termBenchDir, container: "/mh", ro: true },
           ],
           network: true,
-          workdir: "/app",
+          workdir,
           resources,
         }),
       )
@@ -143,7 +148,7 @@ export async function runOneOracleTask(
       log(`  Running solution/solve.sh (timeout=${pyFixed(agentTimeout, 0)}s)...`)
       const solveResult = await execFn(
         buildExecArgv(name, withTimeout(["bash", `/tb/${task}/solution/solve.sh`], agentTimeout), {
-          workdir: "/app",
+          workdir,
         }),
       )
       if (solveResult.timedOut) {
@@ -161,7 +166,7 @@ export async function runOneOracleTask(
       log(`  copy-tests failed: ${msg}`)
       return { reward: 0, elapsed: 0.0, error: "setup_failed" }
     }
-    const reward = await runVerifier(paths, name, task, verifierTimeout)
+    const reward = await runVerifier(paths, name, task, verifierTimeout, execFn, workdir)
     const elapsed = Math.round(((Date.now() - taskStart) / 1000) * 10) / 10
     return { reward, elapsed, error: "" }
   } finally {

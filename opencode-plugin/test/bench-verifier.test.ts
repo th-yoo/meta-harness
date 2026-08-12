@@ -11,7 +11,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
 import type { BenchPaths } from "../src/bench/paths.ts"
-import { copyTests } from "../src/bench/verifier.ts"
+import { copyTests, runVerifier } from "../src/bench/verifier.ts"
 import { buildExecArgv, buildCpToArgv } from "../src/bench/sandbox.ts"
 import { BenchError } from "../src/bench/util.ts"
 import type { ExecResult } from "../src/bench/exec.ts"
@@ -208,4 +208,37 @@ test("copyTests: execFn defaults to the real exec.ts podman funnel when omitted 
   // a runtime exercise (calling it for real would spawn actual podman).
   expect(typeof copyTests).toBe("function")
   expect(copyTests.length).toBeLessThanOrEqual(4)
+})
+
+// ── runVerifier workdir (2026-08-12 prove-plus-comm fix): the test.sh exec
+// must run from the task Dockerfile's WORKDIR, not a hardcoded /app —
+// relative-path graders (os.path.exists("plus_comm.v")) look in the cwd.
+
+test("runVerifier: execs test.sh with the given workdir", async () => {
+  const recordedArgvs: string[][] = []
+  const execFn = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    if (argv.includes("cat")) return { rc: 0, stdout: "1", stderr: "", timedOut: false }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  const reward = await runVerifier(fakeBenchPaths(tmpDir()), "cname", "t", 30, execFn, "/workspace")
+  expect(reward).toBe(1)
+  const testShExec = recordedArgvs.find((a) => a.includes("bash") && a.some((x) => x.includes("test.sh")))!
+  expect(testShExec).toBeTruthy()
+  const wIdx = testShExec.indexOf("-w")
+  expect(wIdx).toBeGreaterThan(-1)
+  expect(testShExec[wIdx + 1]).toBe("/workspace")
+})
+
+test("runVerifier: workdir omitted → /app (byte-identical default)", async () => {
+  const recordedArgvs: string[][] = []
+  const execFn = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    if (argv.includes("cat")) return { rc: 0, stdout: "1", stderr: "", timedOut: false }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await runVerifier(fakeBenchPaths(tmpDir()), "cname", "t", 30, execFn)
+  const testShExec = recordedArgvs.find((a) => a.includes("bash") && a.some((x) => x.includes("test.sh")))!
+  const wIdx = testShExec.indexOf("-w")
+  expect(testShExec[wIdx + 1]).toBe("/app")
 })

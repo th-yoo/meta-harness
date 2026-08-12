@@ -111,22 +111,26 @@ export async function runVerifier(
   name: string,
   task: string,
   verifierTimeout: number,
+  execFn: ExecFn = podman,
+  // The task Dockerfile's WORKDIR (staging.ts taskWorkdir) — relative-path
+  // graders resolve against this cwd (2026-08-12 prove-plus-comm fix).
+  workdir: string = "/app",
 ): Promise<number> {
-  const testShExists = await podman(buildExecArgv(name, ["test", "-f", "/tests/test.sh"]))
+  const testShExists = await execFn(buildExecArgv(name, ["test", "-f", "/tests/test.sh"]))
   if (testShExists.rc !== 0) {
     log("  WARNING: no test.sh found")
     return 0
   }
 
   log(`  verifier (timeout=${pyFixed(verifierTimeout, 0)}s)...`)
-  const result = await podman(
-    buildExecArgv(name, withTimeout(["bash", "/tests/test.sh"], verifierTimeout), { workdir: "/app" }),
+  const result = await execFn(
+    buildExecArgv(name, withTimeout(["bash", "/tests/test.sh"], verifierTimeout), { workdir }),
   )
   if (result.timedOut) {
     log(`  verifier timed out after ${pyFixed(verifierTimeout, 0)}s`)
   }
 
-  const rewardResult = await podman(buildExecArgv(name, ["cat", "/logs/verifier/reward.txt"]))
+  const rewardResult = await execFn(buildExecArgv(name, ["cat", "/logs/verifier/reward.txt"]))
   if (rewardResult.rc !== 0) return 0
   const trimmed = rewardResult.stdout.trim()
   return trimmed === "0" || trimmed === "1" ? parseInt(trimmed, 10) : 0
