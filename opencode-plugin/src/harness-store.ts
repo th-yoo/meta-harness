@@ -344,6 +344,48 @@ export interface AbVerdict {
    * pairs (cmd-ab.ts's ab-stats.ts pairedSpeedStats). Absent entirely on
    * pre-W1a verdicts. */
   speed?: { heldIn: AbSpeedStats | null; heldOut: AbSpeedStats | null }
+  // a3 routing T8 (additive-optional — old verdicts still parse): per-arm
+  // rule-routing checked-bullet identity. The SAME `checksHashOf` hash T5's
+  // `env.checksHash` records for arm B alone — this is where arm A's (the
+  // active baseline's) OWN identity lands, since the single `env` block
+  // above only ever covers arm B (T5 review note: envBlock is computed
+  // once, from the candidate/arm-B harness). Stamped on EVERY verdict going
+  // forward (checkless included, coalesced to `EMPTY_CHECKS_HASH` on both
+  // sides) — optional here only because pre-T8 verdicts on disk lack the
+  // key entirely, same convention as `maxAgentTimeout` above.
+  activeChecksHash?: string
+  candidateChecksHash?: string
+  /** Stamped iff EITHER checksHash above is not `EMPTY_CHECKS_HASH`: a
+   * checked-rule bundle's regressions are NOT attributable between rule
+   * TEXT (the helpful/harmful playbook bookkeeping every ab already scores)
+   * and check BEHAVIOR (the gate's pass/block decisions) — a candidate that
+   * "loses" could be a worse RULE or just a stricter/flakier CHECK. See
+   * `ruleCheckTotals` below and cmd-run.ts's `RunTaskResult.ruleChecks` (the
+   * per-attempt annotation this aggregates). Absent — not merely
+   * false/empty — on a checkless verdict, so existing consumers that only
+   * ever `if (verdict.checkBundleCaveat)` stay byte-shape-compatible. */
+  checkBundleCaveat?: string
+  /** Per-rule `{blocked, exhausted}` totals aggregated across every
+   * attempt's `ruleChecks` annotation (T7), split per arm — the caveat's
+   * pointer target. `blocked` sums `perRule[bulletId].blocked` across
+   * attempts that named this bulletId as the (sole, most-recently-failing)
+   * rule; `exhausted` counts ATTEMPTS whose gate exhausted while THIS
+   * bulletId was that failing rule — rounds/exhausted are gate-level, not
+   * per-rule (rule-gate.ts's F2 scope cut: `perRule` tracks only the most
+   * recently failing bulletId's entry), so per-attempt attribution to the
+   * failing bulletId is the closest reading state.json's shape supports.
+   * Present only alongside `checkBundleCaveat` (undefined on a checkless
+   * verdict).
+   *
+   * RUN-TIME DUTY (not code, not this task): the FIRST real checked-rule ab
+   * run whose verdict lands here with a non-empty caveat must ALSO stamp a
+   * boundary timestamp in docs/2026-08-01-gauntlet-adoption-ledger.md (a3
+   * plan documentation step) — an operational step for whoever runs that
+   * ab, not something verdict assembly can do at write time. */
+  ruleCheckTotals?: {
+    active: Record<string, { blocked: number; exhausted: number }>
+    candidate: Record<string, { blocked: number; exhausted: number }>
+  }
 }
 
 /** Accept a candidate iff the v2 decision says "accept"; fall back to the v1

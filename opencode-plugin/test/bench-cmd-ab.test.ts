@@ -13,6 +13,8 @@ import {
   projectGlobalRoot,
   createCandidate,
   writeActive,
+  checksHashOf,
+  EMPTY_CHECKS_HASH,
   type Playbook,
 } from "../src/harness-store.ts"
 import { BenchError } from "../src/bench/util.ts"
@@ -338,6 +340,96 @@ test("cmdAb: per-arm injection symmetry — arm A gets ONLY the active playbook'
     { bulletId: "bX", cmd: "checkX", timeoutMs: 5000 },
     { bulletId: "bY", cmd: "checkY", timeoutMs: 5000 },
   ])
+})
+
+// ── a3 routing T8: ab verdict checksHash + checkBundleCaveat ───────────────
+
+test("cmdAb: checked ab verdict carries per-arm checksHash + checkBundleCaveat + ruleCheckTotals (a3 routing T8)", async () => {
+  const paths = isolatedPaths(["t1"])
+  const root = projectGlobalRoot(paths.metaRoot)
+  const activeCheckedPb = checkedPlaybook("bX", "checkX")
+  // Candidate playbook = the active bullet unchanged (bX) PLUS a genuinely
+  // new checked bullet (bY) — mirrors the injection-symmetry fixture above
+  // so arm A's hash and arm B's hash are provably DIFFERENT (distinct
+  // bundles), not just both non-empty.
+  const candidateCheckedPb: Playbook = {
+    schemaVersion: 1,
+    nextId: 3,
+    bullets: [
+      ...activeCheckedPb.bullets,
+      {
+        id: "bY",
+        text: "run the second check before finishing",
+        helpful: 0,
+        harmful: 0,
+        addedBy: "candidate",
+        status: "active",
+        createdAt: activeCheckedPb.bullets[0]!.createdAt,
+        updatedAt: activeCheckedPb.bullets[0]!.updatedAt,
+        check: { cmd: "checkY", timeoutMs: 5000, state: "shadow" },
+      },
+    ],
+  }
+  createCandidate(root, "v0", "baseline sys", "", activeCheckedPb)
+  writeActive(root, "v0", "baseline sys", "", activeCheckedPb)
+  createCandidate(root, "v1", "candidate sys", "", candidateCheckedPb)
+
+  // runTaskPairs always awaits arm A (active) to completion before starting
+  // arm B (candidate) — same call-order-is-arm-identity precedent the
+  // injection-symmetry test above relies on. Arm A's attempt reports one
+  // block on bX (not yet exhausted); arm B's reports a block on bY that DID
+  // exhaust — distinct per-arm/per-rule numbers so the aggregation can't
+  // pass by accident (e.g. summing the wrong arm, or conflating exhausted
+  // counts across rules).
+  let callIdx = 0
+  const fake: RunOneTaskFn = async () => {
+    callIdx++
+    if (callIdx === 1) {
+      return res({ ruleChecks: { rounds: 1, exhausted: false, perRule: { bX: { blocked: 1 } } } })
+    }
+    return res({ ruleChecks: { rounds: 2, exhausted: true, perRule: { bY: { blocked: 2 } } } })
+  }
+
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, driver: "claude-code" } as CmdAbArgs,
+      fake,
+      fakeExec,
+    ),
+  )
+
+  const verdict = readAbVerdict(root, "v1")
+  expect(verdict).not.toBeNull()
+  expect(verdict!.activeChecksHash).toBe(checksHashOf(activeCheckedPb))
+  expect(verdict!.candidateChecksHash).toBe(checksHashOf(candidateCheckedPb))
+  expect(verdict!.activeChecksHash).not.toBe(EMPTY_CHECKS_HASH)
+  expect(verdict!.candidateChecksHash).not.toBe(EMPTY_CHECKS_HASH)
+  expect(verdict!.activeChecksHash).not.toBe(verdict!.candidateChecksHash)
+  expect(verdict!.checkBundleCaveat).toBe(
+    "checked-rule bundle: regressions are not attributable between rule text and check behavior; see per-rule ruleChecks block/exhaust counts",
+  )
+  expect(verdict!.ruleCheckTotals).toEqual({
+    active: { bX: { blocked: 1, exhausted: 0 } },
+    candidate: { bY: { blocked: 2, exhausted: 1 } },
+  })
+})
+
+test("cmdAb: checkless ab verdict carries EMPTY_CHECKS_HASH on both arms, no caveat, no totals (a3 routing T8)", async () => {
+  const paths = isolatedPaths(["t1"])
+  const root = setupCandidate(paths, "project-global", "v1") // prose-only playbooks — no checks
+  const fake: RunOneTaskFn = async () => res()
+
+  await quiet(() =>
+    cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1 } as CmdAbArgs, fake, fakeExec),
+  )
+
+  const verdict = readAbVerdict(root, "v1")
+  expect(verdict).not.toBeNull()
+  expect(verdict!.activeChecksHash).toBe(EMPTY_CHECKS_HASH)
+  expect(verdict!.candidateChecksHash).toBe(EMPTY_CHECKS_HASH)
+  expect(verdict!.checkBundleCaveat).toBeUndefined()
+  expect(verdict!.ruleCheckTotals).toBeUndefined()
 })
 
 // ── legacy explicit-tasks mode ───────────────────────────────────────────
