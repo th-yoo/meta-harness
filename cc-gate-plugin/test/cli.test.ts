@@ -66,7 +66,8 @@ function stateFilePath(repo: string, sessionId: string): string {
 
 function seedState(repo: string, sessionId: string, overrides: Partial<CcGateState>): void {
   const store = new FileStateStore(path.join(repo, ".km", "cc-gate"))
-  store.save(sessionId, { ...INITIAL_STATE, ...overrides })
+  // Fresh session (no prior on-disk record) → expected updatedAt 0.
+  store.save(sessionId, { ...INITIAL_STATE, ...overrides }, 0)
 }
 
 function loadState(repo: string, sessionId: string): CcGateState {
@@ -632,6 +633,112 @@ test("sidecar write failure changes nothing about the emitted block decision", a
     expect(sabotaged.stdout).toBe(healthy.stdout)
     expect(sabotaged.stderr).toContain("check-output")
     rmRepo(twin)
+  } finally {
+    rmRepo(repo)
+  }
+})
+
+// ── CAS port: lost-race, sweep-alive, pass-through skip (spawned-CLI) ──────
+// Faithful process-level ports of kkamak gate.test.ts:563/588 — the check
+// COMMAND ITSELF mutates the state file mid-check, translating kkamak's
+// h.check.onRun trick to a real process. The mutator writes atomically
+// (tmp+rename) so the Stop's CAS re-read never catches a torn file (which
+// would read as initial/updatedAt-0 and pass the test for the WRONG reason).
+
+/** A shell check command that, before returning `exitCode`, rewrites the
+ * session's state file with a bumped updatedAt (atomic tmp+rename). */
+function mutatorCheck(repo: string, sessionId: string, exitCode: number): string {
+  const stateFile = stateFilePath(repo, sessionId)
+  const bumped = JSON.stringify({
+    ...INITIAL_STATE,
+    edited: true,
+    gating: true,
+    round: 1,
+    updatedAt: 9_999_999_999_999,
+  })
+  const tmp = `${stateFile}.mutator.tmp`
+  // bun is the guaranteed toolchain binary (the suite runs under it). Write
+  // the mutator to a temp .ts file and invoke it by path, so the JSON payload
+  // never has to survive shell-quoting through `bash -c`.
+  const script =
+    `import fs from "node:fs"\n` +
+    `fs.writeFileSync(${JSON.stringify(tmp)}, ${JSON.stringify(bumped)})\n` +
+    `fs.renameSync(${JSON.stringify(tmp)}, ${JSON.stringify(stateFile)})\n` +
+    `process.exit(${exitCode})\n`
+  const scriptPath = path.join(repo, `.mutator-${sessionId}-${exitCode}.ts`)
+  fs.writeFileSync(scriptPath, script)
+  return `bun ${JSON.stringify(scriptPath)}`
+}
+
+test("Stop lost-race ACCEPT: a concurrent write during the check makes the reset lose CAS, but the reset still lands (file deleted) and exit 0", async () => {
+  const repo = mkRepo()
+  try {
+    // check passes (exit 0) after mutating the state file → handleStop returns
+    // an accept reset; its CAS save loses to the mutator's bumped updatedAt,
+    // saveResetWithRetry reloads fresh and the reset (delete) lands.
+    writeGate(repo, { check: mutatorCheck(repo, "s1", 0) })
+    seedState(repo, "s1", { edited: true })
+
+    const r = await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "s1", cwd: repo }) })
+
+    expect(r.exitCode).toBe(0)
+    expect(fs.existsSync(stateFilePath(repo, "s1"))).toBe(false)
+  } finally {
+    rmRepo(repo)
+  }
+})
+
+test("Stop lost-race EXHAUST (rounds:0): concurrent write during check, still allow-exhausted and state file absent", async () => {
+  const repo = mkRepo()
+  try {
+    writeGate(repo, { check: mutatorCheck(repo, "s1", 1), rounds: 0 })
+    seedState(repo, "s1", { edited: true })
+
+    const r = await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "s1", cwd: repo }) })
+
+    // rounds:0 → first failing check is allowed through (no block), reset
+    // lands as a delete despite the lost race.
+    expect(r.exitCode).toBe(0)
+    expect(fs.existsSync(stateFilePath(repo, "s1"))).toBe(false)
+  } finally {
+    rmRepo(repo)
+  }
+})
+
+test("Stop sweep-alive: an UNARMED Stop (no-save arm) still sweeps a stale FOREIGN session file", async () => {
+  const repo = mkRepo()
+  try {
+    writeGate(repo, { check: "true" })
+    // Plant a stale foreign record + ensure the dir exists, but do NOT arm the
+    // triggering session — its Stop takes the pass-through (no-save) arm.
+    const foreign = stateFilePath(repo, "foreign")
+    fs.mkdirSync(path.dirname(foreign), { recursive: true })
+    fs.writeFileSync(
+      foreign,
+      JSON.stringify({ ...INITIAL_STATE, edited: true, updatedAt: Date.now() - 8 * 24 * 60 * 60 * 1000 }),
+    )
+    // No .last-swept, so the sweep is not rate-limited.
+
+    const r = await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "unarmed", cwd: repo }) })
+
+    expect(r.exitCode).toBe(0)
+    // Sweep fired unconditionally at its late call site even though this Stop
+    // wrote nothing → the stale foreign file is gone.
+    expect(fs.existsSync(foreign)).toBe(false)
+    // The unarmed session left no file of its own.
+    expect(fs.existsSync(stateFilePath(repo, "unarmed"))).toBe(false)
+  } finally {
+    rmRepo(repo)
+  }
+})
+
+test("Stop pass-through: an unarmed session's Stop writes NO state file (no-save arm)", async () => {
+  const repo = mkRepo()
+  try {
+    writeGate(repo, { check: "true" })
+    const r = await runHook({ event: "Stop", stdin: JSON.stringify({ session_id: "never-armed", cwd: repo }) })
+    expect(r.exitCode).toBe(0)
+    expect(fs.existsSync(stateFilePath(repo, "never-armed"))).toBe(false)
   } finally {
     rmRepo(repo)
   }

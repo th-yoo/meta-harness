@@ -191,7 +191,7 @@ consecutive internal errors disarm the gate for the session.
 
 - **Crash window:** If the process crashes between persisting state and appending to the sensor, one round may be lost. Rounds are redeemed on the next turn.
 - **No walk-up:** Launching `claude` in a subdirectory won't find a `gate.json` at the repo root. Use `claude` from the root or absolute `gate.json` paths.
-- **Last-writer-wins:** Concurrent hook processes for the same session have no lock. The last process to write state wins; prior updates are lost. Data is never corrupted, only lasered.
+- **Compare-and-swap on writes:** Concurrent hook processes for the same session serialize on a best-effort lockfile and compare-and-swap on the record's `updatedAt`. A save that raced and lost — a newer write landed while a check was running — is refused rather than allowed to clobber it. A refused *block* write fails open (the turn is allowed, exactly as it would on ENOSPC), and a refused *reset* retries once against fresh state, since a reset is unconditional (the cycle is over). The lock is best-effort: if it cannot be acquired within a bounded window it degrades to CAS-only. A crashed holder's lock is reclaimed only once it is both stale and its recorded pid is confirmed dead, so a merely-slow live holder is never robbed.
 - **3-strike disarm:** After 3 consecutive internal errors (e.g., check throws, state I/O fails), the gate disarms for the session with a visible message. Resume by restarting Claude.
 
 ## How it works
