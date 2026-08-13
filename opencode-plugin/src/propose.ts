@@ -412,16 +412,34 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     } catch { /* malformed ops → no-op edit */ }
     fs.rmSync(stagingOps, { force: true })
     // SCREEN COVERAGE INVARIANT (a3 routing T4): every op's check must pass
-    // screenCheck before ANY applyPlaybookOps call below. `add`-op checks are
-    // ALSO screened (redundantly, harmlessly) by reviewAddedBullets further
-    // down, which owns their review + ledger entry; this is what actually
-    // covers `update`-op checks, which bypass review entirely.
+    // screenCheck before ANY applyPlaybookOps call below — this runs BEFORE
+    // addedOps is computed, so a screen-rejected `add` op never reaches
+    // reviewAddedBullets at all (it only sees survivors); `update`-op checks
+    // bypass review entirely regardless, so this is their only screen too.
+    // Since a screen-rejected add op is dropped here — not by
+    // reviewAddedBullets — THIS is the site that must write its
+    // rejected-ledger entry (fix round 1, review round 4): the plan requires
+    // every screen-rejected bullet be REJECTED WHOLE AND LEDGERED, and the
+    // ledger only exists in the propose lane, only for `add`-op bullets (the
+    // ledger's whole purpose is steering the proposer away from re-deriving
+    // the same idea — `update`/`delete` ops were never ledgered before this
+    // task either, so they stay log-only here).
     const screened = screenOpsChecks(ops)
     ops = screened.ops
     checkLiveEligible = screened.liveEligible
     for (const r of screened.rejections) {
       const label = r.op.op === "update" ? `update ${r.op.id}` : r.op.op
       await host.log("warn", `proposer ${layer.scope} ${version}: ${label} check screen-rejected (${r.reason}) — op dropped`)
+      if (r.op.op === "add") {
+        appendRejectedLedger(layer.root, {
+          rejectedAt: new Date().toISOString().slice(0, 10),
+          scope: layer.scope,
+          version,
+          bullet: `${r.op.text} [check: screen-denied (${r.reason})]`,
+          violations: [`check-screen:${r.reason}`],
+          source: "review-gate",
+        })
+      }
     }
     const assessments = (diagnosis?.["bulletAssessments"] as { id: string; verdict: "helpful" | "harmful" }[]) || []
     if (assessments.length) applyBulletAssessments(layer.root, assessments)
@@ -1443,6 +1461,10 @@ async function applyCurateArtifact(host: HarnessHost, d: StagedArtifactDescripto
   // see the "add is NOT allowed" instruction in buildCuratePrompt below), so
   // screenOpsChecks is the ONLY screen ANY op's check gets here. Must run
   // before applyPlaybookOps or a curator-revised check ships unscreened.
+  // Fix round 1 (review round 4) ruling: this lane has no rejected-ledger at
+  // all (no readRejectedLedger/appendRejectedLedger anywhere in the curate
+  // path) — a dropped op stays LOG-ONLY here, by design. The log line must
+  // still carry the slug reason only, NEVER the raw command text.
   const screened = screenOpsChecks(ops)
   ops = screened.ops
   for (const r of screened.rejections) {

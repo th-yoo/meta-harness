@@ -240,6 +240,41 @@ test("applyProposeArtifact: add op with a Tier-L check → PERSISTED playbook ca
   expect(bullet.check!.liveEligible).toBe(true)
 })
 
+// (fix round 1, review round 4): a screen-rejected add-op's check must be
+// REJECTED WHOLE AND LEDGERED (appendRejectedLedger), not just log-only —
+// screenOpsChecks drops it BEFORE reviewAddedBullets ever sees it, so
+// applyProposeArtifact itself must write the ledger entry from the
+// rejections list. noLlmHost proves reviewAddedBullets is never reached
+// (the op never survives to become part of `addedOps`).
+test("applyProposeArtifact: add op with a screen-rejected check is ledgered whole, ledger text omits the cmd", async () => {
+  const root = path.join(home, "stores", "pbcheckreject")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const b = stagingBase()
+  const STORE_PATH_CMD = "cat .kkamak/global/active/playbook.json"
+  fs.writeFileSync(path.join(b, "project-role-v2-ops.json"),
+    JSON.stringify({ ops: [{
+      op: "add",
+      text: "When finishing a checked task, verify the completion marker exists before declaring done.",
+      check: { cmd: STORE_PATH_CMD, timeoutMs: 5000 },
+    }] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(noLlmHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  const ledger = readRejectedLedger(root)
+  expect(ledger.length).toBe(1)
+  expect(ledger[0]!.bullet).toContain("screen-denied (store-path)")
+  expect(ledger[0]!.bullet).not.toContain(STORE_PATH_CMD)
+  expect(ledger[0]!.violations).toEqual(["check-screen:store-path"])
+  expect(rec.logs.some((l) => l.includes("store-path"))).toBe(true)
+  expect(rec.logs.some((l) => l.includes(STORE_PATH_CMD))).toBe(false)
+})
+
 // ── applyStagedArtifact: propose (per-bullet generality tag) ───────────────
 
 test("applyProposeArtifact: tagged add op → candidate bullet carries generality + slice", async () => {
