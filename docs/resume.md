@@ -3,6 +3,66 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-13 (`yoo-mac` "minimal", cleared ~11:00 KST) — A1 ARC END-TO-END (kkamak v0.6.0 + cc-gate 0.4.3 DEPLOYED) · QUEUE AT ONE STANDING ITEM · MAIN `5118def`+
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness), yoo-mac "minimal", post-2026-08-13 clear.
+git pull FIRST; main >= 5118def. bun install both plugin dirs only if
+pins moved. Sibling "harness" session shares this checkout and holds the
+a3 rule-routing lane (Plan A FLAWLESS 3c3b4c3, T9 spend-gated) — hands
+off that lane; coordinate via SendMessage (its address arrives in its
+own messages; ListAgents shows it as a peer).
+
+STATE (trust, don't re-derive):
+ - P2 CLOSED end-to-end: three clean 28-attempt arms committed, a3
+   ROUTED (user ruling), a4 declined + judge audit CONFIRMS decline
+   (docs/loop-probes/p2/a4-judge-audit.md, 3707c8d — 28/28 degenerate
+   agreement, rule unseen in pass-1, 75% single-re-pass conversion =
+   the citable datum for any future compound carrier).
+ - A1 cycle tagging LIVE BOTH PRODUCERS: kkamak v0.6.0 released
+   (tag on verified 7e3c64e, container install-proof, release pages
+   v0.5.0+v0.6.0 exist) · cc-gate-plugin 0.4.3 merged (5e9d4c7,
+   7b artifact 2cc4424-a1-cycle-tagging-port.md) + DEPLOYED on yoo-mac
+   (km-refresh; first organic implOnly:true lines confirmed).
+   Calibration coveredMechanismRev advanced (3992059, TM1-precedent
+   3rd instance). Office deploy = handoff item.
+ - Housekeeping DONE: plugin cache = 0.4.3 only · old
+   ~/.config/meta-harness archived (.pre-rename-archive-20260813) with
+   back-compat symlink — stranded-store warning dead · rw-mount ghost
+   struck (was RULED 08-11, fix 2746c07 — note its Test User git
+   identity, flagged 277e9be) · C4 DEFERRED with channel-lane
+   migration (explicitly-not-now §7.9, three conjunctive reopen
+   triggers; d3c3a40 probe-swap prohibition stands).
+
+OPEN — THE ONLY STANDING ITEM: TB2 band batch, sized go pending.
+ Time answer given: k=5 serial ~8-9h (ceiling 13h) / parallel-2
+ ~5-6h; RECOMMENDED SHAPE for tight budget = chunked k=1 sweeps
+ (14 tasks x k=1 ~1.5-2h each, store pools across invocations —
+ the v0 baseline itself was built pooled; verify the target
+ verdict's provenance rule tolerates pooling, no-spend, before
+ chunk 1). Tuple re-verified valid (bed7233).
+
+YOO-DEV (self-serve, handoff block 0d69232 below): sensor cadence
+ checkpoint DUE 08-13 -> constants amendment expected · snapshot
+ export · crank-2 v20 verdict check (/mh-activate = user go) · A/A
+ single-host ruling (recommend a) · bun install + km-refresh 0.4.3.
+
+RULES: explicit go before ANY merge and ANY spend · 7b gate +
+docs/reviews artifact, SHAs via git rev-parse · named files only ·
+own worktree per implementer · merging != deploying · re-read the
+baseline, never carry it (stale-open ghost + 147-commit lessons) ·
+probe the CONSEQUENCE · SITREP style.
+
+Session lessons worth keeping: tmux composer ghost-text (empty
+composer shows dim history suggestion — keys type OVER it; C-u via
+MCP lands as literal text, use tmux send-keys -l) · concurrent
+suites on this host false-red the gate AND the bg debt runner ·
+version-parity test catches single-manifest bumps live · a carried
+standing-opens list is a remembered baseline (strike ghosts at the
+source).
+```
+
 ## 📋 YOO-DEV HANDOFF 2026-08-13 (written on yoo-mac — ssh unreachable) — SENSOR CADENCE CHECKPOINT DUE TODAY + 3 QUEUED DECISIONS
 
 ```
