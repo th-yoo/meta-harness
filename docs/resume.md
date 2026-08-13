@@ -3,6 +3,88 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-14 (`yoo-mac` "harness", a3 completion session) — T9 PROBE CLEAN (GATE LIVE-PROVEN) · PLAN B BUILT+MERGED `911ae49` · CONTRACT REV BOTH REPOS · 0.4.6 DEPLOYED + BOUNDARY TS · MAIN `1f86d9e`
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness), yoo-mac, post-2026-08-14 a3-completion
+session. git pull FIRST; main >= 1f86d9e. ~/z2/kkamak also moved
+(5efa3ab, pushed) — pull it too where cloned. bun install cc-gate-plugin
+if pins moved (they did not; CAS merge + a3 merge added no deps).
+
+CLOSED THIS SESSION (do not redo):
+ 1. T9 PROBE (342b9eb, report docs/loop-probes/a3-t9-probe.md): slim
+    two-phase shape (plan amended f8b3442+ec373e9, 4th architect round).
+    Phase 0 spend-free CLEAN (byte-exact landing, check.sh 2/2/0 in
+    container bash 5.2). Phase 1 hypothesis CONFIRMED with 1 of 2 haiku:
+    single claude -p sustained three consecutive blocked Stops —
+    block/block/exhaust-allow, num_turns 3, clean exit 12.7s. Carrier
+    lane fully live-proven. Carrier ruling recorded: claude -p lane;
+    cc-api-daemon CANNOT fire the gate (haiku routes raw-api,
+    warm lane rejects nonzero settingSources).
+ 2. PLAN B (live adapter, spec §4) END-TO-END: plan
+    docs/superpowers/plans/2026-08-13-a3-live-adapter.md (FLAWLESS,
+    3 architect rounds) · SDD 5 tasks, fresh implementer+reviewer per
+    task, 1 fix round (calibration TM1 bump #4), final review caught
+    the REAL seam: ~/z2/kkamak clone EXISTS on yoo-mac (plan premise
+    false) — km-crank hard-fail would have gone red post-merge; fix
+    wave rescoped to merge-window duties. MERGED 911ae49 (7b artifact
+    docs/reviews/2604da8-a3-live-adapter.md). SHIPS: exportRuleChecks
+    at EVERY playbook-mutating transition -> .km/rule-checks.json
+    (liveEligible only) · cc-gate shadow evaluator (caps 8/5000ms,
+    guard re-screen, fail-open) -> SensorLine.ruleChecks outcomes ·
+    contract rev with km-crank parity hard-fail + scan.ts mirror.
+ 3. CONTRACT REV BOTH REPOS ONE WINDOW: kkamak 5efa3ab (5th golden
+    vector CLEAN_ACCEPT_WITH_RULE_CHECKS + conformance shape check,
+    418/0) — executed on YO0-MAC (yoo-dev premise corrected); km-crank
+    verified green FROM MAIN CHECKOUT (400/0, real fixture, no skip).
+    Suites at close: opencode 1985/0 · cc-gate 1063/0.
+ 4. 0.4.6 DEPLOYED yoo-mac + BOUNDARY TS 1786634418937 in adoption
+    ledger (1f86d9e): ruleChecks = SHADOW-only additive telemetry;
+    lines pluginVersion >= 0.4.6 may carry it. km-refresh --force
+    (live-session guard); old cache roots SURVIVED — no fail-open;
+    cache holds 0.4.3-0.4.6 pending both-sessions-restart cleanup.
+ 5. MERGE CONFLICT NOTE: sibling "minimal" merged CAS port 685a46e
+    mid-flight and took 0.4.5 (deployed it too; cross-session
+    messaging DOWN this window — user-relay only). Resolution: imports
+    unioned in hook-cli.ts, splice position re-verified, a3 rev became
+    0.4.6. CAS + ruleChecks proven together (cc-gate 1063/0).
+
+WHOLE a3 PROGRAM NOW: TB2 adapter (16c2303) + T9 proof + live adapter
+(911ae49) all merged; EVERYTHING INERT until the loop mints a
+checked-rule candidate. First checked-rule ab stamps its own boundary
+ts (T8 duty). First liveEligible check makes live shadow lines appear.
+
+OPEN — NEED USER GO/RULING:
+ - Checked-rule crank: /mh-propose until a candidate carries checks
+   (may take 2-3 cranks), then k=5 two-arm ab = overnight spend, own
+   sized go (table computed at go time).
+ - Standing rulings: A/A trial-state (P2-close block) · rejected.json
+   F2 command-text (spec §1 fallback in force).
+ - yoo-dev: STILL UNREACHABLE from yoo-mac (221.151.107.42:22 timeout
+   re-confirmed 08-13). Handoff block below updated: contract-rev
+   duties now REDUCED to pull-both-repos + run suites; sensor
+   checkpoint + crank-2 verdict still pending there.
+ - Sibling "minimal" relay (messaging down): main 1f86d9e, version
+   lane now 0.4.6, a3 hands-off LIFTED, band batch chunk 2 still
+   paused 6/14 awaiting sized go.
+ - Both-sessions-restart then one-version cache cleanup (0.4.3-0.4.5
+   roots removable after).
+
+RULES: explicit go before any merge to main and any spend · 7b gate +
+committed docs/reviews artifact (BARE fields; SHAs via rev-parse) ·
+suites serial · merging ≠ deploying (bump + km-refresh + grep cache) ·
+add NAMED files only · probe the CONSEQUENCE · SITREP.
+
+Most likely lost otherwise: kkamak fixture and km-crank VECTOR_LINES
+are byte-locked BOTH DIRECTIONS now (5 vectors) — any future SensorLine
+field change must update both repos in one window or a hard-fail fires
+on whichever host has both clones; and the worktree advisory-skip trap
+(worktree paths resolve ../../../kkamak to nowhere) means contract
+parity is ONLY proven from the main checkout.
+```
+
+
 ## ⏳ LIVE 2026-08-13 (`yoo-mac` "minimal", post-clear) — CAS PORT MERGED+PUSHED (`685a46e`) · BAND BATCH PAUSED chunk 2 @ 6/14 · XSESSION MESSAGING DOWN (this session)
 
 ```
