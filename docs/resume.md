@@ -17,9 +17,11 @@ LANDED THIS SESSION (all on main, pushed 685a46e):
    before-emit. Design FLAWLESS (7 architect rounds, ledger
    ~/.claude/plans/plan-for-a-misty-flurry.md), code review APPROVED
    (0 findings), suite 1051/0. Commits 579fd0f (impl) + 79583e6 (artifact
-   docs/reviews/579fd0f-cas-reset-port.md) + 685a46e (merge). NOT DEPLOYED:
-   0.4.4 still installed; km-refresh to 0.4.5 = own ruling (merging !=
-   deploying). Merge also carried sibling's afae927 (a3 live-adapter plan).
+   docs/reviews/579fd0f-cas-reset-port.md) + 685a46e (merge). DEPLOYED on
+   yoo-mac (km-refresh --force OK, cache 0.4.5 verified; 0.4.3/0.4.4 dirs
+   survived so both live sessions kept hooks — no fail-open). Office
+   km-refresh after pull = separate act. Merge also carried sibling's
+   afae927 (a3 live-adapter plan).
 
 OPEN / STANDING:
  - BAND BATCH: PAUSED, chunk 2 @ 6/14 (5 done since chunk1). Pool = 33
@@ -34,8 +36,7 @@ OPEN / STANDING:
    Store was surgically seeded from committed snapshot (junk v0 backed up
    ~/.config/kkamak/v0-junk-bak-20260813); active/ populated via writeActive
    (harnessHash 25f13fca883fe563 = baseline parity).
- - km-refresh 0.4.4 -> 0.4.5 after CAS merge (own go; bun install cc-gate-plugin
-   BEFORE km-refresh, GA12).
+ - ~~km-refresh 0.4.5~~ DONE (yoo-mac, --force, cache verified). Office pending.
  - XSESSION MESSAGING DOWN in this session: SendMessage/ListAgents dead
    (MCP messaging server disconnected mid-session, same drop that pulled
    EndConversation). Both UDS sockets alive; it's a capability loss on THIS
