@@ -67,6 +67,7 @@ import {
   readMhConfig,
   readPlaybook,
   checksHashOf,
+  activeChecks,
   type AbSetStats,
   type AbSpeedStats,
 } from "../harness-store.ts"
@@ -295,11 +296,38 @@ export async function cmdAb(
   // Compose both arms once (they differ in exactly one layer by construction).
   const harnessA = assembleAgentsMd(layers, paths.metaRoot, agent, {}, model)
   const harnessB = assembleAgentsMd(layers, paths.metaRoot, agent, { [layer]: candidate }, model)
+  // a3 routing T7's INJECTION SYMMETRY (spec §3): each arm enforces its OWN
+  // playbook's checked bullets — the active arm the LAYER-UNDER-TEST's
+  // active playbook, the candidate arm its candidate playbook (NOT the full
+  // multi-layer `layers` composition harnessA/harnessB above draw from —
+  // checked bullets are only ever proposed/promoted at the layer under
+  // evolution, mirroring T5's own candidateChecksHash precedent, which
+  // already scoped the hash to `layerRoot` alone). `readPlaybook(layerRoot)`
+  // with no version = active.
+  const activePlaybook = readPlaybook(layerRoot)
+  const candidatePlaybook = readPlaybook(layerRoot, candidate)
+  const activeChecksArr = activeChecks(activePlaybook)
+  const candidateChecksArr = activeChecks(candidatePlaybook)
+  // Refusal runs HERE, right after both playbook reads — BEFORE
+  // inContainerAgentVersion() below — so a non-claude-code driver dies
+  // loudly before burning an A/B run's worth of throwaway containers (spec
+  // §3's DRIVER SCOPE rule). Combines BOTH arms: a later ab (once some
+  // check has already been adopted) must refuse on the active arm's
+  // inherited checks too, not just the candidate's new ones — "First
+  // checked-rule ab has active set = empty" (spec §3) is the degenerate
+  // case, not a permanent one. Prose-only candidates (both arrays empty)
+  // are unaffected on either driver.
+  const allChecks = [...activeChecksArr, ...candidateChecksArr]
+  if (allChecks.length > 0 && driver.id !== "claude-code") {
+    die(
+      `run/ab: candidate carries checked bullets (${allChecks.map((c) => c.bulletId).join(", ")}) — requires --driver claude-code; the opencode driver has no hook chokepoint (spec §3)`,
+    )
+  }
   // Arm B's (the candidate's) enforced check-set identity (a3 routing T5) —
-  // threaded from the SAME playbook read that produced harnessB's pinned
-  // layer content, not a separate re-derivation. checksHashOf coalesces a
-  // checkless candidate playbook to EMPTY_CHECKS_HASH on its own.
-  const candidateChecksHash = checksHashOf(readPlaybook(layerRoot, candidate))
+  // threaded from the SAME playbook read above, not a separate re-derivation.
+  // checksHashOf coalesces a checkless candidate playbook to
+  // EMPTY_CHECKS_HASH on its own.
+  const candidateChecksHash = checksHashOf(candidatePlaybook)
   const agentVersion = await inContainerAgentVersion(paths, driver, execFn)
   // Same non-default-driver-unknown-probe gate as cmd-run.ts's cmdRun
   // (final-review fix 3) — a claude-code (etc) probe coming back "unknown"
@@ -611,14 +639,14 @@ export async function cmdAb(
       // arms AND later repeats — an escalation in EITHER arm bumps both arms'
       // subsequent runs, keeping the container cap identical across arms.
       const armA = await runWithOomRetry(
-        (r) => runOneTask(paths, task, model, variant, harnessA, agentTimeout, verifierTimeout, staging, driver, r, undefined, parallelPrepareAuth),
+        (r) => runOneTask(paths, task, model, variant, harnessA, agentTimeout, verifierTimeout, staging, driver, r, undefined, parallelPrepareAuth, activeChecksArr),
         resources, oomCeilingMb, `${prefix}arm A: `,
       )
       resources = armA.resources
       const resA = armA.result
       log(`${prefix}  [arm B: candidate]`)
       const armB = await runWithOomRetry(
-        (r) => runOneTask(paths, task, model, variant, harnessB, agentTimeout, verifierTimeout, staging, driver, r, undefined, parallelPrepareAuth),
+        (r) => runOneTask(paths, task, model, variant, harnessB, agentTimeout, verifierTimeout, staging, driver, r, undefined, parallelPrepareAuth, candidateChecksArr),
         resources, oomCeilingMb, `${prefix}arm B: `,
       )
       resources = armB.resources

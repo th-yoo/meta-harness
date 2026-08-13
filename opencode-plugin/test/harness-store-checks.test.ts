@@ -5,6 +5,7 @@ import * as path from "path"
 import {
   applyPlaybookOps, canonicalChecksJson, checksHashOf, EMPTY_CHECKS_HASH,
   budgetIdentityMatches, readActiveBudget, createCandidate, activateCandidate,
+  activeChecks, checksHashOfList,
   type Playbook, type PlaybookOp,
 } from "../src/harness-store.ts"
 
@@ -90,4 +91,36 @@ test("readActiveBudget on a store with no playbook falls back to EMPTY_CHECKS_HA
   activateCandidate(storeRoot, "v0")
   const budget = readActiveBudget(storeRoot)
   expect(budget.checksHash).toBe(EMPTY_CHECKS_HASH)
+})
+
+// ── a3 routing T7: activeChecks / checksHashOfList (the extraction cmd-run.ts/
+// cmd-ab.ts's enforced-set gathering depends on) ────────────────────────────
+
+test("activeChecks: null playbook and a checkless playbook both yield []", () => {
+  expect(activeChecks(null)).toEqual([])
+  const pb = applyPlaybookOps(base, [{ op: "add", text: "plain" }])
+  expect(activeChecks(pb)).toEqual([])
+})
+
+test("activeChecks: only ACTIVE bullets with a check are extracted, pruned/checkless ones excluded", () => {
+  const withCheck = applyPlaybookOps(base, [
+    { op: "add", text: "verify before done", check: { cmd: "test -s DONE.txt", timeoutMs: 5000 } },
+    { op: "add", text: "plain rule" },
+  ])
+  const pruned = applyPlaybookOps(withCheck, [{ op: "delete", id: "b1" }])
+  const checks = activeChecks(pruned)
+  expect(checks).toEqual([])
+})
+
+test("activeChecks: shape is {bulletId, cmd, timeoutMs} per active checked bullet, feeding checksHashOf via checksHashOfList", () => {
+  const pb = applyPlaybookOps(base, [
+    { op: "add", text: "verify before done", check: { cmd: "test -s DONE.txt", timeoutMs: 5000 } },
+  ])
+  const checks = activeChecks(pb)
+  expect(checks).toEqual([{ bulletId: "b1", cmd: "test -s DONE.txt", timeoutMs: 5000 }])
+  expect(checksHashOfList(checks)).toBe(checksHashOf(pb))
+})
+
+test("checksHashOfList([]) equals EMPTY_CHECKS_HASH", () => {
+  expect(checksHashOfList([])).toBe(EMPTY_CHECKS_HASH)
 })

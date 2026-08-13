@@ -13,12 +13,15 @@ import {
   projectGlobalRoot,
   createCandidate,
   writeActive,
+  type Playbook,
 } from "../src/harness-store.ts"
 import { BenchError } from "../src/bench/util.ts"
 import { readResourceProfile, hostClass, updateResourceProfile } from "../src/bench/resource-profile.ts"
 import * as schedulerReal from "../src/bench/scheduler.ts"
 import { PRESSURE_POLL_SEC } from "../src/bench/host-pressure.ts"
 import { mcnemarExactOneSided } from "../src/bench/ab-stats.ts"
+import { RULE_GATE_DIR } from "../src/bench/rule-gate.ts"
+import { claudeCodeDriver } from "../src/bench/drivers/claude-code.ts"
 
 // Snapshot the REAL scheduler.ts exports at module-eval time (before any
 // mock.module call below) — same pattern as bench-cmd-run.test.ts's own
@@ -78,6 +81,31 @@ function setupCandidate(paths: BenchPaths, layer: "project-global", candidate: s
   writeActive(root, "v0", "baseline sys")
   createCandidate(root, candidate, "candidate sys")
   return root
+}
+
+/** a3 routing T7: a one-bullet Playbook whose sole bullet carries an active
+ * check — the fixture shape `createCandidate`'s `playbook` param accepts
+ * (harness-store.ts's PlaybookBullet/BulletCheck). `bulletId`/`cmd` are
+ * parameterized so refusal-message assertions can pin the exact id. */
+function checkedPlaybook(bulletId = "b1", cmd = "true"): Playbook {
+  const now = new Date().toISOString()
+  return {
+    schemaVersion: 1,
+    nextId: 2,
+    bullets: [
+      {
+        id: bulletId,
+        text: "run the check before finishing",
+        helpful: 0,
+        harmful: 0,
+        addedBy: "candidate",
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+        check: { cmd, timeoutMs: 5000, state: "shadow" },
+      },
+    ],
+  }
 }
 
 /** cmdAb computes its provenance env block via `inContainerAgentVersion`
@@ -147,6 +175,111 @@ test("cmdAb: no splits.json and no explicit tasks dies", async () => {
   await expect(
     cmdAb(paths, { layer: "project-global", candidate: "v1" } as CmdAbArgs, async () => res()),
   ).rejects.toThrow(BenchError)
+})
+
+// ── a3 routing T7: driver refusal for checked bullets ───────────────────────
+// Every test here uses `isolatedPaths` (a NESTED termBenchDir, see that
+// helper's own note below), never the plain tmpDir()+fakeBenchPaths(dir,
+// tbRoot) shortcut most other tests in this file use — that shortcut shares
+// metaRoot = os.tmpdir() across every test that uses it, which is harmless
+// for score.json (each test overwrites the candidate/score dir it touches)
+// but NOT for an ACTIVE playbook: `writeActive`'s `playbook` param is
+// tri-state (undefined = "leave alone"), so a later unrelated test's
+// `writeActive(root, "v0", "baseline sys")` (no playbook arg) would silently
+// inherit an EARLIER checked-bullet test's stale active playbook on the
+// shared root and spuriously refuse. Isolation is required here specifically
+// because this is the first place in this file an active playbook (not just
+// system.md) gets written.
+
+test("cmdAb: candidate carries a checked bullet + default (opencode) driver refuses, naming the bullet id and --driver claude-code", async () => {
+  const paths = isolatedPaths([])
+  fs.mkdirSync(paths.tbRoot, { recursive: true }) // writeTaskTomls([]) never creates it; --all needs it to exist
+  const root = projectGlobalRoot(paths.metaRoot)
+  createCandidate(root, "v0", "baseline sys")
+  writeActive(root, "v0", "baseline sys")
+  createCandidate(root, "v1", "candidate sys", "", checkedPlaybook("b7", "true"))
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return res()
+  }
+
+  let err: unknown
+  try {
+    await cmdAb(paths, { layer: "project-global", candidate: "v1", all: true } as CmdAbArgs, fake, fakeExec)
+  } catch (e) {
+    err = e
+  }
+  expect(err).toBeInstanceOf(BenchError)
+  const msg = (err as Error).message
+  expect(msg).toContain("b7")
+  expect(msg).toContain("--driver claude-code")
+  expect(ran).toBe(false)
+})
+
+test("cmdAb: same checked candidate + --driver claude-code proceeds past the refusal point (task actually runs)", async () => {
+  const paths = isolatedPaths(["t1"])
+  const root = projectGlobalRoot(paths.metaRoot)
+  createCandidate(root, "v0", "baseline sys")
+  writeActive(root, "v0", "baseline sys")
+  createCandidate(root, "v1", "candidate sys", "", checkedPlaybook("b7", "true"))
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return res()
+  }
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, driver: "claude-code" } as CmdAbArgs,
+      fake,
+      fakeExec,
+    ),
+  )
+  expect(ran).toBe(true)
+})
+
+test("cmdAb: prose-only candidate (no checks) on the default opencode driver is unaffected", async () => {
+  const paths = isolatedPaths(["t1"])
+  setupCandidate(paths, "project-global", "v1") // prose-only, no playbook at all
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return res()
+  }
+  await quiet(() =>
+    cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1 } as CmdAbArgs, fake, fakeExec),
+  )
+  expect(ran).toBe(true)
+})
+
+test("cmdAb: the ACTIVE arm's inherited checked bullet ALSO refuses on a non-claude-code driver, even when the candidate itself is prose-only (spec §3 symmetry)", async () => {
+  const paths = isolatedPaths([])
+  fs.mkdirSync(paths.tbRoot, { recursive: true }) // writeTaskTomls([]) never creates it; --all needs it to exist
+  const root = projectGlobalRoot(paths.metaRoot)
+  // Active baseline already carries an adopted checked bullet; the candidate
+  // under test is pure prose.
+  createCandidate(root, "v0", "baseline sys", "", checkedPlaybook("b1", "true"))
+  writeActive(root, "v0", "baseline sys", "", checkedPlaybook("b1", "true"))
+  createCandidate(root, "v1", "candidate sys")
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return res()
+  }
+  let err: unknown
+  try {
+    await cmdAb(paths, { layer: "project-global", candidate: "v1", all: true } as CmdAbArgs, fake, fakeExec)
+  } catch (e) {
+    err = e
+  }
+  expect(err).toBeInstanceOf(BenchError)
+  expect((err as Error).message).toContain("b1")
+  expect(ran).toBe(false)
 })
 
 // ── legacy explicit-tasks mode ───────────────────────────────────────────

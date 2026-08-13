@@ -5,15 +5,17 @@ import * as os from "node:os"
 import { DEFAULT_BENCH_MODEL, type BenchPaths } from "../src/bench/paths.ts"
 import { cmdRun, runTaskOnce, runWithOomRetry, inContainerAgentVersion, type RunOneTaskFn, type RunTaskResult } from "../src/bench/cmd-run.ts"
 import { runOneOracleTask } from "../src/bench/cmd-oracle.ts"
-import { readScore, projectGlobalRoot, createCandidate, writeActive } from "../src/harness-store.ts"
+import { readScore, projectGlobalRoot, createCandidate, writeActive, type Playbook } from "../src/harness-store.ts"
 import { BenchError } from "../src/bench/util.ts"
 import type { AgentAuthMounts } from "../src/bench/agent-auth.ts"
 import { opencodeDriver } from "../src/bench/drivers/opencode.ts"
+import { claudeCodeDriver } from "../src/bench/drivers/claude-code.ts"
 import * as verifierReal from "../src/bench/verifier.ts"
 import * as resultsReal from "../src/bench/results.ts"
 import * as schedulerReal from "../src/bench/scheduler.ts"
 import { PRESSURE_POLL_SEC } from "../src/bench/host-pressure.ts"
 import { updateResourceProfile, readResourceProfile, hostClass } from "../src/bench/resource-profile.ts"
+import { RULE_GATE_DIR, type RuleGateCheck } from "../src/bench/rule-gate.ts"
 
 // Same pre-mock snapshot pattern as the verifier block above: capture the
 // REAL results.ts / scheduler.ts exports at module-eval time so the two
@@ -138,6 +140,31 @@ function result(overrides: Partial<RunTaskResult> = {}): RunTaskResult {
  * `runOneTask` fake — every cmdRun call in this file also injects this fake
  * execFn so that lookup never spawns a real podman. */
 const fakeExec = async () => ({ rc: 0, stdout: "opencode 0.0.0-test", stderr: "", timedOut: false })
+
+/** a3 routing T7: a one-bullet Playbook whose sole bullet carries an active
+ * check — same fixture shape as bench-cmd-ab.test.ts's own checkedPlaybook
+ * (harness-store.ts's PlaybookBullet/BulletCheck), parameterized by bulletId
+ * so refusal-message assertions can pin the exact id. */
+function checkedPlaybook(bulletId = "b1", cmd = "true"): Playbook {
+  const now = new Date().toISOString()
+  return {
+    schemaVersion: 1,
+    nextId: 2,
+    bullets: [
+      {
+        id: bulletId,
+        text: "run the check before finishing",
+        helpful: 0,
+        harmful: 0,
+        addedBy: "candidate",
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+        check: { cmd, timeoutMs: 5000, state: "shadow" },
+      },
+    ],
+  }
+}
 
 test("cmdRun: incremental + final results-file JSON, task_agg shape matches Python cmd_run parity", async () => {
   const dir = tmpDir()
@@ -1635,6 +1662,255 @@ test("cmdRun: --driver claude-code + an 'unknown' version probe dies before any 
     cmdRun(paths, { tasks: ["a"], layers: "none", driver: "claude-code" }, fake, unknownProbeExec),
   ).rejects.toThrow(BenchError)
   expect(ran).toBe(false)
+})
+
+// ── a3 routing T7: driver refusal for checked bullets ───────────────────────
+// Every test in this section uses `isolatedPaths` (NESTED termBenchDir, see
+// that helper's own comment above) rather than the plain
+// tmpDir()+fakeBenchPaths(dir, tbRoot) shortcut most tests in this file use —
+// that shortcut shares metaRoot = os.tmpdir() across every test using it,
+// which is harmless for score.json (each test overwrites what it touches)
+// but NOT for an ACTIVE playbook: `writeActive`'s `playbook` param is
+// tri-state (undefined = "leave alone"), so pollution from an isolated bug
+// here would otherwise leak into every later shared-root test in this file.
+
+test("cmdRun: project-global active playbook carries a checked bullet + default (opencode) driver refuses, naming the bullet id and --driver claude-code", async () => {
+  const paths = isolatedPaths([])
+  fs.mkdirSync(paths.tbRoot, { recursive: true })
+  const root = projectGlobalRoot(paths.metaRoot)
+  createCandidate(root, "v0", "sys", "", checkedPlaybook("b9", "true"))
+  writeActive(root, "v0", "sys", "", checkedPlaybook("b9", "true"))
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return result()
+  }
+  let err: unknown
+  try {
+    await cmdRun(paths, { all: true, layers: "project" }, fake, fakeExec)
+  } catch (e) {
+    err = e
+  }
+  expect(err).toBeInstanceOf(BenchError)
+  const msg = (err as Error).message
+  expect(msg).toContain("b9")
+  expect(msg).toContain("--driver claude-code")
+  expect(ran).toBe(false)
+})
+
+test("cmdRun: same checked active playbook + --driver claude-code proceeds past the refusal point (task actually runs)", async () => {
+  const paths = isolatedPaths(["a"])
+  const root = projectGlobalRoot(paths.metaRoot)
+  createCandidate(root, "v0", "sys", "", checkedPlaybook("b9", "true"))
+  writeActive(root, "v0", "sys", "", checkedPlaybook("b9", "true"))
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return result()
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "project", driver: "claude-code" }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(ran).toBe(true)
+})
+
+test("cmdRun: prose-only active playbook (no checks) on the default opencode driver is unaffected", async () => {
+  const paths = isolatedPaths(["a"])
+  const root = projectGlobalRoot(paths.metaRoot)
+  createCandidate(root, "v0", "sys")
+  writeActive(root, "v0", "sys")
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return result()
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "project" }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(ran).toBe(true)
+})
+
+test("cmdRun: --no-harness / --layers none skip the checked-bullet gate entirely, even with a checked active playbook", async () => {
+  const paths = isolatedPaths(["a"])
+  const root = projectGlobalRoot(paths.metaRoot)
+  createCandidate(root, "v0", "sys", "", checkedPlaybook("b9", "true"))
+  writeActive(root, "v0", "sys", "", checkedPlaybook("b9", "true"))
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return result()
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdRun(paths, { tasks: ["a"], layers: "none" }, fake, fakeExec)
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+  expect(ran).toBe(true)
+})
+
+// ── a3 routing T7: per-attempt rule-gate injection (runTaskOnce direct) ────
+
+test("runTaskOnce: checks non-empty + claude-code driver injects settings.json + check.sh, reads back state.json into ruleChecks", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "do the thing")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const calls: string[][] = []
+  const fakeState = { rounds: 2, exhausted: false, perRule: { b1: { blocked: 2, lastFail: "2026-01-01T00:00:00Z" } } }
+  const execFn = async (argv: string[]) => {
+    calls.push(argv)
+    if (argv[1] === "exec" && argv.includes("cat") && argv.some((a) => a.includes("state.json"))) {
+      return { rc: 0, stdout: JSON.stringify(fakeState), stderr: "", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  mock.module("../src/bench/verifier.ts", () => ({ copyTests: async () => {}, runVerifier: async () => 0 }))
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  const checks: RuleGateCheck[] = [{ bulletId: "b1", cmd: "true", timeoutMs: 1000 }]
+  let res: RunTaskResult
+  try {
+    res = await runTaskOnce(
+      paths, "t", "anthropic/claude-sonnet-5", "", "", 30, 30, "scripts", claudeCodeDriver, undefined, execFn, fakeAuthMounts(), checks,
+    )
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreVerifier()
+  }
+
+  const cpCalls = calls.filter((c) => c[1] === "cp")
+  expect(cpCalls.some((c) => c[3]?.endsWith(":/app/.claude/settings.json"))).toBe(true)
+  expect(cpCalls.some((c) => c[3]?.endsWith(`:${RULE_GATE_DIR}/check.sh`))).toBe(true)
+  const stateReadCalls = calls.filter(
+    (c) => c[1] === "exec" && c.includes("cat") && c.some((a) => a.includes("state.json")),
+  )
+  expect(stateReadCalls.length).toBeGreaterThan(0)
+  expect(res.ruleChecks).toEqual({ rounds: 2, exhausted: false, perRule: { b1: { blocked: 2 } } })
+})
+
+test("runTaskOnce: checkless arm (checks omitted) issues NO rule-gate cp and NO state read; ruleChecks absent", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "do the thing")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const calls: string[][] = []
+  const execFn = async (argv: string[]) => {
+    calls.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  mock.module("../src/bench/verifier.ts", () => ({ copyTests: async () => {}, runVerifier: async () => 0 }))
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  let res: RunTaskResult
+  try {
+    res = await runTaskOnce(paths, "t", "anthropic/claude-sonnet-5", "", "", 30, 30, "scripts", claudeCodeDriver, undefined, execFn, fakeAuthMounts())
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreVerifier()
+  }
+
+  const cpCalls = calls.filter((c) => c[1] === "cp")
+  expect(cpCalls.some((c) => c[3]?.includes(".claude/settings.json"))).toBe(false)
+  expect(cpCalls.some((c) => c[3]?.includes(RULE_GATE_DIR))).toBe(false)
+  const stateReadCalls = calls.filter((c) => c.some((a) => a.includes("state.json")))
+  expect(stateReadCalls.length).toBe(0)
+  expect(res.ruleChecks).toBeUndefined()
+})
+
+test("runTaskOnce: state read rc!=0 (no block occurred, the common case) is fail-open — ruleChecks absent, attempt NOT reclassified dead", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "do the thing")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "exec" && argv.includes("cat") && argv.some((a) => a.includes("state.json"))) {
+      return { rc: 1, stdout: "", stderr: "No such file or directory", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  mock.module("../src/bench/verifier.ts", () => ({ copyTests: async () => {}, runVerifier: async () => 1 }))
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  const checks: RuleGateCheck[] = [{ bulletId: "b1", cmd: "true", timeoutMs: 1000 }]
+  let res: RunTaskResult
+  try {
+    res = await runTaskOnce(
+      paths, "t", "anthropic/claude-sonnet-5", "", "", 30, 30, "scripts", claudeCodeDriver, undefined, execFn, fakeAuthMounts(), checks,
+    )
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreVerifier()
+  }
+
+  expect(res.ruleChecks).toBeUndefined()
+  expect(res.error).not.toBe("setup_failed")
+  expect(res.reward).toBe(1)
+})
+
+test("runTaskOnce: rule-gate settings.json copy-in failure -> setup_failed (never runs unguarded)", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "do the thing")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const calls: string[][] = []
+  const execFn = async (argv: string[]) => {
+    calls.push(argv)
+    if (argv[1] === "cp" && argv[3]?.endsWith(":/app/.claude/settings.json")) {
+      return { rc: 1, stdout: "", stderr: "cp failed", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  const checks: RuleGateCheck[] = [{ bulletId: "b1", cmd: "true", timeoutMs: 1000 }]
+  let res: RunTaskResult
+  try {
+    res = await runTaskOnce(
+      paths, "t", "anthropic/claude-sonnet-5", "", "", 30, 30, "scripts", claudeCodeDriver, undefined, execFn, fakeAuthMounts(), checks,
+    )
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+  }
+
+  expect(res.error).toBe("setup_failed")
+  // The injection short-circuited BEFORE check.sh's own cp (never reached) —
+  // settings.json's cp failure is fatal on its own, nothing downstream of it
+  // (including the agent phase) should have been attempted.
+  const cpCalls = calls.filter((c) => c[1] === "cp")
+  expect(cpCalls.some((c) => c[3]?.endsWith(`:${RULE_GATE_DIR}/check.sh`))).toBe(false)
 })
 
 // ── run --parallel: budget-packed scheduling (Task 6) ─────────────────────

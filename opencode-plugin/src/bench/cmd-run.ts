@@ -29,6 +29,8 @@
  *     scripts-mode staging block, and verifier.ts's copyTests.
  */
 import { randomBytes } from "node:crypto"
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join, parse as parsePath } from "node:path"
 import { podman } from "./exec.ts"
 import type { ExecFn } from "./staging.ts"
@@ -46,12 +48,19 @@ import { runAgent } from "./agent-run.ts"
 import { getDriver } from "./drivers/index.ts"
 import { opencodeDriver } from "./drivers/opencode.ts"
 import type { AgentDriver } from "./drivers/types.ts"
-import { assembleAgentsMd, envBlock, harnessMeta, parsePins, recordToStores } from "./record.ts"
+import { assembleAgentsMd, envBlock, harnessMeta, parsePins, recordToStores, layerStoreRoots } from "./record.ts"
 import { resumeCarryForward, writeRunResults, aggTotals } from "./results.ts"
 import { schedule, DEFAULT_BUDGET, AsyncMutex, type Budget, type ScheduledItem } from "./scheduler.ts"
 import { PRESSURE_POLL_SEC } from "./host-pressure.ts"
 import { BenchError, die, log, pyFixed } from "./util.ts"
-import { readMhConfig, EMPTY_CHECKS_HASH, type ToolUsage, type TrajEvent } from "../harness-store.ts"
+import { readMhConfig, activeChecks, checksHashOfList, readPlaybook, type ToolUsage, type TrajEvent } from "../harness-store.ts"
+import {
+  RULE_GATE_DIR,
+  buildRuleGateScript,
+  buildRuleGateSettings,
+  readRuleGateStateArgs,
+  type RuleGateCheck,
+} from "./rule-gate.ts"
 
 // ── run_task_once ───────────────────────────────────────────────────────
 
@@ -97,6 +106,16 @@ export interface RunTaskResult {
    * fast-return — see AgentRunOutput's doc comment); callers fall back to
    * `elapsed` as a safety net for exotic drivers. */
   agentElapsedSec?: number
+  /** a3 routing T7: post-attempt in-container rule-gate state readback
+   * (rule-gate.ts's `readRuleGateStateArgs`, `state.json`'s shape minus
+   * `perRule[*].lastFail` — outcomes only, F2). Absent when this arm carried
+   * no checked bullets (`checks` was empty — no gate was ever injected), OR
+   * when a checked arm's readback came back rc!=0 (the COMMON case for an
+   * all-pass attempt: rule-gate.ts's buildRuleGateScript only ever WRITES
+   * state.json on a block) or failed to parse — a missing/unreadable state
+   * read on an already-completed attempt is fail-open (never reclassifies
+   * the attempt as dead), just omits this field with a loud log line. */
+  ruleChecks?: { rounds: number; exhausted: boolean; perRule: Record<string, { blocked: number }> }
 }
 
 export type RunOneTaskFn = (
@@ -119,6 +138,13 @@ export type RunOneTaskFn = (
    * real podman + the driver's default (non-keyOnly) prepareAuth. */
   execFn?: ExecFn,
   prepareAuth?: () => AgentAuthMounts,
+  /** a3 routing T7: THIS ARM'S OWN enforced check set (spec §3's INJECTION
+   * SYMMETRY — cmd-ab passes the active arm's active-playbook checks here,
+   * the candidate arm its own candidate-playbook checks; cmd-run's
+   * single-harness degenerate case passes the one assembled union). Trailing
+   * + defaulted (empty) so every existing 12-arg caller/fake in this file's
+   * many unit tests keeps compiling unchanged — checkless is the default. */
+  checks?: RuleGateCheck[],
 ) => Promise<RunTaskResult>
 
 function round1(x: number): number {
@@ -185,6 +211,7 @@ export async function runTaskOnce(
   resources?: { cpus: number; memoryMb: number },
   execFn: ExecFn = podman,
   prepareAuth: () => AgentAuthMounts = () => driver.prepareAuth(),
+  checks: RuleGateCheck[] = [],
 ): Promise<RunTaskResult> {
   const sessionId = `bench-${task}-${Math.floor(Date.now() / 1000)}-${randomBytes(3).toString("hex")}`
   const taskStart = Date.now()
@@ -330,6 +357,50 @@ export async function runTaskOnce(
       }
     }
 
+    // a3 routing T7: per-attempt rule-gate injection — only when THIS ARM's
+    // own enforced set is non-empty (spec §3's INJECTION SYMMETRY: this
+    // function has no driver opinion of its own — cmd-run.ts/cmd-ab.ts
+    // already refused a non-claude-code driver upstream whenever `checks`
+    // could be non-empty; a direct/unit-test caller passing `checks` with
+    // another driver is untouched by that gate, so this stays keyed purely
+    // on `checks.length`, matching "injection only when the set is
+    // non-empty"). The generated script/settings are STRINGS, so this
+    // mirrors agent-run.ts:174-178's mkdtempSync+writeFileSync+
+    // buildCpToArgv pattern (review round-1 F8) — a fresh host scratch dir
+    // per attempt, copied in via `podman cp`, then discarded; NEVER baked
+    // into the shared bench image (P2 fresh-review Important 2). The mkdir
+    // shape mirrors cmd-p2.ts's own a3 settings copy-in
+    // (STOP_GATE_SETTINGS_PATH precedent) — same failure discipline too: a
+    // failed mkdir/cp means this arm cannot actually be enforced, so (like
+    // that precedent) the attempt fails setup_failed rather than silently
+    // running unguarded.
+    if (checks.length > 0) {
+      const mkdirGate = await execFn(buildExecArgv(name, ["mkdir", "-p", "/app/.claude", RULE_GATE_DIR]))
+      if (mkdirGate.rc !== 0) {
+        log(`  rule-gate: mkdir failed: exit ${mkdirGate.rc}`)
+        return failResult("setup_failed")
+      }
+      const scratch = mkdtempSync(join(tmpdir(), "mh-rule-gate-"))
+      try {
+        const settingsHost = join(scratch, "settings.json")
+        const checkHost = join(scratch, "check.sh")
+        writeFileSync(settingsHost, buildRuleGateSettings())
+        writeFileSync(checkHost, buildRuleGateScript(checks))
+        const cpSettings = await execFn(buildCpToArgv(name, settingsHost, "/app/.claude/settings.json"))
+        if (cpSettings.rc !== 0) {
+          log(`  rule-gate: settings.json copy-in failed: exit ${cpSettings.rc}`)
+          return failResult("setup_failed")
+        }
+        const cpScript = await execFn(buildCpToArgv(name, checkHost, `${RULE_GATE_DIR}/check.sh`))
+        if (cpScript.rc !== 0) {
+          log(`  rule-gate: check.sh copy-in failed: exit ${cpScript.rc}`)
+          return failResult("setup_failed")
+        }
+      } finally {
+        rmSync(scratch, { recursive: true, force: true })
+      }
+    }
+
     const { turnCount, toolUsage, events, timedOut, agentElapsedSec } = await runAgent(
       driver,
       paths,
@@ -365,6 +436,41 @@ export async function runTaskOnce(
     // the container must still be up (it's `podman rm`'d in the finally). Best-
     // effort: null on any read failure, never blocks the result.
     const cgroup = await readCgroupStats(name, execFn)
+    // a3 routing T7 readback: post-attempt rule-gate state.json
+    // (rule-gate.ts's readRuleGateStateArgs), read while the container is
+    // still up — same reason as selfScore/cgroup above (`podman rm` runs in
+    // `finally`). FAIL-OPEN (task-7-brief.md note d): state.json is only
+    // ever WRITTEN on a block (rule-gate.ts's buildRuleGateScript header —
+    // an all-pass attempt writes nothing at all), so an rc!=0 read is the
+    // COMMON case for a clean checked attempt, not a failure signal — and
+    // even a genuinely unreadable/corrupt state must never reclassify an
+    // attempt that already completed as dead. Both cases just omit
+    // `ruleChecks` with a loud log line; nothing here can turn a pass into
+    // a setup_failed.
+    let ruleChecks: RunTaskResult["ruleChecks"]
+    if (checks.length > 0) {
+      const stateResult = await execFn(buildExecArgv(name, readRuleGateStateArgs()))
+      if (stateResult.rc === 0) {
+        try {
+          const parsed = JSON.parse(stateResult.stdout) as {
+            rounds: number
+            exhausted: boolean
+            perRule: Record<string, { blocked: number }>
+          }
+          ruleChecks = {
+            rounds: parsed.rounds,
+            exhausted: parsed.exhausted,
+            perRule: Object.fromEntries(
+              Object.entries(parsed.perRule ?? {}).map(([id, v]) => [id, { blocked: v.blocked }]),
+            ),
+          }
+        } catch {
+          log("  rule-gate: state.json unreadable (parse failure) — ruleChecks omitted (fail-open)")
+        }
+      } else {
+        log("  rule-gate: state read rc!=0 (no block this attempt, or state unreadable) — ruleChecks omitted")
+      }
+    }
     const elapsed = (Date.now() - taskStart) / 1000
     log(`  reward=${reward}${selfScore !== null ? `  self=${round1(selfScore)}` : ""}  elapsed=${pyFixed(elapsed, 1)}s`)
     return {
@@ -380,6 +486,7 @@ export async function runTaskOnce(
       oomKilled: (cgroup?.oomKills ?? 0) > 0,
       ...(cgroup ? { cpuSeconds: cgroup.cpuSeconds, peakRssMb: cgroup.peakRssMb } : {}),
       ...(agentElapsedSec !== undefined ? { agentElapsedSec } : {}),
+      ...(ruleChecks ? { ruleChecks } : {}),
     }
   } finally {
     // auth?.cleanup() shreds the darwin Keychain-exported .credentials.json (a
@@ -590,6 +697,31 @@ export async function cmdRun(
     if (harnessMd) log(`Harness assembled (${harnessMd.length} chars)`)
     else log("No active harness content found — running without AGENTS.md")
   }
+  // a3 routing T7: this run's enforced check set — the UNION of every
+  // composed layer's active-or-pinned playbook's checked bullets (cmd-run's
+  // single-harness degenerate case, spec §3: no arm split, so "the one
+  // assembled playbook's checked bullets are the enforced set"). Reads the
+  // SAME layer/pin resolution assembleAgentsMd just used above, so this can
+  // never disagree with what actually got assembled. Empty when harness
+  // assembly itself was skipped (--no-harness / --layers none) — there is no
+  // playbook to enforce, and prose-only harnesses are unaffected either way.
+  //
+  // Refusal runs HERE, right after this read — BEFORE inContainerAgentVersion()
+  // below — so a non-claude-code driver dies loudly before burning a
+  // throwaway container (spec §3's DRIVER SCOPE rule: the opencode driver's
+  // batch `opencode run` has no Stop-hook chokepoint to carry the gate).
+  const runChecks: RuleGateCheck[] =
+    args.noHarness || layers === "none"
+      ? []
+      : layerStoreRoots(layers, agent, paths.metaRoot).flatMap(([scope, root]) =>
+          activeChecks(readPlaybook(root, pins[scope])),
+        )
+  if (runChecks.length > 0 && driver.id !== "claude-code") {
+    die(
+      `run/ab: candidate carries checked bullets (${runChecks.map((c) => c.bulletId).join(", ")}) — requires --driver claude-code; the opencode driver has no hook chokepoint (spec §3)`,
+    )
+  }
+  const runChecksHash = checksHashOfList(runChecks)
   // Phase-0 (best-of-k correlation gate): append the self-check instruction so
   // each attempt records the agent's own passed/total. Default off.
   const selfCheckOn = Boolean(args.selfCheck)
@@ -621,13 +753,12 @@ export async function cmdRun(
     driver.id,
     args.enforceResources ?? false,
     minAgentTimeout,
-    // Checkless (a3 routing T5): a `run` can compose/pin MULTIPLE layers at
-    // once (parsePins above), so — unlike cmd-ab.ts's single pinned
-    // layer+candidate — there is no single ready playbook object here to
-    // hash. EMPTY_CHECKS_HASH is the honest default; T7's rule-gate wiring
-    // reads the run's own playbook(s) at this same assembly site for
-    // checked-driver refusal and will thread the real hash through then.
-    EMPTY_CHECKS_HASH,
+    // a3 routing T7: the real hash of `runChecks` above (a `run` composes/
+    // pins MULTIPLE layers at once — unlike cmd-ab.ts's single pinned
+    // layer+candidate — so this is `checksHashOfList` over the union rather
+    // than `checksHashOf` of one playbook; coalesces to EMPTY_CHECKS_HASH on
+    // its own when `runChecks` is empty).
+    runChecksHash,
   )
 
   const { taskAgg, doneTasks } = resumeCarryForward(
@@ -736,6 +867,7 @@ export async function cmdRun(
             r,
             undefined,
             parallelPrepareAuth,
+            runChecks,
           ),
         resources,
         oomCeilingMb,

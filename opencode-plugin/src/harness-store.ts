@@ -1106,15 +1106,36 @@ export function canonicalChecksJson(
   return "[" + sorted.map((c) => `{"bulletId":${JSON.stringify(c.bulletId)},"cmd":${JSON.stringify(c.cmd)},"timeoutMs":${c.timeoutMs}}`).join(",") + "]"
 }
 
+/** A playbook's ACTIVE-status checked bullets, in `canonicalChecksJson`'s
+ * input shape — the enforced set a TB2 arm injects (a3 routing T7's
+ * cmd-run.ts/cmd-ab.ts wiring) AND the input `checksHashOf` hashes below.
+ * Extracted so both call sites share one filter instead of two independent
+ * copies drifting apart. `null` (no playbook) yields `[]`. */
+export function activeChecks(
+  playbook: Playbook | null,
+): Array<{ bulletId: string; cmd: string; timeoutMs: number }> {
+  return (playbook?.bullets ?? [])
+    .filter((b) => b.status === "active" && b.check)
+    .map((b) => ({ bulletId: b.id, cmd: b.check!.cmd, timeoutMs: b.check!.timeoutMs }))
+}
+
+/** sha256 (full hex) of an already-extracted checks list, canonically
+ * serialized (`canonicalChecksJson`). `checksHashOf` below is the
+ * single-playbook convenience wrapper (`checksHashOfList(activeChecks(pb))`);
+ * this direct form exists for a3 routing T7's cmd-run.ts, which unions
+ * checks across MULTIPLE composed layers (one assembled harness, no arm
+ * split — spec §3's single-harness degenerate case) and so has no single
+ * `Playbook` object to hand `checksHashOf`. */
+export function checksHashOfList(checks: Array<{ bulletId: string; cmd: string; timeoutMs: number }>): string {
+  return createHash("sha256").update(canonicalChecksJson(checks), "utf-8").digest("hex")
+}
+
 /** sha256 (full hex) of the ACTIVE-status bullets' checks, canonically
  * serialized — the budget-identity tuple's rule-routing component
  * (`budgetIdentityMatches`, a3 routing T2). A playbook with zero checks (or
  * `null`, e.g. no playbook at all) hashes to `EMPTY_CHECKS_HASH`. */
 export function checksHashOf(playbook: Playbook | null): string {
-  const list = (playbook?.bullets ?? [])
-    .filter((b) => b.status === "active" && b.check)
-    .map((b) => ({ bulletId: b.id, cmd: b.check!.cmd, timeoutMs: b.check!.timeoutMs }))
-  return createHash("sha256").update(canonicalChecksJson(list), "utf-8").digest("hex")
+  return checksHashOfList(activeChecks(playbook))
 }
 
 /** Precomputed `checksHashOf(null)` — the hash every legacy/checkless
