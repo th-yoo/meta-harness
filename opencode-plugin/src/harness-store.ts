@@ -475,22 +475,34 @@ export interface BudgetStamp {
   minAgentTimeout?: number
   timeoutRecording?: boolean
   env?: { resourceEnforcement?: boolean }
-  /** sha256 of the rule-routing checks bundle (a3 routing T2). Absent on
-   * pre-T2 records — coalesced against `EMPTY_CHECKS_HASH` below, matching
-   * the file's `?? 0`/`?? false` back-compat convention. */
-  checksHash?: string
+  /** sha256 of the rule-routing checks bundle the ACTIVE arm measured (a3
+   * routing T2/T8). Named to match `AbVerdict.activeChecksHash` — the real
+   * field cmd-ab.ts's verdictDict stamps (T8) — NOT a bare `checksHash`,
+   * which no producer ever writes onto a verdict (fix round 1, reviewer
+   * finding: the old `checksHash` name here silently read `undefined` off
+   * every real `AbVerdict`, masked only by hand-built test literals that
+   * happened to carry that key). Absent on pre-T8 records — coalesced
+   * against `EMPTY_CHECKS_HASH` below, matching the file's `?? 0`/`?? false`
+   * back-compat convention. Compared against the SECOND param's `checksHash`
+   * (the layer's CURRENT active-playbook hash, `readActiveBudget`'s real
+   * field name — that side was never wrong, only this verdict side was). */
+  activeChecksHash?: string
 }
 
 /**
  * True iff `verdict`'s budget-identity tuple {maxAgentTimeout, timeoutRecording,
- * resourceEnforcement, checksHash} matches `activeBudget`'s — the gate
+ * resourceEnforcement, activeChecksHash} matches `activeBudget`'s — the gate
  * /mh-activate uses (engine.ts) before activating an account-scope candidate.
  * `timeoutRecording` and `resourceEnforcement` are `?? false`-coalesced on
  * both sides (an absent key and an explicit `false` mean the same thing,
  * matching the existing resourceEnforcement-coalescing convention elsewhere
- * in this codebase — see cmd-ab.ts's --resume guard). `checksHash` follows
- * the same convention, coalescing an absent hash (pre-T2 record) to
- * `EMPTY_CHECKS_HASH` (the hash of "no checks") on both sides.
+ * in this codebase — see cmd-ab.ts's --resume guard). The checksHash leg
+ * follows the same convention, coalescing an absent hash (pre-T8 record) to
+ * `EMPTY_CHECKS_HASH` (the hash of "no checks") on both sides — comparing
+ * `verdict.activeChecksHash` (what the ab's ACTIVE arm measured) against
+ * `activeBudget.checksHash` (the layer's CURRENT active-playbook hash): the
+ * question this leg answers is "has the active baseline's own checked-bundle
+ * identity drifted since this ab ran", not anything about the candidate arm.
  */
 export function budgetIdentityMatches(
   verdict: BudgetStamp,
@@ -507,7 +519,7 @@ export function budgetIdentityMatches(
   const verdictEnforcement = verdict.env?.resourceEnforcement ?? false
   const activeEnforcement = activeBudget.resourceEnforcement ?? false
   if (verdictEnforcement !== activeEnforcement) return false
-  if ((verdict.checksHash ?? EMPTY_CHECKS_HASH) !== (activeBudget.checksHash ?? EMPTY_CHECKS_HASH)) return false
+  if ((verdict.activeChecksHash ?? EMPTY_CHECKS_HASH) !== (activeBudget.checksHash ?? EMPTY_CHECKS_HASH)) return false
   return true
 }
 

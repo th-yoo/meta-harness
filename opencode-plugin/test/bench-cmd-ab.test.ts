@@ -15,6 +15,7 @@ import {
   writeActive,
   checksHashOf,
   EMPTY_CHECKS_HASH,
+  budgetIdentityMatches,
   type Playbook,
 } from "../src/harness-store.ts"
 import { BenchError } from "../src/bench/util.ts"
@@ -430,6 +431,69 @@ test("cmdAb: checkless ab verdict carries EMPTY_CHECKS_HASH on both arms, no cav
   expect(verdict!.candidateChecksHash).toBe(EMPTY_CHECKS_HASH)
   expect(verdict!.checkBundleCaveat).toBeUndefined()
   expect(verdict!.ruleCheckTotals).toBeUndefined()
+})
+
+test("cmdAb + budgetIdentityMatches SEAM: a real cmd-ab-written verdict against a checked active baseline gates on the REAL field name (a3 routing T8 fix round 1)", async () => {
+  // Reviewer finding: budgetIdentityMatches read `verdict.checksHash` — a key
+  // NO real AbVerdict carries (T8 stamped activeChecksHash/candidateChecksHash
+  // instead). Unit tests that hand-built a `{..., checksHash: "aaaa"}` object
+  // literal for the verdict side masked this — it type-checks (BudgetStamp's
+  // checksHash is optional) but no PRODUCER ever writes that key. This test
+  // goes through the REAL seam: a real cmdAb run writes a real ab-verdict.json,
+  // readAbVerdict reads it back with whatever shape cmd-ab.ts ACTUALLY
+  // serialized, and THAT object (not a hand-built stand-in) is what gets
+  // handed to budgetIdentityMatches.
+  const paths = isolatedPaths(["t1"])
+  const root = projectGlobalRoot(paths.metaRoot)
+  const activeCheckedPb = checkedPlaybook("bX", "checkX")
+  createCandidate(root, "v0", "baseline sys", "", activeCheckedPb)
+  writeActive(root, "v0", "baseline sys", "", activeCheckedPb)
+  createCandidate(root, "v1", "candidate sys")
+
+  const fake: RunOneTaskFn = async () => res()
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, driver: "claude-code" } as CmdAbArgs,
+      fake,
+      fakeExec,
+    ),
+  )
+
+  const verdict = readAbVerdict(root, "v1")
+  expect(verdict).not.toBeNull()
+  // Precondition: the active arm really did measure a non-empty checked
+  // bundle — this is the "checked ACTIVE baseline" the finding's first case
+  // names, and the case masked by T2's hand-built literals.
+  expect(verdict!.activeChecksHash).not.toBe(EMPTY_CHECKS_HASH)
+
+  // Mirror the verdict's own {maxAgentTimeout, minAgentTimeout,
+  // timeoutRecording, resourceEnforcement} tuple back at it so ONLY the
+  // checksHash leg is under test (readActiveBudget's OTHER legs depend on
+  // the active version's own recorded sessions, which this fixture never
+  // populates — orthogonal to the bug under test here).
+  const tupleMatchingActiveBudget = (checksHash: string) => ({
+    maxAgentTimeout: verdict!.maxAgentTimeout,
+    minAgentTimeout: verdict!.minAgentTimeout,
+    timeoutRecording: verdict!.timeoutRecording,
+    resourceEnforcement: verdict!.env?.resourceEnforcement,
+    checksHash,
+  })
+
+  // Case 1 (checked-active + matching verdict): the layer's active baseline
+  // is STILL measured at the same checked identity the ab ran under →
+  // legitimate activation must be ALLOWED (true). Before the fix this read
+  // undefined verdict.checksHash -> EMPTY_CHECKS_HASH -> mismatch -> false
+  // (the reviewer's "every legitimate activation hard-blocks" symptom).
+  expect(budgetIdentityMatches(verdict!, tupleMatchingActiveBudget(verdict!.activeChecksHash!))).toBe(true)
+
+  // Case 2 (checkless-active + non-empty verdict activeChecksHash): the
+  // layer's active baseline has since drifted to checkless while this
+  // verdict measured a real checked identity — activation must be REFUSED
+  // (false). Before the fix this read undefined verdict.checksHash ??
+  // EMPTY_CHECKS_HASH == activeBudget.checksHash (also EMPTY) -> silently
+  // treated as a match -> true (the reviewer's "silent false-pass" symptom).
+  expect(budgetIdentityMatches(verdict!, tupleMatchingActiveBudget(EMPTY_CHECKS_HASH))).toBe(false)
 })
 
 // ── legacy explicit-tasks mode ───────────────────────────────────────────

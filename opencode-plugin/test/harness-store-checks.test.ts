@@ -61,14 +61,25 @@ test("two playbooks identical in prose but different in check cmd hash different
 
 // ── Step 4: budgetIdentityMatches + readActiveBudget checksHash wiring ──────
 
-test("budgetIdentityMatches: legacy record (absent checksHash) vs modern zero-check record MATCH", () => {
+// Fix round 1 (reviewer finding): the verdict-side param is `BudgetStamp`,
+// whose checksHash-bearing field is `activeChecksHash` (matching the REAL
+// `AbVerdict` field cmd-ab.ts's verdictDict stamps, a3 routing T8) — NOT a
+// bare `checksHash`, which no verdict producer ever writes. The activeBudget
+// (second-param, "the layer's CURRENT active-playbook hash") side genuinely
+// is `checksHash` (readActiveBudget's real field name) — only the verdict
+// side was ever wrong. These two tests previously hand-built the verdict
+// side with `checksHash` too, which type-checked (BudgetStamp's field is
+// optional) but masked the real-AbVerdict field-name mismatch entirely; see
+// bench-cmd-ab.test.ts's "cmdAb + budgetIdentityMatches SEAM" test for the
+// regression guard that goes through an ACTUAL cmd-ab-written verdict.
+test("budgetIdentityMatches: legacy record (absent activeChecksHash) vs modern zero-check record MATCH", () => {
   const legacy = { maxAgentTimeout: 600, minAgentTimeout: 0, timeoutRecording: false, env: { resourceEnforcement: false } }
   const modern = { maxAgentTimeout: 600, minAgentTimeout: 0, timeoutRecording: false, resourceEnforcement: false, checksHash: EMPTY_CHECKS_HASH }
   expect(budgetIdentityMatches(legacy, modern)).toBe(true)
 })
 
-test("budgetIdentityMatches: differing checksHash MISMATCH", () => {
-  const a = { maxAgentTimeout: 600, minAgentTimeout: 0, timeoutRecording: false, env: { resourceEnforcement: false }, checksHash: "aaaa" }
+test("budgetIdentityMatches: differing activeChecksHash vs checksHash MISMATCH", () => {
+  const a = { maxAgentTimeout: 600, minAgentTimeout: 0, timeoutRecording: false, env: { resourceEnforcement: false }, activeChecksHash: "aaaa" }
   const b = { maxAgentTimeout: 600, minAgentTimeout: 0, timeoutRecording: false, resourceEnforcement: false, checksHash: "bbbb" }
   expect(budgetIdentityMatches(a, b)).toBe(false)
 })
