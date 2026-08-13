@@ -3,6 +3,78 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-13 (`yoo-mac`, P2-close + a3-routing session, cleared) — P2 PROGRAM CLOSED (a3 ROUTED) · a3-ROUTING PLAN A BUILT+MERGED (`16c2303`) · GUARD BACKTICK FIX DEPLOYED 0.4.4 (`6434afc`) · MAIN `6434afc`+
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness), yoo-mac, post-2026-08-13 a3-routing session.
+git pull FIRST; main >= 6434afc (sibling "minimal" session is ACTIVE in
+this checkout — its band batch is chunk-2-paused, see its 0fb8f5e block;
+check git log/branch before assuming state). bun install BOTH plugin dirs
+if pins moved (they did not this session).
+
+WHAT THIS SESSION CLOSED (do not redo):
+ 1. P2 PROGRAM FULLY CLOSED: ruling 1(a) executed (a3 resumed frozen,
+    a4 from ef7f422-pinned worktree, zero burns), tally, ADOPTION RULING
+    = ROUTE a3 (d0d18ee; pass edge directional-only McNemar p=0.375),
+    a4 declined bar-edge + offline judge audit CONFIRMED decline
+    (28/28 degenerate agreement, deficit was carrier design; 75%
+    single-re-pass conversion = citable datum, docs/loop-probes/p2/
+    a4-judge-audit.md). Worktrees/ledgers/monitors all cleaned.
+ 2. a3 RULE-ROUTING SPEC + PLAN A BUILT AND MERGED (`16c2303`):
+    spec docs/superpowers/specs/2026-08-13-a3-rule-routing-design.md
+    (FLAWLESS, 4 architect rounds) · plan docs/superpowers/plans/
+    2026-08-13-a3-rule-routing-tb2.md (FLAWLESS, 3 rounds) · SDD build
+    8 tasks, per-task fresh reviews, 5 in-loop fix rounds, final
+    whole-branch review + fix wave (artifact docs/reviews/
+    5e44620-a3-rule-routing-tb2.md). SHIPPED: BulletCheck schema +
+    checksHash/EMPTY_CHECKS_HASH identity (incl. /mh-activate seam —
+    comparator reads activeChecksHash) · two-tier check screens
+    (check-screen.ts, backtick-reject) · review-gate/curate wiring
+    (screenOpsChecks both apply sites, liveEligible persisted,
+    check:null drop mechanism, proposer+curator prompts) · generated
+    round-capped in-container rule gate (rule-gate.ts, group-kill
+    watchdog, compare-then-increment cap 2) · per-arm TB2 injection +
+    claude-code-driver refusal + ruleChecks annotations · ab verdict
+    per-arm checksHash + checkBundleCaveat. MERGED ≠ RUNNING: nothing
+    executes until a checked-rule candidate exists; FIRST real
+    checked-rule ab stamps a boundary ts in the adoption ledger.
+ 3. GUARD BACKTICK FIX MERGED + DEPLOYED THIS HOST (`6434afc`, artifact
+    893183b-fix-guard-backtick.md): production gauge guard.ts refuses
+    backtick substitution (word-anchored rules were blind to verbs
+    after unspaced backticks — gauge shadow EXECUTES model shell);
+    minimal/guard.ts mirrored (parity test enforces lockstep); plugin
+    0.4.4 same-commit; yoo-mac cache grep-verified. YOO-DEV DUTY on
+    its next pull: km-refresh + verify 0.4.4 (gauge refusals partition
+    by pluginVersion).
+ 4. Earlier same session (already in blocks below): DEFAULT_BENCH_MODEL
+    sonnet-5 (a4d4b51) · A/A yoo-mac impossibility finding + ruling
+    options · TB2 band baseline valid here · housekeeping.
+
+OPEN — NEED USER GO/RULING:
+ - T9 PROBE (next natural step, ≤4 haiku calls, own sized go): live
+    proof the injected rule gate blocks a claude -p Stop in a real
+    container (P2 PROBE C pattern; plan Task 9 has the recipe). Do
+    BEFORE any real checked-rule arm spend.
+ - PLAN B (live adapter): spec §4 designed, unbuilt — kkamak-gate
+    extension + .km/rule-checks.json export producer + SensorLine
+    contract rev (verify on yoo-dev). Own writing-plans cycle.
+ - Deferred-minor notes riding in the 5e44620 artifact: ab-vs-run
+    multi-layer asymmetry (future, once cross-layer checks exist);
+    Plan-B shadow-reset on check resend.
+ - Standing: A/A trial-state ruling (options in P2-close block) ·
+    rejected.json F2 command-text ruling (spec §1 fallback in force) ·
+    TB2 batch continuation = sibling's lane (chunk 2 paused) ·
+    yoo-dev: 08-13 checkpoint + crank-2 verdict (handoff block below;
+    ssh was unreachable from here).
+
+RULES: explicit go before any merge to main and any spend · 7b gate +
+committed docs/reviews artifact (BARE fields — list dashes BLOCK the
+checker; SHAs via git rev-parse) · suites serial · merging ≠ deploying
+(version bump same-commit, km-refresh + grep-verify cache) · add NAMED
+files only · probe the CONSEQUENCE · SITREP.
+```
+
 ## ✅ SESSION END 2026-08-13 (`yoo-mac` "minimal", cleared ~11:00 KST) — A1 ARC END-TO-END (kkamak v0.6.0 + cc-gate 0.4.3 DEPLOYED) · QUEUE AT ONE STANDING ITEM · MAIN `5118def`+
 
 **RESUME PROMPT:**
