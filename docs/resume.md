@@ -49,10 +49,15 @@ OPEN — THE ONLY STANDING ITEM: TB2 band batch, sized go pending.
  only, never run-id/date/count; report-loop segments by same
  tuple. CONSTRAINTS every chunk must hold IDENTICAL: budget tuple
  {3600,3600,enforce}, model haiku-4-5, recordTimeouts policy,
- driver, active version v0. CAVEAT: --resume does NOT accumulate
- k (rewards-non-empty task = done+skipped, results.ts
- resumeCarryForward) — each chunk gets its OWN results file;
- pooling lives in the store only. Batch itself still = sized go.
+ driver, active version v0. CAVEAT (corrected after live false
+ start): --results-file DISABLES store writes entirely (cmd-run.ts
+ noStore = noStore || resultsFile) — store-pooling chunks must run
+ WITHOUT it; per-chunk record = tee'd log + store session
+ timestamps. Also: harness text lives in <root>/active/ (NOT
+ candidates/vN) and the snapshot does not carry active/ — populate
+ via writeActive from the v0 candidate, then verify harnessHash
+ parity (yoo-mac assembled 25f13fca883fe563 = baseline stamp,
+ byte-identical). Batch itself still = sized go.
 
 YOO-DEV (self-serve, handoff block 0d69232 below): sensor cadence
  checkpoint DUE 08-13 -> constants amendment expected · snapshot
