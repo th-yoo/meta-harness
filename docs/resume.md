@@ -56,8 +56,15 @@ checked-rule candidate. First checked-rule ab stamps its own boundary
 ts (T8 duty). First liveEligible check makes live shadow lines appear.
 
 OPEN — NEED USER GO/RULING:
- - Checked-rule crank: /mh-propose until a candidate carries checks
-   (may take 2-3 cranks), then k=5 two-arm ab = overnight spend, own
+ - Checked-rule crank: CRANK 1 RAN 2026-08-14 ~00:37 KST (km-crank
+   --force, headless): proposer emitted 1 prose-only bullet, review
+   gate REVIEW-REJECTED it with mechanize_instead violation — the
+   rejection (in .kkamak/global/rejected.json) carries the mechanized
+   check description and steers the NEXT proposer toward emitting a
+   structured check. Crank 2+ is DATA-GATED: zero-new-evidence never
+   runs, even --force (km-crank/src/gate.ts:69-74); needs new
+   .km/gate-outcomes.ndjson lines (>=1 forced, >=10 unforced). Then:
+   candidate with checks -> k=5 two-arm ab = overnight spend, own
    sized go (table computed at go time).
  - Standing rulings: A/A trial-state (P2-close block) · rejected.json
    F2 command-text (spec §1 fallback in force).
