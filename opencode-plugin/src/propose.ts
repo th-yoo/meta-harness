@@ -452,8 +452,19 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     // updatedAt on every touched bullet even when text/generality/slice end up
     // unchanged (e.g. an update op that re-sends the same values), so an
     // un-stripped compare would over-detect a change that isn't there.
+    // (finding 1, a3 rule-routing review): project a {cmd, timeoutMs} view of
+    // `check` too — an update op that re-sends unchanged text but attaches a
+    // new/changed check (or drops one, check:null — finding 2) renders
+    // byte-identical prose, so without this the whole op (check included)
+    // was silently swallowed as a no-op before ever reaching createCandidate.
+    // state/liveEligible stay deliberately excluded — screen/live state is
+    // stamped AFTER this comparison runs and must never itself count as a
+    // "change".
     const strip = (bs: typeof base.bullets) =>
-      bs.map((b) => ({ id: b.id, text: b.text, generality: b.generality, slice: b.slice, status: b.status }))
+      bs.map((b) => ({
+        id: b.id, text: b.text, generality: b.generality, slice: b.slice, status: b.status,
+        check: b.check ? { cmd: b.check.cmd, timeoutMs: b.check.timeoutMs } : undefined,
+      }))
     playbookChanged = !isDeepStrictEqual(strip(base.bullets), strip(newPlaybook.bullets))
   } else {
     system = fs.readFileSync(stagingSystem, "utf-8").trim()
@@ -1492,8 +1503,15 @@ async function applyCurateArtifact(host: HarnessHost, d: StagedArtifactDescripto
   // an `update` that changes only generality/slice (I1 fix, same rationale as
   // applyProposeArtifact): text is unchanged so the render is byte-identical,
   // so also compare the stripped (id/text/generality/slice/status) bullet sets.
+  // (finding 1, a3 rule-routing review): same check-projection fix as the
+  // propose lane's strip() above — this is the curate lane's own copy of the
+  // bug (an update op that re-sends unchanged text but adds/changes/drops a
+  // check rendered byte-identical prose and was silently swallowed).
   const strip = (bs: typeof playbook.bullets) =>
-    bs.map((b) => ({ id: b.id, text: b.text, generality: b.generality, slice: b.slice, status: b.status }))
+    bs.map((b) => ({
+      id: b.id, text: b.text, generality: b.generality, slice: b.slice, status: b.status,
+      check: b.check ? { cmd: b.check.cmd, timeoutMs: b.check.timeoutMs } : undefined,
+    }))
   const playbookChanged = !isDeepStrictEqual(strip(playbook.bullets), strip(newPlaybook.bullets))
   if (system.trim() === readActiveSystem(layer.root).trim() && !playbookChanged) {
     await host.log("info", `curator ${layer.scope}: no-op curation — identical to active ${activeVersion(layer.root)}; no candidate created, no trial`)
@@ -1560,7 +1578,7 @@ merging it into a broader one. If both merged bullets already share a tag (or
 neither is tagged), keep it as-is; only set \`generality\`/\`slice\` on the surviving
 \`update\` when the merge would otherwise lose a more-specific tag.
 
-Optionally, an "update" op may carry or revise "check": {"cmd": "...", "timeoutMs": <number>} on a bullet that already warrants one, under the same constraints: mechanically verifiable behavior only, workspace-scoped, never stores/network/packages; drop a check (omit the field) rather than keep one that no longer matches the bullet.
+Optionally, an "update" op may carry or revise "check": {"cmd": "...", "timeoutMs": <number>} on a bullet that already warrants one, under the same constraints: mechanically verifiable behavior only, workspace-scoped, never stores/network/packages; to drop a check that no longer matches the bullet, set "check": null explicitly (omitting the field keeps whatever check is already there — it does NOT drop it).
 
 ## Write the results
 

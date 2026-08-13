@@ -213,18 +213,24 @@ export interface EnvBlock {
    * budgetIdentityMatches, cmd-ab.ts's --resume guard) coalesce an absent key
    * and an explicit 0 to the same "no floor" via `?? 0`. */
   minAgentTimeout?: number
-  /** sha256 (full hex, harness-store.ts's `checksHashOf`) of the rule-routing
-   * checked-bullet bundle this run/arm's playbook enforces (a3 routing T5).
+  /** sha256 (full hex, harness-store.ts's `checksHashOf`/`checksHashOfList`)
+   * of the rule-routing checked-bullet bundle this run/arm's ASSEMBLED
+   * harness actually enforces (a3 routing T5, threaded end-to-end by T7).
    * ALWAYS present (unlike `minAgentTimeout` above) — same always-present
    * precedent as `resourceEnforcement`: defaults to `EMPTY_CHECKS_HASH` (the
-   * hash of "no checks") so a call site with no ready playbook object, or a
-   * caller that never passes it, is byte-identical to a genuinely checkless
-   * run/arm. Wired from cmd-ab.ts's candidate-arm playbook (the harness
-   * actually assembled for that arm); cmd-run.ts passes `EMPTY_CHECKS_HASH`
-   * today — it has no single ready playbook object at the assembly call site
-   * (unlike ab's single pinned layer+candidate), pending T7's rule-gate
-   * wiring, which reads the run's own playbook at this same site for
-   * checked-driver refusal and can thread the real hash through then. */
+   * hash of "no checks") only for a caller that never passes it (legacy/
+   * no-playbook call sites) — not a live placeholder for either shipped
+   * command. Both cmd-run.ts and cmd-ab.ts thread the REAL hash here:
+   * cmd-run.ts's `runChecksHash` is `checksHashOfList` over the UNION of
+   * `activeChecks` across every composed layer's resolved (pinned-or-active)
+   * playbook — its single-harness degenerate case, no arm split; cmd-ab.ts
+   * passes its own per-arm `checksHashOf` result into each arm's env block
+   * (`activeChecksHash` for arm A, `candidateChecksHash` for arm B). Those
+   * same per-arm hashes are ALSO carried forward onto the AbVerdict type
+   * itself (harness-store.ts's `activeChecksHash`/`candidateChecksHash`
+   * fields, a3 routing T8) — that pair is what `budgetIdentityMatches`
+   * compares across runs; this field is only the per-record stamp of what
+   * that one run/arm enforced at record time. */
   checksHash: string
 }
 

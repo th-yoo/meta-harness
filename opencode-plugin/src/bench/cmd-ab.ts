@@ -330,10 +330,19 @@ export async function cmdAb(
   // checked-rule ab has active set = empty" (spec §3) is the degenerate
   // case, not a permanent one. Prose-only candidates (both arrays empty)
   // are unaffected on either driver.
-  const allChecks = [...activeChecksArr, ...candidateChecksArr]
-  if (allChecks.length > 0 && driver.id !== "claude-code") {
+  // Finding 5 (a3 routing review): name which arm(s) actually carry each
+  // checked bullet — a naive concat-and-list (the old `allChecks`) both
+  // mislabels an active-only bullet as "candidate carries" it, and can list
+  // the SAME bulletId twice when a candidate inherits a checked bullet
+  // unchanged from active (same id in both arrays). Key by bulletId so each
+  // id appears once, tagged with every arm it was found in.
+  const bulletArms = new Map<string, string[]>()
+  for (const c of activeChecksArr) bulletArms.set(c.bulletId, [...(bulletArms.get(c.bulletId) ?? []), "active"])
+  for (const c of candidateChecksArr) bulletArms.set(c.bulletId, [...(bulletArms.get(c.bulletId) ?? []), "candidate"])
+  if (bulletArms.size > 0 && driver.id !== "claude-code") {
+    const desc = [...bulletArms.entries()].map(([id, arms]) => `${id} (${arms.join("+")})`).join(", ")
     die(
-      `run/ab: candidate carries checked bullets (${allChecks.map((c) => c.bulletId).join(", ")}) — requires --driver claude-code; the opencode driver has no hook chokepoint (spec §3)`,
+      `run/ab: checked bullets present (${desc}) — requires --driver claude-code; the opencode driver has no hook chokepoint (spec §3)`,
     )
   }
   // Arm B's (the candidate's) enforced check-set identity (a3 routing T5) —

@@ -428,6 +428,37 @@ test("applyProposeArtifact: update op changing ONLY generality (same text) → c
   expect(bullet.slice).toBe("acme")
 })
 
+// (finding 1, a3 rule-routing review): the no-op guard's strip() projection
+// EXCLUDED `check` — an update op that re-sends unchanged text but attaches
+// a NEW check rendered byte-identical playbook prose, so playbookChanged
+// stayed false and the whole update (including the new check) was silently
+// swallowed before ever reaching createCandidate. Fixed by projecting a
+// {cmd, timeoutMs} view of check into strip() too (state/liveEligible stay
+// excluded — screen/live state must not itself trigger change detection).
+test("applyProposeArtifact: update op with UNCHANGED text but a NEW check → candidate created, not swallowed as no-op (finding 1)", async () => {
+  const root = path.join(home, "stores", "pbchecknoop")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "project-role-v2-ops.json"),
+    JSON.stringify({ ops: [{ op: "update", id: "b1", text: "b1 rule", check: { cmd: "test -s DONE.txt", timeoutMs: 5000 } }] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(fakeHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).toContain("v2")           // NOT skipped as a no-op
+  expect(readTrial(root)).not.toBeNull()
+  expect(rec.logs.some((l) => l.includes("no-op proposal"))).toBe(false)
+  const pb = readPlaybook(root, "v2")!
+  const bullet = pb.bullets.find((x) => x.id === "b1")!
+  expect(bullet.text).toBe("b1 rule")
+  expect(bullet.check!.cmd).toBe("test -s DONE.txt")
+})
+
 test("applyProposeArtifact: playbook-mode grace (system.md, no ops.json) identical to active → no-op guard skips without NPE", async () => {
   const root = path.join(home, "stores", "pbgrace")
   writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
@@ -668,6 +699,68 @@ test("applyCurateArtifact: update op with a screen-rejected check is dropped; ot
   const b2 = pb.bullets.find((x) => x.id === "b2")!
   expect(b2.status).toBe("pruned")        // the OTHER op in the same batch still applied
   expect(rec.logs.some((l) => l.includes("store-path"))).toBe(true)
+})
+
+// (finding 1, a3 rule-routing review — curate lane's own copy of the same
+// strip() bug as the propose lane above): an update op that re-sends
+// unchanged text but attaches a NEW check must not be swallowed as a no-op
+// curation. This is ALSO the T4-deferred acceptance test: the persisted
+// candidate playbook must carry check.liveEligible stamped from the screen
+// (screenOpsChecks/stampLiveEligible), proving the fix doesn't just create
+// a candidate but creates one with the check's screen result intact.
+test("applyCurateArtifact: update op with UNCHANGED text but a NEW check → candidate created, not swallowed as no-op; persisted check.liveEligible from the screen (finding 1 + T4-deferred)", async () => {
+  const root = path.join(home, "stores", "curchecknoop")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-global", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "curate-project-global-v2-ops.json"),
+    JSON.stringify({ ops: [{ op: "update", id: "b1", text: "b1 rule", check: { cmd: "test -s DONE.txt", timeoutMs: 5000 } }] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(fakeHost(rec), descriptor({ kind: "curate", layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).toContain("v2")           // NOT skipped as a no-op
+  expect(rec.logs.some((l) => l.includes("no-op curation"))).toBe(false)
+  const pb = readPlaybook(root, "v2")!
+  const b1 = pb.bullets.find((x) => x.id === "b1")!
+  expect(b1.text).toBe("b1 rule")
+  expect(b1.check!.cmd).toBe("test -s DONE.txt")
+  expect(b1.check!.state).toBe("shadow")
+  expect(b1.check!.liveEligible).toBe(true)            // T4-deferred: screen result reached the store
+})
+
+// (finding 1 + finding 2 interaction, explicitly called out in the review):
+// a check-DROP (check: null) with otherwise-unchanged text must ALSO count
+// as a change in the strip() projection — null (absent) vs an existing
+// check object differ, so this is a regression risk distinct from the
+// "new check" case above (that one goes undefined→object; this one goes
+// object→undefined, the opposite direction of the same diff).
+test("applyCurateArtifact: update op with UNCHANGED text but check:null (drop) → candidate created, not a no-op (finding 1+2 interaction)", async () => {
+  const root = path.join(home, "stores", "curcheckdrop")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0,
+      check: { cmd: "test -s ALREADY-THERE.txt", timeoutMs: 5000, state: "shadow" } },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-global", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "curate-project-global-v2-ops.json"),
+    JSON.stringify({ ops: [{ op: "update", id: "b1", text: "b1 rule", check: null }] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(fakeHost(rec), descriptor({ kind: "curate", layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).toContain("v2")           // NOT skipped as a no-op
+  expect(rec.logs.some((l) => l.includes("no-op curation"))).toBe(false)
+  const pb = readPlaybook(root, "v2")!
+  const b1 = pb.bullets.find((x) => x.id === "b1")!
+  expect(b1.text).toBe("b1 rule")
+  expect(b1.check).toBeUndefined()                     // dropped
 })
 
 // ── opencode inline parity: triggerPropose without stageArtifactApply ────────

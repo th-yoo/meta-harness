@@ -1060,7 +1060,12 @@ export interface Playbook {
 
 export type PlaybookOp =
   | { op: "add"; text: string; generality?: "universal" | "vendor" | "model"; slice?: string; check?: { cmd: string; timeoutMs: number } }
-  | { op: "update"; id: string; text: string; generality?: "universal" | "vendor" | "model"; slice?: string; check?: { cmd: string; timeoutMs: number } }
+  // `check` on an update op is tri-state (finding 2, a3 rule-routing review):
+  // `undefined` (field omitted) = KEEP whatever check the bullet already has;
+  // `null` = DROP it (the curator prompt's documented "drop a check" path,
+  // which pre-fix had no actual mechanism — omitting the field always meant
+  // keep); an object = SET/REPLACE it. See applyPlaybookOps below.
+  | { op: "update"; id: string; text: string; generality?: "universal" | "vendor" | "model"; slice?: string; check?: { cmd: string; timeoutMs: number } | null }
   | { op: "delete"; id: string }
 
 export function readPlaybook(storeRoot: string, version?: string): Playbook | null {
@@ -1137,7 +1142,12 @@ export function applyPlaybookOps(base: Playbook, ops: PlaybookOp[]): Playbook {
         b.text = op.text; b.updatedAt = now
         if (op.generality !== undefined) b.generality = coerceGen(op.generality)
         if (op.slice !== undefined) b.slice = capSlice(op.slice)
-        if (op.check !== undefined) b.check = { cmd: op.check.cmd, timeoutMs: op.check.timeoutMs, state: "shadow" as const }
+        // Tri-state: null → DELETE the check (finding 2's drop mechanism);
+        // undefined (field omitted) → KEEP whatever check is already there;
+        // an object → SET/REPLACE it, always re-shadowed (a revised check is
+        // unproven again, same as a brand-new one).
+        if (op.check === null) delete b.check
+        else if (op.check !== undefined) b.check = { cmd: op.check.cmd, timeoutMs: op.check.timeoutMs, state: "shadow" as const }
       }
     } else if (op.op === "delete") {
       const b = bullets.find((x) => x.id === op.id)

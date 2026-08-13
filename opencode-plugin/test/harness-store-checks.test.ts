@@ -49,6 +49,43 @@ test("EMPTY_CHECKS_HASH equals checksHashOf(null) and of a checkless playbook", 
   expect(checksHashOf(pb)).toBe(EMPTY_CHECKS_HASH)
 })
 
+// (finding 2, a3 rule-routing review): the curator prompt documents dropping
+// a check by omitting the field, but applyPlaybookOps only ever assigned
+// when op.check !== undefined — omit meant KEEP, so no drop mechanism
+// actually existed. Fix: update ops accept check:null (delete), check
+// omitted (keep, unchanged), or a check object (set/replace).
+test("applyPlaybookOps: update op with check:null DELETES an existing check", () => {
+  const withCheck = applyPlaybookOps(base, [
+    { op: "add", text: "verify before done", check: { cmd: "test -s DONE.txt", timeoutMs: 5000 } },
+  ])
+  const dropped = applyPlaybookOps(withCheck, [
+    { op: "update", id: "b1", text: "verify before done", check: null },
+  ])
+  expect(dropped.bullets[0]!.check).toBeUndefined()
+})
+
+test("applyPlaybookOps: update op with check OMITTED keeps the existing check untouched", () => {
+  const withCheck = applyPlaybookOps(base, [
+    { op: "add", text: "verify before done", check: { cmd: "test -s DONE.txt", timeoutMs: 5000 } },
+  ])
+  const kept = applyPlaybookOps(withCheck, [
+    { op: "update", id: "b1", text: "verify before done, revised" },
+  ])
+  expect(kept.bullets[0]!.check).toEqual(withCheck.bullets[0]!.check)
+})
+
+test("applyPlaybookOps: update op with a check object SETS/REPLACES, re-shadowing state", () => {
+  const withCheck = applyPlaybookOps(base, [
+    { op: "add", text: "verify before done", check: { cmd: "test -s DONE.txt", timeoutMs: 5000 } },
+  ])
+  const replaced = applyPlaybookOps(withCheck, [
+    { op: "update", id: "b1", text: "verify before done", check: { cmd: "test -s OTHER.txt", timeoutMs: 9000 } },
+  ])
+  expect(replaced.bullets[0]!.check!.cmd).toBe("test -s OTHER.txt")
+  expect(replaced.bullets[0]!.check!.timeoutMs).toBe(9000)
+  expect(replaced.bullets[0]!.check!.state).toBe("shadow")
+})
+
 test("two playbooks identical in prose but different in check cmd hash differently", () => {
   const a = applyPlaybookOps(base, [{ op: "add", text: "r", check: { cmd: "c1", timeoutMs: 1000 } }])
   const b = applyPlaybookOps(base, [{ op: "add", text: "r", check: { cmd: "c2", timeoutMs: 1000 } }])

@@ -717,8 +717,12 @@ export async function cmdRun(
           activeChecks(readPlaybook(root, pins[scope])),
         )
   if (runChecks.length > 0 && driver.id !== "claude-code") {
+    // Finding 5 (a3 routing review): cmd-run has no "candidate"/arm split at
+    // all (that's cmd-ab's concept) — this is the union of whichever
+    // layers' resolved (pinned-or-active) playbooks are enforced, so name it
+    // as the assembled run's own checked bullets, not a "candidate"'s.
     die(
-      `run/ab: candidate carries checked bullets (${runChecks.map((c) => c.bulletId).join(", ")}) — requires --driver claude-code; the opencode driver has no hook chokepoint (spec §3)`,
+      `run: assembled harness carries checked bullets (${runChecks.map((c) => c.bulletId).join(", ")}) — requires --driver claude-code; the opencode driver has no hook chokepoint (spec §3)`,
     )
   }
   const runChecksHash = checksHashOfList(runChecks)
