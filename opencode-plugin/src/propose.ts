@@ -63,6 +63,7 @@ import {
 import { proposerSessions } from "./session-state.ts"
 import type { HarnessHost, StagedArtifactDescriptor } from "./host.ts"
 import { reviewAddedBullets } from "./review-gate.ts"
+import { screenCheck } from "./check-screen.ts"
 // Phase 8 / W4b: the external-evidence live contamination guard needs the
 // CURRENT held-out split — propose.ts's first import from src/bench/*
 // (precedent: src/fleet/* already imports ../bench/*, see e.g. fleet/dag.ts).
@@ -274,6 +275,72 @@ export async function triggerPropose(
   }
 }
 
+/** Result of screenOpsChecks: `ops` kept every input op EXCEPT those whose
+ * `check` screened `"rejected"`; `liveEligible` maps a surviving op (by
+ * object identity — filtering never clones) to its screen-derived
+ * eligibility, for a caller to stamp onto the resulting persisted bullet;
+ * `rejections` names what got dropped and why, for a caller to log. */
+export interface OpsScreenResult {
+  ops: PlaybookOp[]
+  liveEligible: Map<PlaybookOp, boolean>
+  rejections: Array<{ op: PlaybookOp; reason: string }>
+}
+
+/** SCREEN COVERAGE INVARIANT (a3 routing T4): every op carrying a `check` —
+ * `add` OR `update` — must pass screenCheck (check-screen.ts) before it can
+ * reach applyPlaybookOps, in EITHER apply lane. `add`-op checks are ALSO
+ * screened by reviewAddedBullets (which owns their review + ledger entry);
+ * this helper is what closes the gap for `update`-op checks (which bypass
+ * review entirely, propose lane and curate lane alike) and — since
+ * applyCurateArtifact never calls reviewAddedBullets at all — is the ONLY
+ * screen the curate lane gets for any op kind. Pure: does not touch the
+ * store or call screenCheck's caller-supplied side effects (there are none).
+ */
+export function screenOpsChecks(ops: PlaybookOp[]): OpsScreenResult {
+  const kept: PlaybookOp[] = []
+  const liveEligible = new Map<PlaybookOp, boolean>()
+  const rejections: Array<{ op: PlaybookOp; reason: string }> = []
+  for (const op of ops) {
+    const check = op.op === "delete" ? undefined : op.check
+    if (!check) { kept.push(op); continue }
+    const screened = screenCheck(check)
+    if (screened.tier === "rejected") {
+      rejections.push({ op, reason: screened.reason ?? "rejected" })
+      continue
+    }
+    kept.push(op)
+    liveEligible.set(op, screened.tier === "live")
+  }
+  return { ops: kept, liveEligible, rejections }
+}
+
+/** Stamp screenOpsChecks' liveEligible map onto the FINAL persisted playbook
+ * (post applyPlaybookOps) for the given ops — applyPlaybookOps itself never
+ * sets liveEligible (harness-store.ts), so this is the only site that
+ * persists it for ops screened by screenOpsChecks. `update` bullets are
+ * found by id; `add` bullets have no id yet at op time, so they're matched
+ * positionally: applyPlaybookOps appends new bullets, in order, after
+ * `base.bullets` — exactly mirroring its own bookkeeping (harness-store.ts).
+ * Restrict `ops` to the op kinds a caller wants patched here (e.g. the
+ * propose lane patches "update" only — its "add" ops are persisted via
+ * reviewAddedBullets's own outcome-based patch instead, to avoid stamping
+ * the same bullet from two independent sources). */
+function stampLiveEligible(base: Playbook, finalPb: Playbook, ops: PlaybookOp[], liveEligible: Map<PlaybookOp, boolean>): void {
+  let addIdx = base.bullets.length
+  for (const op of ops) {
+    const le = liveEligible.get(op)
+    if (op.op === "add") {
+      const bullet = finalPb.bullets[addIdx]
+      addIdx++
+      if (le !== undefined && bullet?.check) bullet.check.liveEligible = le
+    } else if (op.op === "update") {
+      if (le === undefined) continue
+      const bullet = finalPb.bullets.find((b) => b.id === op.id)
+      if (bullet?.check) bullet.check.liveEligible = le
+    }
+  }
+}
+
 /**
  * The post-spawn apply body of triggerPropose, extracted so it can run in a
  * DIFFERENT process than the one that spawned the child (Task L8). Returns
@@ -334,17 +401,34 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
   // applyPlaybookOps keeps that re-derivation byte-identical to this pass.
   let ops: PlaybookOp[] = []
   let opsBase: Playbook | undefined
+  // Populated by screenOpsChecks below (ops branch only) — carried forward so
+  // the post-review re-derivation further down can re-stamp it onto whichever
+  // playbook ends up final (see the SCREEN COVERAGE INVARIANT note there).
+  let checkLiveEligible = new Map<PlaybookOp, boolean>()
   if (playbook && fs.existsSync(stagingOps)) {
     try {
       const parsed = JSON.parse(fs.readFileSync(stagingOps, "utf-8"))
       if (Array.isArray(parsed?.ops)) ops = parsed.ops
     } catch { /* malformed ops → no-op edit */ }
     fs.rmSync(stagingOps, { force: true })
+    // SCREEN COVERAGE INVARIANT (a3 routing T4): every op's check must pass
+    // screenCheck before ANY applyPlaybookOps call below. `add`-op checks are
+    // ALSO screened (redundantly, harmlessly) by reviewAddedBullets further
+    // down, which owns their review + ledger entry; this is what actually
+    // covers `update`-op checks, which bypass review entirely.
+    const screened = screenOpsChecks(ops)
+    ops = screened.ops
+    checkLiveEligible = screened.liveEligible
+    for (const r of screened.rejections) {
+      const label = r.op.op === "update" ? `update ${r.op.id}` : r.op.op
+      await host.log("warn", `proposer ${layer.scope} ${version}: ${label} check screen-rejected (${r.reason}) — op dropped`)
+    }
     const assessments = (diagnosis?.["bulletAssessments"] as { id: string; verdict: "helpful" | "harmful" }[]) || []
     if (assessments.length) applyBulletAssessments(layer.root, assessments)
     const base = readPlaybook(layer.root) ?? playbook   // re-read after assessments
     opsBase = base
     newPlaybook = applyPlaybookOps(base, ops)
+    stampLiveEligible(base, newPlaybook, ops.filter((o) => o.op === "update"), checkLiveEligible)
     system = renderPlaybook(newPlaybook)
     // Strip createdAt/updatedAt before comparing — applyPlaybookOps bumps
     // updatedAt on every touched bullet even when text/generality/slice end up
@@ -434,7 +518,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
       const ledger = readRejectedLedger(layer.root)
       const outcomes = await reviewAddedBullets({
         host,
-        bullets: addedOps.map((o) => o.text),
+        bullets: addedOps.map((o) => ({ text: o.text, check: o.check })),
         diagnosisReason: diagnosisReasonFrom(diagnosis),
         activeSystem: readActiveSystem(layer.root),
         ledger,
@@ -474,6 +558,24 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
       const failedOps = new Set<PlaybookOp>(addedOps.filter((_, i) => !outcomes[i]!.staged))
       const effectiveOps = ops.filter((o) => !failedOps.has(o))
       newPlaybook = applyPlaybookOps(opsBase!, effectiveOps)
+      // Re-stamp update-op liveEligible (playbook is a fresh object — the
+      // stamp applied to the pre-review derivation above is gone).
+      stampLiveEligible(opsBase!, newPlaybook, effectiveOps.filter((o) => o.op === "update"), checkLiveEligible)
+      // Persist add-op liveEligible (review round-1 F2): applyPlaybookOps
+      // deliberately never sets it — reviewAddedBullets's screenCheck-derived
+      // tier (on each staged outcome) is the only source, and THIS patch is
+      // the only site that writes it into the playbook that gets persisted.
+      // newPlaybook's newly appended bullets are, in order, exactly the
+      // STAGED adds in effectiveOps — addedOps/effectiveOps/outcomes all
+      // share addedOps' original relative order, so a running index over
+      // staged outcomes lines up with a running index over the new bullets.
+      const newlyAdded = newPlaybook.bullets.slice(opsBase!.bullets.length)
+      let addedIdx = 0
+      for (const o of outcomes) {
+        if (!o.staged) continue
+        const bullet = newlyAdded[addedIdx++]
+        if (o.check && bullet?.check) bullet.check.liveEligible = o.check.liveEligible
+      }
       system = renderPlaybook(newPlaybook)
     } else {
       await host.log("info", `review-gate ${layer.scope}: skipped (no added bullets)`)
@@ -1076,6 +1178,8 @@ ENDOFENVPOLICY
 
   const writeMain = playbook
     ? `**Required** — write your playbook edits (≤3 ops; each new/updated bullet should reflect a diagnosed root cause; include \`generality\` on \`add\`/\`update\` — \`universal\`|\`vendor\`|\`model\` — and \`slice\` when tagging \`vendor\` or \`model\`). Each new/updated bullet's text MUST take one of two forms — a trigger ("When <trigger>, <action>.") or a hard-gate ("Do not <action> until <condition>.") — no other phrasing passes review:
+
+Optionally, an "add" op may carry "check": {"cmd": "<shell command that mechanically verifies the rule's behavior>", "timeoutMs": <number>}. Only include a check when the rule's behavior is mechanically verifiable by a command; unverifiable rules stay prose-only — never invent a check. The command must be workspace-scoped; never touch stores, network, or packages.
 \`\`\`bash
 cat > "${relOps}" << 'ENDOFOPS'
 {"ops":[{"op":"add","text":"<new behavioral rule>","generality":"universal"},{"op":"update","id":"b2","text":"<revised rule>","generality":"vendor","slice":"<vendor id>"},{"op":"delete","id":"b5"}]}
@@ -1334,7 +1438,22 @@ async function applyCurateArtifact(host: HarnessHost, d: StagedArtifactDescripto
   } catch { /* malformed → no-op curation */ }
   fs.rmSync(stagingOps, { force: true })
 
+  // SCREEN COVERAGE INVARIANT (a3 routing T4): the curate lane never calls
+  // reviewAddedBullets (curation forbids `add` ops by prompt, not by code —
+  // see the "add is NOT allowed" instruction in buildCuratePrompt below), so
+  // screenOpsChecks is the ONLY screen ANY op's check gets here. Must run
+  // before applyPlaybookOps or a curator-revised check ships unscreened.
+  const screened = screenOpsChecks(ops)
+  ops = screened.ops
+  for (const r of screened.rejections) {
+    const label = r.op.op === "update" ? `update ${r.op.id}` : r.op.op
+    await host.log("warn", `curator ${layer.scope} ${version}: ${label} check screen-rejected (${r.reason}) — op dropped`)
+  }
+
   const newPlaybook = applyPlaybookOps(playbook, ops)
+  // screenOpsChecks' stamped liveEligible must reach the WRITTEN playbook —
+  // applyPlaybookOps itself never sets it (harness-store.ts).
+  stampLiveEligible(playbook, newPlaybook, ops, screened.liveEligible)
   const system = renderPlaybook(newPlaybook)
   const tools = readActiveTools(layer.root)
   // Curation only ever edits the playbook — it never stages its own
@@ -1418,6 +1537,8 @@ surviving \`update\` must carry the MORE-SPECIFIC of the two (\`model\` > \`vend
 merging it into a broader one. If both merged bullets already share a tag (or
 neither is tagged), keep it as-is; only set \`generality\`/\`slice\` on the surviving
 \`update\` when the merge would otherwise lose a more-specific tag.
+
+Optionally, an "update" op may carry or revise "check": {"cmd": "...", "timeoutMs": <number>} on a bullet that already warrants one, under the same constraints: mechanically verifiable behavior only, workspace-scoped, never stores/network/packages; drop a check (omit the field) rather than keep one that no longer matches the bullet.
 
 ## Write the results
 

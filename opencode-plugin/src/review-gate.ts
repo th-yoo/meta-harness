@@ -6,6 +6,7 @@
 import { reviewBullet, reviewLoop, extractJsonObject, type ProposalLike } from "../../minimal/review.ts"
 import type { HarnessHost } from "./host.ts"
 import { isFormOnlyReject, type RejectedEntry } from "./harness-store.ts"
+import { screenCheck } from "./check-screen.ts"
 
 const REVISE_ROUNDS = 1
 
@@ -20,10 +21,16 @@ const REVIEW_SYSTEM_PROMPT =
   "justification, then EXACTLY the one JSON object the prompt asks for."
 
 export interface BulletReviewOutcome {
-  bullet: string // final text (may differ from input after revision)
+  bullet: string // final text (may differ from input after revision); for a
+  // check-screen rejection this is the ORIGINAL text + " [check: screen-denied
+  // (<slug>)]" — never the command text (it must be ledger-safe).
   staged: boolean // true = passed review (possibly revised)
   violations: string[] // final violations when staged=false
   trail: { round: number; bullet: string; verdict: "pass" | "fail" }[]
+  // Present iff staged AND the input bullet carried a check — screen-stamped
+  // liveEligible ("live" tier -> true, "bench" -> false). Never present on a
+  // rejected outcome.
+  check?: { cmd: string; timeoutMs: number; liveEligible: boolean }
 }
 
 function ledgerText(ledger: RejectedEntry[]): string {
@@ -54,14 +61,23 @@ Reply with EXACTLY ONE JSON object:
 }
 
 /**
- * Review every added-bullet text through minimal/review.ts's layer1 + rubric
- * + bounded-revise loop, adapted to HarnessHost.runTextAgent. Writes nothing
+ * Review every added bullet through minimal/review.ts's layer1 + rubric +
+ * bounded-revise loop, adapted to HarnessHost.runTextAgent. Writes nothing
  * — the caller owns staging rejected-ledger entries for staged=false
  * outcomes (RG1: harness-store.ts appendRejectedLedger).
+ *
+ * A bullet carrying `check` is screened (check-screen.ts) BEFORE layer-1: a
+ * proposal smuggling a `state` key in the check object is rejected outright
+ * (state is downstream-stamped only, never proposer-set — harness-store.ts);
+ * a `"rejected"` screen tier rejects the WHOLE bullet, with the ledger-bound
+ * text carrying " [check: screen-denied (<slug>)]" — never the raw command
+ * (a3 routing T4). `"bench"`/`"live"` tiers let the bullet's TEXT proceed to
+ * the normal flow; a staged outcome then carries `check.liveEligible`
+ * (`"live"` -> true, `"bench"` -> false).
  */
 export async function reviewAddedBullets(a: {
   host: HarnessHost
-  bullets: string[] // texts of ops with type "add"
+  bullets: Array<{ text: string; check?: { cmd: string; timeoutMs: number } }> // ops with type "add"
   diagnosisReason: string // frozen diagnosis (from diagnosis.json summary)
   activeSystem: string // current harness text for duplicate check
   ledger: RejectedEntry[] // rejected ledger for duplicate check
@@ -83,8 +99,30 @@ export async function reviewAddedBullets(a: {
     return reply ?? "" // null (LLM down) → unparseable → fail-closed in computeVerdict
   }
   const out: BulletReviewOutcome[] = []
-  for (const text of a.bullets) {
-    const proposal: ProposalLike = { action: "propose", reason: a.diagnosisReason, bullet: { text } }
+  for (const b of a.bullets) {
+    let tier: "bench" | "live" | undefined
+    if (b.check) {
+      // A well-formed proposer op never carries "state" (harness-store.ts:
+      // BulletCheck.state is stamped downstream, applyPlaybookOps/check-
+      // screen.ts only) — treat its presence as a smuggling attempt and
+      // reject before spending a screen or an LLM call.
+      if ((b.check as unknown as Record<string, unknown>)["state"] !== undefined) {
+        out.push({ bullet: b.text, staged: false, violations: ["check-screen:state-not-proposer-set"], trail: [] })
+        continue
+      }
+      const screened = screenCheck(b.check)
+      if (screened.tier === "rejected") {
+        out.push({
+          bullet: `${b.text} [check: screen-denied (${screened.reason})]`,
+          staged: false,
+          violations: [`check-screen:${screened.reason}`],
+          trail: [],
+        })
+        continue
+      }
+      tier = screened.tier
+    }
+    const proposal: ProposalLike = { action: "propose", reason: a.diagnosisReason, bullet: { text: b.text } }
     const { final, staged, trail } = await reviewLoop({
       proposal,
       rounds: REVISE_ROUNDS,
@@ -111,10 +149,11 @@ export async function reviewAddedBullets(a: {
       },
     })
     out.push({
-      bullet: final.bullet?.text ?? text,
+      bullet: final.bullet?.text ?? b.text,
       staged,
       violations: staged ? [] : trail[trail.length - 1]!.review.violations,
       trail: trail.map((t) => ({ round: t.round, bullet: t.bullet, verdict: t.review.verdict })),
+      ...(staged && b.check ? { check: { cmd: b.check.cmd, timeoutMs: b.check.timeoutMs, liveEligible: tier === "live" } } : {}),
     })
   }
   return out
