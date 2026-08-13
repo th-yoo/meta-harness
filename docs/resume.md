@@ -129,8 +129,9 @@ OPEN — NEED USER GO/RULING:
    .kkamak/global/candidates/v20/ab-verdict.json) + km-sensors-sync
    export (snapshot stale since Jul 31).
  - a3 production wiring design (above) · TB2 band batch (sized go) ·
-   A/A trial-state ruling · ~/.claude rw-mount (linux P2 only) ·
-   C4 (429-walled, permanent lane design).
+   A/A trial-state ruling · ~~\~/.claude rw-mount~~ (STALE carry-forward —
+   RULED 2026-08-11, fix 2746c07 shadow-dir; see the struck entry in the
+   08-11 block below) · C4 (429-walled, permanent lane design).
 
 RULES: explicit go before any merge to main and any spend · 7b gate +
 committed docs/reviews artifact (bare-field format — list dashes BLOCK
@@ -187,8 +188,8 @@ ELSEWHERE LIVE (not this host's to touch):
    the same new boundary ts.
 
 STANDING OPENS: TB2 batch (re-check baseline budget-identity tuple
-first, no-spend) · ~/.claude rw-mount ruling (blocks linux-host P2
-only) · C4 (bare-SDK 429-walled) · A/A yoo-mac enrollment starts only
+first, no-spend) · ~~\~/.claude rw-mount ruling~~ (STALE — RULED
+2026-08-11, fix 2746c07) · C4 (bare-SDK 429-walled) · A/A yoo-mac enrollment starts only
 with sessions started AFTER the 08-10 hooks pull (this clear qualifies —
 the next session here should enroll; check .km/trial-arms.ndjson gains
 a row).
@@ -657,7 +658,9 @@ OPEN — NEED USER RULING/GO:
    day-1 skips; then reach = user-level env; cap; yoo-mac arming can
    ride the same new boundary ts).
  - TB2 batch (re-check baseline budget-identity tuple first — no-spend).
- - ~/.claude rw-mount ruling (blocks linux-host P2 only).
+ - ~~\~/.claude rw-mount ruling~~ (STALE carry-forward — RULED
+   2026-08-11, fix 2746c07 shadow-dir parity; nothing blocks linux P2
+   on this axis).
  - C4 (still bare-SDK 429-walled; lift-watcher on yoo-dev was stopped —
    re-arm if wanted).
 
