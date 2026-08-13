@@ -36,6 +36,7 @@
 import * as fs from "fs"
 import * as os from "os"
 import * as path from "path"
+import { createHash } from "crypto"
 import { writeJsonAtomic } from "./bench/util.ts"
 // Function-level cycle (failure-retrieval imports store readers back) — safe:
 // every cross-reference resolves at call time, not import time.
@@ -410,13 +411,15 @@ export function readActiveBudget(storeRoot: string): {
   minAgentTimeout?: number
   timeoutRecording?: boolean
   resourceEnforcement?: boolean
+  checksHash?: string
 } {
   const version = activeVersion(storeRoot)
   if (!version) return {}
   const score = readScore(storeRoot, version)
   const { maxAgentTimeout, minAgentTimeout, resourceEnforcement } = budgetFromSessions(score.sessions)
   const activeVerdict = readAbVerdict(storeRoot, version)
-  return { maxAgentTimeout, minAgentTimeout, resourceEnforcement, timeoutRecording: activeVerdict?.timeoutRecording }
+  const checksHash = checksHashOf(readPlaybook(storeRoot))
+  return { maxAgentTimeout, minAgentTimeout, resourceEnforcement, timeoutRecording: activeVerdict?.timeoutRecording, checksHash }
 }
 
 /** The budget-identity-bearing subset of fields `budgetIdentityMatches`'s
@@ -430,20 +433,26 @@ export interface BudgetStamp {
   minAgentTimeout?: number
   timeoutRecording?: boolean
   env?: { resourceEnforcement?: boolean }
+  /** sha256 of the rule-routing checks bundle (a3 routing T2). Absent on
+   * pre-T2 records — coalesced against `EMPTY_CHECKS_HASH` below, matching
+   * the file's `?? 0`/`?? false` back-compat convention. */
+  checksHash?: string
 }
 
 /**
  * True iff `verdict`'s budget-identity tuple {maxAgentTimeout, timeoutRecording,
- * resourceEnforcement} matches `activeBudget`'s — the gate /mh-activate uses
- * (engine.ts) before activating an account-scope candidate. `timeoutRecording`
- * and `resourceEnforcement` are `?? false`-coalesced on both sides (an absent
- * key and an explicit `false` mean the same thing, matching the existing
- * resourceEnforcement-coalescing convention elsewhere in this codebase — see
- * cmd-ab.ts's --resume guard).
+ * resourceEnforcement, checksHash} matches `activeBudget`'s — the gate
+ * /mh-activate uses (engine.ts) before activating an account-scope candidate.
+ * `timeoutRecording` and `resourceEnforcement` are `?? false`-coalesced on
+ * both sides (an absent key and an explicit `false` mean the same thing,
+ * matching the existing resourceEnforcement-coalescing convention elsewhere
+ * in this codebase — see cmd-ab.ts's --resume guard). `checksHash` follows
+ * the same convention, coalescing an absent hash (pre-T2 record) to
+ * `EMPTY_CHECKS_HASH` (the hash of "no checks") on both sides.
  */
 export function budgetIdentityMatches(
   verdict: BudgetStamp,
-  activeBudget: { maxAgentTimeout?: number; minAgentTimeout?: number; timeoutRecording?: boolean; resourceEnforcement?: boolean },
+  activeBudget: { maxAgentTimeout?: number; minAgentTimeout?: number; timeoutRecording?: boolean; resourceEnforcement?: boolean; checksHash?: string },
 ): boolean {
   if (verdict.maxAgentTimeout === undefined) return true // pre-Loop-3 — no claim to violate
   if (verdict.maxAgentTimeout !== activeBudget.maxAgentTimeout) return false
@@ -456,6 +465,7 @@ export function budgetIdentityMatches(
   const verdictEnforcement = verdict.env?.resourceEnforcement ?? false
   const activeEnforcement = activeBudget.resourceEnforcement ?? false
   if (verdictEnforcement !== activeEnforcement) return false
+  if ((verdict.checksHash ?? EMPTY_CHECKS_HASH) !== (activeBudget.checksHash ?? EMPTY_CHECKS_HASH)) return false
   return true
 }
 
@@ -962,6 +972,18 @@ export function createCandidate(
 // (active bullets, "- text" per line). Every existing reader keeps reading plain
 // system.md unchanged — that is the whole backward-compat story.
 
+/** A rule-routing executable check attached to a bullet (a3 rule routing).
+ * `state` and `liveEligible` are stamped downstream (applyPlaybookOps /
+ * check-screen.ts) — never accepted directly from a proposer/curator op. */
+export interface BulletCheck {
+  cmd: string
+  timeoutMs: number
+  /** live-consumer state; TB2 trial arms always enforce regardless. */
+  state: "shadow" | "blocking"
+  /** Screen-stamped (Tier L, check-screen.ts). Never proposer-set. */
+  liveEligible?: boolean
+}
+
 export interface PlaybookBullet {
   id: string
   text: string
@@ -973,6 +995,7 @@ export interface PlaybookBullet {
   updatedAt: string
   generality?: "universal" | "vendor" | "model"
   slice?: string
+  check?: BulletCheck
 }
 
 export interface Playbook {
@@ -982,8 +1005,8 @@ export interface Playbook {
 }
 
 export type PlaybookOp =
-  | { op: "add"; text: string; generality?: "universal" | "vendor" | "model"; slice?: string }
-  | { op: "update"; id: string; text: string; generality?: "universal" | "vendor" | "model"; slice?: string }
+  | { op: "add"; text: string; generality?: "universal" | "vendor" | "model"; slice?: string; check?: { cmd: string; timeoutMs: number } }
+  | { op: "update"; id: string; text: string; generality?: "universal" | "vendor" | "model"; slice?: string; check?: { cmd: string; timeoutMs: number } }
   | { op: "delete"; id: string }
 
 export function readPlaybook(storeRoot: string, version?: string): Playbook | null {
@@ -1052,13 +1075,15 @@ export function applyPlaybookOps(base: Playbook, ops: PlaybookOp[]): Playbook {
     if (op.op === "add") {
       bullets.push({ id: `b${nextId++}`, text: op.text, helpful: 0, harmful: 0,
         addedBy: "candidate", status: "active", createdAt: now, updatedAt: now,
-        generality: coerceGen(op.generality), slice: capSlice(op.slice) })
+        generality: coerceGen(op.generality), slice: capSlice(op.slice),
+        ...(op.check ? { check: { cmd: op.check.cmd, timeoutMs: op.check.timeoutMs, state: "shadow" as const } } : {}) })
     } else if (op.op === "update") {
       const b = bullets.find((x) => x.id === op.id)
       if (b) {
         b.text = op.text; b.updatedAt = now
         if (op.generality !== undefined) b.generality = coerceGen(op.generality)
         if (op.slice !== undefined) b.slice = capSlice(op.slice)
+        if (op.check !== undefined) b.check = { cmd: op.check.cmd, timeoutMs: op.check.timeoutMs, state: "shadow" as const }
       }
     } else if (op.op === "delete") {
       const b = bullets.find((x) => x.id === op.id)
@@ -1067,6 +1092,34 @@ export function applyPlaybookOps(base: Playbook, ops: PlaybookOp[]): Playbook {
   }
   return { schemaVersion: 1, nextId, bullets }
 }
+
+/** Canonical (order-independent, key-order-fixed) JSON serialization of a
+ * checks list — the hash input for `checksHashOf`. Sorted by `bulletId` so
+ * op-application order never perturbs the hash; each entry serialized with
+ * exactly the keys {bulletId, cmd, timeoutMs} in that order (state/
+ * liveEligible deliberately excluded — they're live-consumer/screen state,
+ * not part of the check's *identity*). */
+export function canonicalChecksJson(
+  checks: Array<{ bulletId: string; cmd: string; timeoutMs: number }>,
+): string {
+  const sorted = [...checks].sort((a, b) => (a.bulletId < b.bulletId ? -1 : a.bulletId > b.bulletId ? 1 : 0))
+  return "[" + sorted.map((c) => `{"bulletId":${JSON.stringify(c.bulletId)},"cmd":${JSON.stringify(c.cmd)},"timeoutMs":${c.timeoutMs}}`).join(",") + "]"
+}
+
+/** sha256 (full hex) of the ACTIVE-status bullets' checks, canonically
+ * serialized — the budget-identity tuple's rule-routing component
+ * (`budgetIdentityMatches`, a3 routing T2). A playbook with zero checks (or
+ * `null`, e.g. no playbook at all) hashes to `EMPTY_CHECKS_HASH`. */
+export function checksHashOf(playbook: Playbook | null): string {
+  const list = (playbook?.bullets ?? [])
+    .filter((b) => b.status === "active" && b.check)
+    .map((b) => ({ bulletId: b.id, cmd: b.check!.cmd, timeoutMs: b.check!.timeoutMs }))
+  return createHash("sha256").update(canonicalChecksJson(list), "utf-8").digest("hex")
+}
+
+/** Precomputed `checksHashOf(null)` — the hash every legacy/checkless
+ * playbook coalesces to (`budgetIdentityMatches`'s `?? EMPTY_CHECKS_HASH`). */
+export const EMPTY_CHECKS_HASH = checksHashOf(null)
 
 /** Reflective counter attribution (ACE): ++helpful/++harmful on the ACTIVE
  * playbook's bullets, from the proposer's diagnosis of the active version's runs. */
