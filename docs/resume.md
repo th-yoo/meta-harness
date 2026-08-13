@@ -39,9 +39,20 @@ OPEN — THE ONLY STANDING ITEM: TB2 band batch, sized go pending.
  Time answer given: k=5 serial ~8-9h (ceiling 13h) / parallel-2
  ~5-6h; RECOMMENDED SHAPE for tight budget = chunked k=1 sweeps
  (14 tasks x k=1 ~1.5-2h each, store pools across invocations —
- the v0 baseline itself was built pooled; verify the target
- verdict's provenance rule tolerates pooling, no-spend, before
- chunk 1). Tuple re-verified valid (bed7233).
+ the v0 baseline itself was built pooled). Tuple re-verified valid
+ (bed7233). PRE-CHUNK PROVENANCE CHECK DONE 2026-08-13 (no-spend,
+ yoo-mac "minimal"): pooling IS tolerated by every reader —
+ recordSession appends + rateOf/resolveTrial pool ALL nonTrivial
+ sessions (same-model filter only); budgetFromSessions/
+ budgetIdentityMatches compare the {maxAgentTimeout,
+ minAgentTimeout, timeoutRecording, resourceEnforcement} tuple
+ only, never run-id/date/count; report-loop segments by same
+ tuple. CONSTRAINTS every chunk must hold IDENTICAL: budget tuple
+ {3600,3600,enforce}, model haiku-4-5, recordTimeouts policy,
+ driver, active version v0. CAVEAT: --resume does NOT accumulate
+ k (rewards-non-empty task = done+skipped, results.ts
+ resumeCarryForward) — each chunk gets its OWN results file;
+ pooling lives in the store only. Batch itself still = sized go.
 
 YOO-DEV (self-serve, handoff block 0d69232 below): sensor cadence
  checkpoint DUE 08-13 -> constants amendment expected · snapshot
