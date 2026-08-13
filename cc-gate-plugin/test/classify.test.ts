@@ -98,3 +98,27 @@ test("override pattern flows through computeCycleTags", () => {
   const fallback = computeCycleTags({ touchedPaths: ["src/a.ts"] }, "([")
   expect(fallback).toEqual({ implOnly: true, sameTurnCoEdit: false })
 })
+
+// -- fix wave (review round 1): kkamak-parity semantics -------------------
+
+test("case-insensitive like the kkamak kernel: Tests/ and Spec/ match", () => {
+  expect(isTestPath("Tests/UnitTest1.cs")).toBe(true)
+  expect(isTestPath("src/Spec/Thing.cs")).toBe(true)
+  expect(isTestPath("SRC/FOO.TEST.TS")).toBe(true)
+})
+
+test("override pattern is also case-insensitive", () => {
+  const re = compileTestPathPattern("^checks/")
+  expect(isTestPath("Checks/foo.ts", re)).toBe(true)
+})
+
+test("plural filename forms match (kkamak parity)", () => {
+  expect(isTestPath("tests.ts")).toBe(true)
+  expect(isTestPath("src/foo_tests.go")).toBe(true)
+  expect(isTestPath("src/component.specs.ts")).toBe(true)
+})
+
+test("backslash paths normalize before matching (kkamak parity)", () => {
+  expect(isTestPath("src\\__tests__\\foo.ts")).toBe(true)
+  expect(isTestPath("src\\foo.ts")).toBe(false)
+})

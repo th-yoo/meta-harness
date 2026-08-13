@@ -19,22 +19,28 @@ import type { CcGateState } from "../types.ts"
  * `.spec.` / `_test.` / `-test.` style marker before its extension.
  */
 export const DEFAULT_TEST_PATH_PATTERN =
-  "(^|/)(tests?|specs?|__tests__)(/|$)|(^|/)(test|spec)\\.[^/]+$|[._-](test|spec)\\.[^/]+$"
+  "(^|/)(tests?|specs?|__tests__)(/|$)" +
+  "|(^|/)(tests?|specs?|__tests__)\\.[^/]*$" +
+  "|[._-](test|spec)s?\\.[^/]*$"
 
-/** Compile an override pattern; malformed → undefined (caller falls back). */
+/** Compile an override pattern; malformed → undefined (caller falls back).
+ * Case-INSENSITIVE, matching the kkamak kernel exactly (its own tests pin
+ * `Tests/UnitTest1.cs` as a test path — .NET-style conventions). */
 export function compileTestPathPattern(pattern: string | undefined): RegExp | undefined {
   if (typeof pattern !== "string" || pattern === "") return undefined
   try {
-    return new RegExp(pattern)
+    return new RegExp(pattern, "i")
   } catch {
     return undefined
   }
 }
 
-const DEFAULT_RE = new RegExp(DEFAULT_TEST_PATH_PATTERN)
+const DEFAULT_RE = new RegExp(DEFAULT_TEST_PATH_PATTERN, "i")
 
 export function isTestPath(p: string, re?: RegExp): boolean {
-  return (re ?? DEFAULT_RE).test(p)
+  // Backslash-normalized like the kkamak kernel, so a Windows-style path
+  // from a foreign payload classifies identically on every host.
+  return (re ?? DEFAULT_RE).test(p.replace(/\\/g, "/"))
 }
 
 /**
