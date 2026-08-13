@@ -15,7 +15,7 @@
 - `canonicalChecksJson` serializes ONLY `(bulletId, cmd, timeoutMs)`, array sorted by bulletId, fixed key order. `state`/`liveEligible` EXCLUDED deliberately.
 - `EMPTY_CHECKS_HASH = sha256(canonicalChecksJson([]))`; absent field coalesces to it in budget-identity comparison.
 - F2: no command text on sensor lines or record annotations — outcomes only. rejected.json gets check VERDICT SUMMARY only (e.g. `check: screen-denied (network)`), never command text (open user ruling; this is the fallback in force).
-- Per-arm own-playbook injection; never baked into the shared bench image. Round cap 2 blocks per Stop cycle → exhausted-allow + recorded.
+- Per-arm own-playbook injection; never baked into the shared bench image. Round cap mirrors cc-gate-plugin `rounds: 2` EXACTLY (verified against `cc-gate-plugin/src/core/stop.ts:98-166`): failure 1 → BLOCK (rounds=1), failure 2 → BLOCK (rounds=2), failure 3 → exhausted-ALLOW (rounds=3 > cap 2) + recorded. Two blocks total, exhausted on the third failing Stop.
 - Every checked-rule ab verdict carries `checkBundleCaveat` + per-rule block/exhaust counts.
 - First checked-rule ab stamps a boundary ts in `docs/2026-08-01-gauntlet-adoption-ledger.md` (run-time duty, noted in Task 8).
 - Repo process rules: TDD; explicit user go before merge to main and any spend; 7b gate + docs/reviews artifact (bare fields); suites serial; add NAMED files only.
@@ -52,11 +52,12 @@ import { join } from "node:path"
 
 const root = join(import.meta.dir, "..", "..")
 
-/** Extract the unsafeReason implementation block (from its export line to
- * the file's end — guard.ts is a single-purpose module) for byte-compare. */
+/** Compare from the RULES policy array to EOF — the policy content IS the
+ * thing that must not drift (review round-1 F4: anchoring at the function
+ * would exclude RULES, making the guard a no-op for the likely drift). */
 function implBlock(src: string): string {
-  const i = src.indexOf("export function unsafeReason")
-  if (i < 0) throw new Error("unsafeReason not found")
+  const i = src.indexOf("const RULES")
+  if (i < 0) throw new Error("RULES not found")
   return src.slice(i)
 }
 
@@ -85,7 +86,7 @@ Copy `cc-gate-plugin/src/gauge/guard.ts` verbatim (header comment included), pre
 - [ ] **Step 4: Run tests to verify pass**
 
 Run: `cd opencode-plugin && bun test test/guard-parity.test.ts`
-Expected: PASS (2 tests). Note: if the byte-compare fails because the header edit landed above the extracted block, the test's `implBlock` anchor keeps the compare scoped to the function — verify the header line sits ABOVE `export function unsafeReason`.
+Expected: PASS (2 tests). The prepended header line must sit ABOVE `const RULES` so the compare (RULES → EOF) stays byte-identical.
 
 - [ ] **Step 5: Commit**
 
@@ -99,7 +100,7 @@ git commit -m "feat(kernel): minimal/guard.ts — unsafeReason kernel copy + dri
 ### Task 2: `BulletCheck` schema + `canonicalChecksJson` + `EMPTY_CHECKS_HASH`
 
 **Files:**
-- Modify: `opencode-plugin/src/harness-store.ts` (PlaybookBullet interface ~line 970; PlaybookOp type; `applyPlaybookOps` ~line 1043; `budgetIdentityMatches` ~line 444)
+- Modify: `opencode-plugin/src/harness-store.ts` (PlaybookBullet interface ~line 970; PlaybookOp type; `applyPlaybookOps` ~line 1043; `budgetIdentityMatches` ~line 444; `BudgetStamp` ~line 428; `readActiveBudget` ~line 408)
 - Test: `opencode-plugin/test/harness-store-checks.test.ts` (new file)
 
 **Interfaces:**
@@ -121,7 +122,9 @@ import {
   type Playbook, type PlaybookOp,
 } from "../src/harness-store.ts"
 
-const base: Playbook = { bullets: [] } as unknown as Playbook
+const base: Playbook = { schemaVersion: 1, nextId: 1, bullets: [] } as Playbook
+// (real fixture shape — see gate-trial-store.test.ts:265; a bare {bullets: []}
+// cast would yield "bundefined" ids from applyPlaybookOps' nextId++)
 
 test("legacy playbook JSON without check fields parses and round-trips (back-compat)", () => {
   const pb = applyPlaybookOps(base, [{ op: "add", text: "plain rule" }])
@@ -203,7 +206,7 @@ export const EMPTY_CHECKS_HASH = checksHashOf(null)
 
 (`createHash` import exists already or add `node:crypto`.)
 
-- [ ] **Step 4: Extend `budgetIdentityMatches`** — add `checksHash` to the compared identity with coalescing `(x.checksHash ?? EMPTY_CHECKS_HASH) === (y.checksHash ?? EMPTY_CHECKS_HASH)` following the file's existing `?? 0`/`?? false` convention. Add a test in the same new test file: legacy record (absent) vs modern zero-check record (EMPTY_CHECKS_HASH) MATCH; differing hashes MISMATCH.
+- [ ] **Step 4: Extend `budgetIdentityMatches` AND its production data source** (review round-1 F5 — without this the /mh-activate guard is a silent no-op): (a) `BudgetStamp` (harness-store.ts ~line 428) gains `checksHash?: string`; (b) `readActiveBudget` (~line 408) computes it via `checksHashOf(readPlaybook(storeRoot))`; (c) `budgetIdentityMatches` compares with coalescing `(x.checksHash ?? EMPTY_CHECKS_HASH) === (y.checksHash ?? EMPTY_CHECKS_HASH)` following the file's `?? 0`/`?? false` convention. Tests: legacy record (absent) vs modern zero-check record MATCH; differing hashes MISMATCH; `readActiveBudget` on a store whose active playbook has a checked bullet returns that playbook's real hash (fixture store, same helpers as existing readActiveBudget tests).
 
 - [ ] **Step 5: Run full store tests** — `cd opencode-plugin && bun test test/harness-store-checks.test.ts` and the nearest existing store test file → PASS.
 
@@ -317,27 +320,40 @@ git commit -m "feat(review): two-tier deterministic check screens, slug-only rea
 
 **Files:**
 - Modify: `opencode-plugin/src/review-gate.ts` (`reviewAddedBullets` signature ~line 62; ledger text builder)
-- Modify: the propose-artifact apply path that builds `bullets: string[]` for `reviewAddedBullets` and constructs `PlaybookOp`s (locate via `grep -n "reviewAddedBullets(" opencode-plugin/src` — thread `check` from the proposal JSON through both).
+- Modify: `opencode-plugin/src/propose.ts` — BOTH artifact-apply functions: `applyProposeArtifact` (:285; `reviewAddedBullets` call :435; post-apply patch site ~:476) AND `applyCurateArtifact` (:1313; its direct `applyPlaybookOps` call :1337 — currently zero screening, review round-3). Thread `check` from artifact JSON through ops in both; call the shared `screenOpsChecks` helper in both before `applyPlaybookOps`.
 - Test: extend `opencode-plugin/test/` review-gate test file (locate via `grep -rln reviewAddedBullets opencode-plugin/test`).
 
 **Interfaces:**
 - Consumes: `screenCheck` (T3).
 - Produces: `reviewAddedBullets` accepts `bullets: Array<{ text: string; check?: { cmd: string; timeoutMs: number } }>` (back-compat overload NOT kept — update all callers in the same task); each `BulletReviewOutcome` gains `check?: { cmd: string; timeoutMs: number; liveEligible: boolean }` when staged, or rejection with `reason: "check-screen:<slug>"`.
 - Behavior: proposal carrying `state` at all → rejected `"check-screen:state-not-proposer-set"`. Screen `"rejected"` → whole bullet rejected, ledger entry text = bullet text + ` [check: screen-denied (<slug>)]` — NEVER the command text. Screen `"bench"`/`"live"` → bullet proceeds to the existing layer-1 + rubric flow on its TEXT; if staged, outcome carries `liveEligible` (`"live"` → true, `"bench"` → false).
+- SCREEN COVERAGE INVARIANT: EVERY op carrying a `check` — add OR update — passes `screenCheck` before apply; a `"rejected"` tier drops/rejects that op the same way regardless of op kind. TWO SEPARATE CALL SITES, one shared helper (review round-3: `applyProposeArtifact` at propose.ts:285 and `applyCurateArtifact` at propose.ts:1313 are independent functions — curation calls `applyPlaybookOps` directly at :1337 with no review; a screen must be added THERE explicitly or curator checks ship unscreened): extract `screenOpsChecks(ops): { ops, rejections }` (drops ops whose check screens `"rejected"`, stamps `liveEligible` on survivors) and call it in BOTH functions before their `applyPlaybookOps`. Test-pinned with an update-op case through the CURATE path specifically.
 
-- [ ] **Step 1: Write failing tests** — three cases: (a) checked bullet whose cmd hits `store-path` is rejected whole with ledger text containing `screen-denied (store-path)` and NOT containing the cmd string; (b) checked bullet passing Tier L stages with `liveEligible: true`; (c) proposal JSON smuggling `state: "blocking"` is rejected. Use the existing test file's host/ledger fixtures.
+- [ ] **Step 1: Write failing tests** — five cases: (a) checked bullet whose cmd hits `store-path` is rejected whole with ledger text containing `screen-denied (store-path)` and NOT containing the cmd string; (b) checked bullet passing Tier L stages with `liveEligible: true`; (c) proposal JSON smuggling `state: "blocking"` is rejected; (d) **PERSISTENCE (review round-1 F2): after the full propose-apply path, the PLAYBOOK WRITTEN TO THE STORE carries `check.liveEligible` matching the screen tier** — assert on `readPlaybook()` output, not the outcome object (`applyPlaybookOps` deliberately never sets it; a post-apply patch must); (e) **CURATE PATH (review round-3): an update op carrying a screen-rejected check through `applyCurateArtifact` is dropped/rejected — the screen fires on the curator lane too.**
 
 - [ ] **Step 2: Run to verify fail.**
 
-- [ ] **Step 3: Implement** — signature change + screen call before layer-1; map `tier` to outcome as specified; update every caller (`grep -n "reviewAddedBullets("`).
+- [ ] **Step 3: Implement** — signature change + screen call before layer-1; map `tier` to outcome as specified; update the single production caller (`propose.ts:435`); **post-`applyPlaybookOps` patch in propose.ts (~line 476): for each staged outcome with a check, set `newPlaybook.bullets[i].check.liveEligible` from the outcome before the playbook is written** (this is the only site that persists the stamp — review round-1 F2).
 
-- [ ] **Step 4: Run the review-gate test file + full opencode suite → PASS.**
+- [ ] **Step 4: Update the proposer prompt templates** (review round-1 F3 — spec §2's "Prompt addition"). PROPOSER heredoc (~line 1077) gains:
 
-- [ ] **Step 5: Commit**
+```
+Optionally, an "add" op may carry "check": {"cmd": "<shell command that mechanically verifies the rule's behavior>", "timeoutMs": <number>}. Only include a check when the rule's behavior is mechanically verifiable by a command; unverifiable rules stay prose-only — never invent a check. The command must be workspace-scoped; never touch stores, network, or packages.
+```
+
+CURATOR heredoc (~line 1427) — curation forbids add ops (propose.ts:1409), so it gets the UPDATE-oriented variant instead (review round-2 residual):
+
+```
+Optionally, an "update" op may carry or revise "check": {"cmd": "...", "timeoutMs": <number>} on a bullet that already warrants one, under the same constraints: mechanically verifiable behavior only, workspace-scoped, never stores/network/packages; drop a check (omit the field) rather than keep one that no longer matches the bullet.
+```
+
+- [ ] **Step 5: Run the review-gate test file + full opencode suite → PASS.**
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add opencode-plugin/src/review-gate.ts <caller files> <test file>
-git commit -m "feat(review): structured checked bullets through the review gate, verdict-summary-only ledger (a3 routing T4)"
+git add opencode-plugin/src/review-gate.ts opencode-plugin/src/propose.ts <test file>
+git commit -m "feat(review): structured checked bullets — screens, liveEligible persistence, proposer prompt (a3 routing T4)"
 ```
 
 ---
@@ -373,13 +389,13 @@ git commit -m "feat(review): structured checked bullets through the review gate,
   - `buildRuleGateSettings(): string` — settings.json text whose single Stop hook runs `bash /app/.rule-gate/check.sh`
   - `readRuleGateStateArgs(): string[]` — the `podman exec cat` argv for post-attempt state readback (`/app/.rule-gate/state.json`)
 - Script contract (the TESTED behavior, executed against a temp dir in tests with `RULE_GATE_DIR` overridable via env `RULE_GATE_DIR` for testability):
-  - Runs each check with `timeout <timeoutMs/1000>s bash -c <cmd>`; first failure → increments `rounds` in `state.json` `{rounds, exhausted, perRule: {<bulletId>: {blocked, lastFail}}}`.
-  - `rounds < RULE_GATE_ROUNDS_CAP` → print the failing check's captured stderr+stdout (tail-capped 2048 chars) to fd 2, `exit 2` (block).
-  - `rounds >= cap` → set `exhausted: true`, `exit 0` (allow) — loud line to stderr `rule-gate: exhausted after 2 blocks` (informational; exit 0 does not block).
+  - Runs each check with `timeout <timeoutMs/1000>s bash -c <cmd>`. On first failure, compare-THEN-increment, mirroring `stop.ts`'s `state.round < cfg.rounds` order (review round-2 residual — increment-then-compare would exhaust after ONE block):
+    - if pre-increment `rounds < RULE_GATE_ROUNDS_CAP` → increment `rounds` in `state.json` `{rounds, exhausted, perRule: {<bulletId>: {blocked, lastFail}}}`, print the failing check's captured stderr+stdout (tail-capped 2048 chars) to fd 2, `exit 2` (block); yields blocks at rounds 0→1 and 1→2.
+    - else (pre-increment `rounds >= cap`, i.e. the THIRD failure) → increment, set `exhausted: true`, `exit 0` (allow) — loud line to stderr `rule-gate: exhausted after 2 blocks` (informational; exit 0 does not block).
   - All pass → reset nothing, `exit 0`.
   - F2: state.json carries bulletIds + counts only, no command text.
 
-- [ ] **Step 1: Write failing tests** — generate script for one failing + one passing check into a temp dir; run via `Bun.spawnSync(["bash", script])` with `RULE_GATE_DIR=<tmp>`: first run exits 2 with evidence on stderr; second run exits 2 (rounds 1→2? no: cap 2 means TWO blocks allowed) — precisely: run1 exit 2 (rounds=1), run2 exit 2 (rounds=2)… WRONG — cap 2 means at the SECOND failure the counter hits the cap: run1 exit 2 (rounds=1), run2 exit 0 + `exhausted:true` (rounds=2, cap reached → allow). Mirror cc-gate-plugin `rounds: 2` semantics: 2 total gate rounds, the 2nd failed round exhausts. Pin exactly this in the test. All-pass script exits 0 with no state mutation beyond file creation.
+- [ ] **Step 1: Write failing tests** — generate script for one failing + one passing check into a temp dir; run via `Bun.spawnSync(["bash", script])` with `RULE_GATE_DIR=<tmp>`. Pin EXACTLY the cc-gate-plugin `rounds: 2` mirror (review round-1 F1, verified against `cc-gate-plugin/src/core/stop.ts:98-166`: block while `round < cap`, so cap+1 failures total): run1 → exit 2, evidence on stderr, state rounds=1; run2 → exit 2, rounds=2; run3 → exit 0, `exhausted: true`, rounds=3, stderr carries `rule-gate: exhausted after 2 blocks`. All-pass script exits 0 with no state mutation beyond file creation.
 - [ ] **Step 2: Verify fail.**
 - [ ] **Step 3: Implement** generator (heredoc-safe: checks embedded via `printf %q`-quoted strings or a JSON sidecar the script reads with `python3 -c`/`jq`-free bash parsing — implementer picks the robust one; tests are the contract).
 - [ ] **Step 4: Tests PASS.**
@@ -390,7 +406,7 @@ git commit -m "feat(review): structured checked bullets through the review gate,
 ### Task 7: cmd wiring — driver refusal, injection, annotation
 
 **Files:**
-- Modify: `opencode-plugin/src/bench/cmd-run.ts` (~assembly at line 589, pre-`inContainerAgentVersion` at 602), `cmd-ab.ts` (~294-304), the per-attempt container create/exec path (mirror how P2's `cmd-p2.ts` copies `assets/stop-gate-settings.json` — reuse its `podman cp` pattern for `/app/.claude/settings.json` + `/app/.rule-gate/check.sh`).
+- Modify: `opencode-plugin/src/bench/cmd-run.ts` (~assembly at line 589, pre-`inContainerAgentVersion` at 602), `cmd-ab.ts` (~294-304), the per-attempt container create/exec path. Injection precedent (review round-1 F8): the generated script/settings are STRINGS, so mirror `agent-run.ts:174-178`'s pattern — `mkdtempSync` scratch dir + `writeFileSync` the generated text + `buildCpToArgv` into the container (`/app/.claude/settings.json`, `/app/.rule-gate/check.sh`); `cmd-p2.ts:357-362`'s static-asset copy shows only the `mkdir /app/.claude` + cp shape, not the generated-content step.
 - Test: extend `opencode-plugin/test/bench-cli-ab.test.ts` (refusal) + a focused injection unit test with the existing exec-seam fakes.
 
 **Interfaces:**
@@ -412,6 +428,7 @@ git commit -m "feat(review): structured checked bullets through the review gate,
 
 **Files:**
 - Modify: `cmd-ab.ts` verdict assembly (locate `ab-verdict` writer) + wherever arm env blocks land in the verdict.
+- Modify: `opencode-plugin/src/harness-store.ts` — `AbVerdict` interface (~line 313) gains `checksHash` per-arm slots + `checkBundleCaveat?: string` (closed interface, must be declared before cmd-ab compiles — review round-1 F7).
 - Test: extend `opencode-plugin/test/bench-cli-ab.test.ts`.
 
 **Interfaces:**
@@ -429,7 +446,7 @@ git commit -m "feat(review): structured checked bullets through the review gate,
 **NOT executed by subagents. Runs only on an explicit user sized go (≤4 haiku calls).**
 
 - [ ] Build a throwaway claude-code-driver container per the P2 PROBE C recipe (`docs/loop-probes/p2/PROBE.md`); inject a rule gate with one deliberately-failing check.
-- [ ] One `claude -p` attempt: expect num_turns > 1-turn control, evidence of block/fix cycle, and `state.json` showing `rounds ≥ 1`; a second forced failure must show `exhausted: true` + allow.
+- [ ] One `claude -p` attempt: expect num_turns > 1-turn control, evidence of block/fix cycle, and `state.json` showing `rounds ≥ 1`; forcing failure through THREE Stops must show blocks on 1 and 2, then `exhausted: true` + allow on the third (the T6 contract, live).
 - [ ] Record outcome in the plan file + READINESS-style note. Zero store writes.
 
 ---
@@ -440,3 +457,9 @@ git commit -m "feat(review): structured checked bullets through the review gate,
 - Placeholders: none — where exact regex/impl detail is implementer-tunable, the CONTRACT is pinned by test code instead.
 - Type consistency: `BulletCheck`/`screenCheck` tiers/`checksHashOf`/`EMPTY_CHECKS_HASH`/`buildRuleGateScript` names used consistently across T2-T8.
 - Known open ruling: rejected.json F2 (spec §1) — T4 implements the fallback (verdict-summary-only). If the user rules FOR command text later, that is a one-line ledger change + test.
+
+## Review log
+
+- round 1 (2026-08-13, fresh code-architect, FIX-FIRST → applied): round-cap semantics corrected to the real cc-gate mirror — block/block/exhaust-on-3rd (T6, T9, Global Constraints) (F1); liveEligible PERSISTENCE step + persisted-playbook test added to T4 (post-applyPlaybookOps patch in propose.ts ~476) (F2); proposer prompt-template update added to T4 (F3); T1 parity anchor moved to `const RULES` (F4); readActiveBudget/BudgetStamp wired into T2 step 4 (F5); T2 fixture uses real `{schemaVersion, nextId, bullets}` shape (F6); AbVerdict/BudgetStamp named in T8/T2 file lists (F7); T7 injection precedent corrected to agent-run.ts mkdtemp+write+cp (F8).
+- round 2 (same reviewer, scoped re-verify, FIX-FIRST → applied): T6 script-contract bullets rewritten compare-THEN-increment mirroring stop.ts order (increment-then-compare would exhaust after one block — the contract now agrees with its own Step-1 test pin); curator heredoc gets the update-oriented check text (curation forbids adds, propose.ts:1409); NEW screen-coverage invariant added to T4 — update-op checks pass the same screenCheck at apply (curator lane would otherwise bypass screening).
+- round 3 (same reviewer, FIX-FIRST → applied): the invariant's "one shared code path" claim was false — `applyProposeArtifact` (:285) and `applyCurateArtifact` (:1313, direct `applyPlaybookOps` at :1337, no screening) are separate functions. T4 now names BOTH in Files, specifies the shared `screenOpsChecks(ops)` helper called at both sites, and pins a curate-path update-op test.
