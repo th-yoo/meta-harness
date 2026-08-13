@@ -11,6 +11,11 @@
 // SensorLine gained skippedStop?: true — additive & optional, recording the
 // unmeasured-edits-across-a-prompt-boundary dogfood finding.
 // Amendment (2026-07-30, fix-them-serialized-teacup plan, Task 2):
+// Amendment (2026-08-13, A1 cycle-tagging port from ~/z2/kkamak v0.6.0):
+// CcGateState gained touchedPaths?/touchedTruncated?; SensorLine gained
+// implOnly?/sameTurnCoEdit?; GateConfig gained testPathPattern? — all
+// additive & optional. Raw paths live in .km/ state ONLY and never reach
+// the sensor line (derived booleans only, F2-clean).
 // SensorLine + CcGateState both gained checkMs?: number[] — additive &
 // optional, recording per-round check time (deps.now() around
 // runSingleRound) so durationMs's subagent-wait inflation (live dogfood:
@@ -40,7 +45,24 @@ export interface CcGateState {
    * only array INITIAL_STATE actually declares — this one stays undefined
    * until the first round runs). */
   checkMs?: number[]
+  /** A1 cycle-tagging (2026-08-13): repo-relative-or-absolute paths the
+   * cycle's edit tools touched, deduped, capped at TOUCHED_PATHS_CAP.
+   * Absent on legacy state files and never declared on INITIAL_STATE
+   * (same convention as checkMs). Paths NEVER leave .km/ state — the
+   * sensor line carries only the derived booleans. */
+  touchedPaths?: string[]
+  /** Set (true) the first time a path is dropped because touchedPaths hit
+   * TOUCHED_PATHS_CAP — a truncated set cannot answer "impl-only?", so
+   * the derived sensor fields are omitted for the whole cycle. Absent is
+   * the only false. */
+  touchedTruncated?: true
 }
+
+/** Cap on touchedPaths so a huge refactor cannot grow the state record
+ * without bound. 200 mirrors the kkamak kernel's cap (its HANDOFF-A1
+ * ruling); hitting it sets touchedTruncated and the cycle's tag fields
+ * are omitted rather than computed from a partial set. */
+export const TOUCHED_PATHS_CAP = 200
 
 export const INITIAL_STATE: CcGateState = {
   v: 1,
@@ -64,7 +86,8 @@ export function isInitialState(s: CcGateState): boolean {
   return (
     !s.edited && !s.gating && s.round === 0 && s.outcomes.length === 0 &&
     s.cycleStartedAt === 0 && s.failStreak === 0 &&
-    (!s.checkMs || s.checkMs.length === 0)
+    (!s.checkMs || s.checkMs.length === 0) &&
+    (!s.touchedPaths || s.touchedPaths.length === 0) && !s.touchedTruncated
   )
 }
 
@@ -77,6 +100,12 @@ export interface GateConfig {
   checkTimeoutMs: number // default 300_000
   gauge: boolean // default false — km-gauge shadow PoC opt-in (2026-07-28 pre-reg)
   channelNudge?: boolean // default undefined/off — C4 nudge arming flag (2026-08-03 channel-ladder Task 5; inert until true)
+  /** A1 cycle-tagging: optional override for the test-path HEURISTIC
+   * (core/classify.ts). A string that fails to compile as a RegExp is
+   * dropped (field undefined → built-in default), never a parse failure —
+   * same never-throw discipline as every other field. Telemetry only:
+   * structurally unable to influence any gate decision. */
+  testPathPattern?: string
 }
 
 /** Injected IO for the pure core — tests fake this whole surface. */
@@ -248,6 +277,20 @@ export interface SensorLine {
    * `durationMs` is emitted), carrying the full per-round array for the
    * cycle. Absent on lines from before this amendment. */
   checkMs?: number[]
+  /** A1 cycle-tagging (2026-08-13, ported from kkamak v0.6.0): true iff
+   * the cycle touched source files and no test files, by the
+   * testPathPattern heuristic (core/classify.ts). ABSENT — not false —
+   * whenever the touched-path set cannot be trusted to answer the
+   * question: no paths recorded (legacy state, no edit carried a path) or
+   * the set was truncated at TOUCHED_PATHS_CAP. Never present on a
+   * skippedStop diagnostic line (that cycle has not finished). Raw paths
+   * never appear on the line — derived booleans only (F2). */
+  implOnly?: boolean
+  /** True iff the cycle touched both source and test files in one turn —
+   * implementation and its tests authored together, the shape behind the
+   * review-caught defects the kkamak dogfood log documents. Same absence
+   * rules as implOnly; computed together from the same touched set. */
+  sameTurnCoEdit?: boolean
 }
 
 /** Handlers return sensor lines; hook-cli owns the append (persist → sensor → emit). */

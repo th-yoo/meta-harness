@@ -1,4 +1,12 @@
 import type { GateConfig } from "./types.ts"
+import { compileTestPathPattern } from "./core/classify.ts"
+
+/** A1 cycle-tagging: kept only if it compiles as a RegExp — a malformed
+ * pattern falls back to the built-in default (field undefined), never
+ * disables the gate and never throws. */
+function keepIfCompiles(v: unknown): string | undefined {
+  return typeof v === "string" && compileTestPathPattern(v) !== undefined ? v : undefined
+}
 
 export function parseGateConfig(raw: string | undefined): GateConfig | undefined {
   if (!raw) return undefined
@@ -17,6 +25,7 @@ export function parseGateConfig(raw: string | undefined): GateConfig | undefined
       checkTimeoutMs: typeof j.checkTimeoutMs === "number" ? j.checkTimeoutMs : 300_000,
       gauge: j.gauge === true,
       channelNudge: typeof j.channelNudge === "boolean" ? j.channelNudge : undefined,
+      testPathPattern: keepIfCompiles(j.testPathPattern),
     }
   } catch {
     return undefined

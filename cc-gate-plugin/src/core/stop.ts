@@ -14,6 +14,7 @@ import { INITIAL_STATE } from "../types.ts"
 import type { CcGateState, CoreDeps, StopInput, StopResult } from "../types.ts"
 import { parseGateConfig } from "../config.ts"
 import { buildSensorLine } from "./sensor.ts"
+import { computeCycleTags } from "./classify.ts"
 import { runSingleRound } from "./round.ts"
 import { HYGIENE_MARKER } from "../../vendor/session2.ts"
 
@@ -88,6 +89,11 @@ export async function handleStop(
   // check time, isolated from durationMs's cross-invocation span.
   const checkElapsed = deps.now() - checkStartedAt
 
+  // A1 cycle-tagging: derived booleans for the cycle-CLOSING lines below.
+  // {} (absent fields) when the touched set is empty or truncated —
+  // computeCycleTags owns that rule. Telemetry only; no decision reads it.
+  const cycleTags = computeCycleTags(state, cfg.testPathPattern)
+
   // 4. Round result outcome.
   if (result.outcome === "accepted") {
     const sensor = buildSensorLine(deps, {
@@ -100,6 +106,7 @@ export async function handleStop(
       marker: cfg.marker,
       durationMs: deps.now() - started,
       checkMs: [...(state.checkMs ?? []), checkElapsed],
+      ...cycleTags,
     })
 
     return {
@@ -145,6 +152,7 @@ export async function handleStop(
     marker: false,
     durationMs: deps.now() - started,
     checkMs: [...(state.checkMs ?? []), checkElapsed],
+    ...cycleTags,
   })
 
   return {

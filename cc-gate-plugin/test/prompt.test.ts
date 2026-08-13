@@ -177,3 +177,53 @@ describe("handleUserPromptSubmit", () => {
     expect(result.sensor!.rounds).toEqual([])
   })
 })
+
+// -- A1 cycle-tagging: interrupted closes the cycle and carries tags ------
+
+describe("A1 cycle tagging on prompt paths", () => {
+  const deps: CoreDeps = {
+    runCheck: async () => ({ code: 0, out: "" }),
+    now: () => 5000,
+    hostname: () => "test-host",
+    log: () => undefined,
+  }
+  const cfgRaw = JSON.stringify({ check: "npm test" })
+
+  it("interrupted line carries derived booleans (cycle closes for good)", () => {
+    const state: CcGateState = {
+      v: 1, edited: true, gating: true, round: 1,
+      outcomes: ["verify-failed"], cycleStartedAt: 1000, failStreak: 0,
+      updatedAt: 999,
+      touchedPaths: ["/repo/src/a.ts"],
+    }
+    const { state: next, sensor } = handleUserPromptSubmit(state, "s", cfgRaw, deps)
+    expect(sensor?.interrupted).toBe(true)
+    expect(sensor?.implOnly).toBe(true)
+    expect(sensor?.sameTurnCoEdit).toBe(false)
+    expect(next.touchedPaths).toBeUndefined()
+    expect(JSON.stringify(sensor)).not.toContain("a.ts")
+  })
+
+  it("skippedStop diagnostic line NEVER carries the tag fields", () => {
+    const state: CcGateState = {
+      v: 1, edited: true, gating: false, round: 0,
+      outcomes: [], cycleStartedAt: 0, failStreak: 0, updatedAt: 0,
+      touchedPaths: ["/repo/src/a.ts"],
+    }
+    const { sensor } = handleUserPromptSubmit(state, "s", cfgRaw, deps)
+    expect(sensor?.skippedStop).toBe(true)
+    expect("implOnly" in (sensor as object)).toBe(false)
+    expect("sameTurnCoEdit" in (sensor as object)).toBe(false)
+  })
+
+  it("interrupted with no recorded paths -> fields absent", () => {
+    const state: CcGateState = {
+      v: 1, edited: true, gating: true, round: 1,
+      outcomes: ["verify-failed"], cycleStartedAt: 1000, failStreak: 0,
+      updatedAt: 999,
+    }
+    const { sensor } = handleUserPromptSubmit(state, "s", cfgRaw, deps)
+    expect(sensor?.interrupted).toBe(true)
+    expect("implOnly" in (sensor as object)).toBe(false)
+  })
+})

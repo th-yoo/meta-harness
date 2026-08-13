@@ -19,6 +19,7 @@ import { INITIAL_STATE } from "../types.ts"
 import type { CcGateState, CoreDeps, PromptResult } from "../types.ts"
 import { parseGateConfig } from "../config.ts"
 import { buildSensorLine } from "./sensor.ts"
+import { computeCycleTags } from "./classify.ts"
 
 export function handleUserPromptSubmit(
   state: CcGateState,
@@ -47,6 +48,10 @@ export function handleUserPromptSubmit(
   const cfg = parseGateConfig(gateConfigRaw)
   if (!cfg) return { state: { ...INITIAL_STATE } }
 
+  // A1 cycle-tagging: the interrupted line CLOSES this cycle for good, so
+  // it carries the derived booleans like accept/exhaust do (the kkamak
+  // kernel's ruling — only a skippedStop line, which closes nothing,
+  // omits them). computeCycleTags returns {} when the set is untrusted.
   const sensor = buildSensorLine(deps, {
     sessionID: sessionId,
     check: cfg.check,
@@ -56,6 +61,7 @@ export function handleUserPromptSubmit(
     interrupted: true,
     marker: false,
     durationMs: deps.now() - state.cycleStartedAt,
+    ...computeCycleTags(state, cfg.testPathPattern),
   })
 
   return { state: { ...INITIAL_STATE }, sensor }
