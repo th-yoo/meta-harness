@@ -3,6 +3,50 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ⏳ LIVE 2026-08-13 (`yoo-mac` "minimal", post-clear) — CAS PORT MERGED+PUSHED (`685a46e`) · BAND BATCH PAUSED chunk 2 @ 6/14 · XSESSION MESSAGING DOWN (this session)
+
+```
+LANDED THIS SESSION (all on main, pushed 685a46e):
+ - CAS PORT (cc-gate-plugin 0.4.5): kkamak 0.6.0 compare-and-swap state
+   persistence + reset-retry ported. state.ts save(id,s,expectedUpdatedAt)
+   refuses stale writes (StaleWriteError), monotonic stamp, delete-on-init
+   under lock+CAS with EPERM propagated, withLock/reclaimIfStale/pid-liveness
+   + NEW non-blocking tryLock for sweep (withLock fall-through is fatal to
+   sweep's rmSync — no CAS backstop), saveResetWithRetry; hook-cli single
+   three-way dispatchSave at all 3 sites; sweep moved after-dispatch/
+   before-emit. Design FLAWLESS (7 architect rounds, ledger
+   ~/.claude/plans/plan-for-a-misty-flurry.md), code review APPROVED
+   (0 findings), suite 1051/0. Commits 579fd0f (impl) + 79583e6 (artifact
+   docs/reviews/579fd0f-cas-reset-port.md) + 685a46e (merge). NOT DEPLOYED:
+   0.4.4 still installed; km-refresh to 0.4.5 = own ruling (merging !=
+   deploying). Merge also carried sibling's afae927 (a3 live-adapter plan).
+
+OPEN / STANDING:
+ - BAND BATCH: PAUSED, chunk 2 @ 6/14 (5 done since chunk1). Pool = 33
+   clean bench sessions in ~/.config/kkamak/global/candidates/v0 (14 base +
+   13 chunk1 + 6 chunk2). tuple {3600,3600,enforce}, haiku-4-5, driver
+   opencode, active v0. RESUME: chunk-2 remainder = 8 tasks
+   (large-scale-text-editing path-tracing constraints-scheduling tune-mjcf
+   distribution-search db-wal-recovery prove-plus-comm openssl-selfsigned-cert)
+   via --tasks, same flags, NO --results-file (it disables store writes);
+   then chunks 3-5 full sweeps. STRIP non-bench: sessions (dogfood producer
+   writes THIS interactive session into active v0) at every chunk boundary.
+   Store was surgically seeded from committed snapshot (junk v0 backed up
+   ~/.config/kkamak/v0-junk-bak-20260813); active/ populated via writeActive
+   (harnessHash 25f13fca883fe563 = baseline parity).
+ - km-refresh 0.4.4 -> 0.4.5 after CAS merge (own go; bun install cc-gate-plugin
+   BEFORE km-refresh, GA12).
+ - XSESSION MESSAGING DOWN in this session: SendMessage/ListAgents dead
+   (MCP messaging server disconnected mid-session, same drop that pulled
+   EndConversation). Both UDS sockets alive; it's a capability loss on THIS
+   session's side, only a restart re-registers. Coordinate with sibling
+   (harness, pid 11511) via USER RELAY. Peer heartbeat staleness (>~20min
+   idle) ALSO drops reachability — separate, self-heals on peer activity.
+
+YOO-DEV handoff (unchanged, not this host): sensor checkpoint, snapshot
+ export (stale Jul 31), crank-2 v20 ab verdict, A/A single-host ruling.
+```
+
 ## ✅ SESSION END 2026-08-13 (`yoo-mac`, P2-close + a3-routing session, cleared) — P2 PROGRAM CLOSED (a3 ROUTED) · a3-ROUTING PLAN A BUILT+MERGED (`16c2303`) · GUARD BACKTICK FIX DEPLOYED 0.4.4 (`6434afc`) · MAIN `6434afc`+
 
 **RESUME PROMPT:**
