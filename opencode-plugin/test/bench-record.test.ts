@@ -23,6 +23,7 @@ import {
   readMhConfig,
   buildProposerContext,
   candidatePath,
+  EMPTY_CHECKS_HASH,
 } from "../src/harness-store.ts"
 import { BenchError } from "../src/bench/util.ts"
 import type { ExecResult } from "../src/bench/exec.ts"
@@ -268,8 +269,21 @@ test("envBlock: assembles agentVersion/pluginSha/harnessHash/maxAgentTimeout/pro
     provider: "anthropic",
     driver: "opencode",
     resourceEnforcement: false,
+    checksHash: EMPTY_CHECKS_HASH,
   })
   expect(calls).toBe(2)
+})
+
+test("envBlock: checksHash defaults to EMPTY_CHECKS_HASH, but is carried through verbatim when supplied (a3 routing T5)", async () => {
+  const execFn = async (): Promise<ExecResult> => ({ rc: 0, stdout: "v1\n", stderr: "", timedOut: false })
+  const off = await envBlock("h", 0, "anthropic/claude-x", "/repo", execFn)
+  expect(off.checksHash).toBe(EMPTY_CHECKS_HASH)
+
+  // A distinct (sha256-shaped) hash round-trips verbatim — trailing param
+  // after minAgentTimeout, so minAgentTimeout is explicitly skipped (undefined).
+  const distinct = "b".repeat(64)
+  const on = await envBlock("h", 0, "anthropic/claude-x", "/repo", execFn, "some-version", "opencode", true, undefined, distinct)
+  expect(on.checksHash).toBe(distinct)
 })
 
 test("envBlock: resourceEnforcement defaults to false, but is carried through verbatim when supplied", async () => {

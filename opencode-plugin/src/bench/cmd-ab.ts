@@ -65,6 +65,8 @@ import {
   pruneTrajectories,
   appendMetaMetric,
   readMhConfig,
+  readPlaybook,
+  checksHashOf,
   type AbSetStats,
   type AbSpeedStats,
 } from "../harness-store.ts"
@@ -293,6 +295,11 @@ export async function cmdAb(
   // Compose both arms once (they differ in exactly one layer by construction).
   const harnessA = assembleAgentsMd(layers, paths.metaRoot, agent, {}, model)
   const harnessB = assembleAgentsMd(layers, paths.metaRoot, agent, { [layer]: candidate }, model)
+  // Arm B's (the candidate's) enforced check-set identity (a3 routing T5) —
+  // threaded from the SAME playbook read that produced harnessB's pinned
+  // layer content, not a separate re-derivation. checksHashOf coalesces a
+  // checkless candidate playbook to EMPTY_CHECKS_HASH on its own.
+  const candidateChecksHash = checksHashOf(readPlaybook(layerRoot, candidate))
   const agentVersion = await inContainerAgentVersion(paths, driver, execFn)
   // Same non-default-driver-unknown-probe gate as cmd-run.ts's cmdRun
   // (final-review fix 3) — a claude-code (etc) probe coming back "unknown"
@@ -312,6 +319,7 @@ export async function cmdAb(
     driver.id,
     args.enforceResources ?? false,
     minAgentTimeout,
+    candidateChecksHash,
   )
   // Loop-3 T3: whether a wall-clock agent-phase timeout on arm B gets
   // recorded as a genuine stored fail (default OFF). Read once for the

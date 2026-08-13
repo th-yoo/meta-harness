@@ -23,6 +23,7 @@ import {
   recordSession,
   writeTrajectory,
   pruneTrajectories,
+  EMPTY_CHECKS_HASH,
   type ToolUsage,
   type TrajEvent,
   type SessionRecord,
@@ -212,6 +213,19 @@ export interface EnvBlock {
    * budgetIdentityMatches, cmd-ab.ts's --resume guard) coalesce an absent key
    * and an explicit 0 to the same "no floor" via `?? 0`. */
   minAgentTimeout?: number
+  /** sha256 (full hex, harness-store.ts's `checksHashOf`) of the rule-routing
+   * checked-bullet bundle this run/arm's playbook enforces (a3 routing T5).
+   * ALWAYS present (unlike `minAgentTimeout` above) — same always-present
+   * precedent as `resourceEnforcement`: defaults to `EMPTY_CHECKS_HASH` (the
+   * hash of "no checks") so a call site with no ready playbook object, or a
+   * caller that never passes it, is byte-identical to a genuinely checkless
+   * run/arm. Wired from cmd-ab.ts's candidate-arm playbook (the harness
+   * actually assembled for that arm); cmd-run.ts passes `EMPTY_CHECKS_HASH`
+   * today — it has no single ready playbook object at the assembly call site
+   * (unlike ab's single pinned layer+candidate), pending T7's rule-gate
+   * wiring, which reads the run's own playbook at this same site for
+   * checked-driver refusal and can thread the real hash through then. */
+  checksHash: string
 }
 
 /**
@@ -243,6 +257,13 @@ export interface EnvBlock {
  * Stamped ONLY when truthy (a real floor); omitted otherwise so a flag-off
  * run's env block is byte-identical to every pre-feature record. Every existing
  * caller (that never passes it) is unaffected.
+ *
+ * `checksHash` (rule-routing checked-bullet identity, a3 routing T5) is a
+ * further trailing param defaulting to `EMPTY_CHECKS_HASH` — same
+ * always-present-with-a-default idiom as `resourceEnforcement` above (as
+ * opposed to `minAgentTimeout`'s omit-when-absent idiom), so every existing
+ * caller that never passes it keeps producing an env block with the
+ * "checkless" hash rather than a missing key.
  */
 export async function envBlock(
   harnessMd: string,
@@ -254,6 +275,7 @@ export async function envBlock(
   driverId = "opencode",
   resourceEnforcement = false,
   minAgentTimeout?: number,
+  checksHash: string = EMPTY_CHECKS_HASH,
 ): Promise<EnvBlock> {
   const [ver, sha] = await Promise.all([
     agentVersionOverride !== undefined ? Promise.resolve(agentVersionOverride) : opencodeVersion(execFn),
@@ -268,6 +290,7 @@ export async function envBlock(
     provider,
     driver: driverId,
     resourceEnforcement,
+    checksHash,
     ...(minAgentTimeout ? { minAgentTimeout } : {}),
   }
 }

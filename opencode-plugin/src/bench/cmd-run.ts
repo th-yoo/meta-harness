@@ -51,7 +51,7 @@ import { resumeCarryForward, writeRunResults, aggTotals } from "./results.ts"
 import { schedule, DEFAULT_BUDGET, AsyncMutex, type Budget, type ScheduledItem } from "./scheduler.ts"
 import { PRESSURE_POLL_SEC } from "./host-pressure.ts"
 import { BenchError, die, log, pyFixed } from "./util.ts"
-import { readMhConfig, type ToolUsage, type TrajEvent } from "../harness-store.ts"
+import { readMhConfig, EMPTY_CHECKS_HASH, type ToolUsage, type TrajEvent } from "../harness-store.ts"
 
 // ── run_task_once ───────────────────────────────────────────────────────
 
@@ -621,6 +621,13 @@ export async function cmdRun(
     driver.id,
     args.enforceResources ?? false,
     minAgentTimeout,
+    // Checkless (a3 routing T5): a `run` can compose/pin MULTIPLE layers at
+    // once (parsePins above), so — unlike cmd-ab.ts's single pinned
+    // layer+candidate — there is no single ready playbook object here to
+    // hash. EMPTY_CHECKS_HASH is the honest default; T7's rule-gate wiring
+    // reads the run's own playbook(s) at this same assembly site for
+    // checked-driver refusal and will thread the real hash through then.
+    EMPTY_CHECKS_HASH,
   )
 
   const { taskAgg, doneTasks } = resumeCarryForward(
