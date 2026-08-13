@@ -34,3 +34,24 @@ test("read-only verification passes Tier L", () => {
   expect(T("test -s DONE-CHECK.txt").tier).toBe("live")
   expect(T("grep -q 'result' DONE-CHECK.txt").tier).toBe("live")
 })
+
+test("backtick substitution rejected at Tier B with slug reason only", () => {
+  for (const [cmd, slug] of [
+    ["echo `rm important-file`", "substitution"],
+    ["x=`rm f`", "substitution"],
+    ["echo `sudo reboot`", "substitution"],
+    ["echo `chmod 777 /etc/passwd`", "substitution"],
+  ] as const) {
+    const r = T(cmd)
+    expect(r.tier).toBe("rejected")
+    expect(r.reason).toBe(slug)
+    expect(r.reason!.includes(cmd)).toBe(false)
+  }
+})
+
+test("$() substitution passes through to guard (not rejected by backtick rule)", () => {
+  const r1 = T("echo $(wc -l < f)")
+  expect(r1.tier).toBe("live")
+  const r2 = T("x=$(grep pattern file)")
+  expect(r2.tier).toBe("live")
+})
