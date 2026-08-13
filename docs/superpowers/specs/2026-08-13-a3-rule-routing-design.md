@@ -301,6 +301,12 @@ producer:
   claude-code-only; opencode-driver checked-rule delivery would need
   a different chokepoint and is NOT designed here).
 - Auto-promotion shadow→blocking (needs its own pre-registration).
+- Review-backstop compound carrier (rule in pass-1 + post-hoc review,
+  A1+A4 shape): the a4 offline audit
+  (`docs/loop-probes/p2/a4-judge-audit.md`) measured a 75% single
+  bounded-re-pass conversion (0→21/28) and showed a4's deficit was
+  delivery design, not review-lane weakness — the citable datum if
+  this compound is ever designed. New experiment + own go.
 - Multi-check bullets; check composition.
 - Live opencode-plugin session gating (distinct from the bench driver
   above; opencode plugin untouched).
