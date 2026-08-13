@@ -56,16 +56,19 @@ checked-rule candidate. First checked-rule ab stamps its own boundary
 ts (T8 duty). First liveEligible check makes live shadow lines appear.
 
 OPEN — NEED USER GO/RULING:
- - Checked-rule crank: CRANK 1 RAN 2026-08-14 ~00:37 KST (km-crank
-   --force, headless): proposer emitted 1 prose-only bullet, review
-   gate REVIEW-REJECTED it with mechanize_instead violation — the
-   rejection (in .kkamak/global/rejected.json) carries the mechanized
-   check description and steers the NEXT proposer toward emitting a
-   structured check. Crank 2+ is DATA-GATED: zero-new-evidence never
-   runs, even --force (km-crank/src/gate.ts:69-74); needs new
-   .km/gate-outcomes.ndjson lines (>=1 forced, >=10 unforced). Then:
-   candidate with checks -> k=5 two-arm ab = overnight spend, own
-   sized go (table computed at go time).
+ - Checked-rule crank: CRANKS 1+2 RAN 2026-08-14 00:37/01:07 KST
+   (km-crank --force, headless; ~$0.28 judge total): both proposals
+   prose-only bullets, both REVIEW-REJECTED with mechanize_instead
+   violations carrying the judge's own mechanized check designs
+   (.kkamak/global/rejected.json, 5 entries — all re-read into the
+   next proposer prompt as steering). Proposer prompt VERIFIED correct
+   (propose.ts:326 — add ops may carry check:{cmd,timeoutMs},
+   never-invent guardrail). Cranks are DATA-GATED: zero-new-evidence
+   never runs, even --force (km-crank/src/gate.ts:69-74); >=1 new
+   .km/gate-outcomes.ndjson line unlocks --force. Emit-then-crank
+   pattern: any edit-carrying Stop in a dogfood session emits a line.
+   Then: candidate with checks -> k=5 two-arm ab = overnight spend,
+   own sized go (table computed at go time).
  - Standing rulings: A/A trial-state (P2-close block) · rejected.json
    F2 command-text (spec §1 fallback in force).
  - yoo-dev: STILL UNREACHABLE from yoo-mac (221.151.107.42:22 timeout
