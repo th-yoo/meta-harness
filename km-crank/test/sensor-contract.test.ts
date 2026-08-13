@@ -12,10 +12,13 @@
 // Counterpart (canonical) file: ~/z2/kkamak/test/fixtures/sensor-contract.ndjson
 // (relative from meta-harness repo root: ../kkamak/test/fixtures/sensor-contract.ndjson).
 // D2: that file is the standalone/publishable canonical copy; kkamak's Task 1
-// authors it BY COPYING THE FOUR LINES BELOW BYTE-FOR-BYTE (execution-order
+// authors it BY COPYING THE FIVE LINES BELOW BYTE-FOR-BYTE (execution-order
 // note: this repo's vectors are authored first — kkamak's fixture doesn't
 // exist yet, so the parity check below skips with a printed notice until it
-// lands). Header comment there must name this file back.
+// lands). Header comment there must name this file back. (a3 live adapter
+// Task 5, 2026-08-13: 5th vector line added — ruleChecks contract rev — the
+// parity check below now HARD-FAILS if a present fixture lacks it; see the
+// advisory-parity test near the bottom of this file.)
 //
 // Vector field truth derived from the frozen contract
 // (cc-gate-plugin/src/types.ts's SensorLine, ~:150-165) and km-crank's own
@@ -28,7 +31,8 @@
 // never carry reinject/forced, matching hook-cli.ts:249-251.
 
 import { test, expect } from "bun:test"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
 import path from "node:path"
 import { parseSensorLines } from "../src/scan.ts"
 
@@ -59,7 +63,22 @@ const EXHAUSTED =
 const SKIPPED_STOP_DIAGNOSTIC =
   '{"ts":1753848201000,"sessionID":"sess-f3a4b5c6","check":"bun test","accepted":true,"gateExhausted":false,"rounds":[],"interrupted":false,"marker":false,"durationMs":0,"host":"kkamak-dev","app":"claude-code","skippedStop":true,"pluginVersion":"0.3.1"}'
 
-const VECTOR_LINES = [CLEAN_ACCEPT, CATCH_BLOCK_THEN_FIX, EXHAUSTED, SKIPPED_STOP_DIAGNOSTIC]
+/** 5. a3 live adapter (Task 5, 2026-08-13 contract rev): same shape as (1)
+ * plus the shadow rule-check outcomes — {id,pass,ms} | {id,skipped} |
+ * {id,refused} — SHADOW-only, never influencing accepted/rounds. Mirrors
+ * cc-gate-plugin/src/types.ts's SensorLine.ruleChecks and km-crank's own
+ * src/scan.ts SensorLine mirror; emitted on Stop cycles only, alongside
+ * checkMs, per types.ts's doc comment on ruleChecks. */
+const CLEAN_ACCEPT_WITH_RULE_CHECKS =
+  '{"ts":1753848301000,"sessionID":"sess-a7b8c9d0","check":"bun test","accepted":true,"gateExhausted":false,"rounds":["accepted"],"interrupted":false,"marker":true,"durationMs":3980,"host":"kkamak-dev","app":"claude-code","checkMs":[1050],"pluginVersion":"0.3.1","reinject":"v1","ruleChecks":[{"id":"no-any","pass":true,"ms":42},{"id":"no-console","skipped":true},{"id":"no-todo","refused":true}]}'
+
+const VECTOR_LINES = [
+  CLEAN_ACCEPT,
+  CATCH_BLOCK_THEN_FIX,
+  EXHAUSTED,
+  SKIPPED_STOP_DIAGNOSTIC,
+  CLEAN_ACCEPT_WITH_RULE_CHECKS,
+]
 
 // ── Parser acceptance: every vector line survives parseSensorLines ─────────
 
@@ -110,6 +129,13 @@ test("sensor-contract drift guard: a sessionId-cased line missing marker too (fu
 // SKIPS with a printed notice rather than failing. Once it lands (copied
 // byte-for-byte from VECTOR_LINES above), this becomes a real byte-compare
 // that fails loudly on drift, naming both files.
+//
+// a3 live adapter Task 5 (2026-08-13 contract rev): absent fixture is STILL
+// an advisory skip (yoo-mac has no kkamak clone). A PRESENT fixture that
+// lacks the ruleChecks vector is now a HARD FAIL — the contract rev must not
+// land half-updated silently (spec §4 round-2 finding 6). The vector-presence
+// check is extracted into `assertFixtureHasRuleChecksVector` below so it's
+// unit-testable against a temp file without needing an actual kkamak clone.
 
 const KKAMAK_FIXTURE = path.join(
   import.meta.dir,
@@ -122,15 +148,56 @@ const KKAMAK_FIXTURE = path.join(
   "sensor-contract.ndjson",
 )
 
+/** Throws iff `raw` (a sensor-contract.ndjson fixture's full text) does not
+ * contain the ruleChecks vector — i.e. the a3 contract rev (Task 5) hasn't
+ * been ported to this fixture yet. Extracted so the hard-fail branch is
+ * unit-testable with a temp file (see the two tests directly below) rather
+ * than only reachable via an actual kkamak clone, which this host lacks. */
+export function assertFixtureHasRuleChecksVector(raw: string): void {
+  if (!raw.includes('"ruleChecks"')) {
+    throw new Error(
+      "kkamak sensor-contract fixture is missing the ruleChecks vector — the a3 contract rev landed half-updated; update ~/z2/kkamak's fixture + conformance suite in the same change window",
+    )
+  }
+}
+
+test("assertFixtureHasRuleChecksVector: throws on a fixture missing the ruleChecks vector", () => {
+  const tmp = path.join(tmpdir(), `sensor-contract-no-rulechecks-${Date.now()}-${Math.random()}.ndjson`)
+  writeFileSync(tmp, VECTOR_LINES.slice(0, 4).join("\n") + "\n", "utf8")
+  try {
+    const raw = readFileSync(tmp, "utf8")
+    expect(() => assertFixtureHasRuleChecksVector(raw)).toThrow(/missing the ruleChecks vector/)
+  } finally {
+    rmSync(tmp)
+  }
+})
+
+test("assertFixtureHasRuleChecksVector: passes silently on a fixture containing the ruleChecks vector", () => {
+  const tmp = path.join(tmpdir(), `sensor-contract-has-rulechecks-${Date.now()}-${Math.random()}.ndjson`)
+  writeFileSync(tmp, VECTOR_LINES.join("\n") + "\n", "utf8")
+  try {
+    const raw = readFileSync(tmp, "utf8")
+    expect(() => assertFixtureHasRuleChecksVector(raw)).not.toThrow()
+  } finally {
+    rmSync(tmp)
+  }
+})
+
 test("sensor-contract advisory parity: byte-matches ../kkamak/test/fixtures/sensor-contract.ndjson when present", () => {
+  // Absent fixture: still an advisory skip (yoo-mac has no kkamak clone).
+  // PRESENT fixture that lacks the ruleChecks vector: HARD FAIL — the
+  // contract rev must not land half-updated silently (spec §4 round-2
+  // finding 6).
   if (!existsSync(KKAMAK_FIXTURE)) {
     console.log(
       `[sensor-contract] advisory parity SKIPPED: ${KKAMAK_FIXTURE} does not exist yet ` +
-        `(kkamak Task 1 — phase0-contract-events plan — not landed). Not a failure.`,
+        `(kkamak Task 1 — phase0-contract-events plan — not landed) — advisory on this host; ` +
+        `ruleChecks vector verification (a3 contract rev, Task 5) is pending on yoo-dev. Not a failure.`,
     )
     return
   }
   const theirs = readFileSync(KKAMAK_FIXTURE, "utf-8")
+  assertFixtureHasRuleChecksVector(theirs)
   const ours = VECTOR_LINES.join("\n") + "\n"
   if (ours !== theirs) {
     throw new Error(

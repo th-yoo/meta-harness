@@ -216,6 +216,21 @@ pluginVersion partition; run `bun install` in cc-gate-plugin BEFORE
 km-refresh (install copies node_modules — GA12 lesson).
 ```
 
+```
+A3 CONTRACT REV (ruleChecks) — YOO-DEV DUTIES on next pull:
+ 1. ~/z2/kkamak: add the ruleChecks golden vector to
+    test/fixtures/sensor-contract.ndjson (byte-equal to km-crank's) +
+    extend kkamak's conformance suite; both repos' suites green in the
+    SAME change window.
+ 2. km-crank/test/sensor-contract.test.ts now HARD-FAILS if the fixture
+    exists but lacks the vector — that failure firing on yoo-dev means
+    step 1 was skipped; do step 1, don't relax the test.
+ 3. Deploy: bun install in cc-gate-plugin, km-refresh, grep-verify 0.4.5
+    in the plugin cache; boundary ts entry in
+    docs/2026-08-01-gauntlet-adoption-ledger.md (instrument change:
+    SensorLine +ruleChecks, caps RULE_CHECKS_MAX=8/BUDGET_MS=5000).
+```
+
 ## ⏳ LIVE STATE 2026-08-12 ~17:00 KST (`yoo-dev`) — CRANK-2 AB RUNNING (v20 vs v17)
 
 ```

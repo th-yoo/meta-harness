@@ -63,6 +63,13 @@ export interface SensorLine {
    * in this package (join-by-sessionID+spawnTs is trial-verdict.ts's job
    * upstream via cc-gate-plugin's SensorLine, not this local mirror's). */
   spawnTs?: number
+  /** a3 live adapter (Task 5, contract rev): mirrors cc-gate-plugin/src/types.ts's
+   * SensorLine.ruleChecks — shadow rule-check outcomes for the Stop cycle that
+   * emitted this line. Declared here (optional, not shape-checked below — same
+   * convention as skippedStop/promptCheck above) so the type matches the wire
+   * shape; `parseSensorLines` passes it through untouched like any other
+   * optional field. Not consumed by anything in this package today. */
+  ruleChecks?: Array<{ id: string; pass?: boolean; ms?: number; skipped?: true; refused?: true }>
 }
 
 /** Runtime shape guard — malformed/partial lines (a torn concurrent write, a
