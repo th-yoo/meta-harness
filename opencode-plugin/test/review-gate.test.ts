@@ -79,7 +79,7 @@ test("layer-1 fail (over 60 words) free-fails without calling the LLM", async ()
   const rec: Rec = { prompts: [] }
   const host = fakeHost(rec, [])
   const [outcome] = await reviewAddedBullets({
-    host, bullets: [LONG_BULLET], ledger: [], ...BASE,
+    host, bullets: [{ text: LONG_BULLET }], ledger: [], ...BASE,
   })
   expect(outcome!.staged).toBe(false)
   expect(outcome!.violations.some((v) => v.includes("60 words"))).toBe(true)
@@ -97,7 +97,7 @@ test("layer-1 form-only fail spends one revision round and can stage the revised
   const rec: Rec = { prompts: [] }
   const host = fakeHost(rec, [REVISE_REPLY_PASS, PASS_CHECKS])
   const [outcome] = await reviewAddedBullets({
-    host, bullets: [FORM_ONLY_BULLET], ledger: [], ...BASE,
+    host, bullets: [{ text: FORM_ONLY_BULLET }], ledger: [], ...BASE,
   })
   expect(outcome!.staged).toBe(true)
   expect(outcome!.bullet).toBe(REVISED_BULLET)
@@ -123,7 +123,7 @@ test("duplicate check's rejected list excludes form-only ledger entries", async 
     }),
     ledgerEntry({ bullet: "When a retry loop exceeds three attempts, escalate to a human.", violations: ["duplicate: matches existing harness line"] }),
   ]
-  await reviewAddedBullets({ host, bullets: [GOOD_BULLET], ledger, ...BASE })
+  await reviewAddedBullets({ host, bullets: [{ text: GOOD_BULLET }], ledger, ...BASE })
   expect(rec.prompts.length).toBe(1)
   expect(rec.prompts[0]!).toContain("When a retry loop exceeds three attempts, escalate to a human.")
   expect(rec.prompts[0]!).not.toContain("Always copy a damaged artifact to scratch before touching it.")
@@ -134,7 +134,7 @@ test("layer-1 pass + rubric pass stages the bullet unchanged", async () => {
   const rec: Rec = { prompts: [] }
   const host = fakeHost(rec, [PASS_CHECKS])
   const [outcome] = await reviewAddedBullets({
-    host, bullets: [GOOD_BULLET], ledger: [], ...BASE,
+    host, bullets: [{ text: GOOD_BULLET }], ledger: [], ...BASE,
   })
   expect(outcome!.staged).toBe(true)
   expect(outcome!.bullet).toBe(GOOD_BULLET)
@@ -147,7 +147,7 @@ test("rubric fail then a passing revision stages the revised text", async () => 
   const rec: Rec = { prompts: [] }
   const host = fakeHost(rec, [FAIL_CHECKS, REVISE_REPLY_PASS, PASS_CHECKS])
   const [outcome] = await reviewAddedBullets({
-    host, bullets: [GOOD_BULLET], ledger: [], ...BASE,
+    host, bullets: [{ text: GOOD_BULLET }], ledger: [], ...BASE,
   })
   expect(outcome!.staged).toBe(true)
   expect(outcome!.bullet).toBe(REVISED_BULLET)
@@ -162,7 +162,7 @@ test("rubric fail then a still-failing revision leaves it unstaged with final vi
   const rec: Rec = { prompts: [] }
   const host = fakeHost(rec, [FAIL_CHECKS, REVISE_REPLY_PASS, FAIL_CHECKS])
   const [outcome] = await reviewAddedBullets({
-    host, bullets: [GOOD_BULLET], ledger: [], ...BASE,
+    host, bullets: [{ text: GOOD_BULLET }], ledger: [], ...BASE,
   })
   expect(outcome!.staged).toBe(false)
   expect(outcome!.violations.some((v) => v.includes("category"))).toBe(true)
@@ -175,7 +175,7 @@ test("LLM down (runTextAgent → null) fails closed with an unparseable violatio
   const rec: Rec = { prompts: [] }
   const host = fakeHost(rec, [null, null])
   const [outcome] = await reviewAddedBullets({
-    host, bullets: [GOOD_BULLET], ledger: [], ...BASE,
+    host, bullets: [{ text: GOOD_BULLET }], ledger: [], ...BASE,
   })
   expect(outcome!.staged).toBe(false)
   expect(outcome!.violations.some((v) => v.includes("no parseable"))).toBe(true)
@@ -187,7 +187,7 @@ test("rejected ledger text is embedded in the review prompt", async () => {
   const host = fakeHost(rec, [PASS_CHECKS])
   const entry = ledgerEntry()
   await reviewAddedBullets({
-    host, bullets: [GOOD_BULLET], ledger: [entry], ...BASE,
+    host, bullets: [{ text: GOOD_BULLET }], ledger: [entry], ...BASE,
   })
   expect(rec.prompts.length).toBe(1)
   expect(rec.prompts[0]!.includes(entry.bullet)).toBe(true)
@@ -199,7 +199,7 @@ test("mechanize_instead fail routes to immediate abstain with the named command 
   const rec: Rec = { prompts: [] }
   const host = fakeHost(rec, [MECHANIZE_FAIL_CHECKS])
   const [outcome] = await reviewAddedBullets({
-    host, bullets: [GOOD_BULLET], ledger: [], ...BASE,
+    host, bullets: [{ text: GOOD_BULLET }], ledger: [], ...BASE,
   })
   expect(outcome!.staged).toBe(false)
   expect(outcome!.violations.some((v) => v.includes("mechanize_instead") && v.includes("bun test --filter migration-retry"))).toBe(true)
@@ -215,5 +215,63 @@ test("empty bullets array short-circuits to [] with zero LLM calls", async () =>
     host, bullets: [], ledger: [], ...BASE,
   })
   expect(out).toEqual([])
+  expect(rec.prompts.length).toBe(0)
+})
+
+// ── check screening (a3 routing T4) ─────────────────────────────────────────
+
+const STORE_PATH_CMD = "cat .kkamak/global/active/playbook.json"
+const LIVE_CMD = "test -s DONE-CHECK.txt"
+
+// (a) checked bullet whose cmd hits a Tier-B rejection → whole bullet
+// rejected, ledger text carries "screen-denied (<slug>)" and NEVER the raw
+// command string; screening happens BEFORE layer-1/rubric, so zero LLM calls.
+test("checked bullet whose cmd hits store-path is rejected whole, ledger text omits the cmd", async () => {
+  const rec: Rec = { prompts: [] }
+  const host = fakeHost(rec, [])
+  const [outcome] = await reviewAddedBullets({
+    host,
+    bullets: [{ text: GOOD_BULLET, check: { cmd: STORE_PATH_CMD, timeoutMs: 5000 } }],
+    ledger: [],
+    ...BASE,
+  })
+  expect(outcome!.staged).toBe(false)
+  expect(outcome!.bullet).toContain("screen-denied (store-path)")
+  expect(outcome!.bullet).not.toContain(STORE_PATH_CMD)
+  expect(outcome!.violations).toEqual(["check-screen:store-path"])
+  expect(rec.prompts.length).toBe(0)
+})
+
+// (b) checked bullet whose cmd passes Tier L → proceeds through the normal
+// layer-1 + rubric flow on its TEXT and, once staged, carries liveEligible:true.
+test("checked bullet passing Tier L stages with liveEligible true", async () => {
+  const rec: Rec = { prompts: [] }
+  const host = fakeHost(rec, [PASS_CHECKS])
+  const [outcome] = await reviewAddedBullets({
+    host,
+    bullets: [{ text: GOOD_BULLET, check: { cmd: LIVE_CMD, timeoutMs: 5000 } }],
+    ledger: [],
+    ...BASE,
+  })
+  expect(outcome!.staged).toBe(true)
+  expect(outcome!.bullet).toBe(GOOD_BULLET)
+  expect(outcome!.check).toEqual({ cmd: LIVE_CMD, timeoutMs: 5000, liveEligible: true })
+  expect(rec.prompts.length).toBe(1)
+})
+
+// (c) proposal JSON smuggling a "state" key inside the check object is
+// rejected outright — state is downstream-stamped only, never proposer-set.
+// No LLM call: this is caught before the screen even runs.
+test("checked bullet smuggling state in the check object is rejected without calling the LLM", async () => {
+  const rec: Rec = { prompts: [] }
+  const host = fakeHost(rec, [])
+  const [outcome] = await reviewAddedBullets({
+    host,
+    bullets: [{ text: GOOD_BULLET, check: { cmd: LIVE_CMD, timeoutMs: 5000, state: "blocking" } as never }],
+    ledger: [],
+    ...BASE,
+  })
+  expect(outcome!.staged).toBe(false)
+  expect(outcome!.violations).toEqual(["check-screen:state-not-proposer-set"])
   expect(rec.prompts.length).toBe(0)
 })

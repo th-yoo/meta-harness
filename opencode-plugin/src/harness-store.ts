@@ -36,6 +36,7 @@
 import * as fs from "fs"
 import * as os from "os"
 import * as path from "path"
+import { createHash } from "crypto"
 import { writeJsonAtomic } from "./bench/util.ts"
 // Function-level cycle (failure-retrieval imports store readers back) — safe:
 // every cross-reference resolves at call time, not import time.
@@ -343,6 +344,48 @@ export interface AbVerdict {
    * pairs (cmd-ab.ts's ab-stats.ts pairedSpeedStats). Absent entirely on
    * pre-W1a verdicts. */
   speed?: { heldIn: AbSpeedStats | null; heldOut: AbSpeedStats | null }
+  // a3 routing T8 (additive-optional — old verdicts still parse): per-arm
+  // rule-routing checked-bullet identity. The SAME `checksHashOf` hash T5's
+  // `env.checksHash` records for arm B alone — this is where arm A's (the
+  // active baseline's) OWN identity lands, since the single `env` block
+  // above only ever covers arm B (T5 review note: envBlock is computed
+  // once, from the candidate/arm-B harness). Stamped on EVERY verdict going
+  // forward (checkless included, coalesced to `EMPTY_CHECKS_HASH` on both
+  // sides) — optional here only because pre-T8 verdicts on disk lack the
+  // key entirely, same convention as `maxAgentTimeout` above.
+  activeChecksHash?: string
+  candidateChecksHash?: string
+  /** Stamped iff EITHER checksHash above is not `EMPTY_CHECKS_HASH`: a
+   * checked-rule bundle's regressions are NOT attributable between rule
+   * TEXT (the helpful/harmful playbook bookkeeping every ab already scores)
+   * and check BEHAVIOR (the gate's pass/block decisions) — a candidate that
+   * "loses" could be a worse RULE or just a stricter/flakier CHECK. See
+   * `ruleCheckTotals` below and cmd-run.ts's `RunTaskResult.ruleChecks` (the
+   * per-attempt annotation this aggregates). Absent — not merely
+   * false/empty — on a checkless verdict, so existing consumers that only
+   * ever `if (verdict.checkBundleCaveat)` stay byte-shape-compatible. */
+  checkBundleCaveat?: string
+  /** Per-rule `{blocked, exhausted}` totals aggregated across every
+   * attempt's `ruleChecks` annotation (T7), split per arm — the caveat's
+   * pointer target. `blocked` sums `perRule[bulletId].blocked` across
+   * attempts that named this bulletId as the (sole, most-recently-failing)
+   * rule; `exhausted` counts ATTEMPTS whose gate exhausted while THIS
+   * bulletId was that failing rule — rounds/exhausted are gate-level, not
+   * per-rule (rule-gate.ts's F2 scope cut: `perRule` tracks only the most
+   * recently failing bulletId's entry), so per-attempt attribution to the
+   * failing bulletId is the closest reading state.json's shape supports.
+   * Present only alongside `checkBundleCaveat` (undefined on a checkless
+   * verdict).
+   *
+   * RUN-TIME DUTY (not code, not this task): the FIRST real checked-rule ab
+   * run whose verdict lands here with a non-empty caveat must ALSO stamp a
+   * boundary timestamp in docs/2026-08-01-gauntlet-adoption-ledger.md (a3
+   * plan documentation step) — an operational step for whoever runs that
+   * ab, not something verdict assembly can do at write time. */
+  ruleCheckTotals?: {
+    active: Record<string, { blocked: number; exhausted: number }>
+    candidate: Record<string, { blocked: number; exhausted: number }>
+  }
 }
 
 /** Accept a candidate iff the v2 decision says "accept"; fall back to the v1
@@ -410,13 +453,15 @@ export function readActiveBudget(storeRoot: string): {
   minAgentTimeout?: number
   timeoutRecording?: boolean
   resourceEnforcement?: boolean
+  checksHash?: string
 } {
   const version = activeVersion(storeRoot)
   if (!version) return {}
   const score = readScore(storeRoot, version)
   const { maxAgentTimeout, minAgentTimeout, resourceEnforcement } = budgetFromSessions(score.sessions)
   const activeVerdict = readAbVerdict(storeRoot, version)
-  return { maxAgentTimeout, minAgentTimeout, resourceEnforcement, timeoutRecording: activeVerdict?.timeoutRecording }
+  const checksHash = checksHashOf(readPlaybook(storeRoot))
+  return { maxAgentTimeout, minAgentTimeout, resourceEnforcement, timeoutRecording: activeVerdict?.timeoutRecording, checksHash }
 }
 
 /** The budget-identity-bearing subset of fields `budgetIdentityMatches`'s
@@ -430,20 +475,38 @@ export interface BudgetStamp {
   minAgentTimeout?: number
   timeoutRecording?: boolean
   env?: { resourceEnforcement?: boolean }
+  /** sha256 of the rule-routing checks bundle the ACTIVE arm measured (a3
+   * routing T2/T8). Named to match `AbVerdict.activeChecksHash` — the real
+   * field cmd-ab.ts's verdictDict stamps (T8) — NOT a bare `checksHash`,
+   * which no producer ever writes onto a verdict (fix round 1, reviewer
+   * finding: the old `checksHash` name here silently read `undefined` off
+   * every real `AbVerdict`, masked only by hand-built test literals that
+   * happened to carry that key). Absent on pre-T8 records — coalesced
+   * against `EMPTY_CHECKS_HASH` below, matching the file's `?? 0`/`?? false`
+   * back-compat convention. Compared against the SECOND param's `checksHash`
+   * (the layer's CURRENT active-playbook hash, `readActiveBudget`'s real
+   * field name — that side was never wrong, only this verdict side was). */
+  activeChecksHash?: string
 }
 
 /**
  * True iff `verdict`'s budget-identity tuple {maxAgentTimeout, timeoutRecording,
- * resourceEnforcement} matches `activeBudget`'s — the gate /mh-activate uses
- * (engine.ts) before activating an account-scope candidate. `timeoutRecording`
- * and `resourceEnforcement` are `?? false`-coalesced on both sides (an absent
- * key and an explicit `false` mean the same thing, matching the existing
- * resourceEnforcement-coalescing convention elsewhere in this codebase — see
- * cmd-ab.ts's --resume guard).
+ * resourceEnforcement, activeChecksHash} matches `activeBudget`'s — the gate
+ * /mh-activate uses (engine.ts) before activating an account-scope candidate.
+ * `timeoutRecording` and `resourceEnforcement` are `?? false`-coalesced on
+ * both sides (an absent key and an explicit `false` mean the same thing,
+ * matching the existing resourceEnforcement-coalescing convention elsewhere
+ * in this codebase — see cmd-ab.ts's --resume guard). The checksHash leg
+ * follows the same convention, coalescing an absent hash (pre-T8 record) to
+ * `EMPTY_CHECKS_HASH` (the hash of "no checks") on both sides — comparing
+ * `verdict.activeChecksHash` (what the ab's ACTIVE arm measured) against
+ * `activeBudget.checksHash` (the layer's CURRENT active-playbook hash): the
+ * question this leg answers is "has the active baseline's own checked-bundle
+ * identity drifted since this ab ran", not anything about the candidate arm.
  */
 export function budgetIdentityMatches(
   verdict: BudgetStamp,
-  activeBudget: { maxAgentTimeout?: number; minAgentTimeout?: number; timeoutRecording?: boolean; resourceEnforcement?: boolean },
+  activeBudget: { maxAgentTimeout?: number; minAgentTimeout?: number; timeoutRecording?: boolean; resourceEnforcement?: boolean; checksHash?: string },
 ): boolean {
   if (verdict.maxAgentTimeout === undefined) return true // pre-Loop-3 — no claim to violate
   if (verdict.maxAgentTimeout !== activeBudget.maxAgentTimeout) return false
@@ -456,6 +519,7 @@ export function budgetIdentityMatches(
   const verdictEnforcement = verdict.env?.resourceEnforcement ?? false
   const activeEnforcement = activeBudget.resourceEnforcement ?? false
   if (verdictEnforcement !== activeEnforcement) return false
+  if ((verdict.activeChecksHash ?? EMPTY_CHECKS_HASH) !== (activeBudget.checksHash ?? EMPTY_CHECKS_HASH)) return false
   return true
 }
 
@@ -962,6 +1026,18 @@ export function createCandidate(
 // (active bullets, "- text" per line). Every existing reader keeps reading plain
 // system.md unchanged — that is the whole backward-compat story.
 
+/** A rule-routing executable check attached to a bullet (a3 rule routing).
+ * `state` and `liveEligible` are stamped downstream (applyPlaybookOps /
+ * check-screen.ts) — never accepted directly from a proposer/curator op. */
+export interface BulletCheck {
+  cmd: string
+  timeoutMs: number
+  /** live-consumer state; TB2 trial arms always enforce regardless. */
+  state: "shadow" | "blocking"
+  /** Screen-stamped (Tier L, check-screen.ts). Never proposer-set. */
+  liveEligible?: boolean
+}
+
 export interface PlaybookBullet {
   id: string
   text: string
@@ -973,6 +1049,7 @@ export interface PlaybookBullet {
   updatedAt: string
   generality?: "universal" | "vendor" | "model"
   slice?: string
+  check?: BulletCheck
 }
 
 export interface Playbook {
@@ -982,8 +1059,13 @@ export interface Playbook {
 }
 
 export type PlaybookOp =
-  | { op: "add"; text: string; generality?: "universal" | "vendor" | "model"; slice?: string }
-  | { op: "update"; id: string; text: string; generality?: "universal" | "vendor" | "model"; slice?: string }
+  | { op: "add"; text: string; generality?: "universal" | "vendor" | "model"; slice?: string; check?: { cmd: string; timeoutMs: number } }
+  // `check` on an update op is tri-state (finding 2, a3 rule-routing review):
+  // `undefined` (field omitted) = KEEP whatever check the bullet already has;
+  // `null` = DROP it (the curator prompt's documented "drop a check" path,
+  // which pre-fix had no actual mechanism — omitting the field always meant
+  // keep); an object = SET/REPLACE it. See applyPlaybookOps below.
+  | { op: "update"; id: string; text: string; generality?: "universal" | "vendor" | "model"; slice?: string; check?: { cmd: string; timeoutMs: number } | null }
   | { op: "delete"; id: string }
 
 export function readPlaybook(storeRoot: string, version?: string): Playbook | null {
@@ -1052,13 +1134,20 @@ export function applyPlaybookOps(base: Playbook, ops: PlaybookOp[]): Playbook {
     if (op.op === "add") {
       bullets.push({ id: `b${nextId++}`, text: op.text, helpful: 0, harmful: 0,
         addedBy: "candidate", status: "active", createdAt: now, updatedAt: now,
-        generality: coerceGen(op.generality), slice: capSlice(op.slice) })
+        generality: coerceGen(op.generality), slice: capSlice(op.slice),
+        ...(op.check ? { check: { cmd: op.check.cmd, timeoutMs: op.check.timeoutMs, state: "shadow" as const } } : {}) })
     } else if (op.op === "update") {
       const b = bullets.find((x) => x.id === op.id)
       if (b) {
         b.text = op.text; b.updatedAt = now
         if (op.generality !== undefined) b.generality = coerceGen(op.generality)
         if (op.slice !== undefined) b.slice = capSlice(op.slice)
+        // Tri-state: null → DELETE the check (finding 2's drop mechanism);
+        // undefined (field omitted) → KEEP whatever check is already there;
+        // an object → SET/REPLACE it, always re-shadowed (a revised check is
+        // unproven again, same as a brand-new one).
+        if (op.check === null) delete b.check
+        else if (op.check !== undefined) b.check = { cmd: op.check.cmd, timeoutMs: op.check.timeoutMs, state: "shadow" as const }
       }
     } else if (op.op === "delete") {
       const b = bullets.find((x) => x.id === op.id)
@@ -1067,6 +1156,55 @@ export function applyPlaybookOps(base: Playbook, ops: PlaybookOp[]): Playbook {
   }
   return { schemaVersion: 1, nextId, bullets }
 }
+
+/** Canonical (order-independent, key-order-fixed) JSON serialization of a
+ * checks list — the hash input for `checksHashOf`. Sorted by `bulletId` so
+ * op-application order never perturbs the hash; each entry serialized with
+ * exactly the keys {bulletId, cmd, timeoutMs} in that order (state/
+ * liveEligible deliberately excluded — they're live-consumer/screen state,
+ * not part of the check's *identity*). */
+export function canonicalChecksJson(
+  checks: Array<{ bulletId: string; cmd: string; timeoutMs: number }>,
+): string {
+  const sorted = [...checks].sort((a, b) => (a.bulletId < b.bulletId ? -1 : a.bulletId > b.bulletId ? 1 : 0))
+  return "[" + sorted.map((c) => `{"bulletId":${JSON.stringify(c.bulletId)},"cmd":${JSON.stringify(c.cmd)},"timeoutMs":${c.timeoutMs}}`).join(",") + "]"
+}
+
+/** A playbook's ACTIVE-status checked bullets, in `canonicalChecksJson`'s
+ * input shape — the enforced set a TB2 arm injects (a3 routing T7's
+ * cmd-run.ts/cmd-ab.ts wiring) AND the input `checksHashOf` hashes below.
+ * Extracted so both call sites share one filter instead of two independent
+ * copies drifting apart. `null` (no playbook) yields `[]`. */
+export function activeChecks(
+  playbook: Playbook | null,
+): Array<{ bulletId: string; cmd: string; timeoutMs: number }> {
+  return (playbook?.bullets ?? [])
+    .filter((b) => b.status === "active" && b.check)
+    .map((b) => ({ bulletId: b.id, cmd: b.check!.cmd, timeoutMs: b.check!.timeoutMs }))
+}
+
+/** sha256 (full hex) of an already-extracted checks list, canonically
+ * serialized (`canonicalChecksJson`). `checksHashOf` below is the
+ * single-playbook convenience wrapper (`checksHashOfList(activeChecks(pb))`);
+ * this direct form exists for a3 routing T7's cmd-run.ts, which unions
+ * checks across MULTIPLE composed layers (one assembled harness, no arm
+ * split — spec §3's single-harness degenerate case) and so has no single
+ * `Playbook` object to hand `checksHashOf`. */
+export function checksHashOfList(checks: Array<{ bulletId: string; cmd: string; timeoutMs: number }>): string {
+  return createHash("sha256").update(canonicalChecksJson(checks), "utf-8").digest("hex")
+}
+
+/** sha256 (full hex) of the ACTIVE-status bullets' checks, canonically
+ * serialized — the budget-identity tuple's rule-routing component
+ * (`budgetIdentityMatches`, a3 routing T2). A playbook with zero checks (or
+ * `null`, e.g. no playbook at all) hashes to `EMPTY_CHECKS_HASH`. */
+export function checksHashOf(playbook: Playbook | null): string {
+  return checksHashOfList(activeChecks(playbook))
+}
+
+/** Precomputed `checksHashOf(null)` — the hash every legacy/checkless
+ * playbook coalesces to (`budgetIdentityMatches`'s `?? EMPTY_CHECKS_HASH`). */
+export const EMPTY_CHECKS_HASH = checksHashOf(null)
 
 /** Reflective counter attribution (ACE): ++helpful/++harmful on the ACTIVE
  * playbook's bullets, from the proposer's diagnosis of the active version's runs. */

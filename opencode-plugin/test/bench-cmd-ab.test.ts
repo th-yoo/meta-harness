@@ -13,12 +13,17 @@ import {
   projectGlobalRoot,
   createCandidate,
   writeActive,
+  checksHashOf,
+  EMPTY_CHECKS_HASH,
+  budgetIdentityMatches,
+  type Playbook,
 } from "../src/harness-store.ts"
 import { BenchError } from "../src/bench/util.ts"
 import { readResourceProfile, hostClass, updateResourceProfile } from "../src/bench/resource-profile.ts"
 import * as schedulerReal from "../src/bench/scheduler.ts"
 import { PRESSURE_POLL_SEC } from "../src/bench/host-pressure.ts"
 import { mcnemarExactOneSided } from "../src/bench/ab-stats.ts"
+import type { RuleGateCheck } from "../src/bench/rule-gate.ts"
 
 // Snapshot the REAL scheduler.ts exports at module-eval time (before any
 // mock.module call below) — same pattern as bench-cmd-run.test.ts's own
@@ -78,6 +83,31 @@ function setupCandidate(paths: BenchPaths, layer: "project-global", candidate: s
   writeActive(root, "v0", "baseline sys")
   createCandidate(root, candidate, "candidate sys")
   return root
+}
+
+/** a3 routing T7: a one-bullet Playbook whose sole bullet carries an active
+ * check — the fixture shape `createCandidate`'s `playbook` param accepts
+ * (harness-store.ts's PlaybookBullet/BulletCheck). `bulletId`/`cmd` are
+ * parameterized so refusal-message assertions can pin the exact id. */
+function checkedPlaybook(bulletId = "b1", cmd = "true"): Playbook {
+  const now = new Date().toISOString()
+  return {
+    schemaVersion: 1,
+    nextId: 2,
+    bullets: [
+      {
+        id: bulletId,
+        text: "run the check before finishing",
+        helpful: 0,
+        harmful: 0,
+        addedBy: "candidate",
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+        check: { cmd, timeoutMs: 5000, state: "shadow" },
+      },
+    ],
+  }
 }
 
 /** cmdAb computes its provenance env block via `inContainerAgentVersion`
@@ -147,6 +177,323 @@ test("cmdAb: no splits.json and no explicit tasks dies", async () => {
   await expect(
     cmdAb(paths, { layer: "project-global", candidate: "v1" } as CmdAbArgs, async () => res()),
   ).rejects.toThrow(BenchError)
+})
+
+// ── a3 routing T7: driver refusal for checked bullets ───────────────────────
+// Every test here uses `isolatedPaths` (a NESTED termBenchDir, see that
+// helper's own note below), never the plain tmpDir()+fakeBenchPaths(dir,
+// tbRoot) shortcut most other tests in this file use — that shortcut shares
+// metaRoot = os.tmpdir() across every test that uses it, which is harmless
+// for score.json (each test overwrites the candidate/score dir it touches)
+// but NOT for an ACTIVE playbook: `writeActive`'s `playbook` param is
+// tri-state (undefined = "leave alone"), so a later unrelated test's
+// `writeActive(root, "v0", "baseline sys")` (no playbook arg) would silently
+// inherit an EARLIER checked-bullet test's stale active playbook on the
+// shared root and spuriously refuse. Isolation is required here specifically
+// because this is the first place in this file an active playbook (not just
+// system.md) gets written.
+
+test("cmdAb: candidate carries a checked bullet + default (opencode) driver refuses, naming the bullet id and --driver claude-code", async () => {
+  const paths = isolatedPaths([])
+  fs.mkdirSync(paths.tbRoot, { recursive: true }) // writeTaskTomls([]) never creates it; --all needs it to exist
+  const root = projectGlobalRoot(paths.metaRoot)
+  createCandidate(root, "v0", "baseline sys")
+  writeActive(root, "v0", "baseline sys")
+  createCandidate(root, "v1", "candidate sys", "", checkedPlaybook("b7", "true"))
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return res()
+  }
+
+  let err: unknown
+  try {
+    await cmdAb(paths, { layer: "project-global", candidate: "v1", all: true } as CmdAbArgs, fake, fakeExec)
+  } catch (e) {
+    err = e
+  }
+  expect(err).toBeInstanceOf(BenchError)
+  const msg = (err as Error).message
+  expect(msg).toContain("b7")
+  expect(msg).toContain("--driver claude-code")
+  expect(ran).toBe(false)
+})
+
+test("cmdAb: same checked candidate + --driver claude-code proceeds past the refusal point (task actually runs)", async () => {
+  const paths = isolatedPaths(["t1"])
+  const root = projectGlobalRoot(paths.metaRoot)
+  createCandidate(root, "v0", "baseline sys")
+  writeActive(root, "v0", "baseline sys")
+  createCandidate(root, "v1", "candidate sys", "", checkedPlaybook("b7", "true"))
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return res()
+  }
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, driver: "claude-code" } as CmdAbArgs,
+      fake,
+      fakeExec,
+    ),
+  )
+  expect(ran).toBe(true)
+})
+
+test("cmdAb: prose-only candidate (no checks) on the default opencode driver is unaffected", async () => {
+  const paths = isolatedPaths(["t1"])
+  setupCandidate(paths, "project-global", "v1") // prose-only, no playbook at all
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return res()
+  }
+  await quiet(() =>
+    cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1 } as CmdAbArgs, fake, fakeExec),
+  )
+  expect(ran).toBe(true)
+})
+
+test("cmdAb: the ACTIVE arm's inherited checked bullet ALSO refuses on a non-claude-code driver, even when the candidate itself is prose-only (spec §3 symmetry)", async () => {
+  const paths = isolatedPaths([])
+  fs.mkdirSync(paths.tbRoot, { recursive: true }) // writeTaskTomls([]) never creates it; --all needs it to exist
+  const root = projectGlobalRoot(paths.metaRoot)
+  // Active baseline already carries an adopted checked bullet; the candidate
+  // under test is pure prose.
+  createCandidate(root, "v0", "baseline sys", "", checkedPlaybook("b1", "true"))
+  writeActive(root, "v0", "baseline sys", "", checkedPlaybook("b1", "true"))
+  createCandidate(root, "v1", "candidate sys")
+
+  let ran = false
+  const fake: RunOneTaskFn = async () => {
+    ran = true
+    return res()
+  }
+  let err: unknown
+  try {
+    await cmdAb(paths, { layer: "project-global", candidate: "v1", all: true } as CmdAbArgs, fake, fakeExec)
+  } catch (e) {
+    err = e
+  }
+  expect(err).toBeInstanceOf(BenchError)
+  expect((err as Error).message).toContain("b1")
+  expect(ran).toBe(false)
+})
+
+test("cmdAb: per-arm injection symmetry — arm A gets ONLY the active playbook's checks, arm B ONLY the candidate's (NOT combined, spec §3 INJECTION SYMMETRY)", async () => {
+  const paths = isolatedPaths(["t1"])
+  const root = projectGlobalRoot(paths.metaRoot)
+  const activeCheckedPb = checkedPlaybook("bX", "checkX")
+  // Candidate playbook = the active bullet UNCHANGED (bX) PLUS one genuinely
+  // new checked bullet (bY) — the delta-under-test spec §3 cares about. If
+  // cmd-ab ever regressed to injecting the COMBINED set into both arms
+  // (the exact mutation this test pins against), arm A would wrongly see
+  // bY too.
+  const candidateCheckedPb: Playbook = {
+    schemaVersion: 1,
+    nextId: 3,
+    bullets: [
+      ...activeCheckedPb.bullets,
+      {
+        id: "bY",
+        text: "run the second check before finishing",
+        helpful: 0,
+        harmful: 0,
+        addedBy: "candidate",
+        status: "active",
+        createdAt: activeCheckedPb.bullets[0]!.createdAt,
+        updatedAt: activeCheckedPb.bullets[0]!.updatedAt,
+        check: { cmd: "checkY", timeoutMs: 5000, state: "shadow" },
+      },
+    ],
+  }
+  createCandidate(root, "v0", "baseline sys", "", activeCheckedPb)
+  writeActive(root, "v0", "baseline sys", "", activeCheckedPb)
+  createCandidate(root, "v1", "candidate sys", "", candidateCheckedPb)
+
+  // Capture the `checks` arg (12th positional param) runOneTask actually
+  // received, per call, in call order — runTaskPairs always awaits arm A
+  // (active) to completion before starting arm B (candidate), so with
+  // k=1/one task there are exactly two calls and array order IS arm
+  // identity (no harnessMd string-sniffing needed).
+  const seenChecks: (RuleGateCheck[] | undefined)[] = []
+  const fake: RunOneTaskFn = async (_paths, _task, _model, _variant, _harnessMd, _at, _vt, _staging, _driver, _resources, _execFn, _prepareAuth, checks) => {
+    seenChecks.push(checks)
+    return res()
+  }
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, driver: "claude-code" } as CmdAbArgs,
+      fake,
+      fakeExec,
+    ),
+  )
+
+  expect(seenChecks.length).toBe(2)
+  const [armAChecks, armBChecks] = seenChecks
+  expect(armAChecks).toEqual([{ bulletId: "bX", cmd: "checkX", timeoutMs: 5000 }])
+  expect(armBChecks).toEqual([
+    { bulletId: "bX", cmd: "checkX", timeoutMs: 5000 },
+    { bulletId: "bY", cmd: "checkY", timeoutMs: 5000 },
+  ])
+})
+
+// ── a3 routing T8: ab verdict checksHash + checkBundleCaveat ───────────────
+
+test("cmdAb: checked ab verdict carries per-arm checksHash + checkBundleCaveat + ruleCheckTotals (a3 routing T8)", async () => {
+  const paths = isolatedPaths(["t1"])
+  const root = projectGlobalRoot(paths.metaRoot)
+  const activeCheckedPb = checkedPlaybook("bX", "checkX")
+  // Candidate playbook = the active bullet unchanged (bX) PLUS a genuinely
+  // new checked bullet (bY) — mirrors the injection-symmetry fixture above
+  // so arm A's hash and arm B's hash are provably DIFFERENT (distinct
+  // bundles), not just both non-empty.
+  const candidateCheckedPb: Playbook = {
+    schemaVersion: 1,
+    nextId: 3,
+    bullets: [
+      ...activeCheckedPb.bullets,
+      {
+        id: "bY",
+        text: "run the second check before finishing",
+        helpful: 0,
+        harmful: 0,
+        addedBy: "candidate",
+        status: "active",
+        createdAt: activeCheckedPb.bullets[0]!.createdAt,
+        updatedAt: activeCheckedPb.bullets[0]!.updatedAt,
+        check: { cmd: "checkY", timeoutMs: 5000, state: "shadow" },
+      },
+    ],
+  }
+  createCandidate(root, "v0", "baseline sys", "", activeCheckedPb)
+  writeActive(root, "v0", "baseline sys", "", activeCheckedPb)
+  createCandidate(root, "v1", "candidate sys", "", candidateCheckedPb)
+
+  // runTaskPairs always awaits arm A (active) to completion before starting
+  // arm B (candidate) — same call-order-is-arm-identity precedent the
+  // injection-symmetry test above relies on. Arm A's attempt reports one
+  // block on bX (not yet exhausted); arm B's reports a block on bY that DID
+  // exhaust — distinct per-arm/per-rule numbers so the aggregation can't
+  // pass by accident (e.g. summing the wrong arm, or conflating exhausted
+  // counts across rules).
+  let callIdx = 0
+  const fake: RunOneTaskFn = async () => {
+    callIdx++
+    if (callIdx === 1) {
+      return res({ ruleChecks: { rounds: 1, exhausted: false, perRule: { bX: { blocked: 1 } } } })
+    }
+    return res({ ruleChecks: { rounds: 2, exhausted: true, perRule: { bY: { blocked: 2 } } } })
+  }
+
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, driver: "claude-code" } as CmdAbArgs,
+      fake,
+      fakeExec,
+    ),
+  )
+
+  const verdict = readAbVerdict(root, "v1")
+  expect(verdict).not.toBeNull()
+  expect(verdict!.activeChecksHash).toBe(checksHashOf(activeCheckedPb))
+  expect(verdict!.candidateChecksHash).toBe(checksHashOf(candidateCheckedPb))
+  expect(verdict!.activeChecksHash).not.toBe(EMPTY_CHECKS_HASH)
+  expect(verdict!.candidateChecksHash).not.toBe(EMPTY_CHECKS_HASH)
+  expect(verdict!.activeChecksHash).not.toBe(verdict!.candidateChecksHash)
+  expect(verdict!.checkBundleCaveat).toBe(
+    "checked-rule bundle: regressions are not attributable between rule text and check behavior; see per-rule ruleChecks block/exhaust counts",
+  )
+  expect(verdict!.ruleCheckTotals).toEqual({
+    active: { bX: { blocked: 1, exhausted: 0 } },
+    candidate: { bY: { blocked: 2, exhausted: 1 } },
+  })
+})
+
+test("cmdAb: checkless ab verdict carries EMPTY_CHECKS_HASH on both arms, no caveat, no totals (a3 routing T8)", async () => {
+  const paths = isolatedPaths(["t1"])
+  const root = setupCandidate(paths, "project-global", "v1") // prose-only playbooks — no checks
+  const fake: RunOneTaskFn = async () => res()
+
+  await quiet(() =>
+    cmdAb(paths, { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1 } as CmdAbArgs, fake, fakeExec),
+  )
+
+  const verdict = readAbVerdict(root, "v1")
+  expect(verdict).not.toBeNull()
+  expect(verdict!.activeChecksHash).toBe(EMPTY_CHECKS_HASH)
+  expect(verdict!.candidateChecksHash).toBe(EMPTY_CHECKS_HASH)
+  expect(verdict!.checkBundleCaveat).toBeUndefined()
+  expect(verdict!.ruleCheckTotals).toBeUndefined()
+})
+
+test("cmdAb + budgetIdentityMatches SEAM: a real cmd-ab-written verdict against a checked active baseline gates on the REAL field name (a3 routing T8 fix round 1)", async () => {
+  // Reviewer finding: budgetIdentityMatches read `verdict.checksHash` — a key
+  // NO real AbVerdict carries (T8 stamped activeChecksHash/candidateChecksHash
+  // instead). Unit tests that hand-built a `{..., checksHash: "aaaa"}` object
+  // literal for the verdict side masked this — it type-checks (BudgetStamp's
+  // checksHash is optional) but no PRODUCER ever writes that key. This test
+  // goes through the REAL seam: a real cmdAb run writes a real ab-verdict.json,
+  // readAbVerdict reads it back with whatever shape cmd-ab.ts ACTUALLY
+  // serialized, and THAT object (not a hand-built stand-in) is what gets
+  // handed to budgetIdentityMatches.
+  const paths = isolatedPaths(["t1"])
+  const root = projectGlobalRoot(paths.metaRoot)
+  const activeCheckedPb = checkedPlaybook("bX", "checkX")
+  createCandidate(root, "v0", "baseline sys", "", activeCheckedPb)
+  writeActive(root, "v0", "baseline sys", "", activeCheckedPb)
+  createCandidate(root, "v1", "candidate sys")
+
+  const fake: RunOneTaskFn = async () => res()
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, driver: "claude-code" } as CmdAbArgs,
+      fake,
+      fakeExec,
+    ),
+  )
+
+  const verdict = readAbVerdict(root, "v1")
+  expect(verdict).not.toBeNull()
+  // Precondition: the active arm really did measure a non-empty checked
+  // bundle — this is the "checked ACTIVE baseline" the finding's first case
+  // names, and the case masked by T2's hand-built literals.
+  expect(verdict!.activeChecksHash).not.toBe(EMPTY_CHECKS_HASH)
+
+  // Mirror the verdict's own {maxAgentTimeout, minAgentTimeout,
+  // timeoutRecording, resourceEnforcement} tuple back at it so ONLY the
+  // checksHash leg is under test (readActiveBudget's OTHER legs depend on
+  // the active version's own recorded sessions, which this fixture never
+  // populates — orthogonal to the bug under test here).
+  const tupleMatchingActiveBudget = (checksHash: string) => ({
+    maxAgentTimeout: verdict!.maxAgentTimeout,
+    minAgentTimeout: verdict!.minAgentTimeout,
+    timeoutRecording: verdict!.timeoutRecording,
+    resourceEnforcement: verdict!.env?.resourceEnforcement,
+    checksHash,
+  })
+
+  // Case 1 (checked-active + matching verdict): the layer's active baseline
+  // is STILL measured at the same checked identity the ab ran under →
+  // legitimate activation must be ALLOWED (true). Before the fix this read
+  // undefined verdict.checksHash -> EMPTY_CHECKS_HASH -> mismatch -> false
+  // (the reviewer's "every legitimate activation hard-blocks" symptom).
+  expect(budgetIdentityMatches(verdict!, tupleMatchingActiveBudget(verdict!.activeChecksHash!))).toBe(true)
+
+  // Case 2 (checkless-active + non-empty verdict activeChecksHash): the
+  // layer's active baseline has since drifted to checkless while this
+  // verdict measured a real checked identity — activation must be REFUSED
+  // (false). Before the fix this read undefined verdict.checksHash ??
+  // EMPTY_CHECKS_HASH == activeBudget.checksHash (also EMPTY) -> silently
+  // treated as a match -> true (the reviewer's "silent false-pass" symptom).
+  expect(budgetIdentityMatches(verdict!, tupleMatchingActiveBudget(EMPTY_CHECKS_HASH))).toBe(false)
 })
 
 // ── legacy explicit-tasks mode ───────────────────────────────────────────

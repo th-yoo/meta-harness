@@ -23,6 +23,7 @@ import {
   recordSession,
   writeTrajectory,
   pruneTrajectories,
+  EMPTY_CHECKS_HASH,
   type ToolUsage,
   type TrajEvent,
   type SessionRecord,
@@ -212,6 +213,25 @@ export interface EnvBlock {
    * budgetIdentityMatches, cmd-ab.ts's --resume guard) coalesce an absent key
    * and an explicit 0 to the same "no floor" via `?? 0`. */
   minAgentTimeout?: number
+  /** sha256 (full hex, harness-store.ts's `checksHashOf`/`checksHashOfList`)
+   * of the rule-routing checked-bullet bundle this run/arm's ASSEMBLED
+   * harness actually enforces (a3 routing T5, threaded end-to-end by T7).
+   * ALWAYS present (unlike `minAgentTimeout` above) — same always-present
+   * precedent as `resourceEnforcement`: defaults to `EMPTY_CHECKS_HASH` (the
+   * hash of "no checks") only for a caller that never passes it (legacy/
+   * no-playbook call sites) — not a live placeholder for either shipped
+   * command. Both cmd-run.ts and cmd-ab.ts thread the REAL hash here:
+   * cmd-run.ts's `runChecksHash` is `checksHashOfList` over the UNION of
+   * `activeChecks` across every composed layer's resolved (pinned-or-active)
+   * playbook — its single-harness degenerate case, no arm split; cmd-ab.ts
+   * passes its own per-arm `checksHashOf` result into each arm's env block
+   * (`activeChecksHash` for arm A, `candidateChecksHash` for arm B). Those
+   * same per-arm hashes are ALSO carried forward onto the AbVerdict type
+   * itself (harness-store.ts's `activeChecksHash`/`candidateChecksHash`
+   * fields, a3 routing T8) — that pair is what `budgetIdentityMatches`
+   * compares across runs; this field is only the per-record stamp of what
+   * that one run/arm enforced at record time. */
+  checksHash: string
 }
 
 /**
@@ -243,6 +263,13 @@ export interface EnvBlock {
  * Stamped ONLY when truthy (a real floor); omitted otherwise so a flag-off
  * run's env block is byte-identical to every pre-feature record. Every existing
  * caller (that never passes it) is unaffected.
+ *
+ * `checksHash` (rule-routing checked-bullet identity, a3 routing T5) is a
+ * further trailing param defaulting to `EMPTY_CHECKS_HASH` — same
+ * always-present-with-a-default idiom as `resourceEnforcement` above (as
+ * opposed to `minAgentTimeout`'s omit-when-absent idiom), so every existing
+ * caller that never passes it keeps producing an env block with the
+ * "checkless" hash rather than a missing key.
  */
 export async function envBlock(
   harnessMd: string,
@@ -254,6 +281,7 @@ export async function envBlock(
   driverId = "opencode",
   resourceEnforcement = false,
   minAgentTimeout?: number,
+  checksHash: string = EMPTY_CHECKS_HASH,
 ): Promise<EnvBlock> {
   const [ver, sha] = await Promise.all([
     agentVersionOverride !== undefined ? Promise.resolve(agentVersionOverride) : opencodeVersion(execFn),
@@ -268,6 +296,7 @@ export async function envBlock(
     provider,
     driver: driverId,
     resourceEnforcement,
+    checksHash,
     ...(minAgentTimeout ? { minAgentTimeout } : {}),
   }
 }

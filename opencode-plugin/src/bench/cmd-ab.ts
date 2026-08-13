@@ -25,7 +25,7 @@ import { join } from "node:path"
 import type { StagingMode } from "./cmd-oracle.ts"
 import { podman } from "./exec.ts"
 import type { ExecFn } from "./staging.ts"
-import { runTaskOnce, inContainerAgentVersion, runWithOomRetry, type RunOneTaskFn } from "./cmd-run.ts"
+import { runTaskOnce, inContainerAgentVersion, runWithOomRetry, type RunOneTaskFn, type RunTaskResult } from "./cmd-run.ts"
 import { getDriver } from "./drivers/index.ts"
 import { assembleAgentsMd, envBlock, sessionRecord } from "./record.ts"
 import { layerStoreRoots, type LayerName } from "./record.ts"
@@ -65,6 +65,10 @@ import {
   pruneTrajectories,
   appendMetaMetric,
   readMhConfig,
+  readPlaybook,
+  checksHashOf,
+  activeChecks,
+  EMPTY_CHECKS_HASH,
   type AbSetStats,
   type AbSpeedStats,
 } from "../harness-store.ts"
@@ -82,6 +86,18 @@ interface AbTaskResult {
    * pairedSpeedStats, never crashing or backfilling. */
   candidateElapsed?: number[]
   activeElapsed?: number[]
+  /** a3 routing T8: per-attempt `ruleChecks` annotation (T7's post-attempt
+   * in-container rule-gate state readback — cmd-run.ts's `RunTaskResult`),
+   * index-aligned with candidate/active/candidateElapsed/activeElapsed
+   * ONLY IN THE SENSE that entries are pushed in the same order attempts
+   * complete — unlike those arrays, a checkless attempt pushes NOTHING (not
+   * even a hole), so these stay entirely absent on a checkless ab, byte-
+   * identical to before this field existed. Aggregated across every task by
+   * verdictDict's `aggregateRuleCheckTotals` into the verdict's top-level
+   * `ruleCheckTotals`; also what survives a `--resume` (serialized verbatim
+   * under `taskResults`, same as `candidateElapsed`/`activeElapsed`). */
+  activeRuleChecks?: NonNullable<RunTaskResult["ruleChecks"]>[]
+  candidateRuleChecks?: NonNullable<RunTaskResult["ruleChecks"]>[]
   /** --parallel canonical-order early-stop tag (spec D5): set on tasks that
    * completed AFTER the futility stop rule fired in canonical order — i.e.
    * tasks the equivalent SERIAL run would never have launched. Excluded from
@@ -293,6 +309,53 @@ export async function cmdAb(
   // Compose both arms once (they differ in exactly one layer by construction).
   const harnessA = assembleAgentsMd(layers, paths.metaRoot, agent, {}, model)
   const harnessB = assembleAgentsMd(layers, paths.metaRoot, agent, { [layer]: candidate }, model)
+  // a3 routing T7's INJECTION SYMMETRY (spec §3): each arm enforces its OWN
+  // playbook's checked bullets — the active arm the LAYER-UNDER-TEST's
+  // active playbook, the candidate arm its candidate playbook (NOT the full
+  // multi-layer `layers` composition harnessA/harnessB above draw from —
+  // checked bullets are only ever proposed/promoted at the layer under
+  // evolution, mirroring T5's own candidateChecksHash precedent, which
+  // already scoped the hash to `layerRoot` alone). `readPlaybook(layerRoot)`
+  // with no version = active.
+  const activePlaybook = readPlaybook(layerRoot)
+  const candidatePlaybook = readPlaybook(layerRoot, candidate)
+  const activeChecksArr = activeChecks(activePlaybook)
+  const candidateChecksArr = activeChecks(candidatePlaybook)
+  // Refusal runs HERE, right after both playbook reads — BEFORE
+  // inContainerAgentVersion() below — so a non-claude-code driver dies
+  // loudly before burning an A/B run's worth of throwaway containers (spec
+  // §3's DRIVER SCOPE rule). Combines BOTH arms: a later ab (once some
+  // check has already been adopted) must refuse on the active arm's
+  // inherited checks too, not just the candidate's new ones — "First
+  // checked-rule ab has active set = empty" (spec §3) is the degenerate
+  // case, not a permanent one. Prose-only candidates (both arrays empty)
+  // are unaffected on either driver.
+  // Finding 5 (a3 routing review): name which arm(s) actually carry each
+  // checked bullet — a naive concat-and-list (the old `allChecks`) both
+  // mislabels an active-only bullet as "candidate carries" it, and can list
+  // the SAME bulletId twice when a candidate inherits a checked bullet
+  // unchanged from active (same id in both arrays). Key by bulletId so each
+  // id appears once, tagged with every arm it was found in.
+  const bulletArms = new Map<string, string[]>()
+  for (const c of activeChecksArr) bulletArms.set(c.bulletId, [...(bulletArms.get(c.bulletId) ?? []), "active"])
+  for (const c of candidateChecksArr) bulletArms.set(c.bulletId, [...(bulletArms.get(c.bulletId) ?? []), "candidate"])
+  if (bulletArms.size > 0 && driver.id !== "claude-code") {
+    const desc = [...bulletArms.entries()].map(([id, arms]) => `${id} (${arms.join("+")})`).join(", ")
+    die(
+      `run/ab: checked bullets present (${desc}) — requires --driver claude-code; the opencode driver has no hook chokepoint (spec §3)`,
+    )
+  }
+  // Arm B's (the candidate's) enforced check-set identity (a3 routing T5) —
+  // threaded from the SAME playbook read above, not a separate re-derivation.
+  // checksHashOf coalesces a checkless candidate playbook to
+  // EMPTY_CHECKS_HASH on its own.
+  const candidateChecksHash = checksHashOf(candidatePlaybook)
+  // Arm A's (the active baseline's) own identity (a3 routing T8) — the SAME
+  // derivation, over the active-arm playbook read above. envB (T5) only
+  // ever carries the candidate's hash (it's computed once, from harnessB),
+  // so this is the only place arm A's checked-bullet identity lands on the
+  // verdict; see verdictDict below.
+  const activeChecksHash = checksHashOf(activePlaybook)
   const agentVersion = await inContainerAgentVersion(paths, driver, execFn)
   // Same non-default-driver-unknown-probe gate as cmd-run.ts's cmdRun
   // (final-review fix 3) — a claude-code (etc) probe coming back "unknown"
@@ -312,6 +375,7 @@ export async function cmdAb(
     driver.id,
     args.enforceResources ?? false,
     minAgentTimeout,
+    candidateChecksHash,
   )
   // Loop-3 T3: whether a wall-clock agent-phase timeout on arm B gets
   // recorded as a genuine stored fail (default OFF). Read once for the
@@ -470,6 +534,30 @@ export async function cmdAb(
     }
   }
 
+  // a3 routing T8: sum one arm's per-attempt ruleChecks annotations (T7)
+  // into per-rule {blocked, exhausted} totals — the aggregation
+  // AbVerdict.ruleCheckTotals's field doc describes. Scans EVERY task in
+  // `taskResults`, not the postStop/error-filtered `counted` view below —
+  // this is check-gate TELEMETRY (what actually fired in-container), not a
+  // decision statistic, matching the unconditional-of-postStop cgroup-
+  // footprint memorization in runTaskPairs above (same precedent: provenance
+  // isn't gated on which tasks the DECISION counts).
+  function aggregateRuleCheckTotals(
+    field: "activeRuleChecks" | "candidateRuleChecks",
+  ): Record<string, { blocked: number; exhausted: number }> {
+    const totals: Record<string, { blocked: number; exhausted: number }> = {}
+    for (const tr of Object.values(taskResults)) {
+      for (const attempt of tr[field] ?? []) {
+        for (const [bulletId, r] of Object.entries(attempt.perRule)) {
+          const t = (totals[bulletId] ??= { blocked: 0, exhausted: 0 })
+          t.blocked += r.blocked
+          if (attempt.exhausted) t.exhausted += 1
+        }
+      }
+    }
+    return totals
+  }
+
   function verdictDict(status: string): Record<string, unknown> {
     // ONE shared postStop-aware view (spec D5): every derived field — the
     // paired-stats pipeline AND nTasks/candidateRate/activeRate below — draws
@@ -501,6 +589,17 @@ export async function cmdAb(
     const nAll = included.length
     const candPass = included.filter(([, tr]) => tr.candidate.length > 0 && Math.max(...tr.candidate) === 1).length
     const actPass = included.filter(([, tr]) => tr.active.length > 0 && Math.max(...tr.active) === 1).length
+    // a3 routing T8: gate the caveat + aggregated totals on EITHER arm
+    // carrying real checked bullets — a checked-rule ab where only the
+    // baseline (not the candidate) still has an adopted check is exactly as
+    // non-attributable as the reverse. undefined (not stamped) when both
+    // arms are checkless, so a checkless verdict is byte-identical to
+    // before this field existed (JSON.stringify drops undefined keys, same
+    // convention as speedTiebreak above).
+    const checkBundleCaveat: string | undefined =
+      activeChecksHash !== EMPTY_CHECKS_HASH || candidateChecksHash !== EMPTY_CHECKS_HASH
+        ? "checked-rule bundle: regressions are not attributable between rule text and check behavior; see per-rule ruleChecks block/exhaust counts"
+        : undefined
     const d: Record<string, unknown> = {
       schemaVersion: 2,
       layer,
@@ -550,6 +649,24 @@ export async function cmdAb(
       earlyStopped,
       split: splitMeta,
       env: envB,
+      // a3 routing T8: per-arm checked-bullet identity — envB (T5) only
+      // ever carries the candidate's (arm B's) hash, since it's computed
+      // once from harnessB; these are where arm A's own identity lands.
+      // ALWAYS stamped (coalesced to EMPTY_CHECKS_HASH on a checkless ab,
+      // never omitted) — see AbVerdict's field doc for why that's
+      // deliberately unlike the optional-and-omitted fields above.
+      activeChecksHash,
+      candidateChecksHash,
+      checkBundleCaveat,
+      // RUN-TIME DUTY (not code): the FIRST real checked-rule ab run whose
+      // verdict lands here with a non-empty checkBundleCaveat above must
+      // ALSO stamp a boundary timestamp in
+      // docs/2026-08-01-gauntlet-adoption-ledger.md (a3 plan documentation
+      // step) — an operational step for whoever runs that ab, not
+      // something this function can do at write time.
+      ruleCheckTotals: checkBundleCaveat
+        ? { active: aggregateRuleCheckTotals("activeRuleChecks"), candidate: aggregateRuleCheckTotals("candidateRuleChecks") }
+        : undefined,
       taskResults,
       model,
       variant,
@@ -603,14 +720,14 @@ export async function cmdAb(
       // arms AND later repeats — an escalation in EITHER arm bumps both arms'
       // subsequent runs, keeping the container cap identical across arms.
       const armA = await runWithOomRetry(
-        (r) => runOneTask(paths, task, model, variant, harnessA, agentTimeout, verifierTimeout, staging, driver, r, undefined, parallelPrepareAuth),
+        (r) => runOneTask(paths, task, model, variant, harnessA, agentTimeout, verifierTimeout, staging, driver, r, undefined, parallelPrepareAuth, activeChecksArr),
         resources, oomCeilingMb, `${prefix}arm A: `,
       )
       resources = armA.resources
       const resA = armA.result
       log(`${prefix}  [arm B: candidate]`)
       const armB = await runWithOomRetry(
-        (r) => runOneTask(paths, task, model, variant, harnessB, agentTimeout, verifierTimeout, staging, driver, r, undefined, parallelPrepareAuth),
+        (r) => runOneTask(paths, task, model, variant, harnessB, agentTimeout, verifierTimeout, staging, driver, r, undefined, parallelPrepareAuth, candidateChecksArr),
         resources, oomCeilingMb, `${prefix}arm B: `,
       )
       resources = armB.resources
@@ -629,6 +746,14 @@ export async function cmdAb(
       // agent phase never returned one (e.g. an auth-fail fast-return).
       tr.activeElapsed!.push(resA.agentElapsedSec ?? resA.elapsed)
       tr.candidateElapsed!.push(resB.agentElapsedSec ?? resB.elapsed)
+
+      // a3 routing T8: carry each arm's per-attempt ruleChecks annotation
+      // forward (checkless attempts simply never set resA/resB.ruleChecks —
+      // nothing pushed, arrays stay undefined, see AbTaskResult's field
+      // doc). Lazily allocate so a checkless ab's taskResults are byte-
+      // identical to before this field existed.
+      if (resA.ruleChecks) (tr.activeRuleChecks ??= []).push(resA.ruleChecks)
+      if (resB.ruleChecks) (tr.candidateRuleChecks ??= []).push(resB.ruleChecks)
 
       // Memorize BOTH arms' measured cgroup footprints (resource-profile.ts).
       // A task's resource load is a task×host property, ~prompt-independent, so

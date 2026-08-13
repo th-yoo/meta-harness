@@ -15,6 +15,7 @@ import {
   readTrial,
   candidatePath,
   readRejectedLedger,
+  readPlaybook,
   type StoreLayer,
 } from "../src/harness-store.ts"
 import type { HarnessHost, StagedArtifactDescriptor } from "../src/host.ts"
@@ -207,6 +208,73 @@ test("applyProposeArtifact: playbook ops.json → candidate with edited playbook
   expect(sys).toContain("new behavioral rule")
 })
 
+// (d) PERSISTENCE (review round-1 F2, a3 routing T4): after the full
+// propose-apply path, the PLAYBOOK WRITTEN TO THE STORE carries
+// check.liveEligible matching the screen tier — applyPlaybookOps itself
+// never sets liveEligible, so this pins the post-apply patch that does.
+// Assert on readPlaybook() (the persisted candidate), not the outcome object.
+test("applyProposeArtifact: add op with a Tier-L check → PERSISTED playbook carries check.liveEligible true", async () => {
+  const root = path.join(home, "stores", "pbcheck")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "project-role-v2-ops.json"),
+    JSON.stringify({ ops: [{
+      op: "add",
+      text: "When finishing a checked task, verify the completion marker exists before declaring done.",
+      check: { cmd: "test -s DONE-CHECK.txt", timeoutMs: 5000 },
+    }] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(reviewPassHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  const pb = readPlaybook(root, "v2")!
+  const bullet = pb.bullets.find((x) => x.check)!
+  expect(bullet).toBeDefined()
+  expect(bullet.check!.cmd).toBe("test -s DONE-CHECK.txt")
+  expect(bullet.check!.state).toBe("shadow")
+  expect(bullet.check!.liveEligible).toBe(true)
+})
+
+// (fix round 1, review round 4): a screen-rejected add-op's check must be
+// REJECTED WHOLE AND LEDGERED (appendRejectedLedger), not just log-only —
+// screenOpsChecks drops it BEFORE reviewAddedBullets ever sees it, so
+// applyProposeArtifact itself must write the ledger entry from the
+// rejections list. noLlmHost proves reviewAddedBullets is never reached
+// (the op never survives to become part of `addedOps`).
+test("applyProposeArtifact: add op with a screen-rejected check is ledgered whole, ledger text omits the cmd", async () => {
+  const root = path.join(home, "stores", "pbcheckreject")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const b = stagingBase()
+  const STORE_PATH_CMD = "cat .kkamak/global/active/playbook.json"
+  fs.writeFileSync(path.join(b, "project-role-v2-ops.json"),
+    JSON.stringify({ ops: [{
+      op: "add",
+      text: "When finishing a checked task, verify the completion marker exists before declaring done.",
+      check: { cmd: STORE_PATH_CMD, timeoutMs: 5000 },
+    }] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(noLlmHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  const ledger = readRejectedLedger(root)
+  expect(ledger.length).toBe(1)
+  expect(ledger[0]!.bullet).toContain("screen-denied (store-path)")
+  expect(ledger[0]!.bullet).not.toContain(STORE_PATH_CMD)
+  expect(ledger[0]!.violations).toEqual(["check-screen:store-path"])
+  expect(rec.logs.some((l) => l.includes("store-path"))).toBe(true)
+  expect(rec.logs.some((l) => l.includes(STORE_PATH_CMD))).toBe(false)
+})
+
 // ── applyStagedArtifact: propose (per-bullet generality tag) ───────────────
 
 test("applyProposeArtifact: tagged add op → candidate bullet carries generality + slice", async () => {
@@ -358,6 +426,37 @@ test("applyProposeArtifact: update op changing ONLY generality (same text) → c
   expect(bullet.text).toBe("keep rule")
   expect(bullet.generality).toBe("vendor")
   expect(bullet.slice).toBe("acme")
+})
+
+// (finding 1, a3 rule-routing review): the no-op guard's strip() projection
+// EXCLUDED `check` — an update op that re-sends unchanged text but attaches
+// a NEW check rendered byte-identical playbook prose, so playbookChanged
+// stayed false and the whole update (including the new check) was silently
+// swallowed before ever reaching createCandidate. Fixed by projecting a
+// {cmd, timeoutMs} view of check into strip() too (state/liveEligible stay
+// excluded — screen/live state must not itself trigger change detection).
+test("applyProposeArtifact: update op with UNCHANGED text but a NEW check → candidate created, not swallowed as no-op (finding 1)", async () => {
+  const root = path.join(home, "stores", "pbchecknoop")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "project-role-v2-ops.json"),
+    JSON.stringify({ ops: [{ op: "update", id: "b1", text: "b1 rule", check: { cmd: "test -s DONE.txt", timeoutMs: 5000 } }] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(fakeHost(rec), descriptor({ layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).toContain("v2")           // NOT skipped as a no-op
+  expect(readTrial(root)).not.toBeNull()
+  expect(rec.logs.some((l) => l.includes("no-op proposal"))).toBe(false)
+  const pb = readPlaybook(root, "v2")!
+  const bullet = pb.bullets.find((x) => x.id === "b1")!
+  expect(bullet.text).toBe("b1 rule")
+  expect(bullet.check!.cmd).toBe("test -s DONE.txt")
 })
 
 test("applyProposeArtifact: playbook-mode grace (system.md, no ops.json) identical to active → no-op guard skips without NPE", async () => {
@@ -563,6 +662,105 @@ test("applyCurateArtifact: no-op curation (empty ops) → no candidate, no trial
   expect(listVersions(root)).not.toContain("v2")   // identical playbook → skipped
   expect(readTrial(root)).toBeNull()
   expect(rec.logs.some((l) => l.includes("no-op curation"))).toBe(true)
+})
+
+// (e) CURATE PATH (review round-3, a3 routing T4): applyCurateArtifact never
+// calls reviewAddedBullets, so screenOpsChecks is the ONLY screen a curator
+// check gets — an update op whose check screens "rejected" must still be
+// dropped/rejected the same way an add op's would be. A second, unchecked op
+// in the same batch proves the drop is selective, not a whole-batch reject.
+test("applyCurateArtifact: update op with a screen-rejected check is dropped; other ops still apply", async () => {
+  const root = path.join(home, "stores", "curcheck")
+  writeActive(root, "v1", "- b1 rule\n- b2 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+    { id: "b2", text: "b2 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-global", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "curate-project-global-v2-ops.json"),
+    JSON.stringify({ ops: [
+      {
+        op: "update", id: "b1", text: "When curated, verify via a store-path check.",
+        check: { cmd: "cat .kkamak/global/active/playbook.json", timeoutMs: 5000 },
+      },
+      { op: "delete", id: "b2" },
+    ] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(fakeHost(rec), descriptor({ kind: "curate", layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).toContain("v2")
+  const pb = readPlaybook(root, "v2")!
+  const b1 = pb.bullets.find((x) => x.id === "b1")!
+  expect(b1.text).toBe("b1 rule")         // rejected check → whole update op dropped
+  expect(b1.check).toBeUndefined()
+  const b2 = pb.bullets.find((x) => x.id === "b2")!
+  expect(b2.status).toBe("pruned")        // the OTHER op in the same batch still applied
+  expect(rec.logs.some((l) => l.includes("store-path"))).toBe(true)
+})
+
+// (finding 1, a3 rule-routing review — curate lane's own copy of the same
+// strip() bug as the propose lane above): an update op that re-sends
+// unchanged text but attaches a NEW check must not be swallowed as a no-op
+// curation. This is ALSO the T4-deferred acceptance test: the persisted
+// candidate playbook must carry check.liveEligible stamped from the screen
+// (screenOpsChecks/stampLiveEligible), proving the fix doesn't just create
+// a candidate but creates one with the check's screen result intact.
+test("applyCurateArtifact: update op with UNCHANGED text but a NEW check → candidate created, not swallowed as no-op; persisted check.liveEligible from the screen (finding 1 + T4-deferred)", async () => {
+  const root = path.join(home, "stores", "curchecknoop")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-global", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "curate-project-global-v2-ops.json"),
+    JSON.stringify({ ops: [{ op: "update", id: "b1", text: "b1 rule", check: { cmd: "test -s DONE.txt", timeoutMs: 5000 } }] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(fakeHost(rec), descriptor({ kind: "curate", layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).toContain("v2")           // NOT skipped as a no-op
+  expect(rec.logs.some((l) => l.includes("no-op curation"))).toBe(false)
+  const pb = readPlaybook(root, "v2")!
+  const b1 = pb.bullets.find((x) => x.id === "b1")!
+  expect(b1.text).toBe("b1 rule")
+  expect(b1.check!.cmd).toBe("test -s DONE.txt")
+  expect(b1.check!.state).toBe("shadow")
+  expect(b1.check!.liveEligible).toBe(true)            // T4-deferred: screen result reached the store
+})
+
+// (finding 1 + finding 2 interaction, explicitly called out in the review):
+// a check-DROP (check: null) with otherwise-unchanged text must ALSO count
+// as a change in the strip() projection — null (absent) vs an existing
+// check object differ, so this is a regression risk distinct from the
+// "new check" case above (that one goes undefined→object; this one goes
+// object→undefined, the opposite direction of the same diff).
+test("applyCurateArtifact: update op with UNCHANGED text but check:null (drop) → candidate created, not a no-op (finding 1+2 interaction)", async () => {
+  const root = path.join(home, "stores", "curcheckdrop")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0,
+      check: { cmd: "test -s ALREADY-THERE.txt", timeoutMs: 5000, state: "shadow" } },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-global", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "curate-project-global-v2-ops.json"),
+    JSON.stringify({ ops: [{ op: "update", id: "b1", text: "b1 rule", check: null }] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(fakeHost(rec), descriptor({ kind: "curate", layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).toContain("v2")           // NOT skipped as a no-op
+  expect(rec.logs.some((l) => l.includes("no-op curation"))).toBe(false)
+  const pb = readPlaybook(root, "v2")!
+  const b1 = pb.bullets.find((x) => x.id === "b1")!
+  expect(b1.text).toBe("b1 rule")
+  expect(b1.check).toBeUndefined()                     // dropped
 })
 
 // ── opencode inline parity: triggerPropose without stageArtifactApply ────────
