@@ -57,7 +57,19 @@ OPEN — THE ONLY STANDING ITEM: TB2 band batch, sized go pending.
  candidates/vN) and the snapshot does not carry active/ — populate
  via writeActive from the v0 candidate, then verify harnessHash
  parity (yoo-mac assembled 25f13fca883fe563 = baseline stamp,
- byte-identical). Batch itself still = sized go.
+ byte-identical). BATCH IN FLIGHT (go given 2026-08-13, 5 chunks):
+ chunk 1 DONE 7P/6F +prove-plus-comm infra-skip (podman exit 125,
+ 0-turn, store correctly refused); chunk 2 PAUSED by user at 6/14
+ (3P/3F; large-scale-text-editing attempt killed mid-flight
+ unrecorded). Pool = 33 clean bench sessions (14 baseline + 13 +
+ 6), logs term-bench2/logs/band-k1-chunk{1,2}-yoomac-20260813*.
+ RESUME: chunk-2 remainder = 8 tasks (large-scale-text-editing
+ path-tracing constraints-scheduling tune-mjcf distribution-search
+ db-wal-recovery prove-plus-comm openssl-selfsigned-cert) via
+ --tasks, same flags; then chunks 3-5 full sweeps. CONTAMINATION
+ WATCH: dogfood producer writes THIS interactive session into
+ active v0 score.json (model unknown, note!=bench:) — strip
+ non-bench: sessions at every chunk boundary (one stripped 08-13).
 
 YOO-DEV (self-serve, handoff block 0d69232 below): sensor cadence
  checkpoint DUE 08-13 -> constants amendment expected · snapshot
