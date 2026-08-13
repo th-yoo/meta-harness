@@ -580,10 +580,17 @@ interface FakeWorld {
   resolveResult?: "kept" | "rolled-back" | "deferred" | "abandoned" | "none"
 }
 
-function fakeDeps(w: FakeWorld): TrialScanDeps & { resolveCalls: Array<{ root: string; v: GateTrialVerdict }> } {
+function fakeDeps(
+  w: FakeWorld,
+): TrialScanDeps & {
+  resolveCalls: Array<{ root: string; v: GateTrialVerdict }>
+  exportCalls: Array<{ repo: string; root: string }>
+} {
   const resolveCalls: Array<{ root: string; v: GateTrialVerdict }> = []
+  const exportCalls: Array<{ repo: string; root: string }> = []
   return {
     resolveCalls,
+    exportCalls,
     now: NOW,
     readTrial: (root) => w.trials[root] ?? null,
     projectGlobalRootFor: (repo) => `${repo}/store`,
@@ -598,6 +605,9 @@ function fakeDeps(w: FakeWorld): TrialScanDeps & { resolveCalls: Array<{ root: s
         keep: "kept", rollback: "rolled-back", deferred: "deferred", abandoned: "abandoned",
       }
       return { action: w.resolveResult ?? auto[v.verdict]! }
+    },
+    exportRuleChecks: (repo, root) => {
+      exportCalls.push({ repo, root })
     },
   }
 }
@@ -652,6 +662,10 @@ describe("runTrialScan (crank wiring seam)", () => {
     expect(deps.resolveCalls[0]!.root).toBe("/repoA/store")
     expect(deps.resolveCalls[0]!.v.verdict).toBe("keep")
     expect(r!.action.kind).toBe("trial-keep")
+    // a3 live adapter (Task 2): keep is the gate-outcomes twin of
+    // resolveTrial's confirm branch — export must fire, on the same
+    // (repo, storeRoot) pair resolveGateTrial was enacted on.
+    expect(deps.exportCalls).toEqual([{ repo: "/repoA", root: "/repoA/store" }])
   })
 
   test("pending verdict enacts NOTHING — resolveGateTrial is never called", () => {
@@ -660,6 +674,7 @@ describe("runTrialScan (crank wiring seam)", () => {
     expect(deps.resolveCalls.length).toBe(0)
     expect(r!.action.kind).toBe("trial-pending")
     if (r!.action.kind === "trial-pending") expect(r!.action.projection).toContain("∞")
+    expect(deps.exportCalls.length).toBe(0)
   })
 
   test("calibration stale → trial-pending 'calibration-stale', no enactment", () => {
@@ -690,6 +705,7 @@ describe("runTrialScan (crank wiring seam)", () => {
     expect(deps.resolveCalls[0]!.v).toEqual({ verdict: "abandoned", reason: "calibration-stale" })
     expect(r!.action.kind).toBe("trial-abandoned")
     if (r!.action.kind === "trial-abandoned") expect(r!.action.reason).toBe("calibration-stale")
+    expect(deps.exportCalls).toEqual([{ repo: "/repoA", root: "/repoA/store" }])
   })
 
   test("rollback verdict → trial-rollback action carrying the reason", () => {
@@ -709,6 +725,7 @@ describe("runTrialScan (crank wiring seam)", () => {
       expect(r!.action.trial).toBe("v7")
       expect(r!.action.reason).toContain("three-clause-rule")
     }
+    expect(deps.exportCalls).toEqual([{ repo: "/repoA", root: "/repoA/store" }])
   })
 
   test("abandoned verdict (exposure divergence) → trial-abandoned action", () => {
@@ -729,6 +746,7 @@ describe("runTrialScan (crank wiring seam)", () => {
     expect(deps.resolveCalls.length).toBe(1)
     expect(r!.action.kind).toBe("trial-abandoned")
     if (r!.action.kind === "trial-abandoned") expect(r!.action.reason).toBe("exposure-divergence")
+    expect(deps.exportCalls).toEqual([{ repo: "/repoA", root: "/repoA/store" }])
   })
 
   test("enactment says abandoned for a KEEP verdict (active changed underneath) → trial-abandoned with the active-changed reason", () => {
@@ -742,6 +760,10 @@ describe("runTrialScan (crank wiring seam)", () => {
     const r = runTrialScan(REPOS, deps)
     expect(r!.action.kind).toBe("trial-abandoned")
     if (r!.action.kind === "trial-abandoned") expect(r!.action.reason).toContain("active version changed")
+    // The export gate reads v.verdict (computed independently, here "keep"
+    // per aaStream), NOT resolveGateTrial's enacted.action — export still
+    // fires even though the enactment itself reports "abandoned".
+    expect(deps.exportCalls).toEqual([{ repo: "/repoA", root: "/repoA/store" }])
   })
 
   test("awaitingGo (queued) trial is inert — ignored by the scan", () => {
@@ -815,6 +837,33 @@ describe("runTrialScan (crank wiring seam)", () => {
       expect(d.hosts).toContain("office")
       expect(d.hosts).toContain("macbook")
     }
+  })
+
+  // a3 live adapter (Task 2): exportRuleChecks must NOT be called for a
+  // "deferred" verdict — no state change happened (§4.3, decideTrialVerdict
+  // branch order comment above). Unlike keep/rollback/abandoned, "deferred"
+  // cannot be produced end-to-end through runTrialScan with REAL sensor
+  // data: decideTrialVerdict's null-metric check (trial-verdict.ts ~317)
+  // only fires once the floors are already met, but the floor threshold
+  // (score.gateCycles ≥ MIN_N) and the null-suppression threshold
+  // (`enough(gateCycles) = gateCycles ≥ MIN_N`, cc-gate-plugin/src/score.ts)
+  // are the SAME MIN_N — so floors-met always implies mCatch/mExhaust are
+  // non-null, and mInterrupt's wider denominator (allCycles ≥ gateCycles)
+  // is non-null a fortiori. This is a registered invariant (see the
+  // decideTrialVerdict doc comment), exercised directly by the §5 truth
+  // table (mkArm({ mCatch: null }) etc.) — reproduced here via the real
+  // decideTrialVerdict function to pin that a genuine "deferred"
+  // TrialVerdictOutcome falls outside the export-triggering verdict set
+  // trial-verdict.ts's runTrialScan gates on.
+  test("deferred verdict (§5 null-metric branch) is excluded from the export-triggering verdict set", () => {
+    const v = decideTrialVerdict({
+      baseline: mkArm({ mCatch: null }),
+      trial: mkArm(),
+      pooledBlockEvents: 20,
+      elapsedMs: 10 * DAY,
+    })
+    expect(v.verdict).toBe("deferred")
+    expect(["keep", "rollback", "abandoned"]).not.toContain(v.verdict)
   })
 })
 

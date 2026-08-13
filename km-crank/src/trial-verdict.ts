@@ -453,6 +453,10 @@ export interface TrialScanDeps {
     storeRoot: string,
     v: GateTrialVerdict,
   ): { action: "kept" | "rolled-back" | "deferred" | "abandoned" | "none" }
+  /** a3 live adapter (Task 2): re-derives .km/rule-checks.json for the
+   * transitioning layer. Optional so existing fakeDeps recipes in tests
+   * keep working unchanged. crank.ts wires the real helper. */
+  exportRuleChecks?: (repo: string, root: string) => void
   now: number
 }
 
@@ -544,6 +548,14 @@ export function runTrialScan(repos: string[], deps: TrialScanDeps): TrialScanRes
     }
 
     const enacted = deps.resolveGateTrial(root, v)
+    // a3 live adapter (Task 2): `keep` is the gate-outcomes twin of
+    // resolveTrial's confirm branch (playbook already live) and gets the
+    // SAME reaffirm-not-skip treatment; `rollback`/`abandoned` both restore
+    // or clear the trial, changing the active playbook too. Only `deferred`
+    // (no state change) is exempt.
+    if (v.verdict === "keep" || v.verdict === "rollback" || v.verdict === "abandoned") {
+      deps.exportRuleChecks?.(repo, root)
+    }
     switch (enacted.action) {
       case "kept":
         return { repo, scope, evaluation, action: { kind: "trial-keep", scope, trial: trial.trial, detail } }

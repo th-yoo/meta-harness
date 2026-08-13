@@ -261,6 +261,30 @@ pluginVersion partition; run `bun install` in cc-gate-plugin BEFORE
 km-refresh (install copies node_modules — GA12 lesson).
 ```
 
+```
+A3 CONTRACT REV (ruleChecks) — MERGE-WINDOW DUTIES (yoo-mac, corrected:
+~/z2/kkamak clone EXISTS on this host; final-review finding):
+ 1. IN THE SAME CHANGE WINDOW as the feat/a3-live-adapter merge:
+    append the CLEAN_ACCEPT_WITH_RULE_CHECKS vector line (byte-equal to
+    km-crank/test/sensor-contract.test.ts's VECTOR_LINES 5th entry) to
+    ~/z2/kkamak/test/fixtures/sensor-contract.ndjson + extend kkamak's
+    own conformance suite for the ruleChecks shape; kkamak suite green.
+    ORDERING: fixture update must NOT land before the meta-harness
+    merge (main's 4-line compare would go red); do both in one window,
+    then `cd km-crank && bun test` FROM THE MAIN CHECKOUT (worktree
+    paths resolve to a nonexistent ../kkamak and advisory-skip — only
+    the main checkout exercises the real fixture).
+ 2. km-crank/test/sensor-contract.test.ts HARD-FAILS if the fixture
+    exists but lacks the vector — firing means step 1 was skipped; do
+    step 1, don't relax the test.
+ 3. yoo-dev on next pull: pull ~/z2/kkamak too if cloned there; run
+    both suites; nothing else pending on that host for this rev.
+ 4. Deploy (separate act): bun install in cc-gate-plugin, km-refresh,
+    grep-verify 0.4.5 in plugin cache; boundary ts entry in
+    docs/2026-08-01-gauntlet-adoption-ledger.md (instrument change:
+    SensorLine +ruleChecks, caps RULE_CHECKS_MAX=8/BUDGET_MS=5000).
+```
+
 ## ⏳ LIVE STATE 2026-08-12 ~17:00 KST (`yoo-dev`) — CRANK-2 AB RUNNING (v20 vs v17)
 
 ```

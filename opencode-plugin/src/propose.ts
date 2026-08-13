@@ -60,6 +60,7 @@ import {
   type AgentConfig,
   type EnvPolicy,
 } from "./harness-store.ts"
+import { exportRuleChecks } from "./rule-checks-export.ts"
 import { proposerSessions } from "./session-state.ts"
 import type { HarnessHost, StagedArtifactDescriptor } from "./host.ts"
 import { reviewAddedBullets } from "./review-gate.ts"
@@ -634,6 +635,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     // TRIAL_MIN_SESSIONS scored sessions (see resolveTrial in the idle hook).
     const baseline = activeVersion(layer.root)
     startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook ?? null, effAgentConfig, effEnvPolicy)
+    exportRuleChecks(worktree, layer.root)
     await host.notify(
       `Trial started: ${layer.scope} ${version}${toolsNote} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
       "info", 8_000,
@@ -1530,6 +1532,7 @@ async function applyCurateArtifact(host: HarnessHost, d: StagedArtifactDescripto
   if (isProject) {
     const baseline = activeVersion(layer.root)
     startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook, agentConfig, envPolicy)
+    exportRuleChecks(worktree, layer.root)
     await host.notify(
       `Curation trial: ${layer.scope} ${version} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
       "info", 8_000,

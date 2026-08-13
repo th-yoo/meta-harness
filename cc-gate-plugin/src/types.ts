@@ -291,7 +291,25 @@ export interface SensorLine {
    * review-caught defects the kkamak dogfood log documents. Same absence
    * rules as implOnly; computed together from the same touched set. */
   sameTurnCoEdit?: boolean
+  /** a3 live adapter (spec §4): shadow rule-check outcomes for this Stop.
+   * Outcomes only — {id, pass, ms} | {id, skipped} | {id, refused} — never
+   * command text (F2). Present iff .km/rule-checks.json existed with a
+   * non-empty rules array this Stop; absent otherwise (absent is the
+   * cleaner line, same convention as `forced`). SHADOW: these never
+   * influenced the Stop decision. Caps: RULE_CHECKS_MAX / _BUDGET_MS
+   * (src/rule-checks.ts); skips/refusals are visible states, not silence. */
+  ruleChecks?: RuleCheckOutcome[]
 }
+
+/** a3 live adapter (spec §4): outcome of one shadow rule check. Defined here
+ * (not src/rule-checks.ts) because types.ts is the FROZEN shared contract
+ * that other modules depend on and never the reverse (see file header) —
+ * src/rule-checks.ts imports and re-exports this type rather than owning
+ * it. F2: outcomes never carry command text or check output. */
+export type RuleCheckOutcome =
+  | { id: string; pass: boolean; ms: number }
+  | { id: string; skipped: true }
+  | { id: string; refused: true }
 
 /** Handlers return sensor lines; hook-cli owns the append (persist → sensor → emit). */
 export interface PromptResult {

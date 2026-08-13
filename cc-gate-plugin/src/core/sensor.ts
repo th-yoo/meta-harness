@@ -1,4 +1,4 @@
-import type { CoreDeps, RoundOutcome, SensorLine } from "../types.ts"
+import type { CoreDeps, RoundOutcome, RuleCheckOutcome, SensorLine } from "../types.ts"
 
 export function buildSensorLine(
   deps: CoreDeps,
@@ -34,6 +34,13 @@ export function buildSensorLine(
     // must never reach this builder.
     implOnly?: boolean
     sameTurnCoEdit?: boolean
+    // a3 live adapter (Task 4) amendment — same spread-only-when-defined
+    // discipline; the real Stop flow never supplies this here (it attaches
+    // ruleChecks at the hook-cli.ts IO boundary, after buildSensorLine
+    // returns), so every existing caller stays byte-identical. This arg
+    // exists so the builder's optional-spread convention is pinned by a
+    // direct unit test, matching the other amendments in this file.
+    ruleChecks?: RuleCheckOutcome[]
   },
 ): SensorLine {
   return {
@@ -54,5 +61,6 @@ export function buildSensorLine(
     ...(args.checkMs !== undefined ? { checkMs: args.checkMs } : {}),
     ...(args.implOnly !== undefined ? { implOnly: args.implOnly } : {}),
     ...(args.sameTurnCoEdit !== undefined ? { sameTurnCoEdit: args.sameTurnCoEdit } : {}),
+    ...(args.ruleChecks !== undefined && args.ruleChecks.length > 0 ? { ruleChecks: args.ruleChecks } : {}),
   }
 }
