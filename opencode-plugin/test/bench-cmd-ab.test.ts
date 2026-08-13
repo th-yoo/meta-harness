@@ -20,8 +20,7 @@ import { readResourceProfile, hostClass, updateResourceProfile } from "../src/be
 import * as schedulerReal from "../src/bench/scheduler.ts"
 import { PRESSURE_POLL_SEC } from "../src/bench/host-pressure.ts"
 import { mcnemarExactOneSided } from "../src/bench/ab-stats.ts"
-import { RULE_GATE_DIR } from "../src/bench/rule-gate.ts"
-import { claudeCodeDriver } from "../src/bench/drivers/claude-code.ts"
+import type { RuleGateCheck } from "../src/bench/rule-gate.ts"
 
 // Snapshot the REAL scheduler.ts exports at module-eval time (before any
 // mock.module call below) — same pattern as bench-cmd-run.test.ts's own
@@ -280,6 +279,65 @@ test("cmdAb: the ACTIVE arm's inherited checked bullet ALSO refuses on a non-cla
   expect(err).toBeInstanceOf(BenchError)
   expect((err as Error).message).toContain("b1")
   expect(ran).toBe(false)
+})
+
+test("cmdAb: per-arm injection symmetry — arm A gets ONLY the active playbook's checks, arm B ONLY the candidate's (NOT combined, spec §3 INJECTION SYMMETRY)", async () => {
+  const paths = isolatedPaths(["t1"])
+  const root = projectGlobalRoot(paths.metaRoot)
+  const activeCheckedPb = checkedPlaybook("bX", "checkX")
+  // Candidate playbook = the active bullet UNCHANGED (bX) PLUS one genuinely
+  // new checked bullet (bY) — the delta-under-test spec §3 cares about. If
+  // cmd-ab ever regressed to injecting the COMBINED set into both arms
+  // (the exact mutation this test pins against), arm A would wrongly see
+  // bY too.
+  const candidateCheckedPb: Playbook = {
+    schemaVersion: 1,
+    nextId: 3,
+    bullets: [
+      ...activeCheckedPb.bullets,
+      {
+        id: "bY",
+        text: "run the second check before finishing",
+        helpful: 0,
+        harmful: 0,
+        addedBy: "candidate",
+        status: "active",
+        createdAt: activeCheckedPb.bullets[0]!.createdAt,
+        updatedAt: activeCheckedPb.bullets[0]!.updatedAt,
+        check: { cmd: "checkY", timeoutMs: 5000, state: "shadow" },
+      },
+    ],
+  }
+  createCandidate(root, "v0", "baseline sys", "", activeCheckedPb)
+  writeActive(root, "v0", "baseline sys", "", activeCheckedPb)
+  createCandidate(root, "v1", "candidate sys", "", candidateCheckedPb)
+
+  // Capture the `checks` arg (12th positional param) runOneTask actually
+  // received, per call, in call order — runTaskPairs always awaits arm A
+  // (active) to completion before starting arm B (candidate), so with
+  // k=1/one task there are exactly two calls and array order IS arm
+  // identity (no harnessMd string-sniffing needed).
+  const seenChecks: (RuleGateCheck[] | undefined)[] = []
+  const fake: RunOneTaskFn = async (_paths, _task, _model, _variant, _harnessMd, _at, _vt, _staging, _driver, _resources, _execFn, _prepareAuth, checks) => {
+    seenChecks.push(checks)
+    return res()
+  }
+  await quiet(() =>
+    cmdAb(
+      paths,
+      { layer: "project-global", candidate: "v1", tasks: ["t1"], k: 1, driver: "claude-code" } as CmdAbArgs,
+      fake,
+      fakeExec,
+    ),
+  )
+
+  expect(seenChecks.length).toBe(2)
+  const [armAChecks, armBChecks] = seenChecks
+  expect(armAChecks).toEqual([{ bulletId: "bX", cmd: "checkX", timeoutMs: 5000 }])
+  expect(armBChecks).toEqual([
+    { bulletId: "bX", cmd: "checkX", timeoutMs: 5000 },
+    { bulletId: "bY", cmd: "checkY", timeoutMs: 5000 },
+  ])
 })
 
 // ── legacy explicit-tasks mode ───────────────────────────────────────────

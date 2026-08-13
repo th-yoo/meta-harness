@@ -1876,6 +1876,50 @@ test("runTaskOnce: state read rc!=0 (no block occurred, the common case) is fail
   expect(res.reward).toBe(1)
 })
 
+test("runTaskOnce: state read rc:0 but unparseable JSON is ALSO fail-open — no throw, ruleChecks absent, loud log", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  fs.mkdirSync(path.join(tbRoot, "t"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "t", "instruction.md"), "do the thing")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const execFn = async (argv: string[]) => {
+    if (argv[1] === "exec" && argv.includes("cat") && argv.some((a) => a.includes("state.json"))) {
+      // rc:0 (the read itself succeeded) but the body is NOT valid JSON — a
+      // corrupt/truncated state.json, distinct from the rc!=0 "file absent"
+      // case above. Must not throw out of runTaskOnce.
+      return { rc: 0, stdout: "{not valid json", stderr: "", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+
+  mock.module("../src/bench/verifier.ts", () => ({ copyTests: async () => {}, runVerifier: async () => 1 }))
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  const logSpy = spyOn(console, "log").mockImplementation(() => {})
+  const checks: RuleGateCheck[] = [{ bulletId: "b1", cmd: "true", timeoutMs: 1000 }]
+  let res: RunTaskResult
+  let errLines: string[]
+  try {
+    res = await runTaskOnce(
+      paths, "t", "anthropic/claude-sonnet-5", "", "", 30, 30, "scripts", claudeCodeDriver, undefined, execFn, fakeAuthMounts(), checks,
+    )
+    // util.ts's `log()` writes to console.error (not console.log) — the
+    // loud fail-open line lands on errSpy. Read `.mock.calls` INSIDE the
+    // try, BEFORE mockRestore() below — mockRestore() also clears call
+    // history (mockReset semantics), so reading it after would always see [].
+    errLines = errSpy.mock.calls.map((c) => String(c[0]))
+  } finally {
+    errSpy.mockRestore()
+    logSpy.mockRestore()
+    restoreVerifier()
+  }
+
+  expect(res.ruleChecks).toBeUndefined()
+  expect(res.error).not.toBe("setup_failed")
+  expect(res.reward).toBe(1)
+  expect(errLines.some((l) => l.includes("rule-gate") && l.includes("unreadable"))).toBe(true)
+})
+
 test("runTaskOnce: rule-gate settings.json copy-in failure -> setup_failed (never runs unguarded)", async () => {
   const dir = tmpDir()
   const tbRoot = path.join(dir, "tb-root")
