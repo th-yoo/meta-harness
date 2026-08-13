@@ -80,3 +80,14 @@ test("empty / whitespace-only check → no reason (caller handles null checks)",
   expect(unsafeReason("")).toBeUndefined()
   expect(unsafeReason("   ")).toBeUndefined()
 })
+
+test("backtick command substitution is refused — word-anchored rules cannot see verbs after an unspaced backtick (found via a3 routing T3 review, 2026-08-13)", () => {
+  expect(unsafeReason("echo `rm important-file`")).toBe("backtick-substitution")
+  expect(unsafeReason("x=`rm f`")).toBe("backtick-substitution")
+  expect(unsafeReason("echo `sudo reboot`")).toBe("backtick-substitution")
+  expect(unsafeReason("echo `chmod 777 /etc/passwd`")).toBe("backtick-substitution")
+  // $() interiors ARE scanned ("(" is in the separator class) — stays legal
+  // when the inner command is itself safe:
+  expect(unsafeReason("test $(wc -l < f) -gt 3")).toBeUndefined()
+  expect(unsafeReason("echo $(rm f)")).toBeDefined() // inner rm still caught
+})
