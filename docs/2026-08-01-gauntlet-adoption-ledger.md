@@ -707,3 +707,25 @@ five architect rounds recorded in
   and every metric stream unaffected; boundary recorded for provenance.
   Full gate green post-bump (1892 tests + doc-check). Deploy effective at
   first session after the cache picks up 0.4.2.
+
+- **a3 LIVE ADAPTER + SensorLine ruleChecks CONTRACT REV (2026-08-14,
+  yoo-mac, boundary ts 1786634418937):** merge `911ae49` (7b artifact
+  `2604da8-a3-live-adapter.md`), cc-gate-plugin 0.4.5 → 0.4.6 deployed
+  yoo-mac (km-refresh --force, cache grep-verified; prior roots retained,
+  no fail-open occurred). Instrument change: sensor lines gain OPTIONAL
+  `ruleChecks` outcomes (`{id, pass, ms} | {id, skipped} | {id,
+  refused}`, F2 — never cmd text) emitted by the new shadow evaluator
+  (caps RULE_CHECKS_MAX=8, RULE_CHECKS_BUDGET_MS=5000; raising either is
+  its own future boundary). SHADOW-only: never blocks, never alters the
+  Stop decision — behavior-shaped metrics unaffected; the field is
+  additive telemetry (calibration coveredMechanismRev advanced over the
+  telemetry-only core edit, TM1 precedent, 4th instance). Producer side:
+  every playbook-mutating store transition now writes
+  `.km/rule-checks.json` (liveEligible checks only; inert until a
+  checked-rule candidate exists). Contract rev landed BOTH repos in one
+  window (kkamak `5efa3ab`: 5th golden vector + conformance shape
+  check); km-crank parity hard-fail verified green from the main
+  checkout against the real ~/z2/kkamak fixture. Lines with
+  `pluginVersion >= 0.4.6` may carry the field; earlier lines never do.
+  Suites at deploy: opencode 1985/0 · cc-gate 1063/0 · km-crank 400/0 ·
+  kkamak 418/0.
