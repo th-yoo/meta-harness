@@ -441,13 +441,36 @@ git commit -m "feat(review): structured checked bullets — screens, liveEligibl
 
 ---
 
-### Task 9: probe-the-consequence (GATED — real spend, own sized go)
+### Task 9: probe-the-consequence (GATED — real spend, own sized go) — AMENDED 2026-08-13 (slim shape)
 
-**NOT executed by subagents. Runs only on an explicit user sized go (≤4 haiku calls).**
+**NOT executed by subagents. Runs only on an explicit user sized go (spend phase ≤2 haiku calls; original ≤4 budget superseded by this amendment).**
 
-- [ ] Build a throwaway claude-code-driver container per the P2 PROBE C recipe (`docs/loop-probes/p2/PROBE.md`); inject a rule gate with one deliberately-failing check.
-- [ ] One `claude -p` attempt: expect num_turns > 1-turn control, evidence of block/fix cycle, and `state.json` showing `rounds ≥ 1`; forcing failure through THREE Stops must show blocks on 1 and 2, then `exhausted: true` + allow on the third (the T6 contract, live).
-- [ ] Record outcome in the plan file + READINESS-style note. Zero store writes.
+**Amendment rationale (2026-08-13, post-merge assessment):** the original
+one-shot probe re-proved things already on record. Coverage audit against
+`docs/loop-probes/p2/PROBE.md` and the T6 test suite:
+
+- Stop hooks fire under one-shot `claude -p` in the bench container — **P2 Probe A** (verdict recorded, same image/argv/auth as production).
+- `exit 2` blocks a Stop, stderr feeds back as continuation instructions, agent acts to satisfy the gate (`num_turns: 4` vs control `1`) — **P2 Probe C**.
+- Round-cap bash semantics (compare-then-increment; block/block/exhaust-on-3rd) — **T6 Step-1 tests spawn the REAL generated script under real bash, no fakes**.
+
+Still unproven live, and what this task now targets exclusively:
+
+1. The **generated** `check.sh` + settings under container bash 5.x, landed via the **production injection path** (agent-run.ts mkdtemp+write+cp, `/app/.rule-gate/` layout) — T6 tests ran host bash 3.2 with local paths.
+2. Claude CLI behavior across **three consecutive blocked Stops** to exhaustion — Probe C saw one block→satisfy cycle only. Failure modes this catches before real arm spend: CLI wedges/spins until task timeout (burns a k=5 arm), or gate silently never blocks (arm ≈ control → false "rule has no effect" verdict blamed on the rule — the a4 carrier-design lesson).
+
+**Carrier ruling (2026-08-13):** probe runs the `claude -p` production lane, NOT `@th-yoo/cc-api-daemon` — the daemon routes haiku to its raw-API backend (`route.ts`: `model.includes("haiku") ? "api" : "agent"`, no CLI subprocess, no Stop hooks) and its warm lane hard-rejects any isolation with nonzero `settingSources` (acp-daemon.ts validation), so neither daemon lane can ever fire the injected gate. Daemon stays host-side (judge/offline lanes, a4-review precedent).
+
+**Phase 0 — spend-free container dry-run (zero model calls):**
+
+- [ ] Throwaway container per the P2 Probe A/C recipe (`prepareClaudeCodeAuth()`, `sandbox.ts` argv builders); inject a rule gate with one deliberately-always-failing check via the PRODUCTION injection code (agent-run.ts path), not hand-typed copies.
+- [ ] Verify landing: `podman exec` `cat` of `/app/.rule-gate/check.sh` + the Stop-hook settings file match `buildRuleGateScript`/`buildRuleGateSettings` output.
+- [ ] Drive the round cap by hand: `podman exec <c> bash /app/.rule-gate/check.sh` three times — expect exit `2`, `2`, `0` and `state.json` showing `rounds` advancing then `exhausted: true` (the T6 contract, live in container bash, no CLI involved).
+- [ ] Any Phase-0 failure: STOP, fix, re-run Phase 0. No spend until Phase 0 is clean.
+
+**Phase 1 — live exhaustion probe (1-2 haiku calls):**
+
+- [ ] Reset gate state (fresh container or state.json removal); one `claude -p` attempt with the same always-failing check: expect num_turns > 1-turn control (control shape already on record in PROBE.md — 8 lines, `num_turns: 1`; re-run a control call only if the recorded shape is insufficient, that is the optional 2nd call), blocks on Stops 1 and 2, then `exhausted: true` + allow on the third, clean process exit (no wedge/spin).
+- [ ] Record outcome in the plan file + READINESS-style note (F2 discipline: commands, exit codes, marker presence, event-type counts only — no reply text). Zero store writes.
 
 ---
 
@@ -463,3 +486,4 @@ git commit -m "feat(review): structured checked bullets — screens, liveEligibl
 - round 1 (2026-08-13, fresh code-architect, FIX-FIRST → applied): round-cap semantics corrected to the real cc-gate mirror — block/block/exhaust-on-3rd (T6, T9, Global Constraints) (F1); liveEligible PERSISTENCE step + persisted-playbook test added to T4 (post-applyPlaybookOps patch in propose.ts ~476) (F2); proposer prompt-template update added to T4 (F3); T1 parity anchor moved to `const RULES` (F4); readActiveBudget/BudgetStamp wired into T2 step 4 (F5); T2 fixture uses real `{schemaVersion, nextId, bullets}` shape (F6); AbVerdict/BudgetStamp named in T8/T2 file lists (F7); T7 injection precedent corrected to agent-run.ts mkdtemp+write+cp (F8).
 - round 2 (same reviewer, scoped re-verify, FIX-FIRST → applied): T6 script-contract bullets rewritten compare-THEN-increment mirroring stop.ts order (increment-then-compare would exhaust after one block — the contract now agrees with its own Step-1 test pin); curator heredoc gets the update-oriented check text (curation forbids adds, propose.ts:1409); NEW screen-coverage invariant added to T4 — update-op checks pass the same screenCheck at apply (curator lane would otherwise bypass screening).
 - round 3 (same reviewer, FIX-FIRST → applied): the invariant's "one shared code path" claim was false — `applyProposeArtifact` (:285) and `applyCurateArtifact` (:1313, direct `applyPlaybookOps` at :1337, no screening) are separate functions. T4 now names BOTH in Files, specifies the shared `screenOpsChecks(ops)` helper called at both sites, and pins a curate-path update-op test.
+- amendment (2026-08-13, post-merge, user-directed): T9 reshaped to slim two-phase form — coverage audit showed Probe A/C + T6 real-bash tests already prove hook-fires, exit-2-blocks, and round-cap semantics; remaining live risk is (1) generated script + production injection in real container and (2) CLI multi-block exhaustion behavior. Phase 0 is spend-free (manual check.sh invocations via podman exec); Phase 1 spend cut ≤4 → ≤2 haiku calls. Carrier ruling recorded: `claude -p` production lane, cc-api-daemon declined (haiku routes to raw-API backend, warm lane rejects nonzero settingSources — neither can fire the gate).
