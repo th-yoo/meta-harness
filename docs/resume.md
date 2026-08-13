@@ -3,6 +3,59 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## 📋 YOO-DEV HANDOFF 2026-08-13 (written on yoo-mac — ssh unreachable) — SENSOR CADENCE CHECKPOINT DUE TODAY + 3 QUEUED DECISIONS
+
+```
+FIRST yoo-dev SESSION TODAY RUNS THIS. Written cross-host because the
+checkpoint's stream (.km/review-findings.ndjson) is HOST-LOCAL to
+yoo-dev — it cannot be read from anywhere else, and 221.151.107.42:22
+timed out from yoo-mac at ~09:30 KST.
+
+1. SENSOR CADENCE CHECKPOINT (pre-registered due date 2026-08-13):
+     cd ~/z2/meta-harness && git pull
+     bun scripts/sensor-checkpoint.ts
+   The reader IS the ruling (locked 2026-08-11 BEFORE the number
+   existed, merge 5bdb88c): one event = one pass line with a DISTINCT
+   (baseSha,headSha) pair per calendar day; skip lines never count;
+   defaults pinned boundary ts 1785996709580, bar 25/day — the CLI
+   echoes them, any override is visible in the reading.
+   - >=25/day realized -> bar reachable, sensor stands as armed;
+     record the reading in resume.md + HISTORY, nothing changes.
+   - <25/day (EXPECTED) -> constants return to the USER as one
+     amendment: debounce first (7 of 12 day-1 skips were debounce),
+     then env reach (user-level KKAMAK_REVIEW_SENSOR so worktree
+     sessions inherit), then the 30/day cap — ALL landing as ONE
+     instrument change with ONE new boundary ts; yoo-mac arming rides
+     that same ts (its own sized go, but same boundary).
+   Nothing self-adjusts; the checkpoint only reads.
+
+2. SNAPSHOT EXPORT (stale since Jul 31 — A/A depends on it):
+     bash scripts/km-sensors-sync.sh export
+   then commit the snapshot with NAMED files (blind add -A swept a
+   stray bun.lock into a reviewed range once — 08-11 lesson) and push.
+
+3. CRANK-2 AB VERDICT (was ETA ~24:00 KST 08-12 — check it landed):
+     .kkamak/global/candidates/v20/ab-verdict.json
+   Read per-task table with metric labels straight + elapsed-per-pair
+   FIRST. Win -> /mh-activate account v20 is the USER's own go.
+   Inconclusive/reject -> tally + trajs feed crank #3 propose.
+
+4. A/A SINGLE-HOST RULING (user decision, options in the 08-12 late
+   block below): yoo-mac enrollment is STRUCTURALLY IMPOSSIBLE (trial
+   state is host-local to yoo-dev); recommend option (a) — accept
+   single-host A/A for the machinery test; floors accumulate on
+   yoo-dev alone.
+
+CONTEXT LANDED SINCE YOUR LAST PULL (yoo-mac, 08-12/13): P2 closed
+end-to-end, a3 ROUTED by user ruling (verdict json committed c1a2e06);
+kkamak product v0.6.0 released (A1 cycle tagging, install-proven);
+cc-gate-plugin 0.4.3 = the A1 port (merge 5e9d4c7, 7b artifact
+2cc4424-a1-cycle-tagging-port.md) DEPLOYED on yoo-mac only — office
+km-refresh after pull is a separate act and stamps its own
+pluginVersion partition; run `bun install` in cc-gate-plugin BEFORE
+km-refresh (install copies node_modules — GA12 lesson).
+```
+
 ## ⏳ LIVE STATE 2026-08-12 ~17:00 KST (`yoo-dev`) — CRANK-2 AB RUNNING (v20 vs v17)
 
 ```
