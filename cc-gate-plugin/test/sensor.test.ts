@@ -293,4 +293,28 @@ describe("buildSensorLine", () => {
 
     expect(result.durationMs).toBe(300000)
   })
+
+  // ── a3 live adapter (Task 4): ruleChecks ─────────────────────────────
+
+  it("ruleChecks: present iff provided, outcomes only", () => {
+    const baseArgs = {
+      sessionID: "sess-rc",
+      check: "npm test",
+      accepted: true,
+      gateExhausted: false,
+      rounds: [],
+      interrupted: false,
+      marker: false,
+      durationMs: 1000,
+    }
+
+    const line = buildSensorLine(fakeDeps, {
+      ...baseArgs,
+      ruleChecks: [{ id: "pb-1", pass: true, ms: 3 }],
+    })
+    expect(line.ruleChecks).toEqual([{ id: "pb-1", pass: true, ms: 3 }])
+
+    const bare = buildSensorLine(fakeDeps, baseArgs)
+    expect("ruleChecks" in bare).toBe(false) // absent, not undefined-valued
+  })
 })

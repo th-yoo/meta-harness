@@ -26,15 +26,17 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { unsafeReason } from "./gauge/guard.ts"
+// types.ts is the FROZEN shared contract (see its file header) — it never
+// imports from sibling src modules, so RuleCheckOutcome is defined there
+// (it is also the SensorLine.ruleChecks element type, Task 4) and
+// re-exported here for this module's existing consumers.
+import type { RuleCheckOutcome } from "./types.ts"
 
 export const RULE_CHECKS_MAX = 8
 export const RULE_CHECKS_BUDGET_MS = 5000
 export const RULE_CHECKS_FILE_REL = join(".km", "rule-checks.json")
 
-export type RuleCheckOutcome =
-  | { id: string; pass: boolean; ms: number }
-  | { id: string; skipped: true }
-  | { id: string; refused: true }
+export type { RuleCheckOutcome }
 
 interface FileRule { id: string; cmd: string; timeoutMs: number; state: string }
 

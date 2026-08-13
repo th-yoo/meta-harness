@@ -122,6 +122,19 @@ function assertConformsToSensorContract(line: Record<string, unknown>): void {
   // Arm identity is env-gated; membership in the frozen set is not.
   if ("reinject" in line) expect(REINJECT_VARIANTS).toContain(line.reinject as never)
 
+  // a3 live adapter (Task 4): shadow rule-check outcomes, when present.
+  if ("ruleChecks" in line) {
+    expect(Array.isArray(line.ruleChecks)).toBe(true)
+    for (const rc of line.ruleChecks as Array<Record<string, unknown>>) {
+      expect(typeof rc.id).toBe("string")
+      expect("cmd" in rc).toBe(false) // F2: outcomes never carry command text
+      const shapeOk =
+        (typeof rc.pass === "boolean" && typeof rc.ms === "number") ||
+        rc.skipped === true || rc.refused === true
+      expect(shapeOk).toBe(true)
+    }
+  }
+
   // This producer can always determine its own version, so the optional
   // field is in practice always stamped — and must match the package it
   // shipped from, or a consumer cannot attribute the line.
@@ -227,6 +240,52 @@ test("driven emission conforms: skippedStop diagnostic", async () => {
     assertConformsToSensorContract(line)
     expect(line.skippedStop).toBe(true)
     expect(line.rounds).toEqual([])
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true })
+  }
+})
+
+// ── a3 live adapter (Task 4): shadow rule checks wired into the Stop path ──
+
+test("SHADOW + byte-identity: absent rule-checks file -> emitted line has NO ruleChecks key", async () => {
+  const repo = mkRepo({ check: "true" })
+  try {
+    await edit(repo, "sid-rc-absent")
+    await stop(repo, "sid-rc-absent")
+    const lines = sensorLines(repo)
+    expect(lines.length).toBe(1)
+    const line = lines[0]!
+    assertConformsToSensorContract(line)
+    expect("ruleChecks" in line).toBe(false)
+    expect(line.accepted).toBe(true)
+    expect(line.rounds).toEqual(["accepted"])
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true })
+  }
+})
+
+test("SHADOW invariant: failing rule check annotates the line; Stop still accepts, single line, no extra rounds", async () => {
+  const repo = mkRepo({ check: "true" })
+  try {
+    fs.mkdirSync(path.join(repo, ".km"), { recursive: true })
+    fs.writeFileSync(
+      path.join(repo, ".km", "rule-checks.json"),
+      JSON.stringify({ version: 1, writtenTs: 1, rules: [{ id: "pb-1", cmd: "false", timeoutMs: 1000, state: "shadow" }] }),
+    )
+    await edit(repo, "sid-rc-shadow")
+    await stop(repo, "sid-rc-shadow")
+    const lines = sensorLines(repo)
+    expect(lines.length).toBe(1) // one line, one cycle — the failing rule did NOT block or reopen
+    const line = lines[0]!
+    assertConformsToSensorContract(line)
+    expect(line.accepted).toBe(true)
+    expect(line.rounds).toEqual(["accepted"]) // no verify-failed round from the rule check
+    expect(line.ruleChecks).toHaveLength(1)
+    const rc = (line.ruleChecks as Array<{ id: string; pass: boolean; ms: number }>)[0]!
+    expect(rc.id).toBe("pb-1")
+    expect(rc.pass).toBe(false)
+    expect(typeof rc.ms).toBe("number")
+    expect(JSON.stringify(line)).not.toContain("false\"") // F2: no cmd text on the line (cmd was "false")
   } finally {
     fs.rmSync(repo, { recursive: true, force: true })
   }

@@ -30,6 +30,7 @@ import { appendCheckOutput, buildCheckOutputRecord } from "./sidecar.ts"
 import { captureFixtureRef, bunGitRunner } from "./fixture-ref.ts"
 import { appendSensor } from "./sensor-append.ts"
 import { runCheck } from "./check-runner.ts"
+import { evaluateRuleChecks } from "./rule-checks.ts"
 import type { CoreDeps, DeliveryMode, EmitPlan, GaugeOffReason, SensorLine } from "./types.ts"
 
 const MH_CHILD_ENV = "MH_CHILD"
@@ -302,6 +303,15 @@ async function main(): Promise<void> {
   // which lines exist, only what an existing line admits about the instrument.
   if (line && !line.gauge) {
     line = { ...line, gauge: { present: false, offReason: gaugeOff ?? "no-record" } }
+  }
+  // a3 live adapter: shadow rule checks — annotation only, after the Stop
+  // decision is final and after every `line` reassignment (gauge replace,
+  // no-record annotation); fail-open inside evaluateRuleChecks. Skip
+  // evaluation entirely when no line will be emitted this Stop — don't
+  // burn the budget for a line that won't exist.
+  if (line) {
+    const ruleChecks = await evaluateRuleChecks(cwd, (cmd, c, t) => runCheck(cmd, c, t))
+    if (ruleChecks) line = { ...line, ruleChecks }
   }
   if (line) appendSensor(cwd, gateConfigRaw, line, deps.log)
 
