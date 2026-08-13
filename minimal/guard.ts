@@ -11,6 +11,15 @@
 // not trip `sudo`.
 
 const RULES: { reason: string; re: RegExp }[] = [
+  // Backtick substitution defeats every word-anchored rule below: a verb
+  // immediately after an unspaced backtick has no separator-class char
+  // before it, so `rm f` inside backticks is invisible. $() is fine — "("
+  // IS in the separator class, so interiors are scanned. Refuse backticks
+  // outright (a3 rule-routing T3 review find, 2026-08-13). Known trade:
+  // this also refuses literal-backtick-as-data (e.g. grepping for markdown
+  // code fences) — accepted per this file's fail-toward-refusal policy;
+  // shadow-only blast radius (one M1 data point per refusal).
+  { reason: "backtick-substitution", re: /`/ },
   { reason: "privilege-escalation", re: /(^|[\s;&|(])(sudo|doas|su)\b/ },
   { reason: "network-access", re: /(^|[\s;&|(])(curl|wget|nc|netcat|ssh|scp|rsync|ftp|telnet)\b/ },
   {
