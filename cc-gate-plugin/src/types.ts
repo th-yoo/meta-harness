@@ -308,7 +308,17 @@ export interface StopResult {
 /** File-backed per-session store (state.ts implements). */
 export interface StateStore {
   load(sessionId: string): CcGateState
-  save(sessionId: string, s: CcGateState): void
+  /**
+   * Compare-and-swap persist: `expectedUpdatedAt` is the `updatedAt` of the
+   * state the caller loaded (0 when no record existed at load time — absent
+   * reads back as INITIAL_STATE, whose updatedAt is 0, so the two sentinels
+   * coincide on purpose). save() re-reads the on-disk record right before
+   * committing and THROWS (StaleWriteError) when its updatedAt no longer
+   * matches — a newer write landed first, and blindly overwriting it is the
+   * lost-update race this parameter exists to prevent. Callers treat any
+   * save() throw — stale race, ENOSPC, EPERM — as the same fail-open.
+   */
+  save(sessionId: string, s: CcGateState, expectedUpdatedAt: number): void
   /** Rate-limited via .last-swept dotfile; deletes *.json with updatedAt older than 7d. */
   sweep(nowMs: number): void
 }

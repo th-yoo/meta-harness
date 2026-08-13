@@ -13,8 +13,9 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { FileStateStore } from "./state.ts"
+import { FileStateStore, saveResetWithRetry } from "./state.ts"
 import { parseGateConfig } from "./config.ts"
+import { isInitialState } from "./types.ts"
 import { buildStopOutput } from "./output.ts"
 import { handlePostToolUse } from "./core/edits.ts"
 import { handleUserPromptSubmit } from "./core/prompt.ts"
@@ -30,7 +31,7 @@ import { appendCheckOutput, buildCheckOutputRecord } from "./sidecar.ts"
 import { captureFixtureRef, bunGitRunner } from "./fixture-ref.ts"
 import { appendSensor } from "./sensor-append.ts"
 import { runCheck } from "./check-runner.ts"
-import type { CoreDeps, DeliveryMode, EmitPlan, GaugeOffReason, SensorLine } from "./types.ts"
+import type { CcGateState, CoreDeps, DeliveryMode, EmitPlan, GaugeOffReason, SensorLine } from "./types.ts"
 
 const MH_CHILD_ENV = "MH_CHILD"
 const KM_CHILD_ENV = "KM_CHILD"
@@ -62,6 +63,44 @@ function buildDeps(cwd: string, gateConfigRaw: string | undefined, timeoutMsOver
     now: () => Date.now(),
     hostname: () => os.hostname(),
     log: (msg: string) => console.error(msg),
+  }
+}
+
+/**
+ * The single CAS-aware persist path, shared by all three hook events. Three
+ * ways, keyed on how `next` relates to the loaded `prev`:
+ *   - `next === prev` (pure pass-through, same reference): NO save at all.
+ *     The store's save() re-stamps updatedAt, so an unconditional write here
+ *     would re-date a file that didn't change — the only liveness signal
+ *     sweep reads (an accepted, kkamak-parity behavior change).
+ *   - changed AND `isInitialState(next)`: this is a RESET (every core reset
+ *     site returns a bare {...INITIAL_STATE}). Route through never-throwing
+ *     `saveResetWithRetry` — a reset is unconditional intent, so a lost CAS
+ *     race retries once rather than being dropped.
+ *   - changed AND non-initial: a real progress write (block/round advance,
+ *     edit-tag). CAS save; on a lost race, `onNonResetFailure` decides the
+ *     fail-open shape (Stop discards the block + emits exit 0; Prompt/
+ *     PostToolUse log quietly and continue). The non-initial arm is also the
+ *     structural safety net a future changed-but-non-initial prompt return
+ *     falls into, instead of a reset-retry clobber.
+ */
+function dispatchSave(
+  store: FileStateStore,
+  sessionId: string,
+  prev: CcGateState,
+  next: CcGateState,
+  log: (msg: string) => void,
+  onNonResetFailure: (err: unknown) => void,
+): void {
+  if (next === prev) return
+  if (isInitialState(next)) {
+    saveResetWithRetry(store, sessionId, next, prev.updatedAt, log)
+    return
+  }
+  try {
+    store.save(sessionId, next, prev.updatedAt)
+  } catch (err) {
+    onNonResetFailure(err)
   }
 }
 
@@ -135,7 +174,14 @@ async function main(): Promise<void> {
         : undefined
     const state = store.load(sessionId)
     const next = handlePostToolUse(state, toolName, filePath)
-    if (next !== state) store.save(sessionId, next)
+    // PostToolUse never builds deps; a lost CAS race here is a dropped
+    // telemetry write (kkamak onFileEdited parity), self-heals next edit —
+    // quiet inline log, NOT a propagate-to-main().catch "fatal". next is
+    // never initial (edits.ts always sets edited:true), so the reset arm is
+    // dead here; harmless.
+    dispatchSave(store, sessionId, state, next, (m) => console.error(m), (err) =>
+      console.error(`cc-gate: edit state save lost race, record dropped: ${String(err)}`),
+    )
     return
   }
 
@@ -143,7 +189,13 @@ async function main(): Promise<void> {
     const deps = buildDeps(cwd, gateConfigRaw)
     const state = store.load(sessionId)
     const { state: next, sensor } = handleUserPromptSubmit(state, sessionId, gateConfigRaw, deps)
-    store.save(sessionId, next)
+    // Changed prompt returns are all bare resets today; the reset arm carries
+    // them via never-throwing saveResetWithRetry. A lost race can no longer
+    // abort the sensor append or the spawns below (the pre-CAS unconditional
+    // save could throw straight into main().catch and skip all of it).
+    dispatchSave(store, sessionId, state, next, deps.log, (err) =>
+      deps.log(`cc-gate: prompt state save lost race, dropped: ${String(err)}`),
+    )
     if (sensor) appendSensor(cwd, gateConfigRaw, sensor, deps.log)
 
     // 5th pre-data amendment (prompt-check): accompany, never replace — the
@@ -230,13 +282,12 @@ async function main(): Promise<void> {
   }
 
   // event === "Stop"
+  // sweep runs LATE (just before the final emit), not here: with CAS, sweeping
+  // before this session's own save would delete a 7-day-stale record out from
+  // under the load below and self-inflict a stale-write refusal. See the late
+  // sweep call at the end of this handler.
   const deps = buildDeps(cwd, gateConfigRaw)
   const state = store.load(sessionId)
-  try {
-    store.sweep(Date.now())
-  } catch {
-    // sweep() never throws by contract; belt-and-suspenders only.
-  }
 
   const { state: next, decision, sensor } = await handleStop(
     state,
@@ -245,16 +296,22 @@ async function main(): Promise<void> {
     deps,
   )
 
-  // (a) Persist BEFORE emitting. A throw here is fail-open: never block on
-  // an unrecorded round.
-  try {
-    store.save(sessionId, next)
-  } catch (e) {
+  // (a) Persist BEFORE emitting. Fail-open: a lost CAS race on a real
+  // progress write (block/round advance) is treated exactly like ENOSPC —
+  // discard the block, emit exit 0, never wedge the session. A reset
+  // (isInitialState) is carried by saveResetWithRetry and never downgrades an
+  // allow. A pure pass-through (next===state, the common unarmed Stop) writes
+  // nothing.
+  let saveFailedOpen = false
+  dispatchSave(store, sessionId, state, next, deps.log, (e) => {
     try {
       console.error(`hook-cli: state save failed, failing open: ${String(e)}`)
     } catch {
       // even logging failed; still fail open below
     }
+    saveFailedOpen = true
+  })
+  if (saveFailedOpen) {
     await emit({ exitCode: 0 })
     return
   }
@@ -360,6 +417,18 @@ async function main(): Promise<void> {
       proc.unref()
     },
   })
+
+  // Sweep LAST, after this session's own save landed (so its fresh record is
+  // never a sweep target) and before the terminal emit() — emit() is
+  // Promise<never> (process.exit), so anything after it is dead code. Runs
+  // unconditionally after dispatchSave, including the no-save pass-through
+  // arm (the most common Stop): sweep is per-directory hygiene, not gated on
+  // whether THIS session wrote. sweep() never throws by contract.
+  try {
+    store.sweep(Date.now())
+  } catch {
+    // belt-and-suspenders only.
+  }
 
   await emit(buildStopOutput(armed, mode))
 }

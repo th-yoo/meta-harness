@@ -42,7 +42,7 @@ function writeGate(repo: string, cfg: Record<string, unknown>): void {
 
 function seedState(repo: string, sessionId: string, overrides: Partial<CcGateState>): void {
   const store = new FileStateStore(path.join(repo, ".km", "cc-gate"))
-  store.save(sessionId, { ...INITIAL_STATE, ...overrides })
+  store.save(sessionId, { ...INITIAL_STATE, ...overrides }, 0)
 }
 
 function sensorLines(repo: string): Record<string, unknown>[] {
