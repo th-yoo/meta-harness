@@ -43,6 +43,7 @@ import {
   readCandidateSystem,
   parseModelSpec,
 } from "../../opencode-plugin/src/harness-store.ts"
+import { exportRuleChecks } from "../../opencode-plugin/src/rule-checks-export.ts"
 import { parseExposureRows, type ExposureRow } from "../../opencode-plugin/src/trial-arm.ts"
 import { buildProposerPrompt, applyStagedArtifact } from "../../opencode-plugin/src/propose.ts"
 import { ClaudeCodeHost } from "../../opencode-plugin/src/adapters/claude-code/cc-host.ts"
@@ -254,6 +255,7 @@ async function main(): Promise<void> {
     readCalibration: () => readCalibration(META_REPO_ROOT),
     calibrationStale: (cal) => calibrationStale(META_REPO_ROOT, cal),
     resolveGateTrial,
+    exportRuleChecks: (repo, root) => exportRuleChecks(repo, root),
     now,
   })
   if (trialScan) {

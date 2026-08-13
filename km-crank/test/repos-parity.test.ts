@@ -68,3 +68,11 @@ test("F2: check-output sidecar is NEVER in km-sensors-sync.sh's FILES export lis
   expect(filesLine).toBeDefined()
   expect(filesLine!).not.toContain("check-output")
 })
+
+test("F2: rule-checks export is NEVER in km-sensors-sync.sh's FILES export list", () => {
+  const repoRoot = path.resolve(import.meta.dir, "..", "..")
+  const script = fs.readFileSync(path.join(repoRoot, "scripts", "km-sensors-sync.sh"), "utf-8")
+  const filesLine = script.split("\n").find((l) => l.trimStart().startsWith("FILES=("))
+  expect(filesLine).toBeDefined()
+  expect(filesLine!).not.toContain("rule-checks")
+})
