@@ -466,6 +466,39 @@ history") reaches the front of the queue — at which point build the
 every-3rd-KEEP queue, the human-go activation, and the golden T_MAX rule
 together, and only then remove this refusal.
 
+## 7.9 C4 channel batch + channel-lane transport migration (deferred 2026-08-13, user ruling)
+
+The verification-channel ladder's top rung — the 14-call channel smoke +
+~301-call opus channel batch pre-registered 2026-08-03
+(`2026-08-03-gauge-verification-channel-ladder-preregistration.md`) — stays
+unrun, and the code change that would unblock it (migrating
+`channel-run.ts callChannelModel` off the bare `@anthropic-ai/sdk` lane
+onto `@th-yoo/cc-api-daemon`, where opus cleared while the bare lane
+429'd — the 08-11 per-transport measurement) stays unbuilt. The d3c3a40
+retraction stands: the chain is genuinely walled on its CURRENT transport,
+and a probe-only swap remains forbidden (false-CLEAR, fires the batch into
+a live 429); a real lane migration is the only honest unblock, and it is
+deferred WITH the batch, not before it.
+
+Why deferred, not queued: (1) C4's parent program — gauge per-task
+derivation — is shadow-indefinite under the locked M2 rule, with the
+second-fail kill condition still armed, and the v2 extractor's own pooled
+M1v2 floor unmet (class-C starvation, corpus C-precision 69%); refining a
+verification channel for an instrument that may be killed by its own
+pre-registration is backwards sequencing. (2) No pending verdict, ruling,
+or lane consumes channel-quality data. (3) Two transport migrations and
+several instrument boundaries have landed since the 08-03 pre-reg — any
+future run owes a re-registration against then-current transports
+regardless, so nothing is saved by keeping it "ready".
+
+**Revisit trigger** (all three, together): (a) the gauge M1v2 pooled floor
+is met or credibly near — organic class-C records accumulating via
+fixture-refs; (b) a consumer exists that actually blocks on channel
+quality; (c) the batch is re-registered against then-current transports —
+and the channel-lane migration is built as part of THAT re-registration,
+with its own provenance stamp and instrument-boundary entry, never
+speculatively.
+
 ## 8. Reading this doc in six months
 
 Ask, per entry: did the trigger fire? If yes, the entry graduates into the next

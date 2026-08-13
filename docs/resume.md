@@ -131,7 +131,9 @@ OPEN — NEED USER GO/RULING:
  - a3 production wiring design (above) · TB2 band batch (sized go) ·
    A/A trial-state ruling · ~~\~/.claude rw-mount~~ (STALE carry-forward —
    RULED 2026-08-11, fix 2746c07 shadow-dir; see the struck entry in the
-   08-11 block below) · C4 (429-walled, permanent lane design).
+   08-11 block below) · ~~C4~~ (DEFERRED 2026-08-13, user ruling —
+   explicitly-not-now §7.9; reopen = gauge floor + consumer +
+   re-registration, migration rides the reopen).
 
 RULES: explicit go before any merge to main and any spend · 7b gate +
 committed docs/reviews artifact (bare-field format — list dashes BLOCK
@@ -189,7 +191,8 @@ ELSEWHERE LIVE (not this host's to touch):
 
 STANDING OPENS: TB2 batch (re-check baseline budget-identity tuple
 first, no-spend) · ~~\~/.claude rw-mount ruling~~ (STALE — RULED
-2026-08-11, fix 2746c07) · C4 (bare-SDK 429-walled) · A/A yoo-mac enrollment starts only
+2026-08-11, fix 2746c07) · ~~C4~~ (DEFERRED 2026-08-13 →
+explicitly-not-now §7.9) · A/A yoo-mac enrollment starts only
 with sessions started AFTER the 08-10 hooks pull (this clear qualifies —
 the next session here should enroll; check .km/trial-arms.ndjson gains
 a row).
@@ -661,8 +664,9 @@ OPEN — NEED USER RULING/GO:
  - ~~\~/.claude rw-mount ruling~~ (STALE carry-forward — RULED
    2026-08-11, fix 2746c07 shadow-dir parity; nothing blocks linux P2
    on this axis).
- - C4 (still bare-SDK 429-walled; lift-watcher on yoo-dev was stopped —
-   re-arm if wanted).
+ - ~~C4~~ (DEFERRED 2026-08-13, user ruling — explicitly-not-now §7.9:
+   parked with the channel-lane migration; reopen triggers recorded
+   there. Lift-watcher stays down.).
 
 Rules unchanged: explicit merge/spend/sized gos · 7b gate + artifact
 (SHAs via git rev-parse, never by hand) · pull => bun install both
