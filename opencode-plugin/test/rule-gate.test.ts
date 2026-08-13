@@ -140,6 +140,47 @@ test("a check exceeding its timeoutMs is killed and counted as a failure", () =>
   expect(result.stdout).not.toContain("should-not-appear")
 })
 
+// ── process-group kill on timeout (fix round 1 — review finding) ────────
+//
+// GNU coreutils `timeout` puts its child in a fresh process group and
+// signals the WHOLE GROUP by default; a naive `kill <pid>` (no leading
+// `-`) only ever hits the direct child and orphans anything it
+// backgrounded. Repro: the check backgrounds a grandchild
+// (sleep-then-write-marker) with a timeoutMs shorter than the grandchild's
+// own sleep, then the check itself blocks on a long sleep so the watchdog
+// is guaranteed to be what ends it. If only the direct pid was killed, the
+// orphaned grandchild survives check.sh's own exit and writes the marker
+// on its own schedule; a correct process-GROUP kill takes the grandchild
+// down too, so the marker must never appear.
+test("timeout kills the check's whole process group — a backgrounded grandchild does not survive", () => {
+  // Not writeScript(): the marker path needs the real rgDir baked into the
+  // check's cmd text, so dir/rgDir must be computed BEFORE buildRuleGateScript
+  // is called (rgDir isn't created on disk yet — the script's own `mkdir -p`
+  // does that — but the path string is known and stable).
+  const dir = mkdtempSync(join(tmpdir(), "rule-gate-test-"))
+  const scriptPath = join(dir, "check.sh")
+  const rgDir = join(dir, "rg")
+  const markerPath = join(rgDir, "leak-marker")
+  writeFileSync(
+    scriptPath,
+    buildRuleGateScript([
+      { bulletId: "leaky", cmd: `(sleep 0.5; echo leaked > '${markerPath}') & sleep 10`, timeoutMs: 150 },
+    ]),
+  )
+
+  const started = Date.now()
+  const result = run(scriptPath, rgDir)
+  const elapsed = Date.now() - started
+  // Existing pin: a timed-out check still registers as a block/failure.
+  expect(result.exitCode).toBe(2)
+  expect(elapsed).toBeLessThan(2000) // watchdog fired at ~150ms, not the 10s sleep
+
+  // Give the orphaned grandchild (if the group wasn't actually killed) time
+  // past its own 0.5s sleep to write the marker, THEN check for it.
+  Bun.spawnSync(["sleep", "0.9"])
+  expect(existsSync(markerPath)).toBe(false)
+})
+
 // ── evidence tail-cap ──────────────────────────────────────────────────
 
 test("failing check's evidence on stderr is tail-capped to 2048 bytes", () => {

@@ -44,6 +44,17 @@
  * runs unmodified under both macOS's stock `/bin/bash` (3.2) and a modern
  * container bash (5.x).
  *
+ * Process-group kill (fix round 1, review finding): the watchdog doesn't
+ * just `kill` the check's direct pid — `run_one` (below) puts each check in
+ * its OWN process group via `set -m` and kills the whole group (`kill -TERM
+ * -"$pid"`), mirroring GNU `timeout`'s own default (group, not single-pid)
+ * behavior. A bare single-pid kill orphans anything the check backgrounds —
+ * a live repro showed a check's backgrounded grandchild still writing to
+ * disk ~5s after check.sh had already exited 2, and the bench container is
+ * long-lived across many Stop cycles, so that leak accumulates. No
+ * `setsid` (not guaranteed on the bench image or POSIX) — job control is a
+ * bash builtin present in both 3.2 and 5.x.
+ *
  * F2 (state.json never carries cmd text): `state.json` stores only
  * `{rounds, exhausted, perRule: {<bulletId>: {blocked, lastFail}}}` — counts
  * and an ISO timestamp, keyed by bulletId. `perRule` tracks the MOST
@@ -121,16 +132,38 @@ CHECK_SECS=(${secsLiteral})
 # Self-contained per-check timeout (module header: no coreutils 'timeout'
 # dependency). $1=cmd $2=secs; combined stdout+stderr -> $OUT_FILE; returns
 # the check's own exit code (143/SIGTERM-ish on a real timeout).
+#
+# Process-GROUP kill (fix round 1): 'set -m' (job control) makes the
+# backgrounded 'bash -c "$1"' the leader of a FRESH process group (pgid ==
+# its own pid) instead of sharing check.sh's group — the same thing GNU
+# coreutils 'timeout' does by default. A negative pid in 'kill' targets the
+# whole group, so anything the check itself backgrounds (a grandchild) dies
+# with it; a bare 'kill -TERM "$pid"' (no leading '-') only ever hits that
+# one pid and orphans descendants — exactly the leak a live repro caught
+# (a check backgrounding a sleep+marker-writer kept writing ~5s after
+# check.sh had already exited). No 'setsid' (not guaranteed on the bench
+# image or POSIX) — job control is a bash builtin, present in 3.2 and 5.x
+# alike. Applied after EVERY check, not just a timed-out one: a check that
+# finishes on its own can equally leave a backgrounded grandchild running,
+# and the container is long-lived across Stop cycles, so that leaks too.
+# The escalation-to-KILL grace timer is fire-and-forgotten (own stdin/
+# stdout/stderr, none of check.sh's own pipes) so it adds no wall-clock
+# cost to run_one itself — group cleanup finishes on its own schedule after
+# this function (and often the whole script) has already returned.
 run_one() {
   : > "$OUT_FILE"
+  set -m
   bash -c "$1" >"$OUT_FILE" 2>&1 &
   local pid=$!
-  ( sleep "$2"; kill -TERM "$pid" 2>/dev/null ) &
+  set +m
+  ( sleep "$2"; kill -TERM -"$pid" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
   local watchdog=$!
   wait "$pid" 2>/dev/null
   local rc=$?
   kill "$watchdog" 2>/dev/null
   wait "$watchdog" 2>/dev/null
+  kill -TERM -"$pid" 2>/dev/null
+  ( sleep 0.3; kill -KILL -"$pid" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
   return "$rc"
 }
 
