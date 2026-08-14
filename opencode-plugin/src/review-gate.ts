@@ -40,7 +40,7 @@ function ledgerText(ledger: RejectedEntry[]): string {
     .join("\n")
 }
 
-function revisionPrompt(p: ProposalLike, violations: string[], rejected: string): string {
+function revisionPrompt(p: ProposalLike, violations: string[], rejected: string, checkCmd?: string): string {
   return `You are the LESSON PROPOSER in a REVISION round. Your previously proposed
 rule failed external review. Your DIAGNOSIS is FROZEN — do not re-diagnose.
 Reform ONLY the rule so it fixes the violations below, stays behavior-level
@@ -50,7 +50,15 @@ specifics), or abstain if impossible.
 ## Frozen diagnosis
 ${p.reason ?? ""}
 ## Your rejected rule
-${p.bullet?.text ?? ""}
+${p.bullet?.text ?? ""}${
+    checkCmd
+      ? `
+## Attached check (RIDES WITH this rule — it will be attached to your revised
+text verbatim. Your revised rule MUST still describe exactly the behavior this
+command verifies; if no compliant rewrite can stay verified by it, abstain.)
+\`${checkCmd}\``
+      : ""
+  }
 ## Review violations
 ${violations.map((v) => `- ${v}`).join("\n")}
 ## Previously REJECTED lessons (do NOT re-derive)
@@ -127,7 +135,7 @@ export async function reviewAddedBullets(a: {
       proposal,
       rounds: REVISE_ROUNDS,
       review: (bullet, reason) =>
-        reviewBullet({ bullet, reason, harness: a.activeSystem, rejected, taskId: "", call }),
+        reviewBullet({ bullet, reason, harness: a.activeSystem, rejected, taskId: "", checkCmd: b.check?.cmd, call }),
       revise: async (p, r) => {
         // Layer-1 fails are deterministic and cheap to detect — free-fail
         // fast with NO LLM call, matching reviewBullet's own free-fail path
@@ -139,7 +147,7 @@ export async function reviewAddedBullets(a: {
         const formOnly = !r.layer1.pass && r.layer1.violations.every((v) => v.startsWith("form:"))
         if (!r.layer1.pass && !formOnly)
           return { action: "abstain", reason: `layer-1 free-fail: ${r.violations.join("; ")}` }
-        const reply = await call(revisionPrompt(p, r.violations, rejected))
+        const reply = await call(revisionPrompt(p, r.violations, rejected, b.check?.cmd))
         return (
           (extractJsonObject(reply, /\{\s*"action"/) as ProposalLike) ?? {
             action: "abstain",
@@ -149,7 +157,14 @@ export async function reviewAddedBullets(a: {
       },
     })
     out.push({
-      bullet: final.bullet?.text ?? b.text,
+      // A judge-rejected CHECKED bullet ledgers with an F2-safe suffix noting
+      // the check existed (tier only, never the command) — without it the
+      // ledger reads as prose-only and future proposers/humans can't tell a
+      // mechanized proposal was rejected on other axes.
+      bullet:
+        !staged && b.check && tier
+          ? `${final.bullet?.text ?? b.text} [check: attached (${tier})]`
+          : (final.bullet?.text ?? b.text),
       staged,
       violations: staged ? [] : trail[trail.length - 1]!.review.violations,
       trail: trail.map((t) => ({ round: t.round, bullet: t.bullet, verdict: t.review.verdict })),

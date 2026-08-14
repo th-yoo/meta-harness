@@ -1210,10 +1210,10 @@ ENDOFENVPOLICY
   const writeMain = playbook
     ? `**Required** — write your playbook edits (≤3 ops; each new/updated bullet should reflect a diagnosed root cause; include \`generality\` on \`add\`/\`update\` — \`universal\`|\`vendor\`|\`model\` — and \`slice\` when tagging \`vendor\` or \`model\`). Each new/updated bullet's text MUST take one of two forms — a trigger ("When <trigger>, <action>.") or a hard-gate ("Do not <action> until <condition>.") — no other phrasing passes review:
 
-Optionally, an "add" op may carry "check": {"cmd": "<shell command that mechanically verifies the rule's behavior>", "timeoutMs": <number>}. Only include a check when the rule's behavior is mechanically verifiable by a command; unverifiable rules stay prose-only — never invent a check. The command must be workspace-scoped; never touch stores, network, or packages.
+If a rule's behavior can be mechanically verified by a shell command, its "add" op MUST carry "check": {"cmd": "<shell command that mechanically verifies the rule's behavior>", "timeoutMs": <number>} — a mechanizable rule submitted prose-only gets rejected (mechanize_instead). Leave a rule prose-only ONLY when no workspace-scoped command can genuinely verify it; never invent a check that does not verify the behavior. The command must be workspace-scoped; never touch stores, network, or packages. When a previously rejected entry's mechanize_instead violation names a check design, re-proposing that rule WITH that check (as cmd text) is encouraged — the rejection was about missing mechanization, not the rule's substance.
 \`\`\`bash
 cat > "${relOps}" << 'ENDOFOPS'
-{"ops":[{"op":"add","text":"<new behavioral rule>","generality":"universal"},{"op":"update","id":"b2","text":"<revised rule>","generality":"vendor","slice":"<vendor id>"},{"op":"delete","id":"b5"}]}
+{"ops":[{"op":"add","text":"<new behavioral rule>","generality":"universal","check":{"cmd":"<shell command verifying the rule mechanically — REQUIRED for mechanizable rules, omit only when truly unverifiable>","timeoutMs":30000}},{"op":"update","id":"b2","text":"<revised rule>","generality":"vendor","slice":"<vendor id>"},{"op":"delete","id":"b5"}]}
 ENDOFOPS
 \`\`\``
     : `**Required** — write the improved system.md (each new rule should cite the diagnosis it addresses):
