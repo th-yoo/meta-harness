@@ -771,17 +771,29 @@ test("triggerPropose (opencode path): no stageArtifactApply → waits inline, ap
   const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
 
   // seedPlaybook auto-seeds playbook mode from the baseline, so the proposer's
-  // primary artifact is ops.json. Pre-seed it so inline waitForFile returns at once.
+  // primary artifact is ops.json. Write it from inside runTaskAgent (simulating
+  // the "child" producing its output once actually spawned) rather than before
+  // triggerPropose is called — the pre-clean-before-spawn fix (staging
+  // pre-clean, 2026-08-14) now deletes anything already sitting at this exact
+  // scope+version path BEFORE the spawn, by design (it would otherwise be
+  // indistinguishable from a stale leftover of an abandoned prior cycle), so a
+  // pre-call seed would be wiped before inline waitForFile ever polls for it.
   // RG3 adaptation: renamed to a layer1-passing trigger-form bullet (bare
   // "inline-applied rule" fails the trigger-form check); no assertion below
   // depends on the exact text.
   const b = stagingBase()
-  fs.writeFileSync(path.join(b, "project-role-v1-ops.json"),
-    JSON.stringify({ ops: [{ op: "add", text: "When an inline apply happens, apply the inline-applied rule." }] }))
-
   const rec: Rec = { notes: [], logs: [] }
+  const host: HarnessHost = {
+    ...reviewPassHost(rec),
+    runTaskAgent: async () => {
+      fs.writeFileSync(path.join(b, "project-role-v1-ops.json"),
+        JSON.stringify({ ops: [{ op: "add", text: "When an inline apply happens, apply the inline-applied rule." }] }))
+      return { id: "child-1" }
+    },
+  } as HarnessHost
+
   // Host WITHOUT stageArtifactApply/proposerInFlight → opencode inline path.
-  await triggerPropose(reviewPassHost(rec), worktree, layer)
+  await triggerPropose(host, worktree, layer)
 
   expect(listVersions(root)).toContain("v1")
   expect(readTrial(root)).not.toBeNull()
@@ -793,14 +805,23 @@ test("triggerPropose (CC path): stageArtifactApply present → defers, no inline
   bootstrapStore(root, "- baseline") // → nextVersion = v1
   const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
 
-  // Seed the artifact too — to prove the CC path does NOT apply inline even when present.
+  // Seed the artifact too — to prove the CC path does NOT apply inline even
+  // when present. Written from inside runTaskAgent (simulating the child
+  // producing it once actually spawned), same reasoning as the opencode test
+  // above — the pre-clean-before-spawn fix deletes anything already at this
+  // path before spawn, so a pre-call seed would never survive to this
+  // assertion.
   const b = stagingBase()
-  fs.writeFileSync(path.join(b, "project-role-v1-ops.json"),
-    JSON.stringify({ ops: [{ op: "add", text: "should-not-apply-inline" }] }))
-
   let staged: StagedArtifactDescriptor | undefined
   const rec: Rec = { notes: [], logs: [] }
-  const host = fakeHost(rec, { stageArtifactApply: (d) => { staged = d } })
+  const host = fakeHost(rec, {
+    stageArtifactApply: (d) => { staged = d },
+    runTaskAgent: async () => {
+      fs.writeFileSync(path.join(b, "project-role-v1-ops.json"),
+        JSON.stringify({ ops: [{ op: "add", text: "should-not-apply-inline" }] }))
+      return { id: "child-1" }
+    },
+  })
   await triggerPropose(host, worktree, layer)
 
   // Deferred: candidate NOT created inline; descriptor captured.
