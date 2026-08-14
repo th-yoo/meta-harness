@@ -3,6 +3,13 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+> **MOST RECENT STATE (2026-08-14, both sessions):** main = `3275e54`,
+> cc-gate-plugin **0.4.6 DEPLOYED** (contains a3 live-adapter + judge-check-aware
+> + the CAS state-persistence port). Two SESSION-END blocks below both apply —
+> the "harness" a3 block (next) and the "minimal" CAS+band block further down;
+> the a3 block's `main>=92f298b` is stale, real HEAD is `3275e54` (band commits
+> layered on top). Band batch COMPLETE, 77-pool exported (`e56e282`).
+
 ## ✅ SESSION END 2026-08-14 (`yoo-mac` "harness", a3 completion + live-fire session) — a3 STACK COMPLETE + PIPELINE LIVE-PROVEN IN 5 CRANKS · JUDGE-CHECK-AWARE `cf19d11` · 0.4.6 DEPLOYED · MAIN `92f298b`+
 
 **RESUME PROMPT:**
@@ -126,10 +133,49 @@ parity is ONLY proven from the main checkout.
 ```
 
 
-## ⏳ LIVE 2026-08-13 (`yoo-mac` "minimal", post-clear) — CAS PORT MERGED+PUSHED (`685a46e`) · BAND BATCH PAUSED chunk 2 @ 6/14 · XSESSION MESSAGING DOWN (this session)
+## ✅ SESSION END 2026-08-14 (`yoo-mac` "minimal", post-clear) — CAS PORT MERGED (in 0.4.6) · BAND BATCH COMPLETE (77-pool exported) · XSESSION MESSAGING DOWN · MAIN `3275e54`
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness), yoo-mac "minimal", post-2026-08-14 clear.
+git pull FIRST; main >= 3275e54 (my band+CAS work sits ABOVE the sibling's
+a3 SESSION-END block, which shows a now-stale main>=92f298b — trust
+3275e54). No pin moves; bun install only if pins moved.
+
+STATE (trust, don't re-derive):
+ - CAS PORT: cc-gate-plugin CAS state persistence + reset-retry (kkamak
+   0.6.0) MERGED + IN 0.4.6 (DEPLOYED). My 0.4.5 was superseded by the
+   sibling's a3 merge resolving to 0.4.6, which contains CAS. Nothing open.
+ - BAND BATCH: COMPLETE. 77-session pool (baseline + 5 chunks k=1, haiku-4-5,
+   {3600,3600,enforce}) EXPORTED to committed snapshot (e56e282, surgical
+   v0-only). Pooled 43/77=0.558. prove-plus-comm = INFRA HOLE (podman
+   workdir /workspace deterministic bring-up fail 5/5, baseline-only 1 obs)
+   — fix container staging before it can bench here. Live account store
+   ~/.config/kkamak/global/candidates/v0 has the 77 pooled sessions; if you
+   REUSE it, STRIP non-bench: sessions first (this + sibling dogfood both
+   write into active v0).
+ - XSESSION MESSAGING was DOWN in the cleared session (MCP messaging server
+   dropped mid-session; restart re-registers). Sibling = harness (pid 11511,
+   feat/a3-live-adapter). Coordinate via user relay until a fresh session.
+
+OPEN (this host): none live. NEXT batch = use the PARALLEL RECIPE (below in
+ the band block): ANTHROPIC_API_KEY + --parallel --host-pressure on
+ --cpu-budget/--mem-budget (auth is the gate, not the scheduler; serial was
+ the oauth-lane default, not a limit).
+
+YOO-DEV handoff (unchanged, not this host): sensor cadence checkpoint,
+ snapshot export (stale Jul 31), crank-2 v20 ab verdict, A/A single-host
+ ruling.
+
+RULES: explicit go before ANY merge and ANY spend · 7b gate + docs/reviews
+ artifact, SHAs via git rev-parse · named files only (never blind add -A) ·
+ own worktree per implementer · merging != deploying · surgical diff-first
+ store export (blind store-sync export = data-loss trap) · re-read the
+ baseline, never carry it · SITREP style.
+```
 
 ```
-LANDED THIS SESSION (all on main, pushed 685a46e):
+LANDED THIS SESSION (all on main; final HEAD 3275e54):
  - CAS PORT (cc-gate-plugin 0.4.5): kkamak 0.6.0 compare-and-swap state
    persistence + reset-retry ported. state.ts save(id,s,expectedUpdatedAt)
    refuses stale writes (StaleWriteError), monotonic stamp, delete-on-init
@@ -140,11 +186,13 @@ LANDED THIS SESSION (all on main, pushed 685a46e):
    before-emit. Design FLAWLESS (7 architect rounds, ledger
    ~/.claude/plans/plan-for-a-misty-flurry.md), code review APPROVED
    (0 findings), suite 1051/0. Commits 579fd0f (impl) + 79583e6 (artifact
-   docs/reviews/579fd0f-cas-reset-port.md) + 685a46e (merge). DEPLOYED on
-   yoo-mac (km-refresh --force OK, cache 0.4.5 verified; 0.4.3/0.4.4 dirs
-   survived so both live sessions kept hooks — no fail-open). Office
-   km-refresh after pull = separate act. Merge also carried sibling's
-   afae927 (a3 live-adapter plan).
+   docs/reviews/579fd0f-cas-reset-port.md) + 685a46e (merge). Deployed 0.4.5
+   at c6c4cb0, then SUPERSEDED: the sibling's a3-live-adapter merge (911ae49)
+   resolved the version to 0.4.6 (CAS took 0.4.5 mid-flight) — 0.4.6 CONTAINS
+   the CAS port (verified: HEAD state.ts has StaleWriteError/tryLock) and is
+   the DEPLOYED version now (cache 0.4.3-0.4.6; prune 0.4.3/0.4.4/0.4.5 after
+   both sessions restart). Office km-refresh to 0.4.6 after pull = separate
+   act. Merge also carried sibling's afae927 (a3 live-adapter plan).
 
 OPEN / STANDING:
  - BAND BATCH: ✅ COMPLETE (5 chunks k=1, 2026-08-13/14). Pool = 77 clean
