@@ -33,6 +33,7 @@ import {
   checkPromoteReply,
   checkCurateReply,
   WORKER_DEADLINE_MARGIN_MS,
+  workerDaemonEnv,
   type WorkerArgs,
   type ReplyCheck,
 } from "./daemon-seat.ts"
@@ -120,6 +121,7 @@ export async function runWorkerCycle(
   const ensure = deps.ensure ?? ensureDaemon
   const call = deps.call ?? daemonCall
   const close = deps.close ?? closeSession
+  const denv = workerDaemonEnv(env)
 
   const deadline = args.spawnedAt + args.timeoutMs - WORKER_DEADLINE_MARGIN_MS
   const remaining = () => deadline - Date.now()
@@ -134,7 +136,7 @@ export async function runWorkerCycle(
     // Detached worker MUST be able to spawn a cold daemon — never the
     // zero-wait silent-skip (that budget-guard behavior is a4-review's,
     // not a production seat's).
-    const ready = await ensure(env, { waitMs: Math.min(30_000, Math.max(0, remaining())) })
+    const ready = await ensure(denv, { waitMs: Math.min(30_000, Math.max(0, remaining())) })
     if (!ready) {
       log("daemon unreachable and could not be spawned — exiting without staging")
       return 1
@@ -153,7 +155,7 @@ export async function runWorkerCycle(
         return 1
       }
 
-      const outcome = await call(prompt, args.model, env, { isolation, maxTokens, budgetMs })
+      const outcome = await call(prompt, args.model, denv, { isolation, maxTokens, budgetMs })
       if (outcome.sessionId) sessionIds.push(outcome.sessionId)
 
       if (outcome.kind !== "ok") {
@@ -203,7 +205,7 @@ export async function runWorkerCycle(
   } finally {
     for (const id of sessionIds) {
       try {
-        await close(id, env)
+        await close(id, denv)
       } catch {
         /* best effort — a close failure never changes the cycle outcome */
       }

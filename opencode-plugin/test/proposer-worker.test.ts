@@ -103,23 +103,29 @@ interface Capture {
   ensures: { waitMs?: number }[]
   calls: { prompt: string; model: string; opts: { budgetMs?: number; maxTokens?: number; isolation: { systemPrompt: string; title: string } } }[]
   closed: string[]
+  envs: Record<string, string | undefined>[]
 }
 
 function fakeDeps(outcomes: DaemonOutcome[], over: WorkerDeps = {}): { deps: WorkerDeps; cap: Capture } {
-  const cap: Capture = { ensures: [], calls: [], closed: [] }
+  const cap: Capture = { ensures: [], calls: [], closed: [], envs: [] }
   let i = 0
   const deps: WorkerDeps = {
-    ensure: (async (_env: unknown, opts?: { waitMs?: number }) => {
+    ensure: (async (env: unknown, opts?: { waitMs?: number }) => {
       cap.ensures.push({ waitMs: opts?.waitMs })
+      cap.envs.push(env as Record<string, string | undefined>)
       return true
     }) as WorkerDeps["ensure"],
-    call: (async (prompt: string, model: string, _env: unknown, opts: unknown) => {
+    call: (async (prompt: string, model: string, env: unknown, opts: unknown) => {
       cap.calls.push({ prompt, model, opts: opts as Capture["calls"][number]["opts"] })
+      cap.envs.push(env as Record<string, string | undefined>)
       const o = outcomes[Math.min(i, outcomes.length - 1)]
       i++
       return o
     }) as WorkerDeps["call"],
-    close: (async (sessionId: string) => { cap.closed.push(sessionId) }) as WorkerDeps["close"],
+    close: (async (sessionId: string, env: unknown) => {
+      cap.closed.push(sessionId)
+      cap.envs.push(env as Record<string, string | undefined>)
+    }) as WorkerDeps["close"],
     ...over,
   }
   return { deps, cap }
@@ -405,6 +411,14 @@ test("close failure never changes the cycle outcome", async () => {
   })
   const code = await runWorkerCycle(args, {}, deps)
   expect(code).toBe(0)
+})
+
+test("worker calls ensure/call/close with the long-turn daemon env (fingerprint-separated from the judge daemon)", async () => {
+  const args = workerArgs("promote", promotePaths())
+  const { deps, cap } = fakeDeps([okOutcome(JSON.stringify(PROMOTE_REPLY))])
+  await runWorkerCycle(args, { HOME: "/h" }, deps)
+  for (const e of cap.envs) expect(e.ACP_TURN_TIMEOUT_MS).toBe(String(WORKER_TURN_TIMEOUT_MS))
+  expect(cap.envs.length).toBeGreaterThanOrEqual(3) // ensure + call + close all saw it
 })
 
 // ── workerDaemonEnv ──────────────────────────────────────────────────────
