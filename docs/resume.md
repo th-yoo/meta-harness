@@ -56,6 +56,16 @@ checked-rule candidate. First checked-rule ab stamps its own boundary
 ts (T8 duty). First liveEligible check makes live shadow lines appear.
 
 OPEN — NEED USER GO/RULING:
+ - JUDGE-CHECK-AWARE MERGED cf19d11 (7b artifact
+   1df449f-judge-check-aware.md, approved, 1 residual advisory): the
+   review judge was CHECK-BLIND — every mechanized proposal drew
+   mechanize_instead (live-proven crank 4: proposer emitted a
+   well-formed check, still rejected). Fixed: checkCmd shown to judge
+   ephemerally + deterministic suppression at raw-JSON ingestion +
+   revision-seat check contract + F2-safe attached suffix; proposer
+   prompt hardened (check REQUIRED when mechanizable + example carries
+   check — live-eval'd revisions). Confirm crank pending: expected
+   first checked-rule candidate PROPOSED+STAGED.
  - Checked-rule crank: CRANKS 1+2 RAN 2026-08-14 00:37/01:07 KST
    (km-crank --force, headless; ~$0.28 judge total): both proposals
    prose-only bullets, both REVIEW-REJECTED with mechanize_instead
