@@ -128,6 +128,15 @@ OPEN / STANDING:
    Store was surgically seeded from committed snapshot (junk v0 backed up
    ~/.config/kkamak/v0-junk-bak-20260813); active/ populated via writeActive
    (harnessHash 25f13fca883fe563 = baseline parity).
+   PARALLEL RECIPE for the NEXT batch (this one ran serial = oauth-lane
+   default, not a limit — see the corrected --parallel note further down):
+   export ANTHROPIC_API_KEY=<key>  # keyOnly mount, no oauth token race
+   then add: --parallel --host-pressure on --cpu-budget <N> --mem-budget <MB>
+   --min-cpus <n> --min-mem-mb <m>  (drop --no-oauth-gate; the key is the
+   auth). Load-aware packer schedules concurrently under the cpu/mem budget,
+   ~pack-factor faster wall-clock. IF podman-machine cgroup capture is
+   broken here (verify first), add --no-pack-measured. Budget tuple
+   {3600,3600,enforce} + model unchanged so the pool still accretes onto v0.
  - ~~km-refresh 0.4.5~~ DONE (yoo-mac, --force, cache verified). Office pending.
  - XSESSION MESSAGING DOWN in this session: SendMessage/ListAgents dead
    (MCP messaging server disconnected mid-session, same drop that pulled
@@ -1689,9 +1698,21 @@ An `ab` run is ~2x (two arms).
 RECOMMENDATION: haiku path first — cheaper, baseline still valid, and 27.9%
 pass is the signal band where actuator lift is visible. Opus-5 answers a
 different question (frontier harness quality) and carries the near-ceiling
-risk that made openssl a bad target. --parallel is effectively unavailable
-here: it forbids shared oauth (needs ANTHROPIC_API_KEY) and load-aware
-packing is blocked by broken WSL2 cgroup capture (--no-pack-measured).
+risk that made openssl a bad target. --parallel: CORRECTED 2026-08-14 (the
+old "effectively unavailable" line was WSL2-era + overstated). The
+adaptive load-aware packer (--parallel --host-pressure on --cpu-budget/
+--mem-budget/--min-cpus) is NOT hard-blocked on yoo-mac. The real gate is
+AUTH, not the scheduler (useKeyOnlyForParallel paths.ts:127 + cmd-run.ts
+:783-790): parallel WITH an API key uses a keyOnly read-only mount (safe,
+N concurrent); parallel WITHOUT one falls back to the SHARED RW oauth
+credential mount across all containers = refresh-token race (multiple
+containers rotate the same oauth token near expiry -> corruption). The
+5-chunk k=1 band batch (2026-08-13/14) ran SERIAL only because it was on
+the oauth lane (--no-oauth-gate, no key) — serial was the safe default
+WITHOUT setup, not a hard limit. The WSL2 cgroup-capture blocker
+(--no-pack-measured) is host-specific and may not apply here; verify
+podman-machine cgroup reporting before trusting --host-pressure on, else
+--no-pack-measured.
 GATE FIRST, free — ON THE BATCH'S OWN LANE (fixed 2026-08-11; the old
 bare-SDK probe_models gate here was false-WALLED for TB2: TB2 drivers are
 CLI-shaped, and bare-SDK opus/sonnet 429 is permanent lane design, not the
