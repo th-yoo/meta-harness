@@ -184,26 +184,37 @@ function isPlaybookOpShape(v: unknown): v is PlaybookOp {
 }
 
 function checkOpsPayload(v: unknown, label: string): ReplyCheck<{ ops: PlaybookOp[] }> {
-  if (!isRecord(v) || !Array.isArray(v.ops)) return { ok: false, reason: `${label} must be {"ops": [...]}` }
-  for (const op of v.ops) {
+  // Tolerate the BARE array alongside the documented `{"ops": [...]}` wrapper
+  // — same posture as parseReplyJson's fence tolerance: opus deterministically
+  // flattens the redundant-looking nesting (G2 live cranks 2026-08-14/15,
+  // both attempts of both cycles rejected on exactly this), and burning the
+  // one repair retry on shape trivia starves real repairs.
+  const list = Array.isArray(v) ? v : isRecord(v) && Array.isArray(v.ops) ? v.ops : undefined
+  if (!list) return { ok: false, reason: `${label} must be {"ops": [...]}` }
+  for (const op of list) {
     if (!isPlaybookOpShape(op)) return { ok: false, reason: `${label} contains a malformed op: ${JSON.stringify(op)}` }
   }
-  return { ok: true, value: { ops: v.ops as PlaybookOp[] } }
+  return { ok: true, value: { ops: list as PlaybookOp[] } }
 }
 
 export function checkProposeReply(v: unknown, playbookMode: boolean): ReplyCheck<ProposeReply> {
   if (!isRecord(v)) return { ok: false, reason: "reply must be a single JSON object" }
   if (!isRecord(v.diagnosis)) return { ok: false, reason: `"diagnosis" is required and must be an object` }
+  let normalizedOps: { ops: PlaybookOp[] } | undefined
   if (playbookMode) {
     const ops = checkOpsPayload(v.ops, `"ops"`)
     if (!ops.ok) return ops
+    normalizedOps = ops.value
   } else if (typeof v.system !== "string" || v.system.trim().length === 0) {
     return { ok: false, reason: `"system" is required (non-empty string) in system.md mode` }
   }
   if (v.tools !== undefined && typeof v.tools !== "string") return { ok: false, reason: `"tools" must be a string when present` }
   if (v.agentConfig !== undefined && !isRecord(v.agentConfig)) return { ok: false, reason: `"agentConfig" must be an object when present` }
   if (v.envPolicy !== undefined && !isRecord(v.envPolicy)) return { ok: false, reason: `"envPolicy" must be an object when present` }
-  return { ok: true, value: v as unknown as ProposeReply }
+  // Return the NORMALIZED ops payload, not the raw reply field — a tolerated
+  // bare array must never reach writeStagedFiles unwrapped (ops.json's
+  // {"ops": [...]} shape is what applyPendingArtifacts consumes).
+  return { ok: true, value: (normalizedOps ? { ...v, ops: normalizedOps } : v) as unknown as ProposeReply }
 }
 
 export function checkPromoteReply(v: unknown): ReplyCheck<PromoteReply> {
