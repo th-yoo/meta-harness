@@ -76,6 +76,12 @@ import { screenCheck } from "./check-screen.ts"
 import { loadActiveSplit } from "./bench/splits.ts"
 import { makeBenchPaths } from "./bench/paths.ts"
 import { buildExternalEvidenceSection } from "./evidence.ts"
+// Same atomic-write-with-mkdir utility proposer-worker.ts already uses for
+// every staging file it writes (writeStagedFiles, "../../bench/util.ts") —
+// reused here (fix round 1) so the trigger-level prompt.md persist doesn't
+// assume .kkamak/staging already exists. The old flow relied on the child's
+// `mkdir -p` heredoc line to create it; nothing at trigger level did before.
+import { writeTextAtomic } from "./bench/util.ts"
 
 /** Failure-taxonomy labels the proposer must pick from when diagnosing. */
 export const FAILURE_TAXONOMY = [
@@ -301,7 +307,7 @@ export async function triggerPropose(
     // would break its byte-identical-files-written contract).
     if (isCC) {
       const stagingPrompt = path.join(stagingBase, `${layer.scope}-${version}-prompt.md`)
-      fs.writeFileSync(stagingPrompt, prompt)
+      writeTextAtomic(stagingPrompt, prompt)
     }
 
     const task = await host.runTaskAgent({
@@ -810,7 +816,7 @@ export async function triggerPromote(
 
     if (isCC) {
       const stagingPrompt = path.join(stagingBase, `promote-${target.scope}-${version}-prompt.md`)
-      fs.writeFileSync(stagingPrompt, prompt)
+      writeTextAtomic(stagingPrompt, prompt)
     }
 
     const task = await host.runTaskAgent({
@@ -1580,7 +1586,7 @@ export async function triggerCurate(
 
     if (isCC) {
       const stagingPrompt = path.join(stagingBase, `curate-${layer.scope}-${version}-prompt.md`)
-      fs.writeFileSync(stagingPrompt, prompt)
+      writeTextAtomic(stagingPrompt, prompt)
     }
 
     const task = await host.runTaskAgent({
