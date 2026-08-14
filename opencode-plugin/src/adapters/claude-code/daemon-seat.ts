@@ -52,6 +52,35 @@ export function seatMaxTokens(model: string, seat: SeatKind): number | undefined
   return seat === "judge" ? 4096 : 16384
 }
 
+/** Turn budget for the detached worker's daemon (propose/promote/curate —
+ * NOT the judge). The gauge-sized default (ACP_BUDGET.turnTimeoutMs, 16s)
+ * deterministically kills real proposer turns: a 40KB account-global prompt
+ * plus a multi-KB JSON reply cannot clear 16s on opus (live-diagnosed
+ * 2026-08-14 — constant 16.0-16.2s call-consumed, aborted_streaming,
+ * duration_api_ms 0). 480s: ample for prefill + a 16KB reply, and the
+ * resulting advertised worst case (non-turn legs 16s + 480s = 496s) sits
+ * under the worker's attempt-1 budgetMs (600s for the standard 20min
+ * descriptor) with >=3s of §6e slack — checked by a test.
+ *
+ * CONFIG FLOOR (architect review): this number implies
+ * cfg.proposerTimeoutMin >= 17 — attempt-1 budgetMs is timeoutMs/2, and
+ * below ~998s of descriptor timeout the client guard (advertised worst
+ * case >= budgetMs) refuses every cycle pre-send: silent, free, and
+ * permanent until the config rises. readMhConfig clamps only to (0, 120].
+ * Boundary pinned by the config-floor test in proposer-worker.test.ts. */
+export const WORKER_TURN_TIMEOUT_MS = 480_000
+
+/** Env for the worker's daemon calls. ACP_TURN_TIMEOUT_MS is deliberately
+ * NOT in the daemon's ACP_ENV_DENYLIST, so setting it changes the
+ * envFingerprint: the worker gets its OWN daemon instance with long turns
+ * while the gauge/judge daemon (plain env, default fingerprint) keeps its
+ * 16s fail-fast budget. Isolation via the existing fingerprint mechanism —
+ * no daemon-side contract change beyond the honest worst-case
+ * advertisement (cc-api-daemon 0.8.1). */
+export function workerDaemonEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  return { ...env, ACP_TURN_TIMEOUT_MS: String(WORKER_TURN_TIMEOUT_MS) }
+}
+
 // ── worker argsfile ────────────────────────────────────────────────────────
 
 /** Staged-file paths the worker writes, per kind. Absolute paths, computed by

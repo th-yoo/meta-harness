@@ -13,14 +13,14 @@
  * F2 note: all prompts/replies below are synthetic fixtures invented for
  * this test, never a real proposer transcript.
  */
-import { test, expect, beforeEach, afterEach } from "bun:test"
+import { test, expect, beforeEach, afterEach, describe } from "bun:test"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
 import { createHash } from "node:crypto"
 import type { DaemonOutcome } from "@th-yoo/cc-api-daemon"
 import { runWorkerCycle, parseReplyJson, type WorkerDeps } from "../src/adapters/claude-code/proposer-worker.ts"
-import { WORKER_DEADLINE_MARGIN_MS, type WorkerArgs, type WorkerStagingPaths } from "../src/adapters/claude-code/daemon-seat.ts"
+import { WORKER_DEADLINE_MARGIN_MS, WORKER_TURN_TIMEOUT_MS, workerDaemonEnv, type WorkerArgs, type WorkerStagingPaths } from "../src/adapters/claude-code/daemon-seat.ts"
 
 let stagingDir: string
 
@@ -405,4 +405,38 @@ test("close failure never changes the cycle outcome", async () => {
   })
   const code = await runWorkerCycle(args, {}, deps)
   expect(code).toBe(0)
+})
+
+// ── workerDaemonEnv ──────────────────────────────────────────────────────
+
+describe("workerDaemonEnv", () => {
+  test("sets ACP_TURN_TIMEOUT_MS to the worker turn budget, preserves the rest", () => {
+    const e = workerDaemonEnv({ HOME: "/h", PATH: "/bin" })
+    expect(e.ACP_TURN_TIMEOUT_MS).toBe(String(WORKER_TURN_TIMEOUT_MS))
+    expect(e.HOME).toBe("/h")
+    expect(e.PATH).toBe("/bin")
+  })
+  test("does not mutate the input env", () => {
+    const input: Record<string, string | undefined> = { HOME: "/h" }
+    workerDaemonEnv(input)
+    expect(input.ACP_TURN_TIMEOUT_MS).toBeUndefined()
+  })
+  test("budget arithmetic: worker attempt-1 budget clears the advertised worst case with >=3s slack", () => {
+    // Mirror of the daemon's five-leg sum with the turn leg swapped
+    // (ACP_BUDGET at pin: queueWait 6k + clear 4k + setModel 2k + grace 4k = 16k non-turn legs).
+    const advertisedWorstCase = 16_000 + WORKER_TURN_TIMEOUT_MS
+    const attempt1BudgetMs = Math.floor(1_200_000 / 2) // standard descriptor timeoutMs / 2
+    expect(attempt1BudgetMs).toBeGreaterThanOrEqual(advertisedWorstCase + 3_000)
+  })
+  test("config floor: proposerTimeoutMin has a ~17-minute floor under the 480s turn budget", () => {
+    // Architect-review Important: readMhConfig clamps proposerTimeoutMin only
+    // to (0, 120] — no floor tied to the turn budget. Below the floor,
+    // attempt-1 budgetMs (timeoutMs/2) drops under the advertised worst case
+    // and the client guard refuses EVERY cycle pre-send (no-call, free but
+    // silent — the Task 1 stderr diagnostic never fires on pre-send refusal).
+    // This test documents the boundary so a default change trips it.
+    const advertisedWorstCase = 16_000 + WORKER_TURN_TIMEOUT_MS // 496_000
+    expect(Math.floor((17 * 60_000) / 2)).toBeGreaterThan(advertisedWorstCase + 3_000)  // 17 min: clears
+    expect(Math.floor((16 * 60_000) / 2)).toBeLessThan(advertisedWorstCase + 3_000)     // 16 min: refused
+  })
 })
