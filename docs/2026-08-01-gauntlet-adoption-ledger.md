@@ -729,3 +729,33 @@ five architect rounds recorded in
   `pluginVersion >= 0.4.6` may carry the field; earlier lines never do.
   Suites at deploy: opencode 1985/0 · cc-gate 1063/0 · km-crank 400/0 ·
   kkamak 418/0.
+
+- **DAEMON CARRIER MIGRATION — PROPOSER-ENVIRONMENT + JUDGE-TRANSPORT
+  CHANGE (2026-08-14 17:37 KST, yoo-mac, boundary ts 1786696678012):**
+  merge range `3716ea8..77288bc` on main (7b artifact
+  `77288bc-daemon-carrier-migration.md`). BOTH production seat carriers
+  changed in one window, per user ruling (spec `13b9938`):
+  - **Proposer/promoter/curator:** detached `claude -p` child (repo cwd,
+    hooks, CLAUDE.md, plugin surface live — the PROVEN contamination
+    carrier) replaced by a detached bun worker: deterministic prompt
+    assembly (json-reply outputMode), ONE toolless cc-api-daemon call
+    with our per-seat system prompt, harness-validated JSON reply,
+    harness-written staging files, provenance json + persisted prompt.md
+    per cycle. Proposal DISTRIBUTION shifts across this boundary:
+    pre-boundary proposals were authored under CC's harness (caveman
+    style, superpowers, repo CLAUDE.md all injected); post-boundary
+    proposals see ONLY the assembled prompt. Pre/post proposal
+    comparisons are invalid across this ts.
+  - **Judge/review seat:** one-shot `claude -p --system-prompt` child
+    replaced by toolless daemon call (seat isolation, settingSources [],
+    auto-memory off). Same verdict-relevant inputs; carrier hygiene +
+    explicit DEFAULT_JUDGE_MODEL fallback (previously CC CLI default —
+    judge-model provenance is now recorded, not ambient). Judge-verdict
+    streams comparable in substance but carrier-attributable variance
+    partitions at this ts.
+  - `claude -p` survives ONLY in bench measurement context (TB2 driver
+    specimen + p2 probe arms), user-ruled. cc-api-daemon pin unchanged
+    `33f74db` (0.8.0), toolless guard untouched.
+  - First crank after this boundary stamps the fresh-boundary marker
+    (M4, pending explicit spend go). Suites at merge: opencode 2025/0
+    post-sweep (2031/0 pre-sweep combined).

@@ -3,6 +3,56 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-14 evening (`yoo-mac` "harness" + sibling "minimal" two-track) — DAEMON CARRIER MIGRATION COMPLETE + MERGED · `claude -p` ELIMINATED FROM PRODUCTION SEATS · MAIN `9d960ea`+
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness), yoo-mac, post-2026-08-14-evening session.
+git pull FIRST; main >= 9d960ea. The claude -p elimination program is
+BUILT, MERGED, REVIEWED — do not redo. Spec 13b9938, plan 3716ea8
+(3-round architect-reviewed), 7b artifact
+docs/reviews/77288bc-daemon-carrier-migration.md (verdict approved,
+0 findings, suite 2025/0), boundary ts 1786696678012 in the adoption
+ledger (proposer-environment + judge-transport change — pre/post
+proposal distributions NOT comparable).
+
+WHAT CHANGED: judge/review seat = toolless cc-api-daemon call
+(seatIsolation, DEFAULT_JUDGE_MODEL bare-id fallback, budgetMs 90s
+default). Proposer/promoter/curator = detached bun worker
+(process.execPath, WorkerArgs argsfile, json-reply prompt contract,
+one repair retry under lock-horizon deadline, harness writes staging
++ provenance + prompt.md). claude -p survives ONLY bench specimen
+sites (TB2 driver + p2 probes, user-ruled). Daemon pin unchanged
+33f74db, toolless guard untouched. Key files:
+adapters/claude-code/{daemon-seat,proposer-worker,cc-host}.ts,
+propose.ts (outputMode fork + isCC wiring), review-gate.ts
+(reviewModel now ModelSpec + threaded from cfg.judgeModel).
+
+NEXT (M4, NEEDS EXPLICIT SPEND GO): first post-migration crank smoke —
+one /mh-propose cycle: lock -> worker -> daemon -> staged files
+(+provenance/prompt.md) -> apply -> candidate; judge smoke via one
+review-gate call; acceptance = transcript/prompt provenance contains
+NO CC-harness markers (no CAVEMAN, no superpowers) — contamination
+probe repeated as acceptance test. First crank stamps fresh boundary
+marker per ledger entry.
+
+DEFERRED MINORS (ledger + review artifact): promote/curate
+trigger-level wiring tests missing (traced correct manually; add
+before next structural edit there) · test tmp-dir leak convention ·
+judge-side stale warn text "letting claude use its default model"
+(one-liner). Sibling worktree /Users/yoo/z2/meta-harness-judge +
+branches feat/daemon-judge, feat/daemon-proposer can be cleaned after
+push.
+
+STANDING OPEN (unchanged from prior blocks): A/A trial-state ruling ·
+checked-rule candidate evidence-driven · yoo-dev ssh-dead handoff ·
+both-sessions restart then 0.4.3-0.4.5 cache cleanup.
+
+RULES: explicit go before merge/spend · 7b gate + artifact · suites
+serial · NAMED files only · probe the CONSEQUENCE · sim transport =
+production lane · SITREP.
+```
+
 ## ✅ SESSION END 2026-08-14 late (`yoo-mac` "harness", cleared ~12:00 KST) — F2 RULED · PROPOSER CONTAMINATION PROVEN · NEW PROGRAM: ELIMINATE `claude -p` · MAIN `1cb7cc6`+
 
 **RESUME PROMPT:**
