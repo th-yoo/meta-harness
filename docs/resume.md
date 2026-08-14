@@ -3,6 +3,105 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-14 late (`yoo-mac` "harness", cleared ~12:00 KST) — F2 RULED · PROPOSER CONTAMINATION PROVEN · NEW PROGRAM: ELIMINATE `claude -p` · MAIN `1cb7cc6`+
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness), yoo-mac, post-2026-08-14-late session.
+git pull FIRST; main >= 1cb7cc6. The a3 pipeline is COMPLETE and
+live-proven (see the earlier 08-14 close block below — do not redo any
+of it). This session's tail ruled F2 and opened a NEW PROGRAM.
+
+NEW PROGRAM (user-ruled, THE next build lane): ELIMINATE `claude -p`
+from every seat — "pure LLM with OUR system prompt, not CC's".
+PROVEN CONTAMINATION (smoking gun, 2026-08-14): both crank proposer
+transcripts (~/.claude/projects/-Users-yoo-z2-meta-harness/
+f5ba3cad-*.jsonl, d1c0ffd7-*.jsonl) contain "CAVEMAN MODE ACTIVE —
+level: full" + superpowers refs — SessionStart/UserPromptSubmit hooks
+fire in claude -p children, so every proposal this session was
+authored under CC's system prompt + repo CLAUDE.md + caveman style +
+full plugin surface. Blast radius: zero adopted rules contaminated
+(all 5 cranks rejected; store untouched).
+
+SITE INVENTORY (verified by exhaustive grep — each needs its own
+design disposition in the spec, they are NOT uniform):
+ 1. cc-host.ts:239 runTextAgent (JUDGE) — one-shot, --system-prompt
+    OURS already + --disallowedTools + scratch cwd. Least
+    contaminated; migration to thin API = drop CC runtime entirely.
+ 2. cc-host.ts:394 runTaskAgent (PROPOSER/promoter/curator) — WORST:
+    no system-prompt override, repo cwd, CLAUDE.md/plugins/hooks
+    live. Needs TOOLS (store reads, staging writes) so daemon's
+    toolless lanes don't fit as-is: carrier = agent-sdk query with
+    tools allowed + settingSources: [] + OUR systemPrompt (a
+    cc-api-daemon extension or direct @anthropic-ai/claude-agent-sdk
+    use — daemon's warm validator currently REJECTS nonzero
+    settingSources and strips tools; extending it is a
+    contract-level change to that repo).
+ 3. drivers/claude-code.ts:267 (TB2 BENCH SUBJECT, in-container) —
+    TENSION TO RULE: the CC-agent-with-playbook IS the measured
+    specimen; eliminating claude -p here changes what TB2 measures.
+    Sibling's table called this "not contamination — the specimen".
+    User said eliminate ALL — needs explicit per-site ruling in
+    brainstorm (same for 4).
+ 4. p2/cmd-p2.ts probe arms + T9-style gate probes — measure CC hook
+    MECHANICS; output discarded. Same ruling needed as 3.
+
+PRECEDENT/MACHINERY TO REUSE (do not reinvent): kkamak gauge N5
+migration already did this for gauge seats — send-prompt interface
+spec docs/superpowers/specs/2026-08-04-send-prompt-interface.md,
+REASONING_ISOLATION cc-gate-plugin/src/gauge/send-prompt.ts:144,
+providers/ (anthropic-cli-warm etc.), minimal/llm-acp.ts seatCall;
+plus a4-review's daemon recipe (ensureDaemon/daemonCall/closeSession)
+and the 2026-08-14 carrier-fidelity memory (sim transport = production
+lane). cc-api-daemon repo: ~/z2/cc-api-daemon (unpublished git-dep,
+npm publish held — dependency-surface question belongs in the spec).
+KNOWN daemon caveats to design around: api lane DEFAULT_MAX_TOKENS
+2048 truncation, cold-daemon no-call silent-skip (ACP_IDLE_MS), api
+lane auth path, 429-per-transport.
+
+PROCESS: superpowers brainstorm -> spec (per-site disposition table:
+migrate / keep-as-specimen / retire) -> writing-plans -> SDD, 7b gate
++ artifact, explicit go before merge + before any spend. Instrument
+discipline: proposer-environment change = boundary ts in the adoption
+ledger (proposal distribution shifts); judge-transport change = same.
+First crank after migration stamps a fresh boundary.
+
+ALSO CLOSED THIS SESSION TAIL (do not redo):
+ - rejected.json F2 RULED (user): verdict-summary-only PERMANENT —
+   3-round eval docs/loop-probes/f2-ledger-eval.md (cmd text: zero
+   benefit, anchoring harm on full-CC carrier; carrier changes
+   results — daemon lane hid the effect). Spec §1 r5, committed
+   1cb7cc6. No code change (fallback wiring was already the
+   contract).
+ - claude -p site audit (the inventory above) + two memory
+   corrections (sim-transport-fidelity note now lists the real
+   carriers per lane).
+
+STANDING OPEN (unchanged): A/A trial-state ruling (P2-close block) ·
+checked-rule candidate = evidence-driven (scheduled crank, 10-line
+threshold; do NOT force-crank stale pools) · yoo-dev ssh-dead handoff
+(sensor checkpoint + crank-2 v20 verdict + pull both repos) · sibling
+"minimal" relay (messaging down; main 1cb7cc6, 0.4.6 lane, a3
+hands-off lifted, band chunk 2 paused) · both-sessions restart then
+0.4.3-0.4.5 cache cleanup.
+
+RULES: explicit go before any merge to main and any spend · 7b gate +
+committed docs/reviews artifact (BARE fields; SHAs via rev-parse) ·
+suites serial (concurrent suites = the proven flake source) · merging
+≠ deploying (bump + km-refresh + grep cache) · add NAMED files only ·
+probe the CONSEQUENCE · sim transport must match the production lane
+simulated · SITREP.
+
+Most likely lost otherwise: the elimination program's per-site nuance
+— sites 3/4 measure the CC harness itself (specimen vs contamination
+distinction from the sibling's table); a blanket claude -p purge that
+swaps the bench subject's carrier silently changes what TB2 measures
+and invalidates baseline comparability (budget-identity/boundary-ts
+implications). Get the per-site ruling IN THE SPEC before touching
+drivers/claude-code.ts.
+```
+
+
 > **MOST RECENT STATE (2026-08-14, both sessions):** main = `3275e54`,
 > cc-gate-plugin **0.4.6 DEPLOYED** (contains a3 live-adapter + judge-check-aware
 > + the CAS state-persistence port). Two SESSION-END blocks below both apply —
