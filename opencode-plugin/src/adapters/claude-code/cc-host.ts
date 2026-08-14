@@ -22,15 +22,13 @@
  *                /mh-score UserPromptSubmit hook setPendingScore(verdict) then
  *                runs sessionIdle in the SAME process; promptHumanScore consumes
  *                the staged verdict via takePendingScore and returns immediately.
- *   - runTextAgent → the judge transport (Task L7): a one-shot `claude -p`
- *                child process with the system prompt FULLY REPLACED
- *                (--system-prompt) and every tool denied (--disallowedTools),
- *                spawned in a scratch cwd OUTSIDE the project so the
- *                project's own .claude/settings.json hooks (which are
- *                cwd/project-scoped) can never fire for the judge — a judge
- *                session must not record itself. See runClaudeCodeTextAgent
- *                below for the full contract (model-strip / timeout / JSON
- *                parse / never-throw).
+ *   - runTextAgent → the judge transport (Task L7; daemon-carried since the
+ *                2026-08-14 carrier migration): ONE cc-api-daemon call with
+ *                the system prompt supplied via seat isolation (toolless,
+ *                no settingSources, no auto-memory — so CC's own harness,
+ *                hooks, and CLAUDE.md can never contaminate or record a
+ *                judge turn). See runClaudeCodeTextAgent below for the full
+ *                contract (model fallback / proof / truncation / never-throw).
  *   - runTaskAgent → the proposer/promoter/curator transport (Task L8): spawns
  *                a DETACHED, long-running `claude -p` child (runClaudeCodeTaskAgent
  *                below) and returns `{id}` immediately without waiting — the
@@ -50,6 +48,8 @@ import fs from "node:fs"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
 import type { HarnessHost, ScoreResult, StagedArtifactDescriptor } from "../../host.ts"
+import { ensureDaemon, daemonCall, closeSession, modelProvenBy } from "@th-yoo/cc-api-daemon"
+import { seatIsolation, seatMaxTokens, DEFAULT_JUDGE_MODEL } from "./daemon-seat.ts"
 import { ccRuntimeDir } from "./file-state.ts"
 import { writeProposerLock, proposerInFlight as lockInFlight } from "./proposer.ts"
 
@@ -179,14 +179,24 @@ interface ClaudeJsonResult {
   total_cost_usd?: unknown
 }
 
+/** Injectable daemon-client seam for the judge transport (a4-review.ts's
+ * deps pattern) — tests supply fakes for `ensureDaemon`/`daemonCall`/
+ * `closeSession` so the full suite never touches a real daemon. */
+export type JudgeDeps = {
+  call?: typeof daemonCall
+  ensure?: typeof ensureDaemon
+  close?: typeof closeSession
+}
+
 /**
- * The judge transport itself: spawn a ONE-SHOT `claude -p` with the system
- * prompt fully replaced and every tool denied, in a scratch cwd OUTSIDE the
- * project (so the project's own mh hooks — which are cwd/.claude-scoped —
- * can never fire; a judge session recording itself would be a feedback
- * loop), parse `--output-format json` stdout, and return the reply text.
+ * The judge transport itself: ONE record through cc-api-daemon with the
+ * system prompt carried in the seat isolation (toolless, no settingSources,
+ * no auto-memory, session never persisted — so CC's own harness, hooks, and
+ * CLAUDE.md can never fire for the judge; a judge session recording itself
+ * would be a feedback loop). Session is closed in a `finally`
+ * (close-not-release, a4-review.ts's convention).
  *
- * Free function (not a private class method) so tests can inject `spawnFn`
+ * Free function (not a private class method) so tests can inject `deps`
  * directly without reaching into ClaudeCodeHost internals — `log` is passed
  * in rather than closed over so the SAME function backs
  * `ClaudeCodeHost.runTextAgent` (which forwards to `this.log`) with zero
@@ -194,10 +204,22 @@ interface ClaudeJsonResult {
  *
  * Contract (matches OpencodeHost.runTextAgent — judge.ts/engine.ts consume
  * both identically): NEVER throws; returns the reply string on success, or
- * null on ANY failure (non-anthropic judgeModel, spawn error, timeout,
- * non-zero exit, `is_error`, unparseable JSON, missing `result`). A null
+ * null on ANY failure (non-anthropic judgeModel, daemon unreachable,
+ * non-`ok` outcome, unproven model, api-lane maxTokens truncation). A null
  * return is judge.ts's own "no verdict" sentinel — scoring itself is
  * unaffected.
+ *
+ * Model: `opts.model` undefined falls back to DEFAULT_JUDGE_MODEL — the
+ * daemon hard-requires a non-empty model (no daemon-side default, unlike
+ * the old CLI transport). ONE `effectiveModel` feeds both the call and
+ * `seatMaxTokens` so a future api-lane (haiku) judge computes its cap off
+ * the same model string; `seatMaxTokens` is `undefined` on the agent lane,
+ * where the daemon hard-rejects any call carrying maxTokens.
+ *
+ * Timeout: `budgetMs` is passed EXPLICITLY (`opts.timeoutMs ??
+ * DEFAULT_JUDGE_TIMEOUT_MS`) — no current caller sets `opts.timeoutMs`, and
+ * daemonCall's own internal default is 36s (ACP_BUDGET.clientBudgetMs), so
+ * omitting it would silently regress the judge timeout 90s→36s.
  */
 export async function runClaudeCodeTextAgent(
   opts: {
@@ -208,8 +230,14 @@ export async function runClaudeCodeTextAgent(
     timeoutMs?: number
   },
   log: (level: LogLevel, msg: string) => void,
-  spawnFn: CCSpawnFn = defaultCCSpawn,
+  deps: JudgeDeps = {},
 ): Promise<string | null> {
+  const call = deps.call ?? daemonCall
+  const ensure = deps.ensure ?? ensureDaemon
+  const close = deps.close ?? closeSession
+
+  const env = process.env
+  let sessionIdToClose: string | undefined
   try {
     // ── model resolution: CC only speaks anthropic models ──────────────────
     let modelId: string | undefined
@@ -229,74 +257,48 @@ export async function runClaudeCodeTextAgent(
       }
     }
 
-    // ── isolation: scratch cwd OUTSIDE the project ──────────────────────────
-    const scratchRoot = path.join(ccRuntimeDir(), "judge")
-    fs.mkdirSync(scratchRoot, { recursive: true })
-    const scratchCwd = fs.mkdtempSync(path.join(scratchRoot, "j-"))
+    const effectiveModel = modelId ?? DEFAULT_JUDGE_MODEL
 
-    try {
-      const argv = [
-        "claude", "-p", opts.prompt,
-        "--system-prompt", opts.system,
-        "--output-format", "json",
-        ...(modelId ? ["--model", modelId] : []),
-        "--disallowedTools", ...DISALLOWED_TOOLS,
-      ]
+    await ensure(env, { waitMs: 15_000 })
 
-      const timeoutMs = opts.timeoutMs ?? DEFAULT_JUDGE_TIMEOUT_MS
-      const proc = spawnFn(argv, { cwd: scratchCwd, stdin: "ignore" })
+    const outcome = await call(opts.prompt, effectiveModel, env, {
+      isolation: seatIsolation(opts.system, opts.title),
+      maxTokens: seatMaxTokens(effectiveModel, "judge"),
+      budgetMs: opts.timeoutMs ?? DEFAULT_JUDGE_TIMEOUT_MS,
+    })
 
-      let timedOut = false
-      const timer = setTimeout(() => {
-        timedOut = true
-        try { proc.kill() } catch { /* already gone */ }
-      }, timeoutMs)
-
-      let stdout: string
-      let exitCode: number
-      try {
-        [stdout, exitCode] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
-      } finally {
-        clearTimeout(timer)
-      }
-
-      if (timedOut) {
-        log("warn", `[cc-host] runTextAgent: claude -p timed out after ${timeoutMs}ms — killed, skipping judge`)
-        return null
-      }
-      if (exitCode !== 0) {
-        log("warn", `[cc-host] runTextAgent: claude -p exited ${exitCode} — skipping judge`)
-        return null
-      }
-
-      let parsed: ClaudeJsonResult
-      try {
-        parsed = JSON.parse(stdout) as ClaudeJsonResult
-      } catch {
-        log("warn", "[cc-host] runTextAgent: could not parse claude -p --output-format json stdout — skipping judge")
-        return null
-      }
-
-      if (typeof parsed.total_cost_usd === "number") {
-        log("debug", `[cc-host] runTextAgent: judge call cost $${parsed.total_cost_usd.toFixed(4)}`)
-      }
-
-      if (parsed.is_error) {
-        log("warn", `[cc-host] runTextAgent: claude -p reported is_error — skipping judge (result: ${JSON.stringify(parsed.result)})`)
-        return null
-      }
-      if (typeof parsed.result !== "string") {
-        log("warn", "[cc-host] runTextAgent: claude -p JSON result had no string `result` field — skipping judge")
-        return null
-      }
-
-      return parsed.result
-    } finally {
-      try { fs.rmSync(scratchCwd, { recursive: true, force: true }) } catch { /* best-effort cleanup */ }
+    if (outcome.kind !== "ok") {
+      log("warn", `[cc-host] runTextAgent: daemon call failed (${outcome.kind}) — skipping judge`)
+      return null
     }
+    sessionIdToClose = outcome.sessionId
+
+    if (!modelProvenBy(outcome.model, effectiveModel, outcome.canonicalModel)) {
+      log("warn", `[cc-host] runTextAgent: reply model "${outcome.model}" does not prove requested "${effectiveModel}" — skipping judge`)
+      return null
+    }
+
+    // Truncation is checked on the SPECIFIC value "max_tokens" — absence (or
+    // any other value) means unknown, never "not truncated" (the agent lane
+    // has no equivalent value; a4-review.ts's convention).
+    if (outcome.stopReason === "max_tokens") {
+      log("warn", `[cc-host] runTextAgent: reply truncated at the api-lane maxTokens cap — skipping judge`)
+      return null
+    }
+
+    return outcome.text
   } catch (err) {
     log("warn", `[cc-host] runTextAgent: unexpected failure — ${err instanceof Error ? err.message : String(err)}`)
     return null
+  } finally {
+    if (sessionIdToClose) {
+      try {
+        await close(sessionIdToClose, env)
+      } catch {
+        /* best effort — close-not-release, but never lets a close failure
+         * override the judge outcome already decided above */
+      }
+    }
   }
 }
 
@@ -423,10 +425,10 @@ export class ClaudeCodeHost implements HarnessHost {
 
   private readonly logFile: string
 
-  /** Injectable spawn seam for the judge transport (runTextAgent) —
-   * defaults to the real `claude -p` child. Tests inject a fake so the full
-   * suite never touches a real `claude` binary. */
-  private readonly spawnFn: CCSpawnFn
+  /** Injectable daemon-client seam for the judge transport (runTextAgent) —
+   * defaults to the real cc-api-daemon client trio. Tests inject fakes so
+   * the full suite never touches a real daemon. */
+  private readonly judgeDeps: JudgeDeps
 
   /** Injectable detached-spawn seam for the task transport (runTaskAgent) —
    * defaults to the real detached `claude -p` child. Tests inject a fake. */
@@ -434,11 +436,11 @@ export class ClaudeCodeHost implements HarnessHost {
 
   constructor(
     projectRoot: string,
-    opts: { logFile?: string; spawnFn?: CCSpawnFn; taskSpawnFn?: CCTaskSpawnFn } = {},
+    opts: { logFile?: string; judgeDeps?: JudgeDeps; taskSpawnFn?: CCTaskSpawnFn } = {},
   ) {
     this.projectRoot = projectRoot
     this.logFile = opts.logFile ?? path.join(ccRuntimeDir(), "hook.log")
-    this.spawnFn = opts.spawnFn ?? defaultCCSpawn
+    this.judgeDeps = opts.judgeDeps ?? {}
     this.taskSpawnFn = opts.taskSpawnFn ?? defaultCCTaskSpawn
   }
 
@@ -493,7 +495,7 @@ export class ClaudeCodeHost implements HarnessHost {
     model?: unknown
     timeoutMs?: number
   }): Promise<string | null> {
-    return runClaudeCodeTextAgent(opts, (level, msg) => this.log(level, msg), this.spawnFn)
+    return runClaudeCodeTextAgent(opts, (level, msg) => this.log(level, msg), this.judgeDeps)
   }
 
   async runTaskAgent(opts: {

@@ -158,72 +158,61 @@ test("log appends to the runtime logfile (best-effort durability)", () => {
   expect(fs.readFileSync(logFile, "utf-8")).toContain("hello-log-marker")
 })
 
-// ── runTextAgent (judge transport, Task L7) ───────────────────────────────
+// ── runTextAgent (judge transport, Task L7 — daemon-carried) ──────────────
 //
-// Hermetic: NO real `claude` binary is ever spawned — every test injects a
-// fake CCSpawnFn via the ClaudeCodeHost constructor's `spawnFn` option.
+// Hermetic: NO real daemon is ever reached — every test injects fake
+// {ensure, call, close} deps via the ClaudeCodeHost constructor's
+// `judgeDeps` option (donor pattern: test/p2-a4-review.test.ts).
+import type { DaemonOutcome } from "@th-yoo/cc-api-daemon"
+import { DEFAULT_JUDGE_MODEL } from "../src/adapters/claude-code/daemon-seat.ts"
+import type { JudgeDeps } from "../src/adapters/claude-code/cc-host.ts"
 
-/** A completed child process whose stdout is the given text and whose
- * `exited` promise resolves immediately to `exitCode`. */
-function completedProc(stdoutText: string, exitCode = 0): CCChildProcess {
+type OkOutcome = Extract<DaemonOutcome, { kind: "ok" }>
+
+function okOutcome(over: Partial<OkOutcome> = {}): DaemonOutcome {
   return {
-    stdout: new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode(stdoutText))
-        controller.close()
-      },
-    }),
-    exited: Promise.resolve(exitCode),
-    kill() { /* already exited — no-op, matches real Bun.spawn semantics */ },
+    kind: "ok",
+    text: "the judge verdict text",
+    model: DEFAULT_JUDGE_MODEL,
+    canonicalModel: DEFAULT_JUDGE_MODEL,
+    sessionId: "sess-ok",
+    ...over,
   }
 }
 
-/** A child process that hangs until `.kill()` is called — simulates a stuck
- * `claude -p` so the timeout-kill path can be exercised without a real
- * timer-length wait. `killed()` reports whether kill() has fired. */
-function hangingProc(): { proc: CCChildProcess; killed: () => boolean } {
-  let killedFlag = false
-  let closeController!: ReadableStreamDefaultController<Uint8Array>
-  let resolveExited!: (n: number) => void
-  const stdout = new ReadableStream<Uint8Array>({
-    start(c) { closeController = c },
-  })
-  const exited = new Promise<number>((res) => { resolveExited = res })
-  return {
-    proc: {
-      stdout,
-      exited,
-      kill() {
-        killedFlag = true
-        closeController.close()
-        resolveExited(143) // SIGTERM-ish, matches exec.ts's signal-death convention
-      },
-    },
-    killed: () => killedFlag,
-  }
+/** Captured inputs of the fake daemon-client trio for one runTextAgent call. */
+interface JudgeCapture {
+  ensures: number
+  prompt?: string
+  model?: string
+  callOpts?: { isolation: { systemPrompt: string; title: string }; budgetMs?: number; maxTokens?: number }
+  closed: string[]
 }
 
-const OK_RESULT = JSON.stringify({
-  type: "result", subtype: "success", is_error: false,
-  result: "the judge verdict text", num_turns: 1, total_cost_usd: 0.0123, session_id: "s1",
-})
-
-function hostWithSpawn(spawnFn: CCSpawnFn, projectRoot = "/some/project"): { host: ClaudeCodeHost; logs: { level: string; msg: string }[] } {
+function hostWithJudgeDeps(
+  outcome: DaemonOutcome | (() => DaemonOutcome),
+  over: JudgeDeps = {},
+): { host: ClaudeCodeHost; logs: { level: string; msg: string }[]; cap: JudgeCapture } {
+  const cap: JudgeCapture = { ensures: 0, closed: [] }
+  const deps: JudgeDeps = {
+    ensure: (async () => { cap.ensures++ }) as JudgeDeps["ensure"],
+    call: (async (prompt: string, model: string, _env: unknown, opts: unknown) => {
+      cap.prompt = prompt
+      cap.model = model
+      cap.callOpts = opts as JudgeCapture["callOpts"]
+      return typeof outcome === "function" ? outcome() : outcome
+    }) as JudgeDeps["call"],
+    close: (async (sessionId: string) => { cap.closed.push(sessionId) }) as JudgeDeps["close"],
+    ...over,
+  }
   const logs: { level: string; msg: string }[] = []
-  const host = new ClaudeCodeHost(projectRoot, { spawnFn })
+  const host = new ClaudeCodeHost("/some/project", { judgeDeps: deps })
   host.log = (level, msg) => { logs.push({ level, msg }) }
-  return { host, logs }
+  return { host, logs, cap }
 }
 
-test("runTextAgent: argv is claude -p <prompt> --system-prompt <system> --output-format json --model <modelID> --disallowedTools <verified list>; stdin ignored; cwd outside the project", async () => {
-  let capturedArgv: string[] | undefined
-  let capturedOpts: { cwd: string; stdin: "ignore" } | undefined
-  const spawnFn: CCSpawnFn = (argv, opts) => {
-    capturedArgv = argv
-    capturedOpts = opts
-    return completedProc(OK_RESULT)
-  }
-  const { host } = hostWithSpawn(spawnFn, "/some/project")
+test("runTextAgent: happy path — prompt/model/isolation/budgetMs threaded, text returned, session closed", async () => {
+  const { host, cap } = hostWithJudgeDeps(okOutcome({ model: "claude-sonnet-4-5" }))
 
   const text = await host.runTextAgent({
     title: "[meta-harness] judge sess-1",
@@ -233,55 +222,59 @@ test("runTextAgent: argv is claude -p <prompt> --system-prompt <system> --output
   })
 
   expect(text).toBe("the judge verdict text")
-  expect(capturedArgv).toEqual([
-    "claude", "-p", "judge this session",
-    "--system-prompt", "you are the judge",
-    "--output-format", "json",
-    "--model", "claude-sonnet-4-5", // "anthropic/" prefix STRIPPED
-    "--disallowedTools",
-    "Bash", "Read", "Write", "Edit", "Glob", "Grep", "Task", "WebFetch", "WebSearch", "NotebookEdit",
-  ])
-  expect(capturedOpts!.stdin).toBe("ignore")
-  // Isolation: cwd must be OUTSIDE the project (so project .claude/settings.json
-  // hooks — cwd-scoped — can never fire for the judge process).
-  expect(capturedOpts!.cwd).not.toBe("/some/project")
-  expect(capturedOpts!.cwd.startsWith("/some/project")).toBe(false)
-  expect(capturedOpts!.cwd).toContain(path.join("runtime", "cc", "judge"))
+  expect(cap.ensures).toBe(1)
+  expect(cap.prompt).toBe("judge this session")
+  expect(cap.model).toBe("claude-sonnet-4-5") // "anthropic/" prefix STRIPPED
+  // Isolation carries the system prompt + title (no CC harness, no hooks,
+  // no CLAUDE.md — the contamination class the migration closes).
+  expect(cap.callOpts!.isolation.systemPrompt).toBe("you are the judge")
+  expect(cap.callOpts!.isolation.title).toBe("[meta-harness] judge sess-1")
+  // budgetMs is EXPLICIT (90s default) — omitting it would silently regress
+  // to daemonCall's internal 36s default.
+  expect(cap.callOpts!.budgetMs).toBe(90_000)
+  // close-not-release: the served session is closed after the call.
+  expect(cap.closed).toEqual(["sess-ok"])
 })
 
-test("runTextAgent: scratch cwd is cleaned up after the call (no leaked tmp dirs)", async () => {
-  let seenCwd: string | undefined
-  const spawnFn: CCSpawnFn = (_argv, opts) => { seenCwd = opts.cwd; return completedProc(OK_RESULT) }
-  const { host } = hostWithSpawn(spawnFn)
-  await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
-  expect(seenCwd).toBeDefined()
-  expect(fs.existsSync(seenCwd!)).toBe(false)
-})
-
-test("runTextAgent: omits --model when no model is given (lets claude use its default)", async () => {
-  let capturedArgv: string[] | undefined
-  const spawnFn: CCSpawnFn = (argv) => { capturedArgv = argv; return completedProc(OK_RESULT) }
-  const { host } = hostWithSpawn(spawnFn)
-  await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
-  expect(capturedArgv).not.toContain("--model")
-})
-
-test("runTextAgent: a malformed model spec (not {providerID,modelID}) is ignored — warns, omits --model, still proceeds", async () => {
-  let capturedArgv: string[] | undefined
-  const spawnFn: CCSpawnFn = (argv) => { capturedArgv = argv; return completedProc(OK_RESULT) }
-  const { host, logs } = hostWithSpawn(spawnFn)
-
-  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p", model: "anthropic/claude-x" })
-
+test("runTextAgent: model undefined -> DEFAULT_JUDGE_MODEL substituted (daemon hard-requires a model)", async () => {
+  const { host, cap } = hostWithJudgeDeps(okOutcome())
+  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
   expect(text).toBe("the judge verdict text")
-  expect(capturedArgv).not.toContain("--model")
+  expect(cap.model).toBe(DEFAULT_JUDGE_MODEL)
+})
+
+test("runTextAgent: agent-lane model -> NO maxTokens in call opts (daemon hard-rejects it on the agent lane)", async () => {
+  const { host, cap } = hostWithJudgeDeps(okOutcome())
+  await host.runTextAgent({ title: "t", system: "s", prompt: "p" }) // default = opus = agent lane
+  expect(cap.callOpts!.maxTokens).toBeUndefined()
+})
+
+test("runTextAgent: api-lane (haiku) model -> judge maxTokens cap passed, computed off the SAME effective model", async () => {
+  const { host, cap } = hostWithJudgeDeps(okOutcome({ model: "claude-haiku-4-5" }))
+  await host.runTextAgent({
+    title: "t", system: "s", prompt: "p",
+    model: { providerID: "anthropic", modelID: "claude-haiku-4-5" },
+  })
+  expect(cap.model).toBe("claude-haiku-4-5")
+  expect(cap.callOpts!.maxTokens).toBe(4096)
+})
+
+test("runTextAgent: timeoutMs override is passed through as budgetMs", async () => {
+  const { host, cap } = hostWithJudgeDeps(okOutcome())
+  await host.runTextAgent({ title: "t", system: "s", prompt: "p", timeoutMs: 12_345 })
+  expect(cap.callOpts!.budgetMs).toBe(12_345)
+})
+
+test("runTextAgent: a malformed model spec (not {providerID,modelID}) is ignored — warns, falls back to default, still proceeds", async () => {
+  const { host, logs, cap } = hostWithJudgeDeps(okOutcome())
+  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p", model: "anthropic/claude-x" })
+  expect(text).toBe("the judge verdict text")
+  expect(cap.model).toBe(DEFAULT_JUDGE_MODEL)
   expect(logs.some((l) => l.level === "warn" && l.msg.includes("unrecognized model spec"))).toBe(true)
 })
 
-test("runTextAgent: non-anthropic judgeModel -> null, actionable log, spawnFn NEVER called", async () => {
-  let spawnCalls = 0
-  const spawnFn: CCSpawnFn = () => { spawnCalls++; return completedProc(OK_RESULT) }
-  const { host, logs } = hostWithSpawn(spawnFn)
+test("runTextAgent: non-anthropic judgeModel -> null, actionable log, daemon NEVER touched", async () => {
+  const { host, logs, cap } = hostWithJudgeDeps(okOutcome())
 
   const text = await host.runTextAgent({
     title: "t", system: "s", prompt: "p",
@@ -289,79 +282,69 @@ test("runTextAgent: non-anthropic judgeModel -> null, actionable log, spawnFn NE
   })
 
   expect(text).toBeNull()
-  expect(spawnCalls).toBe(0)
+  expect(cap.ensures).toBe(0)
+  expect(cap.prompt).toBeUndefined()
   const warning = logs.find((l) => l.level === "warn" && l.msg.includes("openrouter"))
   expect(warning).toBeDefined()
   expect(warning!.msg).toContain("anthropic")
   expect(warning!.msg.toLowerCase()).toContain("judgemodel")
 })
 
-test("runTextAgent: reply extraction from a canned --output-format json result", async () => {
-  const spawnFn: CCSpawnFn = () => completedProc(OK_RESULT)
-  const { host } = hostWithSpawn(spawnFn)
+test("runTextAgent: daemon unreachable (ensure throws) -> null + warn, never throws", async () => {
+  const { host, logs } = hostWithJudgeDeps(okOutcome(), {
+    ensure: (async () => { throw new Error("no daemon and spawn failed") }) as JudgeDeps["ensure"],
+  })
+  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
+  expect(text).toBeNull()
+  expect(logs.some((l) => l.level === "warn" && l.msg.includes("unexpected failure"))).toBe(true)
+})
+
+test("runTextAgent: no-call outcome -> null + warn, close NOT called (no session was created)", async () => {
+  const { host, logs, cap } = hostWithJudgeDeps({ kind: "no-call" })
+  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
+  expect(text).toBeNull()
+  expect(logs.some((l) => l.level === "warn" && l.msg.includes("no-call"))).toBe(true)
+  expect(cap.closed).toEqual([])
+})
+
+test("runTextAgent: call-consumed outcome -> null + warn", async () => {
+  const { host, logs } = hostWithJudgeDeps({ kind: "call-consumed" })
+  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
+  expect(text).toBeNull()
+  expect(logs.some((l) => l.level === "warn" && l.msg.includes("call-consumed"))).toBe(true)
+})
+
+test("runTextAgent: model-proof failure -> null + warn, session STILL closed", async () => {
+  const { host, logs, cap } = hostWithJudgeDeps(okOutcome({ model: "claude-haiku-4-5", canonicalModel: "claude-haiku-4-5" }))
+  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" }) // requested default opus, served haiku
+  expect(text).toBeNull()
+  expect(logs.some((l) => l.level === "warn" && l.msg.includes("does not prove"))).toBe(true)
+  expect(cap.closed).toEqual(["sess-ok"])
+})
+
+test("runTextAgent: max_tokens truncation -> null + warn, session STILL closed", async () => {
+  const { host, logs, cap } = hostWithJudgeDeps(okOutcome({ stopReason: "max_tokens" }))
+  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
+  expect(text).toBeNull()
+  expect(logs.some((l) => l.level === "warn" && l.msg.includes("truncated"))).toBe(true)
+  expect(cap.closed).toEqual(["sess-ok"])
+})
+
+test("runTextAgent: close failure never overrides the decided outcome", async () => {
+  const { host } = hostWithJudgeDeps(okOutcome(), {
+    close: (async () => { throw new Error("socket gone") }) as JudgeDeps["close"],
+  })
   const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
   expect(text).toBe("the judge verdict text")
 })
 
-test("runTextAgent: is_error in the JSON result -> null + warn log", async () => {
-  const errJson = JSON.stringify({ type: "result", subtype: "error_during_execution", is_error: true, result: "", total_cost_usd: 0 })
-  const spawnFn: CCSpawnFn = () => completedProc(errJson)
-  const { host, logs } = hostWithSpawn(spawnFn)
+test("runTextAgent: never throws even if call itself throws", async () => {
+  const { host, logs } = hostWithJudgeDeps(okOutcome(), {
+    call: (async () => { throw new Error("wire EPIPE") }) as JudgeDeps["call"],
+  })
   const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
   expect(text).toBeNull()
-  expect(logs.some((l) => l.level === "warn" && l.msg.includes("is_error"))).toBe(true)
-})
-
-test("runTextAgent: non-zero exit code -> null + warn log", async () => {
-  const spawnFn: CCSpawnFn = () => completedProc("", 1)
-  const { host, logs } = hostWithSpawn(spawnFn)
-  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
-  expect(text).toBeNull()
-  expect(logs.some((l) => l.level === "warn" && l.msg.includes("exited 1"))).toBe(true)
-})
-
-test("runTextAgent: unparseable JSON stdout -> null + warn log", async () => {
-  const spawnFn: CCSpawnFn = () => completedProc("not json at all")
-  const { host, logs } = hostWithSpawn(spawnFn)
-  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
-  expect(text).toBeNull()
-  expect(logs.some((l) => l.level === "warn" && l.msg.includes("could not parse"))).toBe(true)
-})
-
-test("runTextAgent: logs total_cost_usd at debug level on success", async () => {
-  const spawnFn: CCSpawnFn = () => completedProc(OK_RESULT)
-  const { host, logs } = hostWithSpawn(spawnFn)
-  await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
-  expect(logs.some((l) => l.level === "debug" && l.msg.includes("0.0123"))).toBe(true)
-})
-
-test("runTextAgent: timeout kills the child and returns null (makes timeoutMs real for CC)", async () => {
-  const { proc, killed } = hangingProc()
-  const spawnFn: CCSpawnFn = () => proc
-  const { host, logs } = hostWithSpawn(spawnFn)
-
-  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p", timeoutMs: 20 })
-
-  expect(text).toBeNull()
-  expect(killed()).toBe(true)
-  expect(logs.some((l) => l.level === "warn" && l.msg.includes("timed out"))).toBe(true)
-})
-
-test("runTextAgent: default timeout is used when timeoutMs is omitted (proc completes well within it)", async () => {
-  // Not a timing assertion (that would be flaky) — just proves the call
-  // succeeds end-to-end without an explicit timeoutMs.
-  const spawnFn: CCSpawnFn = () => completedProc(OK_RESULT)
-  const { host } = hostWithSpawn(spawnFn)
-  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
-  expect(text).toBe("the judge verdict text")
-})
-
-test("runTextAgent: never throws even if spawnFn itself throws", async () => {
-  const spawnFn: CCSpawnFn = () => { throw new Error("spawn EMFILE") }
-  const { host, logs } = hostWithSpawn(spawnFn)
-  const text = await host.runTextAgent({ title: "t", system: "s", prompt: "p" })
-  expect(text).toBeNull()
-  expect(logs.some((l) => l.level === "warn")).toBe(true)
+  expect(logs.some((l) => l.level === "warn" && l.msg.includes("unexpected failure"))).toBe(true)
 })
 
 // ---------------------------------------------------------------------------
