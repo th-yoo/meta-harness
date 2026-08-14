@@ -1476,3 +1476,57 @@ actually "instrument under-powered + margin rule too eager + two grading
 bugs" — and the only way that surfaced was refusing to spend on the next
 experiment before the last one was explained. Analysis of owned data beat
 the planned A/A control run to the answer, at zero token cost.
+
+## Five cranks to a working checked-rule pipeline (2026-08-14, `yoo-mac`) — the loop debugged its own review seam by being run
+
+The a3 rule-routing program merged in three pieces — TB2 adapter
+(`16c2303`), T9 live probe (gate block/block/exhaust-allow proven inside
+one `claude -p`, `342b9eb`), live adapter + SensorLine `ruleChecks`
+contract rev (`911ae49`, cc-gate 0.4.6, boundary ts 1786634418937) — and
+was then exercised for real: five headless km-crank propose rounds in one
+night, each unlocked by the emit-then-crank pattern (the crank's
+zero-new-evidence refusal is absolute, so a genuine edit-carrying Stop in
+the dogfood session mints the line that unlocks the next round).
+
+**Cranks 1-3 exposed the proposer's prose default.** Three straight
+prose-only bullets, three `mechanize_instead` rejections in which the
+judge each time DESIGNED the check it wanted — steering that the
+rejected-ledger feedback alone never converted. Two live-evaluated prompt
+revisions fixed emission: flipping the default (mechanizable ⇒ check
+REQUIRED) did nothing; putting a `check` in the ops JSON EXAMPLE did it —
+models imitate schemas, not imperatives.
+
+**Crank 4 exposed the judge's check-blindness.** The proposer emitted a
+well-formed check (transcript-verified — it even ran the command against
+the workspace before submitting) and STILL drew `mechanize_instead`:
+`buildReviewPrompt`/`computeVerdict` had no channel for "a check rides
+along," so the pipeline was structurally unwinnable — no checked rule
+could ever pass review, regardless of proposer behavior. Fixed as
+`cf19d11` (7b artifact `1df449f-judge-check-aware.md`): the attached
+check is shown to the judge ephemerally (F2 governs persisted artifacts,
+not judge input), suppression is DETERMINISTIC at the raw-JSON ingestion
+point (the reviewer's own probe caught that `reviewLoop`'s fast-abstain
+read the unsanitized object — belt applied where the data enters, not
+where it's consumed), the revision seat sees the check under a
+stay-verified-or-abstain contract, and a judge-rejected checked bullet
+ledgers `[check: attached (<tier>)]` — tier, never the command.
+
+**Crank 5 proved the whole pipe by rejecting correctly.** Same bun-not-npm
+rule, now: check emitted, screened LIVE tier, `mechanize_instead` absent
+for the first time in five rounds, revision round actually fired (two
+judge calls), and the final verdict was `category` + `duplicate` — a
+SUBSTANCE judgment. The rule is tooling knowledge, not work-process, and
+the category rubric exists precisely to kill it. Every stage of
+propose → screen → check-aware review → revise → verdict is now
+live-proven; what's missing is not machinery but evidence — a session
+failure that yields a rule both process-shaped and mechanizable. The
+scheduled crank inherits that watch at its 10-line threshold.
+
+**The meta-lesson extends the crank-#1 entry above:** the pipeline's
+first four "failures" were the instrument, not the subject — a prompt
+whose example taught the wrong shape, then a rubric with no input channel
+for the thing it was judging. Both were only findable by RUNNING the loop
+against real spend and reading the artifacts (the transcript, not the
+ledger, revealed crank 4's emitted check — the ledger's own F2 shape hid
+it). And the fix's reviewer applied the same discipline back: probing the
+fix by execution found the second suppression seam the tests missed.

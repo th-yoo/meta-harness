@@ -3,14 +3,29 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## ✅ SESSION END 2026-08-14 (`yoo-mac` "harness", a3 completion session) — T9 PROBE CLEAN (GATE LIVE-PROVEN) · PLAN B BUILT+MERGED `911ae49` · CONTRACT REV BOTH REPOS · 0.4.6 DEPLOYED + BOUNDARY TS · MAIN `1f86d9e`
+## ✅ SESSION END 2026-08-14 (`yoo-mac` "harness", a3 completion + live-fire session) — a3 STACK COMPLETE + PIPELINE LIVE-PROVEN IN 5 CRANKS · JUDGE-CHECK-AWARE `cf19d11` · 0.4.6 DEPLOYED · MAIN `92f298b`+
 
 **RESUME PROMPT:**
 ```
 Resume kkamak (meta-harness), yoo-mac, post-2026-08-14 a3-completion
-session. git pull FIRST; main >= 1f86d9e. ~/z2/kkamak also moved
+session. git pull FIRST; main >= 92f298b. ~/z2/kkamak also moved
 (5efa3ab, pushed) — pull it too where cloned. bun install cc-gate-plugin
-if pins moved (they did not; CAS merge + a3 merge added no deps).
+if pins moved (they did not; CAS merge + a3 + judge fix added no deps).
+
+HEADLINE: the a3 checked-rule pipeline is COMPLETE and LIVE-PROVEN at
+every stage (propose -> screen -> check-aware review -> revise ->
+substance verdict). Five headless cranks exposed + fixed two real seams:
+proposer prose-default (2 live-eval'd prompt revisions; the ops-example
+check was the lever) and judge check-blindness (cf19d11, 7b artifact
+1df449f-judge-check-aware.md). Crank 5 rejected the bun rule on
+SUBSTANCE (category+duplicate) with check screened LIVE tier and
+mechanize_instead gone — correct behavior, machinery done. First staged
+checked candidate is now purely EVIDENCE-DRIVEN (scheduled crank,
+10-line threshold; do NOT force-crank the same evidence pool). Full
+narrative: minimal/HISTORY.md "Five cranks to a working checked-rule
+pipeline". Emit-then-crank recipe (if a manual crank is ever warranted):
+any edit-carrying Stop in a dogfood session mints the evidence line
+that unlocks `cd km-crank && bun src/crank.ts --force`.
 
 CLOSED THIS SESSION (do not redo):
  1. T9 PROBE (342b9eb, report docs/loop-probes/a3-t9-probe.md): slim
