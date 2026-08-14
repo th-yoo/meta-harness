@@ -147,15 +147,25 @@ LANDED THIS SESSION (all on main, pushed 685a46e):
    afae927 (a3 live-adapter plan).
 
 OPEN / STANDING:
- - BAND BATCH: PAUSED, chunk 2 @ 6/14 (5 done since chunk1). Pool = 33
-   clean bench sessions in ~/.config/kkamak/global/candidates/v0 (14 base +
-   13 chunk1 + 6 chunk2). tuple {3600,3600,enforce}, haiku-4-5, driver
-   opencode, active v0. RESUME: chunk-2 remainder = 8 tasks
-   (large-scale-text-editing path-tracing constraints-scheduling tune-mjcf
-   distribution-search db-wal-recovery prove-plus-comm openssl-selfsigned-cert)
-   via --tasks, same flags, NO --results-file (it disables store writes);
-   then chunks 3-5 full sweeps. STRIP non-bench: sessions (dogfood producer
-   writes THIS interactive session into active v0) at every chunk boundary.
+ - BAND BATCH: ✅ COMPLETE (5 chunks k=1, 2026-08-13/14). Pool = 77 clean
+   bench sessions, EXPORTED to committed snapshot (e56e282, surgical v0-only
+   diff-first — roles/ untouched; blind store-sync export would have
+   --deleted all committed role stores, the CLAUDE.md data-loss trap).
+   POOLED RESULT: 43/77 = 0.558 attempt-rate, per-task-mean 0.588.
+   Distribution (obs/pass): ceiling 1.00 = sqlite-with-gcov,
+   merge-diff-arc-agi, constraints-scheduling, distribution-search; high
+   0.80-0.83 = extract-elf 5/6, tune-mjcf 5/6, kv-store-grpc 4/5;
+   BORDERLINE = large-scale-text-editing 3/5 (0.60); low = openssl 1/6
+   (0.17); floor 0.00 = llm-inference, write-compressor, path-tracing,
+   db-wal-recovery. INFRA HOLE: prove-plus-comm 1 obs (baseline only) —
+   podman "workdir /workspace does not exist" bring-up fail, DETERMINISTIC
+   5/5 chunks on yoo-mac; needs a container-staging fix before it can be
+   benched here. kv-store & large-scale at 5 obs (one 0-turn transient skip
+   each, correctly not recorded). tuple {3600,3600,enforce}, haiku-4-5,
+   driver opencode, active v0. Ran SERIAL (oauth-lane default — see the
+   corrected --parallel note + parallel recipe above for the next batch).
+   Contamination stripped at every boundary (BOTH this + sibling dogfood
+   sessions write into active v0; note!=bench: filter catches them).
    Store was surgically seeded from committed snapshot (junk v0 backed up
    ~/.config/kkamak/v0-junk-bak-20260813); active/ populated via writeActive
    (harnessHash 25f13fca883fe563 = baseline parity).
