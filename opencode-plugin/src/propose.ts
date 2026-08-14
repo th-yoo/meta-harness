@@ -907,7 +907,16 @@ export function buildProposerPrompt(
   // same class of read buildStoreAccessSection already does).
   evidenceDir: string = "",
   heldOut: string[] = [],
+  // Daemon carrier migration (2026-08-14 plan T1): "staging-files" is the
+  // legacy tool-using contract (bash heredocs into the staging dir — the
+  // opencode host's inline-wait path still runs it); "json-reply" is the
+  // daemon-carried contract (the ENTIRE reply is one JSON object, the
+  // harness worker writes every file). Optional trailing param with the
+  // legacy default — same back-compat convention as evidenceDir/heldOut
+  // above — so every existing call site and prompt test stays byte-green.
+  outputMode: "staging-files" | "json-reply" = "staging-files",
 ): string {
+  const json = outputMode === "json-reply"
   const guidance = SCOPE_GUIDANCE[layer.scope]
   const currentSystem = readActiveSystem(layer.root)
   const currentTools = readActiveTools(layer.root)
@@ -938,12 +947,18 @@ export function buildProposerPrompt(
     ? `## Current ${layer.scope} tools.md (refine — do not discard good rules)\n\n\`\`\`\n${currentTools}\n\`\`\``
     : `## Current ${layer.scope} tools.md\n\n(empty — write from scratch if tool patterns warrant it)`
 
-  const storeAccessSection = buildStoreAccessSection(layer)
+  // json-reply mode is toolless — there is no store to go read, so the
+  // access section is dropped and the excerpt headings stop pointing at it.
+  const storeAccessSection = json ? "" : buildStoreAccessSection(layer)
 
   const failing = buildFailureExcerpts(layer.root)
   const failingSection = failing
-    ? `## Failing-trajectory excerpts (an INDEX of where to look — read the full traces via Store access above)\n\n${failing}`
-    : "## Failing-trajectory excerpts\n\n(none captured yet — check the archive via Store access above, or diagnose from the scores/notes)"
+    ? json
+      ? `## Failing-trajectory excerpts (the evidence available this cycle)\n\n${failing}`
+      : `## Failing-trajectory excerpts (an INDEX of where to look — read the full traces via Store access above)\n\n${failing}`
+    : json
+      ? "## Failing-trajectory excerpts\n\n(none captured yet — diagnose from the scores/notes above)"
+      : "## Failing-trajectory excerpts\n\n(none captured yet — check the archive via Store access above, or diagnose from the scores/notes)"
   // Untrusted-evidence clause (mined lesson L1): the proposer reads full failing
   // trajectories — untrusted agent/tool output — but was never told they are
   // evidence, not instructions. Mirrors judge-prompt.txt's own clause, closing
@@ -1144,14 +1159,17 @@ Whitelisted schema (unknown fields are dropped; out-of-range values are clamped/
 - \`extraFastCommands\` (string[], ≤20 entries, each matching \`/^[a-z0-9._+-]{1,32}$/\`) — additional commands to treat as fast (capped timeout).
 - \`extraSlowCommands\` (string[], ≤20 entries, same pattern) — additional commands to treat as slow (no cap); wins over extraFastCommands on conflict.
 
-Emit this file ONLY if a diagnosed root cause is a timeout / tool-latency problem; otherwise omit it.
+${json
+  ? `Include this ONLY if a diagnosed root cause is a timeout / tool-latency problem; otherwise omit the field. Reply-field form: \`"agentConfig": {"schemaVersion":1,"fastTimeoutMs":8000,"extraFastCommands":["mytool"],"extraSlowCommands":["slowtool"]}\`
+`
+  : `Emit this file ONLY if a diagnosed root cause is a timeout / tool-latency problem; otherwise omit it.
 
 \`\`\`bash
 cat > "${relAgentConfig}" << 'ENDOFAGENTCONFIG'
 {"schemaVersion":1,"fastTimeoutMs":8000,"extraFastCommands":["mytool"],"extraSlowCommands":["slowtool"]}
 ENDOFAGENTCONFIG
 \`\`\`
-`
+`}`
       })()
     : ""
 
@@ -1174,14 +1192,17 @@ Whitelisted schema (unknown fields are dropped; out-of-range/invalid values are 
 - \`maxLsEntries\` (number, clamped to [5, 100]) — cap on entries the \`ls\` probe reports.
 - \`languageProbes\` (string[], filtered to the fixed whitelist \`["python3","gcc","g++","node","java","rustc","go"]\`) — which language/toolchain probes to run.
 
-Emit this file ONLY if a diagnosed root cause is missing/incorrect ENVIRONMENT CONTEXT (the agent lacked info the env snapshot should have surfaced); otherwise omit it.
+${json
+  ? `Include this ONLY if a diagnosed root cause is missing/incorrect ENVIRONMENT CONTEXT (the agent lacked info the env snapshot should have surfaced); otherwise omit the field. Reply-field form: \`"envPolicy": {"schemaVersion":1,"probes":{"ls":true,"lang":true,"pkg":false,"mem":false},"lsPath":"/app","maxLsEntries":25,"languageProbes":["python3","node"]}\`
+`
+  : `Emit this file ONLY if a diagnosed root cause is missing/incorrect ENVIRONMENT CONTEXT (the agent lacked info the env snapshot should have surfaced); otherwise omit it.
 
 \`\`\`bash
 cat > "${relEnvPolicy}" << 'ENDOFENVPOLICY'
 {"schemaVersion":1,"probes":{"ls":true,"lang":true,"pkg":false,"mem":false},"lsPath":"/app","maxLsEntries":25,"languageProbes":["python3","node"]}
 ENDOFENVPOLICY
 \`\`\`
-`
+`}`
       })()
     : ""
 
@@ -1207,10 +1228,14 @@ ENDOFENVPOLICY
     ? `{"failures":[{"sessionID":"<id>","taxonomy":"<one label>","rootCause":"<2-5 sentences>","firstUnrecoverableStep":"<quote>"}],"bulletAssessments":[{"id":"<bullet id followed-and-helped or followed-and-hurt>","verdict":"helpful"|"harmful"}]}`
     : `{"failures":[{"sessionID":"<id from a trajectory above>","taxonomy":"<one label from the list>","rootCause":"<2-5 sentences>","firstUnrecoverableStep":"<quote the offending event>"}]}`
 
+  // The mechanization/check contract — shared verbatim between both output
+  // modes (it governs WHAT a rule may look like, not HOW it is delivered).
+  const checkContract = `If a rule's behavior can be mechanically verified by a shell command, its "add" op MUST carry "check": {"cmd": "<shell command that mechanically verifies the rule's behavior>", "timeoutMs": <number>} — a mechanizable rule submitted prose-only gets rejected (mechanize_instead). Leave a rule prose-only ONLY when no workspace-scoped command can genuinely verify it; never invent a check that does not verify the behavior. The command must be workspace-scoped; never touch stores, network, or packages. When a previously rejected entry's mechanize_instead violation names a check design, re-proposing that rule WITH that check (as cmd text) is encouraged — the rejection was about missing mechanization, not the rule's substance.`
+
   const writeMain = playbook
     ? `**Required** — write your playbook edits (≤3 ops; each new/updated bullet should reflect a diagnosed root cause; include \`generality\` on \`add\`/\`update\` — \`universal\`|\`vendor\`|\`model\` — and \`slice\` when tagging \`vendor\` or \`model\`). Each new/updated bullet's text MUST take one of two forms — a trigger ("When <trigger>, <action>.") or a hard-gate ("Do not <action> until <condition>.") — no other phrasing passes review:
 
-If a rule's behavior can be mechanically verified by a shell command, its "add" op MUST carry "check": {"cmd": "<shell command that mechanically verifies the rule's behavior>", "timeoutMs": <number>} — a mechanizable rule submitted prose-only gets rejected (mechanize_instead). Leave a rule prose-only ONLY when no workspace-scoped command can genuinely verify it; never invent a check that does not verify the behavior. The command must be workspace-scoped; never touch stores, network, or packages. When a previously rejected entry's mechanize_instead violation names a check design, re-proposing that rule WITH that check (as cmd text) is encouraged — the rejection was about missing mechanization, not the rule's substance.
+${checkContract}
 \`\`\`bash
 cat > "${relOps}" << 'ENDOFOPS'
 {"ops":[{"op":"add","text":"<new behavioral rule>","generality":"universal","check":{"cmd":"<shell command verifying the rule mechanically — REQUIRED for mechanizable rules, omit only when truly unverifiable>","timeoutMs":30000}},{"op":"update","id":"b2","text":"<revised rule>","generality":"vendor","slice":"<vendor id>"},{"op":"delete","id":"b5"}]}
@@ -1222,6 +1247,50 @@ cat > "${relSystem}" << 'ENDOFSYSTEM'
 <your improved ${layer.scope} system prompt — short behavioral rules only>
 ENDOFSYSTEM
 \`\`\``
+
+  // json-reply results contract: the ENTIRE reply is one JSON object; the
+  // harness (proposer worker) validates it and writes every staging file.
+  const jsonMainField = playbook
+    ? `- \`"ops"\` — REQUIRED: \`{"ops":[{"op":"add","text":"<new behavioral rule>","generality":"universal","check":{"cmd":"<shell command verifying the rule mechanically — REQUIRED for mechanizable rules, omit only when truly unverifiable>","timeoutMs":30000}},{"op":"update","id":"b2","text":"<revised rule>","generality":"vendor","slice":"<vendor id>"},{"op":"delete","id":"b5"}]}\` — ≤3 ops; each new/updated bullet should reflect a diagnosed root cause; include \`generality\` on \`add\`/\`update\` (\`universal\`|\`vendor\`|\`model\`, plus \`slice\` for vendor/model). Each new/updated bullet's text MUST take one of two forms — a trigger ("When <trigger>, <action>.") or a hard-gate ("Do not <action> until <condition>.") — no other phrasing passes review.
+
+${checkContract}`
+    : `- \`"system"\` — REQUIRED: the improved ${layer.scope} system.md as one string (short behavioral rules only; each new rule should cite the diagnosis it addresses).`
+
+  const jsonResultsTail = `## Reply format — respond with ONE JSON object and NOTHING else
+
+You have no tools and cannot write files — the harness writes every staging file from your reply. Reply with a single JSON object (no prose, no markdown fences, nothing before or after it). Fields:
+
+- \`"diagnosis"\` — REQUIRED, FIRST (drives the next generation's memory), shaped:
+\`\`\`json
+${diagShape}
+\`\`\`
+${jsonMainField}
+- \`"tools"\` — optional: tools.md text, only if tool patterns were identified (per-tool guidance keyed by tool name).
+${agentConfigSection || envPolicySection ? `- \`"agentConfig"\` / \`"envPolicy"\` — optional, ONLY under the conditions in their sections below.\n` : ""}- \`"explanation"\` — optional: which diagnosed root cause each edit addresses.
+${agentConfigSection}${envPolicySection}`
+
+  const stagingResultsTail = `## Write the results
+
+**Required FIRST** — write your diagnosis (drives the next generation's memory):
+\`\`\`bash
+mkdir -p "${stagingDir}"
+cat > "${relDiag}" << 'ENDOFDIAG'
+${diagShape}
+ENDOFDIAG
+\`\`\`
+
+${writeMain}
+
+**Optional** — write tools.md only if tool patterns were identified:
+\`\`\`bash
+cat > "${relTools}" << 'ENDOFTOOLS'
+<per-tool guidance keyed by tool name — only include tools with clear patterns>
+ENDOFTOOLS
+\`\`\`
+${agentConfigSection}${envPolicySection}
+After writing the files, briefly explain which diagnosed root cause each edit addresses.`
+
+  const resultsTail = json ? jsonResultsTail : stagingResultsTail
 
   return `# Meta-Harness Proposer — ${layer.scope}
 
@@ -1249,36 +1318,20 @@ ${step2}
 ${rejectionClause}
 No project docs / task-specific knowledge / AGENTS.md content.
 
-## Write the results
-
-**Required FIRST** — write your diagnosis (drives the next generation's memory):
-\`\`\`bash
-mkdir -p "${stagingDir}"
-cat > "${relDiag}" << 'ENDOFDIAG'
-${diagShape}
-ENDOFDIAG
-\`\`\`
-
-${writeMain}
-
-**Optional** — write tools.md only if tool patterns were identified:
-\`\`\`bash
-cat > "${relTools}" << 'ENDOFTOOLS'
-<per-tool guidance keyed by tool name — only include tools with clear patterns>
-ENDOFTOOLS
-\`\`\`
-${agentConfigSection}${envPolicySection}
-After writing the files, briefly explain which diagnosed root cause each edit addresses.`
+${resultsTail}`
 }
 
-function buildPromotePrompt(
+export function buildPromotePrompt(
   source: StoreLayer,
   target: StoreLayer,
   version: string,
   stagingSystem: string,
   stagingTools: string,
   worktree: string,
+  // Same fork + default convention as buildProposerPrompt (plan T1).
+  outputMode: "staging-files" | "json-reply" = "staging-files",
 ): string {
+  const json = outputMode === "json-reply"
   const guidance = SCOPE_GUIDANCE[target.scope]
 
   // "Already covered" context comes from account layers ONLY. Do NOT use
@@ -1339,7 +1392,14 @@ Promote rules that GENERALIZE from the project layer up to the account layer.
 4. Keep it SHORT and behavioral: system.md under 20 lines, tools.md under 15 lines.
    Do NOT write project documentation or task-specific knowledge.
 
-## Write the results
+${json
+  ? `## Reply format — respond with ONE JSON object and NOTHING else
+
+You have no tools and cannot write files — the harness writes every staging file from your reply. Reply with a single JSON object (no prose, no markdown fences, nothing before or after it). Fields:
+
+- \`"system"\` — REQUIRED: the complete merged ${target.scope} system prompt as one string (general behavioral rules only).
+- \`"tools"\` — optional: tools.md text, only if general tool patterns warrant it (per-tool guidance keyed by tool name).`
+  : `## Write the results
 
 **Required** — write the merged system.md:
 \`\`\`bash
@@ -1357,7 +1417,7 @@ ENDOFTOOLS
 \`\`\`
 
 After writing the file(s), briefly explain which rules you promoted and which you
-dropped as too project-specific, citing the evidence.`
+dropped as too project-specific, citing the evidence.`}`
 }
 
 // ── Curator (Phase 3 — ACE anti-bloat) ──────────────────────────────────────
@@ -1546,7 +1606,15 @@ async function applyCurateArtifact(host: HarnessHost, d: StagedArtifactDescripto
   return "applied"
 }
 
-export function buildCuratePrompt(layer: StoreLayer, playbook: Playbook, stagingOps: string, worktree: string): string {
+export function buildCuratePrompt(
+  layer: StoreLayer,
+  playbook: Playbook,
+  stagingOps: string,
+  worktree: string,
+  // Same fork + default convention as buildProposerPrompt (plan T1).
+  outputMode: "staging-files" | "json-reply" = "staging-files",
+): string {
+  const json = outputMode === "json-reply"
   const active = playbook.bullets.filter((b) => b.status === "active")
   const relOps = path.relative(worktree, stagingOps)
   const stagingDir = path.relative(worktree, path.dirname(stagingOps))
@@ -1560,11 +1628,14 @@ You maintain the ${layer.scope} playbook: short behavioral rules. It has ${activ
 ${JSON.stringify(active, null, 2)}
 \`\`\`
 
-${buildStoreAccessSection(layer)}
+${json
+  ? `The bullets' helpful/harmful counters (accumulated from real sessions) are your
+evidence for merge/prune decisions.`
+  : `${buildStoreAccessSection(layer)}
 
 Use the archive as evidence for merge/prune decisions: a bullet's helpful/harmful
 counters summarize sessions whose full trajectories are on disk — when a prune is
-borderline, read the traces before deciding.
+borderline, read the traces before deciding.`}
 
 ## Your task — consolidate, do NOT invent
 
@@ -1583,7 +1654,17 @@ neither is tagged), keep it as-is; only set \`generality\`/\`slice\` on the surv
 
 Optionally, an "update" op may carry or revise "check": {"cmd": "...", "timeoutMs": <number>} on a bullet that already warrants one, under the same constraints: mechanically verifiable behavior only, workspace-scoped, never stores/network/packages; to drop a check that no longer matches the bullet, set "check": null explicitly (omitting the field keeps whatever check is already there — it does NOT drop it).
 
-## Write the results
+${json
+  ? `## Reply format — respond with ONE JSON object and NOTHING else
+
+You have no tools and cannot write files — the harness writes the staged ops file from your reply. Reply with a single JSON object (no prose, no markdown fences, nothing before or after it). Shape:
+
+\`\`\`json
+{"ops":[{"op":"update","id":"b2","text":"<merged rule>","generality":"vendor","slice":"<vendor id>"},{"op":"delete","id":"b7"}]}
+\`\`\`
+
+(\`add\` ops are rejected. An empty ops list \`{"ops":[]}\` means nothing needs changing.)`
+  : `## Write the results
 
 \`\`\`bash
 mkdir -p "${stagingDir}"
@@ -1592,7 +1673,7 @@ cat > "${relOps}" << 'ENDOFOPS'
 ENDOFOPS
 \`\`\`
 
-After writing, briefly explain what you merged and pruned and why.`
+After writing, briefly explain what you merged and pruned and why.`}`
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
