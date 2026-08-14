@@ -59,12 +59,10 @@ import { DEFAULT_PROPOSER_MODEL } from "../../harness-store.ts"
 import type { WorkerArgs, WorkerStagingPaths } from "./daemon-seat.ts"
 
 // Minimal module-scoped Bun ambient (this project has no `bun-types` dep — see
-// bench/exec.ts for the same pattern). Covers both exec()'s bash -c calls and
-// runClaudeCodeTextAgent's `claude -p` child — same opts shape (stdout piped,
-// stderr/stdin ignored, cwd optional) suffices for both. `which` added for
-// resolveClaudeArgv's default deps (PATH-at-process-start resolution).
+// bench/exec.ts for the same pattern). Covers exec()'s bash -c calls and
+// runClaudeCodeTaskAgent's detached daemon-worker spawn (defaultWorkerSpawn) —
+// same opts shape (stdout/stderr/stdin, cwd, env optional) suffices for both.
 declare const Bun: {
-  which(name: string): string | null
   spawn(
     cmd: string[],
     opts: {
@@ -87,76 +85,6 @@ export type LogLevel = "debug" | "info" | "warn" | "error"
 
 // ── judge transport (Task L7) ────────────────────────────────────────────
 
-/** The live-verified (claude 2.1.207) child-process handle shape — a subset
- * of Bun.spawn's return value. Kept as its own named type (rather than reused
- * inline) so `CCSpawnFn` reads as a real seam, not an implementation detail. */
-export interface CCChildProcess {
-  readonly stdout: ReadableStream<Uint8Array>
-  readonly exited: Promise<number>
-  kill(signal?: number | string): void
-}
-
-/** Injectable spawn seam (mirrors bench/retry-provider.ts's SpawnFn /
- * bench/record.ts's SpawnFn convention) — tests supply a fake to assert argv
- * and to simulate hangs (timeout-kill) / crashes without ever touching a real
- * `claude` binary. `opts.stdin` is always "ignore" (VERIFIED: `claude -p`
- * without `< /dev/null` prints a 3s "no stdin data received" warning that
- * pollutes captured stdout) — passed explicitly so it's part of the
- * assertable contract, not just baked into the default impl. */
-export type CCSpawnFn = (
-  argv: string[],
-  opts: { cwd: string; stdin: "ignore" },
-) => CCChildProcess
-
-/** Resolve a bare `"claude"` argv[0] to an absolute path at spawn time.
- *
- * Why: Bun resolves argv[0] against the PATH captured at PROCESS START, and
- * the daily km-crank sweep runs under launchd's minimal PATH (no
- * `~/.local/bin`) — every detached proposer spawn on yoo-mac failed
- * `Executable not found in $PATH: "claude"` 4/4 days (hook.log
- * 2026-08-02..05). Resolution lives HERE, in the real spawn seam, not in
- * argv construction: injected test spawns keep seeing the bare `"claude"`
- * contract, and the fix applies exactly where the failure does.
- *
- * Order: `KKAMAK_CLAUDE_BIN` override → which() → well-known install dirs
- * (HOME-anchored first) → bare name unchanged (the original error is the
- * right message when nothing resolves). */
-export function resolveClaudeArgv(
-  argv: string[],
-  env: Record<string, string | undefined> = process.env,
-  deps: { which: (name: string) => string | null; exists: (p: string) => boolean } =
-    { which: (name) => Bun.which(name), exists: (p) => fs.existsSync(p) },
-): string[] {
-  if (argv[0] !== "claude") return argv
-  const rest = argv.slice(1)
-  const override = env.KKAMAK_CLAUDE_BIN
-  if (override) return [override, ...rest]
-  const found = deps.which("claude")
-  if (found) return [found, ...rest]
-  const candidates = [
-    ...(env.HOME ? [path.join(env.HOME, ".local", "bin", "claude")] : []),
-    "/usr/local/bin/claude",
-    "/opt/homebrew/bin/claude",
-  ]
-  for (const c of candidates) {
-    try { if (deps.exists(c)) return [c, ...rest] } catch { /* keep probing */ }
-  }
-  return argv
-}
-
-function defaultCCSpawn(argv: string[], opts: { cwd: string; stdin: "ignore" }): CCChildProcess {
-  return Bun.spawn(resolveClaudeArgv(argv), { cwd: opts.cwd, stdout: "pipe", stderr: "ignore", stdin: "ignore" })
-}
-
-/** VERIFIED (claude 2.1.207 probe): denying this exact list yields a
- * text-only reply — no tool_use, no permission prompt. Byte-identical intent
- * to opencode-host.ts's ALL_TOOLS_DENIED (CC's tool names differ from
- * opencode's, hence a separate list rather than a shared constant). */
-const DISALLOWED_TOOLS = [
-  "Bash", "Read", "Write", "Edit", "Glob", "Grep",
-  "Task", "WebFetch", "WebSearch", "NotebookEdit",
-] as const
-
 /** Matches opts.model's actual runtime shape: `runJudge` (judge.ts) always
  * calls `host.runTextAgent` with `model: parseModelSpec(cfg.judgeModel)` —
  * an opencode-style `{providerID, modelID}` (from a "provider/model" config
@@ -175,14 +103,6 @@ function isProviderModelSpec(v: unknown): v is { providerID: string; modelID: st
  * `runJudgeOpencode` default (90s), so a CC judge call and an opencode judge
  * call are bounded the same in practice. */
 const DEFAULT_JUDGE_TIMEOUT_MS = 90_000
-
-/** claude -p's `--output-format json` result shape (VERIFIED, claude
- * 2.1.207): only the fields this transport reads are declared. */
-interface ClaudeJsonResult {
-  result?: unknown
-  is_error?: unknown
-  total_cost_usd?: unknown
-}
 
 /** Injectable daemon-client seam for the judge transport (a4-review.ts's
  * deps pattern) — tests supply fakes for `ensureDaemon`/`daemonCall`/
@@ -253,7 +173,7 @@ export async function runClaudeCodeTextAgent(
         log(
           "warn",
           `[cc-host] runTextAgent: judgeModel provider "${opts.model.providerID}" is not "anthropic" — ` +
-            `Claude Code's judge transport is a native \`claude -p\` process and can ONLY use anthropic models. ` +
+            `Claude Code's judge transport is a daemon-carried call and can ONLY use anthropic models. ` +
             `Set config.json's judgeModel to an "anthropic/<model>" slug (e.g. "anthropic/claude-sonnet-4-5") to enable the CC judge. Skipping this judge call.`,
         )
         return null
@@ -309,22 +229,15 @@ export async function runClaudeCodeTextAgent(
 
 // ── task transport (Task L8: proposer / promoter / curator) ───────────────
 
-/** VERIFIED (claude 2.1.207 `--help`): the scoped tool set the propose.ts
- * prompts actually need — Read/Grep/Glob to inspect the store archive, Write +
- * Bash (heredoc `cat >`) to emit the staging files. `--allowedTools` pre-approves
- * exactly these in headless `-p` (no interactive prompt possible); any OTHER tool
- * the child reaches for is auto-denied. Narrower than `--dangerously-skip-
- * permissions` / `--permission-mode bypassPermissions`, which the brief rejects as
- * too blunt for a background child in the user's real repo. */
-const PROPOSER_ALLOWED_TOOLS = ["Read", "Grep", "Glob", "Write", "Bash"] as const
-
-/** Sentinel that neutralizes the project's own mh hooks for the detached child.
- * The child `claude -p` runs IN the project worktree (it needs the repo + store),
- * so CC WOULD fire this project's SessionStart/PostToolUse/Stop hooks for it —
- * a self-referential capture loop. Every hook process the child spawns inherits
- * this env; hook-cli/dispatch see MH_CHILD and exit 0 before any engine call
+/** Sentinel that neutralizes the project's own mh hooks for a detached child
+ * running IN the project worktree — CC would otherwise fire this project's
+ * SessionStart/PostToolUse/Stop hooks for it, a self-referential capture
+ * loop. hook-cli/dispatch see MH_CHILD and exit 0 before any engine call
  * (mechanism (d): a sentinel env var — robust regardless of which settings the
- * child loads, and purely additive). See dispatch.ts / hook-cli.ts. */
+ * child loads, and purely additive). The current runTaskAgent spawn (a
+ * toolless daemon worker, not a CC session) does NOT set this — see the
+ * childEnv comment below — the guard stays live for any transport that DOES
+ * spawn a real CC child in this worktree. See dispatch.ts / hook-cli.ts. */
 export const MH_CHILD_ENV = "MH_CHILD"
 
 /** Detached child handle — the subset of Bun.spawn's return this transport uses.
@@ -335,24 +248,15 @@ export interface CCTaskChild {
   unref(): void
 }
 
-/** Injectable detached-spawn seam (mirrors CCSpawnFn) — tests supply a fake to
- * assert argv/env/cwd and to confirm unref() without ever spawning a real
- * `claude`. Distinct from CCSpawnFn because the task child needs `env` (to carry
- * the MH_CHILD sentinel) and never pipes stdout. */
+/** Injectable detached-spawn seam (mirrors bench/retry-provider.ts's SpawnFn /
+ * bench/record.ts's SpawnFn convention) — tests supply a fake to assert
+ * argv/env/cwd and to confirm unref() without ever spawning a real process.
+ * Needs `env` (the daemon worker's argsfile path travels via argv, but PATH/
+ * HOME/auth travel via env) and never pipes stdout. */
 export type CCTaskSpawnFn = (
   argv: string[],
   opts: { cwd: string; env: Record<string, string> },
 ) => CCTaskChild
-
-function defaultCCTaskSpawn(argv: string[], opts: { cwd: string; env: Record<string, string> }): CCTaskChild {
-  return Bun.spawn(resolveClaudeArgv(argv, opts.env), {
-    cwd: opts.cwd,
-    env: opts.env,
-    stdout: "ignore",
-    stderr: "ignore",
-    stdin: "ignore",
-  })
-}
 
 /** Absolute path to the worker entrypoint, module-relative so it resolves
  * regardless of the spawning hook process's cwd. `path.dirname(new
@@ -383,10 +287,11 @@ function bareModelId(spec: string): string {
 
 function defaultWorkerSpawn(argv: string[], opts: { cwd: string; env: Record<string, string> }): CCTaskChild {
   // NEVER a bare "bun": detached hook children under launchd have a minimal
-  // PATH — this is the exact documented 4/4-day proposer outage (see
-  // resolveClaudeArgv's doc comment above). argv[0] is process.execPath (the
-  // already-running Bun binary, PATH-independent), so no resolution step is
-  // needed here at all — resolveClaudeArgv is intentionally NOT called.
+  // PATH — this was the exact documented 4/4-day proposer outage (hook.log
+  // 2026-08-02..05) when the old transport had to resolve a bare `claude`
+  // argv[0] against that PATH. argv[0] here is process.execPath (the
+  // already-running Bun binary, PATH-independent), so no PATH-resolution
+  // step is needed at all.
   return Bun.spawn(argv, {
     cwd: opts.cwd,
     env: opts.env,
