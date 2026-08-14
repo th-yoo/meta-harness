@@ -21,7 +21,7 @@ import { createHash } from "node:crypto"
 import { ACP_BUDGET, type DaemonOutcome } from "@th-yoo/cc-api-daemon"
 import { runWorkerCycle, parseReplyJson, type WorkerDeps } from "../src/adapters/claude-code/proposer-worker.ts"
 import { readMhConfig } from "../src/harness-store.ts"
-import { WORKER_DEADLINE_MARGIN_MS, WORKER_TURN_TIMEOUT_MS, workerDaemonEnv, type WorkerArgs, type WorkerStagingPaths } from "../src/adapters/claude-code/daemon-seat.ts"
+import { WORKER_DEADLINE_MARGIN_MS, WORKER_TURN_TIMEOUT_MS, workerDaemonEnv, checkProposeReply, checkCurateReply, type WorkerArgs, type WorkerStagingPaths } from "../src/adapters/claude-code/daemon-seat.ts"
 
 let stagingDir: string
 
@@ -463,5 +463,44 @@ describe("workerDaemonEnv", () => {
     } finally {
       fs.rmSync(emptyDir, { recursive: true, force: true })
     }
+  })
+})
+
+// ── ops-shape tolerance (G2 live-crank finding 2026-08-14/15) ─────────────
+
+describe("checkOpsPayload shape tolerance", () => {
+  const OPS = [{ op: "add", text: "when X, do Y" }, { op: "delete", id: "b3" }]
+
+  test("propose: bare ops ARRAY accepted and normalized to {ops: [...]}", () => {
+    const r = checkProposeReply({ diagnosis: { d: 1 }, ops: OPS }, true)
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value.ops).toEqual({ ops: OPS as never })
+  })
+
+  test("propose: documented nested {ops: [...]} still accepted", () => {
+    const r = checkProposeReply({ diagnosis: { d: 1 }, ops: { ops: OPS } }, true)
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value.ops).toEqual({ ops: OPS as never })
+  })
+
+  test("curate: bare ops ARRAY accepted (add-op ban still enforced on it)", () => {
+    const del = [{ op: "delete", id: "b1" }]
+    const ok = checkCurateReply({ ops: del })
+    expect(ok.ok).toBe(true)
+    const banned = checkCurateReply({ ops: [{ op: "add", text: "new rule" }] })
+    expect(banned.ok).toBe(false)
+    if (!banned.ok) expect(banned.reason).toContain("add")
+  })
+
+  test("non-array garbage still rejected with the shape reason", () => {
+    const r = checkProposeReply({ diagnosis: {}, ops: "3 ops" }, true)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.reason).toContain(`{"ops": [...]}`)
+  })
+
+  test("malformed op inside a bare array still rejected", () => {
+    const r = checkProposeReply({ diagnosis: {}, ops: [{ op: "add" }] }, true)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.reason).toContain("malformed op")
   })
 })
