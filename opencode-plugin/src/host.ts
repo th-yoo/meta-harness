@@ -138,11 +138,22 @@ export interface HarnessHost {
    * NOT poll or wait for the artifact, and it does NOT unregister the
    * session from proposerSessions; the caller does that once waitForFile
    * settles (unchanged).
+   *
+   * `system` / `stagingPaths` / `timeoutMs` (daemon carrier migration T3) are
+   * OPTIONAL and platform-specific: Claude Code's daemon-worker transport
+   * (runClaudeCodeTaskAgent) requires all three to actually spawn — a caller
+   * that omits them gets null + a warn log. `stagingPaths` is typed `unknown`
+   * here (like `model`) to keep this interface free of Claude-Code-specific
+   * types (daemon-seat.ts's WorkerStagingPaths); ClaudeCodeHost narrows it at
+   * its own boundary. OpencodeHost does not consume any of the three.
    */
   runTaskAgent(opts: {
     title: string
     prompt: string
     model?: unknown
+    system?: string
+    stagingPaths?: unknown
+    timeoutMs?: number
   }): Promise<{ id: string } | null>
 
   /**

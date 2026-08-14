@@ -4,6 +4,7 @@ import * as path from "node:path"
 import * as os from "node:os"
 import { ClaudeCodeHost, type CCChildProcess, type CCSpawnFn, type CCTaskSpawnFn, MH_CHILD_ENV } from "../src/adapters/claude-code/cc-host.ts"
 import { promptHumanScore } from "../src/score.ts"
+import type { WorkerStagingPaths, WorkerArgs } from "../src/adapters/claude-code/daemon-seat.ts"
 
 let home: string
 let prevHome: string | undefined
@@ -45,11 +46,33 @@ test("promptHumanScore returns the staged verdict WITHOUT prompting (the inversi
   expect(prompted).toBe(false)
 })
 
-// ── runTaskAgent (detached proposer/promoter/curator transport, Task L8) ────
+// ── runTaskAgent (detached proposer/promoter/curator transport, Task L8 /
+// daemon carrier migration T3) ───────────────────────────────────────────
 //
-// Hermetic: NO real `claude` binary — every test injects a fake CCTaskSpawnFn.
+// Hermetic: NO real `claude`/bun worker is ever spawned — every test injects
+// a fake CCTaskSpawnFn. Post-T3 the transport is `[process.execPath,
+// proposer-worker.ts, argsFilePath]`, not a `claude -p` argv — a caller must
+// also supply `system` + `stagingPaths` (the daemon worker's argsfile
+// requires both) or the call returns null before ever spawning.
 
-test("runTaskAgent: detached claude -p with scoped --allowedTools, cwd=project, MH_CHILD env, returns {id}, unref'd", async () => {
+/** Minimal valid WorkerStagingPaths ("propose", non-playbook) — enough to
+ * exercise the argsfile-required guard without depending on T4's real
+ * staging-path construction. */
+function stagingPathsFixture(): WorkerStagingPaths {
+  return {
+    kind: "propose",
+    playbookMode: false,
+    system: "/tmp/system.md",
+    tools: "/tmp/tools.md",
+    diagnosis: "/tmp/diagnosis.json",
+    ops: "/tmp/ops.json",
+    agentConfig: "/tmp/agentConfig.json",
+    envPolicy: "/tmp/envPolicy.json",
+    provenance: "/tmp/provenance.json",
+  }
+}
+
+test("runTaskAgent: detached [process.execPath, proposer-worker.ts, argsfile], cwd=project, no MH_CHILD env, returns {id}, unref'd, argsfile written under ccRuntimeDir()", async () => {
   const calls: { argv: string[]; opts: { cwd: string; env: Record<string, string> } }[] = []
   let unrefs = 0
   const spawnFn: CCTaskSpawnFn = (argv, opts) => {
@@ -62,6 +85,9 @@ test("runTaskAgent: detached claude -p with scoped --allowedTools, cwd=project, 
     title: "[meta-harness] project-role v3",
     prompt: "propose stuff",
     model: { providerID: "anthropic", modelID: "claude-opus-4-8" },
+    system: "you are the proposer",
+    stagingPaths: stagingPathsFixture(),
+    timeoutMs: 20 * 60 * 1000,
   })
 
   expect(task).not.toBeNull()
@@ -69,31 +95,60 @@ test("runTaskAgent: detached claude -p with scoped --allowedTools, cwd=project, 
   expect(task!.id.length).toBeGreaterThan(0)
   expect(calls.length).toBe(1)
   const { argv, opts } = calls[0]!
-  // argv: claude -p <prompt> --model <id> --allowedTools <scoped> --session-id <uuid>
-  expect(argv.slice(0, 5)).toEqual(["claude", "-p", "propose stuff", "--model", "claude-opus-4-8"])
-  const at = argv.indexOf("--allowedTools")
-  expect(at).toBeGreaterThan(0)
-  expect(argv.slice(at + 1, at + 6)).toEqual(["Read", "Grep", "Glob", "Write", "Bash"])
-  // --session-id carries the returned id (comes AFTER the variadic allowedTools)
-  const sid = argv.indexOf("--session-id")
-  expect(sid).toBeGreaterThan(at)
-  expect(argv[sid + 1]).toBe(task!.id)
-  // cwd is the PROJECT (child needs the repo + store)
+  // argv: [process.execPath, <abs path to proposer-worker.ts>, argsFilePath] —
+  // NEVER a bare "bun" (the documented launchd-PATH outage).
+  expect(argv.length).toBe(3)
+  expect(argv[0]).toBe(process.execPath)
+  expect(argv[1]).toContain("proposer-worker.ts")
+  expect(path.isAbsolute(argv[1]!)).toBe(true)
+  const argsFilePath = argv[2]!
+  expect(argsFilePath).toContain(path.join("runtime", "cc", "proposer-args"))
+  expect(argsFilePath.endsWith(`${task!.id}.json`)).toBe(true)
+  // the argsfile itself carries the WorkerArgs the worker will read
+  const written = JSON.parse(fs.readFileSync(argsFilePath, "utf-8")) as WorkerArgs
+  expect(written.kind).toBe("propose")
+  expect(written.prompt).toBe("propose stuff")
+  expect(written.systemPrompt).toBe("you are the proposer")
+  expect(written.model).toBe("claude-opus-4-8")
+  expect(written.artifactId).toBe(task!.id)
+  expect(written.timeoutMs).toBe(20 * 60 * 1000)
+  // cwd is the PROJECT (diagnostic only now — worker is toolless)
   expect(opts.cwd).toBe("/some/project")
-  // MH_CHILD sentinel present so the child's own hooks self-exit
-  expect(opts.env[MH_CHILD_ENV]).toBe("1")
+  // MH_CHILD sentinel is NO LONGER set — the daemon worker has no CC session
+  // of its own to self-trigger this project's hooks for.
+  expect(opts.env[MH_CHILD_ENV]).toBeUndefined()
   // parent env inherited (PATH etc.)
   expect(opts.env["PATH"]).toBeDefined()
   // detached: unref called so the short-lived hook can exit
   expect(unrefs).toBe(1)
 })
 
-test("runTaskAgent: omits --model when no model is given (child uses its default)", async () => {
-  const calls: string[][] = []
-  const spawnFn: CCTaskSpawnFn = (argv) => { calls.push(argv); return { unref() {} } }
+test("runTaskAgent: no model given -> argsfile model falls back to the bare DEFAULT_PROPOSER_MODEL id", async () => {
+  const calls: { argv: string[] }[] = []
+  const spawnFn: CCTaskSpawnFn = (argv) => { calls.push({ argv }); return { unref() {} } }
   const host = new ClaudeCodeHost("/p", { taskSpawnFn: spawnFn })
-  await host.runTaskAgent({ title: "t", prompt: "p" })
-  expect(calls[0]!).not.toContain("--model")
+  const task = await host.runTaskAgent({
+    title: "t", prompt: "p",
+    system: "s", stagingPaths: stagingPathsFixture(),
+  })
+  expect(task).not.toBeNull()
+  const written = JSON.parse(fs.readFileSync(calls[0]!.argv[2]!, "utf-8")) as WorkerArgs
+  // "anthropic/claude-opus-5" (harness-store's DEFAULT_PROPOSER_MODEL), bare id
+  expect(written.model).toBe("claude-opus-5")
+})
+
+test("runTaskAgent: missing system/stagingPaths (caller not yet migrated) -> null, warn, spawnFn NEVER called", async () => {
+  let spawnCalls = 0
+  const spawnFn: CCTaskSpawnFn = () => { spawnCalls++; return { unref() {} } }
+  const logs: { level: string; msg: string }[] = []
+  const host = new ClaudeCodeHost("/p", { taskSpawnFn: spawnFn })
+  host.log = (level, msg) => { logs.push({ level, msg }) }
+
+  const task = await host.runTaskAgent({ title: "t", prompt: "p" })
+
+  expect(task).toBeNull()
+  expect(spawnCalls).toBe(0)
+  expect(logs.some((l) => l.level === "warn" && l.msg.includes("missing system/stagingPaths"))).toBe(true)
 })
 
 test("runTaskAgent: non-anthropic proposerModel -> null, actionable log, spawnFn NEVER called (exit-0 safe)", async () => {
@@ -105,6 +160,7 @@ test("runTaskAgent: non-anthropic proposerModel -> null, actionable log, spawnFn
 
   const task = await host.runTaskAgent({
     title: "t", prompt: "p",
+    system: "s", stagingPaths: stagingPathsFixture(),
     model: { providerID: "openrouter", modelID: "x/y" },
   })
 
@@ -115,17 +171,21 @@ test("runTaskAgent: non-anthropic proposerModel -> null, actionable log, spawnFn
   expect(warn!.msg).toContain("anthropic")
 })
 
-test("runTaskAgent: unrecognized model spec -> warns, omits --model, still spawns", async () => {
-  const calls: string[][] = []
-  const spawnFn: CCTaskSpawnFn = (argv) => { calls.push(argv); return { unref() {} } }
+test("runTaskAgent: unrecognized model spec -> warns, falls back to the default proposer model, still spawns", async () => {
+  const calls: { argv: string[] }[] = []
+  const spawnFn: CCTaskSpawnFn = (argv) => { calls.push({ argv }); return { unref() {} } }
   const logs: { level: string; msg: string }[] = []
   const host = new ClaudeCodeHost("/p", { taskSpawnFn: spawnFn })
   host.log = (level, msg) => { logs.push({ level, msg }) }
 
-  const task = await host.runTaskAgent({ title: "t", prompt: "p", model: "anthropic/claude-x" })
+  const task = await host.runTaskAgent({
+    title: "t", prompt: "p", model: "anthropic/claude-x",
+    system: "s", stagingPaths: stagingPathsFixture(),
+  })
 
   expect(task).not.toBeNull()
-  expect(calls[0]!).not.toContain("--model")
+  const written = JSON.parse(fs.readFileSync(calls[0]!.argv[2]!, "utf-8")) as WorkerArgs
+  expect(written.model).toBe("claude-opus-5")
   expect(logs.some((l) => l.level === "warn" && l.msg.includes("unrecognized model spec"))).toBe(true)
 })
 
@@ -134,7 +194,10 @@ test("runTaskAgent: never throws even if the spawn itself throws (returns null)"
   const logs: { level: string; msg: string }[] = []
   const host = new ClaudeCodeHost("/p", { taskSpawnFn: spawnFn })
   host.log = (level, msg) => { logs.push({ level, msg }) }
-  const task = await host.runTaskAgent({ title: "t", prompt: "p" })
+  const task = await host.runTaskAgent({
+    title: "t", prompt: "p",
+    system: "s", stagingPaths: stagingPathsFixture(),
+  })
   expect(task).toBeNull()
   expect(logs.some((l) => l.level === "warn")).toBe(true)
 })

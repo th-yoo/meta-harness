@@ -29,18 +29,21 @@
  *                hooks, and CLAUDE.md can never contaminate or record a
  *                judge turn). See runClaudeCodeTextAgent below for the full
  *                contract (model fallback / proof / truncation / never-throw).
- *   - runTaskAgent → the proposer/promoter/curator transport (Task L8): spawns
- *                a DETACHED, long-running `claude -p` child (runClaudeCodeTaskAgent
- *                below) and returns `{id}` immediately without waiting — the
- *                staged artifact is applied on a LATER hook event via a lock
- *                file (proposer.ts's apply-on-next-event scan), not polled
- *                in-process. NEVER throws: returns null on any spawn/model
- *                failure, the documented "failed to create session" sentinel
- *                that propose.ts already degrades on gracefully (log-and-skip),
- *                so an auto-propose trigger can never crash a scoring hook —
- *                the engine fires these fire-and-forget via `void trigger*(...)`
- *                with no catch, so a throw would become an unhandled rejection
- *                and risk the adapter's exit-0 prime directive.
+ *   - runTaskAgent → the proposer/promoter/curator transport (Task L8, daemon
+ *                carrier migration T3): writes a WorkerArgs argsfile under
+ *                ccRuntimeDir() and spawns a DETACHED `[process.execPath,
+ *                proposer-worker.ts, argsFilePath]` bun worker
+ *                (runClaudeCodeTaskAgent below), returning `{id}` immediately
+ *                without waiting — the staged artifact is applied on a LATER
+ *                hook event via a lock file (proposer.ts's apply-on-next-event
+ *                scan), not polled in-process. NEVER throws: returns null on
+ *                any spawn/model failure, the documented "failed to create
+ *                session" sentinel that propose.ts already degrades on
+ *                gracefully (log-and-skip), so an auto-propose trigger can
+ *                never crash a scoring hook — the engine fires these
+ *                fire-and-forget via `void trigger*(...)` with no catch, so a
+ *                throw would become an unhandled rejection and risk the
+ *                adapter's exit-0 prime directive.
  *   - exec     → Bun.spawn bash -c (env-snapshot's bootstrap probes).
  */
 
@@ -52,6 +55,8 @@ import { ensureDaemon, daemonCall, closeSession, modelProvenBy } from "@th-yoo/c
 import { seatIsolation, seatMaxTokens, DEFAULT_JUDGE_MODEL } from "./daemon-seat.ts"
 import { ccRuntimeDir } from "./file-state.ts"
 import { writeProposerLock, proposerInFlight as lockInFlight } from "./proposer.ts"
+import { DEFAULT_PROPOSER_MODEL } from "../../harness-store.ts"
+import type { WorkerArgs, WorkerStagingPaths } from "./daemon-seat.ts"
 
 // Minimal module-scoped Bun ambient (this project has no `bun-types` dep — see
 // bench/exec.ts for the same pattern). Covers both exec()'s bash -c calls and
@@ -349,67 +354,148 @@ function defaultCCTaskSpawn(argv: string[], opts: { cwd: string; env: Record<str
   })
 }
 
+/** Absolute path to the worker entrypoint, module-relative so it resolves
+ * regardless of the spawning hook process's cwd. `path.dirname(new
+ * URL(import.meta.url).pathname)`, not `import.meta.dir`: import.meta.dir is
+ * Bun-only and untyped under this project's tsconfig (no bun-types dep) —
+ * see bench/paths.ts / judge.ts for the same pattern. */
+const PROPOSER_WORKER_PATH = path.join(
+  path.dirname(new URL(import.meta.url).pathname),
+  "proposer-worker.ts",
+)
+
+/** Fallback timeoutMs when a not-yet-migrated caller omits it — mirrors
+ * harness-store.ts's DEFAULT_PROPOSER_TIMEOUT_MIN (20 minutes). T4
+ * (triggerPropose/Promote/Curate) always supplies the real
+ * cfg.proposerTimeoutMin-derived value; this only guards a caller mid-migration
+ * that already passed system + stagingPaths but not timeoutMs. */
+const DEFAULT_TASK_TIMEOUT_MS = 20 * 60_000
+
+/** Strip an "anthropic/…" config-string prefix down to the bare model id
+ * daemonCall/WorkerArgs.model expects. A small local helper rather than
+ * harness-store's `parseModelSpec` — DEFAULT_PROPOSER_MODEL is always a
+ * well-formed "provider/model" literal, so the extra generality (and the
+ * undefined-on-bare-name case) isn't needed here. */
+function bareModelId(spec: string): string {
+  const i = spec.indexOf("/")
+  return i >= 0 ? spec.slice(i + 1) : spec
+}
+
+function defaultWorkerSpawn(argv: string[], opts: { cwd: string; env: Record<string, string> }): CCTaskChild {
+  // NEVER a bare "bun": detached hook children under launchd have a minimal
+  // PATH — this is the exact documented 4/4-day proposer outage (see
+  // resolveClaudeArgv's doc comment above). argv[0] is process.execPath (the
+  // already-running Bun binary, PATH-independent), so no resolution step is
+  // needed here at all — resolveClaudeArgv is intentionally NOT called.
+  return Bun.spawn(argv, {
+    cwd: opts.cwd,
+    env: opts.env,
+    stdout: "ignore",
+    stderr: "ignore",
+    stdin: "ignore",
+  })
+}
+
 /**
- * The proposer/promoter/curator transport: spawn a DETACHED, long-running
- * `claude -p` child that runs the propose.ts prompt IN the project worktree
- * (it needs file tools to read traces and write staging files), then return
- * `{id}` IMMEDIATELY without waiting. The hook process that called this exits
- * seconds later; the child keeps running (unref'd). Nobody in THIS process ever
- * polls for the artifact — the staged output is applied on a LATER hook event
- * (see proposer.ts's apply-on-next-event scan). That inversion is why this is a
- * fire-and-forget detached spawn, not the judge's await-to-completion child.
+ * The proposer/promoter/curator transport: write a WorkerArgs argsfile under
+ * ccRuntimeDir() and spawn a DETACHED `[process.execPath, proposer-worker.ts,
+ * argsFilePath]` bun worker that runs the daemon-carried cycle (see
+ * proposer-worker.ts), then return `{id}` IMMEDIATELY without waiting. The
+ * hook process that called this exits seconds later; the worker keeps running
+ * (unref'd). Nobody in THIS process ever polls for the artifact — the staged
+ * output is applied on a LATER hook event (see proposer.ts's
+ * apply-on-next-event scan). That inversion is why this is a fire-and-forget
+ * detached spawn, not the judge's await-to-completion child.
  *
  * NEVER throws (exit-0 prime directive): returns null on any failure, which
- * propose.ts already degrades on (log "Failed to create ... session" + return).
- * Non-anthropic proposerModel → null with an actionable log, same as the judge:
- * a native `claude -p` can only run anthropic models.
+ * propose.ts already degrades on (log "Failed to create ... session" +
+ * return). Non-anthropic proposerModel → null with an actionable log, same as
+ * the judge: the daemon worker can only run anthropic models. A caller not yet
+ * migrated to pass `system`/`stagingPaths` (T4) also gets null + a warn — the
+ * worker has nothing to run without them.
  */
 export function runClaudeCodeTaskAgent(
-  opts: { title: string; prompt: string; model?: unknown; cwd: string },
+  opts: {
+    title: string
+    prompt: string
+    model?: unknown
+    cwd: string
+    system?: string
+    stagingPaths?: WorkerStagingPaths
+    timeoutMs?: number
+  },
   log: (level: LogLevel, msg: string) => void,
-  spawnFn: CCTaskSpawnFn = defaultCCTaskSpawn,
+  spawnFn: CCTaskSpawnFn = defaultWorkerSpawn,
   env: Record<string, string | undefined> = process.env,
 ): { id: string } | null {
   try {
-    let modelId: string | undefined
+    if (opts.system === undefined || opts.stagingPaths === undefined) {
+      log("warn", "[cc-host] runTaskAgent: missing system/stagingPaths — cannot spawn daemon worker")
+      return null
+    }
+
+    // The daemon's argsfile.model is REQUIRED (unlike the old `claude -p`
+    // transport, where omitting --model let the CLI fall back to its own
+    // default) — an undefined OR unrecognized model spec now falls back to
+    // the bare DEFAULT_PROPOSER_MODEL id rather than being omitted. An
+    // explicit non-anthropic model is still a real failure (unchanged).
+    let modelId: string
     if (opts.model !== undefined) {
       if (!isProviderModelSpec(opts.model)) {
-        log("warn", `[cc-host] runTaskAgent: unrecognized model spec ${JSON.stringify(opts.model)} — ignoring, letting claude use its default model`)
+        log("warn", `[cc-host] runTaskAgent: unrecognized model spec ${JSON.stringify(opts.model)} — falling back to the default proposer model`)
+        modelId = bareModelId(DEFAULT_PROPOSER_MODEL)
       } else if (opts.model.providerID !== "anthropic") {
         log(
           "warn",
           `[cc-host] runTaskAgent: proposerModel provider "${opts.model.providerID}" is not "anthropic" — ` +
-            `Claude Code's proposer transport is a native \`claude -p\` child and can ONLY use anthropic models. ` +
+            `Claude Code's proposer transport is a daemon-carried worker and can ONLY use anthropic models. ` +
             `Set config.json's proposerModel to an "anthropic/<model>" slug (e.g. "anthropic/claude-opus-4-8"). Skipping this proposer.`,
         )
         return null
       } else {
         modelId = opts.model.modelID
       }
+    } else {
+      modelId = bareModelId(DEFAULT_PROPOSER_MODEL)
     }
 
-    // A known UUID up front so the returned {id} matches the child's own
-    // session id (used for the pending-artifact descriptor + logging).
+    // A known UUID up front so the returned {id} matches the argsfile's
+    // artifactId (used for the pending-artifact descriptor + logging).
     const sessionId = randomUUID()
 
-    const argv = [
-      "claude", "-p", opts.prompt,
-      ...(modelId ? ["--model", modelId] : []),
-      "--allowedTools", ...PROPOSER_ALLOWED_TOOLS,
-      "--session-id", sessionId,
-    ]
+    const workerArgs: WorkerArgs = {
+      kind: opts.stagingPaths.kind,
+      prompt: opts.prompt,
+      systemPrompt: opts.system,
+      model: modelId,
+      stagingPaths: opts.stagingPaths,
+      timeoutMs: opts.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
+      spawnedAt: Date.now(),
+      artifactId: sessionId,
+    }
 
-    // Inherit the parent env (PATH/HOME/auth the child needs) + the sentinel.
+    const argsDir = path.join(ccRuntimeDir(), "proposer-args")
+    fs.mkdirSync(argsDir, { recursive: true })
+    const argsFilePath = path.join(argsDir, `${sessionId}.json`)
+    fs.writeFileSync(argsFilePath, JSON.stringify(workerArgs))
+
+    const argv = [process.execPath, PROPOSER_WORKER_PATH, argsFilePath]
+
+    // Inherit the parent env (PATH/HOME/auth the worker needs). MH_CHILD_ENV
+    // is intentionally NOT set: the sentinel exists to neutralize this
+    // project's OWN mh hooks for a `claude -p` child running (and thus
+    // triggering hooks) IN the project worktree — the daemon worker is a
+    // plain toolless bun process with no CC session of its own, so there are
+    // no hooks for it to self-trigger.
     const childEnv: Record<string, string> = {}
     for (const [k, v] of Object.entries(env)) if (v !== undefined) childEnv[k] = v
-    childEnv[MH_CHILD_ENV] = "1"
 
     const child = spawnFn(argv, { cwd: opts.cwd, env: childEnv })
     try { child.unref() } catch { /* not fatal — worst case the parent waits briefly */ }
-    log("info", `[cc-host] runTaskAgent: spawned detached proposer "${opts.title}" (session ${sessionId}, cwd ${opts.cwd})`)
+    log("info", `[cc-host] runTaskAgent: spawned detached proposer worker "${opts.title}" (artifact ${sessionId}, cwd ${opts.cwd})`)
     return { id: sessionId }
   } catch (err) {
-    log("warn", `[cc-host] runTaskAgent: failed to spawn detached claude -p — ${err instanceof Error ? err.message : String(err)}`)
+    log("warn", `[cc-host] runTaskAgent: failed to spawn detached worker — ${err instanceof Error ? err.message : String(err)}`)
     return null
   }
 }
@@ -431,7 +517,7 @@ export class ClaudeCodeHost implements HarnessHost {
   private readonly judgeDeps: JudgeDeps
 
   /** Injectable detached-spawn seam for the task transport (runTaskAgent) —
-   * defaults to the real detached `claude -p` child. Tests inject a fake. */
+   * defaults to the real detached bun worker. Tests inject a fake. */
   private readonly taskSpawnFn: CCTaskSpawnFn
 
   constructor(
@@ -441,7 +527,7 @@ export class ClaudeCodeHost implements HarnessHost {
     this.projectRoot = projectRoot
     this.logFile = opts.logFile ?? path.join(ccRuntimeDir(), "hook.log")
     this.judgeDeps = opts.judgeDeps ?? {}
-    this.taskSpawnFn = opts.taskSpawnFn ?? defaultCCTaskSpawn
+    this.taskSpawnFn = opts.taskSpawnFn ?? defaultWorkerSpawn
   }
 
   log(level: LogLevel, msg: string): void {
@@ -502,9 +588,14 @@ export class ClaudeCodeHost implements HarnessHost {
     title: string
     prompt: string
     model?: unknown
+    system?: string
+    stagingPaths?: WorkerStagingPaths
+    timeoutMs?: number
   }): Promise<{ id: string } | null> {
-    // Detached child in the PROJECT worktree (needs the repo + store). Fire-and-
-    // forget: returns {id} at once; the artifact is applied on a later hook event.
+    // Detached worker spawned with cwd = the PROJECT worktree (diagnostic
+    // only now — the toolless daemon worker never touches the repo via cwd).
+    // Fire-and-forget: returns {id} at once; the artifact is applied on a
+    // later hook event.
     return runClaudeCodeTaskAgent(
       { ...opts, cwd: this.projectRoot },
       (level, msg) => this.log(level, msg),
