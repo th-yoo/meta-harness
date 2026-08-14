@@ -63,6 +63,11 @@ import {
 import { exportRuleChecks } from "./rule-checks-export.ts"
 import { proposerSessions } from "./session-state.ts"
 import type { HarnessHost, StagedArtifactDescriptor } from "./host.ts"
+// Type-only: daemon-seat.ts's runtime module also pulls in @th-yoo/cc-api-daemon
+// (WarmIsolation/routeBackend) — `import type` erases at compile time, so the
+// opencode path never actually loads that module, only the WorkerStagingPaths
+// shape triggerPropose/Promote/Curate construct for the CC path below.
+import type { WorkerStagingPaths } from "./adapters/claude-code/daemon-seat.ts"
 import { reviewAddedBullets } from "./review-gate.ts"
 import { screenCheck } from "./check-screen.ts"
 // Phase 8 / W4b: the external-evidence live contamination guard needs the
@@ -131,6 +136,40 @@ export function resolveConfigPath(value: string, root: string): string {
   return path.join(root, value)
 }
 
+// ── Daemon worker system prompts (daemon carrier migration T4) ─────────────
+// CC path only (json-reply mode): the daemon worker is toolless, so the
+// persona must forbid tool-use scaffolding and restate the "entire reply is
+// one JSON object" contract up front — the detailed field-by-field schema
+// itself lives in the per-call user prompt (T1's json-reply mode in
+// buildProposerPrompt/buildPromotePrompt/buildCuratePrompt below). The
+// opencode path's runTaskAgent implementation never reads `system` (see
+// adapters/opencode-host.ts), so these are inert there — passed unconditionally
+// for both hosts is harmless.
+
+const PROPOSE_SYSTEM_PROMPT =
+  "You are the Meta-Harness Proposer: an expert at diagnosing why coding-agent " +
+  "sessions failed, then writing the smallest evidence-grounded fix. You have " +
+  "no tools and cannot read or write files — the harness does that from your " +
+  "reply. Your ENTIRE reply is exactly one JSON object: no prose, no markdown " +
+  "fences, nothing before or after it. Follow the reply-format contract given " +
+  "in the user prompt exactly."
+
+const PROMOTE_SYSTEM_PROMPT =
+  "You are the Meta-Harness Promoter: you generalize proven project-layer " +
+  "rules up to the account layer, keeping only what holds beyond one project. " +
+  "You have no tools and cannot read or write files — the harness does that " +
+  "from your reply. Your ENTIRE reply is exactly one JSON object: no prose, " +
+  "no markdown fences, nothing before or after it. Follow the reply-format " +
+  "contract given in the user prompt exactly."
+
+const CURATE_SYSTEM_PROMPT =
+  "You are the Meta-Harness Curator: you consolidate a playbook by merging " +
+  "near-duplicate rules and pruning net-harmful or obsolete ones — you never " +
+  "invent new rules. You have no tools and cannot read or write files — the " +
+  "harness does that from your reply. Your ENTIRE reply is exactly one JSON " +
+  "object: no prose, no markdown fences, nothing before or after it. Follow " +
+  "the reply-format contract given in the user prompt exactly."
+
 /**
  * Trigger a proposer session for one store layer.
  * `layer.higherRoots` supplies the gap-filling "already covered" context.
@@ -142,6 +181,13 @@ export async function triggerPropose(
   worktree: string,
   layer: StoreLayer,
 ): Promise<void> {
+  // Daemon carrier migration T4: the CC/opencode discriminator, hoisted ABOVE
+  // the prompt build (was checked only at spawn time, after the build) so
+  // `outputMode` is known before buildProposerPrompt runs. Same signal the
+  // spawn-time branch below already used (`host.stageArtifactApply` presence)
+  // — opencode never implements it, so `isCC` is false there and every prompt
+  // built + every file written on that path stays byte-identical to before.
+  const isCC = !!host.stageArtifactApply
   if (inFlight.has(layer.root) || host.proposerInFlight?.(layer.root)) {
     await host.log("info", `propose skipped: ${layer.scope} already has a session in flight`)
     return
@@ -162,6 +208,9 @@ export async function triggerPropose(
     const stagingOps = path.join(stagingBase, `${layer.scope}-${version}-ops.json`)
     const stagingAgentConfig = path.join(stagingBase, `${layer.scope}-${version}-agent-config.json`)
     const stagingEnvPolicy = path.join(stagingBase, `${layer.scope}-${version}-env-policy.json`)
+    // CC path only (json-reply mode) — the worker-side provenance record and
+    // the assembled-prompt provenance file below.
+    const stagingProvenance = path.join(stagingBase, `${layer.scope}-${version}-provenance.json`)
     // Seed the playbook from the active system.md on first use (non-destructive);
     // ops mode iff the layer ends up with a playbook (empty stores stay legacy).
     const playbook = seedPlaybook(layer.root)
@@ -222,17 +271,46 @@ export async function triggerPropose(
       }
     }
 
+    // outputMode must be known before buildProposerPrompt runs (see the isCC
+    // hoist above) — "json-reply" ONLY on the CC path; opencode always stays
+    // "staging-files" (the default), so its prompt build is byte-identical.
+    const outputMode: "staging-files" | "json-reply" = isCC ? "json-reply" : "staging-files"
     const prompt = buildProposerPrompt(layer, version, context, stagingSystem, stagingTools,
       stagingDiagnosis, stagingOps, stagingAgentConfig, stagingEnvPolicy, worktree, playbook,
-      evidenceDir, heldOut)
+      evidenceDir, heldOut, outputMode)
+
+    // CC-only: WorkerStagingPaths for the daemon worker's argsfile — absolute
+    // paths, same set the legacy heredoc prompt embedded as relative paths.
+    const stagingPaths: WorkerStagingPaths = {
+      kind: "propose",
+      playbookMode: !!playbook,
+      system: stagingSystem,
+      tools: stagingTools,
+      diagnosis: stagingDiagnosis,
+      ops: stagingOps,
+      agentConfig: stagingAgentConfig,
+      envPolicy: stagingEnvPolicy,
+      provenance: stagingProvenance,
+    }
 
     await host.log("info", `Starting proposer for ${layer.scope} → ${version} (model=${cfg.proposerModel})`)
     await host.notify(`Proposing ${layer.scope} ${version}…`, "info", 5_000)
+
+    // Persist the assembled prompt next to staging BEFORE spawn — the
+    // provenance record (CC path only: writing this file on the opencode path
+    // would break its byte-identical-files-written contract).
+    if (isCC) {
+      const stagingPrompt = path.join(stagingBase, `${layer.scope}-${version}-prompt.md`)
+      fs.writeFileSync(stagingPrompt, prompt)
+    }
 
     const task = await host.runTaskAgent({
       title: `[meta-harness] ${layer.scope} ${version}`,
       prompt,
       model: proposerModel,
+      system: PROPOSE_SYSTEM_PROMPT,
+      stagingPaths,
+      timeoutMs: cfg.proposerTimeoutMin * 60 * 1000,
     })
     if (!task) {
       await host.log("error", "Failed to create proposer session")
@@ -546,6 +624,11 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     const addedOps = ops.filter((o): o is Extract<PlaybookOp, { op: "add" }> => o.op === "add")
     if (addedOps.length > 0) {
       const ledger = readRejectedLedger(layer.root)
+      // T4: thread the configured judgeModel into the review seat — before
+      // this it silently ignored config.json's judgeModel and always rode
+      // whatever host.runTextAgent defaults to (DEFAULT_JUDGE_MODEL on the
+      // eventual daemon-carried judge). "" (judgeModel unset) → parseModelSpec
+      // returns undefined, same as omitting reviewModel entirely.
       const outcomes = await reviewAddedBullets({
         host,
         bullets: addedOps.map((o) => ({ text: o.text, check: o.check })),
@@ -553,6 +636,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
         activeSystem: readActiveSystem(layer.root),
         ledger,
         scope: layer.scope,
+        reviewModel: parseModelSpec(readMhConfig().judgeModel),
       })
       const failed = outcomes.filter((o) => !o.staged)
       for (const f of failed) {
@@ -684,6 +768,9 @@ export async function triggerPromote(
   source: StoreLayer,   // project-global | project-role
   target: StoreLayer,   // account-global | account-role
 ): Promise<void> {
+  // Daemon carrier migration T4 — same discriminator hoist as triggerPropose:
+  // known before buildPromotePrompt runs.
+  const isCC = !!host.stageArtifactApply
   if (inFlight.has(target.root) || host.proposerInFlight?.(target.root)) {
     await host.log("info", `promote skipped: ${target.scope} already has a session in flight`)
     return
@@ -704,18 +791,35 @@ export async function triggerPromote(
     const stagingBase = path.join(worktree, ".kkamak", "staging")
     const stagingSystem = path.join(stagingBase, `promote-${target.scope}-${version}-system.md`)
     const stagingTools  = path.join(stagingBase, `promote-${target.scope}-${version}-tools.md`)
+    const stagingProvenance = path.join(stagingBase, `promote-${target.scope}-${version}-provenance.json`)
 
-    const prompt = buildPromotePrompt(source, target, version, stagingSystem, stagingTools, worktree)
+    const outputMode: "staging-files" | "json-reply" = isCC ? "json-reply" : "staging-files"
+    const prompt = buildPromotePrompt(source, target, version, stagingSystem, stagingTools, worktree, outputMode)
     const cfg = readMhConfig()
     const proposerModel = parseModelSpec(cfg.proposerModel)
 
+    const stagingPaths: WorkerStagingPaths = {
+      kind: "promote",
+      system: stagingSystem,
+      tools: stagingTools,
+      provenance: stagingProvenance,
+    }
+
     await host.log("info", `Starting promoter ${source.scope} → ${target.scope} ${version} (model=${cfg.proposerModel})`)
     await host.notify(`Promoting ${source.scope} → ${target.scope} ${version}…`, "info", 5_000)
+
+    if (isCC) {
+      const stagingPrompt = path.join(stagingBase, `promote-${target.scope}-${version}-prompt.md`)
+      fs.writeFileSync(stagingPrompt, prompt)
+    }
 
     const task = await host.runTaskAgent({
       title: `[meta-harness] promote ${source.scope}→${target.scope} ${version}`,
       prompt,
       model: proposerModel,
+      system: PROMOTE_SYSTEM_PROMPT,
+      stagingPaths,
+      timeoutMs: cfg.proposerTimeoutMin * 60 * 1000,
     })
     if (!task) {
       await host.log("error", "Failed to create promoter session")
@@ -1435,6 +1539,9 @@ export async function triggerCurate(
   worktree: string,
   layer: StoreLayer,
 ): Promise<void> {
+  // Daemon carrier migration T4 — same discriminator hoist as triggerPropose:
+  // known before buildCuratePrompt runs.
+  const isCC = !!host.stageArtifactApply
   if (inFlight.has(layer.root) || host.proposerInFlight?.(layer.root)) {
     await host.log("info", `curate skipped: ${layer.scope} already has a session in flight`)
     return
@@ -1456,17 +1563,33 @@ export async function triggerCurate(
     const version = nextVersion(layer.root)
     const stagingBase = path.join(worktree, ".kkamak", "staging")
     const stagingOps = path.join(stagingBase, `curate-${layer.scope}-${version}-ops.json`)
-    const prompt = buildCuratePrompt(layer, playbook, stagingOps, worktree)
+    const stagingProvenance = path.join(stagingBase, `curate-${layer.scope}-${version}-provenance.json`)
+    const outputMode: "staging-files" | "json-reply" = isCC ? "json-reply" : "staging-files"
+    const prompt = buildCuratePrompt(layer, playbook, stagingOps, worktree, outputMode)
     const cfg = readMhConfig()
     const proposerModel = parseModelSpec(cfg.proposerModel)
 
+    const stagingPaths: WorkerStagingPaths = {
+      kind: "curate",
+      ops: stagingOps,
+      provenance: stagingProvenance,
+    }
+
     await host.log("info", `Starting curator ${layer.scope} → ${version} (${activeBullets.length} bullets, model=${cfg.proposerModel})`)
     await host.notify(`Curating ${layer.scope} ${version}…`, "info", 5_000)
+
+    if (isCC) {
+      const stagingPrompt = path.join(stagingBase, `curate-${layer.scope}-${version}-prompt.md`)
+      fs.writeFileSync(stagingPrompt, prompt)
+    }
 
     const task = await host.runTaskAgent({
       title: `[meta-harness] curate ${layer.scope} ${version}`,
       prompt,
       model: proposerModel,
+      system: CURATE_SYSTEM_PROMPT,
+      stagingPaths,
+      timeoutMs: cfg.proposerTimeoutMin * 60 * 1000,
     })
     if (!task) {
       await host.log("error", "Failed to create curator session")

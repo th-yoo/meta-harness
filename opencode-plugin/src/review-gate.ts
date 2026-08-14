@@ -90,7 +90,11 @@ export async function reviewAddedBullets(a: {
   activeSystem: string // current harness text for duplicate check
   ledger: RejectedEntry[] // rejected ledger for duplicate check
   scope: string
-  reviewModel?: string
+  // ModelSpec object (harness-store.ts parseModelSpec's return shape), NOT a
+  // bare "provider/model" string — this IS what both host.runTextAgent
+  // implementations expect in opts.model (cc-host.ts's isProviderModelSpec
+  // guard, opencode-host.ts's `opts.model as {providerID,modelID}` cast).
+  reviewModel?: { providerID: string; modelID: string }
 }): Promise<BulletReviewOutcome[]> {
   if (a.bullets.length === 0) return []
   // Form-only rejects are rephrase-eligible (see isFormOnlyReject) — they
