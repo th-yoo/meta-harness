@@ -13,14 +13,15 @@
  * F2 note: all prompts/replies below are synthetic fixtures invented for
  * this test, never a real proposer transcript.
  */
-import { test, expect, beforeEach, afterEach } from "bun:test"
+import { test, expect, beforeEach, afterEach, describe } from "bun:test"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
 import { createHash } from "node:crypto"
-import type { DaemonOutcome } from "@th-yoo/cc-api-daemon"
+import { ACP_BUDGET, type DaemonOutcome } from "@th-yoo/cc-api-daemon"
 import { runWorkerCycle, parseReplyJson, type WorkerDeps } from "../src/adapters/claude-code/proposer-worker.ts"
-import { WORKER_DEADLINE_MARGIN_MS, type WorkerArgs, type WorkerStagingPaths } from "../src/adapters/claude-code/daemon-seat.ts"
+import { readMhConfig } from "../src/harness-store.ts"
+import { WORKER_DEADLINE_MARGIN_MS, WORKER_TURN_TIMEOUT_MS, workerDaemonEnv, type WorkerArgs, type WorkerStagingPaths } from "../src/adapters/claude-code/daemon-seat.ts"
 
 let stagingDir: string
 
@@ -103,23 +104,29 @@ interface Capture {
   ensures: { waitMs?: number }[]
   calls: { prompt: string; model: string; opts: { budgetMs?: number; maxTokens?: number; isolation: { systemPrompt: string; title: string } } }[]
   closed: string[]
+  envs: Record<string, string | undefined>[]
 }
 
 function fakeDeps(outcomes: DaemonOutcome[], over: WorkerDeps = {}): { deps: WorkerDeps; cap: Capture } {
-  const cap: Capture = { ensures: [], calls: [], closed: [] }
+  const cap: Capture = { ensures: [], calls: [], closed: [], envs: [] }
   let i = 0
   const deps: WorkerDeps = {
-    ensure: (async (_env: unknown, opts?: { waitMs?: number }) => {
+    ensure: (async (env: unknown, opts?: { waitMs?: number }) => {
       cap.ensures.push({ waitMs: opts?.waitMs })
+      cap.envs.push(env as Record<string, string | undefined>)
       return true
     }) as WorkerDeps["ensure"],
-    call: (async (prompt: string, model: string, _env: unknown, opts: unknown) => {
+    call: (async (prompt: string, model: string, env: unknown, opts: unknown) => {
       cap.calls.push({ prompt, model, opts: opts as Capture["calls"][number]["opts"] })
+      cap.envs.push(env as Record<string, string | undefined>)
       const o = outcomes[Math.min(i, outcomes.length - 1)]
       i++
       return o
     }) as WorkerDeps["call"],
-    close: (async (sessionId: string) => { cap.closed.push(sessionId) }) as WorkerDeps["close"],
+    close: (async (sessionId: string, env: unknown) => {
+      cap.closed.push(sessionId)
+      cap.envs.push(env as Record<string, string | undefined>)
+    }) as WorkerDeps["close"],
     ...over,
   }
   return { deps, cap }
@@ -405,4 +412,56 @@ test("close failure never changes the cycle outcome", async () => {
   })
   const code = await runWorkerCycle(args, {}, deps)
   expect(code).toBe(0)
+})
+
+test("worker calls ensure/call/close with the long-turn daemon env (fingerprint-separated from the judge daemon)", async () => {
+  const args = workerArgs("promote", promotePaths())
+  const { deps, cap } = fakeDeps([okOutcome(JSON.stringify(PROMOTE_REPLY))])
+  await runWorkerCycle(args, { HOME: "/h" }, deps)
+  for (const e of cap.envs) expect(e.ACP_TURN_TIMEOUT_MS).toBe(String(WORKER_TURN_TIMEOUT_MS))
+  expect(cap.envs.length).toBeGreaterThanOrEqual(3) // ensure + call + close all saw it
+})
+
+// ── workerDaemonEnv ──────────────────────────────────────────────────────
+
+describe("workerDaemonEnv", () => {
+  test("sets ACP_TURN_TIMEOUT_MS to the worker turn budget, preserves the rest", () => {
+    const e = workerDaemonEnv({ HOME: "/h", PATH: "/bin" })
+    expect(e.ACP_TURN_TIMEOUT_MS).toBe(String(WORKER_TURN_TIMEOUT_MS))
+    expect(e.HOME).toBe("/h")
+    expect(e.PATH).toBe("/bin")
+  })
+  test("does not mutate the input env", () => {
+    const input: Record<string, string | undefined> = { HOME: "/h" }
+    workerDaemonEnv(input)
+    expect(input.ACP_TURN_TIMEOUT_MS).toBeUndefined()
+  })
+  test("budget arithmetic: worker attempt-1 budget clears the advertised worst case with >=3s slack", () => {
+    // Mirror of the daemon's five-leg sum with the turn leg swapped
+    // (ACP_BUDGET at pin: queueWait 6k + clear 4k + setModel 2k + grace 4k = 16k non-turn legs).
+    const advertisedWorstCase = ACP_BUDGET.daemonWorstCaseMs - ACP_BUDGET.turnTimeoutMs + WORKER_TURN_TIMEOUT_MS
+    const attempt1BudgetMs = Math.floor(1_200_000 / 2) // standard descriptor timeoutMs / 2
+    expect(attempt1BudgetMs).toBeGreaterThanOrEqual(advertisedWorstCase + 3_000)
+  })
+  test("config floor: proposerTimeoutMin has a ~17-minute floor under the 480s turn budget", () => {
+    // Architect-review Important: readMhConfig clamps proposerTimeoutMin only
+    // to (0, 120] — no floor tied to the turn budget. Below the floor,
+    // attempt-1 budgetMs (timeoutMs/2) drops under the advertised worst case
+    // and the client guard refuses EVERY cycle pre-send (no-call, free but
+    // silent — the Task 1 stderr diagnostic never fires on pre-send refusal).
+    // This test documents the boundary so a default change trips it.
+    const advertisedWorstCase = ACP_BUDGET.daemonWorstCaseMs - ACP_BUDGET.turnTimeoutMs + WORKER_TURN_TIMEOUT_MS // 496_000
+    expect(Math.floor((17 * 60_000) / 2)).toBeGreaterThan(advertisedWorstCase + 3_000)  // 17 min: clears
+    expect(Math.floor((16 * 60_000) / 2)).toBeLessThan(advertisedWorstCase + 3_000)     // 16 min: refused
+
+    // The real shipped default must clear the floor — reads readMhConfig's
+    // actual default, so a default-lowering change trips this test.
+    const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), "mh-floor-"))
+    try {
+      const cfg = readMhConfig(emptyDir)
+      expect(Math.floor((cfg.proposerTimeoutMin * 60_000) / 2)).toBeGreaterThanOrEqual(advertisedWorstCase + 3_000)
+    } finally {
+      fs.rmSync(emptyDir, { recursive: true, force: true })
+    }
+  })
 })
