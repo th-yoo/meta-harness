@@ -1,0 +1,38 @@
+{
+  "sessionID": "bench-sqlite-with-gcov-1786594810-b19f30",
+  "passed": true,
+  "note": "bench:sqlite-with-gcov",
+  "turnCount": 1,
+  "timestamp": "2026-08-13T04:22:39.148Z",
+  "summary": "sqlite-with-gcov",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "toolUsage": {
+    "todowrite": {
+      "calls": 5,
+      "errors": 0
+    },
+    "bash": {
+      "calls": 13,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "b7ffbf3",
+    "harnessHash": "25f13fca883fe563",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "opencode",
+    "resourceEnforcement": true,
+    "minAgentTimeout": 3600
+  },
+  "platform": "opencode",
+  "elapsed": 146.9,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 90.6,
+  "peakRssMb": 1565,
+  "capMemoryMb": 2669,
+  "capRaised": true
+}

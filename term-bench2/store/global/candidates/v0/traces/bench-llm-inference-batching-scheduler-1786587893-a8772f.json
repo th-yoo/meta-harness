@@ -1,0 +1,50 @@
+{
+  "sessionID": "bench-llm-inference-batching-scheduler-1786587893-a8772f",
+  "passed": false,
+  "note": "bench:llm-inference-batching-scheduler",
+  "turnCount": 1,
+  "timestamp": "2026-08-13T02:36:45.773Z",
+  "summary": "llm-inference-batching-scheduler",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "toolUsage": {
+    "bash": {
+      "calls": 43,
+      "errors": 0
+    },
+    "read": {
+      "calls": 7,
+      "errors": 0
+    },
+    "todowrite": {
+      "calls": 4,
+      "errors": 0
+    },
+    "write": {
+      "calls": 13,
+      "errors": 0
+    },
+    "edit": {
+      "calls": 13,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "65a10ae",
+    "harnessHash": "25f13fca883fe563",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "opencode",
+    "resourceEnforcement": true,
+    "minAgentTimeout": 3600
+  },
+  "platform": "opencode",
+  "elapsed": 711.1,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 120.2,
+  "peakRssMb": 959,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

@@ -1,0 +1,47 @@
+{
+  "sessionID": "bench-large-scale-text-editing-1786659531-9c5607",
+  "passed": true,
+  "note": "bench:large-scale-text-editing",
+  "turnCount": 1,
+  "timestamp": "2026-08-13T22:46:26.436Z",
+  "summary": "large-scale-text-editing",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "toolUsage": {
+    "todowrite": {
+      "calls": 4,
+      "errors": 0
+    },
+    "bash": {
+      "calls": 49,
+      "errors": 4
+    },
+    "write": {
+      "calls": 15,
+      "errors": 0
+    },
+    "read": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "9819484",
+    "harnessHash": "25f13fca883fe563",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "opencode",
+    "resourceEnforcement": true,
+    "checksHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "minAgentTimeout": 3600
+  },
+  "platform": "opencode",
+  "elapsed": 1653.4,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 1430.3,
+  "peakRssMb": 3361,
+  "capMemoryMb": 5445,
+  "capRaised": true
+}

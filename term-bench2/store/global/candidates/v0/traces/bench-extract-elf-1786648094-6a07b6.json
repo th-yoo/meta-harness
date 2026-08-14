@@ -1,0 +1,47 @@
+{
+  "sessionID": "bench-extract-elf-1786648094-6a07b6",
+  "passed": true,
+  "note": "bench:extract-elf",
+  "turnCount": 1,
+  "timestamp": "2026-08-13T19:11:52.401Z",
+  "summary": "extract-elf",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "toolUsage": {
+    "read": {
+      "calls": 3,
+      "errors": 0
+    },
+    "bash": {
+      "calls": 34,
+      "errors": 3
+    },
+    "todowrite": {
+      "calls": 4,
+      "errors": 0
+    },
+    "write": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "9819484",
+    "harnessHash": "25f13fca883fe563",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "opencode",
+    "resourceEnforcement": true,
+    "checksHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "minAgentTimeout": 3600
+  },
+  "platform": "opencode",
+  "elapsed": 216.1,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 69.3,
+  "peakRssMb": 1001,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

@@ -1,0 +1,42 @@
+{
+  "sessionID": "bench-kv-store-grpc-1786589627-b4626f",
+  "passed": true,
+  "note": "bench:kv-store-grpc",
+  "turnCount": 1,
+  "timestamp": "2026-08-13T02:57:22.497Z",
+  "summary": "kv-store-grpc",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "toolUsage": {
+    "todowrite": {
+      "calls": 6,
+      "errors": 0
+    },
+    "bash": {
+      "calls": 9,
+      "errors": 0
+    },
+    "write": {
+      "calls": 2,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "65a10ae",
+    "harnessHash": "25f13fca883fe563",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "opencode",
+    "resourceEnforcement": true,
+    "minAgentTimeout": 3600
+  },
+  "platform": "opencode",
+  "elapsed": 214.4,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 49.6,
+  "peakRssMb": 930,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

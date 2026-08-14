@@ -1,0 +1,47 @@
+{
+  "sessionID": "bench-openssl-selfsigned-cert-1786647882-58b325",
+  "passed": true,
+  "note": "bench:openssl-selfsigned-cert",
+  "turnCount": 1,
+  "timestamp": "2026-08-13T19:06:45.579Z",
+  "summary": "openssl-selfsigned-cert",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "toolUsage": {
+    "todowrite": {
+      "calls": 6,
+      "errors": 0
+    },
+    "bash": {
+      "calls": 8,
+      "errors": 0
+    },
+    "write": {
+      "calls": 2,
+      "errors": 0
+    },
+    "edit": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "9819484",
+    "harnessHash": "25f13fca883fe563",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "opencode",
+    "resourceEnforcement": true,
+    "checksHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "minAgentTimeout": 3600
+  },
+  "platform": "opencode",
+  "elapsed": 121.6,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 54,
+  "peakRssMb": 1138,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

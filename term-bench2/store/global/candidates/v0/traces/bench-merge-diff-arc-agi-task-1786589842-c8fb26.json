@@ -1,0 +1,46 @@
+{
+  "sessionID": "bench-merge-diff-arc-agi-task-1786589842-c8fb26",
+  "passed": true,
+  "note": "bench:merge-diff-arc-agi-task",
+  "turnCount": 1,
+  "timestamp": "2026-08-13T03:00:02.032Z",
+  "summary": "merge-diff-arc-agi-task",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "toolUsage": {
+    "todowrite": {
+      "calls": 7,
+      "errors": 0
+    },
+    "read": {
+      "calls": 2,
+      "errors": 0
+    },
+    "bash": {
+      "calls": 21,
+      "errors": 2
+    },
+    "write": {
+      "calls": 3,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "65a10ae",
+    "harnessHash": "25f13fca883fe563",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "opencode",
+    "resourceEnforcement": true,
+    "minAgentTimeout": 3600
+  },
+  "platform": "opencode",
+  "elapsed": 158.2,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 55.8,
+  "peakRssMb": 919,
+  "capMemoryMb": 4096,
+  "capRaised": false
+}
