@@ -127,7 +127,7 @@ export async function reviewAddedBullets(a: {
       proposal,
       rounds: REVISE_ROUNDS,
       review: (bullet, reason) =>
-        reviewBullet({ bullet, reason, harness: a.activeSystem, rejected, taskId: "", call }),
+        reviewBullet({ bullet, reason, harness: a.activeSystem, rejected, taskId: "", checkCmd: b.check?.cmd, call }),
       revise: async (p, r) => {
         // Layer-1 fails are deterministic and cheap to detect — free-fail
         // fast with NO LLM call, matching reviewBullet's own free-fail path
@@ -149,7 +149,14 @@ export async function reviewAddedBullets(a: {
       },
     })
     out.push({
-      bullet: final.bullet?.text ?? b.text,
+      // A judge-rejected CHECKED bullet ledgers with an F2-safe suffix noting
+      // the check existed (tier only, never the command) — without it the
+      // ledger reads as prose-only and future proposers/humans can't tell a
+      // mechanized proposal was rejected on other axes.
+      bullet:
+        !staged && b.check && tier
+          ? `${final.bullet?.text ?? b.text} [check: attached (${tier})]`
+          : (final.bullet?.text ?? b.text),
       staged,
       violations: staged ? [] : trail[trail.length - 1]!.review.violations,
       trail: trail.map((t) => ({ round: t.round, bullet: t.bullet, verdict: t.review.verdict })),
