@@ -576,7 +576,12 @@ export interface MhConfig {
   activeSplitFile: string
 }
 
-const DEFAULT_PROPOSER_MODEL = "anthropic/claude-opus-5"
+// Exported: cc-host.ts's runClaudeCodeTaskAgent falls back to this (bare id,
+// "anthropic/" prefix stripped) when a proposer/promoter/curator call arrives
+// with no explicit model — the daemon worker's argsfile requires a non-empty
+// model, unlike the old `claude -p` transport where omitting --model let the
+// CLI pick its own default.
+export const DEFAULT_PROPOSER_MODEL = "anthropic/claude-opus-5"
 const DEFAULT_PROPOSER_VARIANT = "high"
 const DEFAULT_JUDGE_MIN_SESSIONS = 20
 const DEFAULT_JUDGE_MIN_AGREEMENT = 0.8
