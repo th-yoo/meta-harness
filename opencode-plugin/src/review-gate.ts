@@ -40,7 +40,7 @@ function ledgerText(ledger: RejectedEntry[]): string {
     .join("\n")
 }
 
-function revisionPrompt(p: ProposalLike, violations: string[], rejected: string): string {
+function revisionPrompt(p: ProposalLike, violations: string[], rejected: string, checkCmd?: string): string {
   return `You are the LESSON PROPOSER in a REVISION round. Your previously proposed
 rule failed external review. Your DIAGNOSIS is FROZEN — do not re-diagnose.
 Reform ONLY the rule so it fixes the violations below, stays behavior-level
@@ -50,7 +50,15 @@ specifics), or abstain if impossible.
 ## Frozen diagnosis
 ${p.reason ?? ""}
 ## Your rejected rule
-${p.bullet?.text ?? ""}
+${p.bullet?.text ?? ""}${
+    checkCmd
+      ? `
+## Attached check (RIDES WITH this rule — it will be attached to your revised
+text verbatim. Your revised rule MUST still describe exactly the behavior this
+command verifies; if no compliant rewrite can stay verified by it, abstain.)
+\`${checkCmd}\``
+      : ""
+  }
 ## Review violations
 ${violations.map((v) => `- ${v}`).join("\n")}
 ## Previously REJECTED lessons (do NOT re-derive)
@@ -139,7 +147,7 @@ export async function reviewAddedBullets(a: {
         const formOnly = !r.layer1.pass && r.layer1.violations.every((v) => v.startsWith("form:"))
         if (!r.layer1.pass && !formOnly)
           return { action: "abstain", reason: `layer-1 free-fail: ${r.violations.join("; ")}` }
-        const reply = await call(revisionPrompt(p, r.violations, rejected))
+        const reply = await call(revisionPrompt(p, r.violations, rejected, b.check?.cmd))
         return (
           (extractJsonObject(reply, /\{\s*"action"/) as ProposalLike) ?? {
             action: "abstain",
