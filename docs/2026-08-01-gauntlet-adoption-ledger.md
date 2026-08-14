@@ -756,6 +756,25 @@ five architect rounds recorded in
   - `claude -p` survives ONLY in bench measurement context (TB2 driver
     specimen + p2 probe arms), user-ruled. cc-api-daemon pin unchanged
     `33f74db` (0.8.0), toolless guard untouched.
-  - First crank after this boundary stamps the fresh-boundary marker
-    (M4, pending explicit spend go). Suites at merge: opencode 2025/0
-    post-sweep (2031/0 pre-sweep combined).
+  - Suites at merge: opencode 2025/0 post-sweep (2031/0 pre-sweep
+    combined).
+  - **FRESH-BOUNDARY MARKER — first post-migration crank (M4 smoke,
+    2026-08-14 ~17:58 KST, user-approved spend):** two project-global
+    propose cycles through the production hook path. Crank 1 exposed a
+    REAL race (stale pre-migration staging files applied as candidate v1
+    two seconds after spawn — hijacked cycle); remediated (trial
+    reverted from `.trial` baseline snapshot, bogus candidate deleted)
+    and FIXED on main `6f3fde6` (staging pre-clean in all three
+    triggers + regression test; suite 2026/0; scoped review approved).
+    Crank 2 clean end-to-end: worker → cold-daemon spawn → opus-5 warm
+    lane (model proof passed, live repair-retry recovered) → staged
+    artifacts + provenance → apply → review gate REJECTED 1/1 added
+    bullet → rejected ledger (F2-conformant). Judge authenticity
+    proven: per-key parsed verdicts (category/domain_swap/duplicate
+    failed; behavior_level/mechanize_instead passed) — fail-closed
+    would read "rubric: no parseable checks object". CONTAMINATION
+    ACCEPTANCE PASSED: persisted prompt + worker system prompt contain
+    zero CC-harness markers (no CAVEMAN, no superpowers, no heredocs).
+    Store net effect: zero (rejection; candidates = v0 only). Known
+    residual (non-blocking, follow-up): hook-crash-before-lock-write
+    zombie-worker edge noted in the fix review.

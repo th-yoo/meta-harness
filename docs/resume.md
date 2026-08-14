@@ -28,13 +28,23 @@ adapters/claude-code/{daemon-seat,proposer-worker,cc-host}.ts,
 propose.ts (outputMode fork + isCC wiring), review-gate.ts
 (reviewModel now ModelSpec + threaded from cfg.judgeModel).
 
-NEXT (M4, NEEDS EXPLICIT SPEND GO): first post-migration crank smoke —
-one /mh-propose cycle: lock -> worker -> daemon -> staged files
-(+provenance/prompt.md) -> apply -> candidate; judge smoke via one
-review-gate call; acceptance = transcript/prompt provenance contains
-NO CC-harness markers (no CAVEMAN, no superpowers) — contamination
-probe repeated as acceptance test. First crank stamps fresh boundary
-marker per ledger entry.
+M4 SMOKE: DONE (user go, ~17:58 KST). Crank 1 exposed real
+stale-staging race (pre-migration leftovers applied as candidate v1,
+hijacked cycle) — remediated (trial reverted from .trial snapshot,
+bogus candidate deleted) + FIXED main 6f3fde6 (staging pre-clean all
+three triggers + regression test, suite 2026/0, review approved).
+Crank 2 CLEAN end-to-end: worker -> daemon -> opus-5 (proof passed,
+live repair-retry recovered) -> staged + provenance -> apply -> review
+gate REJECTED 1/1 -> ledger (F2-conformant). Judge proven genuine
+(per-key parsed verdicts, not fail-closed shape). CONTAMINATION
+ACCEPTANCE PASSED (zero CAVEMAN/superpowers in prompt + system
+prompt). Store net zero (candidates v0 only). Fresh-boundary marker
+stamped in adoption ledger. PROGRAM CLOSED.
+
+Residual follow-ups (non-blocking): hook-crash-before-lock-write
+zombie-worker edge (fix review) · promote/curate trigger-level wiring
+tests · test tmp-dir leak convention · stale judge warn text
+one-liner. Two smoke-spawned acpd daemons left warm (normal).
 
 DEFERRED MINORS (ledger + review artifact): promote/curate
 trigger-level wiring tests missing (traced correct manually; add
