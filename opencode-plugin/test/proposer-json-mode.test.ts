@@ -321,16 +321,68 @@ test("triggerPropose (CC path): runTaskAgent receives non-empty system, correctl
   expect(staged!.kind).toBe("propose")
 })
 
+test("triggerPropose (CC path): a stale primary artifact + stale diagnosis left behind by an abandoned prior cycle at the SAME scope+version path is pre-cleaned before runTaskAgent is invoked, while the fresh prompt.md is present", async () => {
+  const root = path.join(home, "stores", "cc-preclean")
+  writeActive(root, "v1", "- baseline", "")
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+  const stagingDir = path.join(worktree, ".kkamak", "staging")
+  fs.mkdirSync(stagingDir, { recursive: true })
+
+  // Seed STALE staging artifacts at the exact `<scope>-<version>-*` path this
+  // fresh cycle is about to reuse (nextVersion() re-derives "v1" again since
+  // no candidate directory exists yet — same as the sibling CC-wiring test
+  // above) — simulating an abandoned pre-migration cycle that never produced
+  // a candidate, per the production smoke bug (2026-08-14): applyPendingArtifacts
+  // polls only for the PRIMARY artifact's presence, so a stale primary here
+  // would otherwise be picked up as a "fresh" completion seconds after the
+  // real worker spawns.
+  const stalePrimary = path.join(stagingDir, "project-role-v1-ops.json")
+  const staleDiagnosis = path.join(stagingDir, "project-role-v1-diagnosis.json")
+  fs.writeFileSync(stalePrimary, JSON.stringify({ ops: [{ op: "add", text: "STALE — from an abandoned cycle" }] }))
+  fs.writeFileSync(staleDiagnosis, JSON.stringify({ failures: [{ sessionID: "stale", taxonomy: "wrong-plan", rootCause: "stale", firstUnrecoverableStep: "stale" }] }))
+
+  const cap: { primaryExistedAtCallTime?: boolean; promptExistedAtCallTime?: boolean; promptContentsAtCallTime?: string } = {}
+  const rec: Rec = { notes: [], logs: [] }
+  let staged: StagedArtifactDescriptor | undefined
+  const host: HarnessHost = {
+    ...baseHostFields(rec),
+    stageArtifactApply: (d) => { staged = d },
+    runTaskAgent: async (opts) => {
+      // Captured SYNCHRONOUSLY inside the call — strictly before this promise
+      // resolves — so this reflects staging-dir state at the moment of spawn,
+      // which is exactly what the pre-clean-before-spawn ordering requires.
+      cap.primaryExistedAtCallTime = fs.existsSync(stalePrimary)
+      const promptPath = path.join(stagingDir, `${layer.scope}-v1-prompt.md`)
+      cap.promptExistedAtCallTime = fs.existsSync(promptPath)
+      cap.promptContentsAtCallTime = cap.promptExistedAtCallTime ? fs.readFileSync(promptPath, "utf-8") : undefined
+      return { id: "cc-child-preclean" }
+    },
+  } as HarnessHost
+
+  await triggerPropose(host, worktree, layer)
+
+  // The stale primary must be GONE by the time the worker is spawned (the
+  // core of the fix) — a poll for its presence right after spawn must not
+  // find leftover data from the abandoned cycle.
+  expect(cap.primaryExistedAtCallTime).toBe(false)
+  // The stale diagnosis (part of propose's known staging set) is cleaned too.
+  expect(fs.existsSync(staleDiagnosis)).toBe(false)
+  // The FRESH prompt.md this cycle just wrote must be present, with content
+  // matching what was actually sent to the worker — pre-clean must not have
+  // clobbered the write that follows it.
+  expect(cap.promptExistedAtCallTime).toBe(true)
+  expect(cap.promptContentsAtCallTime).toBeDefined()
+
+  expect(staged).toBeDefined()
+  expect(staged!.kind).toBe("propose")
+})
+
 test("triggerPropose (opencode path, no stageArtifactApply): runTaskAgent's prompt carries the heredoc write section and NOT the json reply-format section; no prompt.md is written", async () => {
   const root = path.join(home, "stores", "oc-wiring")
   writeActive(root, "v1", "- baseline", "")
   const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
   const stagingDir = path.join(worktree, ".kkamak", "staging")
   fs.mkdirSync(stagingDir, { recursive: true })
-  // Pre-seed the primary artifact (playbook mode → ops.json, seeded from the
-  // non-empty baseline above) so triggerPropose's inline waitForFile returns
-  // immediately instead of really waiting on cfg.proposerTimeoutMin.
-  fs.writeFileSync(path.join(stagingDir, "project-role-v1-ops.json"), JSON.stringify({ ops: [] }))
 
   const cap: Captured = {}
   const rec: Rec = { notes: [], logs: [] }
@@ -340,6 +392,16 @@ test("triggerPropose (opencode path, no stageArtifactApply): runTaskAgent's prom
     // opencode-host shape; triggerPropose's isCC discriminator is false.
     runTaskAgent: async (opts) => {
       cap.opts = opts
+      // Write the primary artifact (playbook mode → ops.json, seeded from the
+      // non-empty baseline above) HERE, simulating the child producing it once
+      // actually spawned, so inline waitForFile returns immediately instead of
+      // really waiting on cfg.proposerTimeoutMin. Writing it before
+      // triggerPropose is called (the old approach) no longer works: the
+      // pre-clean-before-spawn fix (2026-08-14) deletes anything already
+      // sitting at this exact scope+version staging path BEFORE the spawn —
+      // by design, since it's otherwise indistinguishable from a stale
+      // leftover of an abandoned prior cycle at the same path.
+      fs.writeFileSync(path.join(stagingDir, "project-role-v1-ops.json"), JSON.stringify({ ops: [] }))
       return { id: "oc-child-1" }
     },
   } as HarnessHost

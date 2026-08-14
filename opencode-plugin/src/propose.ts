@@ -177,6 +177,29 @@ const CURATE_SYSTEM_PROMPT =
   "the reply-format contract given in the user prompt exactly."
 
 /**
+ * Pre-clean the exact known staging filenames for one scope+version cycle,
+ * BEFORE the fresh prompt is persisted / the worker is spawned (production
+ * smoke bug, 2026-08-14): nextVersion() re-computes the SAME version when a
+ * prior cycle for this scope+version was ABANDONED before ever producing a
+ * candidate (no candidate directory was created to advance it), so a STALE
+ * staging file from that abandoned cycle can still be sitting at the
+ * identical `<scope>-<version>-*` path a fresh cycle is about to reuse. On
+ * the CC path, applyPendingArtifacts polls only for the PRIMARY artifact's
+ * PRESENCE on disk — it cannot distinguish a stale leftover from a fresh
+ * write — so the stale primary was found ~2s after spawn, applied as the
+ * candidate, and the lock cleared while the freshly spawned worker was still
+ * running; its real output then landed orphaned. The opencode inline
+ * waitForFile path polls the identical primary-presence signal, so it has
+ * the same hazard even though it never detaches. Delete EXACTLY the caller-
+ * supplied paths with `force: true` (a no-op when nothing stale is there,
+ * the common case) — never a glob, never the whole staging dir, since other
+ * scopes/versions may have live cycles staged alongside these files.
+ */
+function preCleanStaging(paths: string[]): void {
+  for (const p of paths) fs.rmSync(p, { force: true })
+}
+
+/**
  * Trigger a proposer session for one store layer.
  * `layer.higherRoots` supplies the gap-filling "already covered" context.
  * The proposer writes to a staging file inside the worktree; the plugin
@@ -302,11 +325,20 @@ export async function triggerPropose(
     await host.log("info", `Starting proposer for ${layer.scope} → ${version} (model=${cfg.proposerModel})`)
     await host.notify(`Proposing ${layer.scope} ${version}…`, "info", 5_000)
 
+    // Pre-clean BEFORE the prompt-persist/spawn sequence below (both host
+    // paths — see preCleanStaging doc comment): must run before the isCC
+    // prompt.md persist write, obviously, since it would otherwise delete
+    // what was just written.
+    const stagingPrompt = path.join(stagingBase, `${layer.scope}-${version}-prompt.md`)
+    preCleanStaging([
+      stagingSystem, stagingTools, stagingDiagnosis, stagingOps,
+      stagingAgentConfig, stagingEnvPolicy, stagingPrompt, stagingProvenance,
+    ])
+
     // Persist the assembled prompt next to staging BEFORE spawn — the
     // provenance record (CC path only: writing this file on the opencode path
     // would break its byte-identical-files-written contract).
     if (isCC) {
-      const stagingPrompt = path.join(stagingBase, `${layer.scope}-${version}-prompt.md`)
       writeTextAtomic(stagingPrompt, prompt)
     }
 
@@ -814,8 +846,12 @@ export async function triggerPromote(
     await host.log("info", `Starting promoter ${source.scope} → ${target.scope} ${version} (model=${cfg.proposerModel})`)
     await host.notify(`Promoting ${source.scope} → ${target.scope} ${version}…`, "info", 5_000)
 
+    // Pre-clean BEFORE the prompt-persist/spawn sequence — see
+    // preCleanStaging doc comment (same stale-primary hazard as triggerPropose).
+    const stagingPrompt = path.join(stagingBase, `promote-${target.scope}-${version}-prompt.md`)
+    preCleanStaging([stagingSystem, stagingTools, stagingPrompt, stagingProvenance])
+
     if (isCC) {
-      const stagingPrompt = path.join(stagingBase, `promote-${target.scope}-${version}-prompt.md`)
       writeTextAtomic(stagingPrompt, prompt)
     }
 
@@ -1584,8 +1620,12 @@ export async function triggerCurate(
     await host.log("info", `Starting curator ${layer.scope} → ${version} (${activeBullets.length} bullets, model=${cfg.proposerModel})`)
     await host.notify(`Curating ${layer.scope} ${version}…`, "info", 5_000)
 
+    // Pre-clean BEFORE the prompt-persist/spawn sequence — see
+    // preCleanStaging doc comment (same stale-primary hazard as triggerPropose).
+    const stagingPrompt = path.join(stagingBase, `curate-${layer.scope}-${version}-prompt.md`)
+    preCleanStaging([stagingOps, stagingPrompt, stagingProvenance])
+
     if (isCC) {
-      const stagingPrompt = path.join(stagingBase, `curate-${layer.scope}-${version}-prompt.md`)
       writeTextAtomic(stagingPrompt, prompt)
     }
 
