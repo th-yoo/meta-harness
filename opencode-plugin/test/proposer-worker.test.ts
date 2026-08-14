@@ -18,8 +18,9 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import * as os from "node:os"
 import { createHash } from "node:crypto"
-import type { DaemonOutcome } from "@th-yoo/cc-api-daemon"
+import { ACP_BUDGET, type DaemonOutcome } from "@th-yoo/cc-api-daemon"
 import { runWorkerCycle, parseReplyJson, type WorkerDeps } from "../src/adapters/claude-code/proposer-worker.ts"
+import { readMhConfig } from "../src/harness-store.ts"
 import { WORKER_DEADLINE_MARGIN_MS, WORKER_TURN_TIMEOUT_MS, workerDaemonEnv, type WorkerArgs, type WorkerStagingPaths } from "../src/adapters/claude-code/daemon-seat.ts"
 
 let stagingDir: string
@@ -438,7 +439,7 @@ describe("workerDaemonEnv", () => {
   test("budget arithmetic: worker attempt-1 budget clears the advertised worst case with >=3s slack", () => {
     // Mirror of the daemon's five-leg sum with the turn leg swapped
     // (ACP_BUDGET at pin: queueWait 6k + clear 4k + setModel 2k + grace 4k = 16k non-turn legs).
-    const advertisedWorstCase = 16_000 + WORKER_TURN_TIMEOUT_MS
+    const advertisedWorstCase = ACP_BUDGET.daemonWorstCaseMs - ACP_BUDGET.turnTimeoutMs + WORKER_TURN_TIMEOUT_MS
     const attempt1BudgetMs = Math.floor(1_200_000 / 2) // standard descriptor timeoutMs / 2
     expect(attempt1BudgetMs).toBeGreaterThanOrEqual(advertisedWorstCase + 3_000)
   })
@@ -449,8 +450,18 @@ describe("workerDaemonEnv", () => {
     // and the client guard refuses EVERY cycle pre-send (no-call, free but
     // silent — the Task 1 stderr diagnostic never fires on pre-send refusal).
     // This test documents the boundary so a default change trips it.
-    const advertisedWorstCase = 16_000 + WORKER_TURN_TIMEOUT_MS // 496_000
+    const advertisedWorstCase = ACP_BUDGET.daemonWorstCaseMs - ACP_BUDGET.turnTimeoutMs + WORKER_TURN_TIMEOUT_MS // 496_000
     expect(Math.floor((17 * 60_000) / 2)).toBeGreaterThan(advertisedWorstCase + 3_000)  // 17 min: clears
     expect(Math.floor((16 * 60_000) / 2)).toBeLessThan(advertisedWorstCase + 3_000)     // 16 min: refused
+
+    // The real shipped default must clear the floor — reads readMhConfig's
+    // actual default, so a default-lowering change trips this test.
+    const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), "mh-floor-"))
+    try {
+      const cfg = readMhConfig(emptyDir)
+      expect(Math.floor((cfg.proposerTimeoutMin * 60_000) / 2)).toBeGreaterThanOrEqual(advertisedWorstCase + 3_000)
+    } finally {
+      fs.rmSync(emptyDir, { recursive: true, force: true })
+    }
   })
 })
