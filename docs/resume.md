@@ -64,8 +64,14 @@ OPEN — NEED USER GO/RULING:
    ephemerally + deterministic suppression at raw-JSON ingestion +
    revision-seat check contract + F2-safe attached suffix; proposer
    prompt hardened (check REQUIRED when mechanizable + example carries
-   check — live-eval'd revisions). Confirm crank pending: expected
-   first checked-rule candidate PROPOSED+STAGED.
+   check — live-eval'd revisions). CONFIRM CRANK RAN (crank 5, 00:51 KST):
+   PIPELINE PROVEN END-TO-END — proposer emitted check, screened LIVE
+   tier (ledger suffix "[check: attached (live)]"), mechanize_instead
+   GONE, revision round fired (2 judge calls); final reject on
+   SUBSTANCE (category + duplicate — the bun-tooling rule is
+   legitimately not process-shaped). Machinery COMPLETE; first staged
+   checked candidate is now purely evidence-driven (scheduled crank,
+   10-line threshold). Do not force-crank the same evidence pool.
  - Checked-rule crank: CRANKS 1+2 RAN 2026-08-14 00:37/01:07 KST
    (km-crank --force, headless; ~$0.28 judge total): both proposals
    prose-only bullets, both REVIEW-REJECTED with mechanize_instead
