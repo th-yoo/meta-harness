@@ -65,12 +65,20 @@ EMISSION INVARIANTS: proposer-emitted checks are ALWAYS
 - F2: check text lives in playbook.json (store), never in
   gate-outcomes.ndjson. Sensor lines and TB2 record annotations carry
   OUTCOMES only (rule id, pass/fail, ms) — no command text.
-- F2 OPEN RULING (round-1 finding 5): rejected.json is re-read into
-  every future proposer prompt — a permanent exposure surface; the
-  2026-08-09 sidecar exception does NOT cover it. Until the user rules,
-  a check-rejected bullet is ledgered with its TEXT plus a check
-  VERDICT SUMMARY only (e.g. `check: screen-denied (network)`), never
-  the command text.
+- F2 RULED 2026-08-14 (user, evidence-backed — was round-1 finding 5's
+  open ruling): rejected.json carries a check-rejected bullet's TEXT
+  plus a check VERDICT SUMMARY only (e.g. `check: screen-denied
+  (network)`, `[check: attached (live)]`) — NEVER command text,
+  PERMANENTLY. Rejected.json is re-read into every future proposer
+  prompt and travels in committed store snapshots; the 2026-08-09
+  sidecar exception does not cover it. Evidence (3-round eval,
+  docs/loop-probes/f2-ledger-eval.md): verbatim cmd text in the ledger
+  showed zero repair benefit and, on the production-faithful full-CC
+  proposer carrier, ANCHORED outputs toward the refused command's
+  shape (screen-rejected echoes) — harm with no offsetting gain. The
+  fallback wiring (suffix + violations forms, test-pinned in
+  review-gate-check-aware.test.ts and the sensor conformance) is now
+  the permanent contract; no code change was needed.
 - One check per bullet (multi-check = explicitly-not-now §6).
 - PROVENANCE (round-1 finding 2): `harnessHash` hashes the RENDERED
   MARKDOWN (bullet text lines only) and structurally cannot cover
@@ -370,3 +378,8 @@ producer:
   site; two prose minors fixed — §5.3/§7 reworded off "activation
   writes" to the full §4 producer surface (F1); §4 topic sentence no
   longer overreaches its own confirm-branch exception (F2).
+- r5 (2026-08-14): §1's F2 open ruling RESOLVED by user —
+  verdict-summary-only made permanent, evidence-backed (3-round
+  ledger-form eval, docs/loop-probes/f2-ledger-eval.md: cmd text zero
+  benefit, anchoring harm on the production-faithful carrier). No code
+  change; the fallback wiring is the contract.

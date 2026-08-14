@@ -107,8 +107,9 @@ OPEN — NEED USER GO/RULING:
    pattern: any edit-carrying Stop in a dogfood session emits a line.
    Then: candidate with checks -> k=5 two-arm ab = overnight spend,
    own sized go (table computed at go time).
- - Standing rulings: A/A trial-state (P2-close block) · rejected.json
-   F2 command-text (spec §1 fallback in force).
+ - Standing ruling: A/A trial-state (P2-close block). [rejected.json
+   F2 RULED 2026-08-14: verdict-summary-only PERMANENT — evidence
+   docs/loop-probes/f2-ledger-eval.md, spec §1 r5; no code change.]
  - yoo-dev: STILL UNREACHABLE from yoo-mac (221.151.107.42:22 timeout
    re-confirmed 08-13). Handoff block below updated: contract-rev
    duties now REDUCED to pull-both-repos + run suites; sensor
