@@ -353,3 +353,22 @@ test("loop honors an abstain returned by the revision call", async () => {
   expect(out.final.reason).toBe("domain-only fixable")
   expect(reviews).toBe(1)
 })
+
+test("layer1 allows all-alpha prose alternation chains (2+ slashes, no strong path word)", () => {
+  // 2026-08-14 G2 live false-positive: "binary/format/spec" cost a substantive bullet.
+  const r = layer1Checks(
+    "When reverse-engineering or targeting an existing binary/format/spec, do not scale to the full input until a minimal round-trip succeeds.",
+  )
+  expect(r.violations.join(" ")).not.toContain("path-like")
+  const r2 = layer1Checks("When a step needs read/write/execute access, do not widen permissions until the need is proven.")
+  expect(r2.violations.join(" ")).not.toContain("path-like")
+})
+
+test("layer1 still fails multi-segment chains with a strong path word or non-alpha segment", () => {
+  const strong = layer1Checks("When touching src/gauge/validate, do not skip the tests until they pass.")
+  expect(strong.pass).toBe(false)
+  expect(strong.violations.join(" ")).toContain("path-like")
+  const nonAlpha = layer1Checks("When touching foo/bar2/baz, do not skip the tests until they pass.")
+  expect(nonAlpha.pass).toBe(false)
+  expect(nonAlpha.violations.join(" ")).toContain("path-like")
+})

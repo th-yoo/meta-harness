@@ -77,15 +77,30 @@ const PATH_WORDS = new Set([
   "config", "configs", "vendor", "node_modules", "assets", "public", "api",
   "internal", "core", "utils", "tools", "examples",
 ])
+/** Subset of PATH_WORDS that near-never appear as prose-alternation
+ * segments — any occurrence in a multi-segment chain flags it. The
+ * remainder ("spec", "internal", "build", "api", …) are common English
+ * words that DO appear in prose chains; they still flag single-slash
+ * word/word tokens (unchanged), just not 2+-slash all-alpha chains.
+ * User ruling 2026-08-15: the 2026-07-30 "accepted residual
+ * false-positive" for prose chains is superseded — the live G2 crank lost
+ * a substantive account-global bullet to "binary/format/spec". */
+const STRONG_PATH_WORDS = new Set([
+  "src", "lib", "apps", "bin", "dist", "pkg", "cmd", "docs", "doc",
+  "test", "tests", "scripts", "script", "config", "configs", "vendor",
+  "node_modules", "assets",
+])
 /** A slash counts as path-like when the token is anchored (./ ../ ~/ /abs),
- * multi-segment (2+ slashes — this deliberately also catches prose chains
- * like "read/write/execute"; accepted residual false-positive), has a
- * non-alphabetic side (any character outside ASCII [a-zA-Z]: digits,
+ * has a non-alphabetic side (any character outside ASCII [a-zA-Z]: digits,
  * underscores, hyphens, dots, accented letters — ASCII-only by intent,
  * fail-closed for non-English words), or has a PATH_WORDS side. A single
  * slash between two plain alphabetic non-PATH_WORDS words is prose
  * ("and/or", "filters/qualifies" — live false-positive 2026-07-30,
- * km-crank round 1). Residual risk: a bare word/word path whose BOTH sides
+ * km-crank round 1). Multi-segment (2+ slashes): a chain whose EVERY
+ * segment is plain alphabetic and none is a STRONG_PATH_WORDS member is
+ * prose alternation ("read/write/execute", "binary/format/spec" — live
+ * false-positive 2026-08-14, G2 crank); any non-alpha segment or any
+ * strong path word ("scripts/build/run") still flags. Residual risk: a bare word/word path whose BOTH sides
  * are plain non-PATH_WORDS English words (e.g. "kernel/gate") passes this
  * layer; recorded in docs/2026-07-24-proposer-review-loop.md as an
  * accepted trade-off — layer 2 has NO leak check (RUBRIC_KEYS), so layer 1
@@ -102,7 +117,12 @@ function hasPathLikeToken(bullet: string): boolean {
     if (!raw.includes("/")) continue
     const tok = raw.replace(/^["'(\[]+/, "").replace(/["'.,;:!?)\]]+$/, "")
     if (/^(\.{1,2}\/|~\/|\/)/.test(tok)) return true
-    if ((tok.match(/\//g) ?? []).length >= 2) return true
+    if ((tok.match(/\//g) ?? []).length >= 2) {
+      const segs = tok.split("/")
+      if (segs.some((s) => !/^[a-z]+$/i.test(s))) return true
+      if (segs.some((s) => STRONG_PATH_WORDS.has(s.toLowerCase()))) return true
+      continue // all-alpha chain, no strong path word: prose alternation
+    }
     const [left, right] = tok.split("/")
     if (!/^[a-z]+$/i.test(left ?? "") || !/^[a-z]+$/i.test(right ?? "")) return true
     if (PATH_WORDS.has((left ?? "").toLowerCase()) || PATH_WORDS.has((right ?? "").toLowerCase())) return true
