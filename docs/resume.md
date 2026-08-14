@@ -3,6 +3,83 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ✅ SESSION END 2026-08-14 night (`yoo-mac` "harness") — HOOK-RULE PROGRAM SPEC'D · TB2.1/SONNET-5-HIGH BENCH STRATEGY RULED · MAIN `c95cb31`+
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness), yoo-mac, post-2026-08-14-night session.
+git pull FIRST; main >= c95cb31. Daemon carrier migration is CLOSED
+(see the evening block below — claude -p eliminated from production
+seats, M4 smoke passed, boundary ts 1786696678012; do not redo).
+
+TWO ACTIVE LANES, in order:
+
+LANE 1 — HOOK-RULE EVOLUTION (spec awaiting user review):
+docs/superpowers/specs/2026-08-14-hook-rule-evolution-design.md
+(c95cb31). Brainstormed with 4 user-ruled forks: BOTH surfaces at
+once (dogfood dispatch.ts + bench a3 asset) · evidence-staged ramp
+(shadow->warn->deny, born shadow, N=20/K=5/theta=0.25 initial) ·
+declarative regex matchers only · hookRule rides the playbook bullet
+like check{cmd}. Compiled table .km/hook-rules.json (rule-checks
+producer precedent), fail-open always, HOOK_RULES_MAX=16 deny<=4,
+global kill-switch. OPEN RULING embedded in spec §5: FP-adjudication
+sidecar = bench-only bounded input evidence under docs/loop-probes/
+(A4 F2-exception precedent), dogfood capture id/mode/ms only — user
+must approve/veto at spec review. NEXT: user reviews spec -> then
+writing-plans for P0 ONLY (mechanics probes: does PreToolUse deny
+bind under one-shot claude -p in container; warn-channel mechanics
+additionalContext vs block; latency at 16-rule cap). §8: if CC has
+no non-blocking PreToolUse feedback channel, warn degrades to shadow
+on dogfood.
+
+LANE 2 — TB2.1 + SONNET-5/HIGH BENCH PROGRAM (ruled, not yet built):
+Project thesis restated by user: MAX PERFORMANCE FROM LOW-COST LLM.
+Subject = sonnet-5 at HIGH effort (haiku ruled no-headroom 07-20).
+TB3 rejected as unaffordable ($6.9k sonnet/max full run). TB2.1
+chosen: 89 tasks = TB2.0 refresh (26 task fixes), our podman rig
+ports near-directly. LEADERBOARD ANCHORS (tbench.ai/leaderboard/
+terminal-bench/2.1, k=5 protocol, API cost, intro pricing):
+ #1 CC+Fable5/xhigh 83.8%±1.2 $552 · #5 CC+Opus4.8/high 78.9%±1.3
+ $287 · #10 CC+Sonnet5/high 74.6%±1.6 $288 <- OUR EXACT CONFIG.
+Evolution objective: climb #10 toward #5 (+4.3pt) at identical
+spend via harness (playbook + hook rules + config knobs). Cost
+axis belongs in gate verdicts (pass-rate-per-dollar) — needs a
+ruling. INTRO PRICING ENDS 2026-08-31: sonnet-5 $2/$10 -> $3/$15
+(+50%); full-protocol API baseline (~$288) preferably before then.
+Auth split ruled: one clean k=5 baseline on ANTHROPIC_API_KEY;
+evolution cranks on OAuth Max20 (CC-oauth-in-container recipe
+exists, agent-auth.ts mounts + --no-oauth-gate; windows are
+per-ACCOUNT so dual-host adds no OAuth throughput). Dual-host
+split OK for API run (~2x wall-clock; task-partition via
+selectTasks, git-only store merge, per-host oracle validation
+required) but yoo-dev is ssh-dead (standing handoff). BUILD STEPS
+when started: port 26 task deltas -> oracle 5x per host -> sonnet-5
+k=1 calibration -> full k=5 baseline -> boundary ts + new v0.
+Grok 4.5 noted as possible later opencode-arm subject (ability
+~parity, output cheaper, but its leaderboard run carries -9.0%
+reward-hacking adjustment).
+
+CONTEXT NOTES: original meta-harness paper ran 10 outer iterations
+on TB2 (89 tasks, search=eval). Our loop to date: 160 committed
+bench sessions, ~13 candidates, ZERO net-positive adoptions — gaps
+named: bullet-only action space (hook rules attack this), proposer
+info-poverty (json-reply carrier trade), subject headroom (sonnet-5
+fixes). CC tool DEFINITIONS immutable — enforcement wraps around
+(PreToolUse deny/feedback, permissions, MCP), never rewrites.
+
+STANDING OPEN (unchanged): daemon-migration residuals (promote/
+curate trigger-level wiring tests · test tmp-dir leak · stale judge
+warn text · hook-crash-before-lock-write zombie edge) · A/A
+trial-state ruling · yoo-dev ssh-dead handoff · both-sessions
+restart then 0.4.3-0.4.5 cache cleanup. project-global store back
+at v0 baseline (smoke artifacts reverted); project-role trial v1
+LIVE (started 08-14 07:43Z, 5-session horizon) — do not disturb.
+
+RULES: explicit go before merge/spend · 7b gate + artifact · suites
+serial · NAMED files only · probe the CONSEQUENCE · sim transport =
+production lane · F2 (no cmd text in ledgers) · SITREP.
+```
+
 ## ✅ SESSION END 2026-08-14 evening (`yoo-mac` "harness" + sibling "minimal" two-track) — DAEMON CARRIER MIGRATION COMPLETE + MERGED · `claude -p` ELIMINATED FROM PRODUCTION SEATS · MAIN `9d960ea`+
 
 **RESUME PROMPT:**
