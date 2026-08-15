@@ -132,12 +132,15 @@ AUTH RULED 08-16 (user): NO ANTHROPIC_API_KEY — every lane 2 run
 recipe, freshness-gated parallel). Consequence for the cost axis:
 no per-trial $ from OAuth — pass-rate-per-dollar must use TOKEN
 counts, not measured spend (anchor's $ column stays reference-only).
+K RULED 08-16 (user): NO k=1 anywhere — parity and arms run k=5,
+matching the anchor job's protocol (445 trials = 89x5) and the
+standing k=5 verdict rule.
 Steps remaining: rulings -> oracle 5x over final target set
 (RUNNING 08-16, 5 passes, scheduler width ~4 on VM now 6cpu/10GB) ->
-sonnet-5 k=1 RIG-PARITY pass (~2-3h scheduled, OAuth quota) ->
-evolution arms -> optional full-89 k=5 confirm at program
-END only ($288/$432 post-08-31 IF ever run on key, guards
-solid-task regressions). Wall-clock inputs now measured, not
+sonnet-5 k=5 RIG-PARITY over the 32 (160 trials, ~4.5-6h scheduled,
+OAuth quota, parallel) -> evolution arms (k=5) -> optional full-89
+k=5 confirm at program END only ($288/$432 post-08-31 IF ever run on
+key, guards solid-task regressions). Wall-clock inputs now measured, not
 guessed: trial median 5.2 min / mean 10.4 / p90 29; timeouts are 30%
 of serial wall; scheduler width ~4 (mem-bound, VM 4cpu/8GB).
 COST-AXIS-IN-GATE-VERDICTS RULING STILL OPEN.
