@@ -69,7 +69,7 @@ declare const Bun: {
       cwd?: string
       env?: Record<string, string | undefined>
       stdout?: "pipe" | "ignore"
-      stderr?: "pipe" | "ignore"
+      stderr?: "pipe" | "ignore" | number
       stdin?: "pipe" | "ignore"
     },
   ): {
@@ -285,20 +285,35 @@ function bareModelId(spec: string): string {
   return i >= 0 ? spec.slice(i + 1) : spec
 }
 
-function defaultWorkerSpawn(argv: string[], opts: { cwd: string; env: Record<string, string> }): CCTaskChild {
+export function defaultWorkerSpawn(argv: string[], opts: { cwd: string; env: Record<string, string> }): CCTaskChild {
   // NEVER a bare "bun": detached hook children under launchd have a minimal
   // PATH — this was the exact documented 4/4-day proposer outage (hook.log
   // 2026-08-02..05) when the old transport had to resolve a bare `claude`
   // argv[0] against that PATH. argv[0] here is process.execPath (the
   // already-running Bun binary, PATH-independent), so no PATH-resolution
   // step is needed at all.
-  return Bun.spawn(argv, {
+  // stderr -> durable append log under ccRuntimeDir() (stderr-blindness
+  // fix, 2026-08-15): the worker is DETACHED — with "ignore", every failure
+  // (validation rejects, daemon outcomes, deadline exits) vanished; four
+  // silent worker deaths were debugged blind in the 08-14/15 crank arc.
+  // Logging must never block the spawn: any failure falls back to "ignore".
+  let stderrFd: number | "ignore" = "ignore"
+  try {
+    const dir = path.join(ccRuntimeDir(), "worker-logs")
+    fs.mkdirSync(dir, { recursive: true })
+    stderrFd = fs.openSync(path.join(dir, "proposer-worker.log"), "a")
+  } catch { /* fall back to ignore */ }
+  const child = Bun.spawn(argv, {
     cwd: opts.cwd,
     env: opts.env,
     stdout: "ignore",
-    stderr: "ignore",
+    stderr: stderrFd,
     stdin: "ignore",
   })
+  // The child holds its own dup of the fd; close the parent's copy so a
+  // long-lived hook process never leaks descriptors across spawns.
+  if (typeof stderrFd === "number") { try { fs.closeSync(stderrFd) } catch { /* already closed */ } }
+  return child
 }
 
 /**

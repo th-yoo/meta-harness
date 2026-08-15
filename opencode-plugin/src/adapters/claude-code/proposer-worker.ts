@@ -56,7 +56,9 @@ const SEAT_TITLE: Record<WorkerArgs["kind"], string> = {
 
 function log(msg: string): void {
   try {
-    process.stderr.write(`[proposer-worker] ${msg}\n`)
+    // ISO timestamp: these lines land in a shared append log
+    // (ccRuntimeDir()/worker-logs/proposer-worker.log) across detached runs.
+    process.stderr.write(`[proposer-worker ${new Date().toISOString()}] ${msg}\n`)
   } catch {
     /* detached stderr may be gone — never let logging kill the cycle */
   }
