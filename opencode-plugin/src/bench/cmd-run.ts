@@ -61,6 +61,12 @@ import {
   readRuleGateStateArgs,
   type RuleGateCheck,
 } from "./rule-gate.ts"
+import {
+  HOOK_RULE_GATE_DIR,
+  buildHookRuleEvalScript,
+  readHookRuleOutcomesArgs,
+  type HookRuleSpec,
+} from "./hook-rule-gate.ts"
 
 // ── run_task_once ───────────────────────────────────────────────────────
 
@@ -116,6 +122,14 @@ export interface RunTaskResult {
    * read on an already-completed attempt is fail-open (never reclassifies
    * the attempt as dead), just omits this field with a loud log line. */
   ruleChecks?: { rounds: number; exhausted: boolean; perRule: Record<string, { blocked: number }> }
+  /** hook-rule P1 Task 8: post-attempt in-container outcomes.log readback
+   * (hook-rule-gate.ts's `readHookRuleOutcomesArgs`) — one entry per matched
+   * rule, id/mode only (F2). INTERNAL bench annotation, NOT the sensor
+   * contract (that's P2). Absent when this arm carried no hook-rule table,
+   * OR when the readback came back rc!=0 (the COMMON case for an attempt
+   * with zero matches: eval.sh only ever appends to outcomes.log on a
+   * match) — fail-open, mirroring `ruleChecks` above. */
+  hookRuleOutcomes?: { id: string; mode: string }[]
 }
 
 export type RunOneTaskFn = (
@@ -145,6 +159,12 @@ export type RunOneTaskFn = (
    * + defaulted (empty) so every existing 12-arg caller/fake in this file's
    * many unit tests keeps compiling unchanged — checkless is the default. */
   checks?: RuleGateCheck[],
+  /** hook-rule P1 Task 8: THIS ARM'S OWN compiled hook-rule table (frozen
+   * contract 2's `rules` + `killSwitch`, parsed by the caller — same
+   * injection-symmetry stance as `checks` above). Trailing + defaulted
+   * (undefined = no table = no injection) so every existing caller/fake
+   * keeps compiling unchanged. */
+  hookRuleTable?: { rules: HookRuleSpec[]; killSwitch: boolean },
 ) => Promise<RunTaskResult>
 
 function round1(x: number): number {
@@ -212,6 +232,7 @@ export async function runTaskOnce(
   execFn: ExecFn = podman,
   prepareAuth: () => AgentAuthMounts = () => driver.prepareAuth(),
   checks: RuleGateCheck[] = [],
+  hookRuleTable?: { rules: HookRuleSpec[]; killSwitch: boolean },
 ): Promise<RunTaskResult> {
   const sessionId = `bench-${task}-${Math.floor(Date.now() / 1000)}-${randomBytes(3).toString("hex")}`
   const taskStart = Date.now()
@@ -374,8 +395,17 @@ export async function runTaskOnce(
     // failed mkdir/cp means this arm cannot actually be enforced, so (like
     // that precedent) the attempt fails setup_failed rather than silently
     // running unguarded.
-    if (checks.length > 0) {
-      const mkdirGate = await execFn(buildExecArgv(name, ["mkdir", "-p", "/app/.claude", RULE_GATE_DIR]))
+    // hook-rule P1 Task 8: the PreToolUse evaluator rides the SAME
+    // settings.json single-owner + scratch-dir copy-in as the rule gate —
+    // keyed on its own table being non-empty, independent of `checks`. When
+    // hook rules are present but `checks` is empty, check.sh is still
+    // written (buildRuleGateScript([]) — a trivially-passing script) so the
+    // settings' Stop hook never points at a missing file.
+    const hookRules = hookRuleTable && hookRuleTable.rules.length > 0 ? hookRuleTable : undefined
+    if (checks.length > 0 || hookRules) {
+      const mkdirGate = await execFn(
+        buildExecArgv(name, ["mkdir", "-p", "/app/.claude", RULE_GATE_DIR, ...(hookRules ? [HOOK_RULE_GATE_DIR] : [])]),
+      )
       if (mkdirGate.rc !== 0) {
         log(`  rule-gate: mkdir failed: exit ${mkdirGate.rc}`)
         return failResult("setup_failed")
@@ -384,7 +414,7 @@ export async function runTaskOnce(
       try {
         const settingsHost = join(scratch, "settings.json")
         const checkHost = join(scratch, "check.sh")
-        writeFileSync(settingsHost, buildRuleGateSettings())
+        writeFileSync(settingsHost, buildRuleGateSettings(hookRules ? { hookRules: true } : undefined))
         writeFileSync(checkHost, buildRuleGateScript(checks))
         const cpSettings = await execFn(buildCpToArgv(name, settingsHost, "/app/.claude/settings.json"))
         if (cpSettings.rc !== 0) {
@@ -395,6 +425,15 @@ export async function runTaskOnce(
         if (cpScript.rc !== 0) {
           log(`  rule-gate: check.sh copy-in failed: exit ${cpScript.rc}`)
           return failResult("setup_failed")
+        }
+        if (hookRules) {
+          const evalHost = join(scratch, "eval.sh")
+          writeFileSync(evalHost, buildHookRuleEvalScript(hookRules.rules, hookRules.killSwitch))
+          const cpEval = await execFn(buildCpToArgv(name, evalHost, `${HOOK_RULE_GATE_DIR}/eval.sh`))
+          if (cpEval.rc !== 0) {
+            log(`  hook-rule-gate: eval.sh copy-in failed: exit ${cpEval.rc}`)
+            return failResult("setup_failed")
+          }
         }
       } finally {
         rmSync(scratch, { recursive: true, force: true })
@@ -471,6 +510,23 @@ export async function runTaskOnce(
         log("  rule-gate: state read rc!=0 (no block this attempt, or state unreadable) — ruleChecks omitted")
       }
     }
+    // hook-rule P1 Task 8 readback: outcomes.log, read while the container
+    // is still up (same reason as ruleChecks above). FAIL-OPEN: eval.sh only
+    // ever appends on a match, so rc!=0 (file absent) is the COMMON case for
+    // a zero-match attempt — omit the field, never reclassify the attempt.
+    let hookRuleOutcomes: RunTaskResult["hookRuleOutcomes"]
+    if (hookRules) {
+      const outcomesResult = await execFn(buildExecArgv(name, readHookRuleOutcomesArgs()))
+      if (outcomesResult.rc === 0) {
+        hookRuleOutcomes = outcomesResult.stdout
+          .split("\n")
+          .map((l) => l.trim().split(/\s+/))
+          .filter((parts) => parts.length >= 2 && parts[0] !== "")
+          .map((parts) => ({ id: parts[0]!, mode: parts[1]! }))
+      } else {
+        log("  hook-rule-gate: outcomes read rc!=0 (no matches this attempt, or log unreadable) — hookRuleOutcomes omitted")
+      }
+    }
     const elapsed = (Date.now() - taskStart) / 1000
     log(`  reward=${reward}${selfScore !== null ? `  self=${round1(selfScore)}` : ""}  elapsed=${pyFixed(elapsed, 1)}s`)
     return {
@@ -487,6 +543,7 @@ export async function runTaskOnce(
       ...(cgroup ? { cpuSeconds: cgroup.cpuSeconds, peakRssMb: cgroup.peakRssMb } : {}),
       ...(agentElapsedSec !== undefined ? { agentElapsedSec } : {}),
       ...(ruleChecks ? { ruleChecks } : {}),
+      ...(hookRuleOutcomes ? { hookRuleOutcomes } : {}),
     }
   } finally {
     // auth?.cleanup() shreds the darwin Keychain-exported .credentials.json (a

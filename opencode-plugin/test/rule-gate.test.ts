@@ -205,6 +205,47 @@ test("buildRuleGateSettings: single Stop hook runs bash /app/.rule-gate/check.sh
   expect(parsed.hooks.Stop[0].hooks[0].command).toBe(`bash ${RULE_GATE_DIR}/check.sh`)
 })
 
+// ── hook-rule P1 Task 8: opt-in PreToolUse block ────────────────────────
+
+// Regression pin (hook-rule P1 Task 8): the no-arg output is BYTE-identical
+// to the pre-hook-rules builder — the literal below was captured from the
+// builder before the opts parameter existed. A falsy opt must not change it
+// either.
+const PRE_HOOK_RULES_SETTINGS = `{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /app/.rule-gate/check.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+`
+
+test("buildRuleGateSettings: no-arg output is byte-identical to the pre-hook-rules shape", () => {
+  expect(buildRuleGateSettings()).toBe(PRE_HOOK_RULES_SETTINGS)
+})
+
+test("buildRuleGateSettings({hookRules:false}): still byte-identical to no-arg", () => {
+  expect(buildRuleGateSettings({ hookRules: false })).toBe(PRE_HOOK_RULES_SETTINGS)
+})
+
+test("buildRuleGateSettings({hookRules:true}): ONE settings file carrying both Stop and PreToolUse", () => {
+  const parsed = JSON.parse(buildRuleGateSettings({ hookRules: true }))
+  // Stop block unchanged
+  expect(parsed.hooks.Stop[0].hooks[0].command).toBe(`bash ${RULE_GATE_DIR}/check.sh`)
+  // PreToolUse block added alongside it
+  expect(parsed.hooks.PreToolUse).toHaveLength(1)
+  expect(parsed.hooks.PreToolUse[0].hooks).toHaveLength(1)
+  expect(parsed.hooks.PreToolUse[0].hooks[0].type).toBe("command")
+  expect(parsed.hooks.PreToolUse[0].hooks[0].command).toBe("bash /app/.hookrule-gate/eval.sh")
+})
+
 // ── readRuleGateStateArgs ────────────────────────────────────────────────
 
 test("readRuleGateStateArgs: cat argv for the state file", () => {

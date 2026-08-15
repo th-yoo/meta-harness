@@ -63,6 +63,8 @@
  * is unaffected by that cut and is what Step 1's tests pin.
  */
 
+import { HOOK_RULE_GATE_DIR } from "./hook-rule-gate.ts"
+
 /** Where the gate's state + generated script live inside the container.
  * Overridable via the `RULE_GATE_DIR` env var — baked into the generated
  * script as its default, and read at script-runtime from the env for
@@ -87,8 +89,9 @@ export interface RuleGateCheck {
  * with the standard close-escape-reopen sequence `'\''`. Round-trips any
  * byte sequence (no NUL) back to the exact original string when bash parses
  * the resulting literal — this is what lets a cmd containing single quotes
- * survive script generation. */
-function shQuote(s: string): string {
+ * survive script generation. Exported for hook-rule-gate.ts's evaluator
+ * generator (hook-rule P1, Task 7), which embeds rule fields the same way. */
+export function shQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`
 }
 
@@ -238,28 +241,39 @@ fi
  * mirrors p2/assets/stop-gate-settings.json's exit-2/stderr-evidence shape
  * (that file's header, cmd-p2.ts's `STOP_GATE_SETTINGS_PATH` copy-in), but
  * this one is DYNAMIC text (the command line is fixed, not per-check) since
- * all per-check content lives in check.sh, not settings.json. */
-export function buildRuleGateSettings(): string {
-  return (
-    JSON.stringify(
+ * all per-check content lives in check.sh, not settings.json.
+ *
+ * hook-rule P1 (Task 8): this stays the SINGLE owner of the container's
+ * settings.json — `opts.hookRules` adds the PreToolUse block that runs the
+ * hook-rule evaluator (hook-rule-gate.ts's eval.sh) ALONGSIDE the Stop
+ * block, in the one file; no arg keeps the output byte-identical to the
+ * pre-hook-rules builder (regression-pinned in rule-gate.test.ts). */
+export function buildRuleGateSettings(opts?: { hookRules?: boolean }): string {
+  const hooks: Record<string, unknown> = {
+    Stop: [
       {
-        hooks: {
-          Stop: [
-            {
-              hooks: [
-                {
-                  type: "command",
-                  command: `bash ${RULE_GATE_DIR}/check.sh`,
-                },
-              ],
-            },
-          ],
-        },
+        hooks: [
+          {
+            type: "command",
+            command: `bash ${RULE_GATE_DIR}/check.sh`,
+          },
+        ],
       },
-      null,
-      2,
-    ) + "\n"
-  )
+    ],
+  }
+  if (opts?.hookRules) {
+    hooks.PreToolUse = [
+      {
+        hooks: [
+          {
+            type: "command",
+            command: `bash ${HOOK_RULE_GATE_DIR}/eval.sh`,
+          },
+        ],
+      },
+    ]
+  }
+  return JSON.stringify({ hooks }, null, 2) + "\n"
 }
 
 /** The `podman exec` argv TAIL for post-attempt state readback — pairs with
