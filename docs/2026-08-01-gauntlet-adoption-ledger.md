@@ -778,3 +778,31 @@ five architect rounds recorded in
     Store net effect: zero (rejection; candidates = v0 only). Known
     residual (non-blocking, follow-up): hook-crash-before-lock-write
     zombie-worker edge noted in the fix review.
+
+- **HOOK-RULE P0–P2 + SensorLine hookRules CONTRACT REV (2026-08-15,
+  yoo-mac, boundary ts 1786771179498):** hook-rule evolution program
+  phases P0–P2 landed (spec `docs/superpowers/specs/
+  2026-08-14-hook-rule-evolution-design.md`; P0 evidence
+  `docs/loop-probes/hook-rule-p0/PROBE.md` — deny binds under one-shot
+  `claude -p`, additionalContext warn channel works, composition
+  confirmed, latency 90× under budget). cc-gate-plugin 0.4.6 → 0.4.7.
+  Instrument change: sensor lines gain OPTIONAL `hookRules` outcomes
+  (`{id, matched, mode, ms}`, F2 — never input text or patterns),
+  aggregated at Stop from the dispatch-side per-session accumulator
+  `.km/hook-rule-outcomes-<sessionID>.ndjson` (cap 200, consumed on
+  read, crash-safe). SHADOW-only fleet-wide: every rule is born shadow,
+  no ramp machinery exists (P3), the deny/warn evaluator paths are
+  built but unreachable until transitions exist — behavior-shaped
+  metrics unaffected; the field is additive telemetry. Producer side:
+  `.km/hook-rules.json` compiled table exported at the same five
+  transition sites as rule-checks (caps 16 total / 4 deny at export;
+  inert until a hookRule bullet exists — none do at this boundary).
+  Contract rev landed BOTH repos in one window (kkamak `bf73adc`: 6th
+  golden vector CLEAN_ACCEPT_WITH_HOOK_RULES + count/name-list update,
+  byte-equal to km-crank's embedded normative line); km-crank parity
+  hard-fail PROVEN LIVE mid-window (fired against the real half-updated
+  ~/z2/kkamak fixture, cleared byte-green after `bf73adc`). Lines with
+  `pluginVersion >= 0.4.7` may carry the field; earlier lines never do.
+  P3 gate item standing: bench-side sed input-extraction holes (spec §8)
+  must close before any bench deny arm. Suites at deploy: opencode
+  2109/0 · cc-gate 1071/0 · km-crank 403/0 · kkamak 418/0.
