@@ -287,3 +287,10 @@ deny ──(FP-threshold breach OR implicated bad score)──▶ shadow  [autom
   (dogfood/bench outcome asymmetry) before any deny rides on it.
 - Dedup is exact-string; overlapping patterns on the same (toolMatcher,
   field) are accepted v1 scope.
+- Bench-side input extraction (P1 build finding, 2026-08-15): the container
+  bash evaluator extracts the canonical field from stdin JSON with sed —
+  two known holes: escaped quotes in the value truncate the extraction, and
+  the greedy match binds to the LAST occurrence of the key. Shadow-only in
+  P1 → zero behavioral risk; **P3 GATE ITEM: must be fixed or bounded
+  before any bench deny arm runs** (documented in-file in
+  `src/bench/hook-rule-gate.ts`).
