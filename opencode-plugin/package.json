@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@opencode-ai/plugin": "^1.17.14",
-    "@th-yoo/cc-api-daemon": "git+https://github.com/th-yoo/cc-api-daemon.git#24f5f1206d9ef7d795b862921b688b7a57558d4e"
+    "@th-yoo/cc-api-daemon": "git+https://github.com/th-yoo/cc-api-daemon.git#9786c22075ff7dc897f91a9c1705ced44921d2dc"
   },
   "devDependencies": {
     "@tsconfig/node22": "^22.0.0",

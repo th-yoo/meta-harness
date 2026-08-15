@@ -409,3 +409,27 @@ test("runTextAgent: never throws even if call itself throws", async () => {
   expect(text).toBeNull()
   expect(logs.some((l) => l.level === "warn" && l.msg.includes("unexpected failure"))).toBe(true)
 })
+
+// ── defaultWorkerSpawn stderr capture (stderr-blindness fix, 2026-08-15) ───
+import { defaultWorkerSpawn } from "../src/adapters/claude-code/cc-host.ts"
+
+test("defaultWorkerSpawn: detached child stderr lands in ccRuntimeDir()/worker-logs/proposer-worker.log", async () => {
+  // META_HARNESS_HOME is a per-test tmpdir (beforeEach), so ccRuntimeDir()
+  // resolves under it — hermetic.
+  const child = defaultWorkerSpawn(
+    [process.execPath, "-e", "console.error('mh-stderr-probe-line')"],
+    { cwd: os.tmpdir(), env: { ...process.env } as Record<string, string> },
+  )
+  await child.exited
+  const logPath = path.join(home, "runtime", "cc", "worker-logs", "proposer-worker.log")
+  // Append is async at the OS level only in ordering, not visibility: after
+  // exited resolves the child has flushed and closed its dup.
+  const deadline = Date.now() + 5_000
+  let content = ""
+  while (Date.now() < deadline) {
+    try { content = fs.readFileSync(logPath, "utf-8") } catch { /* not yet */ }
+    if (content.includes("mh-stderr-probe-line")) break
+    await new Promise((r) => setTimeout(r, 50))
+  }
+  expect(content).toContain("mh-stderr-probe-line")
+})
