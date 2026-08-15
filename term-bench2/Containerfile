@@ -135,6 +135,15 @@ RUN apt-get update && apt-get install -y \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
+# uv-managed CPythons for the python-version shim (staging.ts): tasks whose
+# base image pins python:3.10/3.11/3.13 get bare python3/pip3 shimmed onto
+# the matching interpreter instead of the system 3.12 — C extensions then
+# build against the same interpreter the task's `uvx -p X.Y` tests import
+# them with (portfolio-optimization), and apt Debian python libs stay
+# invisible to the task python (gcode-to-text). Pre-baked here so staging
+# pays no per-attempt download.
+RUN uv python install 3.10 3.11 3.13
+
 # opencode itself — the P6 agent phase (record.ts/cmd-run.ts) execs this
 # INSIDE the container (`podman exec ... opencode run --dir /app ...`), never
 # on the host. The installer (https://opencode.ai/install) unpacks to
