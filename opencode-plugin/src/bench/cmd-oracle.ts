@@ -115,6 +115,10 @@ export async function runOneOracleTask(
       return { reward: 0, elapsed: 0.0, error: "setup_failed" }
     }
     await execFn(buildExecArgv(name, ["mkdir", "-p", "/app", "/tests", "/logs/verifier", workdir]))
+    // harbor mounts the task's solution dir at /solution and some solve.sh
+    // scripts read it by that absolute path (headless-terminal). The oracle
+    // container already has the /tb mount, so a symlink is enough.
+    await execFn(buildExecArgv(name, ["ln", "-sfn", `/tb/${task}/solution`, "/solution"]))
 
     if (staging === "scripts") {
       log(`  setup_deps.sh (${task})...`)

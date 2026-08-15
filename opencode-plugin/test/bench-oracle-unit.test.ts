@@ -992,3 +992,35 @@ test("runOneOracleTask: nested Dockerfile WORKDIR — create argv uses /app, pos
   const solve = argvs.find((a) => a.some((s) => s.includes("solve.sh")))!
   expect(solve[solve.indexOf("-w") + 1]).toBe("/app/dclm")
 })
+
+// headless-terminal (TB2.1 oracle 2026-08-16): its solve.sh reads
+// /solution/headless_terminal.py — harbor mounts the task's solution dir at
+// /solution, our oracle container only had the /tb mount. The oracle now
+// symlinks /solution -> /tb/<task>/solution before running solve.sh.
+test("runOneOracleTask: /solution symlink is created before solve.sh runs", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["sometask"])
+  fs.mkdirSync(path.join(tbRoot, "sometask", "environment"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "sometask", "environment", "Dockerfile"), "FROM ubuntu:24.04\n")
+  fs.mkdirSync(path.join(tbRoot, "sometask", "solution"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "sometask", "solution", "solve.sh"), "true\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const argvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    argvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runOneOracleTask(paths, "sometask", "runtime", fakeExec)
+  } finally {
+    errSpy.mockRestore()
+  }
+
+  const linkIdx = argvs.findIndex((a) => a.includes("ln") && a.includes("/tb/sometask/solution"))
+  const solveIdx = argvs.findIndex((a) => a.some((s) => s.includes("solve.sh")))
+  expect(linkIdx).toBeGreaterThan(-1)
+  expect(solveIdx).toBeGreaterThan(linkIdx)
+})
