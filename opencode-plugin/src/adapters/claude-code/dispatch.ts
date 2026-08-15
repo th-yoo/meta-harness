@@ -33,6 +33,7 @@ import type { EvolutionEngine, SessionIdleOutcome, SessionState, SessionStateSto
 import { parseScoreArgs } from "../../score.ts"
 import { MH_CHILD_ENV, type ClaudeCodeHost } from "./cc-host.ts"
 import { applyPendingArtifacts } from "./proposer.ts"
+import { evalHookRules } from "./hook-rule-eval.ts"
 import { appendExposureRow } from "../../trial-arm.ts"
 
 /** The union of hook stdin shapes across the events we install (verified live
@@ -230,23 +231,56 @@ export async function dispatch(
       return undefined
     }
 
-    // ── PreToolUse(Bash): the bash-timeout knob via updatedInput rewrite ──────
+    // ── PreToolUse: hookRule evaluation, then the bash-timeout knob ───────────
     case "PreToolUse": {
-      if ((input.tool_name ?? "").toLowerCase() !== "bash") return undefined
+      const toolName = input.tool_name ?? ""
       const ti = input.tool_input ?? {}
+      // Hook-rule table evaluation runs FIRST for every tool (P0-verified
+      // composition order: a deny must short-circuit the timeout knob, and
+      // additionalContext + updatedInput compose in one response). Fail-open
+      // is the prime directive — any table/eval problem behaves as no-table.
+      let ruleDecision: ReturnType<typeof evalHookRules> | null = null
+      try {
+        const tablePath = path.join(input.cwd ?? host.projectRoot, ".km", "hook-rules.json")
+        const tableJson = fs.existsSync(tablePath) ? fs.readFileSync(tablePath, "utf-8") : null
+        if (tableJson) ruleDecision = evalHookRules(tableJson, toolName, ti as Record<string, unknown>)
+      } catch {
+        ruleDecision = null
+      }
+      if (ruleDecision && ruleDecision.outcomes.length > 0) {
+        // F2: id/mode/ms only — never the tool input.
+        await host.log("info", `hookRules ${JSON.stringify(ruleDecision.outcomes)}`)
+      }
+      if (ruleDecision?.decision === "deny") {
+        return {
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: ruleDecision.feedback || "blocked by hook rule",
+          },
+        }
+      }
+      const warnContext = ruleDecision?.decision === "warn" ? ruleDecision.feedback : undefined
+      if (toolName.toLowerCase() !== "bash") {
+        if (!warnContext) return undefined
+        return {
+          hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow", additionalContext: warnContext },
+        }
+      }
       const newArgs = engine.adjustToolArgs(sessionId, "bash", {
         command: ti.command,
         timeout: typeof ti.timeout === "number" ? ti.timeout : undefined,
         workdir: ti.workdir,
       })
-      if (!newArgs) return undefined
+      if (!newArgs && !warnContext) return undefined
       // Merge onto the original input so description etc. survive the rewrite.
-      const updatedInput = { ...ti, ...newArgs }
+      const updatedInput = newArgs ? { ...ti, ...newArgs } : undefined
       return {
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "allow",
-          updatedInput,
+          ...(updatedInput ? { updatedInput } : {}),
+          ...(warnContext ? { additionalContext: warnContext } : {}),
         },
       }
     }

@@ -404,3 +404,83 @@ test("a corrupt session-state file is tolerated (PostToolUse still exits cleanly
   const { output } = await runHook("PostToolUse", fixture("posttooluse-bash.json"))
   expect(output).toBeUndefined() // no crash, no output
 })
+
+// ── PreToolUse: hookRule shadow evaluator (P1) ───────────────────────────────
+
+function writeHookRulesTable(rules: object[], killSwitch = false) {
+  fs.mkdirSync(path.join(project, ".km"), { recursive: true })
+  fs.writeFileSync(
+    path.join(project, ".km", "hook-rules.json"),
+    JSON.stringify({ version: 1, writtenTs: 1, killSwitch, rules }),
+  )
+}
+
+test("PreToolUse: shadow rule match leaves output identical to no-rule behavior", async () => {
+  bootstrapStore(projectRoleRoot(project, "mh-build"), "SYS")
+  await runHook("SessionStart", fixture("session-start.json"), { MH_ROLE: "mh-build" } as any)
+  writeHookRulesTable([
+    { id: "b1", event: "PreToolUse", toolMatcher: "Bash", inputPattern: "^echo ", feedback: "shadow only", mode: "shadow" },
+  ])
+  const { output } = await runHook("PreToolUse", fixture("pretooluse-bash-echo.json"))
+  const hso = (output as any)?.hookSpecificOutput
+  expect(hso?.permissionDecision).toBe("allow")
+  expect(hso?.updatedInput?.command).toBe("echo hooktest")
+  expect(hso?.additionalContext).toBeUndefined()
+})
+
+test("PreToolUse: deny rule short-circuits with reason, no updatedInput", async () => {
+  writeHookRulesTable([
+    { id: "b2", event: "PreToolUse", toolMatcher: "Bash", inputPattern: "^echo ", feedback: "blocked by probe rule", mode: "deny" },
+  ])
+  const { output } = await runHook("PreToolUse", fixture("pretooluse-bash-echo.json"))
+  const hso = (output as any)?.hookSpecificOutput
+  expect(hso?.permissionDecision).toBe("deny")
+  expect(hso?.permissionDecisionReason).toBe("blocked by probe rule")
+  expect(hso?.updatedInput).toBeUndefined()
+})
+
+test("PreToolUse: warn rule composes additionalContext WITH the timeout knob's updatedInput", async () => {
+  bootstrapStore(projectRoleRoot(project, "mh-build"), "SYS")
+  await runHook("SessionStart", fixture("session-start.json"), { MH_ROLE: "mh-build" } as any)
+  writeHookRulesTable([
+    { id: "b3", event: "PreToolUse", toolMatcher: "Bash", inputPattern: "^echo ", feedback: "consider Read tool", mode: "warn" },
+  ])
+  const { output } = await runHook("PreToolUse", fixture("pretooluse-bash-echo.json"))
+  const hso = (output as any)?.hookSpecificOutput
+  expect(hso?.permissionDecision).toBe("allow")
+  expect(hso?.additionalContext).toBe("consider Read tool")
+  expect(hso?.updatedInput?.command).toBe("echo hooktest")
+})
+
+test("PreToolUse: Edit tool rules are evaluated (Bash-only early return moved)", async () => {
+  writeHookRulesTable([
+    { id: "b4", event: "PreToolUse", toolMatcher: "Edit", inputPattern: "^/etc/", feedback: "no system edits", mode: "deny" },
+  ])
+  const { output } = await runHook("PreToolUse", {
+    session_id: "test-sess-1",
+    cwd: project,
+    tool_name: "Edit",
+    tool_input: { file_path: "/etc/hosts" },
+  } as HookInput)
+  const hso = (output as any)?.hookSpecificOutput
+  expect(hso?.permissionDecision).toBe("deny")
+})
+
+test("PreToolUse: garbage table fails open (identical to no table)", async () => {
+  fs.mkdirSync(path.join(project, ".km"), { recursive: true })
+  fs.writeFileSync(path.join(project, ".km", "hook-rules.json"), "NOT JSON {")
+  const { output } = await runHook("PreToolUse", fixture("pretooluse-bash-echo.json"))
+  const hso = (output as any)?.hookSpecificOutput
+  expect(hso?.permissionDecision ?? "allow").not.toBe("deny")
+})
+
+test("PreToolUse: killSwitch demotes deny to warn additionalContext", async () => {
+  writeHookRulesTable(
+    [{ id: "b5", event: "PreToolUse", toolMatcher: "Bash", inputPattern: "^echo ", feedback: "would block", mode: "deny" }],
+    true,
+  )
+  const { output } = await runHook("PreToolUse", fixture("pretooluse-bash-echo.json"))
+  const hso = (output as any)?.hookSpecificOutput
+  expect(hso?.permissionDecision ?? "allow").toBe("allow")
+  expect(hso?.additionalContext).toBe("would block")
+})
