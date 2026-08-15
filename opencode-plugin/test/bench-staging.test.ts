@@ -148,7 +148,7 @@ test.skipIf(!tbRootExists)("parseTaskDockerfile: build-cython-ext (pip + non-ubu
   const staging = parseTaskDockerfile(paths, "build-cython-ext")
   expect(staging.baseImage).toBe("python:3.13-slim-bookworm")
   expect(staging.envs).toEqual({})
-  expect(staging.steps).toEqual([{ kind: "pip", packages: ["numpy==2.3.0"] }])
+  expect(staging.steps).toEqual([{ kind: "pip", packages: ["numpy==2.3.0"], systemWide: true }])
   // manifest.json: "build-cython-ext": {"apt": ["build-essential", "git", "libgl1"], ...}
   // — also exercises the Ubuntu 24.04 rename table (libgl1-mesa-glx -> libgl1).
   expect(staging.aptPackages).toEqual(["build-essential", "git", "libgl1"])
@@ -178,7 +178,7 @@ test.skipIf(!tbRootExists)("parseTaskDockerfile: feal-linear-cryptanalysis (dir 
   expect(staging.envs).toEqual({})
   expect(staging.steps).toEqual([
     { kind: "copy", src: "task-deps/", dst: "/app/", srcIsDir: true, dirTarget: true, contentsOnly: true },
-    { kind: "pip", packages: ["setuptools==80.9.0"] },
+    { kind: "pip", packages: ["setuptools==80.9.0"], systemWide: true },
     { kind: "run", cmd: "gcc -O3 -o feal feal.c" },
     { kind: "run", cmd: "gcc -O3 -o decrypt decrypt.c" },
     { kind: "run", cmd: "python3 gen.py" },
@@ -577,10 +577,11 @@ test("stageTaskRuntime: executes copy -> pip -> run in that fixed phase order, o
   expect(scripts[0]).toContain("mkdir -p")
   expect(scripts[0]).toContain(`/.mh-stage/adir/.`)
   expect(scripts[0]).toContain('"/app/"')
-  // step 2: the combined pip install
+  // step 2: the combined pip install (system-wide since 2026-08-16 —
+  // image-level pip = global site-packages, see classifyRun)
   expect(scripts[1]).toContain('export FOO="bar"')
-  expect(scripts[1]).toContain("uv pip install")
-  expect(scripts[1]).toContain('"somepkg"')
+  expect(scripts[1]).toContain("pip3 install --break-system-packages")
+  expect(scripts[1]).toContain("somepkg")
   // steps 3-4: the two raw runs, each its OWN step, in Dockerfile order
   expect(scripts[2]).toContain('export FOO="bar"')
   expect(scripts[2]).toContain("echo first-raw")
@@ -630,7 +631,7 @@ test("stageTaskRuntime: apt install runs FIRST, ahead of copy/pip/run, when the 
   expect(scripts[0]!.startsWith("set -euo pipefail\n")).toBe(true)
   expect(scripts[1]).toContain("mkdir -p")
   expect(scripts[1]).toContain('"/app/"')
-  expect(scripts[2]).toContain("uv pip install")
+  expect(scripts[2]).toContain("pip3 install --break-system-packages")
   expect(scripts[3]).toContain("echo raw-step")
 })
 
@@ -788,14 +789,15 @@ test("stageTaskRuntime: a run step sources /opt/.venv if a plain pip step alread
   }
   await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
 
-  // one combined venv pip step, then the raw run — the run step's script must
-  // source the venv (guarded so a Dockerfile with NO pip step at all, the
-  // common case, doesn't fail on a missing /opt/.venv under set -e).
+  // one combined SYSTEM-WIDE pip step (image-level pip = global
+  // site-packages, 2026-08-16), then the raw run. The run step's script
+  // keeps the guarded venv-source line — a harmless no-op now that staging
+  // never creates /opt/.venv, retained for compat (see VENV_ACTIVATE_GUARD).
   const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
   expect(steps.length).toBe(2)
   const scripts = steps.map((argv) => argv[argv.length - 1]!)
-  expect(scripts[0]).toContain("uv pip install")
-  expect(scripts[0]).toContain('"somelib==1.0.0"')
+  expect(scripts[0]).toContain("pip3 install --break-system-packages")
+  expect(scripts[0]).toContain("somelib==1.0.0")
   expect(scripts[1]).toContain('if [ -f "/opt/.venv/bin/activate" ]; then source "/opt/.venv/bin/activate"; fi')
   expect(scripts[1]).toContain("python3 make.py")
 })
@@ -834,13 +836,14 @@ test("stageTaskRuntime: the pip step's venv lives at /opt/.venv, not /app/.venv 
   await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
 
   // fixed phase order still runs pip before run (unchanged — see A2/B2
-  // tests); what changed is WHERE the venv lands, so it never collides with
-  // a later (in this fixed order) run step's own use of /app.
+  // tests). System-wide pip (2026-08-16) also means nothing is ever created
+  // under /app, so the original B1 hazard (a stray /app/.venv blocking the
+  // later `git clone ... /app`) is gone by construction.
   const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
   expect(steps.length).toBe(2)
   const scripts = steps.map((argv) => argv[argv.length - 1]!)
-  expect(scripts[0]).toContain('uv venv --python python3 "/opt/.venv"')
-  expect(scripts[0]).not.toContain('"/app/.venv"')
+  expect(scripts[0]).toContain("pip3 install --break-system-packages")
+  expect(scripts[0]).not.toContain("/app/.venv")
   expect(scripts[1]).toContain("git clone")
 })
 
@@ -889,7 +892,7 @@ test("parseTaskDockerfile: a --break-system-packages pip line yields a system-wi
   ])
 })
 
-test("parseTaskDockerfile: plain pip (no flag) stays a venv pip step; both kinds can coexist as two separate pip steps", () => {
+test("parseTaskDockerfile: flagged and unflagged pip lines merge into ONE system-wide pip step (2026-08-16 routing)", () => {
   const dir = tmpDir()
   const task = "mixed-pip-task"
   mkdirSync(path.join(dir, task, "environment"), { recursive: true })
@@ -903,10 +906,8 @@ test("parseTaskDockerfile: plain pip (no flag) stays a venv pip step; both kinds
   )
   const fakePaths = fakeBenchPaths(dir)
   const staging = parseTaskDockerfile(fakePaths, task)
-  // system-wide step first, then the venv step (both in the pip phase slot)
   expect(staging.steps).toEqual([
-    { kind: "pip", packages: ["pillow==11.2.1"], systemWide: true },
-    { kind: "pip", packages: ["scipy==1.15.3"] },
+    { kind: "pip", packages: ["scipy==1.15.3", "pillow==11.2.1"], systemWide: true },
   ])
 })
 
@@ -1211,4 +1212,40 @@ test("taskWorkdir: relative WORKDIR chains against the previous cwd; missing Doc
   )
   expect(taskWorkdir(fakeBenchPaths(dir), "t")).toBe("/app/john/src")
   expect(taskWorkdir(fakeBenchPaths(dir), "no-such-task")).toBe("/app")
+})
+
+// Ubuntu 24.04 rename: debian/bullseye's `netcat` virtual package no longer
+// exists (qemu-startup/qemu-alpine-ssh, TB2.1 oracle 2026-08-16: `E: Package
+// 'netcat' has no installation candidate`). netcat-openbsd is the 24.04
+// provider matching bullseye's default alternative.
+test("parseTaskDockerfile: netcat renamed to netcat-openbsd (Ubuntu 24.04)", () => {
+  const dir = tmpDir()
+  mkdirSync(path.join(dir, "t", "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, "t", "environment", "Dockerfile"),
+    "FROM debian:bullseye-slim\nRUN apt install -y telnet netcat expect\n",
+  )
+  const staging = parseTaskDockerfile(fakeBenchPaths(dir), "t")
+  expect(staging.aptPackages).toEqual(["expect", "netcat-openbsd", "telnet"])
+})
+
+// Image-level `RUN pip install` = GLOBAL site-packages in a real docker
+// build — solve.sh's and test.sh's bare `python3` see those libs. The old
+// isolated-venv routing (a gen_setup_deps.py inheritance) hid them from
+// everything except staging's own run steps: build-cython-ext (numpy),
+// multi-source-data-merger (pandas/pyarrow) both oracle-failed on exactly
+// this (TB2.1 validation 2026-08-16). Per-attempt containers are throwaway
+// and the bench image sets PIP_BREAK_SYSTEM_PACKAGES=1, so system-wide is
+// both safe and faithful.
+test("parseTaskDockerfile: image-level pip installs route system-wide, not into the venv", () => {
+  const dir = tmpDir()
+  mkdirSync(path.join(dir, "t", "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, "t", "environment", "Dockerfile"),
+    "FROM python:3.11-slim\nRUN pip install pandas==2.2.3 pyarrow==17.0.0\n",
+  )
+  const staging = parseTaskDockerfile(fakeBenchPaths(dir), "t")
+  expect(staging.steps).toEqual([
+    { kind: "pip", packages: ["pandas==2.2.3", "pyarrow==17.0.0"], systemWide: true },
+  ])
 })

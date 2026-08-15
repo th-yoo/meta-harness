@@ -392,6 +392,10 @@ const SKIP_APT_PACKAGES = new Set(["chromium", "chromium-driver", "sudo"])
 const APT_RENAME: Record<string, string> = {
   "libgl1-mesa-glx": "libgl1",
   "libglib2.0-0": "libglib2.0-0t64",
+  // debian/bullseye's `netcat` virtual package has no 24.04 provider under
+  // that name; netcat-openbsd matches bullseye's default alternative
+  // (qemu-startup / qemu-alpine-ssh).
+  netcat: "netcat-openbsd",
 }
 
 const APT_PACKAGE_RE = /^[a-z0-9][a-z0-9.+-]+$/
@@ -521,12 +525,17 @@ function classifyRun(
     classified = true
   }
   if (hasPip(bodyLower)) {
-    if (hasBreakSystemPackages(bodyLower)) {
-      systemPipPackages.push(...extractPipPackages(body))
-    } else {
-      pipPackages.push(...extractPipPackages(body))
-      pipCwdState.cwd = cwd
-    }
+    // ALL image-level pip installs route system-wide (2026-08-16): in a real
+    // docker build `RUN pip install` lands in the image's global
+    // site-packages, visible to solve.sh's / test.sh's bare `python3`. The
+    // old no-flag -> isolated-venv routing (gen_setup_deps.py inheritance)
+    // hid those libs from everything except staging's own run steps —
+    // build-cython-ext (numpy) and multi-source-data-merger (pandas) both
+    // oracle-failed on exactly this. Containers are per-attempt throwaways
+    // and the bench image sets PIP_BREAK_SYSTEM_PACKAGES=1, so system-wide
+    // is both safe and faithful. The venv machinery (PIP_VENV,
+    // VENV_ACTIVATE_GUARD) stays for compat with any future explicit use.
+    systemPipPackages.push(...extractPipPackages(body))
     classified = true
   }
   if (hasUvRun(bodyLower)) {
