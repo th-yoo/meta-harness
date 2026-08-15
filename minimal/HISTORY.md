@@ -1530,3 +1530,56 @@ against real spend and reading the artifacts (the transcript, not the
 ledger, revealed crank 4's emitted check — the ledger's own F2 shape hid
 it). And the fix's reviewer applied the same discipline back: probing the
 fix by execution found the second suppression seam the tests missed.
+
+## Five cranks to the first account-global candidate (2026-08-14→15, "minimal")
+
+The daemon carrier migration closed at noon; by midnight the same clean
+proposer had minted the store's first real account-global candidate — and
+every fix in between was found by running the thing, not by review.
+
+**Cranks 1-2 died at 16 seconds, identically.** The constant WAS the clue:
+16.0-16.2s wall, `duration_api_ms: 0`, `aborted_streaming` — but it took an
+instrumented daemon, a size probe (41KB filler passed), a content bisect
+(aborted: "full prompt passed"), and a probe matrix before the timing
+pattern beat the content theories. `ACP_BUDGET.turnTimeoutMs: 16_000` —
+sized for gauge micro-calls, lethal to a 40KB opus propose turn. The fix
+rode mechanism that already existed: `ACP_TURN_TIMEOUT_MS` is
+fingerprint-relevant, so a worker env override buys a SEPARATE 480s daemon
+while judge/gauge keep their 16s fail-fast — the only daemon change was
+honesty (initialize now advertises the effective worst case, keeping the
+§6e double-spend guard sound). Architect review caught a real scope bug in
+the plan (denv in try, invisible in finally — would have closed sessions
+against the wrong daemon); SDD ran two repos in parallel tracks.
+
+**Crank three reached opus and died at validation.** The reply contract
+shows `{"ops":[...]}`; opus flattens it to a bare array, every time. The
+tolerance fix's own test then caught a second, latent bug: the validator
+approved the nested shape but returned the RAW reply — a tolerated flat
+array would have hit disk unwrapped and broken the apply path downstream.
+
+**Crank three's bullet was good and the gate killed it anyway:**
+"binary/format/spec" — prose alternation read as a path by the leak
+screen's 2+-slash rule (an accepted-FP ruling from July, superseded by
+user ruling). The tune splits PATH_WORDS into a strong subset that still
+fails real paths; the rejected ledger did its F2 job meanwhile — crank
+five re-derived the same idea slash-free.
+
+**Crank four staged clean and the APPLY ate it.** applyStagedArtifact
+consumes staging before the review gate's judge calls, and the apply rides
+a timeout-bounded hook process: two judge calls + cold daemon blew the
+window, the hook died mid-gate, artifact consumed, verdict never rendered,
+lock orphaned. Recorded as open defect (consume-after-verdict is the real
+fix); crank five ran the apply in-process instead.
+
+**Crank five: staged first-attempt, gate ACCEPTED, candidate v1.** 6→8
+bullets, all mechanized, all straight from the failure tail: re-read the
+deliverable from disk before claiming done (the write-compressor session
+had shipped captured stderr bytes as its artifact); inspect bytes + stderr
+before rewriting (the blind-rewrite loop); no stub content in
+deliverables. Zero harness markers in any daemon-carried turn, five for
+five — the contamination class that started this whole arc is dead.
+
+v1 is inactive, k=5 ab deferred. The machinery lesson repeats a3's: every
+one of these five failures was invisible until a real crank hit it, and
+none was where review predicted. The evidence pipeline now runs
+end-to-end on the account layer; what's left is a verdict.

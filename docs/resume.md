@@ -3,6 +3,97 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+> **MOST RECENT STATE (2026-08-15):** main = `f322143`+. TWO parallel-session
+> blocks apply: this "minimal" 08-15 block (candidate v1 minted + turn-budget
+> fix — read FIRST) and the "harness" 08-14-night block below it (hook-rule
+> program spec'd, `c95cb31`, landed mid-arc — its `main>=c95cb31` is stale,
+> real HEAD is `f322143`+). cc-api-daemon = 0.8.1 (`24f5f12`), pins moved in
+> both plugins.
+
+## ✅ SESSION END 2026-08-15 (`yoo-mac` "minimal") — FIRST ACCOUNT-GLOBAL CANDIDATE MINTED (v1, INACTIVE) · DAEMON TURN-BUDGET FIX SHIPPED (0.8.1) · TWO CRANK-PATH FIXES · MAIN `f322143`+
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness), yoo-mac "minimal", post-2026-08-15.
+git pull FIRST; main >= f322143. cc-api-daemon main >= 24f5f12 (0.8.1);
+pins moved 33f74db -> 24f5f12 in BOTH plugins — bun install after pull.
+
+STATE (trust, don't re-derive):
+ - CANDIDATE v1 (account-global): minted 2026-08-15 by the daemon-carried
+   proposer over the 77-pool failure tail. Review-gate ACCEPTED after
+   revision: playbook 6->8 — NEW b7 (re-read the deliverable from disk +
+   check acceptance criteria before reporting done), NEW b8 (inspect
+   artifact bytes + stderr before rewriting), UPD b6 (no stub content in
+   deliverables) — all with checks. INACTIVE. Committed snapshot has it
+   (candidates/v1; July's old v1 -> v1-archived-20260716). NEXT STEP =
+   k=5 ab vs v0 (DEFERRED, spend): serial ~20-26h, parallel recipe
+   ~7-12h wall (ANTHROPIC_API_KEY — oauth refresh races void parallel
+   attempts; see band block). Win -> /mh-activate account-global v1.
+ - DAEMON TURN-BUDGET FIX (the crank unblock): ACP_BUDGET.turnTimeoutMs
+   16s killed every 40KB proposer turn (call-consumed @16s,
+   aborted_streaming, duration_api_ms 0). Fix = existing
+   ACP_TURN_TIMEOUT_MS env override via workerDaemonEnv() (480s,
+   fingerprint-SEPARATED daemon — judge/gauge untouched at 16s) +
+   cc-api-daemon 0.8.1: initialize now advertises the EFFECTIVE
+   daemonWorstCaseMs (496k) so the client §6e guard stays sound; one-line
+   stderr diagnostic on failed warm turns. Config floor: proposerTimeoutMin
+   >= 17min or every cycle refuses pre-send (test-pinned).
+   Plan: docs/superpowers/plans/2026-08-14-daemon-turn-budget-fix.md (SDD,
+   architect-reviewed, final review clean).
+ - CRANK-PATH FIXES (both live-found): (1) ops-shape tolerance — opus
+   flattens {"ops":[...]} to a bare array; validator now accepts+normalizes
+   both (a normalization gap that would have staged unwrapped ops.json was
+   caught by the new test). (2) leak heuristic — all-alpha prose chains
+   ("binary/format/spec") no longer flag; STRONG_PATH_WORDS subset still
+   fails real paths (supersedes the 2026-07-30 accepted-FP ruling, user
+   ruling 2026-08-15).
+
+OPEN DEFECTS (logged, unfixed):
+ 1. APPLY ARTIFACT-LOSS WINDOW: applyStagedArtifact consumes staging files
+    BEFORE the review gate's judge calls; the apply usually rides a
+    timeout-bounded hook process -> a slow gate (2+ judge calls, cold
+    daemon) gets killed mid-apply: artifact consumed, no verdict, lock
+    orphaned. ATE crank four live. Workaround used: run
+    applyPendingArtifacts in-process (no timeout) via bun one-liner.
+    Real fix: consume-after-verdict, or move gate LLM calls out of the
+    hook-bounded path.
+ 2. DETACHED-LANE STDERR BLINDNESS: worker stderr ignored by
+    defaultWorkerSpawn; daemon spawned >/dev/null by ensureDaemon. Every
+    detached failure is silent. Debug recipe (turn-budget plan Task 5
+    Step 3): hand-launch daemon with env + logfile, rerun worker
+    foreground with its argsfile. Follow-up: stderr -> ccRuntimeDir().
+
+DEFERRED (user rulings): k=5 ab for v1 (spend) · parallel batch (same
+ recipe) · prove-plus-comm container-staging fix.
+
+RULES: unchanged (explicit go before merge/spend · surgical diff-first
+ store export · named files only · 7b gate for code · SITREP style).
+```
+
+```
+LANDED THIS SESSION (chronological, all on main + pushed):
+ - B-TRACK of daemon carrier migration (assigned by harness session):
+   judge body-swap B1/B2 + T5-assist proposer-worker tests — merged by
+   harness at 4ac85b5, program closed 8aee20e (see 08-14 blocks).
+ - 20 failure-tail trajs committed (62d9d52) — completes e56e282 export.
+ - G2 crank arc: cranks 1-2 failed at 16s turn cap -> diagnosed via
+   instrumented daemon (content/size exonerated; constant 16.0-16.2s
+   timing was the tell) -> turn-budget plan (architect-reviewed, DAG'd,
+   SDD-executed: daemon 0.8.1 `24f5f12` pushed; meta-harness
+   feat/daemon-turn-budget merged 3676760) -> crank three failed at
+   validation (ops shape) -> fix 93fcd1e -> crank four staged clean but
+   apply DIED in hook timeout (defect 1, artifact lost) + leak-FP had
+   rejected crank three's bullet -> leak tune f086996 -> crank five:
+   staged first-attempt, in-process apply, review-gate ACCEPTED ->
+   candidate v1. Contamination acceptance passed every crank (zero
+   CAVEMAN/superpowers markers in daemon-carried turns).
+ - v1 exported to committed snapshot f322143 (old v1 archived as
+   v1-archived-20260716 — surgical, diff-first, zero loss).
+ - Debug daemons/discovery debris cleaned; scratch node_modules
+   instrumentation evicted by pin install; SDD workspace deleted
+   post-merge; both worktrees removed.
+```
+
 ## ✅ SESSION END 2026-08-14 night (`yoo-mac` "harness") — HOOK-RULE PROGRAM SPEC'D · TB2.1/SONNET-5-HIGH BENCH STRATEGY RULED · MAIN `c95cb31`+
 
 **RESUME PROMPT:**
