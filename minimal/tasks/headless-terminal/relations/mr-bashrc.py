@@ -1,20 +1,19 @@
-import os, sys, tempfile
+import os, sys
 sys.path.insert(0, os.environ["APPDIR"])
+from _mr_common import marker, wait_for
 
-out = os.path.join(tempfile.gettempdir(), "mh_mr_bashrc.txt")
-if os.path.exists(out):
-    os.remove(out)
+out = marker("mh_mr_bashrc.txt")
 rc = os.path.expanduser("~/.bashrc")
-marker = "export MH_RC_MARK=mh_rc_ok  # mh-relation-probe\n"
+mark_line = "export MH_RC_MARK=mh_rc_ok  # mh-relation-probe\n"
 with open(rc, "a") as f:
-    f.write(marker)
+    f.write(mark_line)
 ok = False
 try:
     from headless_terminal import HeadlessTerminal  # constructed AFTER the marker exists
     t = HeadlessTerminal()
     t.send_keystrokes(f"echo $MH_RC_MARK > {out}")
-    t.send_keystrokes("\n", wait_sec=3)
-    ok = os.path.exists(out) and open(out).read().strip() == "mh_rc_ok"
+    t.send_keystrokes("\n")
+    ok = wait_for(out, contains="mh_rc_ok")
 finally:
     lines = open(rc).readlines()
     with open(rc, "w") as f:
