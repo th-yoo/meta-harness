@@ -89,9 +89,13 @@ protein-assembly) + 20 already ported & delta-free (5 not yet in
 baseline-tasks.txt: build-cython-ext headless-terminal
 multi-source-data-merger portfolio-optimization pypi-server).
 SCHEDULER RULED 08-16 (user): ALL lane 2 runs use the adaptive
-load-aware scheduler (--parallel --host-pressure on) on the
-ANTHROPIC_API_KEY lane (keyOnly mount; OAuth = serial-only, never
-parallel). VERIFIED this host 08-16: bench-scheduler +
+load-aware scheduler (--parallel --host-pressure on) — BOTH auth
+lanes. OAuth parallel is already built-safe (freshness gate:
+validateParallel pre-flight + canLaunch launch-guard +
+OAUTH_PARALLEL_MARGIN_MS ensure no task spans the ~8h refresh, so
+auth.json is read-only in the window — no refresh-token race;
+paths.ts useKeyOnlyForParallel doc). API key present -> keyOnly
+read-only mount. The earlier "OAuth serial-only" note was stale. VERIFIED this host 08-16: bench-scheduler +
 bench-host-pressure + bench-resource-profile suites 68/68; live
 darwin signals good (memory_pressure -Q parses 70% free,
 loadPerCore 0.18 vs HI 2.0); measured-capture proven on this host
