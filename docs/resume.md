@@ -49,14 +49,12 @@ STATE (trust, don't re-derive):
    ruling 2026-08-15).
 
 OPEN DEFECTS (logged, unfixed):
- 1. APPLY ARTIFACT-LOSS WINDOW: applyStagedArtifact consumes staging files
-    BEFORE the review gate's judge calls; the apply usually rides a
-    timeout-bounded hook process -> a slow gate (2+ judge calls, cold
-    daemon) gets killed mid-apply: artifact consumed, no verdict, lock
-    orphaned. ATE crank four live. Workaround used: run
-    applyPendingArtifacts in-process (no timeout) via bun one-liner.
-    Real fix: consume-after-verdict, or move gate LLM calls out of the
-    hook-bounded path.
+ 1. ~~APPLY ARTIFACT-LOSS WINDOW~~ FIXED 348374b (consume-after-verdict:
+    staged files survive until the gate settles; retry costs documented at
+    the collector). Bonus fix in same merge: headless relations desk-test
+    flake was a REAL instrument bug — machine-global /tmp markers
+    cross-talked between concurrent suites (false accepts on degraded
+    artifacts); now APPDIR-scoped + condition-based waiting.
  2. DETACHED-LANE STDERR BLINDNESS: worker stderr ignored by
     defaultWorkerSpawn; daemon spawned >/dev/null by ensureDaemon. Every
     detached failure is silent. Debug recipe (turn-budget plan Task 5
