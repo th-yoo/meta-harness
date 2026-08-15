@@ -211,17 +211,25 @@ deny ──(FP-threshold breach OR implicated bad score)──▶ shadow  [autom
 
 ## 5. Measurement + instrument discipline
 
-- **P0 probe FIRST** (probe-the-consequence rule), before any build:
+- **P0 probe FIRST** (probe-the-consequence rule), before any build
+  (RUN 2026-08-15, CC 2.1.207 — full evidence in
+  `docs/loop-probes/hook-rule-p0/PROBE.md`):
   (a) does PreToolUse deny actually bind under one-shot `claude -p` in the
-  bench container (Task-1/a3 precedent — hook mechanics are never assumed);
+  bench container (Task-1/a3 precedent — hook mechanics are never assumed)
+  → P0 result (2026-08-15, CC 2.1.207): YES — binds, and the denial reason
+  reaches the model;
   (b) dogfood warn-channel mechanics: additionalContext vs block-with-message
-  — which surfaces feedback to the agent without halting;
+  — which surfaces feedback to the agent without halting
+  → P0 result: `additionalContext` works — non-blocking, reaches the model;
   (c) per-call latency of compiled-table eval at the 16-rule cap (budget:
-  ≤5ms p95, pure regex);
+  ≤5ms p95, pure regex)
+  → P0 result: p95 0.056ms JS / 0.89ms bash-3.2 mean — ~90× headroom;
   (d) response composition: can one PreToolUse `hookSpecificOutput` carry
   `additionalContext` AND `updatedInput` together (warn + bash-timeout knob
   on the same call, §3) — if not, `updatedInput` wins and warn degrades to
-  shadow for that call.
+  shadow for that call
+  → P0 result: they COMPOSE — both honored in one response; fallback stays
+  dormant.
 - **Telemetry**: sensor line gains OPTIONAL `hookRules` outcomes
   `{id, matched, mode, ms}` — F2: never input text, never cmd text. Contract
   rev = kkamak golden vector + conformance check + boundary ts (the 0.4.6
@@ -259,9 +267,11 @@ deny ──(FP-threshold breach OR implicated bad score)──▶ shadow  [autom
 - Feedback text is a screened but real injection surface (tiered screening §2;
   screening heuristics will lag adversarial phrasing — deny cap of 4 bounds
   blast radius).
-- Warn-channel mechanics unverified until P0 — if CC offers no non-blocking
-  feedback channel on PreToolUse, warn degrades to shadow on dogfood (bench
-  unaffected: container settings support block-with-message).
+- Warn-channel mechanics: VERIFIED by P0 (2026-08-15, CC 2.1.207) —
+  `additionalContext` is a working non-blocking feedback channel; the
+  degrade rule (warn == shadow on dogfood) stays in the design as the
+  documented fallback for future CC versions where the channel breaks, but
+  is not active.
 - Backtracking screen is a heuristic, not re2 equivalence — a pathological
   pattern can clear birth screening. The §3 deadline (in-loop poll) bounds
   aggregate evaluation time, NOT a single catastrophic match — one
