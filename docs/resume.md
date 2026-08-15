@@ -76,7 +76,11 @@ scheduler make-doom-for-mips make-mips-interpreter path-tracing
 query-optimize schemelike-metacircular-eval train-fasttext
 winning-avg-corewars (13 tasks, 32.6h/arm serial, only +8.1pt
 ceiling — bad h/pt).
-LEAN TARGET = 37 tasks: per-arm serial 17.5h (~5-6h scheduled),
+build-pov-ray DROPPED 08-16 (user): povray.org Cloudflare 403s
+tool user-agents (browser UA works) — upstream env drift, even
+upstream's own solve.sh fails; anchor had it 0/5 so zero baseline
+points lost. TARGET = 36.
+LEAN TARGET = 37 tasks (36 after the drop): per-arm serial 17.5h (~5-6h scheduled),
 failed-trial ceiling +16.6pt; 23 of 24 flaky-4/5 kept (stabilize
 alone = +5.2pt = 80.4% > #5 target; only caffe-cifar-10 lost).
 Port scope: 12 fresh (build-pov-ray chess-best-move

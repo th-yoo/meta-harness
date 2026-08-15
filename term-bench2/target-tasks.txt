@@ -1,6 +1,5 @@
 adaptive-rejection-sampler
 build-cython-ext
-build-pov-ray
 cancel-async-tasks
 chess-best-move
 configure-git-webserver
