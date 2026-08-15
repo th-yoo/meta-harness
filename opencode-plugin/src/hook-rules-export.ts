@@ -8,12 +8,13 @@
  * re-screen or re-cap. Truncation is logged to stderr, not the sensor
  * stream (F2 / contract-minimalism — sensor rev is P2).
  *
- * P1: killSwitch is hardcoded false (field present, honored by both
- * evaluators); the toggle mechanism lands with the ramp machinery (P3).
+ * P3: killSwitch mirrors the store-root config's `hookRulesKillSwitch`
+ * (readMhConfig, default false — P1 behavior preserved). The toggle lives in
+ * hook-rules-kill.ts, which persists the flag then re-exports through here.
  */
 import { mkdirSync, writeFileSync } from "node:fs"
 import { join, dirname } from "node:path"
-import { readPlaybook } from "./harness-store.ts"
+import { readMhConfig, readPlaybook, type Playbook } from "./harness-store.ts"
 import { hasBacktrackingRisk, isPortablePattern } from "./hook-rule-screen.ts"
 
 export const HOOK_RULES_EXPORT_REL = join(".km", "hook-rules.json")
@@ -31,35 +32,46 @@ export interface ExportedHookRule {
 
 const numId = (id: string): number => parseInt(id.replace(/^b/, ""), 10) || 0
 
+/** The screened + capped rules the table WOULD carry for this playbook —
+ * the single source of truth for "exportable" (P3's transition-candidate
+ * deny-cap pre-check simulates its flipped playbook through this, so its
+ * refusal logic can never drift from the exporter's truncation logic). */
+export function compileHookRulesTable(pb: Playbook | null): { rules: ExportedHookRule[]; dropped: string[] } {
+  const all: ExportedHookRule[] =
+    pb?.bullets
+      .filter((b) => b.status === "active" && b.hookRule)
+      // Defensive re-check: a non-portable pattern in the store (however it
+      // got there) is skipped so consumers can trust the table blind.
+      .filter((b) => isPortablePattern(b.hookRule!.inputPattern) === null && !hasBacktrackingRisk(b.hookRule!.inputPattern))
+      .map((b) => ({
+        id: b.id,
+        event: b.hookRule!.event,
+        toolMatcher: b.hookRule!.toolMatcher,
+        inputPattern: b.hookRule!.inputPattern,
+        feedback: b.hookRule!.feedback,
+        mode: b.hookRule!.mode,
+      }))
+      .sort((a, z) => numId(a.id) - numId(z.id)) ?? []
+
+  const capped = all.slice(0, HOOK_RULES_MAX)
+  let denySeen = 0
+  const rules = capped.filter((r) => (r.mode === "deny" ? ++denySeen <= HOOK_RULES_DENY_MAX : true))
+  const dropped = all.filter((r) => !rules.includes(r)).map((r) => r.id)
+  return { rules, dropped }
+}
+
 export function exportHookRules(repoRoot: string, storeRoot: string): void {
   try {
-    const pb = readPlaybook(storeRoot)
-    const all: ExportedHookRule[] =
-      pb?.bullets
-        .filter((b) => b.status === "active" && b.hookRule)
-        // Defensive re-check: a non-portable pattern in the store (however it
-        // got there) is skipped so consumers can trust the table blind.
-        .filter((b) => isPortablePattern(b.hookRule!.inputPattern) === null && !hasBacktrackingRisk(b.hookRule!.inputPattern))
-        .map((b) => ({
-          id: b.id,
-          event: b.hookRule!.event,
-          toolMatcher: b.hookRule!.toolMatcher,
-          inputPattern: b.hookRule!.inputPattern,
-          feedback: b.hookRule!.feedback,
-          mode: b.hookRule!.mode,
-        }))
-        .sort((a, z) => numId(a.id) - numId(z.id)) ?? []
-
-    const capped = all.slice(0, HOOK_RULES_MAX)
-    let denySeen = 0
-    const rules = capped.filter((r) => (r.mode === "deny" ? ++denySeen <= HOOK_RULES_DENY_MAX : true))
-    const dropped = all.filter((r) => !rules.includes(r)).map((r) => r.id)
+    const { rules, dropped } = compileHookRulesTable(readPlaybook(storeRoot))
     if (dropped.length > 0)
       console.error(`hook-rules-export: caps truncated ${dropped.length} rule(s): ${dropped.join(",")}`)
 
+    // P3 kill-switch: store-root config flag, default false (P1 behavior).
+    const killSwitch = readMhConfig(storeRoot).hookRulesKillSwitch === true
+
     const outPath = join(repoRoot, HOOK_RULES_EXPORT_REL)
     mkdirSync(dirname(outPath), { recursive: true })
-    writeFileSync(outPath, JSON.stringify({ version: 1, writtenTs: Date.now(), killSwitch: false, rules }, null, 2) + "\n")
+    writeFileSync(outPath, JSON.stringify({ version: 1, writtenTs: Date.now(), killSwitch, rules }, null, 2) + "\n")
   } catch {
     // Fail-open: an export failure must never break a store transition.
     // The consumer treats a stale/absent file as absent (allow-everything).
