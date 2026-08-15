@@ -76,3 +76,16 @@ test("F2: rule-checks export is NEVER in km-sensors-sync.sh's FILES export list"
   expect(filesLine).toBeDefined()
   expect(filesLine!).not.toContain("rule-checks")
 })
+
+test("F2: hook-rules table + hook-rule-outcomes accumulator are NEVER in km-sensors-sync.sh's FILES export list", () => {
+  // hook-rule P2: `.km/hook-rules.json` (compiled patterns) and
+  // `.km/hook-rule-outcomes-*.ndjson` (per-session accumulator) stay
+  // host-local forever — same one-way-door rationale as the sidecar/
+  // rule-checks locks above.
+  const repoRoot = path.resolve(import.meta.dir, "..", "..")
+  const script = fs.readFileSync(path.join(repoRoot, "scripts", "km-sensors-sync.sh"), "utf-8")
+  const filesLine = script.split("\n").find((l) => l.trimStart().startsWith("FILES=("))
+  expect(filesLine).toBeDefined()
+  expect(filesLine!).not.toContain("hook-rules")
+  expect(filesLine!).not.toContain("hook-rule-outcomes")
+})

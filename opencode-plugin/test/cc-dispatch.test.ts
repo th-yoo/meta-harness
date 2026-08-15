@@ -484,3 +484,62 @@ test("PreToolUse: killSwitch demotes deny to warn additionalContext", async () =
   expect(hso?.permissionDecision ?? "allow").toBe("allow")
   expect(hso?.additionalContext).toBe("would block")
 })
+
+// ── PreToolUse: accumulator writer (P2 telemetry bridge) ─────────────────────
+// Frozen contract 2 (hook-rule P2 plan): one ndjson line per PreToolUse event
+// with ≥1 match, appended to .km/hook-rule-outcomes-<session_id>.ndjson under
+// input.cwd — the Stop-side sensor path (cc-gate-plugin) reads + unlinks it.
+// F2: id/matched/mode/ms only, never the tool input.
+
+const accumulatorPath = () => path.join(project, ".km", "hook-rule-outcomes-test-sess-1.ndjson")
+
+test("PreToolUse: matched shadow rule appends one accumulator line with the eval outcomes", async () => {
+  writeHookRulesTable([
+    { id: "b1", event: "PreToolUse", toolMatcher: "Bash", inputPattern: "^echo ", feedback: "shadow only", mode: "shadow" },
+  ])
+  await runHook("PreToolUse", fixture("pretooluse-bash-echo.json"))
+  expect(fs.existsSync(accumulatorPath())).toBe(true)
+  const lines = fs.readFileSync(accumulatorPath(), "utf-8").split("\n").filter((l) => l.trim())
+  expect(lines).toHaveLength(1)
+  const parsed = JSON.parse(lines[0]!)
+  expect(typeof parsed.ts).toBe("number")
+  expect(parsed.outcomes).toHaveLength(1)
+  expect(parsed.outcomes[0].id).toBe("b1")
+  expect(parsed.outcomes[0].matched).toBe(true)
+  expect(parsed.outcomes[0].mode).toBe("shadow")
+  expect(typeof parsed.outcomes[0].ms).toBe("number")
+  // F2: the accumulator never carries the tool input.
+  expect(lines[0]!).not.toContain("echo hooktest")
+})
+
+test("PreToolUse: no rule match writes NO accumulator file", async () => {
+  writeHookRulesTable([
+    { id: "b1", event: "PreToolUse", toolMatcher: "Bash", inputPattern: "^docker ", feedback: "x", mode: "shadow" },
+  ])
+  await runHook("PreToolUse", fixture("pretooluse-bash-echo.json"))
+  expect(fs.existsSync(accumulatorPath())).toBe(false)
+})
+
+test("PreToolUse: two matching calls in the same session append two lines", async () => {
+  writeHookRulesTable([
+    { id: "b1", event: "PreToolUse", toolMatcher: "Bash", inputPattern: "^echo ", feedback: "shadow only", mode: "shadow" },
+  ])
+  await runHook("PreToolUse", fixture("pretooluse-bash-echo.json"))
+  await runHook("PreToolUse", fixture("pretooluse-bash-echo.json"))
+  const lines = fs.readFileSync(accumulatorPath(), "utf-8").split("\n").filter((l) => l.trim())
+  expect(lines).toHaveLength(2)
+})
+
+test("PreToolUse: accumulator write failure is fail-open — tool-call output unchanged", async () => {
+  bootstrapStore(projectRoleRoot(project, "mh-build"), "SYS")
+  await runHook("SessionStart", fixture("session-start.json"), { MH_ROLE: "mh-build" } as any)
+  writeHookRulesTable([
+    { id: "b1", event: "PreToolUse", toolMatcher: "Bash", inputPattern: "^echo ", feedback: "shadow only", mode: "shadow" },
+  ])
+  // A DIRECTORY at the accumulator path makes the append throw (EISDIR).
+  fs.mkdirSync(accumulatorPath(), { recursive: true })
+  const { output } = await runHook("PreToolUse", fixture("pretooluse-bash-echo.json"))
+  const hso = (output as any)?.hookSpecificOutput
+  expect(hso?.permissionDecision).toBe("allow")
+  expect(hso?.updatedInput?.command).toBe("echo hooktest")
+})

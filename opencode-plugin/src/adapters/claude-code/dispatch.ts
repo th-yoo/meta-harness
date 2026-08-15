@@ -250,6 +250,19 @@ export async function dispatch(
       if (ruleDecision && ruleDecision.outcomes.length > 0) {
         // F2: id/mode/ms only — never the tool input.
         await host.log("info", `hookRules ${JSON.stringify(ruleDecision.outcomes)}`)
+        // P2 telemetry bridge (frozen contract 2): matches happen here per
+        // PreToolUse process, but the sensor line is emitted by cc-gate-
+        // plugin's Stop path — this session-scoped accumulator file is the
+        // handoff (Stop reads, attaches, unlinks). Best-effort: a write
+        // failure must never affect the tool call.
+        try {
+          fs.appendFileSync(
+            path.join(input.cwd ?? host.projectRoot, ".km", `hook-rule-outcomes-${sessionId}.ndjson`),
+            JSON.stringify({ ts: Date.now(), outcomes: ruleDecision.outcomes }) + "\n",
+          )
+        } catch {
+          // fail-open
+        }
       }
       if (ruleDecision?.decision === "deny") {
         return {

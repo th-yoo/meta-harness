@@ -72,12 +72,23 @@ const SKIPPED_STOP_DIAGNOSTIC =
 const CLEAN_ACCEPT_WITH_RULE_CHECKS =
   '{"ts":1753848301000,"sessionID":"sess-a7b8c9d0","check":"bun test","accepted":true,"gateExhausted":false,"rounds":["accepted"],"interrupted":false,"marker":true,"durationMs":3980,"host":"kkamak-dev","app":"claude-code","checkMs":[1050],"pluginVersion":"0.3.1","reinject":"v1","ruleChecks":[{"id":"no-any","pass":true,"ms":42},{"id":"no-console","skipped":true},{"id":"no-todo","refused":true}]}'
 
+/** 6. hook-rule P2 (2026-08-15 contract rev): same shape as (5) but with the
+ * per-session PreToolUse hook-rule outcomes — {id,matched,mode,ms} —
+ * SHADOW-lane telemetry only, never influencing accepted/rounds. Lines with
+ * pluginVersion >= 0.4.7 may carry it; earlier lines never do (boundary ts
+ * in the adoption ledger). Required-field values follow this file's own
+ * vector conventions (per the P2 plan's contract 3 note); the hookRules
+ * portion is byte-exact from that frozen contract. */
+const CLEAN_ACCEPT_WITH_HOOK_RULES =
+  '{"ts":1786780000000,"sessionID":"gv-hookrules-1","check":"bun test","accepted":true,"gateExhausted":false,"rounds":["accepted"],"interrupted":false,"marker":true,"durationMs":1200,"host":"kkamak-dev","app":"claude-code","checkMs":[1050],"pluginVersion":"0.4.7","reinject":"v1","hookRules":[{"id":"b12","matched":true,"mode":"shadow","ms":0.05},{"id":"b3","matched":true,"mode":"warn","ms":0.2}]}'
+
 const VECTOR_LINES = [
   CLEAN_ACCEPT,
   CATCH_BLOCK_THEN_FIX,
   EXHAUSTED,
   SKIPPED_STOP_DIAGNOSTIC,
   CLEAN_ACCEPT_WITH_RULE_CHECKS,
+  CLEAN_ACCEPT_WITH_HOOK_RULES,
 ]
 
 // ── Parser acceptance: every vector line survives parseSensorLines ─────────
@@ -183,6 +194,40 @@ test("assertFixtureHasRuleChecksVector: passes silently on a fixture containing 
   }
 })
 
+/** Throws iff `raw` does not contain the hookRules vector — i.e. the P2
+ * contract rev (hook-rule telemetry, 0.4.7) hasn't been ported to this
+ * fixture yet. Same rationale + unit-testability extraction as
+ * `assertFixtureHasRuleChecksVector` above (a3 :156-162 precedent). */
+export function assertFixtureHasHookRulesVector(raw: string): void {
+  if (!raw.includes('"hookRules"')) {
+    throw new Error(
+      "kkamak sensor-contract fixture is missing the hookRules vector — the P2 contract rev landed half-updated; update ~/z2/kkamak's fixture + conformance suite in the same change window",
+    )
+  }
+}
+
+test("assertFixtureHasHookRulesVector: throws on a fixture missing the hookRules vector", () => {
+  const tmp = path.join(tmpdir(), `sensor-contract-no-hookrules-${Date.now()}-${Math.random()}.ndjson`)
+  writeFileSync(tmp, VECTOR_LINES.slice(0, 5).join("\n") + "\n", "utf8")
+  try {
+    const raw = readFileSync(tmp, "utf8")
+    expect(() => assertFixtureHasHookRulesVector(raw)).toThrow(/missing the hookRules vector/)
+  } finally {
+    rmSync(tmp)
+  }
+})
+
+test("assertFixtureHasHookRulesVector: passes silently on a fixture containing the hookRules vector", () => {
+  const tmp = path.join(tmpdir(), `sensor-contract-has-hookrules-${Date.now()}-${Math.random()}.ndjson`)
+  writeFileSync(tmp, VECTOR_LINES.join("\n") + "\n", "utf8")
+  try {
+    const raw = readFileSync(tmp, "utf8")
+    expect(() => assertFixtureHasHookRulesVector(raw)).not.toThrow()
+  } finally {
+    rmSync(tmp)
+  }
+})
+
 test("sensor-contract advisory parity: byte-matches ../kkamak/test/fixtures/sensor-contract.ndjson when present", () => {
   // Absent fixture: still an advisory skip (yoo-mac has no kkamak clone).
   // PRESENT fixture that lacks the ruleChecks vector: HARD FAIL — the
@@ -198,6 +243,7 @@ test("sensor-contract advisory parity: byte-matches ../kkamak/test/fixtures/sens
   }
   const theirs = readFileSync(KKAMAK_FIXTURE, "utf-8")
   assertFixtureHasRuleChecksVector(theirs)
+  assertFixtureHasHookRulesVector(theirs)
   const ours = VECTOR_LINES.join("\n") + "\n"
   if (ours !== theirs) {
     throw new Error(
