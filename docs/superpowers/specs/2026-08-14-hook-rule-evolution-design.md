@@ -28,7 +28,7 @@ Rides the bullet, exactly as `check` does:
   "hookRule": {
     "event": "PreToolUse",
     "toolMatcher": "Bash",
-    "inputPattern": "^(npm|yarn)\\s+(install|add)\\b",
+    "inputPattern": "^(npm|yarn) +(install|add)( |$)",
     "feedback": "This repo uses bun. Re-run with bun add/install.",
     "mode": "shadow"
   } }
@@ -40,11 +40,22 @@ Rides the bullet, exactly as `check` does:
   `Read`, `Glob`, `Grep`; extension = spec revision).
 - `inputPattern`: anchored regex applied to ONE canonical field per tool:
   `Bash`→`command`, `Edit`/`Write`/`Read`→`file_path`, else the
-  JSON-serialized tool input. **Match = violation.**
+  JSON-serialized tool input. **Match = violation.** Restricted to the
+  portable subset (§2) so both engines (§3) agree.
 - `feedback`: corrective text shown on warn/deny (≤200 chars, screened §2).
-- `mode`: `"shadow" | "warn" | "deny"`. **NOT proposer-settable** — the review
-  gate coerces any proposed value to `"shadow"` at birth. Later values are
-  ramp-state transitions (§4) recorded as store transitions, never proposals.
+- `mode`: `"shadow" | "warn" | "deny"`. **NOT proposer-settable — a proposal
+  whose `hookRule` carries `mode` at all is REJECTED** with a named violation
+  (`hook-screen:mode-not-proposer-set`) and a ledger entry, exactly the
+  `check-screen:state-not-proposer-set` precedent (`review-gate.ts:116-124`
+  rejects, never silently coerces). The store stamps `mode: "shadow"` at
+  birth. Later values are ramp transitions (§4), system-applied via the
+  transition writer — never proposer-authored.
+- **Update-op semantics: tri-state, mirroring `check`**
+  (`harness-store.ts:1068-1073` — that tri-state was a shipped bugfix, do not
+  regress it): on `op:"update"`, `hookRule` omitted = keep existing (including
+  its current store-owned `mode`); `hookRule: null` = drop; `hookRule` object
+  = replace. **Any replace restarts the ramp** — the new rule is born `shadow`
+  regardless of the predecessor's mode (edited pattern = unproven pattern).
 - A `hookRule` may coexist with a `check` (Stop-side) on the same bullet; they
   are independent mechanisms sharing the bullet's lifecycle.
 
@@ -53,42 +64,100 @@ Rides the bullet, exactly as `check` does:
 A proposed `hookRule` passes ALL of, else review-gate rejection with a named
 violation (repair-eligible, same loop as `mechanize_instead`):
 
-- regex compiles; length ≤ 200 chars; anchored (`^` or a documented reason
-  pattern class); passes a backtracking-safety heuristic (no nested unbounded
-  quantifiers — linear-time subset check, not full re2 equivalence);
+- regex is in the **portable subset** (not merely "compiles"): literals,
+  character classes `[...]`, alternation `|`, grouping `(...)`, anchors —
+  `^` leading only; `$` either pattern-terminal or as an alternative in a
+  terminal group (`(x|$)`), the only two placements the screen accepts
+  (strict POSIX leaves mid-pattern `$` implementation-defined; both accepted
+  placements are anchor-semantics on the actual engine pair in use, JS
+  `RegExp` + glibc ERE, which is what parity targets) —
+  quantifiers `*` `+` `?` `{m,n}`, the bare `.` wildcard (JS and POSIX ERE
+  agree on it), escaped metacharacters. FORBIDDEN:
+  backreferences, lookaround, lazy quantifiers, inline flags, and the
+  Perl-class shorthands `\d`/`\w`/`\s`/`\b` (screen rejects with the expansion
+  named in the violation message, e.g. `\d`→`[0-9]` — POSIX ERE has no `\b`;
+  word-boundary intent must be rewritten as an explicit class or dropped).
+  Also forbidden: ANY backslash escape inside a bracket expression (JS reads
+  `[\t]` as tab, POSIX ERE as literal `\`+`t` — silent divergence; use the
+  literal character or a named class instead).
+  This subset behaves identically under JS `RegExp` and POSIX ERE (§3's two
+  engines) — the screen enforces parity, the evaluators assume it;
+- length ≤ 200 chars; anchored (`^` or a documented reason pattern class);
+  passes a backtracking-safety heuristic (no nested unbounded quantifiers —
+  linear-time subset check, not full re2 equivalence; residual risk bounded
+  by the runtime deadline, §3);
 - `toolMatcher` in the whitelist;
+- `mode` absent — presence is the `hook-screen:mode-not-proposer-set`
+  rejection (§1), before any LLM screening spend;
 - `feedback` ≤ 200 chars, non-empty, screened for instruction-injection tier
   (no "ignore previous", no tool-directive phrasing beyond the correction —
   content heuristics listed in the plan; feedback is proposer-authored and IS
   an injection surface into future agent turns);
 - dedup: no existing active bullet carries a hookRule with identical
-  (toolMatcher, inputPattern).
+  (toolMatcher, inputPattern). Exact-string only — overlapping-but-unequal
+  patterns are accepted scope for v1 (birth-time nuisance, not a runtime
+  correctness issue).
 
 ## 3. Runtime — one evaluator, two consumers
 
-**Compiled table.** `.km/hook-rules.json` written on every playbook-mutating
-store transition (exact `.km/rule-checks.json` producer precedent): active
-bullets' hookRules flattened to `[{id, event, toolMatcher, inputPattern,
-feedback, mode}]`, pre-validated so consumers never re-screen.
+**Compiled table.** `.km/hook-rules.json` written at every active-playbook-swap
+site — activation, trial start, trial confirm/revert, gate-trial resolution —
+mirroring `exportRuleChecks`'s call-site list exactly
+(`rule-checks-export.ts`; NOT candidate creation — candidates aren't active):
+active bullets' hookRules flattened to `[{id, event, toolMatcher,
+inputPattern, feedback, mode}]` plus a top-level `killSwitch: boolean`,
+pre-validated so consumers never re-screen. The ramp transition writer (§4)
+is an additional producer call site.
 
 **Dogfood (dispatch.ts PreToolUse).** Reads compiled table (hook process is
-short-lived; read per event, table is small), pure-regex evaluation:
+short-lived; read per event, table is small), JS `RegExp` evaluation over the
+screened portable subset (§2):
 
 - `shadow` match → sensor-line outcome only (§5), allow.
 - `warn` match → allow + feedback injected as hook additionalContext
   (exact channel confirmed by P0 probe).
 - `deny` match → decision block with feedback as the reason.
-- **FAIL-OPEN always**: evaluator exception, malformed table, missing file =
-  allow with zero user impact (hook prime directive). Deny only on an
-  affirmative match by a well-formed rule.
+- **Composition with the existing `PreToolUse(Bash)` handler**
+  (`dispatch.ts:234-252`, the bash-timeout `updatedInput` knob) — one JSON
+  response per event, so ordering is explicit: hookRule evaluation runs
+  FIRST; a `deny` short-circuits (no timeout adjustment on a call that won't
+  run); `warn`/`shadow`/no-match fall through to the timeout knob, and a warn
+  response merges `additionalContext` alongside `updatedInput` in the single
+  `hookSpecificOutput`. Whether CC honors both keys in one response is P0
+  probe (d); if not, `updatedInput` wins and warn degrades to shadow for that
+  call (fail-open bias).
+- **Per-call deadline**: total table evaluation carries a wall-clock budget
+  (5ms target, hard bound 50ms checked between rules — an in-loop poll,
+  deliberately, because a worker-thread/subprocess-per-match with hard
+  terminate is disproportionate for a hook that must answer in
+  single-digit ms). Budget breach = fail-open for the remaining rules + a
+  log line naming the rule id that was mid-evaluation. HONEST LIMIT: an
+  in-loop poll cannot preempt a single synchronous match that is itself
+  pathological — it bounds aggregate time across rules, not one
+  catastrophic `RegExp.test()`/`[[ =~ ]]` call. Single-match blowup is
+  accepted residual risk (§8), narrowed by the §2 subset (no nesting, no
+  backreferences, ≤200 chars) rather than eliminated.
+- **FAIL-OPEN always**: evaluator exception, malformed table, missing file,
+  deadline breach = allow with zero user impact (hook prime directive). Deny
+  only on an affirmative match by a well-formed rule within budget.
 - Caps: `HOOK_RULES_MAX = 16` total; deny-mode subset ≤ 4. Over-cap rules
-  beyond the limit are ignored deterministically (stable order by bullet id)
-  and the truncation is logged.
+  beyond the limit are ignored deterministically (stable order by bullet id).
+  Truncation and deadline breaches are logged by the compiled-table writer /
+  evaluator local log — NOT the sensor stream (keeps the §5 contract rev
+  minimal, no F2 entanglement).
 
-**Bench (a3 settings asset).** `stop-gate-settings.json` gains a PreToolUse
-hook entry invoking the same evaluator script container-side; the candidate's
-compiled table is podman-cp'd in (existing rule-checks copy-in pattern). Same
-shadow/warn/deny semantics; outcomes land in the bench annotation channel.
+**Bench (a3 settings asset).** The settings builder `buildRuleGateSettings()`
+(`rule-gate.ts:242-263`) remains the SINGLE owner of the container
+`settings.json` and is extended: when the candidate's compiled table carries
+hookRules, the returned object gains a `hooks.PreToolUse` block alongside the
+existing `hooks.Stop` — one builder, one file, no second generator to race
+the copy-in (existing `podman cp` write-in unchanged). The container-side
+evaluator is a **pure-bash POSIX ERE (`[[ =~ ]]`) reimplementation** — bench
+task images cannot be assumed to carry node/bun (`rule-gate.ts:33-45`
+rationale, unchanged). Engine parity is guaranteed by the §2 portable subset,
+enforced at birth screening; the evaluators do not re-negotiate it. Same
+shadow/warn/deny semantics and per-call deadline; outcomes land in the bench
+annotation channel.
 
 ## 4. Ramp state machine (per rule, evidence-staged)
 
@@ -104,9 +173,39 @@ deny ──(FP-threshold breach OR implicated bad score)──▶ shadow  [autom
   sparse for rarely-matched rules; promotion simply waits for N (no shortcut).
   Initial thresholds (plan-tunable, recorded per transition): N=20, K=5,
   θ=0.25.
-- warn→deny is a measured treatment: the ab arm's ONLY delta is the mode flip.
-- Global kill-switch: config flag zeroes all deny modes instantly (evaluator
-  treats deny as warn when set) — dogfood safety valve.
+- **Transition writer (the mechanism — new machinery, no existing precedent
+  for automatic active-bullet mutation, and this spec says so plainly):**
+  a `hookRuleTransition` store function that mutates ONLY the `mode` field of
+  one active bullet's hookRule, writes the ledger entry, and re-exports the
+  compiled table — it does NOT go through `applyPlaybookOps`, the proposal
+  pipeline, or `review-gate.ts` (nothing proposer-authored changes; text,
+  pattern, feedback are untouched by construction). It runs under the same
+  per-root store lock the proposer/curator take (`proposer.ts` sanitizeRoot /
+  lock-per-root); if the lock is held, the transition is skipped and retried
+  at the next trigger — transitions are idempotent evidence re-checks, never
+  queued writes.
+- **Trigger for shadow→warn and automatic deny→shadow demotion:** the ramp
+  scan runs at sensor-flush time (session close, where FP-proxy inputs are
+  appended anyway) and re-evaluates thresholds from aggregated telemetry.
+  No cron, no daemon: evidence only changes when a session lands, so that is
+  the only trigger needed.
+- **warn→deny is a measured treatment** routed through the EXISTING ab gate:
+  the ramp engine constructs a system-generated transition candidate whose
+  ONLY delta is the mode flip. The transition writer checks the deny cap
+  (§3: deny subset ≤ 4) BEFORE constructing a warn→deny candidate — an arm
+  that would exceed the cap is never built (no point measuring a flip the
+  table would truncate); the export-time cap remains the backstop, so
+  stored bullet state never exceeds it via this path. It carries a `transition` provenance marker,
+  SKIPS review-gate screening (screening exists to check proposer-authored
+  content; a mode flip contains none — this carve-out is explicit and the
+  marker is what authorizes it), and then runs the standard k-trial ab arm.
+  Adopt on non-regression + target-failure reduction → the transition writer
+  applies the flip. §1's "never proposer-authored" is about WHO can set
+  `mode`; system transition candidates are the sanctioned other path.
+- Global kill-switch: `killSwitch: true` in `.km/hook-rules.json` itself
+  (rides the existing copy-in — no second channel), honored by BOTH
+  evaluators: deny is treated as warn while set. Applies to bench too — an
+  ab-arm deny trial gone wrong has the same emergency stop.
 - Every transition = ledger entry + store transition with evidence summary
   (counts, rates, session ids), audited like activation.
 
@@ -118,7 +217,11 @@ deny ──(FP-threshold breach OR implicated bad score)──▶ shadow  [autom
   (b) dogfood warn-channel mechanics: additionalContext vs block-with-message
   — which surfaces feedback to the agent without halting;
   (c) per-call latency of compiled-table eval at the 16-rule cap (budget:
-  ≤5ms p95, pure regex).
+  ≤5ms p95, pure regex);
+  (d) response composition: can one PreToolUse `hookSpecificOutput` carry
+  `additionalContext` AND `updatedInput` together (warn + bash-timeout knob
+  on the same call, §3) — if not, `updatedInput` wins and warn degrades to
+  shadow for that call.
 - **Telemetry**: sensor line gains OPTIONAL `hookRules` outcomes
   `{id, matched, mode, ms}` — F2: never input text, never cmd text. Contract
   rev = kkamak golden vector + conformance check + boundary ts (the 0.4.6
@@ -159,3 +262,18 @@ deny ──(FP-threshold breach OR implicated bad score)──▶ shadow  [autom
 - Warn-channel mechanics unverified until P0 — if CC offers no non-blocking
   feedback channel on PreToolUse, warn degrades to shadow on dogfood (bench
   unaffected: container settings support block-with-message).
+- Backtracking screen is a heuristic, not re2 equivalence — a pathological
+  pattern can clear birth screening. The §3 deadline (in-loop poll) bounds
+  aggregate evaluation time, NOT a single catastrophic match — one
+  pathological `RegExp.test()`/`[[ =~ ]]` call can hang the hook past the
+  50ms bound until it returns. Accepted residual availability risk,
+  narrowed (not eliminated) by the §2 subset restrictions: no nested
+  unbounded quantifiers, no backreferences, pattern length ≤ 200. Revisit
+  with out-of-band preemption (worker/subprocess per match) only if a real
+  hang is ever observed.
+- Engine parity rests on the §2 portable subset being enforced correctly at
+  screening — a screen bug could admit a pattern that matches differently
+  under JS RegExp vs POSIX ERE. Divergence is shadow-visible in telemetry
+  (dogfood/bench outcome asymmetry) before any deny rides on it.
+- Dedup is exact-string; overlapping patterns on the same (toolMatcher,
+  field) are accepted v1 scope.
