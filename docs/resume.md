@@ -106,9 +106,27 @@ loadPerCore 0.18 vs HI 2.0); measured-capture proven on this host
 class (resource-profiles/x64-12c-intel..., 21 tasks sampled).
 Consider podman machine set --cpus 6 --memory 10240 before oracle
 5x (VM now 4cpu/8GB; width ~4 -> ~5-6).
-Steps: port 17 (12 fresh + 5 deltas) -> oracle 5x over the 37 ->
-sonnet-5 k=1 RIG-PARITY pass over the 37 (~2-3h scheduled, ~$25) ->
-evolution arms on the 37 -> optional full-89 k=5 confirm at program
+PORT EXECUTED 08-16: no per-task vendoring needed — runtime staging
+reads the 2-1 clone directly (~/z2/terminal-bench-2-1, --tb-root
+<clone>/tasks; shallow, reproducible per host). Oracle 1x validation
+drove SIX rig fixes, all committed + tested (suite 2157/0):
+6805645 oracle /app-at-create workdir · c5b343e system-wide pip +
+netcat rename · 7bb571d pip extraction (flags/--index-url per
+segment) · 468c773 /solution symlink · 4e6109b python-version shim
+(uv CPython 3.10/3.11/3.13 baked into image 86c4ecc0930c) · 30bcf0d
+pytest shim. ORACLE BOARD: 31/36 PASS. Load-flakes identified (pass
+quiet, fail loaded): tune-mjcf, password-recovery — timing-sensitive
+tests, note for arm scheduling. 5 PENDING USER RULING:
+build-cython-ext (planarity 1.0.0 upstream drift, solve broken
+everywhere, anchor row stale) · qemu-startup + qemu-alpine-ssh (no
+KVM in applehv Intel podman VM, TCG boot > solve's 300s expect;
+WSL2 host has KVM but yoo-dev ssh-dead) · custom-memory-heap-crash
+(environment compiles gcc-13.2 from source — upstream pays once at
+image build, runtime staging pays hours PER ATTEMPT; drop or build
+per-task image pre-bake via podman commit).
+Steps remaining: rulings -> oracle 5x over final target set ->
+sonnet-5 k=1 RIG-PARITY pass (~2-3h scheduled, ~$25) ->
+evolution arms -> optional full-89 k=5 confirm at program
 END only ($288/$432 post-08-31, guards solid-task regressions). Wall-clock inputs now measured, not
 guessed: trial median 5.2 min / mean 10.4 / p90 29; timeouts are 30%
 of serial wall; scheduler width ~4 (mem-bound, VM 4cpu/8GB).
