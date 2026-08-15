@@ -50,7 +50,7 @@ const ORACLE = readFileSync(join(TASKS, "headless-terminal/oracle/headless_termi
 
 test("headless: every relation PASSES on the oracle artifact", () => {
   const { appdir, artifact } = headlessAppdir(ORACLE)
-  for (const f of readdirSync(RELDIR).filter((f) => f.endsWith(".py"))) {
+  for (const f of readdirSync(RELDIR).filter((f) => f.endsWith(".py") && !f.startsWith("_"))) {
     const r = runRelation(join(RELDIR, f), appdir, artifact)
     expect({ relation: f, code: r.code, out: r.out.slice(-300) }).toEqual({ relation: f, code: 0, out: r.out.slice(-300) })
   }
@@ -66,7 +66,7 @@ test("headless: degraded artifact (drops modifier keys) violates at least one re
   expect(degraded).not.toBe(ORACLE) // the anchor line must exist
   const { appdir, artifact } = headlessAppdir(degraded)
   const codes = readdirSync(RELDIR)
-    .filter((f) => f.endsWith(".py"))
+    .filter((f) => f.endsWith(".py") && !f.startsWith("_"))
     .map((f) => runRelation(join(RELDIR, f), appdir, artifact).code)
   expect(codes.some((c) => c !== 0)).toBe(true)
   Bun.spawnSync(["tmux", "kill-server"], { env: { ...process.env, TMUX_TMPDIR: appdir } })
@@ -85,7 +85,7 @@ const SP_ORACLE = readFileSync(join(TASKS, "sparql-university/oracle/solution.sp
 
 test("sparql: every relation PASSES on the oracle query", () => {
   const { appdir, artifact } = sparqlAppdir(SP_ORACLE)
-  for (const f of readdirSync(SP_RELDIR).filter((f) => f.endsWith(".py"))) {
+  for (const f of readdirSync(SP_RELDIR).filter((f) => f.endsWith(".py") && !f.startsWith("_"))) {
     const r = runRelation(join(SP_RELDIR, f), appdir, artifact)
     expect({ relation: f, code: r.code, out: r.out.slice(-300) }).toEqual({ relation: f, code: 0, out: r.out.slice(-300) })
   }
