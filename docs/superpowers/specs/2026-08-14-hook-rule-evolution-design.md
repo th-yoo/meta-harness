@@ -237,8 +237,9 @@ deny ──(FP-threshold breach OR implicated bad score)──▶ shadow  [autom
 - **FP adjudication sidecar**: judging whether a deny was correct needs the
   matched input — bounded evidence sidecar, BENCH-ONLY, under
   `docs/loop-probes/`, A4-sidecar F2-exception precedent. Dogfood sessions
-  get NO input capture (id/mode/ms only). **Needs explicit user ruling at
-  spec review.**
+  get NO input capture (id/mode/ms only). **RULED: APPROVED by user
+  2026-08-15** (bench-only capture; dogfood stays id/mode/ms). Sidecar
+  implementation lands with the first bench deny arm (P4).
 - **Boundaries**: first enforcement activation (any rule leaves shadow on any
   surface) = actuator-class boundary ts in the adoption ledger.
 
@@ -287,10 +288,12 @@ deny ──(FP-threshold breach OR implicated bad score)──▶ shadow  [autom
   (dogfood/bench outcome asymmetry) before any deny rides on it.
 - Dedup is exact-string; overlapping patterns on the same (toolMatcher,
   field) are accepted v1 scope.
-- Bench-side input extraction (P1 build finding, 2026-08-15): the container
-  bash evaluator extracts the canonical field from stdin JSON with sed —
-  two known holes: escaped quotes in the value truncate the extraction, and
-  the greedy match binds to the LAST occurrence of the key. Shadow-only in
-  P1 → zero behavioral risk; **P3 GATE ITEM: must be fixed or bounded
-  before any bench deny arm runs** (documented in-file in
-  `src/bench/hook-rule-gate.ts`).
+- Bench-side input extraction: the P1 sed holes (escaped-quote truncation,
+  last-key greedy binding) were CLOSED 2026-08-15 (P4-prep) — extraction is
+  now a POSIX-awk string-aware scanner binding inside the captured
+  tool_input object; adversarial cases test-locked incl. a false-positive
+  deny the old code emitted. Remaining pattern-authoring caveats (not
+  correctness holes, documented in `src/bench/hook-rule-gate.ts`):
+  \uXXXX escapes stay encoded in extracted values, and Glob/Grep
+  serialized-input parity assumes compact single-line stdin (what CC
+  emits). Deny arms on command/file_path tools are unblocked.
