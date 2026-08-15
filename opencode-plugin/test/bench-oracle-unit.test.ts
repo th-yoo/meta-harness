@@ -1024,3 +1024,31 @@ test("runOneOracleTask: /solution symlink is created before solve.sh runs", asyn
   expect(linkIdx).toBeGreaterThan(-1)
   expect(solveIdx).toBeGreaterThan(linkIdx)
 })
+
+// ── oracle --parallel (lane 2 scheduler ruling, 2026-08-16) ──────────────
+test("cmdOracle: --parallel runs every task through the scheduler and the results file completes", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["a", "b", "c"])
+  const paths = fakeBenchPaths(dir, tbRoot)
+  fs.mkdirSync(paths.resultsDir, { recursive: true })
+  const resultsFile = path.join(paths.resultsDir, "par.json")
+
+  const ran: string[] = []
+  const fake: RunOneOracleTask = async (_p, task) => {
+    ran.push(task)
+    return { reward: 1, elapsed: 1.0, error: "" }
+  }
+  const logSpy = spyOn(console, "error").mockImplementation(() => {})
+  const outSpy = spyOn(console, "log").mockImplementation(() => {})
+  try {
+    await cmdOracle(paths, { tasks: ["a", "b", "c"], resultsFile, parallel: true }, fake)
+  } finally {
+    logSpy.mockRestore()
+    outSpy.mockRestore()
+  }
+  expect(ran.sort()).toEqual(["a", "b", "c"])
+  const written = JSON.parse(fs.readFileSync(resultsFile, "utf-8"))
+  expect(Object.keys(written.tasks).sort()).toEqual(["a", "b", "c"])
+  expect(written.status).toBe("complete")
+})

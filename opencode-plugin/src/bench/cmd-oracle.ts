@@ -36,7 +36,9 @@ import {
   buildRmArgv,
 } from "./sandbox.ts"
 import { BENCH_IMAGE, containerName, type BenchPaths } from "./paths.ts"
-import { selectTasks, taskTimeouts, enforcedResources } from "./tasks.ts"
+import { selectTasks, taskTimeouts, enforcedResources, packingFootprints } from "./tasks.ts"
+import { schedule, DEFAULT_BUDGET, AsyncMutex } from "./scheduler.ts"
+import { PRESSURE_POLL_SEC } from "./host-pressure.ts"
 import { taskWorkdir, stageTaskRuntime, type ExecFn } from "./staging.ts"
 import { copyTests, runVerifier } from "./verifier.ts"
 import { BenchError, log, pyFixed, writeJsonAtomic } from "./util.ts"
@@ -242,6 +244,16 @@ export async function cmdOracle(
      * this flag existed. Threaded to runOneOracleTask via the default
      * parameter closure below (its injectable type stays 3-arg-shaped). */
     enforceResources?: boolean
+    /** Adaptive load-aware scheduling (lane 2 ruling 2026-08-16): pack task
+     * containers against the cpu/mem budget via scheduler.ts, same machinery
+     * as cmd-run's --parallel. Oracle spends no tokens, so no auth gate. */
+    parallel?: boolean
+    cpuBudget?: number
+    memMb?: number
+    /** Transient host-pressure pause gate (internal wiring set by cli.ts's
+     * buildPressureGate from --host-pressure observe|on — see cmd-run.ts's
+     * `pressureGate` field doc). */
+    pressureGate?: () => boolean
   },
   runOneTask: RunOneOracleTask = (p, t, s) =>
     runOneOracleTask(p, t, s, undefined, args.enforceResources ? enforcedResources(p, t) : undefined),
@@ -256,18 +268,48 @@ export async function cmdOracle(
   const results: OracleResultRow[] = []
   const runStartTs = new Date().toISOString()
 
-  for (const task of tasks) {
-    log(`\n=== Oracle: ${task} ===`)
-    const result = await runOneTask(paths, task, staging)
+  // `prefix` tags the status line with the task id under parallel
+  // interleaving; serial passes "" so its log lines stay byte-identical to
+  // the pre-parallel format (test-pinned).
+  const recordResult = (task: string, result: OracleTaskResult, prefix: string): void => {
     results.push({ task, reward: result.reward, elapsed: result.elapsed, error: result.error })
-
     if (result.error !== "setup_failed") {
       const status = result.reward === 1 ? "PASS" : "FAIL"
-      log(`  [${status}] reward=${result.reward}  elapsed=${pyFixed(result.elapsed, 1)}s`)
+      log(`  [${status}] ${prefix}reward=${result.reward}  elapsed=${pyFixed(result.elapsed, 1)}s`)
     }
-
     if (resultsFile) {
       writeOracleResults(resultsFile, runStartTs, results, "in_progress")
+    }
+  }
+
+  if (args.parallel) {
+    // Same packing machinery as cmd-run's --parallel: measured-or-prior pack
+    // weights against the cpu/mem budget, completion-order results guarded by
+    // a mutex (results array + incremental writes are shared mutations).
+    const budget = { cpus: args.cpuBudget ?? DEFAULT_BUDGET.cpus, memoryMb: args.memMb ?? DEFAULT_BUDGET.memoryMb }
+    const footprints = packingFootprints(paths, tasks, {}, true)
+    const items = tasks.map((t) => {
+      const f = footprints.get(t)!
+      return { key: t, cpus: f.pack.cpus, memoryMb: f.pack.memoryMb }
+    })
+    const mutex = new AsyncMutex()
+    await schedule(
+      items,
+      budget,
+      async (it) => {
+        log(`\n=== Oracle: ${it.key} ===`)
+        const result = await runOneTask(paths, it.key, staging)
+        await mutex.withLock(() => recordResult(it.key, result, `${it.key} `))
+      },
+      undefined,
+      args.pressureGate,
+      PRESSURE_POLL_SEC * 1000,
+    )
+  } else {
+    for (const task of tasks) {
+      log(`\n=== Oracle: ${task} ===`)
+      const result = await runOneTask(paths, task, staging)
+      recordResult(task, result, "")
     }
   }
 

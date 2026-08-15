@@ -44,6 +44,7 @@ commands:
   prep        [--apply]
   oracle      [--tasks TASK [TASK ...]] [--task-file PATH] [--results-file PATH]
               [--staging scripts|runtime]  (default: runtime) [--enforce-resources]
+              [--parallel] [--cpu-budget N] [--mem-budget MB] [--host-pressure observe|on]
   run         [--tasks TASK [TASK ...]] [--task-file PATH] [--all]
               [--model ID] [--variant V] [--k N] [--layers global|account|project|none]
               [--no-store] [--save-all-traj] [--self-check] [--no-harness] [--results-file PATH]
@@ -152,6 +153,13 @@ interface OracleArgs {
   resultsFile?: string
   staging?: StagingMode
   enforceResources?: boolean
+  parallel?: boolean
+  cpuBudget?: number
+  memMb?: number
+  hostPressure?: "observe" | "on"
+  /** internal wiring — built from hostPressure by the oracle case, never
+   * parsed (mirrors CmdRunArgs.pressureGate). */
+  pressureGate?: () => boolean
 }
 
 function parseOracleArgs(argv: string[]): OracleArgs | null {
@@ -194,6 +202,36 @@ function parseOracleArgs(argv: string[]): OracleArgs | null {
     if (a === "--enforce-resources") {
       out.enforceResources = true
       i++
+      continue
+    }
+    if (a === "--parallel") {
+      out.parallel = true
+      i++
+      continue
+    }
+    if (a === "--cpu-budget") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.cpuBudget = n
+      i += 2
+      continue
+    }
+    if (a === "--mem-budget") {
+      const v = argv[i + 1]
+      if (v === undefined) return null
+      const n = parseBudgetNum(v)
+      if (n === null) return null
+      out.memMb = n
+      i += 2
+      continue
+    }
+    if (a === "--host-pressure") {
+      const v = argv[i + 1]
+      if (v !== "observe" && v !== "on") return null
+      out.hostPressure = v
+      i += 2
       continue
     }
     return null
@@ -1947,6 +1985,10 @@ export async function main(argv: string[]): Promise<number> {
           printUsage()
           return 2
         }
+        // host-pressure launch gate — same ONE-sensor-per-invocation wiring
+        // as the run/ab cases. Oracle spends no tokens, so no oauth
+        // canLaunch gate is needed for its --parallel.
+        oracleArgs.pressureGate = buildPressureGate(oracleArgs)
         await cmdOracle(paths, oracleArgs)
         return 0
       }
