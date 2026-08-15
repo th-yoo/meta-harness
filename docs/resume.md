@@ -67,24 +67,30 @@ serial, 42 AgentTimeoutError + 6 UnknownApiError). Task split:
 db-wal-recovery dna-insert filter-js-from-html make-doom-for-mips
 protein-assembly raman-fitting; lowest priority). Evolution surface =
 50 non-solid tasks (50.2h/$172 serial per arm; ~15-17h scheduled).
-TARGET RULED 08-16 (user): the 50 failed tasks ONLY — solid-39 out
-of scope entirely (port them never, run them never; they exist only
-in the adopted baseline and the optional program-end confirm).
-Port scope collapses 30fresh+14delta to: 20 fresh ports
-(build-pov-ray caffe-cifar-10 chess-best-move custom-memory-heap-crash
-gpt2-codegolf install-windows-3.11 make-doom-for-mips
-make-mips-interpreter mteb-retrieve pytorch-model-cli qemu-alpine-ssh
-qemu-startup query-optimize sam-cell-seg schemelike-metacircular-eval
-torch-pipeline-parallelism torch-tensor-parallelism train-fasttext
-vulnerable-secret winning-avg-corewars) + 7 delta re-syncs
-(adaptive-rejection-sampler compile-compcert configure-git-webserver
-extract-moves-from-video filter-js-from-html polyglot-rust-c
-protein-assembly) + 23 already ported & delta-free (5 of those not
-yet in baseline-tasks.txt: build-cython-ext headless-terminal
+TARGET RULED 08-16 (user, two rulings): (1) failed tasks ONLY —
+solid-39 out of scope entirely; (2) HEAVY HITTERS EXCLUDED (avg
+trial >=15 min in anchor data; cut also captures every >=3-timeout
+burner): caffe-cifar-10 compile-compcert extract-moves-from-video
+feal-linear-cryptanalysis gpt2-codegolf llm-inference-batching-
+scheduler make-doom-for-mips make-mips-interpreter path-tracing
+query-optimize schemelike-metacircular-eval train-fasttext
+winning-avg-corewars (13 tasks, 32.6h/arm serial, only +8.1pt
+ceiling — bad h/pt).
+LEAN TARGET = 37 tasks: per-arm serial 17.5h (~5-6h scheduled),
+failed-trial ceiling +16.6pt; 23 of 24 flaky-4/5 kept (stabilize
+alone = +5.2pt = 80.4% > #5 target; only caffe-cifar-10 lost).
+Port scope: 12 fresh (build-pov-ray chess-best-move
+custom-memory-heap-crash install-windows-3.11 mteb-retrieve
+pytorch-model-cli qemu-alpine-ssh qemu-startup sam-cell-seg
+torch-pipeline-parallelism torch-tensor-parallelism
+vulnerable-secret) + 5 delta re-syncs (adaptive-rejection-sampler
+configure-git-webserver filter-js-from-html polyglot-rust-c
+protein-assembly) + 20 already ported & delta-free (5 not yet in
+baseline-tasks.txt: build-cython-ext headless-terminal
 multi-source-data-merger portfolio-optimization pypi-server).
-Steps: port 27 (20 fresh + 7 deltas) -> oracle 5x over the 50 ->
-sonnet-5 k=1 RIG-PARITY pass over the 50 (~5h scheduled, ~$36) ->
-evolution arms on the 50 -> optional full-89 k=5 confirm at program
+Steps: port 17 (12 fresh + 5 deltas) -> oracle 5x over the 37 ->
+sonnet-5 k=1 RIG-PARITY pass over the 37 (~2-3h scheduled, ~$25) ->
+evolution arms on the 37 -> optional full-89 k=5 confirm at program
 END only ($288/$432 post-08-31, guards solid-task regressions). Wall-clock inputs now measured, not
 guessed: trial median 5.2 min / mean 10.4 / p90 29; timeouts are 30%
 of serial wall; scheduler width ~4 (mem-bound, VM 4cpu/8GB).
