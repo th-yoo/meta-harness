@@ -7,6 +7,7 @@ import { reviewBullet, reviewLoop, extractJsonObject, type ProposalLike } from "
 import type { HarnessHost } from "./host.ts"
 import { isFormOnlyReject, type RejectedEntry } from "./harness-store.ts"
 import { screenCheck } from "./check-screen.ts"
+import { screenHookRule } from "./hook-rule-screen.ts"
 
 const REVISE_ROUNDS = 1
 
@@ -85,7 +86,7 @@ Reply with EXACTLY ONE JSON object:
  */
 export async function reviewAddedBullets(a: {
   host: HarnessHost
-  bullets: Array<{ text: string; check?: { cmd: string; timeoutMs: number } }> // ops with type "add"
+  bullets: Array<{ text: string; check?: { cmd: string; timeoutMs: number }; hookRule?: unknown }> // ops with type "add"
   diagnosisReason: string // frozen diagnosis (from diagnosis.json summary)
   activeSystem: string // current harness text for duplicate check
   ledger: RejectedEntry[] // rejected ledger for duplicate check
@@ -133,6 +134,22 @@ export async function reviewAddedBullets(a: {
         continue
       }
       tier = screened.tier
+    }
+    if (b.hookRule !== undefined) {
+      // Same pre-LLM discipline as the check screen above: mode smuggling
+      // and every other §2 violation rejects the WHOLE bullet before any
+      // spend; the ledger-bound text carries the slug, never the pattern's
+      // semantics beyond what the proposer already wrote.
+      const hrScreened = screenHookRule(b.hookRule)
+      if (!hrScreened.ok) {
+        out.push({
+          bullet: `${b.text} [hookRule: screen-denied (${hrScreened.violation})]`,
+          staged: false,
+          violations: [hrScreened.violation],
+          trail: [],
+        })
+        continue
+      }
     }
     const proposal: ProposalLike = { action: "propose", reason: a.diagnosisReason, bullet: { text: b.text } }
     const { final, staged, trail } = await reviewLoop({

@@ -57,6 +57,7 @@ import {
   type SessionRecord,
 } from "./harness-store.ts"
 import { exportRuleChecks } from "./rule-checks-export.ts"
+import { exportHookRules } from "./hook-rules-export.ts"
 import { promptHumanScore, handleScoreCommand } from "./score.ts"
 import { runJudge, JUDGE_SYSTEM_PROMPT, type JudgeVerdict } from "./judge.ts"
 import {
@@ -658,6 +659,7 @@ export class EvolutionEngine {
       const res = resolveTrial(l.root)
       if (res.action === "confirmed") {
         exportRuleChecks(this.worktree, l.root)
+        exportHookRules(this.worktree, l.root)
         await this.host.log("info", `[hook:event] trial confirmed ${l.scope} ${res.trial}`)
         await this.host.notify(
           `Trial confirmed: ${l.scope} ${res.trial} kept (${fmtRate(res.trialRate)} vs baseline ${res.baselineRate === null ? "n/a" : fmtRate(res.baselineRate)})`,
@@ -665,6 +667,7 @@ export class EvolutionEngine {
         )
       } else if (res.action === "reverted") {
         exportRuleChecks(this.worktree, l.root)
+        exportHookRules(this.worktree, l.root)
         await this.host.log("warn", `[hook:event] trial reverted ${l.scope} → ${res.baseline}`)
         await this.host.notify(
           `Trial reverted: ${l.scope} back to ${res.baseline} (${fmtRate(res.trialRate)} < baseline ${fmtRate(res.baselineRate)})`,
@@ -834,6 +837,7 @@ export class EvolutionEngine {
         return { consumed: true, kind: "toast", message: `candidate ${version} not found (no system.md) for ${layer.scope}`, variant: "error" }
       }
       exportRuleChecks(this.worktree, layer.root)
+      exportHookRules(this.worktree, layer.root)
       await this.host.log("info", `[hook:command] /mh-activate ${layer.scope} ${version}${force ? " --force" : ""}`)
       return { consumed: true, kind: "toast", message: `activated ${layer.scope} ${version} ✓`, variant: "success" }
     }

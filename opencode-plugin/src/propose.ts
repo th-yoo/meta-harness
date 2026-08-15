@@ -61,6 +61,8 @@ import {
   type EnvPolicy,
 } from "./harness-store.ts"
 import { exportRuleChecks } from "./rule-checks-export.ts"
+import { exportHookRules } from "./hook-rules-export.ts"
+import { screenHookRule } from "./hook-rule-screen.ts"
 import { proposerSessions } from "./session-state.ts"
 import type { HarnessHost, StagedArtifactDescriptor } from "./host.ts"
 // Type-only: daemon-seat.ts's runtime module also pulls in @th-yoo/cc-api-daemon
@@ -413,6 +415,47 @@ export interface OpsScreenResult {
  * screen the curate lane gets for any op kind. Pure: does not touch the
  * store or call screenCheck's caller-supplied side effects (there are none).
  */
+/** hookRule sibling of screenOpsChecks (hook-rule evolution spec §2): every
+ * add/update op carrying a hookRule object passes screenHookRule plus a
+ * dedup against ACTIVE bullets' rules (identical toolMatcher+inputPattern;
+ * an update op is never its own duplicate). Rejected op = dropped WHOLE.
+ * Runs in BOTH lanes (propose + curate) — like screenOpsChecks, it is the
+ * only hookRule screen the curate lane gets. Pure. */
+export function screenOpsHookRules(
+  ops: PlaybookOp[],
+  active: Playbook | null,
+): { ops: PlaybookOp[]; rejections: Array<{ op: PlaybookOp; violation: string }> } {
+  const kept: PlaybookOp[] = []
+  const rejections: Array<{ op: PlaybookOp; violation: string }> = []
+  for (const op of ops) {
+    const hr = op.op === "delete" ? undefined : op.hookRule
+    if (hr === undefined || hr === null) {
+      kept.push(op)
+      continue
+    }
+    const screened = screenHookRule(hr)
+    if (!screened.ok) {
+      rejections.push({ op, violation: screened.violation })
+      continue
+    }
+    const selfId = op.op === "update" ? op.id : undefined
+    const dup = active?.bullets.some(
+      (b) =>
+        b.status === "active" &&
+        b.id !== selfId &&
+        b.hookRule &&
+        b.hookRule.toolMatcher === screened.rule.toolMatcher &&
+        b.hookRule.inputPattern === screened.rule.inputPattern,
+    )
+    if (dup) {
+      rejections.push({ op, violation: "hook-screen:duplicate-rule" })
+      continue
+    }
+    kept.push(op)
+  }
+  return { ops: kept, rejections }
+}
+
 export function screenOpsChecks(ops: PlaybookOp[]): OpsScreenResult {
   const kept: PlaybookOp[] = []
   const liveEligible = new Map<PlaybookOp, boolean>()
@@ -556,6 +599,24 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     // ledger's whole purpose is steering the proposer away from re-deriving
     // the same idea — `update`/`delete` ops were never ledgered before this
     // task either, so they stay log-only here).
+    // hookRule screen first (spec §2, both mode-smuggle and dedup) — same
+    // rejected-whole-and-ledgered contract as the check screen below.
+    const hrScreened = screenOpsHookRules(ops, readPlaybook(layer.root))
+    ops = hrScreened.ops
+    for (const r of hrScreened.rejections) {
+      const label = r.op.op === "update" ? `update ${r.op.id}` : r.op.op
+      await host.log("warn", `proposer ${layer.scope} ${version}: ${label} hookRule screen-rejected (${r.violation}) — op dropped`)
+      if (r.op.op === "add") {
+        appendRejectedLedger(layer.root, {
+          rejectedAt: new Date().toISOString().slice(0, 10),
+          scope: layer.scope,
+          version,
+          bullet: `${r.op.text} [hookRule: screen-denied (${r.violation})]`,
+          violations: [r.violation],
+          source: "review-gate",
+        })
+      }
+    }
     const screened = screenOpsChecks(ops)
     ops = screened.ops
     checkLiveEligible = screened.liveEligible
@@ -685,7 +746,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
       // returns undefined, same as omitting reviewModel entirely.
       const outcomes = await reviewAddedBullets({
         host,
-        bullets: addedOps.map((o) => ({ text: o.text, check: o.check })),
+        bullets: addedOps.map((o) => ({ text: o.text, check: o.check, hookRule: o.hookRule })),
         diagnosisReason: diagnosisReasonFrom(diagnosis),
         activeSystem: readActiveSystem(layer.root),
         ledger,
@@ -775,6 +836,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     const baseline = activeVersion(layer.root)
     startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook ?? null, effAgentConfig, effEnvPolicy)
     exportRuleChecks(worktree, layer.root)
+    exportHookRules(worktree, layer.root)
     await host.notify(
       `Trial started: ${layer.scope} ${version}${toolsNote} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
       "info", 8_000,
@@ -1725,6 +1787,12 @@ async function applyCurateArtifact(host: HarnessHost, d: StagedArtifactDescripto
   // all (no readRejectedLedger/appendRejectedLedger anywhere in the curate
   // path) — a dropped op stays LOG-ONLY here, by design. The log line must
   // still carry the slug reason only, NEVER the raw command text.
+  const hrScreened = screenOpsHookRules(ops, playbook)
+  ops = hrScreened.ops
+  for (const r of hrScreened.rejections) {
+    const label = r.op.op === "update" ? `update ${r.op.id}` : r.op.op
+    await host.log("warn", `curator ${layer.scope} ${version}: ${label} hookRule screen-rejected (${r.violation}) — op dropped`)
+  }
   const screened = screenOpsChecks(ops)
   ops = screened.ops
   for (const r of screened.rejections) {
@@ -1780,6 +1848,7 @@ async function applyCurateArtifact(host: HarnessHost, d: StagedArtifactDescripto
     const baseline = activeVersion(layer.root)
     startTrial(layer.root, version, system, tools, TRIAL_MIN_SESSIONS, newPlaybook, agentConfig, envPolicy)
     exportRuleChecks(worktree, layer.root)
+    exportHookRules(worktree, layer.root)
     await host.notify(
       `Curation trial: ${layer.scope} ${version} (baseline ${baseline}) — resolves after ${TRIAL_MIN_SESSIONS} scored sessions`,
       "info", 8_000,

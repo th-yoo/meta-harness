@@ -1043,6 +1043,18 @@ export interface BulletCheck {
   liveEligible?: boolean
 }
 
+/** A PreToolUse enforcement rule attached to a bullet (hook-rule evolution
+ * spec §1). `mode` is store-owned ramp state — a proposer/curator op carrying
+ * it at all is a review-gate rejection (`hook-screen:mode-not-proposer-set`),
+ * and applyPlaybookOps stamps `"shadow"` on every add/replace. */
+export interface BulletHookRule {
+  event: "PreToolUse"
+  toolMatcher: "Bash" | "Edit" | "Write" | "Read" | "Glob" | "Grep"
+  inputPattern: string
+  feedback: string
+  mode: "shadow" | "warn" | "deny"
+}
+
 export interface PlaybookBullet {
   id: string
   text: string
@@ -1055,6 +1067,7 @@ export interface PlaybookBullet {
   generality?: "universal" | "vendor" | "model"
   slice?: string
   check?: BulletCheck
+  hookRule?: BulletHookRule
 }
 
 export interface Playbook {
@@ -1063,14 +1076,18 @@ export interface Playbook {
   bullets: PlaybookBullet[]
 }
 
+/** Proposer-facing hookRule op shape: no `mode` (store-owned, stamped shadow). */
+export type ProposedHookRule = Omit<BulletHookRule, "mode">
+
 export type PlaybookOp =
-  | { op: "add"; text: string; generality?: "universal" | "vendor" | "model"; slice?: string; check?: { cmd: string; timeoutMs: number } }
+  | { op: "add"; text: string; generality?: "universal" | "vendor" | "model"; slice?: string; check?: { cmd: string; timeoutMs: number }; hookRule?: ProposedHookRule }
   // `check` on an update op is tri-state (finding 2, a3 rule-routing review):
   // `undefined` (field omitted) = KEEP whatever check the bullet already has;
   // `null` = DROP it (the curator prompt's documented "drop a check" path,
   // which pre-fix had no actual mechanism — omitting the field always meant
-  // keep); an object = SET/REPLACE it. See applyPlaybookOps below.
-  | { op: "update"; id: string; text: string; generality?: "universal" | "vendor" | "model"; slice?: string; check?: { cmd: string; timeoutMs: number } | null }
+  // keep); an object = SET/REPLACE it. `hookRule` follows the same tri-state
+  // contract. See applyPlaybookOps below.
+  | { op: "update"; id: string; text: string; generality?: "universal" | "vendor" | "model"; slice?: string; check?: { cmd: string; timeoutMs: number } | null; hookRule?: ProposedHookRule | null }
   | { op: "delete"; id: string }
 
 export function readPlaybook(storeRoot: string, version?: string): Playbook | null {
@@ -1140,7 +1157,9 @@ export function applyPlaybookOps(base: Playbook, ops: PlaybookOp[]): Playbook {
       bullets.push({ id: `b${nextId++}`, text: op.text, helpful: 0, harmful: 0,
         addedBy: "candidate", status: "active", createdAt: now, updatedAt: now,
         generality: coerceGen(op.generality), slice: capSlice(op.slice),
-        ...(op.check ? { check: { cmd: op.check.cmd, timeoutMs: op.check.timeoutMs, state: "shadow" as const } } : {}) })
+        ...(op.check ? { check: { cmd: op.check.cmd, timeoutMs: op.check.timeoutMs, state: "shadow" as const } } : {}),
+        ...(op.hookRule ? { hookRule: { event: op.hookRule.event, toolMatcher: op.hookRule.toolMatcher,
+          inputPattern: op.hookRule.inputPattern, feedback: op.hookRule.feedback, mode: "shadow" as const } } : {}) })
     } else if (op.op === "update") {
       const b = bullets.find((x) => x.id === op.id)
       if (b) {
@@ -1153,6 +1172,11 @@ export function applyPlaybookOps(base: Playbook, ops: PlaybookOp[]): Playbook {
         // unproven again, same as a brand-new one).
         if (op.check === null) delete b.check
         else if (op.check !== undefined) b.check = { cmd: op.check.cmd, timeoutMs: op.check.timeoutMs, state: "shadow" as const }
+        // hookRule: same tri-state; a replaced rule is re-shadowed (spec §1 —
+        // an edited pattern is unproven again; the ramp restarts).
+        if (op.hookRule === null) delete b.hookRule
+        else if (op.hookRule !== undefined) b.hookRule = { event: op.hookRule.event, toolMatcher: op.hookRule.toolMatcher,
+          inputPattern: op.hookRule.inputPattern, feedback: op.hookRule.feedback, mode: "shadow" as const }
       }
     } else if (op.op === "delete") {
       const b = bullets.find((x) => x.id === op.id)
