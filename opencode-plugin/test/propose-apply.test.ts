@@ -1033,3 +1033,63 @@ test("review gate 6: no-op proposal → review runs AFTER the no-op guard, zero 
   expect(listVersions(root)).not.toContain("v2")
   expect(rec.logs.some((l) => l.includes("no-op proposal"))).toBe(true)
 })
+
+// ── consume-after-verdict (apply artifact-loss defect, 2026-08-15) ──────────
+// A hook-timeout kill mid-gate used to lose the artifact: staging was
+// consumed BEFORE the review gate's judge calls. The invariant: staged
+// files survive on disk until the verdict settles, then are consumed on
+// every settled path (accept, reject, no-op).
+
+test("consume-after-verdict: gate judge sees staging files STILL on disk at call time", async () => {
+  const root = path.join(home, "stores", "cav1")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+  const b = stagingBase()
+  const opsPath = path.join(b, "project-role-v2-ops.json")
+  const diagPath = path.join(b, "project-role-v2-diagnosis.json")
+  const toolsPath = path.join(b, "project-role-v2-tools.md")
+  fs.writeFileSync(opsPath, JSON.stringify({ ops: [{ op: "add", text: "When behavior changes, apply the new behavioral rule." }] }))
+  fs.writeFileSync(diagPath, JSON.stringify({ failures: [] }))
+  fs.writeFileSync(toolsPath, "tool guidance")
+
+  const rec: Rec = { notes: [], logs: [] }
+  let seenAtJudgeTime: boolean | undefined
+  const host = fakeHost(rec, {
+    runTextAgent: async () => {
+      seenAtJudgeTime = fs.existsSync(opsPath) && fs.existsSync(diagPath) && fs.existsSync(toolsPath)
+      return REVIEW_PASS
+    },
+  })
+  const res = await applyStagedArtifact(host, descriptor({ layer, version: "v2", playbookMode: true }))
+  expect(res).toBe("applied")
+  // The defect: these were rmSync'd before the judge ever ran — a killed
+  // process lost them. They must be visible AT judge time…
+  expect(seenAtJudgeTime).toBe(true)
+  // …and consumed once the verdict settled.
+  expect(fs.existsSync(opsPath)).toBe(false)
+  expect(fs.existsSync(diagPath)).toBe(false)
+  expect(fs.existsSync(toolsPath)).toBe(false)
+})
+
+test("consume-after-verdict: full-reject verdict still consumes staging (no re-judge loop)", async () => {
+  const root = path.join(home, "stores", "cav2")
+  writeActive(root, "v1", "- b1 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-role", higherRoots: [] }
+  const b = stagingBase()
+  const opsPath = path.join(b, "project-role-v2-ops.json")
+  const diagPath = path.join(b, "project-role-v2-diagnosis.json")
+  fs.writeFileSync(opsPath, JSON.stringify({ ops: [{ op: "add", text: "When behavior changes, apply the new behavioral rule." }] }))
+  fs.writeFileSync(diagPath, JSON.stringify({ failures: [] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  // Review fail on every call (initial + any revision round) → settled reject.
+  const host = fakeHost(rec, { runTextAgent: async () => REVIEW_FAIL })
+  const res = await applyStagedArtifact(host, descriptor({ layer, version: "v2", playbookMode: true }))
+  expect(res).toBe("applied")
+  expect(fs.existsSync(opsPath)).toBe(false)
+  expect(fs.existsSync(diagPath)).toBe(false)
+})

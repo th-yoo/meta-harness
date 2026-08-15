@@ -471,6 +471,21 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
   const isProject = layer.scope === "project-global" || layer.scope === "project-role"
   const playbook = d.playbookMode ? seedPlaybook(layer.root) : null
 
+  // CONSUME-AFTER-VERDICT (artifact-loss defect, 2026-08-15): staged files
+  // used to be rmSync'd as they were read — BEFORE the review gate's judge
+  // calls. The apply normally rides a timeout-bounded hook process, so a
+  // slow gate (multiple judge calls + cold daemon) killed mid-flight lost
+  // the artifact with no verdict, no ledger entry, and an orphaned lock
+  // (ate a live crank, 2026-08-14). Files are now collected here and
+  // deleted only via consumeStaging() at each SETTLED exit (no-op, reject,
+  // candidate created). A kill mid-gate leaves staging intact; the next
+  // apply scan re-runs the whole body — the known cost is re-running
+  // bulletAssessments (double-counted helpful/harmful on retry) and
+  // re-spending gate judge calls, both strictly better than losing the
+  // artifact.
+  const pendingConsume: string[] = []
+  const consumeStaging = () => { for (const f of pendingConsume) fs.rmSync(f, { force: true }) }
+
   const stagingBase = path.join(worktree, ".kkamak", "staging")
   const stagingSystem = path.join(stagingBase, `${layer.scope}-${version}-system.md`)
   const stagingTools  = path.join(stagingBase, `${layer.scope}-${version}-tools.md`)
@@ -488,7 +503,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
   const tools = fs.existsSync(stagingTools)
     ? fs.readFileSync(stagingTools, "utf-8").trim()
     : ""
-  if (tools) fs.rmSync(stagingTools, { force: true })
+  if (tools) pendingConsume.push(stagingTools)
 
   // Read + relocate the diagnosis first — its bulletAssessments must be applied
   // to the ACTIVE playbook before we branch the ops off it.
@@ -497,7 +512,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     try { diagnosis = JSON.parse(fs.readFileSync(stagingDiagnosis, "utf-8")) } catch {
       await host.log("warn", `proposer ${layer.scope} ${version}: diagnosis.json malformed — skipped`)
     }
-    fs.rmSync(stagingDiagnosis, { force: true })
+    pendingConsume.push(stagingDiagnosis)
   } else {
     await host.log("warn", `proposer ${layer.scope} ${version}: no diagnosis.json written (soft-required)`)
   }
@@ -527,7 +542,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
       const parsed = JSON.parse(fs.readFileSync(stagingOps, "utf-8"))
       if (Array.isArray(parsed?.ops)) ops = parsed.ops
     } catch { /* malformed ops → no-op edit */ }
-    fs.rmSync(stagingOps, { force: true })
+    pendingConsume.push(stagingOps)
     // SCREEN COVERAGE INVARIANT (a3 routing T4): every op's check must pass
     // screenCheck before ANY applyPlaybookOps call below — this runs BEFORE
     // addedOps is computed, so a screen-rejected `add` op never reaches
@@ -587,7 +602,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     system = fs.readFileSync(stagingSystem, "utf-8").trim()
     newPlaybook = undefined
   }
-  if (fs.existsSync(stagingSystem)) fs.rmSync(stagingSystem, { force: true })
+  if (fs.existsSync(stagingSystem)) pendingConsume.push(stagingSystem)
 
   // Optional agent-config op — PROJECT layers only (gated). Account-layer
   // candidates are validated by bench `ab`, which runs the default `build`
@@ -604,7 +619,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     } catch {
       await host.log("warn", `proposer ${layer.scope} ${version}: agent-config.json malformed — skipped`)
     }
-    fs.rmSync(stagingAgentConfig, { force: true })
+    pendingConsume.push(stagingAgentConfig)
   }
 
   // Optional env-policy op — PROJECT layers only (gated), same rationale as
@@ -622,7 +637,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     } catch {
       await host.log("warn", `proposer ${layer.scope} ${version}: env-policy.json malformed — skipped`)
     }
-    fs.rmSync(stagingEnvPolicy, { force: true })
+    pendingConsume.push(stagingEnvPolicy)
   }
 
   // Carry the active knob forward when this cycle didn't re-emit one — the
@@ -650,6 +665,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
   if (contentUnchanged && knobsUnchanged && !playbookChanged) {
     await host.log("info", `proposer ${layer.scope}: no-op proposal — identical to active ${activeVersion(layer.root)}; no candidate created, no trial`)
     await host.notify(`Proposer ${layer.scope}: no change proposed — nothing to trial`, "info", 8_000)
+    consumeStaging()
     return "applied"
   }
 
@@ -691,6 +707,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
       if (stagedCount === 0) {
         await host.log("info", `review-gate ${layer.scope}: REJECTED ${failed.length}/${outcomes.length} added bullet(s) — no candidate, no trial`)
         await host.notify(`Proposer ${layer.scope}: review-rejected (${failed[0]!.violations[0] ?? "violations"}) — recorded in ledger`, "warning", 10_000)
+        consumeStaging()
         return "applied"
       }
       // PARTIAL ACCEPT: the gate is per-bullet, so acceptance is per-bullet
@@ -772,6 +789,7 @@ async function applyProposeArtifact(host: HarnessHost, d: StagedArtifactDescript
     )
     await host.log("info", `Candidate ${layer.scope} ${version} created (inactive, awaiting ab-verdict)`)
   }
+  consumeStaging()
   return "applied"
 }
 
