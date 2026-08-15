@@ -86,7 +86,13 @@ export async function runOneOracleTask(
             { host: paths.termBenchDir, container: "/mh", ro: true },
           ],
           network: true,
-          workdir,
+          // Fixed /app at create — podman (unlike docker) refuses to START a
+          // container whose -w dir does not exist, and a nested final
+          // WORKDIR (sanitize-git-repo's /app/dclm) is only created by the
+          // staging replay below. Same pattern as cmd-run.ts's create; the
+          // task workdir is mkdir'd right after start and every solve.sh /
+          // verifier exec still passes it explicitly.
+          workdir: "/app",
           resources,
         }),
       )
@@ -108,7 +114,7 @@ export async function runOneOracleTask(
       log(`  container bring-up failed: ${msg}`)
       return { reward: 0, elapsed: 0.0, error: "setup_failed" }
     }
-    await execFn(buildExecArgv(name, ["mkdir", "-p", "/app", "/tests", "/logs/verifier"]))
+    await execFn(buildExecArgv(name, ["mkdir", "-p", "/app", "/tests", "/logs/verifier", workdir]))
 
     if (staging === "scripts") {
       log(`  setup_deps.sh (${task})...`)

@@ -951,3 +951,44 @@ test("cli main: BenchError from an unknown oracle task → rc 1", async () => {
     errSpy.mockRestore()
   }
 })
+
+// ── nested-WORKDIR bring-up (sanitize-git-repo, TB2.1 oracle 2026-08-16) ──
+// podman (unlike docker) refuses to START a container whose -w dir does not
+// exist. A task Dockerfile ending on `WORKDIR /app/dclm` used to be passed
+// verbatim to podman create, so start died with `workdir "/app/dclm" does
+// not exist` before staging (which creates the dir) could ever run. The fix
+// mirrors cmd-run.ts: create with fixed /app, mkdir -p the task workdir
+// right after start, keep solve/verifier execs on the task workdir.
+test("runOneOracleTask: nested Dockerfile WORKDIR — create argv uses /app, post-start mkdir creates the task workdir", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["sometask"])
+  fs.mkdirSync(path.join(tbRoot, "sometask", "environment"), { recursive: true })
+  fs.writeFileSync(
+    path.join(tbRoot, "sometask", "environment", "Dockerfile"),
+    "FROM ubuntu:24.04\nWORKDIR /app\nWORKDIR dclm\n",
+  )
+  fs.mkdirSync(path.join(tbRoot, "sometask", "solution"), { recursive: true })
+  fs.writeFileSync(path.join(tbRoot, "sometask", "solution", "solve.sh"), "true\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+
+  const argvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    argvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  const errSpy = spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await runOneOracleTask(paths, "sometask", "runtime", fakeExec)
+  } finally {
+    errSpy.mockRestore()
+  }
+
+  const create = argvs.find((a) => a[1] === "create")!
+  expect(create[create.indexOf("-w") + 1]).toBe("/app")
+  const mkdir = argvs.find((a) => a[1] === "exec" && a.includes("mkdir"))!
+  expect(mkdir).toContain("/app/dclm")
+  // solve.sh + verifier still run in the task's own workdir
+  const solve = argvs.find((a) => a.some((s) => s.includes("solve.sh")))!
+  expect(solve[solve.indexOf("-w") + 1]).toBe("/app/dclm")
+})
