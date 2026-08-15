@@ -3,12 +3,74 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-> **MOST RECENT STATE (2026-08-15):** main = `f322143`+. TWO parallel-session
-> blocks apply: this "minimal" 08-15 block (candidate v1 minted + turn-budget
-> fix — read FIRST) and the "harness" 08-14-night block below it (hook-rule
-> program spec'd, `c95cb31`, landed mid-arc — its `main>=c95cb31` is stale,
-> real HEAD is `f322143`+). cc-api-daemon = 0.8.1 (`24f5f12`), pins moved in
-> both plugins.
+> **MOST RECENT STATE (2026-08-15 evening):** main = `fce734c`. Read the
+> "harness" 08-15-evening block FIRST (hook-rule program P0→P4-prep fully
+> built + live, this file's top block); the "minimal" 08-15 block below it
+> (candidate v1 minted + turn-budget fix) and the "harness" 08-14-night
+> block remain as history. cc-api-daemon = 0.8.1 (`24f5f12`), cc-gate-plugin
+> = 0.4.7 DEPLOYED.
+
+## ✅ SESSION END 2026-08-15 evening (`yoo-mac` "harness") — HOOK-RULE PROGRAM P0→P4-PREP FULLY BUILT + LIVE · MAIN `fce734c`
+
+**RESUME PROMPT:**
+```
+Resume kkamak (meta-harness), post-2026-08-15-evening session.
+git pull FIRST; main >= fce734c. HOOK-RULE PROGRAM IS BUILT AND LIVE
+(P0 probes, P1 schema/screen/evaluators, P2 telemetry 0.4.7, P3 ramp,
+P4-prep) — do NOT rebuild any of it; spec + PROBE.md + 4 plans under
+docs/superpowers/ are the record. Boundary ts 1786771179498 (hookRules
+sensor rev). 0.4.7 DEPLOYED (cache grep-verified). §5 sidecar RULED
+APPROVED (bench-only input capture; sidecar impl lands with first bench
+deny arm). Sed-extraction gate item CLOSED (awk scanner 9baeffb).
+Proposer prompt teaches hookRule ops (9a90681) — pipeline armed,
+awaiting ORGANIC proposals.
+
+CURRENT STATE: every rule born shadow; nothing can leave shadow until
+N=20 obs / K=5 sessions / fp<=0.25 accumulate in .km/gate-outcomes
+.ndjson. warn->deny needs a transition candidate + ab arm + explicit
+user spend go (P4). Kill-switch: store-root config hookRulesKillSwitch
+via setHookRulesKillSwitch. Ramp runs at sessionIdle, proposer-lock
+skip-and-retry. Suites at close: opencode 2150/0 · cc-gate 1071/0 ·
+km-crank 403/0 · kkamak 418/0 (kkamak repo commit bf73adc same-window).
+
+ACTIVE LANES, in order:
+LANE 1 — P4 WATCH (passive): next cranks may propose hookRules; watch
+review-gate outcomes + shadow telemetry; first rule leaving shadow on
+any surface = actuator-class boundary ts (stamp in adoption ledger).
+No build work unless a defect surfaces.
+LANE 2 — TB2.1 + SONNET-5/HIGH (ruled 08-14, STILL NOT STARTED):
+INTRO PRICING ENDS 2026-08-31 (+50% after). 89 tasks, podman rig
+ports. Anchors: #10 CC+Sonnet5/high 74.6% $288 = our config; target
+#5 78.9% same spend. Steps: 26 task deltas -> oracle 5x -> sonnet-5
+k=1 calibration -> full k=5 API baseline (~$288, needs go) ->
+boundary + new v0. COST-AXIS-IN-GATE-VERDICTS RULING STILL OPEN.
+
+STANDING: apply artifact-loss defect UNASSIGNED (propose.ts:485-530
+consumes staging before gate; minimal's 08-15 report; rec:
+consume-after-verdict) · yoo-dev ssh-dead · cache cleanup 0.4.3-0.4.6
+(needs both-sessions restart) · project-role trial v1 status check ·
+20 untracked traj ndjson in store (uncommitted bench artifacts, ask).
+
+WORKFLOW NOTE: this session ran orchestrator + peer session "minimal"
+(SendMessage) + cavecrew subagents in parallel DAG lanes per plan —
+3 phases, zero file conflicts, workers never commit, orchestrator
+commits at barriers. Reuse for multi-lane work.
+
+RULES: explicit go before merge/spend · 7b gate + artifact · suites
+serial · NAMED files only · probe the CONSEQUENCE · sim transport =
+production lane · F2 · SITREP.
+```
+
+Session tally (ecfaffc..fce734c, 19 commits + kkamak bf73adc): hook-rule
+program executed end-to-end in one day — P0 probes (4 haiku calls, ONLY
+spend all session; four verdicts green, PROBE.md), P1 schema + screen +
+both-surface shadow evaluators, P2 hookRules sensor contract rev (0.4.7,
+6th golden vector both repos, boundary stamped), P3 ramp machinery
+(transition writer + evidence scan + kill-switch + transition-candidate
+constructor), P4-prep (sidecar ruled, awk extraction fix, proposer
+prompt teaching). Architect-review loops: spec 3 rounds to zero majors;
+P0 plan 13 findings closed. Peer "minimal" ran the bench / latency /
+km-crank / kill-switch lanes throughout.
 
 ## ✅ SESSION END 2026-08-15 (`yoo-mac` "minimal") — FIRST ACCOUNT-GLOBAL CANDIDATE MINTED (v1, INACTIVE) · DAEMON TURN-BUDGET FIX SHIPPED (0.8.1) · TWO CRANK-PATH FIXES · MAIN `f322143`+
 
