@@ -56,9 +56,25 @@ polyglot-c-py polyglot-rust-c protein-assembly rstan-to-pystan);
 remaining 45 manifest tasks untouched upstream but check local
 patches/ overlap at port time. 16 ported-but-not-in-baseline tasks
 need oracle revalidation too.
+BASELINE RULED 08-16 (user): the official leaderboard k=5 job IS our
+TB2.1 baseline — NO $288 baseline run. Data committed 242ba47
+(term-bench2/leaderboard/tb21-cc-sonnet5-anchor-trials.json, all 445
+trials, per-trial duration/tokens/cost/exception; harbor hub job
+84ac1a9d, CC 2.1.205 + claude-sonnet-5, reward 0.7528, $288, 77.1h
+serial, 42 AgentTimeoutError + 6 UnknownApiError). Task split:
+39 solid 5/5 (SKIP — never re-run) · 24 flaky 4/5 (stabilize = +5.4pt
+= 80.6% > #5 target alone) · 14 at 1-3/5 · 7 at 0/5 (build-pov-ray
+db-wal-recovery dna-insert filter-js-from-html make-doom-for-mips
+protein-assembly raman-fitting; lowest priority). Evolution surface =
+50 non-solid tasks (50.2h/$172 serial per arm; ~15-17h scheduled).
 Steps: port (30 fresh + 14 deltas) -> oracle 5x -> sonnet-5 k=1
-calibration -> full k=5 API baseline (~$288, needs go) ->
-boundary + new v0. COST-AXIS-IN-GATE-VERDICTS RULING STILL OPEN.
+RIG-PARITY pass over the 50 non-solid (~5h scheduled, ~$36; anchors
+instrument-mix caveat) -> evolution arms on non-solid subset ->
+one-time full-89 k=5 confirm at program END only ($288 exit cost,
+guards solid-task regressions). Wall-clock inputs now measured, not
+guessed: trial median 5.2 min / mean 10.4 / p90 29; timeouts are 30%
+of serial wall; scheduler width ~4 (mem-bound, VM 4cpu/8GB).
+COST-AXIS-IN-GATE-VERDICTS RULING STILL OPEN.
 
 STANDING: apply artifact-loss defect UNASSIGNED (propose.ts:485-530
 consumes staging before gate; minimal's 08-15 report; rec:
