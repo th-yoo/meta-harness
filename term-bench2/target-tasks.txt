@@ -1,5 +1,4 @@
 adaptive-rejection-sampler
-build-cython-ext
 cancel-async-tasks
 chess-best-move
 configure-git-webserver
@@ -23,8 +22,6 @@ portfolio-optimization
 protein-assembly
 pypi-server
 pytorch-model-cli
-qemu-alpine-ssh
-qemu-startup
 raman-fitting
 sam-cell-seg
 sanitize-git-repo

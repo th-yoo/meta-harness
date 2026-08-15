@@ -124,6 +124,9 @@ WSL2 host has KVM but yoo-dev ssh-dead) · custom-memory-heap-crash
 (environment compiles gcc-13.2 from source — upstream pays once at
 image build, runtime staging pays hours PER ATTEMPT; drop or build
 per-task image pre-bake via podman commit).
+RULED 08-16 (user): build-cython-ext + qemu-startup + qemu-alpine-ssh
+DROPPED — target-tasks.txt = 33. custom-memory-heap-crash still
+undecided (drop vs per-task image pre-bake).
 Steps remaining: rulings -> oracle 5x over final target set ->
 sonnet-5 k=1 RIG-PARITY pass (~2-3h scheduled, ~$25) ->
 evolution arms -> optional full-89 k=5 confirm at program
