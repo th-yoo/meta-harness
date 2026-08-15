@@ -225,6 +225,100 @@ test("Grep call matches on the JSON-serialized tool input", () => {
   expect(outcomesLines(hrDir)[0]).toMatch(/^b5 shadow \d+$/)
 })
 
+// ── adversarial extraction (P4-prep: the two documented sed holes) ───────
+// (a) escaped quotes / backslashes in the value must decode, not truncate;
+// (b) key binding must be FIRST occurrence at the right nesting level —
+//     a later nested object carrying the same key name must not shadow it.
+
+test("hole (a): command containing escaped quotes decodes fully — deny rule on the full text fires", () => {
+  const quoted: HookRuleSpec = {
+    id: "b10",
+    toolMatcher: "Bash",
+    inputPattern: '^echo "hi" && docker ',
+    feedback: "no docker after echo",
+    mode: "deny",
+  }
+  const { scriptPath, hrDir } = writeEval([quoted])
+  const r = run(scriptPath, hrDir, bashInput('echo "hi" && docker ps'))
+  expect(r.exitCode).toBe(0)
+  const parsed = JSON.parse(r.stdout) as { hookSpecificOutput: { permissionDecision: string } }
+  expect(parsed.hookSpecificOutput.permissionDecision).toBe("deny")
+  expect(outcomesLines(hrDir)[0]).toMatch(/^b10 deny \d+$/)
+})
+
+test("hole (a): backslash in the value decodes to a single backslash", () => {
+  const bs: HookRuleSpec = {
+    id: "b11",
+    toolMatcher: "Bash",
+    inputPattern: "^grep \\\\ file$",
+    feedback: "backslash grep",
+    mode: "shadow",
+  }
+  const { scriptPath, hrDir } = writeEval([bs])
+  const r = run(scriptPath, hrDir, bashInput("grep \\ file"))
+  expect(r.exitCode).toBe(0)
+  expect(outcomesLines(hrDir)[0]).toMatch(/^b11 shadow \d+$/)
+})
+
+test("hole (a): Edit file_path with spaces and embedded quotes matches its rule", () => {
+  const editRule: HookRuleSpec = {
+    id: "b12",
+    toolMatcher: "Edit",
+    inputPattern: '^/tmp/my "quoted" dir/',
+    feedback: "quoted dir",
+    mode: "shadow",
+  }
+  const { scriptPath, hrDir } = writeEval([editRule])
+  const stdin = JSON.stringify({
+    session_id: "s1",
+    tool_name: "Edit",
+    tool_input: { file_path: '/tmp/my "quoted" dir/file.txt', old_string: "a", new_string: "b" },
+  })
+  const r = run(scriptPath, hrDir, stdin)
+  expect(r.exitCode).toBe(0)
+  expect(outcomesLines(hrDir)[0]).toMatch(/^b12 shadow \d+$/)
+})
+
+test("hole (b): a later nested object with a `command` key does not shadow the real one (false negative)", () => {
+  const { scriptPath, hrDir } = writeEval([DENY])
+  const stdin = JSON.stringify({
+    session_id: "s1",
+    tool_name: "Bash",
+    tool_input: { command: "docker ps" },
+    later_metadata: { command: "bun safe" },
+  })
+  const r = run(scriptPath, hrDir, stdin)
+  expect(r.exitCode).toBe(0)
+  const parsed = JSON.parse(r.stdout) as { hookSpecificOutput: { permissionDecision: string } }
+  expect(parsed.hookSpecificOutput.permissionDecision).toBe("deny")
+})
+
+test("hole (b): a later nested `command` key matching the pattern does not fire when the real command is clean (false positive)", () => {
+  const { scriptPath, hrDir } = writeEval([DENY])
+  const stdin = JSON.stringify({
+    session_id: "s1",
+    tool_name: "Bash",
+    tool_input: { command: "bun test" },
+    later_metadata: { command: "docker ps" },
+  })
+  const r = run(scriptPath, hrDir, stdin)
+  expect(r.exitCode).toBe(0)
+  expect(r.stdout).toBe("")
+  expect(outcomesLines(hrDir)).toHaveLength(0)
+})
+
+test("hole (b): a nested `tool_name` decoy does not shadow the real top-level tool_name", () => {
+  const { scriptPath, hrDir } = writeEval([EDIT_RULE])
+  const stdin = JSON.stringify({
+    session_id: "s1",
+    tool_name: "Edit",
+    tool_input: { file_path: "/etc/hosts", meta: { tool_name: "Bash" } },
+  })
+  const r = run(scriptPath, hrDir, stdin)
+  expect(r.exitCode).toBe(0)
+  expect(outcomesLines(hrDir)[0]).toMatch(/^b4 shadow \d+$/)
+})
+
 // ── embedding survives quotes (shQuote + build-time JSON escaping) ───────
 
 test("single quotes in pattern/feedback survive script generation end-to-end", () => {
