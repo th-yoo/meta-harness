@@ -838,13 +838,15 @@ test("stageTaskRuntime: the pip step's venv lives at /opt/.venv, not /app/.venv 
   // fixed phase order still runs pip before run (unchanged — see A2/B2
   // tests). System-wide pip (2026-08-16) also means nothing is ever created
   // under /app, so the original B1 hazard (a stray /app/.venv blocking the
-  // later `git clone ... /app`) is gone by construction.
+  // later `git clone ... /app`) is gone by construction. The python:3.11
+  // base additionally emits the version shim as the first exec.
   const steps = expectStageBracketAndUnwrap(recordedArgvs, "container-1", fakePaths, task)
-  expect(steps.length).toBe(2)
+  expect(steps.length).toBe(3)
   const scripts = steps.map((argv) => argv[argv.length - 1]!)
-  expect(scripts[0]).toContain("pip3 install --break-system-packages")
-  expect(scripts[0]).not.toContain("/app/.venv")
-  expect(scripts[1]).toContain("git clone")
+  expect(scripts[0]).toContain("uv python find 3.11")
+  expect(scripts[1]).toContain("pip3 install --break-system-packages")
+  expect(scripts[1]).not.toContain("/app/.venv")
+  expect(scripts[2]).toContain("git clone")
 })
 
 test("stageTaskRuntime: the venv-source guard is present even with no pip step at all (harmless no-op — missing venv doesn't trip set -e)", async () => {
@@ -1248,4 +1250,85 @@ test("parseTaskDockerfile: image-level pip installs route system-wide, not into 
   expect(staging.steps).toEqual([
     { kind: "pip", packages: ["pandas==2.2.3", "pyarrow==17.0.0"], systemWide: true },
   ])
+})
+
+// mteb-retrieve's TB2.1 Dockerfile (oracle 2026-08-16):
+//   RUN pip install --no-cache-dir --upgrade pip \
+//    && pip install --no-cache-dir torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cpu \
+//    && pip install --no-cache-dir mteb==1.36.8 transformers==4.48.3
+// The old extractor reset foundInstall on EVERY "-" token, so a flag between
+// "install" and the first package name silently dropped the whole package
+// list — staging "succeeded" with mteb never installed. Flags must be
+// skipped (value-taking index flags consume their value), and --index-url
+// only governs its own &&-segment: torch comes from the pytorch CPU index,
+// mteb/transformers from PyPI — one pip step per index group.
+test("parseTaskDockerfile: flags between install and packages don't drop packages; --index-url is honored per &&-segment", () => {
+  const dir = tmpDir()
+  mkdirSync(path.join(dir, "t", "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, "t", "environment", "Dockerfile"),
+    "FROM python:3.11-slim\n" +
+      "RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cpu && pip install --no-cache-dir mteb==1.36.8 transformers==4.48.3\n",
+  )
+  const staging = parseTaskDockerfile(fakeBenchPaths(dir), "t")
+  expect(staging.steps).toEqual([
+    {
+      kind: "pip",
+      packages: ["torch==2.7.1", "torchvision==0.22.1"],
+      systemWide: true,
+      indexUrl: "https://download.pytorch.org/whl/cpu",
+    },
+    { kind: "pip", packages: ["mteb==1.36.8", "transformers==4.48.3"], systemWide: true },
+  ])
+})
+
+// python-version shim (portfolio-optimization / gcode-to-text, oracle
+// 2026-08-16): a python:3.13-base task's solve builds C extensions with the
+// shared image's system python 3.12 (cp312 .so) while its test.sh runs
+// `uvx -p 3.13` — which cannot import them. The fix: when the task's base
+// image pins python:<X.Y> and X.Y differs from the image's system 3.12,
+// staging's FIRST exec shims /usr/local/bin/python3, python, pip3 and pip
+// onto the uv-managed CPython X.Y (pre-baked in the bench image), so bare
+// python/pip everywhere in that container IS the task's pinned version —
+// and apt-installed Debian python libs (gcode-to-text's python3-opencv)
+// land in 3.12 where they are invisible, exactly as on the real base image.
+test("stageTaskRuntime: python:3.13 base image emits a python-shim exec before apt/steps", async () => {
+  const dir = tmpDir()
+  const task = "py313-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(
+    path.join(dir, task, "environment", "Dockerfile"),
+    "FROM python:3.13-slim-bookworm\nRUN apt-get update && apt-get install -y git\nRUN echo hi\n",
+  )
+  const fakePaths = fakeBenchPaths(dir)
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+
+  // exec order: [cp env], shim, apt, ...steps..., [rm stage]
+  const scripts = recordedArgvs.map((a) => a[a.length - 1] ?? "")
+  const shimIdx = scripts.findIndex((s) => s.includes("uv python find 3.13"))
+  const aptIdx = scripts.findIndex((s) => s.includes("apt-get install"))
+  expect(shimIdx).toBeGreaterThan(-1)
+  expect(aptIdx).toBeGreaterThan(shimIdx)
+  expect(scripts[shimIdx]).toContain("/usr/local/bin/python3")
+  expect(scripts[shimIdx]).toContain("/usr/local/bin/pip3")
+})
+
+test("stageTaskRuntime: ubuntu:24.04 base image emits NO python shim", async () => {
+  const dir = tmpDir()
+  const task = "plain-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(path.join(dir, task, "environment", "Dockerfile"), "FROM ubuntu:24.04\nRUN echo hi\n")
+  const fakePaths = fakeBenchPaths(dir)
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+  expect(recordedArgvs.some((a) => (a[a.length - 1] ?? "").includes("uv python find"))).toBe(false)
 })

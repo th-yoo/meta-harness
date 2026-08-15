@@ -236,6 +236,10 @@ export interface StagingStep {
    * later bare-`python3` step (including the task's own solve.sh, run outside
    * staging) can see them. See the module header's pip porting note. */
   systemWide?: boolean
+  /** pip: the `--index-url` governing this step's packages (captured
+   * per-&&-segment by extractPipSegments — mteb-retrieve's torch-from-
+   * pytorch-cpu-index line). Absent = default index (PyPI). */
+  indexUrl?: string
   /** run: true for a file-deleting cleanup line (`rm ...` / `find ...
    * -delete`) that stageTaskRuntime executes BEST-EFFORT — a nonzero exit is
    * logged, not thrown (see the module header's env-fidelity fix note and
@@ -445,40 +449,78 @@ function hasPip(bodyLower: string): boolean {
   return /\bpip3?\s+install\b|\buv\s+pip\s+install\b|\buv\s+add\b/.test(bodyLower)
 }
 
-/** True if a pip RUN line carries `--break-system-packages` (PEP 668 / the
- * Docker-explicit "install into the SYSTEM python" request) — see the
- * StagingStep.systemWide field and the pip porting note. */
-function hasBreakSystemPackages(bodyLower: string): boolean {
-  return bodyLower.includes("--break-system-packages")
-}
-
 function hasUvRun(bodyLower: string): boolean {
   return /\buv\s+run\b/.test(bodyLower)
 }
 
-/** Verbatim port of gen_setup_deps.py's extract_pip_packages, including its
- * quirk of skipping any token merely *starting with* "pip"/"pip3"/"uv"
- * (e.g. a hypothetical "uvicorn" package spec would also be skipped). */
-function extractPipPackages(body: string): string[] {
-  const packages: string[] = []
-  let foundInstall = false
-  for (const rawToken of body.split(/[\s&|;\\]+/)) {
-    const token = rawToken.replace(/^["']+/, "").replace(/["']+$/, "")
-    if (!token) continue
-    if (/^(pip3?|uv)/.test(token)) continue
-    if (token === "install" || token === "add") {
-      foundInstall = true
-      continue
+/** One `pip install` command's extraction: its package specs plus the
+ * `--index-url` governing THAT command (if any). */
+export interface PipSegment {
+  packages: string[]
+  indexUrl?: string
+}
+
+/** pip flags that take a value in the following token — the value must be
+ * consumed so it is never mistaken for a package spec. */
+const PIP_VALUE_FLAGS = new Set([
+  "--index-url",
+  "-i",
+  "--extra-index-url",
+  "--find-links",
+  "-f",
+  "-r",
+  "--requirement",
+  "-c",
+  "--constraint",
+  "-t",
+  "--target",
+])
+
+/** Successor to the gen_setup_deps.py extract_pip_packages port. Two fixes
+ * over the generator's logic (mteb-retrieve's TB2.1 Dockerfile, oracle
+ * 2026-08-16):
+ *  - a "-" token no longer aborts package collection (the generator reset
+ *    its found-install flag on ANY flag, so `pip install --no-cache-dir
+ *    pkg==1` extracted NOTHING and staging "succeeded" without the
+ *    packages). Flags are skipped; value-taking flags consume their value.
+ *  - `--index-url` is captured per &&/;-segment, so a torch-from-pytorch-cpu
+ *    segment keeps its index while a sibling PyPI segment doesn't.
+ * The generator quirk of skipping any token merely *starting with*
+ * "pip"/"pip3"/"uv" (e.g. "uvicorn") is retained. */
+function extractPipSegments(body: string): PipSegment[] {
+  const segments: PipSegment[] = []
+  for (const seg of body.split(/&&|\|\||;/)) {
+    const packages: string[] = []
+    let indexUrl: string | undefined
+    let foundInstall = false
+    const tokens = seg
+      .split(/[\s\\]+/)
+      .map((t) => t.replace(/^["']+/, "").replace(/["']+$/, ""))
+      .filter((t) => t.length > 0)
+    for (let i = 0; i < tokens.length; i++) {
+      const token = tokens[i]!
+      if (/^(pip3?|uv)/.test(token)) continue
+      if (token === "install" || token === "add") {
+        foundInstall = true
+        continue
+      }
+      if (token.startsWith("-")) {
+        const eq = token.indexOf("=")
+        const flag = eq > 0 ? token.slice(0, eq) : token
+        const inline = eq > 0 ? token.slice(eq + 1) : undefined
+        if (PIP_VALUE_FLAGS.has(flag)) {
+          const value = inline ?? tokens[++i]
+          if ((flag === "--index-url" || flag === "-i") && value) indexUrl = value
+        }
+        continue
+      }
+      if (foundInstall && /^[a-zA-Z]/.test(token)) {
+        packages.push(token)
+      }
     }
-    if (token.startsWith("-")) {
-      foundInstall = false
-      continue
-    }
-    if (foundInstall && /^[a-zA-Z]/.test(token)) {
-      packages.push(token)
-    }
+    if (packages.length > 0) segments.push({ packages, indexUrl })
   }
-  return packages
+  return segments
 }
 
 // File-deleting cleanup lines: EXECUTED (best-effort — see the module
@@ -502,14 +544,12 @@ interface RawRun {
  * active at the last pip-classified RUN line (there is only ever ONE combined
  * pip step regardless of how many RUN lines contributed to it — see
  * parseTaskDockerfile — so this is the closest single cwd to attach to it).
- * A pip line carrying `--break-system-packages` routes to `systemPipPackages`
- * (installed system-wide) instead of `pipPackages` (the isolated venv) — see
- * hasBreakSystemPackages / StagingStep.systemWide. */
+ * Every pip line routes system-wide (see the hasPip branch); segments carry
+ * a per-&&-command --index-url when present — see extractPipSegments. */
 function classifyRun(
   body: string,
   cwd: string,
-  pipPackages: string[],
-  systemPipPackages: string[],
+  pipSegments: PipSegment[],
   rawRunLines: RawRun[],
   aptPackages: string[],
   pipCwdState: { cwd: string },
@@ -535,7 +575,7 @@ function classifyRun(
     // and the bench image sets PIP_BREAK_SYSTEM_PACKAGES=1, so system-wide
     // is both safe and faithful. The venv machinery (PIP_VENV,
     // VENV_ACTIVATE_GUARD) stays for compat with any future explicit use.
-    systemPipPackages.push(...extractPipPackages(body))
+    pipSegments.push(...extractPipSegments(body))
     classified = true
   }
   if (hasUvRun(bodyLower)) {
@@ -648,8 +688,7 @@ export function parseTaskDockerfile(paths: BenchPaths, task: string): TaskStagin
   let baseImage = ""
   const envPairs: [string, string][] = []
   const rawCopies: { src: string; dst: string; cwd: string }[] = []
-  const pipPackages: string[] = []
-  const systemPipPackages: string[] = []
+  const pipSegments: PipSegment[] = []
   const rawRunLines: RawRun[] = []
   const rawAptPackages: string[] = []
   const pipCwdState = { cwd: DEFAULT_CWD }
@@ -717,7 +756,7 @@ export function parseTaskDockerfile(paths: BenchPaths, task: string): TaskStagin
         break
       }
       case "RUN": {
-        classifyRun(body, cwd, pipPackages, systemPipPackages, rawRunLines, rawAptPackages, pipCwdState)
+        classifyRun(body, cwd, pipSegments, rawRunLines, rawAptPackages, pipCwdState)
         break
       }
       default: {
@@ -743,18 +782,26 @@ export function parseTaskDockerfile(paths: BenchPaths, task: string): TaskStagin
   const steps: StagingStep[] = []
   for (const [k, v] of envPairs) steps.push({ kind: "env", key: k, value: v })
   for (const rc of rawCopies) steps.push(resolveCopyStep(paths, task, rc.src, rc.dst, rc.cwd))
-  // System-wide pip step FIRST (--break-system-packages lines — installed into
-  // the system python so bare `python3` everywhere, including the task's own
-  // solve.sh, sees them), then the isolated-venv pip step. Both occupy the
-  // one "pip" phase slot, ahead of every run step (see module header).
-  if (systemPipPackages.length > 0) {
-    steps.push({ kind: "pip", packages: systemPipPackages, systemWide: true })
+  // Pip steps occupy the one "pip" phase slot, ahead of every run step (see
+  // module header). All are system-wide (2026-08-16 routing); segments are
+  // grouped by index URL in first-encounter order — the default-index group
+  // merges into a single step (preserving the old one-combined-step shape),
+  // while each --index-url'd segment keeps its own step so its index only
+  // governs its own packages (mteb-retrieve: torch from the pytorch CPU
+  // index, mteb/transformers from PyPI).
+  const pipGroups = new Map<string, string[]>()
+  for (const seg of pipSegments) {
+    const key = seg.indexUrl ?? ""
+    const group = pipGroups.get(key)
+    if (group) group.push(...seg.packages)
+    else pipGroups.set(key, [...seg.packages])
   }
-  if (pipPackages.length > 0) {
+  for (const [indexUrl, packages] of pipGroups) {
     steps.push({
       kind: "pip",
-      packages: pipPackages,
-      cwd: pipCwdState.cwd === DEFAULT_CWD ? undefined : pipCwdState.cwd,
+      packages,
+      systemWide: true,
+      ...(indexUrl ? { indexUrl } : {}),
     })
   }
   for (const rr of rawRunLines) {
@@ -864,6 +911,39 @@ export async function stageTaskRuntime(
   // failing copy/pip command fails loud instead of exiting 0.
   const setE = "set -euo pipefail\n"
 
+  // python-version shim — FIRST exec, ahead even of apt. When the task's
+  // base image pins python:<X.Y> and X.Y != the shared image's system
+  // python (3.12), shim /usr/local/bin so bare python3/python/pip3/pip
+  // resolve to the uv-managed CPython X.Y pre-baked into the bench image
+  // (term-bench2/Containerfile `uv python install`). Restores base-image
+  // fidelity for the python:3.13 task class: C extensions build against the
+  // SAME interpreter `uvx -p 3.13` tests import them with
+  // (portfolio-optimization), and apt Debian python libs land in 3.12 where
+  // the task python cannot see them (gcode-to-text's python3-opencv) —
+  // exactly the layout of the real base image. /usr/local/bin precedes
+  // /usr/bin on PATH, container is a per-attempt throwaway.
+  const pyMatch = /^python:(\d+\.\d+)/.exec(staging.baseImage)
+  if (pyMatch && pyMatch[1] !== "3.12") {
+    const v = pyMatch[1]!
+    const shim = [
+      `P="$(uv python find ${v})"`,
+      `ln -sfn "$P" /usr/local/bin/python3`,
+      `ln -sfn "$P" /usr/local/bin/python`,
+      `printf '#!/bin/sh\\nexec "%s" -m pip "$@"\\n' "$P" > /usr/local/bin/pip3`,
+      `chmod +x /usr/local/bin/pip3`,
+      `cp /usr/local/bin/pip3 /usr/local/bin/pip`,
+      `"$P" -m ensurepip --upgrade >/dev/null 2>&1 || true`,
+    ].join("\n")
+    log(`  staging (runtime): ${task} python shim -> ${v} (base ${staging.baseImage})`)
+    const shimResult = await execFn(buildExecArgv(name, ["bash", "-c", `${setE}${shim}`]))
+    if (shimResult.rc !== 0) {
+      throw new BenchError(
+        `stageTaskRuntime(${task}): python ${v} shim failed: exit ${shimResult.rc}` +
+          (shimResult.stderr.trim() ? ` — ${shimResult.stderr.trim()}` : ""),
+      )
+    }
+  }
+
   // apt install — the FIRST step, ahead of copy/pip/run, when this task's
   // Dockerfile declared any `apt-get install`/`apt install` packages (Option
   // A: podman containers have real root + network, so this genuinely
@@ -899,7 +979,8 @@ export async function stageTaskRuntime(
         // steps AND the task's own solve.sh, which runs outside staging) sees
         // these packages. Docker-faithful (chess-best-move, make-mips-
         // interpreter, make-doom-for-mips). See StagingStep.systemWide.
-        script = `${setE}${prelude}pip3 install --break-system-packages ${pkgs}`
+        const indexArg = step.indexUrl ? `--index-url "${step.indexUrl}" ` : ""
+        script = `${setE}${prelude}pip3 install --break-system-packages ${indexArg}${pkgs}`
       } else {
         script =
           setE +
