@@ -127,10 +127,17 @@ per-task image pre-bake via podman commit).
 RULED 08-16 (user): build-cython-ext + qemu-startup + qemu-alpine-ssh
 DROPPED — target-tasks.txt = 33. custom-memory-heap-crash still
 undecided (drop vs per-task image pre-bake).
-Steps remaining: rulings -> oracle 5x over final target set ->
-sonnet-5 k=1 RIG-PARITY pass (~2-3h scheduled, ~$25) ->
+AUTH RULED 08-16 (user): NO ANTHROPIC_API_KEY — every lane 2 run
+(k=1 parity, arms) rides the OAuth Max20 lane (CC-oauth-in-container
+recipe, freshness-gated parallel). Consequence for the cost axis:
+no per-trial $ from OAuth — pass-rate-per-dollar must use TOKEN
+counts, not measured spend (anchor's $ column stays reference-only).
+Steps remaining: rulings -> oracle 5x over final target set
+(RUNNING 08-16, 5 passes, scheduler width ~4 on VM now 6cpu/10GB) ->
+sonnet-5 k=1 RIG-PARITY pass (~2-3h scheduled, OAuth quota) ->
 evolution arms -> optional full-89 k=5 confirm at program
-END only ($288/$432 post-08-31, guards solid-task regressions). Wall-clock inputs now measured, not
+END only ($288/$432 post-08-31 IF ever run on key, guards
+solid-task regressions). Wall-clock inputs now measured, not
 guessed: trial median 5.2 min / mean 10.4 / p90 29; timeouts are 30%
 of serial wall; scheduler width ~4 (mem-bound, VM 4cpu/8GB).
 COST-AXIS-IN-GATE-VERDICTS RULING STILL OPEN.
