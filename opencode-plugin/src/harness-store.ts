@@ -574,6 +574,15 @@ export interface MhConfig {
    * exist, the external-evidence section is disabled entirely for that
    * propose cycle — never show unchecked evidence. */
   activeSplitFile: string
+  /** hook-rule ramp thresholds (hook-rule evolution spec §4; defaults
+   * N=20 / K=5 / θ=0.25 — every applied transition records the values it
+   * was judged against, so tuning these never rewrites history). */
+  hookRuleRampN: number
+  hookRuleRampK: number
+  hookRuleRampTheta: number
+  /** Global hook-rule kill-switch: while true, both evaluators treat deny
+   * as warn (exported into .km/hook-rules.json's killSwitch field). */
+  hookRulesKillSwitch: boolean
 }
 
 // Exported: cc-host.ts's runClaudeCodeTaskAgent falls back to this (bare id,
@@ -605,6 +614,10 @@ export function readMhConfig(configDir: string = accountMetaRoot()): MhConfig {
     recordTimeouts: raw.recordTimeouts ?? false,
     externalEvidenceDir: raw.externalEvidenceDir ?? "",
     activeSplitFile: raw.activeSplitFile ?? "",
+    hookRuleRampN: raw.hookRuleRampN ?? 20,
+    hookRuleRampK: raw.hookRuleRampK ?? 5,
+    hookRuleRampTheta: raw.hookRuleRampTheta ?? 0.25,
+    hookRulesKillSwitch: raw.hookRulesKillSwitch ?? false,
   }
 }
 
@@ -1184,6 +1197,55 @@ export function applyPlaybookOps(base: Playbook, ops: PlaybookOp[]): Playbook {
     }
   }
   return { schemaVersion: 1, nextId, bullets }
+}
+
+// ── hook-rule ramp transitions (hook-rule evolution spec §4) ────────────────
+
+export interface HookRuleTransitionEvidence {
+  matchedSessions: number
+  matchedObs: number
+  fpRate: number
+  /** F2: ids only — never input text */
+  sessionIDs: string[]
+}
+
+/** The ramp's ONLY mutation path for a rule's mode — deliberately outside
+ * applyPlaybookOps and the proposal pipeline (nothing proposer-authored
+ * changes; text/pattern/feedback untouched by construction). Precondition-
+ * checked against the CURRENT active playbook so stale evidence can never
+ * apply: returns false (no writes) unless the bullet is active, carries a
+ * hookRule, and its mode equals `from`. Appends the transition ledger line
+ * (evidence + the thresholds it was judged against) then atomically rewrites
+ * active playbook.json. Never throws. Callers re-export the compiled table. */
+export function hookRuleTransition(
+  storeRoot: string,
+  bulletId: string,
+  from: "shadow" | "warn" | "deny",
+  to: "shadow" | "warn" | "deny",
+  evidence: HookRuleTransitionEvidence,
+): boolean {
+  try {
+    const pb = readPlaybook(storeRoot)
+    if (!pb) return false
+    const b = pb.bullets.find((x) => x.id === bulletId)
+    if (!b || b.status !== "active" || !b.hookRule || b.hookRule.mode !== from) return false
+    const cfg = readMhConfig()
+    const entry = {
+      ts: Date.now(),
+      bulletId,
+      from,
+      to,
+      evidence,
+      thresholds: { n: cfg.hookRuleRampN, k: cfg.hookRuleRampK, theta: cfg.hookRuleRampTheta },
+    }
+    fs.appendFileSync(path.join(storeRoot, "hook-rule-transitions.jsonl"), JSON.stringify(entry) + "\n")
+    b.hookRule.mode = to
+    b.updatedAt = new Date().toISOString()
+    writeJsonAtomic(activePath(storeRoot, "playbook.json"), pb)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** Canonical (order-independent, key-order-fixed) JSON serialization of a

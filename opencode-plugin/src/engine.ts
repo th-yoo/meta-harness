@@ -58,6 +58,7 @@ import {
 } from "./harness-store.ts"
 import { exportRuleChecks } from "./rule-checks-export.ts"
 import { exportHookRules } from "./hook-rules-export.ts"
+import { rampScan } from "./hook-rule-ramp.ts"
 import { promptHumanScore, handleScoreCommand } from "./score.ts"
 import { runJudge, JUDGE_SYSTEM_PROMPT, type JudgeVerdict } from "./judge.ts"
 import {
@@ -676,6 +677,21 @@ export class EvolutionEngine {
       } else if (res.action === "abandoned") {
         await this.host.log("warn", `[hook:event] trial abandoned ${l.scope}: ${res.reason}`)
       }
+    }
+
+    // Hook-rule ramp scan (spec §4): evidence only changes when a session
+    // lands, so session close is the only trigger needed. rampScan is
+    // internally lock-aware (skips under an in-flight proposer) and
+    // fail-open; a ramp problem must never break the score path.
+    try {
+      for (const l of [pgLayer, prLayer]) {
+        const transitions = rampScan(this.worktree, l.root)
+        for (const t of transitions) {
+          await this.host.log("info", `[hook:event] hookRule ramp ${l.scope}: ${t.bulletId} ${t.from}→${t.to} (fp=${t.evidence.fpRate}, sessions=${t.evidence.matchedSessions}, obs=${t.evidence.matchedObs})`)
+        }
+      }
+    } catch {
+      /* fail-open */
     }
 
     // Selection-gated auto-propose.
