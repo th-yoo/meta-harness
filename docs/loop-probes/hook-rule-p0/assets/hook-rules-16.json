@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "killSwitch": false,
+  "rules": [
+    { "id": "r01", "event": "PreToolUse", "toolMatcher": "Bash", "inputPattern": "^(npm|yarn) +(install|add)( |$)", "feedback": "use bun add", "mode": "deny" },
+    { "id": "r02", "event": "PreToolUse", "toolMatcher": "Bash", "inputPattern": "^pip +install ", "feedback": "use uv pip", "mode": "deny" },
+    { "id": "r03", "event": "PreToolUse", "toolMatcher": "Bash", "inputPattern": "^rm +-rf +/(etc|usr|var)(/|$)", "feedback": "refuse system rm", "mode": "deny" },
+    { "id": "r04", "event": "PreToolUse", "toolMatcher": "Bash", "inputPattern": "^git +push +.*--force", "feedback": "no force push", "mode": "deny" },
+    { "id": "r05", "event": "PreToolUse", "toolMatcher": "Bash", "inputPattern": "^curl +[^|]*\\| *(bash|sh)( |$)", "feedback": "no curl-pipe-sh", "mode": "warn" },
+    { "id": "r06", "event": "PreToolUse", "toolMatcher": "Bash", "inputPattern": "^(cat|head|tail) +[^ ]*\\.(log|ndjson)", "feedback": "use Read tool", "mode": "warn" },
+    { "id": "r07", "event": "PreToolUse", "toolMatcher": "Bash", "inputPattern": "^sed +-i ", "feedback": "use Edit tool", "mode": "warn" },
+    { "id": "r08", "event": "PreToolUse", "toolMatcher": "Bash", "inputPattern": "^echo +.*>>? *[^ ]+\\.(ts|js|py)( |$)", "feedback": "use Write tool", "mode": "warn" },
+    { "id": "r09", "event": "PreToolUse", "toolMatcher": "Bash", "inputPattern": "^(python|python3) +-m +pytest", "feedback": "use bun test", "mode": "warn" },
+    { "id": "r10", "event": "PreToolUse", "toolMatcher": "Bash", "inputPattern": "^docker ", "feedback": "use podman", "mode": "warn" },
+    { "id": "r11", "event": "PreToolUse", "toolMatcher": "Bash", "inputPattern": "^grep +[^ ]*-r", "feedback": "use Grep tool", "mode": "shadow" },
+    { "id": "r12", "event": "PreToolUse", "toolMatcher": "Bash", "inputPattern": "^find +[./]", "feedback": "use Glob tool", "mode": "shadow" },
+    { "id": "r13", "event": "PreToolUse", "toolMatcher": "Bash", "inputPattern": "^(ls|pwd|whoami)( |$)", "feedback": "shadow traffic probe", "mode": "shadow" },
+    { "id": "r14", "event": "PreToolUse", "toolMatcher": "Edit", "inputPattern": "^/(etc|usr)/", "feedback": "no system edits", "mode": "shadow" },
+    { "id": "r15", "event": "PreToolUse", "toolMatcher": "Write", "inputPattern": "\\.(env|pem|key)$", "feedback": "no secret writes", "mode": "shadow" },
+    { "id": "r16", "event": "PreToolUse", "toolMatcher": "Bash", "inputPattern": "^(a+|b+|c+)+(x|y)$", "feedback": "worst-case screen-evader shape", "mode": "shadow" }
+  ]
+}
