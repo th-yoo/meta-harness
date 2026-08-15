@@ -32,6 +32,7 @@ import { captureFixtureRef, bunGitRunner } from "./fixture-ref.ts"
 import { appendSensor } from "./sensor-append.ts"
 import { runCheck } from "./check-runner.ts"
 import { evaluateRuleChecks } from "./rule-checks.ts"
+import { readAndConsumeHookRuleOutcomes } from "./hook-rule-outcomes.ts"
 import type { CcGateState, CoreDeps, DeliveryMode, EmitPlan, GaugeOffReason, SensorLine } from "./types.ts"
 
 const MH_CHILD_ENV = "MH_CHILD"
@@ -369,6 +370,13 @@ async function main(): Promise<void> {
   if (line) {
     const ruleChecks = await evaluateRuleChecks(cwd, (cmd, c, t) => runCheck(cmd, c, t))
     if (ruleChecks) line = { ...line, ruleChecks }
+  }
+  // hook-rule evolution P2: consume the dispatch-side per-session
+  // accumulator and annotate — same discipline as ruleChecks above
+  // (annotation only, after the decision is final, fail-open inside).
+  if (line) {
+    const hookRules = readAndConsumeHookRuleOutcomes(cwd, sessionId)
+    if (hookRules) line = { ...line, hookRules }
   }
   if (line) appendSensor(cwd, gateConfigRaw, line, deps.log)
 

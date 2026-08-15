@@ -299,6 +299,13 @@ export interface SensorLine {
    * influenced the Stop decision. Caps: RULE_CHECKS_MAX / _BUDGET_MS
    * (src/rule-checks.ts); skips/refusals are visible states, not silence. */
   ruleChecks?: RuleCheckOutcome[]
+  /** hook-rule evolution P2 (spec §5): per-session PreToolUse hook-rule
+   * outcomes, aggregated from the dispatch-side accumulator at Stop
+   * (src/hook-rule-outcomes.ts). Additive optional — absent when no rule
+   * matched this session (absent is the cleaner line). Lines with
+   * pluginVersion >= 0.4.7 may carry it; earlier lines never do. F2:
+   * id/matched/mode/ms only — never input text. */
+  hookRules?: { id: string; matched: boolean; mode: string; ms: number }[]
 }
 
 /** a3 live adapter (spec §4): outcome of one shadow rule check. Defined here

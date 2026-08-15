@@ -135,6 +135,19 @@ function assertConformsToSensorContract(line: Record<string, unknown>): void {
     }
   }
 
+  // hook-rule evolution P2: PreToolUse hook-rule outcomes, when present.
+  if ("hookRules" in line) {
+    expect(Array.isArray(line.hookRules)).toBe(true)
+    for (const hr of line.hookRules as Array<Record<string, unknown>>) {
+      expect(typeof hr.id).toBe("string")
+      expect(typeof hr.matched).toBe("boolean")
+      expect(typeof hr.mode).toBe("string")
+      expect(typeof hr.ms).toBe("number")
+      expect("inputPattern" in hr).toBe(false) // F2: never the pattern
+      expect("feedback" in hr).toBe(false) // nor proposer text
+    }
+  }
+
   // This producer can always determine its own version, so the optional
   // field is in practice always stamped — and must match the package it
   // shipped from, or a consumer cannot attribute the line.
@@ -259,6 +272,50 @@ test("SHADOW + byte-identity: absent rule-checks file -> emitted line has NO rul
     expect("ruleChecks" in line).toBe(false)
     expect(line.accepted).toBe(true)
     expect(line.rounds).toEqual(["accepted"])
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true })
+  }
+})
+
+// ── hook-rule evolution P2: accumulator-fed hookRules on the Stop path ──
+
+test("hookRules: absent accumulator -> emitted line has NO hookRules key", async () => {
+  const repo = mkRepo({ check: "true" })
+  try {
+    await edit(repo, "sid-hr-absent")
+    await stop(repo, "sid-hr-absent")
+    const lines = sensorLines(repo)
+    expect(lines.length).toBe(1)
+    const line = lines[0]!
+    assertConformsToSensorContract(line)
+    expect("hookRules" in line).toBe(false)
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true })
+  }
+})
+
+test("hookRules: session accumulator is attached, consumed, and F2-clean; other session's file survives", async () => {
+  const repo = mkRepo({ check: "true" })
+  try {
+    fs.mkdirSync(path.join(repo, ".km"), { recursive: true })
+    const acc = path.join(repo, ".km", "hook-rule-outcomes-sid-hr-live.ndjson")
+    const other = path.join(repo, ".km", "hook-rule-outcomes-sid-other.ndjson")
+    const row = JSON.stringify({ ts: 1, outcomes: [{ id: "b12", matched: true, mode: "shadow", ms: 0.05 }] })
+    fs.writeFileSync(acc, row + "\n")
+    fs.writeFileSync(other, row + "\n")
+    await edit(repo, "sid-hr-live")
+    await stop(repo, "sid-hr-live")
+    const lines = sensorLines(repo)
+    expect(lines.length).toBe(1)
+    const line = lines[0]!
+    assertConformsToSensorContract(line)
+    expect(line.hookRules).toHaveLength(1)
+    const hr = (line.hookRules as Array<{ id: string; matched: boolean; mode: string; ms: number }>)[0]!
+    expect(hr.id).toBe("b12")
+    expect(hr.matched).toBe(true)
+    expect(hr.mode).toBe("shadow")
+    expect(fs.existsSync(acc)).toBe(false) // consumed
+    expect(fs.existsSync(other)).toBe(true) // untouched
   } finally {
     fs.rmSync(repo, { recursive: true, force: true })
   }
