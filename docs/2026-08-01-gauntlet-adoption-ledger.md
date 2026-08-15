@@ -806,3 +806,11 @@ five architect rounds recorded in
   P3 gate item standing: bench-side sed input-extraction holes (spec §8)
   must close before any bench deny arm. Suites at deploy: opencode
   2109/0 · cc-gate 1071/0 · km-crank 403/0 · kkamak 418/0.
+  - **0.4.7 DEPLOY (2026-08-15, yoo-mac):** `km-refresh.sh --force` from
+    main (post-P3), cache grep-verified (`0.4.7/src/hook-rule-outcomes.ts`
+    present). hookRules sensor field live from the next session. §5
+    sidecar RULED APPROVED (bench-only input capture); bench
+    sed-extraction gate item CLOSED (awk scanner, `9baeffb`); proposer
+    prompt now teaches the hookRule op contract (`9a90681`) — first
+    organic hookRule proposals possible from the next crank. Stale cache
+    dirs 0.4.3–0.4.6 remain pending the session-restart cleanup batch.
