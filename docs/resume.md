@@ -38,11 +38,26 @@ LANE 1 — P4 WATCH (passive): next cranks may propose hookRules; watch
 review-gate outcomes + shadow telemetry; first rule leaving shadow on
 any surface = actuator-class boundary ts (stamp in adoption ledger).
 No build work unless a defect surfaces.
-LANE 2 — TB2.1 + SONNET-5/HIGH (ruled 08-14, STILL NOT STARTED):
-INTRO PRICING ENDS 2026-08-31 (+50% after). 89 tasks, podman rig
-ports. Anchors: #10 CC+Sonnet5/high 74.6% $288 = our config; target
-#5 78.9% same spend. Steps: 26 task deltas -> oracle 5x -> sonnet-5
-k=1 calibration -> full k=5 API baseline (~$288, needs go) ->
+LANE 2 — TB2.1 + SONNET-5/HIGH (ruled 08-14; scope CONFIRMED 08-16
+= TB2.1 full 89, user-ruled via AskUserQuestion): INTRO PRICING ENDS
+2026-08-31 (+50% after). Anchors: #10 CC+Sonnet5/high 74.6% $288 =
+our config; target #5 78.9% same spend.
+PORT SCOPE (measured 08-16): upstream TB2.1 = 89 tasks; canonical
+source = harbor-framework/terminal-bench-2-1 repo tasks/ (verified
+name-identical to 89; PR #53 on old terminal-bench-2 repo still
+OPEN — do NOT port from the PR). Our rig: manifest.json 59 ported,
+baseline-tasks.txt 43 runnable ("TB2.0 43" = OUR subset, not
+upstream count). Work = 30 fresh ports (13 of which carry 2.1 fixes
+automatically) + 14 delta re-syncs on already-ported tasks
+(adaptive-rejection-sampler build-pmars compile-compcert
+configure-git-webserver extract-moves-from-video filter-js-from-html
+financial-document-processor fix-git mcmc-sampling-stan overfull-hbox
+polyglot-c-py polyglot-rust-c protein-assembly rstan-to-pystan);
+remaining 45 manifest tasks untouched upstream but check local
+patches/ overlap at port time. 16 ported-but-not-in-baseline tasks
+need oracle revalidation too.
+Steps: port (30 fresh + 14 deltas) -> oracle 5x -> sonnet-5 k=1
+calibration -> full k=5 API baseline (~$288, needs go) ->
 boundary + new v0. COST-AXIS-IN-GATE-VERDICTS RULING STILL OPEN.
 
 STANDING: apply artifact-loss defect UNASSIGNED (propose.ts:485-530
