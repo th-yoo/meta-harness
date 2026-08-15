@@ -1,0 +1,7 @@
+{
+  "proposerModel": "anthropic/claude-opus-4-8",
+  "proposerVariant": "high",
+  "scope": "account-global",
+  "kind": "propose",
+  "createdAt": "2026-07-14T11:53:11.495Z"
+}
