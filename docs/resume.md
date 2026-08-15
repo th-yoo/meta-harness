@@ -55,11 +55,10 @@ OPEN DEFECTS (logged, unfixed):
     flake was a REAL instrument bug — machine-global /tmp markers
     cross-talked between concurrent suites (false accepts on degraded
     artifacts); now APPDIR-scoped + condition-based waiting.
- 2. DETACHED-LANE STDERR BLINDNESS: worker stderr ignored by
-    defaultWorkerSpawn; daemon spawned >/dev/null by ensureDaemon. Every
-    detached failure is silent. Debug recipe (turn-budget plan Task 5
-    Step 3): hand-launch daemon with env + logfile, rerun worker
-    foreground with its argsfile. Follow-up: stderr -> ccRuntimeDir().
+ 2. ~~DETACHED-LANE STDERR BLINDNESS~~ FIXED: worker stderr ->
+    ccRuntimeDir()/worker-logs/proposer-worker.log (ISO-timestamped);
+    daemon spawn output -> discovery-sibling acp-<fp>.log (cc-api-daemon
+    0.8.2, pin 9786c22). Debug = read the logs; hand-launch recipe obsolete.
 
 DEFERRED (user rulings): k=5 ab for v1 (spend) · parallel batch (same
  recipe) · prove-plus-comm container-staging fix.
