@@ -88,6 +88,16 @@ configure-git-webserver filter-js-from-html polyglot-rust-c
 protein-assembly) + 20 already ported & delta-free (5 not yet in
 baseline-tasks.txt: build-cython-ext headless-terminal
 multi-source-data-merger portfolio-optimization pypi-server).
+SCHEDULER RULED 08-16 (user): ALL lane 2 runs use the adaptive
+load-aware scheduler (--parallel --host-pressure on) on the
+ANTHROPIC_API_KEY lane (keyOnly mount; OAuth = serial-only, never
+parallel). VERIFIED this host 08-16: bench-scheduler +
+bench-host-pressure + bench-resource-profile suites 68/68; live
+darwin signals good (memory_pressure -Q parses 70% free,
+loadPerCore 0.18 vs HI 2.0); measured-capture proven on this host
+class (resource-profiles/x64-12c-intel..., 21 tasks sampled).
+Consider podman machine set --cpus 6 --memory 10240 before oracle
+5x (VM now 4cpu/8GB; width ~4 -> ~5-6).
 Steps: port 17 (12 fresh + 5 deltas) -> oracle 5x over the 37 ->
 sonnet-5 k=1 RIG-PARITY pass over the 37 (~2-3h scheduled, ~$25) ->
 evolution arms on the 37 -> optional full-89 k=5 confirm at program
