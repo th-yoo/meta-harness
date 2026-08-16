@@ -143,9 +143,17 @@ tune-mjcf 0/5-under-fleet (passes solo) · install-windows-3.11 1/5 ·
 portfolio-optimization 3/5 · cancel-async-tasks 4/5. POLICY: parity/
 arm runs = bulk 29 parallel + TIMING TAIL (tune-mjcf install-windows
 portfolio) serial width-1, two invocations, merged results.
-Steps remaining: k=5 PARITY LAUNCHED 08-16 (sonnet-5, OAuth,
---layers none --no-store, min-agent-timeout 3600, ~160 trials,
-subset baseline expectation 96/160=0.60) ->
+PARITY: STOPPED EARLY by user (time/token budget) after 34-trial
+shakedown — 22/34=0.647 vs anchor same-mix 0.565; agent path HEALTHY
+(zero errors, verifier fires, two anchor-0/5 tasks scraped passes).
+Partial committed term-bench2/leaderboard/parity-k5-partial-20260816.json;
+full parity RESUMABLE later (--resume, same flags: k=5 --layers none
+--no-store --min/max-agent-timeout 3600 --parallel --enforce-resources
+--host-pressure on, bulk 29 + timing tail 3 serial; NOTE launch gates:
+--parallel needs --enforce-resources, oauth-parallel needs explicit
+--max-agent-timeout).
+NEXT: proposer-loop arms on the 32 (evolution machinery as-is,
+TB2.1 bench, k=5 ab) ->
 sonnet-5 k=5 RIG-PARITY over the 32 (160 trials, ~4.5-6h scheduled,
 OAuth quota, parallel) -> evolution arms (k=5) -> optional full-89
 k=5 confirm at program END only ($288/$432 post-08-31 IF ever run on

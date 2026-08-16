@@ -1,0 +1,186 @@
+{
+  "label": "parity-k5-bulk",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "harness": {
+    "layers": "none"
+  },
+  "k": 5,
+  "timestamp": "2026-08-16T02:07:28.684Z",
+  "n_pass": 7,
+  "n_total": 7,
+  "pass_rate": 1,
+  "tasks": {
+    "adaptive-rejection-sampler": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        505.7,
+        347.2,
+        438.8,
+        526.6
+      ],
+      "turns": [
+        43,
+        19,
+        14,
+        19
+      ],
+      "errors": []
+    },
+    "cancel-async-tasks": {
+      "rewards": [
+        1,
+        0,
+        1,
+        0,
+        1
+      ],
+      "elapsed": [
+        198,
+        130.3,
+        84.7,
+        119.3,
+        93.8
+      ],
+      "turns": [
+        11,
+        10,
+        6,
+        9,
+        7
+      ],
+      "errors": []
+    },
+    "chess-best-move": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        127.1,
+        104.7,
+        97.6,
+        165.8,
+        109.8
+      ],
+      "turns": [
+        18,
+        23,
+        21,
+        35,
+        9
+      ],
+      "errors": []
+    },
+    "configure-git-webserver": {
+      "rewards": [
+        1,
+        1,
+        0,
+        0,
+        1
+      ],
+      "elapsed": [
+        103.6,
+        102.8,
+        158.7,
+        125.9,
+        137.2
+      ],
+      "turns": [
+        16,
+        15,
+        18,
+        19,
+        33
+      ],
+      "errors": []
+    },
+    "db-wal-recovery": {
+      "rewards": [
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        257.8,
+        84.6,
+        151.3,
+        142.2,
+        318.5
+      ],
+      "turns": [
+        15,
+        13,
+        11,
+        13,
+        16
+      ],
+      "errors": []
+    },
+    "dna-insert": {
+      "rewards": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        146.5,
+        187.3,
+        154,
+        132.7,
+        162.4
+      ],
+      "turns": [
+        15,
+        17,
+        18,
+        14,
+        16
+      ],
+      "errors": []
+    },
+    "extract-elf": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        109,
+        74.6,
+        97.3,
+        96.1,
+        92.7
+      ],
+      "turns": [
+        9,
+        7,
+        9,
+        9,
+        9
+      ],
+      "errors": []
+    }
+  },
+  "status": "in_progress",
+  "driver": "claude-code",
+  "resourceEnforcement": true,
+  "maxAgentTimeout": 3600,
+  "minAgentTimeout": 3600,
+  "timeoutRecording": true
+}
