@@ -135,8 +135,17 @@ counts, not measured spend (anchor's $ column stays reference-only).
 K RULED 08-16 (user): NO k=1 anywhere — parity and arms run k=5,
 matching the anchor job's protocol (445 trials = 89x5) and the
 standing k=5 verdict rule.
-Steps remaining: rulings -> oracle 5x over final target set
-(RUNNING 08-16, 5 passes, scheduler width ~4 on VM now 6cpu/10GB) ->
+ORACLE 5x DONE 08-16 (160 runs): 28/32 solid 5/5 after pypi-server
+fix (1399959: shim PATH via /etc/mh-shim-env + image BASH_ENV —
+console scripts twine/pytest bare-callable; verified 3/3). Classified
+flakes, all timing/fleet class, matching anchor's own flaky set:
+tune-mjcf 0/5-under-fleet (passes solo) · install-windows-3.11 1/5 ·
+portfolio-optimization 3/5 · cancel-async-tasks 4/5. POLICY: parity/
+arm runs = bulk 29 parallel + TIMING TAIL (tune-mjcf install-windows
+portfolio) serial width-1, two invocations, merged results.
+Steps remaining: k=5 PARITY LAUNCHED 08-16 (sonnet-5, OAuth,
+--layers none --no-store, min-agent-timeout 3600, ~160 trials,
+subset baseline expectation 96/160=0.60) ->
 sonnet-5 k=5 RIG-PARITY over the 32 (160 trials, ~4.5-6h scheduled,
 OAuth quota, parallel) -> evolution arms (k=5) -> optional full-89
 k=5 confirm at program END only ($288/$432 post-08-31 IF ever run on
