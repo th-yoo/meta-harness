@@ -170,9 +170,10 @@ openssl pypi-server sparql torch-tensor portfolio), 5 ties, 4 behind
 (cancel-async 3/5, config-git 3/5, password-recovery 3/5 — all
 single-trial noise; tune-mjcf 1/5 rig-hostile model-speed test on
 old CPU, cost -3 alone). Results committed term-bench2/leaderboard/
-v1-vs-anchor-{bulk,tail}-20260816.json. vulnerable-secret missed the
-bulk run (17/18 recorded, cause unex amined) — k=5 makeup run
-launched. OPEN: v1 adoption decision (needs user go /mh-activate
+v1-vs-anchor-{bulk,tail}-20260816.json. vulnerable-secret makeup DONE:
+5/5 vs anchor 4/5 = 11th beat -> FULL-20 FINAL: v1 85/100=0.850 vs
+anchor 80/100=0.800, NET +5 = +1.12pt (projected official 76.4%);
+v1-vs-anchor-vsec-20260817.json committed. OPEN: v1 adoption decision (needs user go /mh-activate
 account v1 path or fuller confirm) + behind-task noise check ->
 sonnet-5 k=5 RIG-PARITY over the 32 (160 trials, ~4.5-6h scheduled,
 OAuth quota, parallel) -> evolution arms (k=5) -> optional full-89

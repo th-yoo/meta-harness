@@ -1,0 +1,50 @@
+{
+  "label": "v1-vs-anchor-vsec",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "harness": {
+    "layers": "account",
+    "account_active": "v0",
+    "project_active": "v1",
+    "agent": "",
+    "pins": {
+      "account-global": "v1"
+    }
+  },
+  "k": 5,
+  "timestamp": "2026-08-16T08:20:55.100Z",
+  "n_pass": 1,
+  "n_total": 1,
+  "pass_rate": 1,
+  "tasks": {
+    "vulnerable-secret": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        62.5,
+        67.5,
+        59,
+        100.1,
+        88.3
+      ],
+      "turns": [
+        10,
+        10,
+        9,
+        15,
+        13
+      ],
+      "errors": []
+    }
+  },
+  "status": "complete",
+  "driver": "claude-code",
+  "maxAgentTimeout": 3600,
+  "minAgentTimeout": 3600,
+  "timeoutRecording": true
+}
