@@ -162,9 +162,18 @@ then RESTRUCTURED per the v0 ruling into candidate-only k=5:
 run --layers account --pin account-global=v1 --no-store, flaky-20
 (18 bulk parallel + 2 timing tail serial), 100 trials OAuth,
 results v1-vs-anchor-{bulk,tail}.json (session scratchpad).
-Verdict OFFLINE vs anchor rows: v1 rate per task vs anchor 4/5
-column; beat = stabilization evidence -> adoption path; else reject,
-/mh-propose next. Then full arms cadence on the 32 ->
+VERDICT 08-16/17 (95 paired trials, 19/20 tasks): v1 BEATS ANCHOR
+— pooled 0.842 vs 0.800, NET +4 trials = +0.90pt official scale
+(projected 0.753 -> ~0.762). 10 tasks stabilized 5/5-vs-4/5
+(adaptive-rejection extract-elf log-summary merge-diff multi-source
+openssl pypi-server sparql torch-tensor portfolio), 5 ties, 4 behind
+(cancel-async 3/5, config-git 3/5, password-recovery 3/5 — all
+single-trial noise; tune-mjcf 1/5 rig-hostile model-speed test on
+old CPU, cost -3 alone). Results committed term-bench2/leaderboard/
+v1-vs-anchor-{bulk,tail}-20260816.json. vulnerable-secret missed the
+bulk run (17/18 recorded, cause unex amined) — k=5 makeup run
+launched. OPEN: v1 adoption decision (needs user go /mh-activate
+account v1 path or fuller confirm) + behind-task noise check ->
 sonnet-5 k=5 RIG-PARITY over the 32 (160 trials, ~4.5-6h scheduled,
 OAuth quota, parallel) -> evolution arms (k=5) -> optional full-89
 k=5 confirm at program END only ($288/$432 post-08-31 IF ever run on

@@ -1,0 +1,435 @@
+{
+  "label": "v1-vs-anchor-bulk",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "harness": {
+    "layers": "account",
+    "account_active": "v0",
+    "project_active": "v1",
+    "agent": "",
+    "pins": {
+      "account-global": "v1"
+    }
+  },
+  "k": 5,
+  "timestamp": "2026-08-16T03:06:48.459Z",
+  "n_pass": 17,
+  "n_total": 17,
+  "pass_rate": 1,
+  "tasks": {
+    "adaptive-rejection-sampler": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        601.4,
+        411.6,
+        171.3,
+        1267.4,
+        381.9
+      ],
+      "turns": [
+        29,
+        14,
+        11,
+        56,
+        16
+      ],
+      "errors": []
+    },
+    "cancel-async-tasks": {
+      "rewards": [
+        0,
+        1,
+        1,
+        0,
+        1
+      ],
+      "elapsed": [
+        162,
+        256.9,
+        125.4,
+        118.2,
+        188.8
+      ],
+      "turns": [
+        13,
+        15,
+        8,
+        7,
+        9
+      ],
+      "errors": []
+    },
+    "chess-best-move": {
+      "rewards": [
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        358.6,
+        263.5,
+        444.6,
+        192.6,
+        279
+      ],
+      "turns": [
+        31,
+        34,
+        43,
+        36,
+        24
+      ],
+      "errors": []
+    },
+    "configure-git-webserver": {
+      "rewards": [
+        0,
+        0,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        250.9,
+        225.9,
+        180.2,
+        145.2,
+        168.6
+      ],
+      "turns": [
+        16,
+        25,
+        17,
+        19,
+        21
+      ],
+      "errors": []
+    },
+    "extract-elf": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        149.4,
+        160.8,
+        127.7,
+        137.6,
+        127
+      ],
+      "turns": [
+        10,
+        10,
+        7,
+        11,
+        8
+      ],
+      "errors": []
+    },
+    "gcode-to-text": {
+      "rewards": [
+        1,
+        1,
+        1,
+        0,
+        1
+      ],
+      "elapsed": [
+        515.8,
+        211.5,
+        1145.4,
+        270.4,
+        407.8
+      ],
+      "turns": [
+        36,
+        23,
+        53,
+        14,
+        28
+      ],
+      "errors": []
+    },
+    "headless-terminal": {
+      "rewards": [
+        1,
+        0,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        204.2,
+        336.2,
+        185,
+        193.4,
+        232.5
+      ],
+      "turns": [
+        14,
+        37,
+        17,
+        15,
+        17
+      ],
+      "errors": []
+    },
+    "log-summary-date-ranges": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        93.2,
+        71.7,
+        80.2,
+        103,
+        81.9
+      ],
+      "turns": [
+        6,
+        9,
+        8,
+        6,
+        8
+      ],
+      "errors": []
+    },
+    "merge-diff-arc-agi-task": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        191.5,
+        131.3,
+        116.2,
+        111.7,
+        142.9
+      ],
+      "turns": [
+        25,
+        18,
+        15,
+        17,
+        16
+      ],
+      "errors": []
+    },
+    "multi-source-data-merger": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        147.8,
+        142.8,
+        137.2,
+        99.4,
+        90.8
+      ],
+      "turns": [
+        7,
+        7,
+        7,
+        8,
+        6
+      ],
+      "errors": []
+    },
+    "openssl-selfsigned-cert": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        90.2,
+        102.6,
+        99.1,
+        90.6,
+        97.5
+      ],
+      "turns": [
+        11,
+        13,
+        11,
+        9,
+        18
+      ],
+      "errors": []
+    },
+    "password-recovery": {
+      "rewards": [
+        1,
+        1,
+        0,
+        1,
+        0
+      ],
+      "elapsed": [
+        708.1,
+        128.6,
+        474.4,
+        177.6,
+        300.6
+      ],
+      "turns": [
+        24,
+        15,
+        16,
+        17,
+        23
+      ],
+      "errors": []
+    },
+    "pypi-server": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        85.3,
+        116,
+        95.1,
+        94.9,
+        91
+      ],
+      "turns": [
+        14,
+        16,
+        12,
+        12,
+        13
+      ],
+      "errors": []
+    },
+    "pytorch-model-cli": {
+      "rewards": [
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        255.8,
+        173.5,
+        191.7,
+        216.2,
+        209.4
+      ],
+      "turns": [
+        33,
+        16,
+        25,
+        35,
+        22
+      ],
+      "errors": []
+    },
+    "sam-cell-seg": {
+      "rewards": [
+        1,
+        1,
+        0,
+        1,
+        1
+      ],
+      "elapsed": [
+        966.7,
+        631.6,
+        961.5,
+        792.4,
+        654.7
+      ],
+      "turns": [
+        53,
+        49,
+        45,
+        57,
+        43
+      ],
+      "errors": []
+    },
+    "sparql-university": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        155,
+        125.8,
+        90,
+        114.7,
+        103.5
+      ],
+      "turns": [
+        8,
+        8,
+        7,
+        10,
+        7
+      ],
+      "errors": []
+    },
+    "torch-tensor-parallelism": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        428.3,
+        510.6,
+        1033.8,
+        449.9,
+        521.4
+      ],
+      "turns": [
+        8,
+        9,
+        37,
+        8,
+        13
+      ],
+      "errors": []
+    }
+  },
+  "status": "complete",
+  "driver": "claude-code",
+  "resourceEnforcement": true,
+  "maxAgentTimeout": 3600,
+  "minAgentTimeout": 3600,
+  "timeoutRecording": true
+}

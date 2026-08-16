@@ -1,0 +1,74 @@
+{
+  "label": "v1-vs-anchor-tail",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "harness": {
+    "layers": "account",
+    "account_active": "v0",
+    "project_active": "v1",
+    "agent": "",
+    "pins": {
+      "account-global": "v1"
+    }
+  },
+  "k": 5,
+  "timestamp": "2026-08-16T05:50:30.567Z",
+  "n_pass": 2,
+  "n_total": 2,
+  "pass_rate": 1,
+  "tasks": {
+    "portfolio-optimization": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        499,
+        547.6,
+        288.7,
+        408.3,
+        307.5
+      ],
+      "turns": [
+        16,
+        26,
+        10,
+        18,
+        11
+      ],
+      "errors": []
+    },
+    "tune-mjcf": {
+      "rewards": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        284,
+        32.3,
+        33.7,
+        43.3,
+        37.4
+      ],
+      "turns": [
+        16,
+        0,
+        0,
+        0,
+        0
+      ],
+      "errors": []
+    }
+  },
+  "status": "complete",
+  "driver": "claude-code",
+  "maxAgentTimeout": 3600,
+  "minAgentTimeout": 3600,
+  "timeoutRecording": true
+}
