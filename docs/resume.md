@@ -210,8 +210,18 @@ NEW RIG FEATURE NEEDED: quota gate — pause on limit-reached (like
 host-pressure) instead of burning attempts; 30s retry backoff can't
 bridge window resets. Zero-turn classifier fix 92c59f1 already makes
 these transient (visible), gate would make them free.
-OPEN: quota gate build · behind-3 noise check · finish gen-2 crank
-(taxonomy -> propose -> arm) ->
+GEN-2 BLOCKED 08-17 ON JUDGE LANE: failure-taxonomy ran but every
+judge call failed 3/3 'judge transient provider error' (opencode
+judge transport) -> all 4 sampled traces classified 'other' =
+useless; ALSO sampled stale ab-screen traces over the fresh
+evidence-6 (recency cap quirk). Evidence itself is SAFELY BANKED
+(6 failure trajectories in ~/.config/kkamak/global/candidates/v1/
+traces, 15 files). NEXT SESSION: (1) debug judge transport
+(opencode auth? daemon? — same family as the v2-mint call-consumed
+blip), (2) re-run failure-taxonomy --limit covering evidence-6,
+(3) /mh-propose account -> gate -> k=5 arm vs anchor rows.
+OPEN: judge-lane debug · quota gate build · behind-3 noise check ·
+install-windows completion (2 valid passes so far) ->
 sonnet-5 k=5 RIG-PARITY over the 32 (160 trials, ~4.5-6h scheduled,
 OAuth quota, parallel) -> evolution arms (k=5) -> optional full-89
 k=5 confirm at program END only ($288/$432 post-08-31 IF ever run on
