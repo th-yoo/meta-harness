@@ -814,3 +814,27 @@ five architect rounds recorded in
     prompt now teaches the hookRule op contract (`9a90681`) — first
     organic hookRule proposals possible from the next crank. Stale cache
     dirs 0.4.3–0.4.6 remain pending the session-restart cleanup batch.
+
+## 2026-08-17 — account-global v1 ADOPTED (first TB2.1-scored adoption; boundary ts 1786869033047)
+
+- **v1 ACTIVATED** (user go "adopt v1", 2026-08-17 ~02:50 KST; --force
+  path — no two-arm ab-verdict.json, superseded by the v0-:=-anchor
+  ruling): `activateCandidate(~/.config/kkamak/global, v1)` +
+  exportRuleChecks + exportHookRules. Active playbook now 8 bullets
+  (v1's 3 additions: no-placeholder-content in deliverables, re-read
+  deliverable before claiming complete, inspect artifact actual state
+  on check-fail).
+- **EVIDENCE (generation-1 verdict, committed 43c20ca):** candidate-only
+  k=5 run on the flaky-20 TB2.1 subset vs the official Anthropic anchor
+  job rows (harbor job 84ac1a9d, CC 2.1.205 + claude-sonnet-5, adopted
+  as v0 by user ruling): v1 85/100 = 0.850 vs anchor 80/100 = 0.800,
+  NET +5 trials = +1.12pt official scale (projected 75.3% -> 76.4%).
+  11 tasks stabilized 5/5-vs-4/5; 4 behind (3 single-trial noise +
+  tune-mjcf 1/5 rig-hostile model-speed test).
+- **Protocol notes:** OAuth lane, --parallel --enforce-resources
+  --host-pressure on (bulk 18) + serial timing tail; min/max agent
+  timeout 3600; --no-store; --pin account-global=v1. Data:
+  term-bench2/leaderboard/v1-vs-anchor-{bulk,tail,vsec}-2026081*.json
+  vs tb21-cc-sonnet5-anchor-trials.json.
+- **Boundary ts 1786869033047** (actuator-class: active harness content
+  changed for every future session/run on this host).
