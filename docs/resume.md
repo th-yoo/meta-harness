@@ -196,8 +196,22 @@ DROPS RULED 08-17 (user "remove them all"): TARGET = 31.
   per-task image pre-bake (podman commit) — deferred as poor ROI for
   an anchor-3/5 task. Never agent-measured.
 Both count at ANCHOR rates in official-scale projections.
-OPEN: behind-3 noise check (rides v2 arm) · generation-2
-/mh-propose after harder-12 evidence lands ->
+GEN-2 CRANK STATE 08-17: v2 mints x2 REJECTED by gates (attempt 1:
+judge daemon call-consumed infra blip + 1 legit substitution screen;
+attempt 2: dedup vs rejected.json — gates working as designed).
+ROOT INSIGHT: bench runs used --no-store, so NO bench failure ever
+reached the proposer's evidence — it kept re-proposing from stale
+dogfood signals. FIX IN FLIGHT: evidence-6 run (6 real-fail tasks,
+k=1, store ON, --save-all-traj) -> failure-taxonomy -> re-propose.
+install-windows-3.11 makeup: 2 real passes (87/194 turns) + 3
+zero-turn INVALID attempts — measurement incomplete, not counted;
+empties cluster at run start/end = OAuth usage-window cycling.
+NEW RIG FEATURE NEEDED: quota gate — pause on limit-reached (like
+host-pressure) instead of burning attempts; 30s retry backoff can't
+bridge window resets. Zero-turn classifier fix 92c59f1 already makes
+these transient (visible), gate would make them free.
+OPEN: quota gate build · behind-3 noise check · finish gen-2 crank
+(taxonomy -> propose -> arm) ->
 sonnet-5 k=5 RIG-PARITY over the 32 (160 trials, ~4.5-6h scheduled,
 OAuth quota, parallel) -> evolution arms (k=5) -> optional full-89
 k=5 confirm at program END only ($288/$432 post-08-31 IF ever run on

@@ -1,0 +1,54 @@
+{
+  "label": "v1-iw-makeup",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "harness": {
+    "layers": "account",
+    "account_active": "v1",
+    "project_active": "v1",
+    "agent": "",
+    "pins": {
+      "account-global": "v1"
+    }
+  },
+  "k": 5,
+  "timestamp": "2026-08-16T19:57:58.040Z",
+  "n_pass": 1,
+  "n_total": 1,
+  "pass_rate": 1,
+  "tasks": {
+    "install-windows-3.11": {
+      "rewards": [
+        0,
+        1,
+        1,
+        0,
+        0
+      ],
+      "elapsed": [
+        0,
+        847,
+        1441.7,
+        0,
+        0
+      ],
+      "turns": [
+        0,
+        87,
+        194,
+        0,
+        0
+      ],
+      "errors": [
+        "setup_failed",
+        "setup_failed",
+        "setup_failed"
+      ]
+    }
+  },
+  "status": "complete",
+  "driver": "claude-code",
+  "maxAgentTimeout": 3600,
+  "minAgentTimeout": 3600,
+  "timeoutRecording": true
+}
