@@ -933,10 +933,14 @@ export async function stageTaskRuntime(
       `chmod +x /usr/local/bin/pip3`,
       `cp /usr/local/bin/pip3 /usr/local/bin/pip`,
       // pip installs console scripts into the uv-python's own bin dir, which
-      // is not on PATH — wrap pytest (the one console script task test.sh
-      // scripts invoke bare after a `pip install pytest`; headless-terminal).
+      // is not on PATH. Two coverages: a pytest wrapper for direct (non-bash)
+      // execs, and /etc/mh-shim-env — sourced by EVERY non-interactive bash
+      // via the image's BASH_ENV — putting the whole bin dir on PATH so any
+      // console script a solve/test installs is callable bare
+      // (headless-terminal's pytest, pypi-server's twine).
       `printf '#!/bin/sh\\nexec "%s" -m pytest "$@"\\n' "$P" > /usr/local/bin/pytest`,
       `chmod +x /usr/local/bin/pytest`,
+      `printf 'export PATH="%s:$PATH"\\n' "$(dirname "$P")" > /etc/mh-shim-env`,
       `"$P" -m ensurepip --upgrade >/dev/null 2>&1 || true`,
     ].join("\n")
     log(`  staging (runtime): ${task} python shim -> ${v} (base ${staging.baseImage})`)

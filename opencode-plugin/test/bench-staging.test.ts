@@ -1332,3 +1332,24 @@ test("stageTaskRuntime: ubuntu:24.04 base image emits NO python shim", async () 
   await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
   expect(recordedArgvs.some((a) => (a[a.length - 1] ?? "").includes("uv python find"))).toBe(false)
 })
+
+// pypi-server (oracle 5x, 2026-08-16): solve installs twine via pip then
+// calls it BARE — console scripts land in the uv-python bin dir, off PATH.
+// The shim writes /etc/mh-shim-env (read by every non-interactive bash via
+// the image's BASH_ENV) putting that bin dir on PATH.
+test("stageTaskRuntime: python shim writes /etc/mh-shim-env with the interpreter bin dir", async () => {
+  const dir = tmpDir()
+  const task = "py313-env-task"
+  mkdirSync(path.join(dir, task, "environment"), { recursive: true })
+  writeFileSync(path.join(dir, task, "environment", "Dockerfile"), "FROM python:3.13-slim-bookworm\nRUN echo hi\n")
+  const fakePaths = fakeBenchPaths(dir)
+  const recordedArgvs: string[][] = []
+  const fakeExec = async (argv: string[]): Promise<ExecResult> => {
+    recordedArgvs.push(argv)
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await stageTaskRuntime(fakePaths, "container-1", task, fakeExec)
+  const shim = recordedArgvs.map((a) => a[a.length - 1] ?? "").find((s) => s.includes("uv python find"))!
+  expect(shim).toContain("/etc/mh-shim-env")
+  expect(shim).toContain('export PATH=')
+})

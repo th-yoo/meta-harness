@@ -144,6 +144,13 @@ ENV PATH="/root/.local/bin:${PATH}"
 # pays no per-attempt download.
 RUN uv python install 3.10 3.11 3.13
 
+# Read by every non-interactive bash (solve.sh, test.sh, staging steps,
+# agent-spawned shells). The file is only created by staging.ts's
+# python-version shim — it exports the shimmed interpreter's bin dir onto
+# PATH so pip-installed console scripts (pytest, twine, ...) are callable
+# bare. Absent file = silent no-op for unshimmed tasks.
+ENV BASH_ENV=/etc/mh-shim-env
+
 # opencode itself — the P6 agent phase (record.ts/cmd-run.ts) execs this
 # INSIDE the container (`podman exec ... opencode run --dir /app ...`), never
 # on the host. The installer (https://opencode.ai/install) unpacks to
