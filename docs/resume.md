@@ -3,11 +3,75 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-> **MOST RECENT STATE (2026-08-15 evening):** main = `fce734c`. Read the
-> "harness" 08-15-evening block FIRST (hook-rule program P0→P4-prep fully
-> built + live, this file's top block); the "minimal" 08-15 block below it
-> (candidate v1 minted + turn-budget fix) and the "harness" 08-14-night
-> block remain as history. cc-api-daemon = 0.8.1 (`24f5f12`), cc-gate-plugin
+> **MOST RECENT STATE (2026-08-17 morning close):** main = `475dfe8`+. Read the
+> "TB2.1 GENERATION-1" 08-16/17 block FIRST (below). Prior blocks = history.
+
+## ✅ SESSION END 2026-08-17 ~07:00 KST — TB2.1 GENERATION-1: v1 ADOPTED, +2.02pt OVER OFFICIAL ANTHROPIC BASELINE · GEN-2 BLOCKED ON PROPOSER-DIVERSITY DESIGN
+
+**RESUME PROMPT (either host — git-only transfer):**
+```
+Resume kkamak (meta-harness), post-2026-08-17-morning session.
+git pull FIRST; main >= 475dfe8. Read docs/resume.md 08-16/17 blocks.
+
+STATE: TB2.1 lane fully live. v0 := OFFICIAL ANTHROPIC ANCHOR JOB
+(harbor 84ac1a9d, CC+sonnet-5, per-trial rows committed
+term-bench2/leaderboard/tb21-cc-sonnet5-anchor-trials.json — ruled:
+baseline arm NEVER re-run). Target = 31 tasks (target-tasks.txt;
+drops documented: build-pov-ray CF-403, build-cython-ext planarity
+drift, qemu x2 no-KVM, tune-mjcf hardware speed-test,
+custom-memory-heap-crash gcc-staging cost). v1 = account-global
+ACTIVE (adopted 08-17, boundary ts 1786869033047, ledger 4b7ab24):
+GENERATION-1 RESULT v1 0.653 vs anchor 0.593 (150 paired trials,
+NET +9 = +2.02pt, projected official 77.3% vs their 75.3%; their
+opus-only #5 = 78.9% = the finish line: opus performance at sonnet
+runtime). All run data committed term-bench2/leaderboard/v1-*.json.
+
+RIG (10 fixes today, suite 2161/0, all live-verified): oracle+run
+create fixed /app workdir · system-wide pip + per-segment
+--index-url · netcat rename · /solution symlink · python-version
+shim (uv 3.10/3.11/3.13 baked, BASH_ENV=/etc/mh-shim-env PATH) ·
+pytest wrapper · zero-activity CC attempt = transient (92c59f1).
+Scheduler ruled for ALL runs (--parallel --enforce-resources
+--host-pressure on; OAuth-parallel needs explicit
+--max-agent-timeout). VM = 6cpu/10GB. k=5 everywhere (no k=1
+verdicts). NO ANTHROPIC_API_KEY — OAuth Max20 only.
+
+FIX NEXT (gen-2 blocker): PROPOSER-DIVERSITY vs DEDUP DEADLOCK.
+4 v2 mints all gate-rejected: evidence (taxonomy incomplete=5 —
+hard tasks die of UNFINISHED work) pushes proposer to one theme
+(finish/verify); dedup gate blocks similar-to-rejected; every
+rejection APPENDS to ~/.config/kkamak/global/rejected.json making
+the wall thicker (self-reinforcing; infra-poisoned entry already
+removed, .bak-20260817 kept). THREE REMEDY CANDIDATES (design call
+first, then implement ONE): (a) rejected-guards steer the proposer
+PROMPT away from rejected phrasings (propose-lesson --guards lane
+exists), (b) looser/semantic dedup threshold, (c) evidence
+diversification — more failing-task variety so proposer has
+somewhere else to go. Then: /mh-propose account -> gate -> k=5 arm
+over target-tasks.txt vs anchor rows -> gen-2 table.
+
+KNOWN TRAPS (cost us hours): --results-file FORCES noStore
+(cmd-run.ts:746) — evidence runs MUST omit it · DEFAULT_JUDGE_MODEL
+= openrouter/gemini-2.5-flash but host has only anthropic oauth —
+pass --model anthropic/claude-haiku-4-5 (or rule a default flip) ·
+OAuth usage-window edges produce zero-turn attempts (now transient,
+still burn wall-clock) — QUOTA GATE feature wanted · proposer fired
+manually via: echo '{"prompt":"/mh-propose account","cwd":"<repo>",
+"session_id":"<id>"}' | bun opencode-plugin/src/adapters/
+claude-code/hook-cli.ts UserPromptSubmit, apply on next hook tick.
+
+STANDING OPEN: behind-3 noise check (cancel-async config-git
+password-recovery, rides next arm) · install-windows-3.11
+incomplete (2 valid passes, quota-window empties) · upstream drift
+reports (povray CF-403, planarity 1.0.0) worth filing · yoo-dev
+ssh-dead (KVM host would reclaim qemu x2 + tune-mjcf) · lane 1
+hook-rule shadow watch unchanged.
+
+RULES: explicit go before merge/spend · suites serial · NAMED files
+only · probe the CONSEQUENCE · k=5 · scheduler always · F2 · SITREP.
+```
+
+> (history) **2026-08-15 evening state:** main = `fce734c`. cc-api-daemon = 0.8.1 (`24f5f12`), cc-gate-plugin
 > = 0.4.7 DEPLOYED.
 
 ## ✅ SESSION END 2026-08-15 evening (`yoo-mac` "harness") — HOOK-RULE PROGRAM P0→P4-PREP FULLY BUILT + LIVE · MAIN `fce734c`
