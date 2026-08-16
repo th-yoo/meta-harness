@@ -3,8 +3,43 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-> **MOST RECENT STATE (2026-08-17 morning close):** main = `475dfe8`+. Read the
-> "TB2.1 GENERATION-1" 08-16/17 block FIRST (below). Prior blocks = history.
+> **MOST RECENT STATE (2026-08-17 ~09:30 KST):** main = `d1ec116`+. Read the
+> "GEN-2 UNBLOCKED" block FIRST (below). Prior blocks = history.
+
+## ⏳ LIVE STATE 2026-08-17 ~09:30 KST (`yoo-mac`) — GEN-2 UNBLOCKED: DEADLOCK ROOT-CAUSED + FIXED (`d1ec116`) · v2 MINTED + GATE-PASSED · k=5 ARM RUNNING
+
+**Deadlock verdict (design call resolved):** NOT proposer-diversity, NOT
+dedup-tightness. Root cause: production `buildProposerPrompt` never surfaced
+`taxonomy.json` — judge-lane evidence (incomplete=5, runway-exhaustion
+mechanism) was invisible; proposer re-derived verify-theme from raw
+trajectories every cycle and dedup CORRECTLY rejected (10 consecutive
+"duplicate: failed", incl. 2 from a pre-fix live probe 08-17). Remedies (b)
+looser-dedup and (c) evidence-diversification both moot.
+
+**Fix `d1ec116`:** `measuredTaxonomySection` in propose.ts — ACTIVE version's
+judge-labeled taxonomy rendered as primary diagnosis input (after
+untrusted-evidence guard, before external evidence); `taxonomy.json` named in
+store-access layout. Bench lane already did this; production now matches.
+4 render tests red-verified pre-fix; suite 2166/0.
+
+**Post-fix probe: v2 CREATED (account-global, inactive, awaiting ab).**
+Diagnosis premature-termination×2 + spec-misread — matches measured taxonomy.
+New bullets = pacing theme (write minimal deliverable to exact path FIRST;
+no further exploration until first runnable deliverable written; re-validate
+enclosing construct after substring edits). Pre-fix probes appended 2 correct
+dup entries to rejected.json (now 10).
+
+**RUNNING (user go ~09:20 KST): v2 k=5 arm** — tmux session `v2-arm` (pane %10),
+log `.kkamak/v2-arm-20260817.log`:
+`bun term-bench2/runner.ts run --task-file term-bench2/target-tasks.txt
+--model anthropic/claude-sonnet-5 --driver claude-code --k 5 --layers account
+--pin account-global=v2 --label v2-vs-anchor --min-agent-timeout 3600
+--max-agent-timeout 3600 --enforce-resources --parallel --host-pressure on
+--no-oauth-gate` — 31 tasks × 5 = 155 trials, est 15–24h, NO --results-file
+(trajectories must reach store for gen-3 evidence; export JSON after).
+Interrupted → re-run same command + `--resume`. On completion: export rows to
+`term-bench2/leaderboard/v2-vs-anchor-*.json`, paired compare vs frozen anchor
+rows (anchor NEVER re-run), gen-2 table like gen-1's net-points verdict.
 
 ## ✅ SESSION END 2026-08-17 ~07:00 KST — TB2.1 GENERATION-1: v1 ADOPTED, +2.02pt OVER OFFICIAL ANTHROPIC BASELINE · GEN-2 BLOCKED ON PROPOSER-DIVERSITY DESIGN
 
