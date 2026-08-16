@@ -173,8 +173,10 @@ old CPU, cost -3 alone). Results committed term-bench2/leaderboard/
 v1-vs-anchor-{bulk,tail}-20260816.json. vulnerable-secret makeup DONE:
 5/5 vs anchor 4/5 = 11th beat -> FULL-20 FINAL: v1 85/100=0.850 vs
 anchor 80/100=0.800, NET +5 = +1.12pt (projected official 76.4%);
-v1-vs-anchor-vsec-20260817.json committed. OPEN: v1 adoption decision (needs user go /mh-activate
-account v1 path or fuller confirm) + behind-task noise check ->
+v1-vs-anchor-vsec-20260817.json committed. v1 ADOPTED 08-17 (user go; boundary ts 1786869033047, ledger
+entry 4b7ab24) — account-global active = v1's 8 bullets. OPEN:
+behind-3 noise check · tune-mjcf drop-from-arms decision ·
+generation-2 /mh-propose on top of v1 ->
 sonnet-5 k=5 RIG-PARITY over the 32 (160 trials, ~4.5-6h scheduled,
 OAuth quota, parallel) -> evolution arms (k=5) -> optional full-89
 k=5 confirm at program END only ($288/$432 post-08-31 IF ever run on
