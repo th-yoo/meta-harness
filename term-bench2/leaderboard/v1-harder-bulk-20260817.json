@@ -1,0 +1,297 @@
+{
+  "label": "v1-harder-bulk",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "harness": {
+    "layers": "account",
+    "account_active": "v1",
+    "project_active": "v1",
+    "agent": "",
+    "pins": {
+      "account-global": "v1"
+    }
+  },
+  "k": 5,
+  "timestamp": "2026-08-16T11:03:07.369Z",
+  "n_pass": 4,
+  "n_total": 11,
+  "pass_rate": 0.3636,
+  "tasks": {
+    "db-wal-recovery": {
+      "rewards": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        74,
+        159.8,
+        207.4,
+        248.8,
+        224.8
+      ],
+      "turns": [
+        9,
+        13,
+        17,
+        17,
+        14
+      ],
+      "errors": []
+    },
+    "dna-insert": {
+      "rewards": [
+        0,
+        0,
+        1,
+        0,
+        1
+      ],
+      "elapsed": [
+        198.2,
+        342.1,
+        236.4,
+        417.4,
+        190
+      ],
+      "turns": [
+        17,
+        16,
+        22,
+        23,
+        18
+      ],
+      "errors": []
+    },
+    "filter-js-from-html": {
+      "rewards": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        464.6,
+        341.5,
+        422.8,
+        397,
+        176.6
+      ],
+      "turns": [
+        13,
+        10,
+        10,
+        13,
+        5
+      ],
+      "errors": []
+    },
+    "model-extraction-relu-logits": {
+      "rewards": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        523.9,
+        864.7,
+        383.5,
+        1220.7,
+        1018.7
+      ],
+      "turns": [
+        23,
+        33,
+        30,
+        47,
+        44
+      ],
+      "errors": []
+    },
+    "mteb-retrieve": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        518.2,
+        558.2,
+        582.1,
+        526.1,
+        496.2
+      ],
+      "turns": [
+        14,
+        18,
+        22,
+        14,
+        14
+      ],
+      "errors": []
+    },
+    "polyglot-rust-c": {
+      "rewards": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "elapsed": [
+        599.7,
+        380,
+        896.5,
+        438.7,
+        1850
+      ],
+      "turns": [
+        6,
+        6,
+        16,
+        10,
+        12
+      ],
+      "errors": []
+    },
+    "protein-assembly": {
+      "rewards": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        197.8,
+        565.9,
+        509.6,
+        489.8,
+        234.1
+      ],
+      "turns": [
+        15,
+        29,
+        33,
+        26,
+        20
+      ],
+      "errors": []
+    },
+    "raman-fitting": {
+      "rewards": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        756.8,
+        719,
+        328.4,
+        565.4,
+        340.4
+      ],
+      "turns": [
+        34,
+        30,
+        31,
+        38,
+        29
+      ],
+      "errors": []
+    },
+    "sanitize-git-repo": {
+      "rewards": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "turns": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        "setup_failed",
+        "setup_failed",
+        "setup_failed",
+        "setup_failed",
+        "setup_failed"
+      ]
+    },
+    "torch-pipeline-parallelism": {
+      "rewards": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        835.9,
+        794.8,
+        788.2,
+        688.9,
+        490.6
+      ],
+      "turns": [
+        34,
+        28,
+        29,
+        35,
+        23
+      ],
+      "errors": []
+    },
+    "video-processing": {
+      "rewards": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        651.4,
+        493.9,
+        703.5,
+        555.7,
+        479.5
+      ],
+      "turns": [
+        48,
+        54,
+        65,
+        46,
+        49
+      ],
+      "errors": []
+    }
+  },
+  "status": "complete",
+  "driver": "claude-code",
+  "resourceEnforcement": true,
+  "maxAgentTimeout": 3600,
+  "minAgentTimeout": 3600,
+  "timeoutRecording": true
+}

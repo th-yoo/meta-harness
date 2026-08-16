@@ -1,0 +1,56 @@
+{
+  "label": "v1-harder-tail",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "harness": {
+    "layers": "account",
+    "account_active": "v1",
+    "project_active": "v1",
+    "agent": "",
+    "pins": {
+      "account-global": "v1"
+    }
+  },
+  "k": 5,
+  "timestamp": "2026-08-16T15:36:50.681Z",
+  "n_pass": 0,
+  "n_total": 1,
+  "pass_rate": 0,
+  "tasks": {
+    "install-windows-3.11": {
+      "rewards": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "turns": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        "setup_failed",
+        "setup_failed",
+        "setup_failed",
+        "setup_failed",
+        "setup_failed"
+      ]
+    }
+  },
+  "status": "complete",
+  "driver": "claude-code",
+  "maxAgentTimeout": 3600,
+  "minAgentTimeout": 3600,
+  "timeoutRecording": true
+}
