@@ -1,0 +1,50 @@
+{
+  "label": "v1-tune-mjcf-rerun",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "harness": {
+    "layers": "account",
+    "account_active": "v1",
+    "project_active": "v1",
+    "agent": "",
+    "pins": {
+      "account-global": "v1"
+    }
+  },
+  "k": 5,
+  "timestamp": "2026-08-16T08:48:11.939Z",
+  "n_pass": 1,
+  "n_total": 1,
+  "pass_rate": 1,
+  "tasks": {
+    "tune-mjcf": {
+      "rewards": [
+        0,
+        1,
+        0,
+        0,
+        1
+      ],
+      "elapsed": [
+        1013.1,
+        408.2,
+        406.1,
+        421.3,
+        449.2
+      ],
+      "turns": [
+        44,
+        22,
+        20,
+        26,
+        20
+      ],
+      "errors": []
+    }
+  },
+  "status": "complete",
+  "driver": "claude-code",
+  "maxAgentTimeout": 3600,
+  "minAgentTimeout": 3600,
+  "timeoutRecording": true
+}
