@@ -152,8 +152,12 @@ full parity RESUMABLE later (--resume, same flags: k=5 --layers none
 --host-pressure on, bulk 29 + timing tail 3 serial; NOTE launch gates:
 --parallel needs --enforce-resources, oauth-parallel needs explicit
 --max-agent-timeout).
-NEXT: proposer-loop arms on the 32 (evolution machinery as-is,
-TB2.1 bench, k=5 ab) ->
+PROPOSER LOOP STARTED 08-16 (user go): ab SCREEN v1-vs-v0
+account-global RUNNING — flaky-20 subset (18 bulk parallel + 2
+timing tail serial), k=2 screen protocol (never adopts), 80 trials
+OAuth, results ab-v1-screen-{bulk,tail}.json in session scratchpad.
+Verdict path: positive signal -> k=5 confirm; negative -> reject v1,
+/mh-propose next candidate. Then full arms cadence on the 32 ->
 sonnet-5 k=5 RIG-PARITY over the 32 (160 trials, ~4.5-6h scheduled,
 OAuth quota, parallel) -> evolution arms (k=5) -> optional full-89
 k=5 confirm at program END only ($288/$432 post-08-31 IF ever run on
