@@ -182,8 +182,22 @@ limit-reached result, old classifier scored 'done'/reward=0). FIXED
 20-44): 2/5 vs anchor 4/5 — residual -2 = genuine hardware gap
 (model-speed test on old CPU). BOARD FINAL: v1 86/100=0.860 vs
 anchor 0.800, NET +6 = +1.35pt (v1-tune-mjcf-rerun-20260817.json).
-OPEN: behind-3 noise check · tune-mjcf drop-from-arms decision
-(recommend drop: −2 hardware-coupled) · generation-2 /mh-propose ->
+DROPS RULED 08-17 (user "remove them all"): TARGET = 31.
+- tune-mjcf DROPPED: verifier's test_model_speed requires wall-clock
+  sim speed; i7-8850H-through-podman-VM misses the bar regardless of
+  agent output (clean re-run 2/5 with real 20-44-turn attempts vs
+  anchor 4/5; passes solo-quiet, fails under any co-load). Hardware-
+  coupled noise, not harness-addressable. Returns if runs move to a
+  KVM/faster host (yoo-dev).
+- custom-memory-heap-crash DROPPED: environment compiles GCC 13.2
+  from source; upstream pays once at task-image build, our runtime
+  staging pays HOURS PER ATTEMPT at 1 vcpu (sole oracle attempt
+  killed at 54 min mid-compile; k=5 ~10h+ pure compilation). Fix =
+  per-task image pre-bake (podman commit) — deferred as poor ROI for
+  an anchor-3/5 task. Never agent-measured.
+Both count at ANCHOR rates in official-scale projections.
+OPEN: behind-3 noise check (rides v2 arm) · generation-2
+/mh-propose after harder-12 evidence lands ->
 sonnet-5 k=5 RIG-PARITY over the 32 (160 trials, ~4.5-6h scheduled,
 OAuth quota, parallel) -> evolution arms (k=5) -> optional full-89
 k=5 confirm at program END only ($288/$432 post-08-31 IF ever run on

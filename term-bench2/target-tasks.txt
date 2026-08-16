@@ -2,7 +2,6 @@ adaptive-rejection-sampler
 cancel-async-tasks
 chess-best-move
 configure-git-webserver
-custom-memory-heap-crash
 db-wal-recovery
 dna-insert
 extract-elf
@@ -28,6 +27,5 @@ sanitize-git-repo
 sparql-university
 torch-pipeline-parallelism
 torch-tensor-parallelism
-tune-mjcf
 video-processing
 vulnerable-secret
