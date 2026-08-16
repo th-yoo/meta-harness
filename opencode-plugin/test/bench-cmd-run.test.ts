@@ -2609,3 +2609,40 @@ test("run --parallel: args.canLaunch absent by default — schedule() gets undef
 test("DEFAULT_BENCH_MODEL pins the current latest sonnet (model policy: latest tier models; a bump here is a deliberate instrument change, not drift)", () => {
   expect(DEFAULT_BENCH_MODEL).toBe("anthropic/claude-sonnet-5")
 })
+
+// Same nested-WORKDIR podman-start bug as cmd-oracle's (sanitize-git-repo,
+// harder-12 run 2026-08-17: 5/5 attempts setup_failed at podman start —
+// workdir "/app/dclm" does not exist at create time; staging creates it
+// only after start). Create must use fixed /app; the task workdir is
+// mkdir'd right after start and execs pass it explicitly.
+test("runTaskOnce: nested Dockerfile WORKDIR — agent create argv uses /app, post-start mkdir creates the task workdir", async () => {
+  const dir = tmpDir()
+  const tbRoot = path.join(dir, "tb-root")
+  writeTaskTomls(tbRoot, ["nested"])
+  fs.mkdirSync(path.join(tbRoot, "nested", "environment"), { recursive: true })
+  fs.writeFileSync(
+    path.join(tbRoot, "nested", "environment", "Dockerfile"),
+    "FROM ubuntu:24.04\nWORKDIR /app\nWORKDIR dclm\n",
+  )
+  fs.writeFileSync(path.join(tbRoot, "nested", "instruction.md"), "do the thing\n")
+  const paths = fakeBenchPaths(dir, tbRoot)
+  const argvs: string[][] = []
+  const execFn = async (argv: string[]) => {
+    argvs.push(argv)
+    if (argv.includes("claude")) {
+      const doneOut = [
+        JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }] } }),
+        JSON.stringify({ type: "result", subtype: "success", is_error: false, num_turns: 1, result: "ok" }),
+      ].join("\n")
+      return { rc: 0, stdout: doneOut, stderr: "", timedOut: false }
+    }
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await runTaskOnce(
+    paths, "nested", "anthropic/claude-sonnet-5", "", "", 30, 30, "runtime", claudeCodeDriver, undefined, execFn, fakeAuthMounts(),
+  )
+  const create = argvs.find((a) => a[1] === "create")!
+  expect(create[create.indexOf("-w") + 1]).toBe("/app")
+  const mkdir = argvs.find((a) => a[1] === "exec" && a.includes("mkdir"))!
+  expect(mkdir).toContain("/app/dclm")
+})

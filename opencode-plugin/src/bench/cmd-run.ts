@@ -288,7 +288,14 @@ export async function runTaskOnce(
           // no-op for the default driver.
           env: { ...apiKeyEnv(), ...(auth.env ?? {}) },
           network: true,
-          workdir,
+          // Fixed /app at create — podman refuses to START a container whose
+          // -w dir does not exist, and a nested final WORKDIR
+          // (sanitize-git-repo's /app/dclm) is only created by staging AFTER
+          // start (harder-12 run 2026-08-17: 5/5 attempts setup_failed).
+          // Task workdir is mkdir'd right after start; the agent exec and
+          // solve/verifier execs pass it explicitly. Mirrors cmd-oracle's
+          // identical fix (6805645).
+          workdir: "/app",
           resources,
         }),
       )
