@@ -152,12 +152,19 @@ full parity RESUMABLE later (--resume, same flags: k=5 --layers none
 --host-pressure on, bulk 29 + timing tail 3 serial; NOTE launch gates:
 --parallel needs --enforce-resources, oauth-parallel needs explicit
 --max-agent-timeout).
-PROPOSER LOOP STARTED 08-16 (user go): ab SCREEN v1-vs-v0
-account-global RUNNING — flaky-20 subset (18 bulk parallel + 2
-timing tail serial), k=2 screen protocol (never adopts), 80 trials
-OAuth, results ab-v1-screen-{bulk,tail}.json in session scratchpad.
-Verdict path: positive signal -> k=5 confirm; negative -> reject v1,
-/mh-propose next candidate. Then full arms cadence on the 32 ->
+V0 RULED 08-16 (user): v0 = THE ANCHOR JOB ITSELF — the baseline
+arm is NEVER re-run; anchor per-trial rows (committed 242ba47) are
+the v0 column. Halves every comparison's cost; tradeoff accepted:
+cross-infra comparison, no same-rig pairing (user ruled same-tasks
+direct comparison valid).
+PROPOSER LOOP STARTED 08-16 (user go): k=2 two-arm screen launched
+then RESTRUCTURED per the v0 ruling into candidate-only k=5:
+run --layers account --pin account-global=v1 --no-store, flaky-20
+(18 bulk parallel + 2 timing tail serial), 100 trials OAuth,
+results v1-vs-anchor-{bulk,tail}.json (session scratchpad).
+Verdict OFFLINE vs anchor rows: v1 rate per task vs anchor 4/5
+column; beat = stabilization evidence -> adoption path; else reject,
+/mh-propose next. Then full arms cadence on the 32 ->
 sonnet-5 k=5 RIG-PARITY over the 32 (160 trials, ~4.5-6h scheduled,
 OAuth quota, parallel) -> evolution arms (k=5) -> optional full-89
 k=5 confirm at program END only ($288/$432 post-08-31 IF ever run on
