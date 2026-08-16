@@ -220,8 +220,26 @@ traces, 15 files). NEXT SESSION: (1) debug judge transport
 (opencode auth? daemon? — same family as the v2-mint call-consumed
 blip), (2) re-run failure-taxonomy --limit covering evidence-6,
 (3) /mh-propose account -> gate -> k=5 arm vs anchor rows.
-OPEN: judge-lane debug · quota gate build · behind-3 noise check ·
-install-windows completion (2 valid passes so far) ->
+GEN-2 SESSION CLOSE 08-17 ~06:40 KST: judge lane FIXED (root:
+DEFAULT_JUDGE_MODEL=openrouter/gemini-2.5-flash but host has ONLY
+anthropic oauth — pass --model anthropic/claude-haiku-4-5; consider
+flipping the default). Evidence pipeline FIXED end-to-end: (a)
+--results-file FORCES noStore (cmd-run.ts:746 — surprising coupling,
+evidence runs must omit it), (b) evidence-6 re-ran store-only — 6
+sessions + trajectories banked (model-extraction-relu-logits PASSED
+k=1, anchor-1/5 task). Taxonomy REAL: incomplete=5 spec_precision=1
+— hard tasks die from UNFINISHED work, not wrong answers.
+PROPOSER DEADLOCK (4 mint attempts, all gate-rejected): evidence
+pushes one theme (finish/verify), dedup gate blocks similar-to-
+rejected, and EVERY rejection appends to rejected.json making the
+wall thicker (self-reinforcing). Infra-poisoned rejection removed
+(rejected.json.bak-20260817 kept). NEEDS DESIGN, not hotfix:
+rejected-guards must steer the proposer prompt away from rejected
+phrasings, or dedup needs looser semantic threshold, or evidence
+needs diversification (more failing-task variety) so the proposer
+has somewhere else to go.
+OPEN: proposer-diversity design · judge default model ruling ·
+quota gate build · behind-3 check · install-windows completion ->
 sonnet-5 k=5 RIG-PARITY over the 32 (160 trials, ~4.5-6h scheduled,
 OAuth quota, parallel) -> evolution arms (k=5) -> optional full-89
 k=5 confirm at program END only ($288/$432 post-08-31 IF ever run on
