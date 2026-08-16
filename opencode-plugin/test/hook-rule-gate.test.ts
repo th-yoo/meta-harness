@@ -384,6 +384,15 @@ test("runTaskOnce: hook-rule table with rules injects eval.sh + PreToolUse setti
   const calls: string[][] = []
   let settingsContent = ""
   const execFn = async (argv: string[]) => {
+    if (argv.includes("claude")) {
+      // zero-activity rc-0 now classifies transient (limit-exhaustion fix) —
+      // fake a minimal DONE attempt: one tool_use + a result event.
+      const doneOut = [
+        JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }] } }),
+        JSON.stringify({ type: "result", subtype: "success", is_error: false, num_turns: 1, result: "ok" }),
+      ].join("\n")
+      return { rc: 0, stdout: doneOut, stderr: "", timedOut: false }
+    }
     calls.push(argv)
     if (argv[1] === "cp" && argv[3]?.endsWith(":/app/.claude/settings.json")) {
       settingsContent = fs.readFileSync(argv[2]!, "utf-8")
@@ -430,6 +439,15 @@ test("runTaskOnce: no hook-rule table (13-arg legacy call) issues NO .hookrule-g
 
   const calls: string[][] = []
   const execFn = async (argv: string[]) => {
+    if (argv.includes("claude")) {
+      // zero-activity rc-0 now classifies transient (limit-exhaustion fix) —
+      // fake a minimal DONE attempt: one tool_use + a result event.
+      const doneOut = [
+        JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }] } }),
+        JSON.stringify({ type: "result", subtype: "success", is_error: false, num_turns: 1, result: "ok" }),
+      ].join("\n")
+      return { rc: 0, stdout: doneOut, stderr: "", timedOut: false }
+    }
     calls.push(argv)
     return { rc: 0, stdout: "", stderr: "", timedOut: false }
   }
@@ -457,6 +475,15 @@ test("runTaskOnce: outcomes read rc!=0 (no matches — the common case) is fail-
   const paths = fakeBenchPaths(dir)
 
   const execFn = async (argv: string[]) => {
+    if (argv.includes("claude")) {
+      // zero-activity rc-0 now classifies transient (limit-exhaustion fix) —
+      // fake a minimal DONE attempt: one tool_use + a result event.
+      const doneOut = [
+        JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }] } }),
+        JSON.stringify({ type: "result", subtype: "success", is_error: false, num_turns: 1, result: "ok" }),
+      ].join("\n")
+      return { rc: 0, stdout: doneOut, stderr: "", timedOut: false }
+    }
     if (argv[1] === "exec" && argv.includes("cat") && argv.some((a) => a.includes("outcomes.log"))) {
       return { rc: 1, stdout: "", stderr: "No such file or directory", timedOut: false }
     }

@@ -241,6 +241,15 @@ function classifyAttempt(result: ExecResult): AttemptClass {
   const transient = (hadErrorEvent && !hadActivity) || (result.rc !== 0 && !hadActivity && TRANSIENT_RE.test(out))
   if (transient) return "transient"
 
+  // Zero-activity "success" (tune-mjcf live burn, 2026-08-17): an exhausted
+  // OAuth usage window makes CC exit rc 0 with a limit-reached result and
+  // NO tool_use — the old fall-through classified that as "done" and four
+  // consecutive empty attempts were silently recorded as reward=0. A bench
+  // attempt that never invoked a single tool cannot have done task work;
+  // classify as transient (bounded retries surface the cause in the log;
+  // persistent exhaustion still terminates via MAX_ATTEMPTS).
+  if (!hadActivity) return "transient"
+
   return "done"
 }
 

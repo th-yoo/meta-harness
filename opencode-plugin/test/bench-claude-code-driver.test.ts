@@ -215,3 +215,30 @@ test("claudeCodeDriver: authHint is CC-appropriate, not opencode's", () => {
   expect(claudeCodeDriver.authHint).not.toContain("opencode")
   expect(claudeCodeDriver.authHint).not.toContain("auth.json")
 })
+
+// ── zero-activity "success" = provider failure (tune-mjcf 2026-08-17) ────
+// Live burn: 4 consecutive agent attempts finished rc 0 in 32-43s with
+// turns=0 (OAuth usage window exhausted mid-run — CC exits "successfully"
+// with a limit-reached result and NO tool_use). The old classifier returned
+// "done" and each empty attempt was recorded as reward=0, silently costing
+// -1 vs anchor per trial. A bench attempt that never invoked a single tool
+// cannot have done task work: classify as transient (bounded retries make
+// the cause visible; persistent exhaustion still terminates via
+// MAX_ATTEMPTS).
+test("classifyAttempt: rc 0 with a result event but ZERO tool_use classifies as transient, never done", () => {
+  const out = [
+    JSON.stringify({ type: "system", subtype: "init" }),
+    JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      num_turns: 0,
+      result: "5-hour limit reached · resets 9am",
+    }),
+  ].join("\n")
+  expect(claudeCodeDriver.classifyAttempt(ok(out, 0))).toBe("transient")
+})
+
+test("classifyAttempt: completely empty rc-0 stdout classifies as transient, never done", () => {
+  expect(claudeCodeDriver.classifyAttempt(ok("", 0))).toBe("transient")
+})

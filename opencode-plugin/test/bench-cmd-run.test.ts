@@ -1777,6 +1777,15 @@ test("runTaskOnce: checks non-empty + claude-code driver injects settings.json +
   const calls: string[][] = []
   const fakeState = { rounds: 2, exhausted: false, perRule: { b1: { blocked: 2, lastFail: "2026-01-01T00:00:00Z" } } }
   const execFn = async (argv: string[]) => {
+    if (argv.includes("claude")) {
+      // zero-activity rc-0 now classifies transient (limit-exhaustion fix) —
+      // fake a minimal DONE attempt: one tool_use + a result event.
+      const doneOut = [
+        JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }] } }),
+        JSON.stringify({ type: "result", subtype: "success", is_error: false, num_turns: 1, result: "ok" }),
+      ].join("\n")
+      return { rc: 0, stdout: doneOut, stderr: "", timedOut: false }
+    }
     calls.push(argv)
     if (argv[1] === "exec" && argv.includes("cat") && argv.some((a) => a.includes("state.json"))) {
       return { rc: 0, stdout: JSON.stringify(fakeState), stderr: "", timedOut: false }
@@ -1818,6 +1827,15 @@ test("runTaskOnce: checkless arm (checks omitted) issues NO rule-gate cp and NO 
 
   const calls: string[][] = []
   const execFn = async (argv: string[]) => {
+    if (argv.includes("claude")) {
+      // zero-activity rc-0 now classifies transient (limit-exhaustion fix) —
+      // fake a minimal DONE attempt: one tool_use + a result event.
+      const doneOut = [
+        JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }] } }),
+        JSON.stringify({ type: "result", subtype: "success", is_error: false, num_turns: 1, result: "ok" }),
+      ].join("\n")
+      return { rc: 0, stdout: doneOut, stderr: "", timedOut: false }
+    }
     calls.push(argv)
     return { rc: 0, stdout: "", stderr: "", timedOut: false }
   }
@@ -1850,6 +1868,15 @@ test("runTaskOnce: state read rc!=0 (no block occurred, the common case) is fail
   const paths = fakeBenchPaths(dir, tbRoot)
 
   const execFn = async (argv: string[]) => {
+    if (argv.includes("claude")) {
+      // zero-activity rc-0 now classifies transient (limit-exhaustion fix) —
+      // fake a minimal DONE attempt: one tool_use + a result event.
+      const doneOut = [
+        JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }] } }),
+        JSON.stringify({ type: "result", subtype: "success", is_error: false, num_turns: 1, result: "ok" }),
+      ].join("\n")
+      return { rc: 0, stdout: doneOut, stderr: "", timedOut: false }
+    }
     if (argv[1] === "exec" && argv.includes("cat") && argv.some((a) => a.includes("state.json"))) {
       return { rc: 1, stdout: "", stderr: "No such file or directory", timedOut: false }
     }
@@ -1884,6 +1911,15 @@ test("runTaskOnce: state read rc:0 but unparseable JSON is ALSO fail-open — no
   const paths = fakeBenchPaths(dir, tbRoot)
 
   const execFn = async (argv: string[]) => {
+    if (argv.includes("claude")) {
+      // zero-activity rc-0 now classifies transient (limit-exhaustion fix) —
+      // fake a minimal DONE attempt: one tool_use + a result event.
+      const doneOut = [
+        JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }] } }),
+        JSON.stringify({ type: "result", subtype: "success", is_error: false, num_turns: 1, result: "ok" }),
+      ].join("\n")
+      return { rc: 0, stdout: doneOut, stderr: "", timedOut: false }
+    }
     if (argv[1] === "exec" && argv.includes("cat") && argv.some((a) => a.includes("state.json"))) {
       // rc:0 (the read itself succeeded) but the body is NOT valid JSON — a
       // corrupt/truncated state.json, distinct from the rc!=0 "file absent"
