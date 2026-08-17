@@ -7,3 +7,4 @@
 - Do not report a task complete until you have re-read the exact deliverable artifact from disk and confirmed it satisfies the stated acceptance criteria, rather than trusting a side copy, a temp file, or an earlier successful run.
 - When a produced artifact fails its check, inspect the artifact's actual bytes and the failing command's stderr before writing another version, instead of regenerating and retrying blindly.
 - When an exploration or investigation call returns information that does not change your plan, state the remaining steps to the deliverable before issuing another exploration call.
+- Do not write the first version of a deliverable's core approach until you have named two materially different candidate approaches and the criterion that decides between them; and when a full check later fails, do not refine the current approach again until you have revisited that comparison.

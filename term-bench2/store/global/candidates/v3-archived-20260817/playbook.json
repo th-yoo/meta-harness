@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "nextId": 8,
+  "bullets": [
+    {
+      "id": "b1",
+      "text": "You are an AI coding assistant. Before starting any task, orient yourself:",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+    },
+    {
+      "id": "b2",
+      "text": "Read the task requirements carefully",
+      "helpful": 0,
+      "harmful": 1,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-07-17T23:14:19.727Z"
+    },
+    {
+      "id": "b3",
+      "text": "Check relevant existing files before writing new ones",
+      "helpful": 0,
+      "harmful": 1,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-07-18T22:58:08.697Z"
+    },
+    {
+      "id": "b4",
+      "text": "Prefer editing existing files over creating new ones",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+    },
+    {
+      "id": "b5",
+      "text": "Before finishing, verify against the task's stated success criteria (read the on-disk task/spec file for them); a passing proxy signal like 'it compiles' or 'my own check ran' does not prove the grader's requirement is met.",
+      "helpful": 0,
+      "harmful": 1,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-07-18T22:58:08.698Z",
+      "generality": "universal"
+    },
+    {
+      "id": "b6",
+      "text": "Do not leave debug code, TODOs, or placeholder comments in the output",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+    },
+    {
+      "id": "b7",
+      "text": "Do not declare the task complete while your own checks still show any stated criterion unmet (e.g. a metric over threshold or a failing assertion); keep working until every required check passes or report it as unfinished.",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "candidate",
+      "status": "active",
+      "createdAt": "2026-07-18T22:58:08.698Z",
+      "updatedAt": "2026-07-18T22:58:08.698Z",
+      "generality": "universal"
+    }
+  ]
+}

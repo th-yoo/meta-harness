@@ -1,0 +1,8 @@
+{
+  "proposerModel": "authored:gauntlet-spec-vc",
+  "proposerVariant": "",
+  "scope": "account-global",
+  "kind": "authored-vc",
+  "createdAt": "2026-08-17T13:15:47.979Z",
+  "provenance": "V-C arm of docs/superpowers/specs/2026-08-17-gen3-regression-gauntlet-design.md: v3 (organic V-A) + one anti-anchoring bullet (gen-2 mechanism 1). Passed reviewAddedBullets same as organic mints."
+}

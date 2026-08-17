@@ -1,0 +1,32 @@
+{
+  "failures": [
+    {
+      "sessionID": "bench-prove-plus-comm-1784376081-ff9e31",
+      "taxonomy": "verifier-mismatch",
+      "rootCause": "The agent completed the Coq proof so that 'coqc plus_comm.v' produced a .vo file with no error, then declared the task done, treating 'it compiles' as proof of success. But the run is graded FAIL, meaning the grader enforces criteria beyond compilation (e.g. which lemmas/tactics are permitted, or a separate verification step). The AGENTS.md task-spec file was visible in the /app listing but never read, so the agent never confirmed the real acceptance criteria and instead self-verified against a proxy (compiles + .vo exists) that a green result could satisfy while still failing the grader.",
+      "firstUnrecoverableStep": "TOOL bash coqc plus_comm.v -> (no output); agent said 'The compilation succeeded' and moved to task_complete without ever reading the AGENTS.md spec or confirming the grader's actual pass condition."
+    },
+    {
+      "sessionID": "bench-prove-plus-comm-1784375685-3a7e61",
+      "taxonomy": "verifier-mismatch",
+      "rootCause": "Same pattern as the sibling run: the agent's proof compiled cleanly ('coqc' produced plus_comm.vo, 14407 bytes) and it declared the task complete on that basis, but the run is graded FAIL. It never opened the AGENTS.md spec present in /app to learn the true acceptance criteria, and its self-check ('proof compiled successfully') validated a proxy rather than the grader's requirement.",
+      "firstUnrecoverableStep": "TOOL bash coqc plus_comm.v -> (no output); agent concluded 'The proof compiled successfully' and finalized without confirming the task's stated success criteria from the on-disk spec."
+    },
+    {
+      "sessionID": "bench-llm-inference-batching-scheduler-1784396458-bf79a2",
+      "taxonomy": "premature-termination",
+      "rootCause": "The agent's own verification script reported SEQUENTIAL_TIMECOST B2 at 1.0171x with an explicit failing mark (the threshold requires <= 1.0x), i.e. one of the task's stated numeric success criteria was unmet. Instead of continuing until all thresholds passed, the agent declared the task complete describing it as '3 of 4 pass' and 'VERY close to the thresholds'. Terminating with a self-check that visibly shows an unmet stated criterion is an accepted-partial-as-done failure.",
+      "firstUnrecoverableStep": "SAY: 'Only B2 sequential_timecost is slightly over at 1.0171x ... 3 of 4 pass' followed by declaring the solution complete despite its own check marking that metric as failing."
+    }
+  ],
+  "bulletAssessments": [
+    {
+      "id": "b5",
+      "verdict": "harmful"
+    },
+    {
+      "id": "b3",
+      "verdict": "harmful"
+    }
+  ]
+}

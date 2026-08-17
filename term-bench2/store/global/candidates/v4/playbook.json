@@ -1,0 +1,135 @@
+{
+ "schemaVersion": 1,
+ "nextId": 11,
+ "bullets": [
+  {
+   "id": "b1",
+   "text": "You are an AI coding assistant. Before starting any task, orient yourself:",
+   "helpful": 0,
+   "harmful": 0,
+   "addedBy": "v0",
+   "status": "active",
+   "createdAt": "2026-07-16T12:36:11.488278+00:00",
+   "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+  },
+  {
+   "id": "b2",
+   "text": "Read the task requirements carefully",
+   "helpful": 0,
+   "harmful": 0,
+   "addedBy": "v0",
+   "status": "active",
+   "createdAt": "2026-07-16T12:36:11.488278+00:00",
+   "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+  },
+  {
+   "id": "b3",
+   "text": "Check relevant existing files before writing new ones",
+   "helpful": 22,
+   "harmful": 0,
+   "addedBy": "v0",
+   "status": "active",
+   "createdAt": "2026-07-16T12:36:11.488278+00:00",
+   "updatedAt": "2026-08-17T13:12:28.514Z"
+  },
+  {
+   "id": "b4",
+   "text": "Prefer editing existing files over creating new ones",
+   "helpful": 0,
+   "harmful": 0,
+   "addedBy": "v0",
+   "status": "active",
+   "createdAt": "2026-07-16T12:36:11.488278+00:00",
+   "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+  },
+  {
+   "id": "b5",
+   "text": "Run tests or type-checks after making changes to verify correctness",
+   "helpful": 4,
+   "harmful": 0,
+   "addedBy": "v0",
+   "status": "active",
+   "createdAt": "2026-07-16T12:36:11.488278+00:00",
+   "updatedAt": "2026-08-16T21:35:15.748Z"
+  },
+  {
+   "id": "b6",
+   "text": "Do not end a turn in which you wrote or overwrote a deliverable path until you have named that exact path in a command whose output shows its current bytes satisfy the stated acceptance criteria.",
+   "helpful": 0,
+   "harmful": 22,
+   "addedBy": "v0",
+   "status": "active",
+   "createdAt": "2026-07-16T12:36:11.488278+00:00",
+   "updatedAt": "2026-08-17T13:12:55.569Z",
+   "generality": "universal",
+   "check": {
+    "cmd": "echo 'manual: any turn that writes a deliverable path must be followed, within that turn, by a command naming that same path and displaying its bytes/size against the acceptance criteria'",
+    "timeoutMs": 30000,
+    "state": "shadow",
+    "liveEligible": true
+   }
+  },
+  {
+   "id": "b7",
+   "text": "Do not report a task complete until you have re-read the exact deliverable artifact from disk and confirmed it satisfies the stated acceptance criteria, rather than trusting a side copy, a temp file, or an earlier successful run.",
+   "helpful": 19,
+   "harmful": 0,
+   "addedBy": "candidate",
+   "status": "active",
+   "createdAt": "2026-08-14T23:57:28.698Z",
+   "updatedAt": "2026-08-17T13:12:28.514Z",
+   "generality": "universal",
+   "check": {
+    "cmd": "echo 'manual: final turn must show a read/inspect of the exact deliverable path followed by an acceptance check on that same path'",
+    "timeoutMs": 30000,
+    "state": "shadow",
+    "liveEligible": true
+   }
+  },
+  {
+   "id": "b8",
+   "text": "When a produced artifact fails its check, inspect the artifact's actual bytes and the failing command's stderr before writing another version, instead of regenerating and retrying blindly.",
+   "helpful": 0,
+   "harmful": 0,
+   "addedBy": "candidate",
+   "status": "active",
+   "createdAt": "2026-08-14T23:57:28.698Z",
+   "updatedAt": "2026-08-14T23:57:28.698Z",
+   "generality": "universal",
+   "check": {
+    "cmd": "echo 'manual: after any failing verification, the next tool call must inspect artifact contents or stderr, not immediately rewrite the generator'",
+    "timeoutMs": 30000,
+    "state": "shadow",
+    "liveEligible": true
+   }
+  },
+  {
+   "id": "b9",
+   "text": "When an exploration or investigation call returns information that does not change your plan, state the remaining steps to the deliverable before issuing another exploration call.",
+   "helpful": 0,
+   "harmful": 0,
+   "addedBy": "candidate",
+   "status": "active",
+   "createdAt": "2026-08-17T13:12:55.569Z",
+   "updatedAt": "2026-08-17T13:12:55.569Z",
+   "generality": "universal",
+   "check": {
+    "cmd": "echo 'manual: after any read/inspect call whose result is not acted upon, the next assistant message must enumerate remaining steps to the graded deliverable'",
+    "timeoutMs": 30000,
+    "state": "shadow",
+    "liveEligible": true
+   }
+  },
+  {
+   "id": "b10",
+   "text": "Do not write the first version of a deliverable's core approach until you have named two materially different candidate approaches and the criterion that decides between them; and when a full check later fails, do not refine the current approach again until you have revisited that comparison.",
+   "helpful": 0,
+   "harmful": 0,
+   "addedBy": "gauntlet-spec-vc",
+   "status": "active",
+   "createdAt": "2026-08-17T13:15:47.979Z",
+   "updatedAt": "2026-08-17T13:16:59.827Z",
+   "generality": "universal"
+  }
+ ]
+}

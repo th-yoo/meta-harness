@@ -1,0 +1,910 @@
+{
+  "version": "v3",
+  "nPass": 8,
+  "nFail": 12,
+  "sessions": [
+    {
+      "sessionID": "bench-constraints-scheduling-1784504106-1597e0",
+      "passed": true,
+      "note": "bench:constraints-scheduling",
+      "turnCount": 1,
+      "timestamp": "2026-07-19T23:38:57.832Z",
+      "summary": "constraints-scheduling",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "todowrite": {
+          "calls": 4,
+          "errors": 0
+        },
+        "read": {
+          "calls": 5,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 4,
+          "errors": 0
+        },
+        "write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 230.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 37.7,
+      "peakRssMb": 1022,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-constraints-scheduling-1784504684-8fe1b3",
+      "passed": true,
+      "note": "bench:constraints-scheduling",
+      "turnCount": 1,
+      "timestamp": "2026-07-19T23:48:56.480Z",
+      "summary": "constraints-scheduling",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "todowrite": {
+          "calls": 5,
+          "errors": 0
+        },
+        "read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 4,
+          "errors": 0
+        },
+        "write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 251.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 36.5,
+      "peakRssMb": 988,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-constraints-scheduling-1784505463-3bc771",
+      "passed": true,
+      "note": "bench:constraints-scheduling",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T00:08:55.137Z",
+      "summary": "constraints-scheduling",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "todowrite": {
+          "calls": 5,
+          "errors": 0
+        },
+        "read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 2,
+          "errors": 0
+        },
+        "write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 670.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 35.3,
+      "peakRssMb": 967,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-path-tracing-1784504949-48e28e",
+      "passed": false,
+      "note": "bench:path-tracing",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T00:13:18.916Z",
+      "summary": "path-tracing",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "read": {
+          "calls": 4,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 68,
+          "errors": 4
+        },
+        "write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "edit": {
+          "calls": 8,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 1448.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 346.3,
+      "peakRssMb": 1854,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-constraints-scheduling-1784506777-cc85e6",
+      "passed": true,
+      "note": "bench:constraints-scheduling",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T00:25:15.700Z",
+      "summary": "constraints-scheduling",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "todowrite": {
+          "calls": 3,
+          "errors": 0
+        },
+        "read": {
+          "calls": 4,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 338,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 31.5,
+      "peakRssMb": 969,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-tune-mjcf-1784505730-2a7141",
+      "passed": true,
+      "note": "bench:tune-mjcf",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T00:27:08.969Z",
+      "summary": "tune-mjcf",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "todowrite": {
+          "calls": 1,
+          "errors": 0
+        },
+        "read": {
+          "calls": 5,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 28,
+          "errors": 13
+        },
+        "write": {
+          "calls": 17,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 1497.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 807.8,
+      "peakRssMb": 1104,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-constraints-scheduling-1784507734-be4689",
+      "passed": true,
+      "note": "bench:constraints-scheduling",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T00:44:28.117Z",
+      "summary": "constraints-scheduling",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "todowrite": {
+          "calls": 6,
+          "errors": 0
+        },
+        "read": {
+          "calls": 4,
+          "errors": 0
+        },
+        "write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 532.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 36.8,
+      "peakRssMb": 973,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-db-wal-recovery-1784508661-512588",
+      "passed": false,
+      "note": "bench:db-wal-recovery",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T01:00:43.409Z",
+      "summary": "db-wal-recovery",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "bash": {
+          "calls": 52,
+          "errors": 2
+        },
+        "read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "edit": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 581.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 187.5,
+      "peakRssMb": 1027,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-distribution-search-1784505595-00869d",
+      "passed": false,
+      "note": "bench:distribution-search",
+      "turnCount": 0,
+      "timestamp": "2026-07-20T01:06:51.961Z",
+      "summary": "distribution-search",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {},
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 4015.9,
+      "timedOut": true,
+      "agentTimeout": 3600,
+      "cpuSeconds": 3110.6,
+      "peakRssMb": 1478,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-prove-plus-comm-1784510649-688473",
+      "passed": false,
+      "note": "bench:prove-plus-comm",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T01:32:25.884Z",
+      "summary": "prove-plus-comm",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "read": {
+          "calls": 4,
+          "errors": 0
+        },
+        "glob": {
+          "calls": 1,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 17,
+          "errors": 8
+        },
+        "todowrite": {
+          "calls": 3,
+          "errors": 0
+        },
+        "edit": {
+          "calls": 5,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 495.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 41.6,
+      "peakRssMb": 1079,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-path-tracing-1784510018-bc2bab",
+      "passed": false,
+      "note": "bench:path-tracing",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T01:43:46.070Z",
+      "summary": "path-tracing",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "read": {
+          "calls": 8,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 49,
+          "errors": 1
+        },
+        "write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "edit": {
+          "calls": 14,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 1806.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 539.6,
+      "peakRssMb": 2013,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-prove-plus-comm-1784512059-0e85b3",
+      "passed": false,
+      "note": "bench:prove-plus-comm",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T01:57:15.732Z",
+      "summary": "prove-plus-comm",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "todowrite": {
+          "calls": 4,
+          "errors": 0
+        },
+        "read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "glob": {
+          "calls": 1,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 6,
+          "errors": 1
+        },
+        "edit": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 575.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 40.5,
+      "peakRssMb": 1056,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-distribution-search-1784511553-6cb65a",
+      "passed": true,
+      "note": "bench:distribution-search",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T02:06:01.187Z",
+      "summary": "distribution-search",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "todowrite": {
+          "calls": 3,
+          "errors": 0
+        },
+        "write": {
+          "calls": 8,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 13,
+          "errors": 4
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 1606.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 774.9,
+      "peakRssMb": 1373,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-prove-plus-comm-1784512863-dd972e",
+      "passed": false,
+      "note": "bench:prove-plus-comm",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T02:08:04.837Z",
+      "summary": "prove-plus-comm",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "read": {
+          "calls": 4,
+          "errors": 0
+        },
+        "glob": {
+          "calls": 1,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 11,
+          "errors": 6
+        },
+        "todowrite": {
+          "calls": 3,
+          "errors": 0
+        },
+        "edit": {
+          "calls": 9,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 420.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 38.1,
+      "peakRssMb": 1052,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-tune-mjcf-1784511639-4fa159",
+      "passed": false,
+      "note": "bench:tune-mjcf",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T02:11:01.460Z",
+      "summary": "tune-mjcf",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "read": {
+          "calls": 10,
+          "errors": 0
+        },
+        "todowrite": {
+          "calls": 2,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 68,
+          "errors": 54
+        },
+        "edit": {
+          "calls": 78,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 1821.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 806.7,
+      "peakRssMb": 1107,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-prove-plus-comm-1784513962-97172e",
+      "passed": false,
+      "note": "bench:prove-plus-comm",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T02:28:34.624Z",
+      "summary": "prove-plus-comm",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "glob": {
+          "calls": 1,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 5,
+          "errors": 1
+        },
+        "edit": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 552.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 30.6,
+      "peakRssMb": 1044,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-path-tracing-1784513325-e9f70f",
+      "passed": false,
+      "note": "bench:path-tracing",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T02:34:31.661Z",
+      "summary": "path-tracing",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 56,
+          "errors": 1
+        },
+        "write": {
+          "calls": 6,
+          "errors": 0
+        },
+        "edit": {
+          "calls": 6,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 1545.2,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 320,
+      "peakRssMb": 1880,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-prove-plus-comm-1784514988-1b0f3c",
+      "passed": false,
+      "note": "bench:prove-plus-comm",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T02:54:54.054Z",
+      "summary": "prove-plus-comm",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "todowrite": {
+          "calls": 4,
+          "errors": 0
+        },
+        "glob": {
+          "calls": 1,
+          "errors": 0
+        },
+        "read": {
+          "calls": 5,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 10,
+          "errors": 4
+        },
+        "edit": {
+          "calls": 8,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 1105.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 51,
+      "peakRssMb": 1055,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-distribution-search-1784515002-fef8ef",
+      "passed": true,
+      "note": "bench:distribution-search",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T03:01:48.995Z",
+      "summary": "distribution-search",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "todowrite": {
+          "calls": 4,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 25,
+          "errors": 3
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 1505.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 525.5,
+      "peakRssMb": 1373,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-tune-mjcf-1784515000-a5d323",
+      "passed": false,
+      "note": "bench:tune-mjcf",
+      "turnCount": 1,
+      "timestamp": "2026-07-20T03:05:35.711Z",
+      "summary": "tune-mjcf",
+      "model": "anthropic/claude-haiku-4-5",
+      "variant": "",
+      "toolUsage": {
+        "read": {
+          "calls": 6,
+          "errors": 0
+        },
+        "todowrite": {
+          "calls": 4,
+          "errors": 0
+        },
+        "bash": {
+          "calls": 39,
+          "errors": 14
+        },
+        "write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "edit": {
+          "calls": 14,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "1.17.18",
+        "pluginSha": "bb51445",
+        "harnessHash": "2b1f26bf04d2d1e3",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "opencode",
+        "resourceEnforcement": true,
+        "minAgentTimeout": 3600
+      },
+      "platform": "opencode",
+      "elapsed": 1734.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 348.4,
+      "peakRssMb": 1101,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    }
+  ]
+}

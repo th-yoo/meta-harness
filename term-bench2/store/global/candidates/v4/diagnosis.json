@@ -1,0 +1,10 @@
+{
+ "provenance": "authored per gauntlet spec (V-C); base = v3 verbatim",
+ "addedBullet": "Do not write the first version of a deliverable's core approach until you have named two materially different candidate approaches and the criterion that decides between them; and when a full check later fails, do not refine the current approach again until you have revisited that comparison.",
+ "reviewGate": {
+  "staged": true,
+  "violations": [],
+  "note": "second gate pass; staged final text adopted (first script read a nonexistent finalText field)"
+ },
+ "expect_unchanged_guards": "inherited from v3 diagnosis; the added bullet targets approach selection before first scaffold — on guard tasks that already pass, the enumeration step is a bounded preamble, not a behavior change"
+}

@@ -1,11 +1,11 @@
 {
-  "proposerModel": "anthropic/claude-opus-5",
+  "proposerModel": "anthropic/claude-opus-4-8",
   "proposerVariant": "high",
   "scope": "account-global",
   "kind": "propose-ops",
-  "createdAt": "2026-08-17T13:12:55.570Z",
+  "createdAt": "2026-07-18T22:58:08.740Z",
   "generalityRollup": {
-    "universal": 9,
+    "universal": 7,
     "vendor": 0,
     "model": 0
   }

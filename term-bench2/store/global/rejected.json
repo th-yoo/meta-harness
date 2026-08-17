@@ -98,5 +98,25 @@
       "duplicate: failed"
     ],
     "source": "review-gate"
+  },
+  {
+    "rejectedAt": "2026-08-17",
+    "scope": "account-global",
+    "version": "v3",
+    "bullet": "When the same command or check fails twice with the same symptom, do not run a third full-scale attempt until you have run one call whose only purpose is to localize the failure (smaller input, single stage, or dumped intermediate). [check: attached (live)]",
+    "violations": [
+      "duplicate: failed"
+    ],
+    "source": "review-gate"
+  },
+  {
+    "rejectedAt": "2026-08-17",
+    "scope": "account-global",
+    "version": "v3",
+    "bullet": "When the same command or check fails twice with the same symptom, do not run a third full-scale attempt until you have run one call whose only purpose is to localize the failure (smaller input, single stage, or dumped intermediate). [check: attached (live)]",
+    "violations": [
+      "duplicate: failed"
+    ],
+    "source": "review-gate"
   }
 ]

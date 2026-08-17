@@ -1,32 +1,117 @@
 {
   "failures": [
     {
-      "sessionID": "bench-prove-plus-comm-1784376081-ff9e31",
-      "taxonomy": "verifier-mismatch",
-      "rootCause": "The agent completed the Coq proof so that 'coqc plus_comm.v' produced a .vo file with no error, then declared the task done, treating 'it compiles' as proof of success. But the run is graded FAIL, meaning the grader enforces criteria beyond compilation (e.g. which lemmas/tactics are permitted, or a separate verification step). The AGENTS.md task-spec file was visible in the /app listing but never read, so the agent never confirmed the real acceptance criteria and instead self-verified against a proxy (compiles + .vo exists) that a green result could satisfy while still failing the grader.",
-      "firstUnrecoverableStep": "TOOL bash coqc plus_comm.v -> (no output); agent said 'The compilation succeeded' and moved to task_complete without ever reading the AGENTS.md spec or confirming the grader's actual pass condition."
+      "sessionID": "bench-write-compressor-1786640941-10d9a1",
+      "taxonomy": "wrong-plan",
+      "rootCause": "The agent read ~35 lines of the decompressor and declared it understood the format, then spent ~90 bash iterations writing full-size encoders and piping them through ./decomp, getting empty output each time. It never localized which stage broke and never validated a single-symbol round-trip. The controlling error is that it committed to an expensive generate-and-test loop on a target it had not fully read, and never revised the hypothesis when the same uninformative symptom (empty output) recurred. The final artifact was a Python traceback accidentally redirected into data.comp.",
+      "firstUnrecoverableStep": "Now I understand the decompressor. It's an arithmetic coding decompressor that expects: 1. An initial 9-bit integer indicating the number of items to decode"
     },
     {
-      "sessionID": "bench-prove-plus-comm-1784375685-3a7e61",
-      "taxonomy": "verifier-mismatch",
-      "rootCause": "Same pattern as the sibling run: the agent's proof compiled cleanly ('coqc' produced plus_comm.vo, 14407 bytes) and it declared the task complete on that basis, but the run is graded FAIL. It never opened the AGENTS.md spec present in /app to learn the true acceptance criteria, and its self-check ('proof compiled successfully') validated a proxy rather than the grader's requirement.",
-      "firstUnrecoverableStep": "TOOL bash coqc plus_comm.v -> (no output); agent concluded 'The proof compiled successfully' and finalized without confirming the task's stated success criteria from the on-disk spec."
-    },
-    {
-      "sessionID": "bench-llm-inference-batching-scheduler-1784396458-bf79a2",
+      "sessionID": "bench-write-compressor-1786594959-c4e9bb",
       "taxonomy": "premature-termination",
-      "rootCause": "The agent's own verification script reported SEQUENTIAL_TIMECOST B2 at 1.0171x with an explicit failing mark (the threshold requires <= 1.0x), i.e. one of the task's stated numeric success criteria was unmet. Instead of continuing until all thresholds passed, the agent declared the task complete describing it as '3 of 4 pass' and 'VERY close to the thresholds'. Terminating with a self-check that visibly shows an unmet stated criterion is an accepted-partial-as-done failure.",
-      "firstUnrecoverableStep": "SAY: 'Only B2 sequential_timecost is slightly over at 1.0171x ... 3 of 4 pass' followed by declaring the solution complete despite its own check marking that metric as failing."
+      "rootCause": "The agent wrote a literal stub string into the graded path (data.comp) as a working placeholder and then churned on encoder variants until budget exhaustion; the stub was still the deliverable at the end. Bullet b6 was supposed to forbid this but is phrased as an absolute ban that the agent silently violated, and its harmful counter (20) shows the ban costs more than it prevents. The deeper mechanism is that the agent tracked its own encoder progress rather than the artifact's acceptance status, so it never noticed the graded bytes were still garbage.",
+      "firstUnrecoverableStep": "1: This is a placeholder - the actual compressed data needs proper arithmetic coding implementation"
+    },
+    {
+      "sessionID": "bench-polyglot-rust-c-1786948172-48f5ed",
+      "taxonomy": "wrong-plan",
+      "rootCause": "The agent burned turns probing compiler behavior with micro-experiments, then asserted 'Now I understand the full mechanism needed' and wrote the full artifact; when both compilers happened to pass it stopped. In the failing variant the same probe-then-one-shot pattern produced a construct whose validity in one language was never separately confirmed before scaling. The recurring mechanism across all three failures: after an exploratory phase the agent declares understanding and jumps straight to full-scale output instead of confirming the single riskiest assumption in isolation.",
+      "firstUnrecoverableStep": "Now I understand the full mechanism needed (nested vs non-nested block comments, plus a raw-string trick to smuggle the Rust program past the C++ parser)."
     }
   ],
   "bulletAssessments": [
     {
-      "id": "b5",
+      "id": "b7",
+      "verdict": "helpful"
+    },
+    {
+      "id": "b6",
       "verdict": "harmful"
     },
     {
       "id": "b3",
-      "verdict": "harmful"
+      "verdict": "helpful"
+    }
+  ],
+  "predictions": {
+    "expect_improve": [
+      "write-compressor and similar reverse-engineering tasks: b6's absolute placeholder ban is replaced by an acceptance-status gate that makes the agent re-check the graded bytes whenever it is about to end or move on, catching the stub-left-on-disk failure that b6 failed to prevent (b6 harmful=20).",
+      "incomplete/runway-death mode (video-processing, torch-pipeline-parallelism, raman-fitting, protein-assembly): the new bullet forces a stated remaining-step count when exploration output stops changing the plan, converting open-ended investigation into a bounded transition without mandating a premature scaffold write (the v2 mechanism the gate rejected).",
+      "slow-pass near-timeouts (tune-mjcf, distribution-search, large-scale-text-editing): the same repeat-symptom trigger stops the long identical retry loops that consumed most of the budget."
+    ]
+  },
+  "expect_unchanged_guards": [
+    {
+      "task": "adaptive-rejection-sampler",
+      "why": "Its runs converge in ~15 turns without repeated identical failures, so the repeat-symptom trigger never fires and no scaffold-first behavior is imposed."
+    },
+    {
+      "task": "chess-best-move",
+      "why": "Reads and searches vary each turn and produce differing outputs, so the 'same symptom twice' condition is not met."
+    },
+    {
+      "task": "extract-elf",
+      "why": "Passes in 8-11 turns with distinct outputs per step; neither the repeat trigger nor the end-of-task recheck changes its short successful path."
+    },
+    {
+      "task": "gcode-to-text",
+      "why": "Iterative reads produce new information each turn; the deliverable recheck it already does is unchanged."
+    },
+    {
+      "task": "headless-terminal",
+      "why": "Failures there are distinct per attempt; the bullet only adds one localizing call after two identical symptoms, which its traces do not exhibit."
+    },
+    {
+      "task": "log-summary-date-ranges",
+      "why": "6-9 turn runs with no retry loops; edits add no obligation on a first-try success."
+    },
+    {
+      "task": "merge-diff-arc-agi-task",
+      "why": "Already re-reads the deliverable; the reworded b6 imposes no new write-timing constraint."
+    },
+    {
+      "task": "mteb-retrieve",
+      "why": "Single-script tasks that pass on first or second run; no identical-symptom repetition."
+    },
+    {
+      "task": "multi-source-data-merger",
+      "why": "4-6 bash calls, no failure loop, deliverable written once and checked."
+    },
+    {
+      "task": "openssl-selfsigned-cert",
+      "why": "Short cert-generation runs; b6's replacement removes an absolute ban rather than adding a constraint, so behavior is unchanged or freer."
+    },
+    {
+      "task": "polyglot-rust-c",
+      "why": "Its passing runs compile both languages cleanly on the first artifact write; the edits only trigger after a second identical failure, which passing runs never reach."
+    },
+    {
+      "task": "portfolio-optimization",
+      "why": "Edit-and-run loops with changing numeric output each iteration; the identical-symptom trigger never fires."
+    },
+    {
+      "task": "pypi-server",
+      "why": "13-16 turn deterministic setup with no repeated failure; no new pacing requirement applies."
+    },
+    {
+      "task": "pytorch-model-cli",
+      "why": "Runs already end with a deliverable check; the reworded b6 does not forbid or delay any write it currently performs."
+    },
+    {
+      "task": "sam-cell-seg",
+      "why": "Its 80% passes come from progressive edits with distinct errors; unlike v2's rejected scaffold-first rule, nothing here forces an early minimal artifact that could lock a bad structure."
+    },
+    {
+      "task": "sparql-university",
+      "why": "7-8 turn query tasks, single write, no retry loop."
+    },
+    {
+      "task": "torch-tensor-parallelism",
+      "why": "Passing runs debug with differing error messages per attempt; no scaffold-first mandate is introduced, so the v2 regression mechanism is absent."
+    },
+    {
+      "task": "vulnerable-secret",
+      "why": "12-15 turn exploit tasks with new evidence each command; no identical repeated symptom and no change to write timing."
     }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "nextId": 8,
+  "nextId": 10,
   "bullets": [
     {
       "id": "b1",
@@ -16,21 +16,21 @@
       "id": "b2",
       "text": "Read the task requirements carefully",
       "helpful": 0,
-      "harmful": 1,
+      "harmful": 0,
       "addedBy": "v0",
       "status": "active",
       "createdAt": "2026-07-16T12:36:11.488278+00:00",
-      "updatedAt": "2026-07-17T23:14:19.727Z"
+      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
     },
     {
       "id": "b3",
       "text": "Check relevant existing files before writing new ones",
-      "helpful": 0,
-      "harmful": 1,
+      "helpful": 22,
+      "harmful": 0,
       "addedBy": "v0",
       "status": "active",
       "createdAt": "2026-07-16T12:36:11.488278+00:00",
-      "updatedAt": "2026-07-18T22:58:08.697Z"
+      "updatedAt": "2026-08-17T13:12:28.514Z"
     },
     {
       "id": "b4",
@@ -44,35 +44,81 @@
     },
     {
       "id": "b5",
-      "text": "Before finishing, verify against the task's stated success criteria (read the on-disk task/spec file for them); a passing proxy signal like 'it compiles' or 'my own check ran' does not prove the grader's requirement is met.",
-      "helpful": 0,
-      "harmful": 1,
-      "addedBy": "v0",
-      "status": "active",
-      "createdAt": "2026-07-16T12:36:11.488278+00:00",
-      "updatedAt": "2026-07-18T22:58:08.698Z",
-      "generality": "universal"
-    },
-    {
-      "id": "b6",
-      "text": "Do not leave debug code, TODOs, or placeholder comments in the output",
-      "helpful": 0,
+      "text": "Run tests or type-checks after making changes to verify correctness",
+      "helpful": 4,
       "harmful": 0,
       "addedBy": "v0",
       "status": "active",
       "createdAt": "2026-07-16T12:36:11.488278+00:00",
-      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+      "updatedAt": "2026-08-16T21:35:15.748Z"
+    },
+    {
+      "id": "b6",
+      "text": "Do not end a turn in which you wrote or overwrote a deliverable path until you have named that exact path in a command whose output shows its current bytes satisfy the stated acceptance criteria.",
+      "helpful": 0,
+      "harmful": 22,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-08-17T13:12:55.569Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: any turn that writes a deliverable path must be followed, within that turn, by a command naming that same path and displaying its bytes/size against the acceptance criteria'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
     },
     {
       "id": "b7",
-      "text": "Do not declare the task complete while your own checks still show any stated criterion unmet (e.g. a metric over threshold or a failing assertion); keep working until every required check passes or report it as unfinished.",
+      "text": "Do not report a task complete until you have re-read the exact deliverable artifact from disk and confirmed it satisfies the stated acceptance criteria, rather than trusting a side copy, a temp file, or an earlier successful run.",
+      "helpful": 19,
+      "harmful": 0,
+      "addedBy": "candidate",
+      "status": "active",
+      "createdAt": "2026-08-14T23:57:28.698Z",
+      "updatedAt": "2026-08-17T13:12:28.514Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: final turn must show a read/inspect of the exact deliverable path followed by an acceptance check on that same path'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
+    },
+    {
+      "id": "b8",
+      "text": "When a produced artifact fails its check, inspect the artifact's actual bytes and the failing command's stderr before writing another version, instead of regenerating and retrying blindly.",
       "helpful": 0,
       "harmful": 0,
       "addedBy": "candidate",
       "status": "active",
-      "createdAt": "2026-07-18T22:58:08.698Z",
-      "updatedAt": "2026-07-18T22:58:08.698Z",
-      "generality": "universal"
+      "createdAt": "2026-08-14T23:57:28.698Z",
+      "updatedAt": "2026-08-14T23:57:28.698Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: after any failing verification, the next tool call must inspect artifact contents or stderr, not immediately rewrite the generator'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
+    },
+    {
+      "id": "b9",
+      "text": "When an exploration or investigation call returns information that does not change your plan, state the remaining steps to the deliverable before issuing another exploration call.",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "candidate",
+      "status": "active",
+      "createdAt": "2026-08-17T13:12:55.569Z",
+      "updatedAt": "2026-08-17T13:12:55.569Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: after any read/inspect call whose result is not acted upon, the next assistant message must enumerate remaining steps to the graded deliverable'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
     }
   ]
 }
