@@ -23,6 +23,36 @@ master (mac-yoo) + router + session fleet-mac-yoo-fleet. NEXT (human-gated): v0 
 box (fires repo-public-flip trigger) · v1 scoping = agent-state monitoring (dead/stalled/
 idle edges over existing event lane). Memory: project-fleet-v0-design.md updated same day.
 
+## 🔬 GEN-2 REGRESSION INVESTIGATION 2026-08-17 ~18:00 KST — TRAJECTORY-LEVEL, TWO MECHANISMS + ONE RIG GAP
+
+Read all regressed-task trajectories (candidates/v2/traj/). Findings supersede
+the first-pass "locked scaffold" story with evidence:
+
+1. **First-idea anchoring** (sam-cell-seg 0/5 vs v1 4/5): effort EQUAL to v1
+   (fail turns 35–55 vs v1 pass turns 43–57) — NOT early quitting. All 5
+   independent trials produced the IDENTICAL first-workable approach (SAM
+   box-prompt per CSV row + greedy overlap) and polished it. "No exploration
+   until first runnable deliverable" suppressed approach search on a
+   quality-graded task; deterministic same-approach ×5 = bullet-driven.
+2. **Premature completion confidence** (adaptive-rejection-sampler 2/5 vs v1
+   5/5): v2 turn distribution truncated (max 15; v1 passed at 29 and 56
+   turns). Every failing final claims "complete and verified" while the
+   verifier fails — "write minimal, refine in place" read as done-sooner
+   license on iterate-to-quality tasks.
+3. polyglot-rust-c 1/5 / torch-tensor 2/5: NOT fully explained — turns match
+   v1's own short passes (6–16); partial mechanism-2 + variance.
+4. **RIG GAP:** production propose path recorded NO guard predictions
+   (candidates/v2/diagnosis.json has only failures+bulletAssessments; bench
+   lane's lesson-proposer requires expect_unchanged_guards). All 4 regressed
+   tasks were v1-strong — a guard-defense pass would have flagged them
+   pre-trial. Fix: guards.json + prompt-side guard-defense requirement in
+   buildProposerPrompt (shipping this session).
+
+GEN-3 PATH (human go relayed via fleet 18:0x KST — mint yes, k=5 arm HELD for
+separate explicit go): failure-taxonomy over v2 (haiku judge, --model explicit)
+-> /mh-propose account; expected mint = scope-triggered pacing variant
+(rejected-ledger rule-8 exception: overreach attributed, mechanism certified).
+
 ## ✅ GEN-2 VERDICT 2026-08-17 ~13:30 KST — v2 REJECTED (net −5 vs v1; v1 STAYS ACTIVE) · FULL 150-TRIAL BOARD BANKED
 
 **FINAL (30-task board, 150 paired trials, install-windows-3.11 excluded

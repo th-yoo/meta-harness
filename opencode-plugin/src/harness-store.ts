@@ -2202,6 +2202,27 @@ export function readRejectedLedger(root: string): RejectedEntry[] {
   return Array.isArray(j) ? (j as RejectedEntry[]) : []
 }
 
+/** A measured currently-passing task the proposer must defend against
+ * regression (guards.json under the layer root, written at verdict-export
+ * time from the ACTIVE version's arm rows — store score.json alone cannot
+ * source this: it only holds sessions run while a version was the candidate
+ * under trial, so the active version's arm passes live in the leaderboard
+ * export, not the store). Gen-2 lesson: all four v2 regressions were
+ * v1-strong tasks no artifact ever asked the proposer to defend. */
+export interface GuardEntry {
+  task: string
+  /** Pass rate of the ACTIVE version on this task (0..1) at last arm. */
+  rate: number
+  /** Trials behind the rate (k of the arm). */
+  n: number
+}
+
+export function readGuards(root: string): GuardEntry[] {
+  const j = readJson<unknown>(path.join(root, "guards.json"), [])
+  if (!Array.isArray(j)) return []
+  return (j as GuardEntry[]).filter((g) => typeof g?.task === "string" && typeof g?.rate === "number")
+}
+
 export function appendRejectedLedger(root: string, e: RejectedEntry): void {
   const p = path.join(root, "rejected.json")
   const cur = readRejectedLedger(root)

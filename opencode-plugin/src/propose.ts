@@ -54,6 +54,7 @@ import {
   appendRejectedLedger,
   isFormOnlyReject,
   readTaxonomy,
+  readGuards,
   type RejectedEntry,
   type StoreLayer,
   type Playbook,
@@ -1390,6 +1391,29 @@ ${formOnly.map(line).join("\n")}
     return contentBlock + formBlock
   })()
 
+  // Guard-defense section (gen-2 regression fix, 2026-08-17): the bench lane's
+  // lesson-proposer has always required expect_unchanged_guards, but the
+  // production path never surfaced guard tasks at all — v2's four regressions
+  // (sam-cell-seg, polyglot-rust-c, torch-tensor-parallelism,
+  // adaptive-rejection-sampler) were ALL tasks the active version passed at
+  // 4-5/5, and no artifact ever asked the proposer to defend them. Guards come
+  // from guards.json under the layer root (written at verdict-export time from
+  // the ACTIVE version's arm rows — see harness-store.ts readGuards for why
+  // the store alone cannot source this list).
+  const guards = readGuards(layer.root)
+  const strongGuards = guards.filter((g) => g.rate >= 0.8)
+  const guardsSection = guards.length > 0
+    ? `## Guard tasks — the ACTIVE version's measured passes; your edits must not break these
+
+${guards.map((g) => `- ${g.task}: ${Math.round(g.rate * 100)}% pass (n=${g.n})`).join("\n")}
+
+Your diagnosis.json MUST include a "predictions" object:
+- "expect_improve": the failing tasks/mode your edits should flip, and why.
+- "expect_unchanged_guards": name EVERY guard at >=80% above with one line on why your edits are irrelevant or harmless to it. A rule that changes how the agent paces, verifies, or structures work applies to guard tasks too — "the bullet is about X, guards do Y" is not a defense unless you say why Y never triggers X's clause. A guard you cannot defend = narrow the bullet's trigger until you can, or do not propose it.
+
+`
+    : ""
+
   const relSystem = path.relative(worktree, stagingSystem)
   const relTools  = path.relative(worktree, stagingTools)
   const relDiag   = path.relative(worktree, stagingDiagnosis)
@@ -1481,9 +1505,15 @@ ENDOFENVPOLICY
     ? `Do NOT propose: generic best practices any competent agent already follows; one-off fixes tied to a single task, file, or error rather than a recurring behavior; or any rule not grounded in a failing trajectory above. Every rule must earn its place by addressing a diagnosed root cause.`
     : `Do NOT propose: generic best practices any competent agent already follows; or one-off fixes tied to a single task, file, or error rather than a recurring behavior. No failing trajectories have been captured for this layer yet — write a sensible baseline grounded in this scope's purpose instead of citing specific failures.`
 
+  // Predictions ride the diagnosis ONLY when guards exist — without guards the
+  // field would be unverifiable boilerplate, and every existing no-guards
+  // fixture stays byte-identical.
+  const predictionsShape = guards.length > 0
+    ? `,"predictions":{"expect_improve":["<failing task or mode + why>"],"expect_unchanged_guards":[{"task":"<guard task>","why":"<one line>"}]}`
+    : ""
   const diagShape = playbook
-    ? `{"failures":[{"sessionID":"<id>","taxonomy":"<one label>","rootCause":"<2-5 sentences>","firstUnrecoverableStep":"<quote>"}],"bulletAssessments":[{"id":"<bullet id followed-and-helped or followed-and-hurt>","verdict":"helpful"|"harmful"}]}`
-    : `{"failures":[{"sessionID":"<id from a trajectory above>","taxonomy":"<one label from the list>","rootCause":"<2-5 sentences>","firstUnrecoverableStep":"<quote the offending event>"}]}`
+    ? `{"failures":[{"sessionID":"<id>","taxonomy":"<one label>","rootCause":"<2-5 sentences>","firstUnrecoverableStep":"<quote>"}],"bulletAssessments":[{"id":"<bullet id followed-and-helped or followed-and-hurt>","verdict":"helpful"|"harmful"}]${predictionsShape}}`
+    : `{"failures":[{"sessionID":"<id from a trajectory above>","taxonomy":"<one label from the list>","rootCause":"<2-5 sentences>","firstUnrecoverableStep":"<quote the offending event>"}]${predictionsShape}}`
 
   // The mechanization/check contract — shared verbatim between both output
   // modes (it governs WHAT a rule may look like, not HOW it is delivered).
@@ -1567,7 +1597,7 @@ ${untrustedSection}${measuredTaxonomySection}${externalEvidenceSection}${storeAc
 
 ${failingSection}
 
-${timedOutSection}${slowPassSection}${priorSection}${rejectedSection}${ledgerSection}## Your task — DIAGNOSE, then edit
+${timedOutSection}${slowPassSection}${priorSection}${rejectedSection}${ledgerSection}${guardsSection}## Your task — DIAGNOSE, then edit
 
 STEP 1 — Diagnose the failures. For each failing trajectory above (up to 3), find the FIRST unrecoverable step and the root cause. Classify each with exactly ONE taxonomy label from:
 ${FAILURE_TAXONOMY.map((t) => `  - ${t}`).join("\n")}
