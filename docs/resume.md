@@ -10,6 +10,31 @@ does NOT transfer; this file + the repo are the source of truth.)
 > guards live); k=5 arm spend = HELD for separate explicit go. Round
 > narrative: minimal/HISTORY.md gen-2 entry.
 
+## 🚢 SIBLING LANE UPDATE 2026-08-17 ~19:45 KST — FLEET V1 PARTIAL: B7 + B10 built + live-verified, 14 commits UNPUSHED
+
+Extends the v0-complete block below. `~/z2/fleet` local main @ `dc4626a`, origin still
+@ `1caf261` — 14 commits (B7 + B10 + 2 live-bug fix rounds, 186/186 tests) await the
+human's Enter at the worker-tmux push prompt (worker correctly refuses peer-relayed
+grants; only its own user's in-session input clears it). LANDED + LIVE-VERIFIED:
+**B7** five-state classifier (running/idle/awaiting/dead/stalled) + `state-change`
+frames; two live-only bugs fixed (persistent `❯` box during tool calls → spinner-
+presence override; blinking `⏺` status glyph reset the stall clock → glyph
+canonicalization + parenless-spinner mask). **B10** concierge + DM: fleet.json
+validation + reserved `concierge` entry + crash-proof poll-tick config reload;
+fleet-channel exact-`status` vs free-form split + ConciergeHooks; viewport reply
+extraction (claude TUI is ALT-SCREEN, history_size=0 — no scrollback; reply = `⏺`
+block + indented continuations, live-harvested); in-flight tracker; reply relay
+(screen fetch on running→idle + 1s settle, keep-marker-on-none retry, 90s marker TTL
+un-strand, restart-orphan notice). DM D0BQ2SCJECF self-serves end-to-end (9s round-
+trip proven, no orchestrator needed). Post-land production-DM bugs found+fixed same
+day: blank-line paragraph truncation, lone-"?" shortcuts-overlay strand, idle-edge/
+paint TOCTOU. Ops notes: concierge workdir `~/.fleet` + CLAUDE.md (scope rules,
+"(orchestrator)"-post legitimacy, `@orch` prefix → defer); respawned concierge
+defaults to MANUAL mode — cycle shift+tab to auto. v1 remaining: B8 (alert table/
+re-notify/cooldown), B9 (`!answer` relay) — specs in `fleet:docs/v1-spec.md`,
+plans B7/B10 pattern in `fleet:docs/superpowers/plans/`. Memory:
+project-fleet-v0-design.md carries the same state.
+
 ## 🚢 SIBLING LANE CLOSE 2026-08-17 ~12:15 KST — FLEET V0 COMPLETE on yoo-mac (`~/z2/fleet` @ `3902963` pushed)
 
 Separate repo/lane (github.com/th-yoo/fleet, private); recorded here for cross-host resume only.
