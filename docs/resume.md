@@ -16,39 +16,46 @@ does NOT transfer; this file + the repo are the source of truth.)
 > "crank-2 v20 verdict check" items below are RESOLVED — see the
 > "CRANK-2 AB VERDICT 2026-08-17" block. No activation.
 
-## 🟢 GO 2026-08-17 ~20:30 KST — GEN-3 REGRESSION GAUNTLET: APPROVED + SIZED GO GIVEN, MUST RUN ON `yoo-mac`
+## 🟢 GO 2026-08-17 ~20:45 KST — GEN-3 REGRESSION GAUNTLET: RUNS ON `yoo-dev` (user ruling) · yoo-mac OWES ONE EXPORT+PUSH
 
 ```
-USER APPROVED the spec docs/superpowers/specs/2026-08-17-gen3-regression-
-gauntlet-design.md ("approved, go run it") — mint go + 60-trial sized go
-BOTH GIVEN. Staged from yoo-dev; execution blocked there (v2 store/
-taxonomy/trajs + sam-cell-seg + torch-tensor-parallelism are yoo-mac
-host-local; ~/.config/kkamak on yoo-dev is stale July TB2.0). Split file
-committed: term-bench2/splits/regression-gauntlet.txt (6 tasks).
+USER APPROVED spec docs/superpowers/specs/2026-08-17-gen3-regression-
+gauntlet-design.md + sized go; then RULED: run on yoo-dev. Design amended
+to 3 ARMS (v1 + V-A + V-C, 90 trials, all same-host) because v1's banked
+rows are yoo-mac-VM-paced and the rescue tasks are timeout-shaped —
+cross-host pairing was confounded. Byproduct: v1-here vs v1-banked-mac =
+measured mac<->WSL host effect. Split: term-bench2/splits/
+regression-gauntlet.txt. Spec "Host + hygiene" section has the full
+amendment + host-difference table.
 
-TURNKEY SEQUENCE (yoo-mac, in order — spec has full detail + decision rule):
- 1. git pull. /login freshness (each arm ~4-6h vs 8h token).
- 2. V-A mint: failure-taxonomy over v2 (--model anthropic/claude-haiku-4-5)
-    if not already done -> /mh-propose account (guards live; expect
-    scope-triggered pacing variant, rule-8 exception). Guards: the 4
-    regressed tasks as expect_unchanged_guards.
- 3. V-C mint: V-A shape + 2 counterweights (approach-enumeration before
-    scaffold commit; verifier-pass before "done") — organic propose if it
-    emits, else author from V-A proposal JSON + 2 bullets; MUST clear the
-    same review gate. Same guards.
- 4. Two arms, tmux, sequential (quota):
+yoo-mac, ONE JOB (everything else runs on yoo-dev):
+  git pull
+  term-bench2/store-sync.sh export        # REVIEW THE DIFF (surgical rule)
+  git add term-bench2/tasks term-bench2/store
+  git commit -m "data: TB2.1 store + task dirs — gauntlet inputs (8 task
+    dirs incl sam-cell-seg/torch-tensor-parallelism were host-local)"
+  git push
+
+yoo-dev then (this session drives it):
+ 1. git pull && term-bench2/store-sync.sh import
+ 2. bench image: prep --apply (already building 20:45 KST)
+ 3. V-A mint: failure-taxonomy over v2 (--model anthropic/claude-haiku-4-5)
+    -> /mh-propose account (guards live; 4 regressed tasks as
+    expect_unchanged_guards; expect scope-triggered pacing, rule-8)
+ 4. V-C mint: V-A + 2 counterweights (approach-enumeration before scaffold
+    commit; verifier-pass before "done"); same review gate, same guards
+ 5. THREE arms sequential in tmux, each:
     bun term-bench2/runner.ts run --task-file term-bench2/splits/
     regression-gauntlet.txt --model anthropic/claude-sonnet-5 --driver
-    claude-code --k 5 --layers account --pin account-global=<vA|vC>
-    --label gauntlet-<vA|vC> --min-agent-timeout 3600 --max-agent-timeout
-    3600 --enforce-resources --parallel --host-pressure on --no-oauth-gate
-    NO --results-file (store must get trajs). Export rows to
-    term-bench2/leaderboard/gauntlet-<vN>-20260817.json after each.
- 5. Verdict per spec decision rule (pre-registered: regression guard +
-    rescue retention; winner by net; tie -> V-A; margins <=1/task = drift).
-    v1 comparison rows = banked gen-1/gen-2 exports; v1 NEVER re-run.
- 6. Commit + push: rows, verdict table, resume update. Winner earns only
-    a full-board slot PROPOSAL (separate sized go). No activation.
+    claude-code --k 5 --layers account --pin account-global=<v1|vA|vC>
+    --label gauntlet-<arm> --min-agent-timeout 3600 --max-agent-timeout
+    3600 --enforce-resources --parallel --host-pressure on
+    --no-pack-measured --no-oauth-gate
+    NO --results-file. /login before each arm. Export rows to
+    term-bench2/leaderboard/gauntlet-<arm>-20260817.json
+ 6. Verdict per spec rule against the SAME-HOST v1 arm; host-effect table
+    (v1-here vs banked) alongside. Commit + push rows + verdict + resume.
+    Winner earns only a full-board slot PROPOSAL. No activation.
 ```
 
 ## 🚢 SIBLING LANE UPDATE 2026-08-17 ~19:45 KST — FLEET V1 PARTIAL: B7 + B10 built + live-verified, 14 commits UNPUSHED

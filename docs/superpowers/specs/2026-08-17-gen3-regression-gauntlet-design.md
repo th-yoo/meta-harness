@@ -100,12 +100,37 @@ polyglot ~20 → one k=1 pass ≈ 55 min serial. 60 trials ≈ overnight with th
 parallel scheduler; zero API dollars (OAuth Max20); risk = quota-window zero-turn
 attempts (store-excluded, burn wall-clock only).
 
-### Host + hygiene
+### Host + hygiene (amended 2026-08-17 ~20:45: arms run on yoo-dev, 3-arm design)
 
-TB2.1 rig = yoo-mac (mint machinery + v2 store live there). Everything durable —
-this spec, the split file, exported rows, verdict — travels via git. Store-writing
-runs are not resumable; interrupted arm = re-run same command + `--resume` after
-stripping partial tasks. `/login`-freshness before each arm (8h OAuth vs ~5h arm).
+**User ruling: run on yoo-dev (WSL2).** Podman is common to both hosts; measured
+differences: yoo-mac = podman machine VM (6cpu/10GB hard ceiling, Keychain
+credential export, measured packing works) vs yoo-dev = native rootless podman
+4.9.3 (8cpu/23GB, file credential, **cgroup capture broken → `--no-pack-measured`
+mandatory**, no /dev/kvm — the standing-open "yoo-dev would reclaim qemu" note is
+wrong).
+
+**Validity consequence → third arm.** v1's banked rows came off the yoo-mac VM;
+the rescue tasks are runway/timeout-shaped, so a faster host inflates exactly what
+the decision rule reads. Therefore on yoo-dev the experiment runs **three arms —
+v1, V-A, V-C — 90 trials total**, and the verdict pairs V-A/V-C against the
+**same-host v1 arm**, not the banked rows. Byproduct: v1-here vs v1-banked-mac =
+a direct measurement of the mac↔WSL host effect on these six tasks. This amends
+"paired against v1's banked rows" above; the anchor-never-re-run ruling is
+untouched (it covers the official anchor job, not a local v1 baseline arm).
+All three arm commands add `--no-pack-measured`.
+
+**Data locality (one-time yoo-mac push required):** 8 of 31 target task dirs
+(incl. sam-cell-seg, torch-tensor-parallelism) + the TB2.1 store (v2
+taxonomy/trajs, v1 playbook, rejected.json, guards.json) exist only on yoo-mac
+disk — never committed, contra the repo's shareable-artifacts rule. yoo-mac runs:
+`term-bench2/store-sync.sh export` (review the diff — surgical rule), then
+`git add term-bench2/tasks term-bench2/store && commit && push`. yoo-dev then:
+`git pull && term-bench2/store-sync.sh import` and executes everything else
+(image prep, mints, arms).
+
+Store-writing runs are not resumable; interrupted arm = re-run same command +
+`--resume` after stripping partial tasks. `/login`-freshness before each arm
+(8h OAuth vs ~2-4h per arm here).
 
 ## Out of scope
 
