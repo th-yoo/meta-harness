@@ -3,8 +3,12 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-> **MOST RECENT STATE (2026-08-17 ~09:30 KST):** main = `d1ec116`+. Read the
-> "GEN-2 UNBLOCKED" block FIRST (below). Prior blocks = history.
+> **MOST RECENT STATE (2026-08-17 ~18:30 KST):** main = `ba86fc4`+. GEN-2
+> CLOSED: v2 REJECTED (92/150 vs v1 97/150; v1 stays active). Read the
+> "GEN-2 REGRESSION INVESTIGATION" + "GEN-2 VERDICT" blocks FIRST (below).
+> Gen-3: mint go received (taxonomy running, then /mh-propose account with
+> guards live); k=5 arm spend = HELD for separate explicit go. Round
+> narrative: minimal/HISTORY.md gen-2 entry.
 
 ## 🚢 SIBLING LANE CLOSE 2026-08-17 ~12:15 KST — FLEET V0 COMPLETE on yoo-mac (`~/z2/fleet` @ `3902963` pushed)
 

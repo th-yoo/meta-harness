@@ -1583,3 +1583,52 @@ v1 is inactive, k=5 ab deferred. The machinery lesson repeats a3's: every
 one of these five failures was invisible until a real crank hit it, and
 none was where review predicted. The evidence pipeline now runs
 end-to-end on the account layer; what's left is a verdict.
+
+## Generation 2: the gate earned its keep by saying no (2026-08-17, "harness")
+
+The deadlock that closed the last session dissolved under one probe: the
+proposer had never seen the judge lane's taxonomy. The 08-16 mints rode
+degraded evidence, and the "proposer-diversity vs dedup" framing died the
+moment the mtimes were read — taxonomy.json landed at 06:32 on the 17th,
+every rejected mint predated it. One pre-fix probe re-proved the loop live
+(two more verify-theme duplicates, correctly killed), then d1ec116 surfaced
+the measured taxonomy into the production prompt and the very next mint
+came out a different animal: three pacing bullets aimed square at the
+dominant mode — runway exhaustion, hard tasks dying of unfinished work.
+Gate passed, v2 minted, first candidate born from machine-measured evidence
+instead of the proposer's own re-diagnosis.
+
+**The arm said no: 92/150 against v1's 97/150 (anchor 89). REJECT.** And
+the trajectories say the reject was RIGHT, which is the round's real
+product. The pacing bullets won exactly where the taxonomy said they would
+— sanitize-git-repo 3/5 over v1's 0/5, db-wal-recovery 3/5 over 1/5, tasks
+that die unfinished — and lost 4-5 points each on four tasks v1 passed at
+4-5/5, by two distinct mechanisms read straight from the trajs: first-idea
+anchoring (sam-cell-seg: SAME approach five independent times, equal effort
+to v1's passes, exploration suppressed by "no exploration until first
+runnable deliverable") and premature completion (adaptive-rejection: turn
+distributions truncated at 15 where v1's passes ground to 29 and 56, every
+failing final claiming "complete and verified"). A blanket pacing rule is a
+high-variance trade, and the board priced it correctly.
+
+**The round also indicted the rig, precisely.** Nothing ever asked the
+proposer to defend v1's strong tasks — the bench lane's lesson-proposer has
+demanded expect_unchanged_guards since it existed; the production path
+captured no predictions at all (v2's diagnosis.json: failures and bullet
+assessments, nothing else). All four regressions were sitting in the guard
+list that didn't exist. ba86fc4 closes it: guards.json written from the
+active version's arm rows at verdict-export time, prompt section listing
+measured pass rates, diagnosis shape now requiring a per-guard defense —
+narrow the trigger until you can defend it, or don't propose.
+
+An OAuth expiry mid-arm burned 54 attempts to zero-turn husks; the store
+excluded every one by design, makeup batches refilled the deficits, and
+install-windows-3.11 kept its gen-1 ruling (incomplete, dropped both arms).
+The infra noise cost wall-clock and nothing else.
+
+v1 stays active at 77.3 projected, 1.6 from the opus line. Gen-3 opens
+with everything gen-2 lacked: measured taxonomy in the prompt, guards with
+the four broken tasks at the top of the list, and a rejected-ledger entry
+whose recorded mechanism invites the narrowed variant by rule-8 exception.
+The loop's second generation produced no adoption and more knowledge than
+the first.
