@@ -16,6 +16,41 @@ does NOT transfer; this file + the repo are the source of truth.)
 > "crank-2 v20 verdict check" items below are RESOLVED — see the
 > "CRANK-2 AB VERDICT 2026-08-17" block. No activation.
 
+## 🟢 GO 2026-08-17 ~20:30 KST — GEN-3 REGRESSION GAUNTLET: APPROVED + SIZED GO GIVEN, MUST RUN ON `yoo-mac`
+
+```
+USER APPROVED the spec docs/superpowers/specs/2026-08-17-gen3-regression-
+gauntlet-design.md ("approved, go run it") — mint go + 60-trial sized go
+BOTH GIVEN. Staged from yoo-dev; execution blocked there (v2 store/
+taxonomy/trajs + sam-cell-seg + torch-tensor-parallelism are yoo-mac
+host-local; ~/.config/kkamak on yoo-dev is stale July TB2.0). Split file
+committed: term-bench2/splits/regression-gauntlet.txt (6 tasks).
+
+TURNKEY SEQUENCE (yoo-mac, in order — spec has full detail + decision rule):
+ 1. git pull. /login freshness (each arm ~4-6h vs 8h token).
+ 2. V-A mint: failure-taxonomy over v2 (--model anthropic/claude-haiku-4-5)
+    if not already done -> /mh-propose account (guards live; expect
+    scope-triggered pacing variant, rule-8 exception). Guards: the 4
+    regressed tasks as expect_unchanged_guards.
+ 3. V-C mint: V-A shape + 2 counterweights (approach-enumeration before
+    scaffold commit; verifier-pass before "done") — organic propose if it
+    emits, else author from V-A proposal JSON + 2 bullets; MUST clear the
+    same review gate. Same guards.
+ 4. Two arms, tmux, sequential (quota):
+    bun term-bench2/runner.ts run --task-file term-bench2/splits/
+    regression-gauntlet.txt --model anthropic/claude-sonnet-5 --driver
+    claude-code --k 5 --layers account --pin account-global=<vA|vC>
+    --label gauntlet-<vA|vC> --min-agent-timeout 3600 --max-agent-timeout
+    3600 --enforce-resources --parallel --host-pressure on --no-oauth-gate
+    NO --results-file (store must get trajs). Export rows to
+    term-bench2/leaderboard/gauntlet-<vN>-20260817.json after each.
+ 5. Verdict per spec decision rule (pre-registered: regression guard +
+    rescue retention; winner by net; tie -> V-A; margins <=1/task = drift).
+    v1 comparison rows = banked gen-1/gen-2 exports; v1 NEVER re-run.
+ 6. Commit + push: rows, verdict table, resume update. Winner earns only
+    a full-board slot PROPOSAL (separate sized go). No activation.
+```
+
 ## 🚢 SIBLING LANE UPDATE 2026-08-17 ~19:45 KST — FLEET V1 PARTIAL: B7 + B10 built + live-verified, 14 commits UNPUSHED
 
 Extends the v0-complete block below. `~/z2/fleet` local main @ `dc4626a`, origin still
