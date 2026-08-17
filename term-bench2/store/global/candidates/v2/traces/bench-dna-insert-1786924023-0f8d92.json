@@ -1,0 +1,43 @@
+{
+  "sessionID": "bench-dna-insert-1786924023-0f8d92",
+  "passed": true,
+  "note": "bench:dna-insert",
+  "turnCount": 22,
+  "timestamp": "2026-08-16T23:50:53.638Z",
+  "summary": "dna-insert",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 18,
+      "errors": 3
+    },
+    "Read": {
+      "calls": 2,
+      "errors": 0
+    },
+    "Write": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "d1ec116",
+    "harnessHash": "7bd775c8929dee5e",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 229.6,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 19.9,
+  "peakRssMb": 208,
+  "capMemoryMb": 4096,
+  "capRaised": false
+}

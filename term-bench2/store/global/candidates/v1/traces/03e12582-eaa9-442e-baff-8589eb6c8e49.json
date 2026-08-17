@@ -1,0 +1,74 @@
+{
+  "sessionID": "03e12582-eaa9-442e-baff-8589eb6c8e49",
+  "passed": true,
+  "note": "",
+  "turnCount": 33,
+  "timestamp": "2026-08-17T04:23:27.018Z",
+  "summary": "| arm | model | score |\n|---|---|---|\n| anchor (baseline) | sonnet | 75.3% |\n| v1 | sonnet | 77.3% |\n| v2 | sonnet | ~77.1% (partial, 112/155 trials — still running) |\n| opus | opus (Anthropic official) | 78.9% |",
+  "model": "unknown",
+  "variant": "",
+  "toolUsage": {
+    "bash": {
+      "calls": 105,
+      "errors": 15
+    },
+    "read": {
+      "calls": 11,
+      "errors": 0
+    },
+    "askuserquestion": {
+      "calls": 1,
+      "errors": 0
+    },
+    "edit": {
+      "calls": 5,
+      "errors": 0
+    },
+    "toolsearch": {
+      "calls": 5,
+      "errors": 0
+    },
+    "write": {
+      "calls": 1,
+      "errors": 0
+    },
+    "mcp__tmux__create-session": {
+      "calls": 1,
+      "errors": 0
+    },
+    "mcp__tmux__list-windows": {
+      "calls": 1,
+      "errors": 0
+    },
+    "mcp__tmux__list-panes": {
+      "calls": 1,
+      "errors": 0
+    },
+    "mcp__tmux__execute-command": {
+      "calls": 2,
+      "errors": 0
+    },
+    "mcp__tmux__capture-pane": {
+      "calls": 2,
+      "errors": 0
+    },
+    "monitor": {
+      "calls": 2,
+      "errors": 0
+    },
+    "taskstop": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "provider": "unknown",
+    "layerVersions": {
+      "account-global": "v1",
+      "project-global": "v1",
+      "account-role": "v0",
+      "project-role": "v1"
+    }
+  },
+  "platform": "claude-code"
+}

@@ -3,6 +3,8 @@
 - Check relevant existing files before writing new ones
 - Prefer editing existing files over creating new ones
 - Run tests or type-checks after making changes to verify correctness
-- Do not leave debug code, TODOs, or placeholder comments in the output
-- When the exact output format, filenames, field values, or literal strings are not fully specified, derive them from the task text and provided inputs rather than inventing them; never guess a value the grader will check.
-- Verify against the task's stated success criteria or independent ground truth, not against your own assumptions—self-checks that only confirm your invented format prove nothing.
+- When a deliverable's real content is not ready yet, write the simplest end-to-end-valid version of it to the exact deliverable path first and refine it in place, rather than deferring the first write until the content is final.
+- Do not report a task complete until you have re-read the exact deliverable artifact from disk and confirmed it satisfies the stated acceptance criteria, rather than trusting a side copy, a temp file, or an earlier successful run.
+- When a produced artifact fails its check, inspect the artifact's actual bytes and the failing command's stderr before writing another version, instead of regenerating and retrying blindly.
+- Do not continue exploring, reading, or profiling the environment until you have written a first runnable version of the graded deliverable at its required path; once you can name that path and its entrypoint, write it before any further investigation.
+- When you delete or replace a substring inside a structured artifact (markup, CSS, code, config, or serialized data), re-parse or re-validate the enclosing construct afterward instead of only confirming the removed text is gone.

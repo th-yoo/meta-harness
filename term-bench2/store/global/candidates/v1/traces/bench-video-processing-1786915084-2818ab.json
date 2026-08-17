@@ -1,0 +1,43 @@
+{
+  "sessionID": "bench-video-processing-1786915084-2818ab",
+  "passed": false,
+  "note": "bench:video-processing",
+  "turnCount": 69,
+  "timestamp": "2026-08-16T21:30:24.483Z",
+  "summary": "video-processing",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 37,
+      "errors": 1
+    },
+    "Read": {
+      "calls": 25,
+      "errors": 0
+    },
+    "Write": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "84726ff",
+    "harnessHash": "ab902fc9bb8c123c",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 739.3,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 90.6,
+  "peakRssMb": 1531,
+  "capMemoryMb": 3072,
+  "capRaised": true
+}

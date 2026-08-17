@@ -1,0 +1,39 @@
+{
+  "sessionID": "bench-extract-elf-1786848605-5f96f5",
+  "passed": true,
+  "note": "bench:extract-elf",
+  "turnCount": 5,
+  "timestamp": "2026-08-16T02:51:43.135Z",
+  "summary": "extract-elf",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 3,
+      "errors": 0
+    },
+    "Write": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "db51c8c",
+    "harnessHash": "ab902fc9bb8c123c",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 94.3,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 39,
+  "peakRssMb": 222,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

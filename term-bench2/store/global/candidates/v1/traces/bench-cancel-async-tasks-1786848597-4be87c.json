@@ -1,0 +1,47 @@
+{
+  "sessionID": "bench-cancel-async-tasks-1786848597-4be87c",
+  "passed": false,
+  "note": "bench:cancel-async-tasks",
+  "turnCount": 12,
+  "timestamp": "2026-08-16T02:52:47.536Z",
+  "summary": "cancel-async-tasks",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 6,
+      "errors": 1
+    },
+    "Write": {
+      "calls": 3,
+      "errors": 0
+    },
+    "Edit": {
+      "calls": 1,
+      "errors": 0
+    },
+    "Read": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "db51c8c",
+    "harnessHash": "ab902fc9bb8c123c",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 169.1,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 38.2,
+  "peakRssMb": 187,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

@@ -1,0 +1,51 @@
+{
+  "sessionID": "bench-chess-best-move-1786848810-9bf221",
+  "passed": true,
+  "note": "bench:chess-best-move",
+  "turnCount": 29,
+  "timestamp": "2026-08-16T02:59:02.642Z",
+  "summary": "chess-best-move",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 17,
+      "errors": 2
+    },
+    "Read": {
+      "calls": 8,
+      "errors": 0
+    },
+    "ToolSearch": {
+      "calls": 1,
+      "errors": 0
+    },
+    "ScheduleWakeup": {
+      "calls": 1,
+      "errors": 0
+    },
+    "Write": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "db51c8c",
+    "harnessHash": "ab902fc9bb8c123c",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 331.8,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 207.6,
+  "peakRssMb": 465,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

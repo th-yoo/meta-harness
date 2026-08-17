@@ -1,0 +1,215 @@
+{
+  "version": "v2",
+  "model": "anthropic/claude-haiku-4-5",
+  "nClassified": 20,
+  "modeCounts": {
+    "spec_precision": 3,
+    "errored": 2,
+    "looks_done": 2,
+    "incomplete": 11,
+    "other": 1,
+    "infra": 1
+  },
+  "entries": [
+    {
+      "sessionID": "bench-mteb-retrieve-1786954313-076a7a",
+      "task": "mteb-retrieve",
+      "mode": "spec_precision",
+      "failurePoint": "Script execution and result verification — agent did not confirm all 29 documents were ranked before selecting the 5th entry.",
+      "rootCause": "Agent self-verified against its own script output (8 ranks shown) without cross-checking that ranking covered all 29 lines in /app/data.txt. Truncated script write made inspection impossible; no re-read or sanity check.",
+      "generalMechanism": "Require explicit dataset cardinality check post-embedding: assert len(ranked_results) == len(input_docs) before extracting the Nth entry. Validate output shape matches input shape."
+    },
+    {
+      "sessionID": "bench-model-extraction-relu-logits-1786953740-396c0d",
+      "task": "model-extraction-relu-logits",
+      "mode": "spec_precision",
+      "failurePoint": "Recovery of row 0 achieved only 0.438 cosine similarity; agent did not verify minimum acceptable recovery fidelity",
+      "rootCause": "Task says 'equal to A1 (up to permuting/scaling)' but does not numerically define equality threshold. Agent implemented matching + clustering heuristic without validating that all recovered rows meet a reasonable cosine similarity floor (e.g., >0.99 or >0.95). One row fell to 0.438, likely too low for 'equal.'",
+      "generalMechanism": "Extract numerical acceptance criteria from task spec (e.g., 'equal' → cosine sim ≥X). After recovery, verify ALL outputs meet stated thresholds before declaring success. Do not rely on internal algorithm consistency as proxy for spec compliance."
+    },
+    {
+      "sessionID": "bench-model-extraction-relu-logits-1786953247-d1c148",
+      "task": "model-extraction-relu-logits",
+      "mode": "errored",
+      "failurePoint": "refine_kinks() returned empty kink list despite grid evidence of slope discontinuities; downstream pipeline produced no jump vectors, causing IndexError when accessing result shape",
+      "rootCause": "Bisection-based kink refinement used overly strict linearity test (residual threshold) that rejected valid kink intervals; the recursive termination logic marked regions 'linear' when they actually contained ReLU boundaries, preventing any kink coordinates from being returned to collect_jump_vectors()",
+      "generalMechanism": "For numerical robustness in root-finding via bisection, never rely solely on residual-to-tolerance comparison when the tolerance is near machine precision for ill-conditioned functions. Use absolute interval width thresholds, check that midpoint actually lies between parent interval values (monotonicity invariant), and fall back to coarser grid refinement if bisection stalls. Or: validate that the repair produces non-empty output before assuming success."
+    },
+    {
+      "sessionID": "bench-torch-tensor-parallelism-1786951901-6e6aa0",
+      "task": "torch-tensor-parallelism",
+      "mode": "looks_done",
+      "failurePoint": "Test execution truncated; world_size 2 and 4 results not shown before test file deleted",
+      "rootCause": "Agent validated against partial/truncated output and assumed success. Did not wait for full test completion or re-read test results to confirm all 6 configurations passed. Deleted test artifact prematurely, blocking verification.",
+      "generalMechanism": "Require agent to capture and parse full test output into a structured result (e.g., JSON summary), verify all test cases explicitly by count before declaring success, and retain test artifacts until acceptance confirmed."
+    },
+    {
+      "sessionID": "bench-torch-tensor-parallelism-1786951109-b5815e",
+      "task": "torch-tensor-parallelism",
+      "mode": "incomplete",
+      "failurePoint": "File writes claimed success but content unverified; test execution never reached",
+      "rootCause": "Agent did not checkpoint/verify file content after writes, and stopped before running acceptance tests; relied on async installations without blocking confirmation",
+      "generalMechanism": "Require explicit read-back verification of critical file writes and mandate running actual acceptance tests before claiming completion — async background tasks must be synchronized before proceeding"
+    },
+    {
+      "sessionID": "bench-polyglot-rust-c-1786950448-46c45a",
+      "task": "polyglot-rust-c",
+      "mode": "spec_precision",
+      "failurePoint": "Write tool returned truncated output; agent accepted without verification",
+      "rootCause": "Agent assumed successful write based on tool response and later compiler success, but never validated actual file content matched the design. Truncated file would compile (Rust/C++ both forgiving of partial code) but fail verifier's acceptance test.",
+      "generalMechanism": "Always read back critical file writes before proceeding; never assume tool output reflects actual disk state, especially when output is visibly truncated or malformed."
+    },
+    {
+      "sessionID": "bench-polyglot-rust-c-1786948172-48f5ed",
+      "task": "polyglot-rust-c",
+      "mode": "other",
+      "failurePoint": "",
+      "rootCause": "",
+      "generalMechanism": ""
+    },
+    {
+      "sessionID": "bench-torch-pipeline-parallelism-1786946170-1f8ea1",
+      "task": "torch-pipeline-parallelism",
+      "mode": "incomplete",
+      "failurePoint": "After environment setup and model inspection, agent stopped without creating /app/pipeline_parallel.py or implementing train_step_pipeline_afab",
+      "rootCause": "Agent exhausted runway during reconnaissance phase; never transitioned to writing required implementation. No error wall; no claimed success—just stopped.",
+      "generalMechanism": "Enforce explicit phase transition checkpoints: after <N> tool calls on exploration, force artifact creation or declare dead-end. Prevent open-ended investigation without concrete output milestones."
+    },
+    {
+      "sessionID": "bench-torch-pipeline-parallelism-1786945590-36b5d9",
+      "task": "torch-pipeline-parallelism",
+      "mode": "incomplete",
+      "failurePoint": "Agent investigation phase ended without transition to implementation",
+      "rootCause": "Ran out of runway (token budget or turn limit) mid-exploration; never reached the file-writing phase required to meet acceptance criteria",
+      "generalMechanism": "Harness should enforce progress gates: after N exploratory turns, require concrete artifact production (file write, test run) or fail early rather than allowing unbounded investigation loops"
+    },
+    {
+      "sessionID": "bench-torch-pipeline-parallelism-1786944915-ae2c5e",
+      "task": "torch-pipeline-parallelism",
+      "mode": "incomplete",
+      "failurePoint": "Agent halted after research phase; never wrote implementation file or ran tests.",
+      "rootCause": "Reconnaissance completed but no synthesis step. Agent examined reference code but did not translate into target implementation or verify artifact creation.",
+      "generalMechanism": "Require explicit artifact materialization + verification before claiming task complete. Add checkpoint: 'Write concrete solution, verify file exists with correct signature, run one test pass.'"
+    },
+    {
+      "sessionID": "bench-sam-cell-seg-1786943374-1f578a",
+      "task": "sam-cell-seg",
+      "mode": "errored",
+      "failurePoint": "MobileSAM import during environment setup",
+      "rootCause": "MobileSAM installed from GitHub but its modeling module has broken imports — likely missing or incompatible transitive dependency. Agent cannot resolve without modifying source (forbidden) or installing undeclared packages.",
+      "generalMechanism": "Harness must verify critical dependencies (like MobileSAM) are importable and functional before task execution. Pre-test all specified packages with basic import + version checks."
+    },
+    {
+      "sessionID": "bench-sam-cell-seg-1786942649-156ca8",
+      "task": "sam-cell-seg",
+      "mode": "incomplete",
+      "failurePoint": "After cloning MobileSAM repo; before writing convert_masks.py",
+      "rootCause": "Agent halted mid-setup without attempting core task implementation. Completed only environment inspection and repo cloning; never wrote the required script or tested it against demo data.",
+      "generalMechanism": "Harness must enforce turn/token budget discipline and detect incomplete trajectories. Agent should be prompted to validate completion against acceptance criteria before declaring done."
+    },
+    {
+      "sessionID": "bench-sam-cell-seg-1786941572-f9bdd1",
+      "task": "sam-cell-seg",
+      "mode": "incomplete",
+      "failurePoint": "Agent stopped after ~5 tool calls during environment/dependency investigation, before writing any solution code.",
+      "rootCause": "Agent treated preliminary investigation as the full task scope instead of recognizing it as scaffolding for the actual script-writing objective. No forced commit/test of the solution.",
+      "generalMechanism": "Require explicit checkpoints: (1) accept the actual deliverable (file or output), (2) run/test it end-to-end, (3) verify acceptance criteria met. Investigate → build → verify, not investigate → stop."
+    },
+    {
+      "sessionID": "bench-sanitize-git-repo-1786941574-e07152",
+      "task": "sanitize-git-repo",
+      "mode": "incomplete",
+      "failurePoint": "Post-discovery: agent halted after identifying secrets in git history and data files without performing any sanitization edits or commits",
+      "rootCause": "Agent treated scanning/discovery as endpoint rather than prerequisite. Did not execute file edits, git filter-branch, or commit replacements to actually sanitize the repo. No follow-up action taken after finding secrets.",
+      "generalMechanism": "Require agent to verify terminal state matches acceptance criteria (files modified, secrets replaced with placeholders, git history rewritten if needed). Scan-only without remediation should not be treated as task completion."
+    },
+    {
+      "sessionID": "bench-sanitize-git-repo-1786941382-f2474f",
+      "task": "sanitize-git-repo",
+      "mode": "looks_done",
+      "failurePoint": "After discovery phase—agent halted before executing sanitization modifications",
+      "rootCause": "Agent validated its own reconnaissance as success without fulfilling the stated transformation requirement (replacement + removal in working tree AND git history)",
+      "generalMechanism": "Require agent to emit concrete, verifiable post-state (file checksums, git history integrity checks, or explicit grep-confirm-clean cycles) rather than stopping at detection. Chain discovery → modify → verify steps with mandatory output validation."
+    },
+    {
+      "sessionID": "bench-sam-cell-seg-1786941006-a900ad",
+      "task": "sam-cell-seg",
+      "mode": "incomplete",
+      "failurePoint": "After setup exploration, before writing convert_masks.py",
+      "rootCause": "Agent ran parallel background pip install without waiting for completion; then explored MobileSAM internals but stopped before writing or testing the actual script. No convert_masks.py ever created in /app. Likely ran out of focus/runway or treated exploration as sufficient.",
+      "generalMechanism": "Agents must explicitly wait for long-running commands (e.g., pip install) to completion before proceeding. Task completion criteria must drive next steps, not exploration satisfaction. Add checkpoints: (1) verify all deps installed, (2) write script, (3) test against provided demo files, (4) validate output before marking done."
+    },
+    {
+      "sessionID": "bench-sam-cell-seg-1786940400-368ab2",
+      "task": "sam-cell-seg",
+      "mode": "infra",
+      "failurePoint": "Initial environment check: torch and mobile_sam modules missing despite being listed as pre-installed",
+      "rootCause": "Harness setup incomplete—required packages (torch, mobile_sam) were not available in the sandbox, violating the stated assumption that they are installed. Agent spent time diagnosing and attempting workarounds (source clone, pip install) instead of proceeding with the actual task.",
+      "generalMechanism": "Pre-flight validation of harness setup must ensure all declared available packages are actually importable before agent begins; missing deps should fail the harness setup, not force the agent into infrastructure debugging."
+    },
+    {
+      "sessionID": "bench-raman-fitting-1786940399-0d0654",
+      "task": "raman-fitting",
+      "mode": "incomplete",
+      "failurePoint": "Peak fitting algorithm never executed; trajectory ends mid-Python command",
+      "rootCause": "Agent performed data exploration but did not execute the curve_fit or optimization step needed to extract peak parameters. Last command truncated, suggesting timeout or incomplete submission.",
+      "generalMechanism": "Implement turn-budget awareness and enforce intermediate checkpoints: after exploration, agent must execute fitting, then verify file output before considering task done. Add explicit validation loop: fit → write → read-back-verify."
+    },
+    {
+      "sessionID": "bench-protein-assembly-1786939383-ac3007",
+      "task": "protein-assembly",
+      "mode": "incomplete",
+      "failurePoint": "FPbase API call returned HTML instead of JSON; agent created tasks but never resolved them or pivoted; no final gBlock.txt produced",
+      "rootCause": "Agent attempted to fetch live API data (FPbase), hit authentication wall, and lacked strategy to recover (fallback to manual curation, skip that step, or re-attempt with different endpoint). Task creation was initiated but never completed; no core assembly logic executed.",
+      "generalMechanism": "Agents should detect unrecoverable API failures early, enumerate fallback strategies (cached data, manual entry, skip requirement, web scraping), and pivot rather than create orphaned sub-tasks. Implement explicit timeout/error budgets with forced recovery decisions."
+    },
+    {
+      "sessionID": "bench-raman-fitting-1786939409-5337c6",
+      "task": "raman-fitting",
+      "mode": "incomplete",
+      "failurePoint": "After data binning/region extraction; fitting and output phases never executed",
+      "rootCause": "Session terminated before reaching scipy.optimize.curve_fit or JSON serialization. Likely turn/token budget exhausted or execution interrupted mid-pipeline.",
+      "generalMechanism": "Implement checkpoint saves of intermediate state; break multi-stage fitting into smaller verifiable steps with explicit success markers after each phase (parse → extract → fit → validate → write output); add timeout detection and graceful recovery."
+    }
+  ],
+  "byTask": {
+    "mteb-retrieve": [
+      "spec_precision"
+    ],
+    "model-extraction-relu-logits": [
+      "spec_precision",
+      "errored"
+    ],
+    "torch-tensor-parallelism": [
+      "looks_done",
+      "incomplete"
+    ],
+    "polyglot-rust-c": [
+      "spec_precision",
+      "other"
+    ],
+    "torch-pipeline-parallelism": [
+      "incomplete",
+      "incomplete",
+      "incomplete"
+    ],
+    "sam-cell-seg": [
+      "errored",
+      "incomplete",
+      "incomplete",
+      "incomplete",
+      "infra"
+    ],
+    "sanitize-git-repo": [
+      "incomplete",
+      "looks_done"
+    ],
+    "raman-fitting": [
+      "incomplete",
+      "incomplete"
+    ],
+    "protein-assembly": [
+      "incomplete"
+    ]
+  }
+}

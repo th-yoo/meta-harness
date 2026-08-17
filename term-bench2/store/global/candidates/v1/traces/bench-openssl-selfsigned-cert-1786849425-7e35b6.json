@@ -1,0 +1,39 @@
+{
+  "sessionID": "bench-openssl-selfsigned-cert-1786849425-7e35b6",
+  "passed": true,
+  "note": "bench:openssl-selfsigned-cert",
+  "turnCount": 12,
+  "timestamp": "2026-08-16T03:05:48.426Z",
+  "summary": "openssl-selfsigned-cert",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 8,
+      "errors": 1
+    },
+    "Write": {
+      "calls": 3,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "db51c8c",
+    "harnessHash": "ab902fc9bb8c123c",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 119.3,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 54.2,
+  "peakRssMb": 339,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 2,
+  "layer": "account-global",
+  "candidate": "v1",
+  "baseline": "v0",
+  "activeFold": -1,
+  "splitHash": "6fea5462900c",
+  "driver": "claude-code",
+  "maxAgentTimeout": 3600,
+  "minAgentTimeout": 3600,
+  "timeoutRecording": true,
+  "decision": "inconclusive",
+  "winner": "tie",
+  "reasons": [
+    "held-in: delta=-0.100 p=0.688 (b=1,c=2,n=10)",
+    "no held-out split (legacy mode) — cannot accept"
+  ],
+  "candidateRate": 0.6,
+  "activeRate": 1,
+  "nTasks": 5,
+  "k": 2,
+  "heldIn": {
+    "nTasks": 5,
+    "nPairs": 10,
+    "b": 1,
+    "c": 2,
+    "delta": -0.1,
+    "mcnemarP": 0.875,
+    "bootCI90": [
+      -0.4,
+      0.2
+    ]
+  },
+  "heldOut": null,
+  "sentinels": null,
+  "speed": {
+    "heldIn": {
+      "nTasks": 3,
+      "nPairs": 5,
+      "medianCandidate": 77.016,
+      "medianActive": 100.787,
+      "medianRatio": 0.7641,
+      "fasterB": 3,
+      "slowerC": 2,
+      "signTestP": 0.5
+    },
+    "heldOut": null
+  },
+  "earlyStopped": false,
+  "split": null,
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "db51c8c",
+    "harnessHash": "ab902fc9bb8c123c",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+    "minAgentTimeout": 3600
+  },
+  "activeChecksHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "candidateChecksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+  "checkBundleCaveat": "checked-rule bundle: regressions are not attributable between rule text and check behavior; see per-rule ruleChecks block/exhaust counts",
+  "ruleCheckTotals": {
+    "active": {},
+    "candidate": {}
+  },
+  "taskResults": {
+    "extract-elf": {
+      "candidate": [
+        1,
+        1
+      ],
+      "active": [
+        0,
+        1
+      ],
+      "candidateElapsed": [
+        39.318,
+        77.016
+      ],
+      "activeElapsed": [
+        112.769,
+        100.787
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "cancel-async-tasks": {
+      "candidate": [
+        0,
+        0
+      ],
+      "active": [
+        0,
+        1
+      ],
+      "candidateElapsed": [
+        113.607,
+        79.718
+      ],
+      "activeElapsed": [
+        97.747,
+        52.509
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "configure-git-webserver": {
+      "candidate": [
+        0,
+        0
+      ],
+      "active": [
+        0,
+        1
+      ],
+      "candidateElapsed": [
+        106.629,
+        145.68
+      ],
+      "activeElapsed": [
+        84.493,
+        132.848
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "log-summary-date-ranges": {
+      "candidate": [
+        1,
+        1
+      ],
+      "active": [
+        1,
+        1
+      ],
+      "candidateElapsed": [
+        25.871,
+        30.994
+      ],
+      "activeElapsed": [
+        34.432,
+        20.021
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "headless-terminal": {
+      "candidate": [
+        1,
+        1
+      ],
+      "active": [
+        1,
+        1
+      ],
+      "candidateElapsed": [
+        144.651,
+        83.556
+      ],
+      "activeElapsed": [
+        119.011,
+        154.701
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    }
+  },
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "timestamp": "2026-08-16T02:47:43.115Z",
+  "status": "in_progress"
+}

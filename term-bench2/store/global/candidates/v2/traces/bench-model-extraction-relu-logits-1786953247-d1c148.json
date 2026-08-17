@@ -1,0 +1,47 @@
+{
+  "sessionID": "bench-model-extraction-relu-logits-1786953247-d1c148",
+  "passed": false,
+  "note": "bench:model-extraction-relu-logits",
+  "turnCount": 23,
+  "timestamp": "2026-08-17T08:02:20.349Z",
+  "summary": "model-extraction-relu-logits",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 14,
+      "errors": 1
+    },
+    "Write": {
+      "calls": 1,
+      "errors": 0
+    },
+    "Read": {
+      "calls": 3,
+      "errors": 0
+    },
+    "Edit": {
+      "calls": 4,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "7aa98f0",
+    "harnessHash": "7bd775c8929dee5e",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 492,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 49.9,
+  "peakRssMb": 360,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

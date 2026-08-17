@@ -1,0 +1,43 @@
+{
+  "sessionID": "bench-gcode-to-text-1786925345-ae0715",
+  "passed": true,
+  "note": "bench:gcode-to-text",
+  "turnCount": 25,
+  "timestamp": "2026-08-17T00:12:25.602Z",
+  "summary": "gcode-to-text",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 14,
+      "errors": 0
+    },
+    "Write": {
+      "calls": 2,
+      "errors": 0
+    },
+    "Read": {
+      "calls": 4,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "d1ec116",
+    "harnessHash": "7bd775c8929dee5e",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 199.8,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 70.9,
+  "peakRssMb": 946,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

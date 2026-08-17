@@ -1,0 +1,101 @@
+{
+  "version": "v1",
+  "model": "anthropic/claude-haiku-4-5",
+  "nClassified": 8,
+  "modeCounts": {
+    "incomplete": 5,
+    "spec_precision": 1,
+    "other": 1,
+    "looks_done": 1
+  },
+  "entries": [
+    {
+      "sessionID": "bench-video-processing-1786915084-2818ab",
+      "task": "video-processing",
+      "mode": "incomplete",
+      "failurePoint": "Never transitioned from frame inspection to algorithm implementation",
+      "rootCause": "Agent exhausted exploration/analysis without building the actual solver; likely ran out of turns or cognitive runway during investigation phase",
+      "generalMechanism": "Agent must map exploratory findings to concrete deliverables before runway exhaustion; checkpoint after each major phase (explore→implement→verify) to ensure forward progress toward end goal"
+    },
+    {
+      "sessionID": "bench-torch-pipeline-parallelism-1786914355-0312c2",
+      "task": "torch-pipeline-parallelism",
+      "mode": "incomplete",
+      "failurePoint": "Agent halted after environment setup and model introspection; never wrote /app/pipeline_parallel.py or implemented train_step_pipeline_afab().",
+      "rootCause": "Agent exhausted turn/token budget during exploratory phase. No checkpoint/resume mechanism. Trajectory ends mid-tool-output without transition to implementation phase.",
+      "generalMechanism": "Enforce explicit task decomposition with milestone checkpoints. After environment validation, agent must explicitly commit to implementation start. Monitor for stalled exploration patterns and force pivot to core deliverable when introspection exceeds threshold."
+    },
+    {
+      "sessionID": "bench-raman-fitting-1786913677-17f877",
+      "task": "raman-fitting",
+      "mode": "incomplete",
+      "failurePoint": "Peak fitting Python script execution cut off; results.json never written",
+      "rootCause": "Session terminated or turn budget exhausted before fit completion. Last command truncated mid-execution; no fallback or partial result saved.",
+      "generalMechanism": "Implement checkpointing: save intermediate results (e.g., fitted params to temp file) after each logical step, not only at end. If session dies, resume from last checkpoint rather than restart from scratch. For long fits, stream/persist state incrementally."
+    },
+    {
+      "sessionID": "bench-filter-js-from-html-1786913677-78ad01",
+      "task": "filter-js-from-html",
+      "mode": "spec_precision",
+      "failurePoint": "CSS url() sanitization left syntactically broken url());",
+      "rootCause": "Agent removed dangerous URL contents but left dangling parentheses/syntax, breaking the CSS rule instead of cleanly removing the entire dangerous declaration or neutralizing it safely.",
+      "generalMechanism": "When stripping substrings, verify the remainder is syntactically valid in its context (CSS rules, HTML attributes); don't just delete the dangerous part in isolation."
+    },
+    {
+      "sessionID": "bench-protein-assembly-1786913677-43b524",
+      "task": "protein-assembly",
+      "mode": "incomplete",
+      "failurePoint": "Task design and fpbase API query phase (before linker design, reverse translation, or file output)",
+      "rootCause": "Agent initiated multi-step workflow but did not execute through to final gBlock assembly and file write. Large API response volumes and task complexity apparently exceeded available runway or execution depth.",
+      "generalMechanism": "Long-horizon tasks requiring 10+ sequential decisions across external APIs need explicit planning checkpoint + loop-back validation. Agent should checkpoint after each major API fetch (antibody parse, donor/acceptor selection, DHFR extraction, linker design) before proceeding. Break into subtasks with explicit verification milestones rather than task-list setup alone."
+    },
+    {
+      "sessionID": "bench-configure-git-webserver-1786848924-9fabbf",
+      "task": "configure-git-webserver",
+      "mode": "incomplete",
+      "failurePoint": "end-to-end verification never completed — git push output truncated, no curl confirmation",
+      "rootCause": "trajectory cut off mid-test execution before push result and HTTP verification were visible",
+      "generalMechanism": "agents must explicitly complete and log all acceptance-criteria checks before claiming success; truncated tool output is not proof of success"
+    },
+    {
+      "sessionID": "bench-cancel-async-tasks-1786848896-9821cf",
+      "task": "cancel-async-tasks",
+      "mode": "other",
+      "failurePoint": "",
+      "rootCause": "",
+      "generalMechanism": ""
+    },
+    {
+      "sessionID": "bench-cancel-async-tasks-1786848597-4be87c",
+      "task": "cancel-async-tasks",
+      "mode": "looks_done",
+      "failurePoint": "agent validated against its own test suite and manual inspection, not against external verifier's actual acceptance criteria",
+      "rootCause": "mismatch between agent's proxy validation (concurrency verified via lock instrumentation, cleanup verified via print side effects) and verifier's likely stricter or different acceptance check (e.g., signal handling semantics, error propagation detail, or undisclosed edge case)",
+      "generalMechanism": "require agent to expose output/state in a format the external verifier can inspect directly rather than relying on agent's self-constructed test harness; or provide the verifier's test code to the agent before validation"
+    }
+  ],
+  "byTask": {
+    "video-processing": [
+      "incomplete"
+    ],
+    "torch-pipeline-parallelism": [
+      "incomplete"
+    ],
+    "raman-fitting": [
+      "incomplete"
+    ],
+    "filter-js-from-html": [
+      "spec_precision"
+    ],
+    "protein-assembly": [
+      "incomplete"
+    ],
+    "configure-git-webserver": [
+      "incomplete"
+    ],
+    "cancel-async-tasks": [
+      "other",
+      "looks_done"
+    ]
+  }
+}

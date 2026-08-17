@@ -1,0 +1,162 @@
+[
+ {
+  "task": "adaptive-rejection-sampler",
+  "rate": 1.0,
+  "n": 5
+ },
+ {
+  "task": "cancel-async-tasks",
+  "rate": 0.6,
+  "n": 5
+ },
+ {
+  "task": "chess-best-move",
+  "rate": 0.8,
+  "n": 5
+ },
+ {
+  "task": "configure-git-webserver",
+  "rate": 0.6,
+  "n": 5
+ },
+ {
+  "task": "db-wal-recovery",
+  "rate": 0.2,
+  "n": 5
+ },
+ {
+  "task": "dna-insert",
+  "rate": 0.4,
+  "n": 5
+ },
+ {
+  "task": "extract-elf",
+  "rate": 1.0,
+  "n": 5
+ },
+ {
+  "task": "filter-js-from-html",
+  "rate": 0.0,
+  "n": 5
+ },
+ {
+  "task": "gcode-to-text",
+  "rate": 0.8,
+  "n": 5
+ },
+ {
+  "task": "headless-terminal",
+  "rate": 0.8,
+  "n": 5
+ },
+ {
+  "task": "install-windows-3.11",
+  "rate": 0.2,
+  "n": 10
+ },
+ {
+  "task": "log-summary-date-ranges",
+  "rate": 1.0,
+  "n": 5
+ },
+ {
+  "task": "merge-diff-arc-agi-task",
+  "rate": 1.0,
+  "n": 5
+ },
+ {
+  "task": "model-extraction-relu-logits",
+  "rate": 0.0,
+  "n": 5
+ },
+ {
+  "task": "mteb-retrieve",
+  "rate": 1.0,
+  "n": 5
+ },
+ {
+  "task": "multi-source-data-merger",
+  "rate": 1.0,
+  "n": 5
+ },
+ {
+  "task": "openssl-selfsigned-cert",
+  "rate": 1.0,
+  "n": 5
+ },
+ {
+  "task": "password-recovery",
+  "rate": 0.6,
+  "n": 5
+ },
+ {
+  "task": "polyglot-rust-c",
+  "rate": 1.0,
+  "n": 5
+ },
+ {
+  "task": "portfolio-optimization",
+  "rate": 1.0,
+  "n": 5
+ },
+ {
+  "task": "protein-assembly",
+  "rate": 0.0,
+  "n": 5
+ },
+ {
+  "task": "pypi-server",
+  "rate": 1.0,
+  "n": 5
+ },
+ {
+  "task": "pytorch-model-cli",
+  "rate": 0.8,
+  "n": 5
+ },
+ {
+  "task": "raman-fitting",
+  "rate": 0.0,
+  "n": 5
+ },
+ {
+  "task": "sam-cell-seg",
+  "rate": 0.8,
+  "n": 5
+ },
+ {
+  "task": "sanitize-git-repo",
+  "rate": 0.1,
+  "n": 10
+ },
+ {
+  "task": "sparql-university",
+  "rate": 1.0,
+  "n": 5
+ },
+ {
+  "task": "torch-pipeline-parallelism",
+  "rate": 0.0,
+  "n": 5
+ },
+ {
+  "task": "torch-tensor-parallelism",
+  "rate": 1.0,
+  "n": 5
+ },
+ {
+  "task": "tune-mjcf",
+  "rate": 0.3,
+  "n": 10
+ },
+ {
+  "task": "video-processing",
+  "rate": 0.0,
+  "n": 5
+ },
+ {
+  "task": "vulnerable-secret",
+  "rate": 1.0,
+  "n": 5
+ }
+]

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "nextId": 9,
+  "nextId": 11,
   "bullets": [
     {
       "id": "b1",
@@ -16,21 +16,21 @@
       "id": "b2",
       "text": "Read the task requirements carefully",
       "helpful": 0,
-      "harmful": 1,
-      "addedBy": "v0",
-      "status": "active",
-      "createdAt": "2026-07-16T12:36:11.488278+00:00",
-      "updatedAt": "2026-07-17T23:14:19.727Z"
-    },
-    {
-      "id": "b3",
-      "text": "Check relevant existing files before writing new ones",
-      "helpful": 0,
       "harmful": 0,
       "addedBy": "v0",
       "status": "active",
       "createdAt": "2026-07-16T12:36:11.488278+00:00",
       "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+    },
+    {
+      "id": "b3",
+      "text": "Check relevant existing files before writing new ones",
+      "helpful": 19,
+      "harmful": 0,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-08-16T23:30:49.057Z"
     },
     {
       "id": "b4",
@@ -45,44 +45,97 @@
     {
       "id": "b5",
       "text": "Run tests or type-checks after making changes to verify correctness",
-      "helpful": 0,
+      "helpful": 4,
       "harmful": 0,
       "addedBy": "v0",
       "status": "active",
       "createdAt": "2026-07-16T12:36:11.488278+00:00",
-      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+      "updatedAt": "2026-08-16T21:35:15.748Z"
     },
     {
       "id": "b6",
-      "text": "Do not leave debug code, TODOs, or placeholder comments in the output",
+      "text": "When a deliverable's real content is not ready yet, write the simplest end-to-end-valid version of it to the exact deliverable path first and refine it in place, rather than deferring the first write until the content is final.",
       "helpful": 0,
-      "harmful": 0,
+      "harmful": 19,
       "addedBy": "v0",
       "status": "active",
       "createdAt": "2026-07-16T12:36:11.488278+00:00",
-      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+      "updatedAt": "2026-08-16T23:31:18.837Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: the graded deliverable path must be written at least once well before the final turn, then improved in place'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": false
+      }
     },
     {
       "id": "b7",
-      "text": "When the exact output format, filenames, field values, or literal strings are not fully specified, derive them from the task text and provided inputs rather than inventing them; never guess a value the grader will check.",
-      "helpful": 0,
+      "text": "Do not report a task complete until you have re-read the exact deliverable artifact from disk and confirmed it satisfies the stated acceptance criteria, rather than trusting a side copy, a temp file, or an earlier successful run.",
+      "helpful": 16,
       "harmful": 0,
       "addedBy": "candidate",
       "status": "active",
-      "createdAt": "2026-07-17T23:14:19.728Z",
-      "updatedAt": "2026-07-17T23:14:19.728Z",
-      "generality": "universal"
+      "createdAt": "2026-08-14T23:57:28.698Z",
+      "updatedAt": "2026-08-16T23:30:49.057Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: final turn must show a read/inspect of the exact deliverable path followed by an acceptance check on that same path'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
     },
     {
       "id": "b8",
-      "text": "Verify against the task's stated success criteria or independent ground truth, not against your own assumptions—self-checks that only confirm your invented format prove nothing.",
+      "text": "When a produced artifact fails its check, inspect the artifact's actual bytes and the failing command's stderr before writing another version, instead of regenerating and retrying blindly.",
       "helpful": 0,
       "harmful": 0,
       "addedBy": "candidate",
       "status": "active",
-      "createdAt": "2026-07-17T23:14:19.728Z",
-      "updatedAt": "2026-07-17T23:14:19.728Z",
-      "generality": "universal"
+      "createdAt": "2026-08-14T23:57:28.698Z",
+      "updatedAt": "2026-08-14T23:57:28.698Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: after any failing verification, the next tool call must inspect artifact contents or stderr, not immediately rewrite the generator'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
+    },
+    {
+      "id": "b9",
+      "text": "Do not continue exploring, reading, or profiling the environment until you have written a first runnable version of the graded deliverable at its required path; once you can name that path and its entrypoint, write it before any further investigation.",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "candidate",
+      "status": "active",
+      "createdAt": "2026-08-16T23:31:18.837Z",
+      "updatedAt": "2026-08-16T23:31:18.837Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: the first Write/Edit of the graded deliverable path must precede the second half of the sessions tool calls'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
+    },
+    {
+      "id": "b10",
+      "text": "When you delete or replace a substring inside a structured artifact (markup, CSS, code, config, or serialized data), re-parse or re-validate the enclosing construct afterward instead of only confirming the removed text is gone.",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "candidate",
+      "status": "active",
+      "createdAt": "2026-08-16T23:31:18.837Z",
+      "updatedAt": "2026-08-16T23:31:18.837Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: after any substring deletion in a structured file, a parse/validate step on that file must follow before completion'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
     }
   ]
 }

@@ -1,0 +1,47 @@
+{
+  "sessionID": "bench-sam-cell-seg-1786941572-f9bdd1",
+  "passed": false,
+  "note": "bench:sam-cell-seg",
+  "turnCount": 55,
+  "timestamp": "2026-08-17T04:57:29.620Z",
+  "summary": "sam-cell-seg",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 35,
+      "errors": 3
+    },
+    "Write": {
+      "calls": 1,
+      "errors": 0
+    },
+    "Edit": {
+      "calls": 8,
+      "errors": 0
+    },
+    "Read": {
+      "calls": 10,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "dfe87c9",
+    "harnessHash": "7bd775c8929dee5e",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 1069.9,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 585.1,
+  "peakRssMb": 6192,
+  "capMemoryMb": 6191,
+  "capRaised": true
+}

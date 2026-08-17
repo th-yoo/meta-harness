@@ -1,21 +1,35 @@
 {
   "failures": [
     {
-      "sessionID": "bench-extract-elf-1784206315-56b94b",
-      "taxonomy": "spec-misread",
-      "rootCause": "The task required a precise definition of which 'memory values' to extract and in what output format, but the agent never derived it from an authoritative source. It invented a heuristic (overlapping 8-byte and 4-byte reads of every non-zero region in LOAD segments) yielding 143 nonsense entries, including reading the .interp path string '/lib64/ld-...' as the integer 7795506888185572000. It then repeatedly 'verified' the output only against its own invented format checks ('keys are addresses', 'values are integers') rather than against ground truth, so the self-checks always passed while the answer was wrong.",
-      "firstUnrecoverableStep": "TOOL write extract.js implementing the invented scheme: 'reads 8-byte and 4-byte integer values from PROGBITS sections that are in LOAD segments' with no basis in the task's actual definition of the required values."
+      "sessionID": "bench-torch-pipeline-parallelism-1786914355-0312c2",
+      "taxonomy": "premature-termination",
+      "rootCause": "The agent spent its entire turn budget on environment setup and model introspection and never created the required deliverable module or its entrypoint function. It treated exploration as open-ended rather than time-boxed, so the trajectory ends mid-introspection with zero deliverable bytes on disk. No skeleton of the deliverable existed at any point, so partial credit was impossible. The same pattern appears in video-processing, raman-fitting and protein-assembly: exploration consumed the runway before the first write of the graded output.",
+      "firstUnrecoverableStep": "Agent halted after environment setup and model introspection; never wrote /app/pipeline_parallel.py or implemented train_step_pipeline_afab()."
     },
     {
-      "sessionID": "bench-openssl-selfsigned-cert-1784206959-643039",
+      "sessionID": "bench-raman-fitting-1786913677-17f877",
+      "taxonomy": "premature-termination",
+      "rootCause": "The agent ran a long fitting computation whose result existed only in the process's memory and stdout; the session ended before the final write, so results.json was never created. Because nothing was persisted incrementally, all completed work was lost rather than partially banked. A rough-but-valid result written early and then refined would have converted this into a pass or near-pass.",
+      "firstUnrecoverableStep": "Peak fitting Python script execution cut off; results.json never written"
+    },
+    {
+      "sessionID": "bench-filter-js-from-html-1786913677-78ad01",
       "taxonomy": "spec-misread",
-      "rootCause": "The agent guessed the certificate subject fields (O='DevOps Team', CN='dev-internal.company.local'), the validity-date format, and the exact layout/labels of verification.txt instead of confirming the task's required exact strings and format. Its check_cert.py 'Certificate verification successful' validated the agent's own output rather than the required spec, so a green self-check masked a value/format mismatch with what the grader expected.",
-      "firstUnrecoverableStep": "TOOL bash openssl req -new -x509 ... -subj \"/O=DevOps Team/CN=dev-internal.company.local\" — committing invented subject values without confirming them against the task's exact requirements."
+      "rootCause": "The agent excised dangerous substrings from CSS url() contents but did not check that what remained was still syntactically valid, leaving dangling 'url())' fragments. It validated the removal of the bad token instead of validating the resulting artifact in its own grammar. Deleting a span without re-parsing the surrounding construct is the recurring mechanism.",
+      "firstUnrecoverableStep": "CSS url() sanitization left syntactically broken url()); "
     }
   ],
   "bulletAssessments": [
     {
-      "id": "b2",
+      "id": "b3",
+      "verdict": "helpful"
+    },
+    {
+      "id": "b7",
+      "verdict": "helpful"
+    },
+    {
+      "id": "b6",
       "verdict": "harmful"
     }
   ]

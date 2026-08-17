@@ -1,0 +1,78 @@
+{
+  "sessionID": "8427b677-37e7-40d3-855b-81d1346d06b9",
+  "passed": true,
+  "note": "",
+  "turnCount": 130,
+  "timestamp": "2026-08-16T20:51:46.633Z",
+  "summary": "Recorded and committed (`84726ff`). Session close state:\n\n**Banked tonight:**\n- v1 adopted, **+2.02pt over Anthropic's official sonnet run** (150 paired trials, all data in-repo)\n- 9 rig fixes, suite 2161/0\n- 6 fresh failure trajectories safely in the store for gen-2\n\n**Blocked, next session's opening:** judge transport (opencode provider errors) → re-taxonomy → propose → gen-2 arm. Plus quota-gate build. All sequenced in resume.md — any host, `git pull` and go.\n\nGood stopping point. Solid day: ",
+  "model": "unknown",
+  "variant": "",
+  "toolUsage": {
+    "bash": {
+      "calls": 485,
+      "errors": 65
+    },
+    "toolsearch": {
+      "calls": 7,
+      "errors": 0
+    },
+    "mcp__parallel-search-mcp__web_search": {
+      "calls": 1,
+      "errors": 0
+    },
+    "askuserquestion": {
+      "calls": 1,
+      "errors": 0
+    },
+    "read": {
+      "calls": 1,
+      "errors": 0
+    },
+    "edit": {
+      "calls": 54,
+      "errors": 0
+    },
+    "mcp__plugin_playwright_playwright__browser_navigate": {
+      "calls": 5,
+      "errors": 0
+    },
+    "mcp__plugin_playwright_playwright__browser_snapshot": {
+      "calls": 5,
+      "errors": 0
+    },
+    "taskcreate": {
+      "calls": 8,
+      "errors": 0
+    },
+    "taskupdate": {
+      "calls": 13,
+      "errors": 0
+    },
+    "skill": {
+      "calls": 2,
+      "errors": 0
+    },
+    "monitor": {
+      "calls": 1,
+      "errors": 0
+    },
+    "taskstop": {
+      "calls": 5,
+      "errors": 0
+    },
+    "taskoutput": {
+      "calls": 7,
+      "errors": 0
+    }
+  },
+  "env": {
+    "provider": "unknown",
+    "layerVersions": {
+      "account-global": "v1",
+      "project-global": "v1",
+      "account-role": "v0",
+      "project-role": "v1"
+    }
+  },
+  "platform": "claude-code"
+}

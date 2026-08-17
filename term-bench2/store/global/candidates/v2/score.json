@@ -1,222 +1,6643 @@
 {
   "version": "v2",
-  "nPass": 3,
-  "nFail": 3,
+  "nPass": 92,
+  "nFail": 60,
   "sessions": [
     {
-      "sessionID": "bench-constraints-scheduling-1784330745-129358",
+      "sessionID": "bench-cancel-async-tasks-1786923281-ab589a",
       "passed": true,
-      "note": "bench:constraints-scheduling",
-      "turnCount": 1,
-      "timestamp": "2026-07-17T23:33:27.045Z",
-      "summary": "constraints-scheduling",
-      "model": "anthropic/claude-haiku-4-5",
+      "note": "bench:cancel-async-tasks",
+      "turnCount": 12,
+      "timestamp": "2026-08-16T23:36:59.275Z",
+      "summary": "cancel-async-tasks",
+      "model": "anthropic/claude-sonnet-5",
       "variant": "",
       "toolUsage": {
-        "read": {
-          "calls": 4,
+        "Bash": {
+          "calls": 8,
           "errors": 0
         },
-        "bash": {
-          "calls": 1,
+        "Write": {
+          "calls": 2,
           "errors": 0
         },
-        "write": {
+        "Read": {
           "calls": 1,
           "errors": 0
         }
       },
       "env": {
-        "agentVersion": "1.17.18",
-        "pluginSha": "d114cc0",
-        "harnessHash": "298d1b00138964bf",
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
         "maxAgentTimeout": 3600,
         "provider": "anthropic",
-        "driver": "opencode",
-        "resourceEnforcement": true
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
       },
-      "platform": "opencode",
-      "elapsed": 456.5,
+      "platform": "claude-code",
+      "elapsed": 137.3,
       "timedOut": false,
-      "agentTimeout": 1200,
-      "cpuSeconds": 405.9,
-      "peakRssMb": 870,
+      "agentTimeout": 3600,
+      "cpuSeconds": 21.5,
+      "peakRssMb": 194,
       "capMemoryMb": 2048,
       "capRaised": false
     },
     {
-      "sessionID": "bench-constraints-scheduling-1784331521-f75f74",
-      "passed": true,
-      "note": "bench:constraints-scheduling",
-      "turnCount": 1,
-      "timestamp": "2026-07-17T23:43:14.008Z",
-      "summary": "constraints-scheduling",
-      "model": "anthropic/claude-haiku-4-5",
+      "sessionID": "bench-configure-git-webserver-1786923281-94d1cd",
+      "passed": false,
+      "note": "bench:configure-git-webserver",
+      "turnCount": 18,
+      "timestamp": "2026-08-16T23:37:14.905Z",
+      "summary": "configure-git-webserver",
+      "model": "anthropic/claude-sonnet-5",
       "variant": "",
       "toolUsage": {
-        "todowrite": {
-          "calls": 4,
+        "Bash": {
+          "calls": 14,
+          "errors": 2
+        },
+        "Write": {
+          "calls": 2,
           "errors": 0
         },
-        "read": {
-          "calls": 4,
-          "errors": 0
-        },
-        "bash": {
-          "calls": 1,
-          "errors": 0
-        },
-        "write": {
+        "Edit": {
           "calls": 1,
           "errors": 0
         }
       },
       "env": {
-        "agentVersion": "1.17.18",
-        "pluginSha": "d114cc0",
-        "harnessHash": "298d1b00138964bf",
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
         "maxAgentTimeout": 3600,
         "provider": "anthropic",
-        "driver": "opencode",
-        "resourceEnforcement": true
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
       },
-      "platform": "opencode",
-      "elapsed": 267.8,
+      "platform": "claude-code",
+      "elapsed": 152.2,
       "timedOut": false,
-      "agentTimeout": 1200,
-      "cpuSeconds": 234.7,
-      "peakRssMb": 947,
+      "agentTimeout": 3600,
+      "cpuSeconds": 27.1,
+      "peakRssMb": 263,
       "capMemoryMb": 2048,
       "capRaised": false
     },
     {
-      "sessionID": "bench-path-tracing-1784331026-aa0a7b",
+      "sessionID": "bench-cancel-async-tasks-1786923419-038fe6",
       "passed": false,
-      "note": "bench:path-tracing",
-      "turnCount": 0,
-      "timestamp": "2026-07-18T00:03:47.497Z",
-      "summary": "path-tracing",
-      "model": "anthropic/claude-haiku-4-5",
-      "variant": "",
-      "toolUsage": {},
-      "env": {
-        "agentVersion": "1.17.18",
-        "pluginSha": "d114cc0",
-        "harnessHash": "298d1b00138964bf",
-        "maxAgentTimeout": 3600,
-        "provider": "anthropic",
-        "driver": "opencode",
-        "resourceEnforcement": true
-      },
-      "platform": "opencode",
-      "elapsed": 1996,
-      "timedOut": true,
-      "agentTimeout": 1800,
-      "cpuSeconds": 1592.7,
-      "peakRssMb": 1857,
-      "capMemoryMb": 2048,
-      "capRaised": false
-    },
-    {
-      "sessionID": "bench-tune-mjcf-1784332862-36b81b",
-      "passed": false,
-      "note": "bench:tune-mjcf",
-      "turnCount": 0,
-      "timestamp": "2026-07-18T00:18:35.078Z",
-      "summary": "tune-mjcf",
-      "model": "anthropic/claude-haiku-4-5",
-      "variant": "",
-      "toolUsage": {},
-      "env": {
-        "agentVersion": "1.17.18",
-        "pluginSha": "d114cc0",
-        "harnessHash": "298d1b00138964bf",
-        "maxAgentTimeout": 3600,
-        "provider": "anthropic",
-        "driver": "opencode",
-        "resourceEnforcement": true
-      },
-      "platform": "opencode",
-      "elapsed": 1034.1,
-      "timedOut": true,
-      "agentTimeout": 900,
-      "cpuSeconds": 1041.8,
-      "peakRssMb": 1091,
-      "capMemoryMb": 2048,
-      "capRaised": false
-    },
-    {
-      "sessionID": "bench-path-tracing-1784333748-7fb753",
-      "passed": true,
-      "note": "bench:path-tracing",
-      "turnCount": 1,
-      "timestamp": "2026-07-18T00:23:51.107Z",
-      "summary": "path-tracing",
-      "model": "anthropic/claude-haiku-4-5",
+      "note": "bench:cancel-async-tasks",
+      "turnCount": 6,
+      "timestamp": "2026-08-16T23:38:43.108Z",
+      "summary": "cancel-async-tasks",
+      "model": "anthropic/claude-sonnet-5",
       "variant": "",
       "toolUsage": {
-        "read": {
-          "calls": 3,
-          "errors": 0
-        },
-        "write": {
+        "Write": {
           "calls": 1,
           "errors": 0
         },
-        "bash": {
+        "Bash": {
+          "calls": 4,
+          "errors": 1
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 103.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 15.5,
+      "peakRssMb": 183,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-db-wal-recovery-1786923281-484380",
+      "passed": false,
+      "note": "bench:db-wal-recovery",
+      "turnCount": 22,
+      "timestamp": "2026-08-16T23:38:51.518Z",
+      "summary": "db-wal-recovery",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 20,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 248.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 40.2,
+      "peakRssMb": 562,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-chess-best-move-1786923281-a2e347",
+      "passed": true,
+      "note": "bench:chess-best-move",
+      "turnCount": 26,
+      "timestamp": "2026-08-16T23:39:21.721Z",
+      "summary": "chess-best-move",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Read": {
+          "calls": 7,
+          "errors": 0
+        },
+        "Bash": {
+          "calls": 17,
+          "errors": 3
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 279.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 148,
+      "peakRssMb": 478,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-db-wal-recovery-1786923531-83976b",
+      "passed": true,
+      "note": "bench:db-wal-recovery",
+      "turnCount": 10,
+      "timestamp": "2026-08-16T23:40:06.101Z",
+      "summary": "db-wal-recovery",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 8,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 73.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 18.1,
+      "peakRssMb": 288,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-configure-git-webserver-1786923434-e12d1e",
+      "passed": false,
+      "note": "bench:configure-git-webserver",
+      "turnCount": 20,
+      "timestamp": "2026-08-16T23:40:21.703Z",
+      "summary": "configure-git-webserver",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 15,
+          "errors": 1
+        },
+        "ToolSearch": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 186.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 22.1,
+      "peakRssMb": 271,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-cancel-async-tasks-1786923523-a49892",
+      "passed": true,
+      "note": "bench:cancel-async-tasks",
+      "turnCount": 10,
+      "timestamp": "2026-08-16T23:41:09.072Z",
+      "summary": "cancel-async-tasks",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
           "calls": 7,
           "errors": 1
         },
-        "edit": {
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Read": {
           "calls": 1,
           "errors": 0
         }
       },
       "env": {
-        "agentVersion": "1.17.18",
-        "pluginSha": "d114cc0",
-        "harnessHash": "298d1b00138964bf",
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
         "maxAgentTimeout": 3600,
         "provider": "anthropic",
-        "driver": "opencode",
-        "resourceEnforcement": true
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
       },
-      "platform": "opencode",
-      "elapsed": 479.8,
+      "platform": "claude-code",
+      "elapsed": 145.7,
       "timedOut": false,
-      "agentTimeout": 1800,
-      "cpuSeconds": 428.2,
-      "peakRssMb": 1329,
+      "agentTimeout": 3600,
+      "cpuSeconds": 15.9,
+      "peakRssMb": 189,
       "capMemoryMb": 2048,
       "capRaised": false
     },
     {
-      "sessionID": "bench-tune-mjcf-1784335026-ab3408",
-      "passed": false,
-      "note": "bench:tune-mjcf",
-      "turnCount": 0,
-      "timestamp": "2026-07-18T00:54:24.803Z",
-      "summary": "tune-mjcf",
-      "model": "anthropic/claude-haiku-4-5",
+      "sessionID": "bench-configure-git-webserver-1786923621-6df334",
+      "passed": true,
+      "note": "bench:configure-git-webserver",
+      "turnCount": 21,
+      "timestamp": "2026-08-16T23:42:46.403Z",
+      "summary": "configure-git-webserver",
+      "model": "anthropic/claude-sonnet-5",
       "variant": "",
-      "toolUsage": {},
+      "toolUsage": {
+        "Bash": {
+          "calls": 17,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
       "env": {
-        "agentVersion": "1.17.18",
-        "pluginSha": "d114cc0",
-        "harnessHash": "298d1b00138964bf",
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
         "maxAgentTimeout": 3600,
         "provider": "anthropic",
-        "driver": "opencode",
-        "resourceEnforcement": true
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
       },
-      "platform": "opencode",
-      "elapsed": 1030.4,
-      "timedOut": true,
-      "agentTimeout": 900,
-      "cpuSeconds": 983.4,
-      "peakRssMb": 1092,
+      "platform": "claude-code",
+      "elapsed": 144.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 18.5,
+      "peakRssMb": 262,
       "capMemoryMb": 2048,
       "capRaised": false
+    },
+    {
+      "sessionID": "bench-adaptive-rejection-sampler-1786923281-3f2363",
+      "passed": true,
+      "note": "bench:adaptive-rejection-sampler",
+      "turnCount": 15,
+      "timestamp": "2026-08-16T23:43:09.815Z",
+      "summary": "adaptive-rejection-sampler",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 9,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 507.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 51.5,
+      "peakRssMb": 430,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-cancel-async-tasks-1786923669-022f11",
+      "passed": true,
+      "note": "bench:cancel-async-tasks",
+      "turnCount": 12,
+      "timestamp": "2026-08-16T23:44:10.505Z",
+      "summary": "cancel-async-tasks",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 6,
+          "errors": 2
+        },
+        "Write": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 180.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 16.5,
+      "peakRssMb": 187,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-db-wal-recovery-1786923606-733b9c",
+      "passed": false,
+      "note": "bench:db-wal-recovery",
+      "turnCount": 14,
+      "timestamp": "2026-08-16T23:44:21.957Z",
+      "summary": "db-wal-recovery",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 12,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 254.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 30.5,
+      "peakRssMb": 450,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-chess-best-move-1786923561-e1e660",
+      "passed": true,
+      "note": "bench:chess-best-move",
+      "turnCount": 56,
+      "timestamp": "2026-08-16T23:45:27.403Z",
+      "summary": "chess-best-move",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 24,
+          "errors": 3
+        },
+        "Read": {
+          "calls": 27,
+          "errors": 0
+        },
+        "ToolSearch": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Monitor": {
+          "calls": 1,
+          "errors": 0
+        },
+        "TaskOutput": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 365,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 208.7,
+      "peakRssMb": 587,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-db-wal-recovery-1786923861-c0af7e",
+      "passed": true,
+      "note": "bench:db-wal-recovery",
+      "turnCount": 8,
+      "timestamp": "2026-08-16T23:45:53.466Z",
+      "summary": "db-wal-recovery",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 7,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 90.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 29.2,
+      "peakRssMb": 284,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-configure-git-webserver-1786923766-3f48eb",
+      "passed": false,
+      "note": "bench:configure-git-webserver",
+      "turnCount": 34,
+      "timestamp": "2026-08-16T23:46:01.858Z",
+      "summary": "configure-git-webserver",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 17,
+          "errors": 1
+        },
+        "ToolSearch": {
+          "calls": 1,
+          "errors": 0
+        },
+        "TaskCreate": {
+          "calls": 4,
+          "errors": 0
+        },
+        "TaskUpdate": {
+          "calls": 8,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 195.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 26.4,
+      "peakRssMb": 289,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-db-wal-recovery-1786923953-aa3b38",
+      "passed": true,
+      "note": "bench:db-wal-recovery",
+      "turnCount": 9,
+      "timestamp": "2026-08-16T23:47:03.542Z",
+      "summary": "db-wal-recovery",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 8,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 69.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 19.9,
+      "peakRssMb": 285,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-cancel-async-tasks-1786923850-b4e49d",
+      "passed": true,
+      "note": "bench:cancel-async-tasks",
+      "turnCount": 13,
+      "timestamp": "2026-08-16T23:47:07.279Z",
+      "summary": "cancel-async-tasks",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 9,
+          "errors": 3
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 176.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 23,
+      "peakRssMb": 199,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-chess-best-move-1786923927-909246",
+      "passed": true,
+      "note": "bench:chess-best-move",
+      "turnCount": 17,
+      "timestamp": "2026-08-16T23:47:15.371Z",
+      "summary": "chess-best-move",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 10,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 107.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 26.6,
+      "peakRssMb": 335,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-configure-git-webserver-1786923961-464c5f",
+      "passed": true,
+      "note": "bench:configure-git-webserver",
+      "turnCount": 17,
+      "timestamp": "2026-08-16T23:47:50.767Z",
+      "summary": "configure-git-webserver",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 14,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 108.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 23.9,
+      "peakRssMb": 245,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-adaptive-rejection-sampler-1786923789-ca58c3",
+      "passed": false,
+      "note": "bench:adaptive-rejection-sampler",
+      "turnCount": 13,
+      "timestamp": "2026-08-16T23:48:27.214Z",
+      "summary": "adaptive-rejection-sampler",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 9,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 316.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 53.7,
+      "peakRssMb": 427,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-extract-elf-1786924027-368715",
+      "passed": true,
+      "note": "bench:extract-elf",
+      "turnCount": 10,
+      "timestamp": "2026-08-16T23:49:05.653Z",
+      "summary": "extract-elf",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 8,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 117.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 21.4,
+      "peakRssMb": 243,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-dna-insert-1786924023-0f8d92",
+      "passed": true,
+      "note": "bench:dna-insert",
+      "turnCount": 22,
+      "timestamp": "2026-08-16T23:50:53.638Z",
+      "summary": "dna-insert",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 18,
+          "errors": 3
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 229.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 19.9,
+      "peakRssMb": 208,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-adaptive-rejection-sampler-1786924107-350256",
+      "passed": false,
+      "note": "bench:adaptive-rejection-sampler",
+      "turnCount": 6,
+      "timestamp": "2026-08-16T23:51:08.292Z",
+      "summary": "adaptive-rejection-sampler",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 159.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 24.2,
+      "peakRssMb": 424,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-chess-best-move-1786924035-2eb57d",
+      "passed": true,
+      "note": "bench:chess-best-move",
+      "turnCount": 18,
+      "timestamp": "2026-08-16T23:51:31.016Z",
+      "summary": "chess-best-move",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Read": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Bash": {
+          "calls": 11,
+          "errors": 3
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 255.2,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 160.9,
+      "peakRssMb": 699,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-extract-elf-1786924145-356b2d",
+      "passed": true,
+      "note": "bench:extract-elf",
+      "turnCount": 11,
+      "timestamp": "2026-08-16T23:51:48.592Z",
+      "summary": "extract-elf",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 9,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 161.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 23.9,
+      "peakRssMb": 393,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-filter-js-from-html-1786924070-948c86",
+      "passed": false,
+      "note": "bench:filter-js-from-html",
+      "turnCount": 13,
+      "timestamp": "2026-08-16T23:53:23.410Z",
+      "summary": "filter-js-from-html",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 6,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 331.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 124.8,
+      "peakRssMb": 1390,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-dna-insert-1786924253-9dd308",
+      "passed": true,
+      "note": "bench:dna-insert",
+      "turnCount": 20,
+      "timestamp": "2026-08-16T23:53:48.109Z",
+      "summary": "dna-insert",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 16,
+          "errors": 2
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 173.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 21.9,
+      "peakRssMb": 201,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-extract-elf-1786924308-c10462",
+      "passed": true,
+      "note": "bench:extract-elf",
+      "turnCount": 8,
+      "timestamp": "2026-08-16T23:53:49.735Z",
+      "summary": "extract-elf",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 6,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 120.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 29.5,
+      "peakRssMb": 232,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-extract-elf-1786924429-34fc3c",
+      "passed": true,
+      "note": "bench:extract-elf",
+      "turnCount": 9,
+      "timestamp": "2026-08-16T23:55:29.248Z",
+      "summary": "extract-elf",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 7,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 99.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 21.1,
+      "peakRssMb": 236,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-chess-best-move-1786924291-ccb969",
+      "passed": true,
+      "note": "bench:chess-best-move",
+      "turnCount": 29,
+      "timestamp": "2026-08-16T23:56:44.579Z",
+      "summary": "chess-best-move",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 17,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 10,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 313.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 36.6,
+      "peakRssMb": 366,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-filter-js-from-html-1786924403-3135f3",
+      "passed": false,
+      "note": "bench:filter-js-from-html",
+      "turnCount": 8,
+      "timestamp": "2026-08-16T23:56:51.936Z",
+      "summary": "filter-js-from-html",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Write": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Bash": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 207.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 90.2,
+      "peakRssMb": 1385,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-extract-elf-1786924529-e952e2",
+      "passed": true,
+      "note": "bench:extract-elf",
+      "turnCount": 8,
+      "timestamp": "2026-08-16T23:57:54.126Z",
+      "summary": "extract-elf",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 6,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 144.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 20.8,
+      "peakRssMb": 236,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-dna-insert-1786924428-a380f0",
+      "passed": false,
+      "note": "bench:dna-insert",
+      "turnCount": 18,
+      "timestamp": "2026-08-16T23:58:51.739Z",
+      "summary": "dna-insert",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 14,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 303.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 24.1,
+      "peakRssMb": 215,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-headless-terminal-1786924604-3ec687",
+      "passed": false,
+      "note": "bench:headless-terminal",
+      "turnCount": 12,
+      "timestamp": "2026-08-16T23:58:52.495Z",
+      "summary": "headless-terminal",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 7,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 127.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 33.3,
+      "peakRssMb": 277,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-adaptive-rejection-sampler-1786924268-deccc1",
+      "passed": false,
+      "note": "bench:adaptive-rejection-sampler",
+      "turnCount": 15,
+      "timestamp": "2026-08-16T23:59:49.981Z",
+      "summary": "adaptive-rejection-sampler",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 10,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 521.2,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 70,
+      "peakRssMb": 425,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-headless-terminal-1786924732-eefb2f",
+      "passed": true,
+      "note": "bench:headless-terminal",
+      "turnCount": 15,
+      "timestamp": "2026-08-17T00:02:20.007Z",
+      "summary": "headless-terminal",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 9,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 205.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 33.4,
+      "peakRssMb": 275,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-gcode-to-text-1786924604-1cde18",
+      "passed": true,
+      "note": "bench:gcode-to-text",
+      "turnCount": 29,
+      "timestamp": "2026-08-17T00:02:46.302Z",
+      "summary": "gcode-to-text",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 12,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 8,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 357.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 120.1,
+      "peakRssMb": 992,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-dna-insert-1786924731-041ea7",
+      "passed": false,
+      "note": "bench:dna-insert",
+      "turnCount": 18,
+      "timestamp": "2026-08-17T00:03:04.546Z",
+      "summary": "dna-insert",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 15,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 251.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 43.5,
+      "peakRssMb": 205,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-filter-js-from-html-1786924611-264ed9",
+      "passed": false,
+      "note": "bench:filter-js-from-html",
+      "turnCount": 18,
+      "timestamp": "2026-08-17T00:05:03.028Z",
+      "summary": "filter-js-from-html",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Write": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Bash": {
+          "calls": 6,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 490.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 139.5,
+      "peakRssMb": 1385,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-headless-terminal-1786924940-c9ddd9",
+      "passed": true,
+      "note": "bench:headless-terminal",
+      "turnCount": 22,
+      "timestamp": "2026-08-17T00:05:56.842Z",
+      "summary": "headless-terminal",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 12,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 4,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 216.2,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 72.9,
+      "peakRssMb": 281,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-adaptive-rejection-sampler-1786924789-08348d",
+      "passed": true,
+      "note": "bench:adaptive-rejection-sampler",
+      "turnCount": 15,
+      "timestamp": "2026-08-17T00:07:51.282Z",
+      "summary": "adaptive-rejection-sampler",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 12,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 480.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 34.9,
+      "peakRssMb": 425,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-dna-insert-1786924984-f9214d",
+      "passed": false,
+      "note": "bench:dna-insert",
+      "turnCount": 17,
+      "timestamp": "2026-08-17T00:08:33.606Z",
+      "summary": "dna-insert",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 14,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 328.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 26.3,
+      "peakRssMb": 213,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-gcode-to-text-1786924966-5b4668",
+      "passed": false,
+      "note": "bench:gcode-to-text",
+      "turnCount": 44,
+      "timestamp": "2026-08-17T00:09:05.055Z",
+      "summary": "gcode-to-text",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 19,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 12,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 378.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 64.5,
+      "peakRssMb": 575,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-filter-js-from-html-1786925103-fd0edb",
+      "passed": false,
+      "note": "bench:filter-js-from-html",
+      "turnCount": 21,
+      "timestamp": "2026-08-17T00:10:56.507Z",
+      "summary": "filter-js-from-html",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Bash": {
+          "calls": 9,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 6,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 353,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 79.8,
+      "peakRssMb": 1387,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-gcode-to-text-1786925345-ae0715",
+      "passed": true,
+      "note": "bench:gcode-to-text",
+      "turnCount": 25,
+      "timestamp": "2026-08-17T00:12:25.602Z",
+      "summary": "gcode-to-text",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 14,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 4,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 199.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 70.9,
+      "peakRssMb": 946,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-headless-terminal-1786925156-e5c70b",
+      "passed": true,
+      "note": "bench:headless-terminal",
+      "turnCount": 26,
+      "timestamp": "2026-08-17T00:13:12.302Z",
+      "summary": "headless-terminal",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 14,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "ToolSearch": {
+          "calls": 2,
+          "errors": 0
+        },
+        "TaskOutput": {
+          "calls": 1,
+          "errors": 0
+        },
+        "TaskStop": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 434.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 34.7,
+      "peakRssMb": 303,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-filter-js-from-html-1786925456-f3a5b2",
+      "passed": false,
+      "note": "bench:filter-js-from-html",
+      "turnCount": 13,
+      "timestamp": "2026-08-17T00:15:18.301Z",
+      "summary": "filter-js-from-html",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 6,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 261.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 71.9,
+      "peakRssMb": 1391,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-headless-terminal-1786925592-ae0755",
+      "passed": true,
+      "note": "bench:headless-terminal",
+      "turnCount": 38,
+      "timestamp": "2026-08-17T00:17:09.197Z",
+      "summary": "headless-terminal",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 17,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "ToolSearch": {
+          "calls": 1,
+          "errors": 0
+        },
+        "TaskCreate": {
+          "calls": 5,
+          "errors": 0
+        },
+        "TaskUpdate": {
+          "calls": 9,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 236.2,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 33.5,
+      "peakRssMb": 328,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-log-summary-date-ranges-1786925829-0e8aa2",
+      "passed": true,
+      "note": "bench:log-summary-date-ranges",
+      "turnCount": 8,
+      "timestamp": "2026-08-17T00:17:54.365Z",
+      "summary": "log-summary-date-ranges",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 44.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 14.8,
+      "peakRssMb": 191,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-gcode-to-text-1786925545-ddb144",
+      "passed": true,
+      "note": "bench:gcode-to-text",
+      "turnCount": 66,
+      "timestamp": "2026-08-17T00:18:13.832Z",
+      "summary": "gcode-to-text",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 23,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 21,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 347.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 60.6,
+      "peakRssMb": 616,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-log-summary-date-ranges-1786925874-6de292",
+      "passed": true,
+      "note": "bench:log-summary-date-ranges",
+      "turnCount": 7,
+      "timestamp": "2026-08-17T00:18:40.341Z",
+      "summary": "log-summary-date-ranges",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 45.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 15.2,
+      "peakRssMb": 185,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-log-summary-date-ranges-1786925920-130ef1",
+      "passed": true,
+      "note": "bench:log-summary-date-ranges",
+      "turnCount": 8,
+      "timestamp": "2026-08-17T00:19:27.698Z",
+      "summary": "log-summary-date-ranges",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 47,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 15.8,
+      "peakRssMb": 186,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-log-summary-date-ranges-1786925967-c6e249",
+      "passed": true,
+      "note": "bench:log-summary-date-ranges",
+      "turnCount": 9,
+      "timestamp": "2026-08-17T00:20:19.634Z",
+      "summary": "log-summary-date-ranges",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 6,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 51.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 15.7,
+      "peakRssMb": 191,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-log-summary-date-ranges-1786926019-34bde1",
+      "passed": true,
+      "note": "bench:log-summary-date-ranges",
+      "turnCount": 8,
+      "timestamp": "2026-08-17T00:21:18.094Z",
+      "summary": "log-summary-date-ranges",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 6,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 58,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 15.5,
+      "peakRssMb": 187,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-merge-diff-arc-agi-task-1786926078-04c2b8",
+      "passed": true,
+      "note": "bench:merge-diff-arc-agi-task",
+      "turnCount": 19,
+      "timestamp": "2026-08-17T00:22:45.928Z",
+      "summary": "merge-diff-arc-agi-task",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 15,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 87,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 16.9,
+      "peakRssMb": 195,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-multi-source-data-merger-1786926125-ccd30f",
+      "passed": true,
+      "note": "bench:multi-source-data-merger",
+      "turnCount": 9,
+      "timestamp": "2026-08-17T00:24:06.732Z",
+      "summary": "multi-source-data-merger",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 118.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 64.4,
+      "peakRssMb": 890,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-merge-diff-arc-agi-task-1786926165-43e54f",
+      "passed": true,
+      "note": "bench:merge-diff-arc-agi-task",
+      "turnCount": 18,
+      "timestamp": "2026-08-17T00:24:32.183Z",
+      "summary": "merge-diff-arc-agi-task",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 14,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 104.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 28.9,
+      "peakRssMb": 200,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-gcode-to-text-1786925893-e15112",
+      "passed": true,
+      "note": "bench:gcode-to-text",
+      "turnCount": 36,
+      "timestamp": "2026-08-17T00:26:25.405Z",
+      "summary": "gcode-to-text",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 15,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 10,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 489.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 232.3,
+      "peakRssMb": 988,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-merge-diff-arc-agi-task-1786926272-5e575f",
+      "passed": true,
+      "note": "bench:merge-diff-arc-agi-task",
+      "turnCount": 17,
+      "timestamp": "2026-08-17T00:26:28.362Z",
+      "summary": "merge-diff-arc-agi-task",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 14,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 114.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 30.9,
+      "peakRssMb": 191,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-multi-source-data-merger-1786926246-5395de",
+      "passed": true,
+      "note": "bench:multi-source-data-merger",
+      "turnCount": 6,
+      "timestamp": "2026-08-17T00:26:38.645Z",
+      "summary": "multi-source-data-merger",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 149.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 82.8,
+      "peakRssMb": 886,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-openssl-selfsigned-cert-1786926385-bbe2a4",
+      "passed": true,
+      "note": "bench:openssl-selfsigned-cert",
+      "turnCount": 18,
+      "timestamp": "2026-08-17T00:28:00.944Z",
+      "summary": "openssl-selfsigned-cert",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 11,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 94.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 26.9,
+      "peakRssMb": 275,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-multi-source-data-merger-1786926398-f6fd91",
+      "passed": true,
+      "note": "bench:multi-source-data-merger",
+      "turnCount": 6,
+      "timestamp": "2026-08-17T00:28:26.224Z",
+      "summary": "multi-source-data-merger",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 105.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 50.3,
+      "peakRssMb": 884,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-merge-diff-arc-agi-task-1786926388-b8239b",
+      "passed": true,
+      "note": "bench:merge-diff-arc-agi-task",
+      "turnCount": 20,
+      "timestamp": "2026-08-17T00:28:29.066Z",
+      "summary": "merge-diff-arc-agi-task",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 16,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 120,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 22.7,
+      "peakRssMb": 197,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-openssl-selfsigned-cert-1786926480-d3c8ef",
+      "passed": true,
+      "note": "bench:openssl-selfsigned-cert",
+      "turnCount": 8,
+      "timestamp": "2026-08-17T00:29:14.371Z",
+      "summary": "openssl-selfsigned-cert",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 5,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 72.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 24.9,
+      "peakRssMb": 256,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-multi-source-data-merger-1786926506-3b22de",
+      "passed": true,
+      "note": "bench:multi-source-data-merger",
+      "turnCount": 8,
+      "timestamp": "2026-08-17T00:30:21.855Z",
+      "summary": "multi-source-data-merger",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 112,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 52.8,
+      "peakRssMb": 883,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-openssl-selfsigned-cert-1786926554-0e92e1",
+      "passed": true,
+      "note": "bench:openssl-selfsigned-cert",
+      "turnCount": 13,
+      "timestamp": "2026-08-17T00:30:53.339Z",
+      "summary": "openssl-selfsigned-cert",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 8,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 97.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 32.9,
+      "peakRssMb": 272,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-merge-diff-arc-agi-task-1786926509-da951c",
+      "passed": true,
+      "note": "bench:merge-diff-arc-agi-task",
+      "turnCount": 21,
+      "timestamp": "2026-08-17T00:31:06.772Z",
+      "summary": "merge-diff-arc-agi-task",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 17,
+          "errors": 2
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 156.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 33.6,
+      "peakRssMb": 205,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-mteb-retrieve-1786926125-502eab",
+      "passed": true,
+      "note": "bench:mteb-retrieve",
+      "turnCount": 11,
+      "timestamp": "2026-08-17T00:31:45.231Z",
+      "summary": "mteb-retrieve",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 9,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 573.2,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 361.9,
+      "peakRssMb": 3077,
+      "capMemoryMb": 3075,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-openssl-selfsigned-cert-1786926653-584e15",
+      "passed": true,
+      "note": "bench:openssl-selfsigned-cert",
+      "turnCount": 10,
+      "timestamp": "2026-08-17T00:32:17.126Z",
+      "summary": "openssl-selfsigned-cert",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 8,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 82.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 33.9,
+      "peakRssMb": 262,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-multi-source-data-merger-1786926621-ca2213",
+      "passed": true,
+      "note": "bench:multi-source-data-merger",
+      "turnCount": 7,
+      "timestamp": "2026-08-17T00:32:57.570Z",
+      "summary": "multi-source-data-merger",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 150.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 83.8,
+      "peakRssMb": 885,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-password-recovery-1786926666-0d96ac",
+      "passed": true,
+      "note": "bench:password-recovery",
+      "turnCount": 16,
+      "timestamp": "2026-08-17T00:33:36.732Z",
+      "summary": "password-recovery",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 14,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 148.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 38.1,
+      "peakRssMb": 250,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-openssl-selfsigned-cert-1786926737-437f27",
+      "passed": true,
+      "note": "bench:openssl-selfsigned-cert",
+      "turnCount": 12,
+      "timestamp": "2026-08-17T00:33:53.190Z",
+      "summary": "openssl-selfsigned-cert",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 10,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 95.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 43.1,
+      "peakRssMb": 275,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-model-extraction-relu-logits-1786926125-f8da66",
+      "passed": false,
+      "note": "bench:model-extraction-relu-logits",
+      "turnCount": 27,
+      "timestamp": "2026-08-17T00:35:24.217Z",
+      "summary": "model-extraction-relu-logits",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 18,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 797.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 194.9,
+      "peakRssMb": 355,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-password-recovery-1786926816-9a3b7c",
+      "passed": true,
+      "note": "bench:password-recovery",
+      "turnCount": 18,
+      "timestamp": "2026-08-17T00:38:08.703Z",
+      "summary": "password-recovery",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 16,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 270.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 40.7,
+      "peakRssMb": 263,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-password-recovery-1786927088-c7ce4b",
+      "passed": true,
+      "note": "bench:password-recovery",
+      "turnCount": 17,
+      "timestamp": "2026-08-17T00:40:51.242Z",
+      "summary": "password-recovery",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 16,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 162.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 19.4,
+      "peakRssMb": 267,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-mteb-retrieve-1786926705-c8423a",
+      "passed": true,
+      "note": "bench:mteb-retrieve",
+      "turnCount": 22,
+      "timestamp": "2026-08-17T00:43:06.806Z",
+      "summary": "mteb-retrieve",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 20,
+          "errors": 2
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 676.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 363.4,
+      "peakRssMb": 3076,
+      "capMemoryMb": 3075,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-model-extraction-relu-logits-1786926924-5182ce",
+      "passed": false,
+      "note": "bench:model-extraction-relu-logits",
+      "turnCount": 27,
+      "timestamp": "2026-08-17T00:44:25.772Z",
+      "summary": "model-extraction-relu-logits",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 22,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 4,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 540.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 101.6,
+      "peakRssMb": 345,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-polyglot-rust-c-1786926777-fbf494",
+      "passed": false,
+      "note": "bench:polyglot-rust-c",
+      "turnCount": 9,
+      "timestamp": "2026-08-17T00:47:38.891Z",
+      "summary": "polyglot-rust-c",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 6,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 880.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 61,
+      "peakRssMb": 366,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-mteb-retrieve-1786927386-ae563a",
+      "passed": true,
+      "note": "bench:mteb-retrieve",
+      "turnCount": 12,
+      "timestamp": "2026-08-17T00:50:26.142Z",
+      "summary": "mteb-retrieve",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 9,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 433.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 258.9,
+      "peakRssMb": 3077,
+      "capMemoryMb": 3075,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-password-recovery-1786927251-9c0138",
+      "passed": false,
+      "note": "bench:password-recovery",
+      "turnCount": 24,
+      "timestamp": "2026-08-17T00:52:06.915Z",
+      "summary": "password-recovery",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 22,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 674.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 43.1,
+      "peakRssMb": 493,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-mteb-retrieve-1786927826-62c0ca",
+      "passed": true,
+      "note": "bench:mteb-retrieve",
+      "turnCount": 29,
+      "timestamp": "2026-08-17T01:00:25.850Z",
+      "summary": "mteb-retrieve",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 23,
+          "errors": 4
+        },
+        "Read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 592.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 345.6,
+      "peakRssMb": 3077,
+      "capMemoryMb": 3075,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-password-recovery-1786927926-d005ad",
+      "passed": true,
+      "note": "bench:password-recovery",
+      "turnCount": 24,
+      "timestamp": "2026-08-17T01:00:53.289Z",
+      "summary": "password-recovery",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 22,
+          "errors": 3
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 525.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 63.9,
+      "peakRssMb": 2048,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-polyglot-rust-c-1786927658-7ec509",
+      "passed": false,
+      "note": "bench:polyglot-rust-c",
+      "turnCount": 8,
+      "timestamp": "2026-08-17T01:03:57.963Z",
+      "summary": "polyglot-rust-c",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 7,
+          "errors": 2
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 975.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 32.3,
+      "peakRssMb": 326,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-model-extraction-relu-logits-1786927465-4d3531",
+      "passed": false,
+      "note": "bench:model-extraction-relu-logits",
+      "turnCount": 53,
+      "timestamp": "2026-08-17T01:06:47.580Z",
+      "summary": "model-extraction-relu-logits",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 28,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 10,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 13,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 1340.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 560.2,
+      "peakRssMb": 357,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-torch-tensor-parallelism-1786931112-258904",
+      "passed": false,
+      "note": "bench:torch-tensor-parallelism",
+      "turnCount": 12,
+      "timestamp": "2026-08-17T01:55:21.797Z",
+      "summary": "torch-tensor-parallelism",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 6,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 605.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 417.1,
+      "peakRssMb": 7241,
+      "capMemoryMb": 11528,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-torch-tensor-parallelism-1786931721-9a5ba5",
+      "passed": true,
+      "note": "bench:torch-tensor-parallelism",
+      "turnCount": 11,
+      "timestamp": "2026-08-17T02:04:21.063Z",
+      "summary": "torch-tensor-parallelism",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 6,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 534.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 345.8,
+      "peakRssMb": 7522,
+      "capMemoryMb": 11528,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-vulnerable-secret-1786932261-fc1181",
+      "passed": true,
+      "note": "bench:vulnerable-secret",
+      "turnCount": 12,
+      "timestamp": "2026-08-17T02:06:08.769Z",
+      "summary": "vulnerable-secret",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 10,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 107.2,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 29.3,
+      "peakRssMb": 244,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-vulnerable-secret-1786932368-f72eb5",
+      "passed": true,
+      "note": "bench:vulnerable-secret",
+      "turnCount": 12,
+      "timestamp": "2026-08-17T02:07:32.501Z",
+      "summary": "vulnerable-secret",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 8,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 83.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 18.8,
+      "peakRssMb": 236,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-vulnerable-secret-1786932452-e95804",
+      "passed": true,
+      "note": "bench:vulnerable-secret",
+      "turnCount": 12,
+      "timestamp": "2026-08-17T02:09:02.241Z",
+      "summary": "vulnerable-secret",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 10,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 89.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 17.2,
+      "peakRssMb": 236,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-vulnerable-secret-1786932542-71cc88",
+      "passed": true,
+      "note": "bench:vulnerable-secret",
+      "turnCount": 15,
+      "timestamp": "2026-08-17T02:10:40.457Z",
+      "summary": "vulnerable-secret",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 9,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 97.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 17.7,
+      "peakRssMb": 240,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-video-processing-1786932261-f8d081",
+      "passed": false,
+      "note": "bench:video-processing",
+      "turnCount": 29,
+      "timestamp": "2026-08-17T02:12:03.333Z",
+      "summary": "video-processing",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 18,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 9,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 460.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 73.4,
+      "peakRssMb": 859,
+      "capMemoryMb": 3072,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-vulnerable-secret-1786932640-c4dc19",
+      "passed": true,
+      "note": "bench:vulnerable-secret",
+      "turnCount": 13,
+      "timestamp": "2026-08-17T02:12:31.419Z",
+      "summary": "vulnerable-secret",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 11,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 110.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 17.8,
+      "peakRssMb": 248,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-video-processing-1786932723-4729e9",
+      "passed": false,
+      "note": "bench:video-processing",
+      "turnCount": 34,
+      "timestamp": "2026-08-17T02:18:14.634Z",
+      "summary": "video-processing",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 19,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 13,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 370.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 61.6,
+      "peakRssMb": 913,
+      "capMemoryMb": 3072,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-video-processing-1786933094-908a09",
+      "passed": false,
+      "note": "bench:video-processing",
+      "turnCount": 42,
+      "timestamp": "2026-08-17T02:25:37.555Z",
+      "summary": "video-processing",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 17,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 23,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 442.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 59.3,
+      "peakRssMb": 1503,
+      "capMemoryMb": 3072,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-video-processing-1786933537-710a55",
+      "passed": false,
+      "note": "bench:video-processing",
+      "turnCount": 48,
+      "timestamp": "2026-08-17T02:33:21.044Z",
+      "summary": "video-processing",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 22,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 21,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 462.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 63.1,
+      "peakRssMb": 1422,
+      "capMemoryMb": 3072,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-video-processing-1786934001-6ea13a",
+      "passed": false,
+      "note": "bench:video-processing",
+      "turnCount": 62,
+      "timestamp": "2026-08-17T02:46:15.724Z",
+      "summary": "video-processing",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 32,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 26,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d1ec116",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 774.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 107.4,
+      "peakRssMb": 938,
+      "capMemoryMb": 3072,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-install-windows-3.11-1786934914-a7ed26",
+      "passed": false,
+      "note": "bench:install-windows-3.11",
+      "turnCount": 1,
+      "timestamp": "2026-08-17T02:57:24.670Z",
+      "summary": "install-windows-3.11",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 42,
+          "errors": 4
+        },
+        "ToolSearch": {
+          "calls": 2,
+          "errors": 0
+        },
+        "TaskCreate": {
+          "calls": 4,
+          "errors": 0
+        },
+        "TaskUpdate": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 9,
+          "errors": 0
+        },
+        "Monitor": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 530.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 426.6,
+      "peakRssMb": 1784,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-install-windows-3.11-1786935560-cef604",
+      "passed": false,
+      "note": "bench:install-windows-3.11",
+      "turnCount": 45,
+      "timestamp": "2026-08-17T03:07:15.151Z",
+      "summary": "install-windows-3.11",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 35,
+          "errors": 3
+        },
+        "Read": {
+          "calls": 7,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 473.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 243.4,
+      "peakRssMb": 1690,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-pypi-server-1786936035-3cd41f",
+      "passed": true,
+      "note": "bench:pypi-server",
+      "turnCount": 16,
+      "timestamp": "2026-08-17T03:08:43.278Z",
+      "summary": "pypi-server",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 13,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 87.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 30.4,
+      "peakRssMb": 419,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-pypi-server-1786936123-40940e",
+      "passed": true,
+      "note": "bench:pypi-server",
+      "turnCount": 15,
+      "timestamp": "2026-08-17T03:10:13.190Z",
+      "summary": "pypi-server",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 12,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 89.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 33.5,
+      "peakRssMb": 419,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-protein-assembly-1786936035-c76630",
+      "passed": false,
+      "note": "bench:protein-assembly",
+      "turnCount": 23,
+      "timestamp": "2026-08-17T03:11:38.399Z",
+      "summary": "protein-assembly",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 18,
+          "errors": 0
+        },
+        "ToolSearch": {
+          "calls": 2,
+          "errors": 0
+        },
+        "WebSearch": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 262.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 22.5,
+      "peakRssMb": 267,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-pypi-server-1786936213-b6a0db",
+      "passed": true,
+      "note": "bench:pypi-server",
+      "turnCount": 14,
+      "timestamp": "2026-08-17T03:11:41.382Z",
+      "summary": "pypi-server",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 11,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 87.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 32.6,
+      "peakRssMb": 418,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-portfolio-optimization-1786936035-2c5a85",
+      "passed": true,
+      "note": "bench:portfolio-optimization",
+      "turnCount": 13,
+      "timestamp": "2026-08-17T03:12:59.632Z",
+      "summary": "portfolio-optimization",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 6,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 343.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 264.5,
+      "peakRssMb": 2507,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-pypi-server-1786936301-1d4096",
+      "passed": true,
+      "note": "bench:pypi-server",
+      "turnCount": 13,
+      "timestamp": "2026-08-17T03:13:06.211Z",
+      "summary": "pypi-server",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 10,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 84.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 31,
+      "peakRssMb": 424,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-pypi-server-1786936386-4ab0cb",
+      "passed": true,
+      "note": "bench:pypi-server",
+      "turnCount": 13,
+      "timestamp": "2026-08-17T03:14:23.350Z",
+      "summary": "pypi-server",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 10,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 76.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 29.9,
+      "peakRssMb": 416,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-portfolio-optimization-1786936379-fe8689",
+      "passed": true,
+      "note": "bench:portfolio-optimization",
+      "turnCount": 21,
+      "timestamp": "2026-08-17T03:21:23.183Z",
+      "summary": "portfolio-optimization",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 10,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 503,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 354.3,
+      "peakRssMb": 2996,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-protein-assembly-1786936298-bc3c7e",
+      "passed": false,
+      "note": "bench:protein-assembly",
+      "turnCount": 46,
+      "timestamp": "2026-08-17T03:25:53.126Z",
+      "summary": "protein-assembly",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 39,
+          "errors": 0
+        },
+        "ToolSearch": {
+          "calls": 1,
+          "errors": 0
+        },
+        "WebSearch": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 854.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 39.4,
+      "peakRssMb": 252,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-portfolio-optimization-1786936883-5835de",
+      "passed": true,
+      "note": "bench:portfolio-optimization",
+      "turnCount": 14,
+      "timestamp": "2026-08-17T03:26:40.210Z",
+      "summary": "portfolio-optimization",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 7,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 316.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 237.6,
+      "peakRssMb": 2512,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-portfolio-optimization-1786937200-1c4643",
+      "passed": true,
+      "note": "bench:portfolio-optimization",
+      "turnCount": 12,
+      "timestamp": "2026-08-17T03:33:50.081Z",
+      "summary": "portfolio-optimization",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 2,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 429,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 346.1,
+      "peakRssMb": 2516,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-portfolio-optimization-1786937630-4afd85",
+      "passed": true,
+      "note": "bench:portfolio-optimization",
+      "turnCount": 21,
+      "timestamp": "2026-08-17T03:43:16.102Z",
+      "summary": "portfolio-optimization",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 10,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 5,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 565.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 386.4,
+      "peakRssMb": 4096,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-pytorch-model-cli-1786938196-230b24",
+      "passed": true,
+      "note": "bench:pytorch-model-cli",
+      "turnCount": 21,
+      "timestamp": "2026-08-17T03:46:33.542Z",
+      "summary": "pytorch-model-cli",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 18,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 193.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 97.2,
+      "peakRssMb": 2784,
+      "capMemoryMb": 3074,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-raman-fitting-1786938196-33bd72",
+      "passed": false,
+      "note": "bench:raman-fitting",
+      "turnCount": 24,
+      "timestamp": "2026-08-17T03:48:23.951Z",
+      "summary": "raman-fitting",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 18,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 5,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 307.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 49.1,
+      "peakRssMb": 728,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-protein-assembly-1786937153-319d3b",
+      "passed": false,
+      "note": "bench:protein-assembly",
+      "turnCount": 64,
+      "timestamp": "2026-08-17T03:49:06.515Z",
+      "summary": "protein-assembly",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 49,
+          "errors": 4
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "ToolSearch": {
+          "calls": 1,
+          "errors": 0
+        },
+        "WebSearch": {
+          "calls": 10,
+          "errors": 0
+        },
+        "WebFetch": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 1392.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 68.2,
+      "peakRssMb": 493,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-pytorch-model-cli-1786938393-4c2ffb",
+      "passed": true,
+      "note": "bench:pytorch-model-cli",
+      "turnCount": 34,
+      "timestamp": "2026-08-17T03:52:52.929Z",
+      "summary": "pytorch-model-cli",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 26,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Monitor": {
+          "calls": 2,
+          "errors": 0
+        },
+        "ToolSearch": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 376.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 169,
+      "peakRssMb": 3075,
+      "capMemoryMb": 3074,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-pytorch-model-cli-1786938772-50ef32",
+      "passed": true,
+      "note": "bench:pytorch-model-cli",
+      "turnCount": 19,
+      "timestamp": "2026-08-17T03:55:52.901Z",
+      "summary": "pytorch-model-cli",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 16,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 177.2,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 75.7,
+      "peakRssMb": 2659,
+      "capMemoryMb": 3074,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-raman-fitting-1786938503-023a6f",
+      "passed": false,
+      "note": "bench:raman-fitting",
+      "turnCount": 33,
+      "timestamp": "2026-08-17T03:56:05.030Z",
+      "summary": "raman-fitting",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 25,
+          "errors": 2
+        },
+        "Read": {
+          "calls": 6,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 459.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 73.9,
+      "peakRssMb": 725,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-pytorch-model-cli-1786938952-ed708b",
+      "passed": true,
+      "note": "bench:pytorch-model-cli",
+      "turnCount": 30,
+      "timestamp": "2026-08-17T03:59:29.826Z",
+      "summary": "pytorch-model-cli",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 17,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "ToolSearch": {
+          "calls": 1,
+          "errors": 0
+        },
+        "TaskCreate": {
+          "calls": 3,
+          "errors": 0
+        },
+        "TaskUpdate": {
+          "calls": 6,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 213.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 101,
+      "peakRssMb": 2776,
+      "capMemoryMb": 3074,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-pytorch-model-cli-1786939169-7b0a3f",
+      "passed": true,
+      "note": "bench:pytorch-model-cli",
+      "turnCount": 34,
+      "timestamp": "2026-08-17T04:02:38.196Z",
+      "summary": "pytorch-model-cli",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 17,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "ToolSearch": {
+          "calls": 1,
+          "errors": 0
+        },
+        "TaskCreate": {
+          "calls": 4,
+          "errors": 0
+        },
+        "TaskUpdate": {
+          "calls": 8,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 185.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 78,
+      "peakRssMb": 2659,
+      "capMemoryMb": 3074,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-protein-assembly-1786938546-c52ef4",
+      "passed": false,
+      "note": "bench:protein-assembly",
+      "turnCount": 49,
+      "timestamp": "2026-08-17T04:03:03.654Z",
+      "summary": "protein-assembly",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 40,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "ToolSearch": {
+          "calls": 1,
+          "errors": 0
+        },
+        "WebSearch": {
+          "calls": 5,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 836.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 55,
+      "peakRssMb": 254,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-raman-fitting-1786938965-03a86d",
+      "passed": false,
+      "note": "bench:raman-fitting",
+      "turnCount": 22,
+      "timestamp": "2026-08-17T04:03:29.575Z",
+      "summary": "raman-fitting",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 18,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 443.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 49.5,
+      "peakRssMb": 734,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-raman-fitting-1786939409-5337c6",
+      "passed": false,
+      "note": "bench:raman-fitting",
+      "turnCount": 41,
+      "timestamp": "2026-08-17T04:19:59.801Z",
+      "summary": "raman-fitting",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 32,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 7,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 989.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 73.1,
+      "peakRssMb": 721,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-protein-assembly-1786939383-ac3007",
+      "passed": false,
+      "note": "bench:protein-assembly",
+      "turnCount": 80,
+      "timestamp": "2026-08-17T04:20:00.521Z",
+      "summary": "protein-assembly",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 54,
+          "errors": 3
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "ToolSearch": {
+          "calls": 2,
+          "errors": 0
+        },
+        "TaskCreate": {
+          "calls": 5,
+          "errors": 0
+        },
+        "TaskUpdate": {
+          "calls": 6,
+          "errors": 0
+        },
+        "WebSearch": {
+          "calls": 9,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 1016.2,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 65.8,
+      "peakRssMb": 678,
+      "capMemoryMb": 4096,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-raman-fitting-1786940399-0d0654",
+      "passed": false,
+      "note": "bench:raman-fitting",
+      "turnCount": 24,
+      "timestamp": "2026-08-17T04:28:04.086Z",
+      "summary": "raman-fitting",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 22,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 483.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 44.4,
+      "peakRssMb": 748,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sparql-university-1786940884-d9a5b9",
+      "passed": true,
+      "note": "bench:sparql-university",
+      "turnCount": 8,
+      "timestamp": "2026-08-17T04:29:58.305Z",
+      "summary": "sparql-university",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 113.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 18.7,
+      "peakRssMb": 216,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sam-cell-seg-1786940400-368ab2",
+      "passed": false,
+      "note": "bench:sam-cell-seg",
+      "turnCount": 35,
+      "timestamp": "2026-08-17T04:30:06.142Z",
+      "summary": "sam-cell-seg",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 27,
+          "errors": 3
+        },
+        "TaskCreate": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 602.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 303.8,
+      "peakRssMb": 3710,
+      "capMemoryMb": 6191,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-sanitize-git-repo-1786940884-f7b5be",
+      "passed": true,
+      "note": "bench:sanitize-git-repo",
+      "turnCount": 25,
+      "timestamp": "2026-08-17T04:30:17.125Z",
+      "summary": "sanitize-git-repo",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 18,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 4,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 132.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 22.9,
+      "peakRssMb": 374,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sparql-university-1786940998-dfb927",
+      "passed": true,
+      "note": "bench:sparql-university",
+      "turnCount": 8,
+      "timestamp": "2026-08-17T04:32:33.221Z",
+      "summary": "sparql-university",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 151.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 45.6,
+      "peakRssMb": 214,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sanitize-git-repo-1786941017-25f542",
+      "passed": true,
+      "note": "bench:sanitize-git-repo",
+      "turnCount": 16,
+      "timestamp": "2026-08-17T04:33:35.326Z",
+      "summary": "sanitize-git-repo",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 10,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 195.2,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 76.6,
+      "peakRssMb": 410,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sparql-university-1786941153-d22ef7",
+      "passed": true,
+      "note": "bench:sparql-university",
+      "turnCount": 8,
+      "timestamp": "2026-08-17T04:34:47.124Z",
+      "summary": "sparql-university",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 132.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 40.7,
+      "peakRssMb": 229,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sanitize-git-repo-1786941215-97d5bb",
+      "passed": true,
+      "note": "bench:sanitize-git-repo",
+      "turnCount": 22,
+      "timestamp": "2026-08-17T04:36:22.365Z",
+      "summary": "sanitize-git-repo",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 16,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 166.2,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 48,
+      "peakRssMb": 421,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sparql-university-1786941287-43f777",
+      "passed": true,
+      "note": "bench:sparql-university",
+      "turnCount": 8,
+      "timestamp": "2026-08-17T04:36:46.443Z",
+      "summary": "sparql-university",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 118.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 21.9,
+      "peakRssMb": 222,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sparql-university-1786941406-aa56fc",
+      "passed": true,
+      "note": "bench:sparql-university",
+      "turnCount": 7,
+      "timestamp": "2026-08-17T04:38:25.583Z",
+      "summary": "sparql-university",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 98.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 15.4,
+      "peakRssMb": 207,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sam-cell-seg-1786941006-a900ad",
+      "passed": false,
+      "note": "bench:sam-cell-seg",
+      "turnCount": 37,
+      "timestamp": "2026-08-17T04:39:32.728Z",
+      "summary": "sam-cell-seg",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 23,
+          "errors": 3
+        },
+        "ToolSearch": {
+          "calls": 1,
+          "errors": 0
+        },
+        "TaskCreate": {
+          "calls": 3,
+          "errors": 0
+        },
+        "TaskUpdate": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 561.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 395.3,
+      "peakRssMb": 6191,
+      "capMemoryMb": 6191,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-sanitize-git-repo-1786941382-f2474f",
+      "passed": false,
+      "note": "bench:sanitize-git-repo",
+      "turnCount": 25,
+      "timestamp": "2026-08-17T04:39:34.041Z",
+      "summary": "sanitize-git-repo",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 23,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 191.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 62.5,
+      "peakRssMb": 532,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sanitize-git-repo-1786941574-e07152",
+      "passed": false,
+      "note": "bench:sanitize-git-repo",
+      "turnCount": 40,
+      "timestamp": "2026-08-17T04:44:10.729Z",
+      "summary": "sanitize-git-repo",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 32,
+          "errors": 2
+        },
+        "Read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 275.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 55.7,
+      "peakRssMb": 542,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sam-cell-seg-1786941572-f9bdd1",
+      "passed": false,
+      "note": "bench:sam-cell-seg",
+      "turnCount": 55,
+      "timestamp": "2026-08-17T04:57:29.620Z",
+      "summary": "sam-cell-seg",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 35,
+          "errors": 3
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 8,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 10,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 1069.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 585.1,
+      "peakRssMb": 6192,
+      "capMemoryMb": 6191,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-sam-cell-seg-1786942649-156ca8",
+      "passed": false,
+      "note": "bench:sam-cell-seg",
+      "turnCount": 47,
+      "timestamp": "2026-08-17T05:09:34.340Z",
+      "summary": "sam-cell-seg",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 27,
+          "errors": 3
+        },
+        "ToolSearch": {
+          "calls": 1,
+          "errors": 0
+        },
+        "TaskCreate": {
+          "calls": 3,
+          "errors": 0
+        },
+        "TaskUpdate": {
+          "calls": 6,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 4,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 721,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 339,
+      "peakRssMb": 3700,
+      "capMemoryMb": 6191,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-sam-cell-seg-1786943374-1f578a",
+      "passed": false,
+      "note": "bench:sam-cell-seg",
+      "turnCount": 48,
+      "timestamp": "2026-08-17T05:22:38.535Z",
+      "summary": "sam-cell-seg",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 35,
+          "errors": 2
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 7,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 4,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 780.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 379.1,
+      "peakRssMb": 3919,
+      "capMemoryMb": 6191,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-torch-pipeline-parallelism-1786944158-264349",
+      "passed": true,
+      "note": "bench:torch-pipeline-parallelism",
+      "turnCount": 30,
+      "timestamp": "2026-08-17T05:35:15.588Z",
+      "summary": "torch-pipeline-parallelism",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 17,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "TaskCreate": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 6,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 753.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 441.8,
+      "peakRssMb": 7505,
+      "capMemoryMb": 11967,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-torch-pipeline-parallelism-1786944915-ae2c5e",
+      "passed": false,
+      "note": "bench:torch-pipeline-parallelism",
+      "turnCount": 30,
+      "timestamp": "2026-08-17T05:46:29.990Z",
+      "summary": "torch-pipeline-parallelism",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 23,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 669.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 405.8,
+      "peakRssMb": 7489,
+      "capMemoryMb": 11967,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-torch-pipeline-parallelism-1786945590-36b5d9",
+      "passed": false,
+      "note": "bench:torch-pipeline-parallelism",
+      "turnCount": 19,
+      "timestamp": "2026-08-17T05:56:10.134Z",
+      "summary": "torch-pipeline-parallelism",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 15,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 575.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 382.9,
+      "peakRssMb": 7464,
+      "capMemoryMb": 11967,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-torch-pipeline-parallelism-1786946170-1f8ea1",
+      "passed": false,
+      "note": "bench:torch-pipeline-parallelism",
+      "turnCount": 22,
+      "timestamp": "2026-08-17T06:07:32.658Z",
+      "summary": "torch-pipeline-parallelism",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 18,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 677.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 374,
+      "peakRssMb": 7493,
+      "capMemoryMb": 11967,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-torch-pipeline-parallelism-1786946852-8bb268",
+      "passed": true,
+      "note": "bench:torch-pipeline-parallelism",
+      "turnCount": 40,
+      "timestamp": "2026-08-17T06:22:10.392Z",
+      "summary": "torch-pipeline-parallelism",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 30,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "ToolSearch": {
+          "calls": 2,
+          "errors": 0
+        },
+        "WebSearch": {
+          "calls": 2,
+          "errors": 0
+        },
+        "WebFetch": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "dfe87c9",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 872.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 511.3,
+      "peakRssMb": 7542,
+      "capMemoryMb": 11967,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-polyglot-rust-c-1786947733-f3683d",
+      "passed": true,
+      "note": "bench:polyglot-rust-c",
+      "turnCount": 8,
+      "timestamp": "2026-08-17T06:29:32.424Z",
+      "summary": "polyglot-rust-c",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 6,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "7aa98f0",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 437.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 30.1,
+      "peakRssMb": 346,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-polyglot-rust-c-1786948172-48f5ed",
+      "passed": false,
+      "note": "bench:polyglot-rust-c",
+      "turnCount": 10,
+      "timestamp": "2026-08-17T07:07:28.051Z",
+      "summary": "polyglot-rust-c",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 8,
+          "errors": 5
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "7aa98f0",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 2275.2,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 55.3,
+      "peakRssMb": 346,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-polyglot-rust-c-1786950448-46c45a",
+      "passed": false,
+      "note": "bench:polyglot-rust-c",
+      "turnCount": 6,
+      "timestamp": "2026-08-17T07:18:29.249Z",
+      "summary": "polyglot-rust-c",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "7aa98f0",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 660.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 24.2,
+      "peakRssMb": 311,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-torch-tensor-parallelism-1786951109-b5815e",
+      "passed": false,
+      "note": "bench:torch-tensor-parallelism",
+      "turnCount": 24,
+      "timestamp": "2026-08-17T07:31:41.128Z",
+      "summary": "torch-tensor-parallelism",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 18,
+          "errors": 3
+        },
+        "Write": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "7aa98f0",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 786.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 374.7,
+      "peakRssMb": 7519,
+      "capMemoryMb": 11528,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-torch-tensor-parallelism-1786951901-6e6aa0",
+      "passed": false,
+      "note": "bench:torch-tensor-parallelism",
+      "turnCount": 13,
+      "timestamp": "2026-08-17T07:41:35.601Z",
+      "summary": "torch-tensor-parallelism",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 7,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "7aa98f0",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 591,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 268.8,
+      "peakRssMb": 7459,
+      "capMemoryMb": 11528,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-torch-tensor-parallelism-1786952495-133568",
+      "passed": true,
+      "note": "bench:torch-tensor-parallelism",
+      "turnCount": 20,
+      "timestamp": "2026-08-17T07:54:05.849Z",
+      "summary": "torch-tensor-parallelism",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 12,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "7aa98f0",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 745.2,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 336.4,
+      "peakRssMb": 7428,
+      "capMemoryMb": 11528,
+      "capRaised": true
+    },
+    {
+      "sessionID": "bench-model-extraction-relu-logits-1786953247-d1c148",
+      "passed": false,
+      "note": "bench:model-extraction-relu-logits",
+      "turnCount": 23,
+      "timestamp": "2026-08-17T08:02:20.349Z",
+      "summary": "model-extraction-relu-logits",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 14,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 4,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "7aa98f0",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 492,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 49.9,
+      "peakRssMb": 360,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-model-extraction-relu-logits-1786953740-396c0d",
+      "passed": false,
+      "note": "bench:model-extraction-relu-logits",
+      "turnCount": 35,
+      "timestamp": "2026-08-17T08:11:51.921Z",
+      "summary": "model-extraction-relu-logits",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 27,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 4,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "7aa98f0",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 570.8,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 86.6,
+      "peakRssMb": 345,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-mteb-retrieve-1786954313-076a7a",
+      "passed": false,
+      "note": "bench:mteb-retrieve",
+      "turnCount": 7,
+      "timestamp": "2026-08-17T08:24:31.026Z",
+      "summary": "mteb-retrieve",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 5,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "7aa98f0",
+        "harnessHash": "7bd775c8929dee5e",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 749.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 331.7,
+      "peakRssMb": 4617,
+      "capMemoryMb": 4616,
+      "capRaised": true
     }
   ]
 }

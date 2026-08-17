@@ -1,0 +1,43 @@
+{
+  "sessionID": "bench-merge-diff-arc-agi-task-1786926272-5e575f",
+  "passed": true,
+  "note": "bench:merge-diff-arc-agi-task",
+  "turnCount": 17,
+  "timestamp": "2026-08-17T00:26:28.362Z",
+  "summary": "merge-diff-arc-agi-task",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 14,
+      "errors": 1
+    },
+    "Read": {
+      "calls": 1,
+      "errors": 0
+    },
+    "Write": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "d1ec116",
+    "harnessHash": "7bd775c8929dee5e",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 114.6,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 30.9,
+  "peakRssMb": 191,
+  "capMemoryMb": 4096,
+  "capRaised": false
+}

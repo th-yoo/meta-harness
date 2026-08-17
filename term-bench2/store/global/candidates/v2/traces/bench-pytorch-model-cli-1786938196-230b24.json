@@ -1,0 +1,43 @@
+{
+  "sessionID": "bench-pytorch-model-cli-1786938196-230b24",
+  "passed": true,
+  "note": "bench:pytorch-model-cli",
+  "turnCount": 21,
+  "timestamp": "2026-08-17T03:46:33.542Z",
+  "summary": "pytorch-model-cli",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 18,
+      "errors": 0
+    },
+    "Read": {
+      "calls": 1,
+      "errors": 0
+    },
+    "Write": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "dfe87c9",
+    "harnessHash": "7bd775c8929dee5e",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "3665cfeec8f8da5dec471bc2fbd34483aa624c656f2185a2bc08ee2ce6c2e87a",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 193.7,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 97.2,
+  "peakRssMb": 2784,
+  "capMemoryMb": 3074,
+  "capRaised": true
+}

@@ -1,0 +1,23 @@
+{
+ "schemaVersion": 2,
+ "layer": "account-global",
+ "candidate": "v2",
+ "baseline": "v1 (active; anchor v0 reference)",
+ "driver": "claude-code",
+ "maxAgentTimeout": 3600,
+ "minAgentTimeout": 3600,
+ "decision": "reject",
+ "winner": "active",
+ "reasons": [
+  "30-task board (150 paired trials, install-windows-3.11 excluded incomplete): v2 92/150 (0.613) vs active v1 97/150 (0.647) \u2014 net -5",
+  "vs anchor v0 89/150 (0.593): +3 only (+0.67pt projected 76.0% vs v1's 77.3%)",
+  "hard regressions on build/precision tasks: sam-cell-seg 0/5 (v1 4/5), polyglot-rust-c 1/5 (v1 5/5), torch-tensor-parallelism 2/5 (v1 5/5), adaptive-rejection-sampler 2/5 (v1 5/5)",
+  "wins concentrated on runway-death tasks (sanitize-git-repo +3, db-wal-recovery +2) \u2014 insufficient to cover regressions",
+  "mechanism: 'write minimal deliverable first, refine in place' locks bad scaffolds on precision/build tasks; bullet needs scope trigger (gen-3 lesson)"
+ ],
+ "candidateRate": 0.613,
+ "activeRate": 0.647,
+ "nTasks": 30,
+ "k": 5,
+ "computedOffline": "2026-08-17 ~13:30 KST from candidates/v2/score.json vs leaderboard v1-*.json + tb21 anchor rows; no ab subcommand run (baseline arm never re-run per ruling)"
+}
