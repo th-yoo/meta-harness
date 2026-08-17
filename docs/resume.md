@@ -6,6 +6,23 @@ does NOT transfer; this file + the repo are the source of truth.)
 > **MOST RECENT STATE (2026-08-17 ~09:30 KST):** main = `d1ec116`+. Read the
 > "GEN-2 UNBLOCKED" block FIRST (below). Prior blocks = history.
 
+## 🚢 SIBLING LANE CLOSE 2026-08-17 ~12:15 KST — FLEET V0 COMPLETE on yoo-mac (`~/z2/fleet` @ `3902963` pushed)
+
+Separate repo/lane (github.com/th-yoo/fleet, private); recorded here for cross-host resume only.
+Full stack landed + live-verified over real Slack workspace: CLI · master daemon
+(uds status/reload/screen/send/answer/subscribe, singleton guard, 104-byte path check,
+awaiting-approval push events) · injection lane (buffer-paste idle-gated; injectKeys =
+human-relay only) · router/ (Socket Mode, channel-ID-only routing, subtype filter,
+status-then-subscribe, alert/cleared posts, leak-proof reconnect). 124/124 tests.
+Live smoke green incl. one live-only bug found+fixed (duplicate-subscription leak on
+alert-loop reconnect, `3902963`). Dogfood process: briefs via SendMessage to tmux worker
+"fleet" (claude --continue), TDD, orchestrator review BEFORE push, push grants relayed
+from human via Slack DM ("push it"). Operational config host-local only (~/.fleet/
+fleet.json + router.json + slack tokens; never in repo). Runtime left LIVE on yoo-mac:
+master (mac-yoo) + router + session fleet-mac-yoo-fleet. NEXT (human-gated): v0 on WSL2
+box (fires repo-public-flip trigger) · v1 scoping = agent-state monitoring (dead/stalled/
+idle edges over existing event lane). Memory: project-fleet-v0-design.md updated same day.
+
 ## ⏳ LIVE STATE 2026-08-17 ~09:30 KST (`yoo-mac`) — GEN-2 UNBLOCKED: DEADLOCK ROOT-CAUSED + FIXED (`d1ec116`) · v2 MINTED + GATE-PASSED · k=5 ARM RUNNING
 
 **Deadlock verdict (design call resolved):** NOT proposer-diversity, NOT
