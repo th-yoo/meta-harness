@@ -41,6 +41,19 @@ function ledgerText(ledger: RejectedEntry[]): string {
     .join("\n")
 }
 
+/** Renders the "Narrowing INVITED" block body (rule-8 exception) from
+ * narrowing-stamped ledger entries — see harness-store.ts
+ * RejectedEntry.narrowing and minimal/review.ts buildReviewPrompt. Returns
+ * undefined when nothing is stamped so the prompt section renders only when
+ * an invitation actually exists. */
+export function narrowingInvitedText(ledger: RejectedEntry[]): string | undefined {
+  const invited = ledger.filter((e) => e.narrowing?.invited)
+  if (invited.length === 0) return undefined
+  return invited
+    .map((e) => `- [${e.rejectedAt} ${e.version}] ${e.bullet}\n  certified: ${e.narrowing!.mechanism} (${e.narrowing!.attributedBy})`)
+    .join("\n")
+}
+
 function revisionPrompt(p: ProposalLike, violations: string[], rejected: string, checkCmd?: string): string {
   return `You are the LESSON PROPOSER in a REVISION round. Your previously proposed
 rule failed external review. Your DIAGNOSIS is FROZEN — do not re-diagnose.
@@ -101,7 +114,11 @@ export async function reviewAddedBullets(a: {
   // Form-only rejects are rephrase-eligible (see isFormOnlyReject) — they
   // must not appear in the duplicate-check comparison set, or the rephrase
   // the proposer prompt invites gets killed as "duplicate" of its ancestor.
-  const rejected = ledgerText(a.ledger.filter((e) => !isFormOnlyReject(e)))
+  const rejected = ledgerText(a.ledger.filter((e) => !isFormOnlyReject(e) && !e.narrowing?.invited))
+  // Rule-8 exception block: narrowing-stamped entries leave the do-not-
+  // re-derive list and instead invite a strictly-narrower variant — the
+  // duplicate check must see them under that heading, not as dup-fodder.
+  const narrowingInvited = narrowingInvitedText(a.ledger)
   const call = async (prompt: string): Promise<string> => {
     const reply = await a.host.runTextAgent({
       title: `[meta-harness] review ${a.scope}`,
@@ -156,7 +173,7 @@ export async function reviewAddedBullets(a: {
       proposal,
       rounds: REVISE_ROUNDS,
       review: (bullet, reason) =>
-        reviewBullet({ bullet, reason, harness: a.activeSystem, rejected, taskId: "", checkCmd: b.check?.cmd, call }),
+        reviewBullet({ bullet, reason, harness: a.activeSystem, rejected, taskId: "", checkCmd: b.check?.cmd, narrowingInvited, call }),
       revise: async (p, r) => {
         // Layer-1 fails are deterministic and cheap to detect — free-fail
         // fast with NO LLM call, matching reviewBullet's own free-fail path

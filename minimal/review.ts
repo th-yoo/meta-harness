@@ -205,6 +205,14 @@ export function buildReviewPrompt(a: {
    * can pass by construction instead of demanding mechanization the
    * proposal already did. */
   checkCmd?: string
+  /** Pre-rendered "Narrowing INVITED" block (rule-8 exception): rejected
+   * rules whose mechanism a reject verdict CERTIFIED while attributing the
+   * loss to trigger overreach (narrowing.ts attributeOverreach, or a stamped
+   * RejectedEntry.narrowing). A strictly-narrower-scoped variant of one of
+   * these is NOT a duplicate — without this block the duplicate check
+   * dedup-kills the exact fix rule 8 prescribes (live defect: the scoped
+   * pacing variant died twice against the v2-era ledger, 2026-08-17). */
+  narrowingInvited?: string
 }): string {
   return `You are the BULLET REVIEWER for a self-improving coding-agent harness. One
 proposed playbook rule (below) is about to be A/B tested at real compute cost.
@@ -228,7 +236,21 @@ ${a.harness}
 
 ## Rejected-rules ledger (a rule equivalent in substance to any entry fails the duplicate check)
 ${a.rejected}
-
+${
+    a.narrowingInvited
+      ? `
+## Narrowing INVITED — rule-8 exception (these do NOT dup-block a narrower variant)
+The entries below were rejected as TRIGGER OVERREACH with the core mechanism
+CERTIFIED (their predicted improvements came true; the loss came from firing
+on tasks outside the intended scope). A proposed rule whose trigger is
+STRICTLY NARROWER than one of these — it names a more specific observable
+condition and applies in a proper subset of the situations — is the indicated
+fix, NOT a duplicate. It still fails the duplicate check if its trigger is
+equally broad or merely rephrased.
+${a.narrowingInvited}
+`
+      : ""
+  }
 ## Checks — fill EVERY one with its artifact; artifacts are mandatory
 1. category — does the rule name a step of the agent's WORK PROCESS (its
    iteration loop: attempt → verify against ground truth → revise), one of:
@@ -245,7 +267,11 @@ ${a.rejected}
    (an implementation/solution recipe), pass=false.
    Artifact: the restatement.
 4. duplicate — is the rule a near-duplicate in substance of the current
-   harness or a ledger entry? Artifact: quote the matching line, or "none".
+   harness or a ledger entry? EXCEPTION: if the closest match is listed under
+   "Narrowing INVITED" above AND the proposed rule's trigger is strictly
+   narrower (more specific observable condition, proper-subset scope), this
+   check PASSES. Artifact: quote the matching line plus — when invoking the
+   exception — one clause naming exactly what narrowed; otherwise "none".
 ${
     a.checkCmd
       ? `5. mechanize_instead — this rule carries an attached runnable check (see
@@ -296,6 +322,8 @@ export async function reviewBullet(a: {
   /** See buildReviewPrompt.checkCmd — also flips computeVerdict's
    * deterministic mechanize_instead suppression. */
   checkCmd?: string
+  /** See buildReviewPrompt.narrowingInvited (rule-8 exception block). */
+  narrowingInvited?: string
   call: (prompt: string) => string | Promise<string>
 }): Promise<ReviewResult> {
   const layer1 = layer1Checks(a.bullet, a.taskId)

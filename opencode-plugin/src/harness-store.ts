@@ -2184,6 +2184,14 @@ export interface RejectedEntry {
   bullet: string
   violations: string[]
   source: "review-gate"
+  /** Rule-8 exception stamp (narrowing.ts): this entry's mechanism was
+   * CERTIFIED by a reject verdict (predicted improvements came true) while
+   * the loss was attributed to trigger overreach — a strictly-narrower
+   * variant is invited, and the review gate's duplicate check must not kill
+   * it. `attributedBy` records provenance ("ab-verdict:<version>" for the
+   * mechanical path, "operator:<note>" for migration stamps). Additive-
+   * optional: old ledgers parse unchanged. */
+  narrowing?: { invited: true; mechanism: string; attributedBy: string }
 }
 
 /**

@@ -62,6 +62,7 @@ import {
   type AgentConfig,
   type EnvPolicy,
 } from "./harness-store.ts"
+import { attributeOverreach } from "./narrowing.ts"
 import { exportRuleChecks } from "./rule-checks-export.ts"
 import { exportHookRules } from "./hook-rules-export.ts"
 import { screenHookRule } from "./hook-rule-screen.ts"
@@ -1345,7 +1346,21 @@ ${lines}
       const dxText = dx ? `\nDiagnosis it targeted:\n\`\`\`json\n${JSON.stringify(dx, null, 2).slice(0, 1200)}\n\`\`\`` : ""
       let sys = ""
       try { sys = (readCandidateSystem(layer.root, v) || "").trim().slice(0, 1500) } catch { sys = "" }
-      const sysText = sys ? `\nRules it proposed (REJECTED — do NOT repeat or rephrase these):\n${sys}` : ""
+      // Rule-8 exception, mechanical path (narrowing.ts): when the reject
+      // verdict's own per-task table certifies the candidate's predicted
+      // improvements while strong guards regressed, its rules are trigger
+      // overreach — a strictly-narrower variant is invited, not banned.
+      const tr = (verdict as { taskResults?: Record<string, { candidate: number[]; active: number[] }> }).taskResults
+      const preds = (dx as { predictions?: { expect_improve?: unknown } } | null)?.predictions?.expect_improve
+      const expectImprove = Array.isArray(preds) ? preds.filter((x): x is string => typeof x === "string") : []
+      const attribution = tr && expectImprove.length > 0
+        ? attributeOverreach({ taskResults: tr, expectImprove, guards: readGuards(layer.root) })
+        : null
+      const sysText = sys
+        ? attribution?.invited
+          ? `\nRules it proposed (TRIGGER OVERREACH, mechanism CERTIFIED — ${attribution.mechanism}. A STRICTLY NARROWER-scoped variant is the indicated fix; an equally-broad rephrasing is still banned):\n${sys}`
+          : `\nRules it proposed (REJECTED — do NOT repeat or rephrase these):\n${sys}`
+        : ""
       return `### ${v} — REJECTED by the gate (candidate ${cr} vs active ${ar}${reasons ? `; ${reasons}` : ""})${dxText}${sysText}`
     })
     return `## Candidates the gate ALREADY REJECTED — do NOT re-propose their rules
@@ -1373,7 +1388,8 @@ ${blocks.join("\n\n")}
     // a harvest-matching rule — those entries invite a rephrase instead.
     const line = (e: RejectedEntry) => `- [${e.rejectedAt} ${e.version}] ${e.bullet}\n  violations: ${e.violations.join("; ")}`
     const formOnly = ledger.filter(isFormOnlyReject)
-    const content = ledger.filter((e) => !isFormOnlyReject(e))
+    const invited = ledger.filter((e) => e.narrowing?.invited)
+    const content = ledger.filter((e) => !isFormOnlyReject(e) && !e.narrowing?.invited)
     const contentBlock = content.length
       ? `## Bullets the review gate REJECTED before any experiment — do NOT re-derive or rephrase
 
@@ -1388,7 +1404,22 @@ ${formOnly.map(line).join("\n")}
 
 `
       : ""
-    return contentBlock + formBlock
+    // Rule-8 exception (narrowing.ts): mechanism certified, trigger overreach
+    // — these entries INVITE a strictly-narrower variant instead of blocking
+    // it. Without this split the dedup wall killed the exact fix rule 8
+    // prescribes (the scoped pacing variant died twice, 2026-08-17).
+    const invitedBlock = invited.length
+      ? `## Rejected as TRIGGER OVERREACH with the mechanism CERTIFIED — a STRICTLY NARROWER-scoped variant is the indicated fix (rule-8 exception; NOT a duplicate)
+
+${invited.map((e) => `- [${e.rejectedAt} ${e.version}] ${e.bullet}\n  certified: ${e.narrowing!.mechanism} (${e.narrowing!.attributedBy})`).join("\n")}
+
+Narrower means: the trigger names a MORE SPECIFIC observable run-state
+condition and applies in a proper subset of situations. An equally-broad
+rephrasing is still a duplicate.
+
+`
+      : ""
+    return contentBlock + formBlock + invitedBlock
   })()
 
   // Guard-defense section (gen-2 regression fix, 2026-08-17): the bench lane's
@@ -1410,6 +1441,21 @@ ${guards.map((g) => `- ${g.task}: ${Math.round(g.rate * 100)}% pass (n=${g.n})`)
 Your diagnosis.json MUST include a "predictions" object:
 - "expect_improve": the failing tasks/mode your edits should flip, and why.
 - "expect_unchanged_guards": name EVERY guard at >=80% above with one line on why your edits are irrelevant or harmless to it. A rule that changes how the agent paces, verifies, or structures work applies to guard tasks too — "the bullet is about X, guards do Y" is not a defense unless you say why Y never triggers X's clause. A guard you cannot defend = narrow the bullet's trigger until you can, or do not propose it.
+
+## SCOPE REQUIREMENT (measured two generations running: the same behavior pressure HELPS one task class and HURTS another)
+
+Every added bullet's trigger clause must name an OBSERVABLE RUN-STATE
+CONDITION — something the agent can check from inside the session (a repeated
+identical failure symptom, a verifier contract it has read, an artifact state
+it just measured) — tied to the failure class it targets in the measured
+taxonomy above. "Always do X" and triggers that fire on task VOCABULARY
+rather than observed state are overreach by construction: the gate has
+rejected two generations of candidates whose uniform bullets regressed
+guard tasks through exactly this. Also verify the ACTION's side effects
+against the trigger's scope: an acceptance check that mutates graded state
+(compiling artifacts into a graded directory, leaving probe files beside a
+deliverable) is a regression vector — prefer verification that leaves the
+checked state byte-identical, and say so in the bullet when it matters.
 
 `
     : ""
