@@ -23,6 +23,40 @@ master (mac-yoo) + router + session fleet-mac-yoo-fleet. NEXT (human-gated): v0 
 box (fires repo-public-flip trigger) · v1 scoping = agent-state monitoring (dead/stalled/
 idle edges over existing event lane). Memory: project-fleet-v0-design.md updated same day.
 
+## ✅ GEN-2 VERDICT 2026-08-17 ~13:30 KST — v2 REJECTED (net −5 vs v1; v1 STAYS ACTIVE) · FULL 150-TRIAL BOARD BANKED
+
+**FINAL (30-task board, 150 paired trials, install-windows-3.11 excluded
+incomplete — same ruling as gen-1):** v2 92/150 (0.613) vs **v1 97/150 (0.647)**
+vs anchor 89/150 (0.593). v2 beats anchor +3 (+0.67pt, projected 76.0%) but
+LOSES to active v1 net −5. **Decision: REJECT** — ab-verdict.json written to
+candidates/v2/ (offline-computed; anchor never re-run per ruling).
+
+**Regression mechanism (gen-3 evidence, high value):** v2's pacing bullets
+("write minimal deliverable FIRST / no exploration until first runnable
+version") rescued runway-death tasks (sanitize-git-repo 3/5 vs v1 0/5,
+db-wal-recovery 3/5 vs 1/5) but locked bad scaffolds on build/precision tasks:
+sam-cell-seg 0/5 (v1 4/5), polyglot-rust-c 1/5 (v1 5/5),
+torch-tensor-parallelism 2/5 (v1 5/5), adaptive-rejection-sampler 2/5 (v1
+5/5). Lesson: the bullet needs a SCOPE TRIGGER (apply under incompletion risk,
+not on precision/build tasks). Trajectories all stored under candidates/v2/
+for the gen-3 taxonomy pass.
+
+**Run record:** OAuth expiry ~01:06–01:41Z burned 54 zero-turn attempts
+(correctly store-excluded; user re-login + fresh Keychain export per trial
+recovered it); deficits refilled via chained makeup batches (labels
+v2-vs-anchor-makeup-k5/k3/k2/k1). Rows exported to
+`term-bench2/leaderboard/v2-vs-anchor-full-20260817.json` (152 trials incl.
+2 install-windows). Actual arm start 08:33 KST (earlier note said 09:20 —
+corrected).
+
+**NEXT (gen-3):** taxonomy pass over v2's failing trajectories (`runner.ts
+failure-taxonomy --layer account-global --candidate v2 --model
+anthropic/claude-haiku-4-5`) -> /mh-propose account (taxonomy now reaches the
+proposer via d1ec116) — expect a scope-narrowed pacing bullet per rejected.json
+rule-8 exception (rejection attributes overreach while certifying mechanism).
+
+> (superseded live-state block below — kept for the record)
+
 ## ⏳ LIVE STATE 2026-08-17 ~09:30 KST (`yoo-mac`) — GEN-2 UNBLOCKED: DEADLOCK ROOT-CAUSED + FIXED (`d1ec116`) · v2 MINTED + GATE-PASSED · k=5 ARM RUNNING
 
 **Deadlock verdict (design call resolved):** NOT proposer-diversity, NOT
