@@ -35,18 +35,26 @@ PRE-REGISTERED RULE: both candidates PASS rescue retention (v3 +1,
 v4 +2) but FAIL the regression guard on polyglot-rust-c (v3 -3, v4 -2;
 fold nets -2/-3). NO ADVANCE — no full-board proposal, no activation.
 
-THE REAL RESULT — the seesaw REPLICATED: verification-pressure bullets
-(v3/v4 shared b6-acceptance-byte-gate + b9) helped the incompletion-
-shaped task monotonically (sanitize 2->3->4) and hurt the build/
-precision task (polyglot 3->0/1), exactly gen-2's mechanism on a
-DIFFERENT host, different bullet wording, different candidate lineage.
-Two generations x two hosts = the effect is real and task-conditional.
-The loop's missing primitive is CONDITIONAL SCOPING — and the scope-
-triggered pacing bullet the proposer tried to mint was dedup-killed
-against the v2 ledger twice (rule-8 exception failed to clear it).
-V-B (machinery arm) is now the mandated next move: taxonomy-class ->
-per-class bullet scoping + the rule-8 dedup fix, acceptance = machinery
-autonomously re-derives a scoped candidate. Design in the spec.
+POLYGLOT REGRESSION ROOT-CAUSED (trajectory forensics + container
+re-verification, 2026-08-18 morning): every recoverable failing
+main.rs (v1 x1, v3 x4, v4 x2) re-passes the verifier's exact
+compile+value checks in the bench image — 7/7. The code was never
+wrong. The verifier's OTHER assertion is directory purity
+(listdir == ["main.rs"]), and the instruction's "exact commands"
+compile binaries INTO /app/polyglot. b6 ("show the exact path's bytes
+satisfy the stated acceptance criteria") sent v3/v4 to verify with
+those exact commands at the deliverable path -> main/cmain left behind
+-> graded-state pollution. v1's passes verified in /tmp copies. NOT
+"verification burns runway" — VERIFICATION-ARTIFACT POLLUTION; b6
+turned an occasional v1 accident (2/5) into near-determinism. Same
+defect class as crank-2's WORKDIR find: bullets ignoring grader-state
+coupling. Sanitize's monotone gain (2->3->4) is the same pressure on a
+content-graded task — the seesaw axis is HOW THE GRADER READS STATE,
+which no uniform bullet can know. CONDITIONAL SCOPING mandate stands,
+sharpened: scope by grader-coupling class, not task difficulty. The
+proposer's scoped-bullet attempt was dedup-killed twice (rule-8
+exception defect). V-B (taxonomy-class -> per-class scoping + rule-8
+fix) = next move. Design in the spec.
 
 HOST EFFECT (v1-here vs v1-banked-mac, the byproduct measurement):
 mac-strong collapsed (adaptive 5/5->0/5 oracle-verified genuine,

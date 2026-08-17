@@ -1730,3 +1730,27 @@ one shot), the CC hook-adapter propose recipe works cross-host, and the
 V-C authoring path (programmatic reviewAddedBullets on an operator bullet)
 is viable — with the gotcha that the staged text lives in `outcome.bullet`,
 not the input text.
+
+### Addendum (2026-08-18 morning): the polyglot regression root-caused — verification-artifact pollution
+
+The "seesaw" entry above shipped with an unread mechanism; the trajectory
+forensics (prompted by the operator asking "did you investigate WHY?") landed
+somewhere better. Every recoverable failing polyglot main.rs — one v1, four
+v3, two v4 — re-passes the verifier's exact compile-and-value checks inside
+the bench image, 7/7. The code was never wrong. The verifier's other
+assertion is directory purity (`listdir == ["main.rs"]`), the instruction's
+"exact commands" compile binaries INTO the graded directory, and b6 — the
+acceptance-byte-gate bullet, the organic mint's centerpiece — explicitly
+directs the agent to demonstrate the deliverable path's bytes against the
+stated acceptance criteria. Obeying it plants `main`/`cmain` next to the
+deliverable and the grader rejects the directory. v1 committed the same sin
+by accident in exactly its two failing trials; b6 made it near-deterministic.
+
+So the seesaw's axis is not task difficulty and not verification cost — it
+is HOW THE GRADER READS STATE. Content-graded tasks (sanitize) reward
+verification pressure monotonically; state-purity-graded tasks (polyglot)
+punish the same pressure through its side effects. A uniform bullet cannot
+know which side it is on. This sharpens the conditional-scoping mandate from
+"scope by task class" to "scope by grader-coupling class" — and it is the
+third instrument-class finding in this family (crank-2's WORKDIR verifier
+cwd, the fixture-secret push block, now acceptance-check side effects).
