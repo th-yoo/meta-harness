@@ -16,6 +16,49 @@ does NOT transfer; this file + the repo are the source of truth.)
 > "crank-2 v20 verdict check" items below are RESOLVED — see the
 > "CRANK-2 AB VERDICT 2026-08-17" block. No activation.
 
+## ✅ GAUNTLET VERDICT 2026-08-18 03:56 KST (`yoo-dev`) — NO ADVANCE: v3 AND v4 BOTH FAIL THE REGRESSION GUARD · SAME SEESAW AS GEN-2, SECOND HOST
+
+```
+90/90 trials clean (0 auth outages; token refreshed mid-run by user).
+Rows: term-bench2/leaderboard/gauntlet-3arm-20260818.json.
+
+            v1(base) v3(V-A)  v4(V-C)
+adaptive       0/5     1/5      0/5
+db-wal         2/5     2/5      2/5
+polyglot       3/5     0/5      1/5   <- only beyond-drift signal
+sam-cell       0/5     0/5      0/5
+sanitize       2/5     3/5      4/5   <- monotone with bullet stack
+torch          1/5     1/5      0/5
+total          8/30    7/30     7/30
+
+PRE-REGISTERED RULE: both candidates PASS rescue retention (v3 +1,
+v4 +2) but FAIL the regression guard on polyglot-rust-c (v3 -3, v4 -2;
+fold nets -2/-3). NO ADVANCE — no full-board proposal, no activation.
+
+THE REAL RESULT — the seesaw REPLICATED: verification-pressure bullets
+(v3/v4 shared b6-acceptance-byte-gate + b9) helped the incompletion-
+shaped task monotonically (sanitize 2->3->4) and hurt the build/
+precision task (polyglot 3->0/1), exactly gen-2's mechanism on a
+DIFFERENT host, different bullet wording, different candidate lineage.
+Two generations x two hosts = the effect is real and task-conditional.
+The loop's missing primitive is CONDITIONAL SCOPING — and the scope-
+triggered pacing bullet the proposer tried to mint was dedup-killed
+against the v2 ledger twice (rule-8 exception failed to clear it).
+V-B (machinery arm) is now the mandated next move: taxonomy-class ->
+per-class bullet scoping + the rule-8 dedup fix, acceptance = machinery
+autonomously re-derives a scoped candidate. Design in the spec.
+
+HOST EFFECT (v1-here vs v1-banked-mac, the byproduct measurement):
+mac-strong collapsed (adaptive 5/5->0/5 oracle-verified genuine,
+sam 4/5->0/5, torch 5/5->1/5, polyglot 5/5->3/5); mac-weak improved
+(sanitize 0.5->2, db-wal 1->2). Banked cross-host rows are NOT a valid
+control arm on this host, ever. Same-host 3-arm design was load-bearing.
+
+Rig notes: repo term-bench2/tasks/* = dep overlays; REAL task content
+resolves from sibling ~/z2/terminal-bench-2 (tasks at root). Oracle =
+the cheap rig-vs-behavior discriminator (21.7s, no model tokens).
+```
+
 ## 🟢 GO 2026-08-17 ~20:45 KST — GEN-3 REGRESSION GAUNTLET: RUNS ON `yoo-dev` (user ruling) · yoo-mac OWES ONE EXPORT+PUSH
 
 ```

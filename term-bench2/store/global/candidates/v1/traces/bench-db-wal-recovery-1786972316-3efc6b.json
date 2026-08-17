@@ -1,0 +1,35 @@
+{
+  "sessionID": "bench-db-wal-recovery-1786972316-3efc6b",
+  "passed": false,
+  "note": "bench:db-wal-recovery",
+  "turnCount": 14,
+  "timestamp": "2026-08-17T13:15:14.310Z",
+  "summary": "db-wal-recovery",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 13,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "7a74fb3",
+    "harnessHash": "ab902fc9bb8c123c",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 197.5,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 2301.9,
+  "peakRssMb": 0,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

@@ -1,0 +1,47 @@
+{
+  "sessionID": "bench-polyglot-rust-c-1786973513-b44b8a",
+  "passed": true,
+  "note": "bench:polyglot-rust-c",
+  "turnCount": 12,
+  "timestamp": "2026-08-17T13:39:43.984Z",
+  "summary": "polyglot-rust-c",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 8,
+      "errors": 1
+    },
+    "Write": {
+      "calls": 1,
+      "errors": 0
+    },
+    "Edit": {
+      "calls": 1,
+      "errors": 0
+    },
+    "Read": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "7a74fb3",
+    "harnessHash": "ab902fc9bb8c123c",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 470,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 4794.5,
+  "peakRssMb": 0,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

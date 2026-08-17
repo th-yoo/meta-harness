@@ -1,0 +1,43 @@
+{
+  "sessionID": "bench-adaptive-rejection-sampler-1786972926-50dd31",
+  "passed": false,
+  "note": "bench:adaptive-rejection-sampler",
+  "turnCount": 11,
+  "timestamp": "2026-08-17T13:27:42.088Z",
+  "summary": "adaptive-rejection-sampler",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 7,
+      "errors": 1
+    },
+    "Write": {
+      "calls": 1,
+      "errors": 0
+    },
+    "Edit": {
+      "calls": 2,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "7a74fb3",
+    "harnessHash": "ab902fc9bb8c123c",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 334.8,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 4443.8,
+  "peakRssMb": 0,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

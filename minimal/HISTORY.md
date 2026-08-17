@@ -1687,3 +1687,46 @@ v20 remains an unledgered candidate (inconclusive is not reject). Its
 full both-arm trajectories — recorded for the first time — plus this
 table feed crank-3's proposer. Store snapshot carries v20, v19 (the A/A
 byte-copy control, never activate), and the archived run log.
+
+## The regression gauntlet: no advance, and the seesaw replicated (2026-08-17→18, `yoo-dev`) — NO ADVANCE
+
+The gen-3 design call ("which candidate shape?") was settled by experiment
+instead of argument: a 6-task mini-board (gen-2's 4 regressed + 2 rescued
+tasks), three same-host arms at k=5 — v1 baseline, v3 (the organic V-A mint),
+v4 (V-C: v3 plus an authored anti-anchoring bullet, gated through the same
+review gate) — 90 trials, zero auth outages, pre-registered decision rule.
+
+**Verdict: NO ADVANCE.** v1 8/30, v3 7/30, v4 7/30. Both candidates passed
+rescue retention (sanitize-git-repo climbed monotonically with the bullet
+stack: 2/5 → 3/5 → 4/5) and both failed the regression guard on
+polyglot-rust-c (3/5 → 0/5 and 1/5). Neither earns a full-board slot.
+
+**The scientific result outranks the verdict: the seesaw replicated.**
+Verification-pressure bullets helped the incompletion-shaped task and hurt
+the build/precision task — the exact mechanism gen-2 exhibited — on a
+different host, under different bullet wording, in a different candidate
+lineage. Two generations × two hosts: the effect is real, and it is
+task-conditional. A uniform playbook cannot hold both ends of the seesaw.
+The loop's missing primitive is CONDITIONAL SCOPING, and the proposer
+actually tried to mint it — a scope-triggered pacing bullet — and the dedup
+gate killed it against the v2 rejected-ledger entry twice; the rule-8
+"narrowed variant" exception failed to clear it. The blocker is now
+instrument, not evidence: V-B (taxonomy-class → per-class bullet scoping,
+plus the rule-8 dedup fix) is the mandated next move, with acceptance =
+the machinery autonomously re-derives a scoped candidate.
+
+**The host-effect byproduct paid for the redesign:** v1-here vs v1-banked-mac
+showed mac-strong tasks collapsing on WSL (adaptive-rejection-sampler 5/5 →
+0/5 — oracle-verified genuine, 21.7s, no model tokens; sam-cell-seg 4/5 →
+0/5; torch 5/5 → 1/5) while mac-weak tasks improved (sanitize 0.5 → 2,
+db-wal 1 → 2). Had the arms been paired against banked mac rows — the
+original two-arm design — the verdict would have been pure host-noise
+theater. The user's "run it on yoo-dev" ruling forced the three-arm
+same-host redesign that made the data interpretable.
+
+Also proven in passing: mints are host-portable (the store-snapshot bridge
+carried v2's taxonomy/trajs to yoo-dev and the proposer minted v3 there in
+one shot), the CC hook-adapter propose recipe works cross-host, and the
+V-C authoring path (programmatic reviewAddedBullets on an operator bullet)
+is viable — with the gotcha that the staged text lives in `outcome.bullet`,
+not the input text.

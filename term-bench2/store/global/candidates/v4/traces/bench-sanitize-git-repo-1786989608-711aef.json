@@ -1,0 +1,43 @@
+{
+  "sessionID": "bench-sanitize-git-repo-1786989608-711aef",
+  "passed": true,
+  "note": "bench:sanitize-git-repo",
+  "turnCount": 21,
+  "timestamp": "2026-08-17T18:02:50.910Z",
+  "summary": "sanitize-git-repo",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 14,
+      "errors": 0
+    },
+    "Read": {
+      "calls": 3,
+      "errors": 0
+    },
+    "Edit": {
+      "calls": 3,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "a3e4ef8",
+    "harnessHash": "60165bee34e76110",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "e079f42f16e6041a229b7e86e28eff3c9843dfb3221ed9cb5dabfb59b6b3c3d9",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 162.3,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 14670.5,
+  "peakRssMb": 0,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

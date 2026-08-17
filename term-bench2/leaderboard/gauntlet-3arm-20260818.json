@@ -1,0 +1,42 @@
+{
+ "label": "gen3-regression-gauntlet",
+ "spec": "docs/superpowers/specs/2026-08-17-gen3-regression-gauntlet-design.md",
+ "host": "yoo-dev (WSL2, native rootless podman 4.9.3, 8cpu/23GB, --no-pack-measured)",
+ "model": "anthropic/claude-sonnet-5",
+ "driver": "claude-code",
+ "k": 5,
+ "arms": {
+  "v1": {"pin": "account-global=v1", "role": "same-host baseline", "window": "2026-08-17T22:11+09:00 → 00:01"},
+  "v3": {"pin": "account-global=v3", "role": "V-A organic mint (b6→acceptance-byte gate, +b9 exploration-pacing)", "window": "00:01 → 01:41"},
+  "v4": {"pin": "account-global=v4", "role": "V-C authored (v3 + b10 anti-anchoring)", "window": "01:41 → 03:56"}
+ },
+ "tasks": {
+  "adaptive-rejection-sampler": {"v1": [0,0,0,0,0], "v3": [1,0,0,0,0], "v4": [0,0,0,0,0]},
+  "db-wal-recovery":            {"v1": [0,1,1,0,0], "v3": [1,1,0,0,0], "v4": [0,1,0,1,0]},
+  "polyglot-rust-c":            {"v1": [1,0,1,1,0], "v3": [0,0,0,0,0], "v4": [1,0,0,0,0]},
+  "sam-cell-seg":               {"v1": [0,0,0,0,0], "v3": [0,0,0,0,0], "v4": [0,0,0,0,0]},
+  "sanitize-git-repo":          {"v1": [0,1,0,1,0], "v3": [0,0,1,1,1], "v4": [1,0,1,1,1]},
+  "torch-tensor-parallelism":   {"v1": [0,0,1,0,0], "v3": [0,0,1,0,0], "v4": [0,0,0,0,0]}
+ },
+ "totals": {"v1": "8/30", "v3": "7/30", "v4": "7/30"},
+ "passAt5": {"v1": "4/6", "v3": "4/6", "v4": "3/6"},
+ "decision": "no-advance",
+ "rule": "pre-registered (spec): regression guard = no regressed-fold task >1 below v1 AND fold net >= 0; rescue retention = sanitize+db-wal net > 0; both required",
+ "ruleApplication": {
+  "v3": {"regressionGuard": "FAIL (polyglot-rust-c 0/5 vs v1 3/5 = -3; fold net -2)", "rescueRetention": "PASS (+1)"},
+  "v4": {"regressionGuard": "FAIL (polyglot-rust-c 1/5 vs v1 3/5 = -2; fold net -3)", "rescueRetention": "PASS (+2)"}
+ },
+ "hostEffect_v1here_vs_v1bankedMac": {
+  "adaptive-rejection-sampler": "0/5 vs 5/5 (oracle-verified environment; genuine)",
+  "db-wal-recovery": "2/5 vs 1/5",
+  "polyglot-rust-c": "3/5 vs 5/5",
+  "sam-cell-seg": "0/5 vs 4/5",
+  "sanitize-git-repo": "2/5 vs 0.5/5 (banked rate 0.1, n=10)",
+  "torch-tensor-parallelism": "1/5 vs 5/5",
+  "note": "mac-strong tasks collapsed on WSL, mac-weak rescue tasks improved; cross-host pairing would have been fatally confounded — same-host 3-arm design was load-bearing"
+ },
+ "authOutages": 0,
+ "oracleChecks": {"adaptive-rejection-sampler": "PASS 21.7s (run mid-arm-1 to rule out rig defect behind 0/5)"},
+ "trials": 90,
+ "generatedAt": "2026-08-18T04:05+09:00"
+}
