@@ -1317,15 +1317,18 @@ READS (elapsed-per-pair + drift, before any causal story):
    lacks the dir → podman start exit 125 both arms → runner's
    setup_failed exclusion (clean, symmetric). THE FIX FOR CRANK-1'S
    GRADING BUG UN-RUNS THE TASK: bring-up path was never exercised.
-   OPEN DEFECT: create the WORKDIR dir before start (cmd-run).
+   [RESOLVED post-hoc: the TB2.1 rig work had already fixed exactly
+   this — 6805645 (oracle) + 64f9880 (agent path): create uses fixed
+   /app, task workdir mkdir'd post-start; sanitize-git-repo hit the
+   same wall 5x in the harder-12 run. Not an open item.]
  - mid-p gate + significant-reject rule both behaved: no noise-reject
    minted from a +delta run.
 
-NEXT (crank-3 propose feed, all in store snapshot): v20 trajs
-(--save-all-traj, first time both arms recorded) + this per-task table +
-two instrument items (workdir bring-up fix, split band filter). v20
-stays candidate (inconclusive ≠ reject: not ledgered). v19 = A/A
-byte-copy, NEVER activate — both exported to term-bench2/store/.
+LINEAGE NOTE (post-verdict): v17/v20/v19 are TB2.0-HAIKU lineage —
+closed history. The account-global ACTIVE is now TB2.1 v1 (adopted
+08-17, boundary ts 1786869033047); the propose lane runs TB2.1 gen-2,
+NOT a TB2.0 crank-3. v20's trajs + this table remain in the store
+snapshot as evidence corpus only. v19 = A/A byte-copy, NEVER activate.
 ```
 
 ## ✅ SESSION END 2026-08-13 (`yoo-mac`) — P2 RERUN #3 CLOSED END-TO-END: a3 ROUTED (ruling) · a4 DECLINED · ZERO BURNS · MAIN `3a54ab3`+
