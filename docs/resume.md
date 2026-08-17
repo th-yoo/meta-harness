@@ -9,6 +9,12 @@ does NOT transfer; this file + the repo are the source of truth.)
 > Gen-3: mint go received (taxonomy running, then /mh-propose account with
 > guards live); k=5 arm spend = HELD for separate explicit go. Round
 > narrative: minimal/HISTORY.md gen-2 entry.
+>
+> **CRANK-2 AB CLOSED (2026-08-17 ~19:40 KST, `yoo-dev`):** v20 vs v17 =
+> **INCONCLUSIVE** (v20 +delta both folds, not significant; run died at
+> 97/98 on oauth expiry, verdict derived from complete log). The pending
+> "crank-2 v20 verdict check" items below are RESOLVED — see the
+> "CRANK-2 AB VERDICT 2026-08-17" block. No activation.
 
 ## 🚢 SIBLING LANE UPDATE 2026-08-17 ~19:45 KST — FLEET V1 PARTIAL: B7 + B10 built + live-verified, 14 commits UNPUSHED
 
@@ -1274,32 +1280,52 @@ A3 CONTRACT REV (ruleChecks) — MERGE-WINDOW DUTIES (yoo-mac, corrected:
     SensorLine +ruleChecks, caps RULE_CHECKS_MAX=8/BUDGET_MS=5000).
 ```
 
-## ⏳ LIVE STATE 2026-08-12 ~17:00 KST (`yoo-dev`) — CRANK-2 AB RUNNING (v20 vs v17)
+## ✅ CRANK-2 AB VERDICT 2026-08-17 (`yoo-dev`) — v20 vs v17 = INCONCLUSIVE (v20 positive both folds, not significant) · RUN DIED AT 97/98, VERDICT DERIVED
 
 ```
-tmux tb2-ab-v20 · log /mnt/d/tmp/tb2-ab-v20-20260812.log · launched 14:50
-KST on main ed11c56 · A/B account-global v20 vs active v17, split
-live-7-v20.json (held-in: distribution-search, prove-plus-comm,
-llm-inference, path-tracing; held-out: merge-diff, extract-elf,
-kv-store-grpc), k=7, --save-all-traj, mid-p gate LIVE. 98 attempts,
-ETA ~24:00 KST. Token refreshed 16:40 (8h — covers the run).
+RUN: launched 08-12 14:50 KST, died ~00:41 08-13 at pair 7/7 of the LAST
+task (kv-store-grpc) — oauth token (refreshed 16:40, 8h) expired exactly
+as forecast; arm A auth-failed fast (19.1s, "NOT retrying"), arm B died
+unrecorded when the host went down. Runner never wrote ab-verdict.json.
+Monitored live end-to-end; full log archived at
+term-bench2/results-archive/tb2-ab-v20-20260812.log.
 
-At 16:46: distribution-search 6/7 pairs, discordant v20 1 / v17 0,
-0 auth errors.
+VERDICT (ab-verdict.derived-final.json beside the untouched .partial —
+kv pairs 1-6 transcribed from the log, folds recomputed with ab-stats.ts
+functions, decide() semantics hand-applied; provenance in the file):
+  held-in : delta=+0.095 mid-p=0.227 (b=4,c=2,n=21) — 3 tasks
+  held-out: delta=+0.150 mid-p=0.172 (b=6,c=3,n=20) — 3 tasks, kv p7 excluded
+  overall : v20 25/41 (0.610) vs v17 20/41 (0.488), discordants 10-5 v20
+  INCONCLUSIVE — accept needs held-in significance; held-in was COMPLETE
+  at p=0.227, so the lost pair could not have changed the decision.
 
-VERDICT lands in .kkamak/global/candidates/v20/ab-verdict.json (final;
-ab-verdict.partial.json while running). Read the per-task table with the
-metric labels straight (attempts vs pass@k) and elapsed-per-pair FIRST.
+PER-TASK (v17/v20 of 7): dist-search 5/6 · llm-inference 5/6 ·
+path-tracing 0/0 · merge-diff 4/6 · extract-elf 3/5 · kv-store 3/2 (of 6).
 
-IF DEAD/WEDGED: uniform ~900.1s bilateral zeros = expired credential →
-/login, strip poisoned tasks from partial's taskResults (backup first),
-relaunch same command + --resume. Reap orphans: podman ps -a + rm -f.
-Full recipe in memory loop-crank1-v18-verdict + the 08-11/12 session
-block below.
+READS (elapsed-per-pair + drift, before any causal story):
+ - NO regression this time: v20 ahead on BOTH folds incl. crank-1's
+   regression fold (merge/elf/kv). v18's -0.10 stays explained as noise.
+ - crank-1's "candidate churns on llm-inference" story REFUTED: v17
+   slow-fails it the same way (633/577s fails vs 66-100s passes) — the
+   slow-fail is the TASK's failure mode, arm-independent.
+ - v17 test-retest drift live again: llm 5/7 vs 5/5 crank-1, merge 4/7
+   vs 4/5 — ±1-2/7 per task is the noise floor; don't narrate it.
+ - path-tracing 0/14 bilateral = below-band task in held-in; proposer's
+   split-picker needs a band filter (crank-3 item).
+ - prove-plus-comm EXCLUDED live: 3483f14's taskWorkdir() fix sets agent
+   workdir to Dockerfile WORKDIR (/workspace) but the shared bench image
+   lacks the dir → podman start exit 125 both arms → runner's
+   setup_failed exclusion (clean, symmetric). THE FIX FOR CRANK-1'S
+   GRADING BUG UN-RUNS THE TASK: bring-up path was never exercised.
+   OPEN DEFECT: create the WORKDIR dir before start (cmd-run).
+ - mid-p gate + significant-reject rule both behaved: no noise-reject
+   minted from a +delta run.
 
-IF WON (accept): /mh-activate account v20 needs its own user go.
-IF INCONCLUSIVE/REJECT: per-task tally + trajs (all saved this time)
-feed crank #3's propose; margin-rule now can't mint noise-rejects.
+NEXT (crank-3 propose feed, all in store snapshot): v20 trajs
+(--save-all-traj, first time both arms recorded) + this per-task table +
+two instrument items (workdir bring-up fix, split band filter). v20
+stays candidate (inconclusive ≠ reject: not ledgered). v19 = A/A
+byte-copy, NEVER activate — both exported to term-bench2/store/.
 ```
 
 ## ✅ SESSION END 2026-08-13 (`yoo-mac`) — P2 RERUN #3 CLOSED END-TO-END: a3 ROUTED (ruling) · a4 DECLINED · ZERO BURNS · MAIN `3a54ab3`+

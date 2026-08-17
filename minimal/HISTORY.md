@@ -1632,3 +1632,58 @@ the four broken tasks at the top of the list, and a rejected-ledger entry
 whose recorded mechanism invites the narrowed variant by rule-8 exception.
 The loop's second generation produced no adoption and more knowledge than
 the first.
+
+## Loop crank #2: the amended rules met a positive candidate and said "not yet" (2026-08-12→17, `yoo-dev`) — INCONCLUSIVE
+
+The TB2 account-global loop's second full crank ran v20 (crank-2 candidate:
+b5 self-pruned by the proposer on its own harmful:5 counter, plus two
+run-state-conditioned bullets — "measure before you report a count/size/
+state" and "don't abandon a measurably-matching lead" — exactly the shape
+crank-1's post-mortem called for) against active v17 on the live-7 split,
+k=7, mid-p McNemar gate, --save-all-traj, all under live monitoring.
+
+**Verdict: INCONCLUSIVE, and correctly so.** held-in delta +0.095
+(mid-p 0.227, b=4 c=2 n=21); held-out delta +0.150 (mid-p 0.172, b=6 c=3
+n=20). Overall v20 25/41 vs v17 20/41, discordants 10-5. Positive
+everywhere, significant nowhere — and the amended decision rule (3483f14:
+reject demands significance, margin only vetoes accept) did what it was
+built to do: no noise-verdict in either direction. Crank-1's held-out
+"regression" did not reproduce; v18's −0.10 stays explained as sampling
+noise on a borderline band.
+
+**The run died at attempt 97 of 98** — the 8h oauth token expired at
+00:41, eight minutes after the last forecast update, killing the final
+kv-store pair (arm A a loud 19.1s auth fail, arm B unrecorded when the
+host later went down). The runner never wrote its final verdict. It
+didn't matter: held-in was complete, and accept hinges on held-in
+significance, so the verdict was derivable from the log with the
+runner's own stats functions (`ab-verdict.derived-final.json`, partial
+preserved beside it). A verdict that survives the loss of its last data
+point is the mark of a decision rule that was already determined.
+
+**Instrument findings (the recurring genre: each crank pays for itself in
+instrument knowledge):**
+- **The crank-1 fix broke a task in a new way.** taskWorkdir() (3483f14)
+  cures the verifier-cwd grading lottery by honoring the task Dockerfile's
+  WORKDIR — but the shared bench image has no `/workspace`, staging copies
+  arrive only after start, so prove-plus-comm's container dies at podman
+  start (exit 125) in both arms. The runner's setup_failed exclusion
+  contained it cleanly (symmetric, no store poisoning). The fix was tested
+  on the verifier path, never the bring-up path. Open defect: mkdir the
+  WORKDIR before start.
+- **The "candidate churn" mechanism story from crank-1 is dead.** v17
+  slow-fails llm-inference exactly the way v18 did (600s-class fails vs
+  70-100s passes, within the same arm) — the slow-fail belongs to the
+  task, not the candidate. Elapsed-per-pair, read before narrative,
+  killed a plausible causal story for the second crank running.
+- **path-tracing went 0/14 bilateral** — a below-band task burned ~2.6h
+  of the run for zero discordant information. The split proposer needs a
+  band filter.
+- **v17 test-retest drift measured again, live:** per-task ±1-2/7
+  between cranks (llm 5/5→5/7, merge 4/5→4/7). This is the noise floor
+  any future per-task narrative must clear.
+
+v20 remains an unledgered candidate (inconclusive is not reject). Its
+full both-arm trajectories — recorded for the first time — plus this
+table feed crank-3's proposer. Store snapshot carries v20, v19 (the A/A
+byte-copy control, never activate), and the archived run log.

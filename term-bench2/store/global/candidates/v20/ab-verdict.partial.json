@@ -1,0 +1,310 @@
+{
+  "schemaVersion": 2,
+  "layer": "account-global",
+  "candidate": "v20",
+  "baseline": "v17",
+  "activeFold": 0,
+  "splitHash": "a65fdb0e4a7b",
+  "driver": "opencode",
+  "maxAgentTimeout": 3600,
+  "timeoutRecording": true,
+  "decision": "inconclusive",
+  "winner": "tie",
+  "reasons": [
+    "held-in: delta=+0.095 p=0.227 (b=4,c=2,n=21)",
+    "held-out: delta=+0.286 p_active=0.938 (b=5,c=1,n=14)",
+    "inconclusive: held-in win not significant"
+  ],
+  "candidateRate": 0.8,
+  "activeRate": 0.8,
+  "nTasks": 5,
+  "k": 7,
+  "heldIn": {
+    "nTasks": 3,
+    "nPairs": 21,
+    "b": 4,
+    "c": 2,
+    "delta": 0.0952,
+    "mcnemarP": 0.3438,
+    "bootCI90": [
+      0.0476,
+      0.1429
+    ]
+  },
+  "heldOut": {
+    "nTasks": 2,
+    "nPairs": 14,
+    "b": 5,
+    "c": 1,
+    "delta": 0.2857,
+    "mcnemarP": 0.1094,
+    "bootCI90": [
+      0.2857,
+      0.2857
+    ]
+  },
+  "sentinels": null,
+  "speed": {
+    "heldIn": {
+      "nTasks": 2,
+      "nPairs": 8,
+      "medianCandidate": 188.076,
+      "medianActive": 119.564,
+      "medianRatio": 1.1706,
+      "fasterB": 3,
+      "slowerC": 5,
+      "signTestP": 0.8555
+    },
+    "heldOut": {
+      "nTasks": 2,
+      "nPairs": 6,
+      "medianCandidate": 129.898,
+      "medianActive": 148.89,
+      "medianRatio": 0.8804,
+      "fasterB": 4,
+      "slowerC": 2,
+      "signTestP": 0.3438
+    }
+  },
+  "earlyStopped": false,
+  "split": {
+    "file": "live-7-v20.json",
+    "activeFold": 0,
+    "heldIn": [
+      "distribution-search",
+      "prove-plus-comm",
+      "llm-inference-batching-scheduler",
+      "path-tracing"
+    ],
+    "heldOut": [
+      "merge-diff-arc-agi-task",
+      "extract-elf",
+      "kv-store-grpc"
+    ],
+    "sentinels": []
+  },
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "ed11c56",
+    "harnessHash": "e916eecd99d9102b",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "opencode",
+    "resourceEnforcement": true
+  },
+  "taskResults": {
+    "distribution-search": {
+      "candidate": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1
+      ],
+      "active": [
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        0
+      ],
+      "candidateElapsed": [
+        184.965,
+        1104.711,
+        220.388,
+        404.02,
+        441.743,
+        3600.163,
+        1232.442
+      ],
+      "activeElapsed": [
+        648.787,
+        806.913,
+        1176.077,
+        607.949,
+        163.351,
+        1305.318,
+        1316.444
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "prove-plus-comm": {
+      "candidate": [],
+      "active": [],
+      "candidateElapsed": [],
+      "activeElapsed": [],
+      "phase": "held-in",
+      "sentinel": false,
+      "error": "setup_failed"
+    },
+    "llm-inference-batching-scheduler": {
+      "candidate": [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "active": [
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        0
+      ],
+      "candidateElapsed": [
+        529.255,
+        191.187,
+        111.287,
+        57.329,
+        73.189,
+        75.155,
+        63.284
+      ],
+      "activeElapsed": [
+        58.371,
+        75.777,
+        606.057,
+        54.993,
+        52.706,
+        57.87,
+        565.356
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "path-tracing": {
+      "candidate": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "active": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidateElapsed": [
+        994.163,
+        1020.322,
+        631.241,
+        710.328,
+        744.771,
+        274.59,
+        689.05
+      ],
+      "activeElapsed": [
+        506.038,
+        464.148,
+        873.531,
+        469.785,
+        748.702,
+        858.791,
+        761.149
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "merge-diff-arc-agi-task": {
+      "candidate": [
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "active": [
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1
+      ],
+      "candidateElapsed": [
+        89.246,
+        159.203,
+        87.776,
+        92.697,
+        222.801,
+        87.291,
+        84.064
+      ],
+      "activeElapsed": [
+        119.133,
+        207.525,
+        115.192,
+        324.522,
+        178.647,
+        161.772,
+        79.519
+      ],
+      "phase": "held-out",
+      "sentinel": false
+    },
+    "extract-elf": {
+      "candidate": [
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "active": [
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "candidateElapsed": [
+        211.467,
+        170.55,
+        163.547,
+        203.89,
+        180.633,
+        230.988,
+        180.113
+      ],
+      "activeElapsed": [
+        280.194,
+        191.122,
+        60.346,
+        257.014,
+        221.188,
+        236.827,
+        207.397
+      ],
+      "phase": "held-out",
+      "sentinel": false
+    }
+  },
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "timestamp": "2026-08-12T05:11:06.284Z",
+  "status": "in_progress"
+}

@@ -1,0 +1,32 @@
+{
+  "failures": [
+    {
+      "sessionID": "895e0c66-7d5f-4080-b9ca-deb524a5ef9d",
+      "taxonomy": "env-misread",
+      "rootCause": "The agent reported environment and progress state it had never measured. It declared two commits UNPUSHED after reading only log ordering, without ever running an ahead/behind status check — the commits were in fact already pushed, and the false claim went out in a handoff message to a sibling session. The same shape repeated twice more in the run: an ETA extrapolated from early-pace rather than measured throughput, and a running pass-rate compared against an anchor that was measured under a different protocol (k=1 vs k=5), which mechanically manufactures apparent lift. In each case a single cheap direct command existed and was skipped in favour of inference from indirect output; the agent only corrected after an external party refuted it.",
+      "firstUnrecoverableStep": "SAY: 'Push state: I was wrong. main...origin/main shows in-sync — both sibling commits were already pushed before my handoff. I inferred \"unpushed\" from log position without checking ahead/behind.'"
+    },
+    {
+      "sessionID": "ses_0b6577cfeffeOkmy8XkhouxFYK#19",
+      "taxonomy": "tool-misuse",
+      "rootCause": "The question asked for the number of exported functions in ONE named file. The agent issued a single unscoped content search across the whole source directory, got back an aggregate 'Found 63 matches' with a per-file listing that the tool truncates, then eyeballed the portion belonging to the target file and answered 57. The true count is 55. No scoped counting command was ever run against the single named file, so the reported number was a hand-tally of a partial, aggregated tool rendering rather than a measured value — and nothing in the run could have exposed the error.",
+      "firstUnrecoverableStep": "TOOL grep → 'Found 63 matches' (unscoped, multi-file, truncated) → SAY: 'There are **57** `export function` declarations in ...harness-store.'"
+    },
+    {
+      "sessionID": "bench-path-tracing-1786422972-2dbaa0",
+      "taxonomy": "premature-termination",
+      "rootCause": "The task required ~0.99 similarity within a 2KB compressed source budget. Mid-run the agent probed the noisy region and found real structure — run-length sequences with a measured 99.3-99.7% period-6 match rate, varying systematically by row — then dropped that lead explicitly on cost grounds ('promising but complex... I have limited budget') and spent the remaining ~110 events on one-line tweaks to a single analytic approximation, which oscillated between 0.747 and 0.857 and was reverted every time. It repeatedly re-measured its byte budget (515, 646, 425, 356 of 2048), each time noting the headroom and each time declining to use it. It finalized at 0.857 against a 0.99 requirement with ~83% of the byte budget unspent and the only evidence-backed approach never implemented.",
+      "firstUnrecoverableStep": "SAY: 'This is promising but complex. Let me think about time - I have limited budget. Given the complexity of extracting the exact pattern, maybe I should try a simpler ...'"
+    }
+  ],
+  "bulletAssessments": [
+    {
+      "id": "b3",
+      "verdict": "helpful"
+    },
+    {
+      "id": "b5",
+      "verdict": "harmful"
+    }
+  ]
+}

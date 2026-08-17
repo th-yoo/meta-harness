@@ -1,0 +1,45 @@
+{
+  "sessionID": "bench-path-tracing-1786536111-7840dd",
+  "passed": false,
+  "note": "bench:path-tracing",
+  "turnCount": 1,
+  "timestamp": "2026-08-12T12:06:44.147Z",
+  "summary": "path-tracing",
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "toolUsage": {
+    "read": {
+      "calls": 1,
+      "errors": 0
+    },
+    "bash": {
+      "calls": 29,
+      "errors": 0
+    },
+    "write": {
+      "calls": 3,
+      "errors": 0
+    },
+    "edit": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "ed11c56",
+    "harnessHash": "e916eecd99d9102b",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "opencode",
+    "resourceEnforcement": true
+  },
+  "platform": "opencode",
+  "elapsed": 292.1,
+  "timedOut": false,
+  "agentTimeout": 1800,
+  "cpuSeconds": 384320.1,
+  "peakRssMb": 0,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

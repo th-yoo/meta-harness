@@ -1,0 +1,345 @@
+{
+  "schemaVersion": 2,
+  "layer": "account-global",
+  "candidate": "v20",
+  "baseline": "v17",
+  "activeFold": 0,
+  "splitHash": "a65fdb0e4a7b",
+  "driver": "opencode",
+  "maxAgentTimeout": 3600,
+  "timeoutRecording": true,
+  "decision": "inconclusive",
+  "winner": "tie",
+  "reasons": [
+    "held-in: delta=+0.095 p=0.227 (b=4,c=2,n=21)",
+    "held-out: delta=+0.150 p_active=0.828 (b=6,c=3,n=20; kv pair 7 auth-poisoned, excluded)",
+    "inconclusive: held-in win not significant"
+  ],
+  "candidateRate": 0.6098,
+  "activeRate": 0.4878,
+  "nTasks": 6,
+  "k": 7,
+  "heldIn": {
+    "nTasks": 3,
+    "nPairs": 21,
+    "b": 4,
+    "c": 2,
+    "delta": 0.0952,
+    "mcnemarP": 0.3438,
+    "bootCI90": [
+      0.0476,
+      0.1429
+    ]
+  },
+  "heldOut": {
+    "nTasks": 3,
+    "nPairs": 20,
+    "b": 6,
+    "c": 3,
+    "delta": 0.15,
+    "mcnemarP": 0.1719,
+    "bootCI90": null
+  },
+  "sentinels": null,
+  "speed": {
+    "heldIn": {
+      "nTasks": 2,
+      "nPairs": 8,
+      "medianCandidate": 188.076,
+      "medianActive": 119.564,
+      "medianRatio": 1.1706,
+      "fasterB": 3,
+      "slowerC": 5,
+      "signTestP": 0.8555
+    },
+    "heldOut": {
+      "nTasks": 2,
+      "nPairs": 6,
+      "medianCandidate": 129.898,
+      "medianActive": 148.89,
+      "medianRatio": 0.8804,
+      "fasterB": 4,
+      "slowerC": 2,
+      "signTestP": 0.3438
+    }
+  },
+  "earlyStopped": false,
+  "split": {
+    "file": "live-7-v20.json",
+    "activeFold": 0,
+    "heldIn": [
+      "distribution-search",
+      "prove-plus-comm",
+      "llm-inference-batching-scheduler",
+      "path-tracing"
+    ],
+    "heldOut": [
+      "merge-diff-arc-agi-task",
+      "extract-elf",
+      "kv-store-grpc"
+    ],
+    "sentinels": []
+  },
+  "env": {
+    "agentVersion": "1.17.18",
+    "pluginSha": "ed11c56",
+    "harnessHash": "e916eecd99d9102b",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "opencode",
+    "resourceEnforcement": true
+  },
+  "taskResults": {
+    "distribution-search": {
+      "candidate": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1
+      ],
+      "active": [
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        0
+      ],
+      "candidateElapsed": [
+        184.965,
+        1104.711,
+        220.388,
+        404.02,
+        441.743,
+        3600.163,
+        1232.442
+      ],
+      "activeElapsed": [
+        648.787,
+        806.913,
+        1176.077,
+        607.949,
+        163.351,
+        1305.318,
+        1316.444
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "prove-plus-comm": {
+      "candidate": [],
+      "active": [],
+      "candidateElapsed": [],
+      "activeElapsed": [],
+      "phase": "held-in",
+      "sentinel": false,
+      "error": "setup_failed"
+    },
+    "llm-inference-batching-scheduler": {
+      "candidate": [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "active": [
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        0
+      ],
+      "candidateElapsed": [
+        529.255,
+        191.187,
+        111.287,
+        57.329,
+        73.189,
+        75.155,
+        63.284
+      ],
+      "activeElapsed": [
+        58.371,
+        75.777,
+        606.057,
+        54.993,
+        52.706,
+        57.87,
+        565.356
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "path-tracing": {
+      "candidate": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "active": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "candidateElapsed": [
+        994.163,
+        1020.322,
+        631.241,
+        710.328,
+        744.771,
+        274.59,
+        689.05
+      ],
+      "activeElapsed": [
+        506.038,
+        464.148,
+        873.531,
+        469.785,
+        748.702,
+        858.791,
+        761.149
+      ],
+      "phase": "held-in",
+      "sentinel": false
+    },
+    "merge-diff-arc-agi-task": {
+      "candidate": [
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "active": [
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1
+      ],
+      "candidateElapsed": [
+        89.246,
+        159.203,
+        87.776,
+        92.697,
+        222.801,
+        87.291,
+        84.064
+      ],
+      "activeElapsed": [
+        119.133,
+        207.525,
+        115.192,
+        324.522,
+        178.647,
+        161.772,
+        79.519
+      ],
+      "phase": "held-out",
+      "sentinel": false
+    },
+    "extract-elf": {
+      "candidate": [
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "active": [
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "candidateElapsed": [
+        211.467,
+        170.55,
+        163.547,
+        203.89,
+        180.633,
+        230.988,
+        180.113
+      ],
+      "activeElapsed": [
+        280.194,
+        191.122,
+        60.346,
+        257.014,
+        221.188,
+        236.827,
+        207.397
+      ],
+      "phase": "held-out",
+      "sentinel": false
+    },
+    "kv-store-grpc": {
+      "candidate": [
+        0,
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      "active": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        1
+      ],
+      "candidateElapsed": [
+        698.5,
+        903.7,
+        225.1,
+        453,
+        121,
+        342.7
+      ],
+      "activeElapsed": [
+        224.4,
+        329.4,
+        449.1,
+        904.3,
+        904.2,
+        574.3
+      ],
+      "phase": "held-out",
+      "sentinel": false,
+      "note": "pair 7 excluded: oauth token expired ~00:41 KST 08-13 — arm A auth-failed fast (19.1s, recorded reward=0 in log only), arm B died unrecorded when host went down; runner never finalized. Source log /mnt/d/tmp/tb2-ab-v20-20260812.log."
+    }
+  },
+  "model": "anthropic/claude-haiku-4-5",
+  "variant": "",
+  "timestamp": "2026-08-12T05:11:06.284Z",
+  "status": "derived_final",
+  "derivation": "Runner died before finalize (oauth expiry + host restart at 97/98 attempts). kv-store-grpc pairs 1-6 transcribed from the run log; folds recomputed with ab-stats.ts mcnemarMidPOneSided and decided by hand-applying ab-stats.ts decide() semantics (accept requires held-in mid-p<=alpha; held-in complete at p=0.227 so no completion of held-out could change the decision). Derived 2026-08-17."
+}
