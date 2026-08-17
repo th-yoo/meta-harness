@@ -16,6 +16,40 @@ does NOT transfer; this file + the repo are the source of truth.)
 > "crank-2 v20 verdict check" items below are RESOLVED — see the
 > "CRANK-2 AB VERDICT 2026-08-17" block. No activation.
 
+## ✅ V-B MACHINERY SHIPPED + ACCEPTANCE PASSED 2026-08-18 ~08:30 KST (`yoo-dev`) — RULE-8 DEDUP FIX LIVE · v5 MINTED SCOPED WITH ZERO DUP-KILLS
+
+```
+BUILT (f5f0e25, gate exit 0, 9 new tests): narrowing.ts
+attributeOverreach() = MECHANICAL "mechanism certified, trigger
+overreach" (reject verdict taskResults: expect_improve net-positive AND
+strong guards net-negative); RejectedEntry.narrowing stamp; stamped
+entries leave dup-fodder in BOTH reviewer ledger + proposer
+do-not-re-derive, render as "Narrowing INVITED"; reviewer rubric
+check-4 strictly-narrower exception (artifact: quote + what narrowed);
+proposer SCOPE REQUIREMENT (observable run-state triggers tied to
+measured taxonomy classes; graded-state-mutating checks named as
+regression vector — the polyglot forensics fed back as machine input);
+scripts/stamp-narrowing.ts (mechanical + operator paths; 4 pacing-
+family entries stamped with gen-2+gauntlet provenance).
+
+ACCEPTANCE PROBE: fresh organic /mh-propose account -> v5 (opus-5).
+PASS — ZERO dup-kills (prior two cycles: 10), all bullets run-state-
+scoped, staged first try, 18 guards defended:
+ - b6 changed: graded-deliverable path is NOT scratch space — the
+   polyglot pollution lesson re-derived by the machine (write-side)
+ - b9 new: read the rest of a partially-read spec file before claiming
+   to understand the format (write-compressor root cause)
+ - b10 new: numeric-comparison debugging instead of artifact readback
+   (incomplete/slow-pass mode)
+Note: the proposer did NOT take the pacing-narrowing invitation this
+cycle (invitation != mandate; family stays available). MAIN PROOF: the
+dedup wall no longer kills scoped mints.
+
+v5 = candidate, INACTIVE, awaiting trial — arm spend needs its own
+sized go (gauntlet board k=5 = 30 trials/arm vs same-host v1 rows
+already banked; or straight to a full-board slot decision).
+```
+
 ## ✅ GAUNTLET VERDICT 2026-08-18 03:56 KST (`yoo-dev`) — NO ADVANCE: v3 AND v4 BOTH FAIL THE REGRESSION GUARD · SAME SEESAW AS GEN-2, SECOND HOST
 
 ```

@@ -1,0 +1,12 @@
+{
+  "proposerModel": "anthropic/claude-opus-5",
+  "proposerVariant": "high",
+  "scope": "account-global",
+  "kind": "propose-ops",
+  "createdAt": "2026-08-17T23:12:17.767Z",
+  "generalityRollup": {
+    "universal": 10,
+    "vendor": 0,
+    "model": 0
+  }
+}

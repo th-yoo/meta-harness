@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "nextId": 11,
+  "bullets": [
+    {
+      "id": "b1",
+      "text": "You are an AI coding assistant. Before starting any task, orient yourself:",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+    },
+    {
+      "id": "b2",
+      "text": "Read the task requirements carefully",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+    },
+    {
+      "id": "b3",
+      "text": "Check relevant existing files before writing new ones",
+      "helpful": 23,
+      "harmful": 0,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-08-17T23:11:55.637Z"
+    },
+    {
+      "id": "b4",
+      "text": "Prefer editing existing files over creating new ones",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+    },
+    {
+      "id": "b5",
+      "text": "Run tests or type-checks after making changes to verify correctness",
+      "helpful": 4,
+      "harmful": 0,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-08-16T21:35:15.748Z"
+    },
+    {
+      "id": "b6",
+      "text": "Do not write scratch, stand-in, or exploratory content to a path the task names as the graded deliverable; keep experiments at a different path and write that path only when you intend its bytes to be the answer.",
+      "helpful": 0,
+      "harmful": 23,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-08-17T23:12:17.767Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: no tool call may write text containing placeholder/TODO/stub/traceback to a path the task names as the graded deliverable'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
+    },
+    {
+      "id": "b7",
+      "text": "Do not report a task complete until you have re-read the exact deliverable artifact from disk and confirmed it satisfies the stated acceptance criteria, rather than trusting a side copy, a temp file, or an earlier successful run.",
+      "helpful": 20,
+      "harmful": 0,
+      "addedBy": "candidate",
+      "status": "active",
+      "createdAt": "2026-08-14T23:57:28.698Z",
+      "updatedAt": "2026-08-17T23:11:55.637Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: final turn must show a read/inspect of the exact deliverable path followed by an acceptance check on that same path'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
+    },
+    {
+      "id": "b8",
+      "text": "When a produced artifact fails its check, inspect the artifact's actual bytes and the failing command's stderr before writing another version, instead of regenerating and retrying blindly.",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "candidate",
+      "status": "active",
+      "createdAt": "2026-08-14T23:57:28.698Z",
+      "updatedAt": "2026-08-14T23:57:28.698Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: after any failing verification, the next tool call must inspect artifact contents or stderr, not immediately rewrite the generator'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
+    },
+    {
+      "id": "b9",
+      "text": "When you are about to state that you understand a format, protocol, or interface defined by a file you have read only part of, read the rest of that file first if it is under a few hundred lines.",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "candidate",
+      "status": "active",
+      "createdAt": "2026-08-17T23:12:17.767Z",
+      "updatedAt": "2026-08-17T23:12:17.767Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: any turn asserting understanding of a spec/source file must be preceded by a read covering that file in full when it is short'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
+    },
+    {
+      "id": "b10",
+      "text": "When debugging by inspecting a produced binary or image artifact, print a numeric comparison against the expected result instead of reading the artifact back into context, unless a numeric metric cannot express the discrepancy.",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "candidate",
+      "status": "active",
+      "createdAt": "2026-08-17T23:12:17.767Z",
+      "updatedAt": "2026-08-17T23:12:17.767Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: debugging loops over binary/image outputs must show a printed numeric metric rather than repeated Read of the artifact'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      },
+      "hookRule": {
+        "event": "PreToolUse",
+        "toolMatcher": "Read",
+        "inputPattern": "^.*[.](png|jpg|jpeg|bmp|tif|tiff|gif|mp4|avi|mov)$",
+        "feedback": "Reading an image/video artifact into context burns a turn and lots of context. Print a numeric metric (IoU, diff count, hash) comparing it to the expected result instead.",
+        "mode": "shadow"
+      }
+    }
+  ]
+}

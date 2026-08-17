@@ -1754,3 +1754,38 @@ know which side it is on. This sharpens the conditional-scoping mandate from
 "scope by task class" to "scope by grader-coupling class" — and it is the
 third instrument-class finding in this family (crank-2's WORKDIR verifier
 cwd, the fixture-secret push block, now acceptance-check side effects).
+
+## V-B: the dedup wall came down, and the loop's first zero-casualty mint (2026-08-18, `yoo-dev`)
+
+Rule 8 always carried the exception — "a rejection recorded as
+trigger-overreach with the core mechanism certified invites a NARROWER-scoped
+variant" — but only the proposer could see it. The review gate's duplicate
+check was blind, and 10 of the ledger's 12 entries were duplicate-kills,
+including the scoped pacing variant killed twice on 2026-08-17: the wall was
+almost entirely made of the exception's own casualties.
+
+The fix made the exception machine-checkable end to end. attributeOverreach()
+turns a reject verdict into a mechanical certification — the candidate's own
+expect_improve predictions came true (net positive) while strong guards
+regressed (net negative) means the mechanism works and the trigger overshot;
+no human trajectory read. Stamped entries leave the dup-fodder list on BOTH
+prompt surfaces and render as "Narrowing INVITED"; the reviewer's duplicate
+check gained the strictly-narrower exception with a mandatory
+what-narrowed artifact; and the proposer's guards section now carries a
+SCOPE REQUIREMENT: observable run-state triggers tied to measured taxonomy
+classes, with graded-state-mutating acceptance checks named as a regression
+vector — the gauntlet's polyglot forensics, fed back as machine input
+instead of prose.
+
+The acceptance probe was a fresh organic mint, nothing pre-seeded. v5 landed
+with ZERO duplicate kills, every delta scoped to an observable run-state
+trigger, staged on the first pass with 18 guards defended. And b6's rewrite
+is the quiet headline: "do not write scratch content to the graded
+deliverable path" — the write-side of the pollution mechanism the forensics
+proved, re-derived by the machinery from its own inputs. The proposer
+declined the pacing-narrowing invitation this cycle; an invitation is not a
+mandate, and the family stays open. What changed is the falsifier: two
+cycles ago every scoped variant died at the gate; this cycle none did.
+
+v5 awaits its trial under its own sized go. The loop's next verdict will be
+the first earned entirely by machinery that read its own failures.
