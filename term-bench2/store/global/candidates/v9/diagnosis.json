@@ -1,0 +1,127 @@
+{
+  "failures": [
+    {
+      "sessionID": "bench-write-compressor-1786640941-10d9a1",
+      "taxonomy": "wrong-plan",
+      "rootCause": "The agent read roughly the first 35 lines of decomp.c, declared it understood the container format, and then spent ~90 bash iterations generating full-size encoder outputs that produced empty decompressor output every time. It never isolated which stage broke, and the final deliverable data.comp actually contained a Python traceback because the generating heredoc failed and its stderr landed in the redirected file. No stage-level evidence was ever collected, so every retry was blind.",
+      "firstUnrecoverableStep": "Now I understand the decompressor. It's an arithmetic coding decompressor that expects: 1. An initial 9-bit integer indicating the number of items to decode"
+    },
+    {
+      "sessionID": "bench-sam-cell-seg-1786980239-879b88",
+      "taxonomy": "tool-misuse",
+      "rootCause": "After printing numeric overlap counts (e.g. '0 1576 / 2508') the agent switched to reading rendered PNG crops and masks back into context as base64 images, consuming large amounts of runway per debugging step while the discrepancy was already fully expressed numerically. The session then ran long and ended without a correct deliverable. The mode is a context/runway sink triggered by image-artifact debugging, not by a missing rule about correctness.",
+      "firstUnrecoverableStep": "TOOL Read: {\"file_path\":\"/tmp/row1_crop.png\"} → [{\"type\":\"image\",\"source\":{\"type\":\"base64\",...}}]"
+    },
+    {
+      "sessionID": "bench-adaptive-rejection-sampler-1787026661-7c01d8",
+      "taxonomy": "wrong-plan",
+      "rootCause": "The agent hit the same runtime error ('vec' must be sorted non-decreasingly and not contain NAs) repeatedly and each time patched a guard at the symptom site rather than dumping the intermediate hull state that produced it; the eventual localizing run (printing hull$z) came only after many blind edits, and the budget was largely gone. The root cause was an invariant violation in a derived intermediate that was never printed until late.",
+      "firstUnrecoverableStep": "Found it — a `NaN` in the derivative (from density underflow far in the tail) silently bypasses the `which(d > tol*scale)` check"
+    },
+    {
+      "sessionID": "bench-configure-git-webserver-1787023970-131168",
+      "taxonomy": "verifier-mismatch",
+      "rootCause": "Prior forensics established that all failing trials obeyed the instruction's stated clone identity and auth story while the verifier clones with a different user and password convention. No wording change to the playbook can flip this; it is a task-contract defect and should not drive edits.",
+      "firstUnrecoverableStep": "(task-defect family; no agent-side unrecoverable step)"
+    }
+  ],
+  "bulletAssessments": [
+    {
+      "id": "b7",
+      "verdict": "helpful"
+    },
+    {
+      "id": "b6",
+      "verdict": "harmful"
+    },
+    {
+      "id": "b8",
+      "verdict": "helpful"
+    },
+    {
+      "id": "b3",
+      "verdict": "helpful"
+    }
+  ],
+  "predictions": {
+    "expect_improve": [
+      "write-compressor: the deliverable was a redirected-heredoc traceback; requiring stage-localizing evidence after a repeated identical empty/failed check, and forbidding reading rendered binary artifacts back into context once a numeric discrepancy is already printed, removes the two biggest runway sinks that left the artifact garbage.",
+      "sam-cell-seg / video-processing / raman-fitting (incomplete mode): the image-readback ban converts multi-thousand-token image reads into cheap numeric prints, returning runway to implementation and final writes.",
+      "adaptive-rejection-sampler: after two identical runtime symptoms, dumping the offending intermediate instead of patching guards shortens the debug loop."
+    ],
+    "expect_unchanged_guards": [
+      {
+        "task": "adaptive-rejection-sampler",
+        "why": "Guard bullet fires only after the SAME error text repeats twice; passing runs converge in one or two edits and never hit the second identical symptom."
+      },
+      {
+        "task": "extract-elf",
+        "why": "Passing runs verify with numeric/hex byte comparisons already and never Read a produced binary back as an image, so the image-readback clause never triggers."
+      },
+      {
+        "task": "chess-best-move",
+        "why": "Its Reads are of source/text inputs, not of produced image/binary artifacts after a printed numeric discrepancy."
+      },
+      {
+        "task": "gcode-to-text",
+        "why": "Reads target textual input files; no rendered artifact is read back after a numeric comparison, and repeats of an identical symptom are rare in its passing traces."
+      },
+      {
+        "task": "headless-terminal",
+        "why": "Debugging is via captured text output, so neither the binary-readback clause nor the repeated-identical-symptom clause fires."
+      },
+      {
+        "task": "log-summary-date-ranges",
+        "why": "Short text-processing runs (5-6 bash calls) with no repeated failures and no binary artifacts."
+      },
+      {
+        "task": "merge-diff-arc-agi-task",
+        "why": "JSON grid work verified numerically; no image/binary readback and no repeated identical symptom."
+      },
+      {
+        "task": "mteb-retrieve",
+        "why": "Score-based numeric verification only; no artifact readback path."
+      },
+      {
+        "task": "multi-source-data-merger",
+        "why": "Pure text/CSV merge, verified by printed diffs; clauses never trigger."
+      },
+      {
+        "task": "openssl-selfsigned-cert",
+        "why": "Certificates are inspected with openssl x509 -text (numeric/text print), not read back as raw bytes into context."
+      },
+      {
+        "task": "polyglot-rust-c",
+        "why": "b7's copy-verify byte-identity behavior is untouched by these edits; the new clauses concern repeated symptoms and image readback, neither of which appears in its 5/5 passing traces."
+      },
+      {
+        "task": "portfolio-optimization",
+        "why": "Numeric optimization verified by printed metrics; no binary artifact reads."
+      },
+      {
+        "task": "pypi-server",
+        "why": "HTTP responses checked with curl text output; no repeated-identical-failure loop in passing runs."
+      },
+      {
+        "task": "pytorch-model-cli",
+        "why": "Verification is stdout tensors/metrics; no rendered artifact is read back."
+      },
+      {
+        "task": "sparql-university",
+        "why": "Query results compared as text; clauses inert."
+      },
+      {
+        "task": "torch-tensor-parallelism",
+        "why": "Verified by numeric allclose prints already; the new bullets only forbid a readback path it does not use and require a localizing dump it already effectively does."
+      },
+      {
+        "task": "vulnerable-secret",
+        "why": "Text/secret scanning; no image or binary readback and no repeat-failure loop."
+      },
+      {
+        "task": "sam-cell-seg",
+        "why": "Currently 80% under active; the image-readback clause redirects the exact behavior that appears only in its FAILING traces, leaving the numeric-verification path used by passing traces untouched."
+      }
+    ]
+  }
+}

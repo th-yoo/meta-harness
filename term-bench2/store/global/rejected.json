@@ -1,142 +1,152 @@
 [
- {
-  "rejectedAt": "2026-08-14",
-  "scope": "account-global",
-  "version": "v1",
-  "bullet": "When reverse-engineering or targeting an existing binary/format/spec, do not scale to the full input until a minimal end-to-end round-trip (smallest possible input) provably succeeds against the real checker. [check: attached (bench)]",
-  "violations": [
-   "leak: path-like or file-extension token"
-  ],
-  "source": "review-gate"
- },
- {
-  "rejectedAt": "2026-08-16",
-  "scope": "account-global",
-  "version": "v2",
-  "bullet": "When a generator writes an artifact by shell redirection or heredoc, do not treat it as produced until you have inspected the artifact's first bytes and confirmed the generator exited zero rather than dumping an error message into the file. [check: screen-denied (substitution)]",
-  "violations": [
-   "check-screen:substitution"
-  ],
-  "source": "review-gate"
- },
- {
-  "rejectedAt": "2026-08-16",
-  "scope": "account-global",
-  "version": "v2",
-  "bullet": "When a command is supposed to produce or modify a required output path, do not treat it as done until you have compared that path's own size/hash/mtime before and after the run and seen it change. [check: attached (live)]",
-  "violations": [
-   "duplicate: failed"
-  ],
-  "source": "review-gate"
- },
- {
-  "rejectedAt": "2026-08-16",
-  "scope": "account-global",
-  "version": "v2",
-  "bullet": "When targeting an existing binary, decoder, or checker you did not write, do not run it on full-scale input until a smallest-possible input has already round-tripped successfully through that same real checker. [check: attached (live)]",
-  "violations": [
-   "duplicate: failed"
-  ],
-  "source": "review-gate"
- },
- {
-  "rejectedAt": "2026-08-16",
-  "scope": "account-global",
-  "version": "v2",
-  "bullet": "When you run a verification command, name the exact deliverable path in that command; do not accept a passing result obtained on a copy, sample, or temp file as evidence the deliverable is correct. [check: attached (live)]",
-  "violations": [
-   "duplicate: failed"
-  ],
-  "source": "review-gate"
- },
- {
-  "rejectedAt": "2026-08-16",
-  "scope": "account-global",
-  "version": "v2",
-  "bullet": "When a verification of the same artifact fails twice in a row, stop regenerating and instead shrink the input or add instrumentation to localize which stage breaks before writing another version. [check: attached (live)]",
-  "violations": [
-   "duplicate: failed"
-  ],
-  "source": "review-gate"
- },
- {
-  "rejectedAt": "2026-08-16",
-  "scope": "account-global",
-  "version": "v2",
-  "bullet": "When the same end-to-end attempt fails twice with the same symptom, do not launch a third attempt until you have run one call whose only purpose is to narrow the failure (smaller input, intermediate dump, or stage-by-stage output). [check: attached (live)]",
-  "violations": [
-   "duplicate: failed"
-  ],
-  "source": "review-gate",
-  "narrowing": {
-   "invited": true,
-   "mechanism": "gen-2 verdict + trajectory investigation: the pacing/readback mechanism rescued runway-death tasks (sanitize-git-repo 3/5 vs 0/5, db-wal-recovery 3/5 vs 1/5) while uniform triggering regressed four v1-strong build/precision tasks; gauntlet 3-arm replication confirmed the seesaw is task-conditional",
-   "attributedBy": "operator:gen-2-investigation+gauntlet-3arm-20260818"
+  {
+    "rejectedAt": "2026-08-14",
+    "scope": "account-global",
+    "version": "v1",
+    "bullet": "When reverse-engineering or targeting an existing binary/format/spec, do not scale to the full input until a minimal end-to-end round-trip (smallest possible input) provably succeeds against the real checker. [check: attached (bench)]",
+    "violations": [
+      "leak: path-like or file-extension token"
+    ],
+    "source": "review-gate"
+  },
+  {
+    "rejectedAt": "2026-08-16",
+    "scope": "account-global",
+    "version": "v2",
+    "bullet": "When a generator writes an artifact by shell redirection or heredoc, do not treat it as produced until you have inspected the artifact's first bytes and confirmed the generator exited zero rather than dumping an error message into the file. [check: screen-denied (substitution)]",
+    "violations": [
+      "check-screen:substitution"
+    ],
+    "source": "review-gate"
+  },
+  {
+    "rejectedAt": "2026-08-16",
+    "scope": "account-global",
+    "version": "v2",
+    "bullet": "When a command is supposed to produce or modify a required output path, do not treat it as done until you have compared that path's own size/hash/mtime before and after the run and seen it change. [check: attached (live)]",
+    "violations": [
+      "duplicate: failed"
+    ],
+    "source": "review-gate"
+  },
+  {
+    "rejectedAt": "2026-08-16",
+    "scope": "account-global",
+    "version": "v2",
+    "bullet": "When targeting an existing binary, decoder, or checker you did not write, do not run it on full-scale input until a smallest-possible input has already round-tripped successfully through that same real checker. [check: attached (live)]",
+    "violations": [
+      "duplicate: failed"
+    ],
+    "source": "review-gate"
+  },
+  {
+    "rejectedAt": "2026-08-16",
+    "scope": "account-global",
+    "version": "v2",
+    "bullet": "When you run a verification command, name the exact deliverable path in that command; do not accept a passing result obtained on a copy, sample, or temp file as evidence the deliverable is correct. [check: attached (live)]",
+    "violations": [
+      "duplicate: failed"
+    ],
+    "source": "review-gate"
+  },
+  {
+    "rejectedAt": "2026-08-16",
+    "scope": "account-global",
+    "version": "v2",
+    "bullet": "When a verification of the same artifact fails twice in a row, stop regenerating and instead shrink the input or add instrumentation to localize which stage breaks before writing another version. [check: attached (live)]",
+    "violations": [
+      "duplicate: failed"
+    ],
+    "source": "review-gate"
+  },
+  {
+    "rejectedAt": "2026-08-16",
+    "scope": "account-global",
+    "version": "v2",
+    "bullet": "When the same end-to-end attempt fails twice with the same symptom, do not launch a third attempt until you have run one call whose only purpose is to narrow the failure (smaller input, intermediate dump, or stage-by-stage output). [check: attached (live)]",
+    "violations": [
+      "duplicate: failed"
+    ],
+    "source": "review-gate",
+    "narrowing": {
+      "invited": true,
+      "mechanism": "gen-2 verdict + trajectory investigation: the pacing/readback mechanism rescued runway-death tasks (sanitize-git-repo 3/5 vs 0/5, db-wal-recovery 3/5 vs 1/5) while uniform triggering regressed four v1-strong build/precision tasks; gauntlet 3-arm replication confirmed the seesaw is task-conditional",
+      "attributedBy": "operator:gen-2-investigation+gauntlet-3arm-20260818"
+    }
+  },
+  {
+    "rejectedAt": "2026-08-16",
+    "scope": "account-global",
+    "version": "v2",
+    "bullet": "Do not conclude a transformation or command succeeded until the check you ran named the graded deliverable path itself, not a copy, sample, or temp file standing in for it. [check: attached (live)]",
+    "violations": [
+      "duplicate: failed"
+    ],
+    "source": "review-gate"
+  },
+  {
+    "rejectedAt": "2026-08-16",
+    "scope": "account-global",
+    "version": "v2",
+    "bullet": "When a command was expected to write or modify a required output path, do not treat it as done until you have inspected that path's own bytes (head/xxd/file) and confirmed they are the intended content rather than an error message or unchanged prior data. [check: attached (live)]",
+    "violations": [
+      "duplicate: failed"
+    ],
+    "source": "review-gate"
+  },
+  {
+    "rejectedAt": "2026-08-16",
+    "scope": "account-global",
+    "version": "v2",
+    "bullet": "When the same end-to-end attempt fails twice with an identical uninformative symptom, do not start a third attempt until you have first read the full source of the component you are targeting or shrunk the input to localize the failing stage. [check: attached (live)]",
+    "violations": [
+      "duplicate: failed"
+    ],
+    "source": "review-gate",
+    "narrowing": {
+      "invited": true,
+      "mechanism": "gen-2 verdict + trajectory investigation: the pacing/readback mechanism rescued runway-death tasks (sanitize-git-repo 3/5 vs 0/5, db-wal-recovery 3/5 vs 1/5) while uniform triggering regressed four v1-strong build/precision tasks; gauntlet 3-arm replication confirmed the seesaw is task-conditional",
+      "attributedBy": "operator:gen-2-investigation+gauntlet-3arm-20260818"
+    }
+  },
+  {
+    "rejectedAt": "2026-08-17",
+    "scope": "account-global",
+    "version": "v3",
+    "bullet": "When the same command or check fails twice with the same symptom, do not run a third full-scale attempt until you have run one call whose only purpose is to localize the failure (smaller input, single stage, or dumped intermediate). [check: attached (live)]",
+    "violations": [
+      "duplicate: failed"
+    ],
+    "source": "review-gate",
+    "narrowing": {
+      "invited": true,
+      "mechanism": "gen-2 verdict + trajectory investigation: the pacing/readback mechanism rescued runway-death tasks (sanitize-git-repo 3/5 vs 0/5, db-wal-recovery 3/5 vs 1/5) while uniform triggering regressed four v1-strong build/precision tasks; gauntlet 3-arm replication confirmed the seesaw is task-conditional",
+      "attributedBy": "operator:gen-2-investigation+gauntlet-3arm-20260818"
+    }
+  },
+  {
+    "rejectedAt": "2026-08-17",
+    "scope": "account-global",
+    "version": "v3",
+    "bullet": "When the same command or check fails twice with the same symptom, do not run a third full-scale attempt until you have run one call whose only purpose is to localize the failure (smaller input, single stage, or dumped intermediate). [check: attached (live)]",
+    "violations": [
+      "duplicate: failed"
+    ],
+    "source": "review-gate",
+    "narrowing": {
+      "invited": true,
+      "mechanism": "gen-2 verdict + trajectory investigation: the pacing/readback mechanism rescued runway-death tasks (sanitize-git-repo 3/5 vs 0/5, db-wal-recovery 3/5 vs 1/5) while uniform triggering regressed four v1-strong build/precision tasks; gauntlet 3-arm replication confirmed the seesaw is task-conditional",
+      "attributedBy": "operator:gen-2-investigation+gauntlet-3arm-20260818"
+    }
+  },
+  {
+    "rejectedAt": "2026-08-18",
+    "scope": "account-global",
+    "version": "v6",
+    "bullet": "When a task states a numeric acceptance threshold (size, count, score, or tolerance), do not report that threshold as met until the number came from a command reading the deliverable path's current bytes rather than from a generator's own stdout, and that command left the deliverable's directory byte-identical. [check: attached (live)]",
+    "violations": [
+      "duplicate: failed"
+    ],
+    "source": "review-gate"
   }
- },
- {
-  "rejectedAt": "2026-08-16",
-  "scope": "account-global",
-  "version": "v2",
-  "bullet": "Do not conclude a transformation or command succeeded until the check you ran named the graded deliverable path itself, not a copy, sample, or temp file standing in for it. [check: attached (live)]",
-  "violations": [
-   "duplicate: failed"
-  ],
-  "source": "review-gate"
- },
- {
-  "rejectedAt": "2026-08-16",
-  "scope": "account-global",
-  "version": "v2",
-  "bullet": "When a command was expected to write or modify a required output path, do not treat it as done until you have inspected that path's own bytes (head/xxd/file) and confirmed they are the intended content rather than an error message or unchanged prior data. [check: attached (live)]",
-  "violations": [
-   "duplicate: failed"
-  ],
-  "source": "review-gate"
- },
- {
-  "rejectedAt": "2026-08-16",
-  "scope": "account-global",
-  "version": "v2",
-  "bullet": "When the same end-to-end attempt fails twice with an identical uninformative symptom, do not start a third attempt until you have first read the full source of the component you are targeting or shrunk the input to localize the failing stage. [check: attached (live)]",
-  "violations": [
-   "duplicate: failed"
-  ],
-  "source": "review-gate",
-  "narrowing": {
-   "invited": true,
-   "mechanism": "gen-2 verdict + trajectory investigation: the pacing/readback mechanism rescued runway-death tasks (sanitize-git-repo 3/5 vs 0/5, db-wal-recovery 3/5 vs 1/5) while uniform triggering regressed four v1-strong build/precision tasks; gauntlet 3-arm replication confirmed the seesaw is task-conditional",
-   "attributedBy": "operator:gen-2-investigation+gauntlet-3arm-20260818"
-  }
- },
- {
-  "rejectedAt": "2026-08-17",
-  "scope": "account-global",
-  "version": "v3",
-  "bullet": "When the same command or check fails twice with the same symptom, do not run a third full-scale attempt until you have run one call whose only purpose is to localize the failure (smaller input, single stage, or dumped intermediate). [check: attached (live)]",
-  "violations": [
-   "duplicate: failed"
-  ],
-  "source": "review-gate",
-  "narrowing": {
-   "invited": true,
-   "mechanism": "gen-2 verdict + trajectory investigation: the pacing/readback mechanism rescued runway-death tasks (sanitize-git-repo 3/5 vs 0/5, db-wal-recovery 3/5 vs 1/5) while uniform triggering regressed four v1-strong build/precision tasks; gauntlet 3-arm replication confirmed the seesaw is task-conditional",
-   "attributedBy": "operator:gen-2-investigation+gauntlet-3arm-20260818"
-  }
- },
- {
-  "rejectedAt": "2026-08-17",
-  "scope": "account-global",
-  "version": "v3",
-  "bullet": "When the same command or check fails twice with the same symptom, do not run a third full-scale attempt until you have run one call whose only purpose is to localize the failure (smaller input, single stage, or dumped intermediate). [check: attached (live)]",
-  "violations": [
-   "duplicate: failed"
-  ],
-  "source": "review-gate",
-  "narrowing": {
-   "invited": true,
-   "mechanism": "gen-2 verdict + trajectory investigation: the pacing/readback mechanism rescued runway-death tasks (sanitize-git-repo 3/5 vs 0/5, db-wal-recovery 3/5 vs 1/5) while uniform triggering regressed four v1-strong build/precision tasks; gauntlet 3-arm replication confirmed the seesaw is task-conditional",
-   "attributedBy": "operator:gen-2-investigation+gauntlet-3arm-20260818"
-  }
- }
 ]

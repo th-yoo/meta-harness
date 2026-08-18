@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "nextId": 8,
+  "nextId": 10,
   "bullets": [
     {
       "id": "b1",
@@ -25,12 +25,12 @@
     {
       "id": "b3",
       "text": "Check relevant existing files before writing new ones",
-      "helpful": 0,
+      "helpful": 27,
       "harmful": 0,
       "addedBy": "v0",
       "status": "active",
       "createdAt": "2026-07-16T12:36:11.488278+00:00",
-      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+      "updatedAt": "2026-08-18T06:02:40.433Z"
     },
     {
       "id": "b4",
@@ -45,32 +45,87 @@
     {
       "id": "b5",
       "text": "Run tests or type-checks after making changes to verify correctness",
-      "helpful": 0,
+      "helpful": 4,
       "harmful": 0,
       "addedBy": "v0",
       "status": "active",
       "createdAt": "2026-07-16T12:36:11.488278+00:00",
-      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+      "updatedAt": "2026-08-16T21:35:15.748Z"
     },
     {
       "id": "b6",
-      "text": "Do not leave debug code, TODOs, or placeholder comments in the output",
+      "text": "Do not leave placeholder or stub content inside a deliverable artifact at any point; if a real value is not ready yet, leave the file absent rather than writing a stand-in you might forget to replace.",
       "helpful": 0,
-      "harmful": 0,
+      "harmful": 27,
       "addedBy": "v0",
       "status": "active",
       "createdAt": "2026-07-16T12:36:11.488278+00:00",
-      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+      "updatedAt": "2026-08-18T06:02:40.433Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: no deliverable file may contain the words placeholder/TODO/stub at session end'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": false
+      }
     },
     {
       "id": "b7",
-      "text": "When acceptance depends on a term the prompt leaves ambiguous, do not treat your query reproducing your own predicted answer as confirmation. List the plausible interpretations, run checks against the raw data that would give different results under each, and pick the interpretation matching the spec's literal wording.",
+      "text": "Do not report a task complete until you have re-read the exact deliverable artifact from disk and confirmed it satisfies the stated acceptance criteria, rather than trusting a side copy, a temp file, or an earlier successful run.",
+      "helpful": 24,
+      "harmful": 0,
+      "addedBy": "candidate",
+      "status": "active",
+      "createdAt": "2026-08-14T23:57:28.698Z",
+      "updatedAt": "2026-08-18T06:02:40.433Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: final turn must show a read/inspect of the exact deliverable path followed by an acceptance check on that same path'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
+    },
+    {
+      "id": "b8",
+      "text": "When the same verification produces an identical failure symptom twice in a row, do not write another version until one call has dumped the offending intermediate value or artifact bytes plus the failing command's stderr.",
+      "helpful": 1,
+      "harmful": 0,
+      "addedBy": "candidate",
+      "status": "active",
+      "createdAt": "2026-08-14T23:57:28.698Z",
+      "updatedAt": "2026-08-18T06:02:51.832Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: after two consecutive identical failure symptoms, the next tool call must print an intermediate value/artifact bytes/stderr, not rewrite the generator'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
+    },
+    {
+      "id": "b9",
+      "text": "When you have already printed a numeric discrepancy for a produced image or binary artifact, do not read that artifact's bytes back into context; extend the numeric comparison instead.",
       "helpful": 0,
       "harmful": 0,
-      "addedBy": "v9",
+      "addedBy": "candidate",
       "status": "active",
-      "createdAt": "2026-07-21T20:44:16.205Z",
-      "updatedAt": "2026-07-21T20:44:16.205Z"
+      "createdAt": "2026-08-18T06:02:51.832Z",
+      "updatedAt": "2026-08-18T06:02:51.832Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: after a numeric comparison on an image/binary artifact is printed, no subsequent Read of that artifact path may appear in the trajectory'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      },
+      "hookRule": {
+        "event": "PreToolUse",
+        "toolMatcher": "Read",
+        "inputPattern": "^.*[.](png|jpg|jpeg|bmp|tif|tiff|gif|webp|pdf|bin|so|o|a|wav|mp4|npy|pt|pth)$",
+        "feedback": "Do not read image/binary artifacts back into context; print a numeric comparison (diff count, hash, per-pixel stats) instead.",
+        "mode": "shadow"
+      }
     }
   ]
 }
