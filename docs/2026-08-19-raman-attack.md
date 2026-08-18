@@ -105,17 +105,27 @@ knowledge, not discipline — Lane A carries it naturally.
 
 ## 5. Test protocol (arena lessons encoded)
 
-0. **Pilot on the minimal repro task first** — `raman-peak-report`
-   (term-bench2/probe-tasks/, installed into tbRoot via
-   `term-bench2/probe-tasks/install.sh`; split
-   `term-bench2/splits/raman-min.txt`). Same trap (nm axis, no header,
-   instruction silent on units, G≈1580 cm⁻¹ memory-only), every other rung
-   stripped: single peak (no label swap), argmax suffices (no fitting → no
-   precision rung), dot decimals, ascending x. Oracle PASS 10.1s
-   (2026-08-19); raw-axis answer 6327.3 fails ±5 by construction. Cheap +
-   fast pilot bed; also an ablation instrument: if agents PASS the minimal
-   task while failing raman, the residual is complexity/cognitive-load
-   interaction, not pure retrieval.
+0. **Pilot on the ablation ladder first** (term-bench2/probe-tasks/,
+   installed into tbRoot via `term-bench2/probe-tasks/install.sh`; splits
+   `raman-value.txt` / `raman-min.txt` / `raman-ladder.txt`). All rungs share
+   the identical trap — value in wavelength-nm, no axis label, instruction
+   silent on units, canonical G≈1580 cm⁻¹ retrievable only from memory — and
+   the identical verifier bar (x0 = 1580.3 ±5; the nm readout fails by
+   construction):
+
+   | rung | task | above the trap | isolates |
+   |---|---|---|---|
+   | 0 | `raman-value-report` | nothing — readout stated inline in the instruction | pure retrieval, zero load |
+   | 1 | `raman-peak-report` | headerless file + argmax (no fitting, single peak, dot decimals, ascending x) | retrieval under trivial processing |
+   | 2 | `raman-fitting` | full load: Lorentzian fits, 2 peaks + label swap, decimal commas, descending x, precision residual | retrieval under real load |
+
+   Readings: fail at rung 0 ⇒ retrieval failure is fully context-independent
+   (a lane must inject the reference; no discipline wording can work). Pass
+   at 0 + fail at 1 ⇒ even trivial processing displaces retrieval (attention
+   story). Pass at 0+1 + fail at 2 ⇒ load interaction, and lane pilots must
+   run on rung 2 to mean anything. Oracle: rung 1 PASS 10.1s (2026-08-19),
+   rung 0 PASS same day. Rungs 0/1 are probe instruments, never
+   leaderboard-comparable.
 1. **Pilot 1 trial per lane before any k=5** (arena error: 5-trial arms with
    no mechanism pilot). Autopsy the pilot for rung-firing before spending.
 2. Autopsy hygiene: grep **text events only** — tool outputs are data dumps

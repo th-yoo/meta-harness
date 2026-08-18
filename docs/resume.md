@@ -4,7 +4,7 @@
 does NOT transfer; this file + the repo are the source of truth.)
 
 > **MOST RECENT STATE (2026-08-19, `yoo-dev`):** minimal repro task
-> `raman-peak-report` SHIPPED (oracle PASS 10.1s) — see block below. Read in
+> ablation LADDER shipped: rung-0 `raman-value-report` + rung-1 `raman-peak-report` (both oracle PASS) — see block below. Read in
 > order: "REPRESENTATION-READING ARENA" block (all-zero, retrieval is the
 > rung) → docs/2026-08-19-raman-attack.md (four gated lanes + §5.0 minimal
 > repro) → "v7 GAUNTLET PASS". STANDING: v7 = best candidate (gauntlet 13/30
@@ -14,28 +14,35 @@ does NOT transfer; this file + the repo are the source of truth.)
 > PROVEN identical cross-host) · read-side checked-rule design. Candidates
 > v9-v17 = arena probes, never adoption-eligible without gate pass.
 
-## 🔧 MINIMAL REPRO TASK SHIPPED 2026-08-19 (`yoo-dev`) — `raman-peak-report` · ORACLE PASS 10.1s · RETRIEVAL RUNG ISOLATED
+## 🔧 ABLATION LADDER SHIPPED 2026-08-19 (`yoo-dev`) — `raman-value-report` (rung 0) + `raman-peak-report` (rung 1) · BOTH ORACLE PASS · RETRIEVAL RUNG ISOLATED
 
 ```
-WHAT: controlled ablation of raman-fitting — same trap (x axis wavelength-nm,
-no header, instruction silent on units, canonical G≈1580 cm⁻¹ retrievable
-ONLY from memory), every other rung stripped: single G peak (no label swap),
-argmax suffices (no fitting → no precision rung), dot decimals, ascending x.
-Data: deterministic generator (seed 42), Lorentzian with raman's own G params
-(x0=1580.3, gamma=9.06, A=8382.69, offset=5561.03), 1500 rows on uniform nm
-grid 5800-7100; argmax → 1580.457 cm⁻¹ (asserted <2 off); raw-axis answer
-6327.3 fails the ±5 verifier by construction. Verifier checks x0 only.
+WHAT: 3-rung ablation ladder for the representation trap. All rungs share
+the IDENTICAL trap (value in wavelength-nm, no axis label, instruction
+silent on units, canonical G≈1580 cm⁻¹ memory-only) and IDENTICAL verifier
+bar (x0=1580.3 ±5; nm readout fails by construction):
+  rung 0 raman-value-report  readout 6327.285 stated inline, no file, no
+         processing — pure retrieval, zero load (oracle PASS 10.6s)
+  rung 1 raman-peak-report   headerless 1500-row file + argmax; no fitting,
+         single peak, dot decimals, ascending x (oracle PASS 10.1s;
+         deterministic generator seed 42, raman's own G params; argmax →
+         1580.457, asserted <2 off)
+  rung 2 raman-fitting       full load (banked 0/5 across anchor/v1/v2/arena)
+READINGS: fail rung 0 ⇒ retrieval context-independent, only injection lanes
+can work · pass 0 fail 1 ⇒ trivial processing displaces retrieval · pass
+0+1 fail 2 ⇒ load interaction, lane pilots must run on rung 2.
 
-WHERE: source of truth term-bench2/probe-tasks/raman-peak-report/ (git);
-tbRoot copy via term-bench2/probe-tasks/install.sh (REAL COPY, not symlink —
-tbRoot is bind-mounted at /tb in-container, absolute symlink breaks there;
-first oracle attempt failed exactly that way). Split:
-term-bench2/splits/raman-min.txt. Attack doc §5.0 updated.
+WHERE: source of truth term-bench2/probe-tasks/{raman-value-report,
+raman-peak-report}/ (git); tbRoot install via probe-tasks/install.sh (REAL
+COPY, not symlink — tbRoot bind-mounts at /tb in-container, absolute
+symlink breaks there; first oracle attempt failed exactly that way).
+Splits: raman-value.txt / raman-min.txt / raman-ladder.txt. Attack doc
+§5.0 = ladder table. Rungs 0/1 = probe instruments, never
+leaderboard-comparable.
 
-USE: pilot bed for lanes A/B/C (fast+cheap, ~10s oracle); ablation
-instrument — agent PASS here + FAIL raman ⇒ residual = complexity/load
-interaction, not pure retrieval. Baseline on this task NOT yet measured
-(needs its own go; predicted ~0/5 at tier if retrieval is the whole story).
+USE: pilot bed for lanes A/B/C (~10s oracle, fast trials). Agent baselines
+on rungs 0/1 NOT yet measured (own go; ladder run = cheapest next spend,
+locates the failing rung before any lane pilot).
 ```
 
 ## ✅ V-B MACHINERY SHIPPED + ACCEPTANCE PASSED 2026-08-18 ~08:30 KST (`yoo-dev`) — RULE-8 DEDUP FIX LIVE · v5 MINTED SCOPED WITH ZERO DUP-KILLS

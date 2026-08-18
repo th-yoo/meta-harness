@@ -1,0 +1,40 @@
+schema_version = "1.1"
+artifacts = []
+
+[task]
+name = "meta-harness/raman-value-report"
+description = "Rung-0 minimal probe for the representation-trap class: the instruction itself states the G peak readout in wavelength-nm (unlabeled). No file, no processing — the agent either recognizes from memory that a graphene G peak is ~1580 cm^-1, converts 1e7/x, and passes, or echoes the readout and fails. Pure retrieval, zero load."
+keywords = ["probe", "representation-trap", "physics", "unit-conversion"]
+[[task.authors]]
+name = "meta-harness lab"
+email = "thyoo@ridgeasset.com"
+
+[metadata]
+author_name = "meta-harness lab"
+author_email = "thyoo@ridgeasset.com"
+difficulty = "easy"
+category = "scientific-computing"
+tags = ["probe", "representation-trap", "physics"]
+expert_time_estimate_min = 1.0
+junior_time_estimate_min = 5.0
+
+[verifier]
+timeout_sec = 300.0
+
+[agent]
+timeout_sec = 900.0
+
+[environment]
+build_timeout_sec = 600.0
+cpus = 1
+memory_mb = 2048
+storage_mb = 10240
+gpus = 0
+allow_internet = true
+mcp_servers = []
+
+[verifier.env]
+
+[environment.env]
+
+[solution.env]
