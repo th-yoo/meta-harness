@@ -301,6 +301,20 @@ yoo-dev then (this session drives it):
     Winner earns only a full-board slot PROPOSAL. No activation.
 ```
 
+## 🚢 SIBLING LANE UPDATE 2026-08-19 ~00:15 KST — B8 ALERT MAPPING COMPLETE + PUSHED: origin/main = `8fb6919`
+
+8 commits 3c75b90..8fb6919, 255/255 tests. Spec §1.3 landed: full state alert table
+(dead "✖ died" / stalled "⏳" / running→idle "✓ done, waiting" join awaiting/retire),
+approval re-notify (renotifyMs 5min default, INDEPENDENT of cooldown), per-(project,
+kind) flap cooldown (60s, 0=off). Literal from/to matching (new→idle silent). Opus
+whole-branch review again caught the cross-task bug: resync must clearAwaiting when
+project no longer awaiting, else lost-exit-edge (master restart gap) = infinite
+re-notify zombie. Live-smoked all lanes incl. zombie scenario (master killed
+mid-pending, answered in gap, quiet 99s post-resync). Flap cooldown unit-pinned only
+(real cycle 65s vs 60s window). v1 remaining: B9 !answer relay. Ledgered: one
+"done, waiting" per session respawn (cosmetic). Plan:
+fleet:docs/superpowers/plans/2026-08-18-b8-alert-mapping.md.
+
 ## 🚢 SIBLING LANE UPDATE 2026-08-18 late — B11 TRANSCRIPT-TAIL REPLY LANE COMPLETE + PUSHED: origin/main = `3c75b90`
 
 10 commits dc4626a..3c75b90, 219/219 tests. Concierge Slack replies now read from the
