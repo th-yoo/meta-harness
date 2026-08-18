@@ -50,6 +50,26 @@ sized go (gauntlet board k=5 = 30 trials/arm vs same-host v1 rows
 already banked; or straight to a full-board slot decision).
 ```
 
+## 🏆 v7 GAUNTLET PASS 2026-08-18 14:33 KST — 13/30 vs v1 8/30 · FIRST CANDIDATE THROUGH THE PRE-REGISTERED RULE · POLES REPLICATED
+
+```
+polyglot 5/5 (again; 10/10 lifetime) · sanitize 4/5 (again) · db-wal 3/5
+· adaptive 1/5 · sam 0/5 (convention-lottery task, proven: undocumented
+--csv_path + output_path file-vs-folder + exact columns; oracle PASS
+93.8s; torch parity) · torch 0/5 (-1, within allowance).
+Rule: regression guard PASS (fold net +2) + rescue retention PASS (+3).
+Verdict: candidates/v7/ab-verdict.json (decision:inconclusive by policy
+— mini-board adopts nothing; winner:candidate, rule-PASSED recorded).
+
+NEXT (each its own go):
+ 1. v7 full-31-board slot run vs v1 (the adoption-grade comparison).
+ 2. Same-day paired sam-cell rerun both hosts (window-effect split).
+ 3. Upstream defect reports: sam-cell csv_path/output_path,
+    configure-git git@+password contract (join povray/planarity pile).
+v6/v8 parked as candidates. Arm-context attribution: waiting on
+yoo-mac manifest one-liner (paste-block above).
+```
+
 ## 🔬 ARM-CONTEXT ATTRIBUTION 2026-08-18 — "host effect" RETRACTED as causal claim; image pinned; yoo-mac owes one manifest
 
 ```

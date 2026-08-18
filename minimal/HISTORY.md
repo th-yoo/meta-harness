@@ -1823,3 +1823,33 @@ in the verdict. But the loop's question for three generations — can any
 wording hold both ends — now has an existence proof, and the derivation
 chain that produced it (screening verdicts → locus forensics → b7 tension →
 one replacement sentence) ran on machine-fed evidence end to end.
+
+## v7 passes the gauntlet — the first candidate through (2026-08-18, `yoo-dev`) — GAUNTLET PASS
+
+Full 6-task board, k=5, pinned image, zero auth outages: **v7 13/30 vs
+same-host v1 8/30**. The pre-registered rule passed for the first time in
+the gauntlet's existence — regression guard (polyglot +2, sam 0, adaptive
++1, torch −1 within allowance; fold net +2) and rescue retention
+(sanitize+db-wal 7 vs 4). Both existence-proof poles REPLICATED exactly at
+k=5: polyglot 5/5 again (ten straight passes under v7's byte-identical
+rule, graded by a purity-asserting verifier every time) and sanitize 4/5
+again. The one replaced sentence held under retest.
+
+The two floor tasks stayed floors for reasons now proven, not guessed:
+sam-cell-seg is a convention lottery (the verifier demands an undocumented
+--csv_path argument, inverts output_path file-vs-folder semantics, and
+requires exact column match — the reference solution's own argparse
+confirms all three; oracle PASS 93.8s cleared the environment; torch-2.13
+dev parity across arms cleared the framework story). torch-tensor 0/5 vs
+v1 1/5 sits inside the drift allowance.
+
+Along the way this arc also killed three seductive wrong stories with
+evidence — runway-burn (was pollution), verify-then-mutate-as-primary
+(was an instruction-verifier contract mismatch), and host-difference
+(arch, toolchain, and torch versions all measured equal; what remains is
+an unattributed window effect only a same-day paired rerun can split) —
+and pinned the bench image's 57 apt packages so build-date drift dies as
+a variable.
+
+Per the spec: this pass earns exactly one thing — a full-31-board slot
+proposal against v1, its own sized go. Adoption still lives at the board.

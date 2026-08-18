@@ -6,22 +6,98 @@
  "winner": "candidate",
  "decision": "inconclusive",
  "computedOffline": true,
- "candidateRate": 0.9,
- "activeRate": 0.5,
- "nTasks": 2,
+ "candidateRate": 0.43333333333333335,
+ "activeRate": 0.26666666666666666,
+ "nTasks": 6,
  "k": 5,
  "reasons": [
-  "seesaw-poles probe (2 tasks x k=5): polyglot 5/5 vs v1 3/5 (v3 0/5, v4 1/5, v5 1/3) AND sanitize 4/5 vs v1 2/5 — FIRST candidate to hold both poles simultaneously",
-  "mechanism confirmed by the grader itself: polyglot verifier asserts graded-dir purity, so 5/5 passes = the graded location was byte-clean in every trial; the b7 replacement (fresh copy of CURRENT bytes in scratch + re-verify after any edit + graded location ends byte-identical) actuated where v5 b6-hygiene did not",
-  "verification pressure retained (checks mandatory before complete) = sanitize rescue held at 4/5, the board best, WITH the pollution fix in the same playbook",
-  "decision stays inconclusive by policy: a 2-task probe adopts nothing — full gauntlet board and any activation need their own go; drift caveat noted (both poles +2 beyond the ±1 band, jointly unlikely under drift and mechanism-predicted)",
-  "live-state probe (configure-git-webserver + kv-store-grpc, k=5, v7 vs v8 same-window): v7 6/10 (kv 5/5, cgw 1/5) vs v8 5/10 (kv 5/5, cgw 0/5) — tie within drift",
-  "CONTORTION HYPOTHESIS REFUTED: 0/9 failing trajectories attempt file-copy verification of live state; v7 file-shaped b7 is inert (harmless) on live-state tasks — the 14 were never at risk from v7 wording",
-  "REAL live-state failure mode (both arms): VERIFY-THEN-MUTATE — agents check live state, keep mutating (cleanup/reset), report complete; finals say verified end-to-end BEFORE the reset. Divergence family, live-state form",
-  "v8 clause 2 (re-check after last change) did NOT actuate against it (2/5 v8 trajs mutated after last check) — right target, insufficient wording force; candidate next wording: the LAST command before reporting complete must be the acceptance check (ordering-explicit)",
-  "FORENSICS CORRECTION (full 9-traj read + verifier contract): configure-git-webserver fails are an INSTRUCTION-VERIFIER CONTRACT MISMATCH, not verify-then-mutate. The verifier clones git@localhost and answers the password prompt with the literal string password; the instruction says clone user@server and \"I will setup login, you do not have to worry about that\". All 9 failing trials obeyed the instruction (own identities, key auth, two even locked passwords); none created a git user with password auth. No bullet wording fixes this — passing requires ignoring the instruction and guessing the git-server convention. Task-defect family (like prove-plus-comm WORKDIR). Verify-then-mutate was present but non-causal for most trials (verifier pushes fresh); one trial added real damage via reset surgery. The earlier verify-then-mutate-as-primary claim is retracted; the ordering-explicit wording idea remains plausible for GENUINE stale-state divergence but this probe does not evidence it."
+  "FULL GAUNTLET (6 tasks x k=5, --save-all-traj, 0 auth outages, pinned image): v7 13/30 vs same-host v1 8/30 (net +5)",
+  "PRE-REGISTERED RULE: PASSED — first candidate ever. Regression guard: polyglot +2, sam 0, adaptive +1, torch -1 (within the 1-below allowance); fold net +2. Rescue retention: sanitize+db-wal 7 vs 4 (+3)",
+  "BOTH EXISTENCE-PROOF POLES REPLICATED EXACTLY at k=5: polyglot 5/5 again (lifetime 10/10 under v7 — pollution kill stable under a purity-asserting grader), sanitize 4/5 again (rescue retained). Test-retest passed",
+  "sam-cell-seg 0/5 = the convention-lottery task (verifier requires an undocumented --csv_path arg, output_path file-vs-folder inversion, exact column match — solution argparse confirms; oracle PASS 93.8s proves env clean; torch parity across arms). Not a candidate signal",
+  "decision stays inconclusive BY POLICY: mini-board adopts nothing. Per the gauntlet spec, this PASS earns a full-31-board slot PROPOSAL vs v1 (own sized go); activation after that, its own go"
  ],
  "taskResults": {
+  "adaptive-rejection-sampler": {
+   "candidate": [
+    0,
+    1,
+    0,
+    0,
+    0
+   ],
+   "active": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "sanitize-git-repo": {
+   "candidate": [
+    1,
+    1,
+    1,
+    1,
+    0
+   ],
+   "active": [
+    0,
+    1,
+    0,
+    1,
+    0
+   ]
+  },
+  "db-wal-recovery": {
+   "candidate": [
+    0,
+    1,
+    1,
+    1,
+    0
+   ],
+   "active": [
+    0,
+    1,
+    1,
+    0,
+    0
+   ]
+  },
+  "sam-cell-seg": {
+   "candidate": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "active": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "torch-tensor-parallelism": {
+   "candidate": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "active": [
+    0,
+    0,
+    1,
+    0,
+    0
+   ]
+  },
   "polyglot-rust-c": {
    "candidate": [
     1,
@@ -37,60 +113,18 @@
     1,
     0
    ]
-  },
-  "sanitize-git-repo": {
-   "candidate": [
-    1,
-    1,
-    0,
-    1,
-    1
-   ],
-   "active": [
-    0,
-    1,
-    0,
-    1,
-    0
-   ]
   }
  },
- "provenance": "probe-v7 2026-08-18 (seesaw-poles split; screening record). v7 = v1 with b7 replaced (authored update-op, ralph iteration 2; derivation = verification-locus forensics in v5 verdict). Log /mnt/d/tmp/probe-v7-20260818.log.",
- "timestamp": "2026-08-18T11:05:00+09:00",
- "liveProbe": {
-  "taskResults": {
-   "configure-git-webserver": {
-    "v7": [
-     0,
-     0,
-     0,
-     0,
-     1
-    ],
-    "v8": [
-     0,
-     0,
-     0,
-     0,
-     0
-    ]
-   },
-   "kv-store-grpc": {
-    "v7": [
-     1,
-     1,
-     1,
-     1,
-     1
-    ],
-    "v8": [
-     1,
-     1,
-     1,
-     1,
-     1
-    ]
-   }
+ "probeLineage": {
+  "seesawPoles": {
+   "polyglot": "5/5",
+   "sanitize": "4/5"
+  },
+  "gauntlet": {
+   "polyglot": "5/5",
+   "sanitize": "4/5"
   }
- }
+ },
+ "provenance": "gauntlet-v7 2026-08-18 12:53-14:33 KST, log /mnt/d/tmp/gauntlet-v7-20260818.log; image = pinned build (57 apt pins), v1 rows from same-day-earlier unpinned build (nominally identical versions, mirror-sourced pins)",
+ "timestamp": "2026-08-18T14:33:00+09:00"
 }
