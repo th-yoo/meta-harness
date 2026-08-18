@@ -1,0 +1,5 @@
+{
+ "provenance": "retry-arena",
+ "arm": "v13 + retry appended (awareness + retry)",
+ "addedBullet": "Data files may use conventions different from your defaults: delimiters, decimal separators, units, axis ordering, and encodings vary across locales and instruments. Be careful to interpret every value in the file's own conventions rather than your usual reading. When a derived quantity lands outside the domain's canonical range, treat your reading of the conventions as the error: enumerate alternative readings — other units, scales, orderings, encodings — re-derive under each, and report the one whose results are canonical, naming the convention you rejected."
+}

@@ -1,0 +1,5 @@
+{
+ "provenance": "retry-arena",
+ "arm": "v12 + retry appended (CoVe + retry)",
+ "addedBullet": "After computing results but before writing the output file, list one verification question per quantity checking its unit, scale, and label against the domain's canonical values; answer each question from domain knowledge without looking at your draft; where an answer contradicts the draft, revise the results before writing. When a derived quantity lands outside the domain's canonical range, treat your reading of the conventions as the error: enumerate alternative readings — other units, scales, orderings, encodings — re-derive under each, and report the one whose results are canonical, naming the convention you rejected."
+}

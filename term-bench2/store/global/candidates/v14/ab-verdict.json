@@ -1,0 +1,21 @@
+{
+ "schemaVersion": 2,
+ "layer": "account-global",
+ "candidate": "v14",
+ "baseline": "none (arena probe; raman universal 0-floor as reference)",
+ "winner": "tie",
+ "decision": "inconclusive",
+ "computedOffline": true,
+ "nTasks": 1,
+ "k": 5,
+ "score": "0/5",
+ "reasons": [
+  "representation-reading arena, both rounds ALL-ZERO on the raman floor (35 trials total across 7 wordings)",
+  "ROUND-2 AUTOPSY (text-events only — round-1 checked-and-shrugged claim RETRACTED as substring-grep artifact): retry branch fired ~0/20; canonical-value retrieval nearly absent (0-2 weak mentions/trial). The mismatch was never DETECTED because the canonical values were never RETRIEVED — no detection, no retry trigger",
+  "ONE near-miss proves the chain works when retrieval happens: a v17 trial wrote G x0=1593.4 (cm-1 scale — conversion applied!) failing only precision (tolerance +-5). Unprompted conversion-recognition base rate ~1/20",
+  "CORRECTED LADDER: retrieval -> detection -> attribution -> retry. All seven wordings targeted stages 2-4; the bottleneck is stage 1: generic instruction text does not trigger specific domain-memory retrieval",
+  "NEXT SHAPE (unminted, own go): retrieval-first ordering — write down from memory the canonical ranges for every quantity you will report BEFORE processing — placing the reference in context before the fit"
+ ],
+ "provenance": "representation-reading arena 2026-08-18 (rounds 1+2); UNGATED probe candidates, never adoption-eligible without a gate pass. Logs /mnt/d/tmp/arena-*.log",
+ "timestamp": "2026-08-18T18:05:00+09:00"
+}

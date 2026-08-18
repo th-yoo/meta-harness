@@ -1,0 +1,7 @@
+{
+  "proposerModel": "authored:retry-arena",
+  "scope": "account-global",
+  "kind": "arena-probe",
+  "createdAt": "2026-08-18T08:30:32.915Z",
+  "provenance": "retry-arena arm (v11 + retry appended (input-gate + retry)); base v7; UNGATED probe-only. Derivation: first arena all-zero + autopsy (wordings fired, agents checked-and-shrugged — detection without repair); user insight: mismatch must route to retry-with-alternative-reading."
+}

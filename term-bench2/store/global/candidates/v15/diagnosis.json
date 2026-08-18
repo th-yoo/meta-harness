@@ -1,0 +1,5 @@
+{
+ "provenance": "retry-arena",
+ "arm": "v11 + retry appended (input-gate + retry)",
+ "addedBullet": "Before writing code that processes a data file, read a sample and state its conventions from the file's own evidence — delimiter, decimal separator, number format, units, ordering. Where a unit or convention is unstated, treat your default reading as a guess and cross-check derived quantities against known reference magnitudes before reporting. When a derived quantity lands outside the domain's canonical range, treat your reading of the conventions as the error: enumerate alternative readings — other units, scales, orderings, encodings — re-derive under each, and report the one whose results are canonical, naming the convention you rejected."
+}

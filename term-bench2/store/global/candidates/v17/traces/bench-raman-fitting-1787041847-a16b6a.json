@@ -1,0 +1,43 @@
+{
+  "sessionID": "bench-raman-fitting-1787041847-a16b6a",
+  "passed": false,
+  "note": "bench:raman-fitting",
+  "turnCount": 33,
+  "timestamp": "2026-08-18T08:40:52.606Z",
+  "summary": "raman-fitting",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 25,
+      "errors": 1
+    },
+    "Read": {
+      "calls": 6,
+      "errors": 0
+    },
+    "Write": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "8e18df7",
+    "harnessHash": "39de480feb142937",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 604.5,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 36557.4,
+  "peakRssMb": 0,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

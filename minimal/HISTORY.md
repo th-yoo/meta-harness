@@ -1890,3 +1890,26 @@ mechanization advice (the reviewer named the sha256-baseline check it
 should become — the gate teaching the loop, not just refusing), and v9's
 prediction-probe split (write-compressor 5/5, raman 0/5) proved b9's
 non-actuation, third member of the actuation-gap family.
+
+### Arena postscript (same day): round 2 all-zero — and the ladder gains a first rung
+
+The retry clause rescued nothing: v14-v17 all 0/5, thirty-five arena trials
+without a pass. But the text-only autopsy paid for the round twice over.
+First, a retraction: round 1's "checked-and-shrugged" was a grep artifact —
+substring matches in data dumps, not agent reasoning. Second, the real
+bottleneck, one step earlier than every wording tried: the agents almost
+never RETRIEVED the canonical values at all. No reference in context means
+no perceivable mismatch, which means nothing for a retry clause to trigger
+on. Detection, attribution, and repair were all downstream of a retrieval
+step no instruction had forced. The single near-miss — one trial in twenty
+wrote G at 1593.4 cm-1, conversion applied, dead on a ±5 tolerance —
+shows the whole chain works whenever retrieval happens.
+
+The ladder is now: retrieval → detection → attribution → retry. Seven
+wordings attacked rungs two through four. The eighth shape — unminted,
+waiting on its own go — attacks rung one: write the canonical ranges from
+memory BEFORE touching the data, so the reference sits in context before
+the first fit and the mismatch becomes unmissable. The arena's lesson
+generalizes past raman: an instruction can only bind behavior the model
+has already surfaced; knowledge that stays in the weights is invisible to
+every checklist that assumes it is on the table.

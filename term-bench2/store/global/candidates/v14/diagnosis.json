@@ -1,0 +1,5 @@
+{
+ "provenance": "retry-arena",
+ "arm": "fused-compact: convention statement + retry as mismatch branch",
+ "addedBullet": "Before processing a data file, state its conventions from the file's own evidence. When any derived quantity lands outside the domain's canonical range, treat your reading of the conventions as the error: enumerate alternative readings — other units, scales, orderings, encodings — re-derive under each, and report the one whose results are canonical, naming the convention you rejected."
+}

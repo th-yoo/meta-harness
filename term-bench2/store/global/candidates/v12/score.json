@@ -1,0 +1,167 @@
+{
+  "version": "v12",
+  "nPass": 0,
+  "nFail": 4,
+  "sessions": [
+    {
+      "sessionID": "bench-raman-fitting-1787040269-dd37f3",
+      "passed": false,
+      "note": "bench:raman-fitting",
+      "turnCount": 23,
+      "timestamp": "2026-08-18T08:07:51.901Z",
+      "summary": "raman-fitting",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 20,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "8e18df7",
+        "harnessHash": "14e3af798aebef43",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 202.5,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 35730.3,
+      "peakRssMb": 0,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-raman-fitting-1787040471-392998",
+      "passed": false,
+      "note": "bench:raman-fitting",
+      "turnCount": 27,
+      "timestamp": "2026-08-18T08:13:01.203Z",
+      "summary": "raman-fitting",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 25,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "8e18df7",
+        "harnessHash": "14e3af798aebef43",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 309.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 35888.9,
+      "peakRssMb": 0,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-raman-fitting-1787040781-73d768",
+      "passed": false,
+      "note": "bench:raman-fitting",
+      "turnCount": 21,
+      "timestamp": "2026-08-18T08:17:12.391Z",
+      "summary": "raman-fitting",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 16,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 4,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "8e18df7",
+        "harnessHash": "14e3af798aebef43",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 250.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 36009.2,
+      "peakRssMb": 0,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-raman-fitting-1787041032-43ffd3",
+      "passed": false,
+      "note": "bench:raman-fitting",
+      "turnCount": 27,
+      "timestamp": "2026-08-18T08:23:25.521Z",
+      "summary": "raman-fitting",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 18,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 7,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "8e18df7",
+        "harnessHash": "14e3af798aebef43",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 372.9,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 36140.2,
+      "peakRssMb": 0,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    }
+  ]
+}

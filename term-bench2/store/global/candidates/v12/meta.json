@@ -1,0 +1,7 @@
+{
+  "proposerModel": "authored:representation-arena",
+  "scope": "account-global",
+  "kind": "arena-probe",
+  "createdAt": "2026-08-18T07:28:29.516Z",
+  "provenance": "representation-reading arena arm (CoVe-adapted: draft -> verification questions -> independent answers -> revise); base v7; UNGATED probe-only — not adoption-eligible without a gate pass. Derivation: raman root cause (1e7/x conversion missed) + web survey (CoVe arXiv 2309.11495; context-priming/awareness patterns)."
+}

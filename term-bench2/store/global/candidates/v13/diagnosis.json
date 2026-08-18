@@ -1,0 +1,5 @@
+{
+ "provenance": "arena",
+ "arm": "awareness prose (predicted non-actuating control)",
+ "addedBullet": "Data files may use conventions different from your defaults: delimiters, decimal separators, units, axis ordering, and encodings vary across locales and instruments. Be careful to interpret every value in the file's own conventions rather than your usual reading."
+}

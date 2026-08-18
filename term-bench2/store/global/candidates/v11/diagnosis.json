@@ -1,0 +1,5 @@
+{
+ "provenance": "arena",
+ "arm": "ours: ordering-gate + convention statement + calibration",
+ "addedBullet": "Before writing code that processes a data file, read a sample and state its conventions from the file's own evidence — delimiter, decimal separator, number format, units, ordering. Where a unit or convention is unstated, treat your default reading as a guess and cross-check derived quantities against known reference magnitudes before reporting."
+}

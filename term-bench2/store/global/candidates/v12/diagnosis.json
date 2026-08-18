@@ -1,0 +1,5 @@
+{
+ "provenance": "arena",
+ "arm": "CoVe-adapted: draft -> verification questions -> independent answers -> revise",
+ "addedBullet": "After computing results but before writing the output file, list one verification question per quantity checking its unit, scale, and label against the domain's canonical values; answer each question from domain knowledge without looking at your draft; where an answer contradicts the draft, revise the results before writing."
+}

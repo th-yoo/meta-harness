@@ -80,9 +80,18 @@ RUNNING (launched 17:30 KST, 4 parallel tmux arena-v14..v17, 2cpu/
   v15 = v11 + retry appended     v16 = v12 + retry appended
   v17 = v13 + retry appended (sharpest cell: awareness+retry scoring
         would mean retry is the WHOLE story)
-READ RULE: >=2/5 on the 0-floor = retry confirmed as the missing half;
-autopsy either way (did alternative readings get enumerated, was 1e7/x
-tried). Logs /mnt/d/tmp/arena-v1[4-7]-20260818.log.
+ROUND 2 RESULT: ALL ZERO (v14/v15/v16/v17 each 0/5; 35 arena trials
+total across 7 wordings). DEEP AUTOPSY (text-events only) RETRACTS the
+round-1 checked-and-shrugged story (substring-grep artifact): the
+retry branch fired ~0/20 because canonical values were never RETRIEVED
+— no reference in context, no mismatch perceived, no trigger. One
+near-miss (v17 trial: G x0=1593.4, cm-1 scale — conversion applied,
+lost on +-5 precision) proves the chain works when retrieval happens;
+unprompted recognition base rate ~1/20. CORRECTED LADDER: retrieval ->
+detection -> attribution -> retry; all seven wordings fixed stages 2-4,
+bottleneck is stage 1. NEXT SHAPE (unminted, own go): retrieval-first —
+write canonical ranges from memory BEFORE processing. Verdicts on all
+7 candidates (identical reasons block); logs /mnt/d/tmp/arena-*.log.
 
 Also this arc: v9 organic mint (narrowing invitation TAKEN, first
 time), read-side twin gate-rejected with mechanization advice (sha256
