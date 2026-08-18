@@ -3,15 +3,40 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-> **MOST RECENT STATE (2026-08-19 ~09:30 KST, `yoo-dev`):** main = `a4bf9d3`,
-> tree clean, nothing running. Read in order: "REPRESENTATION-READING ARENA"
-> block (all-zero, retrieval is the rung) → docs/2026-08-19-raman-attack.md
-> (four gated lanes) → "v7 GAUNTLET PASS". STANDING: v7 = best candidate
-> (gauntlet 13/30 vs v1 8/30, poles replicated), v1 ACTIVE. PENDING GOS:
-> v7 full-31-board slot run · raman attack lane A/B/C pilots · same-day
-> paired sam-cell rerun (window-effect splitter; toolchains PROVEN identical
-> cross-host) · read-side checked-rule design. Candidates v9-v17 = arena
-> probes, never adoption-eligible without gate pass.
+> **MOST RECENT STATE (2026-08-19, `yoo-dev`):** minimal repro task
+> `raman-peak-report` SHIPPED (oracle PASS 10.1s) — see block below. Read in
+> order: "REPRESENTATION-READING ARENA" block (all-zero, retrieval is the
+> rung) → docs/2026-08-19-raman-attack.md (four gated lanes + §5.0 minimal
+> repro) → "v7 GAUNTLET PASS". STANDING: v7 = best candidate (gauntlet 13/30
+> vs v1 8/30, poles replicated), v1 ACTIVE. PENDING GOS: v7 full-31-board
+> slot run · raman attack lane A/B/C pilots (pilot on raman-peak-report
+> first) · same-day paired sam-cell rerun (window-effect splitter; toolchains
+> PROVEN identical cross-host) · read-side checked-rule design. Candidates
+> v9-v17 = arena probes, never adoption-eligible without gate pass.
+
+## 🔧 MINIMAL REPRO TASK SHIPPED 2026-08-19 (`yoo-dev`) — `raman-peak-report` · ORACLE PASS 10.1s · RETRIEVAL RUNG ISOLATED
+
+```
+WHAT: controlled ablation of raman-fitting — same trap (x axis wavelength-nm,
+no header, instruction silent on units, canonical G≈1580 cm⁻¹ retrievable
+ONLY from memory), every other rung stripped: single G peak (no label swap),
+argmax suffices (no fitting → no precision rung), dot decimals, ascending x.
+Data: deterministic generator (seed 42), Lorentzian with raman's own G params
+(x0=1580.3, gamma=9.06, A=8382.69, offset=5561.03), 1500 rows on uniform nm
+grid 5800-7100; argmax → 1580.457 cm⁻¹ (asserted <2 off); raw-axis answer
+6327.3 fails the ±5 verifier by construction. Verifier checks x0 only.
+
+WHERE: source of truth term-bench2/probe-tasks/raman-peak-report/ (git);
+tbRoot copy via term-bench2/probe-tasks/install.sh (REAL COPY, not symlink —
+tbRoot is bind-mounted at /tb in-container, absolute symlink breaks there;
+first oracle attempt failed exactly that way). Split:
+term-bench2/splits/raman-min.txt. Attack doc §5.0 updated.
+
+USE: pilot bed for lanes A/B/C (fast+cheap, ~10s oracle); ablation
+instrument — agent PASS here + FAIL raman ⇒ residual = complexity/load
+interaction, not pure retrieval. Baseline on this task NOT yet measured
+(needs its own go; predicted ~0/5 at tier if retrieval is the whole story).
+```
 
 ## ✅ V-B MACHINERY SHIPPED + ACCEPTANCE PASSED 2026-08-18 ~08:30 KST (`yoo-dev`) — RULE-8 DEDUP FIX LIVE · v5 MINTED SCOPED WITH ZERO DUP-KILLS
 

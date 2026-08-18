@@ -105,6 +105,17 @@ knowledge, not discipline — Lane A carries it naturally.
 
 ## 5. Test protocol (arena lessons encoded)
 
+0. **Pilot on the minimal repro task first** — `raman-peak-report`
+   (term-bench2/probe-tasks/, installed into tbRoot via
+   `term-bench2/probe-tasks/install.sh`; split
+   `term-bench2/splits/raman-min.txt`). Same trap (nm axis, no header,
+   instruction silent on units, G≈1580 cm⁻¹ memory-only), every other rung
+   stripped: single peak (no label swap), argmax suffices (no fitting → no
+   precision rung), dot decimals, ascending x. Oracle PASS 10.1s
+   (2026-08-19); raw-axis answer 6327.3 fails ±5 by construction. Cheap +
+   fast pilot bed; also an ablation instrument: if agents PASS the minimal
+   task while failing raman, the residual is complexity/cognitive-load
+   interaction, not pure retrieval.
 1. **Pilot 1 trial per lane before any k=5** (arena error: 5-trial arms with
    no mechanism pilot). Autopsy the pilot for rung-firing before spending.
 2. Autopsy hygiene: grep **text events only** — tool outputs are data dumps
