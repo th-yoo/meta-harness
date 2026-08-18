@@ -12,7 +12,8 @@
   "prediction-probe on v9s OWN expect_improve tasks: write-compressor 5/5 (v2-era this task drove the rejection; strong directional confirmation), raman-fitting 0/5 (floor unmoved)",
   "MECHANISM READ (all-traj): b9 (no image readback after numeric discrepancy) did NOT actuate on raman — failing trials read images 3-7x each, zero numeric-comparison prints; b8 evidence-dump fired once. On write-compressor the bullets are consistent with behavior (0 image reads) but the task provides no readback temptation — necessity unproven there",
   "verdict: split — the predicted artifact-quality mode moved (5/5), the predicted incomplete/image mode did not, and the bullet targeting it demonstrably failed to actuate. b9 wording insufficient against in-flight image debugging; same actuation-gap family as v5-b6 and v8-clause-2",
-  "next-shape (unminted): b9 needs an ordering/prohibition form tied to an observable trigger, or a checked-rule mechanization; raman evidence now in trajs for the next propose"
+  "next-shape (unminted): b9 needs an ordering/prohibition form tied to an observable trigger, or a checked-rule mechanization; raman evidence now in trajs for the next propose",
+  "raman ROOT CAUSE (numerical proof): failing fits were CORRECT in raw-axis space — agent G-fit raw x0 6328.1 -> 1e7/6328.1 = 1580.4 cm-1 (expected 1580.3), agent 2D-fit raw 3745.37 -> 2670.0 (expected 2670.08), amplitudes/offsets within ~1%. Missing transform: x -> 1e7/x (file axis = wavelength nm, headerless, European decimal commas, descending); the inversion also swapped their G/2D labels. NOT a task defect: graphene G~1580/2D~2670 cm-1 is canonical — a magnitude sanity-check catches it. Failure class = no unit/magnitude check against the named physical domain before writing results; b9 (readback ban) was aimed at a symptom, not this cause."
  ],
  "taskResults": {
   "write-compressor": {
