@@ -1,0 +1,10 @@
+=== TASK INSTRUCTION ===
+You are given a transaction log. Compute the total amount for April 2026 and write it to /app/total.txt.
+
+=== INPUT DATA SAMPLE (transactions.csv, 5 rows) ===
+date,amount
+2026-04-03,120.50
+2026-01-05,89.99
+2026-04-01,310.20
+2026-12-09,55.00
+2026-04-02,199.99

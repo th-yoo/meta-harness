@@ -1,0 +1,14 @@
+=== TASK INSTRUCTION ===
+You are given a transaction log from our European subsidiary. Compute the total amount for April 2026 and write it to /app/total.txt.
+
+=== INPUT DATA SAMPLE (transactions.csv, 9 rows) ===
+date,amount
+03/04/2026,120.50
+05/01/2026,89.99
+11/02/2026,240.00
+04/03/2026,15.75
+01/04/2026,310.20
+09/12/2026,55.00
+12/06/2026,78.30
+02/04/2026,199.99
+06/05/2026,44.10

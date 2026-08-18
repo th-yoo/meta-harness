@@ -1,0 +1,6 @@
+=== TASK INSTRUCTION ===
+You are given a file with Korean text from our user-feedback system. Translate the Korean text to English and write the translations to /app/out.txt, one per line.
+
+=== INPUT DATA SAMPLE (feedback.txt, 2 rows) ===
+와따시와 캉꼬꾸진데스.
+워 싀 한궈렌.

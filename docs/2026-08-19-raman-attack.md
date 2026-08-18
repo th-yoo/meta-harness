@@ -54,6 +54,21 @@ waits behind it.
 ## 4. The attack stack (ordered by expected value)
 
 ### Lane A — staging-time retrieval cue (SPARK-style; harness feature)
+
+> **UPGRADED 2026-08-19 by the representation-audit probe**
+> (docs/loop-probes/rep-audit-20260819/ — pre-registered, 8 calls): lane A
+> becomes a **convention audit** — an executing-tier model call at staging
+> whose ENTIRE task is "surface convention vs content convention vs
+> plausible misreadings", input = instruction + input-data sample (never
+> tests/). Measured: sonnet-as-auditor cracked the full raman trap (named
+> 1/λ conversion, nm-spaced pixels, G≈1580/2D≈2700, "trusting literal
+> cm⁻¹" as the misreading) — the same sonnet that went 0/5 in-task on
+> rung-0. Task-framing gates retrieval; the cue below is the fallback
+> shape, the audit is the general shape (also IDs script≠language cases no
+> regex linter can reach). Haiku detects but cannot attribute — audit must
+> run at executing tier. Open: quiet-on-clean (both tiers failed the
+> pre-registered D bar); candidate fix = inject only when the audit's
+> CONTENT section reports a mismatch (post-hoc, needs its own confirm).
 At task staging, a cheap model call reads **instruction.md only** (never
 `tests/` — leak-safe rule below) and emits a *reference card*:
 
