@@ -3,18 +3,19 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-> **MOST RECENT STATE (2026-08-17 ~18:30 KST):** main = `ba86fc4`+. GEN-2
-> CLOSED: v2 REJECTED (92/150 vs v1 97/150; v1 stays active). Read the
-> "GEN-2 REGRESSION INVESTIGATION" + "GEN-2 VERDICT" blocks FIRST (below).
-> Gen-3: mint go received (taxonomy running, then /mh-propose account with
-> guards live); k=5 arm spend = HELD for separate explicit go. Round
-> narrative: minimal/HISTORY.md gen-2 entry.
->
-> **CRANK-2 AB CLOSED (2026-08-17 ~19:40 KST, `yoo-dev`):** v20 vs v17 =
-> **INCONCLUSIVE** (v20 +delta both folds, not significant; run died at
-> 97/98 on oauth expiry, verdict derived from complete log). The pending
-> "crank-2 v20 verdict check" items below are RESOLVED — see the
-> "CRANK-2 AB VERDICT 2026-08-17" block. No activation.
+> **MOST RECENT STATE (2026-08-18 ~14:45 KST, `yoo-dev`):** main = `da19774`.
+> **v7 PASSED THE GAUNTLET** — 13/30 vs same-host v1 8/30, first candidate
+> through the pre-registered rule; both seesaw poles replicated (polyglot
+> 5/5 twice, sanitize 4/5 twice). v7 = v1 with ONE bullet replaced (b7 →
+> fresh-copy verification of current bytes + byte-identical graded
+> location). Read blocks below in order: "v7 GAUNTLET PASS" → "ARM-CONTEXT
+> ATTRIBUTION" (yoo-mac owes ONE manifest command, paste-block inside) →
+> "v7 PROBE" → "v5 SCREEN". Machinery this arc: rule-8 narrowing exception
+> (dedup wall down), screening-evidence channel, scope requirement, 57 apt
+> pins. sam-cell + configure-git = proven task-defect lotteries (details in
+> v7/v8 verdicts). PENDING GOS: v7 full-31-board slot run vs v1 ·
+> same-day paired sam-cell rerun (both hosts) · upstream defect reports.
+> v6/v8 parked candidates. v1 STAYS ACTIVE.
 
 ## ✅ V-B MACHINERY SHIPPED + ACCEPTANCE PASSED 2026-08-18 ~08:30 KST (`yoo-dev`) — RULE-8 DEDUP FIX LIVE · v5 MINTED SCOPED WITH ZERO DUP-KILLS
 
