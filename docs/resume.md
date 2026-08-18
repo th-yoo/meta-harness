@@ -51,6 +51,47 @@ sized go (gauntlet board k=5 = 30 trials/arm vs same-host v1 rows
 already banked; or straight to a full-board slot decision).
 ```
 
+## 🔬 REPRESENTATION-READING ARENA 2026-08-18 (`yoo-dev`) — ROUND 1 ALL-ZERO (checked-and-shrugged proven) · ROUND 2 (RETRY CLAUSE) RUNNING
+
+```
+QUESTION (user-driven): what prompt makes an agent read the right
+convention/language/culture? Raman = the live testbed (root cause
+proven: fits correct, missing 1e7/x nm->cm-1 conversion + label swap;
+universal 0-floor on this host; see v9 verdict reasons).
+
+ROUND 1 (v11/v12/v13 = v7 + one bullet, raman k=5-ish, UNGATED
+arena probes — never adoption-eligible without a gate pass):
+  v11 ours (input ordering-gate + convention statement + calibration) 0/4
+  v12 CoVe-adapted (draft -> verify-Qs -> independent answers)        0/4
+  v13 awareness prose (predicted non-actuating control)               0/4
+  (v11 trial 5 sacrificed to a mid-chain restructure; v12/v13 trial 5
+   killed by user stop — k=4 each, floor task, verdict unaffected)
+AUTOPSY: wordings largely FIRED (v11/v12 trajs show convention talk +
+canonical 1580/2670 mentions) yet agents still shipped wrong units —
+CHECKED-AND-SHRUGGED: detection without repair. v13 mostly silent as
+predicted. Actuation was NOT the bottleneck this time.
+
+USER INSIGHT -> ROUND 2: the missing half is RETRY-WITH-ALTERNATIVE-
+READING — on mismatch, treat your reading as the error, enumerate
+alternative conventions, re-derive under each, keep the canonical one.
+RUNNING (launched 17:30 KST, 4 parallel tmux arena-v14..v17, 2cpu/
+5.5GB each, raman k=5, --save-all-traj):
+  v14 fused-compact (convention statement + retry-as-mismatch-branch)
+  v15 = v11 + retry appended     v16 = v12 + retry appended
+  v17 = v13 + retry appended (sharpest cell: awareness+retry scoring
+        would mean retry is the WHOLE story)
+READ RULE: >=2/5 on the 0-floor = retry confirmed as the missing half;
+autopsy either way (did alternative readings get enumerated, was 1e7/x
+tried). Logs /mnt/d/tmp/arena-v1[4-7]-20260818.log.
+
+Also this arc: v9 organic mint (narrowing invitation TAKEN, first
+time), read-side twin gate-rejected with mechanization advice (sha256
+baseline check — checked-rule design item), v9 prediction-probe split
+(write-compressor 5/5, raman 0/5 + b9 non-actuation proven), raman
+root cause with numerical proof, sanitize/db-wal residual-fail
+forensics (hardcoded-SHA trap; destructive-first-probe).
+```
+
 ## 🏆 v7 GAUNTLET PASS 2026-08-18 14:33 KST — 13/30 vs v1 8/30 · FIRST CANDIDATE THROUGH THE PRE-REGISTERED RULE · POLES REPLICATED
 
 ```

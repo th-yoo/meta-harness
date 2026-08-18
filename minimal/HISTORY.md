@@ -1853,3 +1853,40 @@ a variable.
 
 Per the spec: this pass earns exactly one thing — a full-31-board slot
 proposal against v1, its own sized go. Adoption still lives at the board.
+
+## The representation-reading arena: culture, retries, and the shrug (2026-08-18, `yoo-dev`) — ROUND 2 IN FLIGHT
+
+After raman's root cause landed (fits numerically perfect, one missing
+1e7/x unit conversion — the file spoke wavelength-nm with European decimal
+commas and the agents read it in their own defaults), the operator reframed
+the failure as CULTURE: representation conventions the reader doesn't know
+it's assuming. 러브 is English in Korean script; 와따시와카이샤인데스 is
+Japanese in Hangul; nodding means no in Bulgaria; a data file is the same
+kind of foreigner. The failure ladder: format differs (parseable), encoding
+differs (recognizable), MEANING inverts (only calibration catches it).
+
+Round 1 tested three bullet wordings on the raman floor (v7 base, ungated
+arena probes): ours (input ordering-gate + forced convention statement +
+calibration), a CoVe adaptation (draft, verification questions, independent
+answers), and bare awareness prose as the predicted-failure control. All
+zero. But the autopsy overturned the expected story: the wordings FIRED —
+trajectories show convention talk and the canonical 1580/2670 values — and
+the agents still shipped 6328. Not an actuation gap this time:
+CHECKED-AND-SHRUGGED. Detection without repair. The bullets said "verify"
+and nothing said what a failed verification MEANS.
+
+The operator named the missing half: a human's second trial IS a retry
+under a different reading. Round 2 (running) adds the repair branch — on
+mismatch, treat your own reading as the error, enumerate alternative
+conventions, re-derive under each, keep the canonical one — crossed over
+all three base wordings plus a fused-compact form, four arms in parallel.
+The awareness+retry cell is the sharpest: if even that scores, the retry
+clause is the whole story and trigger engineering was never the point.
+
+Meanwhile the loop's own outputs this arc: v9 took the narrowing
+invitation (first bullet ever staged from that lineage — the dedup fix
+paying off), the authored read-side twin was gate-rejected WITH
+mechanization advice (the reviewer named the sha256-baseline check it
+should become — the gate teaching the loop, not just refusing), and v9's
+prediction-probe split (write-compressor 5/5, raman 0/5) proved b9's
+non-actuation, third member of the actuation-gap family.
