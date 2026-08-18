@@ -8,7 +8,10 @@ does NOT transfer; this file + the repo are the source of truth.)
 > retrieval failure is CONTEXT-INDEPENDENT, least repro CONFIRMED; lane C
 > ceiling ~0, lanes A/B only viable moves — see ladder block below. Read in
 > order: "REPRESENTATION-READING ARENA" block (all-zero, retrieval is the
-> rung) → docs/2026-08-19-raman-attack.md (lanes + §5.0 ladder verdict) →
+> rung) → docs/loop-probes/rep-audit-20260819/verdict.md (FRAMING gates
+> retrieval: sonnet-as-auditor cracks raman + hangul + dates; lane A =
+> convention audit at executing tier; quiet-on-clean open) →
+> docs/2026-08-19-raman-attack.md (lanes + §5.0 ladder verdict) →
 > "v7 GAUNTLET PASS". STANDING: v7 = best candidate (gauntlet 13/30 vs v1
 > 8/30, poles replicated), v1 ACTIVE. PENDING GOS: v7 full-31-board slot
 > run · lane A cue-card design review · lane B hookRule proposal · same-day
