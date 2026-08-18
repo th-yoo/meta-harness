@@ -1,0 +1,119 @@
+{
+ "schemaVersion": 2,
+ "layer": "account-global",
+ "candidate": "v3",
+ "baseline": "v1(same-host arm)",
+ "winner": "tie",
+ "decision": "inconclusive",
+ "computedOffline": true,
+ "candidateRate": 0.2333,
+ "activeRate": 0.2667,
+ "nTasks": 6,
+ "k": 5,
+ "reasons": [
+  "fails the pre-registered regression guard (polyglot-rust-c 0/5 vs v1 3/5)",
+  "screened on the 6-task regression gauntlet vs a SAME-HOST v1 arm (host effect measured: cross-host banked rows invalid)",
+  "polyglot-rust-c forensics (7/7 failing solutions re-passed the verifier compile+value checks in the bench image): failures are VERIFICATION-ARTIFACT POLLUTION — the task instructions own stated commands compile main/cmain INTO the graded dir and the verifier asserts listdir==[main.rs]; only verification that leaves the graded directory BYTE-IDENTICAL (verify in a copy, or restore state and re-check) avoids it",
+  "sanitize-git-repo climbed monotonically with acceptance-verification pressure (v1 2/5 -> v3 3/5 -> v4 4/5): that pressure IS the rescue mechanism on content-graded incompletion tasks — keep it, but scope it away from state-purity-graded dirs"
+ ],
+ "taskResults": {
+  "adaptive-rejection-sampler": {
+   "candidate": [
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "active": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "db-wal-recovery": {
+   "candidate": [
+    1,
+    1,
+    0,
+    0,
+    0
+   ],
+   "active": [
+    0,
+    1,
+    1,
+    0,
+    0
+   ]
+  },
+  "polyglot-rust-c": {
+   "candidate": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "active": [
+    1,
+    0,
+    1,
+    1,
+    0
+   ]
+  },
+  "sam-cell-seg": {
+   "candidate": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "active": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "sanitize-git-repo": {
+   "candidate": [
+    0,
+    0,
+    1,
+    1,
+    1
+   ],
+   "active": [
+    0,
+    1,
+    0,
+    1,
+    0
+   ]
+  },
+  "torch-tensor-parallelism": {
+   "candidate": [
+    0,
+    0,
+    1,
+    0,
+    0
+   ],
+   "active": [
+    0,
+    0,
+    1,
+    0,
+    0
+   ]
+  }
+ },
+ "provenance": "gauntlet-3arm-20260818 (screening mini-board; adopts nothing, bans nothing — spec docs/superpowers/specs/2026-08-17-gen3-regression-gauntlet-design.md). decision=inconclusive is deliberate: screening evidence for the proposer via the screening-evidence section, NOT a permanent reject.",
+ "timestamp": "2026-08-18T03:56:00+09:00"
+}

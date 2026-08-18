@@ -110,3 +110,51 @@ test("reviewer prompt: narrowingInvited param renders the exception section + am
   // rubric parses identically either way.
   expect(without).toContain("EXCEPTION: if the closest match is listed")
 })
+
+test("proposer prompt: inconclusive verdict with taskResults renders the screening-evidence section", () => {
+  const worktree = tmpDir("worktree-screen")
+  const storeRoot = tmpDir("store-screen")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  const cdir = path.join(storeRoot, "candidates", "v9")
+  fs.mkdirSync(cdir, { recursive: true })
+  fs.writeFileSync(path.join(cdir, "system.md"), "- screened rule")
+  fs.writeFileSync(path.join(cdir, "ab-verdict.json"), JSON.stringify({
+    winner: "tie", candidateRate: 0.2, activeRate: 0.27, nTasks: 6,
+    timestamp: "2026-08-18T01:00:00Z", decision: "inconclusive",
+    reasons: ["fails rescue retention", "b6-hygiene did not actuate: verification must leave the graded directory BYTE-IDENTICAL"],
+    taskResults: { "polyglot-rust-c": { candidate: [1, 0, 0], active: [1, 1, 1] } },
+  }))
+  const layer: StoreLayer = { root: storeRoot, scope: "account-global", higherRoots: [] }
+  const base = path.join(worktree, ".kkamak", "staging")
+  const prompt = buildProposerPrompt(
+    layer, "v10", "",
+    path.join(base, "s.md"), path.join(base, "t.md"), path.join(base, "d.json"),
+    path.join(base, "o.json"), path.join(base, "a.json"), path.join(base, "e.json"),
+    worktree, null,
+  )
+  expect(prompt).toContain("## Screening evidence")
+  expect(prompt).toContain("BYTE-IDENTICAL")
+  expect(prompt).toContain("polyglot-rust-c: candidate 1/3 vs active 3/3 (net -2)")
+  expect(prompt).toContain("NOT\nbanned")
+})
+
+test("proposer prompt: inconclusive verdict WITHOUT taskResults renders no screening section", () => {
+  const worktree = tmpDir("worktree-noscreen")
+  const storeRoot = tmpDir("store-noscreen")
+  writeActive(storeRoot, "v1", "- some rule", "")
+  const cdir = path.join(storeRoot, "candidates", "v9")
+  fs.mkdirSync(cdir, { recursive: true })
+  fs.writeFileSync(path.join(cdir, "ab-verdict.json"), JSON.stringify({
+    winner: "tie", candidateRate: 0.2, activeRate: 0.27, nTasks: 6,
+    timestamp: "2026-08-18T01:00:00Z", decision: "inconclusive", reasons: ["x"],
+  }))
+  const layer: StoreLayer = { root: storeRoot, scope: "account-global", higherRoots: [] }
+  const base = path.join(worktree, ".kkamak", "staging")
+  const prompt = buildProposerPrompt(
+    layer, "v10", "",
+    path.join(base, "s.md"), path.join(base, "t.md"), path.join(base, "d.json"),
+    path.join(base, "o.json"), path.join(base, "a.json"), path.join(base, "e.json"),
+    worktree, null,
+  )
+  expect(prompt).not.toContain("## Screening evidence")
+})

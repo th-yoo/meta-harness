@@ -1372,6 +1372,46 @@ ${blocks.join("\n\n")}
 `
   })()
 
+  // Screening evidence (gauntlet channel, 2026-08-18): candidates whose
+  // verdict is INCONCLUSIVE with a per-task table — mini-board screens that
+  // adopted nothing and BANNED nothing. Without this section their measured
+  // mechanism findings (e.g. "verification-artifact pollution: the task's own
+  // stated commands compile binaries into the graded dir; only byte-identical
+  // verification wording beats it") never reached the next propose except as
+  // prose in docs — the loop could not learn from its own screens. Distinct
+  // from rejectedSection: nothing here is do-not-re-derive; the invitation is
+  // the opposite — derive SCOPED variants informed by these measurements.
+  const screeningSection = (() => {
+    const screened = listVersions(layer.root)
+      .map((v) => ({ v, verdict: readAbVerdict(layer.root, v) }))
+      .filter((x) => x.verdict?.decision === "inconclusive"
+        && (x.verdict as { taskResults?: unknown }).taskResults
+        && Array.isArray((x.verdict as { reasons?: unknown }).reasons))
+    if (screened.length === 0) return ""
+    const blocks = screened.map(({ v, verdict }) => {
+      const tr = (verdict as { taskResults: Record<string, { candidate: number[]; active: number[] }> }).taskResults
+      const rows = Object.entries(tr)
+        .map(([t, r]) => {
+          const c = r.candidate.filter(Boolean).length
+          const a = r.active.filter(Boolean).length
+          return `  - ${t}: candidate ${c}/${r.candidate.length} vs active ${a}/${r.active.length} (net ${c - a >= 0 ? "+" : ""}${c - a})`
+        })
+        .join("\n")
+      const reasons = (verdict!.reasons ?? []).map((r) => `  - ${r}`).join("\n")
+      return `### ${v} — screened, did not advance (nothing banned)\n${rows}\nFindings recorded with the verdict:\n${reasons}`
+    })
+    return `## Screening evidence — measured mechanisms from candidates that did NOT advance
+
+These candidates were screened on a small paired board. Their rules are NOT
+banned (this is evidence, not the rejected ledger): use the per-task nets and
+recorded findings to derive better-SCOPED variants — in particular, respect
+any finding that names the exact missing wording or mechanism.
+
+${blocks.join("\n\n")}
+
+`
+  })()
+
   // Feed the PERMANENT review-gate rejected ledger (R4/R6 port, RG3's
   // applyProposeArtifact wiring appends here on review-fail — see
   // harness-store.ts readRejectedLedger/rejected.json). Distinct from
@@ -1643,7 +1683,7 @@ ${untrustedSection}${measuredTaxonomySection}${externalEvidenceSection}${storeAc
 
 ${failingSection}
 
-${timedOutSection}${slowPassSection}${priorSection}${rejectedSection}${ledgerSection}${guardsSection}## Your task — DIAGNOSE, then edit
+${timedOutSection}${slowPassSection}${priorSection}${rejectedSection}${screeningSection}${ledgerSection}${guardsSection}## Your task — DIAGNOSE, then edit
 
 STEP 1 — Diagnose the failures. For each failing trajectory above (up to 3), find the FIRST unrecoverable step and the root cause. Classify each with exactly ONE taxonomy label from:
 ${FAILURE_TAXONOMY.map((t) => `  - ${t}`).join("\n")}
