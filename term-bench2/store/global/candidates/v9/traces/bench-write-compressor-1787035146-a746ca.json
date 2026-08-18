@@ -1,0 +1,43 @@
+{
+  "sessionID": "bench-write-compressor-1787035146-a746ca",
+  "passed": true,
+  "note": "bench:write-compressor",
+  "turnCount": 7,
+  "timestamp": "2026-08-18T06:44:37.573Z",
+  "summary": "write-compressor",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Read": {
+      "calls": 1,
+      "errors": 0
+    },
+    "Bash": {
+      "calls": 4,
+      "errors": 0
+    },
+    "Write": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "d1823df",
+    "harnessHash": "9ec619b3f1da77cf",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "a5ca78e0376be8ab409b42f7222c9e94cd029ff8493c7d89b356aa4df67fa060",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 330.5,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 34023.2,
+  "peakRssMb": 0,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}

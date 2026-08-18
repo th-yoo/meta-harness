@@ -1,0 +1,41 @@
+{
+ "schemaVersion": 2,
+ "layer": "account-global",
+ "candidate": "v9",
+ "baseline": "none (prediction-probe; no same-day v1 rows on these tasks)",
+ "winner": "tie",
+ "decision": "inconclusive",
+ "computedOffline": true,
+ "nTasks": 2,
+ "k": 5,
+ "reasons": [
+  "prediction-probe on v9s OWN expect_improve tasks: write-compressor 5/5 (v2-era this task drove the rejection; strong directional confirmation), raman-fitting 0/5 (floor unmoved)",
+  "MECHANISM READ (all-traj): b9 (no image readback after numeric discrepancy) did NOT actuate on raman — failing trials read images 3-7x each, zero numeric-comparison prints; b8 evidence-dump fired once. On write-compressor the bullets are consistent with behavior (0 image reads) but the task provides no readback temptation — necessity unproven there",
+  "verdict: split — the predicted artifact-quality mode moved (5/5), the predicted incomplete/image mode did not, and the bullet targeting it demonstrably failed to actuate. b9 wording insufficient against in-flight image debugging; same actuation-gap family as v5-b6 and v8-clause-2",
+  "next-shape (unminted): b9 needs an ordering/prohibition form tied to an observable trigger, or a checked-rule mechanization; raman evidence now in trajs for the next propose"
+ ],
+ "taskResults": {
+  "write-compressor": {
+   "candidate": [
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "active": null
+  },
+  "raman-fitting": {
+   "candidate": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "active": null
+  }
+ },
+ "provenance": "probe-v9 2026-08-18 14:54-15:52 KST, log /mnt/d/tmp/probe-v9-20260818.log, --save-all-traj; board = v9 diagnosis expect_improve tasks",
+ "timestamp": "2026-08-18T15:52:00+09:00"
+}
