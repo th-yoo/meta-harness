@@ -1,0 +1,53 @@
+{
+ "schemaVersion": 2,
+ "layer": "account-global",
+ "candidate": "v8",
+ "baseline": "v7(same-window arm)",
+ "winner": "tie",
+ "decision": "inconclusive",
+ "computedOffline": true,
+ "nTasks": 2,
+ "k": 5,
+ "reasons": [
+  "live-state probe (configure-git-webserver + kv-store-grpc, k=5, v7 vs v8 same-window): v7 6/10 (kv 5/5, cgw 1/5) vs v8 5/10 (kv 5/5, cgw 0/5) — tie within drift",
+  "CONTORTION HYPOTHESIS REFUTED: 0/9 failing trajectories attempt file-copy verification of live state; v7 file-shaped b7 is inert (harmless) on live-state tasks — the 14 were never at risk from v7 wording",
+  "REAL live-state failure mode (both arms): VERIFY-THEN-MUTATE — agents check live state, keep mutating (cleanup/reset), report complete; finals say verified end-to-end BEFORE the reset. Divergence family, live-state form",
+  "v8 clause 2 (re-check after last change) did NOT actuate against it (2/5 v8 trajs mutated after last check) — right target, insufficient wording force; candidate next wording: the LAST command before reporting complete must be the acceptance check (ordering-explicit)"
+ ],
+ "taskResults": {
+  "kv-store-grpc": {
+   "candidate": [
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "active": [
+    1,
+    1,
+    1,
+    1,
+    1
+   ]
+  },
+  "configure-git-webserver": {
+   "candidate": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "active": [
+    0,
+    0,
+    0,
+    0,
+    1
+   ]
+  }
+ },
+ "provenance": "liveprobe 2026-08-18 (screening; adopts/bans nothing). Logs /mnt/d/tmp/liveprobe-*.log",
+ "timestamp": "2026-08-18T12:39:00+09:00"
+}

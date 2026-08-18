@@ -1,0 +1,39 @@
+{
+  "sessionID": "bench-configure-git-webserver-1787024117-ea9a72",
+  "passed": false,
+  "note": "bench:configure-git-webserver",
+  "turnCount": 11,
+  "timestamp": "2026-08-18T03:37:27.302Z",
+  "summary": "configure-git-webserver",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Bash": {
+      "calls": 9,
+      "errors": 1
+    },
+    "Write": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "4fc939f",
+    "harnessHash": "059f954356234a19",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 129.5,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 28086,
+  "peakRssMb": 0,
+  "capMemoryMb": 2048,
+  "capRaised": false
+}
