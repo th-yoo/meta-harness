@@ -301,12 +301,11 @@ yoo-dev then (this session drives it):
     Winner earns only a full-board slot PROPOSAL. No activation.
 ```
 
-## 🚢 SIBLING LANE UPDATE 2026-08-17 ~19:45 KST — FLEET V1 PARTIAL: B7 + B10 built + live-verified, 14 commits UNPUSHED
+## 🚢 SIBLING LANE UPDATE 2026-08-17 ~19:45 KST — FLEET V1 PARTIAL: B7 + B10 built + live-verified
+### PUSHED 2026-08-18: origin/main = `dc4626a` (16 commits 1caf261..dc4626a incl. 2 docs commits; human granted in worker session; fetch-verified)
 
-Extends the v0-complete block below. `~/z2/fleet` local main @ `dc4626a`, origin still
-@ `1caf261` — 14 commits (B7 + B10 + 2 live-bug fix rounds, 186/186 tests) await the
-human's Enter at the worker-tmux push prompt (worker correctly refuses peer-relayed
-grants; only its own user's in-session input clears it). LANDED + LIVE-VERIFIED:
+Extends the v0-complete block below. `~/z2/fleet` local main @ `dc4626a` — B7 + B10 +
+2 live-bug fix rounds, 186/186 tests. LANDED + LIVE-VERIFIED:
 **B7** five-state classifier (running/idle/awaiting/dead/stalled) + `state-change`
 frames; two live-only bugs fixed (persistent `❯` box during tool calls → spinner-
 presence override; blinking `⏺` status glyph reset the stall clock → glyph
