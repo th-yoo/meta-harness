@@ -301,6 +301,20 @@ yoo-dev then (this session drives it):
     Winner earns only a full-board slot PROPOSAL. No activation.
 ```
 
+## 🚢 SIBLING LANE UPDATE 2026-08-18 late — B11 TRANSCRIPT-TAIL REPLY LANE COMPLETE + PUSHED: origin/main = `3c75b90`
+
+10 commits dc4626a..3c75b90, 219/219 tests. Concierge Slack replies now read from the
+session transcript JSONL (master `reply` uds cmd + pre-injection `transcriptPos` on
+concierge sends; pane_pid→sessions-json→transcript chain); viewport extraction retained
+as fallback only. Kills truncation/paint-TOCTOU/stale-block class. Live-smoked via
+Playwright-driving-user-Slack: multi-paragraph byte-exact 20s, no stale crossover 6s,
+lone-"?" TTL +90s posts "no reply captured" WITHOUT stale scrape, lane freed 7s.
+encodeWorkdir trap banked: CC maps EVERY non-alphanumeric to "-" (~/.fleet →
+-Users-<user>--fleet). Daemons on new build (logs now ~/.fleet/{master,router}.log).
+Worker SDD: per-task reviews + opus whole-branch review (caught real cross-task TTL
+null-handling bug). v1 remaining: B8, B9. Plan: fleet:docs/superpowers/plans/
+2026-08-18-b11-transcript-reply-lane.md.
+
 ## 🚢 SIBLING LANE UPDATE 2026-08-17 ~19:45 KST — FLEET V1 PARTIAL: B7 + B10 built + live-verified
 ### PUSHED 2026-08-18: origin/main = `dc4626a` (16 commits 1caf261..dc4626a incl. 2 docs commits; human granted in worker session; fetch-verified)
 
