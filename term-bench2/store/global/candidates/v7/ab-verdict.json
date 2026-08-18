@@ -15,7 +15,9 @@
   "PRE-REGISTERED RULE: PASSED — first candidate ever. Regression guard: polyglot +2, sam 0, adaptive +1, torch -1 (within the 1-below allowance); fold net +2. Rescue retention: sanitize+db-wal 7 vs 4 (+3)",
   "BOTH EXISTENCE-PROOF POLES REPLICATED EXACTLY at k=5: polyglot 5/5 again (lifetime 10/10 under v7 — pollution kill stable under a purity-asserting grader), sanitize 4/5 again (rescue retained). Test-retest passed",
   "sam-cell-seg 0/5 = the convention-lottery task (verifier requires an undocumented --csv_path arg, output_path file-vs-folder inversion, exact column match — solution argparse confirms; oracle PASS 93.8s proves env clean; torch parity across arms). Not a candidate signal",
-  "decision stays inconclusive BY POLICY: mini-board adopts nothing. Per the gauntlet spec, this PASS earns a full-31-board slot PROPOSAL vs v1 (own sized go); activation after that, its own go"
+  "decision stays inconclusive BY POLICY: mini-board adopts nothing. Per the gauntlet spec, this PASS earns a full-31-board slot PROPOSAL vs v1 (own sized go); activation after that, its own go",
+  "sanitize 4/5 fail forensics: the failing trial purged secrets from FULL git history via git-filter-repo (a defensible reading of the instruction) — but the verifier does repo.commit(d6987af...) on a HARDCODED SHA; history rewrite deletes that SHA -> verifier crash. Contract trap #3: history must be PRESERVED though the instruction never says so. Passing trials edited only the working tree",
+  "db-wal 3/5 fail forensics: both failing trials opened the corrupt-WAL DB with plain sqlite3 as an early command — SQLite checkpointed/truncated the WAL, destroying the evidence before analysis; both agents honestly reported the destruction. Passing trials worked on copies. READ-side variant of the state-mutation law: the DIAGNOSTIC probe mutated graded state; a candidate bullet shape exists (copy before any tool that can write to evidence) but is unminted"
  ],
  "taskResults": {
   "adaptive-rejection-sampler": {
