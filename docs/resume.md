@@ -3,18 +3,21 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-> **MOST RECENT STATE (2026-08-19, `yoo-dev`):** minimal repro task
-> ablation LADDER shipped: rung-0 `raman-value-report` + rung-1 `raman-peak-report` (both oracle PASS) — see block below. Read in
+> **MOST RECENT STATE (2026-08-19, `yoo-dev`):** ablation ladder shipped AND
+> MEASURED — rung-0 `raman-value-report` **0/5** (echo shape, zero load):
+> retrieval failure is CONTEXT-INDEPENDENT, least repro CONFIRMED; lane C
+> ceiling ~0, lanes A/B only viable moves — see ladder block below. Read in
 > order: "REPRESENTATION-READING ARENA" block (all-zero, retrieval is the
-> rung) → docs/2026-08-19-raman-attack.md (four gated lanes + §5.0 minimal
-> repro) → "v7 GAUNTLET PASS". STANDING: v7 = best candidate (gauntlet 13/30
-> vs v1 8/30, poles replicated), v1 ACTIVE. PENDING GOS: v7 full-31-board
-> slot run · raman attack lane A/B/C pilots (pilot on raman-peak-report
-> first) · same-day paired sam-cell rerun (window-effect splitter; toolchains
-> PROVEN identical cross-host) · read-side checked-rule design. Candidates
-> v9-v17 = arena probes, never adoption-eligible without gate pass.
+> rung) → docs/2026-08-19-raman-attack.md (lanes + §5.0 ladder verdict) →
+> "v7 GAUNTLET PASS". STANDING: v7 = best candidate (gauntlet 13/30 vs v1
+> 8/30, poles replicated), v1 ACTIVE. PENDING GOS: v7 full-31-board slot
+> run · lane A cue-card design review · lane B hookRule proposal · same-day
+> paired sam-cell rerun · read-side checked-rule design. Candidates
+> v9-v17 = arena probes, never adoption-eligible without gate pass
+> (NOTE: project-layer active = v17 arena residue — reset before any
+> non-global-layers run).
 
-## 🔧 ABLATION LADDER SHIPPED 2026-08-19 (`yoo-dev`) — `raman-value-report` (rung 0) + `raman-peak-report` (rung 1) · BOTH ORACLE PASS · RETRIEVAL RUNG ISOLATED
+## 🏁 ABLATION LADDER SHIPPED + MEASURED 2026-08-19 (`yoo-dev`) — RUNG 0 = 0/5: RETRIEVAL FAILURE CONTEXT-INDEPENDENT · LEAST REPRO CONFIRMED
 
 ```
 WHAT: 3-rung ablation ladder for the representation trap. All rungs share
@@ -40,9 +43,21 @@ Splits: raman-value.txt / raman-min.txt / raman-ladder.txt. Attack doc
 §5.0 = ladder table. Rungs 0/1 = probe instruments, never
 leaderboard-comparable.
 
-USE: pilot bed for lanes A/B/C (~10s oracle, fast trials). Agent baselines
-on rungs 0/1 NOT yet measured (own go; ladder run = cheapest next spend,
-locates the failing rung before any lane pilot).
+MEASURED (2026-08-19, gone go, v1 arm, sonnet-5, noStore): rung 0 = 0/5
+(turns 2-3, ~5s agent — echo shape), rung 1 = 0/2 (operator-curtailed after
+rung 0 decided; uncounted). errors[] empty, zero auth artifacts. VERDICT:
+retrieval failure CONTEXT-INDEPENDENT — fails at zero load with the readout
+inline; lane C ceiling measured ~0, lanes A/B only viable moves. Results:
+term-bench2/results/ladder-v1-sonnet5-20260819.json.
+
+GOTCHAS (both measured this run):
+ - --save-all-traj is a NO-OP under --results-file: record.ts noStore
+   early-return precedes the traj write → mechanism evidence = trial shape
+   only, no transcripts. Probe runs needing trajs must store-write under a
+   pinned probe version.
+ - project-layer active = v17 (arena residue). Harmless under
+   layers=global, but any run assembling the project layer inherits v17 —
+   check/reset before non-global-layers runs.
 ```
 
 ## ✅ V-B MACHINERY SHIPPED + ACCEPTANCE PASSED 2026-08-18 ~08:30 KST (`yoo-dev`) — RULE-8 DEDUP FIX LIVE · v5 MINTED SCOPED WITH ZERO DUP-KILLS

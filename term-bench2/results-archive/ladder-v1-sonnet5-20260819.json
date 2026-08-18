@@ -1,0 +1,64 @@
+{
+  "label": "ladder-v1-baseline",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "harness": {
+    "layers": "global",
+    "account_active": "v1",
+    "project_active": "v17",
+    "agent": "",
+    "pins": {
+      "account-global": "v1"
+    }
+  },
+  "k": 5,
+  "timestamp": "2026-08-18T23:20:10.510Z",
+  "n_pass": 0,
+  "n_total": 2,
+  "pass_rate": 0,
+  "tasks": {
+    "raman-value-report": {
+      "rewards": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "elapsed": [
+        18.2,
+        14.6,
+        15.7,
+        14.7,
+        14.8
+      ],
+      "turns": [
+        3,
+        2,
+        2,
+        2,
+        2
+      ],
+      "errors": []
+    },
+    "raman-peak-report": {
+      "rewards": [
+        0,
+        0
+      ],
+      "elapsed": [
+        69.7,
+        73
+      ],
+      "turns": [
+        13,
+        13
+      ],
+      "errors": []
+    }
+  },
+  "status": "in_progress",
+  "driver": "claude-code",
+  "maxAgentTimeout": 0,
+  "timeoutRecording": true
+}

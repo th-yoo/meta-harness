@@ -126,6 +126,19 @@ knowledge, not discipline — Lane A carries it naturally.
    run on rung 2 to mean anything. Oracle: rung 1 PASS 10.1s (2026-08-19),
    rung 0 PASS same day. Rungs 0/1 are probe instruments, never
    leaderboard-comparable.
+
+   **MEASURED 2026-08-19 (v1 arm, sonnet-5, noStore):** rung 0 = **0/5**
+   (turns 2-3, ~5s agent time — echo-the-readout shape), rung 1 = 0/2
+   (curtailed by operator after rung 0 decided; uncounted arm). errors[]
+   empty, zero auth artifacts. VERDICT: retrieval failure is fully
+   **context-independent** — fails at zero load with the readout inline in
+   the instruction; no discipline wording can fix rung 1-2 if rung 0 is
+   0/5. Injection lanes (A/B) are the only viable moves; lane C's ceiling
+   is now measured at ~0. CAVEAT: mechanism inferred from trial shape, not
+   transcripts — `--save-all-traj` is a NO-OP under `--results-file`
+   (record.ts noStore early-return precedes the traj write); a probe run
+   needing trajectories must store-write under a pinned probe version.
+   Results: term-bench2/results/ladder-v1-sonnet5-20260819.json.
 1. **Pilot 1 trial per lane before any k=5** (arena error: 5-trial arms with
    no mechanism pilot). Autopsy the pilot for rung-firing before spending.
 2. Autopsy hygiene: grep **text events only** — tool outputs are data dumps
