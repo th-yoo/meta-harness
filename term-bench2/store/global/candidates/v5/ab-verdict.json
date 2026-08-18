@@ -1,0 +1,114 @@
+{
+ "schemaVersion": 2,
+ "layer": "account-global",
+ "candidate": "v5",
+ "baseline": "v1(same-host arm)",
+ "winner": "tie",
+ "decision": "inconclusive",
+ "computedOffline": true,
+ "candidateRate": 0.1667,
+ "activeRate": 0.2667,
+ "nTasks": 6,
+ "k": 5,
+ "reasons": [
+  "fails rescue retention (sanitize+db-wal 2 vs v1 4) — decision was mathematically locked at 22/30, arm curtailed by operator at 27/30 (futility: polyglot 1/3 partial, torch 0/1 partial; no completion could change the decision)",
+  "b6-hygiene did NOT actuate against verification byproducts: v5 polyglot fails still leave binaries in the graded dir — one trial even ran rm THEN re-verified with the exact commands, re-planting them; a scratch-content ban does not read compiled outputs of the task-stated commands as scratch",
+  "the missing wording, verbatim: verification must leave the graded directory BYTE-IDENTICAL — verify in a copy, or restore state and re-check after",
+  "v5 dropped v3s acceptance-verification pressure and sanitize fell back (1/5 vs v3 3/5, v4 4/5): rescue mechanism confirmed by its removal — the seesaw needs BOTH a scoped verification-pressure bullet AND graded-state byte-identity",
+  "adaptive-rejection-sampler +1 vs v1 (1/5 vs 0/5) — drift-range, not narrated"
+ ],
+ "taskResults": {
+  "sanitize-git-repo": {
+   "candidate": [
+    0,
+    0,
+    0,
+    1,
+    0
+   ],
+   "active": [
+    0,
+    1,
+    0,
+    1,
+    0
+   ]
+  },
+  "adaptive-rejection-sampler": {
+   "candidate": [
+    0,
+    1,
+    0,
+    0,
+    0
+   ],
+   "active": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "torch-tensor-parallelism": {
+   "candidate": [
+    0
+   ],
+   "active": [
+    0,
+    0,
+    1,
+    0,
+    0
+   ]
+  },
+  "db-wal-recovery": {
+   "candidate": [
+    0,
+    0,
+    1,
+    0,
+    0
+   ],
+   "active": [
+    0,
+    1,
+    1,
+    0,
+    0
+   ]
+  },
+  "sam-cell-seg": {
+   "candidate": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "active": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "polyglot-rust-c": {
+   "candidate": [
+    1,
+    0,
+    0
+   ],
+   "active": [
+    1,
+    0,
+    1,
+    1,
+    0
+   ]
+  }
+ },
+ "provenance": "gauntlet-v5 arm 2026-08-18 (screening; adopts nothing, bans nothing). Curtailed 09:55 KST after the pre-registered rule outcome was determined; partial tasks carry their actual trial counts. Log /mnt/d/tmp/gauntlet-v5-20260818.log.",
+ "timestamp": "2026-08-18T09:55:00+09:00"
+}

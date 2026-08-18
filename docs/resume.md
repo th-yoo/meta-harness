@@ -50,6 +50,39 @@ sized go (gauntlet board k=5 = 30 trials/arm vs same-host v1 rows
 already banked; or straight to a full-board slot decision).
 ```
 
+## ✅ v5 SCREEN 2026-08-18 09:55 KST — NO ADVANCE (rescue retention fails) · CURTAILED AT 27/30 BY OPERATOR (futility) · BYTE-IDENTICAL FINDING NOW MACHINE-FED
+
+```
+v5 gauntlet arm (sized go "light one"): sanitize 1/5 · adaptive 1/5 ·
+db-wal 1/5 · sam 0/5 · polyglot 1/3(partial) · torch 0/1(partial) vs
+same-host v1 rows. Rescue retention mathematically dead at 22/30 ->
+operator killed the arm (futility: no completion could change the
+rule outcome). 0 auth errors.
+
+MECHANISM READS (trajectory forensics, done before verdict):
+ - polyglot STILL dies of verification-artifact pollution under v5:
+   one trial ran rm THEN re-verified with the exact stated commands,
+   re-planting the binaries. b6-hygiene ("no scratch content at the
+   graded path") does NOT read compiled outputs of the task's own
+   commands as scratch. Missing wording, verbatim: verification must
+   leave the graded directory BYTE-IDENTICAL (verify in a copy, or
+   restore state and re-check).
+ - sanitize fell back to 1/5 (v3 3/5, v4 4/5): the rescue mechanism =
+   acceptance-verification pressure, now confirmed BY ITS REMOVAL.
+   The seesaw needs BOTH a scoped verification-pressure bullet AND
+   graded-state byte-identity.
+
+MACHINE FEED (a398d49 + this commit): new screeningSection in the
+proposer prompt surfaces INCONCLUSIVE verdicts carrying taskResults
+("evidence, not the rejected ledger — derive SCOPED variants");
+v3/v4/v5 screening verdicts written (deliberate decision:inconclusive,
+never reject: a mini-board screen bans nothing) with the byte-identical
+wording + rescue-mechanism identification in reasons. The next organic
+propose reads all three screens, the seesaw table, the scope
+requirement, and the narrowing invitations — no operator hint needed.
+Next mint + any arm = own go.
+```
+
 ## ✅ GAUNTLET VERDICT 2026-08-18 03:56 KST (`yoo-dev`) — NO ADVANCE: v3 AND v4 BOTH FAIL THE REGRESSION GUARD · SAME SEESAW AS GEN-2, SECOND HOST
 
 ```

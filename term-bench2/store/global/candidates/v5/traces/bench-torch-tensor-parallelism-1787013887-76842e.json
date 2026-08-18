@@ -1,0 +1,43 @@
+{
+  "sessionID": "bench-torch-tensor-parallelism-1787013887-76842e",
+  "passed": false,
+  "note": "bench:torch-tensor-parallelism",
+  "turnCount": 10,
+  "timestamp": "2026-08-18T00:49:36.483Z",
+  "summary": "torch-tensor-parallelism",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "toolUsage": {
+    "Write": {
+      "calls": 2,
+      "errors": 0
+    },
+    "Bash": {
+      "calls": 6,
+      "errors": 1
+    },
+    "Read": {
+      "calls": 1,
+      "errors": 0
+    }
+  },
+  "env": {
+    "agentVersion": "2.1.207 (Claude Code)",
+    "pluginSha": "e460a99",
+    "harnessHash": "b8fa16dd68d99400",
+    "maxAgentTimeout": 3600,
+    "provider": "anthropic",
+    "driver": "claude-code",
+    "resourceEnforcement": true,
+    "checksHash": "bfec4d55a64015ae37414f48305c57dd73def04fb899ce2f388983c8009f6ef5",
+    "minAgentTimeout": 3600
+  },
+  "platform": "claude-code",
+  "elapsed": 287.8,
+  "timedOut": false,
+  "agentTimeout": 3600,
+  "cpuSeconds": 22197.6,
+  "peakRssMb": 0,
+  "capMemoryMb": 4096,
+  "capRaised": false
+}
