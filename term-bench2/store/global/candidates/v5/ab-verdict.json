@@ -15,7 +15,8 @@
   "b6-hygiene did NOT actuate against verification byproducts: v5 polyglot fails still leave binaries in the graded dir — one trial even ran rm THEN re-verified with the exact commands, re-planting them; a scratch-content ban does not read compiled outputs of the task-stated commands as scratch",
   "the missing wording, verbatim: verification must leave the graded directory BYTE-IDENTICAL — verify in a copy, or restore state and re-check after",
   "v5 dropped v3s acceptance-verification pressure and sanitize fell back (1/5 vs v3 3/5, v4 4/5): rescue mechanism confirmed by its removal — the seesaw needs BOTH a scoped verification-pressure bullet AND graded-state byte-identity",
-  "adaptive-rejection-sampler +1 vs v1 (1/5 vs 0/5) — drift-range, not narrated"
+  "adaptive-rejection-sampler +1 vs v1 (1/5 vs 0/5) — drift-range, not narrated",
+  "verification-locus forensics across all 13 failing polyglot trajectories (v1/v3/v4/v5): 10 end with IN-PLACE compiles in the graded dir (pollution mode); the other 3 verified a /tmp copy and still failed (side-copy divergence — the very failure the active playbook's b7 exists to stop). b7's anti-side-copy wording FEEDS the pollution mode while preventing divergence: the correct rule must do both — verify a FRESH COPY of the CURRENT deliverable bytes, and leave the graded location byte-identical, free of verification byproducts. This likely wants an UPDATE to b7, not only an add."
  ],
  "taskResults": {
   "sanitize-git-repo": {
