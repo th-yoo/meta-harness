@@ -3,19 +3,15 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-> **MOST RECENT STATE (2026-08-18 ~14:45 KST, `yoo-dev`):** main = `da19774`.
-> **v7 PASSED THE GAUNTLET** — 13/30 vs same-host v1 8/30, first candidate
-> through the pre-registered rule; both seesaw poles replicated (polyglot
-> 5/5 twice, sanitize 4/5 twice). v7 = v1 with ONE bullet replaced (b7 →
-> fresh-copy verification of current bytes + byte-identical graded
-> location). Read blocks below in order: "v7 GAUNTLET PASS" → "ARM-CONTEXT
-> ATTRIBUTION" (yoo-mac owes ONE manifest command, paste-block inside) →
-> "v7 PROBE" → "v5 SCREEN". Machinery this arc: rule-8 narrowing exception
-> (dedup wall down), screening-evidence channel, scope requirement, 57 apt
-> pins. sam-cell + configure-git = proven task-defect lotteries (details in
-> v7/v8 verdicts). PENDING GOS: v7 full-31-board slot run vs v1 ·
-> same-day paired sam-cell rerun (both hosts) · upstream defect reports.
-> v6/v8 parked candidates. v1 STAYS ACTIVE.
+> **MOST RECENT STATE (2026-08-19 ~09:30 KST, `yoo-dev`):** main = `a4bf9d3`,
+> tree clean, nothing running. Read in order: "REPRESENTATION-READING ARENA"
+> block (all-zero, retrieval is the rung) → docs/2026-08-19-raman-attack.md
+> (four gated lanes) → "v7 GAUNTLET PASS". STANDING: v7 = best candidate
+> (gauntlet 13/30 vs v1 8/30, poles replicated), v1 ACTIVE. PENDING GOS:
+> v7 full-31-board slot run · raman attack lane A/B/C pilots · same-day
+> paired sam-cell rerun (window-effect splitter; toolchains PROVEN identical
+> cross-host) · read-side checked-rule design. Candidates v9-v17 = arena
+> probes, never adoption-eligible without gate pass.
 
 ## ✅ V-B MACHINERY SHIPPED + ACCEPTANCE PASSED 2026-08-18 ~08:30 KST (`yoo-dev`) — RULE-8 DEDUP FIX LIVE · v5 MINTED SCOPED WITH ZERO DUP-KILLS
 
