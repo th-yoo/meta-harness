@@ -1,0 +1,55 @@
+{
+ "schemaVersion": 2,
+ "layer": "account-global",
+ "candidate": "v7",
+ "baseline": "v1(same-host gauntlet arm rows)",
+ "winner": "candidate",
+ "decision": "inconclusive",
+ "computedOffline": true,
+ "candidateRate": 0.9,
+ "activeRate": 0.5,
+ "nTasks": 2,
+ "k": 5,
+ "reasons": [
+  "seesaw-poles probe (2 tasks x k=5): polyglot 5/5 vs v1 3/5 (v3 0/5, v4 1/5, v5 1/3) AND sanitize 4/5 vs v1 2/5 — FIRST candidate to hold both poles simultaneously",
+  "mechanism confirmed by the grader itself: polyglot verifier asserts graded-dir purity, so 5/5 passes = the graded location was byte-clean in every trial; the b7 replacement (fresh copy of CURRENT bytes in scratch + re-verify after any edit + graded location ends byte-identical) actuated where v5 b6-hygiene did not",
+  "verification pressure retained (checks mandatory before complete) = sanitize rescue held at 4/5, the board best, WITH the pollution fix in the same playbook",
+  "decision stays inconclusive by policy: a 2-task probe adopts nothing — full gauntlet board and any activation need their own go; drift caveat noted (both poles +2 beyond the ±1 band, jointly unlikely under drift and mechanism-predicted)"
+ ],
+ "taskResults": {
+  "polyglot-rust-c": {
+   "candidate": [
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "active": [
+    1,
+    0,
+    1,
+    1,
+    0
+   ]
+  },
+  "sanitize-git-repo": {
+   "candidate": [
+    1,
+    1,
+    0,
+    1,
+    1
+   ],
+   "active": [
+    0,
+    1,
+    0,
+    1,
+    0
+   ]
+  }
+ },
+ "provenance": "probe-v7 2026-08-18 (seesaw-poles split; screening record). v7 = v1 with b7 replaced (authored update-op, ralph iteration 2; derivation = verification-locus forensics in v5 verdict). Log /mnt/d/tmp/probe-v7-20260818.log.",
+ "timestamp": "2026-08-18T11:05:00+09:00"
+}

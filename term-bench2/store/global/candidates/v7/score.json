@@ -1,6 +1,421 @@
 {
   "version": "v7",
-  "nPass": 0,
-  "nFail": 0,
-  "sessions": []
+  "nPass": 9,
+  "nFail": 1,
+  "sessions": [
+    {
+      "sessionID": "bench-sanitize-git-repo-1787015595-1901d8",
+      "passed": true,
+      "note": "bench:sanitize-git-repo",
+      "turnCount": 17,
+      "timestamp": "2026-08-18T01:15:17.636Z",
+      "summary": "sanitize-git-repo",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 13,
+          "errors": 1
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d8e1e84",
+        "harnessHash": "079bc430da5f0269",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 122.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 23081.5,
+      "peakRssMb": 0,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sanitize-git-repo-1787015717-f77d6e",
+      "passed": true,
+      "note": "bench:sanitize-git-repo",
+      "turnCount": 23,
+      "timestamp": "2026-08-18T01:17:55.458Z",
+      "summary": "sanitize-git-repo",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 19,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d8e1e84",
+        "harnessHash": "079bc430da5f0269",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 157.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 23167.6,
+      "peakRssMb": 0,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sanitize-git-repo-1787015875-5f0206",
+      "passed": false,
+      "note": "bench:sanitize-git-repo",
+      "turnCount": 27,
+      "timestamp": "2026-08-18T01:20:37.162Z",
+      "summary": "sanitize-git-repo",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 14,
+          "errors": 0
+        },
+        "ToolSearch": {
+          "calls": 1,
+          "errors": 0
+        },
+        "TaskCreate": {
+          "calls": 4,
+          "errors": 0
+        },
+        "TaskUpdate": {
+          "calls": 6,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d8e1e84",
+        "harnessHash": "079bc430da5f0269",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 161.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 23218.1,
+      "peakRssMb": 0,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-polyglot-rust-c-1787015595-2e25f8",
+      "passed": true,
+      "note": "bench:polyglot-rust-c",
+      "turnCount": 12,
+      "timestamp": "2026-08-18T01:23:19.885Z",
+      "summary": "polyglot-rust-c",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 10,
+          "errors": 0
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d8e1e84",
+        "harnessHash": "079bc430da5f0269",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 604.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 23272.1,
+      "peakRssMb": 0,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sanitize-git-repo-1787016037-b64948",
+      "passed": true,
+      "note": "bench:sanitize-git-repo",
+      "turnCount": 27,
+      "timestamp": "2026-08-18T01:23:33.355Z",
+      "summary": "sanitize-git-repo",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 21,
+          "errors": 1
+        },
+        "Read": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d8e1e84",
+        "harnessHash": "079bc430da5f0269",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 176,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 23286.7,
+      "peakRssMb": 0,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-sanitize-git-repo-1787016213-fe691a",
+      "passed": true,
+      "note": "bench:sanitize-git-repo",
+      "turnCount": 24,
+      "timestamp": "2026-08-18T01:26:07.822Z",
+      "summary": "sanitize-git-repo",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 17,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 3,
+          "errors": 0
+        },
+        "Edit": {
+          "calls": 3,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d8e1e84",
+        "harnessHash": "079bc430da5f0269",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 154.3,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 23363.7,
+      "peakRssMb": 0,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-polyglot-rust-c-1787016199-6dfb81",
+      "passed": true,
+      "note": "bench:polyglot-rust-c",
+      "turnCount": 19,
+      "timestamp": "2026-08-18T01:52:05.080Z",
+      "summary": "polyglot-rust-c",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 15,
+          "errors": 1
+        },
+        "Write": {
+          "calls": 2,
+          "errors": 0
+        },
+        "Read": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d8e1e84",
+        "harnessHash": "079bc430da5f0269",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 1725.1,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 23882.8,
+      "peakRssMb": 0,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-polyglot-rust-c-1787017925-ca1de8",
+      "passed": true,
+      "note": "bench:polyglot-rust-c",
+      "turnCount": 13,
+      "timestamp": "2026-08-18T02:15:29.936Z",
+      "summary": "polyglot-rust-c",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 11,
+          "errors": 4
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d8e1e84",
+        "harnessHash": "079bc430da5f0269",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 1404.7,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 24417.6,
+      "peakRssMb": 0,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-polyglot-rust-c-1787019329-51f0c0",
+      "passed": true,
+      "note": "bench:polyglot-rust-c",
+      "turnCount": 12,
+      "timestamp": "2026-08-18T02:30:26.418Z",
+      "summary": "polyglot-rust-c",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 10,
+          "errors": 3
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d8e1e84",
+        "harnessHash": "079bc430da5f0269",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 896.4,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 24901.3,
+      "peakRssMb": 0,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    },
+    {
+      "sessionID": "bench-polyglot-rust-c-1787020226-2ba2a2",
+      "passed": true,
+      "note": "bench:polyglot-rust-c",
+      "turnCount": 10,
+      "timestamp": "2026-08-18T02:36:01.187Z",
+      "summary": "polyglot-rust-c",
+      "model": "anthropic/claude-sonnet-5",
+      "variant": "",
+      "toolUsage": {
+        "Bash": {
+          "calls": 8,
+          "errors": 2
+        },
+        "Write": {
+          "calls": 1,
+          "errors": 0
+        }
+      },
+      "env": {
+        "agentVersion": "2.1.207 (Claude Code)",
+        "pluginSha": "d8e1e84",
+        "harnessHash": "079bc430da5f0269",
+        "maxAgentTimeout": 3600,
+        "provider": "anthropic",
+        "driver": "claude-code",
+        "resourceEnforcement": true,
+        "checksHash": "cf694e1944f50e80c30418cd50b53620c16ef187068d767cf18c903f3102c773",
+        "minAgentTimeout": 3600
+      },
+      "platform": "claude-code",
+      "elapsed": 334.6,
+      "timedOut": false,
+      "agentTimeout": 3600,
+      "cpuSeconds": 25060.2,
+      "peakRssMb": 0,
+      "capMemoryMb": 2048,
+      "capRaised": false
+    }
+  ]
 }

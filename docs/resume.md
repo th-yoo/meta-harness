@@ -50,6 +50,33 @@ sized go (gauntlet board k=5 = 30 trials/arm vs same-host v1 rows
 already banked; or straight to a full-board slot decision).
 ```
 
+## 🏆 v7 PROBE 2026-08-18 11:05 KST — BOTH POLES HELD: polyglot 5/5 + sanitize 4/5 · THE SEESAW HAS AN EXISTENCE PROOF
+
+```
+v7 = v1 with ONE bullet replaced (authored update-op, ralph loop): b7
+"rather than trusting a side copy, a temp file" was the load-bearing
+defect — it stops side-copy divergence (2 fails proven: edited the
+deliverable AFTER last verification) but DRIVES verification into the
+graded dir (10/13 failing polyglot trajs end with in-place compiles).
+New b7: acceptance checks on a FRESH COPY of CURRENT bytes in scratch,
+re-verify after ANY edit, graded location ends BYTE-IDENTICAL (no
+compiled outputs/probe files beside the deliverable).
+
+PROBE (seesaw-poles split, 2 tasks x k=5, 0 auth errors):
+  polyglot 5/5  (v1 3/5 · v3 0/5 · v4 1/5 · v5 1/3)
+  sanitize 4/5  (v1 2/5 · v3 3/5 · v4 4/5 · v5 1/5)
+Actuation proof = the grader itself: polyglot verifier asserts dir
+purity, so 5/5 = graded location byte-clean every trial. Verification
+pressure retained -> sanitize holds board-best WITH the fix.
+
+NOT an adoption: 2-task probe, drift caveats in the verdict
+(candidates/v7/ab-verdict.json, decision:inconclusive by policy).
+NEXT (own gos): v7 full gauntlet board -> if it holds, full-board slot
+vs v1 -> activation. v6 (organic, write-compressor-targeted) parked as
+candidate. Derivation chain ran machine-fed end to end: screening
+verdicts -> locus forensics -> b7 tension -> one replacement sentence.
+```
+
 ## ✅ v5 SCREEN 2026-08-18 09:55 KST — NO ADVANCE (rescue retention fails) · CURTAILED AT 27/30 BY OPERATOR (futility) · BYTE-IDENTICAL FINDING NOW MACHINE-FED
 
 ```

@@ -1789,3 +1789,37 @@ cycles ago every scoped variant died at the gate; this cycle none did.
 
 v5 awaits its trial under its own sized go. The loop's next verdict will be
 the first earned entirely by machinery that read its own failures.
+
+## v7: the seesaw broken by one sentence (2026-08-18, `yoo-dev`) — first candidate to hold both poles
+
+Three candidates had failed the same two-sided test, so the ralph loop went
+back to causes instead of candidates. The verification-locus forensics found
+the load-bearing defect INSIDE the active playbook: b7's "rather than
+trusting a side copy, a temp file" — written to stop side-copy divergence
+(real: two failing trials provably edited the deliverable AFTER their last
+verification and shipped unverified bytes) — was simultaneously the sentence
+driving verification INTO the graded directory (10 of 13 failing polyglot
+trajectories end with in-place compiles). One bullet, two failure modes, in
+tension. Every candidate had inherited it untouched.
+
+v7 replaces b7: run the acceptance checks on a FRESH COPY of the
+deliverable's CURRENT bytes in a scratch directory, repeat after ANY later
+edit, and leave the graded location BYTE-IDENTICAL — no compiled outputs,
+probe files, or scratch content beside it. Freshness kills divergence
+without banning copies; byte-identity kills pollution without dropping the
+verification pressure that rescues incompletion tasks. The wording is
+grader-class-agnostic — content-graders see the same bytes checked,
+purity-graders see a clean directory — which is why it can be uniform
+where every scoped attempt failed.
+
+The seesaw-poles probe (2 tasks × k=5): polyglot 5/5 (v1 3/5, v3 0/5,
+v4 1/5, v5 1/3) and sanitize 4/5 (v1 2/5, ties the board best). The
+actuation proof is the grader itself — polyglot's verifier rejects any
+polluted directory, so five straight passes mean the graded location was
+byte-clean five times out of five. Zero failing trajectories to store.
+
+A probe is not an adoption: two tasks, ten trials, drift caveats recorded
+in the verdict. But the loop's question for three generations — can any
+wording hold both ends — now has an existence proof, and the derivation
+chain that produced it (screening verdicts → locus forensics → b7 tension →
+one replacement sentence) ran on machine-fed evidence end to end.
