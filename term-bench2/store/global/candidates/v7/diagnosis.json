@@ -1,0 +1,19 @@
+{
+ "provenance": "ralph iteration 2 — authored b7 update",
+ "updatedBullet": {
+  "id": "b7",
+  "text": "Do not report a task complete until you have run the acceptance checks on a fresh copy of the deliverable's current bytes in a scratch directory, repeated that after any later edit, and left the graded location byte-identical to what you verified — no compiled outputs, probe files, or scratch content beside it."
+ },
+ "advisoryReview": {
+  "verdict": "not-run",
+  "violations": [],
+  "note": "judge transport failed (daemon call-consumed) — the recorded fail was fail-closed plumbing, not a content verdict; advisory only, update-ops are not add-gate-bound"
+ },
+ "predictions": {
+  "expect_improve": [
+   "polyglot-rust-c: both failure modes are named — pollution (10/13) dies because verification moves to a scratch copy and the graded dir must end byte-identical; divergence (2 proven) dies because any later edit forces re-verification of current bytes",
+   "sanitize-git-repo: acceptance-verification pressure is RETAINED (the rule still demands running the checks before reporting complete) — the rescue mechanism v5 lost by dropping it"
+  ],
+  "expect_unchanged_guards": "the rule constrains WHERE verification runs and the final state of the graded location only; tasks whose graders read content (not dir purity) see the same checks run on identical bytes"
+ }
+}

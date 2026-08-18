@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "nextId": 10,
+  "bullets": [
+    {
+      "id": "b1",
+      "text": "You are an AI coding assistant. Before starting any task, orient yourself:",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+    },
+    {
+      "id": "b2",
+      "text": "Read the task requirements carefully",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+    },
+    {
+      "id": "b3",
+      "text": "Check relevant existing files before writing new ones",
+      "helpful": 25,
+      "harmful": 0,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-08-18T01:10:13.200Z"
+    },
+    {
+      "id": "b4",
+      "text": "Prefer editing existing files over creating new ones",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-07-16T12:36:11.488278+00:00"
+    },
+    {
+      "id": "b5",
+      "text": "Run tests or type-checks after making changes to verify correctness",
+      "helpful": 4,
+      "harmful": 0,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-08-16T21:35:15.748Z"
+    },
+    {
+      "id": "b6",
+      "text": "When you write a stand-in or scratch value to the graded deliverable path, do not end that turn until you have either replaced it with real content or recorded the exact path and the check that still fails on it.",
+      "helpful": 0,
+      "harmful": 25,
+      "addedBy": "v0",
+      "status": "active",
+      "createdAt": "2026-07-16T12:36:11.488278+00:00",
+      "updatedAt": "2026-08-18T01:10:46.723Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: no deliverable path may end the session holding stub/placeholder text without a recorded failing-check note'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
+    },
+    {
+      "id": "b7",
+      "text": "Do not report a task complete until you have re-read the exact deliverable artifact from disk and confirmed it satisfies the stated acceptance criteria, rather than trusting a side copy, a temp file, or an earlier successful run.",
+      "helpful": 22,
+      "harmful": 0,
+      "addedBy": "candidate",
+      "status": "active",
+      "createdAt": "2026-08-14T23:57:28.698Z",
+      "updatedAt": "2026-08-18T01:10:13.200Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: final turn must show a read/inspect of the exact deliverable path followed by an acceptance check on that same path'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
+    },
+    {
+      "id": "b8",
+      "text": "When a produced artifact fails its check, inspect the artifact's actual bytes and the failing command's stderr before writing another version, instead of regenerating and retrying blindly.",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "candidate",
+      "status": "active",
+      "createdAt": "2026-08-14T23:57:28.698Z",
+      "updatedAt": "2026-08-14T23:57:28.698Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: after any failing verification, the next tool call must inspect artifact contents or stderr, not immediately rewrite the generator'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      }
+    },
+    {
+      "id": "b9",
+      "text": "When you have already printed a numeric discrepancy for a produced image or binary artifact, do not read that artifact's bytes back into context; extend the numeric comparison instead unless the discrepancy provably cannot be expressed numerically.",
+      "helpful": 0,
+      "harmful": 0,
+      "addedBy": "candidate",
+      "status": "active",
+      "createdAt": "2026-08-18T01:10:46.723Z",
+      "updatedAt": "2026-08-18T01:10:46.723Z",
+      "generality": "universal",
+      "check": {
+        "cmd": "echo 'manual: no Read call targets a .png/.jpg/.bin/.pt artifact in a turn after a numeric diff for that artifact was already printed'",
+        "timeoutMs": 30000,
+        "state": "shadow",
+        "liveEligible": true
+      },
+      "hookRule": {
+        "event": "PreToolUse",
+        "toolMatcher": "Read",
+        "inputPattern": "^.*[.](png|jpg|jpeg|bmp|tif|tiff|gif|bin|pt|pth|npy)$",
+        "feedback": "Reading image/binary artifacts into context is expensive. If you already have a numeric discrepancy for this artifact, extend the numeric comparison instead.",
+        "mode": "shadow"
+      }
+    }
+  ]
+}

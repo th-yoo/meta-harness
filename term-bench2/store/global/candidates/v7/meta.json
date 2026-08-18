@@ -1,0 +1,8 @@
+{
+  "proposerModel": "authored:ralph-iter2-b7-update",
+  "proposerVariant": "",
+  "scope": "account-global",
+  "kind": "authored-update",
+  "createdAt": "2026-08-18T01:12:26.981Z",
+  "provenance": "v1 with b7 replaced (update-op; add-gate not binding, reviewer run as advisory). Two-mode verification rule from the locus forensics recorded in v5's screening verdict."
+}

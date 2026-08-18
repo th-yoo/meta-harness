@@ -1,0 +1,117 @@
+{
+  "failures": [
+    {
+      "sessionID": "bench-write-compressor-1786640941-10d9a1",
+      "taxonomy": "wrong-plan",
+      "rootCause": "The agent read ~35 lines of decomp.c, declared it understood the bitstream contract, and then spent ~90 bash calls generating full-size encodings that it only validated by piping the whole output into ./decomp. Every run produced empty output with no isolation of which stage diverged, so no iteration carried information. It never established that its encoder and the real decoder agreed on even one token before scaling up. The final artifact was a Python traceback that had been redirected into data.comp, and the agent never inspected the artifact's own bytes before the budget expired.",
+      "firstUnrecoverableStep": "Now I understand the decompressor. It's an arithmetic coding decompressor that expects: 1. An initial 9-bit integer indicating the number of items to decode"
+    },
+    {
+      "sessionID": "bench-write-compressor-1786594959-c4e9bb",
+      "taxonomy": "premature-termination",
+      "rootCause": "The agent wrote a literal stub string into the graded path data.comp and left it there while iterating on encoder variants elsewhere. It repeatedly measured 'Compressed size' from its generator's own stdout rather than from the graded file, so its size gate was evaluated on a number that never came from the deliverable. When the budget ran out the graded path still held the stub. The failure is a locus error: all checks named the generator's report, none named the artifact.",
+      "firstUnrecoverableStep": "1: This is a placeholder - the actual compressed data needs proper arithmetic coding implementation"
+    },
+    {
+      "sessionID": "bench-sam-cell-seg-1786980239-879b88",
+      "taxonomy": "resource-limit",
+      "rootCause": "After the mask pipeline produced wrong pixel counts, the agent debugged by reading the produced PNG crop and mask back into context as base64 images (two Read calls on /tmp/*.png), consuming enormous context for a discrepancy that was already expressible numerically (it had printed '0 1576 / 2508' style counts one call earlier). This burned runway on a visual channel that added nothing over the numeric comparison, and the session ended at 73 turns without a correct deliverable. The same shape appears in the slow-pass sessions: time sunk into high-cost inspection rather than the cheapest discriminating measurement.",
+      "firstUnrecoverableStep": "TOOL Read: {\"file_path\":\"/tmp/row1_crop.png\"} → [{\"type\":\"image\",\"source\":{\"type\":\"base64\"..."
+    }
+  ],
+  "bulletAssessments": [
+    {
+      "id": "b3",
+      "verdict": "helpful"
+    },
+    {
+      "id": "b7",
+      "verdict": "helpful"
+    },
+    {
+      "id": "b6",
+      "verdict": "harmful"
+    }
+  ],
+  "predictions": {
+    "expect_improve": [
+      "write-compressor (premature-termination / looks_done): the size-and-validity gate is currently read off the generator's stdout; requiring the numeric gate to be computed from the deliverable path's own bytes catches the stub and the traceback-in-file cases without forcing any early write.",
+      "sam-cell-seg and raman-fitting / video-processing (incomplete + resource-limit): banning image/binary read-back into context once a numeric discrepancy is already in hand removes the largest single context+time sink observed in these long-horizon runs, leaving more runway to reach the deliverable.",
+      "filter-js-from-html style spec_precision is NOT targeted this cycle (the re-parse rule was already rejected as part of v2)."
+    ],
+    "expect_unchanged_guards": [
+      {
+        "task": "adaptive-rejection-sampler",
+        "why": "Deliverable is a Python module graded by numeric tests; b9 only adds that the size/threshold number be read from the deliverable path, which its existing pytest run already does, and it produces no images to read back."
+      },
+      {
+        "task": "extract-elf",
+        "why": "Its checks already name the extracted output path directly; b9 changes nothing, and it inspects binaries with xxd/readelf (numeric/text), never Read-as-image."
+      },
+      {
+        "task": "chess-best-move",
+        "why": "No image or binary artifact is read into context and no numeric threshold is reported by a generator's stdout; both bullets' triggers never fire."
+      },
+      {
+        "task": "gcode-to-text",
+        "why": "Text deliverable verified by reading the file itself; b10 only forbids reading rendered image bytes back into context, which this task never does."
+      },
+      {
+        "task": "headless-terminal",
+        "why": "Verification is textual terminal-state comparison; neither trigger (generator-reported metric, image read-back) occurs."
+      },
+      {
+        "task": "log-summary-date-ranges",
+        "why": "Short text-transform task whose check already cats the deliverable; no metric is taken from a generator's stdout."
+      },
+      {
+        "task": "merge-diff-arc-agi-task",
+        "why": "JSON deliverable compared numerically from the file itself; no image artifacts exist."
+      },
+      {
+        "task": "mteb-retrieve",
+        "why": "Score is computed by an eval script over the written results file, i.e. already deliverable-derived; b10 never fires (no images)."
+      },
+      {
+        "task": "multi-source-data-merger",
+        "why": "CSV/JSON merge verified by re-reading the output path; both triggers absent."
+      },
+      {
+        "task": "openssl-selfsigned-cert",
+        "why": "Cert is verified with openssl x509 on the deliverable path already; b9 is satisfied by existing behavior and adds no extra call."
+      },
+      {
+        "task": "polyglot-rust-c",
+        "why": "b9 explicitly requires the deliverable-derived measurement be taken without leaving byproducts in the graded directory, so it cannot induce the in-place compile pollution that sank v3/v4/v5 on this task; b10 never fires."
+      },
+      {
+        "task": "portfolio-optimization",
+        "why": "Numeric result is already loaded from the written results file by the checker path the agent runs; no image read-back."
+      },
+      {
+        "task": "pypi-server",
+        "why": "Verified by live HTTP requests against the running server, not by a generator-printed metric or an image."
+      },
+      {
+        "task": "pytorch-model-cli",
+        "why": "CLI output is textual; b10's image/binary read-back trigger never occurs and b9 adds no step beyond the existing invocation of the deliverable."
+      },
+      {
+        "task": "sam-cell-seg",
+        "why": "Guard at 80%: b10 removes only the base64 image read-back that the failing run used, keeping the numeric IoU/pixel-count comparisons that the passing runs already relied on, so passing behavior is unchanged."
+      },
+      {
+        "task": "sparql-university",
+        "why": "Query results are textual and read from the output file; neither trigger fires."
+      },
+      {
+        "task": "torch-tensor-parallelism",
+        "why": "Correctness is asserted by numeric allclose in a test script over the module; b9's requirement is already met and b10 has no image artifacts to fire on."
+      },
+      {
+        "task": "vulnerable-secret",
+        "why": "Text/secret extraction verified against the written answer file; no generator-reported threshold and no images."
+      }
+    ]
+  }
+}
