@@ -1,0 +1,8 @@
+{
+  "proposerModel": "authored:grader-coupling-selfscope",
+  "proposerVariant": "",
+  "scope": "account-global",
+  "kind": "authored-update",
+  "createdAt": "2026-08-18T02:59:09.129Z",
+  "provenance": "v7 with b7 self-scoped by deliverable kind (file/tree vs live state) — the trigger is in-session observable per the SCOPE REQUIREMENT doctrine. v7 stays the gauntlet candidate (all 6 board tasks are file/tree-shaped; probe lineage preserved); v8 is the full-board shape where live-state graders exist. Grader-class census: term-bench2/leaderboard/grader-classes-20260818.json."
+}

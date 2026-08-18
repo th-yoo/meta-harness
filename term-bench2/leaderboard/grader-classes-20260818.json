@@ -1,0 +1,470 @@
+{
+ "classifiedAt": "2026-08-18",
+ "method": "6x haiku agents reading tests/instruction per task (deterministic grep over-triggered: 82/89 false live-state from test plumbing); classes keyed to WHAT THE VERIFIER ASSERTS",
+ "classes": {
+  "file-purity": "extra files beside deliverable FAIL",
+  "file-content": "verifier reads named artifacts only",
+  "live-state": "running service/env required at verify time",
+  "mixed": "both"
+ },
+ "counts": {
+  "file-content": 67,
+  "live-state": 14,
+  "file-purity": 5,
+  "mixed": 3
+ },
+ "targetTaskCounts": {
+  "file-content": 23,
+  "live-state": 5,
+  "file-purity": 2,
+  "mixed": 1
+ },
+ "nTasks": 89,
+ "tasks": [
+  {
+   "task": "adaptive-rejection-sampler",
+   "class": "file-content",
+   "evidence": "samples = np.loadtxt(normal_file)"
+  },
+  {
+   "task": "bn-fit-modify",
+   "class": "file-content",
+   "evidence": "CSV columns + KS test on distribution"
+  },
+  {
+   "task": "break-filter-js-from-html",
+   "class": "live-state",
+   "evidence": "WebDriverWait(driver, 5).until(EC.alert_is_present()) — verifier launches Chrome and waits for browser alert"
+  },
+  {
+   "task": "build-cython-ext",
+   "class": "file-content",
+   "evidence": "assert isinstance(spec.loader, ExtensionFileLoader)"
+  },
+  {
+   "task": "build-pmars",
+   "class": "file-purity",
+   "evidence": "assert source_dirs, No pmars source directory found in /app"
+  },
+  {
+   "task": "build-pov-ray",
+   "class": "file-content",
+   "evidence": "actual_hash = calculate_md5(full_path)"
+  },
+  {
+   "task": "caffe-cifar-10",
+   "class": "file-content",
+   "evidence": "assert Iteration 500 in training_content"
+  },
+  {
+   "task": "cancel-async-tasks",
+   "class": "file-content",
+   "evidence": "runs test.py, checks stdout lifecycle messages"
+  },
+  {
+   "task": "chess-best-move",
+   "class": "file-content",
+   "evidence": "move = move_file.read_text().strip().split() — reads file content, no purity check"
+  },
+  {
+   "task": "circuit-fibsqrt",
+   "class": "file-content",
+   "evidence": "line_count < 32000; actual == expected"
+  },
+  {
+   "task": "cobol-modernization",
+   "class": "file-content",
+   "evidence": "ACCOUNTS.DAT read_text == expected"
+  },
+  {
+   "task": "code-from-image",
+   "class": "file-content",
+   "evidence": "open(output_path) f.read()"
+  },
+  {
+   "task": "compile-compcert",
+   "class": "file-content",
+   "evidence": "assert magic_bytes == ELF"
+  },
+  {
+   "task": "configure-git-webserver",
+   "class": "live-state",
+   "evidence": "running git server + curl localhost:8080"
+  },
+  {
+   "task": "constraints-scheduling",
+   "class": "file-content",
+   "evidence": "c = _r('/app/meeting_scheduled.ics') — parses ICS file values, ignores directory contents"
+  },
+  {
+   "task": "count-dataset-tokens",
+   "class": "file-content",
+   "evidence": "expected in Path(/app/answer.txt).read_text()"
+  },
+  {
+   "task": "crack-7z-hash",
+   "class": "file-content",
+   "evidence": "assert content == honeybear"
+  },
+  {
+   "task": "custom-memory-heap-crash",
+   "class": "mixed",
+   "evidence": "checksum + valgrind run"
+  },
+  {
+   "task": "db-wal-recovery",
+   "class": "file-content",
+   "evidence": "assert len(data) == 11"
+  },
+  {
+   "task": "distribution-search",
+   "class": "file-content",
+   "evidence": "np.load /app/dist.npy, KL divergence"
+  },
+  {
+   "task": "dna-assembly",
+   "class": "file-content",
+   "evidence": "with open(primers_path, 'r') as f: lines = [line.rstrip() for line in f] — reads file content only"
+  },
+  {
+   "task": "dna-insert",
+   "class": "file-content",
+   "evidence": "15 <= len(annealed_fwd) <= 45"
+  },
+  {
+   "task": "extract-elf",
+   "class": "file-content",
+   "evidence": "assert actual_percentage >= required"
+  },
+  {
+   "task": "extract-moves-from-video",
+   "class": "file-content",
+   "evidence": "open(solution_path) read"
+  },
+  {
+   "task": "feal-differential-cryptanalysis",
+   "class": "file-content",
+   "evidence": "assert feal_in_c.get_keys()[5] == stolen"
+  },
+  {
+   "task": "feal-linear-cryptanalysis",
+   "class": "file-content",
+   "evidence": "reads /app/plaintexts.txt content"
+  },
+  {
+   "task": "filter-js-from-html",
+   "class": "live-state",
+   "evidence": "WebDriverWait(driver, 3).until(EC.alert_is_present()) — launches Chrome, waits for alerts at runtime"
+  },
+  {
+   "task": "financial-document-processor",
+   "class": "file-purity",
+   "evidence": "actual_file_hashes == expected_original_documents; assert len(files) == 0"
+  },
+  {
+   "task": "fix-code-vulnerability",
+   "class": "file-content",
+   "evidence": "assert /app/bottle.py in file_paths"
+  },
+  {
+   "task": "fix-git",
+   "class": "file-content",
+   "evidence": "spec_from_file_location(algo, algo_path)"
+  },
+  {
+   "task": "fix-ocaml-gc",
+   "class": "file-content",
+   "evidence": "assert 40 tests passed in tests_contents"
+  },
+  {
+   "task": "gcode-to-text",
+   "class": "file-content",
+   "evidence": "reads /app/out.txt exact flag"
+  },
+  {
+   "task": "git-leak-recovery",
+   "class": "file-content",
+   "evidence": "text = flag_path.read_text().strip() — reads artifact file, no directory purity assertions"
+  },
+  {
+   "task": "git-multibranch",
+   "class": "live-state",
+   "evidence": "curl -sk https://localhost:8443/index.html"
+  },
+  {
+   "task": "gpt2-codegolf",
+   "class": "file-content",
+   "evidence": "assert WARRANTY text in run_result.stdout"
+  },
+  {
+   "task": "headless-terminal",
+   "class": "live-state",
+   "evidence": "requests.get(http://localhost:8000)"
+  },
+  {
+   "task": "hf-model-inference",
+   "class": "live-state",
+   "evidence": "requests.get(http://0.0.0.0:5000)"
+  },
+  {
+   "task": "install-windows-3.11",
+   "class": "live-state",
+   "evidence": "pgrep qemu, VNC 5901, web 80 netstat"
+  },
+  {
+   "task": "kv-store-grpc",
+   "class": "live-state",
+   "evidence": "sock.connect_ex((127.0.0.1, port)) assert result == 0 — requires running gRPC server on port 5328"
+  },
+  {
+   "task": "large-scale-text-editing",
+   "class": "file-content",
+   "evidence": "got_hash == exp_hash (_sha256)"
+  },
+  {
+   "task": "largest-eigenval",
+   "class": "file-content",
+   "evidence": "np.allclose(A @ eigenvec, eigenval * eigenvec)"
+  },
+  {
+   "task": "llm-inference-batching-scheduler",
+   "class": "file-content",
+   "evidence": "open(plan_path) json.loads lines"
+  },
+  {
+   "task": "log-summary-date-ranges",
+   "class": "file-content",
+   "evidence": "assert len(reader) - 1 == len(EXPECTED_ROWS)"
+  },
+  {
+   "task": "mailman",
+   "class": "live-state",
+   "evidence": "running SMTP :25 + mailman daemon, /var/mail delivery"
+  },
+  {
+   "task": "make-doom-for-mips",
+   "class": "file-content",
+   "evidence": "frame_img = Image.open(frame_path).convert(RGB) — verifies file was created and checks content"
+  },
+  {
+   "task": "make-mips-interpreter",
+   "class": "file-content",
+   "evidence": "similarity >= 0.95 frame.bmp vs reference"
+  },
+  {
+   "task": "mcmc-sampling-stan",
+   "class": "live-state",
+   "evidence": "Rscript execution requires rstan env"
+  },
+  {
+   "task": "merge-diff-arc-agi-task",
+   "class": "file-content",
+   "evidence": "spec_from_file_location(algo, algo_path)"
+  },
+  {
+   "task": "model-extraction-relu-logits",
+   "class": "file-content",
+   "evidence": "b = np.load(/app/stolen_A1.npy)"
+  },
+  {
+   "task": "modernize-scientific-stack",
+   "class": "file-content",
+   "evidence": "subprocess stdout station results"
+  },
+  {
+   "task": "mteb-leaderboard",
+   "class": "file-content",
+   "evidence": "assert lines[0].strip() == expected — reads file value only"
+  },
+  {
+   "task": "mteb-retrieve",
+   "class": "file-content",
+   "evidence": "lines[0].strip() == expected"
+  },
+  {
+   "task": "multi-source-data-merger",
+   "class": "file-content",
+   "evidence": "set(df[user_id]) == {101..104}"
+  },
+  {
+   "task": "nginx-request-logging",
+   "class": "live-state",
+   "evidence": "requests.get(http://localhost:8080) nginx running"
+  },
+  {
+   "task": "openssl-selfsigned-cert",
+   "class": "file-content",
+   "evidence": "assert 2048 bit in key_text"
+  },
+  {
+   "task": "overfull-hbox",
+   "class": "file-content",
+   "evidence": "reads main.log markers"
+  },
+  {
+   "task": "password-recovery",
+   "class": "file-content",
+   "evidence": "guesses = Path(/app/recovered_passwords.txt).read_text().strip().split — reads file content"
+  },
+  {
+   "task": "path-tracing",
+   "class": "file-content",
+   "evidence": "similarity >= 0.99 reconstructed.ppm"
+  },
+  {
+   "task": "path-tracing-reverse",
+   "class": "file-content",
+   "evidence": "chroot run + similarity metric"
+  },
+  {
+   "task": "polyglot-c-py",
+   "class": "file-purity",
+   "evidence": "assert polyglot_files == [main.py.c]"
+  },
+  {
+   "task": "polyglot-rust-c",
+   "class": "file-purity",
+   "evidence": "assert polyglot_files == [main.rs]"
+  },
+  {
+   "task": "portfolio-optimization",
+   "class": "file-content",
+   "evidence": "imports C extension, compares + timing"
+  },
+  {
+   "task": "protein-assembly",
+   "class": "file-content",
+   "evidence": "gblock_aa = str(Seq(gblock).translate()) — parses file content, no directory purity check"
+  },
+  {
+   "task": "prove-plus-comm",
+   "class": "file-content",
+   "evidence": "n + m = m + n and Proof. and Qed. in content"
+  },
+  {
+   "task": "pypi-server",
+   "class": "live-state",
+   "evidence": "--index-url http://localhost:8080/simple"
+  },
+  {
+   "task": "pytorch-model-cli",
+   "class": "mixed",
+   "evidence": "weights_path.exists + subprocess run CLI"
+  },
+  {
+   "task": "pytorch-model-recovery",
+   "class": "file-content",
+   "evidence": "agent_weights = torch.load(weights_path)"
+  },
+  {
+   "task": "qemu-alpine-ssh",
+   "class": "live-state",
+   "evidence": "QEMU VM ssh :2222 uname -r"
+  },
+  {
+   "task": "qemu-startup",
+   "class": "live-state",
+   "evidence": "spawn telnet $host $port — requires running QEMU VM with telnet service on port 6665"
+  },
+  {
+   "task": "query-optimize",
+   "class": "file-content",
+   "evidence": "golden_results == my_sql_results; median_s bound"
+  },
+  {
+   "task": "raman-fitting",
+   "class": "file-content",
+   "evidence": "abs(x0 - expected) < 5"
+  },
+  {
+   "task": "regex-chess",
+   "class": "file-content",
+   "evidence": "json.load(open(/app/re.json))"
+  },
+  {
+   "task": "regex-log",
+   "class": "file-content",
+   "evidence": "assert matches == expected_dates"
+  },
+  {
+   "task": "reshard-c4-data",
+   "class": "mixed",
+   "evidence": "exact file set + <=30 items/folder + sha256 content"
+  },
+  {
+   "task": "rstan-to-pystan",
+   "class": "file-content",
+   "evidence": "alpha_value = float(content.split(,)[0].strip()) — parses CSV file values only"
+  },
+  {
+   "task": "sam-cell-seg",
+   "class": "file-content",
+   "evidence": "out_df.shape == correct_df.shape; iou >= 0.5"
+  },
+  {
+   "task": "sanitize-git-repo",
+   "class": "file-purity",
+   "evidence": "diff paths not in CONTAMINATED_PATHS raise"
+  },
+  {
+   "task": "schemelike-metacircular-eval",
+   "class": "file-content",
+   "evidence": "run_scheme_direct(test_file)"
+  },
+  {
+   "task": "sparql-university",
+   "class": "file-content",
+   "evidence": "results = g.query(query_text)"
+  },
+  {
+   "task": "sqlite-db-truncate",
+   "class": "file-content",
+   "evidence": "reads /app/recover.json tuples"
+  },
+  {
+   "task": "sqlite-with-gcov",
+   "class": "file-content",
+   "evidence": "os.walk(/app/sqlite): gcda_files.extend(f.endswith .gcda) — checks for file existence"
+  },
+  {
+   "task": "torch-pipeline-parallelism",
+   "class": "file-content",
+   "evidence": "torch.allclose(ref, pipe)"
+  },
+  {
+   "task": "torch-tensor-parallelism",
+   "class": "file-content",
+   "evidence": "torch.allclose(parallel, reference)"
+  },
+  {
+   "task": "train-fasttext",
+   "class": "file-content",
+   "evidence": "fasttext.load_model(/app/model.bin)"
+  },
+  {
+   "task": "tune-mjcf",
+   "class": "file-content",
+   "evidence": "assert np.allclose(final_state, final_state_ref)"
+  },
+  {
+   "task": "video-processing",
+   "class": "file-content",
+   "evidence": "output.toml frame numbers in ranges"
+  },
+  {
+   "task": "vulnerable-secret",
+   "class": "file-content",
+   "evidence": "assert content == expected_flag — reads and checks file content only"
+  },
+  {
+   "task": "winning-avg-corewars",
+   "class": "file-content",
+   "evidence": "win_rate >= min_win_rate from stdout"
+  },
+  {
+   "task": "write-compressor",
+   "class": "file-content",
+   "evidence": "assert result.stdout == original_content"
+  }
+ ]
+}

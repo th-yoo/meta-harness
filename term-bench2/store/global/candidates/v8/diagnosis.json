@@ -1,0 +1,14 @@
+{
+ "provenance": "authored self-scope refinement of v7-b7",
+ "updatedBullet": {
+  "id": "b7",
+  "text": "Before reporting complete: if the graded deliverable is a file or directory tree, run the acceptance checks on a fresh copy of its current bytes in a scratch directory, repeat after any later edit, and leave the graded location byte-identical — no compiled outputs or probe files beside it. If it is live state (a running service or installed environment), re-run the acceptance check against that live state after your last change."
+ },
+ "predictions": {
+  "expect_improve": [
+   "identical to v7 on file/tree-graded tasks (clause 1 is v7's rule verbatim in scope)",
+   "live-state tasks (kv-store-grpc, pypi-server, configure-git-webserver, install-windows class): no copy-a-service contortion — clause 2 demands a live re-check after the last change instead, which is also the anti-divergence discipline for that class"
+  ],
+  "expect_unchanged_guards": "clause 1 == v7 behavior where v7 was probed; clause 2 only ever REPLACES an impossible instruction with the natural live check"
+ }
+}
