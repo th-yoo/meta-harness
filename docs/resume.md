@@ -50,6 +50,33 @@ sized go (gauntlet board k=5 = 30 trials/arm vs same-host v1 rows
 already banked; or straight to a full-board slot decision).
 ```
 
+## 🔬 ARM-CONTEXT ATTRIBUTION 2026-08-18 — "host effect" RETRACTED as causal claim; image pinned; yoo-mac owes one manifest
+
+```
+User challenge (correct): mac-vs-WSL arm divergence was labeled "host
+effect" without mechanism. MEASURED: arm-context effect (bundle: host +
+image-build-date + run-date + scheduler). Adaptive forensics: WSL v1
+fails = genuine near-miss code (self-checks passed in-container,
+verifier margins failed; oracle clean) — same model wrote weaker
+solutions on this arm. UNPINNED VARIABLE FOUND: Containerfile apt list
+had zero version pins; agent-side toolchains drift per build date
+(grader side was already pinned in test.sh).
+
+DONE on yoo-dev: (a) image manifest captured ->
+term-bench2/image-manifest-yoo-dev-20260818.txt (R 4.3.3, gcc 13.3.0,
+rustc 1.75.0, python 3.12.3 + 57 dpkg versions); (b) Containerfile RUN
+list pinned pkg=version (57 pins). Pinned-build verify deferred until
+the live-probe arm ends (no mid-arm image swap); run `bun
+term-bench2/runner.ts prep --apply` after.
+
+yoo-mac, ONE COMMAND (answers mac-vs-WSL toolchain diff):
+  cd ~/z2/meta-harness && git pull && \
+  { echo "# mh-bench manifest — yoo-mac $(date +%F)"; \
+    podman run --rm localhost/mh-bench bash -c 'for c in "Rscript --version" "gcc --version" "rustc --version" "python3 --version" "node --version" "git --version" "coqc --version"; do echo -n "$c => "; $c 2>&1 | head -1; done'; } \
+    > term-bench2/image-manifest-yoo-mac-$(date +%Y%m%d).txt && \
+  git add term-bench2/image-manifest-* && git commit -m "data: yoo-mac image manifest (arm-context attribution)" && git push
+```
+
 ## 🏆 v7 PROBE 2026-08-18 11:05 KST — BOTH POLES HELD: polyglot 5/5 + sanitize 4/5 · THE SEESAW HAS AN EXISTENCE PROOF
 
 ```
