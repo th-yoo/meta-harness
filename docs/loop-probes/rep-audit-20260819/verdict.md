@@ -402,3 +402,32 @@ lane A proven END-TO-END.
    falsified claim can sink a card. Verbatim clause stands; trajs to be
    read for the D reaction. Evidence-alone branch formally conceded
    refuted by its author.
+
+## Arm-3 verdict (2026-08-19) — verifier 1/3, BAR MISSED · trap solved 3/3 · residual = precision rung only
+
+raman-fitting-gen (generated card verbatim) k=3 under v18: rewards 0,1,0.
+ALL THREE trials converted and landed x0 dead-on (1580.33-35 /
+2670.09-2.15); fails were 2D offset 26%/38% past the ±10% bar (+2D gamma
+0.34 past ±1 in trial 1) — baseline-window fit residual, zero
+representation content. Trial-3 traj: agent verified the card
+independently ("confirmed against known Si 300.8/522.5/971.8 and graphene
+lines... not by trusting the injected audit outright"), found EXTRA Si
+lines, D-band prediction caused no discredit (round-5 watch item CLEARED).
+Trial-3 wrote 7/8 bars passing; watcher captured trial-2's file, truth
+recovered from the traj Write event.
+
+BY THE LETTER: lane A end-to-end (modulo card selection) NOT proven — 1/3
+< 2/3. DEMONSTRATED: the full machine chain (mechanical sampler →
+prompted auditor → generated card → agent) cracks the representation trap
+3/3. The binding constraint across arms 2+3 is now wholly the precision
+rung (2D offset/gamma): 3 of 6 card-armed trials fail there and nowhere
+else. Content note (unattributable at n=3 vs n=3): the hand card carried
+"fit in the converted axis for accurate widths"; the generated card has
+no baseline/width prescription.
+
+Options from here (each own go): (a) arm-3b — generator prompt gains a
+generic "state fitting-practice implications (baseline, windowing) of the
+identified convention" clause → regenerate → rerun (attacks the precision
+rung through the same machine chain); (b) accept raman as
+representation-cracked, bank, pivot to census generality + production
+build (propose-verify gate, sampler, staging integration); (c) park.
