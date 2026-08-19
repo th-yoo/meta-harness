@@ -166,121 +166,86 @@ class MergeMargins(NamedTuple):
 
 
 def separation_margin(xy, comps):
-    """How far the merge's decisions sit from flipping -- computed per
-    artifact, never shipped as a constant.
+    """Describe the merge's partition. NOTHING HERE IS A CORRECTNESS CHECK --
+    see the limits table below, which is the most important thing in this
+    docstring.
 
-    Merging at gap_tol=0 ("components whose u-spans overlap are one glyph")
-    has no free parameter. An earlier version of this function also returned a
-    `separated` boolean asserting max_intra < min_inter, and that check was
-    VACUOUS: the classifier itself is `lo <= right`, so intra gaps are always
-    <= 0 and inter gaps always > 0 and the comparison could never fail. It was
-    dead code that read like a guard. Found by test_render_glyphs, written
-    after review; recorded here because a guard that cannot fire is worse than
-    no guard -- it advertises a safety that does not exist.
+    Merging at gap_tol=0 ("components whose u-spans overlap are one glyph") has
+    no free parameter. What is reported is how far the partition sits from
+    deforming, computed per artifact rather than shipped as constants:
 
-    What actually varies is the MARGIN. Every adjacent-component gap is a
-    decision: a negative one merged, a positive one split, and either is
-    fragile when it sits near zero. So report the closest call in each
-    direction, scaled by a size the decision cannot move:
-
-        max_intra      the narrowest overlap that still merged (<= 0)
-        min_inter      the narrowest gap that still split (> 0)
+        max_intra      narrowest overlap that still merged (<= 0)
+        min_inter      narrowest gap that still split (> 0)
         fragility      min(|max_intra|, min_inter) / median glyph HEIGHT
         coverage       sum of glyph widths / total u-extent
         median_aspect  median glyph width / height
         width_ratio    widest glyph / median glyph width
-        glyph_count    glyphs the merge produced (width_ratio is
-                       meaningless at 1)
+        glyph_count    glyphs produced (width_ratio is meaningless at 1)
 
-    NORMALIZE ON THE ORTHOGONAL AXIS. An earlier version divided by median
-    glyph WIDTH, which is computed from the very partition being scored, and
-    that bias runs the dangerous way: when the divide SHATTERS -- a too-small
-    cell, a broken projection -- glyph widths collapse while the gaps between
-    fragments grow, so the ratio goes UP. Measured against synthetic
-    components: a healthy 10-glyph partition scored 0.088 while a shattered
-    30-fragment one scored 2.000, i.e. the broken divide reported ~23x SAFER
-    than the correct one. Height is fixed by the font and untouched by any
-    horizontal merge decision, so a shattered horizontal partition cannot
-    inflate the denominator NEARLY as much. Not "cannot at all": a glyph's
-    height here is the v-extent of whatever the partition grouped, so a split
-    that separates an i-dot from its stem does shrink it, and this fixture's
-    underscores are 0.01-0.25 tall. The honest claim is far-less-coupled, not
-    uncoupled.
+    THREE EARLIER VERSIONS OF THIS FUNCTION SHIPPED A CHECK THAT COULD NOT
+    REPORT ITS OWN CONDITION, and the history is kept because the cause
+    generalizes:
+      1. a `separated` boolean asserting max_intra < min_inter -- vacuous, the
+         classifier IS `lo <= right` so it held for every input;
+      2. fragility normalized by median glyph WIDTH -- a shattered divide
+         scored 2.000 against healthy 0.088, i.e. ~23x SAFER, because the
+         denominator collapsed with the partition it scored;
+      3. median_aspect taken as a MAX -- read 413 on the real fixture and
+         false-alarmed, because two underscores are legitimately flat
+         (6.04 wide x 0.01 tall).
+    Every one was a statistic computed from the very partition it scored. A
+    quantity derived downstream of the decision under test cannot audit that
+    decision, and no further aggregate will fix this -- closing it needs an
+    independently-derived partition (stroke or file-order contiguity) compared
+    against the u-overlap one.
 
-    That REDUCES the inversion without removing it: on the same synthetics the
-    gap is now 0.057 healthy vs 0.222 shattered, ~3.9x instead of ~23x. The
-    residue is in the NUMERATOR -- shattering also widens min_inter, since the
-    gaps between fragments are real gaps. Fragility is a
-    closeness-to-flipping measure and cannot be repaired into a
-    correctness measure; do not read a high value as reassurance.
+    LIMITS TABLE. Measured, not reasoned; synthetics in test_render_glyphs,
+    real-fixture figures from text.gcode.gz at cell 0.4.
 
-    COVERAGE is therefore the shattering check. Glyphs should account for most
-    of the string's u-extent, and it separates the same synthetics cleanly and
-    in the right direction: 0.913 healthy vs 0.341 shattered.
+      failure                     detected by        blind
+      shattering                  coverage 0.341,    width_ratio (equal-width
+      (cell too small)            median_aspect      fragments read 1.00)
+                                  0.11
+      global fusion               median_aspect      coverage (maxes at 1.000,
+      (all -> one blob)           3.89               ABOVE correct); fragility
+                                                     (rises to 0.556, reads
+                                                     safest); width_ratio
+                                                     (n=1, degenerate 1.00)
+      partial fusion              width_ratio 2.28   median_aspect (0.68 vs
+      (a few pairs merge)         on the real            0.66); coverage
+                                  fixture's two L's  (0.803, ABOVE correct);
+                                                     fragility (unchanged)
+      UNIFORM fusion              NOTHING            all four. Real fixture,
+      (every glyph merges                            every glyph fused
+      with a neighbour --                            pairwise: 13 glyphs left
+      what a slightly-too-                           of 26, width_ratio 1.23,
+      large cell produces)                           median_aspect 1.38,
+                                                     coverage 0.896 -- BETTER
+                                                     than the correct 0.794.
+                                                     Only glyph_count betrays
+                                                     it, and only if you
+                                                     already know the answer.
 
-    BUT COVERAGE AND FRAGILITY ARE BOTH BLIND TO OVER-MERGE, the opposite
-    failure, and score it as ideal. Measured on a third synthetic where 30
-    components collapse into ONE blob: coverage 1.000 -- the theoretical
-    maximum, better than the correct partition's 0.913 -- and fragility 0.556,
-    the highest of the three, which in this framing reads safest. The
-    mechanisms are structural, not tuning: over-merging conserves the width
-    sum while absorbing the gaps, so coverage maxes out at exactly the failure
-    it cannot see; and with no inter-glyph gaps left, min_inter is +inf and
-    fragility collapses to |max_intra|, which GROWS as components pile up.
-    Neither has a term that responds to "there are no splits left".
+    So the pair of detectors catches non-uniform deformation. A partition
+    error that deforms every glyph roughly equally is invisible to all of
+    them, because each is a dispersion or ratio statistic and uniform
+    deformation moves numerator and denominator together.
 
-    That is the third check on this instrument that could not report the
-    condition it was named for, and the three share one cause: every one was a
-    statistic computed from the very partition it was scoring. A quantity
-    derived downstream of the decision under test cannot audit that decision.
+    OUTSIDE PRIORS, all three of them, none unique. median_aspect assumes
+    Latin glyphs are not several times wider than tall; coverage assumes no
+    word-spaces and no wide kerning (a spaced string lowers it with a perfect
+    partition); width_ratio assumes no glyph exceeds ~2x the median width
+    (this fixture is already at 1.45, and a string mixing one wide glyph with
+    narrow ones crosses 2.0 while correctly partitioned). Each can therefore
+    be WRONG about a particular artifact -- which the three purely internal
+    statistics structurally cannot be, and which is why they were useless.
+    width_ratio has a second gap: it only moves when a fusion produces the
+    WIDEST glyph in the string, so merging the two 1.01-wide i-class glyphs
+    with a neighbour reaches ~3.2 against an 8.25 maximum and does not move it
+    at all.
 
-    MEDIAN_ASPECT is the two-sided detector. It carries prior information from
-    OUTSIDE the artifact -- Latin glyphs are not several times wider than they
-    are tall -- though it is not unique in that: COVERAGE is only readable
-    through an equally external prior, that the string has no word-spaces and
-    no wide kerning, and its trigger is exactly where that prior sits. A
-    spaced string lowers coverage with no partition error at all, so coverage
-    can be wrong about an artifact in the same way aspect can. It rises when glyphs fuse and
-    falls when they shatter, leaving the correct partition in between --
-    synthetics: healthy 0.63, shattered 0.11, fused 3.89; the real fixture
-    sits at 0.66, right beside healthy, as the prior predicts. Because it
-    encodes an outside prior it can be WRONG about a particular artifact,
-    which is precisely the property the other two structurally lack.
-
-    MEDIAN, not max, and this was measured the hard way: the max form read
-    413 on the real fixture and fired a false OVER-MERGE alarm, because the
-    two underscore glyphs are legitimately flat (6.04 wide x 0.01 tall) and a
-    max is decided by them alone. The synthetics all had uniform glyph
-    heights, so they could not have caught it -- a reminder that a detector
-    validated only on synthetic fixtures is validated against the fixture
-    generator, not the artifact.
-
-    WIDTH_RATIO (widest glyph / median glyph width) is the other half, and it
-    exists because the median's robustness hides the MOST LIKELY failure.
-    When only a few glyphs fuse -- what a slightly-too-large cell produces,
-    and this fixture sits one nudge away with a 0.63 minimum gap against a
-    ~6.3 pitch -- a minority cannot move a median by construction. Measured on
-    a partial-fusion synthetic (3 of 10 glyphs merged): median_aspect 0.633
-    and fragility 0.057, both IDENTICAL to healthy, and coverage 0.929, which
-    scores the broken partition BETTER than the correct one. width_ratio reads
-    2.65 against healthy's 1.00 and the real fixture's 1.45 -- the underscores
-    do not disturb it, being normal in WIDTH (6.04 against a ~5.7 median) even
-    while degenerate in height. Same trick as the height denominator, applied
-    to the other axis: pick the dimension the failure actually deforms.
-
-    The two are complementary, and NEITHER is a correctness check:
-      median_aspect  catches global fusion and shattering; blind to partial
-      width_ratio    catches partial fusion; blind to global fusion (with one
-                     glyph max IS the median, so it reads a degenerate 1.00)
-                     and to shattering (equal-width fragments, also 1.00)
-    Always read width_ratio beside glyph_count, or its n=1 reading of 1.00
-    will be mistaken for health. A partition can still be wrong in ways
-    neither deforms.
-
-    All are dimensionless, derived from the artifact, and REPORTED rather than
-    thresholded -- picking cutoffs would re-commit the fitted-constant error
-    this function exists to avoid. On the shipped fixture: max_intra -0.89,
-    min_inter +0.63, fragility 0.071, coverage 0.794, median_aspect 0.66.
+    Real fixture, correct partition: max_intra -0.89, min_inter +0.63,
+    fragility 0.071, coverage 0.794, median_aspect 0.66, width_ratio 1.45.
     """
     if not comps:
         # keyword form on purpose: this return has silently fallen out of step
@@ -462,7 +427,9 @@ def main():
             "note coverage reads near 1.000 and fragility HIGH here, so "
             "neither of those can catch this ***")
     say("    (reported, never enforced -- judge them; do NOT tune --merge-gap "
-        "until the count looks right)")
+        "until the count looks right. NONE of these detects uniform fusion, "
+        "where every glyph merges with a neighbour: all four read healthy or "
+        "better -- see separation_margin's limits table)")
     if args.merge_gap != 0.0:
         say(f"    NOTE: margins above describe the parameter-free gap_tol=0 "
             f"partition, but --merge-gap {args.merge_gap} was used for the "

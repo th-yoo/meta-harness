@@ -304,6 +304,40 @@ class TestSeparationMargin(unittest.TestCase):
         self.assertLess(rg.separation_margin(xy, comps).width_ratio,
                         rg.WIDTH_RATIO_HIGH)
 
+    def test_uniform_fusion_defeats_every_detector(self):
+        """The fifth blind spot, pinned so the limits table cannot rot. When
+        EVERY glyph fuses with a neighbour -- what a slightly-too-large cell
+        produces, since one threshold applies to all gaps at once -- the
+        deformation is uniform, and every statistic here is a ratio or
+        dispersion measure that moves numerator and denominator together.
+        Half the glyphs are gone and all four numbers read healthy or better."""
+        healthy = rg.separation_margin(*self._spans(self._healthy()))
+        pairs = self._healthy()
+        # fuse each glyph with its neighbour: overlap every second boundary
+        fused_pairs = []
+        for i in range(0, len(pairs), 4):
+            block = pairs[i:i + 4]
+            if len(block) < 4:
+                fused_pairs += block
+                continue
+            (a0, a1), (b0, b1), (c0, c1), (d0, d1) = block
+            fused_pairs += [(a0, a1), (b0, b1), (b1 - 0.01, c1), (c1 - 0.01, d1)]
+        uniform = rg.separation_margin(*self._spans(fused_pairs))
+        self.assertLess(uniform.glyph_count, healthy.glyph_count)
+        self.assertLess(uniform.width_ratio, rg.WIDTH_RATIO_HIGH)
+        self.assertLess(uniform.median_aspect, rg.ASPECT_HIGH)
+        self.assertGreaterEqual(uniform.coverage, healthy.coverage)
+
+    def test_trigger_constants_have_their_documented_values(self):
+        """The constants are pinned by VALUE, not merely referenced. Asserting
+        a metric against rg.WIDTH_RATIO_HIGH passes if the trigger is lowered,
+        so the suite could not otherwise detect the tuning the source forbids
+        -- e.g. dropping 2.0 to 1.9 so a known case fires."""
+        self.assertEqual(rg.FRAGILITY_LOW, 0.02)
+        self.assertEqual(rg.COVERAGE_LOW, 0.5)
+        self.assertEqual(rg.ASPECT_HIGH, 2.5)
+        self.assertEqual(rg.WIDTH_RATIO_HIGH, 2.0)
+
     def test_empty_components_do_not_crash(self):
         """A fixture where every component falls below the pixel floor must
         report NaNs, not raise IndexError out of the span scan."""
