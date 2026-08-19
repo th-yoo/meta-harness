@@ -101,3 +101,47 @@ neither arm ran on clean-v1 content. Pin worked as specified
 (account-global=v19; sibling's v18 elf arm uncollided). Elapsed ran
 concurrently with the sibling's elf arm for part of the window —
 elapsed comparisons across arms are contaminated, within-arm ordering only.
+
+## Card regen v2 verdict (2026-08-19) — 0/2 by the letter; (c) tilt missed BOTH calls, and the sampler is again the cause
+
+Scored against the v2 pre-registered bar (five clauses, fixed before calls).
+
+**r2 = near-miss, 4/5 clauses.** PASSES (a) object scoping (S0 blocks valid,
+"must union in interleaved G2/G3 within the same block boundaries"),
+(b) extrusion-vs-travel EXPLICIT ("plotting the X/Y extrusion geometry (G1
+moves with E>0, plus G2/G3 arcs)"), (d) label-NOT-evidence in textbook
+imperative form ("NOT a rendering of the printed glyphs... not evidence...
+You must determine actual glyph content by plotting"), (e) ZERO permissive
+hedges — the imperative prompt rule actuated fully. MISSES (c): no tilt;
+worse, its Misread D instructs "render/plot the path top-down as-is",
+an actively anti-tilt instruction, and its CONTENT VERDICT is NO MISMATCH.
+Bonus true item: G2/G3 arcs (270+87 present) must be included or curved
+glyphs break — new, correct, nobody had it.
+
+**r1 = 2.5/5.** Passes (a) (with a new true item: G1 extremes outside the
+M555 bbox are purge/skirt contamination, filter to bbox), (d); (b) weak
+(names the 41777 G1-with-E subset as the render set but never states the
+travel-weld risk); FAILS (e) — "commonly", "usually", "likely", "hints"
+all present; MISSES (c). Notable: r1 CORRECTED v1's E-mode error into a
+mandatory disambiguation ("Must grep full file for M82/M83 before trusting
+any E delta math") — the imperative rule turned last generation's
+falsifiable-wrong assertion into a safe instruction.
+
+**Root cause of the (c) miss is the SAMPLER again, not the auditors, and
+this one is mine.** Verified on the real data after scoring: the S0
+extruding cloud lies on one plane, Z = 0.3325X + 0.1720Y - 30.37 with
+R^2 = 0.9878 (38,972 points) — the tilt is real and extreme. But
+sample-v2 carried only aggregate Z stats (min/max/unique-count), which
+CANNOT distinguish a tilted plane from ordinary multi-layer growth, and
+only ~6% of G1 lines are Z-bearing so the 45 verbatim rows carried almost
+no joint (X,Y,Z) structure. Both auditors read the Z spread as normal
+layered printing — the parsimonious reading of the evidence they were
+given. Same failure class as v1's missing text-object rows: the audit
+finds what the sample lets it compute. Generator-arc lesson, third
+instance: fix the evidence, not the reasoner.
+
+**Sampler v3 (staged, mechanical, no spend yet):** add one deterministic
+stat — least-squares plane fit Z ~ aX + bY over S0 extruding points,
+reporting coefficients and R^2 — plus 20 consecutive Z-bearing extruding
+G1 lines verbatim. With R^2=0.99 stated in the sample, tilt is one
+inference step. Re-run = 2 sonnet calls, own go. Bar unchanged.
