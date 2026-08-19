@@ -196,3 +196,24 @@ k=3, sonnet, pinned v18, store-written. Success bar: ≥2/3 reward=1 =
 channel ceiling confirmed; 0-1/3 with trajs showing the prediction tested
 and confirmed but output still raw = actuation wall below content (would
 be a new finding); trajs showing prediction untested = framing regression.
+
+## Amendment: generator-first sequencing (sibling proposal, adopted before go)
+
+Order: generator probe FIRST (headless). If the auditor derives the 1e7/x
+prediction itself, arm-2 runs with the GENERATED card verbatim
+(unmodified — any hand edit voids the end-to-end claim) and an arm-2 pass
+becomes load-bearing for lane A END-TO-END (sampler → audit → gate → card
+→ agent). If the generator fails, arm-2 runs the hand-authored card as
+fallback (channel-ceiling datum salvaged; generator gap stays open).
+
+**Generator probe pre-registration:** prompt = audit-prompt-v2 + compute
+clause ("you may run calculations; numerically TEST each hypothesis
+against the sample before writing the card; state which hypotheses
+survived testing"). Input = production-shaped BLIND sample: instruction.md
++ head-20/tail-20 rows + mechanical distribution-stats block (row count,
+min/max both columns, row-spacing at head/middle/tail) — no peak-region
+rows, no operator knowledge. Tools: Bash allowed (arithmetic on given
+numbers only; no task paths provided). 2 calls, sonnet. PASS iff ≥1 call's
+card contains the reciprocal transform (1e7/x or 1/λ-with-scale) AND the
+joint canonical landing prediction. Partial (transform named, no joint
+prediction) = run arm-2 with generated card anyway, scope note attached.
