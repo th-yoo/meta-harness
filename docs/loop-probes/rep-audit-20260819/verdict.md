@@ -458,3 +458,22 @@ build (propose-verify gate, sampler, staging integration); (c) park.
 ARC STATE: representation-trap research question ANSWERED for raman
 (mechanism 6/6, pooled p<0.001); open work is engineering (census
 generality, revalidator, sampler, staging integration) + the craft rung.
+
+## Precision-rung ROOT CAUSE (2026-08-19, post-arc) — verifier procedure-matching defect, not agent craft
+
+Measured from submitted params + trajs: peak apex height (amp+offset) is
+data-pinned (conserved 13413/13451/13510/13553 across all fits incl. the
+author's); the amp/offset split is near-degenerate and resolved by crop
+window width. Monotonic measured relation: window 150 cm⁻¹ → offset 767
+(arm3-t1, chosen for "stable, high-R²"), 300 → 920 (arm3-t3), author's
+undisclosed 400 (2500-2900, solution/solve.sh) → 1239 = verifier truth.
+The 2D offset bar is ±10% of a small value (±124 absolute) — tighter than
+the parameter's legitimate window-sensitivity (~470). G survives the same
+bar (offset 4.5× larger, amp:offset 1.5:1 vs 10:1). VERDICT: passing the
+2D offset bar requires reproducing the author's undisclosed crop — task
+under-specification / verifier over-tightness, same defect family as
+history-coupled fixtures. Invisible for 48 trials because nothing got
+past the representation trap before. Retro-confirms arm-3b rejection: no
+prompt clause fixes a hidden-window guessing game. "Curve-fitting craft"
+wording RETIRED; candidate for the upstream defect-report list alongside
+sam-cell --csv_path.
