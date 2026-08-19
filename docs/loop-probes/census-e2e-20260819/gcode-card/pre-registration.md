@@ -265,3 +265,7 @@ Decision rule: A joins 2/2 -> cheap works today (structural becomes a debt/scopi
 A fails + B joins -> false-economy measured; structural ships with its prompt half de-risked.
 Both fail -> interface-as-evidence theory wrong; next regen needs a different lever. Probe cannot
 measure debt accrual — scoped to "works today" only.
+DRY-RUN evidence (before calls): mockA (path-form, curated-spec copy) -> "SEAM-GATE CALIBRATE: OK
+-- oracle all-pass, bad 4-seam fail"; mockB (artifactIds form) through bind_shim.py -> identical
+OK. Both bar pipelines proven green on hand-written passing inputs; shim archived at
+/mnt/d/tmp/joinprobe/bind_shim.py (5 lines, mechanical).
