@@ -214,11 +214,16 @@ export function revalidate(claim: RevalClaim, sample: string): RevalOutcome {
   const m = sample.match(/first-col-range=\[\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\]/)
   if (!m) return { ok: false, reason: "range-unavailable" }
   const lo = Number(m[1]), hi = Number(m[2])
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return { ok: false, reason: "range-unavailable" }
   if (claim.landings.length < 2) return { ok: false, reason: "under-2-landings" }
   let landed = 0
   for (const L of claim.landings) {
     if (!L.discriminates.trim()) return { ok: false, reason: "landing-missing-discriminates" }
     if (L.input < lo || L.input > hi) return { ok: false, reason: `input-out-of-range:${L.input}` }
+    // The transform must actually MOVE the value — a claim whose "canonical" already
+    // equals the raw input (within delta) lands trivially without the constant doing
+    // any real work (e.g. identity/0 dressed up as a discovered conversion).
+    if (Math.abs(L.input - L.canonical) <= claim.delta) return { ok: false, reason: "degenerate-transform" }
     const out = applyTransform(claim.transform, claim.constant, L.input)
     if (Math.abs(out - L.canonical) <= claim.delta) landed++
   }

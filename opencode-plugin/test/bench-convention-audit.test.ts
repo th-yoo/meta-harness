@@ -93,6 +93,7 @@ test("revalidate PASSES gen4-r2 (one constant lands >=2)", () => {
 test("revalidate REJECTS gen4-r1 (single constant lands <2)", () => {
   const o = revalidate(r1, SAMPLE)
   expect(o.ok).toBe(false)
+  if (!o.ok) expect(o.reason).toBe("only-1-landed-under-one-constant")
 })
 test("revalidate REJECTS an out-of-range fabricated input", () => {
   const bad: RevalClaim = { ...r2, landings: [ { input: 99999, computed: 100, canonical: 100, discriminates: "E:x" },
@@ -104,7 +105,22 @@ test("revalidate REJECTS a landing with no discriminates (misreading tie)", () =
   expect(revalidate(bad, SAMPLE).ok).toBe(false)
 })
 test("revalidate FAILS closed when range is unavailable", () => {
-  expect(revalidate(r2, "lines=10 top-tokens: a:1\n--head--\nfoo\n--tail--\nbar").ok).toBe(false)
+  const o = revalidate(r2, "lines=10 top-tokens: a:1\n--head--\nfoo\n--tail--\nbar")
+  expect(o.ok).toBe(false)
+  if (!o.ok) expect(o.reason).toBe("range-unavailable")
+})
+test("revalidate FAILS closed when the range bounds are malformed (NaN, not just missing)", () => {
+  const o = revalidate(r2, "lines=10 top-tokens: a:1 first-col-range=[1..2, 3]\n--head--\nfoo\n--tail--\nbar")
+  expect(o.ok).toBe(false)
+  if (!o.ok) expect(o.reason).toBe("range-unavailable")
+})
+test("revalidate REJECTS a degenerate identity/0 card whose canonical equals the raw input", () => {
+  const degenerate: RevalClaim = { transform: "identity", constant: 0, delta: 30,
+    landings: [ { input: 1580, computed: 1580, canonical: 1580, discriminates: "E:units" },
+                { input: 2670, computed: 2670, canonical: 2670, discriminates: "E:units" } ] }
+  const o = revalidate(degenerate, SAMPLE)
+  expect(o.ok).toBe(false)
+  if (!o.ok) expect(o.reason).toBe("degenerate-transform")
 })
 
 const okReply = (text: string) => ({
