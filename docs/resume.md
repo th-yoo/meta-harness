@@ -3,7 +3,62 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-> **MOST RECENT STATE (2026-08-19 newest, `yoo-dev`):** LANE-A INCREMENT-2
+> **MOST RECENT STATE (2026-08-19 newest, `yoo-dev`):** REVALIDATOR
+> **ADHERENCE PROBE RUN — ARM BLOCKED, AND THE TRANSPORT WAS DEAD.** 12
+> sonnet calls, pre-registered, verdict
+> `docs/loop-probes/reval-adherence-20260819/verdict.md`, artifacts committed
+> `4fbd47c`. **DO NOT ARM lane A.** The probe's own question came second to
+> what it uncovered: the shipped audit **could never have made a live model
+> call**. F1 — `runAuditUncached` asked for a 120s turn (daemon worst case
+> 136000) while `daemonCall`'s client budget stayed at 36000, and acp-client
+> refuses PRE-SEND when `dw >= budgetMs` → silent zero-spend `no-call`. F2 —
+> it passed `DEFAULT_BENCH_MODEL` (`anthropic/claude-sonnet-5`, the SUT
+> drivers' opencode-qualified id) to an ACP wire that takes a BARE CLI id →
+> `terminal_reason=api_error`. Both fold into `verdict: "ERROR"`, so an arm
+> would have been a guaranteed silent no-op whose trail looked like model
+> failure. **Both FIXED and committed: `789941b` (model id, `AUDIT_MODEL`
+> derived from `DEFAULT_BENCH_MODEL`) and `92b09ac` (budget, derived from the
+> turn timeout via `ACP_BUDGET`) — landed SEPARATELY on purpose, since both
+> defects independently produce "no successful call" and one commit would
+> destroy the attribution.** Suite 2245/0. **NOT yet verified live end-to-end
+> through the fixed shipped path — that is one sonnet call and its own go.**
+> Why a 2241-test suite missed both: every audit test injects fake daemon
+> deps, and the `okReply` fixture echoed the qualified id, so the fakes agreed
+> with the calling code instead of with the wire (fixture corrected to the
+> measured bare id). **A transport the suite always fakes is a transport
+> nobody has run.** Remaining pre-arm blockers, each its own go: **F3** block
+> SHAPE adherence was 4/4 but 0/4 PARSED — cells carry units and derivations
+> (`| 5811.9 (Å) | 1e7/532 - ... = 1590.1 |`), and the prompt's own toolless
+> fix ("SHOW it inline") contradicts the parser's demand for bare numeric
+> cells; **F4** all 4 cells found the right physics — Raman shift =
+> `ν̃_laser − 1e7/λ`, reciprocal∘offset, TWO ops — which `applyTransform`'s
+> single-op whitelist cannot express, so a CORRECT audit can never pass the
+> gate on this trap class; **F5** 3/4 landing inputs are ABSENT from the
+> sample (head-20 + tail-20 of a 1500-row file leaves the peak structurally
+> invisible, so the model back-solves inputs from its desired answer) → the
+> sampler's derived-stats/calibration block is now LOAD-BEARING, not banked;
+> **F6** those fabricated inputs pass the range guard but are not in
+> head/tail, so the un-built head/tail near-match would have caught 3/4 — the
+> spec §10 "implement or accept" choice **resolves to implement**. CONTROL
+> passed 2/2 (clean input → NO_MISMATCH, `TRANSFORM: none`, no spurious
+> claim); no re-run needed. Process cost: 4 cells VOID — the first trap task
+> (`raman-fitting-gate`) embeds a prior audit under `ORDERING GATE —
+> MANDATORY` and hijacked the auditor; the amendment's "verified card-free"
+> check grepped `REFERENCE CARD` while the task said `AUDIT:`, a string check
+> standing in for a semantic one. `run-probe.ts` now refuses to spend unless
+> `assertCleanStimulus` passes. Sibling `meta-harness-1e` landed its rung-5
+> dry-run behind this (`rung5-dryrun`, unmerged); I reviewed it and refuted
+> its "irreducible" u-sign residual (print order recovers the sign: r=0.99,
+> 25/25 monotone) and its merge "plateau" (a fitted constant — its +0.5
+> ceiling sits just under the string's own 0.63 tightest kerning). I
+> **DECLINED to sign their 7b review artifact**: I am an upstream author of
+> two of the three commits in that range, so `fresh-context: true` would be
+> false and the no-self-review rule would pass on a string comparison while
+> its purpose was defeated. Their replacement guard `separation_margin` is a
+> **tautology** — it classifies gaps by the same overlap predicate it then
+> compares, so `separated` is True by construction and can never fire.
+>
+> **PRIOR STATE (2026-08-19, earlier, `yoo-dev`):** LANE-A INCREMENT-2
 > **REVALIDATOR BUILT** via SDD (7 tasks, each implement+review; opus
 > whole-branch review MERGE-READY). Branch `lane-a-revalidator`, rebased
 > onto merged main `6843e9e`, tip `c0edf71` — **awaiting user merge-go**
@@ -30,7 +85,7 @@ does NOT transfer; this file + the repo are the source of truth.)
 > `.../plans/2026-08-19-lane-a-revalidator.md`. Increment-3 = compute
 > transport + sampler calibration-sweeps (banked from sibling's B2 finding).
 >
-> **PRIOR STATE (2026-08-19 latest, `yoo-dev`):** BOTH-DNA PILOT RUN
+> **PRIOR STATE (2026-08-19, earliest of the three, `yoo-dev`):** BOTH-DNA PILOT RUN
 > + AUTOPSY DONE → **REJECT DNA for the convention-card lane (provable
 > null).** Baseline no-card sonnet-5 k=3: dna-assembly 1/3, dna-insert 2/3
 > (3/6, both solved — mid-band, NOT a raman 0/5 wall). Real verifier
