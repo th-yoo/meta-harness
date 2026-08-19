@@ -65,6 +65,13 @@ own third design load. Reading `contact-sheet.png` honestly:
 So 23–24/26. An overstated necessary condition is exactly how a screening
 test quietly becomes a claim.
 
+**And 23–24/26 is itself an upper bound, not a measurement.** The tiles were
+judged by a reader who already knew the target string — knowing the answer is
+what makes tile 7 read as an ambiguous `0`/`O` rather than an unidentifiable
+oval, and what allows tiles 10 and 13 to be classified as underscores at all.
+A naive reader has none of that. The contamination named below for
+`whole.png` applies to this number too.
+
 **The reader substitution, now named.** `whole.png` was read by an opus-tier
 reader who already knew the target string and used word context — leetspeak
 flag shape — to resolve it. Per-glyph division is precisely the operation
@@ -181,12 +188,48 @@ shattering also widens `min_inter` in the numerator. Fragility measures
 closeness-to-flipping and cannot be repaired into a measure of correctness. A
 high fragility is not reassurance.
 
-**Coverage** = sum of glyph widths / total u-extent is therefore the actual
+**Coverage** = sum of glyph widths / total u-extent is therefore the
 shattering detector, and it separates the same synthetics cleanly and in the
-right direction: 0.913 healthy versus 0.341 shattered. On the real fixture:
-max_intra −0.89, min_inter +0.63, fragility **0.071**, coverage **0.794**.
-Choosing a cutoff on either would re-commit the original error, so the
-instrument prints both and leaves the judgment to a human.
+right direction: 0.913 healthy versus 0.341 shattered.
+
+*Fourth correction — and the reason this section is the longest in the
+document.* Coverage and fragility are **both blind to over-merge**, the
+opposite failure, and score it as ideal. Measured on a third synthetic where
+30 components collapse into one blob: coverage **1.000**, the theoretical
+maximum and *better than the correct partition's 0.913*, with fragility 0.556,
+the highest of the three. Structural, not tuning: over-merging conserves the
+width sum while absorbing the gaps, so coverage peaks at exactly the failure
+it cannot see; and with no inter-glyph gaps left, `min_inter` is +∞ so
+fragility collapses to |max_intra|, which *grows* as components pile up.
+
+**That is three checks in a row on this instrument that could not report the
+condition they were named for** — a boolean true by construction, a metric
+inverted by shattering, and a pair blind to over-merge. They share one cause,
+and it is the transferable lesson of this probe: *every one was a statistic
+computed from the very partition it was scoring. A quantity derived downstream
+of the decision under test cannot audit that decision.*
+
+**Median aspect** (median glyph width / height) is the two-sided detector, and
+the only quantity here carrying a prior from **outside** the artifact — Latin
+glyphs are not several times wider than tall. It rises on fusing and falls on
+shattering: synthetics 0.63 healthy, 0.11 shattered, 3.89 fused, with the real
+fixture at 0.66, beside healthy, as the prior predicts. Because it encodes an
+outside prior it *can be wrong* about a given artifact — precisely the property
+the other two structurally lack.
+
+Median rather than max, learned by measurement: the max form read **413** on
+the real fixture and fired a false over-merge alarm, because the two
+underscores are legitimately flat (6.04 × 0.01) and a max is decided by them
+alone. Every synthetic had uniform glyph heights, so none could have caught
+it — *a detector validated only on synthetic fixtures is validated against the
+fixture generator, not the artifact.*
+
+Real fixture: max_intra −0.89, min_inter +0.63, fragility **0.071**, coverage
+**0.794**, median aspect **0.66**. Choosing a cutoff on any of them would
+re-commit the original error, so the instrument prints all three and leaves
+the judgment to a human. The console does carry three advisory eyeball
+triggers (0.02, 0.5, 2.5); those numbers are arbitrary, are labelled as such
+in the source, change no exit code, and must never become tuning targets.
 
 **Still open, and named rather than closed:** fragility measures how close the
 overlap partition came to changing, not whether that partition is *right*. A

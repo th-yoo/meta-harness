@@ -75,8 +75,13 @@ class TestOrientUByFileOrder(unittest.TestCase):
         out, _ = rg.orient_u_by_file_order(xy)
 
         def signed_area(p):
+            # explicit 2D cross product: np.cross on 2-vectors was deprecated
+            # in numpy 2.0 and REMOVED in 2.5, and this repo's own .venv
+            # carries 2.5.1 -- the convenience form would fail there while
+            # passing on this host's 1.26.4
             a, b, c = p[0], p[len(p) // 2], p[-1]
-            return float(np.cross(b - a, c - a))
+            (ux, uy), (vx, vy) = b - a, c - a
+            return float(ux * vy - uy * vx)
 
         before, after = signed_area(xy), signed_area(out)
         self.assertNotAlmostEqual(before, 0.0, msg="degenerate fixture: collinear points")
@@ -95,10 +100,17 @@ class TestOrientUByFileOrder(unittest.TestCase):
         self.assertAlmostEqual(r_base, r_rot, places=12)
 
     def test_mirroring_one_axis_is_not_absorbed(self):
-        """The companion negative: a MIRROR is a different cloud, not the same
-        one rotated, so the function must not silently normalize it away. This
-        pins the distinction the live bug turned on -- correcting with a
-        single-axis flip would have made these two indistinguishable."""
+        """A MIRROR is a different cloud, not the same one rotated, so the
+        function must not silently normalize it away.
+
+        Scope, stated precisely because an earlier docstring overclaimed it:
+        this does NOT pin the single-axis-flip bug. Mirroring v leaves u
+        untouched, so r stays positive, no correction runs, and the assertion
+        below would pass under a buggy u-only implementation too. The bug is
+        pinned by test_correction_is_a_rotation_not_a_mirror and
+        test_handedness_is_preserved, both of which fail under it. This test
+        guards only against a future version that tries to normalize v.
+        """
         xy = self._text_like()
         base, _ = rg.orient_u_by_file_order(xy)
         mirrored, _ = rg.orient_u_by_file_order(xy * np.array([1.0, -1.0]))
@@ -141,6 +153,15 @@ class TestSeparationMargin(unittest.TestCase):
         return pairs
 
     @staticmethod
+    def _fused(n=30, width=6.0, step=1.0):
+        """The OPPOSITE failure: every component overlaps its neighbour, so the
+        whole string collapses into one glyph. Both fragility and coverage
+        score this as ideal, which is why it must appear in every direction
+        test -- a one-sided healthy/shattered pair passes on an instrument
+        that is blind here."""
+        return [(i * step, i * step + width) for i in range(n)]
+
+    @staticmethod
     def _shattered(n=30, width=1.0, gap=2.0):
         """The failure mode: every glyph broken into narrow fragments with
         wide gaps between them -- what a too-small cell or broken projection
@@ -154,7 +175,7 @@ class TestSeparationMargin(unittest.TestCase):
     def test_margins_describe_the_closest_decisions(self):
         # two glyphs of two overlapping components each, a wide gap between
         xy, comps = self._spans([(0.0, 2.0), (1.5, 3.0), (6.0, 8.0), (7.5, 9.0)])
-        max_intra, min_inter, fragility, coverage = rg.separation_margin(xy, comps)
+        max_intra, min_inter, fragility, coverage, _ = rg.separation_margin(xy, comps)
         self.assertLess(max_intra, 0.0)      # intra-glyph gaps are overlaps
         self.assertGreater(min_inter, 0.0)
         self.assertGreater(fragility, 0.0)
@@ -167,8 +188,8 @@ class TestSeparationMargin(unittest.TestCase):
         fragments, wide gaps -- scored ~23x SAFER than a healthy one (0.088 vs
         2.000, measured). Median glyph HEIGHT is orthogonal to every
         horizontal merge decision, so shattering can no longer inflate it."""
-        _, _, healthy_frag, _ = rg.separation_margin(*self._spans(self._healthy()))
-        _, _, shattered_frag, _ = rg.separation_margin(*self._spans(self._shattered()))
+        healthy_frag = rg.separation_margin(*self._spans(self._healthy())).fragility
+        shattered_frag = rg.separation_margin(*self._spans(self._shattered())).fragility
         self.assertLess(
             shattered_frag, 1.0,
             "shattered divide must not score as near-certainly-safe")
@@ -179,12 +200,60 @@ class TestSeparationMargin(unittest.TestCase):
 
     def test_coverage_detects_shattering_directly(self):
         """Fragility says how close decisions came to flipping; it cannot say
-        the partition is RIGHT. Coverage can: glyphs should account for most
-        of the string's extent."""
-        _, _, _, healthy_cov = rg.separation_margin(*self._spans(self._healthy()))
-        _, _, _, shattered_cov = rg.separation_margin(*self._spans(self._shattered()))
-        self.assertGreater(healthy_cov, 0.8)
-        self.assertLess(shattered_cov, 0.5)
+        the partition is RIGHT. Coverage can, in the shattering direction:
+        glyphs should account for most of the string's extent."""
+        healthy = rg.separation_margin(*self._spans(self._healthy()))
+        shattered = rg.separation_margin(*self._spans(self._shattered()))
+        self.assertGreater(healthy.coverage, 0.8)
+        self.assertLess(shattered.coverage, 0.5)
+
+    def test_fragility_and_coverage_are_both_blind_to_over_merge(self):
+        """Pins the blindness itself, so nobody later mistakes either number
+        for a general correctness check. A fused partition -- the entire
+        string collapsed into ONE glyph -- drives coverage to its theoretical
+        maximum (above the correct partition) and fragility to the highest of
+        the three. Both rate the worst partition as the best one."""
+        healthy = rg.separation_margin(*self._spans(self._healthy()))
+        fused = rg.separation_margin(*self._spans(self._fused()))
+        self.assertGreater(fused.coverage, healthy.coverage)
+        self.assertAlmostEqual(fused.coverage, 1.0, places=6)
+        self.assertGreater(fused.fragility, healthy.fragility)
+
+    def test_median_aspect_is_two_sided(self):
+        """The detector that does fire in BOTH directions, which neither
+        fragility nor coverage does: aspect rises when glyphs fuse and falls
+        when they shatter, leaving the correct partition in between. It is
+        also the only one of the three carrying a prior from outside the
+        artifact -- no Latin glyph is several times wider than it is tall."""
+        healthy = rg.separation_margin(*self._spans(self._healthy()))
+        shattered = rg.separation_margin(*self._spans(self._shattered()))
+        fused = rg.separation_margin(*self._spans(self._fused()))
+        self.assertLess(shattered.median_aspect, healthy.median_aspect)
+        self.assertGreater(fused.median_aspect, healthy.median_aspect)
+        self.assertGreater(fused.median_aspect, 2.5)
+
+    def test_a_few_flat_glyphs_do_not_trip_the_aspect_detector(self):
+        """The real fixture contains underscores -- legitimately 6.04 wide by
+        0.01 tall. A max-aspect form read 413 on it and fired a false
+        OVER-MERGE alarm; the median form must not. No synthetic with uniform
+        glyph heights can catch this, which is the point of the test."""
+        pairs = self._healthy()
+        xy, comps = self._spans(pairs)
+        # two genuinely flat glyphs appended beyond the healthy run
+        flat = np.array([[100.0, 0.0], [106.0, 0.01], [110.0, 0.0], [117.0, 0.25]])
+        xy = np.vstack([xy, flat])
+        comps = comps + [np.array([len(xy) - 4, len(xy) - 3]),
+                         np.array([len(xy) - 2, len(xy) - 1])]
+        m = rg.separation_margin(xy, comps)
+        self.assertLess(m.median_aspect, 2.5,
+                        "a couple of flat glyphs must not read as over-merge")
+
+    def test_empty_components_do_not_crash(self):
+        """A fixture where every component falls below the pixel floor must
+        report NaNs, not raise IndexError out of the span scan."""
+        m = rg.separation_margin(np.zeros((0, 2)), [])
+        self.assertTrue(np.isnan(m.fragility))
+        self.assertTrue(np.isnan(m.median_aspect))
 
     def test_height_denominator_ignores_horizontal_decisions(self):
         """The property that makes the denominator trustworthy: same glyph
@@ -192,12 +261,12 @@ class TestSeparationMargin(unittest.TestCase):
         fragility must not move with the partition."""
         tall_healthy = self._spans(self._healthy(), height=9.0)
         tall_shattered = self._spans(self._shattered(), height=9.0)
-        _, _, f1, _ = rg.separation_margin(*tall_healthy)
-        _, _, f2, _ = rg.separation_margin(*self._spans(self._healthy(), height=18.0))
+        f1 = rg.separation_margin(*tall_healthy).fragility
+        f2 = rg.separation_margin(*self._spans(self._healthy(), height=18.0)).fragility
         # doubling the font height halves fragility; the horizontal layout is
         # unchanged, so this is the denominator responding only to v
         self.assertAlmostEqual(f1, f2 * 2, places=6)
-        self.assertTrue(np.isfinite(rg.separation_margin(*tall_shattered)[2]))
+        self.assertTrue(np.isfinite(rg.separation_margin(*tall_shattered).fragility))
 
     def test_max_intra_below_min_inter_is_vacuous(self):
         """Regression guard for a guard that could not fire. The classifier is
@@ -206,17 +275,17 @@ class TestSeparationMargin(unittest.TestCase):
         deliberately awful one, whose 0.05 split is plainly fragile. Any future
         boolean built on that comparison is dead code."""
         xy, comps = self._spans([(0.0, 5.0), (0.1, 5.1), (5.15, 6.0)])
-        max_intra, min_inter, fragility, _ = rg.separation_margin(xy, comps)
+        max_intra, min_inter, fragility, _, _ = rg.separation_margin(xy, comps)
         self.assertLess(max_intra, min_inter)   # vacuously true, hence useless
         self.assertLess(fragility, 0.02)        # the statistic that does discriminate
 
     def test_fragility_falls_when_a_decision_nears_zero(self):
         """Same glyph layout, one split narrowed towards zero: fragility must
         drop, which is the whole point of reporting it."""
-        _, _, wide, _ = rg.separation_margin(*self._spans(
-            [(0.0, 2.0), (1.5, 3.0), (6.0, 8.0), (7.5, 9.0)]))
-        _, _, narrow, _ = rg.separation_margin(*self._spans(
-            [(0.0, 2.0), (1.5, 3.0), (3.01, 5.0), (4.5, 6.0)]))
+        wide = rg.separation_margin(*self._spans(
+            [(0.0, 2.0), (1.5, 3.0), (6.0, 8.0), (7.5, 9.0)])).fragility
+        narrow = rg.separation_margin(*self._spans(
+            [(0.0, 2.0), (1.5, 3.0), (3.01, 5.0), (4.5, 6.0)])).fragility
         self.assertLess(narrow, wide)
 
     def test_merge_at_zero_is_plain_overlap(self):

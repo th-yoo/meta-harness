@@ -31,8 +31,11 @@ Both sign ambiguities are resolved here, neither by convention:
                 from flipping.
   reading order the slicer emits glyphs left to right, so u's own sign is
                 recovered by requiring u-order to agree with FILE order
-                (see `orient_u_by_file_order`). Measured on this fixture:
-                r = +0.988 for the correct sign, -0.988 for the flipped one.
+                (see `orient_u_by_file_order`). Measured on this fixture,
+                POINT-level (what the function computes and prints):
+                |r| = 0.983. The verdict separately reports a glyph-level
+                r = 0.988 over median file index per glyph; that is a
+                different statistic and is not what this code returns.
 
 DEPENDENCIES. Every other module in this directory is stdlib-only because it
 must run inside the task container. This one is not (numpy + cv2) and is
@@ -44,6 +47,7 @@ staged"; keep new in-container modules stdlib-only.
 import argparse
 import os
 import sys
+from typing import NamedTuple
 
 import numpy as np
 import cv2
@@ -134,6 +138,18 @@ def components_at_cell(xy, cell):
     return comps
 
 
+class MergeMargins(NamedTuple):
+    """What separation_margin reports. A named tuple because this return grew
+    from 3 fields to 5 across three rounds of review, each time because a
+    metric turned out to be blind to a failure mode; positional unpacking at
+    every call site made each of those a mechanical edit."""
+    max_intra: float
+    min_inter: float
+    fragility: float
+    coverage: float
+    median_aspect: float
+
+
 def separation_margin(xy, comps):
     """How far the merge's decisions sit from flipping -- computed per
     artifact, never shipped as a constant.
@@ -152,10 +168,11 @@ def separation_margin(xy, comps):
     fragile when it sits near zero. So report the closest call in each
     direction, scaled by a size the decision cannot move:
 
-        max_intra   the narrowest overlap that still merged (<= 0)
-        min_inter   the narrowest gap that still split (> 0)
-        fragility   min(|max_intra|, min_inter) / median glyph HEIGHT
-        coverage    sum of glyph widths / total u-extent
+        max_intra      the narrowest overlap that still merged (<= 0)
+        min_inter      the narrowest gap that still split (> 0)
+        fragility      min(|max_intra|, min_inter) / median glyph HEIGHT
+        coverage       sum of glyph widths / total u-extent
+        median_aspect  median glyph width / height
 
     NORMALIZE ON THE ORTHOGONAL AXIS. An earlier version divided by median
     glyph WIDTH, which is computed from the very partition being scored, and
@@ -175,15 +192,51 @@ def separation_margin(xy, comps):
     closeness-to-flipping measure and cannot be repaired into a
     correctness measure; do not read a high value as reassurance.
 
-    COVERAGE is therefore the actual shattering check. Glyphs should account
-    for most of the string's u-extent, and it separates the same synthetics
-    cleanly and in the right direction: 0.913 healthy vs 0.341 shattered.
+    COVERAGE is therefore the shattering check. Glyphs should account for most
+    of the string's u-extent, and it separates the same synthetics cleanly and
+    in the right direction: 0.913 healthy vs 0.341 shattered.
 
-    Both are dimensionless, derived entirely from the artifact, and REPORTED
-    rather than thresholded -- picking a cutoff would re-commit the
-    fitted-constant error this function exists to avoid. On the shipped
-    fixture: max_intra -0.89, min_inter +0.63, fragility 0.071, coverage 0.794.
+    BUT COVERAGE AND FRAGILITY ARE BOTH BLIND TO OVER-MERGE, the opposite
+    failure, and score it as ideal. Measured on a third synthetic where 30
+    components collapse into ONE blob: coverage 1.000 -- the theoretical
+    maximum, better than the correct partition's 0.913 -- and fragility 0.556,
+    the highest of the three, which in this framing reads safest. The
+    mechanisms are structural, not tuning: over-merging conserves the width
+    sum while absorbing the gaps, so coverage maxes out at exactly the failure
+    it cannot see; and with no inter-glyph gaps left, min_inter is +inf and
+    fragility collapses to |max_intra|, which GROWS as components pile up.
+    Neither has a term that responds to "there are no splits left".
+
+    That is the third check on this instrument that could not report the
+    condition it was named for, and the three share one cause: every one was a
+    statistic computed from the very partition it was scoring. A quantity
+    derived downstream of the decision under test cannot audit that decision.
+
+    MEDIAN_ASPECT is the two-sided detector, and the only quantity here that
+    carries prior information from OUTSIDE the artifact: Latin glyphs are not
+    several times wider than they are tall. It rises when glyphs fuse and
+    falls when they shatter, leaving the correct partition in between --
+    synthetics: healthy 0.63, shattered 0.11, fused 3.89; the real fixture
+    sits at 0.66, right beside healthy, as the prior predicts. Because it
+    encodes an outside prior it can be WRONG about a particular artifact,
+    which is precisely the property the other two structurally lack.
+
+    MEDIAN, not max, and this was measured the hard way: the max form read
+    413 on the real fixture and fired a false OVER-MERGE alarm, because the
+    two underscore glyphs are legitimately flat (6.04 wide x 0.01 tall) and a
+    max is decided by them alone. The synthetics all had uniform glyph
+    heights, so they could not have caught it -- a reminder that a detector
+    validated only on synthetic fixtures is validated against the fixture
+    generator, not the artifact.
+
+    All are dimensionless, derived from the artifact, and REPORTED rather than
+    thresholded -- picking cutoffs would re-commit the fitted-constant error
+    this function exists to avoid. On the shipped fixture: max_intra -0.89,
+    min_inter +0.63, fragility 0.071, coverage 0.794, median_aspect 0.66.
     """
+    if not comps:
+        return MergeMargins(float("-inf"), float("inf"), float("nan"),
+                            float("nan"), float("nan"))
     spans = sorted((float(xy[c][:, 0].min()), float(xy[c][:, 0].max())) for c in comps)
     intra, inter = [], []
     right = spans[0][1]
@@ -202,7 +255,10 @@ def separation_margin(xy, comps):
 
     extent = float(np.ptp(xy[:, 0]))
     coverage = sum(widths) / extent if extent > 0 else float("nan")
-    return max_intra, min_inter, fragility, coverage
+
+    ratios = [w / h for w, h in zip(widths, heights) if h > 0]
+    median_aspect = float(np.median(ratios)) if ratios else float("nan")
+    return MergeMargins(max_intra, min_inter, fragility, coverage, median_aspect)
 
 
 def merge_by_u_overlap(xy, comps, gap_tol):
@@ -310,20 +366,36 @@ def main():
         return 1
     say(f"cell={args.cell}: {len(comps)} connected components")
 
-    max_intra, min_inter, fragility, coverage = separation_margin(xy, comps)
-    say(f"merge margins: narrowest overlap that merged {max_intra:+.2f}, "
-        f"narrowest gap that split {min_inter:+.2f}, fragility {fragility:.3f} "
-        f"(closest decision / median glyph height), coverage {coverage:.3f} "
-        f"(glyph widths / u-extent)")
-    if not (fragility > 0.02):
-        say("*** fragility near zero -- some component nearly changed glyphs; "
-            "the glyph count below is not trustworthy ***")
-    if not (coverage > 0.5):
-        say("*** coverage low -- glyphs cover little of the string's extent, "
-            "the signature of a SHATTERED divide (cell too small, projection "
-            "broken). Note fragility reads HIGH, not low, when this happens ***")
-    say("    (both reported, never enforced: judge them, do NOT tune "
-        "--merge-gap until the count looks right)")
+    m = separation_margin(xy, comps)
+    say(f"merge margins: narrowest overlap that merged {m.max_intra:+.2f}, "
+        f"narrowest gap that split {m.min_inter:+.2f}")
+    say(f"  fragility {m.fragility:.3f} (closest decision / median glyph height) -- "
+        f"how near a decision came to flipping; blind to over-merge")
+    say(f"  coverage {m.coverage:.3f} (glyph widths / u-extent) -- "
+        f"detects SHATTERING only; over-merge drives it to 1.000")
+    say(f"  median aspect {m.median_aspect:.2f} (median glyph width/height) -- "
+        f"two-sided: rises when glyphs fuse, falls when they shatter")
+
+    # Advisory eyeball triggers. These three numbers ARE arbitrary -- they are
+    # not derived from anything and are here only so an obviously-broken run
+    # prints a line instead of scrolling past. Nothing is enforced, no exit
+    # code changes, and they must never become a tuning target. The `not (x >
+    # y)` form is deliberate: it also fires on NaN.
+    if not (m.fragility > 0.02):
+        say("*** fragility near zero -- some component nearly changed glyphs ***")
+    if not (m.coverage > 0.5):
+        say("*** coverage low -- signature of a SHATTERED divide (cell too "
+            "small, projection broken); note fragility reads HIGH here ***")
+    if not (m.median_aspect < 2.5):
+        say("*** typical glyph far wider than tall -- signature of OVER-MERGE; "
+            "note coverage reads near 1.000 and fragility HIGH here, so "
+            "neither of those can catch this ***")
+    say("    (reported, never enforced -- judge them; do NOT tune --merge-gap "
+        "until the count looks right)")
+    if args.merge_gap != 0.0:
+        say(f"    NOTE: margins above describe the parameter-free gap_tol=0 "
+            f"partition, but --merge-gap {args.merge_gap} was used for the "
+            f"glyphs rendered below -- they are not the same partition")
 
     glyphs = merge_by_u_overlap(xy, comps, args.merge_gap)
     say(f"after u-overlap merge (gap {args.merge_gap}): {len(glyphs)} glyphs "
