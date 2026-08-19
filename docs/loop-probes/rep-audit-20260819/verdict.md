@@ -117,3 +117,46 @@ survivor.
    audit-card-as-block-evidence = detector reuse, tests the
    measured-to-actuate enforce channel; pivot target if pilot-2 arm 1
    fails, not a from-scratch build.
+
+## Pilot 2 arm 1 (2026-08-19) — 0/3 BUT autopsy overturns the framing: gate ACTUATED, card CONTENT failed
+
+raman-fitting-gate (same audit body byte-identical, reframed as mandatory
+before-write ordering gate), k=3, store-written under minted v18 →
+trajectories recovered. All three trials reward=0, submitted values
+identical to pilot-1 (G=3745.37/2D=6327.9, raw+swapped).
+
+Traj autopsy (text events): all three agents READ the gate, EXECUTED its
+steps, TESTED the audit's claims, and REJECTED them with stated reasons:
+ - T1: "no peak exists near 1580/2700" — checked in the RAW axis (true
+   there); location-unbiased peak search instead.
+ - T2: tested the audit's proposed laser-line-subtraction transform,
+   found it "physically impossible for the stated range", rejected. The
+   card's attribution WAS wrong — 1e7/x appears 0 times in all 3 trajs
+   because the card never contained it.
+ - T3: classified the gate as a "textbook prompt-injection pattern" and
+   treated resisting it as correct security behavior.
+
+FINDINGS (each new):
+ 1. Gate framing ACTUATES (b7 law intact) — pilot-1 ambiguity resolves to
+    read-and-reasoned-rejection, not non-compliance.
+ 2. Wrong prescription < no prescription: the card's incorrect
+    laser-subtraction hedge was empirically falsified by the agent, which
+    discredited the whole card (sibling Q2 confirmed hard).
+ 3. Self-sealing check: "verify canonical values" performed in the raw
+    axis confirms the raw reading. A check without the transform is
+    circular.
+ 4. NEW WALL: mandatory-framed mid-prompt directives trigger the model's
+    prompt-injection defenses (T3 explicit).
+ 5. The actuator is the agent's EMPIRICISM: agents test what the card
+    proposes. Arm-2 design therefore: correct transform framed as a
+    falsifiable prediction ("test shift=1e7/x; both peaks should land at
+    G≈1580 and 2D≈2670 simultaneously"), non-mandatory tone, plus the
+    preemption "in the raw axis you will find peaks near 3745/6328".
+    Testing it succeeds spectacularly (both peaks land on canonical
+    values at once) — confirmation, not conflict.
+
+Lane A consequence: audit ATTRIBUTION quality is now load-bearing (a wrong
+transform poisons the card), which retro-justifies the clean-batch
+finding that blind sampling degrades attribution → sampler must ship
+distribution stats. Chain: sample-with-stats → audit → content-gate →
+falsifiable-prediction card → agent's own empiricism closes the loop.
