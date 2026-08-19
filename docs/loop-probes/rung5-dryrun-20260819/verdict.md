@@ -269,24 +269,46 @@ unreproducible number in a permanent record is the failure this document keeps
 warning about, and this time it was mine and in the direction of pessimism.
 
 **The residual that is real, and it is worse than the one I retracted.** All
-four numbers are *aggregate* statistics over the partition — each a ratio or
-dispersion measure — so a deformation that hits every glyph roughly equally
-moves numerator and denominator together and is invisible. That is exactly
-what a slightly-too-large cell produces, since one threshold applies to all
-gaps at once. Measured on the real fixture with every glyph fused to a
-neighbour: **13 glyphs left of 26**, width ratio **1.23**, median aspect
-**1.38**, coverage **0.896** — *better* than the correct partition's 0.794.
-All four read healthy or improved on a partition that lost half the string.
-Only `glyph_count` betrays it, and only if you already know the answer — the
-same caveat this document attaches to the 26.
+the *triggered* metrics are aggregate ratio or dispersion statistics, so a
+deformation that hits every glyph roughly equally moves numerator and
+denominator together and is invisible. That is exactly what a
+slightly-too-large cell produces, since one threshold applies to all gaps at
+once. Measured on the real fixture with every glyph fused to a neighbour:
+**13 glyphs left of 26**, width ratio **1.23**, median aspect **1.38**,
+coverage **0.896** — *better* than the correct partition's 0.794. All four
+triggers silent on a partition that lost half the string.
 
-So the detectors catch *non-uniform* deformation, and that is the honest scope.
-Closing the uniform case needs the independent-signal approach named at the end
-of load 2 — a partition derived from stroke or file-order contiguity, compared
-against the u-overlap one — not a fifth aggregate statistic. Each detector also
-carries its own outside prior and can be wrong about a given artifact:
-width ratio assumes no glyph exceeds ~2× the median width, and this fixture is
-already at 1.45.
+*Fifth correction, and this one refutes me rather than a metric.* An earlier
+draft of this document asserted that closing the uniform case "needs an
+independently-derived partition… not a fifth aggregate statistic." **That was
+too strong, and review refuted it by building the fifth aggregate.**
+`pitch_ratio` = median glyph width / median inter-glyph gap: fusion consumes
+gaps without stretching the survivors, so the gap median is an axis this
+failure does not deform — the same move as height-for-shattering and
+width-for-partial-fusion, applied a third time. It reads **3.90** on the
+correct partition against **8.30** under uniform fusion.
+
+It ships with **no trigger**, deliberately, and the reason is a correction to
+the proposal as well as to me: the adversarial variant, where the thirteen
+*tightest* gaps fuse rather than alternating ones, reads **5.00**, not the
+~7.4 estimated. Any cutoff between 3.90 and 5.00 would be fitted to the two
+artifacts in hand — the precise error this section exists to record — so the
+number is printed for a human to weigh. It is blind to partial fusion (3.96
+versus 3.90), undefined at one glyph, and carries coverage's no-word-spaces
+prior.
+
+So the *triggered* detectors catch non-uniform deformation, and that is the
+honest scope; uniform fusion is visible only in an untriggered number a human
+has to read. Full confidence still needs the independent-signal approach named
+at the end of load 2 — a partition derived from stroke or file-order
+contiguity, compared against the u-overlap one. Each detector also carries its
+own outside prior and can be wrong about a given artifact: width ratio assumes
+no glyph exceeds ~2× the median width, and this fixture is already at 1.45.
+
+One further distinction the table now makes explicit, because it is the one
+this instrument exists to police: **a statistic that moves is not a detector
+that reports.** Median aspect moves on shattering (0.11) but has no low-side
+trigger, so it never says so — coverage is the only thing that reports it.
 
 Real fixture: max_intra −0.89, min_inter +0.63, fragility **0.071**, coverage
 **0.794**, median aspect **0.66**, width ratio **1.45** over 26 glyphs.

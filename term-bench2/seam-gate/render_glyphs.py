@@ -162,6 +162,7 @@ class MergeMargins(NamedTuple):
     coverage: float
     median_aspect: float
     width_ratio: float
+    pitch_ratio: float
     glyph_count: int
 
 
@@ -180,6 +181,7 @@ def separation_margin(xy, comps):
         coverage       sum of glyph widths / total u-extent
         median_aspect  median glyph width / height
         width_ratio    widest glyph / median glyph width
+        pitch_ratio    median glyph width / median inter-glyph gap
         glyph_count    glyphs produced (width_ratio is meaningless at 1)
 
     THREE EARLIER VERSIONS OF THIS FUNCTION SHIPPED A CHECK THAT COULD NOT
@@ -195,41 +197,76 @@ def separation_margin(xy, comps):
          (6.04 wide x 0.01 tall).
     Every one was a statistic computed from the very partition it scored. A
     quantity derived downstream of the decision under test cannot audit that
-    decision, and no further aggregate will fix this -- closing it needs an
-    independently-derived partition (stroke or file-order contiguity) compared
-    against the u-overlap one.
+    decision. An earlier version added "and no further aggregate will fix
+    this"; review refuted it by constructing pitch_ratio, so the weaker and
+    true statement is that each aggregate needs an axis the failure does not
+    deform. Full confidence still needs an independently-derived partition
+    (stroke or file-order contiguity) compared against the u-overlap one.
 
-    LIMITS TABLE. Measured, not reasoned; synthetics in test_render_glyphs,
-    real-fixture figures from text.gcode.gz at cell 0.4.
+    LIMITS TABLE. Measured, not reasoned. Real-fixture figures from
+    text.gcode.gz at cell 0.4; synthetics in test_render_glyphs.
 
-      failure                     detected by        blind
-      shattering                  coverage 0.341,    width_ratio (equal-width
-      (cell too small)            median_aspect      fragments read 1.00)
-                                  0.11
-      global fusion               median_aspect      coverage (maxes at 1.000,
-      (all -> one blob)           3.89               ABOVE correct); fragility
-                                                     (rises to 0.556, reads
-                                                     safest); width_ratio
-                                                     (n=1, degenerate 1.00)
-      partial fusion              width_ratio 2.28   median_aspect (0.68 vs
-      (a few pairs merge)         on the real            0.66); coverage
-                                  fixture's two L's  (0.803, ABOVE correct);
-                                                     fragility (unchanged)
-      UNIFORM fusion              NOTHING            all four. Real fixture,
-      (every glyph merges                            every glyph fused
-      with a neighbour --                            pairwise: 13 glyphs left
-      what a slightly-too-                           of 26, width_ratio 1.23,
-      large cell produces)                           median_aspect 1.38,
-                                                     coverage 0.896 -- BETTER
-                                                     than the correct 0.794.
-                                                     Only glyph_count betrays
-                                                     it, and only if you
-                                                     already know the answer.
+    Note the difference between MOVES and REPORTS: only a statistic with a
+    trigger reports. median_aspect moves on shattering (0.11) but has no
+    low-side trigger, so it never says so -- coverage is the only thing that
+    reports shattering. A statistic that moves is not a detector.
 
-    So the pair of detectors catches non-uniform deformation. A partition
-    error that deforms every glyph roughly equally is invisible to all of
-    them, because each is a dispersion or ratio statistic and uniform
-    deformation moves numerator and denominator together.
+      failure                  REPORTS it        moves only    blind
+      shattering               coverage 0.341    median_aspect width_ratio
+      (cell too small)         (trigger 0.5)     0.11          (1.00, equal
+                                                               fragments)
+      global fusion            median_aspect     --            coverage
+      (all -> one blob)        3.89 (trigger                   (1.000, ABOVE
+                               2.5)                            correct);
+                                                               fragility
+                                                               (0.556, reads
+                                                               safest);
+                                                               width_ratio
+                                                               (n=1, 1.00);
+                                                               pitch_ratio
+                                                               (no gaps, NaN)
+      partial fusion           width_ratio 2.28  --            median_aspect
+      (one pair merges)        (trigger 2.0)                   (0.68 vs 0.66);
+                                                               coverage
+                                                               (0.803, ABOVE
+                                                               correct);
+                                                               fragility
+                                                               (unchanged);
+                                                               pitch_ratio
+                                                               (3.96 vs 3.90)
+      UNIFORM fusion           NOTHING reports   pitch_ratio   all four
+      (every glyph merges      it -- pitch_ratio 3.90 -> 8.30  triggers.
+      with a neighbour)        moves but carries (alternating  13 glyphs of
+                               no trigger        pairs), 5.00  26 survive:
+                                                 (13 tightest  width_ratio
+                                                 gaps)         1.23,
+                                                               median_aspect
+                                                               1.38, coverage
+                                                               0.896 -- BETTER
+                                                               than the
+                                                               correct 0.794
+
+    PITCH_RATIO (median glyph width / median inter-glyph gap) exists because
+    the claim "no further aggregate can catch uniform fusion" -- made in an
+    earlier version of this docstring -- was REFUTED by review. Fusion consumes
+    gaps without stretching the survivors, so the gap median is an axis this
+    failure does not deform: the same move as height-for-shattering and
+    width-for-partial-fusion, applied a third time.
+
+    It carries NO trigger, deliberately. The separation is real but modest and
+    depends on which gaps fuse: 3.90 correct vs 8.30 when alternating pairs
+    merge, but only 5.00 when the thirteen tightest gaps go instead (the
+    reviewer proposing it estimated ~7.4 for that variant; measurement gives
+    5.00, so the adversarial case separates less than predicted). Any cutoff
+    between 3.90 and 5.00 would be fitted to these two artifacts, which is the
+    error this whole function documents. It is printed for a human to weigh.
+    It is blind to partial fusion (3.96 vs 3.90), undefined at one glyph, and
+    carries coverage's no-word-spaces prior.
+
+    So the TRIGGERED detectors catch non-uniform deformation only. A partition
+    error that deforms every glyph roughly equally moves numerator and
+    denominator together in each of them; pitch_ratio is the one statistic
+    that survives that, and it is reported without a trigger.
 
     OUTSIDE PRIORS, all three of them, none unique. median_aspect assumes
     Latin glyphs are not several times wider than tall; coverage assumes no
@@ -253,7 +290,7 @@ def separation_margin(xy, comps):
         return MergeMargins(max_intra=float("-inf"), min_inter=float("inf"),
                             fragility=float("nan"), coverage=float("nan"),
                             median_aspect=float("nan"), width_ratio=float("nan"),
-                            glyph_count=0)
+                            pitch_ratio=float("nan"), glyph_count=0)
     spans = sorted((float(xy[c][:, 0].min()), float(xy[c][:, 0].max())) for c in comps)
     intra, inter = [], []
     right = spans[0][1]
@@ -278,8 +315,17 @@ def separation_margin(xy, comps):
 
     med_w = float(np.median(widths)) if widths else 0.0
     width_ratio = (max(widths) / med_w) if med_w > 0 else float("nan")
+
+    # Gaps BETWEEN the merged glyphs -- recomputed on the glyph partition, not
+    # reused from `inter` above, which is over components.
+    spans_g = sorted((float(np.min(xy[g][:, 0])), float(np.max(xy[g][:, 0])))
+                     for g in glyphs)
+    gaps = [b[0] - a[1] for a, b in zip(spans_g[:-1], spans_g[1:]) if b[0] > a[1]]
+    med_gap = float(np.median(gaps)) if gaps else float("nan")
+    pitch_ratio = (med_w / med_gap) if med_gap and med_gap > 0 else float("nan")
+
     return MergeMargins(max_intra, min_inter, fragility, coverage,
-                        median_aspect, width_ratio, len(glyphs))
+                        median_aspect, width_ratio, pitch_ratio, len(glyphs))
 
 
 def merge_by_u_overlap(xy, comps, gap_tol):
@@ -403,16 +449,17 @@ def main():
     say(f"  coverage {m.coverage:.3f} (glyph widths / u-extent) -- "
         f"detects SHATTERING only; over-merge drives it to 1.000")
     say(f"  median aspect {m.median_aspect:.2f} (median glyph width/height) -- "
-        f"catches GLOBAL fusion and shattering; blind to partial fusion")
+        f"REPORTS global fusion (high trigger only); moves on shattering but "
+        f"has no low trigger, so it never says so; blind to partial fusion")
     say(f"  width ratio {m.width_ratio:.2f} (widest / median glyph width) over "
         f"{m.glyph_count} glyphs -- catches PARTIAL fusion; reads a degenerate "
         f"1.00 at one glyph and on shattering")
+    say(f"  pitch ratio {m.pitch_ratio:.2f} (median glyph width / median gap) -- "
+        f"the only one that moves on UNIFORM fusion; no trigger, see below")
 
-    # Advisory eyeball triggers. These three numbers ARE arbitrary -- they are
-    # not derived from anything and are here only so an obviously-broken run
-    # prints a line instead of scrolling past. Nothing is enforced, no exit
-    # code changes, and they must never become a tuning target. The `not (x >
-    # y)` form is deliberate: it also fires on NaN.
+    # Four advisory triggers; see the module-level constants for what they are
+    # and are not. The `not (x > y)` form is deliberate: it fires on NaN.
+    # NONE of them catches uniform fusion -- see the limits table.
     if not (m.fragility > FRAGILITY_LOW):
         say("*** fragility near zero -- some component nearly changed glyphs ***")
     if not (m.coverage > COVERAGE_LOW):
@@ -427,9 +474,9 @@ def main():
             "note coverage reads near 1.000 and fragility HIGH here, so "
             "neither of those can catch this ***")
     say("    (reported, never enforced -- judge them; do NOT tune --merge-gap "
-        "until the count looks right. NONE of these detects uniform fusion, "
-        "where every glyph merges with a neighbour: all four read healthy or "
-        "better -- see separation_margin's limits table)")
+        "until the count looks right. The four TRIGGERS above are all blind to "
+        "uniform fusion; pitch ratio moves on it but deliberately carries no "
+        "trigger -- see separation_margin's limits table)")
     if args.merge_gap != 0.0:
         say(f"    NOTE: margins above describe the parameter-free gap_tol=0 "
             f"partition, but --merge-gap {args.merge_gap} was used for the "

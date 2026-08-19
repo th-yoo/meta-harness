@@ -304,29 +304,41 @@ class TestSeparationMargin(unittest.TestCase):
         self.assertLess(rg.separation_margin(xy, comps).width_ratio,
                         rg.WIDTH_RATIO_HIGH)
 
-    def test_uniform_fusion_defeats_every_detector(self):
-        """The fifth blind spot, pinned so the limits table cannot rot. When
-        EVERY glyph fuses with a neighbour -- what a slightly-too-large cell
-        produces, since one threshold applies to all gaps at once -- the
-        deformation is uniform, and every statistic here is a ratio or
-        dispersion measure that moves numerator and denominator together.
-        Half the glyphs are gone and all four numbers read healthy or better."""
+    def test_uniform_fusion_defeats_every_trigger(self):
+        """The fifth blind spot, pinned so the limits table cannot rot.
+
+        MODELS THE MECHANISM, which an earlier version of this test did not: a
+        too-large cell makes two glyphs ONE CONNECTED COMPONENT, so no intra
+        gap is recorded for the weld at all. The earlier fixture welded by
+        overlapping components 0.01, which recorded a -0.01 intra gap and drove
+        fragility to 0.0011 -- firing a trigger the real mechanism leaves
+        untouched, so the test contradicted the very cell it pinned. Here each
+        fused pair is a single component spanning both glyphs.
+        """
         healthy = rg.separation_margin(*self._spans(self._healthy()))
         pairs = self._healthy()
-        # fuse each glyph with its neighbour: overlap every second boundary
-        fused_pairs = []
-        for i in range(0, len(pairs), 4):
-            block = pairs[i:i + 4]
-            if len(block) < 4:
-                fused_pairs += block
-                continue
-            (a0, a1), (b0, b1), (c0, c1), (d0, d1) = block
-            fused_pairs += [(a0, a1), (b0, b1), (b1 - 0.01, c1), (c1 - 0.01, d1)]
-        uniform = rg.separation_margin(*self._spans(fused_pairs))
-        self.assertLess(uniform.glyph_count, healthy.glyph_count)
+        welded = [(pairs[i][0], pairs[i + 3][1]) for i in range(0, len(pairs) - 3, 4)]
+        uniform = rg.separation_margin(*self._spans(welded))
+
+        self.assertLess(uniform.glyph_count, healthy.glyph_count)  # glyphs lost
+        # every TRIGGERED statistic reads healthy or better
         self.assertLess(uniform.width_ratio, rg.WIDTH_RATIO_HIGH)
         self.assertLess(uniform.median_aspect, rg.ASPECT_HIGH)
         self.assertGreaterEqual(uniform.coverage, healthy.coverage)
+        self.assertGreater(uniform.fragility, rg.FRAGILITY_LOW,
+                           "the real mechanism leaves fragility untouched; a "
+                           "fixture that trips it is not modelling fusion")
+        # pitch_ratio is the one that moves -- which is why it is reported
+        self.assertGreater(uniform.pitch_ratio, healthy.pitch_ratio)
+
+    def test_pitch_ratio_is_blind_to_partial_fusion(self):
+        """Its own limit, pinned: median width and median gap both barely move
+        when a single pair merges, so pitch_ratio cannot see partial fusion --
+        which is precisely what width_ratio covers."""
+        healthy = rg.separation_margin(*self._spans(self._healthy()))
+        partial = rg.separation_margin(*self._spans(self._partial_fuse()))
+        self.assertLess(abs(partial.pitch_ratio - healthy.pitch_ratio),
+                        0.25 * healthy.pitch_ratio)
 
     def test_trigger_constants_have_their_documented_values(self):
         """The constants are pinned by VALUE, not merely referenced. Asserting
