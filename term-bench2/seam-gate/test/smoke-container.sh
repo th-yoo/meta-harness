@@ -71,6 +71,28 @@ done
 echo "=== using image: $IMAGE ==="
 
 # --------------------------------------------------------------------------
+# 0.5. Real-parser staging check (Task-4 review CRITICAL fix): every other
+#    step in this script hand-mirrors the intended staging with its own
+#    podman commands -- it never actually parses environment/Dockerfile, so
+#    a Dockerfile authored in a way the REAL runtime parser
+#    (opencode-plugin/src/bench/staging.ts's parseTaskDockerfile) misreads
+#    is invisible to it. This drives that unchanged parser over the task's
+#    real Dockerfile and asserts the resolved pip package list is exactly
+#    ["numpy"] and the COPY entries land where hook.py/the settings.json
+#    hook expect. See check-dockerfile-staging.ts's header for the
+#    regression this guards (a `|| echo "...install..."` fallback whose
+#    prose contained the word "install" got misparsed as a second
+#    pip-install marker).
+# --------------------------------------------------------------------------
+if ! command -v bun >/dev/null 2>&1; then
+  echo "FAIL: bun not found on PATH -- cannot run the real-parser staging check (check-dockerfile-staging.ts)"
+  FAIL_COUNT=$((FAIL_COUNT + 1))
+else
+  bun "$HERE/check-dockerfile-staging.ts"
+  check "real parseTaskDockerfile staging check (check-dockerfile-staging.ts)" "$?"
+fi
+
+# --------------------------------------------------------------------------
 # 1. Generate ORACLE and BAD artifact sets on the HOST via calibrate_gcode.py
 #    (its own module functions, not its CLI main() -- main()'s artifact
 #    dirs are ephemeral TemporaryDirectory()s that get cleaned up before we
