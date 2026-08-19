@@ -2,7 +2,7 @@ import { test, expect } from "bun:test"
 import { join, dirname } from "node:path"
 import { readFileSync, mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseFirstColNum, parseVerdict, cardFrom, applyTransform, runAuditUncached, auditCard, _resetAuditCache, writeAuditTrail, revalidate, type RevalClaim } from "../src/bench/convention-audit.ts"
+import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseFirstColNum, parseVerdict, cardFrom, applyTransform, runAuditUncached, auditCard, _resetAuditCache, writeAuditTrail, revalidate, parseRevalBlock, type RevalClaim } from "../src/bench/convention-audit.ts"
 import { runAgent } from "../src/bench/agent-run.ts"
 
 test("auditPrompt loads the frozen prompt with all four clauses + verdict line", () => {
@@ -129,6 +129,43 @@ test("revalidate REJECTS a non-identity degenerate transform (scale/1 doing no r
   const o = revalidate(degenerate, SAMPLE)
   expect(o.ok).toBe(false)
   if (!o.ok) expect(o.reason).toBe("degenerate-transform")
+})
+
+// ── Task 4: parseRevalBlock — four-way, fail-closed ──
+const BLOCK = `SURFACE ...
+REVALIDATION:
+TRANSFORM: reciprocal
+CONSTANT: 1.0e7
+DELTA: 30
+| input | computed | canonical | discriminates |
+|---|---|---|---|
+| 19139.4 | 522.5 | 520.7 | E:units |
+| 3745.3 | 2670.0 | 2700 | E:units |`
+
+test("parseRevalBlock: well-formed → claim", () => {
+  const p = parseRevalBlock(BLOCK)
+  expect(p.kind).toBe("claim")
+  if (p.kind === "claim") {
+    expect(p.claim.transform).toBe("reciprocal")
+    expect(p.claim.constant).toBeCloseTo(1e7, 0)
+    expect(p.claim.landings.length).toBe(2)
+    expect(p.claim.landings[0]!.discriminates).toBe("E:units")
+  }
+})
+test("parseRevalBlock: no marker → absent", () => {
+  expect(parseRevalBlock("SURFACE ... CONTENT ...").kind).toBe("absent")
+})
+test("parseRevalBlock: explicit TRANSFORM: none → none", () => {
+  expect(parseRevalBlock("REVALIDATION:\nTRANSFORM: none").kind).toBe("none")
+})
+test("parseRevalBlock: unknown transform → malformed", () => {
+  expect(parseRevalBlock("REVALIDATION:\nTRANSFORM: wibble\nCONSTANT: 1\nDELTA: 1\n| input | computed | canonical | discriminates |\n|-|-|-|-|\n| 1 | 1 | 1 | x |\n| 2 | 2 | 2 | y |").kind).toBe("malformed")
+})
+test("parseRevalBlock: <2 landing rows → malformed", () => {
+  expect(parseRevalBlock("REVALIDATION:\nTRANSFORM: reciprocal\nCONSTANT: 1\nDELTA: 1\n| input | computed | canonical | discriminates |\n|-|-|-|-|\n| 1 | 1 | 1 | x |").kind).toBe("malformed")
+})
+test("parseRevalBlock: unparseable constant → malformed", () => {
+  expect(parseRevalBlock("REVALIDATION:\nTRANSFORM: reciprocal\nCONSTANT: abc\nDELTA: 1\n| input | computed | canonical | discriminates |\n|-|-|-|-|\n| 1 | 1 | 1 | x |\n| 2 | 2 | 2 | y |").kind).toBe("malformed")
 })
 
 const okReply = (text: string) => ({

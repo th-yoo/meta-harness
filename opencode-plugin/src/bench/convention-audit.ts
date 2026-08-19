@@ -233,6 +233,41 @@ export function revalidate(claim: RevalClaim, sample: string): RevalOutcome {
   return landed >= 2 ? { ok: true } : { ok: false, reason: `only-${landed}-landed-under-one-constant` }
 }
 
+export type ParsedReval =
+  | { kind: "none" }
+  | { kind: "absent" }
+  | { kind: "malformed"; raw: string }
+  | { kind: "claim"; claim: RevalClaim }
+
+const REVAL_TRANSFORMS = new Set<RevalTransform>(["reciprocal", "scale", "offset", "identity"])
+
+/** Parse the imposed REVALIDATION block. Four-way, fail-closed: no marker →
+ * absent; explicit `TRANSFORM: none` → none (criteria-class); a present-but-
+ * broken block → malformed; a complete block → claim. */
+export function parseRevalBlock(raw: string): ParsedReval {
+  const marker = raw.match(/^REVALIDATION:\s*$/m)
+  if (!marker) return { kind: "absent" }
+  const body = raw.slice(marker.index!)
+  const tRaw = body.match(/^TRANSFORM:\s*(\S+)/m)?.[1]?.toLowerCase()
+  if (tRaw === "none") return { kind: "none" }
+  if (!tRaw || !REVAL_TRANSFORMS.has(tRaw as RevalTransform)) return { kind: "malformed", raw }
+  const constant = Number(body.match(/^CONSTANT:\s*(\S+)/m)?.[1])
+  const delta = Number(body.match(/^DELTA:\s*(\S+)/m)?.[1])
+  if (Number.isNaN(constant) || Number.isNaN(delta)) return { kind: "malformed", raw }
+  const landings: RevalLanding[] = []
+  for (const line of body.split("\n")) {
+    const cells = line.split("|").map((c) => c.trim()).filter((c, i, a) => !(i === 0 && c === "") && !(i === a.length - 1 && c === ""))
+    if (cells.length !== 4) continue
+    const [inS, compS, canS, disc] = cells
+    if (inS === "input" || /^-+$/.test(inS!)) continue   // header / separator row
+    const input = Number(inS), computed = Number(compS), canonical = Number(canS)
+    if ([input, computed, canonical].some(Number.isNaN) || !disc) continue
+    landings.push({ input, computed, canonical, discriminates: disc! })
+  }
+  if (landings.length < 2) return { kind: "malformed", raw }
+  return { kind: "claim", claim: { transform: tRaw as RevalTransform, constant, delta, landings } }
+}
+
 /** The audit call's isolation: bare (no tools, no persisted session,
  * thinking disabled) — mirrors `A4_ISOLATION` (a4-review.ts:88-96)
  * exactly, distinguished only by `title` so an audit call is unambiguous
