@@ -221,3 +221,47 @@ Register the new task dir in install.sh's flow (it auto-globs `*/`, so verify on
 
 **Definition of done:** all six tasks complete, verdict banked, branch NOT merged (merge is the
 user's explicit go, per the standing rule), workspace ledger closed with all rulings surfaced.
+# Task 7 — structural fix package (plan amendment, user-ordered 2026-08-19)
+
+Four items, all evidence-backed (join-probe verdict c34d7af + elf desk-check):
+
+1. **Structural id-join.** Card spec form becomes {seamSpecVersion, task, artifactIds:[...],
+   seams:[...]} — NO paths anywhere. spec_check REJECTS any "artifacts" path map or any
+   path-bearing entry (the removed freedom is enforced-absent, with tests). validator.py
+   resolves ids by convention: <root>/.seam/<id>.txt. Migrate: the curated spec
+   (specs/gcode-to-text-gate.json), the task-deps copy, all affected Task-1/2/3 tests
+   (explicit recalibration notes required in the report per test changed), calibrate harness,
+   hook (its own paths unchanged — verify).
+2. **Calibration-evidence emission.** calibrate_gcode.py gains --emit-evidence: prints a
+   sample-ready text block carrying the measured statistic or response curve for EVERY
+   vocabulary op with a free numeric parameter, computed from the given gcode: cluster
+   component-count vs cell over the frozen grid {0.3,0.4,0.5,0.8,1.0}; measured affine
+   residual ratio; measured per-column spreads; row counts (scoped and whole-file). SPEC.md
+   gains the general contract sentence: "for each op with a free parameter, the evidence
+   carries the measured statistic or its response curve over a frozen grid — cards derive
+   bounds, never guess them."
+3. **Rung-separated bars** (docs only): SPEC.md "bar design" section — pre-registered bars must
+   score format / join / content / calibration rungs separately; single conflated pass/fail
+   bars are a recorded defect pattern (two instances in this program).
+4. **source_crosscheck op family** (elf desk-check finding — the vocabulary was artifact-internal;
+   fidelity-to-source was inexpressible). New op:
+   source_crosscheck {reader: "<frozen-registry-id>", sample: N} — the validator re-derives N
+   deterministically-sampled artifact rows from the TASK'S SOURCE FILE via a frozen reader
+   registry and compares within tolerance. validator.py gains --source <path>; hook.py passes
+   the task's input file (/app/text.gcode for this task). Implement the registry with ONE
+   reader: gcode_g1_points (re-parses the sampled rows' x y z against the source's M486-S0
+   extruding G1 lines; deterministic sampling, e.g. every len/N-th artifact row). Registry
+   designed for one-file-per-reader growth (elf_le_words lands with the elf regen). Leak rule:
+   readers read the task INPUT only — never tests/ or solution/; enforce with a test that the
+   reader refuses paths containing /tests/ or /solution/.
+   Fail-open: unknown reader id or missing --source = predicate FAIL with clear detail (not
+   internal error). Update schema.json + spec_check for the new op. Add source_crosscheck
+   {reader:"gcode_g1_points", sample:50} as a new seam in the curated spec, calibrated by
+   running the harness (oracle must pass it; bad set: whole-file points contain non-S0 rows →
+   crosscheck must FAIL on the bad set — verify and record).
+
+Global constraints (binding, from the plan): fail-open absolute; frozen fixture untouched; no
+new deps (numpy ok); python tests test_*.py, full discovery green; container smoke
+(smoke-container.sh) re-run green — extend it if hook.py's invocation changed (--source arg);
+TDD; do NOT touch docs/loop-probes/** (Task 6 owns those files this cycle); do not touch
+verdict.md or pre-registration.md.
