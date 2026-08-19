@@ -155,3 +155,40 @@ RECOMMENDATION (for user): gcode×haiku card arm = the cleanest available
 Score traj-primary (convention consulted+acted) + reward secondary; expect
 partial reward lift capped by the execution wall. Own go + it needs the
 generated gcode card (sampler→sonnet audit) built first.
+
+## Sibling elf inversion (2026-08-19) — VERIFIED at source; elf is the CLEANER cell
+
+Desk-checked ~/z2/terminal-bench-2/extract-elf/tests/test_outputs.py:
+- REF loads [textSection, dataSection, rodataSection] words at vaddrs
+  (line 73/86) — CODE counts as memory image.
+- Bar: (#1) ZERO inconsistent values (any wrong value = hard fail) THEN
+  (#2) >=75% coverage. So a 77/309=25% fail with check#1 passed = CORRECT
+  values, narrow SCOPE (.data+.rodata, missing .text). Pre-check (i) PASSES
+  by verifier construction: the fails cannot contain wrong values.
+- Sound bar: principled (all allocated sections, documented ELF) + 75%
+  edge tolerance. NOT a raman-style lottery.
+
+CALL REVERSED: "scope != convention" was wrong. "What is the memory image
+of this format" (does .text count) IS a representation convention — same
+genus as "what axis is col1." elf failures ARE card-addressable.
+
+elf > gcode as the 2nd actuation cell: haiku already proves LE+vaddr+
+correct-value craft (no execution wall); single gap = memory-image scope.
+Card predicts ~3/3. gcode has execution ceiling (T1) + noisy 2/3-of-n=3
+composition + uninformative reward.
+
+REVISED PLAN (sibling menu, adopted):
+1. Generate elf card (sampler -> sonnet audit on a.out) = pre-check (ii):
+   does "memory image = all allocated sections incl .text" appear
+   NATURALLY? Verbatim discipline: if scope absent, do NOT hand-add —
+   instead bank "scope conventions sit below the auditor's natural
+   register" as a lane-A limitation + flip to gcode.
+2. If scope appears: elf card arm k=5 vs baseline topped to k=5,
+   production-shape (sonnet card -> haiku consumer), traj-primary
+   ("memory-image scope followed") + reward secondary. Baseline is 1/3
+   (2 scope-fail, 1 pass) — claim = lift-from-floored-on-scope, not
+   lift-from-zero. Pre-register composition: reward ceiling ~ scope-
+   flippable fraction (predict >=2 of the 2 scope fails flip).
+3. gcode k=5 mechanism-scored afterwards only if the harder case wanted.
+POWER note (accepted): k=3 proves nothing (1/3 vs 3/3 Fisher p=0.2);
+k=5/arm minimum (1/5 vs 5/5 p≈0.024).
