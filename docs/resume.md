@@ -474,6 +474,20 @@ yoo-dev then (this session drives it):
     Winner earns only a full-board slot PROPOSAL. No activation.
 ```
 
+## 🚢 SIBLING LANE UPDATE 2026-08-20 ~06:20 KST — B9 ANSWER RELAY COMPLETE: FLEET V1 CODE DONE (push pending grant)
+
+B7+B8+B9+B10+B11 all landed. B9: 8 commits on b9-answer-relay worktree merged to
+local fleet main @ `5f35f15`, 328/328 tests — push awaiting human grant at worker
+prompt. !answer <n>/esc live-smoked end-to-end (options-in-alert, 1s inject + audit
+log, structural stale rejection, single-injection under double-send, esc cancel).
+Empirical Key Map: all three prompt shapes = bare digit auto-submit. Opus final
+review caught a REAL injectable bug (non-numeric option → literal keys) + the
+back-to-back-prompt promptStore dead-end. Process notes: 7h loss to subagent stall
++ network (recovered from worktree, nothing lost); T3 built PARALLEL to T2 in a
+second worktree (merge-train landing, human-approved). Deferred fail-safe:
+generalized-selection detector widening (tripwire-pinned), re-notify race (benign
+3×). Plan: fleet:docs/superpowers/plans/2026-08-19-b9-answer-relay.md rev 2.
+
 ## 🚢 SIBLING LANE UPDATE 2026-08-19 ~00:15 KST — B8 ALERT MAPPING COMPLETE + PUSHED: origin/main = `8fb6919`
 
 8 commits 3c75b90..8fb6919, 255/255 tests. Spec §1.3 landed: full state alert table
