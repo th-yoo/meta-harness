@@ -477,3 +477,29 @@ past the representation trap before. Retro-confirms arm-3b rejection: no
 prompt clause fixes a hidden-window guessing game. "Curve-fitting craft"
 wording RETIRED; candidate for the upstream defect-report list alongside
 sam-cell --csv_path.
+
+## Round-7 (user challenge + sibling measurement) — "inaccurate answers" REFUTED; root-cause wording hardened
+
+User challenge: −26..−38% offset misses = real inaccuracy? Settled by
+measurement (both sessions, replicated): (1) offset-vs-window sweep has NO
+plateau (const: 126→1578 across hw 50→500; linear-background, center
+freed: 752→1614) — the barred quantity has no window-independent value
+under any reasonable model; (2) wide-window best practice fails the bar
+HIGH (+21..27%) — refuting the "agents should have used wide wings"
+mechanism twice over; (3) model-free side-band interpolation puts the
+local background at ~1360-1700, ABOVE the expected 1239; (4) the expected
+values are literally solution/solve.sh's Lorentz+const output on
+hard-coded round windows (2D: 2500-2900) — a procedure artifact, citable.
+
+WORDING (replaces "verifier defect"): the offset/gamma bars grade
+PROCEDURE-MATCHING against an unstated norm ("crop round windows around
+canonical positions" — the reachable convention leaderboard passers
+presumably follow), not measurement accuracy; x0/amplitude bars grade
+representation+physics. Gamma and offset are anticorrelated along the
+window axis (~one degree of freedom): each trial's offset+gamma violation
+= ONE miss of one unstated convention.
+
+PRODUCTION RULE: never inject "crop round windows around canonical
+positions" into cards — it would rescue this verifier's pass rate but is
+oracle-procedure injection (overfitting to a grader norm), not convention
+knowledge. Strengthens the census card-grading principle.
