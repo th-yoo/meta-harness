@@ -2088,3 +2088,28 @@ entry exists: tests could not distinguish the two outcomes.
 
 Verdict-grade record: `docs/loop-probes/reval-adherence-20260819/`
 (pre-registration + amendment-01 + verdict + all 10 raw cells + runner).
+
+**RETRACTION (2026-08-20), correcting this session's own merge commit
+`cf232e8`.** That commit message claims the fleet lane's `V1 ACCEPTANCE SWEEP`
+block is misplaced — newest by date but "thirteen sections down" — and says it
+is theirs to move. **That claim is FALSE and nobody should act on it.**
+`docs/resume.md` carries TWO parallel newest-first series, not one: every 🚢
+block is a sibling-lane entry, and they run in strict descending order among
+themselves (08-20 06:50, 08-20 06:20, 08-19, 08-18, 08-17, 08-17). The fleet
+block is the FIRST 🚢 in the file — the top of its own series, exactly where
+the convention puts it. It reads thirteenth only by raw section count, because
+the main-lane series above it is long.
+
+Worth keeping for the method, not the error. The near-miss that produced it was
+real and is recorded above: a clean auto-merge is not a correct merge, and
+git's "Automatic merge went well" could not have reported a chronological
+-ordering failure, because textual non-overlap knows nothing about dates. The
+right method — inspect the merged artifact's structure rather than the tool's
+exit code — is what surfaced it. But the same method, applied by the sibling,
+reached the opposite conclusion, because I had checked the artifact against a
+convention the file does not use. **Reading the artifact beats reading the
+report, but only if you have also read what the artifact's own structure is.**
+The staleness that did exist was one file up and was the sibling's: MOST RECENT
+STATE still said "2026-08-19 newest" with no entry for a rung-5 result that had
+just merged, reachable on another host only by reading commit messages. Fixed
+in `56a1946`.
