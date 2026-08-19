@@ -131,6 +131,14 @@ export interface RunTaskResult {
    * with zero matches: eval.sh only ever appends to outcomes.log on a
    * match) — fail-open, mirroring `ruleChecks` above. */
   hookRuleOutcomes?: { id: string; mode: string }[]
+  /** Seam-gate hook log (rung-4 instrumentation): the verbatim tail of
+   * /app/.seam/hook-log.ndjson, read while the container is still up (same
+   * pattern as ruleChecks/hookRuleOutcomes above). FAIL-OPEN: the file only
+   * exists when a seam-gated task ran, so rc!=0 is the COMMON case for every
+   * other task — omit the field, never reclassify the attempt. Capped at
+   * 16384 chars keeping the TAIL (latest invocations carry the final gate
+   * state; earlier lines are recoverable from the traj's block feedback). */
+  seamHookLog?: string
 }
 
 export type RunOneTaskFn = (
@@ -563,6 +571,18 @@ export async function runTaskOnce(
         log("  hook-rule-gate: outcomes read rc!=0 (no matches this attempt, or log unreadable) — hookRuleOutcomes omitted")
       }
     }
+    // Seam-gate hook-log readback (rung-4 instrumentation): converts future
+    // arms' seam-validation evidence from inference to direct proof. Same
+    // while-container-up + fail-open contract as the two readbacks above.
+    let seamHookLog: RunTaskResult["seamHookLog"]
+    {
+      const seamLogResult = await execFn(buildExecArgv(name, ["cat", "/app/.seam/hook-log.ndjson"]))
+      if (seamLogResult.rc === 0 && seamLogResult.stdout.trim() !== "") {
+        const cap = 16384
+        const out = seamLogResult.stdout
+        seamHookLog = out.length <= cap ? out : out.slice(out.length - cap)
+      }
+    }
     const elapsed = (Date.now() - taskStart) / 1000
     log(`  reward=${reward}${selfScore !== null ? `  self=${round1(selfScore)}` : ""}  elapsed=${pyFixed(elapsed, 1)}s`)
     return {
@@ -580,6 +600,7 @@ export async function runTaskOnce(
       ...(agentElapsedSec !== undefined ? { agentElapsedSec } : {}),
       ...(ruleChecks ? { ruleChecks } : {}),
       ...(hookRuleOutcomes ? { hookRuleOutcomes } : {}),
+      ...(seamHookLog !== undefined ? { seamHookLog } : {}),
     }
   } finally {
     // auth?.cleanup() shreds the darwin Keychain-exported .credentials.json (a

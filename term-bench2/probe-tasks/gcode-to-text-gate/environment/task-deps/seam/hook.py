@@ -35,6 +35,7 @@ import subprocess
 import sys
 
 STATE_PATH = "/app/.seam/state"
+LOG_PATH = "/app/.seam/hook-log.ndjson"
 SPEC_PATH = "/app/.seam/spec.json"
 VALIDATOR_PATH = "/app/.seam/validator.py"
 ROOT = "/app"
@@ -182,6 +183,25 @@ def run_validator(spec_path=SPEC_PATH, validator_path=VALIDATOR_PATH, root=ROOT,
     return proc.returncode, proc.stdout, proc.stderr
 
 
+def append_log(entry, log_path=None):
+    """Append one JSON line describing this invocation to the hook log.
+    OBSERVATION ONLY, never a precondition: any failure to serialize or
+    write is swallowed -- logging must not be able to change a gate
+    decision (the sensor law: the record observes the gate, the gate never
+    depends on the record). log_path resolves at call time for the same
+    mock.patch reason documented on run()."""
+    if log_path is None:
+        log_path = LOG_PATH
+    try:
+        import time
+        entry = dict(entry)
+        entry["ts"] = int(time.time() * 1000)
+        with open(log_path, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass
+
+
 def run(payload, state_path=None):
     """Full decision + I/O flow for one Stop-hook invocation. Returns the
     process exit code. May raise -- main() is the fail-open boundary.
@@ -198,12 +218,18 @@ def run(payload, state_path=None):
     counter = read_counter(state_path)
     action, exit_code, notice = pre_check(payload, counter)
     if action == "skip":
+        append_log({"phase": "pre_check", "action": action, "counter": counter,
+                    "exit_code": exit_code, "notice": bool(notice)})
         if notice:
             sys.stdout.write(notice)
         return exit_code
 
     v_exit_code, v_stdout, _v_stderr = run_validator()
     decision = post_validator_decision(v_exit_code, v_stdout, counter)
+    append_log({"phase": "decision", "validator_exit": v_exit_code,
+                "counter_before": counter, "counter_after": decision["new_counter"],
+                "exit_code": decision["exit_code"],
+                "seam_lines": [l for l in v_stdout.splitlines() if l.startswith("SEAM ")][:40]})
     write_counter(state_path, decision["new_counter"])
     if decision["stderr"]:
         sys.stderr.write(decision["stderr"])
