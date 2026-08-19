@@ -368,3 +368,48 @@ to the harness's own fixed layout (`points`/`projection` -> `points.txt`
 itself rather than assuming the reference names — either closes this gap
 without touching the demonstrated-reliable prose mechanism (5/5 x2, zero
 hedges x2, i.e. 4/4 across v3+v4 now).
+
+## Join-probe verdict (2026-08-19) — bar FAIL 0/4 by the letter; join rung FIXED 4/4; the failure moved DOWN a layer
+
+Scored against the join-probe pre-registration (355cdb3; both bars dry-run green on mocks before
+calls). 4 sonnet calls, 2 per arm. All four cards hedge-free (imperative rule now 4/4 batches).
+
+**By the pre-registered letter: BOTH-FAIL branch** — no call passed its full --check-only bar.
+**By rung (the honest mechanism read):**
+
+| rung | A1 | A2 | B1 | B2 |
+|---|---|---|---|---|
+| naming join (the original defect) | PASS | PASS | PASS | PASS |
+| oracle all-pass | PASS | PASS | PASS | FAIL (1 seam) |
+| bad-discrimination (>=2 seams fail) | FAIL (1) | FAIL (1) | FAIL (1) | PASS (2) |
+
+The defect the probe was designed around is DEAD in one prompt line, in either form: arm A used
+the exact given filenames 2/2; arm B used only the closed ids 2/2, zero invented paths. The
+interface-as-evidence theory was RIGHT for naming — the pre-registered decision rule conflated
+the join rung with full check-pass, so its "both-fail => theory wrong" branch fires by the letter
+while the mechanism refutes it. (The probe's own bar committed the rung-conflation error the
+raman verifier taught us about; recorded against the operator.)
+
+**The newly exposed layer: parameter calibration + seam depth.**
+- A1/A2/B1 emitted shallow seam sets (exists/cols padding; B1 emitted ONE seam, under v4's own
+  >=3 floor) where only the row-count seam discriminates the bad set -> bad fails 1 < 2.
+  Notably their row bounds WERE well-chosen — the sample's own counts (60761 whole-file vs 41777
+  scoped) make that bound derivable, and all three derived it.
+- B2 (structural arm) emitted the RICHEST design — 4 seams, 4 ops, 3 artifacts, matching the
+  curated spec's shape; bad-discrimination PASSES (affine + plane-value both fail on bad) — and
+  died on exactly one number: a self-invented cluster cell=2mm (oracle -> 1 merged component).
+  Nothing in the evidence says what component counts look like at any cell size; the card
+  guessed. ONE calibrated parameter from a full pass.
+
+**Consequences:**
+1. Structural id-fix: de-risked and still selected — B cards complied perfectly with ids-only;
+   no cost observed. Cheap-vs-structural is settled in structural's favor by principle AND now
+   by measured equivalence on the join (both work; structural removes the class).
+2. FIFTH fix-the-evidence instance: the sampler's structure profile should carry a mechanical
+   CALIBRATION SWEEP block (component count vs cell over the plane-projected scoped cloud —
+   exactly Task-3's sweep, already computed: 0.3->57, 0.4->30, 0.5->29, 0.8->23, 1.0->11) plus
+   the already-present row-count facts. With that, B2's design passes outright. Leak-safe:
+   computable from the input file alone.
+3. Probe bars must score rungs separately (operator lesson, second instance of rung-conflation).
+Next regen cycle's mandatory items therefore: structural id-join + sweep-block sampler + rung-
+separated bar. All staged, own go.
