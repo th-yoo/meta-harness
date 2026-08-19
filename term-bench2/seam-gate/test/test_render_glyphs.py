@@ -420,14 +420,22 @@ class TestLimitsTableIsNotStale(unittest.TestCase):
     in BOTH copies, so a stale cell fails the suite instead of surviving into
     the permanent record.
 
-    SCOPE, established by mutation-testing this class rather than asserted:
-    changing one occurrence of a number does NOT fail it, because the same
-    figure appears elsewhere in the prose and `assertIn` is satisfied by any
-    occurrence. Removing every occurrence from either copy DOES fail it (both
-    mutations run). So it catches a number that went missing or changed
-    wholesale -- the actual failure mode on this branch, where new statistics
-    never reached one copy -- and does NOT catch a number sitting in the wrong
-    row. Do not read a green suite as proof the table is correct."""
+    SCOPE, established by mutation-testing THIS implementation rather than
+    asserted. Three mutations were run against the current code: editing the
+    closing line's value alone FAILS, removing a figure wholesale from either
+    copy FAILS, and the unmutated tree passes. It reached that strength in two
+    steps, both of which turned out to be necessary -- see `_both` for the
+    label anchoring and `_closing_block` for the scoping. An earlier version
+    searched for bare numbers across the whole document, and was weaker in two
+    ways it did not admit: a single-occurrence edit was masked by the same
+    figure recurring in the prose, and `assertIn("26")` was satisfied forever
+    by the verdict's own "2026-08-19" dateline -- an assertion that could not
+    fail, inside the check meant to catch exactly that.
+
+    What it still does NOT do: verify a figure sits in the correct ROW of the
+    limits table, or that the surrounding claim is true. It checks that the
+    closing summary of both copies carries the current value under its own
+    label. Do not read a green suite as proof the table is correct."""
 
     @classmethod
     def setUpClass(cls):
