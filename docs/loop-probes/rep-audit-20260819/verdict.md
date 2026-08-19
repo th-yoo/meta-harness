@@ -217,3 +217,13 @@ numbers only; no task paths provided). 2 calls, sonnet. PASS iff ≥1 call's
 card contains the reciprocal transform (1e7/x or 1/λ-with-scale) AND the
 joint canonical landing prediction. Partial (transform named, no joint
 prediction) = run arm-2 with generated card anyway, scope note attached.
+
+**Arm-2 fixture deviation (noted pre-results):** the pre-reg said "MISREADINGS
+hedge replaced"; the built card (raman-fitting-predict) keeps only the
+audit's SURFACE section verbatim and replaces sections 2 AND 3 with the
+prediction block — section 2 also carried the falsified laser-subtraction
+hedge, and leaving falsified content beside the correct prediction would
+re-poison the card (arm-1 finding 2). Deviation banked before any trial
+completed. Also: user chose PARALLEL over generator-first — arm-2 runs the
+hand-authored card (channel-ceiling scope); a generated-card arm-2 remains
+available as a follow-up if the generator passes.
