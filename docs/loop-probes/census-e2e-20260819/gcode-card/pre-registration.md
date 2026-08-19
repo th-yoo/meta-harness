@@ -48,3 +48,26 @@ Changes vs v1 generation (both production-shaped, no hand-written card):
 2 sonnet calls; probe passes if >=1/2 cards meet the full bar; selected
 card = the passing one (both pass -> the one with more of (a)-(c) carried
 as explicit processor instructions). Arm remains a SEPARATE go.
+
+## Card regen v3 — pre-registration (2026-08-19, user "probe first", BEFORE any call)
+
+Changes vs v2 (TWO variables move — flagged: a pass is attributable to the
+package, not either alone; production ships both, arm-2 precedent):
+1. Sampler v3 = v2 + STRUCTURE PROFILE block, mechanical and task-blind,
+   report-not-interpret: global SVD variance ratios; local SVD at 3 fixed
+   scales; per-axis affine functional-dependence R2 (each axis regressed on
+   the other two — functional-dependency discovery, standard data-profiling
+   canon); per-axis spacing CV under frozen transform family {identity,
+   log10, reciprocal}; 20 verbatim Z-bearing extruding S0 lines. No plane
+   named, no dimension claimed, no axis privileged. (Recorded honestly: raw
+   global SVD alone under-discriminates here — 0.9958/0.0028/0.0013 reads
+   quasi-1D; the affine-dependence triple ~0.98/0.98/0.99 carries the
+   plane signal without naming it.)
+2. Generator prompt v3 = imperative rule + DECOMPOSITION RULE (supply an
+   ordered one-dimension-at-a-time recipe with per-step checkpoints; never
+   ask the processor to derive the decomposition — HSRL 2026 finding:
+   agent-derived decompositions are sub-optimal; TopoBench: keep compact).
+
+**PASS bar: UNCHANGED from v2** (five clauses a-e). Recorded-not-required:
+whether the card carries a staged checkpointed recipe (decomposition-rule
+compliance). 2 sonnet calls; >=1/2 full-bar = pass; arm remains separate go.
