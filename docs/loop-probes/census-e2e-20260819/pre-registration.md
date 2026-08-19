@@ -249,3 +249,43 @@ execution-craft, a different and honest limit).
 
 Sibling's baseline top-up (elf k=2, in flight) becomes baseline-only
 characterization — still useful, no longer feeds a card arm.
+
+## Boundary claim CORRECTED (sibling challenge, verified at source) — overclaim fixed
+
+Verified extract-elf/instruction.md: it STATES both success criteria —
+(1) "for any address you include, the value MUST match" (wrong-only
+penalty), (2) "at least 75% of the memory values present in the reference".
+The instruction is leak-safe auditor input. So INCLUSIVE extraction
+(include .text) is DERIVABLE from the instruction's own criteria by
+decision analysis (a superset of loaded sections can't fail #1 if read
+correctly, maximizes #2) — NO tests/ needed.
+
+So "invisible by construction" was TOO STRONG (overclaim, corrected). The
+auditor missed scope because the CURRENT prompt (Q1/Q2) anchors on the
+DATA-SAMPLE surface, not the INSTRUCTION's success criteria — a
+prompt-REGISTER gap, not a structural boundary. Corrected boundary:
+ - CATCHABLE leak-free: (a) data-surface-signature conventions
+   (units/endianness/script/address-base) [current prompt], (b)
+   scope/deliverable conventions with an INSTRUCTION-CRITERIA signature
+   [needs a prompt clause — the elf case].
+ - TRULY uncatchable leak-free (the narrow real boundary): conventions
+   defined ONLY by the reference solution with NO instruction signature —
+   raman's 1239 fit-window is the type specimen (instruction says nothing
+   about windows/model).
+
+## Elf-v3 pre-check — pre-registration (bar fixed BEFORE calls)
+
+audit-prompt-v3 = current generator-prompt + ONE generic clause:
+"Also audit the TASK INSTRUCTION's success criteria for scope/deliverable
+ambiguities: where a broader/inclusive reading is penalty-free under the
+stated scoring, name the dominant reading." Generic, not elf-specific,
+leak-free (reads instruction, already provided).
+PASS bar (same as pre-check ii): card UNPROMPTED states the memory image
+includes executable/code sections (.text by name OR code-is-memory), now
+permitted to derive it from the instruction's wrong-only+75% criteria.
+2 calls, sonnet, same elf input.
+PASS -> elf card arm k=5 back on (cleaner cell, no execution wall) +
+"instruction-criteria clause" becomes a standard lane-A prompt element.
+FAIL -> boundary hardens against a strictly stronger prompt; flip to gcode.
+Scope-creep faced: instruction-denotation ("what does 'memory values'
+mean") IS a representation question; clause stays behavior-generic.
