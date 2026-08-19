@@ -3,26 +3,47 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-> **MOST RECENT STATE (2026-08-19 end, `yoo-dev`):** REPRESENTATION-TRAP
-> ARC CLOSED — headline: convention-card injection lifts raman 0/48+
-> lifetime → 3/6 (Fisher p≈0.0008); mechanism (trap-cracking) 6/6 across
-> card-armed trials; ALL residual fails = 2D offset/gamma precision rung,
-> zero representation content. Full chain PROVEN mechanically: sampler
-> (uniform-resample peak-finder) → auditor (transform-table prompt,
-> gen4-r2 derived 1e7/x with 3 structural proofs) → content-gate (12/12)
-> → generated card verbatim → agent empiricism (verified card
-> independently, found extra Si lines). NOT proven by letter: lane-A
-> end-to-end ≥2/3 (arm-3 1/3, coin-flip bar at k=3 — process lesson
-> banked). Read docs/loop-probes/rep-audit-20260819/verdict.md TOP TO
-> BOTTOM (the whole arc, 6 sibling co-review rounds with meta-harness-f6).
-> NEXT GOS: census generality probe (card-level scoring pre-reg per
-> round-6 §3) · production build (propose-verify revalidator + sampler +
-> staging integration) · v7 full-30-board slot run (raman-fitting DROPPED from target-tasks.txt by user ruling 08-19 — verifier grades an unstated crop procedure, see docs/2026-08-19-raman-verifier-report.md; probe-instrument use only) · sam-cell paired
-> rerun. LAWS: agent empiricism is the actuator (falsifiable predictions,
-> not directives) · wrong prescription < no prescription · coercive
-> injection wording triggers injection-defense · confident-wrong cards
-> must be mechanically revalidated before injection · probe store-writes
-> under MINTED versions (v18) · ≥2/3-at-k=3 = coin-flip bar.
+> **MOST RECENT STATE (2026-08-19 late, `yoo-dev`):** LANE A SHIPPED to main
+> (`a97156a`, pushed). `--convention-audit` staging step OFF-by-default:
+> leak-safe sampler → sonnet ACP-daemon audit → content-gate → verbatim
+> card injected like budgetLine, single-flight cached, audit-trailed;
+> threaded behind the flag (agent-run/cmd-run/cmd-ab/cli). Built via SDD
+> (7 tasks, each reviewed; opus whole-branch review MERGE-READY; 2
+> arming-findings fixed: I1 prompt made honest — daemon isolation is
+> TOOLLESS by security invariant so auditor has NO compute, prompt
+> reframed to auditable inline arithmetic + bumped lane-a-v2; I2 COPY
+> --chown/--chmod/--link/glob robustness). Suite 2208/0. Spec
+> docs/superpowers/specs/2026-08-19-lane-a-convention-audit-design.md,
+> plan .../plans/2026-08-19-lane-a-convention-audit.md.
+> NOT ARMED (user ruling — no arm). BANKED LIMITATION: shipped toolless
+> daemon auditor is weaker than the compute-CLI setup that validated
+> raman-class (compute-heavy) traps; fine for elf-class (criteria) traps;
+> a compute transport = increment-2 (own go). Increment-2 also owes the
+> mechanical propose-verify revalidator (reject gen4-r1-class
+> confident-wrong cards before injection).
+> POST-LOOP SPEC ITEMS unfolded (in /tmp scratchpad plan-fixes.md, may be
+> lost on reboot — RE-DERIVE from here): sampler contract = per-format
+> DERIVED DISCRIMINATING stats + eigenvector loadings (sibling gcode 3rd
+> "fix the evidence" instance); imperative clause evidence-backed;
+> KKAMAK_HOME/META_HARNESS_HOME must be EXPLICIT in launch commands
+> (never inherit from tmux-server env — 3rd env-inheritance trap);
+> measured law "at haiku imperative OPERATIONS transfer, self-VERIFICATION
+> does not" → seam-checks need ENFORCED hook (rung-4) not card prose.
+> NEXT GO (approved, not started): BOTH-DNA PILOT — dna-assembly (0.38,z4)
+> + dna-insert (0.31,z6) baseline autopsy k=1-3 no-card, verify failures
+> are CONVENTION-caused (reverse-complement/strand/reading-frame/circular
+> topology; dna-insert also Tm-on-annealed-region scope trap) not
+> EXECUTION-caused (primer Tm math) — the census-e2e confirm gate. New
+> DOMAIN (molecular biology) = raman-class generality test beyond
+> spectroscopy/gcode/elf. Rejected for lane A: make-mips-interpreter
+> (build-a-VM execution-heavy), extract-moves-from-video
+> (YouTube+OCR+network). Tier-2 confounded: financial-document-processor
+> (0.64 locale trap but OCR-execution). Sibling meta-harness-1e owns the
+> gcode lane (rung-4 enforced-hook + rung-5 harness-render, its own gos).
+> SHARED-CHECKOUT HAZARD (bit this session): both sessions share one
+> working tree + HEAD — sibling commits landed on my feature branch;
+> recovered losslessly (cherry-pick to main + rebase). Coordinate branch
+> ops.
 
 ## 🏁 ABLATION LADDER SHIPPED + MEASURED 2026-08-19 (`yoo-dev`) — RUNG 0 = 0/5: RETRIEVAL FAILURE CONTEXT-INDEPENDENT · LEAST REPRO CONFIRMED
 
