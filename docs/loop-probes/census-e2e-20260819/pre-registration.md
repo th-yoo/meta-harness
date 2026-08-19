@@ -395,3 +395,16 @@ haiku/production tier, 5/5) — but the production regime is HEDGE-FRAGILE,
 a new lane-A design constraint. gcode null is explained (hedge + execution),
 not a mechanism refutation. Next (own go): imperative-card gcode retry to
 separate hedge from execution; but gcode's execution wall caps it regardless.
+
+## Stat honesty note (sibling caveat, accepted) — elf REWARD is suggestive, not significant
+
+Recomputed Fisher one-sided:
+- elf REWARD 5/5 vs 2/5 = p=0.0833 — SUGGESTIVE, NOT significant at k=5.
+  Do NOT cite the elf reward line as p<0.05.
+- elf MECHANISM 5/5 scope-followed vs baseline 1/5 (only the 1 pass acted
+  on inclusive scope; 2/2 autopsied fails were scope-narrow) = p=0.0238.
+  This is where the elf claim is strong, and it is the right foundation:
+  the tier×hedge law rests on the MECHANISM contrast (imperative card ->
+  5/5 complied; hedged card -> 4/5 harvested the hedge), not on the reward
+  delta. Reward-hardening (if wanted): elf k=10/arm reaches p<0.05 cheaply
+  (~100-300s/trial). Own go.
