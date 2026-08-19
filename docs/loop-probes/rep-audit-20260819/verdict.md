@@ -431,3 +431,30 @@ identified convention" clause → regenerate → rerun (attacks the precision
 rung through the same machine chain); (b) accept raman as
 representation-cracked, bank, pivot to census generality + production
 build (propose-verify gate, sampler, staging integration); (c) park.
+
+## Sibling round-6 (accepted, math verified) — the citable claim + census spec
+
+1. POOLED CLAIM (letter-proven, replaces the missed bar as the headline):
+   card-armed trials 3/6 vs lifetime raman 0/48+ → one-sided Fisher
+   p≈0.0008 (=20/24804, verified). "Convention-card injection lifts raman
+   from 0/48 to 3/6, p<0.001; every residual failure is precision-rung
+   (2D offset/gamma), zero representation content." Heterogeneity stated:
+   two cards (hand/generated), mixed arms — claim survives.
+2. Arm-3b REJECTED on power math (verified): ≥2/3 at k=3 passes p=0.5
+   half the time, true-2/3 only 74% — spend without inference; and its
+   target is curve-fitting craft outside the research question. The
+   baseline-implications generator clause is ADOPTED into the standard
+   generator prompt untested-on-raman; census evaluates it free.
+3. CENSUS PRE-REG SPEC: grade the CARD directly per domain (convention
+   identified? decisive evidence computed? mechanically revalidatable?),
+   end-task reward secondary. Never repeat the rung-conflated end-task
+   bar. Production items standing: propose-verify mechanical revalidator
+   (r1-class confident-wrong cards must not inject), selection asterisk,
+   canonical-knowledge dependence per domain.
+4. PROCESS LESSON: ≥2/3-at-k=3 is a coin-flip bar (50% miss at true
+   p=0.5); future arms raise k or pre-register mechanism-level bars with
+   task reward secondary.
+
+ARC STATE: representation-trap research question ANSWERED for raman
+(mechanism 6/6, pooled p<0.001); open work is engineering (census
+generality, revalidator, sampler, staging integration) + the craft rung.

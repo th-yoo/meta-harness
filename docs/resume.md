@@ -3,25 +3,26 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-> **MOST RECENT STATE (2026-08-19 late, `yoo-dev`):** BREAKTHROUGH DAY —
-> first raman passes in lab history. Chain (all pre-registered, all in
-> docs/loop-probes/rep-audit-20260819/verdict.md, read top to bottom):
-> ladder rung-0 0/5 → audit probe (framing gates retrieval; content-gate
-> 12/12) → pilot-1 advisory card FAIL → pilot-2 arm-1 gate card 0/3 with
-> trajs proving read-and-reasoned-rejection (card's transform was WRONG;
-> agents falsified it; mandatory tone = prompt-injection defense) →
-> **arm-2 falsifiable-prediction card 2/3 verifier, TRAP SOLVED 3/3**
-> (x0 dead-on; one fail = 2D gamma 0.03 past ±1 bar; passes 76-104s vs
-> fails 360-880s = crank-1 churn replication). Generator 0/2
-> (sampler-evidence bottleneck, not reasoning). OPEN LINK: generator
-> iter-2 (deterministic peak-finder in sampler, pre-reg turnkey in
-> verdict.md) → generated card verbatim → bench k=3 = lane A end-to-end.
-> LAWS ADDED: wrong prescription < no prescription · agent empiricism is
-> the actuator (falsifiable predictions, not directives) · coercive
-> injected wording triggers injection defense · probe runs store-write
-> under MINTED versions (v18 = v1-clone, never adopt). Sibling session
-> meta-harness-f6 co-reviewed all verdicts (3 rounds). v7/v1 standing
-> state unchanged; v7 board run + sam-cell rerun still pending gos.
+> **MOST RECENT STATE (2026-08-19 end, `yoo-dev`):** REPRESENTATION-TRAP
+> ARC CLOSED — headline: convention-card injection lifts raman 0/48+
+> lifetime → 3/6 (Fisher p≈0.0008); mechanism (trap-cracking) 6/6 across
+> card-armed trials; ALL residual fails = 2D offset/gamma precision rung,
+> zero representation content. Full chain PROVEN mechanically: sampler
+> (uniform-resample peak-finder) → auditor (transform-table prompt,
+> gen4-r2 derived 1e7/x with 3 structural proofs) → content-gate (12/12)
+> → generated card verbatim → agent empiricism (verified card
+> independently, found extra Si lines). NOT proven by letter: lane-A
+> end-to-end ≥2/3 (arm-3 1/3, coin-flip bar at k=3 — process lesson
+> banked). Read docs/loop-probes/rep-audit-20260819/verdict.md TOP TO
+> BOTTOM (the whole arc, 6 sibling co-review rounds with meta-harness-f6).
+> NEXT GOS: census generality probe (card-level scoring pre-reg per
+> round-6 §3) · production build (propose-verify revalidator + sampler +
+> staging integration) · v7 full-31-board slot run · sam-cell paired
+> rerun. LAWS: agent empiricism is the actuator (falsifiable predictions,
+> not directives) · wrong prescription < no prescription · coercive
+> injection wording triggers injection-defense · confident-wrong cards
+> must be mechanically revalidated before injection · probe store-writes
+> under MINTED versions (v18) · ≥2/3-at-k=3 = coin-flip bar.
 
 ## 🏁 ABLATION LADDER SHIPPED + MEASURED 2026-08-19 (`yoo-dev`) — RUNG 0 = 0/5: RETRIEVAL FAILURE CONTEXT-INDEPENDENT · LEAST REPRO CONFIRMED
 
