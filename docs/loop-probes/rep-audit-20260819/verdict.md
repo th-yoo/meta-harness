@@ -503,3 +503,25 @@ PRODUCTION RULE: never inject "crop round windows around canonical
 positions" into cards — it would rescue this verifier's pass rate but is
 oracle-procedure injection (overfitting to a grader norm), not convention
 knowledge. Strengthens the census card-grading principle.
+
+## Round-8 — verifier report documented NOT filed; bench reclassification (RECOMMENDED, one-word confirm)
+
+Report: docs/2026-08-19-raman-verifier-report.md (complete, filing-ready,
+held per user ruling).
+
+Bench status of raman-fitting — split ruling, not blanket exclusion:
+ 1. **Loop-signal use (band membership, ab/gauntlet evidence, proposer
+    reward): EXCLUDE.** The binary reward = representation rung × window
+    lottery; the lottery half is symmetric noise in paired designs (power
+    loss) and pure noise in unpaired ones. A candidate that fixes
+    representation still coin-flips — signal attenuated ~50%.
+ 2. **Board / leaderboard-comparability runs (v7 full-31-board): KEEP.**
+    Forking board membership breaks cross-version and cross-harness
+    comparability; in paired arms the lottery is symmetric (unbiased,
+    just noisier). Interpretation note travels with the score.
+ 3. **Probe use: KEEP, mechanism-scored.** raman remains the best live
+    representation-trap instrument; probe verdicts score the trap rung
+    (x0-only) as the ladder/arms already did in practice.
+Generalization: the census probe should carry a bar-soundness flag per
+task (are the graded quantities data-determined?) — same audit that
+exposed raman applies to any leaderboard task before it feeds the loop.
