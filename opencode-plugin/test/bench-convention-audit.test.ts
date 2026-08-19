@@ -114,8 +114,16 @@ test("revalidate FAILS closed when the range bounds are malformed (NaN, not just
   expect(o.ok).toBe(false)
   if (!o.ok) expect(o.reason).toBe("range-unavailable")
 })
-test("revalidate REJECTS a degenerate identity/0 card whose canonical equals the raw input", () => {
+test("revalidate REJECTS identity outright — it is a falsification candidate, never a winner", () => {
   const degenerate: RevalClaim = { transform: "identity", constant: 0, delta: 30,
+    landings: [ { input: 1580, computed: 1580, canonical: 1580, discriminates: "E:units" },
+                { input: 2670, computed: 2670, canonical: 2670, discriminates: "E:units" } ] }
+  const o = revalidate(degenerate, SAMPLE)
+  expect(o.ok).toBe(false)
+  if (!o.ok) expect(o.reason).toBe("identity-not-a-winner")
+})
+test("revalidate REJECTS a non-identity degenerate transform (scale/1 doing no real work)", () => {
+  const degenerate: RevalClaim = { transform: "scale", constant: 1, delta: 30,
     landings: [ { input: 1580, computed: 1580, canonical: 1580, discriminates: "E:units" },
                 { input: 2670, computed: 2670, canonical: 2670, discriminates: "E:units" } ] }
   const o = revalidate(degenerate, SAMPLE)

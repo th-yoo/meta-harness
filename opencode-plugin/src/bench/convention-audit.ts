@@ -211,6 +211,9 @@ export type RevalOutcome = { ok: true } | { ok: false; reason: string }
  * landing's input is inside the sample's first-col-range, and every landing
  * names the misreading it discriminates. Fail-closed if range is unavailable. */
 export function revalidate(claim: RevalClaim, sample: string): RevalOutcome {
+  // identity is a falsification candidate the auditor rules out, never a valid winning
+  // transform; a no-op resolving a representation MISMATCH is degenerate by construction.
+  if (claim.transform === "identity") return { ok: false, reason: "identity-not-a-winner" }
   const m = sample.match(/first-col-range=\[\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\]/)
   if (!m) return { ok: false, reason: "range-unavailable" }
   const lo = Number(m[1]), hi = Number(m[2])
