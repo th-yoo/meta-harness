@@ -145,3 +145,53 @@ stat — least-squares plane fit Z ~ aX + bY over S0 extruding points,
 reporting coefficients and R^2 — plus 20 consecutive Z-bearing extruding
 G1 lines verbatim. With R^2=0.99 stated in the sample, tilt is one
 inference step. Re-run = 2 sonnet calls, own go. Bar unchanged.
+
+## Card regen v3 verdict (2026-08-19) — PASS: r2 meets the full five-clause bar
+
+Scored against the v3 pre-registration (bar unchanged from v2, fixed before
+calls). Zero permissive hedges in EITHER card (mechanical scan) — the
+imperative rule now actuates 2/2 generations in a row.
+
+**r2 = FULL PASS, all five clauses, plus the recorded-not-required
+decomposition recipe in exactly the divide-and-conquer shape.**
+(a) S0 scoping with a count checkpoint (~41777); (b) E>0 filtering — and it
+inverts travel moves into a FEATURE (pen-up jumps = glyph segmenters,
+step 4); (c) tilt derived via THREE independent arguments: the
+affine-dependence triple ("points fit a single tilted plane, not the
+horizontal XY plane"), a falsification of the horizontal reading ("if the
+plane were horizontal, Z's own R2 would be ~0; instead 0.988"), and a new
+argument the operator had not conceived — avg unique-Z spacing 0.043mm <<
+0.2mm layer height, so Z varies WITHIN layers along the path, i.e. the
+toolpath tracks a sloped surface point-by-point; (d) label barred as
+evidence at both ends of the card ("no earlier step or the M486 label may
+be used as the answer"); (e) hedge count zero. Recipe: 5 ordered steps,
+one checkpoint each, 3D→2D (fit+project) → 2D→1D (travel-break glyph
+clustering along the baseline) → per-glyph read, with a curved-surface
+fallback branch (2b: local tangent planes) — the full recursion, supplied
+to the processor rather than asked of it.
+
+**r1 = 4/5, fails (c) by the letter.** Sound methodology — it refused to
+assume PCA axes align with raw X/Y/Z and demanded eigenvector loadings
+(a LEGITIMATE gap in the structure profile: ratios were reported without
+loadings; production sampler contract should add them) — and its recipe
+does fit-and-project correctly, but it never names the tilt; its step 4
+stays agnostic ("nearly constant per-layer bbox → flat; varying → stop and
+re-scope"), deferring the property the bar demands be stated.
+
+**Sampler post-mortem, banked:** the affine-dependence triple carried the
+tilt (r2 cited it verbatim); the global SVD ratios alone were ambiguous
+exactly as pre-registered (r2's misreading 3 even falsifies the "PC1=99.6%
+means 1-D, ignore Z" trap the profile could have induced). The sub-layer-Z
+argument shows a strong auditor builds discriminating stats we did not
+supply — but only once the object-scoped evidence exists at all.
+
+**Selected card: r2 (4934 chars), verbatim, zero hand edits.** Two-variable
+attribution (sampler stats vs decomposition rule) unresolved by design —
+package-whole, arm-2 precedent.
+
+**Next (separate go): the k=5 haiku attack arm** — gcode-to-text-card task
+rebuilt with the r2 card under the same soft gate, minted store version,
+--save-all-traj; mechanism rungs primary (acted → scoped+filtered
+extraction → plane-projected → >3 glyph clusters → multi-char read),
+reward secondary; prediction: acted-rate high, reward capped by haiku
+glyph perception (0-2/5), per attack-plan.md.
