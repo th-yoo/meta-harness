@@ -52,7 +52,25 @@ proven live caller on this transport uses a bare CLI id (`a4-review.ts`,
 no-op** — every audit returns ERROR → `card: null` → nothing is ever injected,
 while the audit trail records ERRORs that look like model failures. Both are
 invisible to the 2241-test suite because every audit test injects fake daemon
-deps. Neither has a fix go yet.
+deps.
+
+**BOTH FIXED AND LIVE-VERIFIED.** `789941b` (F2: `AUDIT_MODEL` derived from
+`DEFAULT_BENCH_MODEL`) and `92b09ac` (F1: `auditClientBudgetMs` derived from the
+turn timeout via `ACP_BUDGET`), landed as two commits on purpose — both defects
+independently produce "no successful call", so one commit would have destroyed
+the attribution these separate measurements established. Verified end-to-end
+through `runAuditUncached` itself with **no overrides** (no `budgetMs`, no model,
+no `ACP_TURN_TIMEOUT_MS` — the shipped defaults):
+
+```
+$ bun docs/loop-probes/reval-adherence-20260819/run-probe.ts verify
+verdict=NO_MISMATCH rawLen=2902 card=null truncated=false
+LIVE VERIFY: PASS — the shipped path reached the model
+```
+
+Before the fixes the same call returned `verdict: "ERROR"` with an empty
+`rawAudit` and zero spend. Tests alone could not tell those apart, which is the
+whole reason this verification is recorded rather than assumed.
 
 ### F3 — the prompt and the parser demand incompatible things
 Block shape was emitted 4/4. Every block still failed to parse because the

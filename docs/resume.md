@@ -20,8 +20,11 @@ does NOT transfer; this file + the repo are the source of truth.)
 > derived from `DEFAULT_BENCH_MODEL`) and `92b09ac` (budget, derived from the
 > turn timeout via `ACP_BUDGET`) — landed SEPARATELY on purpose, since both
 > defects independently produce "no successful call" and one commit would
-> destroy the attribution.** Suite 2245/0. **NOT yet verified live end-to-end
-> through the fixed shipped path — that is one sonnet call and its own go.**
+> destroy the attribution.** Suite 2245/0, and **LIVE-VERIFIED end-to-end
+> through `runAuditUncached` with NO overrides (shipped defaults):
+> `verdict=NO_MISMATCH rawLen=2902`, where before the fixes the same call gave
+> `ERROR` + empty rawAudit + zero spend. Re-runnable: `bun
+> docs/loop-probes/reval-adherence-20260819/run-probe.ts verify` (1 call).**
 > Why a 2241-test suite missed both: every audit test injects fake daemon
 > deps, and the `okReply` fixture echoed the qualified id, so the fakes agreed
 > with the calling code instead of with the wire (fixture corrected to the

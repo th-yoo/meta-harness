@@ -9,6 +9,7 @@
 // and travels by git alone. The specifiers are relative because this file lives
 // outside opencode-plugin/, so bare package names would not resolve from here.
 import {
+  runAuditUncached,
   auditPrompt,
   buildSample,
   parseVerdict,
@@ -160,11 +161,33 @@ async function cells(only?: string) {
   }
 }
 
+/** Live end-to-end verification of the F1+F2 fixes through the SHIPPED path.
+ *
+ * Deliberately calls `runAuditUncached` itself with NO overrides — no
+ * `budgetMs`, no model, no `ACP_TURN_TIMEOUT_MS` — so the shipped defaults are
+ * what gets exercised. Before the fixes this returned `verdict: "ERROR"` with an
+ * empty `rawAudit` and zero spend; the whole point of the probe's findings was
+ * that tests could not tell that apart from a working call. One call, on the
+ * smallest clean fixture. */
+async function verify(): Promise<boolean> {
+  const up = await ensureDaemon(env, { waitMs: 30_000 })
+  console.log(`daemon up=${up}`)
+  const verifyEnv = { ...process.env, KKAMAK_HOME: `${REPO}/.kkamak`, META_HARNESS_HOME: `${REPO}/.kkamak` }
+  const r = await runAuditUncached({ tbRoot: `${REPO}/opencode-plugin/test/fixtures/conv-audit` } as any, "clean", verifyEnv)
+  const ok = r.verdict !== "ERROR" && r.rawAudit.length > 0
+  console.log(`verdict=${r.verdict} rawLen=${r.rawAudit.length} card=${r.card === null ? "null" : r.card.length} truncated=${r.truncated}`)
+  console.log(`first line: ${JSON.stringify(r.rawAudit.split("\n").find((l) => l.trim()) ?? "")}`)
+  console.log(ok ? "LIVE VERIFY: PASS — the shipped path reached the model" : "LIVE VERIFY: FAIL — still no live call")
+  return ok
+}
+
 const mode = process.argv[2] ?? "prestep"
 if (mode === "prestep") {
   process.exit((await prestep()) ? 0 : 1)
 } else if (mode === "cells") {
   await cells(process.argv[3])
+} else if (mode === "verify") {
+  process.exit((await verify()) ? 0 : 1)
 } else {
   console.error(`unknown mode: ${mode}`)
   process.exit(2)

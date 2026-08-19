@@ -2078,10 +2078,13 @@ upstream author of the range would satisfy the no-self-review rule's string
 comparison while defeating its purpose — declined on those grounds.
 
 Arm remains BLOCKED behind F3 (prompt/parser cell contract), F4 (whitelist
-expressivity), F5 (sampler evidence), each its own go. The fixed transport is
-not yet verified live end-to-end through the shipped path; that is one call
-and its own go, and until it runs the fixes rest on tests, which is the exact
-standing this entry exists to warn about.
+expressivity), F5 (sampler evidence), each its own go. The transport itself is
+now settled: both fixes were verified LIVE end-to-end through
+`runAuditUncached` with no overrides — `verdict=NO_MISMATCH rawLen=2902` where
+before the fixes the identical call returned `ERROR` with an empty body and
+zero spend. That verification is one call and re-runnable
+(`run-probe.ts verify`), and it was run rather than assumed for the reason this
+entry exists: tests could not distinguish the two outcomes.
 
 Verdict-grade record: `docs/loop-probes/reval-adherence-20260819/`
 (pre-registration + amendment-01 + verdict + all 10 raw cells + runner).
