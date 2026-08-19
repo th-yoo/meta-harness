@@ -42,8 +42,10 @@ plane fit, and `validator._NEIGHBORS_8` / `_MIN_COMPONENT_PIXELS` /
 - 38972 S0 extruding points; projected extent u −77.59..90.57, v −6.28..5.78.
 - Clustering at the calibrated cell 0.4 gives **31 connected components**, not
   26 — components are not glyphs.
-- Parameter-free u-overlap merge → **exactly 26 glyphs**, with a computed
-  separation margin (below) rather than a tuned tolerance.
+- Parameter-free u-overlap merge → **exactly 26 glyphs**, with computed
+  margins (below) rather than a tuned tolerance. Carry the same caveat here
+  as for the merge rule: 26 is an answer that was already known, so this is a
+  count agreeing with a target, not an independent measurement of it.
 - Both projection sign ambiguities are now resolved deterministically, neither
   by convention (below).
 - Stroke render (connect consecutive-in-file points, break on a jump > 1.0
@@ -135,14 +137,44 @@ this font's widest intra-glyph split. That is one string in one font: the
 shape of a fitted constant, validated where the answer (26) was already
 known, which is exactly where a fitted rule looks stable.
 
-What transfers is not the number but the **existence of a separation** between
-those two statistics. The instrument now merges at plain u-overlap — no free
-parameter at all — and `separation_margin` computes `max_intra` and
-`min_inter` per artifact, reporting SEPARATED/OVERLAPPING and failing loud
-when they cross, instead of inviting someone to tune the tolerance until the
-count looks right. **This is the sixth fix-the-evidence instance of the arc,
-and the first where the error was about to be baked in as a constant rather
-than carried as a derivation.**
+What transfers is not the number but the **margin** — how far the merge's
+decisions sit from flipping. The instrument now merges at plain u-overlap, no
+free parameter at all. **This is the sixth fix-the-evidence instance of the
+arc, and the first where the error was about to be baked in as a constant
+rather than carried as a derivation.**
+
+*Second correction, and the sharpest lesson here.* The first replacement for
+that constant returned a `separated` boolean asserting `max_intra < min_inter`
+and claimed to "fail loud when they cross". **That guard was vacuous: it could
+never fire.** The classifier is `lo <= right`, so intra-glyph gaps are always
+≤ 0 and inter-glyph gaps always > 0, making the comparison true for every
+possible artifact — the classification predicate *is* the quantity being
+compared. The console line reading SEPARATED was a formatting operation on a
+foregone conclusion.
+
+Two independent finds, same hour: a regression test written against a
+deliberately fragile fixture failed on its first run, and the sibling reviewer
+derived the tautology from the source. Worth recording that **a guard that
+cannot fire is weaker evidence than the fitted constant it replaced** — the
+constant at least made a checkable claim. This is the same disease one level
+up from the error it was meant to fix.
+
+What replaced it is reported, never thresholded: `max_intra` (narrowest
+overlap that still merged), `min_inter` (narrowest gap that still split), and
+**fragility** = min(|max_intra|, min_inter) / median glyph width — a
+dimensionless number derived wholly from the artifact, which *can* come back
+near zero and does on a fragile fixture. On this one: −0.89, +0.63, fragility
+**0.111**, so the closest decision sits about a ninth of a glyph from
+flipping. Choosing a cutoff on fragility would re-commit the original error,
+so the instrument prints it and leaves the judgment to a human.
+
+**Still open, and named rather than closed:** fragility measures how close the
+overlap partition came to changing, not whether that partition is *right*. A
+genuinely independent check would classify by a signal the overlap predicate
+does not use — gap-distribution bimodality, or stroke/file-order contiguity,
+since components of one glyph are contiguous in deposition — and require the
+two partitions to agree. That check can disagree, which is the property this
+one still lacks. Not built; flagged for whoever builds the rung-5 sampler.
 
 **3. Per-glyph crops destroy the cross-glyph metrics that disambiguate
 look-alikes.** As above for `0`/`O` and the two underscores. Lowercase `l`

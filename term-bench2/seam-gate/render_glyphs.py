@@ -135,21 +135,34 @@ def components_at_cell(xy, cell):
 
 
 def separation_margin(xy, comps):
-    """The statistic that justifies the merge, computed per artifact rather
-    than shipped as a constant.
+    """How far the merge's decisions sit from flipping -- computed per
+    artifact, never shipped as a constant.
 
-    Merging at gap_tol=0 -- "components whose u-spans overlap are one glyph"
-    -- has no free parameter. What must hold for that partition to be
-    trustworthy is a SEPARATION: every intra-glyph gap (negative, since the
-    components overlap) must sit strictly below every inter-glyph gap. Returns
-    (max_intra, min_inter, separated). When the two overlap there is no
-    glyph-sized scale in the artifact and the caller must fail loud instead of
-    tuning a threshold until the count looks right.
+    Merging at gap_tol=0 ("components whose u-spans overlap are one glyph")
+    has no free parameter. An earlier version of this function also returned a
+    `separated` boolean asserting max_intra < min_inter, and that check was
+    VACUOUS: the classifier itself is `lo <= right`, so intra gaps are always
+    <= 0 and inter gaps always > 0 and the comparison could never fail. It was
+    dead code that read like a guard. Found by test_render_glyphs, written
+    after review; recorded here because a guard that cannot fire is worse than
+    no guard -- it advertises a safety that does not exist.
 
-    Measured on the shipped fixture: max_intra -0.89, min_inter +0.63. Do not
-    turn that window into a constant -- it is this string's kerning in this
-    font, and a tolerance chosen inside it would be a fitted constant wearing
-    a plateau's clothes.
+    What actually varies is the MARGIN. Every adjacent-component gap is a
+    decision: a negative one merged, a positive one split, and either is
+    fragile when it sits near zero. So report the closest call in each
+    direction and scale it by the artifact's own glyph width:
+
+        max_intra   the narrowest overlap that still merged (<= 0)
+        min_inter   the narrowest gap that still split (> 0)
+        fragility   min(|max_intra|, min_inter) / median glyph width
+
+    Fragility is dimensionless and derived entirely from the artifact. It is
+    REPORTED, not thresholded -- picking a cutoff here would re-commit the
+    fitted-constant error this function exists to avoid. On the shipped
+    fixture: max_intra -0.89, min_inter +0.63, median glyph width ~5.7,
+    fragility ~0.11 -- the closest decision sits about a ninth of a glyph away
+    from flipping. A fragility near 0 means one component nearly changed
+    glyphs and the count should not be trusted.
     """
     spans = sorted((float(xy[c][:, 0].min()), float(xy[c][:, 0].max())) for c in comps)
     intra, inter = [], []
@@ -159,7 +172,13 @@ def separation_margin(xy, comps):
         right = max(right, hi)
     max_intra = max(intra) if intra else float("-inf")
     min_inter = min(inter) if inter else float("inf")
-    return max_intra, min_inter, max_intra < min_inter
+
+    glyphs = merge_by_u_overlap(xy, comps, 0.0)
+    widths = [float(xy[g][:, 0].ptp()) for g in glyphs]
+    scale = float(np.median(widths)) if widths else 0.0
+    closest = min(abs(max_intra), min_inter)
+    fragility = closest / scale if scale > 0 and np.isfinite(closest) else float("nan")
+    return max_intra, min_inter, fragility
 
 
 def merge_by_u_overlap(xy, comps, gap_tol):
@@ -267,12 +286,14 @@ def main():
         return 1
     say(f"cell={args.cell}: {len(comps)} connected components")
 
-    max_intra, min_inter, separated = separation_margin(xy, comps)
-    say(f"glyph-scale separation: max intra-glyph gap {max_intra:+.2f} < "
-        f"min inter-glyph gap {min_inter:+.2f} -> {'SEPARATED' if separated else 'OVERLAPPING'}")
-    if not separated:
-        say("*** no glyph-sized scale in this artifact -- the merge is not "
-            "trustworthy here; do NOT tune --merge-gap until the count looks right ***")
+    max_intra, min_inter, fragility = separation_margin(xy, comps)
+    say(f"merge margins: narrowest overlap that merged {max_intra:+.2f}, "
+        f"narrowest gap that split {min_inter:+.2f}, fragility {fragility:.3f} "
+        f"(closest decision, as a fraction of median glyph width)")
+    if not (fragility > 0.02):
+        say("*** fragility near zero -- some component nearly changed glyphs; "
+            "the glyph count below is not trustworthy. Reported, not enforced: "
+            "judge it, do NOT tune --merge-gap until the count looks right ***")
 
     glyphs = merge_by_u_overlap(xy, comps, args.merge_gap)
     say(f"after u-overlap merge (gap {args.merge_gap}): {len(glyphs)} glyphs "
