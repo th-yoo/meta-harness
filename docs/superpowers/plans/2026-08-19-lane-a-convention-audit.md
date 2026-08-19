@@ -403,7 +403,8 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `opencode-plugin/src/bench/agent-run.ts:135-167` (add `conventionAudit = ""` as the LAST param — after `sleepFn`; append its value after `budgetLine`)
-- Modify: `opencode-plugin/src/bench/cmd-run.ts`, `cmd-ab.ts` (call `auditCard`+`writeAuditTrail` before `runAgent` when flag on; pass `r.card ?? ""` as the new last arg; thread `conventionAudit` into the `validateParallel` call)
+- Modify: `opencode-plugin/src/bench/cmd-run.ts` — add `conventionAudit = false` trailing param to `RunOneTaskFn` (:135) AND `runTaskOnce`; call `auditCard`+`writeAuditTrail` INSIDE `runTaskOnce` before the `runAgent` call (:450), passing `card` + explicit `defaultSleep`; thread the flag through the `runOneTask` call at :925; thread into the `validateParallel` call
+- Modify: `opencode-plugin/src/bench/cmd-ab.ts` — thread `conventionAudit` through both `runOneTask` calls (:723, :730) + the `validateParallel` call (no direct `runAgent` call exists here)
 - Modify: `opencode-plugin/src/bench/cli.ts` (register `--convention-audit` in BOTH `parseRunArgs`+`parseAbArgs`; add `conventionAudit?` to `validateParallel`'s `a` type + the refusal rule)
 - **No signature change needed at these positional callers** (they pass no 11th arg, so appending is safe), but they are compiled by `bun run typecheck`: `opencode-plugin/src/bench/opencode-run.ts:67`, `p2/cmd-p2.ts:369`, `test/bench-agent-run.test.ts` (13 sites), `test/bench-drivers-contract.test.ts` (3 sites).
 - Test: `opencode-plugin/test/bench-convention-audit.test.ts` + assert in an existing agent-run test
@@ -415,11 +416,22 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - [ ] **Step 1: Write the failing tests**
 
 ```typescript
-// injection: card appended after budgetLine, absent when off
-test("runAgent appends the convention card after the budget line when provided", async () => {
-  // drive runAgent with a fake driver capturing buildArgv({instruction}); assert
-  // instruction ends with the card AND still contains the budget line; and that
-  // with conventionAudit undefined the instruction is byte-identical to today.
+// injection: card appended after budgetLine, absent when off.
+// Fake driver captures the instruction passed to buildArgv; fake execFn short-circuits
+// the container so no podman runs. Mirror the existing bench-agent-run.test.ts setup.
+test("runAgent appends the convention card after the budget line, byte-identical when off", async () => {
+  let captured = ""
+  const drv: any = { modelArg: (m: string) => m, harness: { kind: "workspace-file", filename: "AGENTS.md", buildFlags: () => [] },
+    buildArgv: (o: any) => { captured = o.instruction; return ["true"] } }
+  const exec: any = async () => ({ rc: 0, stdout: "", stderr: "", timedOut: false })
+  const sleep: any = async () => {}
+  const base = { tbRoot: FIXROOT } as any        // fixture task dir with a known instruction.md
+  await runAgent(drv, base, "c", "clean", "m", "", 900, "", exec, sleep)          // OFF
+  const off = captured
+  await runAgent(drv, base, "c", "clean", "m", "", 900, "", exec, sleep, "CARD-XYZ")  // ON
+  expect(off).not.toContain("CARD-XYZ")
+  expect(captured.indexOf("CARD-XYZ")).toBeGreaterThan(captured.indexOf("wall-clock"))  // card AFTER budget line
+  expect(captured.startsWith(off.replace(/\n+$/, ""))).toBe(true)                  // off-text is a prefix → byte-identical base
 })
 // oauth-parallel refusal — folded INTO validateParallel (cli.ts:630), which already
 // derives key-vs-oauth internally via requiredApiKeyVar(model)+process.env / readOauthExpiresAt.
@@ -441,7 +453,11 @@ test("validateParallel refuses --convention-audit under oauth (no key env)", () 
   (a) `agent-run.ts` (**CRITICAL — param position**): add `conventionAudit = ""` as the **LAST** parameter, AFTER `sleepFn` — NOT between `harnessMd` and `execFn`. Every existing caller passes `execFn`/`sleepFn` positionally in slots 9/10 (`opencode-run.ts:67`, `cmd-run.ts:450`, `p2/cmd-p2.ts:369`, and 16 test call sites in `test/bench-agent-run.test.ts` + `test/bench-drivers-contract.test.ts`); inserting mid-signature misbinds all of them (compile failure). Appending at slot 11 leaves every existing call untouched. After the `budgetLine` append (`agent-run.ts:167`), add — under a CONTROLLED-CONSTANT comment mirroring the budgetLine one — `if (conventionAudit) instruction = instruction + "\n\n" + conventionAudit`.
   (b) `cli.ts`: register a `conventionAudit` boolean (default false) in **BOTH** `parseRunArgs` AND `parseAbArgs` (each flag is registered per-parser here — cf. `--enforce-resources`) + usage line `[--convention-audit]` in each.
   (c) oauth-parallel refusal folds INTO `validateParallel` (`cli.ts:630`, signature `(a, model, readExpiry?)`): add optional `conventionAudit?: boolean` to the `a` object type. The function already computes `const keyVar = requiredApiKeyVar(model); if (process.env[keyVar]) return` (key present → allow, all rules skipped). Add, AFTER that early-return line so a key still bypasses it: `if (a.conventionAudit) throw new BenchError("--convention-audit cannot be combined with --parallel under oauth auth (the staging audit call runs outside the token-freshness budget) — export " + keyVar + " or drop one flag")`. Message matches `/convention-audit.*parallel/`. Do NOT add a standalone function or a `keyAuth` param. Thread `conventionAudit` into the `validateParallel` call sites in `parseRunArgs`/`parseAbArgs`.
-  (d) `cmd-run.ts`/`cmd-ab.ts`: before each task's `runAgent`, when `conventionAudit` on: `const r = await auditCard(paths, task, env, {}); writeAuditTrail(paths, task, r);` and pass `r.card ?? ""` as `runAgent`'s new last argument. When off, do not pass it (default `""`) — byte-identical path.
+  (d) **Wiring goes through the `RunOneTaskFn`/`runTaskOnce` indirection — NOT a direct `runAgent` call in cmd-run/cmd-ab.** `runAgent` is called from exactly ONE place: inside `runTaskOnce` (`cmd-run.ts:450`). Both command handlers call the injectable `runOneTask: RunOneTaskFn` (default `runTaskOnce`): `cmd-run.ts:925`, `cmd-ab.ts:723` and `:730`. Follow that type's established "trailing + defaulted param" convention (as `checks`/`hookRuleTable` already do, `cmd-run.ts:135-168`):
+    - Add `conventionAudit = false` as a new TRAILING param to `RunOneTaskFn` (the type) and `runTaskOnce` (the impl).
+    - INSIDE `runTaskOnce`, before the `runAgent` call at `:450`, add: `let card = ""; if (conventionAudit) { const r = await auditCard(paths, task, process.env, {}); writeAuditTrail(paths, task, r); card = r.card ?? "" }`.
+    - Fix the `:450` `runAgent` call: it currently passes only 9 positional args (ends at `execFn`, omitting `sleepFn`). To append `card` at slot 11 you MUST pass `sleepFn` at slot 10 explicitly — `import { runAgent, defaultSleep } from "./agent-run.ts"` (defaultSleep is not currently imported here) and change the call to `runAgent(driver, paths, name, task, model, variant, agentTimeout, harnessMd, execFn, defaultSleep, card)`. `bun run typecheck` (Step 4b) is the backstop that catches a mis-slotted append.
+    - Thread the boolean through the three `runOneTask(...)` call sites: append `conventionAudit` (the parsed flag) as the trailing arg at `cmd-run.ts:925`, `cmd-ab.ts:723`, `cmd-ab.ts:730`. When off (default false) the card is `""` → byte-identical path.
 
 - [ ] **Step 4: Run to verify pass** — Expected: PASS. Then run the FULL suite: `cd opencode-plugin && bun test` — expected: green (no regressions; off-path byte-identical).
 
@@ -467,12 +483,13 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - §3.2 daemon audit call (a4-review shape, 16s override, agent lane, fail-safe) → Task 4. ✓
 - §3.3 content-gate → Task 3. ✓ §3.4 card extract → Task 3. ✓
 - §4 frozen prompt (4 clauses + verdict line) → Task 1. ✓
-- §5 wiring + cache single-flight + oauth-parallel refusal → Tasks 5, 7. ✓
+- §5 wiring (through `RunOneTaskFn`/`runTaskOnce`, NOT a direct cmd-run/cmd-ab `runAgent` call) + cache single-flight + oauth-parallel refusal → Tasks 5, 7. ✓
 - §6 audit trail → Task 6. ✓
+- `FIXROOT` in the Task-7 injection test = a fixture task dir with a known `instruction.md` containing the budget line; reuse the Task-2 `clean` fixture's parent (`FIX`) → `const FIXROOT = FIX`.
 - §7 revalidator → OUT (increment 2), correctly not a task. ✓
 - §9 first-arming blockers A (transport, Task 4), B (oauth refusal, Task 7), C (realpath guard, Task 2) → all covered. ✓
 - Item-4 no-gate-contamination trace → Task 7 Step 5. ✓
 
-**Placeholder scan:** no "TBD"/"handle edge cases"/"similar to Task N"; every code step has a concrete block. ✓
+**Placeholder scan:** no "TBD"/"handle edge cases"/"similar to Task N". Every code step has a concrete block, INCLUDING the Task-7 injection test (now a real fake-driver assertion, not an intent comment) and the Task-7 wiring (now the full `RunOneTaskFn`/`runTaskOnce` thread, not "before each task's runAgent"). ✓
 
 **Type consistency:** `AuditResult`, `buildSample→Sample{text,truncated}`, `auditCard`/`runAuditUncached` signatures, `parseVerdict`/`cardFrom`/`writeAuditTrail`/`auditPrompt`/`AUDIT_PROMPT_VERSION` — names used in Tasks 4–7 match their Task 1–3 definitions. ✓
