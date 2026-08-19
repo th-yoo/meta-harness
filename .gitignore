@@ -25,3 +25,6 @@ gate.json.disabled
 # reads as a repo change to tier-0 suite selection. Branches are unaffected:
 # ignoring the checkout never touches the refs it points at.
 .claude/worktrees/
+
+# census probe: staged benchmark inputs (reconstruct from TB2 checkout; canary data, do not track)
+docs/loop-probes/census-20260819/work/
