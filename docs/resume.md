@@ -3,7 +3,23 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-> **MOST RECENT STATE (2026-08-19 late, `yoo-dev`):** LANE A SHIPPED to main
+> **MOST RECENT STATE (2026-08-19 latest, `yoo-dev`):** BOTH-DNA PILOT RUN
+> + AUTOPSY DONE → **REJECT DNA for the convention-card lane (provable
+> null).** Baseline no-card sonnet-5 k=3: dna-assembly 1/3, dna-insert 2/3
+> (3/6, both solved — mid-band, NOT a raman 0/5 wall). Real verifier
+> REPLAYED on reconstructed primers.fasta (traj had no verifier output; 3
+> subagent text-inferences — case-slip/BsaI-cut/mid-codon — ALL REFUTED by
+> replay): every fail is the **Tm-precision rung** (asm-r1 egfp |Δ|5.4,
+> asm-r3 input |Δ|7.2, ins-r2 rev Tm 55.9<58), ZERO representation error —
+> rc/strand/frame/circular-topology/overhang-closure/BsaI all correct.
+> Same wall as raman residual precision rung (arm-3b-excluded craft). DNA
+> ≠ representation domain → do NOT expand lane A to DNA; generality set
+> stays raman/gcode/elf. Increment-2 revalidator UNAFFECTED (stands on
+> raman alone). Verdict: `docs/loop-probes/dna-autopsy-20260819/verdict.md`;
+> pre-reg: `docs/2026-08-19-both-dna-pilot-prereg.md`. Method win: replay
+> the real verifier on reconstructed artifact > agent text-event inference
+> (3/3 inferences were wrong). v999 = disposable clone (gitignored, purge
+> ok). LANE A SHIPPED to main
 > (`a97156a`, pushed). `--convention-audit` staging step OFF-by-default:
 > leak-safe sampler → sonnet ACP-daemon audit → content-gate → verbatim
 > card injected like budgetLine, single-flight cached, audit-trailed;

@@ -1,0 +1,16 @@
+>input_fwd
+AATTCGGGTCTCAtgaggatcccgggaattctcgagt
+>input_rev
+AATTCGGGTCTCAtcatatgtatatctccttcttaaagttaaacaaaattatttctag
+>egfp_fwd
+AATTCGGGTCTCAatgagcaagggcgaggagct
+>egfp_rev
+AATTCGGGTCTCAtacctttgtacagctcgtccatgc
+>flag_fwd
+AATTCGGGTCTCAggtagtggctccggtagcgg
+>flag_rev
+AATTCGGGTCTCAtgtctgaaccactacctgaaccagaac
+>snap_fwd
+AATTCGGGTCTCAgacaaagactgcgaaatgaagcgc
+>snap_rev
+AATTCGGGTCTCActcattaacccagcccaggcttac

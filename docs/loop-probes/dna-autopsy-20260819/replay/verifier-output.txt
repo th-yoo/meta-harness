@@ -1,0 +1,7 @@
+# DNA autopsy — real verifier replay on reconstructed primers (oligotm: /usr/bin/oligotm)
+===== asm-r1 (asm-r1.fasta) =====
+RESULT: FAIL -> Tm of forward and reverse primers must be within 5 degrees C of each other.
+===== asm-r3 (asm-r3.fasta) =====
+RESULT: FAIL -> Tm of forward and reverse primers must be within 5 degrees C of each other.
+===== ins-r2 (ins-r2.fasta) =====
+RESULT: FAIL -> Reverse primer must have a Tm between 58 and 72 degrees C.
