@@ -61,9 +61,14 @@ test("parseVerdict reads the machine line", () => {
 test("parseVerdict defaults to NO_MISMATCH when the line is absent", () => {
   expect(parseVerdict("no verdict here")).toBe("NO_MISMATCH")
 })
-test("cardFrom returns the audit body verbatim", () => {
+test("cardFrom returns the audit body verbatim when no REVALIDATION block is present", () => {
   const raw = "SURFACE ... CONTENT ... MISREADINGS ..."
   expect(cardFrom(raw)).toBe(raw.trim())
+})
+test("cardFrom strips a trailing REVALIDATION block (Task 6: gate wiring)", () => {
+  const raw = "SURFACE stuff\nREVALIDATION:\nTRANSFORM: none"
+  expect(cardFrom(raw)).toBe("SURFACE stuff")
+  expect(cardFrom(raw)).not.toContain("REVALIDATION:")
 })
 
 test("applyTransform covers the closed whitelist (offset is C - in)", () => {
@@ -216,10 +221,53 @@ const deps = (reply: any) => ({
   close: async () => ({ closed: true }),
 })
 
-test("runAuditUncached returns a card on MISMATCH", async () => {
-  const r = await runAuditUncached(P(FIX), "clean", {}, deps(okReply("AUDIT BODY\nCONTENT VERDICT: MISMATCH")))
+// Task 6: MISMATCH now gates on the REVALIDATION block — a blockless MISMATCH
+// reply is `absent` and fails closed to card:null (see the dedicated absent-block
+// test below). Updated to include a valid block so this legacy name ("returns a
+// card on MISMATCH") still holds under the new gated behaviour.
+test("runAuditUncached returns a card on MISMATCH (with a valid REVALIDATION block)", async () => {
+  const withBlock =
+    "AUDIT BODY\nCONTENT VERDICT: MISMATCH\nREVALIDATION:\nTRANSFORM: reciprocal\nCONSTANT: 1e7\nDELTA: 30\n" +
+    "| input | computed | canonical | discriminates |\n|-|-|-|-|\n| 19139.4 | 522.5 | 520.7 | E:units |\n| 3745.3 | 2670.0 | 2700 | E:units |"
+  const r = await runAuditUncached(P(FIX), "raman", {}, deps(okReply(withBlock)))
   expect(r.card).toContain("AUDIT BODY")
   expect(r.verdict).toBe("MISMATCH")
+})
+
+// ── Task 6: revalidation gate wired into runAuditUncached ──
+const withBlock = (t: string) =>
+  `${t}\nCONTENT VERDICT: MISMATCH\nREVALIDATION:\nTRANSFORM: reciprocal\nCONSTANT: 1e7\nDELTA: 30\n| input | computed | canonical | discriminates |\n|-|-|-|-|\n| 19139.4 | 522.5 | 520.7 | E:units |\n| 3745.3 | 2670.0 | 2700 | E:units |`
+
+test("runAuditUncached: MISMATCH + valid block → card present, reval PASS, block stripped", async () => {
+  const r = await runAuditUncached(P(FIX), "raman", {}, deps(okReply(withBlock("AUDIT BODY"))))
+  expect(r.card).toContain("AUDIT BODY")
+  expect(r.card).not.toContain("REVALIDATION:")
+  expect((r as any).reval).toBe("PASS")
+})
+test("runAuditUncached: MISMATCH + failing block → card null, reval FAIL + reason", async () => {
+  const bad =
+    "BODY\nCONTENT VERDICT: MISMATCH\nREVALIDATION:\nTRANSFORM: reciprocal\nCONSTANT: 3.028e7\nDELTA: 30\n" +
+    "| input | computed | canonical | discriminates |\n|-|-|-|-|\n| 19139.4 | 1582.1 | 1582 | E:x |\n| 3745.3 | 8084.8 | 2680 | E:x |"
+  const r = await runAuditUncached(P(FIX), "raman", {}, deps(okReply(bad)))
+  expect(r.card).toBeNull()
+  expect((r as any).reval).toBe("FAIL")
+  expect((r as any).revalReason).toBeTruthy()
+})
+test("runAuditUncached: MISMATCH + absent block → card null (fail-closed)", async () => {
+  const r = await runAuditUncached(P(FIX), "clean", {}, deps(okReply("BODY\nCONTENT VERDICT: MISMATCH")))
+  expect(r.card).toBeNull()
+  expect((r as any).reval).toBe("FAIL")
+})
+test("runAuditUncached: MISMATCH + explicit none → criteria-class card present, reval N/A", async () => {
+  const r = await runAuditUncached(
+    P(FIX),
+    "clean",
+    {},
+    deps(okReply("ELF BODY\nCONTENT VERDICT: MISMATCH\nREVALIDATION:\nTRANSFORM: none")),
+  )
+  expect(r.card).toContain("ELF BODY")
+  expect(r.card).not.toContain("REVALIDATION:")
+  expect((r as any).reval).toBe("N/A")
 })
 test("runAuditUncached returns null card on NO MISMATCH", async () => {
   const r = await runAuditUncached(P(FIX), "clean", {}, deps(okReply("clean\nCONTENT VERDICT: NO MISMATCH")))
@@ -249,10 +297,11 @@ test("auditCard single-flights concurrent same-task misses into one call", async
 test("writeAuditTrail appends one ndjson line with the card + verdict", () => {
   const dir = mkdtempSync(join(tmpdir(), "conv-trail-"))
   writeAuditTrail({ resultsDir: dir } as any, "clean",
-    { card: "C", rawAudit: "R", verdict: "MISMATCH", sample: "S", truncated: false })
+    { card: "C", rawAudit: "R", verdict: "MISMATCH", reval: "PASS", sample: "S", truncated: false })
   const line = JSON.parse(readFileSync(join(dir, "convention-audit-trail.ndjson"), "utf-8").trim())
   expect(line.task).toBe("clean"); expect(line.verdict).toBe("MISMATCH"); expect(line.card).toBe("C")
   expect(line.promptVersion).toBe("lane-a-v2")
+  expect(line.reval).toBe("PASS")
 })
 
 // ── Task 7: injection wiring (agent-run.ts's trailing conventionAudit param) ──

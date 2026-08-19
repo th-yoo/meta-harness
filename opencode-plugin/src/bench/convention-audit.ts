@@ -185,7 +185,7 @@ export function parseVerdict(raw: string): "MISMATCH" | "NO_MISMATCH" {
 }
 
 export function cardFrom(raw: string): string {
-  return raw.trim()
+  return stripRevalBlock(raw)
 }
 
 export type RevalTransform = "reciprocal" | "scale" | "offset" | "identity"
@@ -309,8 +309,16 @@ const AUDIT_ISOLATION: WarmIsolation = {
 }
 
 export type AuditResult =
-  | { card: string; rawAudit: string; verdict: "MISMATCH"; sample: string; truncated: boolean }
-  | { card: null; rawAudit: string; verdict: "NO_MISMATCH" | "ERROR"; sample: string; truncated: boolean }
+  | { card: string; rawAudit: string; verdict: "MISMATCH"; reval: "PASS" | "N/A"; sample: string; truncated: boolean }
+  | {
+      card: null
+      rawAudit: string
+      verdict: "NO_MISMATCH" | "ERROR" | "MISMATCH"
+      reval?: "FAIL"
+      revalReason?: string
+      sample: string
+      truncated: boolean
+    }
 
 /**
  * The live convention-audit call: `ensureDaemon` (zero-wait) -> `daemonCall`
@@ -394,7 +402,25 @@ export async function runAuditUncached(
 
     const verdict = parseVerdict(outcome.text)
     if (verdict === "NO_MISMATCH") return { card: null, rawAudit: outcome.text, verdict, sample, truncated }
-    return { card: cardFrom(outcome.text), rawAudit: outcome.text, verdict: "MISMATCH", sample, truncated }
+
+    // Revalidation gate: a MISMATCH verdict is only trusted (card injected) when
+    // the model's own REVALIDATION block re-derives the winning constant against
+    // the sample's real first-col-range — a criteria-class MISMATCH (`none`)
+    // needs no such proof; anything else (absent/malformed/failed-recompute)
+    // fails closed to card:null so a fabricated or unproven MISMATCH never
+    // reaches injection.
+    const parsed = parseRevalBlock(outcome.text)
+    if (parsed.kind === "none") {
+      return { card: cardFrom(outcome.text), rawAudit: outcome.text, verdict: "MISMATCH", reval: "N/A", sample, truncated }
+    }
+    if (parsed.kind !== "claim") {
+      return { card: null, rawAudit: outcome.text, verdict: "MISMATCH", reval: "FAIL", revalReason: `block-${parsed.kind}`, sample, truncated }
+    }
+    const outcomeReval = revalidate(parsed.claim, sample)
+    if (!outcomeReval.ok) {
+      return { card: null, rawAudit: outcome.text, verdict: "MISMATCH", reval: "FAIL", revalReason: outcomeReval.reason, sample, truncated }
+    }
+    return { card: cardFrom(outcome.text), rawAudit: outcome.text, verdict: "MISMATCH", reval: "PASS", sample, truncated }
   } catch {
     return { card: null, rawAudit: "", verdict: "ERROR", sample, truncated }
   } finally {
@@ -410,8 +436,9 @@ export async function runAuditUncached(
 }
 
 /** Append one ndjson line to <resultsDir>/convention-audit-trail.ndjson recording
- * the audit result: {task, promptVersion, verdict, truncated, cardLen, sampleLen, card, rawAudit}.
- * This is the leak-safety record that documents what was sent to the audit model.
+ * the audit result: {task, promptVersion, verdict, truncated, cardLen, sampleLen, card,
+ * rawAudit, reval, revalReason}. This is the leak-safety record that documents what
+ * was sent to the audit model AND how the revalidation gate ruled on it.
  */
 export function writeAuditTrail(paths: BenchPaths, task: string, r: AuditResult): void {
   const line = {
@@ -423,6 +450,8 @@ export function writeAuditTrail(paths: BenchPaths, task: string, r: AuditResult)
     sampleLen: r.sample.length,
     card: r.card,
     rawAudit: r.rawAudit,
+    reval: (r as any).reval ?? null,
+    revalReason: (r as any).revalReason ?? null,
   }
   appendFileSync(join(paths.resultsDir, "convention-audit-trail.ndjson"), JSON.stringify(line) + "\n")
 }
