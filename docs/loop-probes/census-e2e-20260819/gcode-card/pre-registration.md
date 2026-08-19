@@ -244,3 +244,24 @@ in-container staging as a precondition, not an assumption.
 Spend: one k=1 oracle-pre-step haiku trial + one k=5 haiku arm (this
 document's pre-registered bar), authorized as Task 6 of the rung-4
 seam-gate plan (final task). No further spend beyond these two runs.
+
+## Join-probe (cheap-vs-structural interface fix) — pre-registration (2026-08-19, user "go probe", BEFORE any call)
+
+Question: given the deployment interface as evidence, does seam-spec generation JOIN the harness —
+and does the expression form matter? Arm A (cheap-fix sim): v4 prompt + one line naming the exact
+files the processor writes (points.txt: 3-col x y z extruding S0 points; projected.txt: 2-col u v
+plane projection; plane.txt: 1-row residual ratio). Arm B (structural sim): v4 prompt with the
+artifact wording replaced by a closed ID table (points / projected / plane, same meanings), cards
+told to reference ONLY these ids and never invent paths.
+
+Bars (fixed here): both arms must still pass prose clauses a-e (hedge scan mechanical). Join bar
+per arm: A = emitted seamSpec passes the EXISTING calibrate_gcode.py --check-only unmodified;
+B = emitted spec references only the given ids (any self-invented path/filename = FAIL) and passes
+--check-only after a mechanical id->path bind shim (scoring aid, 5 lines, committed with this
+block). 2 sonnet calls per arm, hard cap 4 total. MANDATORY DRY-RUN before any call: hand-written
+mock spec per arm through its full bar pipeline, output recorded below this block.
+
+Decision rule: A joins 2/2 -> cheap works today (structural becomes a debt/scoping decision).
+A fails + B joins -> false-economy measured; structural ships with its prompt half de-risked.
+Both fail -> interface-as-evidence theory wrong; next regen needs a different lever. Probe cannot
+measure debt accrual — scoped to "works today" only.
