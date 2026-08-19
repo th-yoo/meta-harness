@@ -124,3 +124,34 @@ failures, capped by haiku's reconstruction ability on the T1-type. This
 is a HONEST card arm (headroom exists) with a KNOWN ceiling (< 3/3).
 Card-level scoring (convention consulted+acted in traj) will be cleaner
 than reward here, exactly as pre-registered.
+
+## Haiku baseline FINAL (2026-08-19) — gcode 0/3, extract-elf 1/3
+
+extract-elf haiku k=3 = 1/3 (pass 192s / fail 234s / fail 251s). All three
+READ the convention (little-endian, vaddr, readelf — conv-hits 2-10 each);
+the two fails extracted a DIFFERENT SUBSET of addresses than the reference
+(77 vs 309 vs 309 values) — the verifier requires the reference address
+SET, and which addresses to include is an under-specified execution/scope
+choice, NOT a convention miss. So elf failures = EXECUTION/scope, NOT
+card-addressable. (Also: elf partly passes at haiku = less floored than
+gcode.)
+
+TASK PICK (card arm, if run): gcode — it is the only cell that is BOTH
+convention-floored at haiku AND fails for convention reasons (2/3). elf
+fails on scope-of-extraction, which a convention card does not fix.
+Predicted gcode card ceiling < 3/3 (T1 execution wall stands).
+
+CELL GRID after today:
+- detection generality: across tasks (census 2/2) — BANKED.
+- actuation: raman×sonnet 3/6 (existence proof) — BANKED.
+- gcode×haiku: floored 0/3, 2/3 convention-caused — CARD-ARM CANDIDATE
+  (production claim), honest headroom, known execution ceiling.
+- elf×haiku: 1/3, fails on scope not convention — NOT a card cell.
+- gcode×sonnet: not-floored (mid-p) — science-claim cell needs k≈15
+  or elapsed/traj scoring.
+
+RECOMMENDATION (for user): gcode×haiku card arm = the cleanest available
+2nd actuation cell (production-shaped: sonnet-audit card → haiku consumer).
+Score traj-primary (convention consulted+acted) + reward secondary; expect
+partial reward lift capped by the execution wall. Own go + it needs the
+generated gcode card (sampler→sonnet audit) built first.
