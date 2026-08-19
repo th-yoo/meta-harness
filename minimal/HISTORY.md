@@ -2000,3 +2000,88 @@ The arc's shape after this entry: raman cracked, DNA declined with proof,
 the confident-wrong gate built but not yet armed. What remains before a first
 arm is measurement (does the auditor emit the schema; is the residual worth
 closing), not design.
+
+## LA3 — the adherence probe, and the transport that was never alive (2026-08-19, `yoo-dev`) — arm BLOCKED; two shipped defects meant the lane could never have made a call
+
+LA2 closed by saying that what remained before a first arm was measurement,
+not design. That was wrong in an instructive way. The measurement ran — 12
+sonnet calls, pre-registered, six cells scored — and the largest thing it
+returned was not an adherence number but the discovery that **the shipped
+lane-A audit could never have made a live model call at all.** Arming it
+would have been a guaranteed silent no-op.
+
+**Two transport defects, both live-measured, both now fixed.** F1: the audit
+asked the daemon for a 120s turn (which raises the daemon's advertised worst
+case to 136000) while leaving `daemonCall`'s client budget at its 36000
+default; `acp-client` refuses PRE-SEND whenever `daemonWorstCaseMs >=
+budgetMs`, so every call died as a zero-spend `no-call`. F2: it passed
+`DEFAULT_BENCH_MODEL` — `anthropic/claude-sonnet-5`, the SUT drivers'
+opencode-qualified id — to an ACP wire that takes a bare CLI id, returning
+`terminal_reason=api_error`. Both fold into `verdict: "ERROR"`, so a dead
+transport presented as a failing model, and the audit trail would have
+recorded ERRORs that read like the auditor's fault. Fixed as two separate
+commits (`789941b` id, `92b09ac` budget) on the sibling's advice: both
+defects independently produce "no successful call", so one commit would have
+destroyed the attribution the separate measurements established.
+
+**Why a 2241-test suite saw neither.** Every audit test injects fake daemon
+deps, and the `okReply` fixture echoed the provider-qualified id — so the
+fakes agreed with the calling code instead of with the wire. **A transport
+the suite always fakes is a transport nobody has run.** The fixture now
+returns the id a live daemon actually returns.
+
+**The adherence question itself, answered but not the way the rule
+anticipated.** Block SHAPE adherence was 4/4 — marker, headers, four-column
+table, last thing in the answer. Parses to a claim: 0/4. Every cell carried
+units and inline derivation (`| 5811.9 (Å) | 1e7/532 - ... = 1590.1 |`), so
+`Number()` yields NaN. That is not disobedience: the prompt's own toolless
+fix orders the model to SHOW its arithmetic inline, and the parser demands
+bare numeric cells. The pre-registered rule (FORMAT ≤1/4 → do not arm) fires,
+but its stated mechanism — unreliable structured emission — is refuted. The
+model complied with a specification that contradicts itself.
+
+**Two deeper blockers the spec did not anticipate.** All four cells
+independently found the correct physics: Raman shift = `ν̃_laser − 1e7/λ`,
+a reciprocal composed with an offset — TWO operations, two constants.
+`applyTransform`'s whitelist is single-op, so **a correct audit of this trap
+class cannot produce a passing claim under the gate as built.** And 3/4
+landing inputs are ABSENT from the sample: `buildSample` emits head-20 +
+tail-20 of a 1500-row file, leaving the peak structurally invisible in the
+middle, so the model back-solved plausible inputs from the canonical answer
+it wanted. That promotes the sampler's derived-stats block from banked spec
+item to prerequisite — **the revalidator polices claims the sampler makes
+unprovable.** It also resolves LA2's deferred §10 choice toward IMPLEMENT:
+the fabricated inputs pass the range guard but are not in head/tail, so the
+un-built near-match would have caught 3/4 of them.
+
+CONTROL passed 2/2 (clean input → NO_MISMATCH, `TRANSFORM: none`, no
+spurious claim). Four cells were VOIDED and re-run: the first trap stimulus
+embedded a prior audit under an `ORDERING GATE — MANDATORY` block and
+hijacked the auditor, and the pre-registration's "verified card-free" check
+had grepped one literal header string the task did not use — a string check
+standing in for a semantic one. The runner now refuses to spend unless a
+contamination assertion passes on the built sample.
+
+**Sixth fix-the-evidence instance, and the first with two independent
+sources.** The sibling's rung-5 lane produced the same failure class the same
+day from the opposite direction: a human baking a fixture statistic into a
+merge rule, where this lane had a model inventing evidence a sampler could not
+supply. Cross-review between the lanes then caught, on their side, a claimed-
+irreducible orientation residual that print order resolves (r=0.99, monotone
+25/25), a "plateau" whose ceiling sat just under the fixture's own tightest
+kerning, and a replacement guard that classified by the same predicate it
+compared — `separated` True by construction, a check that could not fire.
+The generalization worth carrying: **a guard that cannot fail is weaker
+evidence than the fitted constant it replaced**, because the constant at
+least made a checkable claim. Also recorded: a review artifact signed by an
+upstream author of the range would satisfy the no-self-review rule's string
+comparison while defeating its purpose — declined on those grounds.
+
+Arm remains BLOCKED behind F3 (prompt/parser cell contract), F4 (whitelist
+expressivity), F5 (sampler evidence), each its own go. The fixed transport is
+not yet verified live end-to-end through the shipped path; that is one call
+and its own go, and until it runs the fixes rest on tests, which is the exact
+standing this entry exists to warn about.
+
+Verdict-grade record: `docs/loop-probes/reval-adherence-20260819/`
+(pre-registration + amendment-01 + verdict + all 10 raw cells + runner).

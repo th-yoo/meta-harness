@@ -54,9 +54,18 @@ does NOT transfer; this file + the repo are the source of truth.)
 > **DECLINED to sign their 7b review artifact**: I am an upstream author of
 > two of the three commits in that range, so `fresh-context: true` would be
 > false and the no-self-review rule would pass on a string comparison while
-> its purpose was defeated. Their replacement guard `separation_margin` is a
-> **tautology** — it classifies gaps by the same overlap predicate it then
-> compares, so `separated` is True by construction and can never fire.
+> its purpose was defeated. Their replacement guard `separation_margin` was a
+> **tautology** — it classified gaps by the same overlap predicate it then
+> compared, so `separated` was True by construction and could never fire;
+> they hit it independently the same hour by building the input that ought to
+> make it fail, and replaced the boolean with an unthresholded dimensionless
+> `fragility` (`6792dc9`, 0.008 on a fragile fixture vs 0.111 on the real
+> one) plus a regression test pinning the vacuity. Their branch went to a
+> fresh-context opus reviewer, unmerged pending its verdict. **CARRY THIS:**
+> a guard that cannot fail is WEAKER evidence than the fitted constant it
+> replaced, because the constant at least made a checkable claim; and the
+> cheapest way to find such a guard is to build the input that ought to make
+> it fail, not to read the source.
 >
 > **PRIOR STATE (2026-08-19, earlier, `yoo-dev`):** LANE-A INCREMENT-2
 > **REVALIDATOR BUILT** via SDD (7 tasks, each implement+review; opus
