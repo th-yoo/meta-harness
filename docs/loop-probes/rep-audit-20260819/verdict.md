@@ -61,3 +61,25 @@ it by letter — both fall on D.**
 - Open engineering items: quiet-on-clean confirmation batch; audit-output
   → prompt-injection format; leak-safety audit trail (store cue text with
   trial).
+
+## Hand-injection pilot 1 (2026-08-19, same day, own go) — FAIL, injection did not actuate
+
+Task `raman-fitting-audit` (term-bench2/probe-tasks/): byte-identical
+raman-fitting grading + the sonnet audit output appended verbatim to
+instruction.md at recency position, framed "REFERENCE CARD (...; advisory)".
+Arm: v1 pin, sonnet-5, k=1, noStore; submitted values captured via 10s
+podman-cp watcher (pilot1-submitted-results.json).
+
+Result: reward=0, 39 turns, 874s. Submitted G x0=3745.37 / 2D x0=6327.97 —
+raw axis + swapped labels, numerically identical to the banked root-cause
+chain. The card supplied retrieval+detection+attribution complete (canonical
+1580/2700, "trusting literal cm⁻¹" named, 1/λ conversion) and the agent
+shipped raw anyway.
+
+Reading (n=1, no traj): "prose asks, position taxes, hooks enforce" extends
+to task-scoped, mechanism-complete, recency-positioned injection. Named
+confound: card was ADVISORY-framed — the wording family that actuates is the
+additive boundary-gate (b7 10/10). Discriminating next test: same card
+re-worded as a before-write ordering gate (pilot 2); if that also fails,
+prose injection is dead entirely and lane B (deterministic hook) is the only
+survivor.

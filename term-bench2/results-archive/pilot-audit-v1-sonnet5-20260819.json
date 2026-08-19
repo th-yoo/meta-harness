@@ -1,0 +1,38 @@
+{
+  "label": "pilot-audit-handinject",
+  "model": "anthropic/claude-sonnet-5",
+  "variant": "",
+  "harness": {
+    "layers": "global",
+    "account_active": "v1",
+    "project_active": "v17",
+    "agent": "",
+    "pins": {
+      "account-global": "v1"
+    }
+  },
+  "k": 1,
+  "timestamp": "2026-08-19T00:04:27.598Z",
+  "n_pass": 0,
+  "n_total": 1,
+  "pass_rate": 0,
+  "tasks": {
+    "raman-fitting-audit": {
+      "rewards": [
+        0
+      ],
+      "elapsed": [
+        885.7
+      ],
+      "turns": [
+        39
+      ],
+      "errors": []
+    }
+  },
+  "status": "complete",
+  "driver": "claude-code",
+  "maxAgentTimeout": 0,
+  "minAgentTimeout": 3600,
+  "timeoutRecording": true
+}
