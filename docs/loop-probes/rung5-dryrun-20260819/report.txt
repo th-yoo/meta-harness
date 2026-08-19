@@ -1,0 +1,34 @@
+S0 extruding points: 38972
+projected extent: u -77.59..90.57  v -6.28..5.78
+cell=0.4: 31 connected components
+after u-overlap merge (gap 0.0): 26 glyphs (expected 26)
+
+per-glyph (reading order):
+  00: pts= 1448  u=  -77.59.. -74.71  size= 2.88x 9.05
+  01: pts=  265  u=  -73.33.. -72.34  size= 0.99x 8.90
+  02: pts= 2800  u=  -70.68.. -64.65  size= 6.03x 6.66
+  03: pts= 2753  u=  -63.67.. -57.88  size= 5.79x 9.27
+  04: pts= 1940  u=  -56.98.. -52.94  size= 4.05x11.69
+  05: pts= 2737  u=  -52.02.. -46.31  size= 5.70x 9.27
+  06: pts= 1401  u=  -44.80.. -39.35  size= 5.45x 6.66
+  07: pts= 1756  u=  -38.27.. -32.32  size= 5.95x 8.78
+  08: pts= 2148  u=  -30.99.. -25.32  size= 5.67x 9.17
+  09: pts= 2477  u=  -23.86.. -17.91  size= 5.95x 8.79
+  10: pts=   68  u=  -16.29.. -10.24  size= 6.04x 0.01
+  11: pts=  310  u=   -9.02..  -8.01  size= 1.01x 8.90
+  12: pts=  843  u=   -6.52..  -1.11  size= 5.41x 6.38
+  13: pts=   74  u=   -0.48..   6.47  size= 6.95x 0.25
+  14: pts= 1385  u=    7.23..  12.68  size= 5.44x 6.66
+  15: pts= 1398  u=   14.09..  19.44  size= 5.35x 9.04
+  16: pts= 1690  u=   20.91..  27.00  size= 6.09x 8.66
+  17: pts=  540  u=   28.71..  34.45  size= 5.74x 8.89
+  18: pts=  542  u=   35.94..  41.67  size= 5.73x 8.88
+  19: pts= 2122  u=   42.73..  48.54  size= 5.80x 6.66
+  20: pts= 1360  u=   50.24..  55.63  size= 5.39x 6.47
+  21: pts= 2496  u=   57.39..  65.63  size= 8.25x 9.23
+  22: pts=  317  u=   67.59..  68.60  size= 1.01x 8.97
+  23: pts= 1527  u=   70.63..  77.88  size= 7.25x 9.01
+  24: pts= 2758  u=   79.53..  85.22  size= 5.70x 9.27
+  25: pts= 1816  u=   86.61..  90.57  size= 3.96x11.73
+
+wrote whole.png, contact-sheet.png, 26 glyph-NN.png into /tmp/claude-1001/-home-th-yoo-z2-meta-harness/98fe1680-be04-47ef-a7be-4e2866981522/scratchpad/rung5-final
