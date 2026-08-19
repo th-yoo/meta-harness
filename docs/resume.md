@@ -3,7 +3,25 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-> **MOST RECENT STATE (2026-08-19 newest, `yoo-dev`):** REVALIDATOR
+> **MOST RECENT STATE (2026-08-20 newest, `yoo-dev`):** RUNG-5 DRY-RUN
+> **MERGED to local main** (merge `2e7934b`, integration merge `cf232e8`) —
+> the harness-side glyph divide renders legibly, so rung-5 is **NOT
+> ELIMINATED**, which is *not* the same as worth building: a
+> necessary-condition screen informs only when it fails and this one passed.
+> Next gate is FREE and must precede the ~2-3h build — verify the agent
+> physically receives an image it can see, with the model id PINNED so a
+> transport `api_error` can never be misread as a perception result. Zero
+> model spend. Six checks shipped in this branch that could not report the
+> condition they were named for, all sharing one cause: **a quantity derived
+> downstream of the decision under test cannot audit that decision**;
+> corollary, **a check that cannot be wrong cannot be informative**. Full
+> block below (🔬 RUNG-5 DRY-RUN MERGED). **NOTHING IS PUSHED** — origin/main
+> = `52c1106` (third/fleet lane); local main is 21 ahead, 0 behind; push
+> needs its own go and is a plain fast-forward. NEVER rebase the range
+> `4fbd47c..7199800` — the review artifact names it by sha and the 7b gate
+> checks exact commit identity.
+>
+> **PRIOR STATE (2026-08-19, `yoo-dev`):** REVALIDATOR
 > **ADHERENCE PROBE RUN — ARM BLOCKED, AND THE TRANSPORT WAS DEAD.** 12
 > sonnet calls, pre-registered, verdict
 > `docs/loop-probes/reval-adherence-20260819/verdict.md`, artifacts committed
@@ -154,6 +172,84 @@ does NOT transfer; this file + the repo are the source of truth.)
 > working tree + HEAD — sibling commits landed on my feature branch;
 > recovered losslessly (cherry-pick to main + rebase). Coordinate branch
 > ops.
+
+## 🔬 RUNG-5 DRY-RUN MERGED 2026-08-20 (`yoo-dev`) — DIVIDE IS LEGIBLE, RUNG-5 *NOT ELIMINATED* (NOT "worth building") · SIX CHECKS THAT COULD NOT FIRE
+
+```
+WHAT: the staged FREE rung-5 dry-run go. Render flag{gc0d3_iz_ch4LLenGiNg}'s
+26 glyphs through the existing pipeline and ask whether they are legible AT
+ALL, before anyone spends ~2-3h building the "harness divides, agent reads one
+glyph" arm. Zero model spend, zero bench spend — local rasterization only.
+
+ANSWER: not dead. 26 glyph tiles, most readable in isolation (23-24/26 — the
+two underscores are baseline-less dashes, the 0 is an oval). BUT a
+necessary-condition screen informs only when it FAILS, and this one passed,
+which is the uninformative direction. Status is "NOT ELIMINATED", never
+"worth building". Reading whole.png used word context that per-glyph division
+is precisely the operation that removes, so only contact-sheet.png bears on
+the arm.
+
+NEXT GATE, FREE, BEFORE ANY BUILD SPEND: does the agent physically receive an
+image it can SEE? Driver is claude-code (`claude -p`), whose Read tool renders
+PNGs, and haiku 4.5 is vision-capable — an argument, NOT a measurement. PIN
+THE MODEL ID in that check's pre-registration: the shipped audit path sends
+`anthropic/claude-sonnet-5` and gets terminal_reason=api_error while the bare
+id works, so a transport failure would present as a perception result and
+kill rung-5 for the wrong reason.
+
+WHERE: instrument `term-bench2/seam-gate/render_glyphs.py` (dev tool on
+calibrate_gcode.py's contract — validator.py never imports it, never decides
+pass/fail, sync-task-copies.sh is a 4-file allowlist so it cannot reach the
+container). Verdict + artifacts `docs/loop-probes/rung5-dryrun-20260819/`.
+Review artifact `docs/reviews/7199800-rung5-dryrun.md`. Merge 2e7934b.
+Reproduce: python3 term-bench2/seam-gate/render_glyphs.py --out <dir>
+
+THE RESULT WORTH KEEPING (verdict-grade, cross-lane): SIX checks shipped here
+that could not report the condition they were named for — a boolean true by
+construction; fragility normalized by glyph WIDTH (scored a shattered divide
+23x SAFER); max-form aspect (read 413 on the real fixture, false-alarmed on
+two legitimately flat underscores); a transposed regression assertion that
+passed on the very inversion it named; a filter over spans disjoint by
+construction, written INTO the commit removing the previous dead check; and
+assertIn("26") satisfied forever by the verdict's own 2026-08-19 dateline,
+inside the anti-staleness check itself.
+  ALL SIX SHARE ONE CAUSE: each was a statistic computed from the very
+  partition it was scoring. A QUANTITY DERIVED DOWNSTREAM OF THE DECISION
+  UNDER TEST CANNOT AUDIT THAT DECISION — whether the computer is a numpy
+  expression or a language model (f7's back-solving auditor is the same
+  failure from the other end, same day).
+  COROLLARY, the actionable half: the statistics that finally worked import a
+  prior from OUTSIDE the artifact, and work precisely because they CAN be
+  wrong about a given fixture. A CHECK THAT CANNOT BE WRONG CANNOT BE
+  INFORMATIVE.
+
+DETECTOR SCOPE, stated because it is not closed: the triggered detectors
+catch NON-UNIFORM deformation only. A slightly-too-large cell that fuses every
+glyph with a neighbour leaves 13 glyphs of 26 while width_ratio 1.23, median
+aspect 1.38 and coverage 0.896 all read BETTER than the correct partition's
+0.794. pitch_ratio moves diagnostically (3.90 -> 8.30) but only 5.00 in the
+adversarial variant, so it ships with NO trigger — any cutoff between 3.90 and
+5.00 would be fitted to the two artifacts in hand. Closing it needs an
+INDEPENDENTLY-DERIVED partition (stroke or file-order contiguity) compared
+against the u-overlap one, not another aggregate.
+
+PROCESS: 7 review rounds, 6 fix-first, approved 0 findings by a fresh-context
+reviewer that could execute NOTHING (Bash disabled) and said so — its two best
+findings came from reading the artifact instead of the report. Six times my
+description of a change did not match what the change did; worst instance,
+patch scripts whose str.replace matched nothing and returned the original
+silently, making three rounds of "fixed" into three no-ops.
+
+GOTCHA: CPython invalidates __pycache__ on mtime and SIZE, not content, so any
+same-byte-length in-place .py rewrite (mutation runs, fixture swaps, A/B of
+implementations) keeps serving the STALE module. Use python3 -B or purge.
+
+STATE: merged to LOCAL main only (integration merge cf232e8 by f7, 21 ahead /
+0 behind). NOT PUSHED — no push go. origin/main = 52c1106 carries a third
+(fleet) lane. Push, when authorized, is a plain fast-forward. NEVER rebase
+this range: the review artifact names 4fbd47c..7199800 by sha and the 7b gate
+checks exact commit identity, so linearizing decertifies it silently.
+```
 
 ## 🔩 RUNG-4 SEAM GATE BUILT + ARMED + MEASURED 2026-08-19 (`yoo-dev`, worktree branch) — ENFORCED SEAMS DRIVE STRUCTURE TO 5/5 · TWO NEW FAILURE MODES MEASURED
 
