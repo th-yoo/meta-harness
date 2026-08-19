@@ -11,7 +11,15 @@ test("auditPrompt loads the frozen prompt with all four clauses + verdict line",
   expect(p).toContain("success criteria")      // instruction-criteria clause
   expect(p).toContain("MANDATORY")             // imperative clause
   expect(p).toContain("CONTENT VERDICT:")      // machine line
-  expect(AUDIT_PROMPT_VERSION).toBe("lane-a-v2")
+  expect(AUDIT_PROMPT_VERSION).toBe("lane-a-v3")
+})
+
+test("AUDIT_PROMPT_VERSION bumped to lane-a-v3 and prompt demands the block", () => {
+  const p = auditPrompt()
+  expect(AUDIT_PROMPT_VERSION).toBe("lane-a-v3")
+  expect(p).toContain("REVALIDATION:")
+  expect(p).toContain("TRANSFORM:")
+  expect(p).toContain("discriminates")     // the misreading-tie column
 })
 
 const P = (root: string) => ({ tbRoot: root } as any)  // only .tbRoot is read
@@ -300,7 +308,7 @@ test("writeAuditTrail appends one ndjson line with the card + verdict", () => {
     { card: "C", rawAudit: "R", verdict: "MISMATCH", reval: "PASS", sample: "S", truncated: false })
   const line = JSON.parse(readFileSync(join(dir, "convention-audit-trail.ndjson"), "utf-8").trim())
   expect(line.task).toBe("clean"); expect(line.verdict).toBe("MISMATCH"); expect(line.card).toBe("C")
-  expect(line.promptVersion).toBe("lane-a-v2")
+  expect(line.promptVersion).toBe("lane-a-v3")
   expect(line.reval).toBe("PASS")
 })
 

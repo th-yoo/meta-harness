@@ -5,7 +5,7 @@ import type { BenchPaths } from "./paths.ts"
 import { DEFAULT_BENCH_MODEL } from "./paths.ts"
 import { BenchError } from "./util.ts"
 
-export const AUDIT_PROMPT_VERSION = "lane-a-v2"
+export const AUDIT_PROMPT_VERSION = "lane-a-v3"
 
 /** Numeric parse of a first-column token, tolerant of a single decimal comma
  * (EU locale, e.g. "47183,554644"). A token with a lone comma and no dot has the

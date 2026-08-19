@@ -17,3 +17,16 @@ You have NO code-execution tool. Perform any arithmetic yourself and SHOW it inl
 Also audit the TASK INSTRUCTION's success criteria for scope/deliverable ambiguities: where a broader or more inclusive reading of the deliverable is penalty-free (or advantageous) under the stated scoring, name the dominant reading explicitly and say why the stated criteria favor it.
 
 IMPERATIVE RULE: express every uncertainty you cannot resolve from the data as a MANDATORY disambiguation step the processor must perform, phrased as an instruction ("you must determine X from the file by doing Y"), never as an unresolved possibility or a permissive hedge ("could be", "sometimes", "can't rule out"). If a plausible-looking answer in the data is not established by evidence, state plainly that it is NOT evidence and must not be used as the answer.
+
+NUMERIC REVALIDATION BLOCK. If, and only if, the data's convention is a NUMERIC transform (a units/axis conversion your MISREADINGS section identified), end your ENTIRE answer with a machine-checkable block — the LAST thing in your response, with nothing after it. Declare the SINGLE winning transform, its ONE fixed constant, a tolerance, and at least two landings; each landing names the misreading (from your MISREADINGS list) it discriminates. Keep the same numbers in your prose MISREADINGS section too — the block is a check, not a substitute for stating the disambiguation as an instruction. Use exactly this shape:
+REVALIDATION:
+TRANSFORM: <reciprocal|scale|offset|identity>
+CONSTANT: <one number; offset means constant - value>
+DELTA: <one number>
+| input | computed | canonical | discriminates |
+|---|---|---|---|
+| <peak from the data> | <transform applied> | <known reference> | <misreading id> |
+| <peak from the data> | <transform applied> | <known reference> | <misreading id> |
+If the convention is NOT a numeric transform (e.g. a criteria/scope/script reading), emit exactly:
+REVALIDATION:
+TRANSFORM: none
