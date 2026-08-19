@@ -17,7 +17,7 @@ does NOT transfer; this file + the repo are the source of truth.)
 > BOTTOM (the whole arc, 6 sibling co-review rounds with meta-harness-f6).
 > NEXT GOS: census generality probe (card-level scoring pre-reg per
 > round-6 §3) · production build (propose-verify revalidator + sampler +
-> staging integration) · v7 full-31-board slot run · sam-cell paired
+> staging integration) · v7 full-30-board slot run (raman-fitting DROPPED from target-tasks.txt by user ruling 08-19 — verifier grades an unstated crop procedure, see docs/2026-08-19-raman-verifier-report.md; probe-instrument use only) · sam-cell paired
 > rerun. LAWS: agent empiricism is the actuator (falsifiable predictions,
 > not directives) · wrong prescription < no prescription · coercive
 > injection wording triggers injection-defense · confident-wrong cards
@@ -170,7 +170,7 @@ Verdict: candidates/v7/ab-verdict.json (decision:inconclusive by policy
 — mini-board adopts nothing; winner:candidate, rule-PASSED recorded).
 
 NEXT (each its own go):
- 1. v7 full-31-board slot run vs v1 (the adoption-grade comparison).
+ 1. v7 full-30-board slot run vs v1 (the adoption-grade comparison; raman dropped 08-19).
  2. Same-day paired sam-cell rerun both hosts (window-effect split).
  3. Upstream defect reports: sam-cell csv_path/output_path,
     configure-git git@+password contract (join povray/planarity pile).

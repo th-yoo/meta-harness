@@ -525,3 +525,12 @@ Bench status of raman-fitting — split ruling, not blanket exclusion:
 Generalization: the census probe should carry a bar-soundness flag per
 task (are the graded quantities data-determined?) — same audit that
 exposed raman applies to any leaderboard task before it feeds the loop.
+
+**Round-8 ruling AMENDED by user (2026-08-19): raman-fitting DROPPED from
+the board too.** target-tasks.txt 31 → 30 tasks (same mechanism as the
+08-16 verifier/infra drops: build-cython-ext, qemu-startup,
+qemu-alpine-ssh). Learnings fully retained (this file + probe tasks +
+attack doc + verifier report). raman survives ONLY as a probe instrument
+(probe-tasks/, mechanism-scored); it feeds neither loop signal nor board
+score. v7 slot run = 30-task board; historical 31-task rows remain
+comparable by dropping the raman row from both sides.

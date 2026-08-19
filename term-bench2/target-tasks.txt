@@ -21,7 +21,6 @@ portfolio-optimization
 protein-assembly
 pypi-server
 pytorch-model-cli
-raman-fitting
 sam-cell-seg
 sanitize-git-repo
 sparql-university
