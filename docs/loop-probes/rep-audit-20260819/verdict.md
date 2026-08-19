@@ -340,3 +340,11 @@ its question, not raman's. STATED DEPENDENCE: the joint-landing table
 discriminates only if the auditor brings graphene-on-Si canonical lines
 (G/2D/Si 1st/2nd order) from world knowledge — sonnet has them; census
 domains may not share this property.
+
+**Iter-3a′ pre-call note:** the corrected deterministic finder emits 2
+peaks (19139.4, 3745.3); G-raw still misses the inherited 3×MAD bar by a
+hair (the file's clipped plateau inflates MAD of the resampled signal).
+Determinism clause: run as-is. Evidence nonetheless sharpened: 19139.4 →
+522.5 ≈ Si 1st-order 520.7 (0.35%) while NO standard laser line fits it
+(514.5nm→19436, 532nm→18797); reciprocal lands both peaks on canonical
+lines, laser lands zero.
