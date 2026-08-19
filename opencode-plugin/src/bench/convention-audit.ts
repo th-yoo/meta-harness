@@ -7,6 +7,14 @@ import { BenchError } from "./util.ts"
 
 export const AUDIT_PROMPT_VERSION = "lane-a-v2"
 
+/** Numeric parse of a first-column token, tolerant of a single decimal comma
+ * (EU locale, e.g. "47183,554644"). A token with a lone comma and no dot has the
+ * comma read as a decimal point; anything else falls through to Number(). */
+export function parseFirstColNum(tok: string): number {
+  if (/^-?\d+,\d+$/.test(tok)) return Number(tok.replace(",", "."))
+  return Number(tok)
+}
+
 export function auditPrompt(): string {
   return readFileSync(join(dirname(new URL(import.meta.url).pathname), "convention-audit-prompt.txt"), "utf-8")
 }
@@ -104,7 +112,7 @@ function summarizeFile(buf: Buffer): string {
 
   const nonBlank = lines.filter((l) => l.trim().length > 0)
   const firstCols = nonBlank.map((l) => l.trim().split(/\s+/)[0]!)
-  const nums = firstCols.map(Number)
+  const nums = firstCols.map(parseFirstColNum)
   let rangeStr = ""
   if (firstCols.length > 0 && nums.every((n) => !Number.isNaN(n))) {
     rangeStr = ` first-col-range=[${Math.min(...nums)}, ${Math.max(...nums)}]`

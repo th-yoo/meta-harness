@@ -2,7 +2,7 @@ import { test, expect } from "bun:test"
 import { join, dirname } from "node:path"
 import { readFileSync, mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseVerdict, cardFrom, runAuditUncached, auditCard, _resetAuditCache, writeAuditTrail } from "../src/bench/convention-audit.ts"
+import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseFirstColNum, parseVerdict, cardFrom, runAuditUncached, auditCard, _resetAuditCache, writeAuditTrail } from "../src/bench/convention-audit.ts"
 import { runAgent } from "../src/bench/agent-run.ts"
 
 test("auditPrompt loads the frozen prompt with all four clauses + verdict line", () => {
@@ -44,6 +44,14 @@ test("buildSample strips COPY flag tokens (--chown=) and still samples the real 
 })
 test("buildSample skips a glob COPY source (*.py) without throwing", () => {
   expect(() => buildSample(P(FIX), "flags-and-glob")).not.toThrow()
+})
+
+test("parseFirstColNum reads EU comma-decimals", () => {
+  expect(parseFirstColNum("47183,554644")).toBeCloseTo(47183.554644, 5)
+  expect(parseFirstColNum("1580.3")).toBeCloseTo(1580.3, 5)
+  expect(parseFirstColNum("-12,5")).toBeCloseTo(-12.5, 5)
+  expect(Number.isNaN(parseFirstColNum("abc"))).toBe(true)
+  expect(Number.isNaN(parseFirstColNum("1,2,3"))).toBe(true)   // not a lone decimal comma
 })
 
 test("parseVerdict reads the machine line", () => {
