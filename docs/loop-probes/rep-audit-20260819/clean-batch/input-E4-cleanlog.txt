@@ -1,0 +1,12 @@
+=== TASK INSTRUCTION ===
+You are given a server log. Count the number of ERROR lines and write the count to /app/count.txt.
+
+=== INPUT DATA SAMPLE (server.log, 8 of 5210 lines) ===
+2026-08-18T22:14:03Z INFO  request handled path=/v2/ingest status=200 dur_ms=12
+2026-08-18T22:14:05Z ERROR upstream timeout path=/v2/ingest attempt=3
+2026-08-18T22:14:06Z INFO  request handled path=/healthz status=200 dur_ms=1
+2026-08-18T22:14:09Z WARN  slow query dur_ms=1420 table=events
+2026-08-18T22:14:11Z ERROR connection reset peer=10.0.3.7:44122
+2026-08-18T22:14:12Z INFO  request handled path=/v2/ingest status=200 dur_ms=9
+2026-08-18T22:14:15Z INFO  retry succeeded path=/v2/ingest attempt=2
+2026-08-18T22:14:20Z INFO  request handled path=/v2/ingest status=200 dur_ms=11

@@ -1,0 +1,11 @@
+=== TASK INSTRUCTION ===
+You are given a service configuration file. Extract the value of the retry backoff in milliseconds and write it to /app/out.txt.
+
+=== INPUT DATA SAMPLE (config.json, complete) ===
+{
+  "service": "ingest-worker",
+  "maxConnections": 32,
+  "retry": {"maxAttempts": 5, "backoffMs": 250, "jitter": true},
+  "timeoutSec": 30,
+  "endpoints": ["https://api.internal:8443/v2/ingest"]
+}
