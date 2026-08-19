@@ -197,8 +197,18 @@ export type AuditResult =
  *
  * Fail-safe: any daemon error, non-"ok" outcome, `max_tokens` truncation,
  * or an unproven model returns `{ card: null, verdict: "ERROR", ... }`.
- * Never throws — every path is wrapped so a caller can treat this as a
- * plain async function with no exception contract to honor.
+ * The daemon-call path never throws — every step from `ensure` through
+ * `close` is wrapped in try/catch/finally, so a daemon-side failure always
+ * comes back as an ERROR result, never an exception.
+ *
+ * NOTE: `buildSample(paths, task)` runs BEFORE that try block and CAN
+ * throw — a leak-guard containment failure (COPY source escapes
+ * `environment/`) or a missing `instruction.md` propagate straight out of
+ * this function. That is deliberate: the leak guard is designed to fail
+ * loud (see this module's `buildSample` doc comment — "a leak guard that
+ * degrades instead of failing loud is not a leak guard"), so it is not
+ * caught here. The caller (`runTaskOnce`, Task 7) is responsible for
+ * guarding that boundary.
  *
  * `ACP_TURN_TIMEOUT_MS` defaults to "120000" in the env handed to the
  * daemon calls (unless the caller already set one) — the daemon's own
