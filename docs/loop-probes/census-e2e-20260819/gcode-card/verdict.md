@@ -195,3 +195,59 @@ rebuilt with the r2 card under the same soft gate, minted store version,
 extraction → plane-projected → >3 glyph clusters → multi-char read),
 reward secondary; prediction: acted-rate high, reward capped by haiku
 glyph perception (0-2/5), per attack-plan.md.
+
+## v3-card attack arm verdict (2026-08-19) — reward 0/5 (as predicted), DECOY EXTINCT, rungs climbed to the perception wall
+
+k=5 haiku, r2 card verbatim, pin v21 (fresh mint; NOTE: first launch failed —
+runner resolves the store via KKAMAK_HOME and earlier arms had silently
+inherited it from the sibling's tmux server env; relaunched with it explicit.
+Third env-inheritance trap of the arc, banked).
+
+Rewards 0,0,0,0,0 — inside the pre-registered 0-2/5 prediction. Elapsed
+252-567s: the genuine-work band, zero fast decoy-shippers, zero 1800s
+checkpoint burns (the R9F exhaustion signature did NOT fire — but see below).
+
+**Rung scores (traj-scanned, vs v1-card arm / no-card baseline):**
+| rung | v3 arm | v1 arm | baseline |
+|---|---|---|---|
+| R1 acted | 5/5 | 1/5 | 1/3 |
+| R2 scoped + E-filtered | 5/5 | 0/5 | 0/3 |
+| R3 plane projection | 3/5 | 0/5 | 0/3 |
+| R4 glyph clustering | 3/5 | 0/5 | 0/3 |
+| R5 multi-char reading | 4/5 | 0/5 (label-primed "EMBOSSED") | 0/3 |
+
+**The headline: the decoy answer is EXTINCT — 0/5 shipped "Embossed text"**
+(v1 arm: 4/5; baseline: 2/3). Every trial attempted a geometry decode; four
+produced multi-character readings FROM the toolpath: "helloworldtesting",
+"HELLO WORLD!", "PRIM", "PRUSA MK4S". All wrong (truth:
+flag{gc0d3_iz_ch4LLenGiNg}) — the perception wall stands exactly where
+attack-plan.md predicted, and it is now the ONLY wall left.
+
+**Perception-stage failure mode, named:** the wrong readings are
+prior-confabulations — "hello world", the printer's own name — generic
+priors filling perceptual gaps, the same mechanism as v1's label-priming
+with the specific decoy removed. Killing the decoy did not kill
+gap-filling; it re-anchored it to weaker, generic priors. Weak-tier
+perception under uncertainty defaults to the nearest high-frequency string.
+
+**Checkpoint compliance: the recipe's STEPS actuated; its CHECKPOINTS did
+not.** Zero mentions of "checkpoint"/"step N"/redo in any trajectory — the
+agents executed the pipeline's operations (scoping, filtering, projecting,
+clustering) but never ran the verify-at-each-seam predicates, so wrong
+intermediate states (bad projections, bad cluster counts) flowed straight
+into perception. This is the sharpest mechanism datum of the arm: at haiku,
+imperative OPERATIONS transfer; imperative SELF-VERIFICATION does not. The
+minimal-lane reading (checkpoints must be ENFORCED — a hook that blocks on
+an unstated/failed seam — not requested in prose) is now supported by
+direct evidence, not just history. The R9F exhaustion trap never fired
+because the checkpoints never ran at all — the bounded-retry fix remains
+correct but is moot until enforcement exists.
+
+**Ladder position after this arm:** rung-3 (imperative recipe card) proves
+sufficient to actuate OPERATIONS and kill decoys at the weak tier, but not
+self-verification. The next rung is enforcement (rung-4 hook demanding
+stated cut + seam results) — now the measured, not merely predicted, next
+step. Perception (R5→reward) may additionally need the render to be
+mechanically supplied (rung-5 harness-side: project+rasterize in the
+sampler, hand the agent a 2D image of glyph clusters — "the harness
+divides, the agent only conquers one glyph at a time").
