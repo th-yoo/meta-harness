@@ -219,6 +219,25 @@ export type AuditResult =
  * `closeSession`; defaulting to the real imports keeps the production call
  * site a single import, not a wiring exercise.
  */
+const _cache = new Map<string, Promise<AuditResult>>()
+
+export function _resetAuditCache() {
+  _cache.clear()
+}
+
+export async function auditCard(
+  paths: BenchPaths,
+  task: string,
+  env: Record<string, string | undefined>,
+  deps: { call?: typeof daemonCall; ensure?: typeof ensureDaemon; close?: typeof closeSession } = {},
+): Promise<AuditResult> {
+  const hit = _cache.get(task)
+  if (hit) return hit
+  const p = runAuditUncached(paths, task, env, deps)
+  _cache.set(task, p)        // set the PROMISE before await → single-flight
+  return p
+}
+
 export async function runAuditUncached(
   paths: BenchPaths,
   task: string,

@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test"
 import { join, dirname } from "node:path"
-import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseVerdict, cardFrom, runAuditUncached } from "../src/bench/convention-audit.ts"
+import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseVerdict, cardFrom, runAuditUncached, auditCard, _resetAuditCache } from "../src/bench/convention-audit.ts"
 
 test("auditPrompt loads the frozen prompt with all four clauses + verdict line", () => {
   const p = auditPrompt()
@@ -81,4 +81,13 @@ test("runAuditUncached fails safe on max_tokens truncation", async () => {
   const r = await runAuditUncached(P(FIX), "clean", {}, deps({ ...okReply(""), stopReason: "max_tokens" }))
   expect(r.card).toBeNull()
   expect(r.verdict).toBe("ERROR")
+})
+
+test("auditCard single-flights concurrent same-task misses into one call", async () => {
+  _resetAuditCache()
+  let calls = 0
+  const d = { ensure: async () => true, close: async () => ({ closed: true }), call: async () => { calls++; return okReply("X\nCONTENT VERDICT: MISMATCH") } }
+  const [a, b] = await Promise.all([auditCard(P(FIX), "clean", {}, d), auditCard(P(FIX), "clean", {}, d)])
+  expect(calls).toBe(1)
+  expect(a.card).toBe(b.card)   // byte-identical across "arms"
 })
