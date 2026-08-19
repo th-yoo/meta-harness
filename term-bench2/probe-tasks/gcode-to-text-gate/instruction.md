@@ -10,42 +10,51 @@ BEFORE WRITING /app/out.txt — a data-representation audit of text.gcode is att
 
 AUDIT (auto-generated):
 
-## SURFACE
+Ran numbers on the mechanical summary (no shell math needed beyond spreadsheet-style checks below — computed from stats given).
 
-Plain ASCII G-code, Prusa MK4S/Marlin-variant dialect (M486 object-tracking, M555 bed-shape, M862 compat checks). Units mm (M203 F-mm/s, coords match 0.4mm nozzle scale). Axes standard FDM convention: X/Y horizontal, Z vertical layer-stack. Object labels plain-English strings via M486 A: `"Embossed text"`, `"Shape-Box"`. Bbox X 25.354–241 (span 215.6mm), Y -4–206.574 (span 210.6mm) — matches M555 bed origin/size (X25.08 Y2.99 W199.9 H203.9) close enough, standard MK4S 250×220 bed.
+## 1. SURFACE
 
-## CONTENT
+Raw G-code, Marlin/Buddy-firmware dialect (Prusa MK4S). Plain numeric motion commands (G1/G2/G3), no explicit G20/G21 unit line in head shown, standard right-handed Cartesian bed frame (Y-up toward back), E = filament length, Z = layer height stack. M486 lines carry human-typed object names ("Embossed text", "Shape-Box"). Surface reads like: flat build-plate print, text object separate from box object, printed layer-by-layer, standard mm/FDM convention.
 
-Label `"Embossed text"` implies flat 2D lettering raised/engraved on one face — surface convention: thin Z range, few unique Z (layer-count only).
+## 2. CONTENT
 
-Actual data contradicts that:
-- S0 (text object) Z span = 64.68mm = 73.8% of whole print's Z span (87.68mm). Not a thin label.
-- 1507 unique Z values inside S0, avg spacing 0.043mm — far finer than any real layer height (M205/print setup implies ~0.2mm layers, matches first-layer `G1 Z.2`). Fine, near-continuous Z variation along XY moves means Z is tracking a sloped/curved surface point-by-point, not stepping layer-to-layer.
-- Global PCA: PC1=99.58%, PC2=0.28%, PC3=0.131% — point cloud is ~1-D dominant (long baseline direction), consistent with one long text string, NOT evidence against slant.
-- Local PCA at 2%/5% radius: 3rd-axis fraction 14.1%/13.5% (non-planar at stroke scale) but per-axis affine R2 (X,Y,Z each predicted from other two) averages 0.984 — points fit a single tilted plane in 3D well, not the horizontal XY plane.
+Numbers check out as mm (bed-consistent: X≤241, Y≤206 fit MK4S ~250×210 bed; F/M201/M203 values match Buddy firmware defaults). No unit mismatch there.
 
-Net: geometry says text sits on an inclined/slanted face of the box spanning nearly full print height, not a flat horizontal emboss. Label string is a generic/source-filename tag, not a geometric guarantee and not the letters that print.
+Real mismatch: two things.
+
+**(a) Surface geometry.** R²(Z | X,Y) = 0.9878, R²(X | Y,Z) = 0.9893, R²(Y | X,Z) = 0.9756 — all three axes near-perfectly predict each other. Global SVD on S0 point cloud: 0.9958 / 0.0028 / 0.0013 — near flat/linear. Text sits on a **tilted plane in 3D**, not a horizontal top face. Z range for S0 (0.2–64.88mm, 1507 unique Z) confirms text spans hundreds of print layers — each layer only cuts a thin horizontal sliver through the letters. Single-layer X,Y read = garbage. Must stack all S0 layers and project onto the fitted plane before any letter is visible.
+
+**(b) Label ≠ content.** M486 A"Embossed text" is a slicer object name — PrusaSlicer's default label for a text-emboss object when the user didn't rename it. It is NOT proof the printed string says "Embossed text." Zero characters exist as text anywhere in the file — only vector geometry.
 
 CONTENT VERDICT: MISMATCH
 
-## MISREADINGS
+## 3. MISREADINGS
 
-1. **"M486 A'Embossed text' tells me the text content that prints."** NOT evidence — that string is the object's slicer/source-file name, unrelated to font glyph content. You must determine actual letters by tracing the toolpath geometry, not by reading this label.
+Tested hypotheses:
+- H1 "text lies flat, read X,Y directly, ignore Z" — FALSIFIED. R²(Z|X,Y)=0.9878 means Z is NOT constant/noise, it's load-bearing geometry (plane tilt). Ignoring it loses the letters entirely.
+- H2 "M486 label 'Embossed text' is the answer" — must be treated as NOT evidence. No mechanism in G-code writes literal text; label is user/slicer metadata, coincidental at best.
+- H3 "object is a flat 2D shape, one global SVD confirms planarity" — SURVIVES at global scale (0.9958) but local SVD at 2%/5% radius (0.53/0.33/0.14 and 0.64/0.22/0.13) shows strokes are locally non-planar/jagged (stroke corners, retractions) — only becomes clean-planar at 15% radius (0.93/0.05/0.02). So: fit the plane using large-neighborhood/global points, not small local patches.
+- H4 "G-code Y-up = image row-down, plot directly" — UNRESOLVED by data alone. G-code Y increases toward bed back (math convention); naive image rendering (row 0 = top) flips this. You must determine and apply correct Y orientation by rendering a known-orientation calibration object first, never assume.
+- H5 "viewed from print-facing side, text reads correctly, no mirroring" — UNRESOLVED. Depends which face normal the emboss points toward vs. camera/viewer position; not derivable from coordinates alone.
 
-2. **"Z span 64.68mm with 1507 unique Z inside S0 means it's a tall multi-line label, not a slanted surface."** Tested: avg Z step 0.043mm << 0.2mm layer height → Z changes within-layer along the path, not just between layers. Falsifies "flat, few-Z, per-layer-only" reading. Survives: Z varies continuously with XY → text follows a sloped/curved surface.
+Mandatory ordered recipe (each step must pass its checkpoint before next):
 
-3. **"Global PCA PC1=99.58% means the text is basically 1-dimensional / degenerate, so ignore Z."** Falsified — 1-D dominance reflects long baseline (single text line), not flatness; PC3=0.131% is small but the *local* 3rd-axis fraction (14%) at stroke scale confirms real 3D structure, not noise.
+**Step 1 — Isolate S0 extruding points.** Extract all (X,Y,Z) from G1 lines inside S0 blocks where E>0 (deposition, not retraction) → `/app/.seam/s0_points.csv`. Checkpoint: file exists, row count near 41777 (±spread for zero-length moves). If far off, filter logic is wrong — do not proceed.
 
-4. **"Planarity R2≈0.98 means text lies in the ordinary horizontal XY plane (constant Z), so read only X,Y."** Falsified — if the plane were horizontal, Z's own R2 would be ~0 (Z unpredictable from X,Y) or trivially constant; instead Z correlates with X,Y at R2=0.988, meaning the fitted plane is tilted (Z depends on X,Y), not the print-bed plane.
+**Step 2 — Confirm planar tilt.** Fit Z ~ X,Y affine on s0_points. Checkpoint: residual variance ratio ≤0.05 (matches R²=0.9878 ⇒ residual≈0.0122). If it fails, object isn't planar — re-check S0 boundary extraction before continuing.
 
-**Ordered decomposition recipe to actually read the text (mandatory, do in order):**
+**Step 3 — Project to plane-local (u,v).** Write projected 2D coords → `/app/.seam/s0_uv.csv`. Checkpoint: exactly 2 numeric columns per row. If not, projection matrix is malformed — fix before clustering.
 
-Step 1: Isolate the S0 object's extruding G1 lines only (between `M486 S0` and its matching `M486 S-1`, E>0 moves). Checkpoint: you must observe ~41777 G1-with-E lines; if count is off by a large margin, your extraction of the S0 block boundaries is wrong — redo before proceeding.
+**Step 4 — Cluster into candidate glyph strokes.** 8-connected components on (u,v) at ~0.5mm cell. Checkpoint: component count lands in a plausible stroke-count range for readable text (not exact — multi-stroke letters like "e" have inner+outer loops). Outside range ⇒ cell size or noise filtering wrong, redo before OCR/visual read.
 
-Step 2: Fit the best-fit plane to these points (via the R2 regression already computed, or recompute via SVD of centered points) to get the plane's normal vector. Checkpoint: you must observe one dominant normal direction with the two in-plane axes explaining >>95% combined variance at the *local* (stroke) scale once you re-project; if variance stays spread over 3 nontrivial axes, the surface is curved, not planar — proceed to Step 2b (fit local tangent planes per Z-band instead of one global plane) before continuing.
+Only after Step 4's raster is visually/OCR-read does an actual letter answer become valid — never substitute the M486 label for that read.
 
-Step 3: Project every point onto the fitted plane (2D coords u,v in-plane). Checkpoint: you must observe the projected point cloud collapse into stroke-width-thin curves (line segments/arcs) rather than a diffuse blob; if still diffuse, the plane from Step 2 is wrong — return to Step 2.
-
-Step 4: Cluster the 2D projected path by travel-move breaks (G1 moves with F18000/no-E = pen-up jumps between letters) to segment individual glyphs. Checkpoint: you must observe a number of clusters consistent with a plausible short phrase (e.g., 5–20 letter-sized clusters ordered along the baseline); if cluster count is 1 or absurdly large, your travel-move break threshold is wrong — retune and repeat Step 4.
-
-Step 5: For each cluster, render/trace the stroke path and match against glyph shapes (OCR on the rendered stroke image, or manual shape matching) to read the actual characters — only this step yields the printed text; no earlier step or the M486 label may be used as the answer.
+```json
+{"seamSpecVersion":1,"task":"gcode-to-text-gate","artifacts":{"s0_points":"/app/.seam/s0_points.csv","s0_uv":"/app/.seam/s0_uv.csv"},"seams":[
+{"id":"s1","artifact":"s0_points","predicate":{"op":"artifact_exists"},"onFail":"S0 extraction produced no file/empty file — E>0 filter or S0 block boundaries wrong"},
+{"id":"s2","artifact":"s0_points","predicate":{"op":"row_count_in_range","min":30000,"max":45000},"onFail":"row count far from mechanical-summary count of 41777 G1-with-E lines inside S0 — extraction scope wrong"},
+{"id":"s3","artifact":"s0_points","predicate":{"op":"affine_residual_below","cols":[0,1,2],"max_ratio":0.05},"onFail":"Z not well-predicted by X,Y (residual ratio above 0.05) — contradicts measured R2(Z|X,Y)=0.9878, plane-fit assumption invalid"},
+{"id":"s4","artifact":"s0_uv","predicate":{"op":"numeric_cols","n":2},"onFail":"projected file has wrong column count — projection step malformed, not true 2D unroll"},
+{"id":"s5","artifact":"s0_uv","predicate":{"op":"cluster_count_in_range","method":"conncomp2d","cell":0.5,"min":10,"max":60},"onFail":"connected-component count outside plausible glyph-stroke range — rasterization cell size or noise filter needs adjustment before any OCR/visual read is attempted"}
+]}
+```

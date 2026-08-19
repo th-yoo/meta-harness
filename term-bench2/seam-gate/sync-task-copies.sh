@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
-# sync-task-copies.sh — stage generated copies of the seam-gate kernel into
-# the gcode-to-text-gate probe task.
+# sync-task-copies.sh — stage generated copies of the seam-gate kernel's CODE
+# files into the gcode-to-text-gate probe task.
 #
 # Single source of truth stays term-bench2/seam-gate/ (this directory) --
-# edit validator.py, spec_check.py, hook.py, or specs/gcode-to-text-gate.json
-# HERE, then re-run this script to refresh the task's staged copies. Never
-# hand-edit anything under probe-tasks/gcode-to-text-gate/environment/
-# task-deps/seam/ directly; it's overwritten wholesale on every run.
+# edit validator.py, spec_check.py, or hook.py HERE, then re-run this script
+# to refresh the task's staged copies. Never hand-edit the copies under
+# probe-tasks/gcode-to-text-gate/environment/task-deps/seam/ directly; they
+# are overwritten wholesale on every run.
+#
+# spec.json is DELIBERATELY OUT OF SCOPE here (rung-4 Task 5 ruling): which
+# spec.json a task arm ships -- the Task-3 curated spec, or a probe-generated
+# spec that passed calibrate_gcode.py --check-only -- is an explicit per-arm
+# decision recorded in that arm's verdict, not something this script should
+# silently overwrite on every run. Deploying (or reverting) spec.json is a
+# manual `cp` + a provenance note in task-deps/seam/README.md, done by
+# whichever task/ruling makes that call. See
+# docs/loop-probes/census-e2e-20260819/gcode-card/verdict.md ("v4 seamSpec"
+# section) for the precedent this guard exists to protect.
 #
 # Usage: bash term-bench2/seam-gate/sync-task-copies.sh
 
@@ -31,16 +41,4 @@ copy_py_with_header "validator.py" "validator.py"
 copy_py_with_header "spec_check.py" "spec_check.py"
 copy_py_with_header "hook.py" "hook.py"
 
-# spec.json: JSON has no comment syntax, so the "generated copy" notice
-# lives in a sibling README.md instead of inside the file.
-cp "$here/specs/gcode-to-text-gate.json" "$dest/spec.json"
-cat > "$dest/README.md" <<'EOF'
-GENERATED COPY — source of truth: term-bench2/seam-gate/specs/gcode-to-text-gate.json
-
-Edit the spec there and re-run term-bench2/seam-gate/sync-task-copies.sh to
-refresh spec.json in this directory. (JSON has no comment syntax, hence this
-sibling note instead of an in-file header like the .py copies get.)
-EOF
-echo "  specs/gcode-to-text-gate.json -> $dest/spec.json (+ $dest/README.md)"
-
-echo "sync-task-copies: done -- $dest refreshed"
+echo "sync-task-copies: done -- $dest refreshed (code files only; spec.json deployment is explicit per-arm, see header comment)"

@@ -251,3 +251,120 @@ step. Perception (R5→reward) may additionally need the render to be
 mechanically supplied (rung-5 harness-side: project+rasterize in the
 sampler, hand the agent a 2D image of glyph clusters — "the harness
 divides, the agent only conquers one glyph at a time").
+
+## Card regen v4 verdict (2026-08-19, rung-4 Task 5) — prose 2/2 full-bar, seamSpec 0/2 by the letter (structural, not semantic); r2 selected, generated-prose + curated-spec arm
+
+Scored against the v4 pre-registration (fixed before either call): prose
+bar = v3's unchanged five clauses; seam bar = seamSpec parses, passes
+`spec_check.check_spec`, uses >=3 distinct ops over >=3 seams, and passes
+`calibrate_gcode.py --check-only` (exit 0) against the real
+`text.gcode.gz` fixture.
+
+**Prose bar: BOTH calls FULL PASS, 5/5 clauses, zero hedges (mechanical
+scan, third generation in a row at 2/2).**
+
+r1 — (a) S0-scoped extraction with a checkpoint (~41777 lines, matches
+sample); (b) explicit travel/retract exclusion ("drop travel
+G1-without-E and retract/prime E<0"); (c) tilt named directly ("text
+conformally wrapped/embossed onto a tilted (and locally curved) 3D
+face") plus a genuinely new item — local SVD near-isotropy (0.53/0.33/
+0.14 at 3.5mm) flags the surface as locally curved, not just tilted,
+adding a fallback branch nobody had specified; (d) M486 label barred
+twice ("Explicit non-evidence... must not be used as the answer... not
+by echoing the M486 label"); (e) zero hedge hits.
+
+r2 — (a) S0 E>0 extraction with the same checkpoint; (b) E>0 filter
+explicit ("deposition, not retraction"); (c) tilt named directly ("Text
+sits on a tilted plane in 3D, not a horizontal top face... Must stack
+all S0 layers and project onto the fitted plane before any letter is
+visible"); (d) label barred twice (Misreading H2 + closing line "never
+substitute the M486 label for that read"); (e) zero hedge hits. One
+observation, not a bar violation: H5 ("viewed from print-facing side...
+not derivable from coordinates alone") is left as a bare unresolved
+possibility without a mandatory-disambiguation-step wrapper, unlike H4
+right above it — the IMPERATIVE RULE's *letter* (mandatory-step framing)
+slipped once even though clause (e)'s specific hedge-word list (the
+mechanical scan this bar actually uses) stayed clean.
+
+**Seam bar: BOTH calls FAIL the literal `--check-only` invocation —
+identically, and for a reason that traces to a gap in the generator
+prompt, not to the auditors' predicate design.** Both seamSpecs parse,
+both pass `spec_check.check_spec` with zero errors, both reference >=3
+seams over >=3 distinct ops (r1: 6 seams / 6 distinct ops; r2: 5 seams /
+5 distinct ops) — the SEAM EMISSION RULE paragraph actuated cleanly on
+format. But `calibrate_gcode.py`'s harness always writes its oracle/bad
+artifacts to the fixed paths `.seam/points.txt` / `.seam/projected.txt`
+(`write_artifact_set`, hardcoded) — it has no notion of an auditor's own
+artifact map. Neither v4 card was told to target those exact filenames
+(the SEAM EMISSION RULE paragraph says only "artifacts are files your
+recipe orders the processor to write under /app/.seam/", no fixed
+names), so both invented their own (`s0points.csv`/`s0proj.csv` vs
+`s0_points.csv`/`s0_uv.csv`). Every seam in both specs failed with
+"artifact file not found" on the real check-only run — exit 1 for both,
+by construction, before any predicate's bounds are even exercised. This
+is a generator-prompt design gap I own, not a card-quality signal.
+
+**Diagnostic re-check (informational only, NOT part of the pre-registered
+bar): with artifact paths mechanically remapped to the harness's fixed
+`points.txt`/`projected.txt` layout, only the `artifacts` map values and
+each seam's `artifact` pointer changed — op/params/onFail untouched — to
+see whether the underlying predicate DESIGN is calibration-consistent
+once naming is fixed.**
+
+r2 remapped: oracle **5/5 PASS**, bad **3/5 FAIL** (`OK -- oracle
+all-pass, bad 3-seam fail`, exit 0) — `row_count_in_range`
+[30000,45000], `affine_residual_below` 0.05, `numeric_cols` n=2, and
+`cluster_count_in_range` cell=0.5 [10,60] (29 components measured) are
+all clean, real-data-calibrated choices.
+
+r1 remapped: oracle **3/6 FAIL**. `numeric_cols` n=4 fails structurally
+(r1's own artifact schema kept the E column; the harness's `points.txt`
+writer only ever emits x,y,z — 3 cols — incompatible with n=4 regardless
+of correctness). `spread_above` col=1 min_std=3.0 fails on a genuine
+near-miss (measured std=2.917849, i.e. r1's threshold sits 3% above the
+real value). `cluster_count_in_range` cell=1.5 [8,20] fails badly (only
+3 components measured at that cell size — r1's cell/bounds are not
+calibrated to the real projected geometry). r1's failure is therefore a
+mix of one structural (naming/schema) issue and two substantive
+miscalibrations; r2's is purely the shared structural naming issue.
+
+**Selection: r2 — the only card whose predicate design is calibration-
+consistent once the shared naming gap is set aside; on prose the two are
+close (r1 has a slightly richer curvature-fallback observation, r2 has a
+slightly cleaner E-filter statement), so the seam-diagnostic breaks the
+tie.** Deployed verbatim, including its literal seamSpec JSON block (the
+agent may read it) — no edits.
+
+**Deployment decision (ruling 5's "generated-prose + curated-spec" arm,
+NOT ruling 6's both-fail fallback):** r2's generated seamSpec, AS
+LITERALLY EMITTED, failed `calibrate_gcode.py --check-only` — so per
+ruling 5, the Task-3 curated spec stays the enforced
+`task-deps/seam/spec.json` (verified byte-identical to
+`term-bench2/seam-gate/specs/gcode-to-text-gate.json`), and no
+`specs/gcode-to-text-gate-generated.json` was written. r2's full prose —
+including its seamSpec block, informational only, not enforced — was
+assembled into `instruction.md` verbatim, replacing v3's card under the
+same soft-gate wording. `term-bench2/seam-gate/sync-task-copies.sh` was
+narrowed to code files only (`validator.py`/`spec_check.py`/`hook.py`);
+`spec.json` deployment is now an explicit per-arm decision (recorded in
+`task-deps/seam/README.md`) so a future round that DOES deploy a
+generated spec won't have it silently reverted by the sync script.
+
+Ruling-6 (both-calls-fail -> v3 prose + curated spec, full stop) does
+NOT apply here: that branch is for when neither call clears even the
+prose bar, i.e. nothing usable exists. Both v4 calls cleared the prose
+bar cleanly; only the seam bar failed, and ruling 5 explicitly names
+"generated-prose + curated-spec" a valid, honestly-labeled arm for
+exactly that outcome — not a probe failure. My own pre-registration's
+tie-break language ("if it is the only prose-passing call") was written
+for the single-pass case and under-specified the both-pass case; this
+verdict resolves that gap using ruling 5's general principle rather than
+collapsing to ruling 6, and flags the resolution here for review.
+
+**Banked for the next seam-emission round:** pin the artifact vocabulary
+to the harness's own fixed layout (`points`/`projection` -> `points.txt`
+/`projected.txt`) directly in the generator prompt, or extend
+`calibrate_gcode.py` to read the artifact filenames out of `--spec`
+itself rather than assuming the reference names — either closes this gap
+without touching the demonstrated-reliable prose mechanism (5/5 x2, zero
+hedges x2, i.e. 4/4 across v3+v4 now).
