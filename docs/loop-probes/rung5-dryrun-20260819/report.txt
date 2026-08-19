@@ -1,6 +1,8 @@
 S0 extruding points: 38972
 projected extent: u -77.59..90.57  v -6.28..5.78
+u-sign from file order: |r| = 0.9834
 cell=0.4: 31 connected components
+glyph-scale separation: max intra-glyph gap -0.89 < min inter-glyph gap +0.63 -> SEPARATED
 after u-overlap merge (gap 0.0): 26 glyphs (expected 26)
 
 per-glyph (reading order):
@@ -31,4 +33,4 @@ per-glyph (reading order):
   24: pts= 2758  u=   79.53..  85.22  size= 5.70x 9.27
   25: pts= 1816  u=   86.61..  90.57  size= 3.96x11.73
 
-wrote whole.png, contact-sheet.png, 26 glyph-NN.png into /tmp/claude-1001/-home-th-yoo-z2-meta-harness/98fe1680-be04-47ef-a7be-4e2866981522/scratchpad/rung5-final
+wrote whole.png, contact-sheet.png, 26 glyph-NN.png into /tmp/claude-1001/-home-th-yoo-z2-meta-harness/98fe1680-be04-47ef-a7be-4e2866981522/scratchpad/rung5-v2

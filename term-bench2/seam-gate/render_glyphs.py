@@ -21,12 +21,24 @@ Pipeline, all of it reused rather than reimplemented:
 BASIS SIGN. numpy's SVD returns singular vectors of arbitrary sign, so a bare
 `vt[:2]` projection renders the text mirrored or upside down about half the
 time -- measured, not theorized (the first dry-run render came out flipped).
-Two of the four orientations are killed deterministically by pinning the
-viewing side: take the plane normal vt[2], point it along world +z (the
-outward face), and build v = normal x u so the basis is right-handed, i.e.
-the viewer sits on the outward side. The remaining ambiguity is u's own sign
-(a 180-degree in-plane rotation); it is NOT derivable from the coordinates
-and is left to the reader.
+Both sign ambiguities are resolved here, neither by convention:
+
+  viewing side  take the plane normal vt[2], point it along world +z (the
+                outward face), and build v = normal x u so the basis is
+                right-handed and the viewer sits outside the part. Pin the
+                NORMAL, never the in-plane axis: on this fixture the normal's
+                z-component is 0.935 while vt[1]'s is 0.054, one rounding
+                from flipping.
+  reading order the slicer emits glyphs left to right, so u's own sign is
+                recovered by requiring u-order to agree with FILE order
+                (see `orient_u_by_file_order`). Measured on this fixture:
+                r = +0.988 for the correct sign, -0.988 for the flipped one.
+
+DEPENDENCIES. Every other module in this directory is stdlib-only because it
+must run inside the task container. This one is not (numpy + cv2) and is
+never staged there -- sync-task-copies.sh is an explicit allowlist. The
+directory invariant is "stdlib-only, except dev tools, which are never
+staged"; keep new in-container modules stdlib-only.
 """
 
 import argparse
@@ -44,16 +56,41 @@ import readers  # noqa: E402
 import validator  # noqa: E402
 
 
+def orient_u_by_file_order(xy):
+    """Resolve u's sign -- the 180-degree in-plane rotation the viewing-side
+    pin leaves open -- by requiring the projected reading order to agree with
+    the order the slicer emitted the points in. Deposition runs left to right
+    across the string, so the correct sign correlates positively with file
+    index and the flipped one correlates equally negatively; the choice is
+    unambiguous whenever |r| is not ~0.
+
+    Correcting a negative r flips BOTH axes -- a 180-degree in-plane rotation,
+    which keeps the viewing side the normal already pinned. Flipping u alone
+    would mirror the text and silently undo that pin.
+
+    Returns (xy, |r|). A near-zero |r| means file order does NOT run along the
+    text (a differently-ordered slicer, or a fixture whose glyphs interleave)
+    -- the caller is told, rather than silently handed an orientation this
+    rule cannot justify.
+    """
+    idx = np.arange(len(xy), dtype=float)
+    r = float(np.corrcoef(xy[:, 0], idx)[0, 1])
+    if r < 0:
+        xy = -xy
+    return xy, abs(r)
+
+
 def project_pinned(points):
-    """SVD plane fit + projection with the basis sign pinned to the outward
-    (+z normal) viewing side. Returns an (N, 2) array of (u, v)."""
+    """SVD plane fit + projection with BOTH basis signs resolved: the viewing
+    side from the plane normal, u's own sign from file order. Returns
+    ((N, 2) array of (u, v), |r| of the file-order agreement)."""
     arr = np.array(points, dtype=float)
     centered = arr - arr.mean(axis=0)
     _, _, vt = np.linalg.svd(centered, full_matrices=False)
     normal = vt[2] * (1.0 if vt[2][2] > 0 else -1.0)
     u = vt[0]
     v = np.cross(normal, u)
-    return np.column_stack([centered @ u, centered @ v])
+    return orient_u_by_file_order(np.column_stack([centered @ u, centered @ v]))
 
 
 def components_at_cell(xy, cell):
@@ -97,12 +134,44 @@ def components_at_cell(xy, cell):
     return comps
 
 
+def separation_margin(xy, comps):
+    """The statistic that justifies the merge, computed per artifact rather
+    than shipped as a constant.
+
+    Merging at gap_tol=0 -- "components whose u-spans overlap are one glyph"
+    -- has no free parameter. What must hold for that partition to be
+    trustworthy is a SEPARATION: every intra-glyph gap (negative, since the
+    components overlap) must sit strictly below every inter-glyph gap. Returns
+    (max_intra, min_inter, separated). When the two overlap there is no
+    glyph-sized scale in the artifact and the caller must fail loud instead of
+    tuning a threshold until the count looks right.
+
+    Measured on the shipped fixture: max_intra -0.89, min_inter +0.63. Do not
+    turn that window into a constant -- it is this string's kerning in this
+    font, and a tolerance chosen inside it would be a fitted constant wearing
+    a plateau's clothes.
+    """
+    spans = sorted((float(xy[c][:, 0].min()), float(xy[c][:, 0].max())) for c in comps)
+    intra, inter = [], []
+    right = spans[0][1]
+    for lo, hi in spans[1:]:
+        (intra if lo <= right else inter).append(lo - right)
+        right = max(right, hi)
+    max_intra = max(intra) if intra else float("-inf")
+    min_inter = min(inter) if inter else float("inf")
+    return max_intra, min_inter, max_intra < min_inter
+
+
 def merge_by_u_overlap(xy, comps, gap_tol):
     """Group components into glyphs: sorted by u, a component joins the
     current glyph while its u-span starts no later than the glyph's current
     right edge + gap_tol. This is what turns an 'i' (dot + stem, two
     components) back into one glyph. Returns a list of index arrays, in
-    left-to-right reading order."""
+    left-to-right reading order.
+
+    gap_tol=0 (the default) is the parameter-free rule -- plain u-overlap.
+    Any other value is an exploration knob; see separation_margin for why a
+    nonzero tolerance must not be shipped."""
     spans = sorted((float(xy[c][:, 0].min()), float(xy[c][:, 0].max()), i)
                    for i, c in enumerate(comps))
     glyphs, cur = [], None
@@ -184,9 +253,12 @@ def main():
 
     points = readers.read_gcode_g1_points(args.gcode)
     say(f"S0 extruding points: {len(points)}")
-    xy = project_pinned(points)
+    xy, order_r = project_pinned(points)
     say(f"projected extent: u {xy[:,0].min():.2f}..{xy[:,0].max():.2f}  "
         f"v {xy[:,1].min():.2f}..{xy[:,1].max():.2f}")
+    say(f"u-sign from file order: |r| = {order_r:.4f}"
+        + ("" if order_r >= 0.5 else "   *** WEAK -- file order does not run along the text, "
+                                     "orientation is NOT justified by this rule ***"))
 
     comps = components_at_cell(xy, args.cell)
     if comps is None:
@@ -194,6 +266,13 @@ def main():
         open(os.path.join(args.out, "report.txt"), "w").write("\n".join(lines) + "\n")
         return 1
     say(f"cell={args.cell}: {len(comps)} connected components")
+
+    max_intra, min_inter, separated = separation_margin(xy, comps)
+    say(f"glyph-scale separation: max intra-glyph gap {max_intra:+.2f} < "
+        f"min inter-glyph gap {min_inter:+.2f} -> {'SEPARATED' if separated else 'OVERLAPPING'}")
+    if not separated:
+        say("*** no glyph-sized scale in this artifact -- the merge is not "
+            "trustworthy here; do NOT tune --merge-gap until the count looks right ***")
 
     glyphs = merge_by_u_overlap(xy, comps, args.merge_gap)
     say(f"after u-overlap merge (gap {args.merge_gap}): {len(glyphs)} glyphs "
