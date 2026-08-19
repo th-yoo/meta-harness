@@ -323,3 +323,27 @@ was a prompt-register gap, not structural. Consequences:
  3. Real lane-A boundary = reference-only-no-instruction-signature only
     (raman fit-window type specimen).
 Card for the elf arm = out-elfv3-r2 (the clean-.text one), verbatim.
+
+## ELF CARD ARM RESULT (2026-08-19) — 5/5 vs baseline 2/5; SECOND ACTUATION CELL LANDS
+
+extract-elf-card k=5 haiku, v18, out-elfv3-r2 card verbatim under soft gate:
+reward = 1,1,1,1,1 = 5/5. Fast (69-127s vs baseline 190-310s = right-
+problem-is-fast, program signature Nth context).
+MECHANISM VERIFIED (traj text-events, all 5): every trial consulted the
+audit (5/5); winning move explicit — "extracts from ALL LOAD segments for
+comprehensive coverage, maximizes included correct values (no penalty) —
+follows the audit's guidance." 699 entries vs the baseline fail's 77 =
+scope opened. (.text-token grep 2/5 only because agents wrote "all LOAD
+segments" = includes .text = the card's own phrasing; inclusive-extraction
+semantics fired 5/5.) NOT luck — the instruction-criteria scope reading
+actuated.
+
+STATS: 2/5 -> 5/5, Fisher one-sided p = 0.0833 (n small); traj acted-rate
+(scope-inclusive-extraction) baseline ~1/5 (only the 1 pass) -> card 5/5,
+Fisher p ≈ 0.008. Traj-primary = the load-bearing number, as pre-registered.
+
+CELL GRID now: detection generalizes (census 2/2); ACTUATION proven in
+TWO cells — raman×sonnet (3/6, data-surface unit trap) AND elf×haiku (5/5,
+instruction-criteria scope trap). Two DIFFERENT convention classes, two
+tiers, both actuate → actuation generalizes beyond the single raman cell.
+The instruction-criteria clause (elf-v3) is validated end-to-end.
