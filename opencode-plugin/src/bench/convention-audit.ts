@@ -155,3 +155,13 @@ export function buildSample(paths: BenchPaths, task: string, budgetBytes: number
 
   return { text: parts.join("\n"), truncated }
 }
+
+export function parseVerdict(raw: string): "MISMATCH" | "NO_MISMATCH" {
+  const m = raw.match(/CONTENT VERDICT:\s*(MISMATCH|NO MISMATCH)/i)
+  if (!m) return "NO_MISMATCH"
+  return m[1].toUpperCase() === "MISMATCH" ? "MISMATCH" : "NO_MISMATCH"
+}
+
+export function cardFrom(raw: string): string {
+  return raw.trim()
+}

@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test"
 import { join, dirname } from "node:path"
-import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample } from "../src/bench/convention-audit.ts"
+import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseVerdict, cardFrom } from "../src/bench/convention-audit.ts"
 
 test("auditPrompt loads the frozen prompt with all four clauses + verdict line", () => {
   const p = auditPrompt()
@@ -32,4 +32,16 @@ test("buildSample truncates an oversized dir COPY and flags it", () => {
 })
 test("buildSample is deterministic", () => {
   expect(buildSample(P(FIX), "clean").text).toBe(buildSample(P(FIX), "clean").text)
+})
+
+test("parseVerdict reads the machine line", () => {
+  expect(parseVerdict("...\nCONTENT VERDICT: MISMATCH\n...")).toBe("MISMATCH")
+  expect(parseVerdict("CONTENT VERDICT: NO MISMATCH")).toBe("NO_MISMATCH")
+})
+test("parseVerdict defaults to NO_MISMATCH when the line is absent", () => {
+  expect(parseVerdict("no verdict here")).toBe("NO_MISMATCH")
+})
+test("cardFrom returns the audit body verbatim", () => {
+  const raw = "SURFACE ... CONTENT ... MISREADINGS ..."
+  expect(cardFrom(raw)).toBe(raw.trim())
 })
