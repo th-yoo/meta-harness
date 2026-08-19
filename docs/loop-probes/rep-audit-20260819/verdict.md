@@ -287,3 +287,28 @@ at local row spacing. Per the determinism clause this is NOT tuned away;
 run proceeds as-is. Noted: the reciprocal reading remains derivable
 (1e7/3745.05=2670.2 = 2D canonical) and a strong card could PREDICT the
 G peak at raw ≈6329 as an agent-verifiable consequence.
+
+## Generator iter-2 verdict (2026-08-19) — 0/2; the decisive arithmetic never ran
+
+Both calls computed hard and missed: r1 fell into a coincidence trap
+(artifact peak 10421/10 = 1042.1 "matches" Si 2nd-order to 0.07% — the
+synthetic file's accident) and ruled out the nm reading via a botched
+check; r2 matched the mega-peak to a 532nm laser line (0.3%), computed
+laser-corrected G/2D targets, found nothing, declared "unresolved". Neither
+ever computed 1e7/3745.05 = 2670.2 — the mechanically-found second peak's
+reciprocal, sitting on the 2D canonical.
+
+Pattern across all 4 generator calls (iter-1+2): the DOMINANT peak anchors
+the hypothesis; the laser-line story explains it well and absorbs the rest
+of the reasoning; secondary peaks never get the transform test. Structural
+note: the task's encoding is UNPHYSICAL (shift = 1e7/x directly implies a
+laser at infinite wavenumber), so a physically-competent auditor is biased
+AGAINST the true reading — raman is plausibly the generator's adversarial
+worst case, not its representative case.
+
+Iter-3 options (each its own go): (a) transform-table instruction — "for
+each candidate transform compute where EVERY listed peak lands; tabulate
+against canonical lines; the reading landing multiple peaks simultaneously
+wins" (generic, leak-free, forces the missing arithmetic); (b) pivot to
+census generalization — test the generator on convention traps where
+physics agrees with the truth (gcode dialects, endianness, feal).
