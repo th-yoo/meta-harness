@@ -76,6 +76,18 @@ failure content is unrecoverable. What is actually evidenced:
 | all six trials, per-character | **28–33 / 36 (77.8–91.7%)** | bounds; arm 1's failure content unrecoverable |
 | exact-match (what I reported) | 3/6 = 50% | compounds per-glyph errors |
 
+**Neither half of that exchange is the flattering one.** The refutation did not
+rest on the percentage at all — it rests on the *shape* of the failures, which
+was fully evidenced: exact match on a six-character string cannot distinguish
+"read nothing" from "read five of six", and rung-5 divides precisely so that
+distinction matters. But the reviewer led with the number and put 91.7% in the
+sentence that did the overturning, so an auditor checking the work would have
+found the load-bearing quantity unsupported and been entitled to doubt the
+rest. A sound finding can be presented in a way that makes an unsupported
+figure carry the argument's weight for anyone auditing it — and that is a
+separate defect from the finding being wrong, worth naming because only the
+audit surfaces it.
+
 **And the fixture was not easy at its hardest point.** My headline said the
 failure came "far below the arm's difficulty". It did not. I excluded `0/O`
 and `1/I` from the alphabet as known-confusable and left `2/Z` in — so the one
