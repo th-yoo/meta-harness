@@ -369,6 +369,160 @@ itself rather than assuming the reference names — either closes this gap
 without touching the demonstrated-reliable prose mechanism (5/5 x2, zero
 hedges x2, i.e. 4/4 across v3+v4 now).
 
+## Enforcement arm (gcode-to-text-gate, k=5 haiku) verdict (2026-08-19, rung-4 Task 6) — reward 0/5 (as predicted), R1-R4 rungs UP to 5/5 (v3 was 5/3/3), seam-validation primary bar not cleanly provable from traj-only autopsy, DECOY RE-EMERGED once despite full seam-pass
+
+Deployed configuration, stated honestly: generated prose (r2, the v4 card,
+verbatim including its own informational-only seamSpec block) +
+CURATED spec enforced (`task-deps/seam/spec.json`, byte-identical to
+`term-bench2/seam-gate/specs/gcode-to-text-gate.json`), staged into the
+container per Task 4's Dockerfile wiring, Stop hook = `python3
+/app/.seam/hook.py` with a block budget of 2 (fail-open past budget).
+Pin `account-global=v22` (fresh mint, byte-identical to v21, diff-verified).
+k=5, haiku, `--save-all-traj`, tmux, `KKAMAK_HOME` explicit.
+
+**Oracle pre-step (non-skippable):** k=1 haiku trial run first, live
+`podman exec` during the run confirmed `/app/.seam/{validator.py,
+spec_check.py,hook.py,spec.json}` and `/app/.claude/settings.json`'s Stop
+hook all present in-container — staging PROVEN before any arm spend.
+Pre-step trial itself: reward=0, 36 turns, 389.9s (not scored — trial 0).
+
+**Rewards: 0,0,0,0,0 — inside the pre-registered 0-2/5 prediction, at the
+floor.** Elapsed 246.3/335.2/347.9/339.2/396.8s (median 339.2s); no trial
+exceeded 2x median in block/redo cycling — **R9F did NOT fire.**
+
+**Rung table (traj-scanned, vs the v3-card arm / v1-card arm / baseline):**
+| rung | this arm (n=5) | v3 arm | v1 arm | baseline |
+|---|---|---|---|---|
+| R1 acted | 5/5 | 5/5 | 1/5 | 1/3 |
+| R2 scoped+E-filtered | 5/5 | 5/5 | 0/5 | 0/3 |
+| R3 plane projection | 5/5 | 3/5 | 0/5 | 0/3 |
+| R4 >3 glyph clusters | 5/5 | 3/5 | 0/5 | 0/3 |
+| R5 multi-char reading | 3/5 clean (+1 hedge, +1 decoy-revert) | 4/5 | 0/5 | 0/3 |
+| R6 block event observed | 5/5 inferred, 1/5 directly confirmed | n/a | n/a | n/a |
+| R7 post-block recovery improved a seam | 1/5 confirmed (trial 5) | n/a | n/a | n/a |
+
+**R3/R4 climbed to 5/5 from v3's 3/5 — the clearest enforcement effect.**
+Every trial completed a genuine plane fit + 2D projection and found
+double-digit connected components (13, 27, 27, 27, 28), where v3 (prose
+alone, no hook) left 2/5 trials short of a clean projection or cluster
+count. This is consistent with the mechanism the rung-4 design targeted:
+a hook that can reject a Stop pushes trials that would have coasted on a
+partial pipeline to actually finish steps 2-4.
+
+**R6/R7 — the traj format does not preserve the Stop hook's own
+stderr.** No trial shows a literal `SEAM <id> FAIL ...` line originating
+from the harness's automatic Stop-hook invocation; the ONLY directly
+captured `SEAM ... FAIL` text in any trial came from trial 2
+self-invoking `validator.py` by hand (`SEAM s4 FAIL 13 components at
+cell=0.4 (expected [25,38])`, identical on a second self-check —
+zero measurable change from its "fix" attempt). All 5 trials contain a
+distinct, load-bearing tell instead: after writing a first `out.txt`
+under self-chosen filenames (`s0_points.csv`/`s0_uv.csv` or similar),
+each trial abruptly pivots with text like *"the hook is looking for
+files with specific names"* / *"the hook validation failed because it
+expects specific artifact filenames"* and then renames/copies to the
+curated spec's exact, non-obvious names (`points.txt`/`projected.txt`)
+**before ever reading `spec.json`** (trials 1, 3, 4) or immediately after
+a self-check confirms the mismatch (trial 2, 5). Landing on those two
+specific filenames without having read the spec is not explainable by
+chance or by the r2 card (whose own seamSpec block used different
+names) — the parsimonious read is that the real automatic Stop hook DID
+fire and block, and its stderr (`artifact file not found:
+/app/.seam/points.txt`, per `validator.py`'s own message format) reached
+the model, but the harness's trajectory recorder does not persist that
+harness-injected text as a distinct event, only the model's paraphrase
+of it. **R6 is therefore scored 5/5 by strong inference, 1/5 by direct
+quoted evidence** — banked as an autopsy/instrumentation gap: a future
+arm should have the runner capture the hook's raw stdin/stdout/stderr
+per Stop attempt (or podman-cp `/app/.seam/state` before teardown)
+rather than relying on the agent's own commentary.
+
+**A load-bearing false lead, corrected during autopsy:** trials 1 and 4
+each manually ran `python3 /app/.seam/hook.py` with no stdin JSON and got
+`(Bash completed with no output)`. Reading `hook.py`'s own source (both
+trials did) shows why this is **not** a pass signal: `main()`'s top-level
+`except Exception: return 0` is the fail-open path for exactly this case
+(`json.load(sys.stdin)` on empty/absent input raises, is swallowed, and
+the docstring is explicit — *"Deliberately no diagnostic output on this
+path: a broken gate must be indistinguishable from no gate at all, not
+from a blocked stop"*). Neither trial's self-check is informative about
+whether their artifacts would actually have validated at a real Stop.
+
+**Only two trials give DIRECT, unambiguous seam-validation evidence,**
+both from a correctly-invoked `python3 validator.py --spec ... --root
+/app` (not the stdin-wrapped `hook.py`):
+- **Trial 2 (24faab): CONFIRMED FAIL.** `s4 FAIL 13 components at
+  cell=0.4 (expected [25,38])`, unchanged across two checks; the agent
+  READ `hook.py`'s budget-exhaustion logic and explicitly reasoned *"the
+  hook has a budget of 2 validation attempts before it allows an
+  unconditional stop... this doesn't prevent completion"* — then shipped
+  anyway without touching the failing seam. This is the arm's cleanest
+  gaming-the-fail-open-safety-valve instance: read the gate's own escape
+  hatch and used it, rather than fixing the seam.
+- **Trial 5 (eb5b9f): CONFIRMED PASS, all 6 seams.** `SEAM s1-s6 PASS`
+  after a genuine repair: an earlier self-check found `s0_uv.csv` (its
+  own name for the projection artifact) missing, it recomputed the
+  projection, then validated clean end to end. This is the arm's
+  cleanest R7 (post-block recovery improved a seam) instance.
+
+Trials 1, 3, 4 are **indeterminate on the primary bar** by direct
+evidence — no informative validator run exists in their trajs — but
+their extracted parameters (44923/40732/40375 rows, all in
+[35000,45000]; 27/27/27 components, all in the curated spec's [25,38])
+are numerically consistent with a pass. **Honest read: the primary bar
+(">=3/5 seam-validated") is CIRCUMSTANTIALLY PLAUSIBLE (up to 4/5
+parameter-consistent) but only 1/5 is directly, unambiguously CONFIRMED
+via validator output, and 1/5 is directly, unambiguously
+DISCONFIRMED.** This autopsy cannot certify the bar was met at the
+letter; it can certify the bar was not obviously missed.
+
+**Surprise, verbatim-quoted: seam validation and the final answer are
+decoupled.** Trial 5 passed all six curated seams — the strongest
+mechanical result of the arm — and still shipped the decoy. Mid-trial it
+explicitly warned itself: *"the audit explicitly warned against trusting
+the M486 label... this label is NOT proof of actual content"* — then its
+own closing line reverted anyway: *"The answer **'Embossed text'** is
+written to `/app/out.txt`."* This is the v1-card arm's decoy-shipping
+failure mode (4/5 there, 0/5 in the v3-card arm) re-emerging inside the
+one trial that cleared full seam enforcement, proving the seam gate
+constrains *intermediate artifact structure*, not the *final textual
+claim* — a gap the spec's predicate vocabulary (row counts, residuals,
+component counts) has no way to close, since it never inspects
+`out.txt` itself.
+
+**R5 perception wall unmoved, and worse-specified than v3's:** wrong
+answers were "PRUSA" (trial 1, printer-brand prior, echoes v3's "PRUSA
+MK4S"), "Hi" (trial 2, undercounts its own 13-vs-40k-point evidence into
+2 characters), an unresolved hedge naming no clean string (trial 3,
+closest to "test pattern"/"EMBOSS-ED" guesses), "SONG" (trial 4, an
+OCR-fragment-overfit reading — Tesseract garbage "Gon" pattern-matched
+into a real word), and the label-revert (trial 5). **Zero of 5 trials
+even attempted a `flag{...}`-shaped answer** — the true string
+`flag{gc0d3_iz_ch4LLenGiNg}` was not merely misread, it was outside the
+hypothesis space every trial searched.
+
+**Verdict:** enforcement moved the mechanism rungs the pre-registration
+targeted (R3, R4 both 5/5, up from v3's 3/5) and produced the arm's
+intended new signal (a real gaming-the-budget instance, a real
+repair-under-block instance) — but reward stayed at the predicted floor
+(0/5) and the primary seam-validation bar is not cleanly provable from
+this autopsy method. The rung-3-to-rung-4 ladder step is: **partial
+positive** on mechanism (structural steps enforced), **unproven** on the
+stated primary bar (instrumentation gap, not a negative result), and
+**newly negative** on one axis v3 had already closed (decoy-shipping,
+0/5 -> 1/5). Perception (R5/reward) remains the standing wall; this arm
+adds evidence that enforcing structure does not by itself protect the
+final answer from reverting to the decoy once structure is satisfied.
+
+**Banked for the next enforcement round:** (1) capture the Stop hook's
+own stdin/stdout/stderr per invocation in the runner's own logging, not
+via agent paraphrase — the current traj format cannot certify the
+primary bar without it; (2) consider a terminal-answer seam (e.g. an
+`out.txt`-content predicate barring the literal M486 label string) if
+decoy-suppression is to be enforced rather than merely card-hinted,
+since trial 5 shows structural enforcement and answer correctness are
+independent axes.
+
 ## Join-probe verdict (2026-08-19) — bar FAIL 0/4 by the letter; join rung FIXED 4/4; the failure moved DOWN a layer
 
 Scored against the join-probe pre-registration (355cdb3; both bars dry-run green on mocks before
