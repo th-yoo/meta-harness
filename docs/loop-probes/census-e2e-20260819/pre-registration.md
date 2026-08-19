@@ -192,3 +192,22 @@ REVISED PLAN (sibling menu, adopted):
 3. gcode k=5 mechanism-scored afterwards only if the harder case wanted.
 POWER note (accepted): k=3 proves nothing (1/3 vs 3/3 Fisher p=0.2);
 k=5/arm minimum (1/5 vs 5/5 p≈0.024).
+
+## Card-generation pre-check bar (pre-registered BEFORE the call, sibling discipline)
+
+Pre-check (ii) PASS bar for the elf card generation — decided now, not after
+reading output:
+- PASS iff the generated card, UNPROMPTED, states that the memory image
+  includes EXECUTABLE/CODE sections — i.e. names `.text` OR says code/
+  instructions are part of the extracted memory (not only data/rodata).
+  Either the section name or an unambiguous "code is also memory/data"
+  phrasing counts; a card that lists only .data/.rodata or omits code
+  sections = FAIL.
+- Also recorded (not gating): does it name the [text,data,rodata] triple,
+  LE word-read at vaddrs, word size.
+PASS → elf card arm proceeds (verbatim card). FAIL → do NOT hand-add
+scope; bank "memory-image scope sits below the auditor's natural register"
+as a lane-A limitation finding and flip to gcode k=5 mechanism-scored.
+Sampler input = blind-ish: instruction + readelf -S/-l/-h summary + a
+hexdump sample (NOT the reference solution / tests). 2 calls, sonnet,
+bash-enabled.
