@@ -312,3 +312,31 @@ against canonical lines; the reading landing multiple peaks simultaneously
 wins" (generic, leak-free, forces the missing arithmetic); (b) pivot to
 census generalization — test the generator on convention traps where
 physics agrees with the truth (gcode dialects, endianness, feal).
+
+## Sibling round-4 (accepted) — iter-3a′ pre-registration (turnkey, awaiting go)
+
+Sibling ran the transform table on the fixed peak list independently:
+reciprocal lands 3745.1→2670.20 (exact 2D), 10421.4→959.6 (Si 2nd-order),
+18858→530.3 (Si 1st-order, loose); laser story lands the dominant peak and
+nothing else. Evidence as sampled already discriminates — the failure is
+purely that secondaries never got the reciprocal test. Challenges
+accepted: (1) dominant-peak anchoring is domain-general, will follow to
+the census — "unphysical worst case" must not excuse it; (2) the
+peak-finder has an OBJECTIVE bug (fixed 21-row window on an axis with
+~2000× spacing variation), fixable independently of raman.
+
+**Iter-3a′ pre-reg:** sampler change only, prompt byte-identical (third
+time). Corrected deterministic peak-finder, fixed before run: normalize
+commas, sort ascending by col1, linear-interpolate col2 onto a uniform
+grid from min(col1) to max(col1) with step = MEDIAN of the file's own
+successive |dx| (data-derived, no new constant); then the inherited
+pipeline unchanged (21-pt moving average, local maxima, prominence > 3×
+MAD of the resampled col2, top 10 by prominence, same line format, x
+reported at the grid position of the maximum). 2 calls, sonnet. PASS bar
+unchanged (reciprocal transform + joint canonical landing in the card).
+If FAIL → step 2 adds the transform-table instruction (single variable).
+Census probe (3b) runs afterwards regardless of outcome — generality is
+its question, not raman's. STATED DEPENDENCE: the joint-landing table
+discriminates only if the auditor brings graphene-on-Si canonical lines
+(G/2D/Si 1st/2nd order) from world knowledge — sonnet has them; census
+domains may not share this property.
