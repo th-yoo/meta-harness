@@ -61,7 +61,7 @@ check() {
 # 0. Sanity: generated task-deps copies must exist (run sync-task-copies.sh
 #    first if this fires).
 # --------------------------------------------------------------------------
-for f in validator.py spec_check.py hook.py spec.json; do
+for f in validator.py spec_check.py hook.py readers.py spec.json; do
   if [[ ! -f "$TASK_DEPS_SEAM/$f" ]]; then
     echo "FAIL: prerequisite $TASK_DEPS_SEAM/$f missing -- run sync-task-copies.sh first"
     exit 1
@@ -166,8 +166,15 @@ podman exec "$CID" mkdir -p /app/.seam /app/.claude
 podman cp "$TASK_DEPS_SEAM/validator.py" "$CID:/app/.seam/validator.py"
 podman cp "$TASK_DEPS_SEAM/spec_check.py" "$CID:/app/.seam/spec_check.py"
 podman cp "$TASK_DEPS_SEAM/hook.py" "$CID:/app/.seam/hook.py"
+podman cp "$TASK_DEPS_SEAM/readers.py" "$CID:/app/.seam/readers.py"
 podman cp "$TASK_DEPS_SEAM/spec.json" "$CID:/app/.seam/spec.json"
 podman cp "$TASK_DEPS_CLAUDE/settings.json" "$CID:/app/.claude/settings.json"
+
+# Task 7 item 4: the task's own input file, staged where hook.py's SOURCE_PATH
+# constant (/app/text.gcode) expects it -- the real Dockerfile stages this via
+# `COPY text.gcode.gz /app` + `RUN gzip -d`; this hand-mirrors that end state
+# so the s7 (source_crosscheck) seam has something real to cross-check against.
+podman cp "$GCODE_PLAIN" "$CID:/app/text.gcode"
 
 podman exec "$CID" pip install --quiet numpy
 NUMPY_INSTALL_STATUS=$?

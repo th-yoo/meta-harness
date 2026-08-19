@@ -7,10 +7,20 @@ every seam's predicate directly against the artifact on disk, and reports
 PASS/FAIL per seam.
 
 CLI:
-    python3 validator.py --spec <spec.json> --root <dir>
+    python3 validator.py --spec <spec.json> --root <dir> [--source <path>]
 
-`--root` is the directory artifact paths resolve under: `/app` in-container,
-a temp dir in tests (see `resolve_artifact_path` below for the exact rule).
+`--root` is the directory artifact ids resolve under: `/app` in-container, a
+temp dir in tests (see `resolve_artifact_id` below for the exact rule).
+`--source` is the task's own input file (e.g. `/app/text.gcode`), needed only
+by seams using the `source_crosscheck` op (Task 7 item 4) -- omit it and any
+such seam fails its predicate with a clear detail, never an internal error.
+
+Artifact identity (Task 7 structural fix): specs carry a flat `artifactIds`
+list -- bare ids, never paths. Every id resolves by convention to
+`<root>/.seam/<id>.txt`; there is no path field anywhere in the spec for a
+generated card to invent a filename into (the measured failure mode a prior
+probe round found -- see docs/loop-probes/census-e2e-20260819/gcode-card/
+verdict.md, "Card regen v4" section).
 
 Output: one line per seam, `SEAM <id> PASS|FAIL <detail>`, to stdout.
 Exit code: 0 if every seam passed, 1 if any seam failed.
@@ -66,8 +76,9 @@ import math
 import os
 import re
 import sys
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
+from readers import ReaderError, read_source
 from spec_check import check_spec
 
 # Test-only escape hatch for simulating "numpy unavailable" without a real
@@ -95,33 +106,22 @@ _TOKEN_SPLIT_RE = re.compile(r"[,\s]+")
 
 
 # --------------------------------------------------------------------------
-# Path resolution
+# Artifact id resolution
 # --------------------------------------------------------------------------
 
-def resolve_artifact_path(artifact_path, root):
-    """Resolve a spec artifact path (e.g. "/app/.seam/points.txt") under --root.
+def resolve_artifact_id(artifact_id, root):
+    """Resolve a bare artifact id (e.g. "points") to its on-disk path under
+    --root, by convention: "<root>/.seam/<id>.txt".
 
-    Spec artifact paths are always absolute in-container paths rooted at a
-    single top-level directory segment (e.g. "/app/..." -- see SPEC.md).
-    The validator drops that one leading segment and re-joins the remainder
-    under --root. This makes the *same* spec resolve correctly in both
-    contexts the brief names: in-container with `--root /app`, "/app/.seam/x"
-    round-trips to itself (identity); in tests with `--root <tmpdir>`, it
-    resolves to "<tmpdir>/.seam/x" so tests never need to fake a real /app.
-
-    Non-absolute or degenerate paths (no segment to drop) fall back to
-    joining the path as-is under root, so this never raises on odd input --
-    any resulting bogus path just surfaces as a normal "file not found"
-    predicate FAIL downstream.
+    This is the whole of Task 7's structural fix: the prior "artifacts"
+    id->path map is gone, so there is no field anywhere in a spec for an
+    author (human or generated) to invent a filename into. The same
+    convention resolves correctly in both contexts the brief names:
+    in-container with `--root /app`, id "points" resolves to
+    "/app/.seam/points.txt"; in tests with `--root <tmpdir>`, it resolves to
+    "<tmpdir>/.seam/points.txt" so tests never need to fake a real /app.
     """
-    p = PurePosixPath(artifact_path)
-    if p.is_absolute():
-        segments = p.parts[1:]  # drop the leading '/'
-        if len(segments) > 1:
-            segments = segments[1:]  # drop the container-root segment (e.g. 'app')
-    else:
-        segments = p.parts
-    return str(Path(root, *segments)) if segments else str(Path(root))
+    return str(Path(root, ".seam", f"{artifact_id}.txt"))
 
 
 # --------------------------------------------------------------------------
@@ -186,7 +186,8 @@ def _safe_parse(path):
 
 
 # --------------------------------------------------------------------------
-# The 8 predicate ops. Each returns (passed: bool, detail: str) and never
+# The 9 predicate ops (Task 7 item 4 adds source_crosscheck). Each returns
+# (passed: bool, detail: str) and never
 # raises for data-level problems (missing/empty/ragged/short artifacts) --
 # those are folded into a FAIL result with an explanatory detail. Only truly
 # unexpected exceptions (programming bugs, numpy internals blowing up in a
@@ -375,14 +376,94 @@ def op_value_in_range(path, row, col, lo, hi):
     return passed, f"value at [{row},{col}] = {val} (expected [{lo},{hi}])"
 
 
+def op_source_crosscheck(path, reader_id, sample_n, source):
+    """Cross-checks `sample_n` deterministically-sampled artifact rows
+    against the task's own SOURCE file, via the frozen reader registry
+    (readers.py). This is the only op that reasons about anything outside
+    the artifact itself -- every other op is artifact-internal, which was
+    the exact gap Task 7 item 4 closes (an agent could satisfy every other
+    seam with internally-consistent but source-unfaithful data).
+
+    Sampling rule (frozen, deterministic -- no randomness): step =
+    len(rows) // sample_n; sampled indices are 0, step, 2*step, ... for as
+    many multiples as land inside the artifact. If step < 1 (fewer artifact
+    rows than sample_n), that's a predicate FAIL with a clear detail, not a
+    crash or a silently-degenerate sample.
+
+    Comparison: each sampled artifact row is compared, coordinate-by-
+    coordinate, against the reader's row at the SAME index in its
+    source-derived list, within 1e-3 absolute tolerance per coordinate. A
+    short source-derived list (index out of range) counts as a mismatch, not
+    a skip -- the whole point is that source and artifact must agree at
+    matching positions.
+
+    Fail-open contract (mirrors every other op + the module docstring's
+    threat model): a missing `source`, an unknown `reader_id`, a leak-rule
+    violation, or an unreadable source file are all ReaderError /
+    OSError/UnicodeDecodeError -- all folded into a predicate FAIL here,
+    never allowed to reach main()'s internal-error path.
+    """
+    rows, err = _safe_parse(path)
+    if err:
+        return False, err
+    if not rows:
+        return False, "no numeric rows found in artifact"
+    if not source:
+        return False, "no --source provided -- source_crosscheck requires the task's input file path"
+
+    step = len(rows) // sample_n
+    if step < 1:
+        return False, (
+            f"not enough artifact rows ({len(rows)}) to sample sample={sample_n} "
+            "(need at least `sample` rows -- floor(len/sample) would be 0)"
+        )
+    indices = [i * step for i in range(sample_n) if i * step < len(rows)]
+
+    try:
+        source_rows = read_source(reader_id, source)
+    except ReaderError as e:
+        return False, f"source_crosscheck reader error: {e}"
+    except (OSError, UnicodeDecodeError) as e:
+        return False, f"source_crosscheck could not read source: {e}"
+
+    mismatches = []
+    for idx in indices:
+        artifact_row = rows[idx]
+        if idx >= len(source_rows):
+            mismatches.append((idx, "source-derived list shorter than this index"))
+            continue
+        source_row = source_rows[idx]
+        ncmp = min(len(artifact_row), len(source_row))
+        bad = [
+            j for j in range(ncmp)
+            if abs(artifact_row[j] - source_row[j]) > 1e-3
+        ]
+        if bad or len(artifact_row) < len(source_row):
+            mismatches.append((idx, f"coord(s) {bad} exceed 1e-3 tolerance" if bad else "row too short"))
+
+    n_sampled = len(indices)
+    n_mismatched = len(mismatches)
+    rate = (n_mismatched / n_sampled) if n_sampled else 1.0
+    passed = n_mismatched == 0
+    detail = (
+        f"reader={reader_id} sampled {n_sampled}/{len(rows)} artifact rows "
+        f"(step={step}) against source -- {n_mismatched} mismatched "
+        f"({rate:.1%})"
+    )
+    if mismatches:
+        first_idx, first_reason = mismatches[0]
+        detail += f"; first mismatch at row {first_idx}: {first_reason}"
+    return passed, detail
+
+
 # --------------------------------------------------------------------------
 # Seam evaluation + CLI
 # --------------------------------------------------------------------------
 
-def evaluate_seam(seam, artifacts, root, np):
+def evaluate_seam(seam, root, np, source=None):
     predicate = seam["predicate"]
     op = predicate["op"]
-    resolved = resolve_artifact_path(artifacts[seam["artifact"]], root)
+    resolved = resolve_artifact_id(seam["artifact"], root)
 
     if op == "artifact_exists":
         return op_artifact_exists(resolved)
@@ -400,6 +481,8 @@ def evaluate_seam(seam, artifacts, root, np):
         return op_cluster_count_in_range(resolved, predicate["cell"], predicate["min"], predicate["max"], np)
     elif op == "value_in_range":
         return op_value_in_range(resolved, predicate["row"], predicate["col"], predicate["min"], predicate["max"])
+    elif op == "source_crosscheck":
+        return op_source_crosscheck(resolved, predicate["reader"], predicate["sample"], source)
     else:
         # Unreachable in practice: check_spec (run before this) rejects any
         # op outside the frozen vocabulary. If we get here, it's a bug --
@@ -410,7 +493,17 @@ def evaluate_seam(seam, artifacts, root, np):
 def parse_args(argv):
     parser = argparse.ArgumentParser(description="Seam-gate validator kernel")
     parser.add_argument("--spec", required=True, help="path to the seam spec JSON")
-    parser.add_argument("--root", required=True, help="directory artifact paths resolve under")
+    parser.add_argument("--root", required=True, help="directory artifact ids resolve under")
+    parser.add_argument(
+        "--source",
+        default=None,
+        help=(
+            "path to the task's own input file (e.g. /app/text.gcode); only "
+            "needed by seams using the source_crosscheck op -- omitted or "
+            "wrong, any such seam fails its predicate with a clear detail, "
+            "not an internal error"
+        ),
+    )
     # No test-hook CLI flag here (deliberately -- see _TEST_NO_NUMPY_ENV above
     # and MEDIUM-4 in the task-2 review): the numpy-unavailable escape hatch
     # is an undocumented env var, not a --help-visible argparse option.
@@ -435,7 +528,7 @@ def run(args):
 
     any_fail = False
     for seam in spec["seams"]:
-        passed, detail = evaluate_seam(seam, spec["artifacts"], args.root, np)
+        passed, detail = evaluate_seam(seam, args.root, np, source=args.source)
         print(f"SEAM {seam['id']} {'PASS' if passed else 'FAIL'} {detail}")
         if not passed:
             any_fail = True

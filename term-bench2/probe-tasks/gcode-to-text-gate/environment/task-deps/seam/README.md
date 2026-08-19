@@ -33,3 +33,12 @@ the harness but the card's prose passed" branch: the selected card's prose
 -- a "generated-prose + curated-spec" arm, not a generated-spec deployment.
 No `term-bench2/seam-gate/specs/gcode-to-text-gate-generated.json` exists
 because no generated spec passed the harness this round.
+
+Update (Task 7, 2026-08-19): the curated spec was migrated to the id-only
+shape (`artifactIds` list, no paths anywhere -- see SPEC.md and
+spec_check.py) and gained a 7th seam, `s7` (`source_crosscheck`,
+reader=`gcode_g1_points`, sample=50). `spec.json` here was re-copied from
+the curated spec after that migration and re-verified byte-identical.
+`readers.py` is now also a generated copy synced by `sync-task-copies.sh`
+(needed by validator.py's `source_crosscheck` op) -- add it to the same
+"never hand-edit" rule as validator.py/spec_check.py/hook.py.

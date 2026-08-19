@@ -4,7 +4,7 @@
   "title": "Seam-gate spec",
   "description": "Declarative spec for the seam gate: artifact paths + a list of seams, each a predicate from the frozen vocabulary. This document is the contract; term-bench2/seam-gate/spec_check.py is the hand-rolled validator actually run by the checker/validator (jsonschema is not assumed available in the runtime environment). Keep the two in sync when either changes.",
   "type": "object",
-  "required": ["seamSpecVersion", "task", "artifacts", "seams"],
+  "required": ["seamSpecVersion", "task", "artifactIds", "seams"],
   "additionalProperties": false,
   "properties": {
     "seamSpecVersion": {
@@ -16,13 +16,15 @@
       "minLength": 1,
       "description": "Task name this spec gates, e.g. 'gcode-to-text'."
     },
-    "artifacts": {
-      "type": "object",
-      "description": "Map of artifact id -> absolute in-container path the agent is expected to write.",
-      "minProperties": 1,
-      "additionalProperties": {
+    "artifactIds": {
+      "type": "array",
+      "description": "Flat list of bare artifact ids the agent is expected to write. NO paths anywhere -- validator.py resolves each id by convention to '<root>/.seam/<id>.txt'. (Task 7 structural fix: the prior 'artifacts' id->path map is removed entirely, so a spec can no longer invent its own artifact filename.)",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
         "type": "string",
-        "minLength": 1
+        "minLength": 1,
+        "pattern": "^[^/\\\\]+$"
       }
     },
     "provisional": {
@@ -54,7 +56,7 @@
         "artifact": {
           "type": "string",
           "minLength": 1,
-          "description": "Must reference a key present in the top-level 'artifacts' map."
+          "description": "Must reference an entry present in the top-level 'artifactIds' list."
         },
         "predicate": {
           "oneOf": [
@@ -65,7 +67,8 @@
             { "$ref": "#/definitions/predicate_variance_ratio_below" },
             { "$ref": "#/definitions/predicate_spread_above" },
             { "$ref": "#/definitions/predicate_cluster_count_in_range" },
-            { "$ref": "#/definitions/predicate_value_in_range" }
+            { "$ref": "#/definitions/predicate_value_in_range" },
+            { "$ref": "#/definitions/predicate_source_crosscheck" }
           ]
         },
         "onFail": {
@@ -159,6 +162,16 @@
         "col": { "type": "integer", "minimum": 0 },
         "min": { "type": "number" },
         "max": { "type": "number" }
+      }
+    },
+    "predicate_source_crosscheck": {
+      "type": "object",
+      "required": ["op", "reader", "sample"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "source_crosscheck" },
+        "reader": { "type": "string", "minLength": 1 },
+        "sample": { "type": "integer", "minimum": 1 }
       }
     }
   }

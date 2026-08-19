@@ -40,5 +40,6 @@ copy_py_with_header() {
 copy_py_with_header "validator.py" "validator.py"
 copy_py_with_header "spec_check.py" "spec_check.py"
 copy_py_with_header "hook.py" "hook.py"
+copy_py_with_header "readers.py" "readers.py"
 
 echo "sync-task-copies: done -- $dest refreshed (code files only; spec.json deployment is explicit per-arm, see header comment)"

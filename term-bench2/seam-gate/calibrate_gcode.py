@@ -22,15 +22,21 @@ row per component). That's wrong for `conncomp2d`'s semantics -- it
 rasterizes the artifact's own *points*, and a file of centroids collapses
 every component to a single pixel, under the validator's 3-pixel component
 floor (`_MIN_COMPONENT_PIXELS` in validator.py) -- so the oracle would
-false-FAIL. This harness instead targets `s4` at the `projection` artifact
+false-FAIL. This harness instead targets `s4` at the `projected` artifact
 (the raw `u v` projected points), and the reference spec's "clusters"
-artifact/seam entries are removed by `rewrite_spec` below. `clusters.txt`
+artifact-id/seam entries are removed by `rewrite_spec` below. `clusters.txt`
 remains a harness OUTPUT (one informational row per component, `cx cy
 pixels`) written by this script for calibration printouts -- it is not
 referenced by any seam and never validated.
 
+Id-only artifacts (Task 7 structural fix): the spec's top-level "artifacts"
+id->path map is gone -- specs now carry a flat `artifactIds` list of bare
+ids, and validator.py resolves each id to `<root>/.seam/<id>.txt` by
+convention. `rewrite_spec` below operates on that id-only shape.
+
 CLI:
     python3 calibrate_gcode.py <gcode_path> [--spec PATH] [--check-only]
+    python3 calibrate_gcode.py <gcode_path> --emit-evidence
 
 `<gcode_path>` is a plain-text (or gzip-compressed, detected by a `.gz`
 suffix) gcode file, e.g. the terminal-bench-2 gcode-to-text task's
@@ -38,6 +44,16 @@ suffix) gcode file, e.g. the terminal-bench-2 gcode-to-text task's
 `specs/gcode-to-text-gate.json`; Task 5 (or any later re-verification) can
 pass a copy of that spec with `--check-only` to re-run the oracle-pass /
 bad-fail assertions without touching it -- see `--check-only`'s help text.
+
+`--emit-evidence` (Task 7 item 2) is a separate, spec-independent mode: it
+computes and prints the measured statistic or response curve for every
+vocabulary op with a free numeric parameter -- see `emit_evidence_block`
+below -- from `<gcode_path>` alone, then exits. It never opens or touches
+`--spec`. This is the "cards derive bounds, never guess them" evidence a
+card generator/sampler should be given (see SPEC.md's evidence-emission
+contract sentence) -- the join-probe's B2 arm designed the richest seam set
+of any generated card and died on exactly one guessed number (a cluster
+cell size with no evidence backing it); this closes that gap.
 
 Exit code: 0 if oracle passes every seam and bad fails >= 2 seams (and, in
 non-check-only mode, the rewritten spec still validates); 1 otherwise. This
@@ -330,9 +346,14 @@ def extract_cluster_predicate(spec):
 
 
 def rewrite_spec(spec, cell, lo, hi):
-    """Return a deep-copied spec with s4 retargeted at the `projection`
-    artifact and calibrated, and the `clusters` artifact/seam entries
+    """Return a deep-copied spec with s4 retargeted at the `projected`
+    artifact id and calibrated, and the `clusters` artifact-id/seam entries
     removed entirely (controller ruling -- see module docstring).
+
+    Operates on the Task-7 id-only spec shape: `artifactIds` is a flat list
+    of bare ids (no paths anywhere), and `seam.artifact` references an entry
+    in that list directly -- validator.py resolves each id to
+    `<root>/.seam/<id>.txt` by convention (see validator.resolve_artifact_id).
 
     Strips "s4" out of the top-level `provisional` list (dropping the key
     entirely if that empties it) -- fix-round ruling (LOW-1, task-3-review.md):
@@ -350,11 +371,12 @@ def rewrite_spec(spec, cell, lo, hi):
     seam = find_seam(spec, "s4")
     if seam is None:
         raise RuntimeError("spec has no seam id 's4' to calibrate")
-    # Retarget s4 first, THEN drop the "clusters" artifact and any remaining
-    # seam that still references it -- s4 itself used to be one of those,
-    # but it's being repointed at "projection" below, not deleted.
-    seam["artifact"] = "projection"
-    spec.get("artifacts", {}).pop("clusters", None)
+    # Retarget s4 first, THEN drop the "clusters" artifact id and any
+    # remaining seam that still references it -- s4 itself used to be one of
+    # those, but it's being repointed at "projected" below, not deleted.
+    seam["artifact"] = "projected"
+    if "artifactIds" in spec:
+        spec["artifactIds"] = [aid for aid in spec["artifactIds"] if aid != "clusters"]
     spec["seams"] = [s for s in spec.get("seams", []) if s.get("artifact") != "clusters"]
     seam = find_seam(spec, "s4")
     seam["predicate"] = {
@@ -383,14 +405,21 @@ def rewrite_spec(spec, cell, lo, hi):
 # Validator invocation
 # --------------------------------------------------------------------------
 
-def run_validator(spec_path, root):
+def run_validator(spec_path, root, source=None):
     """Shell out to the real validator.py CLI (not an in-process import) --
     this is the black-box entry point the actual gate uses, and the whole
     point of this harness is proving the CLI contract holds, not just an
     internal function.
+
+    `source` (Task 7 item 4), when given, is passed through as validator.py's
+    --source -- needed for any source_crosscheck seam to actually be
+    exercised rather than fail-open-FAIL on "no --source provided".
     """
+    cmd = [sys.executable, VALIDATOR_PATH, "--spec", str(spec_path), "--root", str(root)]
+    if source is not None:
+        cmd += ["--source", str(source)]
     proc = subprocess.run(
-        [sys.executable, VALIDATOR_PATH, "--spec", str(spec_path), "--root", str(root)],
+        cmd,
         capture_output=True,
         text=True,
         cwd=_SEAM_GATE_DIR,
@@ -442,12 +471,131 @@ def parse_args(argv):
             "modify --spec on disk."
         ),
     )
+    parser.add_argument(
+        "--emit-evidence",
+        action="store_true",
+        help=(
+            "print a sample-ready evidence block -- the measured statistic "
+            "or response curve for every vocabulary op with a free numeric "
+            "parameter, computed from <gcode> alone -- then exit. Ignores "
+            "and never touches --spec (a card generator/sampler should be "
+            "given this instead of guessing bounds; see SPEC.md's "
+            "evidence-emission contract sentence)."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+# --------------------------------------------------------------------------
+# --emit-evidence (Task 7 item 2): "for each op with a free numeric
+# parameter, the evidence carries the measured statistic or its response
+# curve over a frozen grid -- cards derive bounds, never guess them" (SPEC.md).
+# --------------------------------------------------------------------------
+
+def variance_ratio_component(points, component, np):
+    """Measured SVD variance ratio for `component` -- the same statistic
+    seam s6 (variance_ratio_below) checks. Informational only here (used for
+    the evidence block) -- the actual pass/fail always comes from running
+    the real validator against the artifact file, same caveat as
+    affine_residual_ratio above.
+    """
+    arr = np.array(points, dtype=float)
+    centered = arr - arr.mean(axis=0)
+    try:
+        _, s, _ = np.linalg.svd(centered, full_matrices=False)
+    except np.linalg.LinAlgError:
+        return float("nan")
+    if component >= len(s):
+        return float("nan")
+    total = float(np.sum(s ** 2))
+    return 0.0 if total == 0 else float((s[component] ** 2) / total)
+
+
+def column_spreads(points, np):
+    """Measured per-column standard deviation -- the same statistic
+    spread_above checks. Returns one std per column, in column order."""
+    arr = np.array(points, dtype=float)
+    if arr.size == 0:
+        return []
+    return [float(np.std(arr[:, j])) for j in range(arr.shape[1])]
+
+
+def cluster_count_sweep(proj_points, np, cell_candidates=CELL_CANDIDATES):
+    """Component count vs cell over `cell_candidates`, computed against
+    `proj_points` via the real conncomp2d op (validator.op_cluster_count_in_range,
+    through cluster_count_at_cell) -- same sweep search_cell runs, exposed
+    here purely for evidence printing regardless of whether any candidate
+    lands in the target range. Returns [(cell, count_or_None), ...].
+    """
+    with tempfile.TemporaryDirectory(prefix="seamgate-evidence-") as tmp:
+        proj_path = Path(tmp, ".seam", "projected.txt")
+        write_rows(proj_path, proj_points)
+        return [(cell, cluster_count_at_cell(str(proj_path), cell, np)) for cell in cell_candidates]
+
+
+def emit_evidence_block(gcode_path, oracle_points, bad_points, oracle_proj, oracle_ratio, np):
+    """Build the sample-ready evidence text block: the measured statistic or
+    response curve for every vocabulary op with a free numeric parameter,
+    computed from the given gcode file. Pure function of already-computed
+    data (no I/O beyond cluster_count_sweep's own temp-file use) so it's
+    directly unit-testable.
+    """
+    lines = [f"SEAM-GATE EVIDENCE (gcode={gcode_path})"]
+
+    # row_count_in_range's free params (min, max): the raw counts a card
+    # should derive bounds from, scoped (oracle, S0-extruding) and whole-file
+    # (bad, unscoped) -- explicitly required by the brief.
+    lines.append(
+        f"row_count: scoped(S0-extruding, oracle)={len(oracle_points)} "
+        f"whole_file(G1, unscoped)={len(bad_points)}"
+    )
+
+    # affine_residual_below's free param (max_ratio).
+    lines.append(f"affine_residual_ratio (points, cols=[0,1,2]): {oracle_ratio:.6f}")
+
+    # variance_ratio_below's free param (max), component 2 (the op's use in
+    # this spec's s6).
+    var_ratio = variance_ratio_component(oracle_points, 2, np)
+    lines.append(f"variance_ratio (points, component=2): {var_ratio:.6f}")
+
+    # spread_above's free param (min_std): per-column spread on both
+    # artifacts this pipeline produces.
+    for j, std in enumerate(column_spreads(oracle_points, np)):
+        lines.append(f"spread (points, col={j}): std={std:.6f}")
+    for j, std in enumerate(column_spreads(oracle_proj, np)):
+        lines.append(f"spread (projected, col={j}): std={std:.6f}")
+
+    # cluster_count_in_range's free param (cell): response curve over the
+    # frozen grid, not a single guessed number.
+    lines.append(f"cluster_count_vs_cell (projected, conncomp2d, grid={cell_candidates_str()}):")
+    for cell, count in cluster_count_sweep(oracle_proj, np):
+        count_str = "grid-cap exceeded" if count is None else f"{count} components"
+        lines.append(f"  cell={cell} -> {count_str}")
+
+    return "\n".join(lines)
+
+
+def cell_candidates_str():
+    return "[" + ",".join(str(c) for c in CELL_CANDIDATES) + "]"
 
 
 def main(argv):
     args = parse_args(argv)
     import numpy as np  # noqa: E402 -- lazy import, dev tool, not fail-open
+
+    if args.emit_evidence:
+        oracle_points, bad_points = collect_points(args.gcode)
+        if not oracle_points:
+            print("SEAM-GATE CALIBRATE: no oracle (M486 S0, E-param, X/Y-present) points found "
+                  "in the gcode file -- check the M486 scoping / filter logic", file=sys.stderr)
+            return 1
+        if not bad_points:
+            print("SEAM-GATE CALIBRATE: no G1 points found in the gcode file at all", file=sys.stderr)
+            return 1
+        oracle_proj = svd_plane_project(oracle_points, np)
+        oracle_ratio = affine_residual_ratio(oracle_points, np)
+        print(emit_evidence_block(args.gcode, oracle_points, bad_points, oracle_proj, oracle_ratio, np))
+        return 0
 
     with open(args.spec) as f:
         spec = json.load(f)
@@ -530,8 +678,8 @@ def main(argv):
         write_artifact_set(bad_root, bad_points, bad_proj, bad_ratio, bad_cluster_rows)
 
         spec_on_disk = args.spec  # for check_only this is unmodified; else just rewritten
-        code_oracle, lines_oracle, fails_oracle = run_validator(spec_on_disk, oracle_root)
-        code_bad, lines_bad, fails_bad = run_validator(spec_on_disk, bad_root)
+        code_oracle, lines_oracle, fails_oracle = run_validator(spec_on_disk, oracle_root, source=args.gcode)
+        code_bad, lines_bad, fails_bad = run_validator(spec_on_disk, bad_root, source=args.gcode)
 
         print("SEAM-GATE CALIBRATE: oracle validator run:")
         for l in lines_oracle:

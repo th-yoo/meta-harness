@@ -91,9 +91,127 @@ class TestMissingArtifactReferenceRejected(unittest.TestCase):
         errors = check_spec(spec)
         self.assertTrue(errors, "a seam referencing an undefined artifact id should be rejected")
         self.assertTrue(
-            any("not defined in top-level 'artifacts'" in e for e in errors),
+            any("not defined in top-level 'artifactIds'" in e for e in errors),
             f"expected a missing-artifact-reference error, got: {errors}",
         )
+
+
+# --------------------------------------------------------------------------
+# Task 7 structural id-join: "artifacts" path map is REMOVED, artifactIds is
+# a flat list of bare ids only (no paths anywhere).
+# --------------------------------------------------------------------------
+
+class TestArtifactsPathMapRejected(unittest.TestCase):
+    def test_legacy_artifacts_key_rejected_as_unknown_top_level_key(self):
+        # The old id->path map is not merely deprecated -- carrying it at
+        # all (even alongside a valid artifactIds) makes the spec invalid.
+        spec = load_reference_spec()
+        spec = copy.deepcopy(spec)
+        spec["artifacts"] = {"points": "/app/.seam/points.txt"}
+        errors = check_spec(spec)
+        self.assertTrue(errors, "a spec carrying 'artifacts' should be rejected")
+        self.assertTrue(
+            any("unknown top-level key 'artifacts'" in e for e in errors),
+            f"expected an unknown-top-level-key error for 'artifacts', got: {errors}",
+        )
+
+    def test_missing_artifact_ids_rejected(self):
+        spec = load_reference_spec()
+        spec = copy.deepcopy(spec)
+        del spec["artifactIds"]
+        errors = check_spec(spec)
+        self.assertTrue(errors)
+        self.assertTrue(any("missing required top-level key 'artifactIds'" in e for e in errors))
+
+    def test_path_bearing_artifact_id_rejected(self):
+        # The removed freedom (inventing a filename via a path) is
+        # enforced-absent, not just undocumented: a bare id with a path
+        # separator is rejected outright.
+        spec = load_reference_spec()
+        spec = copy.deepcopy(spec)
+        spec["artifactIds"] = ["/app/.seam/points.txt", "projected"]
+        errors = check_spec(spec)
+        self.assertTrue(errors, "a path-bearing artifactIds entry should be rejected")
+        self.assertTrue(
+            any("must be a bare id, not a path" in e for e in errors),
+            f"expected a bare-id error, got: {errors}",
+        )
+
+    def test_backslash_path_bearing_artifact_id_rejected(self):
+        spec = load_reference_spec()
+        spec = copy.deepcopy(spec)
+        spec["artifactIds"] = ["points\\file", "projected"]
+        errors = check_spec(spec)
+        self.assertTrue(errors)
+        self.assertTrue(any("must be a bare id, not a path" in e for e in errors))
+
+    def test_duplicate_artifact_id_rejected(self):
+        spec = load_reference_spec()
+        spec = copy.deepcopy(spec)
+        spec["artifactIds"] = ["points", "points"]
+        errors = check_spec(spec)
+        self.assertTrue(errors)
+        self.assertTrue(any("duplicate artifactIds entry 'points'" in e for e in errors))
+
+    def test_empty_artifact_ids_rejected(self):
+        spec = load_reference_spec()
+        spec = copy.deepcopy(spec)
+        spec["artifactIds"] = []
+        errors = check_spec(spec)
+        self.assertTrue(errors)
+
+
+# --------------------------------------------------------------------------
+# Task 7 item 4: source_crosscheck predicate shape.
+# --------------------------------------------------------------------------
+
+class TestSourceCrosscheckShape(unittest.TestCase):
+    def test_valid_source_crosscheck_predicate_accepted(self):
+        spec = {
+            "seamSpecVersion": 1,
+            "task": "unit-test-task",
+            "artifactIds": ["a"],
+            "seams": [
+                {
+                    "id": "s1",
+                    "artifact": "a",
+                    "predicate": {"op": "source_crosscheck", "reader": "gcode_g1_points", "sample": 50},
+                    "onFail": "mismatch",
+                }
+            ],
+        }
+        self.assertEqual(check_spec(spec), [])
+
+    def test_source_crosscheck_missing_reader_rejected(self):
+        spec = {
+            "seamSpecVersion": 1,
+            "task": "unit-test-task",
+            "artifactIds": ["a"],
+            "seams": [
+                {"id": "s1", "artifact": "a", "predicate": {"op": "source_crosscheck", "sample": 50}, "onFail": "x"}
+            ],
+        }
+        errors = check_spec(spec)
+        self.assertTrue(errors)
+        self.assertTrue(any("missing required param 'reader'" in e for e in errors))
+
+    def test_source_crosscheck_non_positive_sample_rejected(self):
+        spec = {
+            "seamSpecVersion": 1,
+            "task": "unit-test-task",
+            "artifactIds": ["a"],
+            "seams": [
+                {
+                    "id": "s1",
+                    "artifact": "a",
+                    "predicate": {"op": "source_crosscheck", "reader": "gcode_g1_points", "sample": 0},
+                    "onFail": "x",
+                }
+            ],
+        }
+        errors = check_spec(spec)
+        self.assertTrue(errors)
+        self.assertTrue(any("predicate.sample must be a positive integer" in e for e in errors))
 
 
 class TestMinimalValidSpec(unittest.TestCase):
@@ -101,7 +219,7 @@ class TestMinimalValidSpec(unittest.TestCase):
         spec = {
             "seamSpecVersion": 1,
             "task": "unit-test-task",
-            "artifacts": {"a": "/app/.seam/a.txt"},
+            "artifactIds": ["a"],
             "seams": [
                 {"id": "s1", "artifact": "a", "predicate": {"op": "artifact_exists"}, "onFail": "missing"},
                 {"id": "s2", "artifact": "a", "predicate": {"op": "row_count_in_range", "min": 1, "max": 10}, "onFail": "bad count"},
@@ -111,6 +229,7 @@ class TestMinimalValidSpec(unittest.TestCase):
                 {"id": "s6", "artifact": "a", "predicate": {"op": "spread_above", "col": 0, "min_std": 0.1}, "onFail": "too flat"},
                 {"id": "s7", "artifact": "a", "predicate": {"op": "cluster_count_in_range", "method": "conncomp2d", "cell": 1.0, "min": 1, "max": 5}, "onFail": "bad cluster count"},
                 {"id": "s8", "artifact": "a", "predicate": {"op": "value_in_range", "row": 0, "col": 0, "min": 0, "max": 1}, "onFail": "out of range"},
+                {"id": "s9", "artifact": "a", "predicate": {"op": "source_crosscheck", "reader": "gcode_g1_points", "sample": 3}, "onFail": "source mismatch"},
             ],
         }
         errors = check_spec(spec)
@@ -120,7 +239,7 @@ class TestMinimalValidSpec(unittest.TestCase):
         spec = {
             "seamSpecVersion": 1,
             "task": "unit-test-task",
-            "artifacts": {"a": "/app/.seam/a.txt"},
+            "artifactIds": ["a"],
             "seams": [
                 {
                     "id": "s1",
@@ -138,7 +257,7 @@ class TestMinimalValidSpec(unittest.TestCase):
         spec = {
             "seamSpecVersion": 1,
             "task": "unit-test-task",
-            "artifacts": {"a": "/app/.seam/a.txt"},
+            "artifactIds": ["a"],
             "seams": [
                 {
                     "id": "s1",
@@ -157,7 +276,7 @@ class TestMinimalValidSpec(unittest.TestCase):
         spec = {
             "seamSpecVersion": 1,
             "task": "unit-test-task",
-            "artifacts": {"a": "/app/.seam/a.txt"},
+            "artifactIds": ["a"],
             "seams": [
                 {
                     "id": "s1",

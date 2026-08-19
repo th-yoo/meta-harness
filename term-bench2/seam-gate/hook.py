@@ -37,6 +37,13 @@ STATE_PATH = "/app/.seam/state"
 SPEC_PATH = "/app/.seam/spec.json"
 VALIDATOR_PATH = "/app/.seam/validator.py"
 ROOT = "/app"
+# Task 7 item 4: the task's own input file, passed to validator.py's
+# --source so any source_crosscheck seam can cross-check artifact rows
+# against it. Staged by the task's environment/Dockerfile (COPY
+# text.gcode.gz + gunzip -> /app/text.gcode) -- this path is unchanged by
+# Task 7 (paths this hook already used, like SPEC_PATH/VALIDATOR_PATH/ROOT
+# above, are untouched; this is a new constant, not a migration).
+SOURCE_PATH = "/app/text.gcode"
 BUDGET = 2
 VALIDATOR_TIMEOUT_SEC = 60
 
@@ -119,12 +126,24 @@ def write_counter(state_path, value):
 
 
 def run_validator(spec_path=SPEC_PATH, validator_path=VALIDATOR_PATH, root=ROOT,
-                   timeout=VALIDATOR_TIMEOUT_SEC):
+                   source_path=SOURCE_PATH, timeout=VALIDATOR_TIMEOUT_SEC):
     """Shell out to the real validator.py CLI. May raise (FileNotFoundError,
     subprocess.TimeoutExpired, PermissionError, ...) -- callers must let
-    that propagate to main()'s fail-open handler, not swallow it here."""
+    that propagate to main()'s fail-open handler, not swallow it here.
+
+    Always passes --source (Task 7 item 4): harmless for a spec with no
+    source_crosscheck seam, and required for one that has it -- validator.py
+    itself fails that seam's predicate cleanly (not an internal error) if
+    the path is missing or wrong, so there's no fail-open reason to make
+    this conditional on the spec's content.
+    """
     proc = subprocess.run(
-        [sys.executable, validator_path, "--spec", spec_path, "--root", root],
+        [
+            sys.executable, validator_path,
+            "--spec", spec_path,
+            "--root", root,
+            "--source", source_path,
+        ],
         capture_output=True,
         text=True,
         timeout=timeout,

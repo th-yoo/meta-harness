@@ -17,7 +17,20 @@ import sys
 
 SEAM_SPEC_VERSION = 1
 
-TOP_LEVEL_REQUIRED = {"seamSpecVersion", "task", "artifacts", "seams"}
+# Task 7 (rung-4 structural fix package): the spec's top-level "artifacts" key
+# used to map artifact id -> absolute in-container PATH. That map is REMOVED
+# entirely -- specs now carry only "artifactIds" (a flat list of bare ids, no
+# paths anywhere). validator.py resolves each id by convention:
+# "<root>/.seam/<id>.txt" (see validator.resolve_artifact_id). This is a
+# structural fix, not a cosmetic rename: a generated-card spec can no longer
+# invent its own artifact filenames (the measured failure mode a prior probe
+# round found -- see docs/loop-probes/census-e2e-20260819/gcode-card/
+# verdict.md, "Card regen v4" section) because there is no path field left to
+# invent. Any spec still carrying an "artifacts" key is rejected outright (an
+# unknown top-level key, same as any other), and every artifactIds entry is
+# checked to contain no path separator -- the removed freedom is
+# enforced-absent, not just undocumented.
+TOP_LEVEL_REQUIRED = {"seamSpecVersion", "task", "artifactIds", "seams"}
 TOP_LEVEL_OPTIONAL = {"provisional"}
 TOP_LEVEL_ALLOWED = TOP_LEVEL_REQUIRED | TOP_LEVEL_OPTIONAL
 
@@ -35,6 +48,13 @@ OP_PARAMS = {
     "spread_above": {"col", "min_std"},
     "cluster_count_in_range": {"method", "cell", "min", "max"},
     "value_in_range": {"row", "col", "min", "max"},
+    # Task 7 item 4: cross-checks N deterministically-sampled artifact rows
+    # against the TASK'S SOURCE FILE via a frozen reader registry (see
+    # readers.py). "reader" selects a registry entry by id; "sample" is the
+    # target sample count N (the actual sampling rule -- every
+    # floor(len/N)-th artifact row -- lives in validator.op_source_crosscheck,
+    # not here; this module only checks shape).
+    "source_crosscheck": {"reader", "sample"},
 }
 
 
@@ -97,6 +117,13 @@ def _check_predicate_params(op, predicate, seam_id, errors):
                 errors.append(f"seam '{seam_id}': predicate.{k} must be a number")
     elif op == "artifact_exists":
         pass  # no params
+    elif op == "source_crosscheck":
+        reader = predicate.get("reader")
+        if not (isinstance(reader, str) and reader):
+            errors.append(f"seam '{seam_id}': predicate.reader must be a non-empty string")
+        sample = predicate.get("sample")
+        if not (_is_int(sample) and sample >= 1):
+            errors.append(f"seam '{seam_id}': predicate.sample must be a positive integer")
     # unknown ops are handled by the caller before this function runs
 
 
@@ -128,17 +155,32 @@ def check_spec(spec):
     if "task" in spec and not (isinstance(spec["task"], str) and spec["task"]):
         errors.append("task must be a non-empty string")
 
-    # --- artifacts ---
-    artifacts = spec.get("artifacts")
+    # --- artifactIds ---
+    # No paths anywhere: this is a flat list of bare ids, never a path map.
+    # validator.py resolves each id by convention ("<root>/.seam/<id>.txt");
+    # a card/spec author has no field left in which to invent a filename.
+    artifact_ids_field = spec.get("artifactIds")
     artifact_ids = set()
-    if "artifacts" in spec:
-        if not isinstance(artifacts, dict) or not artifacts:
-            errors.append("artifacts must be a non-empty object mapping artifact id -> path")
+    if "artifactIds" in spec:
+        if not isinstance(artifact_ids_field, list) or not artifact_ids_field:
+            errors.append("artifactIds must be a non-empty array of artifact id strings")
         else:
-            artifact_ids = set(artifacts.keys())
-            for aid, path in artifacts.items():
-                if not (isinstance(path, str) and path):
-                    errors.append(f"artifacts['{aid}'] must be a non-empty string path")
+            seen_artifact_ids = set()
+            for idx, aid in enumerate(artifact_ids_field):
+                label = f"artifactIds[{idx}]"
+                if not (isinstance(aid, str) and aid):
+                    errors.append(f"{label} must be a non-empty string")
+                    continue
+                if "/" in aid or "\\" in aid:
+                    errors.append(
+                        f"{label} ('{aid}') must be a bare id, not a path -- "
+                        "artifactIds entries may not contain '/' or '\\\\'"
+                    )
+                    continue
+                if aid in seen_artifact_ids:
+                    errors.append(f"duplicate artifactIds entry '{aid}'")
+                seen_artifact_ids.add(aid)
+                artifact_ids.add(aid)
 
     # --- provisional (optional) ---
     if "provisional" in spec:
@@ -184,7 +226,7 @@ def check_spec(spec):
                 if not (isinstance(artifact_ref, str) and artifact_ref):
                     errors.append(f"seam '{seam_id}': artifact must be a non-empty string")
                 elif artifact_ref not in artifact_ids:
-                    errors.append(f"seam '{seam_id}': artifact '{artifact_ref}' is not defined in top-level 'artifacts'")
+                    errors.append(f"seam '{seam_id}': artifact '{artifact_ref}' is not defined in top-level 'artifactIds'")
 
                 # predicate check
                 predicate = seam.get("predicate")

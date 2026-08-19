@@ -170,6 +170,19 @@ class TestRun(unittest.TestCase):
             with open(state_path) as f:
                 self.assertEqual(f.read().strip(), "1")
 
+    def test_run_validator_passes_source_flag(self):
+        # Task 7 item 4: hook.py must pass --source /app/text.gcode (the
+        # task's input file) to validator.py -- new test, not a migration of
+        # an existing assertion (this behavior didn't exist before Task 7).
+        with mock.patch("subprocess.run") as mocked_run:
+            mocked_run.return_value = mock.Mock(returncode=0, stdout="SEAM s1 PASS ok\n", stderr="")
+            hook.run_validator()
+        args, kwargs = mocked_run.call_args
+        cmd = args[0]
+        self.assertIn("--source", cmd)
+        self.assertEqual(cmd[cmd.index("--source") + 1], hook.SOURCE_PATH)
+        self.assertEqual(hook.SOURCE_PATH, "/app/text.gcode")
+
     def test_validator_subprocess_error_propagates_out_of_run(self):
         # run() itself does NOT fail-open -- that's main()'s job. Verifies
         # the propagation contract main() relies on.

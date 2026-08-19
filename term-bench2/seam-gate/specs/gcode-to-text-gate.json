@@ -1,10 +1,10 @@
 {
   "seamSpecVersion": 1,
   "task": "gcode-to-text-gate",
-  "artifacts": {
-    "points": "/app/.seam/points.txt",
-    "projection": "/app/.seam/projected.txt"
-  },
+  "artifactIds": [
+    "points",
+    "projected"
+  ],
   "seams": [
     {
       "id": "s1",
@@ -41,7 +41,7 @@
     },
     {
       "id": "s4",
-      "artifact": "projection",
+      "artifact": "projected",
       "predicate": {
         "op": "cluster_count_in_range",
         "method": "conncomp2d",
@@ -53,7 +53,7 @@
     },
     {
       "id": "s5",
-      "artifact": "projection",
+      "artifact": "projected",
       "predicate": {
         "op": "spread_above",
         "col": 1,
@@ -70,6 +70,16 @@
         "max": 0.01
       },
       "onFail": "points.txt is not flat (3rd SVD component carries too much variance) -- points.txt likely still includes travel/non-extrusion moves off the text plane."
+    },
+    {
+      "id": "s7",
+      "artifact": "points",
+      "predicate": {
+        "op": "source_crosscheck",
+        "reader": "gcode_g1_points",
+        "sample": 50
+      },
+      "onFail": "points.txt rows sampled against the task's own source (/app/text.gcode, reader=gcode_g1_points) do not match within tolerance -- points.txt is not faithful to the source's M486-S0 extruding G1 lines (Task 7 calibrated against the oracle gcode artifact; see calibrate_gcode.py)."
     }
   ]
 }

@@ -190,17 +190,24 @@ class TestCollectPoints(unittest.TestCase):
 
 class TestRewriteSpec(unittest.TestCase):
     def _old_shape_spec(self):
-        """A spec in the ORIGINAL (pre-Task-3) shape: s4 targets a separate
-        'clusters' artifact. rewrite_spec must fix this up regardless of
-        which shape it's handed (old or already-migrated)."""
+        """A spec in the pre-calibration shape (Task 7 id-only artifactIds):
+        s4 targets a separate 'clusters' artifact id. rewrite_spec must fix
+        this up regardless of whether s4 already points at 'projected' or
+        still at 'clusters' -- see test_idempotent_on_already_migrated_spec.
+
+        Migration note (Task 7 item 1): this fixture used to carry a
+        top-level "artifacts" id->path dict (e.g.
+        {"points": "/app/.seam/points.txt", ...}); that shape is gone
+        entirely (structural id-join -- see spec_check.py/SPEC.md). Updated
+        to the id-only "artifactIds" list shape, and the "projection" id
+        renamed to "projected" (matching the file rewrite_spec's onFail text
+        already referenced, "projected.txt", and the convention id ->
+        "<root>/.seam/<id>.txt" now enforces literally).
+        """
         return {
             "seamSpecVersion": 1,
             "task": "gcode-to-text-gate",
-            "artifacts": {
-                "points": "/app/.seam/points.txt",
-                "projection": "/app/.seam/projected.txt",
-                "clusters": "/app/.seam/clusters.txt",
-            },
+            "artifactIds": ["points", "projected", "clusters"],
             "provisional": ["s4"],
             "seams": [
                 {"id": "s1", "artifact": "points", "predicate": {"op": "artifact_exists"}, "onFail": "x"},
@@ -216,14 +223,14 @@ class TestRewriteSpec(unittest.TestCase):
     def test_clusters_artifact_and_stray_seam_removed(self):
         spec = self._old_shape_spec()
         out = calibrate_gcode.rewrite_spec(spec, cell=0.4, lo=25, hi=38)
-        self.assertNotIn("clusters", out["artifacts"])
+        self.assertNotIn("clusters", out["artifactIds"])
         self.assertNotIn("clusters", {s.get("artifact") for s in out["seams"]})
 
-    def test_s4_retargeted_to_projection_with_calibrated_predicate(self):
+    def test_s4_retargeted_to_projected_with_calibrated_predicate(self):
         spec = self._old_shape_spec()
         out = calibrate_gcode.rewrite_spec(spec, cell=0.4, lo=25, hi=38)
         s4 = find_seam(out, "s4")
-        self.assertEqual(s4["artifact"], "projection")
+        self.assertEqual(s4["artifact"], "projected")
         self.assertEqual(
             s4["predicate"],
             {"op": "cluster_count_in_range", "method": "conncomp2d", "cell": 0.4, "min": 25, "max": 38},
@@ -358,6 +365,71 @@ class TestHelpText(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("--spec", out)
         self.assertIn("--check-only", out)
+        # Task 7 item 2: --emit-evidence is a third documented mode.
+        self.assertIn("--emit-evidence", out)
+
+
+# --------------------------------------------------------------------------
+# --emit-evidence (Task 7 item 2): pure-logic tests against the small
+# synthetic fixture -- never skip, no real checkout needed. The exact
+# measured numbers against the real fixture are covered by
+# TestEndToEndRealFixture below (skips if that checkout is absent).
+# --------------------------------------------------------------------------
+
+class TestEmitEvidence(unittest.TestCase):
+    def test_variance_ratio_component_flat_cloud_near_zero(self):
+        points = [(x, y, 0.0) for x in range(20) for y in range(20)]
+        ratio = calibrate_gcode.variance_ratio_component(points, 2, np)
+        self.assertLess(ratio, 1e-9)
+
+    def test_variance_ratio_component_out_of_range_component_is_nan(self):
+        points = [(x, y) for x in range(5) for y in range(5)]  # only 2 columns
+        ratio = calibrate_gcode.variance_ratio_component(points, 2, np)
+        self.assertTrue(np.isnan(ratio))
+
+    def test_column_spreads_matches_manual_std(self):
+        points = [(0.0, 0.0), (1.0, 10.0), (2.0, 20.0)]
+        spreads = calibrate_gcode.column_spreads(points, np)
+        self.assertEqual(len(spreads), 2)
+        self.assertAlmostEqual(spreads[0], float(np.std([0.0, 1.0, 2.0])))
+        self.assertAlmostEqual(spreads[1], float(np.std([0.0, 10.0, 20.0])))
+
+    def test_column_spreads_empty_input_returns_empty_list(self):
+        self.assertEqual(calibrate_gcode.column_spreads([], np), [])
+
+    def test_cluster_count_sweep_covers_every_candidate_cell(self):
+        rows = [(b * 5.0 + i * 0.1, i * 0.1) for b in range(15) for i in range(6)]
+        results = calibrate_gcode.cluster_count_sweep(rows, np)
+        self.assertEqual([c for c, _ in results], calibrate_gcode.CELL_CANDIDATES)
+
+    def test_emit_evidence_block_contains_every_required_section(self):
+        path = os.path.join(tempfile.mkdtemp(prefix="seam-gate-evidence-test-"), "t.gcode")
+        with open(path, "w") as f:
+            f.write(SYNTHETIC_GCODE)
+        oracle_points, bad_points = calibrate_gcode.collect_points(path)
+        oracle_proj = calibrate_gcode.svd_plane_project(oracle_points, np)
+        oracle_ratio = calibrate_gcode.affine_residual_ratio(oracle_points, np)
+        block = calibrate_gcode.emit_evidence_block(path, oracle_points, bad_points, oracle_proj, oracle_ratio, np)
+        self.assertIn("row_count:", block)
+        self.assertIn("affine_residual_ratio", block)
+        self.assertIn("variance_ratio", block)
+        self.assertIn("spread (points", block)
+        self.assertIn("spread (projected", block)
+        self.assertIn("cluster_count_vs_cell", block)
+        for cell in calibrate_gcode.CELL_CANDIDATES:
+            self.assertIn(f"cell={cell} ->", block)
+
+    def test_cli_emit_evidence_mode_never_touches_spec(self):
+        path = os.path.join(tempfile.mkdtemp(prefix="seam-gate-evidence-cli-test-"), "t.gcode")
+        with open(path, "w") as f:
+            f.write(SYNTHETIC_GCODE)
+        # A --spec pointing at a nonexistent path -- if --emit-evidence
+        # touched it, this would fail with a file-not-found error.
+        code, out, err = run_calibrate_subprocess(
+            [path, "--emit-evidence", "--spec", "/nonexistent/does-not-matter.json"]
+        )
+        self.assertEqual(code, 0, f"stdout:\n{out}\nstderr:\n{err}")
+        self.assertIn("SEAM-GATE EVIDENCE", out)
 
 
 # --------------------------------------------------------------------------
@@ -397,6 +469,10 @@ class TestEndToEndRealFixture(CalibrateTestCase):
         self.assertIn("SEAM s3 FAIL", bad_section)
         self.assertIn("SEAM s6 FAIL", bad_section)
         self.assertIn("SEAM s4 FAIL", bad_section)
+        # Task 7 item 4: s7 (source_crosscheck) must also fail on the bad
+        # set -- bad's points.txt is the whole-file unscoped G1 set, so its
+        # sampled rows don't match the S0-scoped source at the same indices.
+        self.assertIn("SEAM s7 FAIL", bad_section)
 
         # Rewritten spec must still be a valid seam spec (spec_check.py is
         # the authoritative, dependency-free checker the real validator
@@ -404,9 +480,9 @@ class TestEndToEndRealFixture(CalibrateTestCase):
         with open(scratch_spec) as f:
             rewritten = json.load(f)
         self.assertEqual(check_spec(rewritten), [], "rewritten spec must validate")
-        self.assertNotIn("clusters", rewritten["artifacts"])
+        self.assertNotIn("clusters", rewritten["artifactIds"])
         s4 = find_seam(rewritten, "s4")
-        self.assertEqual(s4["artifact"], "projection")
+        self.assertEqual(s4["artifact"], "projected")
         pred = s4["predicate"]
         self.assertIn(pred["cell"], calibrate_gcode.CELL_CANDIDATES)
         self.assertLess(pred["min"], pred["max"])
@@ -449,6 +525,22 @@ class TestEndToEndRealFixture(CalibrateTestCase):
         code, out, err = run_calibrate_subprocess([self.gcode_path, "--spec", REFERENCE_SPEC_PATH, "--check-only"])
         self.assertEqual(code, 0, f"committed reference spec should still re-prove clean, stderr:\n{err}\nstdout:\n{out}")
         self.assertIn("SEAM-GATE CALIBRATE: OK", out)
+
+    def test_emit_evidence_against_real_fixture_matches_measured_numbers(self):
+        # Task 7 item 2, end-to-end: --emit-evidence's cluster-count sweep and
+        # row counts against the REAL fixture, pinned to the exact numbers
+        # measured during Task 7 (also recorded in the join-probe verdict,
+        # docs/loop-probes/census-e2e-20260819/gcode-card/verdict.md,
+        # "Consequences" item 2): 0.3->57, 0.4->30, 0.5->29, 0.8->23, 1.0->11
+        # components; 38972 scoped / 60761 whole-file rows.
+        code, out, err = run_calibrate_subprocess([self.gcode_path, "--emit-evidence"])
+        self.assertEqual(code, 0, f"stderr:\n{err}\nstdout:\n{out}")
+        self.assertIn("row_count: scoped(S0-extruding, oracle)=38972 whole_file(G1, unscoped)=60761", out)
+        self.assertIn("cell=0.3 -> 57 components", out)
+        self.assertIn("cell=0.4 -> 30 components", out)
+        self.assertIn("cell=0.5 -> 29 components", out)
+        self.assertIn("cell=0.8 -> 23 components", out)
+        self.assertIn("cell=1.0 -> 11 components", out)
 
     def test_literal_brief_bad_shape_fails_overall_but_coincidentally_passes_s4(self):
         # Fix-round finding (task-3-review.md MEDIUM): the brief's own

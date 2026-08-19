@@ -2,6 +2,19 @@
 
 Run with:
     python3 -m unittest discover -s term-bench2/seam-gate/test -p 'test_*.py'
+
+Task 7 migration note: this file was rewritten wholesale for the structural
+id-join fix (item 1). The spec format's top-level "artifacts" id->path map is
+gone -- specs now carry a flat "artifactIds" list of bare ids, and
+validator.py resolves each id to "<root>/.seam/<id>.txt" by convention (see
+validator.resolve_artifact_id). Every test helper (`minimal_spec`,
+`write_artifact`, `write_binary_artifact`) and every call site that used to
+pass a spec-style path (e.g. "/app/.seam/artifact.txt") now passes a bare
+artifact id (e.g. "artifact") instead -- same assertions, new invocation
+shape. `TestResolveArtifactPath` (which exercised the deleted
+`resolve_artifact_path` path-heuristic function) is replaced by
+`TestResolveArtifactId` (exercises the new id-convention resolver). New
+`TestSourceCrosscheck` class covers Task 7 item 4's `source_crosscheck` op.
 """
 
 import contextlib
@@ -22,6 +35,7 @@ if _SEAM_GATE_DIR not in sys.path:
     sys.path.insert(0, _SEAM_GATE_DIR)
 
 import validator  # noqa: E402
+import readers  # noqa: E402
 
 VALIDATOR_PATH = os.path.join(_SEAM_GATE_DIR, "validator.py")
 REFERENCE_SPEC_PATH = os.path.join(_SEAM_GATE_DIR, "specs", "gcode-to-text-gate.json")
@@ -89,9 +103,9 @@ def env_var(key, value):
             os.environ.pop(key, None)
 
 
-def write_binary_artifact(root, artifact_path, data):
+def write_binary_artifact(root, artifact_id, data):
     """Like write_artifact, but writes raw (possibly non-UTF-8) bytes."""
-    full = validator.resolve_artifact_path(artifact_path, root)
+    full = validator.resolve_artifact_id(artifact_id, root)
     os.makedirs(os.path.dirname(full), exist_ok=True)
     with open(full, "wb") as f:
         f.write(data)
@@ -105,12 +119,13 @@ def write_spec(tmpdir, spec_dict, name="spec.json"):
     return path
 
 
-def write_artifact(root, artifact_path, lines):
-    """artifact_path is a spec-style absolute path like '/app/.seam/points.txt';
-    resolved via the same rule validator.py itself uses, so tests exercise the
-    real resolution logic rather than a parallel implementation of it.
+def write_artifact(root, artifact_id, lines):
+    """artifact_id is a bare id like 'artifact'; resolved via the same
+    convention validator.py itself uses (<root>/.seam/<id>.txt), so tests
+    exercise the real resolution logic rather than a parallel implementation
+    of it.
     """
-    full = validator.resolve_artifact_path(artifact_path, root)
+    full = validator.resolve_artifact_id(artifact_id, root)
     os.makedirs(os.path.dirname(full), exist_ok=True)
     with open(full, "w") as f:
         f.write("\n".join(lines))
@@ -119,11 +134,11 @@ def write_artifact(root, artifact_path, lines):
     return full
 
 
-def minimal_spec(artifact_path, predicate, artifact_id="a1", seam_id="s1", on_fail="test onFail"):
+def minimal_spec(predicate, artifact_id="a1", seam_id="s1", on_fail="test onFail"):
     return {
         "seamSpecVersion": 1,
         "task": "test-task",
-        "artifacts": {artifact_id: artifact_path},
+        "artifactIds": [artifact_id],
         "seams": [
             {"id": seam_id, "artifact": artifact_id, "predicate": predicate, "onFail": on_fail},
         ],
@@ -134,7 +149,7 @@ def rows_to_lines(rows, sep=" "):
     return [sep.join(str(v) for v in row) for row in rows]
 
 
-ARTIFACT_PATH = "/app/.seam/artifact.txt"
+ARTIFACT_ID = "artifact"
 
 
 class ValidatorTestCase(unittest.TestCase):
@@ -150,22 +165,27 @@ class ValidatorTestCase(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------
-# Path resolution
+# Artifact id resolution
 # --------------------------------------------------------------------------
 
-class TestResolveArtifactPath(unittest.TestCase):
-    def test_drops_container_root_segment(self):
+class TestResolveArtifactId(unittest.TestCase):
+    def test_resolves_under_seam_dir(self):
         self.assertEqual(
-            validator.resolve_artifact_path("/app/.seam/points.txt", "/tmp/root"),
+            validator.resolve_artifact_id("points", "/tmp/root"),
             os.path.join("/tmp/root", ".seam", "points.txt"),
         )
 
-    def test_identity_when_root_matches_dropped_segment(self):
-        # In-container usage: --root /app should round-trip "/app/..." paths
-        # to themselves.
+    def test_in_container_root(self):
+        # In-container usage: --root /app.
         self.assertEqual(
-            validator.resolve_artifact_path("/app/.seam/points.txt", "/app"),
+            validator.resolve_artifact_id("points", "/app"),
             "/app/.seam/points.txt",
+        )
+
+    def test_different_ids_resolve_to_different_files(self):
+        self.assertNotEqual(
+            validator.resolve_artifact_id("points", "/app"),
+            validator.resolve_artifact_id("projected", "/app"),
         )
 
 
@@ -175,15 +195,15 @@ class TestResolveArtifactPath(unittest.TestCase):
 
 class TestArtifactExists(ValidatorTestCase):
     def test_pass_when_file_present_and_nonempty(self):
-        write_artifact(self.tmpdir, ARTIFACT_PATH, ["1 2 3"])
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "artifact_exists"})
+        write_artifact(self.tmpdir, ARTIFACT_ID, ["1 2 3"])
+        spec = minimal_spec({"op": "artifact_exists"}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 0)
         self.assertSeamLine(out, "s1", "PASS")
 
     def test_fail_when_file_missing(self):
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "artifact_exists"})
+        spec = minimal_spec({"op": "artifact_exists"}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 1)
@@ -198,8 +218,8 @@ class TestArtifactExists(ValidatorTestCase):
 class TestRowCountInRange(ValidatorTestCase):
     def test_pass_when_count_in_range(self):
         lines = [f"{i} {i*2}" for i in range(100)]
-        write_artifact(self.tmpdir, ARTIFACT_PATH, lines)
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "row_count_in_range", "min": 50, "max": 150})
+        write_artifact(self.tmpdir, ARTIFACT_ID, lines)
+        spec = minimal_spec({"op": "row_count_in_range", "min": 50, "max": 150}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 0)
@@ -207,8 +227,8 @@ class TestRowCountInRange(ValidatorTestCase):
 
     def test_fail_when_count_out_of_range(self):
         lines = [f"{i} {i*2}" for i in range(10)]
-        write_artifact(self.tmpdir, ARTIFACT_PATH, lines)
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "row_count_in_range", "min": 50, "max": 150})
+        write_artifact(self.tmpdir, ARTIFACT_ID, lines)
+        spec = minimal_spec({"op": "row_count_in_range", "min": 50, "max": 150}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 1)
@@ -216,8 +236,8 @@ class TestRowCountInRange(ValidatorTestCase):
 
     def test_non_numeric_lines_skipped(self):
         lines = ["# comment", "not a number", "1 2", "3 4"]
-        write_artifact(self.tmpdir, ARTIFACT_PATH, lines)
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "row_count_in_range", "min": 2, "max": 2})
+        write_artifact(self.tmpdir, ARTIFACT_ID, lines)
+        spec = minimal_spec({"op": "row_count_in_range", "min": 2, "max": 2}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 0)
@@ -231,8 +251,8 @@ class TestRowCountInRange(ValidatorTestCase):
 class TestNumericCols(ValidatorTestCase):
     def test_pass_when_every_row_has_n_cols(self):
         lines = [f"{i} {i} {i}" for i in range(20)]
-        write_artifact(self.tmpdir, ARTIFACT_PATH, lines)
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "numeric_cols", "n": 3})
+        write_artifact(self.tmpdir, ARTIFACT_ID, lines)
+        spec = minimal_spec({"op": "numeric_cols", "n": 3}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 0)
@@ -241,8 +261,8 @@ class TestNumericCols(ValidatorTestCase):
     def test_fail_when_a_row_has_wrong_col_count(self):
         lines = [f"{i} {i} {i}" for i in range(20)]
         lines[5] = "1 2"  # only 2 columns
-        write_artifact(self.tmpdir, ARTIFACT_PATH, lines)
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "numeric_cols", "n": 3})
+        write_artifact(self.tmpdir, ARTIFACT_ID, lines)
+        spec = minimal_spec({"op": "numeric_cols", "n": 3}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 1)
@@ -252,8 +272,8 @@ class TestNumericCols(ValidatorTestCase):
     # comma-separated is also valid per SPEC.md ("whitespace- or comma-separated")
     def test_comma_separated_rows_parse(self):
         lines = ["1,2,3", "4, 5, 6"]
-        write_artifact(self.tmpdir, ARTIFACT_PATH, lines)
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "numeric_cols", "n": 3})
+        write_artifact(self.tmpdir, ARTIFACT_ID, lines)
+        spec = minimal_spec({"op": "numeric_cols", "n": 3}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 0)
@@ -284,10 +304,10 @@ class TestAffineResidualBelow(ValidatorTestCase):
         return rows
 
     def test_planar_cloud_passes(self):
-        write_artifact(self.tmpdir, ARTIFACT_PATH, rows_to_lines(self._planar_rows()))
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(self._planar_rows()))
         spec = minimal_spec(
-            ARTIFACT_PATH,
             {"op": "affine_residual_below", "cols": [0, 1, 2], "max_ratio": 0.02},
+            artifact_id=ARTIFACT_ID,
         )
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
@@ -295,10 +315,10 @@ class TestAffineResidualBelow(ValidatorTestCase):
         self.assertSeamLine(out, "s1", "PASS")
 
     def test_spherical_cloud_fails(self):
-        write_artifact(self.tmpdir, ARTIFACT_PATH, rows_to_lines(self._spherical_rows()))
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(self._spherical_rows()))
         spec = minimal_spec(
-            ARTIFACT_PATH,
             {"op": "affine_residual_below", "cols": [0, 1, 2], "max_ratio": 0.02},
+            artifact_id=ARTIFACT_ID,
         )
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
@@ -318,8 +338,8 @@ class TestVarianceRatioBelow(ValidatorTestCase):
             y = random.uniform(-5, 5)
             z = 0.0  # perfectly flat: no 3rd-component variance at all
             rows.append((x, y, z))
-        write_artifact(self.tmpdir, ARTIFACT_PATH, rows_to_lines(rows))
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "variance_ratio_below", "component": 2, "max": 0.01})
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(rows))
+        spec = minimal_spec({"op": "variance_ratio_below", "component": 2, "max": 0.01}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 0)
@@ -332,8 +352,8 @@ class TestVarianceRatioBelow(ValidatorTestCase):
             y = random.uniform(-5, 5)
             z = random.uniform(-5, 5)  # genuine 3D spread, isotropic
             rows.append((x, y, z))
-        write_artifact(self.tmpdir, ARTIFACT_PATH, rows_to_lines(rows))
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "variance_ratio_below", "component": 2, "max": 0.01})
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(rows))
+        spec = minimal_spec({"op": "variance_ratio_below", "component": 2, "max": 0.01}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 1)
@@ -347,8 +367,8 @@ class TestVarianceRatioBelow(ValidatorTestCase):
 class TestSpreadAbove(ValidatorTestCase):
     def test_pass_when_column_has_spread(self):
         rows = [(i, random.uniform(-50, 50)) for i in range(500)]
-        write_artifact(self.tmpdir, ARTIFACT_PATH, rows_to_lines(rows))
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "spread_above", "col": 1, "min_std": 1.0})
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(rows))
+        spec = minimal_spec({"op": "spread_above", "col": 1, "min_std": 1.0}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 0)
@@ -356,8 +376,8 @@ class TestSpreadAbove(ValidatorTestCase):
 
     def test_fail_when_column_is_degenerate(self):
         rows = [(i, 7.0) for i in range(500)]  # column 1 is constant
-        write_artifact(self.tmpdir, ARTIFACT_PATH, rows_to_lines(rows))
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "spread_above", "col": 1, "min_std": 1.0})
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(rows))
+        spec = minimal_spec({"op": "spread_above", "col": 1, "min_std": 1.0}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 1)
@@ -381,10 +401,10 @@ class TestClusterCountInRange(ValidatorTestCase):
 
     def test_pass_when_component_count_in_range(self):
         rows = self._blobs(20)
-        write_artifact(self.tmpdir, ARTIFACT_PATH, rows_to_lines(rows))
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(rows))
         spec = minimal_spec(
-            ARTIFACT_PATH,
             {"op": "cluster_count_in_range", "method": "conncomp2d", "cell": 0.5, "min": 10, "max": 40},
+            artifact_id=ARTIFACT_ID,
         )
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
@@ -396,10 +416,10 @@ class TestClusterCountInRange(ValidatorTestCase):
         # Same points but rasterized at a huge cell size -- everything falls
         # into one occupied grid cell/component, well outside [10,40].
         rows = self._blobs(20)
-        write_artifact(self.tmpdir, ARTIFACT_PATH, rows_to_lines(rows))
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(rows))
         spec = minimal_spec(
-            ARTIFACT_PATH,
             {"op": "cluster_count_in_range", "method": "conncomp2d", "cell": 1000.0, "min": 10, "max": 40},
+            artifact_id=ARTIFACT_ID,
         )
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
@@ -411,10 +431,10 @@ class TestClusterCountInRange(ValidatorTestCase):
         # within the grid-size cap) -> every component is exactly 1 pixel,
         # below the min-floor of 3 -> 0 counted.
         rows = [(b * 2.0, 0.0) for b in range(20)]
-        write_artifact(self.tmpdir, ARTIFACT_PATH, rows_to_lines(rows))
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(rows))
         spec = minimal_spec(
-            ARTIFACT_PATH,
             {"op": "cluster_count_in_range", "method": "conncomp2d", "cell": 0.5, "min": 1, "max": 40},
+            artifact_id=ARTIFACT_ID,
         )
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
@@ -428,10 +448,10 @@ class TestClusterCountInRange(ValidatorTestCase):
         # cell=0.001 would need a ~1e9-cell grid; the cap must turn this into
         # a normal predicate FAIL, not a MemoryError/OOM.
         rows = [(0.0, 0.0), (1_000_000.0, 0.0)]
-        write_artifact(self.tmpdir, ARTIFACT_PATH, rows_to_lines(rows))
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(rows))
         spec = minimal_spec(
-            ARTIFACT_PATH,
             {"op": "cluster_count_in_range", "method": "conncomp2d", "cell": 0.001, "min": 1, "max": 40},
+            artifact_id=ARTIFACT_ID,
         )
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
@@ -446,20 +466,231 @@ class TestClusterCountInRange(ValidatorTestCase):
 
 class TestValueInRange(ValidatorTestCase):
     def test_pass_when_value_in_range(self):
-        write_artifact(self.tmpdir, ARTIFACT_PATH, ["0.97"])
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "value_in_range", "row": 0, "col": 0, "min": 0.9, "max": 1.0})
+        write_artifact(self.tmpdir, ARTIFACT_ID, ["0.97"])
+        spec = minimal_spec({"op": "value_in_range", "row": 0, "col": 0, "min": 0.9, "max": 1.0}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 0)
         self.assertSeamLine(out, "s1", "PASS")
 
     def test_fail_when_value_out_of_range(self):
-        write_artifact(self.tmpdir, ARTIFACT_PATH, ["0.5"])
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "value_in_range", "row": 0, "col": 0, "min": 0.9, "max": 1.0})
+        write_artifact(self.tmpdir, ARTIFACT_ID, ["0.5"])
+        spec = minimal_spec({"op": "value_in_range", "row": 0, "col": 0, "min": 0.9, "max": 1.0}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 1)
         self.assertSeamLine(out, "s1", "FAIL")
+
+
+# --------------------------------------------------------------------------
+# source_crosscheck (Task 7 item 4)
+# --------------------------------------------------------------------------
+
+# A small synthetic gcode fixture: 6 S0-scoped extruding G1 points, in order.
+_SOURCE_GCODE = """\
+M486 S0
+G1 X0 Y0 Z0.2 E0.1
+G1 X1 Y0 Z0.2 E0.1
+G1 X2 Y0 Z0.2 E0.1
+G1 X3 Y0 Z0.2 E0.1
+G1 X4 Y0 Z0.2 E0.1
+G1 X5 Y0 Z0.2 E0.1
+M486 S-1
+"""
+_SOURCE_POINTS = [(float(i), 0.0, 0.2) for i in range(6)]
+
+
+class TestSourceCrosscheck(ValidatorTestCase):
+    def _write_source(self, text=_SOURCE_GCODE):
+        path = os.path.join(self.tmpdir, "source.gcode")
+        with open(path, "w") as f:
+            f.write(text)
+        return path
+
+    def test_matching_artifact_passes(self):
+        source_path = self._write_source()
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(_SOURCE_POINTS))
+        spec = minimal_spec(
+            {"op": "source_crosscheck", "reader": "gcode_g1_points", "sample": 3},
+            artifact_id=ARTIFACT_ID,
+        )
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out = run_validator_inprocess(spec_path, self.tmpdir, extra_args=["--source", source_path])
+        self.assertEqual(code, 0, out)
+        self.assertSeamLine(out, "s1", "PASS")
+        self.assertIn("0 mismatched", out)
+
+    def test_mismatched_artifact_fails(self):
+        source_path = self._write_source()
+        # Deliberately wrong rows -- none of these correspond to the source.
+        bad_rows = [(100.0 + i, 200.0 + i, 300.0 + i) for i in range(6)]
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(bad_rows))
+        spec = minimal_spec(
+            {"op": "source_crosscheck", "reader": "gcode_g1_points", "sample": 3},
+            artifact_id=ARTIFACT_ID,
+        )
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out = run_validator_inprocess(spec_path, self.tmpdir, extra_args=["--source", source_path])
+        self.assertEqual(code, 1, out)
+        self.assertSeamLine(out, "s1", "FAIL")
+        self.assertIn("mismatched", out)
+
+    def test_sampling_is_deterministic_every_floor_len_over_n_th_row(self):
+        # len=6, sample=3 -> step=2 -> indices [0, 2, 4]. Make ONLY those
+        # three rows match the source; the untested rows (1, 3, 5) are
+        # deliberately wrong. Must still PASS -- the odd-indexed rows are
+        # never sampled.
+        source_path = self._write_source()
+        rows = list(_SOURCE_POINTS)
+        rows[1] = (999.0, 999.0, 999.0)
+        rows[3] = (999.0, 999.0, 999.0)
+        rows[5] = (999.0, 999.0, 999.0)
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(rows))
+        spec = minimal_spec(
+            {"op": "source_crosscheck", "reader": "gcode_g1_points", "sample": 3},
+            artifact_id=ARTIFACT_ID,
+        )
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out = run_validator_inprocess(spec_path, self.tmpdir, extra_args=["--source", source_path])
+        self.assertEqual(code, 0, out)
+        self.assertIn("step=2", out)
+
+    def test_sampling_catches_a_mismatch_at_a_sampled_index(self):
+        # Same setup, but corrupt row 2 (a SAMPLED index at step=2) instead.
+        source_path = self._write_source()
+        rows = list(_SOURCE_POINTS)
+        rows[2] = (999.0, 999.0, 999.0)
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(rows))
+        spec = minimal_spec(
+            {"op": "source_crosscheck", "reader": "gcode_g1_points", "sample": 3},
+            artifact_id=ARTIFACT_ID,
+        )
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out = run_validator_inprocess(spec_path, self.tmpdir, extra_args=["--source", source_path])
+        self.assertEqual(code, 1, out)
+        self.assertIn("row 2", out)
+
+    def test_within_tolerance_passes(self):
+        source_path = self._write_source()
+        rows = [(x + 0.0005, y, z) for x, y, z in _SOURCE_POINTS]  # under 1e-3
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(rows))
+        spec = minimal_spec(
+            {"op": "source_crosscheck", "reader": "gcode_g1_points", "sample": 3},
+            artifact_id=ARTIFACT_ID,
+        )
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out = run_validator_inprocess(spec_path, self.tmpdir, extra_args=["--source", source_path])
+        self.assertEqual(code, 0, out)
+
+    def test_beyond_tolerance_fails(self):
+        source_path = self._write_source()
+        rows = [(x + 0.01, y, z) for x, y, z in _SOURCE_POINTS]  # over 1e-3
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(rows))
+        spec = minimal_spec(
+            {"op": "source_crosscheck", "reader": "gcode_g1_points", "sample": 3},
+            artifact_id=ARTIFACT_ID,
+        )
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out = run_validator_inprocess(spec_path, self.tmpdir, extra_args=["--source", source_path])
+        self.assertEqual(code, 1, out)
+
+    def test_missing_source_arg_fails_predicate_not_internal_error(self):
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(_SOURCE_POINTS))
+        spec = minimal_spec(
+            {"op": "source_crosscheck", "reader": "gcode_g1_points", "sample": 3},
+            artifact_id=ARTIFACT_ID,
+        )
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out = run_validator_inprocess(spec_path, self.tmpdir)  # no --source
+        self.assertEqual(code, 1, out)
+        self.assertSeamLine(out, "s1", "FAIL")
+        self.assertNotIn("SEAM-GATE INTERNAL ERROR", out)
+        self.assertIn("no --source provided", out)
+
+    def test_unknown_reader_id_fails_predicate_not_internal_error(self):
+        source_path = self._write_source()
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(_SOURCE_POINTS))
+        spec = minimal_spec(
+            {"op": "source_crosscheck", "reader": "totally_bogus_reader", "sample": 3},
+            artifact_id=ARTIFACT_ID,
+        )
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out = run_validator_inprocess(spec_path, self.tmpdir, extra_args=["--source", source_path])
+        self.assertEqual(code, 1, out)
+        self.assertSeamLine(out, "s1", "FAIL")
+        self.assertNotIn("SEAM-GATE INTERNAL ERROR", out)
+        self.assertIn("unknown reader id", out)
+
+    def test_leak_rule_rejects_tests_path(self):
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(_SOURCE_POINTS))
+        spec = minimal_spec(
+            {"op": "source_crosscheck", "reader": "gcode_g1_points", "sample": 3},
+            artifact_id=ARTIFACT_ID,
+        )
+        spec_path = write_spec(self.tmpdir, spec)
+        leaky_source = os.path.join(self.tmpdir, "tests", "hidden.gcode")
+        os.makedirs(os.path.dirname(leaky_source), exist_ok=True)
+        with open(leaky_source, "w") as f:
+            f.write(_SOURCE_GCODE)
+        code, out = run_validator_inprocess(spec_path, self.tmpdir, extra_args=["--source", leaky_source])
+        self.assertEqual(code, 1, out)
+        self.assertSeamLine(out, "s1", "FAIL")
+        self.assertNotIn("SEAM-GATE INTERNAL ERROR", out)
+        self.assertIn("refuses source path", out)
+
+    def test_leak_rule_rejects_solution_path(self):
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(_SOURCE_POINTS))
+        spec = minimal_spec(
+            {"op": "source_crosscheck", "reader": "gcode_g1_points", "sample": 3},
+            artifact_id=ARTIFACT_ID,
+        )
+        spec_path = write_spec(self.tmpdir, spec)
+        leaky_source = os.path.join(self.tmpdir, "solution", "answer.gcode")
+        os.makedirs(os.path.dirname(leaky_source), exist_ok=True)
+        with open(leaky_source, "w") as f:
+            f.write(_SOURCE_GCODE)
+        code, out = run_validator_inprocess(spec_path, self.tmpdir, extra_args=["--source", leaky_source])
+        self.assertEqual(code, 1, out)
+        self.assertSeamLine(out, "s1", "FAIL")
+        self.assertNotIn("SEAM-GATE INTERNAL ERROR", out)
+        self.assertIn("refuses source path", out)
+
+    def test_not_enough_rows_to_sample_fails_predicate_cleanly(self):
+        source_path = self._write_source()
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(_SOURCE_POINTS[:2]))  # only 2 rows
+        spec = minimal_spec(
+            {"op": "source_crosscheck", "reader": "gcode_g1_points", "sample": 50},
+            artifact_id=ARTIFACT_ID,
+        )
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out = run_validator_inprocess(spec_path, self.tmpdir, extra_args=["--source", source_path])
+        self.assertEqual(code, 1, out)
+        self.assertSeamLine(out, "s1", "FAIL")
+        self.assertNotIn("SEAM-GATE INTERNAL ERROR", out)
+        self.assertIn("not enough artifact rows", out)
+
+    def test_missing_source_file_fails_predicate_not_internal_error(self):
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows_to_lines(_SOURCE_POINTS))
+        spec = minimal_spec(
+            {"op": "source_crosscheck", "reader": "gcode_g1_points", "sample": 3},
+            artifact_id=ARTIFACT_ID,
+        )
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out = run_validator_inprocess(
+            spec_path, self.tmpdir, extra_args=["--source", os.path.join(self.tmpdir, "nope.gcode")]
+        )
+        self.assertEqual(code, 1, out)
+        self.assertSeamLine(out, "s1", "FAIL")
+        self.assertNotIn("SEAM-GATE INTERNAL ERROR", out)
+
+    def test_readers_registry_leak_rule_direct(self):
+        # Same leak rule, exercised directly against readers.py (not through
+        # the validator CLI) -- see also test_readers.py for the fuller
+        # readers-module-level coverage.
+        with self.assertRaises(readers.ReaderError):
+            readers.read_source("gcode_g1_points", "/some/tests/hidden.gcode")
+        with self.assertRaises(readers.ReaderError):
+            readers.read_source("gcode_g1_points", "/some/solution/answer.gcode")
 
 
 # --------------------------------------------------------------------------
@@ -471,7 +702,7 @@ class TestFailOpenContract(ValidatorTestCase):
         # Valid JSON, but violates the frozen schema (unknown top-level key) --
         # check_spec() rejects it, which must route through the fail-open path,
         # not a predicate FAIL.
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "artifact_exists"})
+        spec = minimal_spec({"op": "artifact_exists"}, artifact_id=ARTIFACT_ID)
         spec["totallyUnknownKey"] = True
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
@@ -497,8 +728,8 @@ class TestFailOpenContract(ValidatorTestCase):
         # MEDIUM-4's ruling -- NOT a --help-visible CLI flag): setting it
         # simulates `import numpy` raising ImportError, without needing a
         # real broken environment.
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "artifact_exists"})
-        write_artifact(self.tmpdir, ARTIFACT_PATH, ["1 2 3"])
+        spec = minimal_spec({"op": "artifact_exists"}, artifact_id=ARTIFACT_ID)
+        write_artifact(self.tmpdir, ARTIFACT_ID, ["1 2 3"])
         spec_path = write_spec(self.tmpdir, spec)
         with env_var(validator._TEST_NO_NUMPY_ENV, "1"):
             code, out = run_validator_inprocess(spec_path, self.tmpdir)
@@ -510,8 +741,8 @@ class TestFailOpenContract(ValidatorTestCase):
         # Same as above but as a true subprocess, proving the OS-level exit
         # code (not just the Python function's return value) is 0, and that
         # the env var (not a CLI flag) is what the real process reads.
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "artifact_exists"})
-        write_artifact(self.tmpdir, ARTIFACT_PATH, ["1 2 3"])
+        spec = minimal_spec({"op": "artifact_exists"}, artifact_id=ARTIFACT_ID)
+        write_artifact(self.tmpdir, ARTIFACT_ID, ["1 2 3"])
         spec_path = write_spec(self.tmpdir, spec)
         code, out, err = run_validator_subprocess(
             spec_path, self.tmpdir, extra_env={validator._TEST_NO_NUMPY_ENV: "1"}
@@ -524,8 +755,8 @@ class TestFailOpenContract(ValidatorTestCase):
         # (not --help-visible, not accepted at all) -- passing it is now just
         # an unknown flag, which itself must still fail open via MEDIUM-3's
         # fix (argparse errors funnel through the same INTERNAL ERROR path).
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "artifact_exists"})
-        write_artifact(self.tmpdir, ARTIFACT_PATH, ["1 2 3"])
+        spec = minimal_spec({"op": "artifact_exists"}, artifact_id=ARTIFACT_ID)
+        write_artifact(self.tmpdir, ARTIFACT_ID, ["1 2 3"])
         spec_path = write_spec(self.tmpdir, spec)
         code, out, err = run_validator_subprocess(
             spec_path, self.tmpdir, extra_args=["--_force-no-numpy"]
@@ -546,8 +777,8 @@ class TestFailOpenContract(ValidatorTestCase):
     def test_binary_artifact_content_is_predicate_fail_not_internal_error(self):
         # HIGH-1: non-UTF-8 bytes must fail the seam (exit 1), not escape as
         # SEAM-GATE INTERNAL ERROR (exit 0).
-        write_binary_artifact(self.tmpdir, ARTIFACT_PATH, b"\xff\xfe\x00\x01garbage\x80\x81")
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "row_count_in_range", "min": 1, "max": 10})
+        write_binary_artifact(self.tmpdir, ARTIFACT_ID, b"\xff\xfe\x00\x01garbage\x80\x81")
+        spec = minimal_spec({"op": "row_count_in_range", "min": 1, "max": 10}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 1)
@@ -558,7 +789,7 @@ class TestFailOpenContract(ValidatorTestCase):
         # Same garbage content, exercised against every op that parses
         # artifact content (all but artifact_exists) -- none may crash to
         # INTERNAL ERROR.
-        write_binary_artifact(self.tmpdir, ARTIFACT_PATH, b"\x00\xff\xfe\xfd not utf-8 \x80")
+        write_binary_artifact(self.tmpdir, ARTIFACT_ID, b"\x00\xff\xfe\xfd not utf-8 \x80")
         predicates = [
             {"op": "row_count_in_range", "min": 1, "max": 10},
             {"op": "numeric_cols", "n": 3},
@@ -570,7 +801,7 @@ class TestFailOpenContract(ValidatorTestCase):
         ]
         for predicate in predicates:
             with self.subTest(op=predicate["op"]):
-                spec = minimal_spec(ARTIFACT_PATH, predicate)
+                spec = minimal_spec(predicate, artifact_id=ARTIFACT_ID)
                 spec_path = write_spec(self.tmpdir, spec, name=f"spec-{predicate['op']}.json")
                 code, out = run_validator_inprocess(spec_path, self.tmpdir)
                 self.assertEqual(code, 1, f"op {predicate['op']} did not fail-predicate:\n{out}")
@@ -583,8 +814,8 @@ class TestFailOpenContract(ValidatorTestCase):
         # remaining rows still get evaluated normally.
         rows = [(x, y, 2 * x - y + 3) for x, y in [(1.0, 1.0), (2.0, 3.0), (3.0, 1.0), (4.0, 2.0)]]
         lines = rows_to_lines(rows) + ["3 nan 1", "inf 1 2", "1 2 -inf"]
-        write_artifact(self.tmpdir, ARTIFACT_PATH, lines)
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "affine_residual_below", "cols": [0, 1, 2], "max_ratio": 0.02})
+        write_artifact(self.tmpdir, ARTIFACT_ID, lines)
+        spec = minimal_spec({"op": "affine_residual_below", "cols": [0, 1, 2], "max_ratio": 0.02}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         # Only 4 clean planar rows remain after nan/inf rows are skipped --
@@ -598,10 +829,10 @@ class TestFailOpenContract(ValidatorTestCase):
         # (np.floor(nan).astype(int) -> undefined huge int -> out-of-bounds
         # index) -- it's skipped at parse time instead.
         rows = self._nan_inf_cluster_rows()
-        write_artifact(self.tmpdir, ARTIFACT_PATH, rows)
+        write_artifact(self.tmpdir, ARTIFACT_ID, rows)
         spec = minimal_spec(
-            ARTIFACT_PATH,
             {"op": "cluster_count_in_range", "method": "conncomp2d", "cell": 0.5, "min": 1, "max": 40},
+            artifact_id=ARTIFACT_ID,
         )
         spec_path = write_spec(self.tmpdir, spec)
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
@@ -625,14 +856,14 @@ class TestFailOpenContract(ValidatorTestCase):
 
 class TestArgparseFailuresFailOpen(ValidatorTestCase):
     def test_missing_required_root_exits_0_not_2(self):
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "artifact_exists"})
+        spec = minimal_spec({"op": "artifact_exists"}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out, err = run_validator_argv_subprocess(["--spec", spec_path])  # no --root
         self.assertEqual(code, 0)
         self.assertIn("SEAM-GATE INTERNAL ERROR", out)
 
     def test_unknown_flag_exits_0_not_2(self):
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "artifact_exists"})
+        spec = minimal_spec({"op": "artifact_exists"}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out, err = run_validator_argv_subprocess(
             ["--spec", spec_path, "--root", self.tmpdir, "--totally-bogus-flag"]
@@ -672,8 +903,8 @@ class TestArgparseFailuresFailOpen(ValidatorTestCase):
 
 class TestExitCodeContract(ValidatorTestCase):
     def test_all_pass_exits_0(self):
-        write_artifact(self.tmpdir, ARTIFACT_PATH, ["1 2 3"])
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "artifact_exists"})
+        write_artifact(self.tmpdir, ARTIFACT_ID, ["1 2 3"])
+        spec = minimal_spec({"op": "artifact_exists"}, artifact_id=ARTIFACT_ID)
         spec_path = write_spec(self.tmpdir, spec)
         code, out, err = run_validator_subprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 0)
@@ -681,21 +912,18 @@ class TestExitCodeContract(ValidatorTestCase):
         self.assertSeamLine(out, "s1", "PASS")
 
     def test_any_fail_exits_1(self):
-        spec = minimal_spec(ARTIFACT_PATH, {"op": "artifact_exists"})  # artifact never written
+        spec = minimal_spec({"op": "artifact_exists"}, artifact_id=ARTIFACT_ID)  # artifact never written
         spec_path = write_spec(self.tmpdir, spec)
         code, out, err = run_validator_subprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 1)
         self.assertSeamLine(out, "s1", "FAIL")
 
     def test_mixed_seams_one_failure_still_exits_1_and_reports_both(self):
-        write_artifact(self.tmpdir, "/app/.seam/present.txt", ["1 2 3"])
+        write_artifact(self.tmpdir, "ok", ["1 2 3"])
         spec = {
             "seamSpecVersion": 1,
             "task": "test-task",
-            "artifacts": {
-                "ok": "/app/.seam/present.txt",
-                "missing": "/app/.seam/absent.txt",
-            },
+            "artifactIds": ["ok", "missing"],
             "seams": [
                 {"id": "s1", "artifact": "ok", "predicate": {"op": "artifact_exists"}, "onFail": "x"},
                 {"id": "s2", "artifact": "missing", "predicate": {"op": "artifact_exists"}, "onFail": "y"},
@@ -709,18 +937,32 @@ class TestExitCodeContract(ValidatorTestCase):
 
 
 # --------------------------------------------------------------------------
-# Reference spec integration: gcode-to-text-gate.json, 6 seams
+# Reference spec integration: gcode-to-text-gate.json, 7 seams
 # --------------------------------------------------------------------------
 
 class TestReferenceSpecIntegration(ValidatorTestCase):
     def _write_good_fixtures(self):
+        """Writes points.txt/projected.txt AND a matching synthetic gcode
+        source file (so s7's source_crosscheck can also be exercised
+        end-to-end) -- the source's S0-scoped extruding G1 lines are
+        generated FROM the same `rows` written to points.txt, in the same
+        order, so a reader re-parse reproduces them exactly. Returns the
+        source gcode file's path.
+        """
         rows = []
         for _ in range(40000):
             x = random.uniform(0, 50)
             y = random.uniform(0, 50)
             z = 2 * x + 3 * y + 1
             rows.append((x, y, z))
-        write_artifact(self.tmpdir, "/app/.seam/points.txt", rows_to_lines(rows))
+        write_artifact(self.tmpdir, "points", rows_to_lines(rows))
+
+        gcode_path = os.path.join(self.tmpdir, "source.gcode")
+        with open(gcode_path, "w") as f:
+            f.write("M486 S0\n")
+            for x, y, z in rows:
+                f.write(f"G1 X{x} Y{y} Z{z} E0.1\n")
+            f.write("M486 S-1\n")
 
         # projected.txt: seam s4 (cluster_count_in_range) targets THIS
         # artifact as of Task 3's calibration (retargeted from the original,
@@ -740,31 +982,36 @@ class TestReferenceSpecIntegration(ValidatorTestCase):
             base_v = (b // 6) * 5.0
             for _ in range(12):
                 proj_rows.append((base_u + random.uniform(0, 0.6), base_v + random.uniform(0, 0.6)))
-        write_artifact(self.tmpdir, "/app/.seam/projected.txt", rows_to_lines(proj_rows))
+        write_artifact(self.tmpdir, "projected", rows_to_lines(proj_rows))
+        return gcode_path
 
     def test_reference_spec_all_pass_on_good_fixtures(self):
-        self._write_good_fixtures()
-        code, out = run_validator_inprocess(REFERENCE_SPEC_PATH, self.tmpdir)
-        self.assertEqual(code, 0, f"expected all 6 seams to pass, got:\n{out}")
-        for sid in ("s1", "s2", "s3", "s4", "s5", "s6"):
+        gcode_path = self._write_good_fixtures()
+        code, out = run_validator_inprocess(REFERENCE_SPEC_PATH, self.tmpdir, extra_args=["--source", gcode_path])
+        self.assertEqual(code, 0, f"expected all 7 seams to pass, got:\n{out}")
+        for sid in ("s1", "s2", "s3", "s4", "s5", "s6", "s7"):
             self.assertSeamLine(out, sid, "PASS")
 
     def test_reference_spec_unfiltered_points_fail_plane_seams(self):
         # v1-arm failure shape (per Task 3's brief): whole-file unfiltered
         # points including travel moves off the extrusion plane -- s3 and s6
-        # (both recompute planarity from points.txt) must fail.
-        self._write_good_fixtures()
+        # (both recompute planarity from points.txt) must fail. s7 also
+        # fails here (a natural consequence, not a separate migration): the
+        # overwritten points.txt no longer matches the original good
+        # fixture's source gcode at all.
+        gcode_path = self._write_good_fixtures()
         rows = []
         for _ in range(40000):
             x = random.uniform(0, 50)
             y = random.uniform(0, 50)
             z = random.uniform(0, 50)  # not on any plane
             rows.append((x, y, z))
-        write_artifact(self.tmpdir, "/app/.seam/points.txt", rows_to_lines(rows))
-        code, out = run_validator_inprocess(REFERENCE_SPEC_PATH, self.tmpdir)
+        write_artifact(self.tmpdir, "points", rows_to_lines(rows))
+        code, out = run_validator_inprocess(REFERENCE_SPEC_PATH, self.tmpdir, extra_args=["--source", gcode_path])
         self.assertEqual(code, 1)
         self.assertSeamLine(out, "s3", "FAIL")
         self.assertSeamLine(out, "s6", "FAIL")
+        self.assertSeamLine(out, "s7", "FAIL")
 
 
 if __name__ == "__main__":
