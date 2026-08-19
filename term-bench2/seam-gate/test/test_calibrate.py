@@ -231,11 +231,26 @@ class TestRewriteSpec(unittest.TestCase):
         # onFail evidence text should reflect the new artifact, not the old one.
         self.assertIn("projected.txt", s4["onFail"])
 
-    def test_provisional_left_untouched(self):
+    def test_provisional_key_dropped_when_s4_was_the_only_entry(self):
+        # Fix-round ruling (task-3-review.md LOW-1): once s4's bounds are the
+        # measured calibrated numbers, they're no longer placeholders, so the
+        # top-level `provisional` key -- whose documented meaning is exactly
+        # "placeholder bounds pending calibration" -- is stripped entirely
+        # when calibration empties it. `provisional` remains an OPTIONAL key
+        # in the *format* (schema.json / spec_check.py accept a spec with or
+        # without it); only this now-calibrated spec instance drops it.
         spec = self._old_shape_spec()
         out = calibrate_gcode.rewrite_spec(spec, cell=0.4, lo=25, hi=38)
-        self.assertIn("provisional", out)
-        self.assertIn("s4", out["provisional"])
+        self.assertNotIn("provisional", out)
+        self.assertEqual(check_spec(out), [])
+
+    def test_provisional_key_kept_with_other_entries_when_not_only_s4(self):
+        # If some OTHER seam is also listed provisional, only "s4" is
+        # stripped out of the list -- the key/list survives for the rest.
+        spec = self._old_shape_spec()
+        spec["provisional"] = ["s4", "s1"]
+        out = calibrate_gcode.rewrite_spec(spec, cell=0.4, lo=25, hi=38)
+        self.assertEqual(out["provisional"], ["s1"])
 
     def test_rewritten_spec_still_validates(self):
         spec = self._old_shape_spec()
@@ -434,6 +449,74 @@ class TestEndToEndRealFixture(CalibrateTestCase):
         code, out, err = run_calibrate_subprocess([self.gcode_path, "--spec", REFERENCE_SPEC_PATH, "--check-only"])
         self.assertEqual(code, 0, f"committed reference spec should still re-prove clean, stderr:\n{err}\nstdout:\n{out}")
         self.assertIn("SEAM-GATE CALIBRATE: OK", out)
+
+    def test_literal_brief_bad_shape_fails_overall_but_coincidentally_passes_s4(self):
+        # Fix-round finding (task-3-review.md MEDIUM): the brief's own
+        # one-sentence description of the BAD artifact set is a single
+        # coherent pipeline run -- whole-file unfiltered points, AND a
+        # raw-XY "projection" of THAT SAME unfiltered set (u=X, v=Y, no
+        # plane fit) -- not the hybrid this harness actually builds
+        # (points.txt from the unfiltered set, projected.txt's raw-XY from
+        # the correctly-scoped oracle set instead; see calibrate_gcode.py's
+        # inline comment by `bad_proj` for why). The review independently
+        # measured that this literal shape still fails overall (>=2 seams,
+        # via s1/s3/s6) but *coincidentally PASSES* s4 -- 27 components at
+        # cell=0.4 lands inside the calibrated [25,38] band, purely because
+        # the travel-inflated whole-file cloud's raw x,y happens to
+        # rasterize into a plausible-looking count on this fixture. That
+        # finding was previously only recorded in report prose; this test
+        # pins it in code so a future bounds/parsing change that breaks the
+        # coincidence shows up as a test delta, not silence.
+        #
+        # This is exactly why the harness deliberately builds the committed
+        # hybrid bad set instead of the literal one (it reliably fails s4
+        # too, not just coincidentally) -- but the point stands either way:
+        # individual seams are coincidence-spoofable; discrimination lives
+        # in the seam stack, not any single seam. The row-count/affine/
+        # variance seams over points.txt alone already clear the >=2-seam
+        # bar for this literal shape, with or without s4's help.
+        scratch_spec = self.write_scratch_spec(load_reference_spec())
+        code, _, err = run_calibrate_subprocess([self.gcode_path, "--spec", scratch_spec])
+        self.assertEqual(code, 0, f"pre-calibration step failed, stderr:\n{err}")
+        with open(scratch_spec) as f:
+            calibrated_spec = json.load(f)
+        cell, lo, hi = calibrate_gcode.extract_cluster_predicate(calibrated_spec)
+
+        _, whole_file_points = calibrate_gcode.collect_points(self.gcode_path)
+        literal_bad_proj = np.array([[p[0], p[1]] for p in whole_file_points], dtype=float)
+        literal_bad_ratio = calibrate_gcode.affine_residual_ratio(whole_file_points, np)
+        cluster_rows = calibrate_gcode.compute_cluster_rows(literal_bad_proj, cell, np)
+
+        literal_bad_root = os.path.join(self.tmpdir, "literal_bad_root")
+        calibrate_gcode.write_artifact_set(
+            literal_bad_root, whole_file_points, literal_bad_proj, literal_bad_ratio, cluster_rows
+        )
+
+        code, lines, fails = calibrate_gcode.run_validator(scratch_spec, literal_bad_root)
+        fail_ids = {l.split()[1] for l in fails}
+        pass_ids = {l.split()[1] for l in lines if " PASS " in l}
+
+        # (a) overall exit 1, >=2 seams failing, naming s1 and s3 among them.
+        self.assertEqual(code, 1, f"literal bad shape should still fail overall:\n" + "\n".join(lines))
+        self.assertGreaterEqual(len(fail_ids), 2, f"expected >=2 failing seams:\n" + "\n".join(lines))
+        self.assertIn("s1", fail_ids, "row_count_in_range should fail (whole-file row count)")
+        self.assertIn("s3", fail_ids, "affine_residual_below should fail (travel off the plane)")
+
+        # (b) s4 EXPLICITLY passes here -- the pinned coincidence. If a
+        # future recalibration or parsing change makes s4 start failing
+        # this literal shape too, that's fine (arguably an improvement) --
+        # but it must show up as a failure of THIS assertion, not silently.
+        self.assertIn(
+            "s4", pass_ids,
+            "s4 was measured to COINCIDENTALLY PASS on the literal brief-shape "
+            "bad artifact (27 components landed inside the calibrated range by "
+            "chance, not by design) -- individual seams are coincidence-"
+            "spoofable, discrimination lives in the seam stack. If this now "
+            "fails, the coincidence broke (interesting!) -- update this "
+            "assertion deliberately, don't just delete it.",
+        )
+        s4_line = next(l for l in lines if l.split()[1] == "s4")
+        self.assertIn("PASS", s4_line, f"expected s4 to PASS, got: {s4_line}")
 
 
 if __name__ == "__main__":

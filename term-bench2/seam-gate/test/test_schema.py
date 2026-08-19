@@ -32,13 +32,29 @@ class TestReferenceSpec(unittest.TestCase):
         errors = check_spec(spec)
         self.assertEqual(errors, [], f"reference spec should validate, got errors: {errors}")
 
-    def test_reference_spec_has_provisional_cluster_seam(self):
+    def test_reference_spec_calibrated_cluster_seam_has_no_provisional_key(self):
+        # Fix-round ruling (task-3-review.md LOW-1, 2026-08-19): this test
+        # used to assert "s4" was listed in the top-level `provisional` key
+        # (i.e. its cluster-count bounds were still placeholders). Task 3's
+        # calibration harness (calibrate_gcode.py) has since measured and
+        # rewritten s4's bounds against the real oracle artifact -- they are
+        # no longer placeholders, so `rewrite_spec` now strips `provisional`
+        # entirely once calibration empties it (s4 was the only entry).
+        # `provisional` remains an OPTIONAL top-level key in the *format*
+        # itself -- schema.json / spec_check.py accept a spec with or
+        # without it -- only this specific, now-calibrated reference spec
+        # instance drops it. This is a deliberate, ruled recalibration of
+        # this test, not a relaxation of the format.
         spec = load_reference_spec()
-        self.assertIn("provisional", spec)
-        self.assertIn("s4", spec["provisional"])
-        seam_ids = {s["id"] for s in spec["seams"]}
-        for sid in spec["provisional"]:
-            self.assertIn(sid, seam_ids, f"provisional id '{sid}' must reference a real seam")
+        self.assertNotIn("provisional", spec)
+        # spec_check accepts the key's absence on this spec...
+        self.assertEqual(check_spec(spec), [])
+        # ...and would equally accept its presence on some OTHER spec
+        # instance -- the format itself is unchanged, only this reference
+        # spec's calibrated state differs.
+        with_provisional = copy.deepcopy(spec)
+        with_provisional["provisional"] = ["s4"]
+        self.assertEqual(check_spec(with_provisional), [])
 
 
 class TestUnknownOpRejected(unittest.TestCase):

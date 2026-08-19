@@ -152,20 +152,22 @@ true glyph count is ~26; see the rung-4 plan's calibration finding).
 { "op": "cluster_count_in_range", "method": "conncomp2d", "cell": 0.5, "min": 10, "max": 40 }
 ```
 
-Worked example (seam `s4`, **provisional** -- see `provisional` key): in the
-reference spec, `s4` targets the `projection` artifact (`projected.txt`, the
-plane-basis `u v` rows) and rasterizes its own points directly -- **not** a
-separate pre-computed "clusters" artifact of centroids. (An earlier draft of
-this spec pointed `s4` at a `clusters.txt` holding one row per component,
-`cx cy pixels`; that's wrong for `conncomp2d`'s semantics, since it
-rasterizes the artifact's own points and a file of centroids collapses every
-component to a single pixel, under the 3-pixel component floor -- the oracle
-would false-FAIL. Fixed by Task 3's calibration harness, `calibrate_gcode.py`,
-which still writes `clusters.txt` as an informational, unvalidated harness
-output for calibration printouts.) The gcode flag text is 26 glyphs; `cell`/
-`min`/`max` are the values `calibrate_gcode.py`'s search picked against the
-real oracle artifact -- see that script for the search procedure and current
-numbers.
+Worked example (seam `s4`): in the reference spec, `s4` targets the
+`projection` artifact (`projected.txt`, the plane-basis `u v` rows) and
+rasterizes its own points directly -- **not** a separate pre-computed
+"clusters" artifact of centroids. (An earlier draft of this spec pointed `s4`
+at a `clusters.txt` holding one row per component, `cx cy pixels`; that's
+wrong for `conncomp2d`'s semantics, since it rasterizes the artifact's own
+points and a file of centroids collapses every component to a single pixel,
+under the 3-pixel component floor -- the oracle would false-FAIL. Fixed by
+Task 3's calibration harness, `calibrate_gcode.py`, which still writes
+`clusters.txt` as an informational, unvalidated harness output for
+calibration printouts.) The gcode flag text is 26 glyphs; `cell`/`min`/`max`
+are the values `calibrate_gcode.py`'s search picked against the real oracle
+artifact -- see that script for the search procedure and current numbers.
+Once calibrated, `s4` is no longer listed in `provisional` (its bounds are
+measured, not placeholders) -- `rewrite_spec` strips the key when
+calibration empties it; see the `provisional` row above.
 
 ### `value_in_range` {row, col, min, max}
 
@@ -205,8 +207,12 @@ contract, `spec_check.py` enforces it.
 
 `specs/gcode-to-text-gate.json` is the reference instance: 6 seams over 2 artifacts
 (`points`, `projection`) gating the gcode-to-text pipeline's filter, plane-fit,
-projection, and clustering checkpoints. Seam `s4` (cluster count) is listed in
-`provisional` -- its `cell`/`min`/`max` are the bounds Task 3's calibration harness
-(`calibrate_gcode.py`) measured against the real oracle artifact; `provisional`
-stays set on `s4` as an advisory "recalibrate if the fixture changes" flag (it
-doesn't affect enforcement -- see the `provisional` row above).
+projection, and clustering checkpoints. Seam `s4`'s (cluster count) `cell`/`min`/
+`max` are the bounds Task 3's calibration harness (`calibrate_gcode.py`) measured
+against the real oracle artifact -- no longer placeholders, so the reference spec
+carries no top-level `provisional` key at all (an earlier calibration round left
+`"provisional": ["s4"]` set as an advisory flag; a fix-round ruling determined
+that was stale once the bounds were measured numbers, not placeholders, so
+`rewrite_spec` now strips the key whenever calibration empties it). `provisional`
+itself remains a fully supported, optional top-level key in the *format* -- see
+the row above -- this reference spec instance simply doesn't use it.

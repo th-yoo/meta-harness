@@ -5,9 +5,6 @@
     "points": "/app/.seam/points.txt",
     "projection": "/app/.seam/projected.txt"
   },
-  "provisional": [
-    "s4"
-  ],
   "seams": [
     {
       "id": "s1",

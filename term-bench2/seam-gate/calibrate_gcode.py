@@ -334,14 +334,17 @@ def rewrite_spec(spec, cell, lo, hi):
     artifact and calibrated, and the `clusters` artifact/seam entries
     removed entirely (controller ruling -- see module docstring).
 
-    Deliberately leaves the top-level `provisional` key untouched (it may
-    still list "s4"): `provisional` is documented as purely advisory --
-    SPEC.md: "the validator enforces provisional seams exactly like any
-    other; the key just flags these numbers are expected to be
-    rewritten" -- and Task 1/2's own test_schema.py asserts
-    `"s4" in spec["provisional"]` against this same reference spec file.
-    Stripping it would break that assertion for no functional gain (the
-    validator doesn't special-case it), so it stays.
+    Strips "s4" out of the top-level `provisional` list (dropping the key
+    entirely if that empties it) -- fix-round ruling (LOW-1, task-3-review.md):
+    once s4's bounds are the measured calibrated numbers, `provisional`'s
+    documented meaning ("placeholder bounds pending calibration," SPEC.md /
+    schema.json) is stale for it, not just advisory. `provisional` stays an
+    OPTIONAL top-level key in the *format* -- schema.json/spec_check.py
+    accept a spec with or without it -- only this specific, now-calibrated
+    spec instance drops it. (An earlier version of this function left the
+    key in place specifically to avoid breaking test_schema.py's assertion
+    that it was present; that assertion has since been amended to assert
+    the opposite -- see test_schema.py::TestReferenceSpec.)
     """
     spec = json.loads(json.dumps(spec))  # cheap deep copy
     seam = find_seam(spec, "s4")
@@ -367,6 +370,12 @@ def rewrite_spec(spec, cell, lo, hi):
         "component per character (Task-3 calibrated against the oracle gcode "
         "artifact; see calibrate_gcode.py)."
     )
+    if "provisional" in spec:
+        remaining = [sid for sid in spec["provisional"] if sid != "s4"]
+        if remaining:
+            spec["provisional"] = remaining
+        else:
+            del spec["provisional"]
     return spec
 
 
