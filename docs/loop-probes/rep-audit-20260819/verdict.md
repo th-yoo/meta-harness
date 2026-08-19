@@ -380,3 +380,25 @@ dominance. out-gen4-r2.json = the generated card.
 NEXT (pre-registered consequence, own spend go): raman-fitting-gen =
 soft-gate wrapper + gen4-r2 audit VERBATIM, bench k=3 under v18; ≥2/3 =
 lane A proven END-TO-END.
+
+## Sibling round-5 (accepted) — arm-3 scope asterisk + propose-verify split
+
+1. Arm-3 scope: card was OPERATOR-SELECTED from a 1/2 field; a pass proves
+   the chain END-TO-END MODULO CARD SELECTION. Summary wording bound to
+   this form.
+2. "Failing card = no injection" RETRACTED: gen4-r1 failed CONFIDENT
+   (anchored constants, wrong attributions) — a CONTENT-gate alone would
+   inject it (false-attribution, the arm-1 poison). Production injection
+   gate = CONTENT verdict ∧ MECHANICAL REVALIDATION (propose-verify
+   split): harness deterministically recomputes the card's winning row —
+   apply the claimed transform to the mechanical peaks, check the claimed
+   landings within the claimed Δ, require ONE FIXED constant landing ≥2
+   peaks. Verified: passes gen4-r2 (k=1e7 lands both), rejects gen4-r1 by
+   construction (per-peak fitted constants never jointly land). This is
+   the production card-selection rule that closes the asterisk in (1).
+3. Card risk ranking: Δ-30 on 2D canonical = minor (agents report fits
+   not priors, card self-discloses). Live risk = D-band prediction at
+   x=7407.4 — likely absent in the synthetic file; arm-1 proved one
+   falsified claim can sink a card. Verbatim clause stands; trajs to be
+   read for the D reaction. Evidence-alone branch formally conceded
+   refuted by its author.
