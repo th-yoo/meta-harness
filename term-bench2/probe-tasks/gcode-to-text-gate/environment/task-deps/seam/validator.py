@@ -78,8 +78,19 @@ import re
 import sys
 from pathlib import Path
 
-from readers import ReaderError, read_source
-from spec_check import check_spec
+# `readers` and `spec_check` are deliberately NOT imported at module level
+# (fix-round finding, final-review.md C1): both used to be eager top-level
+# imports, so a missing/corrupt readers.py (a NEW Task-7 dependency) or
+# spec_check.py made the interpreter exit 1 with an uncaught traceback --
+# BEFORE main()'s fail-open try/except exists to catch anything. hook.py
+# reads that exit 1 as a predicate-fail and BLOCKS the stop on a gate-
+# internal breakage, the exact failure mode Global Constraint 1 ("fail-open
+# absolute") forbids. Both are now lazily imported inside run() instead,
+# alongside numpy -- the same pattern Task 2 already used for numpy's own
+# ImportError, threaded through as explicit parameters (readers_mod, like
+# `np`) rather than reassigned as module globals, matching this file's
+# existing style of passing dependencies explicitly through evaluate_seam /
+# the op functions.
 
 # Test-only escape hatch for simulating "numpy unavailable" without a real
 # broken environment. Deliberately an environment variable, not a CLI flag
@@ -376,13 +387,16 @@ def op_value_in_range(path, row, col, lo, hi):
     return passed, f"value at [{row},{col}] = {val} (expected [{lo},{hi}])"
 
 
-def op_source_crosscheck(path, reader_id, sample_n, source):
+def op_source_crosscheck(path, reader_id, sample_n, source, readers_mod):
     """Cross-checks `sample_n` deterministically-sampled artifact rows
     against the task's own SOURCE file, via the frozen reader registry
     (readers.py). This is the only op that reasons about anything outside
     the artifact itself -- every other op is artifact-internal, which was
     the exact gap Task 7 item 4 closes (an agent could satisfy every other
-    seam with internally-consistent but source-unfaithful data).
+    seam with internally-consistent but source-unfaithful data). `readers_mod`
+    is the `readers` module, threaded in from run()'s lazy import the same
+    way `np` is (see this module's C1 fix note near the top) -- never
+    imported at this module's top level.
 
     Sampling rule (frozen, deterministic -- no randomness): step =
     len(rows) // sample_n; sampled indices are 0, step, 2*step, ... for as
@@ -420,8 +434,8 @@ def op_source_crosscheck(path, reader_id, sample_n, source):
     indices = [i * step for i in range(sample_n) if i * step < len(rows)]
 
     try:
-        source_rows = read_source(reader_id, source)
-    except ReaderError as e:
+        source_rows = readers_mod.read_source(reader_id, source)
+    except readers_mod.ReaderError as e:
         return False, f"source_crosscheck reader error: {e}"
     except (OSError, UnicodeDecodeError) as e:
         return False, f"source_crosscheck could not read source: {e}"
@@ -460,7 +474,7 @@ def op_source_crosscheck(path, reader_id, sample_n, source):
 # Seam evaluation + CLI
 # --------------------------------------------------------------------------
 
-def evaluate_seam(seam, root, np, source=None):
+def evaluate_seam(seam, root, np, source=None, readers_mod=None):
     predicate = seam["predicate"]
     op = predicate["op"]
     resolved = resolve_artifact_id(seam["artifact"], root)
@@ -482,7 +496,7 @@ def evaluate_seam(seam, root, np, source=None):
     elif op == "value_in_range":
         return op_value_in_range(resolved, predicate["row"], predicate["col"], predicate["min"], predicate["max"])
     elif op == "source_crosscheck":
-        return op_source_crosscheck(resolved, predicate["reader"], predicate["sample"], source)
+        return op_source_crosscheck(resolved, predicate["reader"], predicate["sample"], source, readers_mod)
     else:
         # Unreachable in practice: check_spec (run before this) rejects any
         # op outside the frozen vocabulary. If we get here, it's a bug --
@@ -512,12 +526,16 @@ def parse_args(argv):
 
 def run(args):
     """Does the real work; any exception raised here (including numpy's
-    ImportError) is caught by main() and turned into the fail-open path."""
+    ImportError, or a missing/corrupt readers.py / spec_check.py -- see this
+    module's C1 fix note near the top import block) is caught by main() and
+    turned into the fail-open path."""
     if os.environ.get(_TEST_NO_NUMPY_ENV) == "1":
         raise ImportError(
             f"numpy import disabled via {_TEST_NO_NUMPY_ENV}=1 (test-only escape hatch)"
         )
     import numpy as np
+    import readers
+    from spec_check import check_spec
 
     with open(args.spec) as f:
         spec = json.load(f)
@@ -528,7 +546,7 @@ def run(args):
 
     any_fail = False
     for seam in spec["seams"]:
-        passed, detail = evaluate_seam(seam, args.root, np, source=args.source)
+        passed, detail = evaluate_seam(seam, args.root, np, source=args.source, readers_mod=readers)
         print(f"SEAM {seam['id']} {'PASS' if passed else 'FAIL'} {detail}")
         if not passed:
             any_fail = True

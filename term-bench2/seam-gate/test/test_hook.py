@@ -113,6 +113,64 @@ class TestPostValidatorDecision(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------
+# C1 fix-round regression (final-review.md): "any nonzero blocks" narrowed to
+# "only exit code 1 blocks" -- everything else outside validator.py's
+# documented 0/1 contract (a signal-killed subprocess, a startup failure,
+# etc.) is gate-internal breakage, not a predicate result, and must fail
+# open. Full matrix per the review's required test: {1 -> block, 2 -> allow,
+# -9/139 -> allow, 0 -> allow+reset}.
+# --------------------------------------------------------------------------
+
+class TestPostValidatorDecisionExitCodeMatrix(unittest.TestCase):
+    def test_exit_0_allows_and_resets_counter(self):
+        decision = hook.post_validator_decision(0, "SEAM s1 PASS ok\n", counter=1)
+        self.assertEqual(decision["exit_code"], 0)
+        self.assertEqual(decision["new_counter"], 0)
+
+    def test_exit_1_blocks_and_increments_counter(self):
+        decision = hook.post_validator_decision(1, "SEAM s1 FAIL bad\n", counter=0)
+        self.assertEqual(decision["exit_code"], 2)
+        self.assertEqual(decision["new_counter"], 1)
+
+    def test_exit_2_allows_with_counter_unchanged(self):
+        # Not validator.py's documented predicate-fail code -- e.g. a
+        # Python startup failure (bad invocation, uncaught traceback) before
+        # main()'s own try/except was ever reached.
+        decision = hook.post_validator_decision(2, "", counter=1)
+        self.assertEqual(decision["exit_code"], 0)
+        self.assertEqual(decision["new_counter"], 1, "counter must stay UNCHANGED, not reset and not incremented")
+
+    def test_exit_negative_9_signal_kill_allows_with_counter_unchanged(self):
+        # Python subprocess reports a signal-killed child as a negative
+        # returncode (-9 for SIGKILL).
+        decision = hook.post_validator_decision(-9, "", counter=1)
+        self.assertEqual(decision["exit_code"], 0)
+        self.assertEqual(decision["new_counter"], 1)
+
+    def test_exit_139_sigsegv_shell_convention_allows_with_counter_unchanged(self):
+        # 128+11 (SIGSEGV), the shell-reported convention some launchers use
+        # instead of subprocess's negative-returncode convention.
+        decision = hook.post_validator_decision(139, "", counter=1)
+        self.assertEqual(decision["exit_code"], 0)
+        self.assertEqual(decision["new_counter"], 1)
+
+    def test_anomalous_exit_code_never_produces_stderr_block_lines(self):
+        # Only real exit-1 predicate-fails get a "SEAM ... FAIL" stderr
+        # block; an anomalous code must not be misread as one.
+        decision = hook.post_validator_decision(2, "SEAM s1 FAIL leftover from a prior run\n", counter=0)
+        self.assertIsNone(decision["stderr"])
+
+    def test_anomalous_exit_code_surfaces_a_notice(self):
+        decision = hook.post_validator_decision(2, "", counter=0)
+        self.assertIsNotNone(decision["notice"])
+        self.assertIn("2", decision["notice"])
+
+    def test_exit_0_and_exit_1_have_no_notice(self):
+        self.assertIsNone(hook.post_validator_decision(0, "SEAM s1 PASS ok\n", counter=0)["notice"])
+        self.assertIsNone(hook.post_validator_decision(1, "SEAM s1 FAIL x\n", counter=0)["notice"])
+
+
+# --------------------------------------------------------------------------
 # run() -- the I/O shell, with run_validator mocked out (no real subprocess)
 # --------------------------------------------------------------------------
 
@@ -182,6 +240,20 @@ class TestRun(unittest.TestCase):
         self.assertIn("--source", cmd)
         self.assertEqual(cmd[cmd.index("--source") + 1], hook.SOURCE_PATH)
         self.assertEqual(hook.SOURCE_PATH, "/app/text.gcode")
+
+    def test_anomalous_validator_exit_code_allows_and_leaves_counter_unchanged(self):
+        # C1 fix-round regression, I/O-shell level: run() must not block, and
+        # must not touch the state file's value, when the validator
+        # subprocess itself returns a code outside the documented 0/1
+        # contract (here: 2, standing in for a startup failure / uncaught
+        # traceback / signal kill).
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = self._state_path(tmp, initial=1)
+            with mock.patch.object(hook, "run_validator", return_value=(2, "", "")):
+                code = hook.run({}, state_path=state_path)
+            self.assertEqual(code, 0)
+            with open(state_path) as f:
+                self.assertEqual(f.read().strip(), "1", "counter must stay unchanged, not reset")
 
     def test_validator_subprocess_error_propagates_out_of_run(self):
         # run() itself does NOT fail-open -- that's main()'s job. Verifies

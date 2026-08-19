@@ -694,6 +694,60 @@ class TestSourceCrosscheck(ValidatorTestCase):
 
 
 # --------------------------------------------------------------------------
+# C1 fix-round regression (final-review.md): a missing/corrupt readers.py or
+# spec_check.py next to validator.py used to make the interpreter exit 1
+# with an uncaught ModuleNotFoundError traceback -- BEFORE main()'s
+# fail-open try/except existed to catch it, which hook.py's
+# post_validator_decision then read as a predicate-fail and BLOCKED the
+# stop on a gate-internal breakage. Both imports are now lazy, inside
+# run() (the same pattern already used for numpy's ImportError) -- this
+# class proves that end to end via a real subprocess invocation of
+# validator.py from a directory that does NOT have readers.py/spec_check.py
+# next to it (so Python's own same-directory import resolution can't find
+# them), not an in-process mock.
+# --------------------------------------------------------------------------
+
+class TestMissingKernelModuleFailsOpen(ValidatorTestCase):
+    def _stage_validator_only(self):
+        """Copies ONLY validator.py into a fresh temp dir -- neither
+        readers.py nor spec_check.py travel with it, reproducing "the
+        pre-Task-7 file set" / "a corrupted readers.py" the review names.
+        """
+        stage_dir = tempfile.mkdtemp(prefix="seam-gate-missing-kernel-module-")
+        self.addCleanup(shutil.rmtree, stage_dir, ignore_errors=True)
+        shutil.copy(VALIDATOR_PATH, os.path.join(stage_dir, "validator.py"))
+        return stage_dir
+
+    def test_missing_readers_and_spec_check_fails_open_not_uncaught_traceback(self):
+        stage_dir = self._stage_validator_only()
+        write_artifact(self.tmpdir, ARTIFACT_ID, ["1 2 3"])
+        spec = minimal_spec({"op": "artifact_exists"}, artifact_id=ARTIFACT_ID)
+        spec_path = write_spec(self.tmpdir, spec)
+        proc = subprocess.run(
+            [sys.executable, os.path.join(stage_dir, "validator.py"), "--spec", spec_path, "--root", self.tmpdir],
+            capture_output=True, text=True, cwd=stage_dir,
+        )
+        self.assertEqual(proc.returncode, 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}")
+        self.assertIn("SEAM-GATE INTERNAL ERROR", proc.stdout)
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertNotIn("SEAM s1", proc.stdout)  # never reached seam evaluation
+
+    def test_missing_readers_module_named_in_error_detail(self):
+        stage_dir = self._stage_validator_only()
+        write_artifact(self.tmpdir, ARTIFACT_ID, ["1 2 3"])
+        spec = minimal_spec({"op": "artifact_exists"}, artifact_id=ARTIFACT_ID)
+        spec_path = write_spec(self.tmpdir, spec)
+        proc = subprocess.run(
+            [sys.executable, os.path.join(stage_dir, "validator.py"), "--spec", spec_path, "--root", self.tmpdir],
+            capture_output=True, text=True, cwd=stage_dir,
+        )
+        self.assertEqual(proc.returncode, 0)
+        # Whichever of the two missing modules Python's import machinery
+        # reaches first (readers is imported before spec_check in run()).
+        self.assertIn("readers", proc.stdout)
+
+
+# --------------------------------------------------------------------------
 # Fail-open contract
 # --------------------------------------------------------------------------
 

@@ -74,33 +74,63 @@ def pre_check(payload, counter, budget=BUDGET):
 def post_validator_decision(validator_exit_code, validator_stdout, counter):
     """Decide the outcome once the validator subprocess has actually run.
 
-    validator_exit_code == 0 -- every seam passed, OR validator.py hit its
-    own internal-error fail-open path (both look identical to callers: exit
-    0) -- reset the counter, allow the stop.
+    Three cases, by validator_exit_code (fix-round finding, final-review.md
+    C1 -- this used to treat "any nonzero" as a block; narrowed here to only
+    validator.py's own documented exit-1 predicate-fail):
 
-    Any other exit code (1 = at least one seam FAIL; anything else is
-    treated the same way, conservatively, as a block) -- increment the
-    counter, block the stop, and surface the validator's own `SEAM <id>
-    FAIL ...` lines on stderr (the simpler of the two options the brief
-    allows: printing the validator's own FAIL lines rather than
-    re-deriving each seam's `onFail` text from spec.json).
+      == 0  -- every seam passed, OR validator.py hit its own internal-error
+               fail-open path (both look identical to callers: exit 0) --
+               reset the counter, allow the stop.
+      == 1  -- validator.py's OWN documented predicate-fail exit code (at
+               least one seam FAIL, per its module docstring's 0/1
+               contract) -- increment the counter, block the stop, and
+               surface the validator's own `SEAM <id> FAIL ...` lines on
+               stderr (the simpler of the two options the brief allows:
+               printing the validator's own FAIL lines rather than
+               re-deriving each seam's `onFail` text from spec.json).
+      anything else -- a signal-killed validator subprocess (e.g. -9/139), a
+               Python startup failure before it even reaches its own
+               try/except (e.g. exit 2 on a bad invocation, or an
+               uncaught-import traceback -- see validator.py's own C1 fix
+               for why that specific case can no longer happen, but this
+               path stays defensive regardless), or any other code outside
+               the documented 0/1 contract: this is validator-INTERNAL
+               breakage, not a predicate result. Fail OPEN (allow the stop,
+               exit 0), leave the counter UNCHANGED (neither reset nor
+               incremented -- it's not a genuine pass, and must not count
+               toward the block budget either), and surface a one-line
+               notice on stdout so the anomaly stays visible without
+               blocking on it. This is exactly Global Constraint 1
+               ("fail-open absolute"): only validator.py's own documented
+               exit-1 predicate-fail may ever block the stop.
     """
     if validator_exit_code == 0:
-        return {"exit_code": 0, "new_counter": 0, "stderr": None}
-    fail_lines = [
-        line
-        for line in validator_stdout.splitlines()
-        if line.startswith("SEAM ") and " FAIL " in line
-    ]
-    if not fail_lines:
+        return {"exit_code": 0, "new_counter": 0, "stderr": None, "notice": None}
+    if validator_exit_code == 1:
         fail_lines = [
-            "[seam-gate] validator exited non-zero with no parsed SEAM FAIL lines "
-            f"(exit code {validator_exit_code})"
+            line
+            for line in validator_stdout.splitlines()
+            if line.startswith("SEAM ") and " FAIL " in line
         ]
+        if not fail_lines:
+            fail_lines = [
+                "[seam-gate] validator exited 1 with no parsed SEAM FAIL lines"
+            ]
+        return {
+            "exit_code": 2,
+            "new_counter": counter + 1,
+            "stderr": "\n".join(fail_lines) + "\n",
+            "notice": None,
+        }
     return {
-        "exit_code": 2,
-        "new_counter": counter + 1,
-        "stderr": "\n".join(fail_lines) + "\n",
+        "exit_code": 0,
+        "new_counter": counter,
+        "stderr": None,
+        "notice": (
+            f"[seam-gate] validator exited {validator_exit_code} (outside the "
+            "documented 0/1 contract) -- treating as gate-internal breakage, "
+            "allowing the stop without blocking\n"
+        ),
     }
 
 
@@ -176,6 +206,8 @@ def run(payload, state_path=None):
     write_counter(state_path, decision["new_counter"])
     if decision["stderr"]:
         sys.stderr.write(decision["stderr"])
+    if decision.get("notice"):
+        sys.stdout.write(decision["notice"])
     return decision["exit_code"]
 
 
