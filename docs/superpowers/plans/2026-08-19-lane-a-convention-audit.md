@@ -6,7 +6,7 @@
 
 **Architecture:** A single new module `convention-audit.ts` exposing `auditCard(paths, task, env, deps)`, a pure pipeline (sampler → daemon audit call → content-gate → card extract) with a single-flight per-task cache. Wired into `agent-run.ts` at the existing `budgetLine` seam and threaded as a boolean flag through `cmd-run.ts`/`cmd-ab.ts`. The audit call mirrors `bench/p2/a4-review.ts` (ACP daemon, deps-injection seam), NOT `claude -p`.
 
-**Tech Stack:** TypeScript (Bun runtime), `@th-yoo/cc-api-daemon` (`ensureDaemon`/`daemonCall`/`closeSession`), node:fs (`realpathSync`), the bench `ExecFn` test idiom. Tests run via `bun test`.
+**Tech Stack:** TypeScript (Bun runtime), `@th-yoo/cc-api-daemon` (`ensureDaemon`/`daemonCall`/`closeSession`), node:fs (`realpathSync`), the a4-review deps-injection test idiom. Tests: `bun test` (runtime) + `bun run typecheck` (types).
 
 **Spec:** `docs/superpowers/specs/2026-08-19-lane-a-convention-audit-design.md` (read it — this plan argues from it).
 
@@ -27,9 +27,9 @@
 
 - Create `opencode-plugin/src/bench/convention-audit.ts` — the whole pipeline + cache. One responsibility: "produce (or decline) a convention card for a task."
 - Create `opencode-plugin/src/bench/convention-audit-prompt.txt` — the frozen, version-stamped audit prompt.
-- Create `opencode-plugin/src/bench/test/convention-audit.test.ts` — unit + integration tests.
-- Create test fixtures under `opencode-plugin/src/bench/test/fixtures/conv-audit/` — fake task dirs (clean, traversal-COPY, symlink-COPY, oversized-dir) + recorded daemon replies.
-- Modify `opencode-plugin/src/bench/agent-run.ts` — append card after `budgetLine` (:165-167), add `conventionAudit?` to `runAgent` params.
+- Create `opencode-plugin/test/bench-convention-audit.test.ts` — unit + integration tests.
+- Create test fixtures under `opencode-plugin/test/fixtures/conv-audit/` — fake task dirs (clean, traversal-COPY, symlink-COPY, oversized-dir) + recorded daemon replies.
+- Modify `opencode-plugin/src/bench/agent-run.ts` — append card after `budgetLine` (:165-167), add `conventionAudit = ""` as the LAST `runAgent` param (after `sleepFn`).
 - Modify `opencode-plugin/src/bench/cmd-run.ts` — parse `--convention-audit`, thread it, oauth-parallel refusal.
 - Modify `opencode-plugin/src/bench/cmd-ab.ts` — same threading + refusal.
 - Modify `opencode-plugin/src/bench/cli.ts` — register the `--convention-audit` boolean in the arg parser + usage line.
@@ -41,7 +41,7 @@
 **Files:**
 - Create: `opencode-plugin/src/bench/convention-audit-prompt.txt`
 - Create: `opencode-plugin/src/bench/convention-audit.ts` (prompt loader only, this task)
-- Test: `opencode-plugin/src/bench/test/convention-audit.test.ts`
+- Test: `opencode-plugin/test/bench-convention-audit.test.ts`
 
 **Interfaces:**
 - Produces: `export const AUDIT_PROMPT_VERSION = "lane-a-v1"`; `export function auditPrompt(): string`
@@ -52,7 +52,7 @@
 
 ```typescript
 import { test, expect } from "bun:test"
-import { auditPrompt, AUDIT_PROMPT_VERSION } from "../convention-audit.ts"
+import { auditPrompt, AUDIT_PROMPT_VERSION } from "../src/bench/convention-audit.ts"
 
 test("auditPrompt loads the frozen prompt with all four clauses + verdict line", () => {
   const p = auditPrompt()
@@ -66,7 +66,7 @@ test("auditPrompt loads the frozen prompt with all four clauses + verdict line",
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `cd opencode-plugin && bun test src/bench/test/convention-audit.test.ts -t "auditPrompt"`
+Run: `cd opencode-plugin && bun test test/bench-convention-audit.test.ts -t "auditPrompt"`
 Expected: FAIL ("Cannot find module ../convention-audit.ts" or export missing)
 
 - [ ] **Step 4: Write minimal implementation** in `convention-audit.ts`
@@ -87,7 +87,7 @@ export function auditPrompt(): string {
 - [ ] **Step 6: Commit**
 
 ```bash
-git add opencode-plugin/src/bench/convention-audit-prompt.txt opencode-plugin/src/bench/convention-audit.ts opencode-plugin/src/bench/test/convention-audit.test.ts
+git add opencode-plugin/src/bench/convention-audit-prompt.txt opencode-plugin/src/bench/convention-audit.ts opencode-plugin/test/bench-convention-audit.test.ts
 git commit -m "feat(lane-a): frozen convention-audit prompt constant + loader
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
@@ -99,8 +99,8 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `opencode-plugin/src/bench/convention-audit.ts`
-- Test: `opencode-plugin/src/bench/test/convention-audit.test.ts`
-- Create fixtures: `opencode-plugin/src/bench/test/fixtures/conv-audit/{clean,traversal,symlink,bigdir}/` each with `instruction.md`, `environment/Dockerfile`, `tests/secret.txt`.
+- Test: `opencode-plugin/test/bench-convention-audit.test.ts`
+- Create fixtures: `opencode-plugin/test/fixtures/conv-audit/{clean,traversal,symlink,bigdir}/` each with `instruction.md`, `environment/Dockerfile`, `tests/secret.txt`.
 
 **Interfaces:**
 - Consumes: `BenchPaths` (`paths.ts:30`, uses `.tbRoot`).
@@ -111,9 +111,9 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - [ ] **Step 2: Write the failing tests**
 
 ```typescript
-import { buildSample } from "../convention-audit.ts"
+import { buildSample } from "../src/bench/convention-audit.ts"
 const P = (root: string) => ({ tbRoot: root } as any)  // only .tbRoot is read
-const FIX = join(dirname(new URL(import.meta.url).pathname), "fixtures/conv-audit")
+const FIX = join(dirname(new URL(import.meta.url).pathname), "fixtures/conv-audit") /* under opencode-plugin/test/ */
 
 test("buildSample emits instruction + input, never tests/ bytes", () => {
   const s = buildSample(P(FIX), "clean")
@@ -136,16 +136,16 @@ test("buildSample is deterministic", () => {
 })
 ```
 
-- [ ] **Step 3: Run tests to verify they fail** — Run: `cd opencode-plugin && bun test src/bench/test/convention-audit.test.ts -t "buildSample"`. Expected: FAIL (buildSample not exported).
+- [ ] **Step 3: Run tests to verify they fail** — Run: `cd opencode-plugin && bun test test/bench-convention-audit.test.ts -t "buildSample"`. Expected: FAIL (buildSample not exported).
 
-- [ ] **Step 4: Implement `buildSample`.** Resolve COPY sources from `<tbRoot>/<task>/environment/Dockerfile` (parse only `COPY <src> <dst>` lines yourself — do NOT import `parseTaskDockerfile`; it does zero containment and `die()`s on unrelated directives). For each `src`: `const root = realpathSync(join(taskDir,"environment")); const cand = realpathSync(join(root, src));` then require `cand === root || cand.startsWith(root + sep)`, else `throw new BenchError("convention-audit: COPY source escapes environment/ (leak guard): " + src)`. Never touch `tests/`/`solution/`. Emit: instruction.md verbatim + per-file `=== <name> (<bytes>) ===` block with a derived summary (text: line count + top token histogram via a simple `\S+` tally + first-column numeric range if parseable; binary: first 64 bytes hex) + head-20/tail-20 lines. Accumulate against `budgetBytes` (default 200_000); on overflow stop adding files, set `truncated: true`.
+- [ ] **Step 4: Implement `buildSample`.** Resolve COPY sources from `<tbRoot>/<task>/environment/Dockerfile` (parse `COPY` lines yourself — do NOT import `parseTaskDockerfile`; it does zero containment and `die()`s on unrelated directives). **COPY-form handling (staging.ts:735-756 corpus reality):** SKIP any line containing `--from=` (multi-stage/external-image copies — not host paths; a naive parse would `realpathSync`-ENOENT on the stage name). For a multi-source `COPY a b c dest/`, iterate every token except the last (the dest) as a source. For each `src`: `const root = realpathSync(join(taskDir,"environment")); const cand = realpathSync(join(root, src));` then require `cand === root || cand.startsWith(root + sep)`, else `throw new BenchError("convention-audit: COPY source escapes environment/ (leak guard): " + src)`. Never touch `tests/`/`solution/`. Emit: instruction.md verbatim + per-file `=== <name> (<bytes>) ===` block with a derived summary (text: line count + top token histogram via a simple `\S+` tally + first-column numeric range if parseable; binary: first 64 bytes hex) + head-20/tail-20 lines. Accumulate against `budgetBytes` (default 200_000); on overflow stop adding files, set `truncated: true`.
 
 - [ ] **Step 5: Run tests to verify they pass** — same command. Expected: PASS (all 5).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add opencode-plugin/src/bench/convention-audit.ts opencode-plugin/src/bench/test/
+git add opencode-plugin/src/bench/convention-audit.ts opencode-plugin/test/
 git commit -m "feat(lane-a): leak-safe sampler with realpath containment + size budget
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
@@ -157,7 +157,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `opencode-plugin/src/bench/convention-audit.ts`
-- Test: `opencode-plugin/src/bench/test/convention-audit.test.ts`
+- Test: `opencode-plugin/test/bench-convention-audit.test.ts`
 
 **Interfaces:**
 - Produces: `export function parseVerdict(raw: string): "MISMATCH" | "NO_MISMATCH"`; `export function cardFrom(raw: string): string`
@@ -165,7 +165,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - [ ] **Step 1: Write the failing tests**
 
 ```typescript
-import { parseVerdict, cardFrom } from "../convention-audit.ts"
+import { parseVerdict, cardFrom } from "../src/bench/convention-audit.ts"
 test("parseVerdict reads the machine line", () => {
   expect(parseVerdict("...\nCONTENT VERDICT: MISMATCH\n...")).toBe("MISMATCH")
   expect(parseVerdict("CONTENT VERDICT: NO MISMATCH")).toBe("NO_MISMATCH")
@@ -199,7 +199,7 @@ export function cardFrom(raw: string): string {
 - [ ] **Step 5: Commit**
 
 ```bash
-git add opencode-plugin/src/bench/convention-audit.ts opencode-plugin/src/bench/test/convention-audit.test.ts
+git add opencode-plugin/src/bench/convention-audit.ts opencode-plugin/test/bench-convention-audit.test.ts
 git commit -m "feat(lane-a): content-gate verdict parser + verbatim card extractor
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
@@ -211,7 +211,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `opencode-plugin/src/bench/convention-audit.ts`
-- Test: `opencode-plugin/src/bench/test/convention-audit.test.ts`
+- Test: `opencode-plugin/test/bench-convention-audit.test.ts`
 
 **Interfaces:**
 - Consumes: `buildSample`, `auditPrompt`, `parseVerdict`, `cardFrom`; the daemon deps `{ call?: typeof daemonCall; ensure?: typeof ensureDaemon; close?: typeof closeSession }`; `DEFAULT_BENCH_MODEL` (`paths.ts:28`).
@@ -230,9 +230,11 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - [ ] **Step 1: Write the failing tests** (recorded-reply fixtures, no live call — mirror `a4-review.ts` tests)
 
 ```typescript
-import { runAuditUncached } from "../convention-audit.ts"
+import { runAuditUncached } from "../src/bench/convention-audit.ts"
 const okReply = (text: string) => ({ kind: "ok", text, model: "anthropic/claude-sonnet-5", canonicalModel: "anthropic/claude-sonnet-5", sessionId: "s1", stopReason: "end_turn" })
-const deps = (reply: any) => ({ ensure: async () => {}, call: async () => reply, close: async () => {} })
+// Fixture return types MUST match the real deps signatures (tsc --noEmit checks this;
+// bun test does not): ensureDaemon → Promise<boolean>, closeSession → Promise<{closed}>.
+const deps = (reply: any) => ({ ensure: async () => true, call: async () => reply, close: async () => ({ closed: true }) })
 
 test("runAuditUncached returns a card on MISMATCH", async () => {
   const r = await runAuditUncached(P(FIX), "clean", {}, deps(okReply("AUDIT BODY\nCONTENT VERDICT: MISMATCH")))
@@ -254,11 +256,18 @@ test("runAuditUncached fails safe on max_tokens truncation", async () => {
 
 - [ ] **Step 2: Run to verify fail** — Expected: FAIL.
 
-- [ ] **Step 3: Implement**, mirroring `runA4Review` (a4-review.ts:247-290):
+- [ ] **Step 3: Implement**, mirroring `runA4Review` (a4-review.ts:247-290). NOTE `opts.isolation` is REQUIRED by `daemonCall` (acp-client.ts:120, "never defaulted") — define a frozen `AUDIT_ISOLATION: WarmIsolation` exactly like `A4_ISOLATION` (a4-review.ts:88-96) and pass it; `{}` is a compile error and a meaningless frame to the daemon.
 
 ```typescript
-import { ensureDaemon, daemonCall, closeSession, modelProvenBy } from "@th-yoo/cc-api-daemon"
+import { ensureDaemon, daemonCall, closeSession, modelProvenBy, type WarmIsolation } from "@th-yoo/cc-api-daemon"
 import { DEFAULT_BENCH_MODEL } from "./paths.ts"
+
+// Frozen, toolless, thinking-disabled — mirrors A4_ISOLATION (a4-review.ts:88).
+const AUDIT_ISOLATION: WarmIsolation = {
+  systemPrompt: "", settingSources: [], settings: { autoMemoryEnabled: false },
+  persistSession: false, strictMcpConfig: true, tools: [],
+  title: "kkamak-lane-a-convention-audit", thinking: { type: "disabled" },
+}
 
 export async function runAuditUncached(paths, task, env, deps = {}) {
   const call = deps.call ?? daemonCall, ensure = deps.ensure ?? ensureDaemon, close = deps.close ?? closeSession
@@ -267,7 +276,7 @@ export async function runAuditUncached(paths, task, env, deps = {}) {
   let sid: string | undefined
   try {
     await ensure(auditEnv, { waitMs: 0 })
-    const outcome = await call(auditPrompt() + "\n\n" + sample, DEFAULT_BENCH_MODEL, auditEnv, {})
+    const outcome = await call(auditPrompt() + "\n\n" + sample, DEFAULT_BENCH_MODEL, auditEnv, { isolation: AUDIT_ISOLATION })
     if (outcome.kind !== "ok") return { card: null, rawAudit: "", verdict: "ERROR", sample, truncated }
     sid = outcome.sessionId
     if (outcome.stopReason === "max_tokens" || !modelProvenBy(outcome.model, DEFAULT_BENCH_MODEL, outcome.canonicalModel))
@@ -285,10 +294,12 @@ export async function runAuditUncached(paths, task, env, deps = {}) {
 
 - [ ] **Step 4: Run to verify pass** — Expected: PASS (all 4).
 
+- [ ] **Step 4b: Typecheck** (bun test does NOT typecheck — the deps-fixture return types + isolation const must pass `tsc`). Run: `cd opencode-plugin && bun run typecheck`. Expected: no errors in `convention-audit.ts` or the test file.
+
 - [ ] **Step 5: Commit**
 
 ```bash
-git add opencode-plugin/src/bench/convention-audit.ts opencode-plugin/src/bench/test/convention-audit.test.ts
+git add opencode-plugin/src/bench/convention-audit.ts opencode-plugin/test/bench-convention-audit.test.ts
 git commit -m "feat(lane-a): audit daemon call + auditCard orchestration (a4-review shape, fail-safe)
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
@@ -300,7 +311,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `opencode-plugin/src/bench/convention-audit.ts`
-- Test: `opencode-plugin/src/bench/test/convention-audit.test.ts`
+- Test: `opencode-plugin/test/bench-convention-audit.test.ts`
 
 **Interfaces:**
 - Produces: `export async function auditCard(paths, task, env, deps?): Promise<AuditResult>` — caches by `task`, single-flights concurrent misses. `export function _resetAuditCache(): void` (test helper).
@@ -308,11 +319,11 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - [ ] **Step 1: Write the failing test** (asserts the sequential invariant's safety net: concurrent same-task requests share ONE completion)
 
 ```typescript
-import { auditCard, _resetAuditCache } from "../convention-audit.ts"
+import { auditCard, _resetAuditCache } from "../src/bench/convention-audit.ts"
 test("auditCard single-flights concurrent same-task misses into one call", async () => {
   _resetAuditCache()
   let calls = 0
-  const d = { ensure: async () => {}, close: async () => {}, call: async () => { calls++; return okReply("X\nCONTENT VERDICT: MISMATCH") } }
+  const d = { ensure: async () => true, close: async () => ({ closed: true }), call: async () => { calls++; return okReply("X\nCONTENT VERDICT: MISMATCH") } }
   const [a, b] = await Promise.all([auditCard(P(FIX), "clean", {}, d), auditCard(P(FIX), "clean", {}, d)])
   expect(calls).toBe(1)
   expect(a.card).toBe(b.card)   // byte-identical across "arms"
@@ -340,7 +351,7 @@ export async function auditCard(paths, task, env, deps = {}) {
 - [ ] **Step 5: Commit**
 
 ```bash
-git add opencode-plugin/src/bench/convention-audit.ts opencode-plugin/src/bench/test/convention-audit.test.ts
+git add opencode-plugin/src/bench/convention-audit.ts opencode-plugin/test/bench-convention-audit.test.ts
 git commit -m "feat(lane-a): single-flight per-task card cache (concurrent-arm safety net)
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
@@ -352,7 +363,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `opencode-plugin/src/bench/convention-audit.ts`
-- Test: `opencode-plugin/src/bench/test/convention-audit.test.ts`
+- Test: `opencode-plugin/test/bench-convention-audit.test.ts`
 
 **Interfaces:**
 - Produces: `export function writeAuditTrail(paths: BenchPaths, task: string, r: AuditResult): void` — appends one JSON line to `<resultsDir>/convention-audit-trail.ndjson` with `{task, promptVersion, verdict, truncated, cardLen, sampleLen, card, rawAudit}`.
@@ -360,7 +371,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
-import { writeAuditTrail } from "../convention-audit.ts"
+import { writeAuditTrail } from "../src/bench/convention-audit.ts"
 test("writeAuditTrail appends one ndjson line with the card + verdict", () => {
   const dir = mkdtempSync(join(tmpdir(), "conv-trail-"))
   writeAuditTrail({ resultsDir: dir } as any, "clean",
@@ -380,7 +391,7 @@ test("writeAuditTrail appends one ndjson line with the card + verdict", () => {
 - [ ] **Step 5: Commit**
 
 ```bash
-git add opencode-plugin/src/bench/convention-audit.ts opencode-plugin/src/bench/test/convention-audit.test.ts
+git add opencode-plugin/src/bench/convention-audit.ts opencode-plugin/test/bench-convention-audit.test.ts
 git commit -m "feat(lane-a): audit-trail ndjson writer (leak-safety record)
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
@@ -391,10 +402,11 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ### Task 7: Wiring — flag, injection, oauth-parallel refusal
 
 **Files:**
-- Modify: `opencode-plugin/src/bench/agent-run.ts:135-167` (add `conventionAudit?: string` — the card string — to params; append after `budgetLine`)
-- Modify: `opencode-plugin/src/bench/cmd-run.ts`, `cmd-ab.ts` (call `auditCard`+`writeAuditTrail` before `runAgent` when flag on; pass `result.card ?? ""`; oauth-parallel refusal)
-- Modify: `opencode-plugin/src/bench/cli.ts` (register `--convention-audit` boolean + usage)
-- Test: `opencode-plugin/src/bench/test/convention-audit.test.ts` + assert in an existing agent-run test
+- Modify: `opencode-plugin/src/bench/agent-run.ts:135-167` (add `conventionAudit = ""` as the LAST param — after `sleepFn`; append its value after `budgetLine`)
+- Modify: `opencode-plugin/src/bench/cmd-run.ts`, `cmd-ab.ts` (call `auditCard`+`writeAuditTrail` before `runAgent` when flag on; pass `r.card ?? ""` as the new last arg; thread `conventionAudit` into the `validateParallel` call)
+- Modify: `opencode-plugin/src/bench/cli.ts` (register `--convention-audit` in BOTH `parseRunArgs`+`parseAbArgs`; add `conventionAudit?` to `validateParallel`'s `a` type + the refusal rule)
+- **No signature change needed at these positional callers** (they pass no 11th arg, so appending is safe), but they are compiled by `bun run typecheck`: `opencode-plugin/src/bench/opencode-run.ts:67`, `p2/cmd-p2.ts:369`, `test/bench-agent-run.test.ts` (13 sites), `test/bench-drivers-contract.test.ts` (3 sites).
+- Test: `opencode-plugin/test/bench-convention-audit.test.ts` + assert in an existing agent-run test
 
 **Interfaces:**
 - Consumes: `auditCard`, `writeAuditTrail`, `AuditResult`.
@@ -409,28 +421,38 @@ test("runAgent appends the convention card after the budget line when provided",
   // instruction ends with the card AND still contains the budget line; and that
   // with conventionAudit undefined the instruction is byte-identical to today.
 })
-// oauth-parallel refusal (cmd-run/cmd-ab arg validation)
-test("--convention-audit --parallel under oauth is refused", () => {
-  expect(() => validateConventionAuditParallel({ conventionAudit: true, parallel: true, keyAuth: false }))
-    .toThrow(/convention-audit.*parallel.*oauth/i)
+// oauth-parallel refusal — folded INTO validateParallel (cli.ts:630), which already
+// derives key-vs-oauth internally via requiredApiKeyVar(model)+process.env / readOauthExpiresAt.
+// There is NO keyAuth param in this codebase; do not invent one.
+test("validateParallel refuses --convention-audit under oauth (no key env)", () => {
+  // Real signature: validateParallel(a, model, readExpiry?). conventionAudit goes on `a`.
+  // Set enforceResources+parallel (else the function throws on those FIRST) and inject a
+  // far-future expiry so ONLY the new conventionAudit rule can fire. Ensure no key env.
+  const a = { parallel: true, enforceResources: true, conventionAudit: true, maxAgentTimeout: 900 }
+  delete process.env.ANTHROPIC_API_KEY
+  expect(() => validateParallel(a as any, "anthropic/claude-sonnet-5", () => Date.now() + 9e9))
+    .toThrow(/convention-audit.*parallel/i)
 })
 ```
 
 - [ ] **Step 2: Run to verify fail** — Expected: FAIL.
 
 - [ ] **Step 3: Implement.**
-  (a) `agent-run.ts`: add `conventionAudit = ""` param after `harnessMd`; after the `budgetLine` append (`:167`), add — under a CONTROLLED-CONSTANT comment mirroring the budgetLine one — `if (conventionAudit) instruction = instruction + "\n\n" + conventionAudit`.
-  (b) `cli.ts`: add `conventionAudit` boolean to the parser (default false) + usage line `[--convention-audit]`.
-  (c) `cmd-run.ts`/`cmd-ab.ts`: a shared guard `validateConventionAuditParallel({conventionAudit, parallel, keyAuth})` that throws when `conventionAudit && parallel && !keyAuth` (mirror the refusal at `cmd-run.ts:783-791`). Before each task's `runAgent`, when `conventionAudit` on: `const r = await auditCard(paths, task, env, {}); writeAuditTrail(paths, task, r);` and pass `r.card ?? ""` into `runAgent`. When off, pass `""` — byte-identical path.
+  (a) `agent-run.ts` (**CRITICAL — param position**): add `conventionAudit = ""` as the **LAST** parameter, AFTER `sleepFn` — NOT between `harnessMd` and `execFn`. Every existing caller passes `execFn`/`sleepFn` positionally in slots 9/10 (`opencode-run.ts:67`, `cmd-run.ts:450`, `p2/cmd-p2.ts:369`, and 16 test call sites in `test/bench-agent-run.test.ts` + `test/bench-drivers-contract.test.ts`); inserting mid-signature misbinds all of them (compile failure). Appending at slot 11 leaves every existing call untouched. After the `budgetLine` append (`agent-run.ts:167`), add — under a CONTROLLED-CONSTANT comment mirroring the budgetLine one — `if (conventionAudit) instruction = instruction + "\n\n" + conventionAudit`.
+  (b) `cli.ts`: register a `conventionAudit` boolean (default false) in **BOTH** `parseRunArgs` AND `parseAbArgs` (each flag is registered per-parser here — cf. `--enforce-resources`) + usage line `[--convention-audit]` in each.
+  (c) oauth-parallel refusal folds INTO `validateParallel` (`cli.ts:630`, signature `(a, model, readExpiry?)`): add optional `conventionAudit?: boolean` to the `a` object type. The function already computes `const keyVar = requiredApiKeyVar(model); if (process.env[keyVar]) return` (key present → allow, all rules skipped). Add, AFTER that early-return line so a key still bypasses it: `if (a.conventionAudit) throw new BenchError("--convention-audit cannot be combined with --parallel under oauth auth (the staging audit call runs outside the token-freshness budget) — export " + keyVar + " or drop one flag")`. Message matches `/convention-audit.*parallel/`. Do NOT add a standalone function or a `keyAuth` param. Thread `conventionAudit` into the `validateParallel` call sites in `parseRunArgs`/`parseAbArgs`.
+  (d) `cmd-run.ts`/`cmd-ab.ts`: before each task's `runAgent`, when `conventionAudit` on: `const r = await auditCard(paths, task, env, {}); writeAuditTrail(paths, task, r);` and pass `r.card ?? ""` as `runAgent`'s new last argument. When off, do not pass it (default `""`) — byte-identical path.
 
 - [ ] **Step 4: Run to verify pass** — Expected: PASS. Then run the FULL suite: `cd opencode-plugin && bun test` — expected: green (no regressions; off-path byte-identical).
+
+- [ ] **Step 4b: Typecheck the whole package** (the param-position + validateParallel changes must compile against all 19 call sites). Run: `cd opencode-plugin && bun run typecheck`. Expected: no errors. This is the guard that catches finding-#1-class regressions `bun test` cannot.
 
 - [ ] **Step 5: Trace-confirm item-4 (no A/B-gate contamination).** Add a comment + a one-line test asserting the appended card does not appear in `envBlock`'s budget-identity hash (computed once from `harnessMd` before per-task append) nor in stored `TrajEvent`s (`normalizeEvents` parses only assistant/result NDJSON). Grep-verify: `grep -n "envBlock" cmd-ab.ts` shows it built from `harnessMd`, not per-task instruction.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add opencode-plugin/src/bench/agent-run.ts opencode-plugin/src/bench/cmd-run.ts opencode-plugin/src/bench/cmd-ab.ts opencode-plugin/src/bench/cli.ts opencode-plugin/src/bench/test/
+git add opencode-plugin/src/bench/agent-run.ts opencode-plugin/src/bench/cmd-run.ts opencode-plugin/src/bench/cmd-ab.ts opencode-plugin/src/bench/cli.ts opencode-plugin/test/
 git commit -m "feat(lane-a): wire --convention-audit flag, instruction injection, oauth-parallel refusal
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
