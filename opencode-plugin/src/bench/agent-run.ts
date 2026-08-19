@@ -143,6 +143,7 @@ export async function runAgent(
   harnessMd: string,
   execFn: ExecFn = podman,
   sleepFn: SleepFn = defaultSleep,
+  conventionAudit = "",
 ): Promise<AgentRunOutput> {
   const instructionPath = join(paths.tbRoot, task, "instruction.md")
   let instruction: string
@@ -165,6 +166,13 @@ export async function runAgent(
   const budgetLine = `\n\nYou have roughly ${pyFixed(agentTimeout, 0)}s of wall-clock for this task. `
     + `Budget it: prefer a simpler approach that finishes over an ambitious one that risks running out of time.`
   instruction = instruction + budgetLine
+
+  // Convention-audit card (Lane A, task-7-brief.md) — like budgetLine above,
+  // a per-task CONTROLLED CONSTANT computed outside the evolvable harness
+  // markdown, so it is byte-identical across both A/B arms of an ab run and
+  // never becomes an accidental proposer-controlled lever. OFF by default
+  // (conventionAudit === ""), so the off-path instruction text is unchanged.
+  if (conventionAudit) instruction = instruction + "\n\n" + conventionAudit
 
   let cmd = driver.buildArgv({ model: driver.modelArg(model), variant, instruction })
 

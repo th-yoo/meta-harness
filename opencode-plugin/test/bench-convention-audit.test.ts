@@ -3,6 +3,7 @@ import { join, dirname } from "node:path"
 import { readFileSync, mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseVerdict, cardFrom, runAuditUncached, auditCard, _resetAuditCache, writeAuditTrail } from "../src/bench/convention-audit.ts"
+import { runAgent } from "../src/bench/agent-run.ts"
 
 test("auditPrompt loads the frozen prompt with all four clauses + verdict line", () => {
   const p = auditPrompt()
@@ -101,4 +102,30 @@ test("writeAuditTrail appends one ndjson line with the card + verdict", () => {
   const line = JSON.parse(readFileSync(join(dir, "convention-audit-trail.ndjson"), "utf-8").trim())
   expect(line.task).toBe("clean"); expect(line.verdict).toBe("MISMATCH"); expect(line.card).toBe("C")
   expect(line.promptVersion).toBe("lane-a-v1")
+})
+
+// ── Task 7: injection wiring (agent-run.ts's trailing conventionAudit param) ──
+
+const FIXROOT = FIX  // Task-2 fixture's parent — "clean" has a known instruction.md
+
+test("runAgent appends the convention card after the budget line, byte-identical when off", async () => {
+  let captured = ""
+  // runAgent unconditionally calls driver.classifyAttempt (agent-run.ts:206) and
+  // driver.parseOutput (:233) — the fake MUST supply both or it throws before any assertion.
+  const drv: any = {
+    id: "fake", modelArg: (m: string) => m,
+    harness: { kind: "workspace-file", filename: "AGENTS.md", buildFlags: () => [] },
+    buildArgv: (o: any) => { captured = o.instruction; return ["true"] },
+    classifyAttempt: () => "done",
+    parseOutput: () => ({ turnCount: 1, toolUsage: {}, events: [] }),
+  }
+  const exec: any = async () => ({ rc: 0, stdout: "", stderr: "", timedOut: false })
+  const sleep: any = async () => {}
+  const base = { tbRoot: FIXROOT } as any        // fixture task dir with a known instruction.md
+  await runAgent(drv, base, "c", "clean", "m", "", 900, "", exec, sleep)          // OFF
+  const off = captured
+  await runAgent(drv, base, "c", "clean", "m", "", 900, "", exec, sleep, "CARD-XYZ")  // ON
+  expect(off).not.toContain("CARD-XYZ")
+  expect(captured.indexOf("CARD-XYZ")).toBeGreaterThan(captured.indexOf("wall-clock"))  // card AFTER budget line
+  expect(captured.startsWith(off.replace(/\n+$/, ""))).toBe(true)                  // off-text is a prefix → byte-identical base
 })

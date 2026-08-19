@@ -371,3 +371,33 @@ test("buildPressureGate: ONE sensor is shared across every call of the returned 
   expect(created).toBe(1) // the sensor is built once, not per gate call
   expect(sensor.calls).toBe(3)
 })
+
+// ── Lane A (task-7-brief.md): --convention-audit refused under oauth+parallel ──
+// The staging audit call (auditCard) runs outside this gate's token-freshness
+// budget, so oauth+parallel+convention-audit is refused outright rather than
+// silently under-budgeting. A key still bypasses it (see the early-return
+// this new rule sits after).
+
+test("validateParallel refuses --convention-audit under oauth (no key env)", () => {
+  const a = { parallel: true, enforceResources: true, conventionAudit: true, maxAgentTimeout: 900 }
+  delete process.env.ANTHROPIC_API_KEY
+  expect(() => validateParallel(a as any, "anthropic/claude-sonnet-5", () => Date.now() + 9e9))
+    .toThrow(/convention-audit.*parallel/i)
+})
+
+test("validateParallel: --convention-audit + key present — allows (key bypasses the refusal too)", () => {
+  const prev = process.env["ANTHROPIC_API_KEY"]
+  process.env["ANTHROPIC_API_KEY"] = "sk-test-parallel"
+  try {
+    expect(() =>
+      validateParallel(
+        { parallel: true, enforceResources: true, conventionAudit: true, maxAgentTimeout: 900 },
+        "anthropic/claude-sonnet-5",
+        () => Date.now() + 9e9,
+      ),
+    ).not.toThrow()
+  } finally {
+    if (prev === undefined) delete process.env["ANTHROPIC_API_KEY"]
+    else process.env["ANTHROPIC_API_KEY"] = prev
+  }
+})

@@ -217,6 +217,11 @@ export interface CmdAbArgs {
    * stamped `speedTiebreak: true` top-level in the verdict for provenance
    * (a gate-policy change, NOT part of budget-identity or resume-ident). */
   speedTiebreak?: boolean
+  /** Lane A (task-7-brief.md): OFF-by-default per-task convention-audit
+   * card, threaded through to both arms' runOneTask/runTaskOnce calls.
+   * Default undefined (falsy) → no audit call, byte-identical to before
+   * this flag existed. */
+  conventionAudit?: boolean
 }
 
 function round4(x: number): number {
@@ -377,6 +382,15 @@ export async function cmdAb(
     minAgentTimeout,
     candidateChecksHash,
   )
+  // Lane A no-gate-contamination trace (task-7-brief.md Step 5): envB is
+  // computed ONCE here from `harnessB` (the evolvable per-arm harness
+  // markdown) BEFORE any per-task work runs — the convention-audit card is
+  // appended per-task, per-attempt, INSIDE agent-run.ts's runAgent, straight
+  // into the instruction string, never into harnessMd. So the card can never
+  // reach this budget-identity hash (envBlock never sees a task or a card),
+  // and it never lands in a stored TrajEvent either — normalizeEvents
+  // (harness-store.ts) parses only the driver's assistant/result NDJSON
+  // output, which does not echo the instruction back.
   // Loop-3 T3: whether a wall-clock agent-phase timeout on arm B gets
   // recorded as a genuine stored fail (default OFF). Read once for the
   // whole ab run — see recordToStores's guard doc in record.ts.
@@ -720,14 +734,14 @@ export async function cmdAb(
       // arms AND later repeats — an escalation in EITHER arm bumps both arms'
       // subsequent runs, keeping the container cap identical across arms.
       const armA = await runWithOomRetry(
-        (r) => runOneTask(paths, task, model, variant, harnessA, agentTimeout, verifierTimeout, staging, driver, r, undefined, parallelPrepareAuth, activeChecksArr),
+        (r) => runOneTask(paths, task, model, variant, harnessA, agentTimeout, verifierTimeout, staging, driver, r, undefined, parallelPrepareAuth, activeChecksArr, undefined, args.conventionAudit),
         resources, oomCeilingMb, `${prefix}arm A: `,
       )
       resources = armA.resources
       const resA = armA.result
       log(`${prefix}  [arm B: candidate]`)
       const armB = await runWithOomRetry(
-        (r) => runOneTask(paths, task, model, variant, harnessB, agentTimeout, verifierTimeout, staging, driver, r, undefined, parallelPrepareAuth, candidateChecksArr),
+        (r) => runOneTask(paths, task, model, variant, harnessB, agentTimeout, verifierTimeout, staging, driver, r, undefined, parallelPrepareAuth, candidateChecksArr, undefined, args.conventionAudit),
         resources, oomCeilingMb, `${prefix}arm B: `,
       )
       resources = armB.resources

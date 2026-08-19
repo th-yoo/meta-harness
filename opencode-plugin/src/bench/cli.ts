@@ -52,7 +52,7 @@ commands:
               [--min-agent-timeout SEC] [--resume] [--agent NAME]
               [--pin LAYER=vN]... [--staging scripts|runtime] [--driver ID] [--enforce-resources]
               [--parallel] [--cpu-budget N] [--mem-budget MB] [--min-cpus N] [--min-mem-mb MB]
-              [--no-pack-measured] [--host-pressure observe|on] [--no-oauth-gate]
+              [--no-pack-measured] [--host-pressure observe|on] [--no-oauth-gate] [--convention-audit]
   task-load   [--tasks TASK [TASK ...]] [--task-file PATH] [--all]
               [--results-file PATH] [--cpu-budget N] [--mem-budget MB]
               (read-only: declared footprint + timeouts + co-run preview)
@@ -72,6 +72,7 @@ commands:
               [--results-file PATH] [--staging scripts|runtime] [--driver ID] [--enforce-resources]
               [--parallel] [--cpu-budget N] [--mem-budget MB] [--min-cpus N] [--min-mem-mb MB]
               [--no-pack-measured] [--host-pressure observe|on] [--speed-tiebreak] [--no-oauth-gate]
+              [--convention-audit]
   screen      --layer L --candidates vN[,vN...] [--agent NAME]
               [--tasks TASK [TASK ...]] [--task-file PATH] [--all]
               [--model ID] [--variant V] [--layers global|account|project|none]
@@ -531,6 +532,11 @@ function parseRunArgs(argv: string[]): CmdRunArgs | null {
       i += 2
       continue
     }
+    if (a === "--convention-audit") {
+      out.conventionAudit = true
+      i++
+      continue
+    }
     return null
   }
   return out
@@ -635,6 +641,7 @@ export function validateParallel(
     memBudget?: number
     maxAgentTimeout?: number
     noOauthGate?: boolean
+    conventionAudit?: boolean
   },
   model: string,
   readExpiry: () => number | null = () => readOauthExpiresAt(),
@@ -651,6 +658,20 @@ export function validateParallel(
   }
   const keyVar = requiredApiKeyVar(model)
   if (process.env[keyVar]) return // key present — allow, unchanged
+
+  // --convention-audit under oauth+parallel refusal (Task 7): the staging
+  // audit call (auditCard) runs outside this gate's token-freshness budget
+  // (it's an extra daemon call per task, not accounted for by neededMs
+  // below), so oauth+parallel+convention-audit is refused outright rather
+  // than silently under-budgeting. A key bypasses this too (see the
+  // early-return above) since key-auth has no shared-credential race to
+  // begin with.
+  if (a.conventionAudit) {
+    throw new BenchError(
+      `--convention-audit cannot be combined with --parallel under oauth auth (the staging audit call runs ` +
+        `outside the token-freshness budget) — export ${keyVar} or drop one flag`,
+    )
+  }
 
   const exp = readExpiry()
   if (exp === null) {
@@ -1037,6 +1058,11 @@ function parseAbArgs(argv: string[]): CmdAbArgs | null {
     }
     if (a === "--speed-tiebreak") {
       out.speedTiebreak = true
+      i++
+      continue
+    }
+    if (a === "--convention-audit") {
+      out.conventionAudit = true
       i++
       continue
     }

@@ -44,7 +44,7 @@ import { copyTests, runVerifier } from "./verifier.ts"
 import { readSelfScore, SELF_CHECK_INSTRUCTION, SELF_CHECK_MARKER } from "./self-score.ts"
 import { readCgroupStats } from "./cgroup.ts"
 import { updateResourceProfile, readResourceProfile, raiseCapMeasured, PACK_MIN_SAMPLES } from "./resource-profile.ts"
-import { runAgent } from "./agent-run.ts"
+import { runAgent, defaultSleep } from "./agent-run.ts"
 import { getDriver } from "./drivers/index.ts"
 import { opencodeDriver } from "./drivers/opencode.ts"
 import type { AgentDriver } from "./drivers/types.ts"
@@ -54,6 +54,7 @@ import { schedule, DEFAULT_BUDGET, AsyncMutex, type Budget, type ScheduledItem }
 import { PRESSURE_POLL_SEC } from "./host-pressure.ts"
 import { BenchError, die, log, pyFixed } from "./util.ts"
 import { readMhConfig, activeChecks, checksHashOfList, readPlaybook, type ToolUsage, type TrajEvent } from "../harness-store.ts"
+import { auditCard, writeAuditTrail } from "./convention-audit.ts"
 import {
   RULE_GATE_DIR,
   buildRuleGateScript,
@@ -165,6 +166,13 @@ export type RunOneTaskFn = (
    * (undefined = no table = no injection) so every existing caller/fake
    * keeps compiling unchanged. */
   hookRuleTable?: { rules: HookRuleSpec[]; killSwitch: boolean },
+  /** Lane A (task-7-brief.md): OFF-by-default per-task convention-audit
+   * card. Trailing + defaulted (false) so every existing caller/fake keeps
+   * compiling unchanged. When true, runTaskOnce runs `auditCard` before its
+   * `runAgent` call and appends the resulting card to the instruction (see
+   * agent-run.ts's own trailing `conventionAudit` param) — a CONTROLLED
+   * CONSTANT, not the evolvable harnessMd. */
+  conventionAudit?: boolean,
 ) => Promise<RunTaskResult>
 
 function round1(x: number): number {
@@ -233,6 +241,7 @@ export async function runTaskOnce(
   prepareAuth: () => AgentAuthMounts = () => driver.prepareAuth(),
   checks: RuleGateCheck[] = [],
   hookRuleTable?: { rules: HookRuleSpec[]; killSwitch: boolean },
+  conventionAudit = false,
 ): Promise<RunTaskResult> {
   const sessionId = `bench-${task}-${Math.floor(Date.now() / 1000)}-${randomBytes(3).toString("hex")}`
   const taskStart = Date.now()
@@ -447,6 +456,24 @@ export async function runTaskOnce(
       }
     }
 
+    // Lane A convention-audit (task-7-brief.md): OFF by default. The
+    // leak-guard containment failure buildSample (inside auditCard) can
+    // throw is caught HERE — a containment failure on one task must fail
+    // that task's audit gracefully (no card) + log LOUD, never crash the
+    // whole multi-task run. Everything else inside auditCard is already
+    // fail-safe (see convention-audit.ts's runAuditUncached doc comment).
+    let card = ""
+    if (conventionAudit) {
+      try {
+        const r = await auditCard(paths, task, process.env, {})
+        writeAuditTrail(paths, task, r)
+        card = r.card ?? ""
+      } catch (e) {
+        log(`  convention-audit failed for ${task}: ${(e as Error).message} — proceeding without card`)
+        card = ""
+      }
+    }
+
     const { turnCount, toolUsage, events, timedOut, agentElapsedSec } = await runAgent(
       driver,
       paths,
@@ -457,6 +484,8 @@ export async function runTaskOnce(
       agentTimeout,
       harnessMd,
       execFn,
+      defaultSleep,
+      card,
     )
 
     // copyTests throws BenchError on a failed /tests reset / tests cp /
@@ -709,6 +738,10 @@ export interface CmdRunArgs {
    * undefined — no pause gate, byte-identical to before this flag existed.
    * Mirrors `canLaunch`'s internal-wiring stance. */
   pressureGate?: () => boolean
+  /** Lane A (task-7-brief.md): OFF-by-default per-task convention-audit
+   * card, threaded through to runOneTask/runTaskOnce. Default undefined
+   * (falsy) → no audit call, byte-identical to before this flag existed. */
+  conventionAudit?: boolean
 }
 
 export async function cmdRun(
@@ -936,6 +969,8 @@ export async function cmdRun(
             undefined,
             parallelPrepareAuth,
             runChecks,
+            undefined,
+            args.conventionAudit,
           ),
         resources,
         oomCeilingMb,
