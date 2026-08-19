@@ -474,6 +474,24 @@ yoo-dev then (this session drives it):
     Winner earns only a full-board slot PROPOSAL. No activation.
 ```
 
+## 🚢 V1 ACCEPTANCE SWEEP 2026-08-20 ~06:50 KST — PASS (one documented caveat)
+
+Criteria vs live evidence: death alert ✅ (B8 smoke, 4s) · prompt→alert with
+options ✅ + !answer 1 answers ✅ + stale rejected "prompt no longer pending" ✅ +
+double-send single-injection ✅ + esc ✅ (B9 smoke) · re-notify if ignored ✅ (B8,
++45s cadence ×2, retire stops) · done notice ✅ (B8/B9, repeatedly) · concierge
+free-form DM ✅ (B11, byte-exact) · at-most-once per edge ✅ (no double-post ever
+observed live; cooldown unit-pinned) · unmapped-channel silence ✅ (unit-pinned).
+CAVEAT — stall alert: full chain never observed live. Components proven: B7
+classifier built on LIVE-harvested stall fixture + 2 live stall-clock bugs fixed;
+B8 stalled→alert row unit-pinned. Organic reproduction BLOCKED BY DESIGN: CC's own
+harness auto-rescues hung Bash (proven 2× tonight — sleep refused, tail -f
+auto-backgrounded); SIGSTOP freezes didn't hold (process resumed, cause unresolved
+— user was concurrently at the terminal). Finding worth keeping: worker-class
+sessions self-heal tool hangs; stall lane's real target = API-stream wedges
+(cf. the REAL 600s subagent stall 08-19, on an unmonitored session). Verdict:
+V1 ACCEPTED; stall chain rides fixture+unit proof until an organic wedge shows up.
+
 ## 🚢 SIBLING LANE UPDATE 2026-08-20 ~06:20 KST — B9 ANSWER RELAY COMPLETE: FLEET V1 CODE DONE + PUSHED (origin/main = `5f35f15`)
 
 B7+B8+B9+B10+B11 all landed. B9: 8 commits on b9-answer-relay worktree merged to
