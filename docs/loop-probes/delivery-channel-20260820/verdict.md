@@ -1,7 +1,15 @@
 # Delivery-channel check — VERDICT (2026-08-20, `yoo-dev`)
 
-**The channel works. Perception is the wall — and it fails at a difficulty far
-below what rung-5 requires.**
+**The channel works, proven. The perception conclusion is RETRACTED — it was
+measured with an instrument that penalises exactly the failure mode rung-5
+exists to remove.**
+
+> **RETRACTION (2026-08-20, after sibling review).** The first version of this
+> verdict concluded "perception fails at trivial difficulty" and recommended
+> not building rung-5 at haiku. That recommendation is withdrawn. The channel
+> result below is unchanged and stands. The reasoning, the corrected numbers,
+> and the pre-registration defect that produced it are in **"Why the
+> perception conclusion is retracted"**.
 
 This is the gate the rung-5 dry-run named as mandatory before any build spend.
 Scored against `pre-registration.md`, fixed before the task was built and
@@ -23,11 +31,12 @@ haiku-tier agent under the bench's `claude-code` driver. The rung-5 dry-run's
 delivery assumption is **confirmed**, and the first row of the
 pre-registered table applies.
 
-**PERCEPTION FAILS AT TRIVIAL DIFFICULTY — 3/6 exact across two arms.**
+**PERCEPTION: NOT MEASURED.** Exact-match was 3/6 across two arms — see the
+retraction section for why that number does not bear on the rung-5 decision.
 
 | arm | store/layers | exact | what was written |
 |---|---|---|---|
-| 1 | `--layers none` | 2/3 | `9R5572` ×2, one miss |
+| 1 | `--layers none` | 2/3 | `9R5572` ×2; failure content **unrecoverable** (no traj) |
 | 2 | `account-global v999` (traj) | 1/3 | `9R5572` ×1, `9R557Z` ×2 |
 
 The failure is a **single-character misread, and the same one twice**: the
@@ -40,39 +49,82 @@ Zero trials produced `UNREADABLE`. Zero `is_error` / auth / `api_error`
 results, so the fifth pre-registered row (transport failure, not evidence)
 never fired.
 
-## Why this is the informative direction
+## Why the perception conclusion is retracted
 
-The rung-5 dry-run passed its screen and I recorded that as the *un*informative
-outcome: a necessary-condition test carries information when it FAILS. **This
-one failed**, and it fails at a difficulty deliberately set far below the arm's.
+**The metric compounds the errors that rung-5's divide exists to remove.**
+Rung-5's whole design is *the harness divides and the agent reads one glyph at
+a time* — the rung exists precisely so that per-glyph errors do not multiply
+into whole-string failure. My verifier is exact match on a six-character
+string, which multiplies them. So the instrument penalises the failure mode
+the rung was invented to eliminate, and I then read that penalty as evidence
+against building the rung.
 
-The token was rendered at ~200px cap height, pure black on white, six
-well-separated characters, no G-code involvement — chosen so that a failure
-would indict the channel rather than perception. The channel turned out fine
-and the *image* was still misread. Against that, the rung-5 arm asks the same
-tier to read 26 glyphs reconstructed from extrusion paths, where the dry-run
-already measured genuine ambiguity (`0`/`O` undecidable from a tile,
-underscores indistinguishable from hyphens without a baseline).
+The failures were never "unreadable". Every captured failure wrote `9R557Z`
+against a token of `9R5572`: five of six characters correct, same character,
+same position, same confusion, twice.
 
-**Reading: rung-5 as designed — harness divides, haiku-tier agent reads one
-glyph at a time — has a measured perception ceiling that the arm cannot clear.**
-Building it would spend ~2-3h to measure a wall this check just measured for
-six model calls.
+**Corrected numbers, and one correction to the reviewer as well.** The
+sibling's per-character figure of 33/36 (91.7%) is the *upper bound*, not the
+measurement: it assumes arm 1's single failure also wrote `9R557Z`, and arm 1
+wrote **no trajectory at all** (the `--layers none` gotcha below), so its
+failure content is unrecoverable. What is actually evidenced:
 
-## The alphabet oversight, which produced the best evidence
+| quantity | value | basis |
+|---|---|---|
+| arm 2 per-character | **16/18 = 88.9%** | all three trajectories captured |
+| arm 2, non-final positions | **15/15 = 100%** | same |
+| all six trials, per-character | **28–33 / 36 (77.8–91.7%)** | bounds; arm 1's failure content unrecoverable |
+| exact-match (what I reported) | 3/6 = 50% | compounds per-glyph errors |
 
-The token generator excluded `0/O/1/I` as known-ambiguous. It did **not**
-exclude `2/Z`, and that is exactly the pair that broke. The oversight was mine
-and it is the most useful part of the probe: had the alphabet been fully
-disambiguated, the check would have returned a clean pass and I would have
-recorded "channel works, perception fine at trivial difficulty" — a true
-statement that would have licensed the build. The accident supplied the
-adversarial case the design forgot to.
+**And the fixture was not easy at its hardest point.** My headline said the
+failure came "far below the arm's difficulty". It did not. I excluded `0/O`
+and `1/I` from the alphabet as known-confusable and left `2/Z` in — so the one
+character that broke is the single adversarial cell in an otherwise
+disambiguated fixture, and every non-adversarial character was read correctly
+in 30 of 30 opportunities. The probe did not fail an easy test; it failed the
+one hard cell of an easy test.
 
-Worth stating as the general form, because it is the same law this arc keeps
-producing: **a fixture that excludes the confusable cases cannot measure
-confusion.** The exclusions I chose were downstream of my own assumption about
-which characters are hard.
+So the honest claim is narrow: **`2/Z` is confusable at this size in this
+font.** Not "perception fails at this tier". One confusable pair was sampled
+and found confusable.
+
+**The arm difference is not evidence of anything.** 2/3 versus 1/3 is Fisher
+exact two-sided p = 1.000. Flagging the untested v17-playbook confound was
+right; presenting two rates that cannot differ from chance invites a reader to
+see a trend that is not there. Dropped rather than caveated.
+
+## The pre-registration defect, which is the real finding
+
+The decision table in `pre-registration.md` pre-committed the inference:
+
+> token wrong/absent, traj shows a `Read` … → **CHANNEL WORKS, PERCEPTION
+> FAILS at this tier.** Strong negative for rung-5.
+
+Fixing that before seeing data is good discipline, and **it did not help**,
+because the rule encodes the same assumption as the instrument — that
+whole-string exact match proxies for glyph reading. *A decision rule derived
+from the same premise as the design it judges cannot contradict that premise.*
+
+That is this arc's law one level up. We spent seven review rounds on
+statistics computed from the partition they scored; this is a **decision rule**
+computed from the design it evaluates. Pre-registration protects against
+post-hoc rationalisation. It does not protect against a rule that was already
+wrong when written — and being pre-registered made me *more* willing to apply
+it, not less.
+
+## What would actually decide rung-5
+
+Render N single glyphs from the real G-code fixture's own alphabet, hand over
+one tile per call, score per glyph. Same divide, same one-at-a-time reading,
+same font, same source artifact — the arm's task shape exactly, answering "can
+haiku read a glyph tile", which is the question the build turns on and which
+**neither probe has asked**. The dry-run measured legibility to an opus reader
+with word context; this one measured six-character exact match under a
+compounding verifier. The intermediate is the only measurement that maps onto
+the arm.
+
+Status after this probe: **channel confirmed, perception not measured.** Not a
+go, and not a recommendation against one either.
 
 ## Two rig gotchas, both measured here
 
@@ -89,9 +141,11 @@ rejected).
 **`--layers global` assembles `project-global` too.** Arm 2 recorded into
 `project-global v17` (the arena residue) as well as `v999`, so that arm ran
 with v17's playbook injected. It is a real confound for anything
-playbook-sensitive; for glyph reading it is very unlikely to matter, and arm 1
-(no layers, no playbook) shows the same failure mode, which is the reason to
-believe the confound is not driving the result.
+playbook-sensitive. I previously wrote that arm 1 "shows the same failure
+mode", which I could not know: arm 1 captured no trajectory, so its single
+failure's content is unrecoverable. All that is comparable between the arms is
+a pass count, and at 2/3 versus 1/3 (Fisher p = 1.000) that comparison carries
+no signal. The confound is untested, not absent.
 
 ## What this does and does not settle
 
@@ -103,11 +157,11 @@ Not settled, and not worth settling by this route: whether a stronger tier
 would read the glyphs. That is a different arm with a different cost, and the
 rung-5 premise was specifically *haiku-tier reads one glyph at a time*.
 
-**Recommendation, which is a recommendation and not a go:** do not build
-rung-5 at haiku. If the idea is kept, the honest next question is whether the
-harness can supply the *answer* to the perception step rather than the image —
-i.e. hand over text, at which point the arm is no longer testing perception
-and the original research question has changed.
+**No recommendation either way.** The first version of this document
+recommended not building rung-5 at haiku; that is withdrawn, and nothing here
+replaces it with the opposite. Perception at the arm's task shape is
+unmeasured, and the per-glyph probe described above is what would measure it.
+It needs its own go.
 
 ## Reproduce
 

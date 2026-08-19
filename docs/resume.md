@@ -3,15 +3,32 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+> **⚠️ BEFORE RUNNING ANY BENCH ARM — `--layers none` SILENTLY DISCARDS YOUR
+> TRAJECTORIES, even with `--save-all-traj`.** `record.ts:432` writes trajs
+> inside a loop over `layerStoreRoots(layers, …)`, which is EMPTY for
+> `layers=none`, so the write never executes and nothing warns you. You get a
+> pass/fail number with NO mechanism evidence and no way to recover it. Measured
+> 2026-08-20: cost a re-run and left one arm's failure content permanently
+> unrecoverable. Probe runs needing transcripts must pin a real layer —
+> `--layers global --pin account-global=v999` — and note `--pin` rejects a bare
+> `global` (names are `account-global` / `project-global` / `account-role` /
+> `project-role`). `--layers global` also assembles `project-global`, so it
+> records into the v17 arena residue and injects its playbook.
+>
 > **MOST RECENT STATE (2026-08-20 newest, `yoo-dev`):** RUNG-5 DRY-RUN
 > **MERGED to local main** (merge `2e7934b`, integration merge `cf232e8`) —
 > the harness-side glyph divide renders legibly, so rung-5 is **NOT
 > ELIMINATED**, which is *not* the same as worth building: a
 > necessary-condition screen informs only when it fails and this one passed.
-> Next gate is FREE and must precede the ~2-3h build — verify the agent
-> physically receives an image it can see, with the model id PINNED so a
-> transport `api_error` can never be misread as a perception result. Zero
-> model spend. Six checks shipped in this branch that could not report the
+> **DELIVERY-CHANNEL GATE NOW CLOSED (2026-08-20, `de89f43`): the channel
+> WORKS — proven 3/3, real PNG bytes decoded out of the trajectory, 1200x400
+> matching the fixture. Perception is NOT MEASURED: that verdict's first
+> version claimed it failed and recommended against the build; RETRACTED after
+> sibling review, because exact-match on a 6-char string compounds precisely
+> the per-glyph errors rung-5's divide exists to remove. What would decide it:
+> render N single glyphs from the real fixture's own alphabet, one tile per
+> call, score PER GLYPH — the arm's task shape, which neither probe has asked.
+> Own go.** Six checks shipped in this branch that could not report the
 > condition they were named for, all sharing one cause: **a quantity derived
 > downstream of the decision under test cannot audit that decision**;
 > corollary, **a check that cannot be wrong cannot be informative**. Full
