@@ -82,6 +82,17 @@ If the delivery channel is not an image the agent can actually see, this
 entire dry-run measures something the arm never touches. **Verifying the
 channel is free and must precede the ~2-3h build, not follow it.**
 
+**A confound that check must be pre-registered against** (raised by the
+sibling lane, which measured it): the shipped bench audit path sends the
+opencode-flavored id `anthropic/claude-sonnet-5` to the ACP wire and gets
+`terminal_reason=api_error`, while the same wire accepts the bare
+`claude-sonnet-5`. Any channel check that resolves a model id from the
+opencode-flavored bench constants rather than a bare CLI id will therefore
+fail as a TRANSPORT error that presents as a perception result. Pin the model
+id explicitly in the check's pre-registration, and treat any `api_error` as a
+transport failure to be fixed and re-run — never as evidence that the tier
+cannot see the glyph. The same rule applies to the arm itself.
+
 ## Design loads
 
 **1. Both SVD sign ambiguities are resolved — the "irreducible" residual was
