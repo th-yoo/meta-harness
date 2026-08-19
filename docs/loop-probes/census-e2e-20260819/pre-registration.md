@@ -32,3 +32,33 @@ baseline trajs that miss it.
 
 **Spend:** step 1 = 2 bench trials, authorized "go (1)" 2026-08-19. Step 2
 gated on step-1 result + a fresh /login.
+
+## Step-1 baseline pilot RESULT (2026-08-19) — BOTH PASS unaided; no headroom at sonnet tier
+
+gcode-to-text reward=1 (381s, 31 turns): agent solved the convention
+UNAIDED — "toolpath geometry doesn't sit flat... fitting a plane via
+PCA/SVD and projecting the toolpath onto that plane unwarped it into
+legible letters, rendered and read visually." (7 geometry/toolpath text
+hits.) The representation trap was read AND executed with no card.
+
+extract-elf reward=1 (108s, 11 turns): solved unaided — little-endian,
+link-time vaddr, values at addresses; "address 0 → ELF magic, 8196-8204
+decoding Hello world". (4 endian/vaddr hits.)
+
+VERDICT: at sonnet-5 (executing tier) neither census trap is
+convention-FLOORED — the agent identifies and acts on the convention on
+its own. Contrast raman (sonnet 0-floored). So an end-to-end CARD lift is
+UNPROVABLE on these two tasks at this model: ceiling effect, no headroom.
+The card can only demonstrate actuation where the baseline FAILS on the
+convention.
+
+CONSEQUENCE: the card arm (step 2) is CANCELLED for gcode/elf at sonnet.
+To test actuation generality end-to-end, need a convention-FLOORED
+setup: (a) run these traps at HAIKU tier (where the convention may floor,
+matching the TB2 baseline-model regime), or (b) find a census trap that
+floors sonnet like raman did. Raman remains the only known
+sonnet-floored representation trap in hand. This is itself a finding:
+the census "traps" are tier-dependent — floored for the leaderboard's
+weaker stacks (gcode mean 0.38, elf 0.61 across 10 agents), self-solved
+at sonnet. Detection generality (census probe) holds; ACTUATION lift
+needs a floored baseline, which sonnet does not provide here.
