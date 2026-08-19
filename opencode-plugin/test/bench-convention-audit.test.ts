@@ -167,6 +167,16 @@ test("parseRevalBlock: <2 landing rows → malformed", () => {
 test("parseRevalBlock: unparseable constant → malformed", () => {
   expect(parseRevalBlock("REVALIDATION:\nTRANSFORM: reciprocal\nCONSTANT: abc\nDELTA: 1\n| input | computed | canonical | discriminates |\n|-|-|-|-|\n| 1 | 1 | 1 | x |\n| 2 | 2 | 2 | y |").kind).toBe("malformed")
 })
+// ── Fix round 1 (post-review) ──
+test("parseRevalBlock: blank input cells do NOT coerce to 0 landings → malformed, not claim", () => {
+  const p = parseRevalBlock("REVALIDATION:\nTRANSFORM: reciprocal\nCONSTANT: 1\nDELTA: 1\n| input | computed | canonical | discriminates |\n|-|-|-|-|\n|  | 1 | 1 | x |\n|  | 2 | 2 | y |")
+  expect(p.kind).toBe("malformed")
+})
+test("parseRevalBlock: block is bounded at the first blank line — a later unrelated table is not absorbed", () => {
+  const p = parseRevalBlock(BLOCK + "\n\nsome unrelated prose\n| a | b | c | d |\n| e | f | g | h |")
+  expect(p.kind).toBe("claim")
+  if (p.kind === "claim") expect(p.claim.landings.length).toBe(2)
+})
 
 const okReply = (text: string) => ({
   kind: "ok",

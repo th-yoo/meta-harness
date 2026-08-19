@@ -247,7 +247,12 @@ const REVAL_TRANSFORMS = new Set<RevalTransform>(["reciprocal", "scale", "offset
 export function parseRevalBlock(raw: string): ParsedReval {
   const marker = raw.match(/^REVALIDATION:\s*$/m)
   if (!marker) return { kind: "absent" }
-  const body = raw.slice(marker.index!)
+  const start = marker.index!
+  // Bound the block to its contiguous extent — cut at the first blank line
+  // after the marker, so unrelated later content (or a second stray block)
+  // never gets stitched into this claim.
+  const blank = raw.indexOf("\n\n", start)
+  const body = blank === -1 ? raw.slice(start) : raw.slice(start, blank)
   const tRaw = body.match(/^TRANSFORM:\s*(\S+)/m)?.[1]?.toLowerCase()
   if (tRaw === "none") return { kind: "none" }
   if (!tRaw || !REVAL_TRANSFORMS.has(tRaw as RevalTransform)) return { kind: "malformed", raw }
@@ -260,6 +265,9 @@ export function parseRevalBlock(raw: string): ParsedReval {
     if (cells.length !== 4) continue
     const [inS, compS, canS, disc] = cells
     if (inS === "input" || /^-+$/.test(inS!)) continue   // header / separator row
+    // Blank cells coerce via Number("") === 0, NOT NaN — reject them before
+    // the Number() calls so a blank input can't fabricate a {input:0,...} landing.
+    if (!inS || !compS || !canS) continue
     const input = Number(inS), computed = Number(compS), canonical = Number(canS)
     if ([input, computed, canonical].some(Number.isNaN) || !disc) continue
     landings.push({ input, computed, canonical, discriminates: disc! })
