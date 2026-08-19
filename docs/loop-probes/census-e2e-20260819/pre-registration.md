@@ -100,3 +100,27 @@ reward-noise, nothing at mechanism level). Roles: cite-don't-rerun
 existence proof + headless probe-instrument for future auditor/card-format
 regression. Do NOT take raman to haiku (execution-floored on scipy craft +
 verifier defect = reward unusable).
+
+## Haiku baseline autopsy (2026-08-19) — gcode 0/3, FAILURES SPLIT 2 convention : 1 execution
+
+gcode-to-text haiku k=3 = 0/3 (188s/25s/62s), FLOORED (contrast sonnet 1/1).
+Per-trial cause (traj text-events):
+- T1 (188s, 16 convention-hits): convention READ RIGHT, executed the
+  geometry visualization, reconstructed a letterform but MISREAD the glyph
+  ("A"). EXECUTION floor — the PCA/SVD-unwarp reconstruction craft haiku
+  lacks; a card cannot supply this (agent already had the convention).
+- T2 (25s): grabbed the M486 object LABEL literally, shipped "Embossed
+  text" (slicer object name), never reached the toolpath. CONVENTION miss
+  — card-addressable.
+- T3 (62s): stated the convention correctly ("encoded as movement
+  commands, not a string") then GAVE UP ("depends what was entered").
+  Detection-without-actuation — the exact rung the card targets.
+
+VERDICT: haiku IS convention-floored on gcode (unlike sonnet), and 2/3
+failures are convention-caused → genuine card headroom. BUT T1 exposes an
+EXECUTION ceiling: even given the convention, haiku's reconstruction may
+misread the glyph. Predicted card effect = flips T2/T3-type (convention)
+failures, capped by haiku's reconstruction ability on the T1-type. This
+is a HONEST card arm (headroom exists) with a KNOWN ceiling (< 3/3).
+Card-level scoring (convention consulted+acted in traj) will be cleaner
+than reward here, exactly as pre-registered.
