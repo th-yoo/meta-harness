@@ -94,3 +94,68 @@ hold, reward 0-2/5 capped by haiku glyph perception. Checkpoint-recovery
 events (a failed checkpoint followed by a redo) recorded as their own
 mechanism datum — first live test of checkpointed-recipe self-repair at
 weak tier.
+
+## Card regen v4 — pre-registration (2026-08-19, rung-4 Task 5, BEFORE any call)
+
+Changes vs v3 (one variable moves; sample unchanged, still
+`input-gcode-sample-v3.txt`): generator prompt gains a SEAM EMISSION RULE
+paragraph appended after the DECOMPOSITION RULE — for each mandatory
+recipe step, also emit a machine-checkable seam as a fenced ```json block
+(key `seamSpec`), restricted to the eight-op frozen predicate vocabulary
+from `term-bench2/seam-gate/SPEC.md` (`artifact_exists`,
+`row_count_in_range`, `numeric_cols`, `affine_residual_below`,
+`variance_ratio_below`, `spread_above`, `cluster_count_in_range`,
+`value_in_range`), each op's one-line semantics condensed verbatim from
+that spec. Rationale: v3's card proved the decomposition-recipe mechanism
+generates real checkpoints in prose, but the arm found checkpoints never
+get ENFORCED at haiku tier (verdict above, "checkpoint compliance" note) —
+rung-4 tests whether the SAME generation step can also emit a
+machine-checkable spec a Stop-hook can enforce, closing that gap.
+`generator-prompt-v4.txt` = `generator-prompt-v3.txt` + this one paragraph
+only (TopoBench lesson: long prompts hurt, kept compact).
+
+**PASS bar, fixed here before any call:**
+
+Prose bar — v3's five clauses, UNCHANGED (a-e): (a) names object scoping;
+(b) names extrusion-vs-travel; (c) names the tilted-plane property with a
+fit/project consequence; (d) states the M486 label is NOT evidence; (e)
+zero permissive-hedge phrasings anywhere in the card (mechanical scan, the
+gcode-card verdict.md precedent's pattern: "could be", "sometimes", "can't
+rule out", "likely", "commonly", "usually", "hints").
+
+Seam bar — the emitted seamSpec, ALL of:
+1. a fenced ```json block with top-level key `seamSpec` is present and
+   parses as JSON;
+2. passes `spec_check.check_spec` (imported from
+   `term-bench2/seam-gate/spec_check.py`) with zero errors;
+3. references >= 3 seams using >= 3 distinct predicate ops;
+4. passes `python3 term-bench2/seam-gate/calibrate_gcode.py
+   term-bench2/probe-tasks/gcode-to-text-gate/environment/text.gcode.gz
+   --spec <extracted-spec.json> --check-only` at exit code 0 — the script's
+   own internal assertion is oracle-all-seams-pass AND bad-artifacts-fail
+   >= 2 seams, which is strictly stronger than (and therefore satisfies)
+   the task-5-brief's stated floor of bad-fails->=1; exit 0 is the
+   mechanical pass signal used here.
+
+A call meets the FULL bar only if BOTH the prose bar and the seam bar pass.
+Each call is scored independently. Selected card = the one meeting the
+full bar; if both meet it, the one whose seamSpec has more
+calibration-consistent seams (more seams surviving the calibrate_gcode.py
+oracle-pass / bad-fail check, ties broken toward more distinct ops used).
+If neither call meets the full bar: bank the verdict, deploy v3's prose
+verbatim (current instruction.md content) with the Task-3 calibrated spec
+kept in task-deps, mark the arm "v3-prose + curated-spec" for Task 6, and
+STOP — no retries beyond the 2 pre-registered calls (hard cap).
+
+If a call passes the prose bar but its seamSpec fails the seam bar, that
+call is scored FAIL on the full bar (both required) but its prose remains
+eligible under ruling 5's "generated-prose + curated-spec" arm if it is
+the only prose-passing call — recorded honestly as a divergence, not a
+probe failure.
+
+Spend: exactly 2 headless sonnet calls (hard cap, no bench trials, no
+extra calls), authorized as Task 5 of the rung-4 seam-gate plan. Same
+isolated-scratch call mechanics as v3 (mktemp -d outside the repo, prompt
++ `input-gcode-sample-v3.txt` copied in as `sample.txt`, `--model sonnet
+--allowedTools "Bash Read" --output-format json`, no KKAMAK_HOME, no store
+touched).
