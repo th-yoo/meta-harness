@@ -2,7 +2,7 @@ import { test, expect } from "bun:test"
 import { join, dirname } from "node:path"
 import { readFileSync, mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseFirstColNum, parseVerdict, cardFrom, applyTransform, runAuditUncached, auditCard, _resetAuditCache, writeAuditTrail } from "../src/bench/convention-audit.ts"
+import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseFirstColNum, parseVerdict, cardFrom, applyTransform, runAuditUncached, auditCard, _resetAuditCache, writeAuditTrail, revalidate, type RevalClaim } from "../src/bench/convention-audit.ts"
 import { runAgent } from "../src/bench/agent-run.ts"
 
 test("auditPrompt loads the frozen prompt with all four clauses + verdict line", () => {
@@ -71,6 +71,40 @@ test("applyTransform covers the closed whitelist (offset is C - in)", () => {
   expect(applyTransform("scale", 0.1, 1913.9)).toBeCloseTo(191.39, 2)
   expect(applyTransform("offset", 20721.4, 19139.4)).toBeCloseTo(1582.0, 1)  // C - in
   expect(applyTransform("identity", 0, 42)).toBe(42)
+})
+
+// ── Task 3: revalidate — one-fixed-constant + anti-fabrication ──
+//
+// Hand-transcribed from docs/loop-probes/rep-audit-20260819/generator/out-gen4-r{1,2}.json.
+// These test the ALGORITHM (measured), NOT live prompt-adherence (that is the deferred probe).
+const SAMPLE = "lines=1500 top-tokens: x:1 first-col-range=[150, 21000]\n--head--\n150 ...\n--tail--\n20950 ..."
+
+const r2: RevalClaim = { transform: "reciprocal", constant: 1e7, delta: 30,
+  landings: [ { input: 19139.4, computed: 522.5, canonical: 520.7, discriminates: "E:units" },
+              { input: 3745.3, computed: 2670.0, canonical: 2700, discriminates: "E:units" } ] }
+// gen4-r1's best single constant (3.028e7) lands only x1; the other misses badly.
+const r1: RevalClaim = { transform: "reciprocal", constant: 3.028e7, delta: 30,
+  landings: [ { input: 19139.4, computed: 1582.1, canonical: 1582, discriminates: "E:units" },
+              { input: 3745.3, computed: 8084.8, canonical: 2680, discriminates: "E:units" } ] }
+
+test("revalidate PASSES gen4-r2 (one constant lands >=2)", () => {
+  expect(revalidate(r2, SAMPLE).ok).toBe(true)
+})
+test("revalidate REJECTS gen4-r1 (single constant lands <2)", () => {
+  const o = revalidate(r1, SAMPLE)
+  expect(o.ok).toBe(false)
+})
+test("revalidate REJECTS an out-of-range fabricated input", () => {
+  const bad: RevalClaim = { ...r2, landings: [ { input: 99999, computed: 100, canonical: 100, discriminates: "E:x" },
+                                               { input: 88888, computed: 112, canonical: 112, discriminates: "E:x" } ] }
+  expect(revalidate(bad, SAMPLE).ok).toBe(false)
+})
+test("revalidate REJECTS a landing with no discriminates (misreading tie)", () => {
+  const bad: RevalClaim = { ...r2, landings: r2.landings.map(l => ({ ...l, discriminates: "" })) }
+  expect(revalidate(bad, SAMPLE).ok).toBe(false)
+})
+test("revalidate FAILS closed when range is unavailable", () => {
+  expect(revalidate(r2, "lines=10 top-tokens: a:1\n--head--\nfoo\n--tail--\nbar").ok).toBe(false)
 })
 
 const okReply = (text: string) => ({

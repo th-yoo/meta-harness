@@ -202,6 +202,29 @@ export function applyTransform(t: RevalTransform, c: number, x: number): number 
   }
 }
 
+export interface RevalLanding { input: number; computed: number; canonical: number; discriminates: string }
+export interface RevalClaim { transform: RevalTransform; constant: number; delta: number; landings: RevalLanding[] }
+export type RevalOutcome = { ok: true } | { ok: false; reason: string }
+
+/** Recompute the card's winning row deterministically. PASS iff, under the ONE
+ * declared constant, >=2 landings land within delta of their canonical, every
+ * landing's input is inside the sample's first-col-range, and every landing
+ * names the misreading it discriminates. Fail-closed if range is unavailable. */
+export function revalidate(claim: RevalClaim, sample: string): RevalOutcome {
+  const m = sample.match(/first-col-range=\[\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\]/)
+  if (!m) return { ok: false, reason: "range-unavailable" }
+  const lo = Number(m[1]), hi = Number(m[2])
+  if (claim.landings.length < 2) return { ok: false, reason: "under-2-landings" }
+  let landed = 0
+  for (const L of claim.landings) {
+    if (!L.discriminates.trim()) return { ok: false, reason: "landing-missing-discriminates" }
+    if (L.input < lo || L.input > hi) return { ok: false, reason: `input-out-of-range:${L.input}` }
+    const out = applyTransform(claim.transform, claim.constant, L.input)
+    if (Math.abs(out - L.canonical) <= claim.delta) landed++
+  }
+  return landed >= 2 ? { ok: true } : { ok: false, reason: `only-${landed}-landed-under-one-constant` }
+}
+
 /** The audit call's isolation: bare (no tools, no persisted session,
  * thinking disabled) — mirrors `A4_ISOLATION` (a4-review.ts:88-96)
  * exactly, distinguished only by `title` so an audit call is unambiguous
