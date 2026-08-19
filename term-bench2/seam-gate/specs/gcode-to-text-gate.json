@@ -3,45 +3,75 @@
   "task": "gcode-to-text-gate",
   "artifacts": {
     "points": "/app/.seam/points.txt",
-    "projection": "/app/.seam/projected.txt",
-    "clusters": "/app/.seam/clusters.txt"
+    "projection": "/app/.seam/projected.txt"
   },
-  "provisional": ["s4"],
+  "provisional": [
+    "s4"
+  ],
   "seams": [
     {
       "id": "s1",
       "artifact": "points",
-      "predicate": { "op": "row_count_in_range", "min": 35000, "max": 45000 },
+      "predicate": {
+        "op": "row_count_in_range",
+        "min": 35000,
+        "max": 45000
+      },
       "onFail": "points.txt row count is outside [35000,45000] -- filter must select S0+E extrusion points only, not the whole gcode file."
     },
     {
       "id": "s2",
       "artifact": "points",
-      "predicate": { "op": "numeric_cols", "n": 3 },
+      "predicate": {
+        "op": "numeric_cols",
+        "n": 3
+      },
       "onFail": "points.txt rows must have exactly 3 numeric columns (x y z) -- check the filter/parse step for extra or missing fields."
     },
     {
       "id": "s3",
       "artifact": "points",
-      "predicate": { "op": "affine_residual_below", "cols": [0, 1, 2], "max_ratio": 0.02 },
+      "predicate": {
+        "op": "affine_residual_below",
+        "cols": [
+          0,
+          1,
+          2
+        ],
+        "max_ratio": 0.02
+      },
       "onFail": "points.txt z does not fit an affine plane in x,y within tolerance -- the extrusion plane fit is wrong or points.txt still contains non-planar (unfiltered) rows."
     },
     {
       "id": "s4",
-      "artifact": "clusters",
-      "predicate": { "op": "cluster_count_in_range", "method": "conncomp2d", "cell": 0.5, "min": 10, "max": 40 },
-      "onFail": "clusters.txt component count is outside [10,40] -- glyph clustering at this cell size is not isolating one component per character (provisional bound, pending Task-3 calibration)."
+      "artifact": "projection",
+      "predicate": {
+        "op": "cluster_count_in_range",
+        "method": "conncomp2d",
+        "cell": 0.4,
+        "min": 25,
+        "max": 38
+      },
+      "onFail": "projected.txt component count is outside [25,38] at cell=0.4mm -- glyph clustering on the plane-basis projection is not isolating one component per character (Task-3 calibrated against the oracle gcode artifact; see calibrate_gcode.py)."
     },
     {
       "id": "s5",
       "artifact": "projection",
-      "predicate": { "op": "spread_above", "col": 1, "min_std": 1.0 },
+      "predicate": {
+        "op": "spread_above",
+        "col": 1,
+        "min_std": 1.0
+      },
       "onFail": "projected.txt v-column has too little spread -- the plane-projection step looks degenerate (e.g. u=x,v=y raw passthrough instead of a real basis projection)."
     },
     {
       "id": "s6",
       "artifact": "points",
-      "predicate": { "op": "variance_ratio_below", "component": 2, "max": 0.01 },
+      "predicate": {
+        "op": "variance_ratio_below",
+        "component": 2,
+        "max": 0.01
+      },
       "onFail": "points.txt is not flat (3rd SVD component carries too much variance) -- points.txt likely still includes travel/non-extrusion moves off the text plane."
     }
   ]

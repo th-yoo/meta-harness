@@ -152,11 +152,20 @@ true glyph count is ~26; see the rung-4 plan's calibration finding).
 { "op": "cluster_count_in_range", "method": "conncomp2d", "cell": 0.5, "min": 10, "max": 40 }
 ```
 
-Worked example (seam `s4`, **provisional** -- see `provisional` key): `clusters.txt`
-holds one row per detected connected component (`cx cy pixels`). The gcode flag
-text is 26 glyphs; `[10, 40]` is a wide placeholder range pending Task 3's
-calibration sweep, which rewrites `cell`/`min`/`max` against the real oracle
-artifact.
+Worked example (seam `s4`, **provisional** -- see `provisional` key): in the
+reference spec, `s4` targets the `projection` artifact (`projected.txt`, the
+plane-basis `u v` rows) and rasterizes its own points directly -- **not** a
+separate pre-computed "clusters" artifact of centroids. (An earlier draft of
+this spec pointed `s4` at a `clusters.txt` holding one row per component,
+`cx cy pixels`; that's wrong for `conncomp2d`'s semantics, since it
+rasterizes the artifact's own points and a file of centroids collapses every
+component to a single pixel, under the 3-pixel component floor -- the oracle
+would false-FAIL. Fixed by Task 3's calibration harness, `calibrate_gcode.py`,
+which still writes `clusters.txt` as an informational, unvalidated harness
+output for calibration printouts.) The gcode flag text is 26 glyphs; `cell`/
+`min`/`max` are the values `calibrate_gcode.py`'s search picked against the
+real oracle artifact -- see that script for the search procedure and current
+numbers.
 
 ### `value_in_range` {row, col, min, max}
 
@@ -194,8 +203,10 @@ contract, `spec_check.py` enforces it.
 
 ## Reference spec
 
-`specs/gcode-to-text-gate.json` is the reference instance: 6 seams over 3 artifacts
-(`points`, `projection`, `clusters`) gating the gcode-to-text pipeline's filter,
-plane-fit, projection, and clustering checkpoints. Seam `s4` (cluster count) is
-listed in `provisional` -- its `cell`/`min`/`max` are placeholder bounds; Task 3's
-calibration harness rewrites them against the real oracle artifact.
+`specs/gcode-to-text-gate.json` is the reference instance: 6 seams over 2 artifacts
+(`points`, `projection`) gating the gcode-to-text pipeline's filter, plane-fit,
+projection, and clustering checkpoints. Seam `s4` (cluster count) is listed in
+`provisional` -- its `cell`/`min`/`max` are the bounds Task 3's calibration harness
+(`calibrate_gcode.py`) measured against the real oracle artifact; `provisional`
+stays set on `s4` as an advisory "recalibrate if the fixture changes" flag (it
+doesn't affect enforcement -- see the `provisional` row above).

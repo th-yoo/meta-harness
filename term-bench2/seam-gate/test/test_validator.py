@@ -722,15 +722,25 @@ class TestReferenceSpecIntegration(ValidatorTestCase):
             rows.append((x, y, z))
         write_artifact(self.tmpdir, "/app/.seam/points.txt", rows_to_lines(rows))
 
-        proj_rows = [(random.uniform(0, 100), random.uniform(0, 20)) for _ in range(1000)]
+        # projected.txt: seam s4 (cluster_count_in_range) targets THIS
+        # artifact as of Task 3's calibration (retargeted from the original,
+        # broken "clusters" centroid artifact -- conncomp2d rasterizes the
+        # artifact's own points, and a file of pre-computed centroids
+        # collapses every component to 1 pixel, under the validator's
+        # 3-pixel floor, which would false-FAIL any real oracle; see
+        # calibrate_gcode.py's module docstring). Lay out well-separated
+        # point clumps (6 cols x 5 rows, spacing 5.0mm, each clump a 12-point
+        # 0.6x0.6mm box) so conncomp2d finds exactly 30 components at the
+        # calibrated cell=0.4 -- comfortably inside the calibrated [25,38]
+        # band with margin -- while spanning enough of both axes that
+        # column 1 (v)'s spread also clears s5's min_std=1.0.
+        proj_rows = []
+        for b in range(30):
+            base_u = (b % 6) * 5.0
+            base_v = (b // 6) * 5.0
+            for _ in range(12):
+                proj_rows.append((base_u + random.uniform(0, 0.6), base_v + random.uniform(0, 0.6)))
         write_artifact(self.tmpdir, "/app/.seam/projected.txt", rows_to_lines(proj_rows))
-
-        cluster_rows = []
-        for b in range(20):
-            base_x = b * 5.0
-            for _ in range(8):
-                cluster_rows.append((base_x + random.uniform(0, 1.4), random.uniform(0, 1.4)))
-        write_artifact(self.tmpdir, "/app/.seam/clusters.txt", rows_to_lines(cluster_rows))
 
     def test_reference_spec_all_pass_on_good_fixtures(self):
         self._write_good_fixtures()
