@@ -65,20 +65,22 @@ revalidate(claim, sample): {ok:true} | {ok:false; reason}   // pure
 - **`revalidate`:** apply `transform(input, THE ONE constant)` per landing;
   require ≥2 within `delta` of `canonical` under that single constant — this
   **one-fixed-constant test is the PRIMARY guard** (it is what rejects gen4-r1).
-  **Anti-fabrication (defense-in-depth, explicitly partial):** (a) each `input`
-  within the sample's `first-col-range`; (b) each `input` near-matches a number
-  in the sample's head/tail-20 text where present — PARTIAL by construction:
-  head/tail catch the extreme peaks (raman is x-sorted) but miss mid-file peaks,
-  because the shipped sampler emits no peak list (full peak-list anti-fabrication
-  needs the deferred sampler peak-emission, §7/§9). The weight against the
-  reverse-solve hole is therefore carried by (a) + the one-fixed-constant test +
-  the misreading-tie below, not by (b) alone. If `first-col-range` is unavailable
-  (post comma-decimal fix) → `reval:"FAIL"` reason `range-unavailable`
-  (fail-closed, NOT graceful).
-- **seam→misreading tie:** every landing row names which MISREADING (from the
-  card's own MISREADINGS section) it discriminates (the `discriminates`
-  column). A fabricated landing has no real misreading to cite — the
-  padding-kill from the sibling's seam-depth datum, reused as fabrication-kill.
+  **Anti-fabrication AS BUILT in this increment:** (a) each `input` within the
+  sample's `first-col-range`; (b) `identity` is rejected outright and any
+  degenerate no-op (`|input − canonical| ≤ delta`, transform-agnostic) is
+  rejected; (c) each landing's `discriminates` field is non-empty. These + the
+  one-fixed-constant PRIMARY guard are the whole bound. If `first-col-range` is
+  unavailable (post comma-decimal fix) or non-finite → `reval:"FAIL"` reason
+  `range-unavailable` (fail-closed, NOT graceful).
+  **DEFERRED to pre-arm hardening (NOT built here — §9):** the stronger
+  head/tail-20 near-match on `input` (needs sampler peak-emission) and verifying
+  the `discriminates` token actually appears in the card's MISREADINGS prose
+  (and that the two landings cite DISTINCT misreadings). Until those land, the
+  non-empty `discriminates` check is a shape check, not a real misreading-tie.
+- **seam→misreading tie (INTENT; only the shape half is built):** every landing
+  row names which MISREADING it discriminates (the `discriminates` column). The
+  built check only enforces non-empty; cross-checking the token against the
+  MISREADINGS section — the actual fabrication-kill — is deferred (see above).
 
 ## 4. Injected bytes — STRIP the table
 Today `cardFrom(raw)=raw.trim()` (`:179-181`) injects the whole audit verbatim.
@@ -177,5 +179,11 @@ locale), silently disabling `first-col-range`. Normalize comma-decimals before
 2. Anti-fabrication is defense-in-depth, not a proof; a card that both derives
    real sample peaks AND finds one constant landing ≥2 on textbook canonicals
    is, by construction, a correct card. The residual is a card citing a real
-   pair under a coincidental constant — bounded by the head/tail near-match +
-   misreading-tie, accepted for this increment.
+   pair under a coincidental constant. **As built, this residual is bounded by
+   (a) range-membership + the one-fixed-constant test + the degenerate/identity
+   guards ONLY** — NOT by a head/tail near-match or a real misreading-tie (both
+   deferred to pre-arm hardening, §3/§9). A fabricator that invents
+   `canonical = transform(C, real-in-range-input)` for two real inputs under one
+   constant, citing any non-empty `discriminates` string, still passes. Closing
+   this — or formally accepting it — is a **pre-arm gate item**, tracked so the
+   first measured arm does not treat the gate as tighter than it is.

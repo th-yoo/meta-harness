@@ -60,3 +60,15 @@ real prior output.
 ## Out of scope
 End-task reward (no bench run here); compute-transport (increment-3);
 haiku-tier. This probe measures EMISSION register + derive-vs-guess only.
+
+## PRE-ARM HARDENING (added from increment-2 final whole-branch review)
+Before the FIRST measured arm, close or formally accept the anti-fabrication
+residual the built gate leaves open (spec §10 caveat 2, as-corrected): the
+revalidator bounds fabrication only by range-membership + the one-fixed-constant
+test + the degenerate/identity guards. NOT built: (b) head/tail-20 near-match on
+`input` (needs sampler peak-emission), and verifying each landing's
+`discriminates` token actually appears in the card's MISREADINGS prose + that the
+two landings cite DISTINCT misreadings. A card inventing
+`canonical = transform(C, real-in-range-input)` for two real inputs under one
+constant, citing any non-empty discriminates, currently passes. Decide at arm
+time: implement (b) + the MISREADINGS cross-check, or accept-and-document.
