@@ -279,3 +279,11 @@ PASS bar unchanged: card contains reciprocal transform + joint canonical
 landing. A pass feeds the generated card VERBATIM into bench k=3
 (raman-fitting-gen task) under v18 — that run passing at ≥2/3 = lane A
 proven end-to-end.
+
+**Iter-2 pre-call note (before any generator call):** the pre-registered
+deterministic peak-finder emits 3 peaks (x=18858.0, x=3745.1, x=10421.4);
+the G-raw peak (≈6328) is ABSENT — the fixed 21-pt window over-smooths it
+at local row spacing. Per the determinism clause this is NOT tuned away;
+run proceeds as-is. Noted: the reciprocal reading remains derivable
+(1e7/3745.05=2670.2 = 2D canonical) and a strong card could PREDICT the
+G peak at raw ≈6329 as an agent-verifiable consequence.
