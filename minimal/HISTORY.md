@@ -1951,3 +1951,52 @@ agent's own report (v1-arm verification theater, measured).
 
 Verdict-grade record: docs/loop-probes/census-e2e-20260819/gcode-card/
 (pre-registration + verdict, join-probe + enforcement-arm sections).
+
+## LA2 — the propose-verify revalidator, and DNA's provable null (2026-08-19, `yoo-dev`) — the gate the arc called for, built; a fourth domain probed and declined
+
+The representation-trap arc set two production items when raman was cracked
+(mechanism 6/6, pooled p<0.001): a mechanical propose-verify gate to reject
+confident-wrong cards, and a census of which domains the card lane
+generalizes to. This entry closes both, and they point opposite directions —
+one is a build that shipped, one is a domain that didn't.
+
+**The census, fourth domain: molecular biology, DECLINED (provable null).**
+Both-DNA pilot (dna-assembly, dna-insert) baseline autopsy, sonnet-5 k=3,
+no card: 3/6 attempts, both tasks solved at least once — mid-band, not a
+raman 0/5 wall. The traj carried no verifier output, so failure
+classification was inference; three subagents guessed case-slip / BsaI-cut /
+mid-codon and all three were REFUTED by reconstructing the agent's
+primers.fasta from the traj and replaying the real verifier. Ground truth:
+every failure is the Tm-precision rung (pair-balance within 5°C / in-window),
+zero representation error — reverse-complement, strand, reading-frame,
+circular topology, overhang closure all correct. Same wall as raman's
+residual precision rung, which the lane explicitly does not target. The
+cross-domain law, now third-confirmed (raman 2D-offset, gcode glyph, DNA Tm):
+**cards move convention walls, never craft walls.** Lane-A membership
+requires a MEASURED convention-caused floor; DNA has the flavour, not the
+floor. Method lesson banked: replay the real scorer on the reconstructed
+artifact beats agent text-event inference (3/3 refuted) — the fifth
+"fix-the-evidence, not the reasoner" instance of the arc.
+
+**The gate, built (increment-2, SDD, MERGE-READY).** A numeric card must now
+carry a machine-checkable REVALIDATION block; the harness recomputes the
+winning row deterministically and injects only if one fixed constant lands
+≥2 peaks within Δ — gen4-r2 passes, gen4-r1 (per-peak fitted constants that
+never jointly land) rejected by construction. The block is stripped from the
+injected card (a bare constant in the instruction invites parroting, the
+arm-1 poison); fail-closed on absent/malformed. Two real gate breaches were
+caught in review and closed: a degenerate identity/const-0 card whose
+canonical equals its input (trivially "lands"), and a blank table cell that
+`Number("")`-coerces to 0 (a fabricated landing). Both are the confident-wrong
+class the gate exists to stop, found by adversarial review, not by the
+happy-path tests. Honest residual, corrected in the spec: the built
+anti-fabrication bound is range-membership + the one-fixed-constant test +
+the degenerate/identity guards ONLY — the head/tail near-match and the real
+misreading-tie (verifying the cited misreading exists) are deferred to a
+pre-arm hardening gate, alongside the unmeasured adherence of the imposed
+pipe-table schema. Ships OFF. Zero model spend to build (pure TDD, 2237/0).
+
+The arc's shape after this entry: raman cracked, DNA declined with proof,
+the confident-wrong gate built but not yet armed. What remains before a first
+arm is measurement (does the auditor emit the schema; is the residual worth
+closing), not design.

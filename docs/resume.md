@@ -3,7 +3,34 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-> **MOST RECENT STATE (2026-08-19 latest, `yoo-dev`):** BOTH-DNA PILOT RUN
+> **MOST RECENT STATE (2026-08-19 newest, `yoo-dev`):** LANE-A INCREMENT-2
+> **REVALIDATOR BUILT** via SDD (7 tasks, each implement+review; opus
+> whole-branch review MERGE-READY). Branch `lane-a-revalidator`, rebased
+> onto merged main `6843e9e`, tip `c0edf71` — **awaiting user merge-go**
+> (I'm the SECOND pusher; sibling's rung-4 landed first; main is
+> worktree-locked → my merge = rebase-then-FF-push `origin/main` to branch
+> tip). WHAT: a deterministic propose-verify gate before injecting a
+> NUMERIC card — the card must carry a machine-checkable REVALIDATION block
+> (transform ∈ {reciprocal,scale,offset=C−in,identity} + ONE fixed constant
+> + ≥2 landings); the harness recomputes and injects ONLY if ≥2 land within
+> Δ under that one constant (rejects the gen4-r1 "per-peak fitted constants"
+> confident-wrong class); block is STRIPPED from the injected card;
+> FAIL-CLOSED (absent/malformed on MISMATCH → no inject; only explicit
+> `TRANSFORM: none` = criteria-class inject). Reviews caught+fixed 2 REAL
+> gate defects (degenerate identity/const-0 bypass; blank-cell `Number("")`=0
+> fabrication) + hardened. Zero model/bench spend (pure TDD, full suite
+> 2237/0). SHIPS OFF; `AUDIT_PROMPT_VERSION` `lane-a-v3`. STANDING (each own
+> go): the **adherence probe** (6-call, pre-registered
+> `docs/loop-probes/reval-adherence-20260819/`) is a PRE-ARM gate — imposed
+> pipe-table schema adherence is UNMEASURED; and **pre-arm hardening** — the
+> as-built anti-fabrication bound is range + one-fixed-constant + degenerate/
+> identity guards ONLY (head/tail near-match + MISREADINGS cross-check NOT
+> built; spec §3/§10 corrected honest). Spec
+> `docs/superpowers/specs/2026-08-19-lane-a-revalidator-design.md`, plan
+> `.../plans/2026-08-19-lane-a-revalidator.md`. Increment-3 = compute
+> transport + sampler calibration-sweeps (banked from sibling's B2 finding).
+>
+> **PRIOR STATE (2026-08-19 latest, `yoo-dev`):** BOTH-DNA PILOT RUN
 > + AUTOPSY DONE → **REJECT DNA for the convention-card lane (provable
 > null).** Baseline no-card sonnet-5 k=3: dna-assembly 1/3, dna-insert 2/3
 > (3/6, both solved — mid-band, NOT a raman 0/5 wall). Real verifier
