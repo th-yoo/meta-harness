@@ -421,8 +421,13 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 // the container so no podman runs. Mirror the existing bench-agent-run.test.ts setup.
 test("runAgent appends the convention card after the budget line, byte-identical when off", async () => {
   let captured = ""
-  const drv: any = { modelArg: (m: string) => m, harness: { kind: "workspace-file", filename: "AGENTS.md", buildFlags: () => [] },
-    buildArgv: (o: any) => { captured = o.instruction; return ["true"] } }
+  // runAgent unconditionally calls driver.classifyAttempt (agent-run.ts:206) and
+  // driver.parseOutput (:233) — the fake MUST supply both or it throws before any assertion.
+  const drv: any = { id: "fake", modelArg: (m: string) => m,
+    harness: { kind: "workspace-file", filename: "AGENTS.md", buildFlags: () => [] },
+    buildArgv: (o: any) => { captured = o.instruction; return ["true"] },
+    classifyAttempt: () => "done",
+    parseOutput: () => ({ turnCount: 1, toolUsage: {}, events: [] }) }
   const exec: any = async () => ({ rc: 0, stdout: "", stderr: "", timedOut: false })
   const sleep: any = async () => {}
   const base = { tbRoot: FIXROOT } as any        // fixture task dir with a known instruction.md
@@ -457,7 +462,7 @@ test("validateParallel refuses --convention-audit under oauth (no key env)", () 
     - Add `conventionAudit = false` as a new TRAILING param to `RunOneTaskFn` (the type) and `runTaskOnce` (the impl).
     - INSIDE `runTaskOnce`, before the `runAgent` call at `:450`, add: `let card = ""; if (conventionAudit) { const r = await auditCard(paths, task, process.env, {}); writeAuditTrail(paths, task, r); card = r.card ?? "" }`.
     - Fix the `:450` `runAgent` call: it currently passes only 9 positional args (ends at `execFn`, omitting `sleepFn`). To append `card` at slot 11 you MUST pass `sleepFn` at slot 10 explicitly — `import { runAgent, defaultSleep } from "./agent-run.ts"` (defaultSleep is not currently imported here) and change the call to `runAgent(driver, paths, name, task, model, variant, agentTimeout, harnessMd, execFn, defaultSleep, card)`. `bun run typecheck` (Step 4b) is the backstop that catches a mis-slotted append.
-    - Thread the boolean through the three `runOneTask(...)` call sites: append `conventionAudit` (the parsed flag) as the trailing arg at `cmd-run.ts:925`, `cmd-ab.ts:723`, `cmd-ab.ts:730`. When off (default false) the card is `""` → byte-identical path.
+    - Thread the boolean through the three `runOneTask(...)` call sites: `cmd-run.ts:925`, `cmd-ab.ts:723`, `cmd-ab.ts:730`. **All three currently end at the 13th arg (`checks`) and OMIT the 14th `hookRuleTable` (relying on its default).** `conventionAudit` is the 15th param, so you MUST insert an explicit `undefined` placeholder for `hookRuleTable` before appending `conventionAudit` — e.g. `..., activeChecksArr, undefined, conventionAudit)`. Appending naively (binding into the `hookRuleTable` slot) is a type error caught by Step 4b typecheck, but insert the placeholder to get it right first. When off (default false) the card is `""` → byte-identical path.
 
 - [ ] **Step 4: Run to verify pass** — Expected: PASS. Then run the FULL suite: `cd opencode-plugin && bun test` — expected: green (no regressions; off-path byte-identical).
 
