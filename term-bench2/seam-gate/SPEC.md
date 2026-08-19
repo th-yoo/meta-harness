@@ -10,6 +10,12 @@ auditor-authored code is ever executed by the validator. This is a hard boundary
 adding a new check requires adding a new op to the vocabulary (in `schema.json` +
 `spec_check.py` + the validator), never embedding code in a spec file.
 
+**Threat model:** this gate defends against lazy non-compliance -- an agent that
+under-filters data, skips a pipeline step, or otherwise produces artifacts that
+don't actually satisfy the pipeline's own checkpoints -- not an adversarial agent.
+An agent willing to edit `spec.json` or the hook script itself is out of scope,
+the same trust model as the repo's own completion gate.
+
 ## Top-level shape
 
 ```json

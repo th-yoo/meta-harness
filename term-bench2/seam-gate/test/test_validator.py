@@ -44,14 +44,58 @@ def run_validator_inprocess(spec_path, root, extra_args=None):
     return code, buf.getvalue()
 
 
-def run_validator_subprocess(spec_path, root, extra_args=None):
+def run_validator_subprocess(spec_path, root, extra_args=None, extra_env=None):
     """Shell out to `python3 validator.py ...` for true end-to-end exit-code
     checks (proves sys.exit(main(...)) actually wires the return value to the
     OS-level process exit code, not just the Python function return value).
     """
     cmd = [sys.executable, VALIDATOR_PATH, "--spec", spec_path, "--root", root] + (extra_args or [])
-    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=_SEAM_GATE_DIR)
+    env = dict(os.environ)
+    if extra_env:
+        env.update(extra_env)
+    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=_SEAM_GATE_DIR, env=env)
     return proc.returncode, proc.stdout, proc.stderr
+
+
+def run_validator_argv_subprocess(argv, extra_env=None):
+    """Like run_validator_subprocess, but for raw argv (e.g. missing/unknown
+    flags) rather than a well-formed --spec/--root pair.
+    """
+    cmd = [sys.executable, VALIDATOR_PATH] + argv
+    env = dict(os.environ)
+    if extra_env:
+        env.update(extra_env)
+    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=_SEAM_GATE_DIR, env=env)
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+@contextlib.contextmanager
+def env_var(key, value):
+    """Temporarily set (or, if value is None, unset) an environment variable
+    for the duration of the block, restoring the prior state afterward.
+    """
+    had_old = key in os.environ
+    old = os.environ.get(key)
+    if value is None:
+        os.environ.pop(key, None)
+    else:
+        os.environ[key] = value
+    try:
+        yield
+    finally:
+        if had_old:
+            os.environ[key] = old
+        else:
+            os.environ.pop(key, None)
+
+
+def write_binary_artifact(root, artifact_path, data):
+    """Like write_artifact, but writes raw (possibly non-UTF-8) bytes."""
+    full = validator.resolve_artifact_path(artifact_path, root)
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    with open(full, "wb") as f:
+        f.write(data)
+    return full
 
 
 def write_spec(tmpdir, spec_dict, name="spec.json"):
@@ -363,9 +407,10 @@ class TestClusterCountInRange(ValidatorTestCase):
         self.assertSeamLine(out, "s1", "FAIL")
 
     def test_singleton_pixels_below_min_floor_are_discarded(self):
-        # Each point isolated (huge spacing, one point per blob) -> every
-        # component is exactly 1 pixel, below the min-floor of 3 -> 0 counted.
-        rows = [(b * 1000.0, 0.0) for b in range(20)]
+        # Each point isolated (spacing > cell, one point per blob, well
+        # within the grid-size cap) -> every component is exactly 1 pixel,
+        # below the min-floor of 3 -> 0 counted.
+        rows = [(b * 2.0, 0.0) for b in range(20)]
         write_artifact(self.tmpdir, ARTIFACT_PATH, rows_to_lines(rows))
         spec = minimal_spec(
             ARTIFACT_PATH,
@@ -375,6 +420,24 @@ class TestClusterCountInRange(ValidatorTestCase):
         code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 1)
         self.assertIn("0 components", out)
+
+    def test_pathological_coordinate_range_fails_predicate_not_oom(self):
+        # LOW-5: a huge coordinate range combined with a small cell size
+        # would otherwise size an unbounded rasterization grid (memory bound
+        # is agent-controllable). Two points ~1,000,000 units apart at
+        # cell=0.001 would need a ~1e9-cell grid; the cap must turn this into
+        # a normal predicate FAIL, not a MemoryError/OOM.
+        rows = [(0.0, 0.0), (1_000_000.0, 0.0)]
+        write_artifact(self.tmpdir, ARTIFACT_PATH, rows_to_lines(rows))
+        spec = minimal_spec(
+            ARTIFACT_PATH,
+            {"op": "cluster_count_in_range", "method": "conncomp2d", "cell": 0.001, "min": 1, "max": 40},
+        )
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out = run_validator_inprocess(spec_path, self.tmpdir)
+        self.assertEqual(code, 1)
+        self.assertSeamLine(out, "s1", "FAIL")
+        self.assertIn("exceeds grid bounds", out)
 
 
 # --------------------------------------------------------------------------
@@ -430,27 +493,177 @@ class TestFailOpenContract(ValidatorTestCase):
         self.assertIn("SEAM-GATE INTERNAL ERROR", out)
 
     def test_numpy_unavailable_fails_open(self):
-        # Documented test hook (see task-2 report / validator.py --help):
-        # --_force-no-numpy simulates `import numpy` raising ImportError,
-        # without needing a real broken environment.
+        # Undocumented env-var test hook (validator._TEST_NO_NUMPY_ENV, per
+        # MEDIUM-4's ruling -- NOT a --help-visible CLI flag): setting it
+        # simulates `import numpy` raising ImportError, without needing a
+        # real broken environment.
         spec = minimal_spec(ARTIFACT_PATH, {"op": "artifact_exists"})
         write_artifact(self.tmpdir, ARTIFACT_PATH, ["1 2 3"])
         spec_path = write_spec(self.tmpdir, spec)
-        code, out = run_validator_inprocess(spec_path, self.tmpdir, extra_args=["--_force-no-numpy"])
+        with env_var(validator._TEST_NO_NUMPY_ENV, "1"):
+            code, out = run_validator_inprocess(spec_path, self.tmpdir)
         self.assertEqual(code, 0)
         self.assertIn("SEAM-GATE INTERNAL ERROR", out)
         self.assertIn("numpy", out)
 
     def test_numpy_unavailable_fails_open_subprocess(self):
         # Same as above but as a true subprocess, proving the OS-level exit
-        # code (not just the Python function's return value) is 0.
+        # code (not just the Python function's return value) is 0, and that
+        # the env var (not a CLI flag) is what the real process reads.
         spec = minimal_spec(ARTIFACT_PATH, {"op": "artifact_exists"})
         write_artifact(self.tmpdir, ARTIFACT_PATH, ["1 2 3"])
         spec_path = write_spec(self.tmpdir, spec)
-        code, out, err = run_validator_subprocess(spec_path, self.tmpdir, extra_args=["--_force-no-numpy"])
+        code, out, err = run_validator_subprocess(
+            spec_path, self.tmpdir, extra_env={validator._TEST_NO_NUMPY_ENV: "1"}
+        )
         self.assertEqual(code, 0)
         self.assertIn("SEAM-GATE INTERNAL ERROR", out)
-        self.assertIn("numpy", out)
+
+    def test_force_no_numpy_cli_flag_no_longer_exists(self):
+        # MEDIUM-4: the old --_force-no-numpy CLI flag must be gone entirely
+        # (not --help-visible, not accepted at all) -- passing it is now just
+        # an unknown flag, which itself must still fail open via MEDIUM-3's
+        # fix (argparse errors funnel through the same INTERNAL ERROR path).
+        spec = minimal_spec(ARTIFACT_PATH, {"op": "artifact_exists"})
+        write_artifact(self.tmpdir, ARTIFACT_PATH, ["1 2 3"])
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out, err = run_validator_subprocess(
+            spec_path, self.tmpdir, extra_args=["--_force-no-numpy"]
+        )
+        self.assertEqual(code, 0)
+        self.assertIn("SEAM-GATE INTERNAL ERROR", out)
+        self.assertNotIn("--help", err)  # sanity: didn't silently no-op into a clean run
+        self.assertNotIn("SEAM s1", out)  # never reached seam evaluation
+
+    def test_help_flag_still_omits_it(self):
+        proc = subprocess.run(
+            [sys.executable, VALIDATOR_PATH, "--help"],
+            capture_output=True, text=True, cwd=_SEAM_GATE_DIR,
+        )
+        self.assertNotIn("force-no-numpy", proc.stdout)
+        self.assertNotIn("numpy", proc.stdout.lower())
+
+    def test_binary_artifact_content_is_predicate_fail_not_internal_error(self):
+        # HIGH-1: non-UTF-8 bytes must fail the seam (exit 1), not escape as
+        # SEAM-GATE INTERNAL ERROR (exit 0).
+        write_binary_artifact(self.tmpdir, ARTIFACT_PATH, b"\xff\xfe\x00\x01garbage\x80\x81")
+        spec = minimal_spec(ARTIFACT_PATH, {"op": "row_count_in_range", "min": 1, "max": 10})
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out = run_validator_inprocess(spec_path, self.tmpdir)
+        self.assertEqual(code, 1)
+        self.assertSeamLine(out, "s1", "FAIL")
+        self.assertNotIn("SEAM-GATE INTERNAL ERROR", out)
+
+    def test_binary_artifact_content_across_ops(self):
+        # Same garbage content, exercised against every op that parses
+        # artifact content (all but artifact_exists) -- none may crash to
+        # INTERNAL ERROR.
+        write_binary_artifact(self.tmpdir, ARTIFACT_PATH, b"\x00\xff\xfe\xfd not utf-8 \x80")
+        predicates = [
+            {"op": "row_count_in_range", "min": 1, "max": 10},
+            {"op": "numeric_cols", "n": 3},
+            {"op": "affine_residual_below", "cols": [0, 1, 2], "max_ratio": 0.02},
+            {"op": "variance_ratio_below", "component": 2, "max": 0.01},
+            {"op": "spread_above", "col": 1, "min_std": 1.0},
+            {"op": "cluster_count_in_range", "method": "conncomp2d", "cell": 0.5, "min": 1, "max": 40},
+            {"op": "value_in_range", "row": 0, "col": 0, "min": 0.0, "max": 1.0},
+        ]
+        for predicate in predicates:
+            with self.subTest(op=predicate["op"]):
+                spec = minimal_spec(ARTIFACT_PATH, predicate)
+                spec_path = write_spec(self.tmpdir, spec, name=f"spec-{predicate['op']}.json")
+                code, out = run_validator_inprocess(spec_path, self.tmpdir)
+                self.assertEqual(code, 1, f"op {predicate['op']} did not fail-predicate:\n{out}")
+                self.assertSeamLine(out, "s1", "FAIL")
+                self.assertNotIn("SEAM-GATE INTERNAL ERROR", out)
+
+    def test_nan_inf_tokens_fail_affine_residual_below_predicate(self):
+        # HIGH-2: a row containing a nan/inf token must not crash
+        # np.linalg.lstsq -- it's skipped like a non-numeric line, and the
+        # remaining rows still get evaluated normally.
+        rows = [(x, y, 2 * x - y + 3) for x, y in [(1.0, 1.0), (2.0, 3.0), (3.0, 1.0), (4.0, 2.0)]]
+        lines = rows_to_lines(rows) + ["3 nan 1", "inf 1 2", "1 2 -inf"]
+        write_artifact(self.tmpdir, ARTIFACT_PATH, lines)
+        spec = minimal_spec(ARTIFACT_PATH, {"op": "affine_residual_below", "cols": [0, 1, 2], "max_ratio": 0.02})
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out = run_validator_inprocess(spec_path, self.tmpdir)
+        # Only 4 clean planar rows remain after nan/inf rows are skipped --
+        # still a valid (small) fit, still passes; the key assertion is no
+        # internal error, regardless of pass/fail direction.
+        self.assertNotIn("SEAM-GATE INTERNAL ERROR", out)
+        self.assertIn("SEAM s1 ", out)
+
+    def test_nan_inf_tokens_fail_cluster_count_in_range_predicate(self):
+        # HIGH-2: a nan/inf x,y row must not corrupt grid-index casting
+        # (np.floor(nan).astype(int) -> undefined huge int -> out-of-bounds
+        # index) -- it's skipped at parse time instead.
+        rows = self._nan_inf_cluster_rows()
+        write_artifact(self.tmpdir, ARTIFACT_PATH, rows)
+        spec = minimal_spec(
+            ARTIFACT_PATH,
+            {"op": "cluster_count_in_range", "method": "conncomp2d", "cell": 0.5, "min": 1, "max": 40},
+        )
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out = run_validator_inprocess(spec_path, self.tmpdir)
+        self.assertNotIn("SEAM-GATE INTERNAL ERROR", out)
+        self.assertIn("SEAM s1 ", out)
+
+    @staticmethod
+    def _nan_inf_cluster_rows():
+        rows = []
+        for b in range(5):
+            base_x = b * 5.0
+            for _ in range(4):
+                rows.append(f"{base_x + random.uniform(0, 1.4)} {random.uniform(0, 1.4)}")
+        rows += ["nan 1.0", "1.0 inf", "-inf -inf"]
+        return rows
+
+
+# --------------------------------------------------------------------------
+# CLI argument-parsing failures (MEDIUM-3): argparse errors must fail open
+# --------------------------------------------------------------------------
+
+class TestArgparseFailuresFailOpen(ValidatorTestCase):
+    def test_missing_required_root_exits_0_not_2(self):
+        spec = minimal_spec(ARTIFACT_PATH, {"op": "artifact_exists"})
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out, err = run_validator_argv_subprocess(["--spec", spec_path])  # no --root
+        self.assertEqual(code, 0)
+        self.assertIn("SEAM-GATE INTERNAL ERROR", out)
+
+    def test_unknown_flag_exits_0_not_2(self):
+        spec = minimal_spec(ARTIFACT_PATH, {"op": "artifact_exists"})
+        spec_path = write_spec(self.tmpdir, spec)
+        code, out, err = run_validator_argv_subprocess(
+            ["--spec", spec_path, "--root", self.tmpdir, "--totally-bogus-flag"]
+        )
+        self.assertEqual(code, 0)
+        self.assertIn("SEAM-GATE INTERNAL ERROR", out)
+
+    def test_no_args_at_all_exits_0_not_2(self):
+        code, out, err = run_validator_argv_subprocess([])
+        self.assertEqual(code, 0)
+        self.assertIn("SEAM-GATE INTERNAL ERROR", out)
+
+    def test_help_flag_still_exits_0_cleanly(self):
+        # -h/--help's own sys.exit(0) must be left alone -- no spurious
+        # INTERNAL ERROR line should be printed on top of argparse's help text.
+        code, out, err = run_validator_argv_subprocess(["--help"])
+        self.assertEqual(code, 0)
+        self.assertNotIn("SEAM-GATE INTERNAL ERROR", out)
+        self.assertIn("usage", out.lower())
+
+    def test_main_never_raises_systemexit_in_process(self):
+        # validator.main() must return an int, not let argparse's SystemExit
+        # propagate -- this would otherwise kill the calling process/test
+        # runner outright rather than following the documented 0/1 contract.
+        argv = ["--spec", "/nonexistent/spec.json"]  # missing --root
+        buf = io.StringIO()
+        err_buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err_buf):
+            code = validator.main(argv)  # must not raise SystemExit
+        self.assertEqual(code, 0)
+        self.assertIn("SEAM-GATE INTERNAL ERROR", buf.getvalue())
 
 
 # --------------------------------------------------------------------------

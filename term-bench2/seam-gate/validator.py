@@ -18,36 +18,63 @@ Fail-open contract: this is a gate, and gates must never wedge an agent's
 session on the gate's own bugs. Two distinct failure classes exist:
 
   - Predicate FAIL (expected, data-dependent): an artifact is missing, empty,
-    unparseable, ragged, or numerically doesn't satisfy its predicate. These
-    are normal outcomes -- reported as `SEAM <id> FAIL <detail>`, and the
-    overall exit code is 1 (block). Every op function below is written to
-    catch this class itself and return `(False, detail)` rather than raise.
+    unreadable (binary/non-UTF-8 content, non-finite nan/inf tokens, ragged
+    columns, out-of-range indices), or numerically doesn't satisfy its
+    predicate. These are normal outcomes -- reported as `SEAM <id> FAIL
+    <detail>`, and the overall exit code is 1 (block). Every op function
+    below is written to catch this class itself and return `(False, detail)`
+    rather than raise. This is also a deliberate security boundary: an
+    artifact that's garbage in some *new* way we didn't anticipate must still
+    fail the seam, not silently allow the gate -- see `_safe_parse` and the
+    grid-size cap in `op_cluster_count_in_range` below, both added after a
+    review found garbage-input shapes that used to escape as internal
+    errors.
   - Internal error (unexpected: validator bugs, a malformed spec, numpy
-    missing, a spec file that's absent/corrupt JSON): anything that reaches
-    the top-level `except Exception` in `main()`. Printed as
-    `SEAM-GATE INTERNAL ERROR <msg>` and the process **exits 0** (allow) --
-    a broken gate must never be indistinguishable from a broken agent.
+    missing, a spec file that's absent/corrupt JSON, malformed CLI
+    arguments): anything that reaches `main()`'s top-level handlers. Printed
+    as `SEAM-GATE INTERNAL ERROR <msg>` and the process **exits 0** (allow)
+    -- a broken gate must never be indistinguishable from a broken agent.
 
 Artifact format: whitespace- or comma-separated numeric text files. Parsed
-tolerantly -- non-numeric lines are skipped outright, not partially parsed;
-rows exceeding a per-artifact cap (500,000) beyond the cap are simply not
-read. See `parse_artifact`.
+tolerantly -- non-numeric lines (including non-finite nan/inf tokens, which
+Python's `float()` otherwise parses successfully) are skipped outright, not
+partially parsed; rows exceeding a per-artifact cap (500,000) beyond the cap
+are simply not read. Non-UTF-8/binary artifact content is treated the same
+way as a missing file (predicate FAIL), not surfaced as an internal error.
+See `parse_artifact` / `_safe_parse`.
 
 `cluster_count_in_range`'s `conncomp2d` method is implemented with numpy
 only (no scipy): points are rasterized onto a boolean grid at the given cell
-size, and connected components are found via an explicit stack-based
-(iterative, not recursive) flood fill with 8-connectivity. See
-`op_cluster_count_in_range`.
+size (capped at `_MAX_GRID_DIM` per side so pathological coordinate
+magnitudes can't force an unbounded allocation), and connected components
+are found via an explicit stack-based (iterative, not recursive) flood fill
+with 8-connectivity. See `op_cluster_count_in_range`.
+
+Threat model: this gate defends against lazy non-compliance (an agent that
+under-filters data or skips a step), not an adversarial agent -- one that
+edits `spec.json` or the hook script itself is outside scope, the same trust
+model as the repo's own completion gate. The `--_force-no-numpy`-style test
+hook was deliberately *not* shipped as a documented CLI flag for this
+reason (see `_TEST_NO_NUMPY_ENV` below): a `--help`-visible, always-available
+gate-bypass switch is a bigger risk than the convenience it buys in tests.
 """
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
 from pathlib import Path, PurePosixPath
 
 from spec_check import check_spec
+
+# Test-only escape hatch for simulating "numpy unavailable" without a real
+# broken environment. Deliberately an environment variable, not a CLI flag
+# (see MEDIUM-4 in the task-2 review): a `--help`-visible flag that forces a
+# full gate bypass on request is a bigger risk than the convenience it buys
+# in tests. Never documented in `--help`.
+_TEST_NO_NUMPY_ENV = "SEAM_GATE_TEST_NO_NUMPY"
 
 MAX_ROWS = 500_000
 
@@ -57,6 +84,11 @@ _NEIGHBORS_8 = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1
 # Minimum pixel count for a rasterized component to count as a real cluster
 # (per SPEC.md's `cluster_count_in_range`: "minimum pixel floor of 3").
 _MIN_COMPONENT_PIXELS = 3
+
+# Per-dimension cap on the conncomp2d rasterization grid. Keeps the boolean
+# grid's memory bounded regardless of agent-controlled coordinate magnitude
+# vs. cell size (task-2 review LOW-5).
+_MAX_GRID_DIM = 4096
 
 _TOKEN_SPLIT_RE = re.compile(r"[,\s]+")
 
@@ -98,12 +130,20 @@ def resolve_artifact_path(artifact_path, root):
 def parse_artifact(path, max_rows=MAX_ROWS):
     """Parse a whitespace-/comma-separated numeric text file into rows of floats.
 
-    Tolerant: a line that doesn't parse cleanly to all-numeric tokens is
-    skipped outright (not partially parsed). Stops reading once `max_rows`
-    numeric rows have been collected. Raises OSError (e.g. FileNotFoundError,
-    PermissionError) if the file itself can't be opened/read -- callers
-    (`_safe_parse`) catch that and turn it into a predicate FAIL, per the
-    "unreadable artifact = predicate FAIL, not internal error" rule.
+    Tolerant: a line that doesn't parse cleanly to all-numeric, all-finite
+    tokens is skipped outright (not partially parsed) -- this includes lines
+    with non-numeric tokens AND lines containing nan/inf tokens (Python's
+    `float()` parses "nan"/"inf" successfully, so those need an explicit
+    `math.isfinite` check; without it they'd reach op arithmetic like
+    `np.linalg.lstsq` or grid-index casts and blow up as an internal error
+    instead of a predicate FAIL -- see task-2 review HIGH-2). Stops reading
+    once `max_rows` numeric rows have been collected.
+
+    Raises OSError (e.g. FileNotFoundError, PermissionError) if the file
+    itself can't be opened/read, and UnicodeDecodeError if its content isn't
+    valid UTF-8 text -- callers (`_safe_parse`) catch both and turn them into
+    a predicate FAIL, per the "unreadable artifact = predicate FAIL, not
+    internal error" rule (task-2 review HIGH-1).
     """
     rows = []
     with open(path, "r") as f:
@@ -120,15 +160,18 @@ def parse_artifact(path, max_rows=MAX_ROWS):
                 vals = [float(t) for t in tokens]
             except ValueError:
                 continue  # non-numeric line: skip it entirely
+            if not all(math.isfinite(v) for v in vals):
+                continue  # nan/inf token(s): treat like a non-numeric line, skip it
             rows.append(vals)
     return rows
 
 
 def _safe_parse(path):
     """Parse `path`, returning (rows, None) on success or (None, detail) on
-    any data-level problem (missing file, unreadable file). Never raises --
-    this is the shared "unreadable artifact -> predicate FAIL" boundary that
-    every op besides artifact_exists funnels through.
+    any data-level problem (missing file, unreadable file, non-UTF-8/binary
+    content). Never raises -- this is the shared "unreadable artifact ->
+    predicate FAIL" boundary that every op besides artifact_exists funnels
+    through.
     """
     if not os.path.isfile(path):
         return None, f"artifact file not found: {path}"
@@ -136,6 +179,8 @@ def _safe_parse(path):
         rows = parse_artifact(path)
     except OSError as e:
         return None, f"artifact unreadable: {e}"
+    except UnicodeDecodeError as e:
+        return None, f"artifact is not valid UTF-8 text (binary/corrupt content): {e}"
     return rows, None
 
 
@@ -197,7 +242,15 @@ def op_affine_residual_below(path, cols, max_ratio, np):
     arr = np.array(usable, dtype=float)
     x, y, z = arr[:, i], arr[:, j], arr[:, k]
     A = np.column_stack([x, y, np.ones_like(x)])
-    coef, _, _, _ = np.linalg.lstsq(A, z, rcond=None)
+    try:
+        coef, _, _, _ = np.linalg.lstsq(A, z, rcond=None)
+    except np.linalg.LinAlgError as e:
+        # Defense-in-depth: parse_artifact already strips nan/inf rows, so
+        # this shouldn't normally trigger, but any other degenerate/singular
+        # input (e.g. all-duplicate rows) must still fail the seam, not crash
+        # the gate -- matches the guard op_variance_ratio_below already has
+        # around its svd() call.
+        return False, f"least-squares fit failed to converge: {e}"
     resid = z - A @ coef
     resid_var = float(np.var(resid))
     z_var = float(np.var(z))
@@ -267,6 +320,19 @@ def op_cluster_count_in_range(path, cell, cmin, cmax, np):
     gx = np.floor((x - xmin) / cell).astype(int)
     gy = np.floor((y - ymin) / cell).astype(int)
     w, h = int(gx.max()) + 1, int(gy.max()) + 1
+    if w > _MAX_GRID_DIM or h > _MAX_GRID_DIM:
+        # Agent-controllable memory bound: an artifact's coordinate range vs.
+        # `cell` size directly sizes this boolean grid. Without a cap,
+        # pathological coordinates (a pipeline bug, or an adversarial write)
+        # force an oversized allocation that either raises MemoryError (which
+        # would otherwise escape as an internal error / fail-open exit 0 --
+        # an induced bypass of the gate) or OOM-kills the process outright.
+        # Capping and reporting a FAIL here keeps this a normal, expected
+        # predicate outcome instead (task-2 review LOW-5).
+        return False, (
+            f"artifact coordinate range exceeds grid bounds at this cell size "
+            f"({w}x{h} cells > {_MAX_GRID_DIM}x{_MAX_GRID_DIM} cap; cell={cell})"
+        )
     grid = np.zeros((h, w), dtype=bool)
     grid[gy, gx] = True
 
@@ -344,23 +410,19 @@ def parse_args(argv):
     parser = argparse.ArgumentParser(description="Seam-gate validator kernel")
     parser.add_argument("--spec", required=True, help="path to the seam spec JSON")
     parser.add_argument("--root", required=True, help="directory artifact paths resolve under")
-    parser.add_argument(
-        "--_force-no-numpy",
-        dest="force_no_numpy",
-        action="store_true",
-        help=(
-            "test hook only: simulate `numpy` being unavailable, to exercise the "
-            "fail-open path without an actual broken environment"
-        ),
-    )
+    # No test-hook CLI flag here (deliberately -- see _TEST_NO_NUMPY_ENV above
+    # and MEDIUM-4 in the task-2 review): the numpy-unavailable escape hatch
+    # is an undocumented env var, not a --help-visible argparse option.
     return parser.parse_args(argv)
 
 
 def run(args):
     """Does the real work; any exception raised here (including numpy's
     ImportError) is caught by main() and turned into the fail-open path."""
-    if args.force_no_numpy:
-        raise ImportError("numpy import forced-disabled via --_force-no-numpy (test hook)")
+    if os.environ.get(_TEST_NO_NUMPY_ENV) == "1":
+        raise ImportError(
+            f"numpy import disabled via {_TEST_NO_NUMPY_ENV}=1 (test-only escape hatch)"
+        )
     import numpy as np
 
     with open(args.spec) as f:
@@ -380,9 +442,26 @@ def run(args):
 
 
 def main(argv):
-    args = parse_args(argv)
+    """Top-level entry point. Both CLI-argument parsing and the actual run
+    are covered by the fail-open contract -- a malformed/missing --spec or
+    --root, an unknown flag, or any other reason argparse would normally
+    sys.exit(2) must still land on exit 0 with an INTERNAL ERROR line
+    (task-2 review MEDIUM-3), not escape the documented 0/1 contract.
+    """
     try:
+        args = parse_args(argv)
         return run(args)
+    except SystemExit as e:
+        # argparse (or anything else in this scope) called sys.exit()
+        # directly. A clean `-h`/`--help` exit (code 0/None) is left alone --
+        # argparse already printed its own help text, and exit 0 already
+        # matches the fail-open target, so there's nothing to reclassify.
+        # Anything else (missing required arg, unknown flag, etc. -> code 2)
+        # gets folded into the same INTERNAL ERROR message as any other
+        # internal failure.
+        if e.code not in (0, None):
+            print(f"SEAM-GATE INTERNAL ERROR argument parsing failed (exit code {e.code})")
+        return 0
     except Exception as e:
         print(f"SEAM-GATE INTERNAL ERROR {e}")
         return 0
