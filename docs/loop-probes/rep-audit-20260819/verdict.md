@@ -251,3 +251,31 @@ see generator/verdict.md).
 
 Attack-stack state after today: retrieval(audit)✓ gate(content-verdict)✓
 channel(prediction card)✓ generator(sampler iter-2)✗ ← the one open link.
+
+## Sibling round-3 notes (accepted verbatim)
+
+1. Headline number = TRAP 3/3, verifier 2/3 — keep separated downstream;
+   the residual is fitting precision, a different failure class from the
+   entire banked raman chain.
+2. Elapsed signature (pass 76-104s vs fail 360-880s) replicates crank-1's
+   within-arm churn proof (63-86s vs 551-772s) in an independent context:
+   elapsed-per-pair confirmed again as the cheapest mechanism probe.
+3. Generator 0/2 stays FAIL by the letter; "observationally equivalent
+   given the sample" is a diagnosis, not a re-score. Iter-2 = NEW
+   pre-registered probe, never a retry of this one.
+4. Iter-2 sampler is leak-safe (mechanical local-maxima from the raw file;
+   conversion + attribution remain the auditor's work).
+
+## Generator iter-2 — pre-registration (turnkey, awaiting go)
+
+Sampler change ONLY: the blind sample gains a DETERMINISTIC peak-finder
+block with output format fixed HERE, before any run — after replacing
+commas and sorting ascending by col1: smooth col2 with a 21-point moving
+average, list every local maximum with prominence > 3× the median absolute
+deviation of col2, as lines `peak: x=<col1 at max, 3dp> y_smoothed=<1dp>
+prominence=<1dp>`, capped at 10 peaks by prominence. No other sample or
+prompt change (generator-prompt.txt byte-identical). 2 calls, sonnet.
+PASS bar unchanged: card contains reciprocal transform + joint canonical
+landing. A pass feeds the generated card VERBATIM into bench k=3
+(raman-fitting-gen task) under v18 — that run passing at ≥2/3 = lane A
+proven end-to-end.

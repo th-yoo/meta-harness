@@ -3,22 +3,25 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-> **MOST RECENT STATE (2026-08-19, `yoo-dev`):** ablation ladder shipped AND
-> MEASURED — rung-0 `raman-value-report` **0/5** (echo shape, zero load):
-> retrieval failure is CONTEXT-INDEPENDENT, least repro CONFIRMED; lane C
-> ceiling ~0, lanes A/B only viable moves — see ladder block below. Read in
-> order: "REPRESENTATION-READING ARENA" block (all-zero, retrieval is the
-> rung) → docs/loop-probes/rep-audit-20260819/verdict.md (FRAMING gates
-> retrieval: sonnet-as-auditor cracks raman + hangul + dates; lane A =
-> convention audit at executing tier; quiet-on-clean open) →
-> docs/2026-08-19-raman-attack.md (lanes + §5.0 ladder verdict) →
-> "v7 GAUNTLET PASS". STANDING: v7 = best candidate (gauntlet 13/30 vs v1
-> 8/30, poles replicated), v1 ACTIVE. PENDING GOS: v7 full-31-board slot
-> run · lane A cue-card design review · lane B hookRule proposal · same-day
-> paired sam-cell rerun · read-side checked-rule design. Candidates
-> v9-v17 = arena probes, never adoption-eligible without gate pass
-> (NOTE: project-layer active = v17 arena residue — reset before any
-> non-global-layers run).
+> **MOST RECENT STATE (2026-08-19 late, `yoo-dev`):** BREAKTHROUGH DAY —
+> first raman passes in lab history. Chain (all pre-registered, all in
+> docs/loop-probes/rep-audit-20260819/verdict.md, read top to bottom):
+> ladder rung-0 0/5 → audit probe (framing gates retrieval; content-gate
+> 12/12) → pilot-1 advisory card FAIL → pilot-2 arm-1 gate card 0/3 with
+> trajs proving read-and-reasoned-rejection (card's transform was WRONG;
+> agents falsified it; mandatory tone = prompt-injection defense) →
+> **arm-2 falsifiable-prediction card 2/3 verifier, TRAP SOLVED 3/3**
+> (x0 dead-on; one fail = 2D gamma 0.03 past ±1 bar; passes 76-104s vs
+> fails 360-880s = crank-1 churn replication). Generator 0/2
+> (sampler-evidence bottleneck, not reasoning). OPEN LINK: generator
+> iter-2 (deterministic peak-finder in sampler, pre-reg turnkey in
+> verdict.md) → generated card verbatim → bench k=3 = lane A end-to-end.
+> LAWS ADDED: wrong prescription < no prescription · agent empiricism is
+> the actuator (falsifiable predictions, not directives) · coercive
+> injected wording triggers injection defense · probe runs store-write
+> under MINTED versions (v18 = v1-clone, never adopt). Sibling session
+> meta-harness-f6 co-reviewed all verdicts (3 rounds). v7/v1 standing
+> state unchanged; v7 board run + sam-cell rerun still pending gos.
 
 ## 🏁 ABLATION LADDER SHIPPED + MEASURED 2026-08-19 (`yoo-dev`) — RUNG 0 = 0/5: RETRIEVAL FAILURE CONTEXT-INDEPENDENT · LEAST REPRO CONFIRMED
 
