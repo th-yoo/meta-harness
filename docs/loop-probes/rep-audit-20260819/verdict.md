@@ -359,3 +359,24 @@ Step 2 per pre-registered sequence: transform-table instruction
 enumerate standard transform families incl. reciprocal, evaluate every
 peak under every transform, multi-peak joint landing wins, show the
 table). Sample stays v3. Single variable.
+
+## Generator step-2 verdict (2026-08-19) — PASS (1/2, bar ≥1): r2 derived the reciprocal with the full table
+
+r1 FAIL, instructive: executed the table faithfully but fit every
+transform constant by anchoring the DOMINANT peak to a graphene line —
+anchoring recursed into the procedure's free parameter; never tried the
+natural constant or the secondary-peak anchor (k = 2670.1×3745.34 =
+1.0000e7 unrun). Canonical set G/D/2D only (no Si).
+
+r2 PASS, exceeding the bar: derived x=1e7/shift via THREE independent
+arguments (range; spacing-collapse matching d(1/x); Δshift-uniformity
+under the transform — a structural proof no prior call or audit found),
+tabulated fixed candidate families, reciprocal row lands P1→522.5 (Si
+520.7 — Si brought in from its own world knowledge) and P2→2670.0 (2D)
+simultaneously with all rivals falsified, and PREDICTS G at x=6329.1 and
+D at 7407.4 as verifiable consequences, explaining Si's prominence
+dominance. out-gen4-r2.json = the generated card.
+
+NEXT (pre-registered consequence, own spend go): raman-fitting-gen =
+soft-gate wrapper + gen4-r2 audit VERBATIM, bench k=3 under v18; ≥2/3 =
+lane A proven END-TO-END.
