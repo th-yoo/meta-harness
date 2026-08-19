@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test"
 import { join, dirname } from "node:path"
-import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseVerdict, cardFrom } from "../src/bench/convention-audit.ts"
+import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseVerdict, cardFrom, runAuditUncached } from "../src/bench/convention-audit.ts"
 
 test("auditPrompt loads the frozen prompt with all four clauses + verdict line", () => {
   const p = auditPrompt()
@@ -44,4 +44,41 @@ test("parseVerdict defaults to NO_MISMATCH when the line is absent", () => {
 test("cardFrom returns the audit body verbatim", () => {
   const raw = "SURFACE ... CONTENT ... MISREADINGS ..."
   expect(cardFrom(raw)).toBe(raw.trim())
+})
+
+const okReply = (text: string) => ({
+  kind: "ok",
+  text,
+  model: "anthropic/claude-sonnet-5",
+  canonicalModel: "anthropic/claude-sonnet-5",
+  sessionId: "s1",
+  stopReason: "end_turn",
+})
+// Fixture return types MUST match the real deps signatures (tsc --noEmit checks this;
+// bun test does not): ensureDaemon → Promise<boolean>, closeSession → Promise<{closed}>.
+const deps = (reply: any) => ({
+  ensure: async () => true,
+  call: async () => reply,
+  close: async () => ({ closed: true }),
+})
+
+test("runAuditUncached returns a card on MISMATCH", async () => {
+  const r = await runAuditUncached(P(FIX), "clean", {}, deps(okReply("AUDIT BODY\nCONTENT VERDICT: MISMATCH")))
+  expect(r.card).toContain("AUDIT BODY")
+  expect(r.verdict).toBe("MISMATCH")
+})
+test("runAuditUncached returns null card on NO MISMATCH", async () => {
+  const r = await runAuditUncached(P(FIX), "clean", {}, deps(okReply("clean\nCONTENT VERDICT: NO MISMATCH")))
+  expect(r.card).toBeNull()
+  expect(r.verdict).toBe("NO_MISMATCH")
+})
+test("runAuditUncached fails safe (card null) on daemon error", async () => {
+  const r = await runAuditUncached(P(FIX), "clean", {}, deps({ kind: "error" }))
+  expect(r.card).toBeNull()
+  expect(r.verdict).toBe("ERROR")
+})
+test("runAuditUncached fails safe on max_tokens truncation", async () => {
+  const r = await runAuditUncached(P(FIX), "clean", {}, deps({ ...okReply(""), stopReason: "max_tokens" }))
+  expect(r.card).toBeNull()
+  expect(r.verdict).toBe("ERROR")
 })

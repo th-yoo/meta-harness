@@ -1,6 +1,8 @@
 import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs"
 import { join, dirname, relative, sep } from "node:path"
+import { ensureDaemon, daemonCall, closeSession, modelProvenBy, type WarmIsolation } from "@th-yoo/cc-api-daemon"
 import type { BenchPaths } from "./paths.ts"
+import { DEFAULT_BENCH_MODEL } from "./paths.ts"
 import { BenchError } from "./util.ts"
 
 export const AUDIT_PROMPT_VERSION = "lane-a-v1"
@@ -164,4 +166,93 @@ export function parseVerdict(raw: string): "MISMATCH" | "NO_MISMATCH" {
 
 export function cardFrom(raw: string): string {
   return raw.trim()
+}
+
+/** The audit call's isolation: bare (no tools, no persisted session,
+ * thinking disabled) — mirrors `A4_ISOLATION` (a4-review.ts:88-96)
+ * exactly, distinguished only by `title` so an audit call is unambiguous
+ * in a transcript or a log line. `daemonCall`'s `opts.isolation` is
+ * REQUIRED, never defaulted (acp-client.ts:120) — `{}` would be a compile
+ * error and a meaningless frame to the daemon. */
+const AUDIT_ISOLATION: WarmIsolation = {
+  systemPrompt: "",
+  settingSources: [],
+  settings: { autoMemoryEnabled: false },
+  persistSession: false,
+  strictMcpConfig: true,
+  tools: [],
+  title: "kkamak-lane-a-convention-audit",
+  thinking: { type: "disabled" },
+}
+
+export type AuditResult =
+  | { card: string; rawAudit: string; verdict: "MISMATCH"; sample: string; truncated: boolean }
+  | { card: null; rawAudit: string; verdict: "NO_MISMATCH" | "ERROR"; sample: string; truncated: boolean }
+
+/**
+ * The live convention-audit call: `ensureDaemon` (zero-wait) -> `daemonCall`
+ * -> `modelProvenBy`/truncation check -> `parseVerdict` -> `cardFrom` ->
+ * `closeSession` (best effort, `finally`, only when a session was actually
+ * created) — mirrors `runA4Review` (a4-review.ts:247-290).
+ *
+ * Fail-safe: any daemon error, non-"ok" outcome, `max_tokens` truncation,
+ * or an unproven model returns `{ card: null, verdict: "ERROR", ... }`.
+ * Never throws — every path is wrapped so a caller can treat this as a
+ * plain async function with no exception contract to honor.
+ *
+ * `ACP_TURN_TIMEOUT_MS` defaults to "120000" in the env handed to the
+ * daemon calls (unless the caller already set one) — the daemon's own
+ * 16s default is tuned for short turns and kills a multi-KB-sample audit
+ * turn before the model can reply.
+ *
+ * `deps` lets tests inject fakes for `daemonCall`/`ensureDaemon`/
+ * `closeSession`; defaulting to the real imports keeps the production call
+ * site a single import, not a wiring exercise.
+ */
+export async function runAuditUncached(
+  paths: BenchPaths,
+  task: string,
+  env: Record<string, string | undefined>,
+  deps: { call?: typeof daemonCall; ensure?: typeof ensureDaemon; close?: typeof closeSession } = {},
+): Promise<AuditResult> {
+  const call = deps.call ?? daemonCall
+  const ensure = deps.ensure ?? ensureDaemon
+  const close = deps.close ?? closeSession
+
+  const { text: sample, truncated } = buildSample(paths, task)
+  const auditEnv = { ...env, ACP_TURN_TIMEOUT_MS: env.ACP_TURN_TIMEOUT_MS ?? "120000" }
+
+  let sid: string | undefined
+  try {
+    await ensure(auditEnv, { waitMs: 0 })
+
+    const outcome = await call(auditPrompt() + "\n\n" + sample, DEFAULT_BENCH_MODEL, auditEnv, {
+      isolation: AUDIT_ISOLATION,
+    })
+
+    if (outcome.kind !== "ok") return { card: null, rawAudit: "", verdict: "ERROR", sample, truncated }
+    sid = outcome.sessionId
+
+    if (
+      outcome.stopReason === "max_tokens" ||
+      !modelProvenBy(outcome.model, DEFAULT_BENCH_MODEL, outcome.canonicalModel)
+    ) {
+      return { card: null, rawAudit: outcome.text ?? "", verdict: "ERROR", sample, truncated }
+    }
+
+    const verdict = parseVerdict(outcome.text)
+    if (verdict === "NO_MISMATCH") return { card: null, rawAudit: outcome.text, verdict, sample, truncated }
+    return { card: cardFrom(outcome.text), rawAudit: outcome.text, verdict: "MISMATCH", sample, truncated }
+  } catch {
+    return { card: null, rawAudit: "", verdict: "ERROR", sample, truncated }
+  } finally {
+    if (sid) {
+      try {
+        await close(sid, auditEnv)
+      } catch {
+        /* best effort — close-not-release, but never lets a close failure
+         * override the audit outcome already decided above */
+      }
+    }
+  }
 }
