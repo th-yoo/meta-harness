@@ -474,7 +474,7 @@ yoo-dev then (this session drives it):
     Winner earns only a full-board slot PROPOSAL. No activation.
 ```
 
-## 🚢 SIBLING LANE UPDATE 2026-08-20 ~06:20 KST — B9 ANSWER RELAY COMPLETE: FLEET V1 CODE DONE (push pending grant)
+## 🚢 SIBLING LANE UPDATE 2026-08-20 ~06:20 KST — B9 ANSWER RELAY COMPLETE: FLEET V1 CODE DONE + PUSHED (origin/main = `5f35f15`)
 
 B7+B8+B9+B10+B11 all landed. B9: 8 commits on b9-answer-relay worktree merged to
 local fleet main @ `5f35f15`, 328/328 tests — push awaiting human grant at worker
