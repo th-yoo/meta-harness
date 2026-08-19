@@ -303,3 +303,23 @@ Caveats banked:
     (k=3: pass 192 vs fails 234/251; top-up: pass 236 vs fail 310) — the
     program's twice-else-replicated mechanism probe, now 4th independent
     context.
+
+## Elf-v3 pre-check VERDICT (2026-08-19) — PASS 2/2; scope IS catchable, boundary claim confirmed-corrected
+
+audit-prompt-v3 (+ generic instruction-criteria clause), 2 sonnet calls:
+- r2 clean PASS: "dump every statically-derivable word from all readable
+  LOAD segments (.text, .rodata, .data)... broader inclusive extraction
+  strictly favored under stated scoring" — names .text, code-as-memory,
+  inclusive strategy, derived from criteria (wrong-only + 75% recall).
+- r1 PASS (marginal on letter): "dump every word across ALL LOAD
+  segments... broadest inclusive extraction favored by scoring" — names
+  "all LOAD segments" (includes .text) + code-as-memory + criteria, no
+  .text token.
+Both derived scope from the INSTRUCTION's stated criteria, leak-free, one
+GENERIC clause, no hand-added scope. Corrected boundary CONFIRMED: scope
+was a prompt-register gap, not structural. Consequences:
+ 1. Instruction-criteria clause = STANDARD lane-A prompt element henceforth.
+ 2. Elf card arm BACK ON (cleaner cell, no execution wall).
+ 3. Real lane-A boundary = reference-only-no-instruction-signature only
+    (raman fit-window type specimen).
+Card for the elf arm = out-elfv3-r2 (the clean-.text one), verbatim.
