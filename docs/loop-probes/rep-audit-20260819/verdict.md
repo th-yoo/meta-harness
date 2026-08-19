@@ -348,3 +348,14 @@ Determinism clause: run as-is. Evidence nonetheless sharpened: 19139.4 →
 522.5 ≈ Si 1st-order 520.7 (0.35%) while NO standard laser line fits it
 (514.5nm→19436, 532nm→18797); reciprocal lands both peaks on canonical
 lines, laser lands zero.
+
+**Iter-3a′ verdict: 0/2.** Both calls anchored again; r2 wrote "no
+scale/laser-line conversion tested reproduces sane G/2D positions from the
+two detected peaks" with 1e7/3745.3=2670.2 unrun. Six generator calls
+total, the decisive arithmetic never executed. Evidence-alone hypothesis
+DEAD (sibling's optimistic branch refuted; anchoring diagnosis stands).
+Step 2 per pre-registered sequence: transform-table instruction
+(generator-prompt-v2.txt — generic anti-anchoring decision procedure:
+enumerate standard transform families incl. reciprocal, evaluate every
+peak under every transform, multi-peak joint landing wins, show the
+table). Sample stays v3. Single variable.
