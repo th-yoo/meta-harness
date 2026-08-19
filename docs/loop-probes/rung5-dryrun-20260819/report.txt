@@ -7,7 +7,7 @@ merge margins: narrowest overlap that merged -0.89, narrowest gap that split +0.
   coverage 0.794 (glyph widths / u-extent) -- detects SHATTERING only; over-merge drives it to 1.000
   median aspect 0.66 (median glyph width/height) -- REPORTS global fusion (high trigger only); moves on shattering but has no low trigger, so it never says so; blind to partial fusion
   width ratio 1.45 (widest / median glyph width) over 26 glyphs -- catches PARTIAL fusion; reads a degenerate 1.00 at one glyph and on shattering
-  pitch ratio 3.90 (median glyph width / median gap) -- the only one that moves on UNIFORM fusion; no trigger, see below
+  pitch ratio 3.90 (median glyph width / median gap) -- the only one whose move on UNIFORM fusion is diagnostic (aspect and coverage also move there, but toward reassurance); no trigger
     (reported, never enforced -- judge them; do NOT tune --merge-gap until the count looks right. The four TRIGGERS above are all blind to uniform fusion; pitch ratio moves on it but deliberately carries no trigger -- see separation_margin's limits table)
 after u-overlap merge (gap 0.0): 26 glyphs (expected 26)
 
@@ -39,4 +39,4 @@ per-glyph (reading order):
   24: pts= 2758  u=   79.53..  85.22  size= 5.70x 9.27
   25: pts= 1816  u=   86.61..  90.57  size= 3.96x11.73
 
-wrote whole.png, contact-sheet.png, 26 glyph-NN.png into /tmp/claude-1001/-home-th-yoo-z2-meta-harness/98fe1680-be04-47ef-a7be-4e2866981522/scratchpad/r5i
+wrote whole.png, contact-sheet.png, 26 glyph-NN.png into /tmp/claude-1001/-home-th-yoo-z2-meta-harness/98fe1680-be04-47ef-a7be-4e2866981522/scratchpad/r5j

@@ -211,10 +211,24 @@ def separation_margin(xy, comps):
     low-side trigger, so it never says so -- coverage is the only thing that
     reports shattering. A statistic that moves is not a detector.
 
-      failure                  REPORTS it        moves only    blind
+      failure                  REPORTS it        moves only    blind / WRONG
       shattering               coverage 0.341    median_aspect width_ratio
-      (cell too small)         (trigger 0.5)     0.11          (1.00, equal
-                                                               fragments)
+      (cell too small)         (trigger 0.5)     0.11;         (1.00, equal
+                                                 pitch_ratio   fragments);
+                                                 9.5 -> 0.5,   fragility 0.057
+                                                 the largest   -> 0.222, i.e.
+                                                 move in this  the shattered
+                                                 table         partition still
+                                                               scores ~3.9x
+                                                               SAFER. The
+                                                               oldest inversion
+                                                               here: the height
+                                                               denominator cut
+                                                               it from ~23x but
+                                                               never removed it,
+                                                               because
+                                                               shattering also
+                                                               widens min_inter
       global fusion            median_aspect     --            coverage
       (all -> one blob)        3.89 (trigger                   (1.000, ABOVE
                                2.5)                            correct);
@@ -316,12 +330,16 @@ def separation_margin(xy, comps):
     med_w = float(np.median(widths)) if widths else 0.0
     width_ratio = (max(widths) / med_w) if med_w > 0 else float("nan")
 
-    # Gaps BETWEEN the merged glyphs -- recomputed on the glyph partition, not
-    # reused from `inter` above, which is over components.
-    spans_g = sorted((float(np.min(xy[g][:, 0])), float(np.max(xy[g][:, 0])))
-                     for g in glyphs)
-    gaps = [b[0] - a[1] for a, b in zip(spans_g[:-1], spans_g[1:]) if b[0] > a[1]]
-    med_gap = float(np.median(gaps)) if gaps else float("nan")
+    # `inter` IS the between-glyph gap list. A boundary survives into two
+    # separate glyphs exactly when lo > right, which is the same predicate that
+    # built `inter`, over the same sorted spans with the same running maximum.
+    # An earlier version recomputed this over glyph spans and filtered on
+    # `b[0] > a[1]` -- a condition true for every consecutive pair by
+    # construction, so the filter never dropped an element: another guard that
+    # could not fire, written into the function whose docstring memorialises
+    # that defect. Verified identical element-for-element on the real fixture
+    # and all three synthetics.
+    med_gap = float(np.median(inter)) if inter else float("nan")
     pitch_ratio = (med_w / med_gap) if med_gap and med_gap > 0 else float("nan")
 
     return MergeMargins(max_intra, min_inter, fragility, coverage,
@@ -455,7 +473,8 @@ def main():
         f"{m.glyph_count} glyphs -- catches PARTIAL fusion; reads a degenerate "
         f"1.00 at one glyph and on shattering")
     say(f"  pitch ratio {m.pitch_ratio:.2f} (median glyph width / median gap) -- "
-        f"the only one that moves on UNIFORM fusion; no trigger, see below")
+        f"the only one whose move on UNIFORM fusion is diagnostic (aspect and "
+        f"coverage also move there, but toward reassurance); no trigger")
 
     # Four advisory triggers; see the module-level constants for what they are
     # and are not. The `not (x > y)` form is deliberate: it fires on NaN.

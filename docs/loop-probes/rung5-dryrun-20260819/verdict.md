@@ -310,18 +310,34 @@ this instrument exists to police: **a statistic that moves is not a detector
 that reports.** Median aspect moves on shattering (0.11) but has no low-side
 trigger, so it never says so — coverage is the only thing that reports it.
 
-Real fixture: max_intra −0.89, min_inter +0.63, fragility **0.071**, coverage
-**0.794**, median aspect **0.66**, width ratio **1.45** over 26 glyphs.
-Choosing a cutoff on any of them would
-re-commit the original error, so the instrument prints all four and leaves the
-judgment to a human. The console carries four advisory triggers — fragility
-0.02, coverage 0.5, aspect 2.5, width ratio 2.0. They are **not** arbitrary,
-and calling them that (as an earlier draft did) discourages the re-examination
-they need: each was chosen to sit between two *measured* artifacts, which is
-weaker than a calibrated threshold and stronger than a number from nowhere.
-They change no exit code, live in named constants the tests import, and are
-pinned by value so that lowering one to make a known case fire would fail the
-suite rather than pass it quietly.
+Real fixture, correct partition: max_intra −0.89, min_inter +0.63, fragility
+**0.071**, coverage **0.794**, median aspect **0.66**, width ratio **1.45**,
+pitch ratio **3.90**, over **26** glyphs.
+
+The console prints all five statistics plus the glyph count, and carries four
+advisory triggers — fragility 0.02, coverage 0.5, aspect 2.5, width ratio 2.0.
+They are **not** arbitrary, and calling them that (as an earlier draft did)
+discourages the re-examination they need: each was chosen to sit between two
+*measured* artifacts, which is weaker than a calibrated threshold and stronger
+than a number from nowhere. They change no exit code, live in named constants
+the tests import, and are pinned by value so that lowering one to make a known
+case fire fails the suite rather than passing quietly. `pitch_ratio` has no
+trigger at all, for the reason given above.
+
+**One limitation belongs in the shattering row and went undisclosed in the
+docstring for two commits while this document carried it:** fragility reads
+**0.222** on a shattered partition against **0.057** healthy, so the broken
+one still scores ~3.9× *safer*. That is the instrument's oldest surviving
+inversion — the height denominator cut it from ~23× but never removed it,
+because shattering also widens `min_inter` in the numerator. `pitch_ratio`
+moves furthest of anything in the table there, 9.5 → 0.5, but has no trigger,
+so **coverage remains the only statistic that reports shattering**.
+
+A test now recomputes each of these numbers and asserts it appears in *both*
+copies of the table, since divergence between them has been the most common
+review finding on this branch. Its scope was established by mutation testing,
+not assertion: it fails when a number goes missing from either copy, and does
+*not* catch a number sitting in the wrong row.
 
 **Still open, and named rather than closed:** fragility measures how close the
 overlap partition came to changing, not whether that partition is *right*. A

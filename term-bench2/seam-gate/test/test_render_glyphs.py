@@ -24,6 +24,7 @@ if _SEAM_GATE_DIR not in sys.path:
 
 try:
     import numpy as np
+    import readers
     import render_glyphs as rg
     _DEPS = True
 except ImportError:
@@ -318,6 +319,15 @@ class TestSeparationMargin(unittest.TestCase):
         healthy = rg.separation_margin(*self._spans(self._healthy()))
         pairs = self._healthy()
         welded = [(pairs[i][0], pairs[i + 3][1]) for i in range(0, len(pairs) - 3, 4)]
+        # One glyph left UNFUSED, as its two overlapping components. Without it
+        # the fixture has no intra gaps at all, max_intra is -inf, and the
+        # fragility assertion below passes off the synthetic's gap parameter
+        # rather than the documented mechanism -- which is that unfused glyphs
+        # keep their internal components, so max_intra stays at the genuine
+        # within-glyph overlap. Set the gap to 0.15 without this and the old
+        # version of this test failed while the real mechanism was unchanged.
+        tail = welded[-1][1]
+        welded = welded + [(tail + 0.6, tail + 3.6), (tail + 3.0, tail + 6.3)]
         uniform = rg.separation_margin(*self._spans(welded))
 
         self.assertLess(uniform.glyph_count, healthy.glyph_count)  # glyphs lost
@@ -399,6 +409,78 @@ class TestSeparationMargin(unittest.TestCase):
         self.assertEqual(len(rg.merge_by_u_overlap(xy, comps, 0.0)), 2)
         xy, comps = self._spans([(0.0, 2.0), (1.9, 4.0)])
         self.assertEqual(len(rg.merge_by_u_overlap(xy, comps, 0.0)), 1)
+
+
+@unittest.skipUnless(_DEPS, "render_glyphs needs numpy + cv2 (dev tool, never staged in-container)")
+class TestLimitsTableIsNotStale(unittest.TestCase):
+    """The limits table exists in two hand-maintained copies -- the docstring
+    and docs/loop-probes/rung5-dryrun-20260819/verdict.md -- and divergence
+    between them has been the single most common review finding on this
+    branch. This recomputes the load-bearing numbers and asserts each appears
+    in BOTH copies, so a stale cell fails the suite instead of surviving into
+    the permanent record.
+
+    SCOPE, established by mutation-testing this class rather than asserted:
+    changing one occurrence of a number does NOT fail it, because the same
+    figure appears elsewhere in the prose and `assertIn` is satisfied by any
+    occurrence. Removing every occurrence from either copy DOES fail it (both
+    mutations run). So it catches a number that went missing or changed
+    wholesale -- the actual failure mode on this branch, where new statistics
+    never reached one copy -- and does NOT catch a number sitting in the wrong
+    row. Do not read a green suite as proof the table is correct."""
+
+    @classmethod
+    def setUpClass(cls):
+        here = os.path.dirname(os.path.abspath(__file__))
+        repo = os.path.dirname(os.path.dirname(os.path.dirname(here)))
+        cls.docstring = rg.separation_margin.__doc__
+        with open(os.path.join(repo, "docs", "loop-probes",
+                               "rung5-dryrun-20260819", "verdict.md")) as f:
+            cls.verdict = f.read()
+        gcode = os.path.join(repo, "term-bench2", "probe-tasks",
+                             "gcode-to-text-gate", "environment", "text.gcode.gz")
+        xy, _ = rg.project_pinned(readers.read_gcode_g1_points(gcode))
+        cls.real = rg.separation_margin(xy, rg.components_at_cell(xy, 0.4))
+
+    def _both(self, name, text):
+        self.assertIn(text, self.docstring,
+                      f"{name}: docstring's limits table is stale ({text} missing)")
+        self.assertIn(text, self.verdict,
+                      f"{name}: verdict's limits table is stale ({text} missing)")
+
+    def test_real_fixture_numbers_appear_in_both_copies(self):
+        m = self.real
+        self._both("fragility", f"{m.fragility:.3f}")
+        self._both("coverage", f"{m.coverage:.3f}")
+        self._both("median_aspect", f"{m.median_aspect:.2f}")
+        self._both("width_ratio", f"{m.width_ratio:.2f}")
+        self._both("pitch_ratio", f"{m.pitch_ratio:.2f}")
+        self._both("glyph_count", str(m.glyph_count))
+
+    def test_shattering_inversion_is_disclosed_in_both_copies(self):
+        """The oldest surviving inversion: the shattered partition still scores
+        safer on fragility. It went undisclosed in the docstring for two
+        commits while the verdict carried it."""
+        healthy = rg.separation_margin(*TestSeparationMargin._spans(
+            TestSeparationMargin._healthy()))
+        shattered = rg.separation_margin(*TestSeparationMargin._spans(
+            TestSeparationMargin._shattered()))
+        self.assertGreater(shattered.fragility, healthy.fragility)
+        for copy, name in ((self.docstring, "docstring"), (self.verdict, "verdict")):
+            self.assertIn(f"{shattered.fragility:.3f}", copy,
+                          f"{name} omits fragility's shattering reading")
+
+    def test_console_prints_every_reported_statistic(self):
+        """The summary sentence has been the last place each new number failed
+        to reach, three commits running. Every field except the two raw gaps
+        must be named in the console output block."""
+        with open(os.path.join(os.path.dirname(os.path.abspath(rg.__file__)),
+                               "render_glyphs.py")) as f:
+            src = f.read()
+        block = src[src.index("merge margins:"):src.index("after u-overlap merge")]
+        for field in ("fragility", "coverage", "median_aspect", "width_ratio",
+                      "pitch_ratio", "glyph_count"):
+            self.assertIn(field, block, f"console block never prints {field}")
 
 
 if __name__ == "__main__":
