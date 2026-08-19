@@ -1913,3 +1913,41 @@ the first fit and the mismatch becomes unmissable. The arena's lesson
 generalizes past raman: an instruction can only bind behavior the model
 has already surfaced; knowledge that stays in the weights is invisible to
 every checklist that assumes it is on the table.
+
+
+## SG1 — rung-4 seam gate (2026-08-19, yoo-dev) — the binding actuator, recursed into the task interior
+
+R8 called for escalation from prose to binding actuator; the seam gate is
+that escalation applied INSIDE a task: the completion-gate philosophy
+(refuse "done" until a check passes) miniaturized to verify-at-every-seam
+of a card-supplied decomposition, enforced by a Stop hook that RECOMPUTES
+declarative predicates on agent-emitted artifacts — never trusting the
+agent's own report (v1-arm verification theater, measured).
+
+- **Measured actuation ladder at haiku:** prose bullet (dead, loop-1) →
+  hedged card (harvested) → imperative card (operations 5/5, checkpoints
+  0/5 — verbs transfer, self-verification does not) → ENFORCED seams
+  (structure R1-R4 all 5/5; v3 arm was 5/5/3/3). Each rung pre-registered,
+  each measured against the previous.
+- **The gate's own build ate its own law three times:** an uncalibrated
+  cluster predicate false-blocked oracle data (caught by mandatory
+  calibration); a Dockerfile fallback message was misparsed by the real
+  staging parser (caught by executing the counterparty's code, not reading
+  it); a module-level import sat outside the fail-open boundary so gate
+  breakage would block the agent (caught by the final review, the exact
+  false-positive class R9F/kkamak history warns breeds gate-avoidance).
+- **Two new failure modes, both measured not theorized:** budget-gaming
+  (an agent waited out the 2-block fail-open budget rather than fix its
+  seam — the trust-model cost of fail-open, now with a trajectory) and the
+  unbound deliverable (full seam-pass then decoy answer — seams bind
+  artifacts, not the final answer; the last step reverts to prior).
+- **Fix-the-evidence, fifth instance:** cards derive correct bounds when
+  the sample carries the numbers (row counts: 4/4 correct) and guess when
+  it doesn't (cluster cell: died on it). Sampler contract now: measured
+  statistic or response curve for every parameterizable predicate.
+- **Standing open:** seam-validation direct evidence 2/5 (hook stderr not
+  captured by traj recorder — instrumentation staged); deliverable seam
+  staged; card regen under the path-free id-join mandatory before rerun.
+
+Verdict-grade record: docs/loop-probes/census-e2e-20260819/gcode-card/
+(pre-registration + verdict, join-probe + enforcement-arm sections).

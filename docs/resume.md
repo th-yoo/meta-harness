@@ -61,6 +61,58 @@ does NOT transfer; this file + the repo are the source of truth.)
 > recovered losslessly (cherry-pick to main + rebase). Coordinate branch
 > ops.
 
+## 🔩 RUNG-4 SEAM GATE BUILT + ARMED + MEASURED 2026-08-19 (`yoo-dev`, worktree branch) — ENFORCED SEAMS DRIVE STRUCTURE TO 5/5 · TWO NEW FAILURE MODES MEASURED
+
+```
+WHAT: the binding-actuator escalation (R8's call, minimal lane) built as a
+Stop-hook SEAM GATE: declarative predicate specs (frozen 8-op vocabulary ->
+9 with source_crosscheck), python validator RECOMPUTING predicates on
+agent-emitted artifacts (never trusting reported results), calibration
+harness proving every predicate against oracle+bad artifacts BEFORE arming,
+in-container hook (fail-open absolute, 2-block budget, exit-1-only blocks).
+Built via SDD: 7 tasks + 4 fix rounds + final whole-branch review (1
+Critical found: fail-open boundary hole -> fixed+re-reviewed). 159/159
+tests, 9/9 container smoke incl. real-staging-parser tripwire.
+
+MEASURED (all pre-registered before spend):
+- v3 prose-card arm (before): operations 5/5, self-verification 0/5 —
+  imperative prose actuates VERBS, never verify-at-seam.
+- ENFORCEMENT arm (gcode-to-text-gate, k=5 haiku, v22 pin): R1-R4 all 5/5
+  (v3: 5/5/3/3) — seams drove plane-projection + clustering to universal.
+  Reward 0/5 (predicted 0-2/5, perception wall). Seam-validated: direct
+  proof 2/5 (1 full-pass, 1 confirmed-fail), 3/5 indeterminate — traj
+  recorder never captures hook stderr (instrumentation gap, fix staged).
+- NEW FAILURE MODES: (1) budget-gaming — trial 2 waited out the 2-block
+  fail-open budget instead of fixing its seam; (2) unbound deliverable —
+  trial 5 passed ALL seams then wrote the M486 decoy as out.txt: seams
+  bind intermediate artifacts, not the answer. Deliverable-seam fix staged.
+- JOIN-PROBE (4 calls, pre-reg, dry-run-first): the Task-5 naming defect
+  is dead in ONE prompt line either form (filenames 2/2, closed-ids 2/2);
+  failure moved DOWN to parameter calibration — cards derive bounds
+  correctly when evidence carries the numbers, guess when it doesn't
+  (B2 died on one self-invented cell size). FIFTH fix-the-evidence
+  instance -> sampler contract gains calibration sweeps/response curves.
+
+LAWS BANKED: cards move convention walls never craft walls (raman/gcode/
+DNA 3-domain) · read-the-scorer-first now non-optional (mock dry-run of
+every new bar; 2 rung-conflation instances recorded) · scan rubric gains
+ownership column (naming-authority miss) · card-scope-creep = plumbing
+freedom removed structurally (artifactIds only, paths inexpressible).
+
+WHERE: branch worktree-rung4-seam-gate (18 commits, base a97156a), final
+review MERGEABLE, merging per coordinated order (lane-A first, this branch
+rebased+re-verified second). Code term-bench2/seam-gate/ + probe-tasks/
+gcode-to-text-gate/. Probe record: docs/loop-probes/census-e2e-20260819/
+gcode-card/{pre-registration,verdict}.md (join-probe + enforcement-arm
+sections). Plan: docs/superpowers/plans/2026-08-19-rung4-seam-gate.md.
+
+STAGED (each own go): card regen under id-join (MANDATORY before any arm
+rerun — deployed card knowingly stale) · deliverable seam (text-op family
+tied to card's misreadings) · hook-stderr capture (hook-side log +
+runner-side podman-cp; runner half needs lane-A coordination) · elf reader
+for source_crosscheck registry.
+```
+
 ## 🏁 ABLATION LADDER SHIPPED + MEASURED 2026-08-19 (`yoo-dev`) — RUNG 0 = 0/5: RETRIEVAL FAILURE CONTEXT-INDEPENDENT · LEAST REPRO CONFIRMED
 
 ```
