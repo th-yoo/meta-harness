@@ -133,6 +133,23 @@ go, and not a recommendation against one either.
 `for (const [name, root] of layerStoreRoots(layers, …))`; with `layers=none`
 that iterable is empty, so the loop body — and the traj write — never runs.
 The first arm produced a result with no mechanism evidence and no warning.
+
+**Its second-order cost is worse than the first, and it is the reason this
+trap now sits at the top of `docs/resume.md`.** A silent capture failure does
+not merely deprive the person running the arm of mechanism evidence. It leaves
+a *hole* in the record, and a hole invites everyone downstream to fill it with
+the most plausible assumption and be confident about it. That is exactly what
+happened here: the sibling review that overturned this verdict computed a
+specific per-character figure of 33/36 by assuming arm 1's unreadable failure
+wrote the same string as the two it could read. The number was load-bearing —
+it was in the sentence that did the overturning — and it was unknowable. The
+conclusion survived only because it also holds at the lower bound, which is
+luck rather than method.
+
+So the accurate statement is not "`--layers none` silently loses
+trajectories". It is: **a silent capture failure corrupts not just your own
+arm but any independent review of it**, because the reviewer cannot see that
+the evidence was never captured rather than merely absent.
 Probe runs needing transcripts must pin a real layer: `--layers global --pin
 account-global=v999` (note the pin layer names are `account-global` /
 `project-global` / `account-role` / `project-role`; a bare `global` is

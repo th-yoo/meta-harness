@@ -8,8 +8,12 @@ does NOT transfer; this file + the repo are the source of truth.)
 > inside a loop over `layerStoreRoots(layers, …)`, which is EMPTY for
 > `layers=none`, so the write never executes and nothing warns you. You get a
 > pass/fail number with NO mechanism evidence and no way to recover it. Measured
-> 2026-08-20: cost a re-run and left one arm's failure content permanently
-> unrecoverable. Probe runs needing transcripts must pin a real layer —
+> 2026-08-20: cost a re-run, left one arm's failure content permanently
+> unrecoverable, and then CORRUPTED AN INDEPENDENT REVIEW of that arm — the
+> reviewer filled the hole with the most plausible assumption and put the
+> resulting number in the sentence that overturned the verdict. A silent
+> capture failure does not just lose your evidence; it invites everyone
+> downstream to reconstruct what was lost and be confident about it. Probe runs needing transcripts must pin a real layer —
 > `--layers global --pin account-global=v999` — and note `--pin` rejects a bare
 > `global` (names are `account-global` / `project-global` / `account-role` /
 > `project-role`). `--layers global` also assembles `project-global`, so it
