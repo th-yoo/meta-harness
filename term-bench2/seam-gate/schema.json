@@ -1,0 +1,165 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://meta-harness.local/seam-gate/schema.json",
+  "title": "Seam-gate spec",
+  "description": "Declarative spec for the seam gate: artifact paths + a list of seams, each a predicate from the frozen vocabulary. This document is the contract; term-bench2/seam-gate/spec_check.py is the hand-rolled validator actually run by the checker/validator (jsonschema is not assumed available in the runtime environment). Keep the two in sync when either changes.",
+  "type": "object",
+  "required": ["seamSpecVersion", "task", "artifacts", "seams"],
+  "additionalProperties": false,
+  "properties": {
+    "seamSpecVersion": {
+      "const": 1,
+      "description": "Spec format version. Frozen at 1."
+    },
+    "task": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Task name this spec gates, e.g. 'gcode-to-text'."
+    },
+    "artifacts": {
+      "type": "object",
+      "description": "Map of artifact id -> absolute in-container path the agent is expected to write.",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "provisional": {
+      "type": "array",
+      "description": "Optional list of seam ids whose predicate params (typically numeric bounds) are provisional placeholders pending calibration.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "seams": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/seam"
+      }
+    }
+  },
+  "definitions": {
+    "seam": {
+      "type": "object",
+      "required": ["id", "artifact", "predicate", "onFail"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Seam id, e.g. 's1'. Unique within the spec."
+        },
+        "artifact": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Must reference a key present in the top-level 'artifacts' map."
+        },
+        "predicate": {
+          "oneOf": [
+            { "$ref": "#/definitions/predicate_artifact_exists" },
+            { "$ref": "#/definitions/predicate_row_count_in_range" },
+            { "$ref": "#/definitions/predicate_numeric_cols" },
+            { "$ref": "#/definitions/predicate_affine_residual_below" },
+            { "$ref": "#/definitions/predicate_variance_ratio_below" },
+            { "$ref": "#/definitions/predicate_spread_above" },
+            { "$ref": "#/definitions/predicate_cluster_count_in_range" },
+            { "$ref": "#/definitions/predicate_value_in_range" }
+          ]
+        },
+        "onFail": {
+          "type": "string",
+          "minLength": 1,
+          "description": "One-line evidence message shown to the agent when this seam fails."
+        }
+      }
+    },
+    "predicate_artifact_exists": {
+      "type": "object",
+      "required": ["op"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "artifact_exists" }
+      }
+    },
+    "predicate_row_count_in_range": {
+      "type": "object",
+      "required": ["op", "min", "max"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "row_count_in_range" },
+        "min": { "type": "number" },
+        "max": { "type": "number" }
+      }
+    },
+    "predicate_numeric_cols": {
+      "type": "object",
+      "required": ["op", "n"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "numeric_cols" },
+        "n": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "predicate_affine_residual_below": {
+      "type": "object",
+      "required": ["op", "cols", "max_ratio"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "affine_residual_below" },
+        "cols": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "type": "integer", "minimum": 0 }
+        },
+        "max_ratio": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "predicate_variance_ratio_below": {
+      "type": "object",
+      "required": ["op", "component", "max"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "variance_ratio_below" },
+        "component": { "type": "integer", "minimum": 0 },
+        "max": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "predicate_spread_above": {
+      "type": "object",
+      "required": ["op", "col", "min_std"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "spread_above" },
+        "col": { "type": "integer", "minimum": 0 },
+        "min_std": { "type": "number", "minimum": 0 }
+      }
+    },
+    "predicate_cluster_count_in_range": {
+      "type": "object",
+      "required": ["op", "method", "cell", "min", "max"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "cluster_count_in_range" },
+        "method": { "const": "conncomp2d" },
+        "cell": { "type": "number", "exclusiveMinimum": 0 },
+        "min": { "type": "integer", "minimum": 0 },
+        "max": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "predicate_value_in_range": {
+      "type": "object",
+      "required": ["op", "row", "col", "min", "max"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "value_in_range" },
+        "row": { "type": "integer", "minimum": 0 },
+        "col": { "type": "integer", "minimum": 0 },
+        "min": { "type": "number" },
+        "max": { "type": "number" }
+      }
+    }
+  }
+}
