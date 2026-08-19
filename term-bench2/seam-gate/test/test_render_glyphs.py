@@ -153,6 +153,19 @@ class TestSeparationMargin(unittest.TestCase):
         return pairs
 
     @staticmethod
+    def _partial_fuse(n=10, width=5.7, gap=0.6, fuse=(1, 2)):
+        """The LIKELY failure, as opposed to the exotic one: a few tight-kerned
+        glyphs merge while the rest stay correct -- what a slightly-too-large
+        cell produces. Median-based statistics cannot see it by construction,
+        since a minority cannot move a median."""
+        pairs, x = [], 0.0
+        for i in range(n):
+            if i:
+                x += width + (-1.0 if i in fuse else gap)
+            pairs += [(x, x + width * 0.53), (x + width * 0.44, x + width)]
+        return pairs
+
+    @staticmethod
     def _fused(n=30, width=6.0, step=1.0):
         """The OPPOSITE failure: every component overlaps its neighbour, so the
         whole string collapses into one glyph. Both fragility and coverage
@@ -175,7 +188,7 @@ class TestSeparationMargin(unittest.TestCase):
     def test_margins_describe_the_closest_decisions(self):
         # two glyphs of two overlapping components each, a wide gap between
         xy, comps = self._spans([(0.0, 2.0), (1.5, 3.0), (6.0, 8.0), (7.5, 9.0)])
-        max_intra, min_inter, fragility, coverage, _ = rg.separation_margin(xy, comps)
+        max_intra, min_inter, fragility, coverage = rg.separation_margin(xy, comps)[:4]
         self.assertLess(max_intra, 0.0)      # intra-glyph gaps are overlaps
         self.assertGreater(min_inter, 0.0)
         self.assertGreater(fragility, 0.0)
@@ -190,11 +203,15 @@ class TestSeparationMargin(unittest.TestCase):
         horizontal merge decision, so shattering can no longer inflate it."""
         healthy_frag = rg.separation_margin(*self._spans(self._healthy())).fragility
         shattered_frag = rg.separation_margin(*self._spans(self._shattered())).fragility
+        # ORIENTATION MATTERS AND WAS WRONG HERE ONCE. "Dwarf" means shattered
+        # exceeding healthy, so shattered belongs on the left. The transposed
+        # form (healthy < shattered * 20) passes on the OLD broken metric --
+        # 0.090 < 40 -- and so could not fail on the inversion it named. This
+        # form fails on the old metric (2.000 < 1.80 is false) and passes on
+        # the new one (0.222 < 1.14). Relative, not absolute: an earlier
+        # `shattered < 1.0` would have let a rescaled fixture through at 0.67.
         self.assertLess(
-            shattered_frag, 1.0,
-            "shattered divide must not score as near-certainly-safe")
-        self.assertLess(
-            healthy_frag, shattered_frag * 20,
+            shattered_frag, healthy_frag * 20,
             "shattered divide must not dwarf the healthy one -- the old width "
             "denominator produced exactly that inversion")
 
@@ -230,7 +247,7 @@ class TestSeparationMargin(unittest.TestCase):
         fused = rg.separation_margin(*self._spans(self._fused()))
         self.assertLess(shattered.median_aspect, healthy.median_aspect)
         self.assertGreater(fused.median_aspect, healthy.median_aspect)
-        self.assertGreater(fused.median_aspect, 2.5)
+        self.assertGreater(fused.median_aspect, rg.ASPECT_HIGH)
 
     def test_a_few_flat_glyphs_do_not_trip_the_aspect_detector(self):
         """The real fixture contains underscores -- legitimately 6.04 wide by
@@ -245,8 +262,47 @@ class TestSeparationMargin(unittest.TestCase):
         comps = comps + [np.array([len(xy) - 4, len(xy) - 3]),
                          np.array([len(xy) - 2, len(xy) - 1])]
         m = rg.separation_margin(xy, comps)
-        self.assertLess(m.median_aspect, 2.5,
+        self.assertLess(m.median_aspect, rg.ASPECT_HIGH,
                         "a couple of flat glyphs must not read as over-merge")
+
+    def test_partial_fusion_is_invisible_to_the_median_statistics(self):
+        """Pins the blindness so nobody reads median_aspect as a correctness
+        check. Three of ten glyphs fused: median aspect and fragility are
+        IDENTICAL to healthy, and coverage is HIGHER -- the broken partition
+        scoring better than the correct one."""
+        healthy = rg.separation_margin(*self._spans(self._healthy()))
+        partial = rg.separation_margin(*self._spans(self._partial_fuse()))
+        self.assertLess(partial.glyph_count, healthy.glyph_count)  # glyphs were lost
+        self.assertAlmostEqual(partial.median_aspect, healthy.median_aspect, places=2)
+        self.assertAlmostEqual(partial.fragility, healthy.fragility, places=2)
+        self.assertGreater(partial.coverage, healthy.coverage)
+
+    def test_width_ratio_catches_partial_fusion(self):
+        """The detector that does see it: one glyph far wider than the median.
+        Blind to the cases median_aspect covers, which is why both are
+        reported."""
+        healthy = rg.separation_margin(*self._spans(self._healthy()))
+        partial = rg.separation_margin(*self._spans(self._partial_fuse()))
+        shattered = rg.separation_margin(*self._spans(self._shattered()))
+        fused = rg.separation_margin(*self._spans(self._fused()))
+        self.assertAlmostEqual(healthy.width_ratio, 1.0, places=2)
+        self.assertGreater(partial.width_ratio, rg.WIDTH_RATIO_HIGH)
+        # its own blind spots, pinned so they are never mistaken for health
+        self.assertAlmostEqual(shattered.width_ratio, 1.0, places=2)
+        self.assertAlmostEqual(fused.width_ratio, 1.0, places=2)
+        self.assertEqual(fused.glyph_count, 1)
+
+    def test_flat_glyphs_do_not_disturb_the_width_ratio(self):
+        """The underscores are degenerate in HEIGHT but normal in WIDTH, which
+        is why the width axis is the right one for this detector."""
+        pairs = self._healthy()
+        xy, comps = self._spans(pairs)
+        flat = np.array([[100.0, 0.0], [106.0, 0.015], [110.0, 0.0], [117.0, 0.25]])
+        xy = np.vstack([xy, flat])
+        comps = comps + [np.array([len(xy) - 4, len(xy) - 3]),
+                         np.array([len(xy) - 2, len(xy) - 1])]
+        self.assertLess(rg.separation_margin(xy, comps).width_ratio,
+                        rg.WIDTH_RATIO_HIGH)
 
     def test_empty_components_do_not_crash(self):
         """A fixture where every component falls below the pixel floor must
@@ -254,6 +310,8 @@ class TestSeparationMargin(unittest.TestCase):
         m = rg.separation_margin(np.zeros((0, 2)), [])
         self.assertTrue(np.isnan(m.fragility))
         self.assertTrue(np.isnan(m.median_aspect))
+        self.assertTrue(np.isnan(m.width_ratio))
+        self.assertEqual(m.glyph_count, 0)
 
     def test_height_denominator_ignores_horizontal_decisions(self):
         """The property that makes the denominator trustworthy: same glyph
@@ -275,7 +333,7 @@ class TestSeparationMargin(unittest.TestCase):
         deliberately awful one, whose 0.05 split is plainly fragile. Any future
         boolean built on that comparison is dead code."""
         xy, comps = self._spans([(0.0, 5.0), (0.1, 5.1), (5.15, 6.0)])
-        max_intra, min_inter, fragility, _, _ = rg.separation_margin(xy, comps)
+        max_intra, min_inter, fragility = rg.separation_margin(xy, comps)[:3]
         self.assertLess(max_intra, min_inter)   # vacuously true, hence useless
         self.assertLess(fragility, 0.02)        # the statistic that does discriminate
 

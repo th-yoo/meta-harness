@@ -209,9 +209,14 @@ and it is the transferable lesson of this probe: *every one was a statistic
 computed from the very partition it was scoring. A quantity derived downstream
 of the decision under test cannot audit that decision.*
 
-**Median aspect** (median glyph width / height) is the two-sided detector, and
-the only quantity here carrying a prior from **outside** the artifact — Latin
-glyphs are not several times wider than tall. It rises on fusing and falls on
+**Median aspect** (median glyph width / height) is the two-sided detector. It
+carries a prior from **outside** the artifact — Latin glyphs are not several
+times wider than tall — though an earlier draft of this document wrongly
+called it the *only* such quantity. Coverage is readable only through an
+equally external prior, that the string has no word-spaces and no wide
+kerning, and its trigger is exactly where that prior sits: a spaced string
+lowers coverage with no partition error at all. The claimed structural
+asymmetry between them does not exist. It rises on fusing and falls on
 shattering: synthetics 0.63 healthy, 0.11 shattered, 3.89 fused, with the real
 fixture at 0.66, beside healthy, as the prior predicts. Because it encodes an
 outside prior it *can be wrong* about a given artifact — precisely the property
@@ -224,8 +229,50 @@ alone. Every synthetic had uniform glyph heights, so none could have caught
 it — *a detector validated only on synthetic fixtures is validated against the
 fixture generator, not the artifact.*
 
+*Fifth correction: the median's robustness hides the failure most likely to
+actually happen.* When only a **few** glyphs fuse — what a slightly-too-large
+cell produces, and this fixture sits one nudge from it with a 0.63 minimum gap
+against a ~6.3 pitch — a minority cannot move a median by construction.
+Measured on a partial-fusion synthetic (3 of 10 glyphs merged): median aspect
+**0.633** and fragility **0.057**, both *identical to healthy*, and coverage
+**0.929**, again scoring the broken partition better than the correct one. All
+three metrics blind or actively wrong, on the ordinary failure rather than the
+exotic one.
+
+**Width ratio** (widest glyph / median glyph width) is the missing half: 1.00
+healthy, **2.65** on partial fusion, 1.45 on the real fixture. The underscores
+do not disturb it because they are normal in *width* (6.04 against a ~5.7
+median) even while degenerate in height — the same trick as the height
+denominator, applied to the axis the failure actually deforms. It has its own
+blind spots, pinned by tests rather than left implicit: it reads a degenerate
+1.00 at one glyph (max *is* the median) and 1.00 on shattering (equal-width
+fragments), so it must always be read beside the glyph count. The two
+detectors are complementary and **neither is a correctness check** — a
+partition can still be wrong in ways neither deforms.
+
+**The residual, stated because it is not closed.** All four numbers are
+*aggregate statistics over the partition*, so all four are blind to any error
+touching a minority of glyphs, and for over-merge two of them improve. Tested
+on the real fixture rather than a synthetic: fusing the two capital L's (the
+realistic failure — they sit 1.49 apart on a string whose tightest true gap is
+0.63) moves median aspect 0.661 → 0.678, leaves coverage and fragility
+*unchanged*, and gives width ratio **1.99** — under the 2.0 advisory trigger,
+so nothing fires. Roughly: any error affecting fewer than half the glyphs is
+invisible, and over-merge of that kind makes the instrument read *better* than
+the correct partition.
+
+I deliberately did **not** lower the trigger to 1.9 to catch it. Tuning a
+threshold until it fires on the one case in hand is the fitted-constant error
+this whole section exists to record, and it would have bought a green light
+rather than a working detector. The honest disposition is that the detectors
+are descriptive, none is a correctness check, and closing this needs the
+independent-signal approach named at the end of load 2 — a partition derived
+from stroke or file-order contiguity, compared against the u-overlap one —
+not a fifth aggregate statistic.
+
 Real fixture: max_intra −0.89, min_inter +0.63, fragility **0.071**, coverage
-**0.794**, median aspect **0.66**. Choosing a cutoff on any of them would
+**0.794**, median aspect **0.66**, width ratio **1.45** over 26 glyphs.
+Choosing a cutoff on any of them would
 re-commit the original error, so the instrument prints all three and leaves
 the judgment to a human. The console does carry three advisory eyeball
 triggers (0.02, 0.5, 2.5); those numbers are arbitrary, are labelled as such

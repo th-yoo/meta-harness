@@ -138,6 +138,19 @@ def components_at_cell(xy, cell):
     return comps
 
 
+# Advisory eyeball triggers. NOT arbitrary, and not calibrated either: each
+# was chosen to sit between the two artifacts in hand (e.g. COVERAGE_LOW 0.5
+# lies between the shattered synthetic's 0.341 and the fixture's 0.794). That
+# is weaker than a calibrated threshold and stronger than a number pulled from
+# nowhere, and saying "arbitrary" discourages the re-examination they need.
+# They change no exit code and must never become tuning targets. Defined here
+# so the tests import them instead of duplicating the literals.
+FRAGILITY_LOW = 0.02
+COVERAGE_LOW = 0.5
+ASPECT_HIGH = 2.5
+WIDTH_RATIO_HIGH = 2.0
+
+
 class MergeMargins(NamedTuple):
     """What separation_margin reports. A named tuple because this return grew
     from 3 fields to 5 across three rounds of review, each time because a
@@ -148,6 +161,8 @@ class MergeMargins(NamedTuple):
     fragility: float
     coverage: float
     median_aspect: float
+    width_ratio: float
+    glyph_count: int
 
 
 def separation_margin(xy, comps):
@@ -173,6 +188,9 @@ def separation_margin(xy, comps):
         fragility      min(|max_intra|, min_inter) / median glyph HEIGHT
         coverage       sum of glyph widths / total u-extent
         median_aspect  median glyph width / height
+        width_ratio    widest glyph / median glyph width
+        glyph_count    glyphs the merge produced (width_ratio is
+                       meaningless at 1)
 
     NORMALIZE ON THE ORTHOGONAL AXIS. An earlier version divided by median
     glyph WIDTH, which is computed from the very partition being scored, and
@@ -183,7 +201,11 @@ def separation_margin(xy, comps):
     30-fragment one scored 2.000, i.e. the broken divide reported ~23x SAFER
     than the correct one. Height is fixed by the font and untouched by any
     horizontal merge decision, so a shattered horizontal partition cannot
-    inflate the denominator.
+    inflate the denominator NEARLY as much. Not "cannot at all": a glyph's
+    height here is the v-extent of whatever the partition grouped, so a split
+    that separates an i-dot from its stem does shrink it, and this fixture's
+    underscores are 0.01-0.25 tall. The honest claim is far-less-coupled, not
+    uncoupled.
 
     That REDUCES the inversion without removing it: on the same synthetics the
     gap is now 0.057 healthy vs 0.222 shattered, ~3.9x instead of ~23x. The
@@ -212,9 +234,13 @@ def separation_margin(xy, comps):
     statistic computed from the very partition it was scoring. A quantity
     derived downstream of the decision under test cannot audit that decision.
 
-    MEDIAN_ASPECT is the two-sided detector, and the only quantity here that
-    carries prior information from OUTSIDE the artifact: Latin glyphs are not
-    several times wider than they are tall. It rises when glyphs fuse and
+    MEDIAN_ASPECT is the two-sided detector. It carries prior information from
+    OUTSIDE the artifact -- Latin glyphs are not several times wider than they
+    are tall -- though it is not unique in that: COVERAGE is only readable
+    through an equally external prior, that the string has no word-spaces and
+    no wide kerning, and its trigger is exactly where that prior sits. A
+    spaced string lowers coverage with no partition error at all, so coverage
+    can be wrong about an artifact in the same way aspect can. It rises when glyphs fuse and
     falls when they shatter, leaving the correct partition in between --
     synthetics: healthy 0.63, shattered 0.11, fused 3.89; the real fixture
     sits at 0.66, right beside healthy, as the prior predicts. Because it
@@ -229,14 +255,40 @@ def separation_margin(xy, comps):
     validated only on synthetic fixtures is validated against the fixture
     generator, not the artifact.
 
+    WIDTH_RATIO (widest glyph / median glyph width) is the other half, and it
+    exists because the median's robustness hides the MOST LIKELY failure.
+    When only a few glyphs fuse -- what a slightly-too-large cell produces,
+    and this fixture sits one nudge away with a 0.63 minimum gap against a
+    ~6.3 pitch -- a minority cannot move a median by construction. Measured on
+    a partial-fusion synthetic (3 of 10 glyphs merged): median_aspect 0.633
+    and fragility 0.057, both IDENTICAL to healthy, and coverage 0.929, which
+    scores the broken partition BETTER than the correct one. width_ratio reads
+    2.65 against healthy's 1.00 and the real fixture's 1.45 -- the underscores
+    do not disturb it, being normal in WIDTH (6.04 against a ~5.7 median) even
+    while degenerate in height. Same trick as the height denominator, applied
+    to the other axis: pick the dimension the failure actually deforms.
+
+    The two are complementary, and NEITHER is a correctness check:
+      median_aspect  catches global fusion and shattering; blind to partial
+      width_ratio    catches partial fusion; blind to global fusion (with one
+                     glyph max IS the median, so it reads a degenerate 1.00)
+                     and to shattering (equal-width fragments, also 1.00)
+    Always read width_ratio beside glyph_count, or its n=1 reading of 1.00
+    will be mistaken for health. A partition can still be wrong in ways
+    neither deforms.
+
     All are dimensionless, derived from the artifact, and REPORTED rather than
     thresholded -- picking cutoffs would re-commit the fitted-constant error
     this function exists to avoid. On the shipped fixture: max_intra -0.89,
     min_inter +0.63, fragility 0.071, coverage 0.794, median_aspect 0.66.
     """
     if not comps:
-        return MergeMargins(float("-inf"), float("inf"), float("nan"),
-                            float("nan"), float("nan"))
+        # keyword form on purpose: this return has silently fallen out of step
+        # with the field list once already as the tuple grew
+        return MergeMargins(max_intra=float("-inf"), min_inter=float("inf"),
+                            fragility=float("nan"), coverage=float("nan"),
+                            median_aspect=float("nan"), width_ratio=float("nan"),
+                            glyph_count=0)
     spans = sorted((float(xy[c][:, 0].min()), float(xy[c][:, 0].max())) for c in comps)
     intra, inter = [], []
     right = spans[0][1]
@@ -258,7 +310,11 @@ def separation_margin(xy, comps):
 
     ratios = [w / h for w, h in zip(widths, heights) if h > 0]
     median_aspect = float(np.median(ratios)) if ratios else float("nan")
-    return MergeMargins(max_intra, min_inter, fragility, coverage, median_aspect)
+
+    med_w = float(np.median(widths)) if widths else 0.0
+    width_ratio = (max(widths) / med_w) if med_w > 0 else float("nan")
+    return MergeMargins(max_intra, min_inter, fragility, coverage,
+                        median_aspect, width_ratio, len(glyphs))
 
 
 def merge_by_u_overlap(xy, comps, gap_tol):
@@ -364,6 +420,14 @@ def main():
         say(f"cell={args.cell}: grid cap exceeded, nothing to render")
         open(os.path.join(args.out, "report.txt"), "w").write("\n".join(lines) + "\n")
         return 1
+    if not comps:
+        # separation_margin tolerates this, but contact_sheet's max() over an
+        # empty tile list does not -- the "does not crash" property has to hold
+        # for the TOOL, not just the function
+        say(f"cell={args.cell}: no components survived the "
+            f"{validator._MIN_COMPONENT_PIXELS}-pixel floor, nothing to render")
+        open(os.path.join(args.out, "report.txt"), "w").write("\n".join(lines) + "\n")
+        return 1
     say(f"cell={args.cell}: {len(comps)} connected components")
 
     m = separation_margin(xy, comps)
@@ -374,19 +438,26 @@ def main():
     say(f"  coverage {m.coverage:.3f} (glyph widths / u-extent) -- "
         f"detects SHATTERING only; over-merge drives it to 1.000")
     say(f"  median aspect {m.median_aspect:.2f} (median glyph width/height) -- "
-        f"two-sided: rises when glyphs fuse, falls when they shatter")
+        f"catches GLOBAL fusion and shattering; blind to partial fusion")
+    say(f"  width ratio {m.width_ratio:.2f} (widest / median glyph width) over "
+        f"{m.glyph_count} glyphs -- catches PARTIAL fusion; reads a degenerate "
+        f"1.00 at one glyph and on shattering")
 
     # Advisory eyeball triggers. These three numbers ARE arbitrary -- they are
     # not derived from anything and are here only so an obviously-broken run
     # prints a line instead of scrolling past. Nothing is enforced, no exit
     # code changes, and they must never become a tuning target. The `not (x >
     # y)` form is deliberate: it also fires on NaN.
-    if not (m.fragility > 0.02):
+    if not (m.fragility > FRAGILITY_LOW):
         say("*** fragility near zero -- some component nearly changed glyphs ***")
-    if not (m.coverage > 0.5):
+    if not (m.coverage > COVERAGE_LOW):
         say("*** coverage low -- signature of a SHATTERED divide (cell too "
             "small, projection broken); note fragility reads HIGH here ***")
-    if not (m.median_aspect < 2.5):
+    if not (m.width_ratio < WIDTH_RATIO_HIGH) and m.glyph_count > 1:
+        say("*** one glyph far wider than the rest -- signature of PARTIAL "
+            "fusion (cell slightly too large); note median aspect, coverage "
+            "and fragility all read HEALTHY here ***")
+    if not (m.median_aspect < ASPECT_HIGH):
         say("*** typical glyph far wider than tall -- signature of OVER-MERGE; "
             "note coverage reads near 1.000 and fragility HIGH here, so "
             "neither of those can catch this ***")
@@ -406,7 +477,7 @@ def main():
     for rank, idxs in enumerate(glyphs):
         sub = xy[idxs]
         say(f"  {rank:02d}: pts={len(idxs):5d}  u={sub[:,0].min():8.2f}..{sub[:,0].max():7.2f}  "
-            f"size={sub[:,0].ptp():5.2f}x{sub[:,1].ptp():5.2f}")
+            f"size={np.ptp(sub[:,0]):5.2f}x{np.ptp(sub[:,1]):5.2f}")
         dots = render(sub, args.px_per_unit, 6, False, args.gap_break)
         strokes = render(sub, args.px_per_unit, 6, True, args.gap_break)
         height = max(dots.shape[0], strokes.shape[0])
