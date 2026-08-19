@@ -289,3 +289,17 @@ PASS -> elf card arm k=5 back on (cleaner cell, no execution wall) +
 FAIL -> boundary hardens against a strictly stronger prompt; flip to gcode.
 Scope-creep faced: instruction-denotation ("what does 'memory values'
 mean") IS a representation question; clause stays behavior-generic.
+
+## elf haiku baseline k=5 = 2/5 (sibling top-up, 2026-08-19)
+
+My k=3 (1/3, trajs) + sibling k=2 top-up (1/2, noStore reward-only:
+reward=1/236s/53t, reward=0/310s/66t; results-file
+elf-baseline-topup-haiku-20260819.json). Baseline = 2/5.
+Caveats banked:
+ 1. Cause-composition: known for 3 (2 scope-narrow fails + 1 pass, trajs),
+    ASSUMED for the 2 top-up trials (noStore ate trajs). Any paired
+    elf-arm comparison states baseline as known-3/assumed-2.
+ 2. Elapsed signature holds 2-for-2 across batches: pass faster than fail
+    (k=3: pass 192 vs fails 234/251; top-up: pass 236 vs fail 310) — the
+    program's twice-else-replicated mechanism probe, now 4th independent
+    context.
