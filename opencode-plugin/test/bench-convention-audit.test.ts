@@ -2,7 +2,9 @@ import { test, expect } from "bun:test"
 import { join, dirname } from "node:path"
 import { readFileSync, mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseFirstColNum, parseVerdict, cardFrom, applyTransform, runAuditUncached, auditCard, _resetAuditCache, writeAuditTrail, revalidate, parseRevalBlock, stripRevalBlock, type RevalClaim } from "../src/bench/convention-audit.ts"
+import { auditPrompt, AUDIT_PROMPT_VERSION, AUDIT_MODEL, buildSample, parseFirstColNum, parseVerdict, cardFrom, applyTransform, runAuditUncached, auditCard, _resetAuditCache, writeAuditTrail, revalidate, parseRevalBlock, stripRevalBlock, type RevalClaim } from "../src/bench/convention-audit.ts"
+import { DEFAULT_BENCH_MODEL } from "../src/bench/paths.ts"
+import { ACP_BUDGET } from "@th-yoo/cc-api-daemon"
 import { runAgent } from "../src/bench/agent-run.ts"
 
 test("auditPrompt loads the frozen prompt with all four clauses + verdict line", () => {
@@ -213,11 +215,15 @@ test("a mid-line mention (marker not alone on its own line) is a no-op for both 
   expect(parseRevalBlock(raw).kind).toBe("absent")
 })
 
+// The ids here are what a LIVE daemon actually returns, measured 2026-08-19:
+// the ACP wire echoes the BARE id it was asked for. The old fixture returned
+// "anthropic/claude-sonnet-5" — it agreed with the calling code rather than with
+// the wire, which is why finding F2 stayed invisible to this suite.
 const okReply = (text: string) => ({
   kind: "ok",
   text,
-  model: "anthropic/claude-sonnet-5",
-  canonicalModel: "anthropic/claude-sonnet-5",
+  model: "claude-sonnet-5",
+  canonicalModel: "claude-sonnet-5",
   sessionId: "s1",
   stopReason: "end_turn",
 })
@@ -336,4 +342,29 @@ test("runAgent appends the convention card after the budget line, byte-identical
   expect(off).not.toContain("CARD-XYZ")
   expect(captured.indexOf("CARD-XYZ")).toBeGreaterThan(captured.indexOf("wall-clock"))  // card AFTER budget line
   expect(captured.startsWith(off.replace(/\n+$/, ""))).toBe(true)                  // off-text is a prefix → byte-identical base
+})
+
+// ── Transport: the two defects the adherence probe measured live ──
+//
+// docs/loop-probes/reval-adherence-20260819/verdict.md, findings F1 and F2.
+// Both were invisible here because every test above injects a fake daemon; the
+// fakes agreed with the code instead of with the wire. These two lock the wire's
+// actual contract, measured against a live daemon on 2026-08-19.
+
+test("F2: the audit requests a BARE model id — the ACP wire rejects a provider-qualified one", async () => {
+  let requested = ""
+  await runAuditUncached(P(FIX), "clean", {}, {
+    ensure: async () => true,
+    call: async (_t: string, model: string) => { requested = model; return okReply("x\nCONTENT VERDICT: NO MISMATCH") },
+    close: async () => ({ closed: true }),
+  } as any)
+  // Live-measured: "anthropic/claude-sonnet-5" → terminal_reason=api_error;
+  // "claude-sonnet-5" → kind=ok, proven=true. The proven live caller on this
+  // transport (a4-review.ts) likewise passes a bare id.
+  expect(requested).not.toContain("/")
+  expect(requested).toBe("claude-sonnet-5")
+})
+
+test("F2: the audit stays pinned to the bench tier (derived from DEFAULT_BENCH_MODEL, never a second literal)", () => {
+  expect(AUDIT_MODEL).toBe(DEFAULT_BENCH_MODEL.replace(/^[^/]+\//, ""))
 })

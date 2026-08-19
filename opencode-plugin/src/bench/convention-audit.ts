@@ -7,6 +7,20 @@ import { BenchError } from "./util.ts"
 
 export const AUDIT_PROMPT_VERSION = "lane-a-v3"
 
+/** The model id for the audit call, DERIVED from `DEFAULT_BENCH_MODEL` rather
+ * than written as a second literal, so the auditor can never drift off the tier
+ * the bench itself runs at.
+ *
+ * The provider prefix is stripped because the two transports disagree about the
+ * shape of a model id: the SUT drivers take opencode's provider-qualified form
+ * (`anthropic/claude-sonnet-5`), while the ACP wire takes a BARE CLI id — the
+ * proven live caller on this transport passes `claude-haiku-4-5`
+ * (p2/a4-review.ts). Sending the qualified form here is finding F2 of
+ * `docs/loop-probes/reval-adherence-20260819/verdict.md`: measured live, it comes
+ * back `terminal_reason=api_error`, which `runAuditUncached` folds into a plain
+ * `verdict: "ERROR"` — indistinguishable from a model that simply failed. */
+export const AUDIT_MODEL = DEFAULT_BENCH_MODEL.replace(/^[^/]+\//, "")
+
 /** Numeric parse of a first-column token, tolerant of a single decimal comma
  * (EU locale, e.g. "47183,554644"). A token with a lone comma and no dot has the
  * comma read as a decimal point; anything else falls through to Number(). */
@@ -386,7 +400,7 @@ export async function runAuditUncached(
   try {
     await ensure(auditEnv, { waitMs: 0 })
 
-    const outcome = await call(auditPrompt() + "\n\n" + sample, DEFAULT_BENCH_MODEL, auditEnv, {
+    const outcome = await call(auditPrompt() + "\n\n" + sample, AUDIT_MODEL, auditEnv, {
       isolation: AUDIT_ISOLATION,
     })
 
@@ -395,7 +409,7 @@ export async function runAuditUncached(
 
     if (
       outcome.stopReason === "max_tokens" ||
-      !modelProvenBy(outcome.model, DEFAULT_BENCH_MODEL, outcome.canonicalModel)
+      !modelProvenBy(outcome.model, AUDIT_MODEL, outcome.canonicalModel)
     ) {
       return { card: null, rawAudit: outcome.text ?? "", verdict: "ERROR", sample, truncated }
     }
