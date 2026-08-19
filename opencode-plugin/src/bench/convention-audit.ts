@@ -5,7 +5,7 @@ import type { BenchPaths } from "./paths.ts"
 import { DEFAULT_BENCH_MODEL } from "./paths.ts"
 import { BenchError } from "./util.ts"
 
-export const AUDIT_PROMPT_VERSION = "lane-a-v1"
+export const AUDIT_PROMPT_VERSION = "lane-a-v2"
 
 export function auditPrompt(): string {
   return readFileSync(join(dirname(new URL(import.meta.url).pathname), "convention-audit-prompt.txt"), "utf-8")
@@ -29,6 +29,14 @@ const DEFAULT_BUDGET_BYTES = 200_000
  * shape at staging.ts:735-756 (skip --from=, multi-source COPY iterates
  * every token but the last as a source) without adopting any of that
  * module's other behavior.
+ *
+ * Best-effort beyond that mirror: flag tokens (`--chown=`, `--chmod=`,
+ * `--link`, ...) are stripped rather than mistaken for a source, and a
+ * source containing an unescaped glob char (`*`, `?`, `[`) is skipped
+ * (not added, not thrown on) since it can't be realpath-resolved — sampling
+ * a subset of a glob's matches is fine for a best-effort sampler. A
+ * `--from=` flag still skips the WHOLE COPY line (its source is another
+ * build stage, not a host path) rather than being stripped like other flags.
  */
 function parseCopySources(dockerfileText: string): string[] {
   const sources: string[] = []
@@ -37,11 +45,15 @@ function parseCopySources(dockerfileText: string): string[] {
     const m = /^COPY\s+(.+)$/i.exec(line)
     if (!m) continue
     const body = m[1]!
-    if (body.includes("--from=")) continue // multi-stage/external-image copy — not a host path
-    const parts = body.split(/\s+/).filter((p) => p.length > 0)
+    if (/--from=/.test(body)) continue // multi-stage/external-image copy — not a host path
+    const tokens = body.split(/\s+/).filter((p) => p.length > 0)
+    const parts = tokens.filter((t) => !t.startsWith("--")) // drop flag tokens (--chown=, --chmod=, --link, ...)
     if (parts.length < 2) continue // need at least one source + a dest
     const srcs = parts.slice(0, -1) // last token is the dest, everything else is a source
-    sources.push(...srcs)
+    for (const s of srcs) {
+      if (/[*?[]/.test(s)) continue // glob source — can't realpath-resolve; skip gracefully
+      sources.push(s)
+    }
   }
   return sources
 }

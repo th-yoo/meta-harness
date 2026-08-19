@@ -12,7 +12,7 @@ CONTENT VERDICT: MISMATCH
 or
 CONTENT VERDICT: NO MISMATCH
 
-You have shell access for calculations. Before writing your answer, numerically TEST each hypothesis you form about the data's convention against the sample numbers (compute, don't assert). In your MISREADINGS section, state which hypotheses survived your numerical tests and which you falsified, with the computed values.
+You have NO code-execution tool. Perform any arithmetic yourself and SHOW it inline in your answer (e.g. write out `1e7 / 6327.285 = 1580.6`) so every numeric claim is auditable. Never claim to have run a script or computed something you did not show. Before writing your answer, numerically TEST each hypothesis you form about the data's convention against the sample numbers by working the arithmetic out inline. In your MISREADINGS section, state which hypotheses survived your numerical tests and which you falsified, with the shown computed values.
 
 Also audit the TASK INSTRUCTION's success criteria for scope/deliverable ambiguities: where a broader or more inclusive reading of the deliverable is penalty-free (or advantageous) under the stated scoring, name the dominant reading explicitly and say why the stated criteria favor it.
 

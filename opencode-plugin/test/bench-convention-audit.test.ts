@@ -11,7 +11,7 @@ test("auditPrompt loads the frozen prompt with all four clauses + verdict line",
   expect(p).toContain("success criteria")      // instruction-criteria clause
   expect(p).toContain("MANDATORY")             // imperative clause
   expect(p).toContain("CONTENT VERDICT:")      // machine line
-  expect(AUDIT_PROMPT_VERSION).toBe("lane-a-v1")
+  expect(AUDIT_PROMPT_VERSION).toBe("lane-a-v2")
 })
 
 const P = (root: string) => ({ tbRoot: root } as any)  // only .tbRoot is read
@@ -35,6 +35,15 @@ test("buildSample truncates an oversized dir COPY and flags it", () => {
 })
 test("buildSample is deterministic", () => {
   expect(buildSample(P(FIX), "clean").text).toBe(buildSample(P(FIX), "clean").text)
+})
+test("buildSample strips COPY flag tokens (--chown=) and still samples the real source", () => {
+  const s = buildSample(P(FIX), "flags-and-glob")
+  expect(() => buildSample(P(FIX), "flags-and-glob")).not.toThrow()
+  expect(s.text).toContain("data.txt")
+  expect(s.text).toContain("alpha 1")
+})
+test("buildSample skips a glob COPY source (*.py) without throwing", () => {
+  expect(() => buildSample(P(FIX), "flags-and-glob")).not.toThrow()
 })
 
 test("parseVerdict reads the machine line", () => {
@@ -101,7 +110,7 @@ test("writeAuditTrail appends one ndjson line with the card + verdict", () => {
     { card: "C", rawAudit: "R", verdict: "MISMATCH", sample: "S", truncated: false })
   const line = JSON.parse(readFileSync(join(dir, "convention-audit-trail.ndjson"), "utf-8").trim())
   expect(line.task).toBe("clean"); expect(line.verdict).toBe("MISMATCH"); expect(line.card).toBe("C")
-  expect(line.promptVersion).toBe("lane-a-v1")
+  expect(line.promptVersion).toBe("lane-a-v2")
 })
 
 // ── Task 7: injection wiring (agent-run.ts's trailing conventionAudit param) ──
