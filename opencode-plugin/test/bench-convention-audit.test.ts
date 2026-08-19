@@ -2,7 +2,7 @@ import { test, expect } from "bun:test"
 import { join, dirname } from "node:path"
 import { readFileSync, mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseFirstColNum, parseVerdict, cardFrom, runAuditUncached, auditCard, _resetAuditCache, writeAuditTrail } from "../src/bench/convention-audit.ts"
+import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseFirstColNum, parseVerdict, cardFrom, applyTransform, runAuditUncached, auditCard, _resetAuditCache, writeAuditTrail } from "../src/bench/convention-audit.ts"
 import { runAgent } from "../src/bench/agent-run.ts"
 
 test("auditPrompt loads the frozen prompt with all four clauses + verdict line", () => {
@@ -64,6 +64,13 @@ test("parseVerdict defaults to NO_MISMATCH when the line is absent", () => {
 test("cardFrom returns the audit body verbatim", () => {
   const raw = "SURFACE ... CONTENT ... MISREADINGS ..."
   expect(cardFrom(raw)).toBe(raw.trim())
+})
+
+test("applyTransform covers the closed whitelist (offset is C - in)", () => {
+  expect(applyTransform("reciprocal", 1e7, 19139.4)).toBeCloseTo(522.5, 1)
+  expect(applyTransform("scale", 0.1, 1913.9)).toBeCloseTo(191.39, 2)
+  expect(applyTransform("offset", 20721.4, 19139.4)).toBeCloseTo(1582.0, 1)  // C - in
+  expect(applyTransform("identity", 0, 42)).toBe(42)
 })
 
 const okReply = (text: string) => ({

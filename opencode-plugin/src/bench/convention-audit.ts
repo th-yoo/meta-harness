@@ -188,6 +188,20 @@ export function cardFrom(raw: string): string {
   return raw.trim()
 }
 
+export type RevalTransform = "reciprocal" | "scale" | "offset" | "identity"
+
+/** Evaluate a whitelisted single-constant transform. Pinned: offset = C - in
+ * (laser-line subtraction; both gen4 fixtures use this sign). No eval, no
+ * arbitrary formulae. */
+export function applyTransform(t: RevalTransform, c: number, x: number): number {
+  switch (t) {
+    case "reciprocal": return c / x
+    case "scale": return c * x
+    case "offset": return c - x
+    case "identity": return x
+  }
+}
+
 /** The audit call's isolation: bare (no tools, no persisted session,
  * thinking disabled) — mirrors `A4_ISOLATION` (a4-review.ts:88-96)
  * exactly, distinguished only by `title` so an audit call is unambiguous
