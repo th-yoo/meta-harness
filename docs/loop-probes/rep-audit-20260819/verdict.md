@@ -83,3 +83,37 @@ additive boundary-gate (b7 10/10). Discriminating next test: same card
 re-worded as a before-write ordering gate (pilot 2); if that also fails,
 prose injection is dead entirely and lane B (deterministic hook) is the only
 survivor.
+
+## Sibling review amendments (2026-08-19, meta-harness-f6 cross-session review; accepted after check)
+
+1. **Rung-0 interpretation narrowed** (same evidence, refined reading —
+   flagged per no-reason-drift): the rung-0 instruction ASSERTS the readout
+   is the G peak, so retrieved-but-deferring produces the same echo as
+   retrieval-absent; no transcripts → indistinguishable. Rung-0 measured
+   retrieval ∧ authority-to-contradict, conflated. Retrieval failure
+   remains traj-proven at rung 2 (arena autopsies: 0-2 weak canonical
+   mentions / 20 trials); the zero-load context-independence claim is the
+   confounded part. Pilot-1 weights the binding constraint toward
+   actuation/authority once knowledge is supplied.
+2. **Pilot-1 bigger confound**: the card is diagnosis-complete but
+   prescription-incomplete, and its hedge ("G/2D may sit at different x0
+   than textbook values") arguably licenses raw-axis reporting. Pilot-1 is
+   three-way ambiguous (card unread / dismissed / hedge-followed);
+   submitted numbers exclude only botched-conversion. "Advisory injection
+   dead" = overreach; keep the hedged wording.
+3. **Process rule**: probe runs that need mechanism evidence store-write
+   under a MINTED v1-byte-identical probe version (arena pattern) — never
+   --results-file (traj loss, bit twice 2026-08-19), never pinned to real
+   v1 (store pollution).
+4. **Pilot-2 design**: two arms, one variable each — arm 1 same hedged
+   card as before-write ordering gate (framing-only); arm 2 gate +
+   prescription sentence, runs only if arm 1 fails. k≥3, store-written.
+5. **Clean-batch pre-registration must fix**: D-bar contradicts the audit
+   prompt (Q3 demands misreading enumeration; D demands exact silence —
+   bar or prompt, pick one); add a BLIND-sample arm (input-A used
+   head/PEAK/tail with operator knowledge of peak location; automation
+   samples blind).
+6. **Lane B minimal pilot re-priced**: existing hook block channel +
+   audit-card-as-block-evidence = detector reuse, tests the
+   measured-to-actuate enforce channel; pivot target if pilot-2 arm 1
+   fails, not a from-scratch build.
