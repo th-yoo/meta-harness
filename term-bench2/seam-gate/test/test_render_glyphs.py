@@ -119,23 +119,85 @@ class TestSeparationMargin(unittest.TestCase):
     """The merge is justified per artifact, never by a shipped tolerance."""
 
     @staticmethod
-    def _spans(pairs):
+    def _spans(pairs, height=9.0):
         """Fake components: each (lo, hi) becomes a 2-point index array whose
-        u-span is exactly that interval."""
+        u-span is exactly that interval. Height is the v-extent every
+        component spans -- font-fixed in a real artifact, which is why the
+        fragility denominator uses it."""
         xy = []
         comps = []
         for lo, hi in pairs:
             comps.append(np.array([len(xy), len(xy) + 1]))
-            xy.extend([[lo, 0.0], [hi, 0.0]])
+            xy.extend([[lo, 0.0], [hi, height]])
         return np.array(xy, dtype=float), comps
+
+    @staticmethod
+    def _healthy(n=10, width=5.7, gap=0.6):
+        """n glyphs, each two overlapping components, cleanly separated."""
+        pairs, x = [], 0.0
+        for _ in range(n):
+            pairs += [(x, x + width * 0.53), (x + width * 0.44, x + width)]
+            x += width + gap
+        return pairs
+
+    @staticmethod
+    def _shattered(n=30, width=1.0, gap=2.0):
+        """The failure mode: every glyph broken into narrow fragments with
+        wide gaps between them -- what a too-small cell or broken projection
+        produces."""
+        pairs, x = [], 0.0
+        for _ in range(n):
+            pairs.append((x, x + width))
+            x += width + gap
+        return pairs
 
     def test_margins_describe_the_closest_decisions(self):
         # two glyphs of two overlapping components each, a wide gap between
         xy, comps = self._spans([(0.0, 2.0), (1.5, 3.0), (6.0, 8.0), (7.5, 9.0)])
-        max_intra, min_inter, fragility = rg.separation_margin(xy, comps)
+        max_intra, min_inter, fragility, coverage = rg.separation_margin(xy, comps)
         self.assertLess(max_intra, 0.0)      # intra-glyph gaps are overlaps
         self.assertGreater(min_inter, 0.0)
-        self.assertGreater(fragility, 0.1)   # both decisions sit well clear of zero
+        self.assertGreater(fragility, 0.0)
+        self.assertGreater(coverage, 0.5)
+
+    def test_fragility_is_not_inflated_by_a_shattered_divide(self):
+        """Regression guard for a metric that rewarded the failure it was
+        meant to catch. Normalizing by median glyph WIDTH used the partition
+        under test as its own denominator, so a shattered divide -- narrow
+        fragments, wide gaps -- scored ~23x SAFER than a healthy one (0.088 vs
+        2.000, measured). Median glyph HEIGHT is orthogonal to every
+        horizontal merge decision, so shattering can no longer inflate it."""
+        _, _, healthy_frag, _ = rg.separation_margin(*self._spans(self._healthy()))
+        _, _, shattered_frag, _ = rg.separation_margin(*self._spans(self._shattered()))
+        self.assertLess(
+            shattered_frag, 1.0,
+            "shattered divide must not score as near-certainly-safe")
+        self.assertLess(
+            healthy_frag, shattered_frag * 20,
+            "shattered divide must not dwarf the healthy one -- the old width "
+            "denominator produced exactly that inversion")
+
+    def test_coverage_detects_shattering_directly(self):
+        """Fragility says how close decisions came to flipping; it cannot say
+        the partition is RIGHT. Coverage can: glyphs should account for most
+        of the string's extent."""
+        _, _, _, healthy_cov = rg.separation_margin(*self._spans(self._healthy()))
+        _, _, _, shattered_cov = rg.separation_margin(*self._spans(self._shattered()))
+        self.assertGreater(healthy_cov, 0.8)
+        self.assertLess(shattered_cov, 0.5)
+
+    def test_height_denominator_ignores_horizontal_decisions(self):
+        """The property that makes the denominator trustworthy: same glyph
+        heights, wildly different horizontal partitions -> the scale used for
+        fragility must not move with the partition."""
+        tall_healthy = self._spans(self._healthy(), height=9.0)
+        tall_shattered = self._spans(self._shattered(), height=9.0)
+        _, _, f1, _ = rg.separation_margin(*tall_healthy)
+        _, _, f2, _ = rg.separation_margin(*self._spans(self._healthy(), height=18.0))
+        # doubling the font height halves fragility; the horizontal layout is
+        # unchanged, so this is the denominator responding only to v
+        self.assertAlmostEqual(f1, f2 * 2, places=6)
+        self.assertTrue(np.isfinite(rg.separation_margin(*tall_shattered)[2]))
 
     def test_max_intra_below_min_inter_is_vacuous(self):
         """Regression guard for a guard that could not fire. The classifier is
@@ -144,16 +206,16 @@ class TestSeparationMargin(unittest.TestCase):
         deliberately awful one, whose 0.05 split is plainly fragile. Any future
         boolean built on that comparison is dead code."""
         xy, comps = self._spans([(0.0, 5.0), (0.1, 5.1), (5.15, 6.0)])
-        max_intra, min_inter, fragility = rg.separation_margin(xy, comps)
+        max_intra, min_inter, fragility, _ = rg.separation_margin(xy, comps)
         self.assertLess(max_intra, min_inter)   # vacuously true, hence useless
         self.assertLess(fragility, 0.02)        # the statistic that does discriminate
 
     def test_fragility_falls_when_a_decision_nears_zero(self):
         """Same glyph layout, one split narrowed towards zero: fragility must
         drop, which is the whole point of reporting it."""
-        _, _, wide = rg.separation_margin(*self._spans(
+        _, _, wide, _ = rg.separation_margin(*self._spans(
             [(0.0, 2.0), (1.5, 3.0), (6.0, 8.0), (7.5, 9.0)]))
-        _, _, narrow = rg.separation_margin(*self._spans(
+        _, _, narrow, _ = rg.separation_margin(*self._spans(
             [(0.0, 2.0), (1.5, 3.0), (3.01, 5.0), (4.5, 6.0)]))
         self.assertLess(narrow, wide)
 

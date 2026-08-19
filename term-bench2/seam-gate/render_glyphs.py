@@ -150,19 +150,39 @@ def separation_margin(xy, comps):
     What actually varies is the MARGIN. Every adjacent-component gap is a
     decision: a negative one merged, a positive one split, and either is
     fragile when it sits near zero. So report the closest call in each
-    direction and scale it by the artifact's own glyph width:
+    direction, scaled by a size the decision cannot move:
 
         max_intra   the narrowest overlap that still merged (<= 0)
         min_inter   the narrowest gap that still split (> 0)
-        fragility   min(|max_intra|, min_inter) / median glyph width
+        fragility   min(|max_intra|, min_inter) / median glyph HEIGHT
+        coverage    sum of glyph widths / total u-extent
 
-    Fragility is dimensionless and derived entirely from the artifact. It is
-    REPORTED, not thresholded -- picking a cutoff here would re-commit the
+    NORMALIZE ON THE ORTHOGONAL AXIS. An earlier version divided by median
+    glyph WIDTH, which is computed from the very partition being scored, and
+    that bias runs the dangerous way: when the divide SHATTERS -- a too-small
+    cell, a broken projection -- glyph widths collapse while the gaps between
+    fragments grow, so the ratio goes UP. Measured against synthetic
+    components: a healthy 10-glyph partition scored 0.088 while a shattered
+    30-fragment one scored 2.000, i.e. the broken divide reported ~23x SAFER
+    than the correct one. Height is fixed by the font and untouched by any
+    horizontal merge decision, so a shattered horizontal partition cannot
+    inflate the denominator.
+
+    That REDUCES the inversion without removing it: on the same synthetics the
+    gap is now 0.057 healthy vs 0.222 shattered, ~3.9x instead of ~23x. The
+    residue is in the NUMERATOR -- shattering also widens min_inter, since the
+    gaps between fragments are real gaps. Fragility is a
+    closeness-to-flipping measure and cannot be repaired into a
+    correctness measure; do not read a high value as reassurance.
+
+    COVERAGE is therefore the actual shattering check. Glyphs should account
+    for most of the string's u-extent, and it separates the same synthetics
+    cleanly and in the right direction: 0.913 healthy vs 0.341 shattered.
+
+    Both are dimensionless, derived entirely from the artifact, and REPORTED
+    rather than thresholded -- picking a cutoff would re-commit the
     fitted-constant error this function exists to avoid. On the shipped
-    fixture: max_intra -0.89, min_inter +0.63, median glyph width ~5.7,
-    fragility ~0.11 -- the closest decision sits about a ninth of a glyph away
-    from flipping. A fragility near 0 means one component nearly changed
-    glyphs and the count should not be trusted.
+    fixture: max_intra -0.89, min_inter +0.63, fragility 0.071, coverage 0.794.
     """
     spans = sorted((float(xy[c][:, 0].min()), float(xy[c][:, 0].max())) for c in comps)
     intra, inter = [], []
@@ -174,11 +194,15 @@ def separation_margin(xy, comps):
     min_inter = min(inter) if inter else float("inf")
 
     glyphs = merge_by_u_overlap(xy, comps, 0.0)
-    widths = [float(xy[g][:, 0].ptp()) for g in glyphs]
-    scale = float(np.median(widths)) if widths else 0.0
+    heights = [float(np.ptp(xy[g][:, 1])) for g in glyphs]
+    widths = [float(np.ptp(xy[g][:, 0])) for g in glyphs]
+    scale = float(np.median(heights)) if heights else 0.0
     closest = min(abs(max_intra), min_inter)
     fragility = closest / scale if scale > 0 and np.isfinite(closest) else float("nan")
-    return max_intra, min_inter, fragility
+
+    extent = float(np.ptp(xy[:, 0]))
+    coverage = sum(widths) / extent if extent > 0 else float("nan")
+    return max_intra, min_inter, fragility, coverage
 
 
 def merge_by_u_overlap(xy, comps, gap_tol):
@@ -286,14 +310,20 @@ def main():
         return 1
     say(f"cell={args.cell}: {len(comps)} connected components")
 
-    max_intra, min_inter, fragility = separation_margin(xy, comps)
+    max_intra, min_inter, fragility, coverage = separation_margin(xy, comps)
     say(f"merge margins: narrowest overlap that merged {max_intra:+.2f}, "
         f"narrowest gap that split {min_inter:+.2f}, fragility {fragility:.3f} "
-        f"(closest decision, as a fraction of median glyph width)")
+        f"(closest decision / median glyph height), coverage {coverage:.3f} "
+        f"(glyph widths / u-extent)")
     if not (fragility > 0.02):
         say("*** fragility near zero -- some component nearly changed glyphs; "
-            "the glyph count below is not trustworthy. Reported, not enforced: "
-            "judge it, do NOT tune --merge-gap until the count looks right ***")
+            "the glyph count below is not trustworthy ***")
+    if not (coverage > 0.5):
+        say("*** coverage low -- glyphs cover little of the string's extent, "
+            "the signature of a SHATTERED divide (cell too small, projection "
+            "broken). Note fragility reads HIGH, not low, when this happens ***")
+    say("    (both reported, never enforced: judge them, do NOT tune "
+        "--merge-gap until the count looks right)")
 
     glyphs = merge_by_u_overlap(xy, comps, args.merge_gap)
     say(f"after u-overlap merge (gap {args.merge_gap}): {len(glyphs)} glyphs "

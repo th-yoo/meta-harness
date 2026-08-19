@@ -161,12 +161,32 @@ up from the error it was meant to fix.
 
 What replaced it is reported, never thresholded: `max_intra` (narrowest
 overlap that still merged), `min_inter` (narrowest gap that still split), and
-**fragility** = min(|max_intra|, min_inter) / median glyph width — a
-dimensionless number derived wholly from the artifact, which *can* come back
-near zero and does on a fragile fixture. On this one: −0.89, +0.63, fragility
-**0.111**, so the closest decision sits about a ninth of a glyph from
-flipping. Choosing a cutoff on fragility would re-commit the original error,
-so the instrument prints it and leaves the judgment to a human.
+**fragility** — dimensionless, derived wholly from the artifact, and able to
+come back near zero, which it does on a fragile fixture.
+
+*Third correction, and the metric bit back twice.* The first fragility divided
+by median glyph **width** — computed from the very partition it was scoring.
+That bias runs the dangerous way. When a divide **shatters** (cell too small,
+projection broken) glyph widths collapse while inter-fragment gaps grow, so
+the ratio *rises*: measured on synthetic components, a healthy 10-glyph
+partition scored 0.088 and a shattered 30-fragment one scored **2.000** — the
+broken divide reporting ~23× safer than the correct one. A metric that
+rewarded the failure it existed to catch.
+
+Normalizing by median glyph **height** fixes the denominator, since text
+height is font-fixed and untouched by any horizontal merge decision. Being
+honest about what that does and does not buy: it cuts the inversion to ~3.9×
+(0.057 healthy vs 0.222 shattered) but **does not remove it**, because
+shattering also widens `min_inter` in the numerator. Fragility measures
+closeness-to-flipping and cannot be repaired into a measure of correctness. A
+high fragility is not reassurance.
+
+**Coverage** = sum of glyph widths / total u-extent is therefore the actual
+shattering detector, and it separates the same synthetics cleanly and in the
+right direction: 0.913 healthy versus 0.341 shattered. On the real fixture:
+max_intra −0.89, min_inter +0.63, fragility **0.071**, coverage **0.794**.
+Choosing a cutoff on either would re-commit the original error, so the
+instrument prints both and leaves the judgment to a human.
 
 **Still open, and named rather than closed:** fragility measures how close the
 overlap partition came to changing, not whether that partition is *right*. A
