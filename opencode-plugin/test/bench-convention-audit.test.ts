@@ -2,7 +2,7 @@ import { test, expect } from "bun:test"
 import { join, dirname } from "node:path"
 import { readFileSync, mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseFirstColNum, parseVerdict, cardFrom, applyTransform, runAuditUncached, auditCard, _resetAuditCache, writeAuditTrail, revalidate, parseRevalBlock, type RevalClaim } from "../src/bench/convention-audit.ts"
+import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseFirstColNum, parseVerdict, cardFrom, applyTransform, runAuditUncached, auditCard, _resetAuditCache, writeAuditTrail, revalidate, parseRevalBlock, stripRevalBlock, type RevalClaim } from "../src/bench/convention-audit.ts"
 import { runAgent } from "../src/bench/agent-run.ts"
 
 test("auditPrompt loads the frozen prompt with all four clauses + verdict line", () => {
@@ -176,6 +176,23 @@ test("parseRevalBlock: block is bounded at the first blank line — a later unre
   const p = parseRevalBlock(BLOCK + "\n\nsome unrelated prose\n| a | b | c | d |\n| e | f | g | h |")
   expect(p.kind).toBe("claim")
   if (p.kind === "claim") expect(p.claim.landings.length).toBe(2)
+})
+
+// ── Task 5: stripRevalBlock — removes the machine block from the injected card ──
+
+test("stripRevalBlock removes the block to EOF and trims", () => {
+  const raw = "SURFACE stuff\nCONTENT VERDICT: MISMATCH\nREVALIDATION:\nTRANSFORM: reciprocal\n| input |...\n| 1 | 2 | 3 | x |"
+  const out = stripRevalBlock(raw)
+  expect(out).toContain("SURFACE stuff")
+  expect(out).not.toContain("REVALIDATION:")
+  expect(out).not.toContain("TRANSFORM:")
+})
+test("stripRevalBlock is a no-op when no block present", () => {
+  expect(stripRevalBlock("SURFACE only")).toBe("SURFACE only")
+})
+test("stripRevalBlock over-strips a mid-answer block (bias: block last)", () => {
+  const raw = "human\nREVALIDATION:\nTRANSFORM: none\ntrailing human prose"
+  expect(stripRevalBlock(raw)).toBe("human")   // trailing prose lost — acceptable; a leak is worse
 })
 
 const okReply = (text: string) => ({

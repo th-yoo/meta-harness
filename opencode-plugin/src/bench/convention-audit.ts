@@ -276,6 +276,15 @@ export function parseRevalBlock(raw: string): ParsedReval {
   return { kind: "claim", claim: { transform: tRaw as RevalTransform, constant, delta, landings } }
 }
 
+/** Remove the REVALIDATION block (first whole-line marker → end of string) so it
+ * is never injected into the task instruction. Biases toward over-stripping: a
+ * block leaking into the SUT is worse than losing trailing prose. */
+export function stripRevalBlock(raw: string): string {
+  const m = raw.match(/^REVALIDATION:\s*$/m)
+  if (!m) return raw.trim()
+  return raw.slice(0, m.index).trim()
+}
+
 /** The audit call's isolation: bare (no tools, no persisted session,
  * thinking disabled) — mirrors `A4_ISOLATION` (a4-review.ts:88-96)
  * exactly, distinguished only by `title` so an audit call is unambiguous
