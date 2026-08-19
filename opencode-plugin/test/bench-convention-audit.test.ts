@@ -194,6 +194,11 @@ test("stripRevalBlock over-strips a mid-answer block (bias: block last)", () => 
   const raw = "human\nREVALIDATION:\nTRANSFORM: none\ntrailing human prose"
   expect(stripRevalBlock(raw)).toBe("human")   // trailing prose lost — acceptable; a leak is worse
 })
+test("a mid-line mention (marker not alone on its own line) is a no-op for both parse and strip", () => {
+  const raw = "see the REVALIDATION: section below"
+  expect(stripRevalBlock(raw)).toBe(raw)
+  expect(parseRevalBlock(raw).kind).toBe("absent")
+})
 
 const okReply = (text: string) => ({
   kind: "ok",

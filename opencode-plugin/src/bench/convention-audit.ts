@@ -241,11 +241,17 @@ export type ParsedReval =
 
 const REVAL_TRANSFORMS = new Set<RevalTransform>(["reciprocal", "scale", "offset", "identity"])
 
+// Shared by parseRevalBlock and stripRevalBlock — they MUST agree on what
+// counts as the block marker, or a block could be parsed-but-not-stripped
+// (leak into the injected card) or stripped-but-not-parsed. No `/g` flag,
+// so no lastIndex state leaks across the independent `.match()` calls.
+const REVAL_MARKER = /^REVALIDATION:\s*$/m
+
 /** Parse the imposed REVALIDATION block. Four-way, fail-closed: no marker →
  * absent; explicit `TRANSFORM: none` → none (criteria-class); a present-but-
  * broken block → malformed; a complete block → claim. */
 export function parseRevalBlock(raw: string): ParsedReval {
-  const marker = raw.match(/^REVALIDATION:\s*$/m)
+  const marker = raw.match(REVAL_MARKER)
   if (!marker) return { kind: "absent" }
   const start = marker.index!
   // Bound the block to its contiguous extent — cut at the first blank line
@@ -280,7 +286,7 @@ export function parseRevalBlock(raw: string): ParsedReval {
  * is never injected into the task instruction. Biases toward over-stripping: a
  * block leaking into the SUT is worse than losing trailing prose. */
 export function stripRevalBlock(raw: string): string {
-  const m = raw.match(/^REVALIDATION:\s*$/m)
+  const m = raw.match(REVAL_MARKER)
   if (!m) return raw.trim()
   return raw.slice(0, m.index).trim()
 }
