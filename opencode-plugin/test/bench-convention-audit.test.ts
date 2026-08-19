@@ -368,3 +368,40 @@ test("F2: the audit requests a BARE model id — the ACP wire rejects a provider
 test("F2: the audit stays pinned to the bench tier (derived from DEFAULT_BENCH_MODEL, never a second literal)", () => {
   expect(AUDIT_MODEL).toBe(DEFAULT_BENCH_MODEL.replace(/^[^/]+\//, ""))
 })
+test("F1: the client budget clears the daemon's worst case, or the call dies pre-send as a silent no-call", async () => {
+  let budget: number | undefined
+  const env = { ACP_TURN_TIMEOUT_MS: "120000" }
+  await runAuditUncached(P(FIX), "clean", env, {
+    ensure: async () => true,
+    call: async (_t: string, _m: string, _e: unknown, opts: { budgetMs?: number }) => {
+      budget = opts.budgetMs
+      return okReply("x\nCONTENT VERDICT: NO MISMATCH")
+    },
+    close: async () => ({ closed: true }),
+  } as any)
+  // acp-client refuses PRE-SEND when daemonWorstCaseMs >= budgetMs. The daemon's
+  // worst case tracks the turn timeout this env asks for.
+  const worstCase = ACP_BUDGET.daemonWorstCaseMs - ACP_BUDGET.turnTimeoutMs + 120_000
+  expect(budget).toBeGreaterThan(worstCase)
+})
+
+test("F1: the budget tracks a caller-supplied turn timeout rather than a fixed constant", async () => {
+  const budgetFor = async (turnMs: string): Promise<number | undefined> => {
+    let b: number | undefined
+    await runAuditUncached(P(FIX), "clean", { ACP_TURN_TIMEOUT_MS: turnMs }, {
+      ensure: async () => true,
+      call: async (_t: string, _m: string, _e: unknown, o: { budgetMs?: number }) => {
+        b = o.budgetMs
+        return okReply("x\nCONTENT VERDICT: NO MISMATCH")
+      },
+      close: async () => ({ closed: true }),
+    } as any)
+    return b
+  }
+  const long = await budgetFor("300000")
+  expect(long).toBeGreaterThan(ACP_BUDGET.daemonWorstCaseMs - ACP_BUDGET.turnTimeoutMs + 300_000)
+  // A turn timeout BELOW the daemon's own floor must not shrink the budget under
+  // the floor-derived worst case.
+  const short = await budgetFor("1000")
+  expect(short).toBeGreaterThanOrEqual(ACP_BUDGET.clientBudgetMs)
+})

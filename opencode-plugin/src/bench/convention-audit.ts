@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, realpathSync, statSync, appendFileSync } from "node:fs"
 import { join, dirname, relative, sep } from "node:path"
-import { ensureDaemon, daemonCall, closeSession, modelProvenBy, type WarmIsolation } from "@th-yoo/cc-api-daemon"
+import { ensureDaemon, daemonCall, closeSession, modelProvenBy, ACP_BUDGET, type WarmIsolation } from "@th-yoo/cc-api-daemon"
 import type { BenchPaths } from "./paths.ts"
 import { DEFAULT_BENCH_MODEL } from "./paths.ts"
 import { BenchError } from "./util.ts"
@@ -20,6 +20,38 @@ export const AUDIT_PROMPT_VERSION = "lane-a-v3"
  * back `terminal_reason=api_error`, which `runAuditUncached` folds into a plain
  * `verdict: "ERROR"` — indistinguishable from a model that simply failed. */
 export const AUDIT_MODEL = DEFAULT_BENCH_MODEL.replace(/^[^/]+\//, "")
+
+/** The audit's per-turn budget. A multi-KB sample needs far more than the
+ * daemon's own 16s default, which is tuned for short turns. */
+export const AUDIT_TURN_TIMEOUT_MS = 120_000
+
+/** The client-side whole-call budget for the audit, DERIVED from the turn
+ * timeout actually in force.
+ *
+ * `ACP_BUDGET` encodes a contract: `clientBudgetMs > daemonWorstCaseMs`. Raising
+ * `ACP_TURN_TIMEOUT_MS` raises the daemon's advertised worst case (the daemon
+ * swaps its own turn leg for the requested one) but does NOT raise the client
+ * budget, which defaults to a fixed `ACP_BUDGET.clientBudgetMs`. Asking for a
+ * 120s turn therefore inverted the contract — worst case 136s against a 36s
+ * budget — and `daemonCall` refuses PRE-SEND whenever
+ * `daemonWorstCaseMs >= budgetMs`, returning a silent, zero-spend `no-call`
+ * that `runAuditUncached` folds into `verdict: "ERROR"`. Finding F1 of
+ * `docs/loop-probes/reval-adherence-20260819/verdict.md`; measured live, every
+ * audit call died there before this fix.
+ *
+ * So: rebuild the daemon's worst case for the turn in force and keep the same
+ * preamble slack the package's own constants use (connect + initialize +
+ * session/new, which the daemon's per-turn clock does not cover). The turn is
+ * floored at `ACP_BUDGET.turnTimeoutMs`, which also clears the package's
+ * per-backend floors (CLI spawn 8s, auth resolve 10s), so a caller asking for a
+ * SHORTER turn can never shrink the budget below the stock contract. */
+export function auditClientBudgetMs(env: Record<string, string | undefined>): number {
+  const asked = Number(env.ACP_TURN_TIMEOUT_MS)
+  const turn = Math.max(Number.isFinite(asked) ? asked : AUDIT_TURN_TIMEOUT_MS, ACP_BUDGET.turnTimeoutMs)
+  const daemonWorstCase = ACP_BUDGET.daemonWorstCaseMs - ACP_BUDGET.turnTimeoutMs + turn
+  const preamble = ACP_BUDGET.clientBudgetMs - ACP_BUDGET.daemonWorstCaseMs
+  return daemonWorstCase + preamble
+}
 
 /** Numeric parse of a first-column token, tolerant of a single decimal comma
  * (EU locale, e.g. "47183,554644"). A token with a lone comma and no dot has the
@@ -394,7 +426,7 @@ export async function runAuditUncached(
   const close = deps.close ?? closeSession
 
   const { text: sample, truncated } = buildSample(paths, task)
-  const auditEnv = { ...env, ACP_TURN_TIMEOUT_MS: env.ACP_TURN_TIMEOUT_MS ?? "120000" }
+  const auditEnv = { ...env, ACP_TURN_TIMEOUT_MS: env.ACP_TURN_TIMEOUT_MS ?? String(AUDIT_TURN_TIMEOUT_MS) }
 
   let sid: string | undefined
   try {
@@ -402,6 +434,7 @@ export async function runAuditUncached(
 
     const outcome = await call(auditPrompt() + "\n\n" + sample, AUDIT_MODEL, auditEnv, {
       isolation: AUDIT_ISOLATION,
+      budgetMs: auditClientBudgetMs(auditEnv),
     })
 
     if (outcome.kind !== "ok") return { card: null, rawAudit: "", verdict: "ERROR", sample, truncated }
