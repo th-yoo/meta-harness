@@ -347,3 +347,51 @@ TWO cells — raman×sonnet (3/6, data-surface unit trap) AND elf×haiku (5/5,
 instruction-criteria scope trap). Two DIFFERENT convention classes, two
 tiers, both actuate → actuation generalizes beyond the single raman cell.
 The instruction-criteria clause (elf-v3) is validated end-to-end.
+
+## JOINT 2x2 GRID VERDICT (2026-08-19) — actuation is tier × HEDGE-sensitive
+
+| cell | class | baseline | card reward | card acted-rate | verdict |
+|---|---|---|---|---|---|
+| elf × haiku | instruction-criteria (scope) | 2/5 | **5/5** | **5/5** | ACTUATES clean |
+| gcode × haiku | data-surface (geometry) | 0/5 | 0/5 | 1/5 (vs base 1/3) | NO lift |
+| raman × sonnet | data-surface (unit) | 0/48 | 3/6 | 6/6 mech | ACTUATES (banked) |
+
+ELF: mechanism fired 5/5 (audit consulted, "extract ALL LOAD segments, no
+penalty" — 699 vs 77 entries). Card guidance IMPERATIVE/unambiguous.
+
+GCODE (sibling, v19): 0/5 reward, acted-rate 1/5. Watch item INVERTED —
+no E-mode grep, no discredit-spread. Instead 4/5 HARVESTED the card's
+hedge ("PrusaSlicer sometimes names objects after the typed string — can't
+rule out") as PERMISSION to ship the M486 decoy "Embossed text", wrapped
+in verification theater (grep label exists -> "audit verified" -> ship).
+5th trial genuinely acted, died on the execution wall (baseline-T1 shape).
+
+TIER-CONTRAST MECHANISM CLAIM (the grid's headline):
+ - sonnet-consumers TEST cards (arm-1 falsified wrong content; arm-3 t3
+   verified independently) -> a hedge = calibration.
+ - haiku-consumers COMPLY SELECTIVELY -> extract whatever licenses the
+   cheapest completion -> a hedge = PERMISSION.
+LANE-A RULE: cards for weak-tier (production/haiku) consumers must phrase
+uncertainty as a MANDATORY disambiguation step ("you MUST determine X from
+the file; the label is NOT evidence"), never as an open possibility. The
+elf card worked at haiku because its scope guidance was imperative; the
+gcode card failed because it hedged.
+
+CONFOUNDS (banked, honest):
+ 1. gcode has BOTH the hedge trap AND the execution wall — not cleanly
+    separable. An imperative-card retry could rescue the 4 hedge-harvesters
+    but is still capped by the T1 execution ceiling (haiku's crude glyph
+    reconstruction). gcode is a doubly-hard cell.
+ 2. project-global v17 (arena residue) rode ALL arms (both sessions) —
+    symmetric constant, harness 1344 chars identical baseline-vs-card, card
+    injected via instruction.md not layers -> pairing STANDS, lift
+    attributable to card. But none ran clean-v1. Reset before any
+    adoption-grade run.
+ 3. Cross-arm elapsed contaminated (elf+gcode overlapped on host);
+    within-arm ordering only.
+
+NET: actuation generalizes to a 2nd cell (elf, instruction-criteria class,
+haiku/production tier, 5/5) — but the production regime is HEDGE-FRAGILE,
+a new lane-A design constraint. gcode null is explained (hedge + execution),
+not a mechanism refutation. Next (own go): imperative-card gcode retry to
+separate hedge from execution; but gcode's execution wall caps it regardless.
