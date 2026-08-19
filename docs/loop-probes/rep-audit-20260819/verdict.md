@@ -227,3 +227,27 @@ re-poison the card (arm-1 finding 2). Deviation banked before any trial
 completed. Also: user chose PARALLEL over generator-first — arm-2 runs the
 hand-authored card (channel-ceiling scope); a generated-card arm-2 remains
 available as a follow-up if the generator passes.
+
+## Arm-2 verdict (2026-08-19) — 2/3 PASS, CHANNEL CEILING CONFIRMED · REPRESENTATION TRAP SOLVED 3/3
+
+raman-fitting-predict k=3 under v18 (hand-authored falsifiable-prediction
+card): rewards 1,1,0. Passes: G=1580.33/2D=2670.10 and G=1580.31/2D=2670.09.
+Trial-3 traj: mechanism executed PERFECTLY (located raw peaks 6329.4/3745.1,
+applied 1e7/x, verified joint landing "right on top of canonical", refit in
+converted axis, x0=1580.34/2670.11) — failed the verifier on 2D gamma 18.55
+vs 17.52 (±1 bar, missed by 0.03) and offset. Ordinary fit-quality
+residual; the representation trap itself was solved in all three trials.
+
+Elapsed signature inverted: passes 76-104s vs historical fails 360-880s —
+solving the right problem is FAST (consistent with crank-1's slow-fail
+churn finding).
+
+Pre-registered bar (≥2/3) MET: a correct transform framed as a falsifiable
+prediction, delivered through a soft ordering gate, survives agent
+empiricism + injection defense and flips raman 0/48+ lifetime → 2/3
+(mechanism 3/3). Scope: CHANNEL CEILING (hand-authored card). Lane A
+end-to-end still gated on the generator (0/2, sampler-evidence bottleneck —
+see generator/verdict.md).
+
+Attack-stack state after today: retrieval(audit)✓ gate(content-verdict)✓
+channel(prediction card)✓ generator(sampler iter-2)✗ ← the one open link.
