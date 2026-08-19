@@ -1,6 +1,8 @@
 import { test, expect } from "bun:test"
 import { join, dirname } from "node:path"
-import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseVerdict, cardFrom, runAuditUncached, auditCard, _resetAuditCache } from "../src/bench/convention-audit.ts"
+import { readFileSync, mkdtempSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { auditPrompt, AUDIT_PROMPT_VERSION, buildSample, parseVerdict, cardFrom, runAuditUncached, auditCard, _resetAuditCache, writeAuditTrail } from "../src/bench/convention-audit.ts"
 
 test("auditPrompt loads the frozen prompt with all four clauses + verdict line", () => {
   const p = auditPrompt()
@@ -90,4 +92,13 @@ test("auditCard single-flights concurrent same-task misses into one call", async
   const [a, b] = await Promise.all([auditCard(P(FIX), "clean", {}, d), auditCard(P(FIX), "clean", {}, d)])
   expect(calls).toBe(1)
   expect(a.card).toBe(b.card)   // byte-identical across "arms"
+})
+
+test("writeAuditTrail appends one ndjson line with the card + verdict", () => {
+  const dir = mkdtempSync(join(tmpdir(), "conv-trail-"))
+  writeAuditTrail({ resultsDir: dir } as any, "clean",
+    { card: "C", rawAudit: "R", verdict: "MISMATCH", sample: "S", truncated: false })
+  const line = JSON.parse(readFileSync(join(dir, "convention-audit-trail.ndjson"), "utf-8").trim())
+  expect(line.task).toBe("clean"); expect(line.verdict).toBe("MISMATCH"); expect(line.card).toBe("C")
+  expect(line.promptVersion).toBe("lane-a-v1")
 })

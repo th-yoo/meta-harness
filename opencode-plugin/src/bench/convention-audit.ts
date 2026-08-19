@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs"
+import { readFileSync, readdirSync, realpathSync, statSync, appendFileSync } from "node:fs"
 import { join, dirname, relative, sep } from "node:path"
 import { ensureDaemon, daemonCall, closeSession, modelProvenBy, type WarmIsolation } from "@th-yoo/cc-api-daemon"
 import type { BenchPaths } from "./paths.ts"
@@ -284,4 +284,22 @@ export async function runAuditUncached(
       }
     }
   }
+}
+
+/** Append one ndjson line to <resultsDir>/convention-audit-trail.ndjson recording
+ * the audit result: {task, promptVersion, verdict, truncated, cardLen, sampleLen, card, rawAudit}.
+ * This is the leak-safety record that documents what was sent to the audit model.
+ */
+export function writeAuditTrail(paths: BenchPaths, task: string, r: AuditResult): void {
+  const line = {
+    task,
+    promptVersion: AUDIT_PROMPT_VERSION,
+    verdict: r.verdict,
+    truncated: r.truncated,
+    cardLen: r.card?.length ?? 0,
+    sampleLen: r.sample.length,
+    card: r.card,
+    rawAudit: r.rawAudit,
+  }
+  appendFileSync(join(paths.resultsDir, "convention-audit-trail.ndjson"), JSON.stringify(line) + "\n")
 }
