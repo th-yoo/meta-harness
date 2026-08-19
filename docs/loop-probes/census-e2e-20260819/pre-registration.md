@@ -62,3 +62,41 @@ the census "traps" are tier-dependent — floored for the leaderboard's
 weaker stacks (gcode mean 0.38, elf 0.61 across 10 agents), self-solved
 at sonnet. Detection generality (census probe) holds; ACTUATION lift
 needs a floored baseline, which sonnet does not provide here.
+
+
+## CORRECTION (sibling review, post-result) — "no headroom/ceiling" was a k=1 OVERCLAIM
+
+A k=1 pass establishes NOT-ZERO-FLOORED, not ceiling. gcode leaderboard
+mean 0.38 → sonnet could be p≈0.5 with ample headroom, just not raman's
+unambiguous-0-floor kind. Correct statement: the raman-style
+unambiguous-lift design (0-floor baseline) is UNAVAILABLE at sonnet; a
+mid-p lift test needs ~k=15/arm on reward. The card arm was cancelled on
+POWER grounds, not ceiling grounds.
+
+CLAIM STRUCTURE (accepted): actuation is (task × tier) CELL-relative —
+defined only where the baseline fails for convention reasons. Detection
+generalizes across tasks (census, banked). Channel + actuation proven in
+ONE cell: raman × sonnet (3/6 vs 0/48, p≈0.0008, mechanism 6/6). That is
+an EXISTENCE proof, not generality. Any SECOND convention-floored cell
+closes it. Two ways to get one:
+ - HAIKU pipeline (production claim): sonnet-audit card → haiku consumer
+   = lane A's actual shipping shape (baseline law = haiku; audit runs
+   sonnet regardless per the tier ruling). NOT a task-generality test
+   (task AND tier both move vs the raman cell).
+ - SONNET-gcode paired k≈5 (science claim): tier FIXED, task moved = the
+   clean task-generality cell. Score traj-primary (convention consulted +
+   acted) + ELAPSED signature (381s/31-turn grind shortening under a card
+   — the twice-replicated mechanism probe), reward secondary.
+MANDATORY either way: step-1 discipline transfers — baseline pilots k≥3
+at the target tier with traj autopsy classifying each failure
+convention-caused vs execution-caused, BEFORE any card arm. Risk: haiku
+may fail gcode on EXECUTION (PCA/SVD unwarping craft the card cannot
+supply) → a card arm on an execution-floored baseline yields a null that
+misreads as "actuation doesn't generalize." Card arm only where failures
+are convention-caused.
+RAMAN: not needed again. Banked sonnet-cell existence proof is as good as
+that cell gets (verifier bar is a procedure lottery — re-running adds
+reward-noise, nothing at mechanism level). Roles: cite-don't-rerun
+existence proof + headless probe-instrument for future auditor/card-format
+regression. Do NOT take raman to haiku (execution-floored on scipy craft +
+verifier defect = reward unusable).
