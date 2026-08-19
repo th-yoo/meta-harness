@@ -541,6 +541,38 @@ yoo-dev then (this session drives it):
     Winner earns only a full-board slot PROPOSAL. No activation.
 ```
 
+## 🚢 V1 ACCEPTANCE SWEEP 2026-08-20 ~06:50 KST — PASS (one documented caveat)
+
+Criteria vs live evidence: death alert ✅ (B8 smoke, 4s) · prompt→alert with
+options ✅ + !answer 1 answers ✅ + stale rejected "prompt no longer pending" ✅ +
+double-send single-injection ✅ + esc ✅ (B9 smoke) · re-notify if ignored ✅ (B8,
++45s cadence ×2, retire stops) · done notice ✅ (B8/B9, repeatedly) · concierge
+free-form DM ✅ (B11, byte-exact) · at-most-once per edge ✅ (no double-post ever
+observed live; cooldown unit-pinned) · unmapped-channel silence ✅ (unit-pinned).
+CAVEAT — stall alert: full chain never observed live. Components proven: B7
+classifier built on LIVE-harvested stall fixture + 2 live stall-clock bugs fixed;
+B8 stalled→alert row unit-pinned. Organic reproduction BLOCKED BY DESIGN: CC's own
+harness auto-rescues hung Bash (proven 2× tonight — sleep refused, tail -f
+auto-backgrounded); SIGSTOP freezes didn't hold (process resumed, cause unresolved
+— user was concurrently at the terminal). Finding worth keeping: worker-class
+sessions self-heal tool hangs; stall lane's real target = API-stream wedges
+(cf. the REAL 600s subagent stall 08-19, on an unmonitored session). Verdict:
+V1 ACCEPTED; stall chain rides fixture+unit proof until an organic wedge shows up.
+
+## 🚢 SIBLING LANE UPDATE 2026-08-20 ~06:20 KST — B9 ANSWER RELAY COMPLETE: FLEET V1 CODE DONE + PUSHED (origin/main = `5f35f15`)
+
+B7+B8+B9+B10+B11 all landed. B9: 8 commits on b9-answer-relay worktree merged to
+local fleet main @ `5f35f15`, 328/328 tests — push awaiting human grant at worker
+prompt. !answer <n>/esc live-smoked end-to-end (options-in-alert, 1s inject + audit
+log, structural stale rejection, single-injection under double-send, esc cancel).
+Empirical Key Map: all three prompt shapes = bare digit auto-submit. Opus final
+review caught a REAL injectable bug (non-numeric option → literal keys) + the
+back-to-back-prompt promptStore dead-end. Process notes: 7h loss to subagent stall
++ network (recovered from worktree, nothing lost); T3 built PARALLEL to T2 in a
+second worktree (merge-train landing, human-approved). Deferred fail-safe:
+generalized-selection detector widening (tripwire-pinned), re-notify race (benign
+3×). Plan: fleet:docs/superpowers/plans/2026-08-19-b9-answer-relay.md rev 2.
+
 ## 🚢 SIBLING LANE UPDATE 2026-08-19 ~00:15 KST — B8 ALERT MAPPING COMPLETE + PUSHED: origin/main = `8fb6919`
 
 8 commits 3c75b90..8fb6919, 255/255 tests. Spec §1.3 landed: full state alert table
