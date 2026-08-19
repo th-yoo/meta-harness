@@ -203,8 +203,12 @@ def separation_margin(xy, comps):
     deform. Full confidence still needs an independently-derived partition
     (stroke or file-order contiguity) compared against the u-overlap one.
 
-    LIMITS TABLE. Measured, not reasoned. Real-fixture figures from
-    text.gcode.gz at cell 0.4; synthetics in test_render_glyphs.
+    LIMITS TABLE. Measured, not reasoned. EVERY ROW IS MARKED with the
+    artifact its figures come from -- [synth] rows are the generators in
+    test_render_glyphs, [real] rows are text.gcode.gz at cell 0.4. The table
+    mixes both, and an unmarked table invites comparing a run against a
+    baseline from a different world: the shattering row's healthy pitch_ratio
+    is 9.5 on the synthetic while the real fixture prints 3.90.
 
     Note the difference between MOVES and REPORTS: only a statistic with a
     trigger reports. median_aspect moves on shattering (0.11) but has no
@@ -212,10 +216,10 @@ def separation_margin(xy, comps):
     reports shattering. A statistic that moves is not a detector.
 
       failure                  REPORTS it        moves only    blind / WRONG
-      shattering               coverage 0.341    median_aspect width_ratio
+      shattering [synth]       coverage 0.341    median_aspect width_ratio
       (cell too small)         (trigger 0.5)     0.11;         (1.00, equal
                                                  pitch_ratio   fragments);
-                                                 9.5 -> 0.5,   fragility 0.057
+                                                 9.5 -> 0.5    fragility 0.057
                                                  the largest   -> 0.222, i.e.
                                                  move in this  the shattered
                                                  table         partition still
@@ -229,7 +233,7 @@ def separation_margin(xy, comps):
                                                                because
                                                                shattering also
                                                                widens min_inter
-      global fusion            median_aspect     --            coverage
+      global fusion [synth]    median_aspect     --            coverage
       (all -> one blob)        3.89 (trigger                   (1.000, ABOVE
                                2.5)                            correct);
                                                                fragility
@@ -239,7 +243,7 @@ def separation_margin(xy, comps):
                                                                (n=1, 1.00);
                                                                pitch_ratio
                                                                (no gaps, NaN)
-      partial fusion           width_ratio 2.28  --            median_aspect
+      partial fusion [real]    width_ratio 2.28  --            median_aspect
       (one pair merges)        (trigger 2.0)                   (0.68 vs 0.66);
                                                                coverage
                                                                (0.803, ABOVE
@@ -248,7 +252,7 @@ def separation_margin(xy, comps):
                                                                (unchanged);
                                                                pitch_ratio
                                                                (3.96 vs 3.90)
-      UNIFORM fusion           NOTHING reports   pitch_ratio   all four
+      UNIFORM fusion [real]    NOTHING reports   pitch_ratio   all four
       (every glyph merges      it -- pitch_ratio 3.90 -> 8.30  triggers.
       with a neighbour)        moves but carries (alternating  13 glyphs of
                                no trigger        pairs), 5.00  26 survive:
@@ -296,7 +300,8 @@ def separation_margin(xy, comps):
     at all.
 
     Real fixture, correct partition: max_intra -0.89, min_inter +0.63,
-    fragility 0.071, coverage 0.794, median_aspect 0.66, width_ratio 1.45.
+    fragility 0.071, coverage 0.794, median_aspect 0.66, width_ratio 1.45,
+    pitch_ratio 3.90, over 26 glyphs.
     """
     if not comps:
         # keyword form on purpose: this return has silently fallen out of step

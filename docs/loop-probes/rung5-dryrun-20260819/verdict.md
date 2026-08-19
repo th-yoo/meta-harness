@@ -325,7 +325,11 @@ case fire fails the suite rather than passing quietly. `pitch_ratio` has no
 trigger at all, for the reason given above.
 
 **One limitation belongs in the shattering row and went undisclosed in the
-docstring for two commits while this document carried it:** fragility reads
+docstring for two commits while this document carried it** (figures in this
+paragraph are from the *synthetic* generators, not the real fixture — the
+docstring's table now marks every row with which artifact it came from, since
+the shattering row's healthy pitch ratio is 9.5 on the synthetic while the
+real fixture prints 3.90): fragility reads
 **0.222** on a shattered partition against **0.057** healthy, so the broken
 one still scores ~3.9× *safer*. That is the instrument's oldest surviving
 inversion — the height denominator cut it from ~23× but never removed it,

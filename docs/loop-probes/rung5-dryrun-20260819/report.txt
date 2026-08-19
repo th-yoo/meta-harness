@@ -39,4 +39,4 @@ per-glyph (reading order):
   24: pts= 2758  u=   79.53..  85.22  size= 5.70x 9.27
   25: pts= 1816  u=   86.61..  90.57  size= 3.96x11.73
 
-wrote whole.png, contact-sheet.png, 26 glyph-NN.png into /tmp/claude-1001/-home-th-yoo-z2-meta-harness/98fe1680-be04-47ef-a7be-4e2866981522/scratchpad/r5j
+wrote whole.png, contact-sheet.png, 26 glyph-NN.png into /tmp/claude-1001/-home-th-yoo-z2-meta-harness/98fe1680-be04-47ef-a7be-4e2866981522/scratchpad/r5k

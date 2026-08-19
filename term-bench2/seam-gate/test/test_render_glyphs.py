@@ -442,25 +442,63 @@ class TestLimitsTableIsNotStale(unittest.TestCase):
         xy, _ = rg.project_pinned(readers.read_gcode_g1_points(gcode))
         cls.real = rg.separation_margin(xy, rg.components_at_cell(xy, 0.4))
 
-    def _both(self, name, text):
-        self.assertIn(text, self.docstring,
-                      f"{name}: docstring's limits table is stale ({text} missing)")
-        self.assertIn(text, self.verdict,
-                      f"{name}: verdict's limits table is stale ({text} missing)")
+    @staticmethod
+    def _closing_block(text):
+        """The 'Real fixture, correct partition' summary only. Matching the
+        whole document lets an edit to THIS line be masked by the same
+        label+value appearing in a table row elsewhere -- mutation-tested:
+        changing the closing line alone passed until the search was scoped
+        here."""
+        i = text.index("Real fixture, correct partition")
+        return text[i:i + 400]
+
+    def _both(self, name, doc_pat, verdict_pat):
+        """Both patterns are LABEL-ANCHORED regexes matched inside the closing
+        block, not bare numbers matched anywhere.
+
+        An earlier version searched for the bare figure, and one assertion
+        could not fail: `assertIn("26")` was satisfied forever by the verdict's
+        own "2026-08-19" dateline. The same hole let "0.66" be satisfied by a
+        future "0.667" and "1.45" by "11.45" -- text that is not the number the
+        cell is about. Anchoring to the label closes it, and makes a
+        single-occurrence edit detectable rather than masked by the figure
+        recurring elsewhere in the prose.
+        """
+        self.assertRegex(self._closing_block(self.docstring), doc_pat,
+                         f"{name}: docstring's closing figures are stale")
+        self.assertRegex(self._closing_block(self.verdict), verdict_pat,
+                         f"{name}: verdict's closing figures are stale")
 
     def test_real_fixture_numbers_appear_in_both_copies(self):
         m = self.real
-        self._both("fragility", f"{m.fragility:.3f}")
-        self._both("coverage", f"{m.coverage:.3f}")
-        self._both("median_aspect", f"{m.median_aspect:.2f}")
-        self._both("width_ratio", f"{m.width_ratio:.2f}")
-        self._both("pitch_ratio", f"{m.pitch_ratio:.2f}")
-        self._both("glyph_count", str(m.glyph_count))
+        self._both("fragility",
+                   rf"fragility {m.fragility:.3f}",
+                   rf"fragility\s*\*\*{m.fragility:.3f}\*\*")
+        self._both("coverage",
+                   rf"coverage {m.coverage:.3f}",
+                   rf"coverage \*\*{m.coverage:.3f}\*\*")
+        self._both("median_aspect",
+                   rf"median_aspect {m.median_aspect:.2f}",
+                   rf"median aspect \*\*{m.median_aspect:.2f}\*\*")
+        self._both("width_ratio",
+                   rf"width_ratio {m.width_ratio:.2f}",
+                   rf"width ratio \*\*{m.width_ratio:.2f}\*\*")
+        self._both("pitch_ratio",
+                   rf"pitch_ratio {m.pitch_ratio:.2f}",
+                   rf"pitch ratio \*\*{m.pitch_ratio:.2f}\*\*")
+        self._both("glyph_count",
+                   rf"over {m.glyph_count} glyphs",
+                   rf"over \*\*{m.glyph_count}\*\* glyphs")
 
     def test_shattering_inversion_is_disclosed_in_both_copies(self):
         """The oldest surviving inversion: the shattered partition still scores
         safer on fragility. It went undisclosed in the docstring for two
-        commits while the verdict carried it."""
+        commits while the verdict carried it.
+
+        NOTE this test FAILS ON IMPROVEMENT -- the day someone repairs
+        fragility so the inversion is gone, the first assertion goes red. That
+        is intended: the disclosure must be rewritten at the same time, and a
+        red test is the cheapest way to force that. It is not a regression."""
         healthy = rg.separation_margin(*TestSeparationMargin._spans(
             TestSeparationMargin._healthy()))
         shattered = rg.separation_margin(*TestSeparationMargin._spans(
