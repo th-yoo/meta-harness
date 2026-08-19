@@ -211,3 +211,41 @@ as a lane-A limitation finding and flip to gcode k=5 mechanism-scored.
 Sampler input = blind-ish: instruction + readelf -S/-l/-h summary + a
 hexdump sample (NOT the reference solution / tests). 2 calls, sonnet,
 bash-enabled.
+
+## Elf card-gen VERDICT (2026-08-19) — pre-check (ii) FAILS; STRUCTURAL lane-A boundary found
+
+Failing-traj confirmation (bench-extract-elf-...f6045b, the 77-value fail):
+agent's own summary extracted from ".data, .rodata, .init_array,
+.fini_array, .got, .dynamic" — **.text ABSENT**. So the haiku fail cause
+= SCOPE (missing the code section), base-0 vaddrs used correctly. Sibling's
+scope inversion CONFIRMED from data; my address-base worry refuted (base
+was right).
+
+Generated card (2/2 calls): both found the PIE ADDRESS-BASE convention
+(example 0x400000 legacy vs readelf base 0x0) + file-offset-vs-vaddr +
+endianness — computed, falsifiable, high quality. Neither produced the
+memory-image-SCOPE convention (.text-counts). Pre-check (ii) FAILS the
+pre-registered bar (card must unprompted state memory image includes
+code/.text).
+
+STRUCTURAL FINDING (the real result, not just "flip to gcode"):
+the auditor surfaces only conventions with a DATA-SURFACE SIGNATURE
+visible in the leak-safe sample. Address-base has one (example addrs vs
+readelf). Endianness/units/script/axis have one. But SCOPE-OF-EXTRACTION
+("which sections the grader counts as the memory image") is defined by the
+REFERENCE SOLUTION, not by the data surface — so it is invisible to a
+leak-safe auditor by construction. This is a FUNDAMENTAL lane-A boundary:
+lane A catches representation traps with a data-surface signature; it
+CANNOT catch grader-scope conventions without reading tests/ (leak-forbidden).
+Not a prompt-tuning gap — a structural one. The card being off-target here
+is itself the finding; the address-base card is NOT the blocker (agent had
+base right) so an elf card arm would null by construction.
+
+DECISION (per pre-registered FAIL branch): do NOT hand-add scope to the
+card. Elf card arm CANCELLED. Flip to gcode k=5 mechanism-scored as the
+2nd-actuation cell (gcode's convention — text-as-toolpath-geometry — DOES
+have a data-surface signature, so lane A can carry it; the ceiling there is
+execution-craft, a different and honest limit).
+
+Sibling's baseline top-up (elf k=2, in flight) becomes baseline-only
+characterization — still useful, no longer feeds a card arm.
