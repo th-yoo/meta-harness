@@ -160,3 +160,39 @@ transform poisons the card), which retro-justifies the clean-batch
 finding that blind sampling degrades attribution → sampler must ship
 distribution stats. Chain: sample-with-stats → audit → content-gate →
 falsifiable-prediction card → agent's own empiricism closes the loop.
+
+## Sibling review round 2 (accepted) + arm-2 pre-registration
+
+Sibling pokes, accepted:
+ 1. **Generator gap = the real lane-A hole.** Arm-2's card content
+    (1e7/x, raw positions, joint landing) is hand-authored; the automated
+    auditor never produced it. Lane-A viability probe = give the auditor
+    compute + instruction to numerically test its hypotheses against the
+    sample before writing the card; pass iff it derives the 1e7/x
+    prediction itself. Arm-2 cannot prove lane A regardless of outcome.
+ 2. **Arm-2 scope = CHANNEL-CEILING probe** (prediction is
+    solution-adjacent: 1e7/3745.37=2669.96, 1e7/6327.97=1580.29 — exact;
+    the transform IS the label swap, preemption sentence load-bearing).
+    Mild scope note kept: after arm-1, "correct recipe survives agent
+    empiricism + injection defense" was genuinely in doubt (T3 rejected a
+    card containing the textbook values), so a pass is informative, not
+    trivial. But it is NOT lane-A viability.
+ 3. **Three variables move together** (correct content, prediction
+    framing, non-mandatory tone) — named here per pre-reg discipline. A
+    PASS is package-level, unattributable among the three; production
+    ships the package whole, acceptable. If FAIL: decomposition arm =
+    correct-content-with-mandatory-tone first.
+ 4. Leak-safety item gains a line: coercive injected wording
+    pattern-matches to prompt-injection attack (arm-1 T3) — cost scales
+    with coerciveness; credibility, not force, is the lever.
+
+**Arm-2 pre-registration (before any call):** task raman-fitting-predict =
+raman-fitting-gate with the card's MISREADINGS hedge replaced by a
+falsifiable-prediction block (non-mandatory tone): candidate transform
+shift=1e7/x; prediction that raw peaks ≈3745.4 and ≈6328.0 are the 2D and
+G peaks and land at ≈2670 and ≈1580 simultaneously under the transform;
+invitation to test and keep whichever reading survives. Gate steps stay.
+k=3, sonnet, pinned v18, store-written. Success bar: ≥2/3 reward=1 =
+channel ceiling confirmed; 0-1/3 with trajs showing the prediction tested
+and confirmed but output still raw = actuation wall below content (would
+be a new finding); trajs showing prediction untested = framing regression.
