@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test"
 import { fitAffine, deriveDelta, EPS } from "../src/bench/reval-fit.ts"
 import { enumerateAutomorphisms, conditioningCheck, R_THRESHOLD_PLACEHOLDER } from "../src/bench/reval-fit.ts"
-import { mergeCheck } from "../src/bench/reval-fit.ts"
+import { mergeCheck, FIT_FAMILY } from "../src/bench/reval-fit.ts"
 
 test("fitAffine recovers exact affine relation", () => {
   const us = [1.0, 2.3, 2.9, 5.1, 7.8]
@@ -159,4 +159,16 @@ test("logarithmic relationship is rejected by residuals under the affine family"
 test("oracle arm: the same anchors under the true affine family still pass", () => {
   const us = [1.0, 2.3, 2.9, 5.1, 7.8]
   expect(mergeCheck(us, us.map((u) => 100 + 40 * u)).ok).toBe(true)
+})
+
+// -- §8.5 family-addition enforcement: a member without a registered attack
+// -- cannot exist, and every registered attack must actually be rejected.
+test("every family member carries a regression attack that the check rejects", () => {
+  expect(FIT_FAMILY.length).toBe(2) // frozen: {x, 1/x}; growth needs oracle+bad set per §1
+  for (const m of FIT_FAMILY) {
+    const { us, wrongClaim } = m.regressionAttack
+    expect(us.length).toBeGreaterThanOrEqual(3)
+    const r = mergeCheck(us, wrongClaim)
+    expect(r.ok).toBe(false) // the attack input must be rejected — by geometry or residual
+  }
 })

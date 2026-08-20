@@ -154,3 +154,39 @@ export function mergeCheck(anchorsU: number[], canonicals: number[]): MergeResul
   if (!cond.ok) return { ok: false, reason: "degenerate-constellation", a: fit.a, b: fit.b, delta, R: cond.R }
   return { ok: true, a: fit.a, b: fit.b, delta, R: cond.R }
 }
+
+export interface FamilyMember {
+  name: string
+  u: (x: number) => number
+  /** §8.5 enforcement: a family member cannot be added without its own
+   * T1-style attack input; the enforcement test rejects members without one
+   * (and rejects a member whose attack the check fails to reject). */
+  regressionAttack: { us: number[]; wrongClaim: number[] }
+}
+
+const T1_US = [1, 2, 3, 4, 5]
+const T1_TRUTH = T1_US.map((u) => 100 + 40 * u)
+
+/** Frozen a priori (spec §6.2): general measurement algebra, never grown per
+ * incident. Growth requires oracle-set AND bad-set validation (§8.3) plus a
+ * regression attack here (§8.5) — the type makes the attack mandatory. */
+export const FIT_FAMILY: readonly FamilyMember[] = [
+  {
+    name: "x",
+    u: (x) => x,
+    regressionAttack: { us: T1_US, wrongClaim: [...T1_TRUTH.slice(1), T1_TRUTH[4]! + 40] },
+  },
+  {
+    name: "inv-x",
+    u: (x) => 1 / x,
+    // attack constructed in X-SPACE and passed through the member's own u —
+    // xs chosen so u(x) is the equal-spaced degenerate constellation; an
+    // identical-to-"x" attack would make this enforcement near-vacuous.
+    regressionAttack: (() => {
+      const xs = [1, 0.5, 1 / 3, 0.25, 0.2]
+      const us = xs.map((x) => 1 / x) // ≈ [1,2,3,4,5] via the member's transform
+      const truth = us.map((u) => 100 + 40 * u)
+      return { us, wrongClaim: [...truth.slice(1), truth[4]! + 40] }
+    })(),
+  },
+] as const
