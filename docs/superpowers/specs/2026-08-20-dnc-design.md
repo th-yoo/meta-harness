@@ -36,10 +36,20 @@ HAS been — this spec argues from verdicts, not enthusiasm.
 A valid split axis has partitions that are:
 
 - **(a) independently solvable** — minimal cross-boundary coupling,
-  checkable structurally. LOAD-BEARING: an axis that severs dependencies
-  produces subtasks whose merge needs the answer, reintroducing claimant
-  degrees of freedom at merge time (the revalidator-bypass defect, at the
-  merge).
+  checkable structurally, where "coupling" includes SHARED-REFERENCE
+  channels (a common baseline, scale, or interpretive frame), not only
+  geometric overlap: the glyph-perception probe measured a low-SPATIAL-
+  coupling axis destroying a shared scale/case reference and halving
+  accuracy (26/26 whole vs 13/26 divided,
+  `docs/loop-probes/glyph-perception-20260820/`). LOAD-BEARING: an axis
+  that severs dependencies produces subtasks whose merge needs the answer,
+  reintroducing claimant degrees of freedom at merge time (the
+  revalidator-bypass defect, at the merge). **Measurement procedure
+  (answer-free, transfers to any proposed divide): solve each partition
+  alone, solve the whole, diff per position — the paired delta localizes
+  any hidden shared-reference dependency geometric analysis cannot see.
+  Run it BEFORE building on a claimed low-coupling axis; it is how a
+  coupling claim is falsified.**
 - **(b) sweep-stable** — the partition persists over the widest unchosen
   parameter range (scale-space class).
 - **(c) non-degenerate** — "divided nothing" excluded as a property of the
