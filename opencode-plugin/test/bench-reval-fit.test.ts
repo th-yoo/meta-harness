@@ -137,3 +137,26 @@ test("DOCUMENTED BOUNDARY (probe T6): an invented consistent (a,b) PASSES — th
   const invented = usIr.map((u) => 7 + 3 * u)
   expect(mergeCheck(usIr, invented).ok).toBe(true)
 })
+
+// -- §8.3 out-of-family bad set: residuals must reject a wrong family --------
+
+test("quadratic relationship is rejected by residuals under the affine family", () => {
+  const us = [1.0, 2.3, 2.9, 5.1, 7.8]
+  const quad = us.map((u) => 50 + 5 * u * u)
+  const r = mergeCheck(us, quad)
+  expect(r.ok).toBe(false)
+  expect(r.reason).toBe("residual")
+})
+
+test("logarithmic relationship is rejected by residuals under the affine family", () => {
+  const us = [1.0, 2.3, 2.9, 5.1, 7.8]
+  const logc = us.map((u) => 300 + 500 * Math.log(u))
+  const r = mergeCheck(us, logc)
+  expect(r.ok).toBe(false)
+  expect(r.reason).toBe("residual")
+})
+
+test("oracle arm: the same anchors under the true affine family still pass", () => {
+  const us = [1.0, 2.3, 2.9, 5.1, 7.8]
+  expect(mergeCheck(us, us.map((u) => 100 + 40 * u)).ok).toBe(true)
+})
