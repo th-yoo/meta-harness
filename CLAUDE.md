@@ -35,7 +35,22 @@ build the input that should break it*.
 HARNESS KNOWING THE ANSWER. World knowledge comes from the model; the harness
 supplies redundancy. An over-determined fit (more anchors than fitted parameters)
 is checkable with no reference table, which is the only mechanism found so far
-that does not require pre-loading answers.
+that does not require pre-loading answers. Its scope is measured, not assumed:
+it rejects ERROR (internal inconsistency), never DECEPTION (consistent
+fabrication) — a wholly invented claim applied consistently passes every check
+computed from the claim itself.
+
+**The downstream-of-decision law** (three independent derivations, 2026-08-20:
+lane B's six gcode checks, lane A's value-fabrication probe T6, and a
+fresh-context architect review — each found it without the others):
+**a statistic computed from the thing it audits cannot contradict it; a check
+that cannot fail cannot inform.** The escape is always a prior from OUTSIDE
+the artifact under audit — the task's own source, independent geometry, an
+outcome the claimant does not control. Before trusting any check, ask what
+would have to be true for it to fail, and whether anything outside the audited
+claim supplies that. Corollary, measured the same day: a fixed defence list
+grown one entry per attack found is this law at the meta level — derive
+defences from the artifact's structure, never enumerate them by incident.
 
 ## Save shareable artifacts under the repo — not host-local paths
 
