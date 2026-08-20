@@ -325,7 +325,17 @@ to further claim classes is future work gated on §8.
    enumerates every L-A-eligible artifact and the claim is checked against
    ALL of them — the claimant never selects the checked source (source
    cherry-picking is anchor cherry-picking one layer up); an unresolvable
-   eligible set → fail-closed NO-SOURCE.
+   eligible set → fail-closed NO-SOURCE. **Combination rule:** per-source
+   verdicts are {consistent, inconsistent, undecidable} (undecidable = no
+   deterministic comparison exists for that source, per (iii)); the L-A
+   verdict is INCONSISTENT if ANY source is inconsistent (inconsistency
+   vetoes), CONSISTENT iff at least one source is deterministically
+   consistent AND none is inconsistent, and NO-SOURCE when no source is
+   decidable. Undecidable sources are never evidence and never a veto —
+   they simply are not witnesses. **Terminology binding: CROSSCHECKED is
+   DEFINED as the (i) conjunction — `mergeCheck.ok AND L-A verdict
+   CONSISTENT` — one name, one predicate; the authority ladder's
+   CROSSCHECKED is this and nothing else.**
    (iii) **CONSISTENT is decided deterministically harness-side** where
    the source is numeric — the §8.2 predicate shape with tolerance derived
    from the source artifact, never claimant- or model-supplied. A model
