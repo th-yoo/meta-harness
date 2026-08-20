@@ -115,3 +115,42 @@ export function conditioningCheck(us: number[], cs: number[], tol?: number): Con
   const R = Math.min(...altRms) / Math.max(claimed, EPS)
   return { ok: R > R_THRESHOLD_PLACEHOLDER, R, alternates: altRms.length }
 }
+
+export type MergeReject = "coverage" | "insufficient-anchors" | "coincident-anchors" | "degenerate-constellation" | "residual"
+
+export interface MergeResult { ok: boolean; reason?: MergeReject; a?: number; b?: number; delta?: number; R?: number }
+
+/** Spec §6 merge: ONE over-determined fit across the FULL anchor set, delta
+ * derived from the fit itself, conditioning check on the constellation.
+ * Fail-closed at every gate. THREAT MODEL (spec §6, binding): this rejects
+ * ERROR (internal inconsistency), never DECEPTION (a consistently invented
+ * (a,b) passes by construction — probe T6); value truth needs an outside
+ * prior (§8.8) and is not this function's claim. */
+export function mergeCheck(anchorsU: number[], canonicals: number[]): MergeResult {
+  if (canonicals.length !== anchorsU.length) return { ok: false, reason: "coverage" }
+  if (anchorsU.length < 3) return { ok: false, reason: "insufficient-anchors" }
+  const { su, sc } = sortedWith(anchorsU, canonicals)
+  // Coincident anchors would make deriveDelta throw; fail CLOSED, not loud —
+  // a typed reject, never an escaping RangeError (the reorder below made
+  // deriveDelta reachable before any other guard could catch this).
+  for (let i = 1; i < su.length; i++) {
+    if (su[i]! - su[i - 1]! < EPS) return { ok: false, reason: "coincident-anchors" }
+  }
+  // RESIDUALS FIRST. The conditioning R's denominator is the claimed fit's own
+  // rms, so a badly-fitting claim collapses R and would steal the reason from
+  // the residual signal (a shifted claim on irregular anchors must report
+  // "residual", matching the probe's side-by-side record — the two signals
+  // are independent, never chained bad-fit-first).
+  const fit = fitAffine(su, sc)
+  const delta = deriveDelta(su, fit.b)
+  for (let i = 0; i < su.length; i++) {
+    if (Math.abs(fit.a + fit.b * su[i]! - sc[i]!) >= delta) {
+      return { ok: false, reason: "residual", a: fit.a, b: fit.b, delta }
+    }
+  }
+  // A residual-clean claim still faces the geometry question: could a WRONG
+  // pairing fit this well? (probe T1/T10 — perfect fits on degenerate geometry.)
+  const cond = conditioningCheck(su, sc)
+  if (!cond.ok) return { ok: false, reason: "degenerate-constellation", a: fit.a, b: fit.b, delta, R: cond.R }
+  return { ok: true, a: fit.a, b: fit.b, delta, R: cond.R }
+}

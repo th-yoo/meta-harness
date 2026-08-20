@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test"
 import { fitAffine, deriveDelta, EPS } from "../src/bench/reval-fit.ts"
 import { enumerateAutomorphisms, conditioningCheck, R_THRESHOLD_PLACEHOLDER } from "../src/bench/reval-fit.ts"
+import { mergeCheck } from "../src/bench/reval-fit.ts"
 
 test("fitAffine recovers exact affine relation", () => {
   const us = [1.0, 2.3, 2.9, 5.1, 7.8]
@@ -86,4 +87,53 @@ test("T10 floor: reversal on SYMMETRIC irregular constellation is REJECTED (deri
 
 test("n < 3 is rejected outright", () => {
   expect(conditioningCheck([1, 2], [140, 180]).ok).toBe(false)
+})
+
+const usIr = [1.0, 2.3, 2.9, 5.1, 7.8]
+
+test("mergeCheck accepts an honest full-coverage claim on irregular anchors", () => {
+  const r = mergeCheck(usIr, truthOf(usIr))
+  expect(r.ok).toBe(true)
+  expect(r.b).toBeCloseTo(40, 6)
+  expect(r.delta).toBeCloseTo(12, 6) // |40| * 0.6 / 2
+})
+
+test("mergeCheck rejects partial coverage — claimant never selects the graded subset (spec §6.5)", () => {
+  const r = mergeCheck(usIr, truthOf(usIr).slice(0, 3))
+  expect(r.ok).toBe(false)
+  expect(r.reason).toBe("coverage")
+})
+
+test("mergeCheck rejects n < 3", () => {
+  const r = mergeCheck([1.0, 2.3], [140, 192])
+  expect(r.ok).toBe(false)
+  expect(r.reason).toBe("insufficient-anchors")
+})
+
+test("mergeCheck rejects coincident anchors fail-closed instead of throwing", () => {
+  const r = mergeCheck([1, 2, 2, 4, 5], [140, 180, 180, 260, 300])
+  expect(r.ok).toBe(false)
+  expect(r.reason).toBe("coincident-anchors")
+})
+
+test("mergeCheck rejects degenerate geometry fail-closed (probe T2)", () => {
+  const us = [1, 2, 3, 4, 5]
+  const r = mergeCheck(us, truthOf(us))
+  expect(r.ok).toBe(false)
+  expect(r.reason).toBe("degenerate-constellation")
+})
+
+test("mergeCheck rejects a shifted claim on irregular anchors via residuals (probe T4)", () => {
+  const truth = truthOf(usIr)
+  const shifted = [...truth.slice(1), truth[4]! + 40]
+  const r = mergeCheck(usIr, shifted)
+  expect(r.ok).toBe(false)
+  expect(r.reason).toBe("residual")
+})
+
+test("DOCUMENTED BOUNDARY (probe T6): an invented consistent (a,b) PASSES — the merge checks pairing, never truth", () => {
+  // Spec §6 scope paragraph: this is deception, rejectable only by an outside
+  // prior (§8.8). This test pins the boundary so nobody mistakes it for a bug.
+  const invented = usIr.map((u) => 7 + 3 * u)
+  expect(mergeCheck(usIr, invented).ok).toBe(true)
 })
