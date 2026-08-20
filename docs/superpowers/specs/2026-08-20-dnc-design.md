@@ -347,7 +347,13 @@ to further claim classes is future work gated on §8.
    card must be NUMERIC-LITERAL-FREE BY CONSTRUCTION (mechanically checked
    before injection against the claim's own numeric fields) — a prose card
    that smuggles the number is a numeric injection wearing the
-   criteria-class label.
+   criteria-class label. The checker's definition of "numeric literal"
+   MUST cover the evasion encodings a model actually emits: spelled-out
+   numerals ("twenty-six"), expressions evaluating to the value
+   ("1e7/532", "26±0"), and unit-relocated forms ("2.6e1") — a digit-run
+   regex is the same in-costume smuggling one encoding over. Standing
+   adversarial input, to be built ALONGSIDE the checker: a criteria card
+   that says the number without matching the checker.
    (v) **Pristine-snapshot rule**: L-A reads harness-captured
    PRE-EXECUTION copies of eligible artifacts (the `buildSample` pattern —
    task-definition tree, never the live container): several census tasks
