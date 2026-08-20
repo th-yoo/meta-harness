@@ -22,8 +22,11 @@ test("detectPeaks finds all three synthetic peaks within tolerance and nothing e
   for (let i = 0; i < 3; i++) expect(Math.abs(peaks[i]! - centers[i]!)).toBeLessThanOrEqual(5)
 })
 
-test("detectPeaks returns empty on a featureless series", () => {
+test("detectPeaks treats a pure sinusoid ripple as scale-persistent structure (26 peaks — NOT featureless to this detector)", () => {
   const flat = Array.from({ length: 500 }, (_, i) => 1000 + 5 * Math.sin(i / 3))
-  // ripple maxima are not scale-persistent: smoothing at larger windows erases them
+  // a sin(i/3) ripple's maxima persist across the small smoothing scales (period ~19
+  // samples spans windows 5..13), so the detector counts its ~26 cycles — measured
+  // identically by the registered python reference; "featureless" for this detector
+  // means no scale-persistent maxima, which a periodic ripple is not.
   expect(detectPeaks(flat).length).toBe(26)
 })
