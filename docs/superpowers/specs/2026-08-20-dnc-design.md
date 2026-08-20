@@ -239,9 +239,29 @@ to further claim classes is future work gated on §8.
    criterion (§3), the merge design (§6), lane-B's seam replacement, and
    any level-2 probe. One agreement is not transfer. Highest-leverage next
    spend in both lanes.
-2. **Noise robustness** of the R ≤ 3 threshold (probe cases were
-   noiseless): synthetic noisy honest claims must not be rejected in bulk.
-   Zero-spend extension of the existing probe. **Acceptance rule
+2. **Noise robustness — RESOLVED 2026-08-21 by the derived-thresholds
+   probe** (`docs/loop-probes/derived-thresholds-20260821/`): the §8.2
+   acceptance rule fired against the R=3 placeholder (noise sweep, GAP<100
+   at sigma ≤1%), and the derived-threshold branch was then designed and
+   validated 11/11 — ONE noise-floor predicate (`X² = Σ(r_i/sigma_c_i)²`
+   vs `chi2(0.999, n−2)`; claim must pass, every alternate pairing must
+   fail) replaces the R ratio, its placeholder, and `delta_fit`; sigma
+   derived from the artifact only (MAD smoothing residuals + per-anchor
+   position spread across persistent scales); LEVEL shown non-load-bearing
+   across 0.99/0.999/0.9999. Binding clauses for the arming increment:
+   (a) **the predicate's "every alternate" quantifier is BOUND to §6.4's
+   DERIVED automorphism output plus the fixed ±1 reference** — never a
+   fixed attack list, or the unification inherits the incident-registry
+   hole through its quantifier and the T-matrix cannot show it;
+   (b) **validated noise domain declared: exact through sigma ≤1% of
+   canonical span** — when the artifact's own derived sigma exceeds the
+   validated range, the gate returns UNCHECKABLE-not-wrong (fail-closed,
+   V5 semantics), never extrapolates the predicate past its evidence;
+   (c) **the sigma ESTIMATOR (MAD-smoothing-residual + scale-tracking) is
+   the predicate's single external input** — it carries the second-fixture
+   caveat's weight and enters the transfer register in its own right: the
+   next fixture class (heteroscedastic / peak-correlated noise) tests the
+   ESTIMATOR, not just the predicate. **Acceptance rule
    pre-committed NOW, before any verdict exists to protect:** in the
    noiseless probe the separation was total (R = 0 / 6.5e-16 vs 1.5e10) —
    removing or moving the threshold changes nothing, so 3 is a PLACEHOLDER,
