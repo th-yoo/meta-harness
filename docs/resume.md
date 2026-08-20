@@ -3,6 +3,23 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+> **⚠️ SHARED CHECKOUT — `git add <path>` STAGES THE OTHER LANE'S UNCOMMITTED
+> WORK TOO.** Both sessions share one working tree, so a path names the FILE,
+> not your changes to it. Measured twice on 2026-08-20: `docs/resume.md` edits
+> from one lane were committed under the other lane's authorship and message
+> (`8d09f7c` carries lane-B's seam audit and deleted lane-B's state header),
+> and earlier the same day a branch checkout squatted HEAD under a session
+> mid-probe.
+> **DETECTION SIGNATURE:** `git add <shared file>` then "nothing to commit" on
+> a file you KNOW you changed = someone else's commit already carried your
+> work. The failure is SILENT at commit time and visible only to the person
+> whose work was absorbed.
+> **PREVENTION:** `git diff --cached` before committing any file the other lane
+> also writes, or `git add -p docs/resume.md`. If it already happened, recover
+> ADDITIVELY — never revert or edit the other lane's block; a wrong authorship
+> record is far cheaper than a tangled one, and a pushed commit cannot be fixed
+> without rewriting everything under it.
+>
 > **⚠️ BEFORE RUNNING ANY BENCH ARM — `--layers none` SILENTLY DISCARDS YOUR
 > TRAJECTORIES, even with `--save-all-traj`.** `record.ts:432` writes trajs
 > inside a loop over `layerStoreRoots(layers, …)`, which is EMPTY for
