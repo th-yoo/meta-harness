@@ -92,6 +92,28 @@ agents deriving glyphs from coordinate lists in text.)
   minimum a recorded env-delta) → THEN the bullet ab on the stable
   environment. Libs already present → the audit just closes the risk.
 
+## 4c. Libs audit — RUN 2026-08-21, verdict CLEAN, no env change needed
+
+Measured on `localhost/mh-bench:latest` (user go, zero model spend):
+
+- Base image is BARE by design: `matplotlib`, `PIL`, `numpy`, `cv2` all
+  MISSING in both system python3 (3.12) and `uvx -p 3.13 python`.
+- BUT the agent's runtime containers have **network ON**
+  (`cmd-run.ts:307`, `sandbox.ts` bwrap-parity note) and a working
+  `pip`/`uv`; no PEP-668 externally-managed block: live in-container
+  `pip install matplotlib` → 3.11.1 imports; `pip install pillow` → PIL
+  imports (pip-as-root warning only, cosmetic).
+- Offline control: with `--network none` the same install fails — network
+  is the enabling condition, and it is on in the SUT path.
+
+Consequence: the WoT loop is ALREADY POSSIBLE end-to-end with zero
+environment change — the agent can self-provision its renderer deps at
+task time (the LATM shape, complete: write code, install libs, render,
+Read the image back — read-back proven by the delivery-channel probe 3/3).
+**The sequencing trap of 4b is MOOT: no env remedy exists to confound the
+bullet ab.** The bullet can trial on the current environment whenever its
+own go lands.
+
 ## 5. Falsifiable expectation (registered thought, not a run)
 
 If the render bullet ships through the standard proposer/ab path, the
