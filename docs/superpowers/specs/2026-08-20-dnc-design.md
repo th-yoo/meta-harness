@@ -155,7 +155,20 @@ to further claim classes is future work gated on §8.
    spend in both lanes.
 2. **Noise robustness** of the R ≤ 3 threshold (probe cases were
    noiseless): synthetic noisy honest claims must not be rejected in bulk.
-   Zero-spend extension of the existing probe.
+   Zero-spend extension of the existing probe. **Acceptance rule
+   pre-committed NOW, before any verdict exists to protect:** in the
+   noiseless probe the separation was total (R = 0 / 6.5e-16 vs 1.5e10) —
+   removing or moving the threshold changes nothing, so 3 is a PLACEHOLDER,
+   not load-bearing. It becomes a fitted constant the moment noise shrinks
+   the gap and someone tunes it to keep verdicts. Rule: the fixed threshold
+   survives only if the noisy gap stays ≥ 2 orders of magnitude across the
+   sweep; otherwise the check must move to a DERIVED threshold (from the
+   fit's own condition number under the delta bound) — never a tuned one.
+2a. **Intercept-absorption generality:** the T1 mechanism (a consistent
+   identity shift absorbed by the free additive constant) applies to ANY
+   family with a free intercept, not just affine-in-u. Every future family
+   member with an additive constant inherits the conditioning-check
+   requirement automatically.
 3. **Oracle set AND bad set** for any mechanism addition (per §1) — the
    frozen family, the conditioning check, and the peak detector each get
    both when implemented.
