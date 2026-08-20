@@ -1,0 +1,9 @@
+answer.txt
+crop_0.png
+crop_1.png
+crop_2.png
+obj0_top.png
+parse.py
+segs.pkl
+text.gcode
+text.gcode.gz

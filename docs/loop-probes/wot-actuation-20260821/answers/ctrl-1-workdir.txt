@@ -1,0 +1,12 @@
+answer.txt
+layer_all.png
+layer_all_rot.png
+layer_mid.png
+layer_zoom.png
+markers.txt
+parse.py
+plot_all.py
+plot.py
+segments.pkl
+text.gcode
+text.gcode.gz
