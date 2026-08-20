@@ -312,32 +312,59 @@ to further claim classes is future work gated on §8.
    Scope honesty: verifies faithfulness-to-source, not truth (stale/wrong
    source passes); L-A inputs are attacker-influenceable text and get
    sampler-grade containment (the `assertCleanStimulus` class).
-   **The bench's own task TESTS are never an L-A source — they are the
-   answer key, and a gate that reads them violates §1 by construction.**
+   **Eligibility is a POSITIVE structural criterion, not a ban list** (a
+   ban list — tests/ today, solution/ tomorrow, expected-values-in-README
+   next — is the incident registry §6.4 just closed, re-grown at the
+   source boundary): **an artifact is L-A-eligible iff it is VISIBLE TO
+   THE SUT INSIDE THE TASK CONTAINER.** SUT-visible artifacts cannot be
+   secret answer keys — the task already exposes them, so the gate
+   consuming them adds zero answer knowledge beyond the task's own
+   surface. Grader-private material (tests/, solution/, hidden checkers,
+   anything reachable only from the grading path) is banned automatically
+   without being named; the criterion is mechanically checkable from the
+   container mount/manifest. Edge, stated: an artifact both SUT-visible
+   AND grader-used stays eligible — the required independence is from the
+   CLAIM, not from the grader; SUT-visibility is what guarantees no §1
+   violation. This subsumes the replay-the-task-tool class correctly: it
+   is legitimate exactly because the tool ships in the SUT's own
+   environment.
 
-   **L-B independent replication (secondary, spend-gated):** k≥2 audits in
-   INDEPENDENT contexts; the claim's family and constants must replicate
-   within the derived sigma. Kills the arbitrary-invention class exactly
-   (an invented (a,b) has no stable generator; world-knowledge constants
-   replicate); BLIND to shared confident error — the documented L3 limit
-   ("a consistent wrong belief is consistent"), stated, not hidden.
-   Registered probe design (spend, own go): k=3 independent audits on the
-   raman fixture; falsifier — fabricated constants must FAIL replication
-   while a planted world-knowledge claim replicates.
+   **L-B independent replication (secondary, spend-gated — DEMOTED by
+   adversarial review before it ever armed):** the rung's original premise
+   ("invented (a,b) has no stable generator") holds for STOCHASTIC
+   invention and FAILS for PRIOR-DRIVEN invention — constants drawn from
+   the model's training prior are near-deterministic, and the OBSERVED
+   fabrication record is exactly that class (gen4-r1 confident-wrong; F4's
+   identical 532nm story in 4/4 cells; the line-15 era's systematic bias).
+   Same-model same-prompt replication measures sampling stability, not
+   truth, and shared training makes shared confident error the EXPECTED
+   failure mode. Consequences, binding: (i) replication as designed
+   requires GENERATOR DIVERSITY — different prompt framings at minimum,
+   different model family where the transport allows; k same-draws are one
+   witness, not k. (ii) The rung is EVIDENCE-GATED and confers NO numeric
+   authority until its registered falsifier probe runs AND includes a
+   PRIOR-DRIVEN arm: planted memorized-plausible-but-wrong constants (not
+   only arbitrary ones) must FAIL diverse replication while planted
+   world-knowledge claims replicate — if prior-driven fabrications
+   replicate, the rung dies by its own registration.
 
    **L-C outcome backstop:** task reward on the next crank, paired
    gain/regression attribution (the Regression-Tax lens) — the only layer
    whose ground truth the claimant does not control; slow and confounded,
    hence backstop.
 
-   **Authority policy (fail-closed ladder, binding):** value-truth status
-   gates injection authority — CROSSCHECKED → numeric injection permitted;
-   REPLICATED-only → numeric injection permitted, status carried in the
-   audit trail; UNCHECKED (NO-SOURCE and unreplicated) → NO numeric
-   injection, criteria-class card only (the existing fail-closed posture
-   extended to value truth). A T6-class invented claim can therefore reach
-   at most REPLICATED — and only by defeating independent replication,
-   which is its registered falsifier.
+   **Authority policy (fail-closed ladder, binding — tightened by
+   adversarial review):** value-truth status gates injection authority —
+   **CROSSCHECKED → numeric injection permitted. Everything else —
+   REPLICATED-only included — → criteria-class card only, status carried
+   in the audit trail. Numeric injection requires CROSSCHECKED, full
+   stop.** The coverage cost is accepted knowingly: the 34% census is the
+   gate being honest about where it can act, and the demoted rung sat
+   precisely on the task class (NO-SOURCE, raman) where reproducible
+   prior-driven fabrication was measured. REPLICATED-only may be
+   re-instated to numeric authority ONLY by the evidence gate above (the
+   prior-driven falsifier probe passing with generator diversity) — a
+   rehabilitation path, not a default.
 9. **Full-series data path** (implementation): the peak detector needs the
    full numeric series; the audit sample pipeline truncates to head/tail by
    design. First build decision: harness-side raw-fixture read (leak-safe
