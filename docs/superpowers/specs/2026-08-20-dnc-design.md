@@ -156,16 +156,26 @@ assumed (`docs/loop-probes/dnc-merge-fit-20260820/verdict.md`):
    near-periodic sub-constellations, partial reversals on symmetric
    subsets), so a fixed alternate list is the F4 whitelist-growth pattern
    at the meta level: v1 → v2 already grew by one entry in response to one
-   found attack, the rule's own tell. **The REQUIREMENT is therefore the
-   DERIVED form: the alternate set is computed from the constellation's own
-   geometry — enumerate its approximate automorphisms (u-spacing
-   autocorrelation / self-similarity under a noise-scaled tolerance) and
-   use those as the alternates.** Per-artifact, answer-free, closed over
-   the attack class instead of chasing it. v2's fixed set {±1 shift,
-   reversal} ships only as the regression FLOOR — any implementation must
-   pass it, and must not stop at it. Fail-closed on purpose: degenerate
-   constellations are UNCHECKABLE, not wrong; no inject, never a pass. T1
-   and T10 are the standing regression inputs.
+   found attack, the rule's own tell. **The REQUIREMENT is therefore TWO
+   components with distinct jobs (amended from the plan's architect review,
+   which found the earlier wording self-contradictory on asymmetric
+   geometry): (i) the DERIVED component — enumerate the constellation's own
+   approximate automorphisms (u-spacing autocorrelation / self-similarity
+   under a noise-scaled tolerance) and use those pairings as alternates.
+   This closes the unbounded symmetry-attack class per artifact, and it is
+   CORRECTLY EMPTY on asymmetric geometry: a wrong pairing can only fit
+   well by composing with a symmetry of the constellation, so no symmetry
+   means no attack surface in that class. (ii) the FIXED ±1-index-shift
+   pair — the minimal-misassignment distinguishability reference, which
+   supplies the R ratio's comparison scale on geometry with no symmetries.
+   It is fixed at ±1 forever, predates every attack, and never grows in
+   response to one — growth-by-incident applies to neither component.
+   Reversal is NOT in the fixed set: it arrives via (i) exactly when the
+   geometry has mirror symmetry.** v2's fixed set {±1 shift, reversal}
+   survives only as the regression FLOOR (tests any implementation must
+   pass); T1 and T10 are the standing regression inputs. Fail-closed on
+   purpose: degenerate constellations are UNCHECKABLE, not wrong; no
+   inject, never a pass.
 5. **Full-anchor coverage — the merge consumes the ENTIRE harness survivor
    set.** The claimant never selects which anchors are graded: freedom to
    pick 3 of 17 is freedom to construct a fabricated line on a compliant

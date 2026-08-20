@@ -19,7 +19,7 @@
 - Never edit committed verdict/pre-registration files under `docs/loop-probes/` — new files (addenda) only.
 - Never `git add docs/resume.md` without `git add -p` + `git diff --cached` inspection (shared file).
 - Frozen family is exactly `u ∈ {x, 1/x}` (spec §6.2) — no additions in this plan.
-- The conditioning check's alternate set is DERIVED from constellation geometry (spec §6.4); the fixed set {±1 shift, reversal} is the regression FLOOR — tests assert the derived form covers it; the floor is never the implementation.
+- The conditioning check's alternate set has TWO components with distinct jobs (spec §6.4 as amended): DERIVED automorphisms — the symmetry defence, correctly EMPTY on asymmetric geometry because a wrong pairing can only fit well by composing with a symmetry, so no symmetry = no attack surface in that class — plus the FIXED ±1-index-shift pair as the minimal-misassignment distinguishability reference (fixed BEFORE any attack existed and never grown in response to one; reversal is NOT in the fixed set — it comes from the derived component when the geometry has mirror symmetry). {T1, T10} are the regression floor.
 - R threshold 3 is a PLACEHOLDER pending the §8.2 noise rule — name it `R_THRESHOLD_PLACEHOLDER` in code so no reader mistakes it for a validated constant.
 - Commit messages end with: `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`
 
@@ -30,7 +30,7 @@ G1 (independent, may run in any order):   T1 reval-fit core   T5 series-peaks   
 G2 (after T1):                            T2 conditioning check
 G3 (after T2):                            T3 merge check
 G4 (after T3, mutually independent):      T4 out-of-family bad set   T7 family enforcement   T10 noise sweep
-G5 (after T3+T5+T6):                      T8 real-fixture integration
+G5 (after T3+T5+T6+T7):                   T8 real-fixture integration
 G6 (after T8):                            T11 second fixture
 G7 (last):                                T12 docs + resume
 ```
@@ -180,18 +180,18 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `opencode-plugin/test/bench-reval-fit.test.ts` (extend the existing import line with the new names):
+Append to `opencode-plugin/test/bench-reval-fit.test.ts` (add a NEW import statement below the existing ones — the code below shows it; multiple import statements from the same module are fine):
 
 ```ts
 import { enumerateAutomorphisms, conditioningCheck, R_THRESHOLD_PLACEHOLDER } from "../src/bench/reval-fit.ts"
 
 // -- derived automorphisms ---------------------------------------------------
 
-test("equal-spaced constellation has translation and mirror automorphisms", () => {
+test("equal-spaced constellation has the mirror automorphism (finite translations never survive the boundaries)", () => {
   const auts = enumerateAutomorphisms([1, 2, 3, 4, 5])
-  expect(auts.length).toBeGreaterThan(0)
-  // mirror of an equal-spaced set is the full reversal permutation
-  expect(auts).toContainEqual([4, 3, 2, 1, 0])
+  // translations of a FINITE arithmetic sequence always push a boundary
+  // element outside tolerance, so only the mirror survives
+  expect(auts).toEqual([[4, 3, 2, 1, 0]])
 })
 
 test("SYMMETRIC irregular constellation has the mirror automorphism (probe T10 geometry)", () => {
@@ -300,10 +300,16 @@ export function enumerateAutomorphisms(us: number[], tol?: number): number[][] {
 
 export interface ConditioningResult { ok: boolean; R: number; alternates: number }
 
-/** Spec §6.4: R = min(RMS over alternates) / max(RMS claimed, EPS); reject when
- * R <= threshold or n < 3. Alternates = the constellation's own derived
- * automorphism pairings, plus the ±1 index shifts (drop-one translations —
- * the floor's shift arm; on irregular geometry they fit badly and are inert). */
+/** Spec §6.4 (as amended): R = min(RMS over alternates) / max(RMS claimed, EPS);
+ * reject when R <= threshold or n < 3. TWO alternate components with distinct
+ * jobs: (1) the constellation's DERIVED automorphism pairings — the symmetry
+ * defence; an empty set on asymmetric geometry is CORRECT, not a gap, because
+ * a wrong pairing can only fit well by composing with a symmetry of the
+ * constellation, so no symmetry = no attack surface in that class; (2) the
+ * FIXED ±1-index-shift pair — the minimal-misassignment distinguishability
+ * reference, fixed before any attack existed and never grown in response to
+ * one (reversal is NOT fixed here: it arrives via (1) when the geometry has
+ * mirror symmetry). Growth-by-incident applies to neither component. */
 export function conditioningCheck(us: number[], cs: number[], tol?: number): ConditioningResult {
   const n = us.length
   if (n < 3 || cs.length !== n) return { ok: false, R: NaN, alternates: 0 }
@@ -357,7 +363,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `opencode-plugin/test/bench-reval-fit.test.ts` (extend the import with `mergeCheck`):
+Append to `opencode-plugin/test/bench-reval-fit.test.ts` (add a new import statement for `mergeCheck` below the existing ones, as shown):
 
 ```ts
 import { mergeCheck } from "../src/bench/reval-fit.ts"
@@ -429,19 +435,23 @@ export interface MergeResult { ok: boolean; reason?: MergeReject; a?: number; b?
 export function mergeCheck(anchorsU: number[], canonicals: number[]): MergeResult {
   if (canonicals.length !== anchorsU.length) return { ok: false, reason: "coverage" }
   if (anchorsU.length < 3) return { ok: false, reason: "insufficient-anchors" }
-  const cond = conditioningCheck(anchorsU, canonicals)
-  if (!cond.ok) return { ok: false, reason: "degenerate-constellation", R: cond.R }
-  const { su, sc } = (() => {
-    const idx = anchorsU.map((_, i) => i).sort((i, j) => anchorsU[i]! - anchorsU[j]!)
-    return { su: idx.map((i) => anchorsU[i]!), sc: idx.map((i) => canonicals[i]!) }
-  })()
+  const { su, sc } = sortedWith(anchorsU, canonicals)
+  // RESIDUALS FIRST. The conditioning R's denominator is the claimed fit's own
+  // rms, so a badly-fitting claim collapses R and would steal the reason from
+  // the residual signal (a shifted claim on irregular anchors must report
+  // "residual", matching the probe's side-by-side record — the two signals
+  // are independent, never chained bad-fit-first).
   const fit = fitAffine(su, sc)
   const delta = deriveDelta(su, fit.b)
   for (let i = 0; i < su.length; i++) {
     if (Math.abs(fit.a + fit.b * su[i]! - sc[i]!) >= delta) {
-      return { ok: false, reason: "residual", a: fit.a, b: fit.b, delta, R: cond.R }
+      return { ok: false, reason: "residual", a: fit.a, b: fit.b, delta }
     }
   }
+  // A residual-clean claim still faces the geometry question: could a WRONG
+  // pairing fit this well? (probe T1/T10 — perfect fits on degenerate geometry.)
+  const cond = conditioningCheck(su, sc)
+  if (!cond.ok) return { ok: false, reason: "degenerate-constellation", a: fit.a, b: fit.b, delta, R: cond.R }
   return { ok: true, a: fit.a, b: fit.b, delta, R: cond.R }
 }
 ```
@@ -812,9 +822,15 @@ export const FIT_FAMILY: readonly FamilyMember[] = [
   {
     name: "inv-x",
     u: (x) => 1 / x,
-    // same equal-spaced identity-shift geometry expressed in u-space: the
-    // attack is on the constellation, and u-values ARE the constellation.
-    regressionAttack: { us: T1_US, wrongClaim: [...T1_TRUTH.slice(1), T1_TRUTH[4]! + 40] },
+    // attack constructed in X-SPACE and passed through the member's own u —
+    // xs chosen so u(x) is the equal-spaced degenerate constellation; an
+    // identical-to-"x" attack would make this enforcement near-vacuous.
+    regressionAttack: (() => {
+      const xs = [1, 0.5, 1 / 3, 0.25, 0.2]
+      const us = xs.map((x) => 1 / x) // ≈ [1,2,3,4,5] via the member's transform
+      const truth = us.map((u) => 100 + 40 * u)
+      return { us, wrongClaim: [...truth.slice(1), truth[4]! + 40] }
+    })(),
   },
 ] as const
 ```
@@ -842,7 +858,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Test: `opencode-plugin/test/bench-dnc-integration.test.ts` (create)
 
 **Interfaces:**
-- Consumes: `detectPeaks` (T5), `readSeriesFile` (T6), `conditioningCheck`, `deriveDelta`, `fitAffine` (T1–T2).
+- Consumes: `detectPeaks` (T5), `readSeriesFile` (T6), `conditioningCheck` (T2), `FIT_FAMILY` (T7).
 - Produces: the end-to-end evidence that the TS pipeline reproduces the probe's D3 result on the real fixture — 17 peaks, irregular geometry in both family variables.
 
 - [ ] **Step 1: Write the test** (validation test — expected to pass if T5/T6 are faithful ports; a mismatch with the probe's recorded numbers is a transcription bug in T5/T6, not a threshold to adjust)
@@ -915,35 +931,51 @@ Create `docs/loop-probes/f3-cell-contract-20260820/score-o4.py`:
 ```python
 #!/usr/bin/env python3
 """Formal scoring of the O4 arm against the ALREADY-REGISTERED rule in
-pre-registration.md (O4 was run but never scored in verdict.md — found by the
-D&C spec architect review, F4). Scores ONLY what was registered: strict parse
-rate and the announced-check behaviour. Run from the repo root."""
+pre-registration.md AMENDMENT 01 (O4 was run but never scored in verdict.md —
+found by the D&C spec architect review, F4). The registered metric is
+CONSTANT-CONSISTENCY under the STRICT check — the declared CONSTANT token
+appears in every derivation row — baseline to beat O3's 2/4. Parse rate
+(strictBlock) is REPORTED for the divergence story but is NOT the scored
+metric. Run from the repo root."""
 import glob
 import json
 import os
+import re
 
 cells = sorted(glob.glob(os.path.join(os.path.dirname(__file__), "out-O4-r*.json")))
 assert len(cells) == 4, f"expected 4 O4 cells, found {len(cells)}"
+consistent = 0
 rows = []
 for p in cells:
     d = json.load(open(p))
-    rows.append((os.path.basename(p), d.get("strictBlock"), d.get("verdict")))
-parsed = sum(1 for _, sb, _v in rows if sb == "claim")
-print(f"O4 strict parse: {parsed}/4")
-for name, sb, v in rows:
-    print(f"  {name}: strictBlock={sb} verdict={v}")
-print("registered rule: 4/4 -> adopt; <=2/4 -> confirms prediction (root cause F4, not F3)")
-print(f"outcome: {'ADOPT' if parsed == 4 else 'CONFIRMS PREDICTION' if parsed <= 2 else 'INDETERMINATE'}")
+    raw = d.get("rawAudit", "")
+    m = re.search(r"^CONSTANT:\s*(\S+)", raw, re.M)
+    const_tok = m.group(1) if m else None
+    # O4's block is five columns: | input | computed | canonical | derivation |
+    # discriminates | — the derivation is cell index 3 of each data row.
+    derivs = []
+    for line in raw.splitlines():
+        parts = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(parts) == 5 and parts[0] not in ("input",) and not set(parts[0]) <= set("-: "):
+            derivs.append(parts[3])
+    ok = const_tok is not None and len(derivs) > 0 and all(const_tok in dv for dv in derivs)
+    consistent += ok
+    rows.append((os.path.basename(p), const_tok, len(derivs), ok, d.get("strictBlock")))
+print(f"O4 CONSTANT-CONSISTENCY (strict): {consistent}/4  [registered baseline: O3 2/4]")
+for name, tok, nd, ok, sb in rows:
+    print(f"  {name}: CONSTANT={tok} derivation-rows={nd} consistent={ok} (strictBlock={sb} — parse metric, reported not scored)")
+print("registered rule: consistency 4/4 -> adopt cross-check + column; <=2/4 -> confirms prediction (root cause F4, not F3); 3/4 -> INDETERMINATE under the registered rule")
+print(f"outcome: {'ADOPT' if consistent == 4 else 'CONFIRMS PREDICTION' if consistent <= 2 else 'INDETERMINATE'}")
 ```
 
 - [ ] **Step 2: Run it and capture output**
 
 Run: `python3 docs/loop-probes/f3-cell-contract-20260820/score-o4.py`
-Expected shape: `O4 strict parse: 0/4` with per-cell lines (architect read `malformed, malformed, none, malformed`), outcome `CONFIRMS PREDICTION`. Whatever it ACTUALLY prints goes verbatim into Step 3 — never write the addendum from the expectation.
+NO expected outcome is written here on purpose — the registered rule has three branches (4/4 adopt, ≤2/4 confirms-prediction, 3/4 indeterminate) and the scorer decides. Whatever it ACTUALLY prints goes verbatim into Step 3 — never write the addendum from an expectation.
 
 - [ ] **Step 3: Write the addendum with the real output**
 
-Create `docs/loop-probes/f3-cell-contract-20260820/addendum-01-o4-scoring.md` containing: a header noting the arm was run 2026-08-20 but omitted from `verdict.md` (found by the architect review of the D&C spec, finding F4); the scorer's verbatim output in a fenced block; the registered rule quoted from `pre-registration.md`; the one-paragraph reading — O4 (announcing the cross-check) scored ≤2/4, confirming the pre-registered prediction, and the announced-metric-improved-while-behaviour-degraded observation this gives the D&C spec's G1 a verdict-grade citation for. `verdict.md` itself is NOT edited.
+Create `docs/loop-probes/f3-cell-contract-20260820/addendum-01-o4-scoring.md` containing: a header noting the arm was run 2026-08-20 but omitted from `verdict.md` (found by the architect review of the D&C spec, finding F4); the scorer's verbatim output in a fenced block; the registered rule quoted from `pre-registration.md` AMENDMENT 01; and a reading that (a) applies whichever branch of the registered rule actually fired, and (b) states the PARSE-vs-CONSISTENCY divergence precisely (parse was 0/4 while consistency is whatever the scorer printed) — that divergence, not any single number, is what the D&C spec's G1 cites (the announced metric moving independently of the underlying behaviour). If the outcome is INDETERMINATE, say so and leave G1 citing the divergence plus the raw cells; do not round 3/4 down to confirm a prediction. `verdict.md` itself is NOT edited.
 
 - [ ] **Step 4: Gate, then commit**
 
@@ -1255,17 +1287,34 @@ for (const m of FIT_FAMILY) {
 }
 ```
 
-- [ ] **Step 5: Run and write the verdict**
-
-Run: `bun docs/loop-probes/dnc-second-fixture-20260820/run-transfer.ts`
-Then create `verdict.md`: runner output verbatim in a fenced block; each registered outcome marked HELD / FAILED; the registered decision applied. **If ANY line shows `*** DEVIATES ***` or the divide finds < 3 peaks: write the verdict recording the failure and STOP — do not modify detector, check, or fixture; the failure IS the deliverable.**
-
-- [ ] **Step 6: Gate, then commit**
+- [ ] **Step 5: Commit the registration BEFORE running (structural no-tuning guard)**
 
 ```bash
 bun scripts/gate-check.ts 2>&1 | tail -1
 git add docs/loop-probes/dnc-second-fixture-20260820/
-git commit -m "probe(lane-a): second fixture transfer test — divide/merge machinery on an unseen domain (spec §8.1)
+git commit -m "probe(lane-a): second-fixture registration — fixture, truth, runner committed before any transfer run (spec §8.1)
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+git rev-parse --short HEAD   # record as REG_SHA for Step 6
+```
+
+- [ ] **Step 6: Run and write the verdict, with the machinery-freeze proof**
+
+Run: `bun docs/loop-probes/dnc-second-fixture-20260820/run-transfer.ts`
+Then run the freeze guard and capture its (required-empty) output:
+
+```bash
+git diff --stat REG_SHA..HEAD -- opencode-plugin/src/bench/
+```
+
+Then create `verdict.md`: runner output verbatim in a fenced block; the freeze-guard command and its output verbatim (MUST be empty — any diff in `opencode-plugin/src/bench/` between registration and verdict means the machinery was edited in response to this fixture, which voids the transfer claim; record the void, do not "fix" it); each registered outcome marked HELD / FAILED; the registered decision applied. **If ANY line shows `*** DEVIATES ***` or the divide finds < 3 peaks: write the verdict recording the failure and STOP — do not modify detector, check, or fixture; the failure IS the deliverable.**
+
+- [ ] **Step 7: Gate, then commit the verdict**
+
+```bash
+bun scripts/gate-check.ts 2>&1 | tail -1
+git add docs/loop-probes/dnc-second-fixture-20260820/verdict.md
+git commit -m "probe(lane-a): second fixture transfer verdict — machinery frozen at registration (spec §8.1)
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
