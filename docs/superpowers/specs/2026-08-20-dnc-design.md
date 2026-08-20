@@ -152,10 +152,20 @@ assumed (`docs/loop-probes/dnc-merge-fit-20260820/verdict.md`):
    alternates {+1 shift, −1 shift, full reversal}) / RMS(claimed); R ≤ 3 or
    n < 3 → reject; regression-verified identical to v1 on T1–T4. The attack
    class is "any wrong pairing composing with a symmetry of the
-   constellation"; when an implementation detects further constellation
-   symmetries, their images join the alternate set. Fail-closed on purpose:
-   degenerate constellations are UNCHECKABLE, not wrong; no inject, never a
-   pass. T1 and T10 are the standing regression inputs.
+   constellation" — which is UNBOUNDED (reflections about interior points,
+   near-periodic sub-constellations, partial reversals on symmetric
+   subsets), so a fixed alternate list is the F4 whitelist-growth pattern
+   at the meta level: v1 → v2 already grew by one entry in response to one
+   found attack, the rule's own tell. **The REQUIREMENT is therefore the
+   DERIVED form: the alternate set is computed from the constellation's own
+   geometry — enumerate its approximate automorphisms (u-spacing
+   autocorrelation / self-similarity under a noise-scaled tolerance) and
+   use those as the alternates.** Per-artifact, answer-free, closed over
+   the attack class instead of chasing it. v2's fixed set {±1 shift,
+   reversal} ships only as the regression FLOOR — any implementation must
+   pass it, and must not stop at it. Fail-closed on purpose: degenerate
+   constellations are UNCHECKABLE, not wrong; no inject, never a pass. T1
+   and T10 are the standing regression inputs.
 5. **Full-anchor coverage — the merge consumes the ENTIRE harness survivor
    set.** The claimant never selects which anchors are graded: freedom to
    pick 3 of 17 is freedom to construct a fabricated line on a compliant
@@ -166,11 +176,20 @@ assumed (`docs/loop-probes/dnc-merge-fit-20260820/verdict.md`):
 1–5 establish *pairing integrity over the full anchor set plus geometric
 non-degeneracy* — they do NOT establish value truth. An invented (a, b)
 applied consistently to the harness's own anchors passes every geometric
-check by construction (T6: gate PASS, v1 ACCEPT, v2 ACCEPT). Value truth
-requires a mechanism OUTSIDE the constellation — candidates: the
-`source_crosscheck` class (recompute against the task's own source) or
-loop-level outcome evidence — and is an OPEN design item, not silently
-claimed. "The merge is the check" holds for pairing, not for values.
+check by construction (T6: gate PASS, v1 ACCEPT, v2 ACCEPT).
+
+**Threat-model split (binding sentence):** the merge-gate rejects ERROR —
+internal inconsistency, the gen4-r1 confident-wrong class, the original
+design target — and NEVER rejects DECEPTION — consistent fabrication;
+deception is rejectable only by a prior from OUTSIDE the claim. Value truth
+therefore requires an outside mechanism — PRIMARY candidate: the
+`source_crosscheck` class (recompute against the task's own source; the
+only lane-B seam that survived the §1 audit, precisely because its prior
+comes from the artifact's source); BACKSTOP: loop-level outcome evidence
+(real but slow and confounded — an injected card can lift pass rate for
+wrong reasons). Crosscheck where a source exists, outcome as backstop. This
+is an OPEN design item (§8.8), not silently claimed. "The merge is the
+check" holds for pairing, not for values.
 
 **Falsifiable expectation, registered:** IF raman's repeated-command
 behaviour was caused by a gate that no correct claim could pass, then after
