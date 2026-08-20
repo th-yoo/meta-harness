@@ -311,7 +311,48 @@ to further claim classes is future work gated on §8.
    structurally NO-SOURCE — the one artifact is the claim's own input.
    Scope honesty: verifies faithfulness-to-source, not truth (stale/wrong
    source passes); L-A inputs are attacker-influenceable text and get
-   sampler-grade containment (the `assertCleanStimulus` class).
+   containment that must be SEMANTIC, not lexical — the VOID finding's
+   `assertCleanStimulus` era failed exactly as a string match standing in
+   for a semantic check, and that failure is the open hardening item the
+   arming increment owns, not a solved reassurance.
+   **Binding rules (architect review 2026-08-21, findings #1-#5):**
+   (i) **The gate is a stated CONJUNCTION**: numeric injection requires
+   `mergeCheck.ok` (§6 pairing + §8.2 predicate) AND L-A verdict
+   CONSISTENT — one testable predicate, with a regression test asserting
+   each half alone is insufficient; the pairing check is never an implied
+   precondition (the F1/F2 wiring-bug class).
+   (ii) **Full-source coverage, symmetric to §6.5**: the HARNESS
+   enumerates every L-A-eligible artifact and the claim is checked against
+   ALL of them — the claimant never selects the checked source (source
+   cherry-picking is anchor cherry-picking one layer up); an unresolvable
+   eligible set → fail-closed NO-SOURCE.
+   (iii) **CONSISTENT is decided deterministically harness-side** where
+   the source is numeric — the §8.2 predicate shape with tolerance derived
+   from the source artifact, never claimant- or model-supplied. A model
+   call is NEVER the sole arbiter of CROSSCHECKED (a model judging claim-
+   vs-source consistency is a downstream-of-decision statistic, and L-B's
+   own shared-prior logic applies to it in full); where no deterministic
+   comparison exists, the verdict is NO-SOURCE, fail-closed.
+   (iv) **Content-level enforcement of the ladder**: a non-CROSSCHECKED
+   card must be NUMERIC-LITERAL-FREE BY CONSTRUCTION (mechanically checked
+   before injection against the claim's own numeric fields) — a prose card
+   that smuggles the number is a numeric injection wearing the
+   criteria-class label.
+   (v) **Pristine-snapshot rule**: L-A reads harness-captured
+   PRE-EXECUTION copies of eligible artifacts (the `buildSample` pattern —
+   task-definition tree, never the live container): several census tasks
+   MUTATE their own candidate sources (db-wal-recovery, data-merger), and
+   a post-run read compares the claim against its own downstream effect —
+   the downstream-of-decision law verbatim.
+   Also binding: eligibility is decided by a NEW dedicated
+   eligibility-manifest function (neither existing Dockerfile parser — their
+   design goals are incompatible with this use, per their own doc
+   comments); L-A's data access shares §8.9's full-series requirement
+   (cross-referenced — the truncated audit sample cannot support artifact
+   reads); the executable-evaluator subclass means EXECUTION (harness runs
+   the task's tool via a uniform contract where one exists), never model
+   judgment over the tool's source — tasks without a uniform invocation
+   contract fall back to NO-SOURCE rather than growing per-task adapters.
    **Eligibility is a POSITIVE structural criterion, not a ban list** (a
    ban list — tests/ today, solution/ tomorrow, expected-values-in-README
    next — is the incident registry §6.4 just closed, re-grown at the
@@ -333,9 +374,16 @@ to further claim classes is future work gated on §8.
    adversarial review before it ever armed):** the rung's original premise
    ("invented (a,b) has no stable generator") holds for STOCHASTIC
    invention and FAILS for PRIOR-DRIVEN invention — constants drawn from
-   the model's training prior are near-deterministic, and the OBSERVED
-   fabrication record is exactly that class (gen4-r1 confident-wrong; F4's
-   identical 532nm story in 4/4 cells; the line-15 era's systematic bias).
+   the model's training prior are near-deterministic. Evidence trail,
+   corrected by architect review: F4's identical 532nm story in 4/4
+   independent cells is the direct instance — WITH the recorded confound
+   that the line-15 prompt contamination (the same era) may have seeded
+   it; the retraction's clean-prompt re-probe is therefore a PREREQUISITE
+   of this rung's evidence-gate premise, not background future work.
+   (gen4-r1 is NOT evidence here — it is a within-claim inconsistency the
+   existing gate already rejects, i.e. the ERROR class; the line-15 bias
+   itself was a harness bug since fixed.) The demotion stands on T6 plus
+   the F4 instance under its stated confound — conservative by design.
    Same-model same-prompt replication measures sampling stability, not
    truth, and shared training makes shared confident error the EXPECTED
    failure mode. Consequences, binding: (i) replication as designed
@@ -351,7 +399,13 @@ to further claim classes is future work gated on §8.
    **L-C outcome backstop:** task reward on the next crank, paired
    gain/regression attribution (the Regression-Tax lens) — the only layer
    whose ground truth the claimant does not control; slow and confounded,
-   hence backstop.
+   hence backstop. **L-C NEVER grants per-claim numeric authority** —
+   stated outright so no future reading lets strong aggregate outcomes
+   loosen the ladder (the reward-hacking surface stays closed). L-B's
+   cross-family diversity requirement carries a measured transport
+   feasibility risk (429-per-transport tiers, haiku-only lanes) — the
+   rehabilitation path may be unexercisable on some transports, which is a
+   fact about the path, not a license to weaken it.
 
    **Authority policy (fail-closed ladder, binding — tightened by
    adversarial review):** value-truth status gates injection authority —
