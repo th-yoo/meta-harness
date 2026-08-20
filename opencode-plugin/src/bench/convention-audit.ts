@@ -5,7 +5,7 @@ import type { BenchPaths } from "./paths.ts"
 import { DEFAULT_BENCH_MODEL } from "./paths.ts"
 import { BenchError } from "./util.ts"
 
-export const AUDIT_PROMPT_VERSION = "lane-a-v3"
+export const AUDIT_PROMPT_VERSION = "lane-a-v5"
 
 /** The model id for the audit call, DERIVED from `DEFAULT_BENCH_MODEL` rather
  * than written as a second literal, so the auditor can never drift off the tier

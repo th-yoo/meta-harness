@@ -13,12 +13,12 @@ test("auditPrompt loads the frozen prompt with all four clauses + verdict line",
   expect(p).toContain("success criteria")      // instruction-criteria clause
   expect(p).toContain("MANDATORY")             // imperative clause
   expect(p).toContain("CONTENT VERDICT:")      // machine line
-  expect(AUDIT_PROMPT_VERSION).toBe("lane-a-v3")
+  expect(AUDIT_PROMPT_VERSION).toBe("lane-a-v5")
 })
 
-test("AUDIT_PROMPT_VERSION bumped to lane-a-v3 and prompt demands the block", () => {
+test("AUDIT_PROMPT_VERSION bumped to lane-a-v5 and prompt demands the block", () => {
   const p = auditPrompt()
-  expect(AUDIT_PROMPT_VERSION).toBe("lane-a-v3")
+  expect(AUDIT_PROMPT_VERSION).toBe("lane-a-v5")
   expect(p).toContain("REVALIDATION:")
   expect(p).toContain("TRANSFORM:")
   expect(p).toContain("discriminates")     // the misreading-tie column
@@ -314,7 +314,7 @@ test("writeAuditTrail appends one ndjson line with the card + verdict", () => {
     { card: "C", rawAudit: "R", verdict: "MISMATCH", reval: "PASS", sample: "S", truncated: false })
   const line = JSON.parse(readFileSync(join(dir, "convention-audit-trail.ndjson"), "utf-8").trim())
   expect(line.task).toBe("clean"); expect(line.verdict).toBe("MISMATCH"); expect(line.card).toBe("C")
-  expect(line.promptVersion).toBe("lane-a-v3")
+  expect(line.promptVersion).toBe("lane-a-v5")
   expect(line.reval).toBe("PASS")
 })
 
@@ -404,4 +404,20 @@ test("F1: the budget tracks a caller-supplied turn timeout rather than a fixed c
   // the floor-derived worst case.
   const short = await budgetFor("1000")
   expect(short).toBeGreaterThanOrEqual(ACP_BUDGET.clientBudgetMs)
+})
+
+// F4 retraction pin (2026-08-20): the shipped prompt once carried the raman
+// fixture's own answer as its worked example (`1e7 / 6327.285 = 1580.6`) and a
+// Raman-domain teaching paragraph. This pins their removal — a regression test
+// on a specific retraction, NOT a general leak detector (a general detector
+// would itself need an answer list).
+test("audit prompt carries no raman answer key (F4 retraction pin)", () => {
+  const p = auditPrompt()
+  for (const leak of ["6327.285", "1580", "Raman", "laser", "graphene", "1e7", "offset-reciprocal"]) {
+    expect(p.includes(leak)).toBe(false)
+  }
+})
+
+test("prompt version is lane-a-v5 (v4 retired with the F4 revert, never reused)", () => {
+  expect(AUDIT_PROMPT_VERSION).toBe("lane-a-v5")
 })
