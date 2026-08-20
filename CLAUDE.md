@@ -1,5 +1,42 @@
 # Repository guidance
 
+## What we are building: a GENERAL self-improving agent — not a TB2 solver
+
+The benchmark is the measuring instrument, never the target. A solution that
+works because we already knew this task's answer is **cheating** — a student who
+memorized the test answers beforehand. It scores well and teaches the agent
+nothing.
+
+**The test, applied to every mechanism before it is built:** does this transfer
+to a task we have never seen? If it only works because a human encoded this
+task's answer into the harness, it is cheating however well it is engineered,
+documented, or version-controlled.
+
+**Cheating, by this rule** (all real examples from lane A, 2026-08-20):
+- a **reference table** in the harness (a canonical spectral-line list) — that is
+  the answer key; the line is 1580 only because we wrote 1580 in a file
+- a **new op added because this trap needed it** (`offset-reciprocal`, the fifth
+  member of a whitelist grown one entry per trap encountered)
+- a **per-domain registry** where each new task type gets its own entry —
+  memorizing tests one at a time and calling the collection generality
+
+**The tell: FACT growth by incident is fitting.** Adding a fact in response to a
+case that failed is indistinguishable from legitimate coverage when viewed from
+the inside. MECHANISM growth is different and can be acceptable, but only when
+each addition is independently validated against an oracle set AND a bad set.
+"Declared and version-controlled" does not make an answer key legitimate — it
+makes it auditable cheating.
+
+**Legitimate**: transport and infrastructure fixes; format/wire contracts that
+carry no task knowledge; and method — notably, *to test whether a check can fail,
+build the input that should break it*.
+
+**The harness's real job** is to make the model's claim FALSIFIABLE WITHOUT THE
+HARNESS KNOWING THE ANSWER. World knowledge comes from the model; the harness
+supplies redundancy. An over-determined fit (more anchors than fitted parameters)
+is checkable with no reference table, which is the only mechanism found so far
+that does not require pre-loading answers.
+
 ## Save shareable artifacts under the repo — not host-local paths
 
 Any artifact meant to be reused, or used on another host, MUST live under the
