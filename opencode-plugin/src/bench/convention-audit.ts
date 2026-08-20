@@ -5,7 +5,7 @@ import type { BenchPaths } from "./paths.ts"
 import { DEFAULT_BENCH_MODEL } from "./paths.ts"
 import { BenchError } from "./util.ts"
 
-export const AUDIT_PROMPT_VERSION = "lane-a-v3"
+export const AUDIT_PROMPT_VERSION = "lane-a-v4"
 
 /** The model id for the audit call, DERIVED from `DEFAULT_BENCH_MODEL` rather
  * than written as a second literal, so the auditor can never drift off the tier
@@ -234,22 +234,29 @@ export function cardFrom(raw: string): string {
   return stripRevalBlock(raw)
 }
 
-export type RevalTransform = "reciprocal" | "scale" | "offset" | "identity"
+export type RevalTransform = "reciprocal" | "scale" | "offset" | "identity" | "offset-reciprocal"
 
 /** Evaluate a whitelisted single-constant transform. Pinned: offset = C - in
  * (laser-line subtraction; both gen4 fixtures use this sign). No eval, no
  * arbitrary formulae. */
-export function applyTransform(t: RevalTransform, c: number, x: number): number {
+export function applyTransform(t: RevalTransform, c: number, x: number, unit: number = 1): number {
   switch (t) {
     case "reciprocal": return c / x
     case "scale": return c * x
     case "offset": return c - x
     case "identity": return x
+    // F4: `C - K/x`. Raman shift = laser wavenumber minus the signal's absolute
+    // wavenumber, and the whole family of "reference minus a reciprocal-encoded
+    // axis" conventions. K is the UNIT scale (1e8 for Angstrom input, 1e7 for
+    // nm), fixed by the data's units and constrained to a power of ten at the
+    // parser — it is NOT a second fit parameter, so the claim still has exactly
+    // ONE free constant and the one-fixed-constant test keeps its force.
+    case "offset-reciprocal": return c - unit / x
   }
 }
 
 export interface RevalLanding { input: number; computed: number; canonical: number; discriminates: string }
-export interface RevalClaim { transform: RevalTransform; constant: number; delta: number; landings: RevalLanding[] }
+export interface RevalClaim { transform: RevalTransform; constant: number; delta: number; landings: RevalLanding[]; unit?: number }
 export type RevalOutcome = { ok: true } | { ok: false; reason: string }
 
 /** Recompute the card's winning row deterministically. PASS iff, under the ONE
@@ -273,7 +280,7 @@ export function revalidate(claim: RevalClaim, sample: string): RevalOutcome {
     // equals the raw input (within delta) lands trivially without the constant doing
     // any real work (e.g. identity/0 dressed up as a discovered conversion).
     if (Math.abs(L.input - L.canonical) <= claim.delta) return { ok: false, reason: "degenerate-transform" }
-    const out = applyTransform(claim.transform, claim.constant, L.input)
+    const out = applyTransform(claim.transform, claim.constant, L.input, claim.unit)
     if (Math.abs(out - L.canonical) <= claim.delta) landed++
   }
   return landed >= 2 ? { ok: true } : { ok: false, reason: `only-${landed}-landed-under-one-constant` }
@@ -285,7 +292,7 @@ export type ParsedReval =
   | { kind: "malformed"; raw: string }
   | { kind: "claim"; claim: RevalClaim }
 
-const REVAL_TRANSFORMS = new Set<RevalTransform>(["reciprocal", "scale", "offset", "identity"])
+const REVAL_TRANSFORMS = new Set<RevalTransform>(["reciprocal", "scale", "offset", "identity", "offset-reciprocal"])
 
 // Shared by parseRevalBlock and stripRevalBlock — they MUST agree on what
 // counts as the block marker, or a block could be parsed-but-not-stripped
@@ -311,6 +318,23 @@ export function parseRevalBlock(raw: string): ParsedReval {
   const constant = Number(body.match(/^CONSTANT:\s*(\S+)/m)?.[1])
   const delta = Number(body.match(/^DELTA:\s*(\S+)/m)?.[1])
   if (Number.isNaN(constant) || Number.isNaN(delta)) return { kind: "malformed", raw }
+
+  // F4: `offset-reciprocal` REQUIRES an explicit UNIT, and that unit must be a
+  // power of ten. Requiring it keeps the scale a declared unit conversion
+  // rather than a guessed one (a harness that infers the scale would be
+  // choosing the number that makes the claim land — the fabrication this gate
+  // exists to stop), and the power-of-ten constraint keeps it from becoming a
+  // second free parameter fitted alongside the constant.
+  let unit: number | undefined
+  if (tRaw === "offset-reciprocal") {
+    const uRaw = body.match(/^UNIT:\s*(\S+)/m)?.[1]
+    if (uRaw === undefined) return { kind: "malformed", raw }
+    const u = Number(uRaw)
+    if (!Number.isFinite(u) || u <= 0) return { kind: "malformed", raw }
+    const exp = Math.log10(u)
+    if (Math.abs(exp - Math.round(exp)) > 1e-9) return { kind: "malformed", raw }
+    unit = u
+  }
   const landings: RevalLanding[] = []
   for (const line of body.split("\n")) {
     const cells = line.split("|").map((c) => c.trim()).filter((c, i, a) => !(i === 0 && c === "") && !(i === a.length - 1 && c === ""))
@@ -325,7 +349,7 @@ export function parseRevalBlock(raw: string): ParsedReval {
     landings.push({ input, computed, canonical, discriminates: disc! })
   }
   if (landings.length < 2) return { kind: "malformed", raw }
-  return { kind: "claim", claim: { transform: tRaw as RevalTransform, constant, delta, landings } }
+  return { kind: "claim", claim: { transform: tRaw as RevalTransform, constant, delta, landings, ...(unit === undefined ? {} : { unit }) } }
 }
 
 /** Remove the REVALIDATION block (first whole-line marker → end of string) so it

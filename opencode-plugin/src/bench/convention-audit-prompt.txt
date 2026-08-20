@@ -20,13 +20,15 @@ IMPERATIVE RULE: express every uncertainty you cannot resolve from the data as a
 
 NUMERIC REVALIDATION BLOCK. If, and only if, the data's convention is a NUMERIC transform (a units/axis conversion your MISREADINGS section identified), end your ENTIRE answer with a machine-checkable block — the LAST thing in your response, with nothing after it. Declare the SINGLE winning transform, its ONE fixed constant, a tolerance, and at least two landings; each landing names the misreading (from your MISREADINGS list) it discriminates. Keep the same numbers in your prose MISREADINGS section too — the block is a check, not a substitute for stating the disambiguation as an instruction. Use exactly this shape:
 REVALIDATION:
-TRANSFORM: <reciprocal|scale|offset|identity>
-CONSTANT: <one number; offset means constant - value>
+TRANSFORM: <reciprocal|scale|offset|identity|offset-reciprocal>
+CONSTANT: <one number; offset means constant - value; offset-reciprocal means constant - unit/value>
+UNIT: <REQUIRED for offset-reciprocal only; the unit-conversion scale, a power of ten — 1e7 when the axis is in nm, 1e8 when it is in Angstrom>
 DELTA: <one number>
 | input | computed | canonical | discriminates |
 |---|---|---|---|
 | <peak from the data> | <transform applied> | <known reference> | <misreading id> |
 | <peak from the data> | <transform applied> | <known reference> | <misreading id> |
+Use `offset-reciprocal` when the axis is a reference value MINUS a reciprocal-encoded quantity — the Raman-shift family, `shift = laser_wavenumber - unit/wavelength`. Declare the laser/reference wavenumber as CONSTANT and the unit scale as UNIT; check the units of the axis before choosing UNIT, since an axis in Angstrom needs 1e8 and the same data read as nm needs 1e7, and the wrong one misses by an order of magnitude. UNIT must be a power of ten: it is a unit conversion, not a second number you are free to fit.
 If the convention is NOT a numeric transform (e.g. a criteria/scope/script reading), emit exactly:
 REVALIDATION:
 TRANSFORM: none

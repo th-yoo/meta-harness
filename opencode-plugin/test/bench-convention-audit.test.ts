@@ -13,12 +13,12 @@ test("auditPrompt loads the frozen prompt with all four clauses + verdict line",
   expect(p).toContain("success criteria")      // instruction-criteria clause
   expect(p).toContain("MANDATORY")             // imperative clause
   expect(p).toContain("CONTENT VERDICT:")      // machine line
-  expect(AUDIT_PROMPT_VERSION).toBe("lane-a-v3")
+  expect(AUDIT_PROMPT_VERSION).toBe("lane-a-v4")
 })
 
-test("AUDIT_PROMPT_VERSION bumped to lane-a-v3 and prompt demands the block", () => {
+test("AUDIT_PROMPT_VERSION bumped to lane-a-v4 and prompt demands the block", () => {
   const p = auditPrompt()
-  expect(AUDIT_PROMPT_VERSION).toBe("lane-a-v3")
+  expect(AUDIT_PROMPT_VERSION).toBe("lane-a-v4")
   expect(p).toContain("REVALIDATION:")
   expect(p).toContain("TRANSFORM:")
   expect(p).toContain("discriminates")     // the misreading-tie column
@@ -314,7 +314,7 @@ test("writeAuditTrail appends one ndjson line with the card + verdict", () => {
     { card: "C", rawAudit: "R", verdict: "MISMATCH", reval: "PASS", sample: "S", truncated: false })
   const line = JSON.parse(readFileSync(join(dir, "convention-audit-trail.ndjson"), "utf-8").trim())
   expect(line.task).toBe("clean"); expect(line.verdict).toBe("MISMATCH"); expect(line.card).toBe("C")
-  expect(line.promptVersion).toBe("lane-a-v3")
+  expect(line.promptVersion).toBe("lane-a-v4")
   expect(line.reval).toBe("PASS")
 })
 
@@ -404,4 +404,85 @@ test("F1: the budget tracks a caller-supplied turn timeout rather than a fixed c
   // the floor-derived worst case.
   const short = await budgetFor("1000")
   expect(short).toBeGreaterThanOrEqual(ACP_BUDGET.clientBudgetMs)
+})
+
+// ── F4: the laser-offset transform the single-op whitelist could not express ──
+//
+// docs/loop-probes/f3-cell-contract-20260820/verdict.md. Every one of 7 numeric
+// claims across two probe arms meant `C - K/x` (Raman shift = laser wavenumber
+// minus the signal's absolute wavenumber) and none could be stated under a
+// single-op whitelist, so a CORRECT audit of this trap class could never pass.
+// K is a UNIT scale (1e8 for Angstrom input, 1e7 for nm) — fixed by the data's
+// units, NOT a free fit parameter, so the claim still has exactly ONE free
+// constant and the anti-fabrication property is preserved.
+
+test("F4: applyTransform computes C - K/x under the declared unit scale", () => {
+  expect(applyTransform("offset-reciprocal", 18796.99, 5808.5, 1e8)).toBeCloseTo(1580.84, 1)
+  expect(applyTransform("offset-reciprocal", 18796.99, 6212.3, 1e8)).toBeCloseTo(2699.89, 1)
+})
+
+test("F4: the unit scale defaults to 1, so the op degrades to a plain C - 1/x", () => {
+  expect(applyTransform("offset-reciprocal", 10, 0.5)).toBeCloseTo(8, 6)
+})
+
+test("F4: revalidate PASSES the real raman claim — two landings under ONE constant", () => {
+  const claim: RevalClaim = {
+    transform: "offset-reciprocal", constant: 18796.99, unit: 1e8, delta: 5,
+    landings: [
+      { input: 5808.5, computed: 1580.8, canonical: 1580, discriminates: "A:raw-as-cm-1" },
+      { input: 6212.3, computed: 2699.9, canonical: 2700, discriminates: "B:wrong-peak" },
+    ],
+  }
+  expect(revalidate(claim, "lines=1500 top-tokens: x:1 first-col-range=[5800, 7100]\n--head--\n5800\n--tail--\n7100").ok).toBe(true)
+})
+
+test("F4: the WRONG unit scale (1e7 on Angstrom data) fails to land — the measured error", () => {
+  const claim: RevalClaim = {
+    transform: "offset-reciprocal", constant: 18796.99, unit: 1e7, delta: 5,
+    landings: [
+      { input: 5808.5, computed: 1580.8, canonical: 1580, discriminates: "A" },
+      { input: 6212.3, computed: 2699.9, canonical: 2700, discriminates: "B" },
+    ],
+  }
+  const o = revalidate(claim, "lines=1500 top-tokens: x:1 first-col-range=[5800, 7100]\n--head--\n5800\n--tail--\n7100")
+  expect(o.ok).toBe(false)
+})
+
+test("F4: a unit scale that is not a power of ten is REJECTED — K is a unit, not a second fit parameter", () => {
+  const block = "REVALIDATION:\nTRANSFORM: offset-reciprocal\nCONSTANT: 18796.99\nUNIT: 5e7\nDELTA: 5\n" +
+    "| input | computed | canonical | discriminates |\n|---|---|---|---|\n" +
+    "| 5808.5 | 1580.8 | 1580 | A |\n| 6212.3 | 2699.9 | 2700 | B |"
+  expect(parseRevalBlock(block).kind).toBe("malformed")
+})
+
+test("F4: offset-reciprocal WITHOUT a UNIT line is malformed (fail-closed, never a guessed scale)", () => {
+  const block = "REVALIDATION:\nTRANSFORM: offset-reciprocal\nCONSTANT: 18796.99\nDELTA: 5\n" +
+    "| input | computed | canonical | discriminates |\n|---|---|---|---|\n" +
+    "| 5808.5 | 1580.8 | 1580 | A |\n| 6212.3 | 2699.9 | 2700 | B |"
+  expect(parseRevalBlock(block).kind).toBe("malformed")
+})
+
+test("F4: a well-formed offset-reciprocal block parses, carrying its unit", () => {
+  const block = "REVALIDATION:\nTRANSFORM: offset-reciprocal\nCONSTANT: 18796.99\nUNIT: 1e8\nDELTA: 5\n" +
+    "| input | computed | canonical | discriminates |\n|---|---|---|---|\n" +
+    "| 5808.5 | 1580.8 | 1580 | A |\n| 6212.3 | 2699.9 | 2700 | B |"
+  const p = parseRevalBlock(block)
+  expect(p.kind).toBe("claim")
+  if (p.kind === "claim") { expect(p.claim.unit).toBe(1e8); expect(p.claim.transform).toBe("offset-reciprocal") }
+})
+
+test("F4: the pre-F4 whitelist is untouched — old blocks parse exactly as before", () => {
+  const block = "REVALIDATION:\nTRANSFORM: reciprocal\nCONSTANT: 1e7\nDELTA: 30\n" +
+    "| input | computed | canonical | discriminates |\n|---|---|---|---|\n" +
+    "| 19139.4 | 522.5 | 520.7 | E |\n| 3745.3 | 2670.0 | 2700 | E |"
+  const p = parseRevalBlock(block)
+  expect(p.kind).toBe("claim")
+  if (p.kind === "claim") expect(p.claim.unit).toBeUndefined()
+})
+
+test("F4: the prompt offers offset-reciprocal and its UNIT contract", () => {
+  const p = auditPrompt()
+  expect(p).toContain("offset-reciprocal")
+  expect(p).toContain("UNIT:")
+  expect(p).toContain("power of ten")   // K is a unit conversion, not a second fit parameter
 })
