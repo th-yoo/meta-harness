@@ -75,6 +75,14 @@ does NOT transfer; this file + the repo are the source of truth.)
 > x-values (intensity ~5600 vs the peak's 13950) to make it land; I built an op
 > for their fabrication without once checking their claims against the artifact.
 > **Retraction-or-revert is the first queue item.**
+> **DONE 2026-08-20 (later): F4 REVERTED (5982a08) and a SECOND, OLDER
+> answer key found and removed — the prompt's line-15 example was the fixture's
+> own `1e7 / 6327.285 = 1580.6` since lane-a-v2, i.e. every raman audit under
+> v2..v4 was handed its answer; neutral example + `lane-a-v5` (0a79de5),
+> regression pin test, retraction record
+> `docs/loop-probes/f4-retraction-20260820/retraction.md`. Contamination
+> hypothesis (prompt taught the 1e7 fixation the probe measured) recorded
+> there, undecided — deciding it needs a clean-prompt re-probe, own go.**
 >
 > **DESIGN DIRECTION (nothing built, and half of it now fails the rule).**
 > "Enumerate, don't classify" — the harness enumerates `y = a + b·u`,
@@ -120,7 +128,8 @@ does NOT transfer; this file + the repo are the source of truth.)
 > encodes no answer and survives. **Open item, both lanes: A SECOND FIXTURE** —
 > one agreement is not transfer. Detail in the ⚖️ GENERALITY RULE block below.
 >
-> **QUEUE (each its own go, nothing authorized):** (1) F4 retraction/revert;
+> **QUEUE (each its own go, nothing authorized):** (1) DONE — F4 reverted +
+> prompt answer key removed (see above);
 > (2) write up the bypass + design against spec §10 — it exists ONLY in
 > cross-session messages and host-local memory, so by this repo's own rule it
 > does not exist; (3) sampler emitting ≥3 mechanical peaks with `input` required
