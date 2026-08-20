@@ -49,7 +49,13 @@ The criterion is applied PER FIXTURE, and its ability to REFUSE is its
 value: gcode's current fixture has a low-coupling glyph axis
 (decompose-then-read); a connected-glyph font flips (a) and the criterion
 must refuse or relocate the cut. Raman is REFUSED for plain D&C — coupling
-is global by nature (one shared transform) — and is routed to §6 instead.
+is global by nature (one shared transform) — and is routed to §6, which
+NARROWS the merge-time claimant degrees of freedom (to pairing over a full
+harness-fixed anchor set with non-degenerate geometry) but does not
+eliminate them: value truth remains outside §6's guarantee (see §6's scope
+paragraph). Routed, not solved. (The gcode/raman applications here are
+worked illustrations of the criterion, not independently verdicted
+measurements — the second fixture (§8.1) is their test.)
 Criterion provenance: lane-B derivation, validated on ONE fixture; the
 second fixture (§8) is its transfer test.
 
@@ -71,14 +77,29 @@ and judged ONLY by outcome pass@k:
 **Guards (measured, mandatory):**
 
 - G1 — no check, score, or gate ever reads the agent's declared rung or
-  split; a declared rung is a claimant-controlled statistic (F3/O4:
-  announcing a check moves the failure). Behavior is taught; only outcomes
-  are measured.
+  split; a declared rung is a claimant-controlled statistic. Evidence: the
+  O4 arm's raw cells (`f3-cell-contract-20260820/out-O4-r*.json` —
+  announcing the cross-check produced 0/4 parseable blocks while
+  constant-consistency rose, i.e. the announced metric improved as the
+  underlying behaviour degraded). NOTE: the O4 arm was never formally
+  scored in that probe's verdict — scoring it is a §8 obligation; until
+  then this guard argues from the raw cells directly. Behavior is taught;
+  only outcomes are measured.
 - G2 — triggers are OBSERVED failure signatures, never task-shape
   vocabulary (v18 b7 was a lexical trigger; "task has many parts" would
   misfire identically).
-- G3 — expected under-actuation (prose lesson-following measured 1/8); a
+- G3 — expected under-actuation (prose lesson-following measured 1/8,
+  `docs/reboot.md` loop-1 verdict — carried-over evidence, now in §10); a
   null ab result is informative about level 2, not a defect in the trial.
+
+**Injection path (implementability):** the registered wording above is
+INTENT, not final bytes. The proposer's review gate requires trigger/
+hard-gate phrasing tied to a measured taxonomy (`propose.ts` SCOPE
+requirement), and bullets 1 and 3 as written do not conform. At build time
+the bullets are rewritten into the trigger/hard-gate template and routed
+through the STANDARD diagnosis-driven proposer path — no bypass script; if
+the standard path cannot express one of them, that bullet is dropped, not
+smuggled. The ab verdict judges whatever wording actually shipped.
 
 Validation: standard candidate → ab → verdict on the band. Own spend go.
 
@@ -120,29 +141,55 @@ assumed (`docs/loop-probes/dnc-merge-fit-20260820/verdict.md`):
    residual-visible, which is why it can stay frozen.
 3. **Delta DERIVED, never declared**: `delta < |b| · min Δu / 2` from the
    fit's own slope and the detected spacing. No external constant.
-4. **Constellation conditioning check — REQUIRED, measured necessary.** The
-   global identity-shift attack passes the plain over-determined gate with
-   rms = 0 on an equal-spaced constellation (the affine family absorbs the
-   shift into the intercept); redundancy alone does not defeat it. Check:
-   shift-degeneracy ratio R = min(RMS under ±1-index shift)/RMS(claimed);
-   R ≤ 3 or n < 3 → reject. Measured: kills the attack, accepts
-   irregular-honest at R = 1.5e10, and refuses honest claims on degenerate
-   geometry — fail-closed on purpose: degenerate constellations are
-   UNCHECKABLE, not wrong; no inject, never a pass. T1 of the probe is the
-   standing regression input for any implementation.
+4. **Constellation conditioning check — REQUIRED, measured necessary,
+   version 2.** The global identity-shift attack passes the plain
+   over-determined gate with rms = 0 on an equal-spaced constellation (the
+   affine family absorbs the shift into the intercept); redundancy alone
+   does not defeat it. And the ±1-shift-only check (v1) was itself measured
+   incomplete: on a SYMMETRIC irregular constellation, full reversal is
+   affine with negated slope — plain gate rms = 0 and v1 ACCEPTS the wrong
+   claim at R = 5.9e10 (addendum-01, T10). Check v2: R = min(RMS over
+   alternates {+1 shift, −1 shift, full reversal}) / RMS(claimed); R ≤ 3 or
+   n < 3 → reject; regression-verified identical to v1 on T1–T4. The attack
+   class is "any wrong pairing composing with a symmetry of the
+   constellation"; when an implementation detects further constellation
+   symmetries, their images join the alternate set. Fail-closed on purpose:
+   degenerate constellations are UNCHECKABLE, not wrong; no inject, never a
+   pass. T1 and T10 are the standing regression inputs.
+5. **Full-anchor coverage — the merge consumes the ENTIRE harness survivor
+   set.** The claimant never selects which anchors are graded: freedom to
+   pick 3 of 17 is freedom to construct a fabricated line on a compliant
+   subset (addendum-01, consequence 3). Inability to identify the full set
+   → fail-closed, no card.
 
-**Falsifiable expectation, registered:** raman's minimal-thrash class is
-plausibly caused by the shipped gate's inability to accept a correct answer
-(F4: right physics, inexpressible). Post-redesign, raman minimal-thrash
-count should DROP. Measure it when the redesign runs.
+**Scope of the guarantee (measured boundary, addendum-01 T6):** conditions
+1–5 establish *pairing integrity over the full anchor set plus geometric
+non-degeneracy* — they do NOT establish value truth. An invented (a, b)
+applied consistently to the harness's own anchors passes every geometric
+check by construction (T6: gate PASS, v1 ACCEPT, v2 ACCEPT). Value truth
+requires a mechanism OUTSIDE the constellation — candidates: the
+`source_crosscheck` class (recompute against the task's own source) or
+loop-level outcome evidence — and is an OPEN design item, not silently
+claimed. "The merge is the check" holds for pairing, not for values.
+
+**Falsifiable expectation, registered:** IF raman's repeated-command
+behaviour was caused by a gate that no correct claim could pass, then after
+a redesign under which correct claims can pass, the RAW repeat-count
+distribution of raman failure trajectories should shift down (registered as
+a distribution shift, not a thresholded class count — per §5.3's own rule;
+the retracted F4 inference is NOT this claim's basis, cf.
+`f4-retraction-20260820/retraction.md`: what survives is only that the
+whitelist could not express a genuine two-free-parameter relationship).
+Measure when the redesign runs.
 
 ## 7. Structural direction — the harness as commitment device
 
-Probe-before-decide discipline is a scaffold property, not a model property
-(4 measured reasons: no commitment device in a single context; playbook
-never asks; timeout economics punish probing; instruction alone
-under-actuates — the audit prompt ordered hypothesis-testing and models
-fabricated instead). Level 1 teaches the behavior; the durable path is the
+Probe-before-decide discipline is a scaffold property, not a model property.
+One reason is measured in this spec's evidentiary base (instruction alone
+under-actuates: the audit prompt ordered hypothesis-testing and models
+fabricated instead — reval-adherence F5); three are carried-over
+observations, not measurements (no commitment device in a single context;
+playbook never asks; timeout economics punish probing). Level 1 teaches the behavior; the durable path is the
 harness supplying the commitment device — the revalidator-forces-landings
 pattern generalized. §6 IS that pattern for one claim class. Extending it
 to further claim classes is future work gated on §8.
@@ -171,9 +218,33 @@ to further claim classes is future work gated on §8.
    requirement automatically.
 3. **Oracle set AND bad set** for any mechanism addition (per §1) — the
    frozen family, the conditioning check, and the peak detector each get
-   both when implemented.
+   both when implemented. The family's bad set MUST include a fixture whose
+   true relationship is provably OUTSIDE {x, 1/x} (e.g. quadratic or log),
+   testing that residuals reject a wrong family — the membership was chosen
+   downstream of raman's known 1/x relationship, so its generality is
+   unproven until an out-of-family rejection is measured.
 4. Every level-1 claim goes through the existing candidate/ab machinery —
    no new validation path invented.
+5. **Family-addition enforcement:** every family member added later must
+   land with a T1-style regression case (its own identity-shift/symmetry
+   attack input) in the test suite — enforced by a test that fails when a
+   family member lacks one, not by documentation.
+6. **Noise-extension pre-registration:** before the §8.2 noise sweep runs,
+   its parameters are registered with T-matrix specificity — noise
+   distribution and magnitudes, trial count, and "gap" defined as the
+   WORST-CASE ratio across the sweep. Absent that registration, the sweep
+   does not run.
+7. **Score the O4 arm** of `f3-cell-contract-20260820` formally (cells
+   exist; script-tally) so §4 G1 can cite a verdict instead of raw cells.
+8. **Value-truth mechanism** (§6 scope paragraph): design the
+   outside-the-constellation check for invented-(a,b) claims —
+   `source_crosscheck` class or loop-level outcome evidence — before any
+   arming decision. T6 is its motivating input.
+9. **Full-series data path** (implementation): the peak detector needs the
+   full numeric series; the audit sample pipeline truncates to head/tail by
+   design. First build decision: harness-side raw-fixture read (leak-safe
+   resolution, separate from the audit sample) vs a redesigned sample
+   format. Named here so the builder does not discover it mid-increment.
 
 ## 9. Non-goals
 
@@ -189,9 +260,16 @@ to further claim classes is future work gated on §8.
 
 Verdicts this spec argues from:
 `docs/loop-probes/dnc-length-vs-difficulty-20260820/` (+ addenda 01, 02),
-`docs/loop-probes/dnc-merge-fit-20260820/`,
-`docs/loop-probes/f3-cell-contract-20260820/`,
+`docs/loop-probes/dnc-merge-fit-20260820/` (+ addendum-01 pre/verdict —
+T6 value-fabrication boundary, T10 symmetric-reversal gap, check v2),
+`docs/loop-probes/f3-cell-contract-20260820/` (verdict + raw O4 cells,
+`out-O4-r*.json`, arm unscored — §8.7),
 `docs/loop-probes/reval-adherence-20260819/`,
-`docs/loop-probes/f4-retraction-20260820/retraction.md`.
+`docs/loop-probes/f4-retraction-20260820/retraction.md`,
+`docs/reboot.md` (loop-1 verdict: prose lesson-following 1/8).
+Architect review: `docs/reviews/2026-08-20-dnc-spec-architect-review.md`
+(SOUND-WITH-AMENDMENTS; F1–F15 — F1/F2/F13 resolved by addendum-01 +
+§6.5/scope/check-v2; F3–F8, F10–F12 resolved by amendment; F9 → §8.9;
+F14 → §3 wording; F15 positive).
 Cross-lane review: meta-harness-1e (axis criterion, attack construction,
 three merge conditions, thrash prediction, per-fixture scope).

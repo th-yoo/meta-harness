@@ -135,3 +135,54 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+# ---- addendum-01 extension (architect review F1/F2/F13) ----------------
+
+def conditioning_check_v2(us, cs):
+    """v2: alternate set = {+1 shift, -1 shift, full reversal}."""
+    n = len(us)
+    if n < 3:
+        return False, float("nan")
+    _, _, rms_claimed = fit_affine(us, cs)
+    alts = []
+    if n - 1 >= 3:
+        alts.append(fit_affine(us[:-1], cs[1:])[2])
+        alts.append(fit_affine(us[1:], cs[:-1])[2])
+    alts.append(fit_affine(us, list(reversed(cs)))[2])
+    r = min(alts) / max(rms_claimed, EPS)
+    return r > R_THRESHOLD, r
+
+
+def addendum():
+    print("== addendum-01: architect-review attacks (registered in addendum-01-pre.md) ==")
+    us_ir = [1.0, 2.3, 2.9, 5.1, 7.8]
+    truth_ir = [100 + 40 * u for u in us_ir]
+    us_eq = [1.0, 2.0, 3.0, 4.0, 5.0]
+    truth_eq = [100 + 40 * u for u in us_eq]
+    us_sym = [1.0, 2.0, 6.0, 10.0, 11.0]
+    truth_sym = [100 + 40 * u for u in us_sym]
+
+    cases = [
+        ("T6  value-fab (invented a=7,b=3)", us_ir, [7 + 3 * u for u in us_ir]),
+        ("T7a reversal on equal-spaced", us_eq, list(reversed(truth_eq))),
+        ("T7b reversal on irregular-asym", us_ir, list(reversed(truth_ir))),
+        ("T8  +2-shift on equal-spaced", us_eq, truth_eq[2:] + [truth_eq[-1] + 40, truth_eq[-1] + 80]),
+        ("T9  two-element swap on irregular", us_ir, [truth_ir[0], truth_ir[3], truth_ir[2], truth_ir[1], truth_ir[4]]),
+        ("T10 reversal on SYMMETRIC irregular", us_sym, list(reversed(truth_sym))),
+    ]
+    for name, us, cs in cases:
+        gate = plain_gate(us, cs, DELTA_SYNTH)
+        ok1, r1 = conditioning_check(us, cs)
+        ok2, r2 = conditioning_check_v2(us, cs)
+        _, _, rms = fit_affine(us, cs)
+        print(f"{name}: plain-gate={'PASS' if gate else 'REJECT'} (rms={rms:.4g}) | "
+              f"v1={'ACCEPT' if ok1 else 'REJECT'} (R={r1:.3g}) | "
+              f"v2={'ACCEPT' if ok2 else 'REJECT'} (R={r2:.3g})")
+    print("\nv2 regression over T1-T4 originals:")
+    for name, us, cs in [("T1", us_eq, truth_eq[1:] + [truth_eq[-1] + 40]),
+                          ("T2", us_eq, truth_eq),
+                          ("T3", us_ir, truth_ir),
+                          ("T4", us_ir, truth_ir[1:] + [truth_ir[-1] + 40])]:
+        ok2, r2 = conditioning_check_v2(us, cs)
+        print(f"  {name}: v2={'ACCEPT' if ok2 else 'REJECT'} (R={r2:.3g})")
