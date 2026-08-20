@@ -2113,3 +2113,54 @@ The staleness that did exist was one file up and was the sibling's: MOST RECENT
 STATE still said "2026-08-19 newest" with no entry for a rung-5 result that had
 just merged, reachable on another host only by reading commit messages. Fixed
 in `56a1946`.
+
+## 2026-08-20 — lane A: the answer-key purge, the D&C arc, and the first held transfer
+
+The bias audit the generality rule demanded found the harness had been
+handing out answers twice over: F4's `offset-reciprocal` (built for a
+fabrication nobody checked against the artifact) and, older and worse, the
+audit prompt's own worked example — `1e7 / 6327.285 = 1580.6`, the raman
+fixture's exact peak and answer, shipped to every auditor since lane-a-v2.
+Both removed (revert `5982a08`, prompt fix + `lane-a-v5` `0a79de5`,
+retraction record in `docs/loop-probes/f4-retraction-20260820/`). The
+contamination hypothesis — that the example taught the 1e7 fixation the
+adherence probe later measured — is recorded, undecided, and needs a
+clean-prompt re-probe.
+
+The D&C arc then ran design-by-probe end to end. Length-vs-difficulty
+classification over 196 stored failure trajs: BIMODAL — a length sub-band
+(path-tracing 12/14 hard) against pure-difficulty tasks (torch-tensor
+17/17), thrash a third gate-shaped class; blanket L2 orchestration dead
+before a line of it was written. The merge=fit probe built the breaking
+inputs first: identity shift passes a plain over-determined gate at rms=0
+on regular spacing (conditioning check REQUIRED); a symmetric-constellation
+reversal defeated the ±1-shift check at R=5.9e10 (derived-automorphism
+alternates became the requirement, fixed lists demoted to regression
+floor); an invented (a,b) passes everything by construction — geometry
+checks pairing, never truth, so the spec says so instead of overclaiming.
+The spec survived a fresh-context architect review (SOUND-WITH-AMENDMENTS →
+both criticals probed same-hour → amended), and the downstream-of-decision
+law — three independent derivations in one day — was promoted into
+`CLAUDE.md` §1 with a scope correction to §1's own redundancy sentence:
+over-determined fits reject ERROR, never DECEPTION.
+
+The library then shipped OFF via SDD (12 tasks, plan reviewed to FLAWLESS
+over four iterations, one of which caught three of the plan's own
+"Expected: PASS" claims as false by hand-computing the embedded
+arithmetic): `reval-fit` / `series-peaks` / `series-source`, suite 2280/0,
+TS/python port parity exact (17 peaks, CV 1.374/1.861). Two verdicts went
+against us and were recorded straight: the R=3 placeholder FAILED its own
+pre-registered noise rule (GAP<100 at sigma ≤1% — the immunization written
+before any verdict existed to protect fired against our own constant), and
+the final review found the derived delta serving two masters (a spacing
+bound doing a noise bound's job — fixture-2's quadratic arm passed
+residuals; `delta_pair`/`delta_fit` split recorded as the fix shape).
+
+And the week's standing blocker moved: the SECOND FIXTURE TRANSFER HELD ON
+ALL ARMS — registration committed before the run, machinery frozen by an
+empty-diff proof, unseen-domain divide 6/6, oracle accepted, bad arms
+rejected, the T6 boundary behaving exactly as documented. One held
+transfer is evidence, not proof; the third fixture is the generality
+claim. Arming stays blocked on the noise-derived tolerance family and the
+value-truth mechanism — every gate this lane ships still has to earn the
+right to say no.

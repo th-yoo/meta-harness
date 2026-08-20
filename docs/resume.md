@@ -156,6 +156,34 @@ does NOT transfer; this file + the repo are the source of truth.)
 > generality claim. **Arming and the L1-ab wiring remain their own go** —
 > nothing in this paragraph changes what ships live.
 >
+> **DONE 2026-08-20 (close of session): final review + fix wave + PUSH.**
+> Whole-branch review APPROVED with one cross-probe find neither verdict
+> could see (**F1**, recorded
+> `docs/loop-probes/dnc-second-fixture-20260820/addendum-01-final-review.md`):
+> the derived delta is GEOMETRY-DEPENDENT — fixture-2's quadratic bad arm
+> PASSED residuals (delta 487.5 vs residual 436.8) and was caught only by
+> conditioning at R=1.49, under the placeholder the noise sweep had just
+> invalidated. Root cause converged cross-lane (**addendum-02-two-masters**,
+> `f10a8c9`): the delta SERVES TWO MASTERS — spacing-derived pairing bound
+> doing a noise bound's job; fix shape = `delta_pair` (spacing) +
+> `delta_fit` (noise floor), both answer-free; CONSOLIDATION HYPOTHESIS:
+> `delta_fit` and the derived R threshold may fall out of one derivation,
+> reducing arming blockers 3→2. Fix wave: ripple test renamed for what it
+> measures (`6daf3e0` — a sin ripple IS scale-persistent structure, 26
+> peaks, python/TS identical; the plan's "featureless→0" prediction was
+> wrong) + F1 addendum (`f5128b7`). **ARMING BLOCKERS, recorded:** (i)
+> §8.2 derived threshold, (ii) its out-of-family validation (F1), (iii)
+> §8.8 value-truth mechanism — with (i)+(ii) possibly one derivation.
+> **Queue statuses:** (2) bypass+design writeup = DONE (the D&C spec
+> `docs/superpowers/specs/2026-08-20-dnc-design.md` + its probe chain ARE
+> the writeup, architect-reviewed); (3) sampler mechanical peaks = BUILT
+> ships-OFF (`series-peaks.ts`, 17 peaks on the real fixture), arming own
+> go; (4) second fixture = HELD (see above), third fixture = the real
+> generality claim; (5) pushed this session — origin/main now carries the
+> full series. **Also this session: downstream-of-decision law PROMOTED to
+> `CLAUDE.md` §1 (`32e4804`, user go, three independent derivations) and
+> the D&C escalation-ladder/axis-criterion state lives in the spec §2–§3.**
+>
 > **PRIOR STATE (2026-08-20, `yoo-dev`, sibling lane):** RUNG-5 DRY-RUN
 > **MERGED to local main** (merge `2e7934b`, integration merge `cf232e8`) —
 > the harness-side glyph divide renders legibly, so rung-5 is **NOT
