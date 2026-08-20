@@ -471,7 +471,7 @@ export function mergeCheck(anchorsU: number[], canonicals: number[]): MergeResul
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd opencode-plugin && bun test test/bench-reval-fit.test.ts`
-Expected: PASS (19 tests).
+Expected: PASS (20 tests).
 
 - [ ] **Step 5: Full suite + gate, then commit**
 

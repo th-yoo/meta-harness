@@ -72,3 +72,17 @@ Fixes applied for iteration 3: freeze guard path extended to the probe dir
 (verdict.md not yet existing at guard time); mergeCheck gains a
 "coincident-anchors" typed reject with spacing pre-check + test; Task 9
 addendum must state the fail-closed no-table rationale in one sentence.
+
+## Iteration 3 (final scoped re-review)
+
+Fix A (freeze-guard scope): ADDRESSED — both paths in the diff; verdict.md
+structurally excluded (two-dot commit diff + created post-guard); REG_SHA
+baselines all registration files via the whole-directory add.
+Fix B (coincident-anchors): ADDRESSED — sorted adjacent-pair pre-check, same
+EPS sense as deriveDelta, deriveDelta unreachable with zero spacing on every
+mergeCheck path, no other unguarded caller in the plan.
+One NEW Minor: stale cumulative test count (19 -> 20) at Task 3 Step 4 —
+fixed in the commit carrying this entry.
+
+FINAL VERDICT: all findings across three iterations ADDRESSED. The plan is
+review-clean.
