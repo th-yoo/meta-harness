@@ -57,3 +57,18 @@ in the fixes; the hand-computed numbers are recorded here)
 12. [OBSERVATION] T8's exact counts (3565 rows, 17 peaks) assume Python/Bun
     arithmetic parity; plan already flags the percentile-index parity. No
     change.
+
+## Iteration 2 (scoped re-review)
+
+Findings 1-4, 6-9: ADDRESSED (hand-verified, incl. re-walk of all five
+mergeCheck cases under the reorder and float-walk of the inv-x attack).
+Finding 5: NOT ADDRESSED as scoped — freeze guard covered only
+opencode-plugin/src/bench/, leaving fixture/truth/runner/pre-registration
+tunable post-run with an empty-diff alibi. NEW IMPORTANT: the finding-1
+reorder made deriveDelta reachable with coincident anchors → uncaught
+RangeError escaping "fail-closed" mergeCheck.
+
+Fixes applied for iteration 3: freeze guard path extended to the probe dir
+(verdict.md not yet existing at guard time); mergeCheck gains a
+"coincident-anchors" typed reject with spacing pre-check + test; Task 9
+addendum must state the fail-closed no-table rationale in one sentence.

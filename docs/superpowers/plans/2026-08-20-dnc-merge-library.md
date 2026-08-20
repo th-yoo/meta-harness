@@ -357,7 +357,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: `fitAffine`, `deriveDelta`, `conditioningCheck` (Tasks 1–2).
 - Produces:
-  - `export type MergeReject = "coverage" | "insufficient-anchors" | "degenerate-constellation" | "residual"`
+  - `export type MergeReject = "coverage" | "insufficient-anchors" | "coincident-anchors" | "degenerate-constellation" | "residual"`
   - `export interface MergeResult { ok: boolean; reason?: MergeReject; a?: number; b?: number; delta?: number; R?: number }`
   - `export function mergeCheck(anchorsU: number[], canonicals: number[]): MergeResult` — full-anchor coverage is enforced by shape: `canonicals.length` must equal `anchorsU.length` (spec §6.5 — the claimant never selects the graded subset). Order: `canonicals[i]` is the claim for `anchorsU[i]`.
 
@@ -387,6 +387,12 @@ test("mergeCheck rejects n < 3", () => {
   const r = mergeCheck([1.0, 2.3], [140, 192])
   expect(r.ok).toBe(false)
   expect(r.reason).toBe("insufficient-anchors")
+})
+
+test("mergeCheck rejects coincident anchors fail-closed instead of throwing", () => {
+  const r = mergeCheck([1, 2, 2, 4, 5], [140, 180, 180, 260, 300])
+  expect(r.ok).toBe(false)
+  expect(r.reason).toBe("coincident-anchors")
 })
 
 test("mergeCheck rejects degenerate geometry fail-closed (probe T2)", () => {
@@ -422,7 +428,7 @@ Expected: FAIL — `mergeCheck` not exported.
 Append to `opencode-plugin/src/bench/reval-fit.ts`:
 
 ```ts
-export type MergeReject = "coverage" | "insufficient-anchors" | "degenerate-constellation" | "residual"
+export type MergeReject = "coverage" | "insufficient-anchors" | "coincident-anchors" | "degenerate-constellation" | "residual"
 
 export interface MergeResult { ok: boolean; reason?: MergeReject; a?: number; b?: number; delta?: number; R?: number }
 
@@ -436,6 +442,12 @@ export function mergeCheck(anchorsU: number[], canonicals: number[]): MergeResul
   if (canonicals.length !== anchorsU.length) return { ok: false, reason: "coverage" }
   if (anchorsU.length < 3) return { ok: false, reason: "insufficient-anchors" }
   const { su, sc } = sortedWith(anchorsU, canonicals)
+  // Coincident anchors would make deriveDelta throw; fail CLOSED, not loud —
+  // a typed reject, never an escaping RangeError (the reorder below made
+  // deriveDelta reachable before any other guard could catch this).
+  for (let i = 1; i < su.length; i++) {
+    if (su[i]! - su[i - 1]! < EPS) return { ok: false, reason: "coincident-anchors" }
+  }
   // RESIDUALS FIRST. The conditioning R's denominator is the claimed fit's own
   // rms, so a badly-fitting claim collapses R and would steal the reason from
   // the residual signal (a shifted claim on irregular anchors must report
@@ -975,7 +987,7 @@ NO expected outcome is written here on purpose — the registered rule has three
 
 - [ ] **Step 3: Write the addendum with the real output**
 
-Create `docs/loop-probes/f3-cell-contract-20260820/addendum-01-o4-scoring.md` containing: a header noting the arm was run 2026-08-20 but omitted from `verdict.md` (found by the architect review of the D&C spec, finding F4); the scorer's verbatim output in a fenced block; the registered rule quoted from `pre-registration.md` AMENDMENT 01; and a reading that (a) applies whichever branch of the registered rule actually fired, and (b) states the PARSE-vs-CONSISTENCY divergence precisely (parse was 0/4 while consistency is whatever the scorer printed) — that divergence, not any single number, is what the D&C spec's G1 cites (the announced metric moving independently of the underlying behaviour). If the outcome is INDETERMINATE, say so and leave G1 citing the divergence plus the raw cells; do not round 3/4 down to confirm a prediction. `verdict.md` itself is NOT edited.
+Create `docs/loop-probes/f3-cell-contract-20260820/addendum-01-o4-scoring.md` containing: a header noting the arm was run 2026-08-20 but omitted from `verdict.md` (found by the architect review of the D&C spec, finding F4); the scorer's verbatim output in a fenced block; the registered rule quoted from `pre-registration.md` AMENDMENT 01; and a reading that (a) applies whichever branch of the registered rule actually fired, and (b) states the PARSE-vs-CONSISTENCY divergence precisely (parse was 0/4 while consistency is whatever the scorer printed) — that divergence, not any single number, is what the D&C spec's G1 cites (the announced metric moving independently of the underlying behaviour). If the outcome is INDETERMINATE, say so and leave G1 citing the divergence plus the raw cells; do not round 3/4 down to confirm a prediction. The addendum must also state, in one sentence, why a cell with NO revalidation table counts as inconsistent rather than vacuously consistent (fail-closed, matching every other gate in this design; the vacuous reading would let an empty block outscore a populated one). `verdict.md` itself is NOT edited.
 
 - [ ] **Step 4: Gate, then commit**
 
@@ -1301,13 +1313,13 @@ git rev-parse --short HEAD   # record as REG_SHA for Step 6
 - [ ] **Step 6: Run and write the verdict, with the machinery-freeze proof**
 
 Run: `bun docs/loop-probes/dnc-second-fixture-20260820/run-transfer.ts`
-Then run the freeze guard and capture its (required-empty) output:
+Then run the freeze guard and capture its (required-empty) output — the guard covers BOTH the machinery AND the fixture/registration files, so a post-run edit to `fixture.dat`, `truth.json`, `make-fixture.ts`, `run-transfer.ts`, or `pre-registration.md` is caught the same as a machinery edit (`verdict.md` does not exist yet at this point, so the probe-dir path is safe to include whole):
 
 ```bash
-git diff --stat REG_SHA..HEAD -- opencode-plugin/src/bench/
+git diff --stat REG_SHA..HEAD -- opencode-plugin/src/bench/ docs/loop-probes/dnc-second-fixture-20260820/
 ```
 
-Then create `verdict.md`: runner output verbatim in a fenced block; the freeze-guard command and its output verbatim (MUST be empty — any diff in `opencode-plugin/src/bench/` between registration and verdict means the machinery was edited in response to this fixture, which voids the transfer claim; record the void, do not "fix" it); each registered outcome marked HELD / FAILED; the registered decision applied. **If ANY line shows `*** DEVIATES ***` or the divide finds < 3 peaks: write the verdict recording the failure and STOP — do not modify detector, check, or fixture; the failure IS the deliverable.**
+Then create `verdict.md`: runner output verbatim in a fenced block; the freeze-guard command and its output verbatim (MUST be empty — ANY diff in either path between registration and verdict means machinery or fixture was edited in response to the result, which voids the transfer claim; record the void, do not "fix" it); each registered outcome marked HELD / FAILED; the registered decision applied. **If ANY line shows `*** DEVIATES ***` or the divide finds < 3 peaks: write the verdict recording the failure and STOP — do not modify detector, check, or fixture; the failure IS the deliverable.**
 
 - [ ] **Step 7: Gate, then commit the verdict**
 
