@@ -327,4 +327,3 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>'
 
 Run: `cd opencode-plugin && bun test 2>&1 | tail -3 && cd .. && git log --oneline -5 && git status --short`
 Expected: suite 0 fail; four new commits on main (revert, prompt fix, retraction doc, resume); working tree clean except the pre-existing untracked `term-bench2/probe-tasks/extract-elf-card/`. DO NOT PUSH — push has its own go.
-```
