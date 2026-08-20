@@ -27,7 +27,7 @@ check every model claim against the artifact.)
 
 The shipped prompt's inline-arithmetic example was `1e7 / 6327.285 = 1580.6`
 — the fixture's exact peak and answer — since lane-a-v2 (`a97156a`),
-predating F4. Two consequences:
+predating F4. Three consequences:
 
 1. Any raman audit under lane-a-v2..v4 received its own answer in the
    prompt. Raman results through this auditor are contaminated.
