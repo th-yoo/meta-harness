@@ -295,10 +295,49 @@ to further claim classes is future work gated on §8.
    does not run.
 7. **Score the O4 arm** of `f3-cell-contract-20260820` formally (cells
    exist; script-tally) so §4 G1 can cite a verdict instead of raw cells.
-8. **Value-truth mechanism** (§6 scope paragraph): design the
-   outside-the-constellation check for invented-(a,b) claims —
-   `source_crosscheck` class or loop-level outcome evidence — before any
-   arming decision. T6 is its motivating input.
+8. **Value-truth mechanism — DESIGNED 2026-08-21 (user go); implementation
+   is the arming increment's.** Threat: T6-class consistent fabrication,
+   rejectable only by a prior OUTSIDE the claim. Three layers, each with
+   its blind spot named, composed fail-closed:
+
+   **L-A `source_crosscheck` (primary):** check the claim against
+   task-owned artifacts INDEPENDENT of the audited claim's inputs —
+   secondary data files, metadata, and especially task-owned EXECUTABLE
+   evaluators in the environment (`eval.py`, cost models, reference
+   decoders — the replay-the-task's-own-tool class the DNA autopsy proved
+   as method). Verdict ∈ {CONSISTENT, INCONSISTENT, NO-SOURCE}. Measured
+   coverage (census 2026-08-21, real terminal-bench-2 environments): 21/61
+   tasks (34%) multi-artifact; single-artifact tasks (raman included) are
+   structurally NO-SOURCE — the one artifact is the claim's own input.
+   Scope honesty: verifies faithfulness-to-source, not truth (stale/wrong
+   source passes); L-A inputs are attacker-influenceable text and get
+   sampler-grade containment (the `assertCleanStimulus` class).
+   **The bench's own task TESTS are never an L-A source — they are the
+   answer key, and a gate that reads them violates §1 by construction.**
+
+   **L-B independent replication (secondary, spend-gated):** k≥2 audits in
+   INDEPENDENT contexts; the claim's family and constants must replicate
+   within the derived sigma. Kills the arbitrary-invention class exactly
+   (an invented (a,b) has no stable generator; world-knowledge constants
+   replicate); BLIND to shared confident error — the documented L3 limit
+   ("a consistent wrong belief is consistent"), stated, not hidden.
+   Registered probe design (spend, own go): k=3 independent audits on the
+   raman fixture; falsifier — fabricated constants must FAIL replication
+   while a planted world-knowledge claim replicates.
+
+   **L-C outcome backstop:** task reward on the next crank, paired
+   gain/regression attribution (the Regression-Tax lens) — the only layer
+   whose ground truth the claimant does not control; slow and confounded,
+   hence backstop.
+
+   **Authority policy (fail-closed ladder, binding):** value-truth status
+   gates injection authority — CROSSCHECKED → numeric injection permitted;
+   REPLICATED-only → numeric injection permitted, status carried in the
+   audit trail; UNCHECKED (NO-SOURCE and unreplicated) → NO numeric
+   injection, criteria-class card only (the existing fail-closed posture
+   extended to value truth). A T6-class invented claim can therefore reach
+   at most REPLICATED — and only by defeating independent replication,
+   which is its registered falsifier.
 9. **Full-series data path** (implementation): the peak detector needs the
    full numeric series; the audit sample pipeline truncates to head/tail by
    design. First build decision: harness-side raw-fixture read (leak-safe
