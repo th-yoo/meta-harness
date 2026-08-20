@@ -114,6 +114,29 @@ Read the image back — read-back proven by the delivery-channel probe 3/3).
 bullet ab.** The bullet can trial on the current environment whenever its
 own go lands.
 
+## 4d. Two pre-trial registrations (cross-lane review, adopted)
+
+1. **Network-on is now a LOAD-BEARING invariant — declared here.** The
+   bullet's whole mechanism rides on runtime containers keeping network +
+   a reachable pip (`cmd-run.ts:307`). Container network-off is standard
+   sandbox hardening someone could reasonably apply later, and the bullet
+   would then die SILENTLY — the ab/production delta would read as model
+   regression, indistinguishable from the bullet not actuating (the
+   gate-state-cannot-be-sampled shape). INVARIANT: `bench SUT containers:
+   network on, pip reachable` — verify at the TB2 batch pre-step alongside
+   the existing 429-transport probe before any bullet-bearing run; the
+   check is one in-container `pip download --no-deps --dest /tmp pip`-class
+   probe or equivalent.
+2. **Self-provision cost is inside the task's own budget.** matplotlib +
+   pillow installs cost tens of seconds; the band has timeout-boundary
+   tasks (tune-mjcf died on timeout in loop-2). The bullet could produce
+   within-arm churn exactly like b7's (pass fast / fail slow) if installs
+   push marginal tasks over. PRE-REGISTERED for the bullet ab:
+   elapsed-per-pair is a WATCHED quantity (the cheapest mechanism probe),
+   and trials record install latency whenever the agent takes the render
+   path — so a timeout regression is attributable to install cost, never
+   silently read as the bullet failing on merit.
+
 ## 5. Falsifiable expectation (registered thought, not a run)
 
 If the render bullet ships through the standard proposer/ab path, the
