@@ -136,6 +136,26 @@ does NOT transfer; this file + the repo are the source of truth.)
 > to BE a peak — the one mechanism that survives the rule; (4) second fixture,
 > the only test of transfer for either lane; (5) push (4 commits ahead).
 >
+> **DONE 2026-08-20 (later still): D&C DIVIDE/MERGE LIBRARY BUILT, SHIPS
+> OFF.** Three modules landed via SDD (12 tasks, plan reviewed to FLAWLESS):
+> `opencode-plugin/src/bench/{reval-fit,series-peaks,series-source}.ts` +
+> tests `test/bench-{reval-fit,series-peaks,series-source}.test.ts`; suite
+> 2280/0. **§8 validation obligations closed**: O4 scored against its
+> registered rule (`d67cf40`, CONSTANT-CONSISTENCY 3/4 INDETERMINATE — the
+> parse-vs-consistency divergence F3 found stands, unresolved); noise sweep
+> (`32625b1`) — the R=3 placeholder FAILS the pre-registered rule at
+> sigma ≤1% (GAP<100), so §8.2's DERIVED-THRESHOLD branch is now the binding
+> arming blocker, not a nice-to-have; out-of-family bad set green (`0650427`,
+> quadratic/log rejected by residuals); family enforcement green (`06fc577`,
+> mandatory per-member regression attacks); real-fixture integration
+> reproduces 17 peaks end-to-end (`3e4557e`). **SECOND FIXTURE TRANSFER: ALL
+> ARMS HELD** (registration `2d5bd4b` frozen before the run, verdict
+> `8645c00` — divide 6/6, oracle arm ok, bad arms correctly rejected,
+> freeze-guard diff empty) — one held transfer is evidence, not proof; queue
+> item (4) above stays open in spirit, a third fixture is the actual
+> generality claim. **Arming and the L1-ab wiring remain their own go** —
+> nothing in this paragraph changes what ships live.
+>
 > **PRIOR STATE (2026-08-20, `yoo-dev`, sibling lane):** RUNG-5 DRY-RUN
 > **MERGED to local main** (merge `2e7934b`, integration merge `cf232e8`) —
 > the harness-side glyph divide renders legibly, so rung-5 is **NOT
