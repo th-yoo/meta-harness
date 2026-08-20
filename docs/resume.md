@@ -89,6 +89,20 @@ does NOT transfer; this file + the repo are the source of truth.)
 > instances, none found by reading: **to test whether a check can fail, build the
 > input that should break it.**
 >
+> **LANE B (seam gate / rung-5) STATUS, audited against the same rule.**
+> **5 of 7 deployed seams are fixture-fitted**; `s4` is an explicit answer key
+> (cell searched against `TARGET_TRUTH = 26`, commented in
+> `calibrate_gcode.py:88` as "Oracle glyph truth for this fixture"). Only `s2`
+> (format contract) and `s7` (`source_crosscheck`) carry no answer.
+> Oracle/bad calibration does NOT rescue the rest — it proves the CHECK
+> discriminates here, not that the BOUND transfers. **Answer-free replacement
+> derived and measured, NOT built:** scale-space stability, one degeneracy
+> clause ("divided nothing"), 26 glyphs persists across 9 consecutive scales
+> over a 200× unchosen sweep range, 9× margin, agrees with the fitted cell.
+> **Rung-5 splits:** the DIVIDER is an answer key and dies; DECOMPOSE-THEN-READ
+> encodes no answer and survives. **Open item, both lanes: A SECOND FIXTURE** —
+> one agreement is not transfer. Detail in the ⚖️ GENERALITY RULE block below.
+>
 > **QUEUE (each its own go, nothing authorized):** (1) F4 retraction/revert;
 > (2) write up the bypass + design against spec §10 — it exists ONLY in
 > cross-session messages and host-local memory, so by this repo's own rule it
