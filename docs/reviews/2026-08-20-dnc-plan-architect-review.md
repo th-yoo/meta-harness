@@ -86,3 +86,14 @@ fixed in the commit carrying this entry.
 
 FINAL VERDICT: all findings across three iterations ADDRESSED. The plan is
 review-clean.
+
+## Iteration 4 (confirmation on current bytes)
+
+Count fix verified (5+8+7=20); all four iteration-1/2 fixes intact
+(mergeCheck ordering with coincident pre-check, dual-path freeze guard,
+CONSTANT-CONSISTENCY scorer, DAG G5+T7). Two Observation-level prose nits
+(T7 "Consumes" says Task 2's check but calls mergeCheck (T3); T11 lists
+parseSeries it only uses via readSeriesFile) — explicitly non-blocking,
+summary-line imprecision only, execution unaffected.
+
+**VERDICT: FLAWLESS.**
