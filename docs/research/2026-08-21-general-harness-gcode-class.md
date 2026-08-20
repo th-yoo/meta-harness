@@ -72,7 +72,25 @@ agents deriving glyphs from coordinate lists in text.)
    and fixing it universally is §1-legitimate.
 3. **NOT to build:** any gcode renderer in the harness. The agent writes
    its own renderer at task time (LATM shape); the harness only guarantees
-   the loop is POSSIBLE.
+   the loop is POSSIBLE. That is precisely WHY the pattern stays
+   answer-free — the moment the harness supplies a format-specific
+   renderer it crosses back over §1. The bullet's wording stays
+   MODALITY-level ("draw it and look"), never naming a format.
+
+## 4b. Cautions before the bullet ships (cross-lane review, adopted)
+
+- **Expectation anchor:** 0→92% is GPT-4o on BIG-Bench, not sonnet on TB2.
+  External numbers are motivation, never a prior for calling the ab early —
+  the ab verdict is the only evidence that counts locally (the
+  no-reason-drift rule applied to literature).
+- **Sequencing rule (the F1/F2 lesson at loop level):** the libs AUDIT is
+  zero-spend and safe anytime; its REMEDY is not attribution-neutral. If
+  plotting libs are missing and get added to band images, that env change
+  alters what EVERY arm can do — shipped in the same window as the bullet,
+  the ab measures bullet+env and attributes both to the bullet. Sequence:
+  audit → if missing, env fix as its OWN change with a re-baseline (or at
+  minimum a recorded env-delta) → THEN the bullet ab on the stable
+  environment. Libs already present → the audit just closes the risk.
 
 ## 5. Falsifiable expectation (registered thought, not a run)
 
