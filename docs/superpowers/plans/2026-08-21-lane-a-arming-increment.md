@@ -43,6 +43,10 @@ is more informative than either list alone.
 | Family choice selects between two domain boundaries | — | Q4 residual | fixed (both families must be in domain), Task 13 |
 | `reject-degenerate` conflates attacked with uncheckable | — | LOW | recorded, manifest |
 
+**Round 2 (cross-lane re-attack on Task 16, which I pointed them at).** The sweep ranges I wrote were the *same* defect one level up: author-chosen windows (`persistence 3..12` out of a structural `1..49`) positioned where flatness was plausible, so the assertion passed because its failure region was excluded by the window's own choice — the sibling lane's third-address relocation, reproduced by me inside a test written to prevent exactly that. Three further gaps: the quartet's fourth member had no sweep at all, the two `0.9` bounds were named in prose and absent from the tests, and the tests measured anchor COUNT while the prose claimed VERDICT stability. All fixed; Task 16 now sweeps full structural domains on both fixtures and asserts the default sits two steps inside the widest verdict plateau.
+
+**Induced from rounds 1 and 2 together:** the defect recurs at whatever level is not currently being examined. Round 1 it was the quantifier while I audited the decoders; round 2 it was the sweep bounds while I audited the constants. Expect round 3 in whatever this table's own structure takes for granted.
+
 **The one that matters.** Lane A's self-audit found four constants and a list —
 and missed the critical, which was not a constant at all but a **quantifier**.
 §8.8(iv)'s enforcement asked "does the card state THESE numbers?", where THESE
@@ -3017,7 +3021,15 @@ Cross-lane review's F3: `REG_LEVEL` earned a measured non-load-bearing certifica
 
 **The constants:** the detector quartet (90th-percentile threshold, ≥5-scale persistence, ≤3 match distance, the 5..101 window range) — a code comment asserts "NEVER tuned", which is a statement about intent, not a measurement; and `DATA_LINE_FRACTION = 0.9` in `source-crosscheck.ts` plus the 0.9 parse-coverage bound in `selectSeries`.
 
-**The certificate:** for each constant, sweep it across a wide unchosen range and show the VERDICTS on the pinned cases do not move. Same argument that retired `R_THRESHOLD_PLACEHOLDER` — a constant whose neighbourhood is flat is not load-bearing, and the flatness is measured, not asserted. A constant whose verdicts DO move is load-bearing and must be derived or declared, not left in place.
+**THE SWEEP BOUNDS ARE THEMSELVES THE HAZARD — this task was rewritten after cross-lane re-attack.** A first draft swept `persistence` over `[3..12]`, `percentile` over `[0.80..0.95]`, `matchDistance` over `[1..8]`, and asserted the anchor count never moved. Those windows are author-chosen intervals positioned where flatness is plausible: 49 scales actually exist, so persistence's domain is `1..49`, and at `persistence = 1` every finest-scale maximum survives and the count necessarily explodes. **The check passed precisely because its natural failure region sat outside the window its author drew.** That is the third-address relocation the sibling lane already measured — the constant moves INTO the sweep bounds of a "threshold-free" sweep and is honestly reported as answer-free each time.
+
+**The fix is this project's own criterion turned on its own instrument.** Sweep the ENTIRE STRUCTURAL DOMAIN — endpoints defined by where the parameter's *meaning* degenerates, never by choice — and assert the scale-space property: **the default sits inside the WIDEST stability plateau, at least two steps from either edge.** The deliverable is the plateau MAP recorded in the manifest, not a boolean.
+
+The symmetry is the argument: the detector selects peaks by *scale*-persistence; its own hyperparameters are validated by *parameter*-persistence. If the principle is good enough for the artifact it is good enough for the instrument. A default outside the widest plateau, or within one step of a plateau edge, is the load-bearing finding this task exists to surface.
+
+**The certificate measures VERDICTS, not anchor counts.** The first draft asserted count stability while its own prose claimed verdict stability; count stability implies verdict stability only through the length-mismatch → `uncheckable` path. The sweep therefore runs the pinned claim battery (honest / shifted / reversed / quadratic) at every parameter value and compares the resulting verdict vector.
+
+**Both fixtures, not one.** A plateau measured on graphene alone is the single-fixture caveat wearing a certificate. Fixture-2 is committed and the sweep is cheap.
 
 **Files:**
 - Create: `opencode-plugin/test/bench-constant-sweeps.test.ts`
@@ -3026,59 +3038,171 @@ Cross-lane review's F3: `REG_LEVEL` earned a measured non-load-bearing certifica
 - [ ] **Step 1: Write the sweep test**
 
 ```ts
-/** F3 extent-tolerance certificates. Each constant is swept across a range far
- * wider than any plausible tuning, asserting the pinned verdicts do not move.
- * A sweep that DOES move a verdict is a finding: that constant is load-bearing
- * and needs a derivation, not a comment saying it was never tuned. */
+/** F3 parameter-persistence certificates. Every hyperparameter is swept across
+ * its FULL STRUCTURAL DOMAIN — endpoints are where the parameter's meaning
+ * degenerates, never where flatness looked plausible — and the assertion is the
+ * scale-space property: the default sits inside the widest plateau of constant
+ * VERDICT, at least two steps from either edge.
+ *
+ * The detector selects peaks by scale-persistence; this validates the detector's
+ * own parameters by parameter-persistence. Same principle, applied to the
+ * instrument instead of the artifact. */
 import { test, expect } from "bun:test"
-import { detectPeaksTracked } from "../src/bench/series-peaks.ts"
+import { detectPeaksTracked, MIN_SMOOTH_WINDOW, MAX_SMOOTH_WINDOW } from "../src/bench/series-peaks.ts"
 import { readSeriesFile } from "../src/bench/series-source.ts"
+import { deriveSeriesNoise } from "../src/bench/noise-sigma.ts"
+import { mergeGate } from "../src/bench/merge-gate.ts"
 
 const GRA = "term-bench2/probe-tasks/raman-fitting-audit/environment"
+const FX2 = "docs/loop-probes/dnc-second-fixture-20260820"
 
-test("detector persistence floor: anchor count is stable across 3..12 scales", () => {
-  const { ys } = readSeriesFile(`${GRA}/task-deps/graphene.dat`, GRA)
-  // detectPeaksTracked must accept the floor as a parameter for this sweep;
-  // default stays 5. Record every count in the manifest, not just the spread.
-  const counts = [3, 4, 5, 6, 8, 10, 12].map((k) => detectPeaksTracked(ys, { persistence: k }).length)
-  expect(new Set(counts).size).toBe(1)
-})
+const FIXTURES = [
+  { name: "graphene", path: `${GRA}/task-deps/graphene.dat`, root: GRA },
+  { name: "fixture-2", path: `${FX2}/fixture.dat`, root: FX2 },
+]
 
-test("detector match distance: anchor count is stable across 1..8 samples", () => {
-  const { ys } = readSeriesFile(`${GRA}/task-deps/graphene.dat`, GRA)
-  const counts = [1, 2, 3, 4, 6, 8].map((d) => detectPeaksTracked(ys, { matchDistance: d }).length)
-  expect(new Set(counts).size).toBe(1)
-})
+type Opts = { persistence?: number; matchDistance?: number; percentile?: number; windowMax?: number }
 
-test("detector percentile threshold: anchor count is stable across 0.80..0.95", () => {
-  const { ys } = readSeriesFile(`${GRA}/task-deps/graphene.dat`, GRA)
-  const counts = [0.80, 0.85, 0.90, 0.95].map((p) => detectPeaksTracked(ys, { percentile: p }).length)
-  expect(new Set(counts).size).toBe(1)
-})
+/** The pinned claim battery, rebuilt from whatever anchors this parameter value
+ * produces — so the verdict vector is self-consistent at every point and no
+ * expected answer is carried in. */
+function verdictVector(ys: number[], xs: number[], opts: Opts): string {
+  const tracks = detectPeaksTracked(ys, opts)
+  if (tracks.length < 3) return "uncheckable:n<3"
+  const noise = deriveSeriesNoise(xs, ys, tracks, (x) => x)
+  const honest = noise.us.map((u) => 10 + 2.0 * u)
+  const shifted = [...honest.slice(1), honest[honest.length - 1]! + 2.0]
+  const reversed = [...honest].reverse()
+  const quadratic = noise.us.map((u) => 20 + 0.5 * u * u)
+  return [honest, shifted, reversed, quadratic]
+    .map((cs) => mergeGate(noise, cs).verdict)
+    .join("|")
+}
+
+/** Longest run of identical verdict vectors. Returns the run containing the
+ * default plus the widest run overall, so the test can compare them. */
+function plateaus(values: number[], vectors: string[]) {
+  const runs: { from: number; to: number; vec: string; i0: number; i1: number }[] = []
+  for (let i = 0; i < vectors.length; i++) {
+    const last = runs[runs.length - 1]
+    if (last && last.vec === vectors[i]) { last.to = values[i]!; last.i1 = i }
+    else runs.push({ from: values[i]!, to: values[i]!, vec: vectors[i]!, i0: i, i1: i })
+  }
+  const widest = runs.reduce((a, b) => (b.i1 - b.i0 > a.i1 - a.i0 ? b : a))
+  return { runs, widest }
+}
+
+function assertDefaultInWidestPlateau(
+  label: string, values: number[], vectors: string[], defaultValue: number,
+) {
+  const { widest } = plateaus(values, vectors)
+  const di = values.indexOf(defaultValue)
+  expect(di).toBeGreaterThanOrEqual(0)
+  // the default must live in the widest plateau...
+  expect(vectors[di]).toBe(widest.vec)
+  expect(di).toBeGreaterThanOrEqual(widest.i0)
+  expect(di).toBeLessThanOrEqual(widest.i1)
+  // ...and not perched on its edge, where one step changes the verdicts
+  const marginSteps = Math.min(di - widest.i0, widest.i1 - di)
+  expect(marginSteps).toBeGreaterThanOrEqual(2)
+  console.log(`[plateau] ${label}: widest ${widest.from}..${widest.to} ` +
+    `(${widest.i1 - widest.i0 + 1} steps), default ${defaultValue}, margin ${marginSteps}`)
+}
+
+for (const fx of FIXTURES) {
+  const { xs, ys } = readSeriesFile(fx.path, fx.root)
+
+  test(`${fx.name}: persistence plateau over the FULL scale count 1..49`, () => {
+    // structural domain: one entry per smoothing scale that exists
+    const nScales = (MAX_SMOOTH_WINDOW - MIN_SMOOTH_WINDOW) / 2 + 1
+    const values = Array.from({ length: nScales }, (_, i) => i + 1)
+    assertDefaultInWidestPlateau(
+      `${fx.name}/persistence`, values,
+      values.map((k) => verdictVector(ys, xs, { persistence: k })), 5)
+  })
+
+  test(`${fx.name}: percentile plateau over the full open interval`, () => {
+    // structural domain: (0,1), sampled densely — 0 admits everything, 1 admits nothing
+    const values = Array.from({ length: 99 }, (_, i) => Math.round((i + 1) * 100) / 10000)
+    assertDefaultInWidestPlateau(
+      `${fx.name}/percentile`, values,
+      values.map((p) => verdictVector(ys, xs, { percentile: p })), 0.9)
+  })
+
+  test(`${fx.name}: matchDistance plateau to the artifact's own peak spacing`, () => {
+    // structural upper bound, derived from the artifact: beyond the median gap
+    // between candidate peaks, distinct peaks merge and the parameter stops
+    // meaning "the same peak, one scale up"
+    const finest = detectPeaksTracked(ys, { persistence: 1 }).map((t) => t.pos)
+    const gaps = finest.slice(1).map((p, i) => p - finest[i]!).sort((a, b) => a - b)
+    const medianGap = Math.max(4, gaps[gaps.length >> 1] ?? 4)
+    const values = Array.from({ length: medianGap }, (_, i) => i + 1)
+    assertDefaultInWidestPlateau(
+      `${fx.name}/matchDistance`, values,
+      values.map((d) => verdictVector(ys, xs, { matchDistance: d })), 3)
+  })
+
+  test(`${fx.name}: window-range plateau to series length/2 (upstream of MIN_SERIES_ROWS)`, () => {
+    // structural bound: a smoothing window past half the series is a global mean.
+    // This is the quartet's fourth member, and MIN_SERIES_ROWS now DERIVES from
+    // it, so its certificate is upstream of that derivation.
+    const cap = Math.floor(ys.length / 2)
+    const values: number[] = []
+    for (let w = 21; w <= cap; w += 20) values.push(w % 2 === 0 ? w + 1 : w)
+    if (!values.includes(MAX_SMOOTH_WINDOW)) values.push(MAX_SMOOTH_WINDOW)
+    values.sort((a, b) => a - b)
+    assertDefaultInWidestPlateau(
+      `${fx.name}/windowMax`, values,
+      values.map((w) => verdictVector(ys, xs, { windowMax: w })), MAX_SMOOTH_WINDOW)
+  })
+}
 ```
 
-Widen `detectPeaksTracked` to `detectPeaksTracked(ys, opts?: { persistence?: number; matchDistance?: number; percentile?: number })`, defaulting to the pre-registered values so no production behaviour changes.
+Widen `detectPeaksTracked` to `detectPeaksTracked(ys, opts?: { persistence?: number; matchDistance?: number; percentile?: number; windowMax?: number })`, defaulting to the pre-registered values so no production behaviour changes.
 
-- [ ] **Step 2: Run the sweeps and RECORD WHAT THEY SAY**
+- [ ] **Step 2: Run the sweeps and RECORD THE PLATEAU MAP**
 
-Run: `cd opencode-plugin && bun test test/bench-constant-sweeps.test.ts`
+Run: `cd opencode-plugin && bun test test/bench-constant-sweeps.test.ts 2>&1 | grep plateau`
 
-**If a sweep fails, that is the deliverable, not a defect to tune away.** Do not narrow the range to make it pass. Record the measured extent in the manifest (`stable over X..Y, moves at Z`) and flag the constant as load-bearing for the next review. A constant with a narrow stable region is exactly what this task exists to surface.
+Copy every `[plateau]` line into the manifest. **The map is the deliverable; the boolean is a side effect.**
 
-- [ ] **Step 3: Commit**
+**If a sweep fails, that IS the finding — never narrow the domain to make it pass.** The domain endpoints are structural and are not negotiable: shrinking them to recover a green test is precisely the defect this task was rewritten to remove. A default outside the widest plateau, or within two steps of its edge, means that constant is load-bearing and needs a derivation or an honest declaration.
+
+- [ ] **Step 3: The two 0.9 bounds — a host-dependent probe, not a repo test**
+
+`DATA_LINE_FRACTION` (`source-crosscheck.ts`) and `selectSeries`'s parse-coverage bound decide *decidability and selection on real task trees*, so synthetics cannot certify them — the same lesson as validating a detector on synthetic peaks. But only **2 of 61** task trees carry `environment/` inside this repo; the real trees live at `~/z2/terminal-bench-2`, host-local by nature of the question.
+
+So this sweep is a probe SCRIPT, mirroring `census-gen.py`'s stance, not a portable `bun test`:
+
+Create `docs/loop-probes/arming-increment-20260821/sweep-selection-bounds.ts` that, for each bound swept over `(0,1]` in steps of 0.01, reports how many real task trees yield `ok` from `selectSeries` and how many artifacts are `isDataShaped`. Record the plateau in the manifest with the host and checkout SHA stated, exactly as the census does. **Do not fold these numbers into a portable test** — a test whose result depends on an uncommitted checkout is a test that lies on the other host.
+
+- [ ] **Step 4: Commit**
 
 ```bash
 cd opencode-plugin && bun test 2>&1 | tail -5
 cd .. && bun scripts/gate-check.ts
-git add opencode-plugin/src/bench/series-peaks.ts opencode-plugin/test/bench-constant-sweeps.test.ts
+git add opencode-plugin/src/bench/series-peaks.ts opencode-plugin/test/bench-constant-sweeps.test.ts docs/loop-probes/arming-increment-20260821/
 git commit -m "$(cat <<'EOF'
-test(lane-a): extent-tolerance certificates for the unswept constants (F3)
+test(lane-a): parameter-persistence certificates for the detector quartet (F3)
 
 The chi-square level earned a measured non-load-bearing certificate; the
-detector quartet and the two 0.9 bounds never did — a comment asserting "never
-tuned" states intent, not evidence. Each is now swept across a range wider than
-any plausible tuning, asserting the pinned verdicts do not move. A sweep that
-moves a verdict is a finding to record, never a range to narrow.
+detector quartet never did — a comment asserting "never tuned" states intent,
+not evidence.
+
+Each hyperparameter is swept across its FULL STRUCTURAL DOMAIN (persistence over
+all 49 scales that exist, percentile over the open interval, matchDistance to the
+artifact's own median peak spacing, window range to series length/2), and the
+assertion is the scale-space property: the default sits inside the widest plateau
+of constant VERDICT, two steps clear of either edge. The detector selects peaks
+by scale-persistence; its own parameters are validated by parameter-persistence.
+
+An earlier draft swept author-chosen windows (persistence 3..12 of 1..49) and
+asserted anchor-count stability. That check passed because its natural failure
+region sat outside the window its author drew — the sweep-bounds relocation, and
+it measured counts while claiming verdicts. Both fixed; the deliverable is the
+plateau map, not a boolean. The two selection bounds decide on real task trees,
+only 2 of 61 of which are in-repo, so they get a host-dependent probe script
+rather than a portable test that would lie on the other host.
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
 EOF
@@ -3124,7 +3248,8 @@ implicitly satisfied.
 | §8.8 authority ladder, numeric requires CROSSCHECKED | `bench-value-truth.test.ts` + `bench-dnc-integration.test.ts` |
 | §8.8 executable subclass never text-judged (F2) | `bench-source-crosscheck.test.ts` (.py/.lua/.jl/extensionless all undecidable) |
 | §8.9 full-series data path | `bench-series-source.test.ts` `selectSeries` |
-| Constant extents measured, not asserted (F3) | `bench-constant-sweeps.test.ts` |
+| Constant extents measured, not asserted (F3) | `bench-constant-sweeps.test.ts` (plateau map over full structural domains, both fixtures) |
+| Selection bounds on real trees (F3, host-dependent) | `arming-increment-20260821/sweep-selection-bounds.ts` |
 
 ## Coverage, honestly restated after review
 
