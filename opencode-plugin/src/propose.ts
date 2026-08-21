@@ -471,6 +471,20 @@ export function screenOpsChecks(ops: PlaybookOp[]): OpsScreenResult {
       rejections.push({ op, reason: screened.reason ?? "rejected" })
       continue
     }
+    // failProbe is screened exactly like the check cmd itself — it is still a
+    // shell command the harness will run — closing the SAME coverage gap for
+    // `update` ops that this whole function exists for (add-op failProbes are
+    // separately caught by reviewAddedBullets/review-gate.ts). Namespaced
+    // "failprobe-<reason>" so the propose lane's `check-screen:${r.reason}`
+    // ledger wrap (below) yields `check-screen:failprobe-<reason>`.
+    const probe = (check as { failProbe?: { cmd: string; timeoutMs: number } }).failProbe
+    if (probe) {
+      const pScreened = screenCheck(probe)
+      if (pScreened.tier === "rejected") {
+        rejections.push({ op, reason: `failprobe-${pScreened.reason ?? "rejected"}` })
+        continue
+      }
+    }
     kept.push(op)
     liveEligible.set(op, screened.tier === "live")
   }

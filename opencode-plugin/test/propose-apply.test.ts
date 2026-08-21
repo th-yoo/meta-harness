@@ -701,6 +701,44 @@ test("applyCurateArtifact: update op with a screen-rejected check is dropped; ot
   expect(rec.logs.some((l) => l.includes("store-path"))).toBe(true)
 })
 
+// (shadow-lane upstream fix, 2026-08-22): screenOpsChecks is the ONLY screen
+// an update op's check ever gets (it bypasses reviewAddedBullets entirely,
+// propose lane and curate lane alike per the SCREEN COVERAGE INVARIANT note
+// above screenOpsChecks) — so failProbe on an update op's check MUST be
+// screened here too, same reject-whole contract as check.cmd, mirroring the
+// test immediately above.
+test("applyCurateArtifact: update op whose check.failProbe screens rejected is dropped whole; other ops still apply", async () => {
+  const root = path.join(home, "stores", "curcheckprobe")
+  writeActive(root, "v1", "- b1 rule\n- b2 rule", "", { version: 1, bullets: [
+    { id: "b1", text: "b1 rule", status: "active", helpful: 0, harmful: 0 },
+    { id: "b2", text: "b2 rule", status: "active", helpful: 0, harmful: 0 },
+  ] })
+  const layer: StoreLayer = { root, scope: "project-global", higherRoots: [] }
+
+  const b = stagingBase()
+  fs.writeFileSync(path.join(b, "curate-project-global-v2-ops.json"),
+    JSON.stringify({ ops: [
+      {
+        op: "update", id: "b1", text: "When curated, verify via a checked probe.",
+        check: { cmd: "test -s DONE.txt", timeoutMs: 5000, failProbe: { cmd: "", timeoutMs: 5000 } },
+      },
+      { op: "delete", id: "b2" },
+    ] }))
+
+  const rec: Rec = { notes: [], logs: [] }
+  const res = await applyStagedArtifact(fakeHost(rec), descriptor({ kind: "curate", layer, version: "v2", playbookMode: true }))
+
+  expect(res).toBe("applied")
+  expect(listVersions(root)).toContain("v2")
+  const pb = readPlaybook(root, "v2")!
+  const b1 = pb.bullets.find((x) => x.id === "b1")!
+  expect(b1.text).toBe("b1 rule")         // rejected failProbe → whole update op dropped
+  expect(b1.check).toBeUndefined()
+  const b2 = pb.bullets.find((x) => x.id === "b2")!
+  expect(b2.status).toBe("pruned")        // the OTHER op in the same batch still applied
+  expect(rec.logs.some((l) => l.includes("failprobe-empty"))).toBe(true)
+})
+
 // (finding 1, a3 rule-routing review — curate lane's own copy of the same
 // strip() bug as the propose lane above): an update op that re-sends
 // unchanged text but attaches a NEW check must not be swallowed as a no-op
