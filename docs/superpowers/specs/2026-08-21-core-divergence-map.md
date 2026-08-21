@@ -63,6 +63,25 @@ is a genuine external git dependency (`cc-gate-plugin/package.json`:
 — `kkamak/package.json` currently declares **zero** runtime dependencies, so
 this whole package is out of scope for a same-shape port.
 
+**Amendment (fix round 1):** the extraction above still only catches static
+`import ... from "..."` forms. A dynamic `await import(...)` call is
+invisible to every `from "..."` grep pattern used above, and gauge has one:
+`gauge/agent-transport.ts:112` (`const { query } = await import("@anthropic-ai/claude-agent-sdk")`,
+lazy-loaded specifically to avoid a ~84ms transitive load cost on every hook
+event per the file's own comment). A full sweep for this class —
+`grep -rn "await import\|import(" cc-gate-plugin/src/gauge/` — found exactly
+this one hit and no others. Static-import extraction methods must add this
+sweep as a second pass; a package can be an external dependency of `gauge/`
+without ever appearing as a `from "..."` line.
+
+Also missed by the original static-only pass: `transport.ts:19` imports the
+`Anthropic` default export from `@anthropic-ai/sdk` — a plain default import
+(`import Anthropic from "@anthropic-ai/sdk"`), which the brief's `from "\.\./"` -anchored
+pattern never targets since it isn't a relative-path import at all. Both are
+added to the table below (rows 20-21) as `lab-only`, same treatment as the
+other `@th-yoo/cc-api-daemon` bare-package imports — zero presence in
+`kkamak/src/` and `kkamak/package.json`, verified.
+
 No file in `gauge/` (recursively) imports `../state.ts`. `cc-gate-plugin/src/state.ts`
 (`FileStateStore`, `saveResetWithRetry`) exists but is imported only by
 `hook-cli.ts` — confirmed via `grep -rn '"\./state\.ts"' cc-gate-plugin/src/`,
@@ -72,10 +91,12 @@ no row is fabricated for it below. (kkamak's structural analog,
 `src/runtime/file-state-store.ts`, is noted anyway in the self-review section
 since a later K-task may want the parallel.)
 
-**Row count: 19 symbols**, from 7 origin files/packages:
+**Row count: 21 symbols**, from 9 origin files/packages:
 `../types.ts` (7), `../config.ts` (1), `../check-runner.ts` (1),
 `../sensor-append.ts` (1), `../fixture-ref.ts` (4),
-`../../acp-client-singleton.ts` (2), `@th-yoo/cc-api-daemon` (3).
+`../../acp-client-singleton.ts` (2), `@th-yoo/cc-api-daemon` (3),
+`@anthropic-ai/sdk` (1, default import), `@anthropic-ai/claude-agent-sdk`
+(1, dynamic `import()`).
 
 ## Step 2: symbol-level mapping table
 
@@ -105,6 +126,8 @@ target, K3/K4 create it); `lab-only` = per brief, exact required row value.
 | `modelProvenBy` (`@th-yoo/cc-api-daemon`, imported at `gauge/providers/anthropic-cli-warm.ts:43`) | *(none)* | lab-only — do not port; covered by K3 transport port or excluded file list |
 | `ACP_BUDGET` (`@th-yoo/cc-api-daemon`, imported at `gauge/providers/anthropic-cli-warm.ts:43`) | *(none)* | lab-only — do not port; covered by K3 transport port or excluded file list |
 | `WarmIsolation` (`@th-yoo/cc-api-daemon`, imported at `gauge/send-prompt.ts:36`) | *(none)* | lab-only — do not port; covered by K3 transport port or excluded file list |
+| `Anthropic` (default import, `@anthropic-ai/sdk`, imported at `cc-gate-plugin/src/gauge/transport.ts:19`) | *(none)* | lab-only — do not port; covered by K3 transport port or excluded file list |
+| `query` (dynamic `await import(...)`, `@anthropic-ai/claude-agent-sdk`, imported at `cc-gate-plugin/src/gauge/agent-transport.ts:112`) | *(none)* | lab-only — do not port; covered by K3 transport port or excluded file list |
 
 **Verification method for every "(none)" cell:** `grep -rn '<symbol>' ~/z2/kkamak/src/` returned zero hits before that row was written — including a combined check (`grep -rn 'GaugePromptClass\|GaugeSensorField\|GaugeTransport\|GaugeHorizon\|GAUGE_TRANSPORTS\|fixture-ref\|FixtureRef\|acp-client\|ensureDaemon\|daemonCall\|cc-api-daemon' ~/z2/kkamak/src/ ~/z2/kkamak/package.json`, exit code 1 / no output). `kkamak/package.json` also declares zero runtime `dependencies` (only three `devDependencies`), independently corroborating that the daemon-transport packages have no home there yet.
 
@@ -152,6 +175,16 @@ target, K3/K4 create it); `lab-only` = per brief, exact required row value.
   `fixture-ref`) — they are gauge's own types with no existing kkamak host,
   so they get a distinct `NEW` treatment instead, to avoid K2–K4 misreading
   them as symbols to drop from the port.
+- **Fix round 1** added two rows caught by review, not by this task's
+  original pass: `Anthropic` (`@anthropic-ai/sdk` default import,
+  `transport.ts:19`) and `query` (`@anthropic-ai/claude-agent-sdk`, dynamic
+  `await import(...)`, `agent-transport.ts:112`). Both were invisible to the
+  `from "\.\./"`-anchored extraction method used throughout this doc — a
+  default import from a bare package name matches no `from "../` pattern,
+  and a dynamic `import()` call has no static `from` clause at all. A full
+  sweep (`grep -rn "await import\|import(" cc-gate-plugin/src/gauge/`) was
+  run after the fix to confirm `agent-transport.ts:112` is the *only*
+  dynamic-import site in `gauge/` — no other misses of this class remain.
 - Not investigated further (out of scope for this task): whether K3's
   "transport port" is expected to reintroduce `@th-yoo/cc-api-daemon` as a
   new kkamak dependency, or whether the CLI-warm provider is excluded from
