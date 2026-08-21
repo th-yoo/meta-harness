@@ -1054,6 +1054,14 @@ export interface BulletCheck {
   state: "shadow" | "blocking"
   /** Screen-stamped (Tier L, check-screen.ts). Never proposer-set. */
   liveEligible?: boolean
+  /** Falsification probe (shadow-lane calibration, 2026-08-22): a bash
+   * snippet that CONSTRUCTS the violating state in a throwaway sandbox dir;
+   * the check cmd, run in that same dir afterward, must exit nonzero. A
+   * check with no probe (or a probe under which it still passes) is
+   * "unproven" — its always-green sensor tally carries no promotion
+   * evidence (measured: 120/120 pass across b3/b7/b8, zero information).
+   * Never exported to .km/rule-checks.json; store + calibration only. */
+  failProbe?: { cmd: string; timeoutMs: number }
 }
 
 /** A PreToolUse enforcement rule attached to a bullet (hook-rule evolution
@@ -1093,14 +1101,14 @@ export interface Playbook {
 export type ProposedHookRule = Omit<BulletHookRule, "mode">
 
 export type PlaybookOp =
-  | { op: "add"; text: string; generality?: "universal" | "vendor" | "model"; slice?: string; check?: { cmd: string; timeoutMs: number }; hookRule?: ProposedHookRule }
+  | { op: "add"; text: string; generality?: "universal" | "vendor" | "model"; slice?: string; check?: { cmd: string; timeoutMs: number; failProbe?: { cmd: string; timeoutMs: number } }; hookRule?: ProposedHookRule }
   // `check` on an update op is tri-state (finding 2, a3 rule-routing review):
   // `undefined` (field omitted) = KEEP whatever check the bullet already has;
   // `null` = DROP it (the curator prompt's documented "drop a check" path,
   // which pre-fix had no actual mechanism — omitting the field always meant
   // keep); an object = SET/REPLACE it. `hookRule` follows the same tri-state
   // contract. See applyPlaybookOps below.
-  | { op: "update"; id: string; text: string; generality?: "universal" | "vendor" | "model"; slice?: string; check?: { cmd: string; timeoutMs: number } | null; hookRule?: ProposedHookRule | null }
+  | { op: "update"; id: string; text: string; generality?: "universal" | "vendor" | "model"; slice?: string; check?: { cmd: string; timeoutMs: number; failProbe?: { cmd: string; timeoutMs: number } } | null; hookRule?: ProposedHookRule | null }
   | { op: "delete"; id: string }
 
 export function readPlaybook(storeRoot: string, version?: string): Playbook | null {
@@ -1170,7 +1178,8 @@ export function applyPlaybookOps(base: Playbook, ops: PlaybookOp[]): Playbook {
       bullets.push({ id: `b${nextId++}`, text: op.text, helpful: 0, harmful: 0,
         addedBy: "candidate", status: "active", createdAt: now, updatedAt: now,
         generality: coerceGen(op.generality), slice: capSlice(op.slice),
-        ...(op.check ? { check: { cmd: op.check.cmd, timeoutMs: op.check.timeoutMs, state: "shadow" as const } } : {}),
+        ...(op.check ? { check: { cmd: op.check.cmd, timeoutMs: op.check.timeoutMs, state: "shadow" as const,
+          ...(op.check.failProbe ? { failProbe: { cmd: op.check.failProbe.cmd, timeoutMs: op.check.failProbe.timeoutMs } } : {}) } } : {}),
         ...(op.hookRule ? { hookRule: { event: op.hookRule.event, toolMatcher: op.hookRule.toolMatcher,
           inputPattern: op.hookRule.inputPattern, feedback: op.hookRule.feedback, mode: "shadow" as const } } : {}) })
     } else if (op.op === "update") {
@@ -1184,7 +1193,8 @@ export function applyPlaybookOps(base: Playbook, ops: PlaybookOp[]): Playbook {
         // an object → SET/REPLACE it, always re-shadowed (a revised check is
         // unproven again, same as a brand-new one).
         if (op.check === null) delete b.check
-        else if (op.check !== undefined) b.check = { cmd: op.check.cmd, timeoutMs: op.check.timeoutMs, state: "shadow" as const }
+        else if (op.check !== undefined) b.check = { cmd: op.check.cmd, timeoutMs: op.check.timeoutMs, state: "shadow" as const,
+          ...(op.check.failProbe ? { failProbe: { cmd: op.check.failProbe.cmd, timeoutMs: op.check.failProbe.timeoutMs } } : {}) }
         // hookRule: same tri-state; a replaced rule is re-shadowed (spec §1 —
         // an edited pattern is unproven again; the ramp restarts).
         if (op.hookRule === null) delete b.hookRule
