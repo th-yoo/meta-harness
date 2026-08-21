@@ -25,6 +25,14 @@ test("store-path / network / package-install / rm -rf rejected at Tier B with sl
   }
 })
 
+test("store-path json.load structural integrity check is exempt (no content leaves the check), plain reads of store paths stay rejected", () => {
+  const r = T(`ok=0; for f in .kkamak/*/active/*.json *.json; do [ -e "$f" ] || continue; python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f" || ok=1; done; exit $ok`)
+  expect(r.tier).not.toBe("rejected")
+  // the exception is substring-scoped to json.load(open( — a cat/grep/ls of
+  // the same path with no json.load call must still be rejected.
+  expect(T("cat .kkamak/roles/mh-build/active/playbook.json").tier).toBe("rejected")
+})
+
 test("workspace-scoped write passes Tier B but not Tier L", () => {
   const r = T("echo probe > probe.txt && test -s probe.txt")
   expect(r.tier).toBe("bench")
