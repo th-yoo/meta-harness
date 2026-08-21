@@ -18,7 +18,7 @@
 - **Do NOT push.** Push is its own user go.
 - **Suite discipline:** after every task run `bun test lab/code-mode-gate/ poc/code-mode-gate/` (both green). The opencode-plugin suite is untouched by construction (no files there change); run it once at the end (Task 7) as a paranoia check: `cd opencode-plugin && bun test` → expect `2280 pass, 1 skip, 0 fail`.
 - **NOT a security sandbox.** Worker isolation gives a thread boundary, watchdog kill, and no shared scope — it does NOT give memory limits or hostile-code safety. Every file header that mentions isolation must name QuickJS-WASI (OpenClaw `src/agents/code-mode-*`) as the hostile-guest reference. Never claim "sandbox" in code, comments, or docs.
-- **Verifier-agnosticism is a REQUIREMENT, not a nice-to-have:** the runtime must never import, name, or special-case any verifier domain (no "anchor", "raman", "series" identifiers inside `lab/code-mode-gate/{types,bridge,guest-shell,runtime}.ts`). Domain words live only under `verifiers/`. Task 7 greps for this.
+- **Verifier-agnosticism is a REQUIREMENT, not a nice-to-have:** the runtime core (`lab/code-mode-gate/{types,bridge,guest-shell,runtime}.ts`) must never import, name, or special-case any verifier domain. Task 7 enforces this with two LIST-FREE checks (import-graph + vocabulary DERIVED from the verifiers' own exports) — a hand-enumerated word list is the incident-registry pattern and is prohibited.
 - Commit messages end with: `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`
 
 ## File Structure
@@ -74,8 +74,10 @@ import { test, expect } from "bun:test"
 import { DEFAULT_LIMITS, approxTokensOf, newMeter } from "./types.ts"
 
 test("default limits mirror the reference implementation's shape", () => {
-  // Values chosen to match OpenClaw code-mode defaults (timeout 10s,
-  // pending 16, output 64KB) so cost comparisons stay comparable.
+  // Cited: openclaw/openclaw src/agents/code-mode-runtime.ts —
+  // DEFAULT_TIMEOUT_MS / DEFAULT_MAX_OUTPUT_BYTES / DEFAULT_MAX_PENDING_TOOL_CALLS.
+  // This pin only detects one copy drifting from the other; the citation is
+  // what carries the external claim.
   expect(DEFAULT_LIMITS).toEqual({ timeoutMs: 10_000, maxPendingCalls: 16, maxOutputBytes: 65_536 })
 })
 
@@ -118,11 +120,14 @@ export interface Limits {
   maxOutputBytes: number
 }
 
-/** Mirrors the reference implementation's defaults (OpenClaw code-mode:
- * timeout 10s, pending 16, output 64KB) so cost comparisons stay comparable.
- * NOTE: no memory limit — Bun Workers cannot enforce one. This is a thread
- * boundary with a watchdog, NOT a security sandbox; the hostile-guest
- * reference is OpenClaw's QuickJS-WASI worker. */
+/** Mirrors the reference implementation's defaults so cost comparisons stay
+ * comparable — cited, not asserted: openclaw/openclaw
+ * src/agents/code-mode-runtime.ts (DEFAULT_TIMEOUT_MS = 10_000,
+ * DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024, DEFAULT_MAX_PENDING_TOOL_CALLS = 16).
+ * Their DEFAULT_MEMORY_LIMIT_BYTES (64MB) is deliberately NOT mirrored — Bun
+ * Workers cannot enforce one. This is a thread boundary with a watchdog, NOT
+ * a security sandbox; the hostile-guest reference is OpenClaw's QuickJS-WASI
+ * worker. */
 export const DEFAULT_LIMITS: Limits = { timeoutMs: 10_000, maxPendingCalls: 16, maxOutputBytes: 64 * 1024 }
 
 /** Steering: what a gate rejection tells the guest so correction can happen
@@ -147,7 +152,10 @@ export interface CostMeter {
   toolCalls: number
   gateChecks: number
   gateRejections: number
-  /** rejections whose steering was consumed inside the SAME turn */
+  /** rejections in a turn that ALSO produced a later acceptance. TEMPORAL
+   * co-occurrence, not proven causal steering consumption — a guest that
+   * ignored the steering and happened to succeed later scores identically.
+   * Causal actuation is the un-bought number; see README. */
   localRetries: number
   approxTokens: number
 }
@@ -249,6 +257,57 @@ test("log flood beyond maxOutputBytes fails with output_limit_exceeded", async (
   expect(out.status).toBe("failed")
   expect(out.status === "failed" && out.code).toBe("output_limit_exceeded")
 })
+
+test("a tool STILL IN FLIGHT when the watchdog fires: clean timeout, no unhandled rejection", async () => {
+  // the settled-recheck-after-await race: the handler resumes on a
+  // terminated worker and must not postMessage into it
+  const out = await runGuest(
+    `await api.tools.slow();`,
+    ["slow"],
+    { ...DEFAULT_LIMITS, timeoutMs: 200 },
+    { ...noopCb(), onToolCall: () => new Promise(() => {}) }, // never resolves
+  )
+  expect(out.status).toBe("failed")
+  expect(out.status === "failed" && out.code).toBe("timeout")
+  await new Promise((r) => setTimeout(r, 100)) // give a leaked rejection time to surface as a test failure
+}, 10_000)
+
+test("a THROWING tool rejects the guest's await; guest catches; turn survives", async () => {
+  // the real unknown-tool/tool-error path: bridge catch → result{ok:false} →
+  // shell reject → guest catch
+  const logs: string[] = []
+  const out = await runGuest(
+    `try { await api.tools.boom(); } catch (e) { api.log("caught:" + e.message); }`,
+    ["boom"],
+    DEFAULT_LIMITS,
+    { ...noopCb(), onToolCall: () => { throw new Error("boom") }, onLog: (m) => logs.push(m) },
+  )
+  expect(out.status).toBe("completed")
+  expect(logs).toEqual(["caught:boom"])
+})
+
+test("more concurrent un-awaited calls than maxPendingCalls → pending_limit_exceeded", async () => {
+  const out = await runGuest(
+    `await Promise.all([api.tools.slow(), api.tools.slow(), api.tools.slow()]);`,
+    ["slow"],
+    { ...DEFAULT_LIMITS, maxPendingCalls: 2 },
+    { ...noopCb(), onToolCall: () => new Promise((r) => setTimeout(r, 200)) },
+  )
+  expect(out.status).toBe("failed")
+  expect(out.status === "failed" && out.code).toBe("pending_limit_exceeded")
+})
+
+test("a bad guest-shell URL yields structured guest_error, never a raw throw", async () => {
+  const out = await runGuest(
+    `api.log("unreached");`,
+    [],
+    { ...DEFAULT_LIMITS, timeoutMs: 3000 },
+    noopCb(),
+    new URL("./no-such-shell.ts", import.meta.url),
+  )
+  expect(out.status).toBe("failed")
+  expect(out.status === "failed" && out.code).toBe("guest_error")
+}, 10_000)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -344,9 +403,11 @@ export function runGuest(
   toolNames: string[],
   limits: Limits,
   cb: BridgeCallbacks,
+  /** test seam for worker-construction failure; production callers omit it */
+  shellUrl: URL = new URL("./guest-shell.ts", import.meta.url),
 ): Promise<BridgeOutcome> {
   return new Promise((resolve) => {
-    const worker = new Worker(new URL("./guest-shell.ts", import.meta.url))
+    let worker: Worker | undefined
     let settled = false
     let inFlight = 0
     let outputBytes = 0
@@ -355,7 +416,7 @@ export function runGuest(
       if (settled) return
       settled = true
       clearTimeout(watchdog)
-      worker.terminate()
+      worker?.terminate()
       resolve(outcome)
     }
 
@@ -363,6 +424,21 @@ export function runGuest(
       () => finish({ status: "failed", code: "timeout", message: `guest exceeded ${limits.timeoutMs}ms` }),
       limits.timeoutMs,
     )
+
+    // Construction can throw synchronously (bad URL, resolution failure on
+    // another host). Uncaught, it would REJECT this promise and escape
+    // runTurn() as a raw exception — breaking the every-failure-has-a-code
+    // contract. Catch → structured guest_error.
+    try {
+      worker = new Worker(shellUrl)
+    } catch (e) {
+      finish({
+        status: "failed",
+        code: "guest_error",
+        message: `worker construction failed: ${e instanceof Error ? e.message : String(e)}`,
+      })
+      return
+    }
 
     worker.onmessage = async (ev: MessageEvent<GuestMsg>) => {
       const msg = ev.data
@@ -397,9 +473,14 @@ export function runGuest(
       try {
         const value =
           msg.target === "gate" ? cb.onGateCall(msg.args) : await cb.onToolCall(msg.name ?? "", msg.args)
-        worker.postMessage({ type: "result", id: msg.id, ok: true, value })
+        // the watchdog (or a cap) may have fired while the tool call was
+        // in flight — posting to a terminated worker is the race the
+        // slow-tool test exists to catch. Re-check after EVERY await.
+        if (settled) return
+        worker!.postMessage({ type: "result", id: msg.id, ok: true, value })
       } catch (e) {
-        worker.postMessage({
+        if (settled) return
+        worker!.postMessage({
           type: "result",
           id: msg.id,
           ok: false,
@@ -410,8 +491,11 @@ export function runGuest(
       }
     }
 
+    // Fires for worker-load failures (e.g. the shell module failing to
+    // resolve asynchronously). Guest program errors do NOT land here — the
+    // shell's own try/catch reports them as guestError on "completed".
     worker.onerror = (e) => {
-      finish({ status: "failed", code: "guest_error", message: String(e.message ?? e) })
+      finish({ status: "failed", code: "guest_error", message: String((e as ErrorEvent).message ?? e) })
     }
 
     worker.postMessage({ type: "run", src, toolNames })
@@ -422,7 +506,7 @@ export function runGuest(
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `bun test lab/code-mode-gate/bridge.test.ts`
-Expected: PASS, 4 tests. (The timeout test takes ~300ms; the flood test must NOT hit the 10s default.)
+Expected: PASS, 8 tests. (Watchdog tests take ~200-300ms each; the flood test must NOT hit the 10s default. If the bad-URL test times out instead of erroring, Bun raised the failure through neither the constructor nor onerror on this host — record which, and route it to guest_error; do not delete the test.)
 
 - [ ] **Step 6: Commit**
 
@@ -454,7 +538,7 @@ EOF
 - Consumes: `runGuest`, `BridgeCallbacks`, `BridgeOutcome` (Task 2); `Verifier`, `Verdict`, `Limits`, `DEFAULT_LIMITS`, `CostMeter`, `newMeter`, `approxTokensOf` (Task 1).
 - Produces:
   - `export interface RuntimeOptions<C, S> { contextTokens: number; tools: Record<string, (args?: unknown) => unknown | Promise<unknown>>; verifier: Verifier<C, S>; limits?: Partial<Limits> }`
-  - `export type TurnResult = ({ status: "completed"; guestError?: string } | { status: "failed"; code: string; message: string }) & { verdicts: Verdict<unknown>[]; logs: string[] }`
+  - `export type TurnResult = ({ status: "completed"; guestError?: string } | { status: "failed"; code: FailureCode; message: string }) & { verdicts: Verdict<unknown>[]; logs: string[] }`
   - `export class ComposedRuntime<C, S = unknown> { constructor(opts: RuntimeOptions<C, S>); runTurn(src: string): Promise<TurnResult>; getCommitted(): C | null; readonly meter: CostMeter }`
   - Gate semantics (Task 4 tests these; implement them HERE): commit happens host-side iff verdict.ok; committed value is a structured clone; last accepted claim wins; guest has no commit capability.
 
@@ -501,16 +585,23 @@ test("tool calls round-trip through the worker and are metered", async () => {
   expect(rt.meter.roundTrips).toBe(1)
 })
 
-test("an unknown tool rejects the guest's promise but does not kill the turn", async () => {
-  const rt = mkRuntime()
+test("a throwing tool surfaces to the guest as a catchable rejection and is metered", async () => {
+  // NOTE: api.tools only stubs KNOWN names, so "unknown tool" is unreachable
+  // through the api surface — runtime.ts's unknown-tool guard defends against
+  // forged protocol messages only (guests share the worker's global scope and
+  // could postMessage directly; see README trust-boundary note). The REACHABLE
+  // error path is a tool that throws host-side.
+  const rt = new ComposedRuntime<number[], { sum: number }>({
+    contextTokens: 10,
+    tools: { boom: () => { throw new Error("boom") } },
+    verifier: sumTo10,
+  })
   const result = await rt.runTurn(`
-    try { await api.tools.double(1); await api.tools["nope"]; } catch {}
-    let caught = "";
-    try { await api.checkAndCommit([1]); } catch {}
-    api.log("survived");
+    try { await api.tools.boom(); } catch (e) { api.log("caught:" + e.message); }
   `)
   expect(result.status).toBe("completed")
-  expect(result.logs).toEqual(["survived"])
+  expect(result.logs).toEqual(["caught:boom"])
+  expect(rt.meter.toolCalls).toBe(1)
 })
 
 test("token accounting: contextTokens plus program size, once per turn", async () => {
@@ -576,7 +667,7 @@ export interface RuntimeOptions<C, S> {
 
 export type TurnResult = (
   | { status: "completed"; guestError?: string }
-  | { status: "failed"; code: string; message: string }
+  | { status: "failed"; code: FailureCode; message: string }
 ) & { verdicts: Verdict<unknown>[]; logs: string[] }
 
 export class ComposedRuntime<C, S = unknown> {
@@ -721,7 +812,8 @@ test("the committed value is a clone, not a live reference into guest data", asy
   await rt.runTurn(`
     const claim = [5, 5];
     await api.checkAndCommit(claim);
-    claim[0] = 999;                        // structured clone already crossed the boundary
+    claim[0] = 999;  // Bun structured-clone semantics PIN, not runtime logic:
+                     // trivially true today; guards a future in-process fast path
   `)
   expect(rt.getCommitted()).toEqual([5, 5])
 })
@@ -810,8 +902,9 @@ test("source-recount: correct counts accepted; wrong counts rejected with actual
   expect(v.steering!.summary).toContain("lines")
 })
 
-test("the two verifiers share zero domain vocabulary — agnosticism witness", () => {
-  // merge-fit knows anchors; recount knows lines/words. The runtime knows neither.
+test("both verifiers satisfy the same Verdict/steering contract (shape witness)", () => {
+  // Contract-shape check ONLY. Vocabulary/agnosticism enforcement lives in
+  // Task 7's derived guard — this test must not claim it.
   const mv = mergeFitVerifier(U)(SHIFTED)
   const rv = sourceRecountVerifier("a b\n")({ lines: 9, words: 9 })
   expect(mv.ok).toBe(false)
@@ -990,7 +1083,9 @@ async function runComposed() {
     await api.tools.sampleStats();
     let v = await api.checkAndCommit(${lit(SHIFTED)});
     if (!v.ok) {
-      api.log("gate: " + v.reason + " | " + v.steering.summary);
+      // steering is OPTIONAL on Verdict — only "residual" rejections carry it.
+      // The ?. pattern is the one real guests must use.
+      api.log("gate: " + v.reason + " | " + (v.steering ? v.steering.summary : "no steering"));
       v = await api.checkAndCommit(${lit(HONEST)});
     }
   `)
@@ -1062,32 +1157,62 @@ EOF
 Create `lab/code-mode-gate/agnostic.test.ts`:
 
 ```ts
-/** The runtime layer must stay verifier-agnostic: no verifier domain
- * vocabulary in core files. This is the guard that keeps "reusable library"
- * true as it evolves — a core file naming a domain is the 1/99 failure
- * starting over. Executable, not a review note. */
+/** Verifier-agnosticism of the core runtime, enforced two LIST-FREE ways.
+ * A hand-enumerated word list would be a fixed set growing one entry per new
+ * verifier — the incident-registry pattern this repo's CLAUDE.md names as
+ * cheating (caught by architect review; original draft had exactly that).
+ *
+ * (1) IMPORT GRAPH: core files must not import verifiers/ or opencode-plugin.
+ *     Structural, needs no vocabulary at all.
+ * (2) DERIVED VOCABULARY: every identifier EXPORTED by files under verifiers/
+ *     is extracted and must not appear in core files. The forbidden set is
+ *     derived from the artifact, so a third verifier extends it automatically. */
 import { test, expect } from "bun:test"
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import { dirname, join } from "node:path"
 
+const HERE = dirname(fileURLToPath(import.meta.url))
 const CORE = ["types.ts", "guest-shell.ts", "bridge.ts", "runtime.ts"]
-const DOMAIN_WORDS = /anchor|raman|series|canonical|spectr|glyph|gcode|recount|lines|words/i
 
-test("core runtime files contain zero verifier-domain vocabulary", () => {
+test("core files import neither verifiers/ nor opencode-plugin", () => {
   const offenders: string[] = []
   for (const f of CORE) {
-    const text = readFileSync(new URL(`./${f}`, import.meta.url), "utf-8")
+    const text = readFileSync(join(HERE, f), "utf-8")
     for (const [i, line] of text.split("\n").entries()) {
-      if (DOMAIN_WORDS.test(line)) offenders.push(`${f}:${i + 1}: ${line.trim()}`)
+      if (/from\s+"[^"]*(verifiers\/|opencode-plugin)/.test(line)) offenders.push(`${f}:${i + 1}`)
+    }
+  }
+  expect(offenders).toEqual([])
+})
+
+test("no verifier-EXPORTED identifier appears in core files (derived, self-maintaining)", () => {
+  const vdir = join(HERE, "verifiers")
+  const exported = new Set<string>()
+  for (const vf of readdirSync(vdir).filter((n) => n.endsWith(".ts"))) {
+    const text = readFileSync(join(vdir, vf), "utf-8")
+    for (const m of text.matchAll(/export\s+(?:function|const|interface|type|class)\s+(\w+)/g)) {
+      exported.add(m[1]!)
+    }
+  }
+  // the guard itself must be able to fail: an empty forbidden set would make
+  // this a check that cannot fire
+  expect(exported.size).toBeGreaterThan(0)
+  const offenders: string[] = []
+  for (const f of CORE) {
+    const text = readFileSync(join(HERE, f), "utf-8")
+    for (const name of exported) {
+      if (new RegExp(`\\b${name}\\b`).test(text)) offenders.push(`${f}: ${name}`)
     }
   }
   expect(offenders).toEqual([])
 })
 ```
 
-- [ ] **Step 2: Run it; fix any offender in core files (never widen the regex to pass)**
+- [ ] **Step 2: Run it; fix any offender by MOVING the line, never by editing the guard**
 
 Run: `bun test lab/code-mode-gate/agnostic.test.ts`
-Expected: PASS. If it fails, the offending core line moves to a verifier or a test — the regex is the requirement, not the obstacle. (Comments count: vocabulary in a comment becomes vocabulary in the next edit.)
+Expected: PASS. If either check fires, the offending core line moves into a verifier or a test. The import check is structural; the vocabulary set is derived from the verifiers themselves — there is no list to widen.
 
 - [ ] **Step 3: Write README.md**
 
@@ -1118,11 +1243,19 @@ absorbed in-turn, no guest commit capability, fail-closed commit.
 ## Still deliberately unclaimed
 
 - **Actuation** — guests here are scripted; whether a real model consumes
-  steering in-program is the un-bought number (prose prior 1/8).
+  steering in-program is the un-bought number (prose prior 1/8). Relatedly,
+  `localRetries` measures TEMPORAL co-occurrence (a rejection followed by an
+  acceptance in the same turn), not proven causal steering use.
 - **Security** — thread boundary + watchdog, NOT a sandbox. No memory limit.
+  Guests run in the worker's GLOBAL scope: a guest can reach `postMessage`
+  and forge raw protocol messages, bypassing the `api.tools` surface (the
+  runtime's unknown-tool guard exists for exactly that). Trusted-guest only.
   Hostile-guest reference: OpenClaw QuickJS-WASI (`src/agents/code-mode-*`).
 - **Snapshots/resume, TS guests, tool catalogs** — YAGNI until an experiment
   needs them.
+
+Guest authors: `steering` is optional on `Verdict` — only steering-bearing
+rejections carry it; use `v.steering?.summary`.
 
 ## Run
 
@@ -1162,4 +1295,20 @@ EOF
 
 **Type consistency:** `Verifier<C,S>`/`Verdict<S>`/`Steering<S>` defined T1, consumed T3/T5 with matching shapes; `runGuest(src, toolNames, limits, cb)` signature identical in T2 definition and T3 call site; `BridgeOutcome.guestError` produced T2, surfaced through `TurnResult` T3; message protocol field names (`type/id/target/name/args/ok/value/error/msg/src/toolNames`) match between guest-shell and bridge; `mergeFitVerifier(anchorsU)` factory signature identical in T5 definition and T6 use. `sumTo10` toy verifier defined once in runtime.test.ts and used by T3+T4 appends to the same file.
 
-**Known risks, stated:** Bun Worker + `new URL(..., import.meta.url)` resolution is exercised by T2's first test — if the runner resolves workers differently on another host, T2 fails loudly at step 5, before anything builds on it. The busy-loop timeout tests allocate 300ms watchdogs with 10s test timeouts.
+**Known risks, stated:** Bun Worker + `new URL(..., import.meta.url)` resolution is exercised by T2's first test — if the runner resolves workers differently on another host, T2 fails loudly at step 5, before anything builds on it. The busy-loop timeout tests allocate 200-300ms watchdogs with 10s test timeouts.
+
+## Post-architect-review amendments (2026-08-21, applied before execution)
+
+Architect verdict: sound-with-amendments. All findings applied to this plan in place:
+
+- **F1 CRITICAL** — `settled` re-checked after every `await` before `postMessage` (watchdog-vs-in-flight-RPC race); new slow-tool test pins it.
+- **F2 CRITICAL** — worker construction wrapped; failures resolve structured `guest_error` instead of rejecting out of `runTurn()`; `shellUrl` test seam + bad-URL test make `guest_error` demonstrably reachable.
+- **F3 HIGH** — vacuous unknown-tool test replaced with the reachable throwing-tool path (bridge and runtime level); unknown-tool guard documented as forged-message defense.
+- **F4 HIGH** — `pending_limit_exceeded` and `guest_error` now each have a firing test; all four FailureCodes exercised.
+- **F5 HIGH** — hand-listed `DOMAIN_WORDS` regex (the incident-registry pattern) replaced by two list-free checks: import-graph + vocabulary derived from verifier exports, with a can-this-guard-fire self-check.
+- **F6 MEDIUM** — `TurnResult` failed branch typed `FailureCode`, not `string`.
+- **F7 MEDIUM** — `localRetries` comment/README softened to temporal co-occurrence; causal language removed.
+- **F8 MEDIUM** — T5's contract test renamed to what it actually checks (shape witness).
+- **F9 MEDIUM** — DEFAULT_LIMITS provenance cited to `openclaw/openclaw src/agents/code-mode-runtime.ts` constants by name.
+- **F11/F12/F13 LOW** — clone test labeled a Bun-semantics pin; `v.steering?.` pattern shown; global-scope protocol-forgery leak named in README trust-boundary note.
+- **F10 LOW** — duplicated parity fixtures accepted as-is (deliberate PoC decoupling; verified byte-equivalent by reviewer).
