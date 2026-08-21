@@ -446,8 +446,15 @@ test("runJudgeOpencode: returns concatenated text on success", async () => {
 
 test("runJudgeOpencode: timeout with attempts remaining retries, then null if never succeeds", async () => {
   let calls = 0
-  const execFn = async (): Promise<ExecResult> => {
+  // The prompt rides on stdin now, so EVERY attempt must carry it — a retry
+  // that re-invokes the CLI with an empty stdin gets "You must provide a
+  // message or a command" and the judge silently degrades to null. The
+  // per-attempt payload is only observable here: the three transport tests in
+  // bench-judge-pure.test.ts all run with maxAttempts=1.
+  const stdins: (string | undefined)[] = []
+  const execFn = async (_argv: string[], opts?: { stdin?: string }): Promise<ExecResult> => {
     calls++
+    stdins.push(opts?.stdin)
     return { rc: 0, stdout: "", stderr: "", timedOut: true }
   }
   const errSpy = spyOn(console, "error").mockImplementation(() => {})
@@ -459,6 +466,7 @@ test("runJudgeOpencode: timeout with attempts remaining retries, then null if ne
   }
   expect(result).toBeNull()
   expect(calls).toBe(2)
+  expect(stdins).toEqual(["p", "p"])
 })
 
 test("runJudgeOpencode: blank reply text -> null", async () => {

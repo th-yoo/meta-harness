@@ -115,6 +115,20 @@ export async function runJudgeOpencode(
     // piped prompt reached session creation, an empty stdin exited with "You
     // must provide a message or a command").
     //
+    // NOT A PURE TRANSPORT MOVE — the bytes the judge model reads CHANGE, for
+    // the better, and anyone comparing judge output across this boundary needs
+    // to know. The CLI quote-wraps an argv message and does not touch a stdin
+    // one; from the same 1.17.20 binary:
+    //   P=[...j.message,...j["--"]||[]].map((G)=>G.includes(" ")
+    //       ?`"${G.replace(/"/g,"\\\"")}"`:G).join(" ")
+    // Every judge prompt contains spaces, so BEFORE this change the model
+    // received the whole prompt wrapped in double quotes with every internal
+    // quote backslash-escaped — the reply-schema instructions included. On
+    // stdin it arrives verbatim. Judge verdicts feed loop decisions
+    // (judge-audit.ts, cmd-failure-taxonomy.ts, cmd-propose-lesson.ts all
+    // default runJudge to this function), so verdicts from before and after
+    // this commit are NOT directly comparable.
+    //
     // Keeping the prompt out of argv removes Linux's MAX_ARG_STRLEN ceiling
     // (131,072 BYTES in ONE element — a 200,000-char element THROWS E2BIG out
     // of Bun.spawn rather than failing softly), which otherwise bounds how

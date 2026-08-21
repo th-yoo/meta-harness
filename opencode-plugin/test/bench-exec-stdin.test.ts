@@ -7,19 +7,30 @@
  * seam cannot see: a payload the child never reads, a parent whose own stdin
  * is held open, and a byte count that disagrees with the char count.
  *
- * MEASURED kill map (each mutation applied to exec.ts and the file re-run,
- * 2026-08-21) — not a claim about what "should" fail:
- *   - delete the write/end block          -> 1, 2, 3, 4 fail
- *   - write BEFORE the timer is armed     -> 5 fails (timedOut false after 30s)
- *   - `stdin: "inherit"` when no payload  -> 6 fails (times out; the child ate
- *                                            the parent's held-open stdin)
- *   - drop the `.catch` on the write      -> NOTHING fails. Bun's FileSink
- *     swallows EPIPE, so no probe produced a rejection; that catch is crash
- *     insurance, and test 7 asserts the resolved contract, not the catch.
- *   - await the write before the drains   -> NOTHING fails. Bun buffers the
- *     payload in memory, so that ordering is not a deadlock the way a
- *     sequential stdout/stderr drain is. Ordering matters against the TIMER
- *     (mutation 2), not against the drains.
+ * MEASURED kill map (each mutation applied to exec.ts and the file re-run) —
+ * not a claim about what "should" fail. Corrected 2026-08-21 after a
+ * fresh-context review reproduced every row: one was worded loosely enough to
+ * be false, and a kill map is the acceptance evidence this repo merges on.
+ *   - delete the write/end block            -> 1, 2, 3, 4 fail
+ *   - AWAIT the write before the timer is
+ *     armed (the exact reverted shape:
+ *     `write(); await end()` above the
+ *     timer)                                -> 5 fails, timedOut false after 30s
+ *   - `stdin: "inherit"` when no payload    -> 6 fails (times out; the child ate
+ *                                              the parent's held-open stdin)
+ * And the rows that kill NOTHING, which matter just as much:
+ *   - MOVE the write statement above the timer without moving the await:
+ *     7 pass. Creation order is immaterial — `write()` never blocks long
+ *     enough (220 KB: 0ms, 1 MB: 1ms, 20 MB: 16ms). The operative rule is
+ *     narrower than "created after the timer": do not AWAIT before arming it.
+ *   - await the write before the drains: 7 pass. Bun eagerly drains a child's
+ *     piped stdout with nothing reading it, so this is not the input-side
+ *     twin of the sequential-drain deadlock.
+ *   - drop the `.catch`, or drop `written` from the Promise.all: 7 pass.
+ *     Nothing here produced a rejection to catch (a child that reads 1 KB then
+ *     exits, one already dead, and one SIGKILLed mid-stream all RESOLVE with a
+ *     short count), and `proc.exited` is in the Promise.all regardless, so
+ *     `written` cannot be the last thing outstanding. Insurance, not coverage.
  */
 import { test, expect } from "bun:test"
 import { join } from "node:path"
@@ -68,8 +79,18 @@ test("3: a multi-byte payload round-trips byte-exact (chars are not bytes)", asy
 
 test("4: a payload past MAX_ARG_STRLEN is deliverable on stdin — as an argv element it is not", async () => {
   const payload = "z".repeat(200_000)
-  // the ceiling being removed, demonstrated rather than asserted from docs
-  await expect(runHost(["/bin/echo", payload])).rejects.toThrow(/E2BIG/)
+  // The ceiling being removed, demonstrated rather than asserted from docs —
+  // but MAX_ARG_STRLEN is a LINUX constant (32 * PAGE_SIZE, per argv ELEMENT;
+  // measured here: 131,071 spawns, 131,072 throws, and 16 elements of 100,000
+  // each — 1.6 MB of total argv — spawn fine, so the bound is per-element and
+  // not ARG_MAX). XNU has no per-string cap, so this argument would spawn
+  // happily on the project's MacBook and only this half of the test would go
+  // red there. This repo transfers by git alone, so a Linux-only assertion
+  // would ship a broken suite to that host; the stdin half below is
+  // platform-neutral and always runs.
+  if (process.platform === "linux") {
+    await expect(runHost(["/bin/echo", payload])).rejects.toThrow(/E2BIG/)
+  }
   const result = await runHost(["cat"], { stdin: payload })
   expect(result.rc).toBe(0)
   expect(result.stdout.length).toBe(payload.length)
@@ -100,7 +121,11 @@ test(
     // hold its own stdin open, so the probe runs in a child whose stdin is a
     // pipe this test opens and never closes.
     const fixture = join(import.meta.dir, "fixtures", "exec", "held-stdin-probe.ts")
-    const proc = Bun.spawn(["bun", fixture], { stdin: "pipe", stdout: "pipe", stderr: "pipe" })
+    // process.execPath, not "bun": bun lives outside any default PATH on this
+    // host, and resolving it through PATH makes the ONLY test that catches
+    // `stdin: "inherit"` die with "Executable not found in $PATH" instead —
+    // a guard that fails for a reason unrelated to what it guards.
+    const proc = Bun.spawn([process.execPath, fixture], { stdin: "pipe", stdout: "pipe", stderr: "pipe" })
     const [stdout, stderr] = await Promise.all([
       new Response(proc.stdout).text(),
       new Response(proc.stderr).text(),
@@ -117,8 +142,13 @@ test(
 
 test("7: a child that exits without reading still yields a normal result", async () => {
   // A payload nobody will ever read must not become runHost's problem: `true`
-  // is gone before it lands. (Bun swallows the EPIPE itself — see the kill map;
-  // this asserts the contract, not the catch.)
+  // is gone before it lands. This asserts the CONTRACT, not the catch — and it
+  // cannot assert delivery, because neither return value can audit that:
+  // measured, `write()` gives a short count once backpressured (5 MB into a
+  // child that reads 1 KB resolves at 219,264, remainder dropped) and `end()`
+  // is a final-flush count, 736 for a fully delivered 220 KB and 0 for total
+  // loss. Delivery is proven by tests 1-4 reading the payload back out of the
+  // child instead.
   const result = await runHost(["true"], { stdin: "w".repeat(500_000) })
   expect(result.rc).toBe(0)
   expect(result.timedOut).toBe(false)
