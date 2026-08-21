@@ -156,6 +156,40 @@ does NOT transfer; this file + the repo are the source of truth.)
 > generality claim. **Arming and the L1-ab wiring remain their own go** —
 > nothing in this paragraph changes what ships live.
 >
+> **MOST RECENT (2026-08-21, lane A): ARMING SPEC CLOSED — all three
+> blockers designed, validated, twice-reviewed. 19 commits UNPUSHED.**
+> The day, newest-first: **§8.8 value-truth** designed (3-layer:
+> source_crosscheck primary w/ SUT-VISIBILITY eligibility + 21/61 measured
+> coverage; replication DEMOTED — prior-driven fabrication is a stable
+> generator, numeric injection requires CROSSCHECKED FULL STOP; outcome
+> backstop never grants authority), then architect-reviewed: 5 criticals
+> closed as binding rules (i)–(v) — stated conjunction (CROSSCHECKED ≡
+> mergeCheck.ok ∧ all-source CONSISTENT), full-source coverage w/
+> inconsistency-vetoes combination, deterministic-only CONSISTENT (model
+> call never sole arbiter), numeric-literal-free non-CROSSCHECKED cards
+> incl. evasion encodings, pristine pre-execution snapshots. gen4-r1
+> DE-CITED from L-B demotion (ERROR-class); clean-prompt re-probe =
+> PREREQUISITE of L-B rehab. **Derived thresholds VALIDATED 11/11**
+> (`derived-thresholds-20260821`): one chi²-vs-noise predicate replaces
+> R+placeholder+delta_fit; sigma from artifact only; F1 closed by V9;
+> LEVEL non-load-bearing; noise sweep exact ≤1%. **WoT/gcode arc CLOSED**:
+> per-glyph divide DEAD (whole-read 26/26 vs 13/26 — word-superiority
+> effect, prior art; agent's own zoom crops re-created reference loss);
+> render bullet DEPRIORITIZED (spontaneous render 2/2 fresh-context +
+> stored 5/6 sonnet pass; tier settled SONNET — haiku memory stale);
+> coupling-delta instrument added to spec §3(a). **METHOD (both lanes):
+> score behavior from TRANSCRIPTS never surviving artifacts (M3 false
+> negative — agents clean up); corpus-check-before-register (killed one
+> sweep: ZERO gcode trajs in store).** **MEASUREMENT DEBT, go-board item:
+> pass-traj coverage 16/250=6.4% vs fail 70%
+> (`store-traj-census-20260821`).** Queue: (a) ARMING INCREMENT —
+> implementation-only vs closed spec (§8.2 clauses a-c, §8.8 rules i-v,
+> T-matrix as regression set); (b) PUSH (19 ahead, one WSL2 host);
+> (c) clean-prompt re-probe (spend, L-B prereq); (d) pass-traj
+> persistence; (e) L1 ladder bullets ride next proposer crank. Each own
+> go. Research notes: `docs/research/2026-08-21-*` (best-practices survey;
+> WoT/gcode-class incl. network+pip LOAD-BEARING INVARIANT declared).
+>
 > **DONE 2026-08-20 (close of session): final review + fix wave + PUSH.**
 > Whole-branch review APPROVED with one cross-probe find neither verdict
 > could see (**F1**, recorded

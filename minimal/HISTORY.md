@@ -2164,3 +2164,45 @@ transfer is evidence, not proof; the third fixture is the generality
 claim. Arming stays blocked on the noise-derived tolerance family and the
 value-truth mechanism — every gate this lane ships still has to earn the
 right to say no.
+
+## 2026-08-21 — lane A: the arc from probe to closed arming spec
+
+The day ran design-by-probe at full cadence and ended with the arming
+increment implementation-ready. The gcode question ("watch the agent
+process glyph by glyph") answered itself backwards twice: per-glyph
+isolation HALVED reading accuracy against a perfect whole-string read (the
+word-superiority effect, prior art 1886), and the one error in the
+follow-up actuation probe came from an agent whose own zoom crops
+re-created the same reference destruction — after a scoring correction
+that became method law: score behavior from TRANSCRIPTS, never surviving
+artifacts, because agents clean up and an artifact check's false negative
+cannot announce itself. The render bullet died of no headroom (spontaneous
+render 2/2 fresh-context, 5/6 stored sonnet pass; tier settled sonnet, the
+haiku memory was loop-1 stale), and the whole-vs-divided per-position
+delta entered the spec as the second answer-free instrument: the
+empirical coupling measurement that falsifies a low-coupling claim before
+anything builds on it.
+
+Then the two remaining arming blockers fell in sequence. Derived
+thresholds: one chi-square-vs-noise predicate — sigma from the artifact
+only, MAD smoothing residuals plus per-anchor position spread across
+persistent scales — replaced the R ratio, its measured-dead placeholder,
+and delta_fit in a single derivation; eleven pre-registered cases held on
+the first run, the quadratic that had slipped the spacing bound died at
+residual on the same geometry (F1 closed), and the derivation recovered a
+generator's injected noise blind (25.2 vs 25). Value-truth: a three-layer
+ladder whose adversarial reviews (sibling + fresh-context architect)
+tightened it twice — replication demoted because prior-driven fabrication
+IS a stable generator; numeric injection requires CROSSCHECKED full stop,
+defined as one conjunction; source eligibility is SUT-visibility (a
+positive structural criterion, not a ban list); CONSISTENT is
+deterministic harness-side only; criteria cards are numeric-literal-free
+against named evasion encodings; sources are pristine pre-execution
+snapshots. Five criticals, all found in unstated seams, all closed as
+binding rules before anything armed.
+
+Standing at close: 19 commits unpushed on one host; pass-traj coverage
+measured at 6.4% and promoted to visible measurement debt; the arming
+increment is implementation-only against a spec where every constant is
+derived or convention, every checker has its breaking input, and every
+blind spot is named in writing.
