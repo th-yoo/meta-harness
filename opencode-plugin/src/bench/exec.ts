@@ -34,7 +34,6 @@ declare const Bun: {
   spawn(
     cmd: string[],
     opts: {
-      stdin?: "pipe" | "inherit"
       stdout: "pipe"
       stderr: "pipe"
       env?: Record<string, string | undefined>
@@ -62,23 +61,13 @@ export interface ExecResult {
  */
 export async function runHost(
   argv: string[],
-  opts?: { timeoutSec?: number; env?: Record<string, string>; stdin?: string },
+  opts?: { timeoutSec?: number; env?: Record<string, string> },
 ): Promise<ExecResult> {
-  // `stdin`: deliver a large payload WITHOUT argv. Linux caps a single argv
-  // element at MAX_ARG_STRLEN (131,072); a judge prompt carrying a full
-  // trajectory exceeds that (measured 2026-08-21: 200,000 -> E2BIG, 131,000 ->
-  // OK). Passing it on stdin removes the ceiling entirely — it is not a limit
-  // of the child, which reads stdin happily, but of how we invoked it.
   const proc = Bun.spawn(argv, {
-    stdin: opts?.stdin === undefined ? "inherit" : "pipe",
     stdout: "pipe",
     stderr: "pipe",
     env: { ...process.env, ...(opts?.env ?? {}) },
   })
-  if (opts?.stdin !== undefined) {
-    proc.stdin.write(opts.stdin)
-    await proc.stdin.end()
-  }
 
   let timedOut = false
   let timer: ReturnType<typeof setTimeout> | undefined

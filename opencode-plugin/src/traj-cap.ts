@@ -21,9 +21,17 @@
  * Re-running the taxonomy after the fix flipped all 8 classifications.
  *
  * The value is a RESOURCE bound, not a correctness knob: truncation now
- * announces itself, so exhausting the budget is visible rather than silent. The
- * judge transport delivers the prompt on stdin, so no argv ceiling applies. */
-export const DEFAULT_TRAJ_CAP = 200_000
+ * announces itself, so exhausting the budget is visible rather than silent.
+ *
+ * WHY 100_000 AND NOT MORE: the judge prompt currently rides in ONE argv
+ * element, and Linux MAX_ARG_STRLEN is 131,072 BYTES (measured: 200,000 →
+ * E2BIG). 100_000 chars of ASCII-dominant trajectory plus the prompt frame
+ * stays under that with margin; a companion byte-guard in opencode-run.ts
+ * fail-closes (null-skip) instead of crashing if multibyte content pushes the
+ * assembled prompt past the ceiling anyway. The stdin transport that lifts
+ * this ceiling was REVERTED with three blockers (review: ecde549) — when it is
+ * redone with tests that can fail, this cap can rise again. */
+export const DEFAULT_TRAJ_CAP = 100_000
 
 export interface RenderedTraj {
   /** the text the judge reads; ends with a neutral marker when truncated */

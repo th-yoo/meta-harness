@@ -11,7 +11,7 @@ import {
   JUDGE_AUDIT_ALARM_THRESHOLD,
 } from "../src/bench/judge-audit.ts"
 import { buildTaxonomyPrompt } from "../src/bench/failure-taxonomy.ts"
-import { buildJudgeArgv } from "../src/bench/opencode-run.ts"
+import { runJudgeOpencode } from "../src/bench/opencode-run.ts"
 import type { TrajEvent } from "../src/harness-store.ts"
 
 // Ported from term-bench2/test_judge_audit.py — pure halves only (the
@@ -219,29 +219,34 @@ test("buildTaxonomyPrompt carries the notice in the TRUSTED frame, before the da
   expect(p.indexOf("NOTE (harness, trusted)")).toBeLessThan(p.indexOf("## Agent trajectory"))
 })
 
-// ── stdin transport (2026-08-21) ─────────────────────────────────────────
-// The judge prompt was passed as ONE argv element, imposing Linux's
-// MAX_ARG_STRLEN (131,072) as a hard ceiling on what any judge can be shown —
-// measured: 200,000 chars -> E2BIG, 131,000 -> OK. That is the 8,000-char cap
-// defect one layer down: a transport constraint silently bounding what the
-// judge may know. opencode reads the message from stdin (verified live:
-// `echo ... | opencode run --format json` returned the reply), so the ceiling
-// is removable, not inherent.
+// ── argv byte-guard (interim until the stdin-transport redo) ─────────────
+// The prompt rides in ONE argv element; Linux MAX_ARG_STRLEN is 131,072
+// BYTES per element (measured: 200,000 → E2BIG). The stdin transport that
+// removed this ceiling was reverted with three blockers (review record
+// ecde549). Until its redo lands, an over-budget prompt must SKIP into the
+// existing null contract — never reach execve and E2BIG-crash the runner.
 
-test("buildJudgeArgv keeps the prompt OUT of argv", () => {
-  const argv = buildJudgeArgv("/tmp/scratch", [], "anthropic/claude-sonnet-5")
-  expect(argv[0]).toBe("opencode")
-  expect(argv).toContain("run")
-  expect(argv).toContain("--model")
-  // the prompt is delivered on stdin; no element may carry it
-  expect(argv.every((a) => a.length < 1_000)).toBe(true)
-  expect(argv.join(" ")).not.toContain("PROMPT_BODY")
+test("an over-argv-budget prompt is skipped fail-closed; execFn never called", async () => {
+  let called = 0
+  const execFn = async () => {
+    called++
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  const big = "x".repeat(130_000)
+  const out = await runJudgeOpencode(big, "anthropic/claude-sonnet-5", 1, 1, execFn as any)
+  expect(out).toBe(null)
+  expect(called).toBe(0)
 })
 
-test("argv stays far below MAX_ARG_STRLEN regardless of trajectory size", () => {
-  const argv = buildJudgeArgv("/tmp/scratch", ["--agent", "mh-judge"], "anthropic/claude-sonnet-5")
-  const longest = Math.max(...argv.map((a) => a.length))
-  expect(longest).toBeLessThan(4_096)
+test("an in-budget prompt still reaches execFn (the guard is a bound, not a wall)", async () => {
+  let seen: string[] = []
+  const execFn = async (argv: string[]) => {
+    seen = argv
+    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+  }
+  await runJudgeOpencode("small prompt", "anthropic/claude-sonnet-5", 1, 1, execFn as any)
+  expect(seen.length).toBeGreaterThan(0)
+  expect(seen.join(" ")).toContain("small prompt")
 })
 
 
