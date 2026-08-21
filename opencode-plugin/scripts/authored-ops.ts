@@ -29,6 +29,7 @@ export function applyAuthoredOps(a: { storeRoot: string; repoRoot: string; ops: 
   const base = readPlaybook(a.storeRoot) ?? { schemaVersion: 1, nextId: 1, bullets: [] }
   const next = applyPlaybookOps(base, a.ops)
   const p = path.join(a.storeRoot, "active", "playbook.json")
+  fs.mkdirSync(path.dirname(p), { recursive: true })
   fs.writeFileSync(p + ".tmp", JSON.stringify(next, null, 2) + "\n"); fs.renameSync(p + ".tmp", p)
   exportRuleChecks(a.repoRoot, a.storeRoot)
   exportHookRules(a.repoRoot, a.storeRoot)

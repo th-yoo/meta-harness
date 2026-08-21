@@ -25,6 +25,18 @@ test("screen-failing hookRule op refuses the WHOLE batch, store untouched", () =
   expect(pb.bullets).toHaveLength(0)
 })
 
+test("fresh store with no active/ dir yet: clean ops apply and create the path", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mh-authored-store-fresh-"))
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "mh-authored-repo-fresh-"))
+  // deliberately no mkdirSync(active) and no playbook.json — simulates a
+  // brand-new store the Task 6 seed script may target
+  const r = applyAuthoredOps({ storeRoot: root, repoRoot: repo, provenance: "test",
+    ops: [{ op: "add", text: "When G, do H." }] })
+  expect(r.applied).toBe(true)
+  const pb = JSON.parse(fs.readFileSync(path.join(root, "active", "playbook.json"), "utf8"))
+  expect(pb.bullets).toHaveLength(1)
+})
+
 test("clean ops apply, stamp shadow, and export both tables", () => {
   const { root, repo } = store()
   const r = applyAuthoredOps({ storeRoot: root, repoRoot: repo, provenance: "test",
