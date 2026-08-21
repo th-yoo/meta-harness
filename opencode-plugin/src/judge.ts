@@ -16,7 +16,7 @@
 import * as fs from "fs"
 import * as path from "path"
 import { readMhConfig, parseModelSpec, type TrajEvent } from "./harness-store.ts"
-import { applyTrajCap, truncationNotice, DEFAULT_TRAJ_CAP, type RenderedTraj } from "./bench/judge-audit.ts"
+import { applyTrajCap, truncationNotice, DEFAULT_TRAJ_CAP, type RenderedTraj } from "./traj-cap.ts"
 import type { HarnessHost } from "./host.ts"
 
 /**
@@ -63,7 +63,7 @@ export interface JudgeVerdict {
  * apply here.
  */
 function renderTrajEvents(events: TrajEvent[], cap = DEFAULT_TRAJ_CAP): RenderedTraj {
-  if (!events.length) return { text: "(no trajectory captured)", truncated: false, totalChars: 0, shownChars: 0 }
+  if (!events.length) return applyTrajCap("(no trajectory captured)", cap)
   const lines = events.map((e) => {
     if (e.t === "tool") {
       return `TOOL ${e.tool ?? "?"}${e.error ? " [ERROR]" : ""}: ${e.args ?? ""}${e.output ? ` → ${e.output}` : ""}`

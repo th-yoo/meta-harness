@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test"
 import { buildJudgePrompt, parseVerdict } from "../src/judge.ts"
+import { DEFAULT_TRAJ_CAP } from "../src/traj-cap.ts"
 import type { TrajEvent } from "../src/harness-store.ts"
 
 // Token-free: exercises buildJudgePrompt's rendering + parseVerdict directly —
@@ -132,8 +133,12 @@ test("buildJudgePrompt announces truncation to the scoring judge", () => {
   const p = buildJudgePrompt("summary", 12, many)
   expect(p).toContain("NOTE (harness, trusted)")
   expect(p.indexOf("NOTE (harness, trusted)")).toBeLessThan(p.indexOf("## Trajectory"))
-  // no imperative smuggled into the untrusted data section
-  expect(p).not.toMatch(/do NOT describe it as ending/)
+  // #4 (was vacuous: asserted a literal no revision ever contained). The real
+  // check: the notice's imperative sentence must appear ONCE, in the frame,
+  // and never inside the trajectory section.
+  const dataStart = p.indexOf("## Trajectory")
+  expect(p.slice(dataStart)).not.toContain("do not conclude that work you cannot see never happened")
+  expect(p.slice(0, dataStart)).toContain("do not conclude that work you cannot see never happened")
 })
 
 test("a short trajectory carries no truncation notice", () => {
@@ -143,11 +148,14 @@ test("a short trajectory carries no truncation notice", () => {
   expect(p).toContain("SAY: hello")
 })
 
-test("the scoring judge's cap is the SHARED constant, not a second literal", () => {
-  const big: TrajEvent[] = Array.from({ length: 900 }, (_, i) => ({
-    t: "text" as const,
-    text: `event ${i} ${"y".repeat(70)}`,
-  }))
-  // 900 * ~80 chars is well past the old 8,000 and inside DEFAULT_TRAJ_CAP
-  expect(buildJudgePrompt("s", 1, big)).not.toContain("NOTE (harness, trusted)")
+test("the scoring judge's cap IS the shared constant (identity, not magnitude)", () => {
+  // #5 (was overclaiming: a hardcoded 100_000 would have passed). Assert the
+  // boundary sits exactly at DEFAULT_TRAJ_CAP, which only the shared constant
+  // can satisfy.
+  const line = "y".repeat(99) + "\n"
+  const under: TrajEvent[] = [{ t: "text", text: "y".repeat(DEFAULT_TRAJ_CAP - 10) }]
+  const over: TrajEvent[] = [{ t: "text", text: "y".repeat(DEFAULT_TRAJ_CAP + 10) }]
+  expect(buildJudgePrompt("s", 1, under)).not.toContain("NOTE (harness, trusted)")
+  expect(buildJudgePrompt("s", 1, over)).toContain("NOTE (harness, trusted)")
+  expect(line.length).toBe(100)
 })

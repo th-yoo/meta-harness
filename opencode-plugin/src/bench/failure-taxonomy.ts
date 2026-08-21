@@ -7,7 +7,8 @@
  * cmd-failure-taxonomy.ts. The trajectory is UNTRUSTED DATA, not instructions.
  */
 import type { TrajEvent } from "../harness-store.ts"
-import { extractLastJsonObject, renderJudgeAuditEvents, truncationNotice } from "./judge-audit.ts"
+import { extractLastJsonObject, renderJudgeAuditEvents } from "./judge-audit.ts"
+import { truncationNotice } from "../traj-cap.ts"
 
 /** Seed schema (spec Component 1 + TRAIL/AHE): the judge picks the MOST specific
  * mode. `spec_precision` is a sub-case of `looks_done` — prefer it when the failure

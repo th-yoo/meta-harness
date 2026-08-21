@@ -2,6 +2,7 @@ import { test, expect } from "bun:test"
 import {
   renderJudgeAuditEvents,
   truncationNotice,
+  applyTrajCap,
   buildJudgeAuditPrompt,
   parseJudgeReply,
   judgeReplyText,
@@ -58,8 +59,12 @@ test("renderJudgeAuditEvents renders tool/text/error lines and caps output", () 
   ]
   const out = renderJudgeAuditEvents(events).text
   expect(out).toBe("TOOL bash: ls → a.txt\nTOOL bash [ERROR]: rm x\nSAY: done\nERROR: boom")
-  expect(renderJudgeAuditEvents(events, 5).shownChars).toBe(5)
-  expect(renderJudgeAuditEvents(events, 5).truncated).toBe(true)
+  const tiny = renderJudgeAuditEvents(events, 5)
+  expect(tiny.truncated).toBe(true)
+  // pathological cap (< marker length): disclosure wins over the bound, and the
+  // standing invariant is shownChars === text.length, not shownChars <= cap
+  expect(tiny.shownChars).toBe(tiny.text.length)
+  expect(tiny.text.trim()).toMatch(/^\[truncated at 5 of \d+ characters\]$/)
 })
 
 // ── parse_judge_reply ─────────────────────────────────────────────────────
@@ -182,7 +187,10 @@ test("the in-data marker is NEUTRAL — no imperative inside untrusted data", ()
   expect(r.totalChars).toBeGreaterThan(r.shownChars)
   expect(r.text).toMatch(/\[truncated at [\d,]+ of [\d,]+ characters\]/)
   // NO imperatives in the data section
-  expect(r.text).not.toMatch(/do NOT|CONTINUES|never happened/)
+  // #4: the earlier regex had two dead alternatives (the notice text is
+  // lowercase "do not"); assert against the ACTUAL notice sentence instead.
+  expect(r.text).not.toContain("do not conclude that work you cannot see never happened")
+  expect(r.text).not.toMatch(/\bNOTE \(harness/)
 })
 
 test("truncationNotice builds the TRUSTED-FRAME sentence, outside the data", () => {
@@ -234,4 +242,43 @@ test("argv stays far below MAX_ARG_STRLEN regardless of trajectory size", () => 
   const argv = buildJudgeArgv("/tmp/scratch", ["--agent", "mh-judge"], "anthropic/claude-sonnet-5")
   const longest = Math.max(...argv.map((a) => a.length))
   expect(longest).toBeLessThan(4_096)
+})
+
+
+// ── invariants and boundaries (fresh-context review, findings 7 and 8) ──
+
+test("shownChars === text.length on EVERY path, including empty events", () => {
+  const empty = renderJudgeAuditEvents([])
+  expect(empty.shownChars).toBe(empty.text.length)
+  expect(empty.totalChars).toBe(empty.text.length)
+  expect(empty.truncated).toBe(false)
+  const small = renderJudgeAuditEvents([{ t: "text", text: "hi" }])
+  expect(small.shownChars).toBe(small.text.length)
+  const big = applyTrajCap("z".repeat(5_000), 1_000)
+  expect(big.shownChars).toBe(big.text.length)
+})
+
+test("a normal truncation does NOT exceed the cap (marker room reserved)", () => {
+  const r = applyTrajCap("z".repeat(50_000), 1_000)
+  expect(r.text.length).toBeLessThanOrEqual(1_000)
+  expect(r.totalChars).toBe(50_000)
+})
+
+test("the exactly-at-cap boundary is not truncated; one over is", () => {
+  const at = applyTrajCap("z".repeat(1_000), 1_000)
+  expect(at.truncated).toBe(false)
+  expect(at.text.length).toBe(1_000)
+  const over = applyTrajCap("z".repeat(1_001), 1_000)
+  expect(over.truncated).toBe(true)
+})
+
+test("buildJudgeAuditPrompt: truncation notice AND amended evidence rule", () => {
+  // finding 3: this prompt's truncation path was entirely untested
+  // finding 2: its rules block claimed the trajectory is COMPLETE evidence
+  const many: TrajEvent[] = Array.from({ length: 6000 }, (_, i) => ({ t: "text" as const, text: `e${i} ${"w".repeat(80)}` }))
+  const p = buildJudgeAuditPrompt(many, "task note")
+  expect(p).toContain("NOTE (harness, trusted)")
+  expect(p.indexOf("NOTE (harness, trusted)")).toBeLessThan(p.indexOf("## Trajectory (tool calls"))
+  expect(p.replace(/\s+/g, " ")).toContain("COMPLETE unless a truncation NOTE appears above")
+  expect(p.replace(/\s+/g, " ")).not.toContain("your COMPLETE and ONLY evidence")
 })
