@@ -72,6 +72,19 @@ it stays checkable through 2% (measured false-reject 10/200 = 5%) and flips at 5
 (measured 182/200 = 91%), and its margin degrades smoothly with the measured
 rate instead of stepping at an arbitrary 0.01.
 
+**What made this legitimate was the DISCIPLINE, not the arithmetic.** The
+derivation was incident-born — it started from graphene failing a bound — which
+is the exact provenance this project treats as the fitting smell. It is
+acceptable here only because of how it was run: the **kill condition was
+registered before the run** (`residual-dominant ⇒ mechanism refuted, aggregator
+question returns`), the evidence was **V7's synthetic sweep with graphene held
+OUT of the validation set**, and graphene was then used as a **prediction** the
+mechanism had to get right. The same arithmetic with graphene inside the oracle
+set would have been cheating — identical numbers, identical conclusion, no
+validity. Incident-triggered discovery with structure-validated response is
+legitimate; incident-triggered discovery with incident-fitted validation is the
+F4 pattern.
+
 **Three wins, and they are compression, not addition:**
 1. `VALIDATED_SIGMA_FRACTION` is **deleted** — replaced by a quantity computed
    from the constellation plus the already-registered `REG_LEVEL`. One fewer
