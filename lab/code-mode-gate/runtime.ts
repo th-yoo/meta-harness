@@ -51,8 +51,7 @@ export class ComposedRuntime<C, S = unknown> {
 
     const verdicts: Verdict<unknown>[] = []
     const logs: string[] = []
-    let rejectionsThisTurn = 0
-    let acceptedThisTurn = false
+    let pendingRejections = 0
 
     const outcome = await runGuest(src, Object.keys(this.opts.tools), this.limits, {
       onToolCall: (name, args) => {
@@ -68,19 +67,17 @@ export class ComposedRuntime<C, S = unknown> {
         if (verdict.ok) {
           // the ONLY commit site; guests hold no commit capability
           this.committed = structuredClone(claim) as C
-          acceptedThisTurn = true
+          this.meter.localRetries += pendingRejections
+          pendingRejections = 0
         } else {
           this.meter.gateRejections += 1
-          rejectionsThisTurn += 1
+          pendingRejections += 1
         }
         return verdict
       },
       onLog: (msg) => logs.push(msg),
     })
 
-    if (rejectionsThisTurn > 0 && acceptedThisTurn) {
-      this.meter.localRetries += rejectionsThisTurn
-    }
     return { ...outcome, verdicts, logs }
   }
 }

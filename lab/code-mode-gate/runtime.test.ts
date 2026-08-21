@@ -65,6 +65,29 @@ test("token accounting: contextTokens plus program size, once per turn", async (
   expect(rt.meter.approxTokens).toBe(2 * (1000 + Math.ceil(src.length / 4)))
 })
 
+test("acceptance BEFORE a rejection does not count as a local retry", async () => {
+  const rt = mkRuntime()
+  const result = await rt.runTurn(`
+    await api.checkAndCommit([5,5]);
+    await api.checkAndCommit([9,9]);
+  `)
+  expect(result.status).toBe("completed")
+  expect(rt.meter.localRetries).toBe(0)
+  expect(rt.meter.gateRejections).toBe(1)
+})
+
+test("only rejections followed by an acceptance count", async () => {
+  const rt = mkRuntime()
+  const result = await rt.runTurn(`
+    await api.checkAndCommit([1]);
+    await api.checkAndCommit([5,5]);
+    await api.checkAndCommit([2]);
+  `)
+  expect(result.status).toBe("completed")
+  expect(rt.meter.localRetries).toBe(1)
+  expect(rt.meter.gateRejections).toBe(2)
+})
+
 test("limits pass through: a tight timeout kills a spinning guest", async () => {
   const rt = new ComposedRuntime<number[], { sum: number }>({
     contextTokens: 10,
