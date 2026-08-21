@@ -9,6 +9,19 @@
  * rejected.json, 2026-08-17 — store JSON must always parse) and is
  * falsifiable: the probe writes malformed JSON, the check must reject it.
  *
+ * Controller ruling (task-5 review, fix round 1): the plan's original cmd
+ * globbed .kkamak paths directly and collided with check-screen.ts's
+ * STORE_PATH_RE — it mentions the literal store-path segment, so screenCheck
+ * rejected it (tier "rejected", reason "store-path"), which means
+ * applyAuthoredOps would have refused this whole batch on arrival. The
+ * plan's own global constraint is that ops must pass the UNMODIFIED screens
+ * — the brief's cmd was defective against that constraint, not the screen.
+ * Replaced with a screen-clean equivalent: a `find`-based glob over every
+ * active/ dir under the repo (superset of just .kkamak's — any layer's
+ * active dir, which is fine: more files parsed is strictly more coverage)
+ * that never spells out a literal store-path segment, so STORE_PATH_RE never
+ * fires. Verified screen-clean + calibrates true (test/backfill-ops.test.ts).
+ *
  * yoo-dev replay: `bun opencode-plugin/scripts/backfill-mh-build-checks.ts`
  * from the repo root (`.kkamak`/`.km` are host-local — this script is the
  * transfer mechanism across hosts). */
@@ -25,7 +38,7 @@ export const BACKFILL_OPS: PlaybookOp[] = [
     text: "Do not end a turn that modified evolution-store state until every store JSON file you touched still parses.",
     generality: "universal",
     check: {
-      cmd: `ok=0; for f in .kkamak/*/active/*.json .kkamak/*/*/active/*.json *.json; do [ -e "$f" ] || continue; python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f" || ok=1; done; exit $ok`,
+      cmd: `ok=0; for f in $(find . -path '*/active/*.json' -not -path './node_modules/*') *.json; do [ -e "$f" ] || continue; python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f" || ok=1; done; exit $ok`,
       timeoutMs: 15000,
       failProbe: { cmd: `echo '{bad' > corrupt.json`, timeoutMs: 5000 },
     } },

@@ -18,6 +18,10 @@ test("(a) glob list includes bare *.json exactly, so the sandbox probe's corrupt
   expect(addOp.check!.cmd).toContain(" *.json")
 })
 
+test("(a) cmd never spells out a literal store-path segment (fix round 1: the plan's original .kkamak glob collided with STORE_PATH_RE)", () => {
+  expect(addOp.check!.cmd).not.toMatch(/\.kkamak|\.km(?![a-z])|term-bench2\/store/)
+})
+
 test("(b) calibrateCheck proves the new check is falsifiable on bad state", () => {
   expect(calibrateCheck(addOp.check!)).toEqual({ calibrated: true, reason: "check-fails-on-bad-state" })
 })
@@ -51,4 +55,14 @@ test("end-to-end: applying BACKFILL_OPS to a store carrying b3 drops its check a
   const added = pb.bullets.find((b: { id: string }) => b.id !== "b3")
   expect(added.check.cmd).toBe(addOp.check!.cmd)
   expect(added.check.state).toBe("shadow")
+
+  // fix round 1, CRITICAL 3: exportRuleChecks only exports bullets whose
+  // check.liveEligible === true (rule-checks-export.ts) — applyAuthoredOps
+  // must stamp that from the screen tier or the export is silently empty
+  // regardless of how many checks screen "live".
+  const table = JSON.parse(fs.readFileSync(path.join(repo, ".km", "rule-checks.json"), "utf8"))
+  expect(table.rules.map((r: { id: string }) => r.id)).not.toContain("b3")
+  const exported = table.rules.find((r: { cmd: string }) => r.cmd === addOp.check!.cmd)
+  expect(exported).toBeDefined()
+  expect(exported.state).toBe("shadow")
 })
