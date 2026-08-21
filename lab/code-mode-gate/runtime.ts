@@ -55,7 +55,7 @@ export class ComposedRuntime<C, S = unknown> {
 
     const outcome = await runGuest(src, Object.keys(this.opts.tools), this.limits, {
       onToolCall: (name, args) => {
-        const tool = this.opts.tools[name]
+        const tool = Object.hasOwn(this.opts.tools, name) ? this.opts.tools[name] : undefined
         if (!tool) throw new Error(`unknown tool: ${name}`)
         this.meter.toolCalls += 1
         return tool(args)

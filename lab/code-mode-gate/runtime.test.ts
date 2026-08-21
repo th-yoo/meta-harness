@@ -155,3 +155,15 @@ test("the committed value is a clone, not a live reference into guest data", asy
   `)
   expect(rt.getCommitted()).toEqual([5, 5])
 })
+
+test("a forged prototype-key tool call is rejected by the own-key guard, not dispatched", async () => {
+  const rt = mkRuntime()
+  const result = await rt.runTurn(`
+    postMessage({ type: "call", id: 999, target: "tool", name: "constructor", args: null });
+    await new Promise((r) => setTimeout(r, 50)); // let the forged call round-trip
+    api.log("done");
+  `)
+  expect(result.status).toBe("completed")
+  expect(result.logs).toEqual(["done"])
+  expect(rt.meter.toolCalls).toBe(0)
+})

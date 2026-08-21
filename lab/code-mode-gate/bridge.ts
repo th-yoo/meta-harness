@@ -1,7 +1,8 @@
 /** Host side of the composed runtime's isolation boundary. Owns the Worker
  * lifecycle, dispatches guest RPCs to callbacks, and enforces the limits with
  * enumerated failure codes. One worker per turn (created fresh, terminated
- * always) — simplest lifecycle that is correct; snapshots/resume are YAGNI. */
+ * always) — simplest lifecycle that is correct; snapshots/resume are YAGNI.
+ * Thread boundary, NOT a security sandbox — hostile-guest reference: OpenClaw's QuickJS-WASI worker (src/agents/code-mode-*). */
 import type { FailureCode, Limits } from "./types.ts"
 
 export interface BridgeCallbacks {

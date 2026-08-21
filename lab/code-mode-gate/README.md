@@ -14,7 +14,7 @@ effect path — now with a real thread boundary and a pluggable verifier.
 | Guest API | sync | async (`await api.tools.x()`, `await api.checkAndCommit(c)`) |
 | Agnosticism | n/a | enforced by executable grep guard (`agnostic.test.ts`) |
 
-## What is preserved (pinned by `parity.test.ts`)
+## What is preserved (pinned by `parity.test.ts` and `runtime.test.ts`)
 
 Correctness parity, 5-trips-vs-1, >3x token ratio at 4k context, rejection
 absorbed in-turn, no guest commit capability, fail-closed commit.
