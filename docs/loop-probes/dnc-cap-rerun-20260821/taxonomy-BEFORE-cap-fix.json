@@ -1,0 +1,88 @@
+{
+  "version": "v20",
+  "model": "anthropic/claude-sonnet-5",
+  "nClassified": 8,
+  "modeCounts": {
+    "incomplete": 8
+  },
+  "entries": [
+    {
+      "sessionID": "bench-path-tracing-1786537186-8f3cd0",
+      "task": "path-tracing",
+      "mode": "incomplete",
+      "failurePoint": "After extensive multi-step pixel/region analysis of image.ppm, the trajectory ends before any image.c file is written or compiled",
+      "rootCause": "Agent over-invested turns in exhaustive manual pattern discovery (histograms, row scans, gradient/checkerboard characterization) instead of quickly settling on an approximate procedural model and moving to implementation, exhausting its budget during analysis with no working solution ever produced or tested",
+      "generalMechanism": "Enforce a budget/checkpoint policy that caps pure-exploration steps and forces early transition to producing and testing a minimal working artifact, then iteratively refining it, rather than allowing unbounded open-ended data analysis before any implementation attempt"
+    },
+    {
+      "sessionID": "bench-path-tracing-1786536111-7840dd",
+      "task": "path-tracing",
+      "mode": "incomplete",
+      "failurePoint": "After extensive iterative sampling/analysis of the PPM pixel structure (gradient sky + checkerboard/diagonal pattern), the trajectory ends before ever writing image.c or attempting compilation/testing",
+      "rootCause": "Agent spent its entire visible budget on manual pixel-by-pixel pattern discovery via repeated bash/python sampling scripts instead of converging quickly on a parametric model and writing code; the underlying image (procedural render with two structurally different regions) required more analysis than the agent allotted time for before producing any deliverable",
+      "generalMechanism": "Enforce a time/step budget split: cap exploratory/analysis actions and force an early checkpoint that requires producing a minimal working draft (even if imperfect) before continuing to refine, so the agent always has a submittable artifact rather than running out of turns purely in the investigation phase"
+    },
+    {
+      "sessionID": "bench-path-tracing-1786534465-b948ae",
+      "task": "path-tracing",
+      "mode": "incomplete",
+      "failurePoint": "Agent spent the entire trajectory analyzing image.ppm pixel patterns and testing algorithmic hypotheses (gradients, hashes, coordinate functions) but never began writing image.c",
+      "rootCause": "The reverse-engineering search space (custom procedural image generator) was large and the agent kept iterating exploratory analysis without converging on the generating function or falling back to a simpler approximate reconstruction (e.g. clustering/palette+regions) that could hit 0.99 similarity within budget; the session ends mid-investigation with zero code produced",
+      "generalMechanism": "For open-ended reverse-engineering tasks, enforce a time/turn budget checkpoint that forces the agent to commit to and implement a best-effort approximate solution (even if imperfect) well before exhausting the budget, rather than open-ended exploratory analysis with no fallback deliverable"
+    },
+    {
+      "sessionID": "bench-path-tracing-1786532954-82bbaf",
+      "task": "path-tracing",
+      "mode": "incomplete",
+      "failurePoint": "Agent never progressed past open-ended pixel-pattern analysis to actually writing image.c or compiling/testing it — trajectory cuts off during a Python exploratory script with no code artifact produced",
+      "rootCause": "The agent over-invested its turn/time budget in manual data exploration (histograms, spatial sampling, gradient detection) instead of timeboxing analysis and moving to implementation early, so it ran out of runway before producing or validating the required C program and reconstructed.ppm output",
+      "generalMechanism": "Enforce a hard turn/time budget split (e.g., cap exploration steps or require an early draft-and-iterate loop) so the agent is forced to produce a minimal working artifact and run the acceptance check well before budget exhaustion, rather than allowing unbounded upfront analysis."
+    },
+    {
+      "sessionID": "bench-path-tracing-1786531800-e3f22d",
+      "task": "path-tracing",
+      "mode": "incomplete",
+      "failurePoint": "Agent is still doing manual pixel-sampling analysis and has just started inspecting the /app/orig binary when the trajectory ends, with image.c never written",
+      "rootCause": "The agent used a slow, granular exploration strategy (reading full file contents, single-scanline python probes) on a very large image instead of efficient bulk/vectorized analysis, consuming its available turns/time on investigation before ever attempting to write, compile, or test the required image.c program",
+      "generalMechanism": "Time-box the exploration phase relative to total budget (e.g., cap analysis turns and require an early draft/checkpoint of the deliverable), and mandate use of efficient bulk data-processing tools (numpy/vectorized reads) instead of manual line-by-line inspection for large-file analysis tasks"
+    },
+    {
+      "sessionID": "bench-path-tracing-1786529855-7513b2",
+      "task": "path-tracing",
+      "mode": "incomplete",
+      "failurePoint": "After the initial low-similarity gradient attempt (0.893), the agent began an open-ended manual pixel-pattern investigation (sampling rows/columns via slow shell/python heredocs) and the trajectory cuts off mid-analysis without ever writing an improved image.c or re-testing similarity",
+      "rootCause": "The target image had a non-trivial structure (radial gradient plus a separate patterned/textured layer) that the agent tried to reverse-engineer by manual inspection of individual pixels rather than a systematic/statistical approach, consuming its turn/time budget on slow diagnostic loops (large ASCII PPM parsing, missing numpy, malformed heredocs) before producing a second, better candidate solution",
+      "generalMechanism": "When facing tasks requiring iterative refine-and-verify loops (fit a program's output to a target metric), the agent should time-box exploratory analysis, use efficient bulk/vectorized tooling for data inspection, and checkpoint by writing+testing an improved candidate early and often rather than spending the whole budget on manual investigation before ever attempting a second solution"
+    },
+    {
+      "sessionID": "bench-path-tracing-1786528342-3a14a5",
+      "task": "path-tracing",
+      "mode": "incomplete",
+      "failurePoint": "Agent was still reverse-engineering the pixel pattern (testing Mandelbrot hypothesis, inspecting /app/orig binary) when the trajectory ends — no image.c was ever written or compiled",
+      "rootCause": "The agent spent its entire budget on open-ended pixel-by-pixel forensic analysis trying to derive the exact generating algorithm, without time-boxing that phase or producing an early draft solution to iterate on, so it exhausted its turns/context before implementation began",
+      "generalMechanism": "Enforce a hard cap on pure-analysis steps before requiring a first runnable draft artifact; structure the task loop as write-a-baseline-then-refine rather than fully-solve-analytically-first, so partial progress yields a testable deliverable even if analysis is incomplete"
+    },
+    {
+      "sessionID": "bench-llm-inference-batching-scheduler-1786525032-c5933f",
+      "task": "llm-inference-batching-scheduler",
+      "mode": "incomplete",
+      "failurePoint": "Trajectory ends after data/tooling exploration and distribution analysis, before any batching algorithm was implemented or the output plan files (plan_b1.jsonl/plan_b2.jsonl) were generated or checked against the cost model thresholds.",
+      "rootCause": "The agent spent its available turns on thorough upfront exploration (reading cost model, baseline packer, and analyzing request-length distributions) but the trajectory cuts off before implementation began — the TODO list still shows 'Implement optimized batching algorithm', 'Generate and validate output plans', and 'Verify performance against thresholds' as pending, indicating the session ran out of runway before producing or validating any deliverable.",
+      "generalMechanism": "Enforce time/turn budgeting that reserves guaranteed capacity for implementation and validation phases (e.g., cap exploration turns, or checkpoint partial/minimal-viable output early) so agents produce a first working artifact before exhausting the budget on analysis alone."
+    }
+  ],
+  "byTask": {
+    "path-tracing": [
+      "incomplete",
+      "incomplete",
+      "incomplete",
+      "incomplete",
+      "incomplete",
+      "incomplete",
+      "incomplete"
+    ],
+    "llm-inference-batching-scheduler": [
+      "incomplete"
+    ]
+  }
+}
