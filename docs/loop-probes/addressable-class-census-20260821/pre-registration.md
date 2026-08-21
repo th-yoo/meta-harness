@@ -92,6 +92,13 @@ and cannot un-know it. `raman-fitting` is therefore recorded as a **known
 positive and excluded from the headline count**, quoted separately. Every other
 task is unread by me on both questions as of this registration.
 
+**Extended: ALL self-authored probe tasks are excluded from the headline**, not
+just raman. Tasks we wrote can only be evidence about our own habits, never about
+the benchmark's population — and the previous census demonstrated the cost
+concretely: five of its six series-bearing trees were ours, inflating the
+apparent count 6×. The denominator is **genuine benchmark tasks only**, stated
+explicitly so no reader can reconstruct a friendlier one.
+
 ## What this is NOT
 
 Not a design document. **No divide-v2 is to be designed before the count

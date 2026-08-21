@@ -16,12 +16,16 @@ applying the plan's own structural criteria in order:
 | **exactly one numeric series** | **6** |
 | ≥3 scale-persistent anchors | 5 |
 
-**All six are raman variants reading the same `graphene.dat`** (`raman-fitting`
-plus the four `raman-fitting-*` probe tasks we ourselves created, plus
-`raman-peak-report` which yields only 1 anchor). **91 of 99 tasks have no
+**All six are raman variants reading the same `graphene.dat`** — and **five of
+the six are probe tasks we authored ourselves** (`raman-fitting-audit`,
+`-gate`, `-gen`, `-predict`, `raman-peak-report`). **91 of 99 tasks have no
 two-column numeric series at all.**
 
-Of genuine benchmark tasks, the count is **one: `raman-fitting`.**
+**Denominator, stated so no friendlier one can be reconstructed:** tasks we wrote
+are evidence about our own habits, never about the benchmark's population. They
+are excluded from the headline and quoted only in the side column. Of genuine
+benchmark tasks the count is **one: `raman-fitting`** — i.e. `1/99`, and the
+`6/99` figure is an artifact of our own probe tasks inflating it 6×.
 
 **This is the 1:1 tell, stated against our own rule.** CLAUDE.md: *"if additions
 grow 1:1 with incidents … no compression happened and no induction happened."*
