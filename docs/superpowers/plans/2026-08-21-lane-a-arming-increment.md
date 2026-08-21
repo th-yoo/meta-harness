@@ -23,6 +23,45 @@ State this before anyone reads further, so no one expects a lift that the spec f
 - **The executable-evaluator subclass of L-A is not implemented here** (Task 11 returns `undecidable` for it). Implementing it needs a uniform invocation contract; inventing per-task adapters is the named cheating class. Named as follow-on, not silently skipped.
 - **Nothing arms.** `conventionAudit` default stays `false` in `cmd-run.ts`. Flipping it is its own go with its own evidence.
 
+## Cross-lane review reconciliation (2026-08-21, both passes blind)
+
+The plan at `bd99201` was reviewed twice independently: by lane A (self-audit,
+recorded before the reply landed) and by `meta-harness-1e`. Neither saw the
+other's findings first. The diff is method evidence and is recorded because it
+is more informative than either list alone.
+
+| Finding | Lane A self-audit | Cross-lane | Status |
+|---|---|---|---|
+| Literal checker quantifies over a CLAIMANT-SUPPLIED value set | **MISSED** | **F1 CRITICAL** | fixed, Task 12 |
+| `EXECUTABLE_EXT` is a fail-open incident registry | S1 | F2 HIGH | fixed, Task 11 |
+| `REL_TOL` author-supplied, violates §8.8(iii) | S2 | F3 | fixed (derived from source precision), Task 11 |
+| `MIN_SERIES_ROWS = 64` justification is false | S4 | F3 | fixed (= `MAX_SMOOTH_WINDOW`), Tasks 2 + 7 |
+| `SCALE_FACTORS` fixed list, fails open | S3 | — | fixed (mantissa comparison), Task 4 |
+| Bad set shares an author with the checker | S5 | Q3 caveat | recorded, follow-on |
+| Detector quartet asserted-stable, never swept | — | F3 | new Task 16 |
+| Partial-match veto is a hair-trigger | — | F4 | fixed, Task 11 |
+| Family choice selects between two domain boundaries | — | Q4 residual | fixed (both families must be in domain), Task 13 |
+| `reject-degenerate` conflates attacked with uncheckable | — | LOW | recorded, manifest |
+
+**The one that matters.** Lane A's self-audit found four constants and a list —
+and missed the critical, which was not a constant at all but a **quantifier**.
+§8.8(iv)'s enforcement asked "does the card state THESE numbers?", where THESE
+came from the model's own claim block. Answering `FAMILY: none` emptied the set,
+and every decoder ran against nothing. The self-audit had scrutinised the
+decoders and the fixture — the removal ritual performed on one object while a
+different object supplied the answer, which is the failure the resume banner
+already names and which was still not visible from the inside.
+
+Worse, and worth keeping: **lane A's own test blessed the hole.** The T4 case
+"an empty value list makes every card literal-free (nothing to smuggle)" asserted
+the vacuous behaviour as correct. A check that cannot fail was not merely
+present; it had a passing test certifying it.
+
+Standing prediction for the next review, from the same evidence: look at
+QUANTIFIERS and their domains before looking at constants. Both passes found
+constants easily; only the second pass found the quantifier, and only because it
+was asked to attack the enforcement rather than the values.
+
 ## Global Constraints
 
 - **Zero model-token spend.** Every task here is pure functions + fixtures + `bun test`. No `daemonCall`, no live audit, no bench run.
@@ -72,7 +111,9 @@ G5:
 G6:
   T12 wire the gate into runAuditUncached (T10+T13)
 G7:
-  T14 real-fixture end-to-end (T12)                     T15 docs + regression manifest (T14)
+  T14 real-fixture end-to-end (T12)                     T16 constant sweeps (T2, may run any time after)
+G8:
+  T15 docs + regression manifest (T14+T16)
 ```
 
 **Execution note:** the shared checkout serializes implementers — **never dispatch two in parallel**; same working tree, same suite. The DAG is a dispatch ORDER constraint showing what *could* parallelize under future worktree isolation. Within G1, T2+T3 are one dispatch candidate (both touch only `reval-fit.ts`/`series-peaks.ts` and share no identifiers).
@@ -390,6 +431,12 @@ Expected: FAIL — `detectPeaksTracked` is not exported.
 Replace the body of `opencode-plugin/src/bench/series-peaks.ts` below its existing header comment with:
 
 ```ts
+/** The detector's smoothing-window sweep bounds — EXPORTED because other modules
+ * derive their own floors from the detector's geometry (series-source's
+ * MIN_SERIES_ROWS) and a restated copy is a constant waiting to drift. */
+export const MIN_SMOOTH_WINDOW = 5
+export const MAX_SMOOTH_WINDOW = 101
+
 export interface PeakTrack {
   /** index into ys at the finest scale */
   pos: number
@@ -404,7 +451,7 @@ export interface PeakTrack {
  * values and are NEVER tuned against an expected peak count or identity. */
 export function detectPeaksTracked(ys: number[]): PeakTrack[] {
   const perScale: number[][] = []
-  for (let w = 5; w <= 101; w += 2) {
+  for (let w = MIN_SMOOTH_WINDOW; w <= MAX_SMOOTH_WINDOW; w += 2) {
     const half = (w / 2) | 0
     const sm: number[] = []
     for (let i = 0; i < ys.length; i++) {
@@ -644,8 +691,13 @@ Spec §8.8 (iv). A non-CROSSCHECKED card must be **numeric-literal-free by const
 - Consumes: nothing.
 - Produces:
   - `export interface LiteralHit { encoding: "digits" | "words" | "expression" | "scaled"; text: string; value: number }`
-  - `export function findValueMentions(card: string, values: number[], relTol?: number): LiteralHit[]` — `relTol` defaults to `1e-3` (relative). Empty array ⇒ the card is literal-free w.r.t. those values.
+  - `export function findAnyNumbers(card: string): LiteralHit[]` — **the primary entry point**, used by the ladder. Decodes every number the card states, in any encoding. Takes no target list, so no caller can shrink the checked set (F1).
+  - `export function findValueMentions(card: string, values: number[]): LiteralHit[]` — targeted form, retained because it is how the evasion fixture tests that a decoder resolves to the *right value*, not merely that it fired.
   - `export function isLiteralFree(card: string, values: number[]): boolean`
+
+**Decimal relocation is computed, not enumerated.** An earlier draft carried `SCALE_FACTORS = [1e-6 … 1e6]` — a hand-picked list whose omissions fail open. Replaced by mantissa comparison: normalize both numbers to `[1,10)` and require the base-10 exponent difference to be an integer. That covers every decimal relocation with no list to forget.
+
+**Standing caveat on this task's bad set (S5, unfixable by editing).** `evasion-cards.json` and the decoders share an author and a sitting, so the fixture cannot falsify the checker — both encode one person's list of encodings. This is the shared-prior argument that got L-B demoted, applied to us. The real bad set needs **generator diversity**: a different generator producing smuggling attempts against a checker it can see. That is spend, so it is a named follow-on with its own go, and the manifest must not claim coverage this fixture does not establish.
 
 - [ ] **Step 1: Write the adversarial fixture FIRST**
 
@@ -682,7 +734,7 @@ Create `opencode-plugin/test/bench-numeric-literal.test.ts`:
 ```ts
 import { test, expect } from "bun:test"
 import { readFileSync } from "node:fs"
-import { findValueMentions, isLiteralFree } from "../src/bench/numeric-literal.ts"
+import { findValueMentions, isLiteralFree, findAnyNumbers } from "../src/bench/numeric-literal.ts"
 
 const FIX = JSON.parse(readFileSync("test/fixtures/evasion-cards.json", "utf-8"))
 
@@ -715,8 +767,34 @@ test("multiple claim values are all checked", () => {
   expect(isLiteralFree("Peaks at 1580.6 and 2700.", [42, 2700])).toBe(false)
 })
 
-test("an empty value list makes every card literal-free (nothing to smuggle)", () => {
+// --- findAnyNumbers: the untargeted primitive the ladder uses ---------------
+
+test("findAnyNumbers needs no target list and catches every encoding", () => {
+  expect(findAnyNumbers("plain 1580.6").length).toBeGreaterThan(0)
+  expect(findAnyNumbers("one thousand five hundred eighty point six").length).toBeGreaterThan(0)
+  expect(findAnyNumbers("1e7/6327.285").length).toBeGreaterThan(0)
+  expect(findAnyNumbers("Convert before reporting; state your convention.")).toEqual([])
+})
+
+test("findAnyNumbers takes exactly one argument — no set for a caller to shrink", () => {
+  // F1 structural guard: the bypass was a claimant-emptied target list
+  expect(findAnyNumbers.length).toBe(1)
+})
+
+test("decimal relocation is computed from the mantissa, not matched to a scale list", () => {
+  // every one of these is 1580.6 relocated; none needs an entry anywhere
+  for (const s of ["1.5806e3", "0.15806e4", "15806000e-4", "1.5806e-9"]) {
+    expect(isLiteralFree(`value ${s}`, [1580.6])).toBe(false)
+  }
+  // a different mantissa is NOT a relocation
+  expect(isLiteralFree("value 1.5807e3", [1580.6])).toBe(true)
+})
+
+test("a NON-empty value list is still required for the targeted form to fire", () => {
+  // the targeted form is a decoder test, not a gate — the gate is findAnyNumbers.
+  // This asserts the OLD vacuous behavior is confined to the non-gating path.
   expect(isLiteralFree("anything at all, 1580.6", [])).toBe(true)
+  expect(findAnyNumbers("anything at all, 1580.6").length).toBeGreaterThan(0)
 })
 ```
 
@@ -852,7 +930,7 @@ function decodeExpressions(text: string): { text: string; value: number }[] {
   return out
 }
 
-const SCALE_FACTORS = [1e-6, 1e-3, 1e-2, 1e-1, 1, 10, 100, 1e3, 1e6]
+const REL_TOL = 1e-3
 
 /** Is `got` the same number as `want`, up to a relative tolerance? */
 function near(got: number, want: number, relTol: number): boolean {
@@ -861,26 +939,43 @@ function near(got: number, want: number, relTol: number): boolean {
   return Math.abs(got - want) / scale <= relTol
 }
 
-export function findValueMentions(card: string, values: number[], relTol = 1e-3): LiteralHit[] {
+/** Same number up to a DECIMAL RELOCATION — "1580.6", "1.5806e3" and "0.15806e4"
+ * are one value wearing three costumes. Computed from the mantissa rather than
+ * matched against a list of scale factors: a list's omissions fail open, and
+ * there is no principled place to stop enumerating. */
+function sameMantissa(got: number, want: number, relTol: number): boolean {
+  if (!Number.isFinite(got) || !Number.isFinite(want)) return false
+  if (got === 0 || want === 0) return got === want
+  const exp = Math.log10(Math.abs(got)) - Math.log10(Math.abs(want))
+  const k = Math.round(exp)
+  if (Math.abs(exp - k) > 1e-9) return false
+  return near(got / 10 ** k, want, relTol) && Math.sign(got) === Math.sign(want)
+}
+
+/** Every number the card states, in every encoding this module can decode.
+ * NO TARGET LIST — that is the point (F1). §8.8(iv)'s enforcement previously
+ * quantified over the claim's own numeric fields, so a claimant answering
+ * `FAMILY: none` emptied the set and walked the value through in prose while
+ * every decoder was asked to look for nothing. "Every number" is a set nobody
+ * supplies and therefore nobody can shrink. */
+export function findAnyNumbers(card: string): LiteralHit[] {
+  return [
+    ...decodeNumerals(card).map((d) => ({ encoding: "digits" as const, ...d })),
+    ...decodeWordNumbers(card).map((d) => ({ encoding: "words" as const, ...d })),
+    ...decodeExpressions(card).map((d) => ({ encoding: "expression" as const, ...d })),
+  ]
+}
+
+/** Targeted form: does the card state one of THESE values? Retained because it
+ * is how the evasion fixture proves a decoder resolves to the right VALUE, not
+ * merely that it fired. The ladder uses findAnyNumbers, never this. */
+export function findValueMentions(card: string, values: number[]): LiteralHit[] {
   if (values.length === 0) return []
   const hits: LiteralHit[] = []
-  const sources: [LiteralHit["encoding"], { text: string; value: number }[]][] = [
-    ["digits", decodeNumerals(card)],
-    ["words", decodeWordNumbers(card)],
-    ["expression", decodeExpressions(card)],
-  ]
-  for (const want of values) {
-    for (const [encoding, decoded] of sources) {
-      for (const d of decoded) {
-        if (near(d.value, want, relTol)) { hits.push({ encoding, text: d.text, value: d.value }); continue }
-        // unit-relocated: the same mantissa moved by a decimal scale
-        for (const f of SCALE_FACTORS) {
-          if (f !== 1 && near(d.value * f, want, relTol)) {
-            hits.push({ encoding: "scaled", text: d.text, value: d.value })
-            break
-          }
-        }
-      }
+  for (const d of findAnyNumbers(card)) {
+    for (const want of values) {
+      if (near(d.value, want, REL_TOL)) { hits.push(d); break }
+      if (sameMantissa(d.value, want, REL_TOL)) { hits.push({ ...d, encoding: "scaled" }); break }
     }
   }
   return hits
@@ -1303,7 +1398,7 @@ EOF
 
 Spec §8.9. The divide step needs the full numeric series; the audit sample truncates to head/tail-20 by design. The harness must pick the series file **structurally**, never from a per-task mapping (a mapping is the per-domain registry the spec names as cheating).
 
-**Rule, fail-closed:** among the eligible artifacts, an artifact *is* a candidate series iff it parses as two numeric columns with at least `MIN_SERIES_ROWS = 64` rows and at least 90% of its non-blank lines parsing. **Exactly one candidate** ⇒ that is the series. Zero or more than one ⇒ `no-series`, and the gate grants no numeric authority. Ambiguity is refused, not resolved by a heuristic.
+**Rule, fail-closed:** among the eligible artifacts, an artifact *is* a candidate series iff it parses as two numeric columns with at least `MIN_SERIES_ROWS` rows (= the detector's widest smoothing window, imported from `series-peaks.ts`) and at least 90% of its non-blank lines parsing. **Exactly one candidate** ⇒ that is the series. Zero or more than one ⇒ `no-series`, and the gate grants no numeric authority. Ambiguity is refused, not resolved by a heuristic.
 
 **Files:**
 - Modify: `opencode-plugin/src/bench/series-source.ts` (append)
@@ -1312,7 +1407,7 @@ Spec §8.9. The divide step needs the full numeric series; the audit sample trun
 **Interfaces:**
 - Consumes: `eligibleArtifacts`, `EligibleSet` from `./eligibility.ts` (Task 1); `parseSeries` (same file).
 - Produces:
-  - `export const MIN_SERIES_ROWS = 64`
+  - `export const MIN_SERIES_ROWS: number` — `= MAX_SMOOTH_WINDOW` from `series-peaks.ts` (101), never a restated literal
   - `export type SeriesSelection = { ok: true; path: string; xs: number[]; ys: number[] } | { ok: false; reason: "no-series" | "ambiguous" | "no-eligible-set" }`
   - `export function selectSeries(elig: EligibleSet): SeriesSelection`
 
@@ -1368,7 +1463,7 @@ test("an unresolvable eligible set yields no-eligible-set, never a guess", () =>
 test("a binary artifact is skipped without throwing", () => {
   const d = mkdtempSync(join(tmpdir(), "sel5-"))
   writeFileSync(join(d, "blob.bin"), Buffer.from([0, 1, 2, 0, 255, 0]))
-  writeFileSync(join(d, "data.dat"), twoCol(100))
+  writeFileSync(join(d, "data.dat"), twoCol(200))
   const r = selectSeries({ ok: true, root: d, files: [join(d, "blob.bin"), join(d, "data.dat")] })
   expect(r.ok && r.path.endsWith("data.dat")).toBe(true)
 })
@@ -1383,11 +1478,18 @@ Expected: FAIL — `selectSeries` is not exported.
 
 ```ts
 import type { EligibleSet } from "./eligibility.ts"
+import { MAX_SMOOTH_WINDOW } from "./series-peaks.ts"
 
-/** A structural floor, not a tuned one: below this the peak detector's own
- * persistence requirement (5 consecutive scales over windows up to 101) cannot
- * be evaluated at all, so the number is dictated by the detector's geometry. */
-export const MIN_SERIES_ROWS = 64
+/** Floored at the detector's own WIDEST SMOOTHING WINDOW, imported rather than
+ * restated so there is exactly one owner. Below that, the widest scale spans the
+ * whole series and the persistence test is degenerate — the floor is genuinely
+ * dictated by the detector's geometry.
+ *
+ * An earlier draft wrote 64 and justified it with this same sentence. It does
+ * not follow: the detector sweeps windows to 101, and 64 < 101. A round number
+ * wearing a derivation's clothes is worse than an admitted arbitrary constant,
+ * because the false derivation stops the next reader from checking. */
+export const MIN_SERIES_ROWS = MAX_SMOOTH_WINDOW
 
 export type SeriesSelection =
   | { ok: true; path: string; xs: number[]; ys: number[] }
@@ -2103,27 +2205,59 @@ function fixture(files: Record<string, string>) {
   return { ok: true as const, root: d, files: paths }
 }
 
-test("a secondary numeric source that agrees with the claim is CONSISTENT", () => {
-  const e = fixture({ "reference.txt": "expected peak 1580.6\nsecond peak 2700.1\n" })
-  const r = crosscheckClaim(e, [1580.6, 2700.1])
-  expect(r.verdict).toBe("CONSISTENT")
+test("a data-shaped source that agrees with the claim is CONSISTENT", () => {
+  const e = fixture({ "reference.dat": "1580.6 1.0\n2700.1 0.5\n1350.0 0.2\n" })
+  expect(crosscheckClaim(e, [1580.6, 2700.1]).verdict).toBe("CONSISTENT")
 })
 
-test("a secondary numeric source that contradicts the claim is INCONSISTENT", () => {
-  const e = fixture({ "reference.txt": "expected peak 1580.6\n" })
-  const r = crosscheckClaim(e, [999.9])
-  expect(r.verdict).toBe("INCONSISTENT")
+test("JSON metadata is a recognized data grammar", () => {
+  const e = fixture({ "meta.json": JSON.stringify({ peaks: [1580.6, 2700.1] }) })
+  expect(crosscheckClaim(e, [1580.6, 2700.1]).verdict).toBe("CONSISTENT")
 })
 
-test("a source with no numbers at all is undecidable, not consistent", () => {
-  const e = fixture({ "notes.md": "This file explains the format in prose only.\n" })
+test("a data-shaped source that contradicts the claim is INCONSISTENT", () => {
+  const e = fixture({ "reference.dat": "1580.6 1.0\n2700.1 0.5\n" })
+  expect(crosscheckClaim(e, [1580.6, 999.9]).verdict).toBe("INCONSISTENT")
+})
+
+test("tolerance comes from the SOURCE token's printed precision, not a constant", () => {
+  // "1580.6" asserts one decimal -> half-ulp is 0.05
+  const e = fixture({ "ref.dat": "1580.6 1.0\n0.0 0.0\n" })
+  expect(crosscheckClaim(e, [1580.62]).checks[0]!.verdict).toBe("consistent")
+  expect(crosscheckClaim(e, [1580.8]).checks[0]!.verdict).toBe("undecidable")
+  // a source printing more digits asserts more, and tightens the comparison
+  const e2 = fixture({ "ref.dat": "1580.600000 1.0\n0.0 0.0\n" })
+  expect(crosscheckClaim(e2, [1580.62]).checks[0]!.verdict).toBe("undecidable")
+})
+
+test("F2: a program's source is undecidable REGARDLESS of extension", () => {
+  // the fail-open incident registry this replaces would have missed .lua and
+  // .jl entirely, letting an embedded constant manufacture CROSSCHECKED
+  for (const name of ["eval.py", "eval.lua", "eval.jl", "runner"]) {
+    const e = fixture({ [name]: "THRESHOLD = 1580.6\nprint('ok')\n" })
+    const c = crosscheckClaim(e, [1580.6]).checks[0]!
+    expect(c.verdict).toBe("undecidable")
+    expect(c.why).toContain("not data-shaped")
+  }
+})
+
+test("prose mentioning the value is undecidable, not consistent (accepted coverage cost)", () => {
+  const e = fixture({ "notes.md": "The expected peak is around 1580.6 for this material.\n" })
   expect(crosscheckClaim(e, [1580.6]).verdict).toBe("NO-SOURCE")
+})
+
+test("F4: a prose file can no longer veto an otherwise consistent claim", () => {
+  const e = fixture({
+    "ref.dat": "1580.6 1.0\n2700.1 0.5\n",
+    "README.md": "Serve on port 8080. Released 2019. See 1580.6 in the notes.\n",
+  })
+  expect(crosscheckClaim(e, [1580.6, 2700.1]).verdict).toBe("CONSISTENT")
 })
 
 test("the series the claim was derived FROM is excluded — it is the claim's own input", () => {
   // the downstream-of-decision law: a source that IS the claim's input cannot
   // contradict the claim
-  const e = fixture({ "series.dat": "1 2\n2 3\n", "ref.txt": "peak at 1580.6\n" })
+  const e = fixture({ "series.dat": "1 2\n2 3\n", "ref.dat": "1580.6 1.0\n0.0 0.0\n" })
   const r = crosscheckClaim(e, [1580.6], e.files[0])
   expect(r.checks.some((c) => c.path.endsWith("series.dat"))).toBe(false)
   expect(r.verdict).toBe("CONSISTENT")
@@ -2134,17 +2268,14 @@ test("an unresolvable eligible set is NO-SOURCE — never partially checked", ()
 })
 
 test("EVERY eligible source is checked — the claimant never selects one", () => {
-  const e = fixture({ "a.txt": "1580.6\n", "b.txt": "1580.6\n", "c.txt": "9999.9\n" })
-  const r = crosscheckClaim(e, [1580.6])
+  const e = fixture({
+    "a.dat": "1580.6 1.0\n0.0 0.0\n",
+    "b.dat": "1580.6 2.0\n0.0 0.0\n",
+    "c.dat": "1580.6 1.0\n9999.9 0.0\n",
+  })
+  const r = crosscheckClaim(e, [1580.6, 2700.1])
   expect(r.checks.length).toBe(3)
-  expect(r.verdict).toBe("INCONSISTENT") // c.txt vetoes
-})
-
-test("an executable evaluator is undecidable, not executed (no uniform contract yet)", () => {
-  const e = fixture({ "eval.py": "THRESHOLD = 1580.6\nprint('ok')\n" })
-  const r = crosscheckClaim(e, [1580.6])
-  expect(r.checks[0]!.verdict).toBe("undecidable")
-  expect(r.checks[0]!.why).toContain("executable")
+  expect(r.verdict).toBe("INCONSISTENT") // none carries 2700.1; partial match vetoes
 })
 ```
 
@@ -2177,11 +2308,51 @@ export type SourceVerdict = "consistent" | "inconsistent" | "undecidable"
 export interface SourceCheck { path: string; verdict: SourceVerdict; why: string }
 export type LAVerdict = "CONSISTENT" | "INCONSISTENT" | "NO-SOURCE"
 
-/** File extensions whose content is a program, not data. These are decidable
- * only by EXECUTION under a uniform contract (§8.8), which does not exist yet —
- * reading constants out of source and calling that a crosscheck would be model-
- * free pattern matching dressed as verification. */
-const EXECUTABLE_EXT = /\.(py|sh|c|cpp|rs|js|ts|R|pl|rb|go|java)$/i
+/** DECIDABILITY IS A POSITIVE DATA-SHAPE CRITERION (F2, found independently by
+ * both lanes). An earlier draft classified sources by an extension denylist
+ * (.py|.sh|.c|…) — an incident registry that grows one entry per language
+ * encountered, and which fails OPEN in the worst direction: an eval.lua, an
+ * eval.jl or an extensionless script misses the regex, falls through to the
+ * numeric comparison, and a threshold constant embedded in that PROGRAM'S
+ * SOURCE manufactures `consistent` -> CONSISTENT -> CROSSCHECKED -> numeric
+ * injection. The list was the only thing enforcing §8.8's rule that the
+ * executable subclass needs EXECUTION and never text judgment over source, and
+ * it enforced it by enumeration.
+ *
+ * Inverted: a source is decidable iff it PARSES AS DATA — valid JSON, or a
+ * strong majority of non-blank lines that are numeric-token lines. Everything
+ * else is undecidable by default, so an unlisted language lands where it belongs
+ * without anyone having to have remembered it. Same shape as Task 1's
+ * eligibility criterion and Task 7's series selection.
+ *
+ * Two grammars are recognized, and a grammar is not a fact: a parser either
+ * succeeds on the bytes or it does not, and anything unrecognized is
+ * undecidable. Adding a data FORMAT later is adding a parser, exactly as adding
+ * an encoding to Task 4 is adding a decoder — mechanism growth with a
+ * fail-closed default, not an entry in a registry.
+ *
+ * NOTE THE COVERAGE COST, and do not soften it: prose that merely MENTIONS a
+ * number is now undecidable, not consistent. Grepping a value out of a README is
+ * as weak as grepping a constant out of source — the number could be a version,
+ * a year, a port, an example. This pushes real L-A coverage BELOW the census's
+ * 34%, and the manifest says so. */
+const DATA_LINE_FRACTION = 0.9
+
+function isDataShaped(text: string): boolean {
+  try {
+    const v = JSON.parse(text)
+    if (v !== null && typeof v === "object") return true
+  } catch {
+    /* not JSON — fall through to the numeric-table grammar */
+  }
+  const lines = text.split("\n").filter((l) => l.trim().length > 0)
+  if (lines.length === 0) return false
+  const numericLines = lines.filter((l) => {
+    const toks = l.trim().split(/[\s,;|]+/).filter((t) => t.length > 0)
+    return toks.length > 0 && toks.every((t) => Number.isFinite(Number(t.replace(",", "."))))
+  }).length
+  return numericLines / lines.length >= DATA_LINE_FRACTION
+}
 
 /** §8.8 (ii) combination rule. Inconsistency VETOES. CONSISTENT requires at
  * least one deterministically consistent source and no inconsistent one.
@@ -2193,21 +2364,32 @@ export function combineSourceVerdicts(checks: SourceCheck[]): LAVerdict {
   return "NO-SOURCE"
 }
 
-const REL_TOL = 1e-3
-
-function numbersIn(text: string): number[] {
-  const out: number[] = []
+function numbersIn(text: string): { value: number; text: string }[] {
+  const out: { value: number; text: string }[] = []
   for (const m of text.matchAll(/-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g)) {
     const v = Number(m[0])
-    if (Number.isFinite(v)) out.push(v)
+    if (Number.isFinite(v)) out.push({ value: v, text: m[0] })
   }
   return out
 }
 
+/** §8.8(iii): "tolerance derived from the source artifact, never claimant- or
+ * model-supplied." A bare REL_TOL would be author-supplied — the L-A analogue of
+ * the delta we spent a week deriving out of the merge gate. Derived instead from
+ * the SOURCE TOKEN'S OWN PRINTED PRECISION: a source that writes `1580.6`
+ * asserts one decimal place, so agreement means agreement to half an ulp of that
+ * representation. Reading the tolerance off the artifact is the whole point. */
+function toleranceOf(token: string): number {
+  const m = /\.(\d+)/.exec(token)
+  const decimals = m ? m[1]!.length : 0
+  // written case-insensitively rather than as a character class: `[eE](` reads
+  // as a markdown link to the repo's doc-check, which scans inside code fences
+  const expM = /e([-+]?\d+)/i.exec(token)
+  const exp = expM ? Number(expM[1]) : 0
+  return 0.5 * 10 ** (-decimals + exp)
+}
+
 function checkOne(path: string, claimValues: number[]): SourceCheck {
-  if (EXECUTABLE_EXT.test(path)) {
-    return { path, verdict: "undecidable", why: "executable source: needs a uniform invocation contract (§8.8), not implemented" }
-  }
   let text: string
   try {
     const buf = readFileSync(path)
@@ -2216,6 +2398,13 @@ function checkOne(path: string, claimValues: number[]): SourceCheck {
   } catch {
     return { path, verdict: "undecidable", why: "unreadable" }
   }
+  // F2: decidable iff it parses as DATA. A program's source is undecidable here
+  // whatever its extension — deciding it requires EXECUTION under a uniform
+  // contract (§8.8), and reading constants out of source would be exactly the
+  // pattern-matching-dressed-as-verification this module refuses.
+  if (!isDataShaped(text)) {
+    return { path, verdict: "undecidable", why: "not data-shaped: needs execution under a uniform contract (§8.8), not implemented" }
+  }
   const found = numbersIn(text)
   if (found.length === 0) return { path, verdict: "undecidable", why: "no numeric content" }
 
@@ -2223,13 +2412,18 @@ function checkOne(path: string, claimValues: number[]): SourceCheck {
   // claim-vs-source consistency is itself a downstream-of-decision statistic and
   // is never the sole arbiter of CROSSCHECKED.
   const matched = claimValues.filter((v) =>
-    found.some((f) => Math.abs(f - v) / Math.max(Math.abs(v), 1e-12) <= REL_TOL))
+    found.some((f) => Math.abs(f.value - v) <= toleranceOf(f.text)))
   if (matched.length === claimValues.length) {
     return { path, verdict: "consistent", why: `all ${claimValues.length} claim values appear in source` }
   }
   if (matched.length === 0) {
     return { path, verdict: "undecidable", why: "source numbers are unrelated to the claim" }
   }
+  // F4: a veto is only credible from a data-shaped source, which is all that
+  // reaches here now. A prose README mentioning one of 17 claim values (a port,
+  // a year, a version) would otherwise convert into a veto against an otherwise
+  // CONSISTENT claim — safe in direction, but it would make L-A fragile in
+  // exactly the 34% of tasks where it exists at all.
   return { path, verdict: "inconsistent", why: `${matched.length}/${claimValues.length} claim values appear; source disagrees on the rest` }
 }
 
@@ -2293,10 +2487,18 @@ Spec §8.8 (i)+(iv) and the authority policy. **CROSSCHECKED is DEFINED as the c
 - Consumes: `GateVerdict` (Task 9); `LAVerdict` (Task 11); `isLiteralFree` (Task 4).
 - Produces:
   - `export type Authority = "numeric" | "criteria-class"`
-  - `export interface LadderInput { gate: GateVerdict; la: LAVerdict; card: string; claimValues: number[] }`
+  - `export interface LadderInput { gate: GateVerdict; la: LAVerdict; card: string }`
   - `export interface LadderResult { crosschecked: boolean; authority: Authority; inject: boolean; reason: string }`
   - `export function isCrosschecked(gate: GateVerdict, la: LAVerdict): boolean`
   - `export function applyLadder(input: LadderInput): LadderResult`
+
+**F1 — the fix this task exists to carry (cross-lane review, CONFIRMED critical).** An earlier draft passed `claimValues` into the literal check, taking them from the model's own ANCHOR CLAIM block. That made §8.8(iv)'s enforcement **quantify over a set the audited party supplies** — the downstream-of-decision law at a fourth address, with the removal ritual performed on the DECODERS while the VALUE SET stayed claimant-owned. Zero-sophistication bypass: answer `FAMILY: none` (so `claimValues` is empty) and put the number in the prose. Every decoder is bypassed because the checker is asked to look for nothing.
+
+**So a non-CROSSCHECKED card must contain NO decodable number at all.** The checked set is "every number", which nobody supplies. `claimValues` is gone from this module's inputs — not defaulted, not optional, gone.
+
+**Why the harness-derived-set alternative was rejected** (anchor positions under both families ∪ claimed values): on the raman fixture it appears to work, because `1580.6` and the anchor's `1/x` value `1.5806e-4` share a mantissa, so decimal-relocation matching catches it. That is an arithmetic coincidence of *this fixture's* `1e7` relationship. Give the family a nonzero intercept and the mantissa relation vanishes along with the catch. A defence that works on the fixture we have and not on the general case is the §1 pattern; it was rejected on those grounds, not on cost.
+
+**Accepted cost, stated honestly:** legitimate criteria cards can no longer say "there are 2 columns". Task 10's prompt is amended to ask for numeral-free criteria prose, which aligns the model's incentive instead of fighting it. The failure direction is refusal-to-inject — the conservative one.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2329,40 +2531,62 @@ test("the source half ALONE is insufficient", () => {
 // --- the authority ladder ---------------------------------------------------
 
 test("CROSSCHECKED permits numeric injection", () => {
-  const r = applyLadder({ gate: "accept", la: "CONSISTENT", card: DIRTY, claimValues: [1580.6] })
+  const r = applyLadder({ gate: "accept", la: "CONSISTENT", card: DIRTY })
   expect(r.crosschecked).toBe(true)
   expect(r.authority).toBe("numeric")
   expect(r.inject).toBe(true)
 })
 
 test("NOT crosschecked forces criteria-class, and a numeric card is REFUSED", () => {
-  const r = applyLadder({ gate: "accept", la: "NO-SOURCE", card: DIRTY, claimValues: [1580.6] })
+  const r = applyLadder({ gate: "accept", la: "NO-SOURCE", card: DIRTY })
   expect(r.authority).toBe("criteria-class")
   expect(r.inject).toBe(false)
   expect(r.reason).toContain("numeric literal")
 })
 
 test("NOT crosschecked with a genuinely literal-free card DOES inject", () => {
-  const r = applyLadder({ gate: "uncheckable", la: "NO-SOURCE", card: CLEAN, claimValues: [1580.6] })
+  const r = applyLadder({ gate: "uncheckable", la: "NO-SOURCE", card: CLEAN })
   expect(r.authority).toBe("criteria-class")
   expect(r.inject).toBe(true)
 })
 
 test("(iv) content enforcement uses the evasion-aware checker, not a digit regex", () => {
   const spelled = "The peak sits near one thousand five hundred eighty point six."
-  const r = applyLadder({ gate: "accept", la: "NO-SOURCE", card: spelled, claimValues: [1580.6] })
+  expect(applyLadder({ gate: "accept", la: "NO-SOURCE", card: spelled }).inject).toBe(false)
+})
+
+// --- F1: the checked set is not the claimant's ------------------------------
+
+test("F1 REGRESSION: FAMILY:none plus a numeric card cannot smuggle the value", () => {
+  // the confirmed critical. The old signature took the claim's own value list,
+  // so answering FAMILY:none emptied it and every decoder was asked to look for
+  // nothing. There is now no input by which a caller can empty the checked set.
+  const r = applyLadder({ gate: "uncheckable", la: "NO-SOURCE", card: DIRTY })
+  expect(r.inject).toBe(false)
+})
+
+test("F1 REGRESSION: applyLadder has no claim-supplied value input at all", () => {
+  // asserted structurally, so a future refactor cannot reintroduce the
+  // quantifier by adding an optional parameter
+  expect(applyLadder.length).toBe(1)
+  const probe: Record<string, unknown> = { gate: "accept", la: "NO-SOURCE", card: DIRTY, claimValues: [] }
+  expect(applyLadder(probe as any).inject).toBe(false) // an ignored extra field changes nothing
+})
+
+test("a decoy number unrelated to any claim still refuses a criteria-class card", () => {
+  const r = applyLadder({ gate: "uncheckable", la: "NO-SOURCE", card: "Report the value 4242 in the converted axis." })
   expect(r.inject).toBe(false)
 })
 
 test("REPLICATED-only is not a status this ladder can express — numeric requires CROSSCHECKED, full stop", () => {
   // L-B is demoted and confers no numeric authority; there is deliberately no
   // input by which a caller could grant it
-  const keys = Object.keys(applyLadder({ gate: "accept", la: "CONSISTENT", card: CLEAN, claimValues: [] }))
+  const keys = Object.keys(applyLadder({ gate: "accept", la: "CONSISTENT", card: CLEAN }))
   expect(keys).toEqual(["crosschecked", "authority", "inject", "reason"])
 })
 
 test("an empty card never injects", () => {
-  expect(applyLadder({ gate: "accept", la: "CONSISTENT", card: "   ", claimValues: [] }).inject).toBe(false)
+  expect(applyLadder({ gate: "accept", la: "CONSISTENT", card: "   " }).inject).toBe(false)
 })
 ```
 
@@ -2393,7 +2617,7 @@ Expected: FAIL — module not found.
  * cannot act is worth more than one that acts everywhere. */
 import type { GateVerdict } from "./merge-gate.ts"
 import type { LAVerdict } from "./source-crosscheck.ts"
-import { isLiteralFree, findValueMentions } from "./numeric-literal.ts"
+import { findAnyNumbers } from "./numeric-literal.ts"
 
 export type Authority = "numeric" | "criteria-class"
 
@@ -2401,8 +2625,6 @@ export interface LadderInput {
   gate: GateVerdict
   la: LAVerdict
   card: string
-  /** the claim's own numeric fields — what a criteria-class card may not state */
-  claimValues: number[]
 }
 
 export interface LadderResult {
@@ -2426,10 +2648,12 @@ export function applyLadder(input: LadderInput): LadderResult {
     return { crosschecked, authority, inject: true, reason: `CROSSCHECKED (gate=${input.gate}, L-A=${input.la})` }
   }
   // §8.8 (iv): a non-CROSSCHECKED card must be numeric-literal-free BY
-  // CONSTRUCTION, mechanically checked before injection. A prose card that
-  // smuggles the number is a numeric injection wearing the criteria-class label.
-  if (!isLiteralFree(input.card, input.claimValues)) {
-    const hits = findValueMentions(input.card, input.claimValues)
+  // CONSTRUCTION. The checked set is EVERY decodable number, not the claim's own
+  // fields: quantifying over a claimant-supplied set let `FAMILY: none` empty it
+  // and walk the value through in prose (F1). Nobody supplies "every number", so
+  // nobody can shrink it.
+  const hits = findAnyNumbers(input.card)
+  if (hits.length > 0) {
     return {
       crosschecked,
       authority,
@@ -2557,8 +2781,9 @@ In `convention-audit.ts`: delete `RevalTransform`, `applyTransform`, `RevalLandi
 ```ts
 import { eligibleArtifacts } from "./eligibility.ts"
 import { selectSeries } from "./series-source.ts"
-import { detectPeaksTracked } from "./series-peaks.ts"
-import { deriveSeriesNoise, type SeriesNoise } from "./noise-sigma.ts"
+import { detectPeaksTracked, type PeakTrack } from "./series-peaks.ts"
+import { FIT_FAMILY } from "./reval-fit.ts"
+import { deriveSeriesNoise, sigmaFraction, VALIDATED_SIGMA_FRACTION, type SeriesNoise } from "./noise-sigma.ts"
 import { mergeGate, type GateVerdict } from "./merge-gate.ts"
 import { crosscheckClaim, type LAVerdict } from "./source-crosscheck.ts"
 import { applyLadder, type Authority } from "./value-truth.ts"
@@ -2595,18 +2820,29 @@ Then in `runAuditUncached`, replace the revalidation gate block (currently `conv
     let claimValues: number[] = []
     if (parsed.kind === "claim" && anchors) {
       claimValues = parsed.canonicals
-      const u = parsed.family === "inv-x" ? (x: number) => 1 / x : (x: number) => x
-      const noise = deriveSeriesNoise(
-        anchorXs, anchorYs, anchorTracks, u,
-      )
-      gate = mergeGate(noise, parsed.canonicals).verdict
+      // Q4 residual, closed: sigmaFraction is claim-free per family, but the
+      // CLAIMANT PICKS THE FAMILY, so it selects between two artifact-derived
+      // boundary ratios — a claim uncheckable under x could be checkable under
+      // inv-x. Bounded (a binary choice among harness-derived quantities, no
+      // influence on values), but free is free. Require the validated domain
+      // under BOTH frozen members before grading under the claimed one, and the
+      // choice buys nothing.
+      const perFamily = FIT_FAMILY.map((f) =>
+        deriveSeriesNoise(anchors.xs, anchors.ys, anchors.tracks, f.u))
+      const allInDomain = perFamily.every(
+        (nz) => sigmaFraction(nz.us, nz.sigmaU) <= VALIDATED_SIGMA_FRACTION)
+      if (allInDomain) {
+        const u = parsed.family === "inv-x" ? (x: number) => 1 / x : (x: number) => x
+        const noise = deriveSeriesNoise(anchors.xs, anchors.ys, anchors.tracks, u)
+        gate = mergeGate(noise, parsed.canonicals).verdict
+      }
     }
 
     const la = anchors
       ? crosscheckClaim(eligibleArtifacts(paths, task), claimValues, anchors.seriesPath).verdict
       : ("NO-SOURCE" as LAVerdict)
 
-    const ladder = applyLadder({ gate, la, card, claimValues })
+    const ladder = applyLadder({ gate, la, card })
     if (!ladder.inject) {
       return {
         card: null, rawAudit: outcome.text, verdict: "MISMATCH",
@@ -2704,9 +2940,20 @@ test("raman is structurally NO-SOURCE, so an honest claim is STILL criteria-clas
   const gate = mergeGate(ctx.noise, honest).verdict
   const la = crosscheckClaim(eligibleArtifacts({ tbRoot: PROBE_ROOT } as any, "raman-fitting-audit"), honest, ctx.seriesPath).verdict
   expect(la).toBe("NO-SOURCE")
-  const r = applyLadder({ gate, la, card: "Convert before reporting.", claimValues: honest })
+  const r = applyLadder({ gate, la, card: "Convert before reporting." })
   expect(r.crosschecked).toBe(false)
   expect(r.authority).toBe("criteria-class")
+})
+
+test("F1 STANDING REGRESSION on the real tree: FAMILY:none cannot smuggle a value", () => {
+  // the confirmed critical, end to end. FAMILY:none leaves the gate uncheckable
+  // and L-A NO-SOURCE; the card must still be refused for stating the number.
+  const r = applyLadder({
+    gate: "uncheckable", la: "NO-SOURCE",
+    card: "The converted axis places the main feature at 1580.6.",
+  })
+  expect(r.inject).toBe(false)
+  expect(r.reason).toContain("numeric literal")
 })
 
 test("a fabricated-but-consistent claim reaches the SAME criteria-class ceiling", () => {
@@ -2715,7 +2962,7 @@ test("a fabricated-but-consistent claim reaches the SAME criteria-class ceiling"
   const ctx = buildAnchorContext({ tbRoot: PROBE_ROOT } as any, "raman-fitting-audit")!
   const fabricated = ctx.noise.us.map((u) => 4242 + 7 * u)
   const gate = mergeGate(ctx.noise, fabricated).verdict
-  const r = applyLadder({ gate, la: "NO-SOURCE", card: "Convert before reporting.", claimValues: fabricated })
+  const r = applyLadder({ gate, la: "NO-SOURCE", card: "Convert before reporting." })
   expect(r.authority).toBe("criteria-class")
   expect(r.inject).toBe(true) // the card is literal-free, so the criteria card ships
 })
@@ -2764,6 +3011,82 @@ EOF
 
 ---
 
+### Task 16: extent-tolerance certificates for the unswept constants (F3)
+
+Cross-lane review's F3: `REG_LEVEL` earned a measured non-load-bearing certificate; four other constants did not, and they sit exactly where the next architect review will drill. None is an answer key. All are asserted-stable and never swept, which by this project's own standard is a claim without evidence.
+
+**The constants:** the detector quartet (90th-percentile threshold, ≥5-scale persistence, ≤3 match distance, the 5..101 window range) — a code comment asserts "NEVER tuned", which is a statement about intent, not a measurement; and `DATA_LINE_FRACTION = 0.9` in `source-crosscheck.ts` plus the 0.9 parse-coverage bound in `selectSeries`.
+
+**The certificate:** for each constant, sweep it across a wide unchosen range and show the VERDICTS on the pinned cases do not move. Same argument that retired `R_THRESHOLD_PLACEHOLDER` — a constant whose neighbourhood is flat is not load-bearing, and the flatness is measured, not asserted. A constant whose verdicts DO move is load-bearing and must be derived or declared, not left in place.
+
+**Files:**
+- Create: `opencode-plugin/test/bench-constant-sweeps.test.ts`
+- Modify: `docs/loop-probes/arming-increment-20260821/regression-manifest.md` (record the measured extents)
+
+- [ ] **Step 1: Write the sweep test**
+
+```ts
+/** F3 extent-tolerance certificates. Each constant is swept across a range far
+ * wider than any plausible tuning, asserting the pinned verdicts do not move.
+ * A sweep that DOES move a verdict is a finding: that constant is load-bearing
+ * and needs a derivation, not a comment saying it was never tuned. */
+import { test, expect } from "bun:test"
+import { detectPeaksTracked } from "../src/bench/series-peaks.ts"
+import { readSeriesFile } from "../src/bench/series-source.ts"
+
+const GRA = "term-bench2/probe-tasks/raman-fitting-audit/environment"
+
+test("detector persistence floor: anchor count is stable across 3..12 scales", () => {
+  const { ys } = readSeriesFile(`${GRA}/task-deps/graphene.dat`, GRA)
+  // detectPeaksTracked must accept the floor as a parameter for this sweep;
+  // default stays 5. Record every count in the manifest, not just the spread.
+  const counts = [3, 4, 5, 6, 8, 10, 12].map((k) => detectPeaksTracked(ys, { persistence: k }).length)
+  expect(new Set(counts).size).toBe(1)
+})
+
+test("detector match distance: anchor count is stable across 1..8 samples", () => {
+  const { ys } = readSeriesFile(`${GRA}/task-deps/graphene.dat`, GRA)
+  const counts = [1, 2, 3, 4, 6, 8].map((d) => detectPeaksTracked(ys, { matchDistance: d }).length)
+  expect(new Set(counts).size).toBe(1)
+})
+
+test("detector percentile threshold: anchor count is stable across 0.80..0.95", () => {
+  const { ys } = readSeriesFile(`${GRA}/task-deps/graphene.dat`, GRA)
+  const counts = [0.80, 0.85, 0.90, 0.95].map((p) => detectPeaksTracked(ys, { percentile: p }).length)
+  expect(new Set(counts).size).toBe(1)
+})
+```
+
+Widen `detectPeaksTracked` to `detectPeaksTracked(ys, opts?: { persistence?: number; matchDistance?: number; percentile?: number })`, defaulting to the pre-registered values so no production behaviour changes.
+
+- [ ] **Step 2: Run the sweeps and RECORD WHAT THEY SAY**
+
+Run: `cd opencode-plugin && bun test test/bench-constant-sweeps.test.ts`
+
+**If a sweep fails, that is the deliverable, not a defect to tune away.** Do not narrow the range to make it pass. Record the measured extent in the manifest (`stable over X..Y, moves at Z`) and flag the constant as load-bearing for the next review. A constant with a narrow stable region is exactly what this task exists to surface.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd opencode-plugin && bun test 2>&1 | tail -5
+cd .. && bun scripts/gate-check.ts
+git add opencode-plugin/src/bench/series-peaks.ts opencode-plugin/test/bench-constant-sweeps.test.ts
+git commit -m "$(cat <<'EOF'
+test(lane-a): extent-tolerance certificates for the unswept constants (F3)
+
+The chi-square level earned a measured non-load-bearing certificate; the
+detector quartet and the two 0.9 bounds never did — a comment asserting "never
+tuned" states intent, not evidence. Each is now swept across a range wider than
+any plausible tuning, asserting the pinned verdicts do not move. A sweep that
+moves a verdict is a finding to record, never a range to narrow.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
 ### Task 15: regression manifest, spec addendum, resume handoff
 
 **Files:**
@@ -2796,9 +3119,28 @@ implicitly satisfied.
 | §8.8(ii) full-source coverage + combination rule | `bench-source-crosscheck.test.ts` |
 | §8.8(iii) deterministic CONSISTENT, no model arbiter | `bench-source-crosscheck.test.ts` (no daemon import) |
 | §8.8(iv) numeric-literal-free incl. evasion encodings | `bench-numeric-literal.test.ts` + `fixtures/evasion-cards.json` |
+| §8.8(iv) checked set is NOT claimant-supplied (F1) | `bench-value-truth.test.ts` FAMILY:none regressions + `bench-dnc-integration.test.ts` |
 | §8.8(v) pristine pre-execution snapshot | `bench-eligibility.test.ts` (reads task-definition tree only) |
 | §8.8 authority ladder, numeric requires CROSSCHECKED | `bench-value-truth.test.ts` + `bench-dnc-integration.test.ts` |
+| §8.8 executable subclass never text-judged (F2) | `bench-source-crosscheck.test.ts` (.py/.lua/.jl/extensionless all undecidable) |
 | §8.9 full-series data path | `bench-series-source.test.ts` `selectSeries` |
+| Constant extents measured, not asserted (F3) | `bench-constant-sweeps.test.ts` |
+
+## Coverage, honestly restated after review
+
+The census's 34% multi-artifact figure is an UPPER BOUND on L-A coverage, not the
+coverage. Two review findings cut it further, both deliberately:
+
+- **F2** — a source is decidable only if it parses as DATA. Program sources are
+  undecidable whatever their extension, which is the spec's own rule finally
+  enforced structurally rather than by an extension list.
+- **F4/prose** — a file that merely MENTIONS a number is undecidable, not
+  consistent. Grepping a value out of a README is as weak as grepping a constant
+  out of source.
+
+Real coverage is therefore below 34% and is not yet measured. **Measuring it is a
+follow-on**: re-run `census-gen.py` against `isDataShaped` rather than against
+file counts. Until then the manifest claims no number.
 
 ## Not implemented (named, not silently skipped)
 
@@ -2809,6 +3151,25 @@ implicitly satisfied.
 - **Second fixture for the sigma ESTIMATOR** — §8.2(c) says the next fixture
   class (heteroscedastic / peak-correlated noise) tests the estimator, not just
   the predicate. Both current fixtures are homoscedastic. Open transfer debt.
+  **Cross-reference (cross-lane review, Q4):** the `inv-x` family member makes
+  `sigma_u` heteroscedastic by construction, while V7's validation was
+  homoscedastic — so every `inv-x` claim already rides this debt, not just a
+  hypothetical future fixture.
+- **A bad set the checker's author did not write** — `evasion-cards.json` shares
+  an author with the decoders it tests, so it cannot falsify them (the L-B
+  shared-prior argument, applied to us). Needs generator diversity; that is
+  spend, with its own go.
+- **True L-A coverage under the tightened decidability rule** — see above.
+
+## Known imprecision, recorded rather than fixed
+
+`mergeAccept` returns `reject-degenerate` both when an attack was caught (V1) and
+when the geometry simply cannot discriminate (V2, an honest claim on equal
+spacing). The harness cannot distinguish these — both are "an alternate also
+fits" — but the NAME reads as "you are wrong" where the design language insists
+uncheckable ≠ wrong. The verdict string stays as-is because Task 8 pins it to
+derive.py; the audit trail should surface the degenerate case as
+UNCHECKABLE-GEOMETRY in its reason text so the record does not overclaim.
 
 ## Reference
 
