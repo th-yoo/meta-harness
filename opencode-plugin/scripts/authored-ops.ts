@@ -40,6 +40,9 @@ function stampLiveEligible(base: Playbook, finalPb: Playbook, ops: PlaybookOp[],
 export function applyAuthoredOps(a: { storeRoot: string; repoRoot: string; ops: PlaybookOp[]; provenance: string }): { applied: boolean; refusals: string[] } {
   const refusals: string[] = []
   const liveEligible = new Map<PlaybookOp, boolean>()
+  // Read up front (not just after the screen loop): the dup-hookrule guard
+  // below needs to compare each op against the CURRENT active playbook.
+  const base = readPlaybook(a.storeRoot) ?? { schemaVersion: 1, nextId: 1, bullets: [] }
   for (const op of a.ops) {
     if (op.op === "delete") continue
     if (op.check) {
@@ -51,11 +54,20 @@ export function applyAuthoredOps(a: { storeRoot: string; repoRoot: string; ops: 
     }
     if (op.hookRule) {
       const hs = screenHookRule(op.hookRule)
-      if (!hs.ok) refusals.push(`${op.op}:"${op.text.slice(0, 40)}" hookRule ${hs.violation}`)
+      if (!hs.ok) { refusals.push(`${op.op}:"${op.text.slice(0, 40)}" hookRule ${hs.violation}`); continue }
+      // Dup-hookrule guard (propose.ts's screenOpsHookRules precedent, mirrored
+      // here since this lane has no LLM curator to catch a mechanical replay):
+      // refuse an add/update whose toolMatcher+inputPattern already exists on
+      // an ACTIVE bullet in the target playbook — without this, re-running a
+      // seed script doubles every rule under new ids each time it's invoked.
+      const selfId = op.op === "update" ? op.id : undefined
+      const dup = base.bullets.some((b) =>
+        b.status === "active" && b.id !== selfId && b.hookRule &&
+        b.hookRule.toolMatcher === hs.rule.toolMatcher && b.hookRule.inputPattern === hs.rule.inputPattern)
+      if (dup) refusals.push(`${op.op}:"${op.text.slice(0, 40)}" hookRule hook-screen:duplicate-rule`)
     }
   }
   if (refusals.length > 0) return { applied: false, refusals }
-  const base = readPlaybook(a.storeRoot) ?? { schemaVersion: 1, nextId: 1, bullets: [] }
   const next = applyPlaybookOps(base, a.ops)
   stampLiveEligible(base, next, a.ops, liveEligible)
   const p = path.join(a.storeRoot, "active", "playbook.json")
@@ -65,6 +77,24 @@ export function applyAuthoredOps(a: { storeRoot: string; repoRoot: string; ops: 
   exportHookRules(a.repoRoot, a.storeRoot)
   console.error(`authored-ops[${a.provenance}]: applied ${a.ops.length} op(s)`)
   return { applied: true, refusals: [] }
+}
+
+/** CWD/store precondition (shadow-lane upstream fix, task 3): both
+ * backfill-mh-build-checks.ts and seed-hook-rules.ts resolve storeRoot as a
+ * path RELATIVE to process.cwd() and applyAuthoredOps's own mkdirSync(...,
+ * {recursive:true}) will happily create a brand-new, empty store rather than
+ * erroring — so running either script from the wrong directory silently
+ * builds a phantom store next to whatever cwd you happened to be in instead
+ * of touching the real one. An existing store always has an
+ * active/playbook.json (migrateSystemToPlaybook / a prior applyAuthoredOps
+ * run writes it); its absence is the cheap, reliable "wrong cwd or brand-new
+ * store" signal. Returns an error message (never throws / exits) so callers
+ * — main blocks AND tests — can decide what to do with it. */
+export function checkStorePrecondition(storeRoot: string): string | null {
+  const p = path.join(storeRoot, "active", "playbook.json")
+  return fs.existsSync(p)
+    ? null
+    : `refused: no ${p} — storeRoot is resolved relative to process.cwd(); run from the repo root (or pass an absolute storeRoot) so this doesn't silently create a phantom store.`
 }
 
 if (import.meta.main) {

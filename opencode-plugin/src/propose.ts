@@ -2071,7 +2071,7 @@ merging it into a broader one. If both merged bullets already share a tag (or
 neither is tagged), keep it as-is; only set \`generality\`/\`slice\` on the surviving
 \`update\` when the merge would otherwise lose a more-specific tag.
 
-Optionally, an "update" op may carry or revise "check": {"cmd": "...", "timeoutMs": <number>} on a bullet that already warrants one, under the same constraints: mechanically verifiable behavior only, workspace-scoped, never stores/network/packages; to drop a check that no longer matches the bullet, set "check": null explicitly (omitting the field keeps whatever check is already there — it does NOT drop it).
+Optionally, an "update" op may carry or revise "check": {"cmd": "...", "timeoutMs": <number>} on a bullet that already warrants one, under the same constraints: mechanically verifiable behavior only, workspace-scoped, never stores/network/packages; to drop a check that no longer matches the bullet, set "check": null explicitly (omitting the field keeps whatever check is already there — it does NOT drop it). A check object may also carry an optional "failProbe": {"cmd": "...", "timeoutMs": <number>} used to calibrate that the check can actually fail — replacing "check" wholesale (any non-null, non-omitted value) replaces the ENTIRE object, so a revision that omits "failProbe" silently drops the existing probe; repeat it verbatim if the bullet's check was already calibrated and should stay that way.
 
 ${json
   ? `## Reply format — respond with ONE JSON object and NOTHING else

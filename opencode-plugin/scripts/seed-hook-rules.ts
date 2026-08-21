@@ -5,6 +5,25 @@
 // "shadow" on every add (harness-store.ts applyPlaybookOps); screenHookRule
 // rejects any op that tries to smuggle `mode` in.
 //
+// Controller ruling (shadow-lane upstream fix review, task 1 — export
+// clobber): applyAuthoredOps re-exports BOTH .km tables (hook-rules.json AND
+// rule-checks.json) from its single storeRoot on every call (see
+// rule-checks-export.ts / hook-rules-export.ts headers: "single-layer by
+// design" — each export reflects only the layer it was just pointed at).
+// This script originally targeted `.kkamak/global` while
+// backfill-mh-build-checks.ts targets `.kkamak/roles/mh-build` — two
+// DIFFERENT layers. Whichever of the two ran second would export rules:[]
+// for the layer it does NOT touch (that layer has no bullets carrying the
+// other lane's rules/checks from this run), silently wiping whatever the
+// first script had just exported for it. Fixed by pointing this seed at the
+// SAME layer as the backfill (`.kkamak/roles/mh-build`): last-writer-wins
+// WITHIN one layer is ordinary playbook mutation, not a clobber — the hazard
+// was specifically two scripts straddling different layers. This is a point
+// fix, not a systemic one: any future script pair authoring ops into two
+// DIFFERENT layers (e.g. a project-global seed run alongside a role seed)
+// still clobbers each other's exported table — standing pre-existing
+// clobber hazard, noted here, not fixed.
+//
 // All four literal patterns from the brief needed a portable-subset fix to
 // clear screenHookRule's anchor gate (^-leading OR $-terminal per
 // hook-rule-screen.ts's isPortablePattern/anchor check) AND, per review
@@ -20,7 +39,7 @@
 // must/must-not table PLUS compound-command probes and a mid-word decoy
 // under the real evalHookRules (test/seed-hook-rules-patterns.test.ts).
 import type { PlaybookOp } from "../src/harness-store.ts"
-import { applyAuthoredOps } from "./authored-ops.ts"
+import { applyAuthoredOps, checkStorePrecondition } from "./authored-ops.ts"
 
 export const SEED_OPS: PlaybookOp[] = [
   // Incident class: store deletion/overwrite without reading (CLAUDE.md rule;
@@ -60,11 +79,17 @@ export const SEED_OPS: PlaybookOp[] = [
 ]
 
 if (import.meta.main) {
+  const storeRoot = ".kkamak/roles/mh-build"
+  const preErr = checkStorePrecondition(storeRoot)
+  if (preErr) { console.error(preErr); process.exit(2) }
   const r = applyAuthoredOps({
-    storeRoot: ".kkamak/global",
+    storeRoot,
     repoRoot: process.cwd(),
     ops: SEED_OPS,
-    provenance: "seed-hook-rules-20260822",
+    // -mh-build suffix records WHY (see header comment): same layer as
+    // backfill-mh-build-checks.ts, not .kkamak/global, to avoid the
+    // cross-layer export clobber.
+    provenance: "seed-hook-rules-20260822-mh-build",
   })
   if (!r.applied) { console.error("REFUSED:\n  " + r.refusals.join("\n  ")); process.exit(1) }
 }

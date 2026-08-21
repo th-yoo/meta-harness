@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test"
 import * as fs from "node:fs"; import * as path from "node:path"; import * as os from "node:os"
-import { BACKFILL_OPS } from "../scripts/backfill-mh-build-checks.ts"
+import { BACKFILL_OPS, checkB3HasCheck, checkB3CheckDropped } from "../scripts/backfill-mh-build-checks.ts"
 import { screenCheck } from "../src/check-screen.ts"
 import { calibrateCheck } from "../src/check-calibrate.ts"
 import { applyAuthoredOps } from "../scripts/authored-ops.ts"
@@ -65,4 +65,41 @@ test("end-to-end: applying BACKFILL_OPS to a store carrying b3 drops its check a
   const exported = table.rules.find((r: { cmd: string }) => r.cmd === addOp.check!.cmd)
   expect(exported).toBeDefined()
   expect(exported.state).toBe("shadow")
+})
+
+test("(d) CWD/store precondition: checkB3HasCheck/checkB3CheckDropped bracket the apply correctly", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mh-backfill-precond-store-"))
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "mh-backfill-precond-repo-"))
+  fs.mkdirSync(path.join(root, "active"), { recursive: true })
+  fs.writeFileSync(path.join(root, "active", "playbook.json"), JSON.stringify({
+    schemaVersion: 1, nextId: 2,
+    bullets: [{
+      id: "b3", text: "old b3 text", helpful: 52, harmful: 0, addedBy: "test",
+      status: "active", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
+      check: { cmd: "jobs -r | wc -l", timeoutMs: 5000, state: "live" },
+    }],
+  }))
+
+  // pre-apply: b3 carries a check → precondition passes (null = ok)
+  expect(checkB3HasCheck(root)).toBeNull()
+
+  applyAuthoredOps({ storeRoot: root, repoRoot: repo, ops: BACKFILL_OPS, provenance: "test" })
+
+  // post-apply: b3's check was dropped → assertion passes (null = ok)
+  expect(checkB3CheckDropped(root)).toBeNull()
+})
+
+test("(d) checkB3HasCheck refuses a store where b3 has no check (already migrated / wrong store)", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mh-backfill-precond-nob3-"))
+  fs.mkdirSync(path.join(root, "active"), { recursive: true })
+  fs.writeFileSync(path.join(root, "active", "playbook.json"), JSON.stringify({
+    schemaVersion: 1, nextId: 2,
+    bullets: [{
+      id: "b3", text: "already migrated", helpful: 52, harmful: 0, addedBy: "test",
+      status: "active", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
+    }],
+  }))
+  const msg = checkB3HasCheck(root)
+  expect(msg).not.toBeNull()
+  expect(msg).toContain("b3")
 })
