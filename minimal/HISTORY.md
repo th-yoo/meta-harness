@@ -2206,3 +2206,52 @@ measured at 6.4% and promoted to visible measurement debt; the arming
 increment is implementation-only against a spec where every constant is
 derived or convention, every checker has its breaking input, and every
 blind spot is named in writing.
+
+## 2026-08-21 — lane B: the convergence migration, and the spawn edge that bit twice
+
+The kkamak/cc-gate-plugin fork finally started closing from the right
+direction: proven instruments INTO the production kernel, config-gated,
+instead of the lab plugin drifting further. kkamak 0.8.0 (`25f6c4e`, pushed)
+carries a generic extension seam — gate.json `extensions:{name:true}`, kernel
+byte-untouched, adapter-supplied `ExtensionContext {root, prompt?}` — and the
+gauge instrument ported whole: 14 files + a cli-spawn provider, experiment
+machinery (cls-ab, paired-validation, corpus tooling, replay/refiner CLIs) and
+daemon/SDK transports deliberately left lab-side behind a provider registry
+that was already the lab's own shape. Off by default, and the default is not a
+promise but a pin: 0.7.0 parity asserted byte-level through real hook-cli
+subprocesses against expectations hand-derived from kernel source (never
+recomputed from the code under test), with a tamper-detection control proving
+the comparator can fire. The b3 stream this file cares about was measured
+UNDISTURBED — the installed 0.4.0 lab plugin untouched, emissions growing +11
+while the work ran.
+
+The execution was the experiment as much as the artifact: SDD with the
+K-lane implemented by a peer CC session driven over SendMessage, every task
+reviewed by fresh subagents, five stop-and-report escalations from the worker
+each answered with a ruling instead of a workaround (R1–R17, in the plan
+file). Three of those stops were real architecture: GateHost exposed no root,
+GateEvent carried no prompt, SensorSink.append is sync — resolved as context
+threading and hold-and-flush decoration, never a kernel edit.
+
+The method lesson is the one worth the tuition, because it bit TWICE in one
+task: **import-graph reachability is blind to process-spawn edges.** First
+the refiner was excluded as "lab-only" on import-graph evidence while
+spawn.ts execs it (R14 reversal); then the fixed port shipped a spawn chain
+that was dead in production anyway — provider registration lived in the hook
+process's module graph, and the spawned child's registry was empty (S1
+Critical, found by the final review's lifecycle trace, proven both directions
+with a stub binary). The masking test had registered the provider in its own
+process: the test supplied exactly what production lacked. Standing rule: one
+test per spawned entrypoint, run as a REAL child with no parent-side setup;
+stash-fail-pop-pass as the proof pattern.
+
+Same day, the judge-window branch closed: two independent fresh-context
+reviews (opus subagent + the sibling's 5-lens adversarial fleet) converged on
+the stdin-transport redo, one gate artifact carried both verdicts honestly
+(fix-first, deferral hinge named rather than laundered), and merge-with-gate
+put it on main (`b7d4c6e`) — the 7b floor's no-self-review and
+effective-tip mechanics both did their jobs against real pressure, including
+refusing a same-author artifact and forcing the artifact to chase the moving
+tip. Next on this arc, own go: the BACK-PORT — cc-gate-plugin re-based onto
+kkamak 0.8.0, lab transports re-registering through the seam, with kkamak
+known-issue #14 (multi-extension flush ordering) as the entry gate.

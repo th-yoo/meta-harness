@@ -36,7 +36,41 @@ does NOT transfer; this file + the repo are the source of truth.)
 > `project-role`). `--layers global` also assembles `project-global`, so it
 > records into the v17 arena residue and injects its playbook.
 >
-> **MOST RECENT STATE (2026-08-21 late, `yoo-dev`, lane B session close):**
+> **MOST RECENT STATE (2026-08-21 latest, `yoo-dev`, lane B second session close):**
+> **KKAMAK 0.8.0 SHIPPED+PUSHED (extension seam + gauge migrated) AND
+> fix/judge-window MERGED TO MAIN. ALL PUSHED** (meta-harness main `27db608`,
+> kkamak main `25f6c4e`). What happened: (1) **instruments-convergence Phase 1
+> DONE** — plan `docs/superpowers/plans/2026-08-21-instruments-convergence-migration.md`
+> executed via SDD, cross-session (this lane = controller+reviews, `kkamak`
+> peer session = K-lane implementer, driven by SendMessage + tmux go-prompts):
+> kkamak gained `src/extensions/` (config-gated via gate.json
+> `extensions:{name:true}`, kernel byte-untouched, ExtensionContext
+> `{root,prompt?}`, hold-and-flush sensor decoration, lazy loading) + gauge
+> ported (14 files + cli-spawn provider; experiment machinery + daemon
+> transports stay lab-side). OFF by default — 0.7.0 parity pinned at
+> subprocess byte level; live one-call flag confirmation recorded in kkamak
+> `docs/gauge.md`; suite 712/0. Rulings R1–R17 in the plan file. (2)
+> **judge-window CLOSED**: sibling's stdin-transport redo (`5412f4c`) passed
+> two independent fresh-context reviews (mine opus + sibling's 5-lens), single
+> gate artifact `docs/reviews/5412f4c-stdin-transport-redo.md` (fix-first, 9
+> recorded-open, deferral hinge = ecde549 #5), merge-with-gate → main
+> `b7d4c6e`; main's 8k judge-window bug is fixed. (3) **b3 UNDISTURBED**
+> (M4 measured: installed 0.4.0 lab plugin untouched, gauge stream grew +11
+> during the work). **METHOD LAW EARNED (bit twice in one task): import-graph
+> reachability is BLIND to process-spawn edges** — refiner wrongly excluded
+> (R14), then the port's provider registry empty in the spawned child (S1
+> Critical); fix pattern = one test per spawned entrypoint run as a REAL
+> child, stash-fail-pop-pass proof. **NEXT (each own go): (a) BACK-PORT
+> cc-gate-plugin onto kkamak 0.8.0** (lab transports re-register as
+> SendPromptProviders; reconcile deliberate type divergences — extension
+> GaugeOffReason has `"error"`; entry gate = kkamak known-issue #14
+> multi-extension flush ordering; b3 continuity = hard constraint; lab-plugin
+> version bump so cache refreshes); (b) driver-argv prompt paths + `podman
+> exec -i` (queued own change, out of judge-window range); (c) kkamak #13
+> marker-indirection; (d) extract-elf-card still untracked/unowned.
+> ecde549 #5/#6/#7/#8 + F8 hardening remain recorded-open on main.
+>
+> **PREVIOUS STATE (2026-08-21 late, `yoo-dev`, lane B session close):**
 > **ONESHOT SHIPPED + LAB LIBRARY BUILT + JUDGE-WINDOW BRANCH REPAIRED. ALL
 > PUSHED** (meta-harness main `ecde549`, `fix/judge-window` `5e26c21`, kkamak
 > `ffae2ec` v0.7.0). What happened: (1) `poc/code-mode-gate` +
