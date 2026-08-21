@@ -151,6 +151,21 @@ export async function reviewAddedBullets(a: {
         continue
       }
       tier = screened.tier
+      // A failProbe cmd is screened exactly like the check cmd itself — it is
+      // still a shell command the harness will run — before any LLM spend.
+      const probe = (b.check as { failProbe?: { cmd: string; timeoutMs: number } }).failProbe
+      if (probe) {
+        const pScreened = screenCheck(probe)
+        if (pScreened.tier === "rejected") {
+          out.push({
+            bullet: `${b.text} [failProbe: screen-denied (${pScreened.reason})]`,
+            staged: false,
+            violations: [`check-screen:failprobe-${pScreened.reason}`],
+            trail: [],
+          })
+          continue
+        }
+      }
     }
     if (b.hookRule !== undefined) {
       // Same pre-LLM discipline as the check screen above: mode smuggling
