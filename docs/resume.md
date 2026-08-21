@@ -156,6 +156,74 @@ does NOT transfer; this file + the repo are the source of truth.)
 > generality claim. **Arming and the L1-ab wiring remain their own go** —
 > nothing in this paragraph changes what ships live.
 >
+> **MOST RECENT (2026-08-21 LATE, lane A): THE INSTRUMENT WAS BROKEN —
+> AN 8,000-CHAR CAP MANUFACTURED THE CLASSIFICATIONS D&C WAS STEERED BY.**
+> `renderJudgeAuditEvents` capped trajectories at 8_000 chars with a bare
+> `.slice()`; trajectories run 21,673-66,508, so the judge saw **12-38%** of each
+> session and narrated its window as the whole thing. A mid-session cut satisfies
+> `incomplete`'s definition BY CONSTRUCTION. Re-run after the fix:
+> **`incomplete`=8/8 -> `capability`=7, `looks_done`=1. Not one survived.**
+> Confirmed three ways: deconfounded (8/8 per-session after correcting a
+> worktree `tbRoot` confound I introduced), dereferenced (`"Normalized L2
+> similarity: 1.000000"` verbatim in the raw ndjson), and INDEPENDENTLY — 26
+> historical maker-checker sessions show **3/3 long-session judge-human
+> disagreement vs 22% short baseline**.
+> **FIXED, unmerged on `fix/judge-window`:** both capped renderers now share
+> `applyTrajCap` with an IN-BAND truncation notice (`5945878` audit renderer,
+> `a2cf26b` scoring renderer). Suite 2176 pass / 0 fail. Cap 200_000 matching
+> `DEFAULT_BUDGET_BYTES`; **the notice is the fix, the cap is a resource bound.**
+> **MEASURED DAMAGE:** failing sessions -> verdicts null, **reasons 2/3 FALSE**
+> (`82bbaf` OLD: "No evidence of image.c being written, compiled, or verified" —
+> that session wrote 5x, compiled 9x, ran 9x). Passing sessions -> **1/3 outcome
+> A**: llm-inference OLD=false NEW=true, the window hid real work. So the window
+> damages REASONS reliably, VERDICTS sometimes — **and the proposer consumes
+> reasons** (`readTaxonomy`, no traj access), so every bullet premise the loop has
+> generated inherits it, `b7` included. Verdicts clean (outcome data), HYPOTHESES
+> contaminated.
+> **D&C STATUS, and this is the harder half.** Merge gate REFUTED: accepts a
+> claim wrong by 11x the task tolerance 12/12; reaches **1 of 99** tasks (91 have
+> no numeric series, 5 of the 6 that do are self-authored); honest accepts are
+> near-vacuous since `1e7/x` is affine in `1/x` BY IDENTITY. Divide measured DEAD
+> on gcode (26/26 whole vs 13/26 split). L1 trial says timeboxing not splitting —
+> **but that came through the window, so it is suspect**. Level 2 never probed,
+> motivating evidence gone. **AND §5's targeting layer is NOT intact either**:
+> `classify()` assigns classes by thresholds on metadata proxies (`out_bytes >=
+> out_q3`, `thrash >= 1`), the probe's own addendum flagged M6 as
+> boundary-manufacturing, and `path-tracing` moved from length-sub-band to
+> `capability` the moment transcripts were read. 196 trajs classified on proxies,
+> transcripts never read, first one checked moved.
+> **THE PROCESS FINDING, worth more than any artifact here:** four frame-level
+> misses today, **all caught by the user, none by two agents reviewing each
+> other**. Every agent-side break came from ARTIFACT CONTACT (log grep, commit
+> re-read, raw ndjson). Adversarial review inside a shared frame checks CONTENT,
+> never the FRAME. Rules adopted: **PRIOR-ART CHECK** (no experiment
+> recommendation without a quoted log search — both lanes recommended a step done
+> 2 days prior, elf card 5/5 `c0b2222`) + **ADOPTION SWEEP** (once, backward) +
+> **REOPEN-ON-CONTACT**. And the ∃/∀ rule (cross-lane): **a windowed witness can
+> testify to ∃, never to ∀** — it predicted WHICH judge statements would be false,
+> three times, before anyone looked. Every `k/n` claim is mixed; measured `k/n` is
+> a LOWER bound.
+> **SILENT DEGRADATION DEFAULTS** — the class, three instances in one session and
+> I built the second after writing up the first: the 8k bare-string cap;
+> `existsSync ? read : ""` (worktree `tbRoot` resolves to a nonexistent sibling,
+> so the judge got an EMPTY instruction with no warning); my own `nohup` under a
+> SIGTERM'd parent. Evidence pipelines must be fail-closed or in-band-visible.
+> **WORKTREE GOTCHAS (new):** `git worktree add` copies no `node_modules` — run
+> `bun install` in BOTH plugin dirs or the suite fails as scattered test errors,
+> not as missing deps. `findMetaRoot` walks from the SOURCE FILE, so a worktree
+> resolves `tbRoot` to `.claude/worktrees/terminal-bench-2` (absent) — pass
+> `--tb-root` explicitly. Skips go 1 -> 12 silently.
+> **QUEUE, each its own go, NOTHING authorized:** (a) MERGE `fix/judge-window`
+> (2 commits, suite green); (b) PUSH (11 ahead); (c) taxonomy paired-render
+> re-run — score at CLAIM level with dereference, NOT label-flip, since verdicts
+> can null while reasons are 2/3 false; (d) judge-vs-verifier strictness probe
+> (dna-assembly/sanitize-git failed NEW on substantive grounds — a separate
+> defect class); (e) silent-fallback inventory (`?? ""`, `: ""`, bare caps in
+> judge/proposer/audit paths). Probes: `docs/loop-probes/{dnc-cap-rerun,
+> judge-window-damage,judge-scoring-paired,judge-window-passing,
+> dnc-level2-carryable,dnc-live-quartet,dnc-minimal-runnable,l1-ladder-trial,
+> dnc-label-audit}-20260821/`.
+
 > **MOST RECENT (2026-08-21, lane A): ARMING SPEC CLOSED — all three
 > blockers designed, validated, twice-reviewed. 19 commits UNPUSHED.**
 > The day, newest-first: **§8.8 value-truth** designed (3-layer:
