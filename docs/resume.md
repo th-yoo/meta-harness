@@ -3,6 +3,62 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## 🔧 SHADOW-LANE UPSTREAM FIXES 2026-08-22 (`yoo-mac`) — CALIBRATION CONTRACT LIVE · HOOK-RULE LANE SEEDED · BOTH LANES NOW ACCRUE REAL DENOMINATORS
+
+```
+WHY (data audit, yoo-mac, 550 sensor lines 07-30..08-21): ruleChecks
+120/120 pass = zero promotion evidence (b3's check `jobs -r | wc -l`
+vacuous BY CONSTRUCTION — fresh shell, wc rc always 0); hookRules 0
+carriers — .km/hook-rules.json rules:[] by construction (no bullet ever
+carried a hookRule); coEdit 30/32 clean → boolean DECIDED permanently
+shadow (94% benign, promoting = FP machine). Unshadowing anything today
+would have been promotion-by-boredom. hook-rule-ramp.ts (shadow→warn at
+FP-proxy θ) was already built — starved, not missing.
+
+SHIPPED (12-commit branch merged FF, main 134689c; SDD 6 tasks + 5 fix
+rounds, every round caught something real — bypassable screen exception
+w/ executed attack strings, vacuous liveEligible-never-stamped export,
+compound-command-blind patterns x4, cross-layer export clobber):
+ - failProbe on bullet checks: a check must PROVE it can fail (probe
+   constructs bad state in sandbox, check must exit nonzero) —
+   check-calibrate.ts runner, gate screens probes on both op paths,
+   proposer contract documents the field
+ - authored-ops operator lane (scripts/authored-ops.ts, v7 precedent
+   formalized): gate-equivalent screens incl. dup-hookRule guard,
+   liveEligible stamping (propose-parity), atomic apply, cwd
+   preconditions, both-table re-export
+ - scripts/rule-check-report.ts: per-rule denominator (calibration
+   status x sensor tallies)
+
+DEPLOYED LIVE (this host, .kkamak/roles/mh-build — BOTH scripts target
+the SAME layer deliberately; single-layer exporters are last-writer-wins,
+a cross-layer pair mutually clobbers .km tables. STANDING HAZARD, prior
+to this branch: any project-GLOBAL transition still wipes both tables):
+ - b3's vacuous check RETIRED (update op, check:null); b17 calibrated
+   store-json-integrity check live ({calibrated:true,
+   reason:"check-fails-on-bad-state"}, find pruned, timeoutMs 4000 under
+   cc-gate's 5000ms aggregate budget)
+ - 4 structural shadow hook rules b18-b21 (store rm/mv · ndjson
+   truncate-redirect · blind store-sync export · force-push/hard-reset),
+   compound-command-aware patterns (cd&&/pipe/tail forms match; decoy
+   `echo confirm .kkamak/global` doesn't)
+WIRE PROOF (live): synthetic PreToolUse `rm -rf .kkamak/does-not-exist-
+probe` → hookRules [{"id":"b18","matched":true,"mode":"shadow",
+"ms":0.091}], allow (shadow), accumulator line written. Stop→sensor join
+= contract-locked (cc-gate 0.4.7 aggregation tests + 134 production
+0.4.7 lines); first organic session Stop completes the chain.
+
+yoo-dev REPLAY (`.kkamak`/`.km` host-local; scripts are the transfer):
+  git pull && bun opencode-plugin/scripts/backfill-mh-build-checks.ts \
+    && bun opencode-plugin/scripts/seed-hook-rules.ts
+  (mains refuse on wrong cwd / missing store; seed refuses double-run)
+
+REVISIT: after ~2 weeks dogfood, `bun opencode-plugin/scripts/
+rule-check-report.ts .kkamak/roles/mh-build .km/gate-outcomes.ndjson`;
+hook-rule-ramp promotes shadow→warn automatically at its θ once
+matched-session data accrues. Suite 2226/0 (opencode) + 1071/0 (cc-gate).
+```
+
 > **⚠️ SHARED CHECKOUT — `git add <path>` STAGES THE OTHER LANE'S UNCOMMITTED
 > WORK TOO.** Both sessions share one working tree, so a path names the FILE,
 > not your changes to it. Measured twice on 2026-08-20: `docs/resume.md` edits
