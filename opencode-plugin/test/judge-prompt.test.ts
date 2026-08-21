@@ -116,3 +116,37 @@ test("JUDGE_SYSTEM_PROMPT loads from the shared judge-prompt.txt (single source 
   const onDisk = fs.readFileSync(path.join(import.meta.dir, "..", "src", "judge-prompt.txt"), "utf-8").trim()
   expect(JUDGE_SYSTEM_PROMPT).toBe(onDisk)
 })
+
+// ── truncation must announce itself here too (2026-08-21) ────────────────
+// judge.ts's renderTrajEvents carried the SAME cap=8_000 bare-string defect as
+// judge-audit's renderJudgeAuditEvents. This is the SCORING path, and its
+// rubric says "using ONLY the evidence in the Trajectory" — an explicit
+// invitation to make ABSENCE claims about a window. Measured on the taxonomy
+// side: an 8,000-char window flipped every one of 8 classifications.
+
+test("buildJudgePrompt announces truncation to the scoring judge", () => {
+  const many: TrajEvent[] = Array.from({ length: 4000 }, (_, i) => ({
+    t: "text" as const,
+    text: `step ${i} ${"q".repeat(80)}`,
+  }))
+  const p = buildJudgePrompt("summary", 12, many)
+  expect(p).toContain("TRUNCATED")
+  expect(p).toContain("CONTINUES")
+  expect(p).toMatch(/first [\d,]+ of [\d,]+/)
+})
+
+test("a short trajectory carries no truncation notice", () => {
+  const few: TrajEvent[] = [{ t: "text", text: "hello" }]
+  const p = buildJudgePrompt("summary", 1, few)
+  expect(p).not.toContain("TRUNCATED")
+  expect(p).toContain("SAY: hello")
+})
+
+test("the scoring judge's cap is the SHARED constant, not a second literal", () => {
+  const big: TrajEvent[] = Array.from({ length: 900 }, (_, i) => ({
+    t: "text" as const,
+    text: `event ${i} ${"y".repeat(70)}`,
+  }))
+  // 900 * ~80 chars is well past the old 8,000 and inside DEFAULT_TRAJ_CAP
+  expect(buildJudgePrompt("s", 1, big)).not.toContain("TRUNCATED")
+})

@@ -78,13 +78,21 @@ export function renderJudgeAuditEvents(events: TrajEvent[], cap = DEFAULT_TRAJ_C
     if (e.t === "error") return `ERROR: ${e.text ?? ""}`
     return `SAY: ${e.text ?? ""}`
   })
-  const full = lines.join("\n")
+  return applyTrajCap(lines.join("\n"), cap)
+}
+
+/** Cap a rendered trajectory and, when it truncates, SAY SO IN BAND.
+ *
+ * Shared by both renderers (this module's and judge.ts's) so the notice wording
+ * and the cap cannot drift apart. The in-band sentence is the actual fix: a
+ * judge that is not told it holds a prefix narrates the prefix as the whole
+ * session, which is how an 8,000-char window flipped all 8 classifications in
+ * docs/loop-probes/dnc-cap-rerun-20260821/. */
+export function applyTrajCap(full: string, cap: number = DEFAULT_TRAJ_CAP): RenderedTraj {
   if (full.length <= cap) {
     return { text: full, truncated: false, totalChars: full.length, shownChars: full.length }
   }
   const shown = full.slice(0, cap)
-  // IN-BAND notice: the judge must be told, in the text it reads, that what it
-  // has is a prefix. Without this it narrates the window as the whole session.
   const notice =
     `\n\n[TRUNCATED: you are seeing the first ${cap.toLocaleString()} of ` +
     `${full.length.toLocaleString()} characters. The session CONTINUES beyond this ` +
