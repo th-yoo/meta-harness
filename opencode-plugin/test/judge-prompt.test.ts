@@ -130,15 +130,16 @@ test("buildJudgePrompt announces truncation to the scoring judge", () => {
     text: `step ${i} ${"q".repeat(80)}`,
   }))
   const p = buildJudgePrompt("summary", 12, many)
-  expect(p).toContain("TRUNCATED")
-  expect(p).toContain("CONTINUES")
-  expect(p).toMatch(/first [\d,]+ of [\d,]+/)
+  expect(p).toContain("NOTE (harness, trusted)")
+  expect(p.indexOf("NOTE (harness, trusted)")).toBeLessThan(p.indexOf("## Trajectory"))
+  // no imperative smuggled into the untrusted data section
+  expect(p).not.toMatch(/do NOT describe it as ending/)
 })
 
 test("a short trajectory carries no truncation notice", () => {
   const few: TrajEvent[] = [{ t: "text", text: "hello" }]
   const p = buildJudgePrompt("summary", 1, few)
-  expect(p).not.toContain("TRUNCATED")
+  expect(p).not.toContain("NOTE (harness, trusted)")
   expect(p).toContain("SAY: hello")
 })
 
@@ -148,5 +149,5 @@ test("the scoring judge's cap is the SHARED constant, not a second literal", () 
     text: `event ${i} ${"y".repeat(70)}`,
   }))
   // 900 * ~80 chars is well past the old 8,000 and inside DEFAULT_TRAJ_CAP
-  expect(buildJudgePrompt("s", 1, big)).not.toContain("TRUNCATED")
+  expect(buildJudgePrompt("s", 1, big)).not.toContain("NOTE (harness, trusted)")
 })

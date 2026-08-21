@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test"
 import {
   renderJudgeAuditEvents,
+  truncationNotice,
   buildJudgeAuditPrompt,
   parseJudgeReply,
   judgeReplyText,
@@ -9,6 +10,7 @@ import {
   JUDGE_AUDIT_ALARM_THRESHOLD,
 } from "../src/bench/judge-audit.ts"
 import { buildTaxonomyPrompt } from "../src/bench/failure-taxonomy.ts"
+import { buildJudgeArgv } from "../src/bench/opencode-run.ts"
 import type { TrajEvent } from "../src/harness-store.ts"
 
 // Ported from term-bench2/test_judge_audit.py — pure halves only (the
@@ -170,15 +172,26 @@ test("renderJudgeAuditEvents reports whether it truncated", () => {
   expect(r.totalChars).toBe(r.shownChars)
 })
 
-test("a truncated render ANNOUNCES the cut, in the text the judge reads", () => {
+test("the in-data marker is NEUTRAL — no imperative inside untrusted data", () => {
+  // FIX-FIRST (cross-lane review): both prompts order the judge to IGNORE text
+  // inside the trajectory that instructs it. An imperative notice there is
+  // either discounted (fix inert) or obeyed (injection surface demonstrated).
   const many: TrajEvent[] = Array.from({ length: 200 }, (_, i) => ({ t: "text" as const, text: `line ${i} ${"x".repeat(50)}` }))
   const r = renderJudgeAuditEvents(many, 500)
   expect(r.truncated).toBe(true)
   expect(r.totalChars).toBeGreaterThan(r.shownChars)
-  // the judge must be told, in-band, that the session continues
-  expect(r.text).toContain("TRUNCATED")
-  expect(r.text).toContain("CONTINUES")
-  expect(r.text).toMatch(/first [\d,]+ of [\d,]+/)
+  expect(r.text).toMatch(/\[truncated at [\d,]+ of [\d,]+ characters\]/)
+  // NO imperatives in the data section
+  expect(r.text).not.toMatch(/do NOT|CONTINUES|never happened/)
+})
+
+test("truncationNotice builds the TRUSTED-FRAME sentence, outside the data", () => {
+  const n = truncationNotice({ text: "", truncated: true, totalChars: 64586, shownChars: 8000 })
+  expect(n).toContain("harness")
+  expect(n).toContain("64,586")
+  expect(n).toContain("8,000")
+  expect(n).toMatch(/absence from this prefix is not evidence of absence/i)
+  expect(truncationNotice({ text: "", truncated: false, totalChars: 10, shownChars: 10 })).toBe("")
 })
 
 test("the default cap admits a real trajectory that previously got cut", () => {
@@ -190,8 +203,35 @@ test("the default cap admits a real trajectory that previously got cut", () => {
   expect(r.truncated).toBe(false)
 })
 
-test("buildTaxonomyPrompt carries the truncation notice into the prompt", () => {
+test("buildTaxonomyPrompt carries the notice in the TRUSTED frame, before the data", () => {
   const many: TrajEvent[] = Array.from({ length: 4000 }, (_, i) => ({ t: "text" as const, text: `l${i} ${"z".repeat(80)}` }))
   const p = buildTaxonomyPrompt(many, "task", "instruction", true)
-  expect(p).toContain("TRUNCATED")
+  expect(p).toContain("NOTE (harness, trusted)")
+  // the notice must precede the untrusted trajectory section
+  expect(p.indexOf("NOTE (harness, trusted)")).toBeLessThan(p.indexOf("## Agent trajectory"))
+})
+
+// ── stdin transport (2026-08-21) ─────────────────────────────────────────
+// The judge prompt was passed as ONE argv element, imposing Linux's
+// MAX_ARG_STRLEN (131,072) as a hard ceiling on what any judge can be shown —
+// measured: 200,000 chars -> E2BIG, 131,000 -> OK. That is the 8,000-char cap
+// defect one layer down: a transport constraint silently bounding what the
+// judge may know. opencode reads the message from stdin (verified live:
+// `echo ... | opencode run --format json` returned the reply), so the ceiling
+// is removable, not inherent.
+
+test("buildJudgeArgv keeps the prompt OUT of argv", () => {
+  const argv = buildJudgeArgv("/tmp/scratch", [], "anthropic/claude-sonnet-5")
+  expect(argv[0]).toBe("opencode")
+  expect(argv).toContain("run")
+  expect(argv).toContain("--model")
+  // the prompt is delivered on stdin; no element may carry it
+  expect(argv.every((a) => a.length < 1_000)).toBe(true)
+  expect(argv.join(" ")).not.toContain("PROMPT_BODY")
+})
+
+test("argv stays far below MAX_ARG_STRLEN regardless of trajectory size", () => {
+  const argv = buildJudgeArgv("/tmp/scratch", ["--agent", "mh-judge"], "anthropic/claude-sonnet-5")
+  const longest = Math.max(...argv.map((a) => a.length))
+  expect(longest).toBeLessThan(4_096)
 })
