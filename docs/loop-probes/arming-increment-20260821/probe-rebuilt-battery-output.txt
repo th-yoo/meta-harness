@@ -1,0 +1,15 @@
+persistence : n_anchors : REBUILT verdict vector
+          1 :        21 : uncheckable:noise
+          2 :        19 : uncheckable:noise
+          3 :        19 : uncheckable:noise
+          5 :        17 : uncheckable:noise
+          8 :        14 : uncheckable:noise
+         12 :         6 : uncheckable:noise
+         20 :         5 : uncheckable:noise
+         30 :         5 : uncheckable:noise
+         40 :         4 : uncheckable:noise
+         49 :         4 : uncheckable:noise
+
+VERDICT: if the vector is constant while n_anchors moves, the rebuilt
+battery certifies parameter values whose OUTPUT changed completely.
+default (persistence=5) found n=17

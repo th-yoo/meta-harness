@@ -18,7 +18,15 @@
 
 State this before anyone reads further, so no one expects a lift that the spec forbids:
 
-- **raman stays criteria-class.** raman-fitting is single-artifact (`value-truth-census-20260821/census.md`), therefore structurally NO-SOURCE, therefore never CROSSCHECKED, therefore never numeric-injected. That is the ladder working as designed, not a defect to engineer around.
+- **MEASURED 2026-08-21, and it dominates everything else here: the gate returns `uncheckable` on the real raman fixture, always.** `max(sigma_u)/span(u)` is **0.105 for graphene under `u = x`** and **0.150 under `u = 1/x`**, against §8.2(b)'s validated domain bound of **0.01** — an order of magnitude outside. The median anchor is also outside (0.015), so this is the fixture's noise regime, not one badly-tracked anchor. Fixture-2 by contrast sits comfortably inside (0.0007).
+
+  **Consequence: on the motivating task, arming buys nothing.** Not because of L-A coverage — the gate never reaches the L-A question. The anchors' positional uncertainty is too large for the predicate to discriminate at the confidence it was validated at.
+
+  **Why nobody saw this earlier:** `derive.py` V11 "accepts graphene", but the reference implements **no domain gate at all** — clause §8.2(b) exists only in the spec. The port is the first place the clause and the reference meet, and they disagree. A reference validated 11/11 can still be silent about a clause it never implemented; "the port reproduces the reference" would have hidden this completely.
+
+  **Do NOT resolve this by choosing a friendlier aggregator.** `max` is fail-closed; the median (0.015) is also outside; some other statistic could be found that lets raman through, and finding it would be fitting the bound to the fixture we want to pass — the §1 violation this whole plan exists to avoid. The aggregator is genuinely **undetermined by the evidence**: V7's sweep was homoscedastic, so it distinguishes no aggregator. Resolution requires the heteroscedastic fixture already named as transfer debt, pre-registered before it runs. Until then: `max`, fail-closed, `uncheckable`.
+
+- **raman stays criteria-class even if the domain question is resolved.** raman-fitting is single-artifact (`value-truth-census-20260821/census.md`), therefore structurally NO-SOURCE, therefore never CROSSCHECKED, therefore never numeric-injected. Two independent reasons now, and the noise one binds first.
 - **Value truth is still not established for NO-SOURCE tasks.** §6 rejects ERROR, never DECEPTION (probe V5 `value-fab` ACCEPTS by construction — that is the measured T6 boundary, reproduced in this plan's Task 8).
 - **The executable-evaluator subclass of L-A is not implemented here** (Task 11 returns `undecidable` for it). Implementing it needs a uniform invocation contract; inventing per-task adapters is the named cheating class. Named as follow-on, not silently skipped.
 - **Nothing arms.** `conventionAudit` default stays `false` in `cmd-run.ts`. Flipping it is its own go with its own evidence.
@@ -45,7 +53,13 @@ is more informative than either list alone.
 
 **Round 2 (cross-lane re-attack on Task 16, which I pointed them at).** The sweep ranges I wrote were the *same* defect one level up: author-chosen windows (`persistence 3..12` out of a structural `1..49`) positioned where flatness was plausible, so the assertion passed because its failure region was excluded by the window's own choice — the sibling lane's third-address relocation, reproduced by me inside a test written to prevent exactly that. Three further gaps: the quartet's fourth member had no sweep at all, the two `0.9` bounds were named in prose and absent from the tests, and the tests measured anchor COUNT while the prose claimed VERDICT stability. All fixed; Task 16 now sweeps full structural domains on both fixtures and asserts the default sits two steps inside the widest verdict plateau.
 
-**Induced from rounds 1 and 2 together:** the defect recurs at whatever level is not currently being examined. Round 1 it was the quantifier while I audited the decoders; round 2 it was the sweep bounds while I audited the constants. Expect round 3 in whatever this table's own structure takes for granted.
+**Round 3 (aimed, on my own request, at what this table takes for granted).** It landed on the one thing I had CHANGED rather than adopted — the rebuilt verdict battery — which is the induction confirming itself: the reconciliation examined the sibling's proposal, not my amendment. Rebuilding `honest` from whatever anchors each parameter produced made it affine in `us` *by construction*, so it accepted for any admissible geometry and the vector stayed flat while the instrument's output changed completely. **Measured on graphene: anchor count moved 21 → 17 → 6 → 4 across the persistence sweep while the rebuilt vector never changed once.** My worry was right that a fixed external expectation carries an answer; the fix traded answer-carrying for vacuity in the dangerous direction. The sound reference is the DEFAULT's own output — self-referential, carries no answer, and is the object under certification rather than an answer key.
+
+Three more from the same pass, all accepted: the manifest was a check that cannot fail (prose table, no drift detector — now enforced by `bench-manifest-drift.test.ts`); prompt-contamination was still incident-keyed rather than closed as a class (now a `findValueMentions` sweep over the assembled prompt against every oracle canonical); and the entire rewrite is validated through faked transport, so a live 1-call re-verify is now binding as the first step of the arming go.
+
+**Induced from three rounds:** the defect recurs at whatever level is not currently being examined — round 1 the quantifier while I audited decoders, round 2 the sweep bounds while I audited constants, round 3 the reference semantics while I reconciled references. **Common form every time: the check's own FRAME was supplied by the thing under check.** The standing prediction is registered permanently, not retired when this plan ships: round 4 lives in whatever both lanes now agree about.
+
+**And the largest finding of the three rounds was found by neither review.** Probing R3-1 empirically — rather than accepting a correct argument — measured that graphene sits 10× outside the validated noise domain, so the gate is `uncheckable` on the motivating task. `derive.py` never implemented §8.2(b), so the clause and its reference disagree, and the port is the first place they meet. **Building the input that should break the check found what reading and reviewing both missed** — seventh instance of that method rule, and the first where the input was built to test a *reviewer's* claim.
 
 **The one that matters.** Lane A's self-audit found four constants and a list —
 and missed the critical, which was not a constant at all but a **quantifier**.
@@ -2926,8 +2940,13 @@ import { eligibleArtifacts } from "../src/bench/eligibility.ts"
 import { crosscheckClaim } from "../src/bench/source-crosscheck.ts"
 import { mergeGate } from "../src/bench/merge-gate.ts"
 import { applyLadder } from "../src/bench/value-truth.ts"
+import { sigmaFraction, VALIDATED_SIGMA_FRACTION, deriveSeriesNoise } from "../src/bench/noise-sigma.ts"
+import { detectPeaksTracked } from "../src/bench/series-peaks.ts"
+import { readSeriesFile } from "../src/bench/series-source.ts"
+import { readFileSync } from "node:fs"
 
 const PROBE_ROOT = "term-bench2/probe-tasks"
+const FX2 = "docs/loop-probes/dnc-second-fixture-20260820"
 
 test("raman: the harness enumerates 17 anchors from the real fixture", () => {
   const ctx = buildAnchorContext({ tbRoot: PROBE_ROOT } as any, "raman-fitting-audit")
@@ -2936,15 +2955,35 @@ test("raman: the harness enumerates 17 anchors from the real fixture", () => {
   expect(ctx!.block).toContain("17 anchors")
 })
 
-test("raman is structurally NO-SOURCE, so an honest claim is STILL criteria-class only", () => {
-  // the honest outcome of this whole increment, pinned. A gate that granted
-  // numeric authority here would be claiming a guarantee §6 does not have.
+test("MEASURED: graphene's noise is 10x outside the validated domain, so the gate is UNCHECKABLE", () => {
+  // measured 2026-08-21: max(sigma_u)/span = 0.105 under u=x, 0.150 under u=1/x,
+  // against the 0.01 bound. Pinned as a NUMBER, not as a verdict, so that a
+  // future change to the estimator or the aggregator shows up here as a diff
+  // rather than silently moving raman across the boundary.
+  const ctx = buildAnchorContext({ tbRoot: PROBE_ROOT } as any, "raman-fitting-audit")!
+  const frac = sigmaFraction(ctx.noise.us, ctx.noise.sigmaU)
+  expect(frac).toBeGreaterThan(VALIDATED_SIGMA_FRACTION)
+  expect(frac).toBeCloseTo(0.105, 2)
+  const honest = ctx.noise.us.map((u) => 10 + 2.0 * u)
+  expect(mergeGate(ctx.noise, honest).verdict).toBe("uncheckable")
+})
+
+test("fixture-2 IS inside the domain — the bound is not vacuously excluding everything", () => {
+  // without this the uncheckable result above would be indistinguishable from a
+  // gate that can never rule on any real series
+  const { xs, ys } = readSeriesFile(`${FX2}/fixture.dat`, FX2)
+  const noise = deriveSeriesNoise(xs, ys, detectPeaksTracked(ys), (x) => x)
+  expect(sigmaFraction(noise.us, noise.sigmaU)).toBeLessThan(VALIDATED_SIGMA_FRACTION)
+  const tr = JSON.parse(readFileSync(`${FX2}/truth.json`, "utf-8"))
+  expect(mergeGate(noise, noise.us.map((u) => tr.a + tr.b * u)).verdict).toBe("accept")
+})
+
+test("raman is ALSO structurally NO-SOURCE — the second, independent reason", () => {
   const ctx = buildAnchorContext({ tbRoot: PROBE_ROOT } as any, "raman-fitting-audit")!
   const honest = ctx.noise.us.map((u) => 10 + 2.0 * u)
-  const gate = mergeGate(ctx.noise, honest).verdict
   const la = crosscheckClaim(eligibleArtifacts({ tbRoot: PROBE_ROOT } as any, "raman-fitting-audit"), honest, ctx.seriesPath).verdict
   expect(la).toBe("NO-SOURCE")
-  const r = applyLadder({ gate, la, card: "Convert before reporting." })
+  const r = applyLadder({ gate: "uncheckable", la, card: "Convert before reporting." })
   expect(r.crosschecked).toBe(false)
   expect(r.authority).toBe("criteria-class")
 })
@@ -3063,70 +3102,98 @@ const FIXTURES = [
 
 type Opts = { persistence?: number; matchDistance?: number; percentile?: number; windowMax?: number }
 
-/** The pinned claim battery, rebuilt from whatever anchors this parameter value
- * produces — so the verdict vector is self-consistent at every point and no
- * expected answer is carried in. */
-function verdictVector(ys: number[], xs: number[], opts: Opts): string {
+/** MEASURED FAILURE OF THE OBVIOUS APPROACH (probe, 2026-08-21). An earlier
+ * draft rebuilt the battery from whatever anchors each parameter value produced,
+ * reasoning that a fixed external expectation would carry an answer in. It does
+ * — but the rebuild is vacuous in the dangerous direction: `honest` is affine in
+ * `us` BY CONSTRUCTION, so it accepts for any anchor set with admissible
+ * geometry, and the vector stays flat while the instrument's output changes
+ * completely. Measured on graphene, persistence swept 1..49: the anchor count
+ * moved 21 -> 17 -> 6 -> 4 while the rebuilt vector never changed once. A
+ * parameter value finding 4 anchors instead of 17 certified as "in plateau".
+ *
+ * THE SOUND REFERENCE IS THE DEFAULT'S OWN OUTPUT — neither external truth nor a
+ * per-value rebuild. The claim being certified is "the registered defaults are
+ * not load-bearing", i.e. "the instrument reports the same structure in a wide
+ * neighbourhood of them", so deviation FROM the defaults is exactly the quantity.
+ * The default's output is not an answer key: it is the object under
+ * certification. Note the scope this buys — it certifies NON-LOAD-BEARINGNESS,
+ * never correctness; correctness comes from Task 8's oracle cases. */
+interface Reading { n: number; us: number[]; vec: string }
+
+function read(ys: number[], xs: number[], opts: Opts, battery?: number[][]): Reading {
   const tracks = detectPeaksTracked(ys, opts)
-  if (tracks.length < 3) return "uncheckable:n<3"
+  if (tracks.length < 3) return { n: tracks.length, us: [], vec: "uncheckable:n<3" }
   const noise = deriveSeriesNoise(xs, ys, tracks, (x) => x)
+  // the battery is built ONCE from the DEFAULT anchors and reused at every
+  // parameter value; a claim whose length no longer matches this parameter's
+  // anchor set is `uncheckable`, which is itself the signal that the output moved
+  const vec = (battery ?? []).map((cs) => mergeGate(noise, cs).verdict).join("|")
+  return { n: tracks.length, us: noise.us, vec }
+}
+
+/** The battery, built once from the DEFAULT parameters' anchors. */
+function defaultBattery(ys: number[], xs: number[]): number[][] {
+  const noise = deriveSeriesNoise(xs, ys, detectPeaksTracked(ys), (x) => x)
   const honest = noise.us.map((u) => 10 + 2.0 * u)
-  const shifted = [...honest.slice(1), honest[honest.length - 1]! + 2.0]
-  const reversed = [...honest].reverse()
-  const quadratic = noise.us.map((u) => 20 + 0.5 * u * u)
-  return [honest, shifted, reversed, quadratic]
-    .map((cs) => mergeGate(noise, cs).verdict)
-    .join("|")
+  return [
+    honest,
+    [...honest.slice(1), honest[honest.length - 1]! + 2.0],
+    [...honest].reverse(),
+    noise.us.map((u) => 20 + 0.5 * u * u),
+  ]
 }
 
-/** Longest run of identical verdict vectors. Returns the run containing the
- * default plus the widest run overall, so the test can compare them. */
-function plateaus(values: number[], vectors: string[]) {
-  const runs: { from: number; to: number; vec: string; i0: number; i1: number }[] = []
-  for (let i = 0; i < vectors.length; i++) {
-    const last = runs[runs.length - 1]
-    if (last && last.vec === vectors[i]) { last.to = values[i]!; last.i1 = i }
-    else runs.push({ from: values[i]!, to: values[i]!, vec: vectors[i]!, i0: i, i1: i })
-  }
-  const widest = runs.reduce((a, b) => (b.i1 - b.i0 > a.i1 - a.i0 ? b : a))
-  return { runs, widest }
+/** Two readings agree iff the instrument reported the same structure: same
+ * anchor count, positions within the artifact's own sigma, same verdicts. */
+function agrees(a: Reading, b: Reading, sigmaU: number[]): boolean {
+  if (a.n !== b.n || a.vec !== b.vec) return false
+  return a.us.every((u, i) => Math.abs(u - b.us[i]!) <= Math.max(sigmaU[i] ?? 0, 1e-12))
 }
 
-function assertDefaultInWidestPlateau(
-  label: string, values: number[], vectors: string[], defaultValue: number,
+/** The plateau containing the default: the maximal run of consecutive parameter
+ * values whose reading AGREES WITH THE DEFAULT'S. Because agreement is measured
+ * against one fixed reference, this is a genuine neighbourhood of the default
+ * and not a chain of pairwise-similar readings that drift arbitrarily far. */
+function assertDefaultPlateau(
+  label: string, values: number[], readings: Reading[], defaultValue: number, sigmaU: number[],
 ) {
-  const { widest } = plateaus(values, vectors)
   const di = values.indexOf(defaultValue)
   expect(di).toBeGreaterThanOrEqual(0)
-  // the default must live in the widest plateau...
-  expect(vectors[di]).toBe(widest.vec)
-  expect(di).toBeGreaterThanOrEqual(widest.i0)
-  expect(di).toBeLessThanOrEqual(widest.i1)
-  // ...and not perched on its edge, where one step changes the verdicts
-  const marginSteps = Math.min(di - widest.i0, widest.i1 - di)
-  expect(marginSteps).toBeGreaterThanOrEqual(2)
-  console.log(`[plateau] ${label}: widest ${widest.from}..${widest.to} ` +
-    `(${widest.i1 - widest.i0 + 1} steps), default ${defaultValue}, margin ${marginSteps}`)
+  const ref = readings[di]!
+  let lo = di
+  let hi = di
+  while (lo > 0 && agrees(readings[lo - 1]!, ref, sigmaU)) lo--
+  while (hi < values.length - 1 && agrees(readings[hi + 1]!, ref, sigmaU)) hi++
+  const margin = Math.min(di - lo, hi - di)
+  console.log(`[plateau] ${label}: ${values[lo]}..${values[hi]} ` +
+    `(${hi - lo + 1} of ${values.length} steps), default ${defaultValue}, margin ${margin}, ` +
+    `n=${ref.n}, vec=${ref.vec}`)
+  // the default must sit clear of the plateau's edges, where one step changes
+  // what the instrument reports
+  expect(margin).toBeGreaterThanOrEqual(2)
+  // and the plateau must be a real neighbourhood, not the default plus noise
+  expect(hi - lo + 1).toBeGreaterThanOrEqual(5)
 }
 
 for (const fx of FIXTURES) {
   const { xs, ys } = readSeriesFile(fx.path, fx.root)
+  const battery = defaultBattery(ys, xs)
+  const defSigma = deriveSeriesNoise(xs, ys, detectPeaksTracked(ys), (x) => x).sigmaU
 
   test(`${fx.name}: persistence plateau over the FULL scale count 1..49`, () => {
     // structural domain: one entry per smoothing scale that exists
     const nScales = (MAX_SMOOTH_WINDOW - MIN_SMOOTH_WINDOW) / 2 + 1
     const values = Array.from({ length: nScales }, (_, i) => i + 1)
-    assertDefaultInWidestPlateau(
-      `${fx.name}/persistence`, values,
-      values.map((k) => verdictVector(ys, xs, { persistence: k })), 5)
+    assertDefaultPlateau(`${fx.name}/persistence`, values,
+      values.map((k) => read(ys, xs, { persistence: k }, battery)), 5, defSigma)
   })
 
   test(`${fx.name}: percentile plateau over the full open interval`, () => {
     // structural domain: (0,1), sampled densely — 0 admits everything, 1 admits nothing
     const values = Array.from({ length: 99 }, (_, i) => Math.round((i + 1) * 100) / 10000)
-    assertDefaultInWidestPlateau(
-      `${fx.name}/percentile`, values,
-      values.map((p) => verdictVector(ys, xs, { percentile: p })), 0.9)
+    assertDefaultPlateau(`${fx.name}/percentile`, values,
+      values.map((p) => read(ys, xs, { percentile: p }, battery)), 0.9, defSigma)
   })
 
   test(`${fx.name}: matchDistance plateau to the artifact's own peak spacing`, () => {
@@ -3135,11 +3202,10 @@ for (const fx of FIXTURES) {
     // meaning "the same peak, one scale up"
     const finest = detectPeaksTracked(ys, { persistence: 1 }).map((t) => t.pos)
     const gaps = finest.slice(1).map((p, i) => p - finest[i]!).sort((a, b) => a - b)
-    const medianGap = Math.max(4, gaps[gaps.length >> 1] ?? 4)
+    const medianGap = Math.max(8, gaps[gaps.length >> 1] ?? 8)
     const values = Array.from({ length: medianGap }, (_, i) => i + 1)
-    assertDefaultInWidestPlateau(
-      `${fx.name}/matchDistance`, values,
-      values.map((d) => verdictVector(ys, xs, { matchDistance: d })), 3)
+    assertDefaultPlateau(`${fx.name}/matchDistance`, values,
+      values.map((m) => read(ys, xs, { matchDistance: m }, battery)), 3, defSigma)
   })
 
   test(`${fx.name}: window-range plateau to series length/2 (upstream of MIN_SERIES_ROWS)`, () => {
@@ -3151,9 +3217,17 @@ for (const fx of FIXTURES) {
     for (let w = 21; w <= cap; w += 20) values.push(w % 2 === 0 ? w + 1 : w)
     if (!values.includes(MAX_SMOOTH_WINDOW)) values.push(MAX_SMOOTH_WINDOW)
     values.sort((a, b) => a - b)
-    assertDefaultInWidestPlateau(
-      `${fx.name}/windowMax`, values,
-      values.map((w) => verdictVector(ys, xs, { windowMax: w })), MAX_SMOOTH_WINDOW)
+    assertDefaultPlateau(`${fx.name}/windowMax`, values,
+      values.map((w) => read(ys, xs, { windowMax: w }, battery)), MAX_SMOOTH_WINDOW, defSigma)
+  })
+
+  test(`${fx.name}: SELF-CHECK — the certificate can actually fail`, () => {
+    // the measured lesson that produced this design: a rebuilt battery gave a
+    // FLAT vector while the anchor count moved 21 -> 4. This asserts the
+    // default-referenced form is sensitive where the rebuilt form was blind.
+    const far = read(ys, xs, { persistence: 40 }, battery)
+    const def = read(ys, xs, {}, battery)
+    expect(agrees(far, def, defSigma)).toBe(false)
   })
 }
 ```
@@ -3285,6 +3359,25 @@ file counts. Until then the manifest claims no number.
   shared-prior argument, applied to us). Needs generator diversity; that is
   spend, with its own go.
 - **True L-A coverage under the tightened decidability rule** — see above.
+- **A LIVE transport call. Nothing in this increment has made one.** Every
+  integration test injects `fakeDeps` — correct for a zero-spend plan, and the
+  reason this repo already shipped an audit path that could never place a call:
+  two independent transport defects (client budget below the daemon's worst case;
+  a provider-prefixed model id) survived a green suite **because the audit tests
+  fake the daemon**. This increment rewrites that same call site.
+  **Binding: the FIRST step of the arming go is a live 1-call re-verify**
+  (`run-probe.ts`'s existing verify pattern), before any batch. It is named here
+  so its absence cannot read as coverage — a green suite over a faked transport
+  is exactly how the path went dead last time.
+- **The heteroscedastic fixture is now BLOCKING, not deferred.** It was transfer
+  debt; the graphene measurement (0.105 vs the 0.01 bound) makes it the
+  resolution path for whether `max` is the right domain aggregator. Until it
+  runs, `max` stands and raman is `uncheckable`.
+- **Skipped tests are host-conditional.** The suite's skips are
+  `skipIf(!tbRootExists)`, so they silently vanish on a host without the
+  `terminal-bench-2` checkout — the same 2-of-61 gap that forced the selection
+  bounds into a probe script. "Suite green" on the MacBook covers strictly less
+  than "suite green" here.
 
 ## Known imprecision, recorded rather than fixed
 
@@ -3302,6 +3395,77 @@ UNCHECKABLE-GEOMETRY in its reason text so the record does not overclaim.
 re-verified 2026-08-21. The TS port is pinned to it case-for-case by
 `bench-derived-thresholds.test.ts`.
 ```
+
+- [ ] **Step 1b: Make the manifest a check that CAN fail**
+
+The clause→test table is prose. Rename, delete or gut a test later and every row stays intact while the manifest goes on claiming coverage — **manifest-suite drift with no detector, which is precisely the class §1 bans: a coverage claim nothing can contradict.** This repo already paid for that lesson once (`KKAMAK_DEV_CHECKS` exists because of it).
+
+Create `opencode-plugin/test/bench-manifest-drift.test.ts`:
+
+```ts
+/** The manifest claims each spec clause is pinned by a named test. Nothing
+ * enforced that claim, which made the manifest a check that cannot fail. This
+ * parses the "Pinned by" column and asserts every named file exists and every
+ * named test string appears inside it. */
+import { test, expect } from "bun:test"
+import { readFileSync, existsSync } from "node:fs"
+
+const MANIFEST = "../docs/loop-probes/arming-increment-20260821/regression-manifest.md"
+
+test("every test file named in the manifest exists", () => {
+  const md = readFileSync(MANIFEST, "utf-8")
+  const named = [...md.matchAll(/`([A-Za-z0-9._-]+\.test\.ts)`/g)].map((m) => m[1]!)
+  expect(named.length).toBeGreaterThan(8) // the table is populated, not empty
+  const missing = [...new Set(named)].filter((f) => !existsSync(`test/${f}`))
+  expect(missing).toEqual([])
+})
+
+test("every probe script named in the manifest exists", () => {
+  const md = readFileSync(MANIFEST, "utf-8")
+  const named = [...md.matchAll(/`([A-Za-z0-9/._-]+\.(?:ts|py))`/g)]
+    .map((m) => m[1]!).filter((p) => p.includes("/"))
+  const missing = [...new Set(named)].filter((p) => !existsSync(`../docs/loop-probes/${p}`) && !existsSync(`../${p}`))
+  expect(missing).toEqual([])
+})
+
+test("the suite's skipped tests are named in the manifest", () => {
+  // a skip that wanders into the pinned battery is invisible inside "suite
+  // green". The repo's skips are `skipIf(!tbRootExists)` — host-conditional,
+  // and they VANISH on a host without the terminal-bench-2 checkout.
+  const md = readFileSync(MANIFEST, "utf-8")
+  expect(md).toContain("skipIf(!tbRootExists)")
+})
+```
+
+- [ ] **Step 1c: Close the prompt-contamination CLASS, not the incident**
+
+The line-15 answer key was removed with a regression pin. If that pin greps for the specific value it is a string check standing in for a semantic one — the exact amendment failure already measured on `assertCleanStimulus`. Meanwhile v6 rewrites prompt bytes that nobody has contamination-audited as a class.
+
+The structural tool now exists: `findValueMentions`. Add to `opencode-plugin/test/bench-convention-audit.test.ts`:
+
+```ts
+import { findValueMentions } from "../src/bench/numeric-literal.ts"
+
+test("CLASS CHECK: no oracle canonical value appears anywhere in the assembled prompt", () => {
+  // supersedes the line-15 incident pin. Anchor x positions are legitimately
+  // present — the assembled prompt enumerates them on purpose. The assertion is
+  // that no CANONICAL-side value (the thing the model is supposed to supply
+  // from world knowledge) appears in the bytes we hand it.
+  const tr = JSON.parse(readFileSync("../docs/loop-probes/dnc-second-fixture-20260820/truth.json", "utf-8"))
+  const evasion = JSON.parse(readFileSync("test/fixtures/evasion-cards.json", "utf-8"))
+  const oracleCanonicals = [
+    ...tr.trueChannels,            // fixture-2's canonical channels
+    tr.a, tr.b,                    // and its generating constants
+    evasion.target,                // the graphene canonical the evasion set targets
+  ]
+  const ctx = buildAnchorContext({ tbRoot: "term-bench2/probe-tasks" } as any, "raman-fitting-audit")
+  const assembled = auditPrompt() + "\n\n" + (ctx?.block ?? "")
+  const hits = findValueMentions(assembled, oracleCanonicals)
+  expect(hits.map((h) => `${h.encoding}:${h.text}`)).toEqual([])
+})
+```
+
+**If this fails on the anchor block, do not weaken the assertion** — it means a canonical-side value is recoverable from what we hand the model, which is the line-15 defect recurring in new bytes.
 
 - [ ] **Step 2: Write the spec addendum**
 
