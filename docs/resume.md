@@ -36,6 +36,36 @@ does NOT transfer; this file + the repo are the source of truth.)
 > `project-role`). `--layers global` also assembles `project-global`, so it
 > records into the v17 arena residue and injects its playbook.
 >
+> **MOST RECENT STATE (2026-08-21 late, `yoo-dev`, lane B session close):**
+> **ONESHOT SHIPPED + LAB LIBRARY BUILT + JUDGE-WINDOW BRANCH REPAIRED. ALL
+> PUSHED** (meta-harness main `ecde549`, `fix/judge-window` `5e26c21`, kkamak
+> `ffae2ec` v0.7.0). What happened: (1) `poc/code-mode-gate` +
+> `lab/code-mode-gate` — OpenClaw-inspired composed runtime (one guest program
+> per round trip + zero-spend gate w/ steering; 4.9x measured), built via SDD,
+> 32 tests, final-review clean. (2) kkamak PRODUCTION got **oneshot** — a
+> SKILL (MCP struck as redundant beside Bash; name via user strip-down:
+> code/gated/batch all redundant → oneshot): one Bash call per edit-verify
+> chunk, in-script gate retry, tail-4k truncation, additive PostToolUse
+> observer, correlate.ts; dogfooded on its own known-issues (#13 new:
+> marker blind to indirection — OPEN). (3) `fix/judge-window`: transport half
+> of 9218f0f REVERTED per review `ecde549` (3 blockers discharged; cap
+> 100_000 argv-safe + byte-guard; suite 2195/0, tsc at main parity). OPEN:
+> **stdin-transport REDO** as its own change with fail-capable tests — main
+> still carries the 8k judge-window bug until branch merges (user decision).
+> **HOST-LOCAL, NOT IN GIT (yoo-dev only):** oneshot dogfood shim =
+> `~/.claude/skills/oneshot/SKILL.md` (PLUGIN_ROOT hardcoded to
+> `/home/th-yoo/z2/kkamak/skills/oneshot`) + settings.json PostToolUse/Bash
+> hook → `dogfood-hook-cli.ts`. Source-2 logs to `<cwd>/.km/` from NEXT
+> session. kkamak-local plugin stays **0.4.7 lab copy** (`cc-gate-plugin`) —
+> repointing to 0.7.0 would KILL gauge/b3 (0.7.0 has zero gauge; ~30 files of
+> lab instruments are deliberately prod-excluded). **STRATEGY (user-ruled,
+> own go): migrate proven instruments INTO kkamak config-gated, then
+> BACK-PORT kkamak → cc-gate-plugin; NEVER retire the lab plugin —
+> experiments stay lab-side, kkamak = upstream stable.** Also standing:
+> extract-elf-card/ untracked+unowned; lane-A strategic finds in memory
+> (capability-class band, mechanical-seam law n=2, prior-art/adoption-sweep/
+> cite-dereference/pointer-or-inadmissible rules).
+>
 > **MOST RECENT STATE (2026-08-20 newest, `yoo-dev`, lane A):** **THE GATE
 > CANNOT REJECT A LIE, AND MOST OF LANE A IS CHEATING BY THE NEW RULE.** Two
 > things landed and both are binding.
