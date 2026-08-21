@@ -219,34 +219,65 @@ test("buildTaxonomyPrompt carries the notice in the TRUSTED frame, before the da
   expect(p.indexOf("NOTE (harness, trusted)")).toBeLessThan(p.indexOf("## Agent trajectory"))
 })
 
-// ── argv byte-guard (interim until the stdin-transport redo) ─────────────
-// The prompt rides in ONE argv element; Linux MAX_ARG_STRLEN is 131,072
-// BYTES per element (measured: 200,000 → E2BIG). The stdin transport that
-// removed this ceiling was reverted with three blockers (review record
-// ecde549). Until its redo lands, an over-budget prompt must SKIP into the
-// existing null contract — never reach execve and E2BIG-crash the runner.
+// ── prompt transport (stdin, not argv) ───────────────────────────────────
+// `opencode run`'s message positional defaults to [] and the CLI reads the
+// message from stdin whenever stdin is not a TTY — verified against the
+// installed binary 2026-08-21 with a bad provider (so no model call): a
+// piped prompt reaches session creation, an empty stdin exits with "You must
+// provide a message or a command". Delivering it on stdin removes Linux's
+// MAX_ARG_STRLEN ceiling (131,072 BYTES per argv element; a 200,000-char
+// element THROWS E2BIG out of Bun.spawn, which is why the interim guard had
+// to skip judges). The transport itself is proven against real subprocesses
+// in bench-exec-stdin.test.ts.
 
-test("an over-argv-budget prompt is skipped fail-closed; execFn never called", async () => {
-  let called = 0
-  const execFn = async () => {
-    called++
-    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+const okReply = { rc: 0, stdout: '{"type":"text","part":{"text":"ok"}}', stderr: "", timedOut: false }
+
+test("the judge prompt travels on stdin and appears nowhere in argv", async () => {
+  const prompt = "JUDGE_PROMPT_SENTINEL trajectory evidence"
+  let seenArgv: string[] = []
+  let seenOpts: { timeoutSec?: number; stdin?: string } | undefined
+  const execFn = async (argv: string[], opts?: { timeoutSec?: number; stdin?: string }) => {
+    seenArgv = argv
+    seenOpts = opts
+    return okReply
   }
-  const big = "x".repeat(130_000)
-  const out = await runJudgeOpencode(big, "anthropic/claude-sonnet-5", 1, 1, execFn as any)
-  expect(out).toBe(null)
-  expect(called).toBe(0)
+  await runJudgeOpencode(prompt, "anthropic/claude-sonnet-5", 1, 1, execFn as any)
+  expect(seenOpts?.stdin).toBe(prompt)
+  expect(seenArgv.some((a) => a.includes("JUDGE_PROMPT_SENTINEL"))).toBe(false)
+  // and the argv is still a well-formed judge invocation
+  expect(seenArgv.slice(0, 2)).toEqual(["opencode", "run"])
+  expect(seenArgv).toContain("--model")
 })
 
-test("an in-budget prompt still reaches execFn (the guard is a bound, not a wall)", async () => {
-  let seen: string[] = []
-  const execFn = async (argv: string[]) => {
-    seen = argv
-    return { rc: 0, stdout: "", stderr: "", timedOut: false }
+test("a prompt past the argv ceiling reaches the judge instead of being skipped", async () => {
+  let called = 0
+  let delivered = ""
+  const execFn = async (_argv: string[], opts?: { stdin?: string }) => {
+    called++
+    delivered = opts?.stdin ?? ""
+    return okReply
   }
-  await runJudgeOpencode("small prompt", "anthropic/claude-sonnet-5", 1, 1, execFn as any)
-  expect(seen.length).toBeGreaterThan(0)
-  expect(seen.join(" ")).toContain("small prompt")
+  const big = "x".repeat(400_000) // >3x MAX_ARG_STRLEN
+  const out = await runJudgeOpencode(big, "anthropic/claude-sonnet-5", 1, 1, execFn as any)
+  expect(called).toBe(1)
+  expect(delivered.length).toBe(big.length)
+  expect(out).toBe("ok")
+})
+
+test("a prompt whose CHAR count is under the argv ceiling but whose BYTE count is over still transits", async () => {
+  // 50,000 chars / 150,000 bytes: the case a char-denominated bound waves
+  // through and a byte-denominated one skips. stdin has neither bound.
+  const prompt = "日".repeat(50_000)
+  expect(prompt.length).toBeLessThan(131_072)
+  expect(Buffer.byteLength(prompt, "utf8")).toBeGreaterThan(131_072)
+  let delivered = ""
+  const execFn = async (_argv: string[], opts?: { stdin?: string }) => {
+    delivered = opts?.stdin ?? ""
+    return okReply
+  }
+  const out = await runJudgeOpencode(prompt, "anthropic/claude-sonnet-5", 1, 1, execFn as any)
+  expect(delivered).toBe(prompt)
+  expect(out).toBe("ok")
 })
 
 

@@ -23,14 +23,14 @@
  * The value is a RESOURCE bound, not a correctness knob: truncation now
  * announces itself, so exhausting the budget is visible rather than silent.
  *
- * WHY 100_000 AND NOT MORE: the judge prompt currently rides in ONE argv
- * element, and Linux MAX_ARG_STRLEN is 131,072 BYTES (measured: 200,000 →
- * E2BIG). 100_000 chars of ASCII-dominant trajectory plus the prompt frame
- * stays under that with margin; a companion byte-guard in opencode-run.ts
- * fail-closes (null-skip) instead of crashing if multibyte content pushes the
- * assembled prompt past the ceiling anyway. The stdin transport that lifts
- * this ceiling was REVERTED with three blockers (review: ecde549) — when it is
- * redone with tests that can fail, this cap can rise again. */
+ * WHY 100_000: it is a MEASURED bound now, not a transport one. The argv
+ * ceiling that used to set it is gone — the judge prompt rides on stdin
+ * (opencode-run.ts, covered in test/bench-exec-stdin.test.ts), so Linux's
+ * MAX_ARG_STRLEN no longer bounds anything here. What remains is the measured
+ * range of real trajectories: the path-tracing failures rendered to
+ * 21,673-66,508 chars, all inside 100_000, so nothing observed is being cut.
+ * Raising it further is a separate decision that needs its own evidence (judge
+ * context budget and cost per call), not a free consequence of the transport. */
 export const DEFAULT_TRAJ_CAP = 100_000
 
 export interface RenderedTraj {

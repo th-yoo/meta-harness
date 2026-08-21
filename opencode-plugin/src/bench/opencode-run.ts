@@ -69,7 +69,10 @@ export async function runOpencode(
 
 // ── run_judge_opencode (judge transport — runs on the HOST, no container) ──
 
-export type HostExecFn = (argv: string[], opts?: { timeoutSec?: number }) => Promise<ExecResult>
+export type HostExecFn = (
+  argv: string[],
+  opts?: { timeoutSec?: number; stdin?: string },
+) => Promise<ExecResult>
 
 /**
  * Invoke the judge headlessly on the HOST (no bwrap/podman sandbox — the
@@ -91,16 +94,6 @@ export async function runJudgeOpencode(
   const agentBlock = judgeAgentConfig(promptPath)
   const scratch = mkdtempSync(join(tmpdir(), "mh-judge-audit-"))
   try {
-    // The prompt rides in ONE argv element until the stdin-transport redo
-    // lands (reverted with three blockers — review record ecde549). Linux
-    // MAX_ARG_STRLEN is 131,072 BYTES per element; past it execve fails
-    // E2BIG. Fail closed into the existing null-skip contract instead of
-    // crashing the runner mid-batch.
-    const promptBytes = Buffer.byteLength(prompt, "utf8")
-    if (promptBytes > 125_000) {
-      log(`  judge prompt ${promptBytes}B exceeds argv-safe bound (125000B) — skipping judge call`)
-      return null
-    }
     let agentArgs: string[] = []
     if (agentBlock) {
       writeJsonAtomic(join(scratch, "opencode.json"), {
@@ -113,11 +106,27 @@ export async function runJudgeOpencode(
       log("  judge agent: default (judge-prompt.txt missing)")
     }
 
-    const cmd = ["opencode", "run", "--dir", scratch, ...agentArgs, "--auto", "--format", "json", "--model", model, prompt]
+    // Judge argv WITHOUT the prompt — it is delivered on stdin instead.
+    //
+    // `opencode run`'s message positional defaults to [] and the CLI reads the
+    // message from stdin whenever stdin is not a TTY (`process.stdin.isTTY ?
+    // undefined : await Bun.stdin.text()` in the installed 1.17.20 binary;
+    // confirmed live 2026-08-21 against a bad provider, so no model call: a
+    // piped prompt reached session creation, an empty stdin exited with "You
+    // must provide a message or a command").
+    //
+    // Keeping the prompt out of argv removes Linux's MAX_ARG_STRLEN ceiling
+    // (131,072 BYTES in ONE element — a 200,000-char element THROWS E2BIG out
+    // of Bun.spawn rather than failing softly), which otherwise bounds how
+    // much trajectory any judge can be shown: the same defect class as the
+    // 8,000-char render cap, one layer down. The transport is covered against
+    // real subprocesses in test/bench-exec-stdin.test.ts — including the
+    // reverted attempt's three blockers.
+    const cmd = ["opencode", "run", "--dir", scratch, ...agentArgs, "--auto", "--format", "json", "--model", model]
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       log(`  judge opencode run (timeout=${pyFixed(timeoutSec, 0)}s, attempt ${attempt}/${maxAttempts})...`)
-      const result = await execFn(cmd, { timeoutSec })
+      const result = await execFn(cmd, { timeoutSec, stdin: prompt })
 
       if (result.timedOut) {
         log(`  judge opencode timed out after ${pyFixed(timeoutSec, 0)}s`)
