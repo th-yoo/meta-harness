@@ -1,0 +1,44 @@
+[
+  {
+    "name": "dna-assembly",
+    "arm": "OLD",
+    "passed": false,
+    "confidence": 0.72,
+    "reasoning": "Trajectory shows only analysis/design steps: extracting fragments, verifying reconstruction of an 'output' sequence, checking for BsaI sites, and computing overhangs. No evidence of final deliverable being produced (e.g., actual primer sequences written out, output file created, or final assembled/verified construct saved). Session appears cut off mid-design without a completed, delivered result."
+  },
+  {
+    "name": "dna-assembly",
+    "arm": "NEW",
+    "passed": false,
+    "confidence": 0.85,
+    "reasoning": "Final simulation explicitly showed MATCH: False for the full assembled sequence vs output, only matching as a 'circular rotation' - not exact positional match. Agent's closing claim of success contradicts its own last verification output, which never printed MATCH: True for the real target check."
+  },
+  {
+    "name": "llm-inference",
+    "arm": "OLD",
+    "passed": false,
+    "confidence": 0.75,
+    "reasoning": "Trajectory is truncated mid-session (baseline evaluation output cut off). No evidence the agent modified optimized_packer.py, ran the optimized version, or achieved thresholds. Only exploration and baseline eval shown; no final results, no output_data written, no confirmation of task completion."
+  },
+  {
+    "name": "llm-inference",
+    "arm": "NEW",
+    "passed": true,
+    "confidence": 0.72,
+    "reasoning": "Agent found pre-existing optimized_packer.py, ran it, and verified via actual cost_model.py evaluation that both buckets pass all required thresholds (cost, pad ratio, p95 latency, seq timecost) and hard constraints (all requests included, shape counts within limits). Real tool output confirms success, though the agent authored no new optimization code itself, just validated existing outputs."
+  },
+  {
+    "name": "sanitize-git",
+    "arm": "OLD",
+    "passed": false,
+    "confidence": 0.85,
+    "reasoning": "The trajectory shows only investigation/discovery of secrets (AWS keys, GitHub token, HF token) in working tree and git history. It ends mid-search, with no evidence of actual remediation: no file edits removing secrets, no git history rewrite (git-filter-repo wasn't even installed), no commit, and no force-push. Task was not completed."
+  },
+  {
+    "name": "sanitize-git",
+    "arm": "NEW",
+    "passed": false,
+    "confidence": 0.72,
+    "reasoning": "Agent found and redacted secrets in working-tree files (yaml, process.py, json), but secrets remain fully exposed in git history (multiple commits with plaintext tokens/keys found via git log -p). Task was to sanitize a git repo, which implies history too. No git-filter-repo/BFG history rewrite was performed (tool wasn't even installed); session ends mid-explanation without completing history purge."
+  }
+]

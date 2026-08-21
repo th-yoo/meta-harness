@@ -1,0 +1,38 @@
+
+=== dna-assembly  events=34  old=8880  new=20481  GROUND TRUTH=PASS ===
+  judge agent: mh-judge (locked-down persona)
+  judge opencode run (timeout=180s, attempt 1/3)...
+  OLD: passed=false conf=0.72 WRONG (under-credited)
+     Trajectory shows only analysis/design steps: extracting fragments, verifying reconstruction of an 'output' sequence, checking for BsaI sites, and computing overhangs. No evidence of final de
+  judge agent: mh-judge (locked-down persona)
+  judge opencode run (timeout=180s, attempt 1/3)...
+  NEW: passed=false conf=0.85 WRONG (under-credited)
+     Final simulation explicitly showed MATCH: False for the full assembled sequence vs output, only matching as a 'circular rotation' - not exact positional match. Agent's closing claim of succe
+
+=== llm-inference  events=36  old=8902  new=18994  GROUND TRUTH=PASS ===
+  judge agent: mh-judge (locked-down persona)
+  judge opencode run (timeout=180s, attempt 1/3)...
+  OLD: passed=false conf=0.75 WRONG (under-credited)
+     Trajectory is truncated mid-session (baseline evaluation output cut off). No evidence the agent modified optimized_packer.py, ran the optimized version, or achieved thresholds. Only explorat
+  judge agent: mh-judge (locked-down persona)
+  judge opencode run (timeout=180s, attempt 1/3)...
+  NEW: passed=true conf=0.72 CORRECT
+     Agent found pre-existing optimized_packer.py, ran it, and verified via actual cost_model.py evaluation that both buckets pass all required thresholds (cost, pad ratio, p95 latency, seq timec
+
+=== sanitize-git  events=34  old=8890  new=17492  GROUND TRUTH=PASS ===
+  judge agent: mh-judge (locked-down persona)
+  judge opencode run (timeout=180s, attempt 1/3)...
+  OLD: passed=false conf=0.85 WRONG (under-credited)
+     The trajectory shows only investigation/discovery of secrets (AWS keys, GitHub token, HF token) in working tree and git history. It ends mid-search, with no evidence of actual remediation: n
+  judge agent: mh-judge (locked-down persona)
+  judge opencode run (timeout=180s, attempt 1/3)...
+  NEW: passed=false conf=0.72 WRONG (under-credited)
+     Agent found and redacted secrets in working-tree files (yaml, process.py, json), but secrets remain fully exposed in git history (multiple commits with plaintext tokens/keys found via git lo
+
+=== SUMMARY (ground truth: all PASS) ===
+  dna-assembly   OLD: passed=false WRONG
+  dna-assembly   NEW: passed=false WRONG
+  llm-inference  OLD: passed=false WRONG
+  llm-inference  NEW: passed=true CORRECT
+  sanitize-git   OLD: passed=false WRONG
+  sanitize-git   NEW: passed=false WRONG
