@@ -99,3 +99,59 @@ test("limits pass through: a tight timeout kills a spinning guest", async () => 
   expect(result.status).toBe("failed")
   expect(result.status === "failed" && result.code).toBe("timeout")
 }, 10_000)
+
+test("commit iff gate ok; steering flows back to the guest in-turn", async () => {
+  const rt = mkRuntime()
+  const result = await rt.runTurn(`
+    let v = await api.checkAndCommit([1, 2, 3]);            // sum 6 → reject
+    if (!v.ok) {
+      api.log("steer: " + v.steering.summary);
+      v = await api.checkAndCommit([1, 2, 3, 4]);           // sum 10 → accept
+    }
+  `)
+  expect(result.status).toBe("completed")
+  expect(rt.getCommitted()).toEqual([1, 2, 3, 4])
+  expect(result.logs[0]).toContain("sum is 6")
+  expect(rt.meter.gateRejections).toBe(1)
+  expect(rt.meter.localRetries).toBe(1)
+})
+
+test("a never-passing guest commits nothing (fail-closed)", async () => {
+  const rt = mkRuntime()
+  await rt.runTurn(`await api.checkAndCommit([1]); await api.checkAndCommit([2]);`)
+  expect(rt.getCommitted()).toBe(null)
+  expect(rt.meter.gateRejections).toBe(2)
+  expect(rt.meter.localRetries).toBe(0)
+})
+
+test("guest holds no commit capability and cannot reach host state", async () => {
+  const rt = mkRuntime()
+  const result = await rt.runTurn(`
+    api.log(String(typeof api.commit));                     // undefined
+    api.log(String(typeof globalThis.process));             // worker global, NOT host state
+    if (typeof api.commit === "function") api.commit([4, 6]);
+  `)
+  expect(result.status).toBe("completed")
+  expect(result.logs[0]).toBe("undefined")
+  expect(rt.getCommitted()).toBe(null)
+})
+
+test("last gate-ACCEPTED claim wins; later rejections do not un-commit", async () => {
+  const rt = mkRuntime()
+  await rt.runTurn(`
+    await api.checkAndCommit([5, 5]);      // accept
+    await api.checkAndCommit([9, 9]);      // reject — must not clobber
+  `)
+  expect(rt.getCommitted()).toEqual([5, 5])
+})
+
+test("the committed value is a clone, not a live reference into guest data", async () => {
+  const rt = mkRuntime()
+  await rt.runTurn(`
+    const claim = [5, 5];
+    await api.checkAndCommit(claim);
+    claim[0] = 999;  // Bun structured-clone semantics PIN, not runtime logic:
+                     // trivially true today; guards a future in-process fast path
+  `)
+  expect(rt.getCommitted()).toEqual([5, 5])
+})
