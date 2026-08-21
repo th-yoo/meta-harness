@@ -184,6 +184,47 @@ The inductive move is the opposite direction: **attack a task never attacked
 before**, and let the general divide emerge from the DIFFERENCES between instance
 1 and instance 2. n=2 teaches what no amount of n=1 review can.
 
+## 5. The authorship-boundary law (cross-lane, four instances, one mechanism)
+
+Generalised from §4(b) by `meta-harness-1e` and checked here against the
+session's other findings, where it turns out to subsume three of them:
+
+> **Evidence generated inside the authorship boundary of the thing it tests
+> measures the generator, not the world.**
+
+| instance | authored by | what it actually measured |
+|---|---|---|
+| §8.1's "second fixture" transfer test | us (`make-fixture.ts`, seed 424242) | our fixture generator |
+| the `6/99` series-bearing denominator | us (5 of 6 were our probe tasks) | our own habits |
+| `evasion-cards.json` as the literal checker's bad set | us, same author, same sitting | our imagination of evasions |
+| L-B replication as a value-truth witness | same model, same prompt | sampling stability, not truth |
+
+The fourth is the spec's own demotion argument (shared training ⇒ shared prior ⇒
+shared confident error), which was reached independently and never connected to
+the other three. It is the same law at the level of witnesses rather than
+fixtures. The third is this session's finding S5, also never connected.
+
+**Consequence, binding on both lanes:** a transfer test's fixture must come from
+**outside the authorship boundary of the thing under test**, or it is n=1 in
+costume. Lane B's open second-fixture item for the scale-space criterion carries
+the identical exposure — a self-generated gcode fixture with a varied string and
+varied font parameters would discharge the requirement while measuring our
+generator. This is the "detector validated on synthetics" lesson promoted from
+detectors to transfer requirements, bad sets, denominators, and witnesses alike.
+
+## 6. Where the leverage was actually lost
+
+The n=1 spiral was **not** a discipline failure in any round — every round was
+rigorous, and the reviews demonstrably worked (four real defects, three of them
+critical or high). It was a **SEQUENCING decision** made once and early (§6
+first, level-2 "own go, after §6 and the second fixture") that routed every
+subsequent disciplined round into the same instance.
+
+**The expensive choice is WHICH INSTANCE TO FACE, not how hard to review it.**
+Review quality is not the scarce resource here — this cycle proved we have it.
+Instance selection is where the leverage was lost, and it is a decision that
+belongs to the principals, not to the lanes agreeing with each other.
+
 ## Honest summary
 
 - **Method: compressed.** Many instances → one scope-defect mechanism, one
