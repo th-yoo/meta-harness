@@ -1,0 +1,25 @@
+Looking at this problem, I need to determine how the reported first-column values relate to actual Raman shift positions for the D, G, D', and 2D bands of graphene (expected near 1350, 1580, 1620, and 2700 cm⁻¹ respectively).
+
+**Testing the inv-x hypothesis:**
+
+Raman spectrometers frequently store the x-axis in wavelength (nm) rather than Raman shift, related via:
+Raman shift = 10⁷·(1/λ_laser − 1/λ) = A − 10⁷/λ
+
+This is affine in 1/x. Computing 10⁷/x for each listed feature:
+
+- x₁ = 3745.081694 → 10⁷/x₁ ≈ 2670.169
+- x₂ = 6174.891631 → 10⁷/x₂ ≈ 1619.465
+- x₃ = 6327.542514 → 10⁷/x₃ ≈ 1580.392
+- x₄ = 7411.503835 → 10⁷/x₄ ≈ 1349.254
+
+These values line up almost exactly with the well-known graphene Raman band positions:
+- ≈1350 cm⁻¹ → D band
+- ≈1580 cm⁻¹ → G band
+- ≈1620 cm⁻¹ → D' band
+- ≈2670–2700 cm⁻¹ → 2D band
+
+This confirms the relationship is affine in 1/x (with essentially zero intercept and slope ≈ 10⁷), i.e., family = inv-x. The (feature → band) mapping is: feature 4 → D, feature 3 → G, feature 2 → D', feature 1 → 2D, but the question asks me to report the canonical position value for each feature in the listed order, not to reorder them.
+
+ANCHOR CLAIM:
+FAMILY: inv-x
+CANONICALS: 2670.169, 1619.465, 1580.392, 1349.254

@@ -1,0 +1,29 @@
+You are given the output file of a Raman Setup. We used it to measure a defective graphene sample.
+
+Find the D, G, D' and 2D bands of the spectrum and write their positions to a file called "/app/results.json".
+
+The file should have the following format:
+{
+  "D":  { "x0": <x0_value> },
+  "G":  { "x0": <x0_value> },
+  "D'": { "x0": <x0_value> },
+  "2D": { "x0": <x0_value> }
+}
+
+
+The first column of the data file holds these values at the 4 strongest features:
+  1: 3745.081694
+  2: 6174.891631
+  3: 6327.542514
+  4: 7411.503835
+
+Report, for EVERY feature listed above and in that order, the value you would
+write for it as the band position. Also state which relationship holds between
+the first-column value x and the position you report: "x" if the position is an
+affine function of x, or "inv-x" if it is an affine function of 1/x.
+
+End your answer with exactly this block and nothing after it:
+
+ANCHOR CLAIM:
+FAMILY: <x | inv-x>
+CANONICALS: <one number per feature, comma separated, in the listed order>

@@ -1,0 +1,32 @@
+[harness] detected 4 anchors: 3745.082, 6174.892, 6327.543, 7411.504
+[harness] prompt 1010 bytes -> calling model
+  judge agent: mh-judge (locked-down persona)
+  judge opencode run (timeout=180s, attempt 1/3)...
+=== REPLY (tail) ===
+n Raman shift, related via:
+Raman shift = 10⁷·(1/λ_laser − 1/λ) = A − 10⁷/λ
+
+This is affine in 1/x. Computing 10⁷/x for each listed feature:
+
+- x₁ = 3745.081694 → 10⁷/x₁ ≈ 2670.169
+- x₂ = 6174.891631 → 10⁷/x₂ ≈ 1619.465
+- x₃ = 6327.542514 → 10⁷/x₃ ≈ 1580.392
+- x₄ = 7411.503835 → 10⁷/x₄ ≈ 1349.254
+
+These values line up almost exactly with the well-known graphene Raman band positions:
+- ≈1350 cm⁻¹ → D band
+- ≈1580 cm⁻¹ → G band
+- ≈1620 cm⁻¹ → D' band
+- ≈2670–2700 cm⁻¹ → 2D band
+
+This confirms the relationship is affine in 1/x (with essentially zero intercept and slope ≈ 10⁷), i.e., family = inv-x. The (feature → band) mapping is: feature 4 → D, feature 3 → G, feature 2 → D', feature 1 → 2D, but the question asks me to report the canonical position value for each feature in the listed order, not to reorder them.
+
+ANCHOR CLAIM:
+FAMILY: inv-x
+CANONICALS: 2670.169, 1619.465, 1580.392, 1349.254
+
+[parse] family=inv-x canonicals=2670.169, 1619.465, 1580.392, 1349.254
+
+[gate] mergeCheck: ok=true reason=- a=0.0015059 b=1.00000e+7 delta=19.53
+[truth] true shifts: 2670.2, 1619.5, 1580.4, 1349.3
+[truth] claim max abs err vs true shift: 0.003381
