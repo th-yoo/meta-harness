@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test"
 import { buildJudgePrompt, parseVerdict } from "../src/judge.ts"
+import { DEFAULT_TRAJ_CAP } from "../src/traj-cap.ts"
 import type { TrajEvent } from "../src/harness-store.ts"
 
 // Token-free: exercises buildJudgePrompt's rendering + parseVerdict directly —
@@ -115,4 +116,46 @@ test("JUDGE_SYSTEM_PROMPT loads from the shared judge-prompt.txt (single source 
   const path = await import("node:path")
   const onDisk = fs.readFileSync(path.join(import.meta.dir, "..", "src", "judge-prompt.txt"), "utf-8").trim()
   expect(JUDGE_SYSTEM_PROMPT).toBe(onDisk)
+})
+
+// ── truncation must announce itself here too (2026-08-21) ────────────────
+// judge.ts's renderTrajEvents carried the SAME cap=8_000 bare-string defect as
+// judge-audit's renderJudgeAuditEvents. This is the SCORING path, and its
+// rubric says "using ONLY the evidence in the Trajectory" — an explicit
+// invitation to make ABSENCE claims about a window. Measured on the taxonomy
+// side: an 8,000-char window flipped every one of 8 classifications.
+
+test("buildJudgePrompt announces truncation to the scoring judge", () => {
+  const many: TrajEvent[] = Array.from({ length: 4000 }, (_, i) => ({
+    t: "text" as const,
+    text: `step ${i} ${"q".repeat(80)}`,
+  }))
+  const p = buildJudgePrompt("summary", 12, many)
+  expect(p).toContain("NOTE (harness, trusted)")
+  expect(p.indexOf("NOTE (harness, trusted)")).toBeLessThan(p.indexOf("## Trajectory"))
+  // #4 (was vacuous: asserted a literal no revision ever contained). The real
+  // check: the notice's imperative sentence must appear ONCE, in the frame,
+  // and never inside the trajectory section.
+  const dataStart = p.indexOf("## Trajectory")
+  expect(p.slice(dataStart)).not.toContain("do not conclude that work you cannot see never happened")
+  expect(p.slice(0, dataStart)).toContain("do not conclude that work you cannot see never happened")
+})
+
+test("a short trajectory carries no truncation notice", () => {
+  const few: TrajEvent[] = [{ t: "text", text: "hello" }]
+  const p = buildJudgePrompt("summary", 1, few)
+  expect(p).not.toContain("NOTE (harness, trusted)")
+  expect(p).toContain("SAY: hello")
+})
+
+test("the scoring judge's cap IS the shared constant (identity, not magnitude)", () => {
+  // #5 (was overclaiming: a hardcoded 100_000 would have passed). Assert the
+  // boundary sits exactly at DEFAULT_TRAJ_CAP, which only the shared constant
+  // can satisfy.
+  const line = "y".repeat(99) + "\n"
+  const under: TrajEvent[] = [{ t: "text", text: "y".repeat(DEFAULT_TRAJ_CAP - 10) }]
+  const over: TrajEvent[] = [{ t: "text", text: "y".repeat(DEFAULT_TRAJ_CAP + 10) }]
+  expect(buildJudgePrompt("s", 1, under)).not.toContain("NOTE (harness, trusted)")
+  expect(buildJudgePrompt("s", 1, over)).toContain("NOTE (harness, trusted)")
+  expect(line.length).toBe(100)
 })

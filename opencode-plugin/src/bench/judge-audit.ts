@@ -16,6 +16,8 @@ import { runJudgeOpencode } from "./opencode-run.ts"
 import { layerStoreRoots, type LayerName } from "./record.ts"
 import type { BenchPaths } from "./paths.ts"
 import { die, log } from "./util.ts"
+import { applyTrajCap, truncationNotice, DEFAULT_TRAJ_CAP, type RenderedTraj } from "../traj-cap.ts"
+export { applyTrajCap, truncationNotice, DEFAULT_TRAJ_CAP, type RenderedTraj }
 import {
   appendMetaMetric,
   candidateExists,
@@ -37,8 +39,10 @@ export const JUDGE_AUDIT_ALARM_THRESHOLD = 0.8
  * Python-side audit prompt mirrors the TS-side rubric byte-for-byte in
  * spirit.
  */
-export function renderJudgeAuditEvents(events: TrajEvent[], cap = 8_000): string {
-  if (!events.length) return "(no trajectory captured)"
+export function renderJudgeAuditEvents(events: TrajEvent[], cap = DEFAULT_TRAJ_CAP): RenderedTraj {
+  if (!events.length) {
+    return applyTrajCap("(no trajectory captured)", cap)
+  }
   const lines = events.map((e) => {
     if (e.t === "tool") {
       const err = e.error ? " [ERROR]" : ""
@@ -51,7 +55,7 @@ export function renderJudgeAuditEvents(events: TrajEvent[], cap = 8_000): string
     if (e.t === "error") return `ERROR: ${e.text ?? ""}`
     return `SAY: ${e.text ?? ""}`
   })
-  return lines.join("\n").slice(0, cap)
+  return applyTrajCap(lines.join("\n"), cap)
 }
 
 // ── build_judge_audit_prompt ─────────────────────────────────────────────
@@ -67,15 +71,19 @@ export function renderJudgeAuditEvents(events: TrajEvent[], cap = 8_000): string
  * not just a log line).
  */
 export function buildJudgeAuditPrompt(events: TrajEvent[], taskNote: string): string {
-  const trajSection = renderJudgeAuditEvents(events)
+  const rendered = renderJudgeAuditEvents(events)
+  const trajSection = rendered.text
+  const notice = truncationNotice(rendered)
   return `# Meta-Harness Judge Audit
-
+${notice ? `\n${notice}\n` : ""}
 You are scoring whether an ALREADY-FINISHED coding-agent session accomplished
 its task. This is a ONE-SHOT judgement from fixed evidence.
 
 ## Rules — read first
 - The session already ran, elsewhere and earlier. The **Trajectory** below is
-  your COMPLETE and ONLY evidence. You cannot see anything else.
+  your ONLY evidence — you cannot see anything else. It is COMPLETE unless a
+  truncation NOTE appears above; if one does, the trajectory is a PREFIX and
+  absence from it is not evidence of absence.
 - **Do NOT investigate.** Do not use ANY tool of any kind — no file reads, no
   commands, no grep/glob/list, no web fetch or search, no browser or MCP tools
   (e.g. playwright) — to "check" the answer. The real environment here is NOT
