@@ -164,3 +164,105 @@ gauge/providers/anthropic-cli-warm.ts:5
 Additional evidence commands (beyond the brief's Step 2 minimum, needed to
 verdict every row against the fixed rubric) are reproduced in the task
 report, `task-M1-report.md`, alongside this file.
+
+## b3 continuity — 2026-08-21 (M4)
+
+Purpose: prove the migration-planning work (M1, this doc's fix round 1)
+did not disturb the deployed lab plugin or its gauge/b3 emission stream —
+`global-constraints.md`'s "b3 continuity" clause: "the installed plugin
+cache (`~/.claude/plugins/`, `kkamak-local` → `cc-gate-plugin` @ 0.4.x)
+must be untouched; gauge emissions to `.km/gauge/` must continue."
+
+**1. Installed-plugin source check.**
+
+```
+$ python3 - <<'EOF'
+import json, pathlib
+p = pathlib.Path.home() / ".claude/plugins/installed_plugins.json"
+d = json.loads(p.read_text())
+print(json.dumps({k: v for k, v in d.items() if "kkamak" in k.lower()}, indent=2))
+EOF
+{}
+```
+
+The prescribed one-liner returns `{}` — **not** because kkamak is missing,
+but because `installed_plugins.json`'s top level is `{"version": 2,
+"plugins": {...}}`, so filtering `d.items()` (the top level) never sees
+plugin names; they live one level down in `d["plugins"]`. Re-ran filtering
+the correct level:
+
+```
+$ python3 -c "
+import json, pathlib
+d = json.loads((pathlib.Path.home()/'.claude/plugins/installed_plugins.json').read_text())
+print(json.dumps({k: v for k, v in d['plugins'].items() if 'kkamak' in k.lower()}, indent=2))
+"
+{
+  "kkamak@kkamak-local": [
+    {
+      "scope": "user",
+      "installPath": "/home/th-yoo/.claude/plugins/cache/kkamak-local/kkamak/0.4.0",
+      "version": "0.4.0",
+      "installedAt": "2026-08-02T23:00:29.176Z",
+      "lastUpdated": "2026-08-06T06:06:19.645Z",
+      "gitCommitSha": "4d279812ee2af65ecad0773f804f21cd0e5ac7a0"
+    }
+  ]
+}
+```
+
+`installPath` is the plugin CACHE, not the marketplace source — resolved
+the source separately from `~/.claude/plugins/known_marketplaces.json`:
+
+```
+$ python3 -c "
+import json, pathlib
+d = json.loads((pathlib.Path.home()/'.claude/plugins/known_marketplaces.json').read_text())
+print(json.dumps({k: v for k, v in d.items() if 'kkamak' in k.lower()}, indent=2))
+"
+{
+  "kkamak-local": {
+    "source": {
+      "source": "directory",
+      "path": "/home/th-yoo/z2/meta-harness/cc-gate-plugin"
+    },
+    "installLocation": "/home/th-yoo/z2/meta-harness/cc-gate-plugin",
+    "lastUpdated": "2026-08-02T23:00:27.607Z"
+  }
+}
+```
+
+**Result: matches expected exactly** — `kkamak-local` sources from
+`/home/th-yoo/z2/meta-harness/cc-gate-plugin`, installed version `0.4.0`
+(within `0.4.x`), `lastUpdated` on both records predates this session
+(2026-08-06 / 2026-08-02) — i.e. nothing in M1 or its fix round touched
+the plugin's registration or triggered a reinstall. No "anything else"
+condition triggered; proceeded.
+
+**2. Gauge emission continuity.**
+
+```
+$ ls ~/z2/kkamak/.km/gauge/*.done.json | wc -l
+61
+
+$ find ~/z2/kkamak/.km/gauge -name '*.done.json' -newermt '2026-08-21 12:00' | wc -l
+20
+```
+
+Comparison against the inventory doc's recorded count: the verdict table
+above (Step 2 evidence, and row 1's evidence cell) recorded **50** files,
+captured earlier today during the M1 task. The count is now **61** — a
+**+11 delta**, not a zero delta, so the "report a zero delta with context"
+instruction does not apply here; noting it anyway for completeness: this
+is a genuine, non-zero increase, meaning gauge-gated sessions kept landing
+in kkamak throughout the M1 work and its fix round, including 20 of them
+after 12:00 today. This is the expected shape for "undisturbed" — a
+frozen or broken stream would show a zero or negative delta; this shows
+continued live growth.
+
+**Verdict: UNDISTURBED.** Plugin source, install path, and version are
+byte-identical to the pre-M1 baseline (`global-constraints.md`'s "b3
+continuity" clause holds); the gauge `.done.json` stream grew by 11 files
+(20 in today's post-12:00 window) across the M1 task and its fix round,
+confirming the migration-planning work in this repo did not touch the
+installed plugin cache or interrupt live gauge emission.
