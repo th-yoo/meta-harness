@@ -1,0 +1,28 @@
+Looking at the four strongest-feature x-values (7411.5, 6327.5, 6174.9, 3745.1), I need to determine which Raman band each corresponds to and the functional relationship linking the raw first-column value to the reported band position.
+
+**Reasoning:**
+
+Raman spectrometers typically record data with the first column in raw detector/wavelength units, and the actual Raman shift (cm⁻¹) is calculated from the excitation wavelength and the measured wavelength via:
+
+Raman Shift = (1/λ₀ − 1/λ) × 10⁷
+
+This means the reported band position is an **affine function of 1/x**, not of x itself.
+
+Ordering: the raw x-values decrease monotonically (7411 → 6327 → 6174 → 3745). Under an inv-x (1/λ) relationship, larger x corresponds to smaller Raman shift, and smaller x corresponds to larger Raman shift. Given the well-known ordering of graphene defect-related bands:
+
+- D band ≈ 1350 cm⁻¹ (lowest shift)
+- G band ≈ 1580 cm⁻¹
+- D′ band ≈ 1620 cm⁻¹
+- 2D band ≈ 2700 cm⁻¹ (highest shift)
+
+This matches perfectly with the decreasing x-order (largest x → D, ..., smallest x → 2D), consistent with the inv-x relationship.
+
+So the mapping is:
+1. x=7411.50 → D → 1350
+2. x=6327.54 → G → 1580
+3. x=6174.89 → D′ → 1620
+4. x=3745.08 → 2D → 2700
+
+ANCHOR CLAIM:
+FAMILY: inv-x
+CANONICALS: 1350, 1580, 1620, 2700
