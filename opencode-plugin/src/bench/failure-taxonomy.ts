@@ -37,7 +37,7 @@ export interface TaxonomyEntry {
  * errored) / GENERAL MECHANISM (structural, not task-specific). */
 export function buildTaxonomyPrompt(events: TrajEvent[], taskNote: string, instructionMd: string, failed: boolean): string {
   const menu = TAXONOMY_MODES.map((m) => `- \`${m.key}\`: ${m.desc}`).join("\n")
-  const trajSection = renderJudgeAuditEvents(events)
+  const trajSection = renderJudgeAuditEvents(events).text
   const instr = instructionMd.trim() ? instructionMd.trim().slice(0, 4000) : "(instruction unavailable)"
   return `You are an expert coding-agent failure analyst. Diagnose WHY this agent trajectory ${failed ? "FAILED" : "ended"} — the external verifier scored it ${failed ? "FAIL" : "PASS"}, and the agent NEVER saw that verdict.
 

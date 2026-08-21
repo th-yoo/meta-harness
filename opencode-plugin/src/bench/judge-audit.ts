@@ -37,8 +37,35 @@ export const JUDGE_AUDIT_ALARM_THRESHOLD = 0.8
  * Python-side audit prompt mirrors the TS-side rubric byte-for-byte in
  * spirit.
  */
-export function renderJudgeAuditEvents(events: TrajEvent[], cap = 8_000): string {
-  if (!events.length) return "(no trajectory captured)"
+/** The trajectory budget handed to a judge.
+ *
+ * WAS 8_000, and that silently truncated real work out of view: measured
+ * 2026-08-21, path-tracing failure trajectories render to 21,673-66,508 chars,
+ * so the judge saw 12-38% of each session. In 5 of 7 the agent's first
+ * `write /app/image.c` fell OUTSIDE the window, and the judge — accurately
+ * describing its own input — reported "the trajectory ends before any image.c
+ * is written". It had not. Worse, a window cut mid-session matches the
+ * `incomplete` mode's definition ("stops partway with work visibly unfinished")
+ * BY CONSTRUCTION, so the cap manufactured the mode it was supposed to observe.
+ *
+ * Matches convention-audit's DEFAULT_BUDGET_BYTES rather than inventing a
+ * second number. The real fix is not this value — it is that truncation now
+ * ANNOUNCES ITSELF (see RenderedTraj); at any cap, a silent cut reproduces the
+ * same failure. */
+export const DEFAULT_TRAJ_CAP = 200_000
+
+export interface RenderedTraj {
+  /** the text the judge reads; carries an explicit notice when truncated */
+  text: string
+  truncated: boolean
+  totalChars: number
+  shownChars: number
+}
+
+export function renderJudgeAuditEvents(events: TrajEvent[], cap = DEFAULT_TRAJ_CAP): RenderedTraj {
+  if (!events.length) {
+    return { text: "(no trajectory captured)", truncated: false, totalChars: 0, shownChars: 0 }
+  }
   const lines = events.map((e) => {
     if (e.t === "tool") {
       const err = e.error ? " [ERROR]" : ""
@@ -51,7 +78,19 @@ export function renderJudgeAuditEvents(events: TrajEvent[], cap = 8_000): string
     if (e.t === "error") return `ERROR: ${e.text ?? ""}`
     return `SAY: ${e.text ?? ""}`
   })
-  return lines.join("\n").slice(0, cap)
+  const full = lines.join("\n")
+  if (full.length <= cap) {
+    return { text: full, truncated: false, totalChars: full.length, shownChars: full.length }
+  }
+  const shown = full.slice(0, cap)
+  // IN-BAND notice: the judge must be told, in the text it reads, that what it
+  // has is a prefix. Without this it narrates the window as the whole session.
+  const notice =
+    `\n\n[TRUNCATED: you are seeing the first ${cap.toLocaleString()} of ` +
+    `${full.length.toLocaleString()} characters. The session CONTINUES beyond this ` +
+    `point — do NOT describe it as ending here, and do NOT conclude that work ` +
+    `absent from this prefix never happened.]`
+  return { text: shown + notice, truncated: true, totalChars: full.length, shownChars: shown.length }
 }
 
 // ── build_judge_audit_prompt ─────────────────────────────────────────────
@@ -67,7 +106,7 @@ export function renderJudgeAuditEvents(events: TrajEvent[], cap = 8_000): string
  * not just a log line).
  */
 export function buildJudgeAuditPrompt(events: TrajEvent[], taskNote: string): string {
-  const trajSection = renderJudgeAuditEvents(events)
+  const trajSection = renderJudgeAuditEvents(events).text
   return `# Meta-Harness Judge Audit
 
 You are scoring whether an ALREADY-FINISHED coding-agent session accomplished

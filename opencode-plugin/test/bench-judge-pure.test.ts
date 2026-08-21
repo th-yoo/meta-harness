@@ -8,6 +8,7 @@ import {
   DEFAULT_JUDGE_MODEL,
   JUDGE_AUDIT_ALARM_THRESHOLD,
 } from "../src/bench/judge-audit.ts"
+import { buildTaxonomyPrompt } from "../src/bench/failure-taxonomy.ts"
 import type { TrajEvent } from "../src/harness-store.ts"
 
 // Ported from term-bench2/test_judge_audit.py — pure halves only (the
@@ -46,16 +47,17 @@ test("buildJudgeAuditPrompt with empty events", () => {
 // ── renderJudgeAuditEvents ───────────────────────────────────────────────
 
 test("renderJudgeAuditEvents renders tool/text/error lines and caps output", () => {
-  expect(renderJudgeAuditEvents([])).toBe("(no trajectory captured)")
+  expect(renderJudgeAuditEvents([]).text).toBe("(no trajectory captured)")
   const events: TrajEvent[] = [
     { t: "tool", tool: "bash", args: "ls", output: "a.txt", error: false },
     { t: "tool", tool: "bash", args: "rm x", error: true },
     { t: "text", text: "done" },
     { t: "error", text: "boom" },
   ]
-  const out = renderJudgeAuditEvents(events)
+  const out = renderJudgeAuditEvents(events).text
   expect(out).toBe("TOOL bash: ls → a.txt\nTOOL bash [ERROR]: rm x\nSAY: done\nERROR: boom")
-  expect(renderJudgeAuditEvents(events, 5).length).toBe(5)
+  expect(renderJudgeAuditEvents(events, 5).shownChars).toBe(5)
+  expect(renderJudgeAuditEvents(events, 5).truncated).toBe(true)
 })
 
 // ── parse_judge_reply ─────────────────────────────────────────────────────
@@ -152,4 +154,44 @@ test("judgeAgentConfig against the REAL shared judge-prompt.txt (single source o
 test("DEFAULT_JUDGE_MODEL / JUDGE_AUDIT_ALARM_THRESHOLD constants", () => {
   expect(DEFAULT_JUDGE_MODEL).toBe("openrouter/google/gemini-2.5-flash")
   expect(JUDGE_AUDIT_ALARM_THRESHOLD).toBe(0.8)
+})
+
+// ── truncation must be VISIBLE (2026-08-21) ──────────────────────────────
+// Measured defect: cap=8_000 silently cut 12-38% windows out of 21-66KB
+// trajectories, and the judge narrated its window as the whole session
+// ("the trajectory ends before any image.c is written" — it did not).
+// Truncation that does not announce itself manufactures the `incomplete` mode.
+
+test("renderJudgeAuditEvents reports whether it truncated", () => {
+  const small: TrajEvent[] = [{ t: "text", text: "hi" }]
+  const r = renderJudgeAuditEvents(small)
+  expect(r.truncated).toBe(false)
+  expect(r.text).toContain("SAY: hi")
+  expect(r.totalChars).toBe(r.shownChars)
+})
+
+test("a truncated render ANNOUNCES the cut, in the text the judge reads", () => {
+  const many: TrajEvent[] = Array.from({ length: 200 }, (_, i) => ({ t: "text" as const, text: `line ${i} ${"x".repeat(50)}` }))
+  const r = renderJudgeAuditEvents(many, 500)
+  expect(r.truncated).toBe(true)
+  expect(r.totalChars).toBeGreaterThan(r.shownChars)
+  // the judge must be told, in-band, that the session continues
+  expect(r.text).toContain("TRUNCATED")
+  expect(r.text).toContain("CONTINUES")
+  expect(r.text).toMatch(/first [\d,]+ of [\d,]+/)
+})
+
+test("the default cap admits a real trajectory that previously got cut", () => {
+  // the path-tracing failures rendered to 21,673-66,508 chars; 8,000 cut 5 of 7
+  // before their first image.c write
+  const big: TrajEvent[] = Array.from({ length: 900 }, (_, i) => ({ t: "text" as const, text: `event ${i} ${"y".repeat(70)}` }))
+  const r = renderJudgeAuditEvents(big)
+  expect(r.totalChars).toBeGreaterThan(60_000)
+  expect(r.truncated).toBe(false)
+})
+
+test("buildTaxonomyPrompt carries the truncation notice into the prompt", () => {
+  const many: TrajEvent[] = Array.from({ length: 4000 }, (_, i) => ({ t: "text" as const, text: `l${i} ${"z".repeat(80)}` }))
+  const p = buildTaxonomyPrompt(many, "task", "instruction", true)
+  expect(p).toContain("TRUNCATED")
 })
