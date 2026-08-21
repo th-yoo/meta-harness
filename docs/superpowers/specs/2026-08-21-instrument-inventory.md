@@ -17,19 +17,23 @@ or **dead**.
 
 Every file under `cc-gate-plugin/src/` **outside** `core/`, `config.ts`,
 `hook-cli.ts`, `state.ts`, `types.ts`, `output.ts`, `check-runner.ts`,
-`init-cli.ts`, found by `find cc-gate-plugin/src -type f` (2026-08-21):
-39 candidate files, grouped below into the 12 rows named in the M1 brief
-plus one extra found in the tree that the brief's list did not name
-(`rule-checks.ts` — flagged below as an enumeration addition, not a memory
-claim).
+`init-cli.ts`, found by `find cc-gate-plugin/src -type f -name "*.ts"`
+(recounted 2026-08-21 after fix round 1): **39 candidate `.ts` files**,
+grouped below into **15 rows** — the 12 named in the M1 brief, plus
+`rule-checks.ts` (found by Step 1's enumeration, not named in the brief),
+plus the brief's single "gauge/ runtime subset" row split into two
+(core / transport, Flag #2) plus `gauge/corpus-store.ts` broken out as its
+own row (fix round 1, Flag #4 — missed in the first pass; see "file-coverage
+arithmetic" below for the re-runnable count).
 
 ## Verdict table
 
 | instrument | files | live evidence (pointer) | decision-neutral? | external deps | verdict |
 |---|---|---|---|---|---|
-| **gauge/ runtime — core** | `gauge/channel.ts`, `classifier.ts`, `evaluate.ts`, `files.ts`, `guard.ts`, `nudge.ts`, `send-prompt.ts`, `shadow.ts`, `spawn.ts`, `state-resolve.ts`, `validate.ts` (11) | `~/z2/kkamak/.km/gauge/*.done.json` → **50 files** (`ls ... \| wc -l`); wired live via `hook-cli.ts:23-28` (`maybeSpawnGauge`, `decideNudge`, `shadowEvaluateAtStop`) | **Yes** — shadow-mode by construction (`guard.ts:1-3`: "Shadow mode means the check cannot change a GATE DECISION"); `hook-cli.ts:321-323`: "Sensor append never changes the decision... runs AFTER the decision is final" | **Zero** — every one of these 11 files imports only `node:*` builtins + in-repo `../types.ts`/sibling gauge files (verified: `grep -n "^import"` on each, none reference a package name) | **migrate-now** |
+| **gauge/ runtime — core** | `gauge/channel.ts`, `classifier.ts`, `evaluate.ts`, `files.ts`, `guard.ts`, `nudge.ts`, `send-prompt.ts`, `shadow.ts`, `spawn.ts`, `validate.ts` (10 — `state-resolve.ts` moved OUT to the experiment-subset row in fix round 1, see Flag #4) | `~/z2/kkamak/.km/gauge/*.done.json` → **50 files** (`ls ... \| wc -l`); wired live via `hook-cli.ts:23-28` (`maybeSpawnGauge`, `decideNudge`, `shadowEvaluateAtStop`) | **Yes** — shadow-mode by construction (`guard.ts:1-3`: "Shadow mode means the check cannot change a GATE DECISION"); `hook-cli.ts:321-323`: "Sensor append never changes the decision... runs AFTER the decision is final" | **Zero runtime** — all 10 files import only `node:*` builtins and in-repo modules at the VALUE level (verified: `grep -n "^import"` on each). One exception is type-only, not runtime: `send-prompt.ts:36` `import type { WarmIsolation } from "@th-yoo/cc-api-daemon"` — the module's own header states this must stay `import type` so "no value from the barrel enters this module's runtime graph," i.e. it erases at compile and costs zero RUNTIME dependency. It is still a compile-time reference to the banned package name, so K-lane must replace it with a locally-declared type (kkamak will not have `@th-yoo/cc-api-daemon` in `node_modules` at all) rather than copy the line verbatim | **migrate-now** |
 | **gauge/ runtime — transport** | `gauge/transport.ts`, `gauge/agent-transport.ts`, `gauge/channel-run.ts` (3) | same `.done.json` evidence as above (these files are what *produce* the gauge calls the core consumes) | Yes (same shadow-mode discipline; transport failures fail-open, never touch decision) | **External** — `transport.ts:19` `import Anthropic from "@anthropic-ai/sdk"` (1 hit); `agent-transport.ts:112` `await import("@anthropic-ai/claude-agent-sdk")` (dynamic); `channel-run.ts` rides `transport.ts`'s `sdkCall`. Both packages are the ones global-constraints.md explicitly bans (`@anthropic-ai/sdk`) or bans by extension (Agent-SDK, same family, same "zero runtime dependencies" clause) | **lab-only (dep-bound) — NOT directly portable.** Must be reimplemented as a fresh CLI-spawn provider behind `send-prompt.ts`'s port (global-constraints.md: "LLM calls go through an extension-local transport port; only the CLI-spawn provider is ported") — no such CLI-spawn provider exists yet in this tree (checked: only `anthropic-api.ts` [HTTP SDK] and `anthropic-cli-warm.ts` [ACP daemon] exist under `gauge/providers/`; neither is a bare-CLI-spawn implementation) |
-| **gauge/ experiment subset** | `gauge/cls-ab.ts`, `paired-validation.ts`, `corpus-mine.ts`, `corpus-replay.ts`, `replay-cli.ts`, `refiner.ts`, `refiner-cli.ts` (7) | Evidence exists but **only in the lab's own dogfood store**: `~/z2/meta-harness/.km/gauge-cls-ab/` = 8 entries, `.km/gauge-corpus/` = 1, `.km/gauge-corpus-shadow/` = 2 (`ls | wc -l`, run 2026-08-21). **Zero** equivalent dirs in `~/z2/kkamak/.km/` (`ls` → No such file or directory ×2) | N/A (offline batch CLIs, never called from `hook-cli.ts`'s live Stop path — confirmed: none of the 7 filenames appear as an import in `hook-cli.ts`) | Downstream of `transport.ts`'s `@anthropic-ai/sdk` import (via shared `sdkCall`) | **lab-only** (confirms brief's prior) |
+| **gauge/ experiment subset** | `gauge/cls-ab.ts`, `paired-validation.ts`, `corpus-mine.ts`, `corpus-replay.ts`, `replay-cli.ts`, `refiner.ts`, `refiner-cli.ts`, `state-resolve.ts` (8 — `state-resolve.ts` added here in fix round 1: `grep -rln "state-resolve" .` shows its ONLY importer is `gauge/replay-cli.ts`; it is never imported by `hook-cli.ts`, `gauge/shadow.ts`, `gauge/spawn.ts`, or `gauge/nudge.ts`, so it belongs in the offline mine→derive→resolve→report pipeline, not the live core — see Flag #4, a self-caught correction of the original doc) | Evidence exists but **only in the lab's own dogfood store**: `~/z2/meta-harness/.km/gauge-cls-ab/` = 8 entries, `.km/gauge-corpus/` = 1, `.km/gauge-corpus-shadow/` = 2 (`ls | wc -l`, run 2026-08-21). **Zero** equivalent dirs in `~/z2/kkamak/.km/` (`ls` → No such file or directory ×2) | N/A (offline batch CLIs, never called from `hook-cli.ts`'s live Stop path — confirmed: none of the 8 filenames appear as an import in `hook-cli.ts`) | Downstream of `transport.ts`'s `@anthropic-ai/sdk` import (via shared `sdkCall`) | **lab-only** (confirms brief's prior) |
+| **gauge/corpus-store.ts** | `gauge/corpus-store.ts` (1 — missing from the original table; fix round 1 Flag #4, CRITICAL finding) | `~/z2/meta-harness/.km/gauge-corpus/records.ndjson` = **410 lines, 2,187,641 bytes**, real corpus records (`{"provenance":"corpus-transcript","stage":"resolved","repo":"/home/th-yoo/z2/kkamak","sessionId":"ddaa7162-...",...}`, mtime 2026-08-04). Absent from `~/z2/kkamak/.km/` (`ls ~/z2/kkamak/.km/gauge-corpus/` → No such file or directory) | **Yes** — pure storage layer, own header: "Single append/rewrite target for the whole mine -> derive -> resolve -> report pipeline"; `grep -ni "decision\|block\|accept" gauge/corpus-store.ts` → **0 hits** | **Zero runtime** — `gauge/corpus-store.ts:34-36`: `import fs from "node:fs"`, `import path from "node:path"`, `import type { GaugeFile } from "./files.ts"` (in-repo, type-only) — no external package reference at all, not even type-only | **lab-only** — individually clears all three rubric legs, but `grep -rln "corpus-store" .` shows every one of its importers (`corpus-mine.ts`, `corpus-replay.ts`, `replay-cli.ts`, `channel-run.ts`, `cls-ab.ts`, `paired-validation.ts`, `state-resolve.ts`) is itself lab-only offline mine→derive→resolve→report tooling, never wired into `hook-cli.ts`'s live Stop path. Nothing in the migrate-now set calls it — migrating a storage layer with zero live callers in kkamak would ship dead code, so it tracks its callers rather than migrating standalone. If any offline tooling in this family is later promoted, this file promotes with it (same live-evidence pointer, same zero-dep profile) |
 | **gauge/providers/*** | `providers/anthropic-api.ts`, `providers/anthropic-cli-warm.ts` (2) | `anthropic-api.ts` is a thin `SendPromptProvider` wrapper around `transport.ts`'s live-evidenced `sdkCall`; `anthropic-cli-warm.ts` has no independent live-emission pointer found (not imported by `hook-cli.ts` or any spawn seam) | Yes (both are pure request/response wrappers, no decision access) | `anthropic-api.ts`: imports `transport.ts` (→ `@anthropic-ai/sdk` transitively); `anthropic-cli-warm.ts:42-43`: `import { ensureDaemon, daemonCall } from "../../acp-client-singleton.ts"` + `import { modelProvenBy, ACP_BUDGET } from "@th-yoo/cc-api-daemon"` — the second package global-constraints.md bans by name | **lab-only (dep-bound)** — both providers require a package kkamak's zero-dependency rule forbids; neither is the (not-yet-existing) CLI-spawn provider |
 | **review-sensor/ (+spawn)** | `review-sensor/core.ts`, `review-sensor/git-diff.ts`, `review-sensor/runner.ts`, `review-sensor-spawn.ts` (4) | Ships OFF by default: `review-sensor-spawn.ts:33` `if (env.KKAMAK_REVIEW_SENSOR !== "1") return false`. Live evidence exists **only where manually armed** (lab dogfood, this repo): `~/z2/meta-harness/.km/review-findings.ndjson` = 982 lines, `.km/review-sensor-state.json` = `{"lastPassTs":1787307055089,...,"dayKey":"2026-08-21","dayCount":27}` (mtime 2026-08-21, today). **Zero** trace in `~/z2/kkamak/.km/` (`review-findings.ndjson`, `review-sensor-state.json` both absent). `docs/techs.md:391`: "review-sensor moves from unbuilt to built-and-held (arming = user decision)" | Yes — `review-sensor-spawn.ts` header: "best-effort... the gate check plus one spawn call, nothing else"; findings are annotate-only | `runner.ts:38,45`: `import { modelProvenBy, type WarmIsolation } from "@th-yoo/cc-api-daemon"` + `import { ensureDaemon, daemonCall, closeSession } from "../acp-client-singleton.ts"` — banned package | **lab-only** (confirms brief's prior — built, ships OFF, never armed in the deployment target, and dep-bound in its execution path) |
 | **prompt-check** | `prompt-check-cli.ts`, `prompt-check-spawn.ts` (2) | `~/z2/kkamak/.km/gate-outcomes.ndjson`: real lines carry `"promptCheck":true,"spawnTs":...` (confirmed via `python3 -m json.load` over all 87 lines — key set includes `promptCheck`, `spawnTs`, `skippedStop`); also `~/z2/kkamak/docs/dogfood-log.md:482`: "skippedStop 1, nonCycleLines 1 (promptCheck, spawnTs 1786065473715)" | Yes — `prompt-check-cli.ts` header: "fabricates ONE sensor line via the frozen `buildSensorLine` core builder (CALLED, never edited)"; `prompt-check-spawn.ts` header: "accompany skippedStop, never replace it" | **Zero** — `prompt-check-spawn.ts` imports only `node:fs`, `node:path`, in-repo `types.ts`; `prompt-check-cli.ts` imports only in-repo `config.ts`, `sensor-append.ts`, `check-runner.ts`, `core/sensor.ts`, `types.ts` | **migrate-now** |
@@ -61,23 +65,65 @@ claim).
    before K-lane treats reinject as lab-only-and-skip.
 2. **`gauge/ runtime subset` needed to be split.** The brief's "expected
    rows at minimum" lists it as one row, and the live-evidence half of the
-   prior (`.done.json` emissions) does hold. But 3 of the 14 files
+   prior (`.done.json` emissions) does hold. But 3 of the 13 files
    (`transport.ts`, `agent-transport.ts`, `channel-run.ts`) carry the exact
    external dependencies (`@anthropic-ai/sdk`, `@anthropic-ai/claude-agent-sdk`)
    that `global-constraints.md` bans outright — they cannot migrate as literal
-   ports. I split the row into "core" (11 files, migrate-now) and "transport"
+   ports. I split the row into "core" (10 files, migrate-now) and "transport"
    (3 files, lab-only/needs-reimplementation) rather than forcing one verdict
    onto files with materially different dependency profiles. **This directly
    answers the downstream-gating question: yes, gauge's runtime subset is
    migrate-now for its decision-neutral annotate/evaluate logic; the SDK-based
    transport files are not directly portable and need a fresh CLI-spawn
    provider built against `send-prompt.ts`'s existing port interface (which
-   itself has zero runtime imports — `import type` only, erased at compile —
-   and is migrate-now as the port shape).**
+   itself has zero runtime imports — one type-only reference to
+   `@th-yoo/cc-api-daemon` that erases at compile, see row 1's evidence
+   cell — and is migrate-now as the port shape).**
 3. **`sensor-append.ts` overlaps kkamak's existing kernel appender.** Verdict
    is migrate-now on rubric grounds, but K-lane needs to reconcile field-level
    additions against kkamak's own frozen-contract sensor stream rather than
    installing a second appender.
+4. **Fix round 1 (2026-08-21): `gauge/corpus-store.ts` had no row — CRITICAL
+   finding, self-verified.** `find cc-gate-plugin/src -type f -name "*.ts"`
+   minus the excluded set is 39 files; the original table's rows summed to
+   38. Added as its own row (above); verdicted lab-only per the rubric
+   applied to its actual import list (`node:fs`, `node:path`, one in-repo
+   type-only import — zero external deps at any level) and its actual
+   caller list (all 7 importers are lab-only offline tooling). While
+   tracing that caller list I found a second, self-caught error: the
+   original table placed `gauge/state-resolve.ts` in the migrate-now
+   "core" row, but `grep -rln "state-resolve" cc-gate-plugin/src --include="*.ts"`
+   shows its **only** importer is `gauge/replay-cli.ts` (an experiment-subset
+   CLI) — it is never imported by `hook-cli.ts` or any file on the live
+   Stop path (`shadow.ts`, `spawn.ts`, `nudge.ts` all checked, none
+   reference it). `state-resolve.ts`'s own header confirms this: "km-gauge
+   corpus-replay execution-state resolver... mine -> derive -> resolve ->
+   report pipeline, stage 3." This was not one of the review's 2 reported
+   findings — I corrected it because leaving a known-disproven row-membership
+   claim in the doc after discovering it, while fixing an adjacent finding
+   on the same seam, would repeat the exact failure mode this repo's method
+   rules warn against (a claim not checked against the artifact). Moved to
+   the experiment-subset row; core dropped from 11 to 10 files.
+
+## File-coverage arithmetic (re-runnable)
+
+```
+$ find cc-gate-plugin/src -type f -name "*.ts" | \
+    grep -vE "^cc-gate-plugin/src/(core/(classify|edits|prompt|round|sensor|stop)\.ts|config\.ts|hook-cli\.ts|state\.ts|types\.ts|output\.ts|check-runner\.ts|init-cli\.ts)$" | \
+    wc -l
+39
+```
+
+Row-by-row file counts, summed: gauge/ runtime — core (10) + gauge/ runtime
+— transport (3) + gauge/ experiment subset (8) + gauge/corpus-store.ts (1)
++ gauge/providers/* (2) + review-sensor/ (+spawn) (4) + prompt-check (2)
++ sidecar.ts (1) + sensor-append.ts (1) + reinject.ts (1) + score.ts/
+score-cli.ts (2) + hook-rule-outcomes.ts (1) + fixture-ref.ts (1)
++ acp-client-singleton.ts (1) + rule-checks.ts (1)
+= 10+3+8+1+2+4+2+1+1+1+2+1+1+1+1 = **39 = 39 candidates.**
+Every candidate file appears in exactly one row (checked by hand against
+the `find` listing above); no file appears in two rows and none are
+missing.
 
 ## Evidence commands run (verbatim, Step 2 of the brief)
 
