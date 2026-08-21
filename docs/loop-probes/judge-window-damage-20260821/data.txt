@@ -1,0 +1,10 @@
+SHORT (<=2 turns): 5/23 disagree = 22%
+   v4 turns=1 judge=False human=True
+   v5 turns=1 judge=False human=True
+   v5 turns=1 judge=False human=True
+   v5 turns=1 judge=False human=True
+   v6 turns=2 judge=False human=True
+LONG (>2 turns): 3/3 disagree = 100%
+   v17 turns=20 judge=False human=True
+   v17 turns=7 judge=False human=True
+   v17 turns=34 judge=True human=False
