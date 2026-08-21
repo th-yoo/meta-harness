@@ -1,0 +1,32 @@
+
+=== 531800-e3f22d  events=131  oldPrompt=8898  newPrompt=52617 ===
+  judge agent: mh-judge (locked-down persona)
+  judge opencode run (timeout=180s, attempt 1/3)...
+  OLD: passed=false conf=0.7 :: The trajectory shows only exploratory analysis of image.ppm and discovery of the /app/orig executable, ending mid-investigation. There is no evidence 
+  judge agent: mh-judge (locked-down persona)
+  judge opencode run (timeout=180s, attempt 1/3)...
+  NEW: passed=false conf=0.92 :: Task required reconstructing image.ppm via image.c meeting a 0.99 L2 similarity target. Agent's final measured similarity was only 0.96, explicitly fa
+
+=== 529855-7513b2  events=181  oldPrompt=8898  newPrompt=63558 ===
+  judge agent: mh-judge (locked-down persona)
+  judge opencode run (timeout=180s, attempt 1/3)...
+  OLD: passed=false conf=0.7 :: Trajectory is truncated mid-investigation. Agent found only a simple gradient reconstruction achieving 0.893 similarity (below apparent 0.99 target), 
+  judge agent: mh-judge (locked-down persona)
+  judge opencode run (timeout=180s, attempt 1/3)...
+  NEW: passed=false conf=0.85 :: Task required reverse-engineering image.ppm into image.c, implying reaching a high similarity threshold (~0.99 per agent's own stated target). Final a
+
+=== 532954-82bbaf  events=181  oldPrompt=8898  newPrompt=79268 ===
+  judge agent: mh-judge (locked-down persona)
+  judge opencode run (timeout=180s, attempt 1/3)...
+  OLD: passed=false conf=0.75 :: Trajectory only shows analysis phase (reading/sampling image, identifying patterns). No evidence of image.c being written, compiled, or verified again
+  judge agent: mh-judge (locked-down persona)
+  judge opencode run (timeout=180s, attempt 1/3)...
+  NEW: passed=false conf=0.95 :: Agent explicitly acknowledged final similarity of only 0.754, far below the required 0.99 threshold. It never solved the bottom section pattern and ga
+
+=== GROUND TRUTH: all three FAILED (reward.txt = 0) ===
+  531800-e3f22d OLD: passed=false  CORRECT
+  531800-e3f22d NEW: passed=false  CORRECT
+  529855-7513b2 OLD: passed=false  CORRECT
+  529855-7513b2 NEW: passed=false  CORRECT
+  532954-82bbaf OLD: passed=false  CORRECT
+  532954-82bbaf NEW: passed=false  CORRECT
