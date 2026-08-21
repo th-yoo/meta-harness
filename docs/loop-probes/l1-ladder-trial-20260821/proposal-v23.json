@@ -1,0 +1,32 @@
+{
+  "action": "propose",
+  "reason": "8/8 failures share the same root cause (unbounded exploration exhausting budget before any implementation), all generalMechanism fields converge on the same timeboxing fix, and no existing bullet or prior lesson addresses it.",
+  "actuator": "memory",
+  "whyThisActuator": "The fix is a behavioral checkpoint rule injectable into agent context, not a tool/environment change.",
+  "bulletAssessments": [],
+  "bullet": {
+    "text": "When investigating a large or ambiguous target before writing code, cap exploration to a fixed number of steps (e.g., 5-8 tool calls), then write and test a first-draft implementation immediately, even if imperfect, and refine it iteratively rather than continuing open-ended analysis.",
+    "mode": "incomplete",
+    "evidence": [
+      "bench-path-tracing-1786537186-8f3cd0",
+      "bench-path-tracing-1786536111-7840dd",
+      "bench-path-tracing-1786534465-b948ae",
+      "bench-llm-inference-batching-scheduler-1786525032-c5933f"
+    ]
+  },
+  "predictions": {
+    "expectImprove": [
+      "path-tracing",
+      "llm-inference-batching-scheduler"
+    ],
+    "expectUnchangedGuards": [
+      "distribution-search: already reaches and validates a working solution under current harness, so an earlier draft checkpoint changes timing not correctness",
+      "merge-diff-arc-agi-task: task is diff/merge-application, minimal open-ended exploration involved, rule rarely triggers",
+      "extract-elf: analysis-then-extract flow already produces artifacts promptly; capping steps only forces earlier drafts, not less rigor on final output",
+      "kv-store-grpc: implementation-first task with clear spec, little exploratory analysis phase to timebox",
+      "prove-plus-comm: proof construction is symbolic/iterative already, not open-ended data exploration, so trigger condition rarely applies"
+    ],
+    "falsifyIf": "If in the A/B, path-tracing/batching sessions still exhaust budget in analysis without ever writing a draft despite the bullet, or if any guard task regresses because agents now submit premature drafts before sufficient investigation."
+  },
+  "wordCount": 42
+}
