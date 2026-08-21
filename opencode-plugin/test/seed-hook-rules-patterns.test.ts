@@ -3,13 +3,30 @@ import { SEED_OPS } from "../scripts/seed-hook-rules.ts"
 import { screenHookRule } from "../src/hook-rule-screen.ts"
 import { evalHookRules } from "../src/adapters/claude-code/hook-rule-eval.ts"
 
-// Brief's match/no-match table, in SEED_OPS order:
+// Brief's match/no-match table PLUS compound-command probes (review
+// 2026-08-22: bare `^pattern` was compound-command blind — `cd x && rm ...`,
+// piped/redirected tails, etc. — which would silently degrade the shadow
+// lane's denominator) and a mid-word decoy, in SEED_OPS order:
 // rm/mv store | ndjson redirect | store-sync | force-push
-const CASES: { must: string; mustNot: string }[] = [
-  { must: "rm -rf .kkamak/global", mustNot: "rm -rf node_modules" },
-  { must: "echo x > .km/gate-outcomes.ndjson", mustNot: "cat a.ndjson >> backup.ndjson" },
-  { must: "term-bench2/store-sync.sh export", mustNot: "term-bench2/store-sync.sh import" },
-  { must: "git push origin main --force", mustNot: "git push origin main" },
+const CASES: { mustMatch: string[]; mustNotMatch: string[] }[] = [
+  {
+    mustMatch: ["rm -rf .kkamak/global", "cd /tmp && rm -rf .kkamak/global"],
+    // mid-word decoy: "confirm" contains the substring "rm" but has no
+    // ;/&/| separator gating it — must NOT trip the compound-prefix branch.
+    mustNotMatch: ["rm -rf node_modules", "echo confirm .kkamak/global"],
+  },
+  {
+    mustMatch: ["echo x > .km/gate-outcomes.ndjson", "echo x > .km/gate-outcomes.ndjson && ls"],
+    mustNotMatch: ["cat a.ndjson >> backup.ndjson"],
+  },
+  {
+    mustMatch: ["term-bench2/store-sync.sh export", "store-sync.sh export 2>&1 | tail -5"],
+    mustNotMatch: ["term-bench2/store-sync.sh import"],
+  },
+  {
+    mustMatch: ["git push origin main --force", "cd repo && git push origin main --force"],
+    mustNotMatch: ["git push origin main"],
+  },
 ]
 
 test("SEED_OPS has exactly the 4 structural rules", () => {
@@ -30,7 +47,7 @@ describe.each(SEED_OPS.map((op, i) => [i, op] as const))("rule %i", (i, op) => {
     expect(s.ok).toBe(true)
   })
 
-  test("evalHookRules matches the true-positive and not the near-miss", () => {
+  test("evalHookRules matches every true-positive (incl. compound forms) and none of the near-misses", () => {
     // Table shape exactly as compileHookRulesTable emits (hook-rules-export.ts).
     const table = JSON.stringify({
       version: 1,
@@ -45,12 +62,16 @@ describe.each(SEED_OPS.map((op, i) => [i, op] as const))("rule %i", (i, op) => {
         mode: "shadow",
       }],
     })
-    const { must, mustNot } = CASES[i]
+    const { mustMatch, mustNotMatch } = CASES[i]
 
-    const hit = evalHookRules(table, hr.toolMatcher, { command: must })
-    expect(hit.outcomes.some((o) => o.matched)).toBe(true)
+    for (const command of mustMatch) {
+      const hit = evalHookRules(table, hr.toolMatcher, { command })
+      expect(hit.outcomes.some((o) => o.matched)).toBe(true)
+    }
 
-    const miss = evalHookRules(table, hr.toolMatcher, { command: mustNot })
-    expect(miss.outcomes.some((o) => o.matched)).toBe(false)
+    for (const command of mustNotMatch) {
+      const miss = evalHookRules(table, hr.toolMatcher, { command })
+      expect(miss.outcomes.some((o) => o.matched)).toBe(false)
+    }
   })
 })
