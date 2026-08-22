@@ -18,7 +18,7 @@ Models design good gauntlets. The failure is running one you never designed, on 
 4. **Cost ceiling** = cost of being wrong, as a number. Never the size of the diff.
 5. **Bar independence.** The author doesn't write the bar. If the request names its own solution ("move to JWTs"), restate the need ("stateless auth") and set criteria from that.
 6. **The bar can fire.** Name one case where it would pass and one where it wouldn't. Gate 3 doesn't imply this — a saturated corpus never engages the clause.
-7. **The critic can fail.** Seed a defect into a copy — prose included, no exempt medium — seeded by someone who hasn't seen the critic prompt. Missed twice → **NO VERDICT**.
+7. **The critic can fail.** A party who hasn't seen the critic prompt seeds a defect into an **isolated** copy — the critic must not be able to reach the original, or you measured diffing, not reasoning. Prose included, no exempt medium. Missed → retry once with a **different** plant from the same party; repairing the prompt and re-running the same plant fits the critic to the test. Missed twice → **NO VERDICT**. *(This gate is n=1 — one planted defect, one session.)*
 
 **Arguing about what a gate means = that gate FAILS.** *Panel* = any spawn of ≥2 review agents. *Author* = whoever wrote it, including you.
 
