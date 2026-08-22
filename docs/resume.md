@@ -3,6 +3,48 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## 🧷 SESSION CLOSE 2026-08-22 (`yoo-mac` "harness") — RESUME PROMPT FOR THE KKAMAK-REFUTATION SESSION
+
+```
+Resume kkamak-refutation lane (meta-harness), post-2026-08-22 close.
+git pull FIRST (~/z2/meta-harness AND ~/z2/kkamak AND ~/z2/cc-api-daemon).
+Read resume.md blocks: "DEBT-IN-SUITE MARKERS LIVE" (has the sized
+refutation ladder) + this block. main >= 6cf9a45; kkamak >= dccef31.
+
+STATE: 7 calibrated KNOWN-HOLE markers live across 3 repos (grep
+"KNOWN-HOLE(" for inventory); debt-instrument probe closed (verdict +
+Addendum 1: census self-corrected 11->7, fix-2 watchers DROPPED n=1);
+kkamak critique verdict banked: gate = floor + telemetry, NOT
+defect-catcher — correlated generator-evaluator error, lit-confirmed.
+Structural gap (test-loosening) CONCEDED, open by measured choice.
+
+DO NEXT, in order:
+ 1. README honesty pass on ~/z2/kkamak (~150 doc lines, FREE, no
+    coordination needed): floor-not-oracle framing, per-Stop cost
+    correction (critic's per-edit-turn model is wrong), tiered-check
+    pattern, dogfood scoreboard surfaced. Own commit + push.
+ 2. COORDINATION PING before any code: pinned-ref extension belongs to
+    the cc-gate->kkamak backport milestone on yoo-dev's board (resume
+    "MOST RECENT STATE 2026-08-21" block, NEXT item (a)). If yoo-dev
+    lane is idle, claim it here; if active, hand over the ladder specs.
+ 3. Then (own go each): pinned-ref check extension (~500 lines, spec in
+    the ladder block — merge-base test tree vs current impl, 0.8.0
+    extension seam, shadow-first, reuse kernel/classify.ts) ->
+    init-time gate calibration (~180) -> fresh-context coEdit route
+    (~350, DESIGN FLAG: makes kkamak optional-spend — user decision
+    before build).
+
+TRAPS: kkamak repo = public, generality rule applies (no answer keys);
+extension work = kernel byte-untouched, config-gated, off-default,
+0.7.0-parity pinned (gauge port = the template, kkamak docs/gauge.md);
+markers are calibrated — NEVER unskip without reading the marker's
+unskip-branch comment; suite counts include deliberate skips (mh 16,
+kkamak 3); shared-checkout git-add hazard if a sibling session is live.
+
+RULES: explicit go before merge/push of code (docs pushes fine) · TDD ·
+SDD for the ~500-line item · one change per commit · F2 · SITREP.
+```
+
 ## 🧷 DEBT-IN-SUITE MARKERS LIVE 2026-08-22 (`yoo-mac`) — 7 CALIBRATED KNOWN-HOLEs ACROSS 3 REPOS · CENSUS SELF-CORRECTED 11→7
 
 ```
