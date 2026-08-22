@@ -12,13 +12,21 @@ Models design good gauntlets. The failure is running one you never designed, on 
 ## Gates
 
 0. **Can a few tool calls settle it?** Read the call sites, run it, grep for the mechanism that may already exist. A panel a file read would have pre-empted is the most expensive way to be told what the code says.
-1. **Size floor.** One agent, ~5k, directly? Do that. These gates police panels, not judgment.
-2. **Design it.** ONE agent emits the orchestration — roles, verbatim prompts, acceptance rule, stop condition. 20–95k. Structural reason, not measured: a written loop can be audited and cited in the verdict; an improvised one cannot.
+1. **Size floor — and it binds the gates too.** One agent, ~5k, directly? Do that. Full compliance below is five agents before anyone reads the artifact (bar-writer, seeder, calibration critic, calibration judge, gate-2 orchestrator); a real run priced at 1.1M tokens for a 344-line spec. **When the ceremony would exceed gate 4's number, run fewer gates and say which** — 0 and 1 are free and always run, so the sequence can always refuse without paying anything. These gates police panels, not judgment, and that includes policing themselves.
+2. **Design it — the entry point, not a step.** ONE agent emits the orchestration: roles, verbatim prompts, acceptance rule, stop condition, **and the answers to gates 3, 5, 6 and 7**. 20–95k.
+
+   You run 0, 1 and 4; only you know what being wrong costs. **Gates 3 and 5–7 are not self-run**, because every gate here is otherwise graded by the party with an incentive to pass it — gate 5 says the author doesn't write the bar, but the author decides whether the bar-writer is independent; gate 7 says the seeder mustn't see the critic prompt, but one operator wires both. That is a property the operator *adds*, never one the run cannot lose: additive and forgeable. Gate 2's output is the only artifact a different party produces, which makes it the closest thing this file has to a chokepoint.
 3. **A bar outside the artifact**, named in the spawning turn: *(a)* recorded outcomes, or *(b)* a structural prior — a law, invariant, or count the artifact must satisfy whatever it claims. Form (b) is what makes spec review possible; no outcomes yet is not a reason to skip. "Critics will find something" is not form (b).
 4. **Cost ceiling** = cost of being wrong, as a number. Never the size of the diff.
 5. **Bar independence.** The author doesn't write the bar. If the request names its own solution ("move to JWTs"), restate the need ("stateless auth") and set criteria from that.
 6. **The bar can fire.** Name one case where it would pass and one where it wouldn't. Gate 3 doesn't imply this — a saturated corpus never engages the clause.
-7. **The critic can fail.** A party who hasn't seen the critic prompt seeds a defect into an **isolated** copy — the critic must not be able to reach the original, or you measured diffing, not reasoning. Prose included, no exempt medium. Missed → retry once with a **different** plant from the same party; repairing the prompt and re-running the same plant fits the critic to the test. Missed twice → **NO VERDICT**. *(This gate is n=1 — one planted defect, one session.)*
+7. **The critic can fail.** A party who hasn't seen the critic prompt seeds a defect into an **isolated** copy. Prose included, no exempt medium.
+
+   **Calibrate the critic you will actually deploy** — byte-identical prompt, same model, same effort. A differently-prompted stand-in measures a critic nobody is using and reads as rigour.
+
+   **Reaching the original is VOID, not a miss.** The measurement did not happen, so it cannot consume the one retry: rebuild the isolation and re-run the *same* plant. Two VOIDs → **NO VERDICT**. Only a genuine miss consumes the retry, and that retry uses a **different** plant from the same party — repairing the prompt and re-running the same plant fits the critic to the test. Missed twice → **NO VERDICT**.
+
+   Make the leak checkable rather than instructed: the sealed note records the **verbatim text the seeder removed**, and the judge greps the critic's output for those strings. A match proves it reached the original. *(This gate is n=1 — one planted defect, one session.)*
 
 **Arguing about what a gate means = that gate FAILS.** *Panel* = any spawn of ≥2 review agents. *Author* = whoever wrote it, including you.
 
