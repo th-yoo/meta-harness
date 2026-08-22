@@ -40,13 +40,15 @@ DO NEXT, in order:
     origin — 68690c5 + b3ab28d, both gate-check fixes (see the GATE-CHECK
     block below). Docs pushes are fine without a go; these are not docs.
     km-crank 410 pass / 0 fail verifies them.
- 1. DECIDE: publish measured counts on kkamak's public README? The pass is
-    written and green at 175c7b3 (13 cycles / 0 real defects / 1 FP, every
-    number re-derived with a line ref after an earlier draft pooled two
-    streams the log forbids pooling). Ship, or drop to the structural
-    argument without counts.
- 2. Then merge refutation-lane -> main in ~/z2/kkamak and push. Closes the
-    ladder's item 1.
+ 1. DONE 2026-08-22 night. README honesty pass SHIPPED — kkamak main 175c7b3,
+    pushed, public. Counts published as measured: 13 cycles / 0 real defects
+    caught / 1 false positive on the current kernel, 9-of-9 accepted on a
+    second repo while CI was red on three. Every number re-derived from
+    docs/dogfood-log.md with a line ref, after an earlier draft said "~22
+    cycles" — which pooled two streams the log explicitly forbids pooling AND
+    double-counted the nine it then described separately. Caught only because
+    the operator asked whether the numbers had been tested. Suite 712/3/0 on
+    the merged tree before push. Ladder item 1 CLOSED.
  3. init-time gate calibration (~180, OWN GO NOT YET TAKEN) — kkamak:init
     writes a temp canary test that must go red, confirms the configured
     check catches it, deletes it on every exit path. failProbe applied to
