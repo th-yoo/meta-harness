@@ -230,11 +230,28 @@ function spawnBg(tree: string): void {
  * with bun, so process.pid here IS the pid it recorded. */
 function bgMain(tree: string): never {
   const table = commands()
-  const r = spawnSync(table.full.argv[0]!, table.full.argv.slice(1), {
-    cwd: path.join(cwd, table.full.cwd), encoding: "utf8", env: process.env,
-  })
-  const out = (r.stdout ?? "") + (r.stderr ?? "")
-  const code = r.status ?? 1
+  const runFull = (): { code: number; out: string } => {
+    const r = spawnSync(table.full.argv[0]!, table.full.argv.slice(1), {
+      cwd: path.join(cwd, table.full.cwd), encoding: "utf8", env: process.env,
+    })
+    return { code: r.status ?? 1, out: (r.stdout ?? "") + (r.stderr ?? "") }
+  }
+
+  // CONFIRM BEFORE LATCHING (2026-08-22). `red` is a latch: decide() sends
+  // every Stop down full-sync while it is set, and no staleness path clears
+  // it (BG_STALE_MS covers "running" only). Worse, full-sync is the most
+  // contended run in the repo, so a timing-sensitive failure that set the
+  // latch becomes MORE likely to recur — self-reinforcing, exit only by
+  // hand. Measured: gate-check-cli.test.ts timed out by 7.93ms inside the
+  // full run while passing 403/0 standalone, and every Stop afterwards paid
+  // ~3.5min. A second run costs nothing here — this process is detached and
+  // nobody waits on it — and it is the whole difference between a flake and
+  // real debt. Deliberately NOT applied to runFullSync: that path is
+  // foreground, its failure is already surfaced to the user as the block
+  // reason, and re-running would double a wait someone is sitting through.
+  let { code, out } = runFull()
+  if (code !== 0) ({ code, out } = runFull())
+
   const owner = readMarker()
   if (owner?.status !== "running" || owner.pid !== process.pid) {
     process.stderr.write(`gate-check bg: marker no longer owned (pid ${process.pid}) — result discarded\n`)

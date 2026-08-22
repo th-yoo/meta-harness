@@ -43,7 +43,17 @@ fs.appendFileSync(path.join(dir, "args.txt"), process.argv.slice(2).join(" ") + 
 console.log("FAKE_OUT:" + tag)   // lets tests prove output capture is real
 let exits = {}
 try { exits = JSON.parse(fs.readFileSync(path.join(dir, "exits.json"), "utf8")) } catch {}
-process.exit(exits[tag] ?? 0)
+let code = exits[tag] ?? 0
+// An ARRAY is a per-invocation sequence, consumed left to right and
+// persisted back — lets a test express "fails once, then passes", which is
+// the shape of a contention flake. Scalars behave exactly as before.
+if (Array.isArray(code)) {
+  const seq = code
+  code = seq.length ? seq.shift() : 0
+  exits[tag] = seq
+  fs.writeFileSync(path.join(dir, "exits.json"), JSON.stringify(exits))
+}
+process.exit(code)
 `)
   const table = {
     suites: Object.fromEntries(["ccgate", "opencode", "gateplugin", "kmcrank", "doccheck"]
@@ -83,6 +93,15 @@ async function until(pred: () => boolean, ms: number): Promise<boolean> {
   return pred()
 }
 
+// TIMEOUT RULE (2026-08-22, structural — not per-incident): every test here
+// that calls runGate() spawns `bun scripts/gate-check.ts` as a real
+// subprocess, so its wall time tracks machine load, not the assertion. On
+// bun's 5000ms default those flake under full-suite contention — measured
+// twice in one day, 5007.93ms and 5009.35ms, each latching the bg marker red
+// and forcing every subsequent Stop down the ~3.5min full-sync path. All
+// spawn-bearing tests therefore carry an explicit envelope. The two
+// realCommands() tests at the bottom assert on a plain object, never spawn,
+// and correctly keep the default.
 describe("gate-check CLI", () => {
   test("first run (no marker, no baseline): tier0 = FALLBACK_SUITES (incumbent scope — ccgate yes, opencode NO), exits 0, spawns bg full run that lands green", async () => {
     const dir = tempRepo()
@@ -127,7 +146,7 @@ describe("gate-check CLI", () => {
     expect(ran(dir)).not.toContain("FULL")
     expect((r.stdout ?? "") + (r.stderr ?? "")).toContain("FAKE_OUT:kmcrank")
     expect(marker(dir)).toBeUndefined()
-  })
+  }, 30_000)
 
   test("KKAMAK_GATE_NO_BG=1 suppresses the spawn", async () => {
     const dir = tempRepo()
@@ -137,7 +156,7 @@ describe("gate-check CLI", () => {
     await new Promise((res) => setTimeout(res, 500))
     expect(ran(dir)).not.toContain("FULL")
     expect(marker(dir)).toBeUndefined()
-  })
+  }, 30_000)
 
   test("red marker -> full-sync debt repayment: FULL runs in-process, green marker replaces red, exit 0", () => {
     const dir = tempRepo()
@@ -148,7 +167,7 @@ describe("gate-check CLI", () => {
     expect(r.status).toBe(0)
     expect(ran(dir)).toEqual(["FULL"])          // debt path runs ONLY the full check
     expect(marker(dir)?.status).toBe("green")
-  })
+  }, 30_000)
 
   test("red marker + full check still failing -> non-zero exit, marker stays red with fresh outputTail", () => {
     const dir = tempRepo()
@@ -159,7 +178,7 @@ describe("gate-check CLI", () => {
     const r = runGate(dir, { KKAMAK_GATE_NO_BG: "1" })
     expect(r.status).not.toBe(0)
     expect(marker(dir)?.status).toBe("red")
-  })
+  }, 30_000)
 
   test("bg full-run failure lands a red marker with outputTail", async () => {
     const dir = tempRepo()
@@ -168,6 +187,33 @@ describe("gate-check CLI", () => {
     const r = runGate(dir)
     expect(r.status).toBe(0)                     // tier0 green; debt lands async
     expect(await until(() => marker(dir)?.status === "red", 15_000)).toBe(true)
+  }, 30_000)
+
+  // Confirm-before-latch. decide() sends every Stop down full-sync while the
+  // marker reads red, and there is no staleness path out of red (BG_STALE_MS
+  // only covers "running"). So one transient bg failure latches the gate into
+  // its slowest mode — and that mode is the most contended, which makes the
+  // transient recur. Measured 2026-08-22: gate-check-cli timed out by 7.93ms
+  // inside the full run while passing 403/0 standalone. A second run is free
+  // in bg (nobody waits) and is the difference between a flake and debt.
+  test("bg: a full check that fails once then passes does NOT latch red", async () => {
+    const dir = tempRepo()
+    fs.writeFileSync(path.join(dir, "README.md"), "x")
+    fs.writeFileSync(path.join(dir, "exits.json"), JSON.stringify({ FULL: [1, 0] }))
+    const r = runGate(dir)
+    expect(r.status).toBe(0)
+    expect(await until(() => marker(dir)?.status === "green", 15_000)).toBe(true)
+    expect(ran(dir).filter((t) => t === "FULL").length).toBe(2)
+  }, 30_000)
+
+  test("bg: a full check that fails twice still latches red", async () => {
+    const dir = tempRepo()
+    fs.writeFileSync(path.join(dir, "README.md"), "x")
+    fs.writeFileSync(path.join(dir, "exits.json"), JSON.stringify({ FULL: 1 }))
+    const r = runGate(dir)
+    expect(r.status).toBe(0)
+    expect(await until(() => marker(dir)?.status === "red", 15_000)).toBe(true)
+    expect(ran(dir).filter((t) => t === "FULL").length).toBe(2)
   }, 30_000)
 
   test("running marker + live pid: no duplicate spawn", async () => {
@@ -181,7 +227,13 @@ describe("gate-check CLI", () => {
     expect(r.status).toBe(0)
     await new Promise((res) => setTimeout(res, 500))
     expect(ran(dir)).not.toContain("FULL")
-  })
+    // 30_000 like its two siblings above and below: this spawns a real CLI
+    // subprocess AND burns 500ms of its own budget on the settle sleep, so on
+    // bun's 5000ms default it has ~4.5s for the spawn. Measured 2026-08-22:
+    // 5007.93ms under full-suite contention — 7.93ms over — which latched the
+    // bg marker red and forced every subsequent Stop down the full-sync path.
+    // The assertion is unchanged; only the harness's patience is.
+  }, 30_000)
 
   test("running marker + dead pid: recovered, new bg spawn happens", async () => {
     const dir = tempRepo()
@@ -213,7 +265,7 @@ describe("gate-check CLI", () => {
     const r = runGate(dir, { KKAMAK_GATE_FULL: "1", KKAMAK_GATE_NO_BG: "1" })
     expect(r.status).toBe(0)
     expect(ran(dir)).toEqual(["FULL"])
-  })
+  }, 30_000)
 
   test("untracked files change the tree hash (dirty-tree, not HEAD)", async () => {
     const dir = tempRepo()
