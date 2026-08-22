@@ -3,6 +3,31 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## 🧷 DEBT-IN-SUITE MARKERS LIVE 2026-08-22 (`yoo-mac`) — 7 CALIBRATED KNOWN-HOLEs ACROSS 3 REPOS · CENSUS SELF-CORRECTED 11→7
+
+```
+Probe chain (all committed): pre-registration 7e9f65a -> census (63 items) ->
+verdict (fix 1 only; watchers DROPPED n=1; probe D unjustified) -> SDD build
+-> Addendum 1 (34c50db): calibration killed 4 of 11 "expressible" rows
+(MH-22 REFUTED by f4-retraction; MH-12 UNBACKED — 0.63/0.65 has no artifact,
+recording-layer debt; DOG-1a/1b verified closed). 7 markers landed 1:1,
+every one active-FAIL-proven before test.skip:
+meta-harness MH-1 pg-clobber / MH-3 layers-none traj-discard / MH-21 F3
+parse-contradiction (both-branch unskip comment) / MH-24 F6 head-tail
+(known-holes.test.ts, 4 skips visible); kkamak KI-9 (pivoted to #9 addendum
+instance — from-based one no longer reproduces, known-issues corrected) /
+KI-13 / KI-14 (main 20fc2ad..dccef31 pushed); cc-api-daemon convention-only
+(dcc1c91). CONVENTION (all 3 CLAUDE.md): partial fix/deferral lands WITH its
+calibrated marker; unskipping is the revisit. grep KNOWN-HOLE( for inventory.
+Also: cc-gate install-shape test 30s envelope (1d25ad5, contention-measured).
+KKAMAK CRITIQUE ARC banked this week: gate = floor + telemetry, not
+defect-catcher (correlated generator-evaluator error, lit-confirmed
+Huang/ICLR24 + correlated-error bound); refutation matrix + KEEP/DROP/
+IMPROVE/ADD ladder in session notes — structural ADDs (pinned-ref check
+extension, fresh-context coEdit route, init-time gate calibration) = own
+gos, natural home = cc-gate->kkamak backport milestone on yoo-dev board.
+```
+
 ## 🔧 SHADOW-LANE UPSTREAM FIXES 2026-08-22 (`yoo-mac`) — CALIBRATION CONTRACT LIVE · HOOK-RULE LANE SEEDED · BOTH LANES NOW ACCRUE REAL DENOMINATORS
 
 ```
