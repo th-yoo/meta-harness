@@ -14,7 +14,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { execFileSync, spawnSync, spawn } from "node:child_process"
 import {
-  decide, parseMarker, suitesForChangedPaths, fastArgvSuffix, pullInsFor, PKG_DIR,
+  decide, parseMarker, suitesForChangedPaths, scopePathsForSelection, fastArgvSuffix, pullInsFor, PKG_DIR,
   type GateBgMarker, type SuiteId,
 } from "../km-crank/src/gate-check-core.ts"
 
@@ -154,6 +154,19 @@ function changedPathsSince(tree: string, current: string): string[] | undefined 
     return out.split("\n").filter(Boolean)
   } catch {
     return undefined   // unknown tree (pruned) -> caller falls back to ALL
+  }
+}
+
+/** Paths git knows nothing about yet, for scope narrowing only (see
+ * scopePathsForSelection). An empty set on ANY failure, which degrades to
+ * exactly today's un-narrowed behaviour rather than dropping a path we
+ * failed to classify. */
+function untrackedPaths(): ReadonlySet<string> {
+  try {
+    const out = execFileSync("git", ["ls-files", "--others", "--exclude-standard"], { cwd, encoding: "utf8" })
+    return new Set(out.split("\n").filter(Boolean))
+  } catch {
+    return new Set()
   }
 }
 
@@ -371,7 +384,14 @@ function main(): never {
   // A run being in flight, or the last one having failed, says nothing about
   // whether the last known-good tree is still a valid diff base — it is.
   const base = marker?.status === "green" ? marker.tree : marker?.lastGreenTree
-  const changed = base ? changedPathsSince(base, tree) : undefined
+  const rawChanged = base ? changedPathsSince(base, tree) : undefined
+  // Identity keeps every untracked file (see dirtyTreeId); SCOPE does not.
+  // Narrow only when a background full run is being spawned, so anything
+  // dropped here is still covered by tier 1 on this same Stop.
+  const changed = rawChanged !== undefined && d.spawnBg
+    ? scopePathsForSelection(rawChanged, untrackedPaths())
+    : rawChanged
+  const narrowed = rawChanged !== undefined && changed !== undefined ? rawChanged.length - changed.length : 0
   const suites = changed !== undefined ? suitesForChangedPaths(changed) : [...d.suites]
   recordDecision(d, marker, { suites, base })
   const pullIns = new Map<SuiteId, string[]>()
@@ -385,7 +405,11 @@ function main(): never {
   // this exact line: "suite:file" pairs, accumulated across ALL suites (in
   // suite order) rather than one flat ccgate-only list.
   const pullLog = [...pullIns.entries()].flatMap(([s, files]) => files.map((f) => `${s}:${f}`))
-  console.log(`gate-check: tier0 suites [${suites.join(", ")}]${pullLog.length ? ` + slow pull-in [${pullLog.join(", ")}]` : ""} (tree ${tree.slice(0, 8)})`)
+  // Never silently narrow: a scope reduction says so, and says who covers it.
+  const narrowNote = narrowed > 0
+    ? ` — scope narrowed: ${narrowed} untracked unmapped path${narrowed === 1 ? "" : "s"} not selected (tier 1 covers them)`
+    : ""
+  console.log(`gate-check: tier0 suites [${suites.join(", ")}]${pullLog.length ? ` + slow pull-in [${pullLog.join(", ")}]` : ""} (tree ${tree.slice(0, 8)})${narrowNote}`)
 
   for (const s of suites) {
     const suiteCmd = table.suites[s]

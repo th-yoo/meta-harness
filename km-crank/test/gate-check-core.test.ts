@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   parseMarker, decide, suitesForChangedPaths, fastFiles, fastArgvSuffix, pullInsFor,
+  scopePathsForSelection,
   ALL_SUITES, FALLBACK_SUITES, BG_STALE_MS, PKG_DIR, SUITE_POLICY, type GateBgMarker,
 } from "../src/gate-check-core.ts"
 
@@ -104,6 +105,57 @@ describe("suitesForChangedPaths (package-level TIA)", () => {
   })
   test("empty change list -> doccheck only (nothing to test, doc drift still checked)", () => {
     expect(suitesForChangedPaths([])).toEqual(["doccheck"])
+  })
+})
+
+// The dirty-tree hash deliberately includes untracked files — identity must
+// miss nothing, or a new untracked test file leaves the hash unchanged and
+// the full check is skipped over it (pinned in gate-check-cli.test.ts:367).
+// SCOPE selection has the opposite requirement: an untracked scratch file
+// that no suite could load matched no TIA entry and so unioned in
+// FALLBACK_SUITES, silently, on every Stop until it was deleted. Measured
+// 2026-08-23. Only paths whose suite cannot be inferred AND which no suite
+// can reach are dropped; tier 1's background full-sync still covers them,
+// which is the same latency-not-blindness trade this file's own
+// FALLBACK_SUITES comment already takes for opencode.
+describe("scopePathsForSelection (untracked scratch must not force full scope)", () => {
+  test("an untracked path claimed by no TIA entry is dropped", () => {
+    expect(scopePathsForSelection(["scratch-probe.ts"], new Set(["scratch-probe.ts"]))).toEqual([])
+  })
+
+  // The over-narrowing guard: a genuinely new test file in a package IS
+  // reachable by that package's suite, so it must survive being untracked.
+  test("an untracked path inside a TIA package is kept", () => {
+    const p = "cc-gate-plugin/test/brand-new.test.ts"
+    expect(scopePathsForSelection([p], new Set([p]))).toEqual([p])
+  })
+
+  // scripts/ maps to no suite yet km-crank imports scripts/gate-check.ts —
+  // exactly why the conservative fallback exists.
+  test("a TRACKED path claimed by no TIA entry is kept, so the fallback still fires", () => {
+    expect(scopePathsForSelection(["scripts/gate-check.ts"], new Set())).toEqual(["scripts/gate-check.ts"])
+  })
+
+  // REGRESSION: the first version of this filter dropped on untracked +
+  // unmapped alone, and killed the kmcrank pull-in for a brand-new
+  // scripts/gate-check.ts. Relative-path imports do not care what git
+  // tracks, so pull-in reachability is the third conjunct.
+  test("an UNTRACKED path a suite's pull-in policy reaches is kept", () => {
+    const p = "scripts/gate-check.ts"
+    expect(scopePathsForSelection([p], new Set([p]))).toEqual([p])
+  })
+
+  test("no untracked paths at all -> input passes through unchanged", () => {
+    const paths = ["cc-gate-plugin/src/x.ts", "scripts/gate-check.ts", "docs/a.md"]
+    expect(scopePathsForSelection(paths, new Set())).toEqual(paths)
+  })
+
+  // End-to-end of the reported failure: the scratch file alone must not drag
+  // in four suites.
+  test("dropping the scratch file collapses scope from FALLBACK_SUITES to doccheck", () => {
+    const changed = ["scratch-probe.ts"]
+    expect(suitesForChangedPaths(changed)).toEqual(ALL_SUITES.filter((s) => FALLBACK_SUITES.includes(s)))
+    expect(suitesForChangedPaths(scopePathsForSelection(changed, new Set(changed)))).toEqual(["doccheck"])
   })
 })
 

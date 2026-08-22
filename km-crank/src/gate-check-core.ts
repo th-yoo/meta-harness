@@ -145,6 +145,52 @@ export function suitesForChangedPaths(paths: string[]): SuiteId[] {
   return ALL_SUITES.filter((s) => picked.has(s))
 }
 
+/**
+ * Filter a changed-path list down to what SCOPE selection should see.
+ *
+ * The dirty-tree hash includes untracked files on purpose — identity must
+ * miss nothing, or a brand-new untracked test file leaves the hash unchanged
+ * and the background full check is skipped over it (pinned:
+ * gate-check-cli.test.ts's "untracked files change the tree hash"). Scope
+ * selection has the OPPOSITE requirement, and reusing one value for both
+ * jobs is what made an untracked scratch file at the repo root union in
+ * FALLBACK_SUITES on every Stop until someone deleted it — invisibly,
+ * because nothing logged why the scope widened (measured 2026-08-23).
+ *
+ * Dropped only when NOTHING can reach the path. Three conjuncts, and the
+ * third exists because the first draft of this function got it wrong:
+ *
+ *  1. untracked — git has never seen it;
+ *  2. the TIA map claims no suite, so it is not a new file inside a package
+ *     whose suite would collect it;
+ *  3. no suite's pull-in policy names it.
+ *
+ * Conjunct 3 is not belt-and-braces. The first version dropped on 1 AND 2
+ * alone, reasoning that an untracked file cannot have been imported by
+ * anything — and the existing suite refuted it immediately: a brand-new
+ * untracked `scripts/gate-check.ts` is imported by
+ * km-crank/test/gate-check-cli.test.ts through a RELATIVE PATH, which git
+ * tracking has no bearing on. Untracked does not mean unreachable.
+ * `pullInsFor` is the repo's existing record of which non-package paths a
+ * suite actually loads, so reachability is read from it rather than from a
+ * second table maintained here.
+ *
+ * A TRACKED unmapped path still triggers the conservative fallback
+ * untouched — this only ever narrows things git has never seen.
+ *
+ * Safe because tier 1's background full-sync still covers a dropped path:
+ * the same latency-to-detection-not-blindness trade FALLBACK_SUITES' own
+ * comment above already takes for opencode. The caller applies this only
+ * when a background run is actually being spawned.
+ */
+export function scopePathsForSelection(changed: string[], untracked: ReadonlySet<string>): string[] {
+  return changed.filter((p) => {
+    if (!untracked.has(p)) return true
+    if (TIA_MAP.some((e) => e.re.test(p))) return true
+    return ALL_SUITES.some((s) => pullInsFor(s, [p]).length > 0)
+  })
+}
+
 /** Spawn-heavy cc-gate-plugin test files excluded from tier 0. Historical
  * measurement 2026-08-05 (darwin): six files ≈134s of a ≈160s suite (real
  * daemon + CC CLI subprocess spawns, 2s settles). That measurement PREDATES
