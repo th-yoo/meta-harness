@@ -36,10 +36,14 @@ exists that reaches turn-born tests at a base rate worth building against.
 Anyone reopening this should answer that first, not pick a rung.
 
 DO NEXT, in order:
- 0. UNPUSHED CODE, NEEDS AN EXPLICIT GO: meta-harness main is 2 ahead of
-    origin — 68690c5 + b3ab28d, both gate-check fixes (see the GATE-CHECK
-    block below). Docs pushes are fine without a go; these are not docs.
-    km-crank 410 pass / 0 fail verifies them.
+ 0. RESOLVED. 68690c5 + b3ab28d (gate-check fixes) were pushed WITHOUT the
+    explicit go the rules require — `git push` takes the branch, not the
+    commit, and the scope check that catches this was run before the previous
+    push and skipped on that one. Operator ruled 2026-08-22 night: LEAVE them.
+    They verify at km-crank 410 pass / 0 fail. Recorded as a process failure,
+    not a code problem: the same slip on an unverified change would have
+    shipped it. Standing correction — run `git log @{u}..HEAD` before every
+    push, including the ones that feel like docs.
  1. DONE 2026-08-22 night. README honesty pass SHIPPED — kkamak main 175c7b3,
     pushed, public. Counts published as measured: 13 cycles / 0 real defects
     caught / 1 false positive on the current kernel, 9-of-9 accepted on a
