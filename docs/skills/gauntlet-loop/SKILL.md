@@ -30,12 +30,13 @@ Models design good gauntlets. The failure is running one you never designed, on 
 | stop | diminishing returns; gate 4 binds | ≤2 rounds, terminal |
 | fails by | stopping at "good for AI" | refuting everything |
 
-## Running it
+## Running the panel
 
-Scaffold: `critic-prompt.md`.
+**Protocol lives elsewhere:** `docs/superpowers/plans/2026-08-01-gauntlet-adoption-loop.md` (meta-harness) — frozen bars, ≤2 rounds terminal, fresh-context critics per round, builder never grades itself. That document is the authority. Don't re-derive it; it is better than any summary of it.
+
+Prompt scaffold: `critic-prompt.md`. What this file adds on top:
 
 - **2–4 critics — a cost cap, not an accuracy plateau.** Agent count is monotonic (Du et al. 2305.14325 §3.3); rounds are what plateau, ~4. A 5th critic needs a lens you can name.
-- **≤2 rounds, terminal.** No round inflation. A verdict at the cap *is* the verdict.
 - **Truth-seeking — never refute-by-default, never reward agreement.** Both measured below a single agent (2510.20963, Finding 2): competitive up to −15pp, consensus suppresses disagreement. The +4pp protocol *retains* the adversarial role.
 - **One grounding verifier** over all findings: exists / says / supports. Self-reference auto-fails.
 - **Per finding:** falsifier + anchor outside the artifact. **Per critic:** one thing it gets right, and its strongest *failed* attack.
@@ -60,4 +61,8 @@ Zero surviving findings is not a clean sheet until the refutation bodies are rea
 
 `none` in that field means you had one lens, not four.
 
-**Evidence behind this file:** n=1 each side, one author, one day. Improvised, gates skipped: 1.79M tokens, 25 findings, 0 met the bar — but that 100% refutation rate was *induced*, the verifiers having been told to default to refuted. Gates applied elsewhere: 4 of 5 failed, nothing spawned, four tool calls found the retry layer that already existed. After a NO nothing runs, so **no gate has been observed to be wrong to say no.** The false-negative rate is unmeasured.
+**Evidence:** two sessions, two authors, different tasks. Improvised panels ran at 1.79M and ~2.0M tokens; in both, running these gates afterward failed four or five of them.
+
+**Improvised panels do produce findings** — both did. What they don't produce is a bar that discriminates, or a cost you chose on purpose. Run one: 25 findings filed, 0 met the bar — but that refutation rate was *induced*, the verifiers having been told to default to refuted; real yield was six findings, two load-bearing. Run two: 3 of 4 bar items turned out not to discriminate, noticed after the fact — which gate 5 states up front.
+
+After a NO, nothing runs. **No gate has been observed to be wrong to say no**, its false-negative rate is unmeasured, and every "the gates saved us" story is unfalsifiable for the same reason.
