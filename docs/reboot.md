@@ -21,6 +21,33 @@ env-artifact forensics, the 10-task opus band. What is explicitly NOT carried fo
 work: everything in [`explicitly-not-now.md`](explicitly-not-now.md) plus all fleet/self-hosting
 build work (paper stays as reference).
 
+### Amendment 2026-08-22 — squad freeze lifted, one increment only
+
+**Scope of the lift:** the fleet/squad build freeze above is lifted for the Part 1 scope in §2 of
+[`superpowers/specs/2026-08-22-squad-part1-closure-design.md`](superpowers/specs/2026-08-22-squad-part1-closure-design.md)
+and **for nothing else**. Depth-2 recursion, the claude-code leaf, tier-2 bounds evolution, and
+squad-arm selection remain frozen. Reopening beyond that §2 requires its own decision and its own
+evidence — this amendment is not a precedent for the next one.
+
+**Why the condition is met.** This reboot's standard is evidence from *running*, not from design.
+Two runs supply it, and neither is a design document:
+
+1. **The squad has driven end-to-end.** Five drives, 2026-07-13 17:04–17:07Z,
+   `root/slugify1/{analyzer→evaluator-spec→designer→implementer→evaluator-verdict}`, real models
+   (haiku-4-5 ×3, sonnet-4-6 ×2), implementer tool usage `read 4 / bash 11 / write 2`. Session ids
+   in `term-bench2/store/roles/mh-*/candidates/*/score.json`.
+2. **The oracle can fail.** E0, 2026-08-22: the Evaluator, handed deliberately broken code against a
+   correct test-spec and an implementer report falsely claiming success, executed the code
+   (`toolUsage {read: 3, bash: 3}`), ignored the false report, and emitted `VERDICT: FAIL`. Session
+   `ses_fd80a9b00ffeeCSkHqEs3NZAtQ`, $0.0216. The wrongness of the input was established by the
+   operator before the drive — the escape from the downstream-of-decision law, and the method
+   CLAUDE.md names.
+
+**What this does not claim.** E0 is n=1 on a loud defect; the Evaluator's false-PASS rate is
+unmeasured. The diagnosis that opened this file — breadth-before-proof — stands as written, and the
+lift is narrow precisely because it was correct. This amendment moves one increment out of the
+freeze; it does not reopen the city plan.
+
 ## The loop (user's formulation, amended)
 
 > 1. Pick task(s) from TB2.0 shown solvable by another Anthropic-LLM harness.
