@@ -9,7 +9,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { tmpdir } from "node:os"
 import { execFileSync, spawn, spawnSync } from "node:child_process"
-import { realCommands } from "../../scripts/gate-check.ts"
+import { realCommands, dirtyTreeId } from "../../scripts/gate-check.ts"
 
 const GATE_CHECK = path.join(import.meta.dir, "..", "..", "scripts", "gate-check.ts")
 const CLEANUP: string[] = []
@@ -362,6 +362,64 @@ describe("gate-check CLI", () => {
     const r = runGate(dir, { KKAMAK_GATE_FULL: "1", KKAMAK_GATE_NO_BG: "1" })
     expect(r.status).toBe(0)
     expect(ran(dir)).toEqual(["FULL"])
+  }, 30_000)
+
+  // The clean-worktree fast path skips staging entirely (58ms vs 490-1310ms
+  // measured 2026-08-23). Both directions are pinned so the guard cannot rot
+  // into either failure: this test covers clean-implies-HEAD-tree, and
+  // "untracked files change the tree hash" below covers dirty-implies-
+  // different. A guard that returned HEAD's tree for a DIRTY worktree would
+  // silently mark unverified work as already-checked, which is why the
+  // second direction is not optional.
+  test("a clean worktree hashes to HEAD's tree; a dirty one does not", () => {
+    const dir = tempRepo()
+    // tempRepo leaves .km/ untracked, so ignore it — otherwise the worktree
+    // is never clean and the fast path can never be exercised here.
+    fs.writeFileSync(path.join(dir, ".gitignore"), ".km/\n")
+    execFileSync("git", ["add", ".gitignore"], { cwd: dir })
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "ignore"], { cwd: dir })
+
+    const head = execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: dir, encoding: "utf8" }).trim()
+    expect(dirtyTreeId(dir)).toBe(head)
+
+    fs.writeFileSync(path.join(dir, "u.txt"), "x")   // untracked, not ignored
+    expect(dirtyTreeId(dir)).not.toBe(head)
+  }, 30_000)
+
+  // The staging index is reused across runs so `git add -A` consults its
+  // stat cache instead of rehashing the worktree (408ms -> 37ms, measured
+  // 2026-08-23). A reused index can only be wrong by going STALE, and a
+  // stale identity reports unverified work as already-checked — the worst
+  // failure this file has. So every step is compared against an independent
+  // cold computation, and the "1" -> "2" rewrite is deliberate: same byte
+  // length, same second, which is exactly the racily-clean case a stat
+  // cache can get wrong.
+  test("index reuse agrees with a cold index across add/modify/delete", () => {
+    const dir = tempRepo()
+    fs.writeFileSync(path.join(dir, ".gitignore"), ".km/\n")
+    execFileSync("git", ["add", ".gitignore"], { cwd: dir })
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "ignore"], { cwd: dir })
+
+    // Reference index lives OUTSIDE the repo; inside, it would stage itself
+    // and diverge from what dirtyTreeId sees.
+    const refIndex = path.join(fs.mkdtempSync(path.join(tmpdir(), "gate-ref-")), "index")
+    const reference = (): string => {
+      const env = { ...process.env, GIT_INDEX_FILE: refIndex }
+      execFileSync("git", ["read-tree", "HEAD"], { cwd: dir, env })
+      execFileSync("git", ["add", "-A"], { cwd: dir, env })
+      execFileSync("git", ["rm", "-r", "--cached", "-f", "--ignore-unmatch", "--", ".km"], { cwd: dir, env })
+      const t = execFileSync("git", ["write-tree"], { cwd: dir, env, encoding: "utf8" }).trim()
+      fs.rmSync(refIndex, { force: true })
+      return t
+    }
+
+    const f = path.join(dir, "a.txt")
+    fs.writeFileSync(f, "1")
+    expect(dirtyTreeId(dir)).toBe(reference())     // seeds the warm index
+    fs.writeFileSync(f, "2")
+    expect(dirtyTreeId(dir)).toBe(reference())     // racily-clean rewrite
+    fs.rmSync(f)
+    expect(dirtyTreeId(dir)).toBe(reference())     // deletion, back to clean
   }, 30_000)
 
   test("untracked files change the tree hash (dirty-tree, not HEAD)", async () => {

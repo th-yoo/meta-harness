@@ -122,12 +122,89 @@ function commands(): CommandTable {
 }
 
 // ---------- dirty-tree hash (fixture-ref.ts precedent) ----------
-function dirtyTreeId(): string {
-  const tmpIndex = path.join(BG_DIR, `index-${process.pid}`)
-  fs.mkdirSync(BG_DIR, { recursive: true })
+/**
+ * Content id of the working tree, untracked files included (that inclusion
+ * is the point — see the "untracked files change the tree hash" CLI test).
+ *
+ * FAST PATH: a clean worktree's dirty tree IS HEAD's tree, so the staging
+ * work is skipped entirely. Measured 2026-08-23 on this repo: 58ms vs
+ * 490-1310ms, and both paths verified to return the identical hash.
+ * `git status --porcelain` empty means no tracked modification and no
+ * untracked non-ignored file, so `add -A` could stage nothing beyond HEAD.
+ * `.km/` is gitignored here so it is absent from both sides; where it is
+ * NOT ignored (the throwaway CLI-test repos) status is non-empty and this
+ * falls through to the authoritative path, which strips it. Any failure —
+ * including a repo with no commits, where `HEAD^{tree}` does not resolve —
+ * also falls through.
+ *
+ * `repo` is a parameter purely so this is testable against a temp repo
+ * without spawning the CLI; production callers take the default.
+ */
+export function dirtyTreeId(repo: string = cwd): string {
+  try {
+    const status = execFileSync("git", ["status", "--porcelain"], { cwd: repo, encoding: "utf8" })
+    if (status.trim() === "") {
+      return execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: repo, encoding: "utf8" }).trim()
+    }
+  } catch {
+    // Fall through: the authoritative path is always correct, just slower.
+  }
+
+  try {
+    return warmStagedTreeId(repo)
+  } catch {
+    return coldStagedTreeId(repo)
+  }
+}
+
+/**
+ * Staged tree via an index REUSED across runs. `git add -A` against a cold
+ * index re-stats and re-hashes the whole worktree; against a warm one it
+ * consults the index's stat cache and touches only what moved. Measured
+ * 2026-08-23 on this repo: 408ms cold vs 37ms warm.
+ *
+ * This is how git itself is designed to be used — every ordinary `git
+ * status` leans on the same stat cache. The per-pid throwaway index was the
+ * unusual choice, taken for isolation, and it paid the full rehash every
+ * Stop to get it.
+ *
+ * Reseeded whenever HEAD moves, since the index's baseline is HEAD's tree.
+ * Concurrency is handled by git itself: it takes `<index>.lock`, so a second
+ * gate-check running at the same time throws here and the caller falls back
+ * to a private cold index rather than corrupting a shared one.
+ */
+function warmStagedTreeId(repo: string): string {
+  const bgDir = path.join(repo, ".km", "gate-bg")
+  fs.mkdirSync(bgDir, { recursive: true })
+  const warmIndex = path.join(bgDir, "index-warm")
+  const warmHead = path.join(bgDir, "index-warm.head")
+  const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim()
+
+  const env = { ...process.env, GIT_INDEX_FILE: warmIndex }
+  let seeded = false
+  try {
+    seeded = fs.existsSync(warmIndex) && fs.readFileSync(warmHead, "utf8").trim() === head
+  } catch {
+    seeded = false
+  }
+  if (!seeded) {
+    execFileSync("git", ["read-tree", "HEAD"], { cwd: repo, env })
+    fs.writeFileSync(warmHead, head)
+  }
+  execFileSync("git", ["add", "-A"], { cwd: repo, env })
+  execFileSync("git", ["rm", "-r", "--cached", "-f", "--ignore-unmatch", "--", ".km"], { cwd: repo, env })
+  return execFileSync("git", ["write-tree"], { cwd: repo, env, encoding: "utf8" }).trim()
+}
+
+/** Authoritative fallback: a private index, built from scratch, discarded.
+ * Slower by ~370ms and correct under any condition the warm path declines. */
+function coldStagedTreeId(repo: string): string {
+  const bgDir = path.join(repo, ".km", "gate-bg")
+  const tmpIndex = path.join(bgDir, `index-${process.pid}`)
+  fs.mkdirSync(bgDir, { recursive: true })
   try {
     const env = { ...process.env, GIT_INDEX_FILE: tmpIndex }
-    execFileSync("git", ["read-tree", "HEAD"], { cwd, env })
+    execFileSync("git", ["read-tree", "HEAD"], { cwd: repo, env })
     // DEVIATION (verbatim `git add -A -- . ':!.km'` fails when .km/ is
     // gitignored, as it is in this repo's real .gitignore): git treats an
     // explicitly-named ignored path — even negated — as a hard error
@@ -136,13 +213,13 @@ function dirtyTreeId(): string {
     // is skipped exactly like fixture-ref.ts's plain `git add -A`), then
     // unstage any .km/ entries that snuck in when it's NOT gitignored (the
     // throwaway CLI-test temp repos have no .gitignore at all).
-    execFileSync("git", ["add", "-A"], { cwd, env })
+    execFileSync("git", ["add", "-A"], { cwd: repo, env })
     // -f: the temp index file itself lives under .km/gate-bg/ and mutates
     // every call, so its staged content always differs from HEAD/worktree
     // — a plain `rm --cached` refuses that as unsafe. We're deliberately
     // dropping .km/ wholesale, so force is correct here, not dangerous.
-    execFileSync("git", ["rm", "-r", "--cached", "-f", "--ignore-unmatch", "--", ".km"], { cwd, env })
-    return execFileSync("git", ["write-tree"], { cwd, env, encoding: "utf8" }).trim()
+    execFileSync("git", ["rm", "-r", "--cached", "-f", "--ignore-unmatch", "--", ".km"], { cwd: repo, env })
+    return execFileSync("git", ["write-tree"], { cwd: repo, env, encoding: "utf8" }).trim()
   } finally {
     fs.rmSync(tmpIndex, { force: true })
   }
