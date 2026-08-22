@@ -3,75 +3,71 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
-## 🧷 RESUME PROMPT 2026-08-22 close (`yoo-mac`) — LOOSENING GAP: NEITHER CANDIDATE MECHANISM REACHES THE MEASURED SHAPE
+## 🧷 RESUME PROMPT 2026-08-22 FULL CLOSE (`yoo-mac`) — ONE RUNG LEFT · EVERYTHING ELSE SHIPPED
 
 ```
-Resume kkamak-refutation lane. git pull ~/z2/meta-harness and ~/z2/kkamak.
-Read the "PINNED-REF REFUTED" block below this one. main >= this commit;
-kkamak main dccef31, worktree branch refutation-lane at 175c7b3 (LOCAL,
-UNPUSHED).
+Resume kkamak lane. git pull ~/z2/meta-harness AND ~/z2/kkamak.
+All three repos clean, nothing unpushed: meta-harness 5e9b0c7, kkamak
+175c7b3, cc-api-daemon dcc1c91. Worktree ~/z2/kkamak-refutation-lane
+(branch refutation-lane) == kkamak main, clean, free for new work.
 
-STATE CHANGE vs the previous close: the loosening gap was banked as
-"CONCEDED, open by measured choice." It is now conceded for a REASON, with
-anchors — neither candidate mechanism reaches the shape we actually measured.
+DO NOT RE-DERIVE ANY OF THIS — it is banked in the blocks below with
+file:line, and re-deriving it is how a day gets spent twice:
+ - PINNED-REF IS REFUTED as spec'd. Four anchored findings, see the
+   "PINNED-REF REFUTED" block. Do not build it. If someone wants the
+   loosening gap closed, the redesign needs a SUBTRACTIVE trust root and a
+   signal that reaches turn-born tests — 100% of measured escapes were in
+   files that did not exist at the pin.
+ - LOOSENING GAP: conceded FOR A REASON now, not by choice. Neither
+   candidate mechanism reaches the measured shape. The open question is
+   whether one exists at a base rate worth building against — not which
+   rung to pick.
+ - README HONESTY PASS: shipped, public, kkamak main. Ladder item 1 closed.
+ - GATE-CHECK: three defects fixed, see its block. Marker now carries
+   lastGreenTree so TIA survives a background run.
 
-THE SHAPE: dogfood-log 08-11 — both genuine escaped defects (FileStateStore
-race; unguarded reverse-ordering in its fix) had impl AND tests authored in
-the SAME TURN. "A test written to match an implementation it was written
-alongside passes by construction." 100% of measured escapes were in files
-that did not exist before the turn.
- - pinned-ref CANNOT SEE THIS. It materializes the OLD test tree; a file
-   absent at the pin cannot be selected, materialized, or run. Reach on the
-   measured shape is zero STRUCTURALLY, not statistically. (Plus the four
-   refutations in the block below.)
- - coEdit fresh-context route CAN see it — it targets sameTurnCoEdit cycles
-   exactly — but the signal was measured 30/32 benign (94%), ruled
-   "permanently shadow, promoting = FP machine" in the 08-22 shadow-lane
-   audit, and its "exact fix" citation is preprints.org 202601.0892, NOT
-   peer-reviewed and explicitly disclaiming its own empirical claims.
- - resume.md:6338 applies to BOTH: "~1 block opportunity = no power."
+THE ONE RUNG LEFT — OWN GO NOT YET TAKEN:
+ init-time gate calibration (~180 lines). kkamak:init writes a temp canary
+ test that MUST go red, confirms the configured check catches it, deletes it
+ on every exit path. failProbe applied to the adopter's own gate.json — it
+ catches a `check` that passes because it is not running anything. Fully
+ independent of pinned-ref; nothing today touched it. TDD, three cases:
+ a check that cannot fail, a check that can, cleanup on every path
+ (including throw/timeout/SIGINT). Suite baseline 712 pass / 3 skip / 0 fail.
 
-So the lane's open question is no longer WHICH mechanism. It is WHETHER one
-exists that reaches turn-born tests at a base rate worth building against.
-Anyone reopening this should answer that first, not pick a rung.
+STANDING DEBTS, none blocking:
+ - gauntlet-loop skill: 1690 words vs a <500 guideline. The arithmetic is in
+   its commit log — ~24 rules, ~480 words of bare clauses, and the verifying
+   runs cite the REASONS not the clauses. Shorter means fewer rules, which is
+   a decision, not an edit. Verified binding at four independent runs.
+ - the skill's own panel round-2 cross-check was never run; 8 of 12 anchors
+   accepted on citation strength rather than grounded.
+ - two subagent-authored runbooks (9f02500, 6e8a857) committed with bodies
+   unread, provenance disclaimed in their messages.
+ - office box: docs/skills/gauntlet-loop/ needs copying (or symlinking) into
+   ~/.claude/skills/ there to activate. On yoo-mac it is already a symlink,
+   so there is one copy and divergence cannot recur.
 
-DO NEXT, in order:
- 0. RESOLVED. 68690c5 + b3ab28d (gate-check fixes) were pushed WITHOUT the
-    explicit go the rules require — `git push` takes the branch, not the
-    commit, and the scope check that catches this was run before the previous
-    push and skipped on that one. Operator ruled 2026-08-22 night: LEAVE them.
-    They verify at km-crank 410 pass / 0 fail. Recorded as a process failure,
-    not a code problem: the same slip on an unverified change would have
-    shipped it. Standing correction — run `git log @{u}..HEAD` before every
-    push, including the ones that feel like docs.
- 1. DONE 2026-08-22 night. README honesty pass SHIPPED — kkamak main 175c7b3,
-    pushed, public. Counts published as measured: 13 cycles / 0 real defects
-    caught / 1 false positive on the current kernel, 9-of-9 accepted on a
-    second repo while CI was red on three. Every number re-derived from
-    docs/dogfood-log.md with a line ref, after an earlier draft said "~22
-    cycles" — which pooled two streams the log explicitly forbids pooling AND
-    double-counted the nine it then described separately. Caught only because
-    the operator asked whether the numbers had been tested. Suite 712/3/0 on
-    the merged tree before push. Ladder item 1 CLOSED.
- 3. init-time gate calibration (~180, OWN GO NOT YET TAKEN) — kkamak:init
-    writes a temp canary test that must go red, confirms the configured
-    check catches it, deletes it on every exit path. failProbe applied to
-    the adopter's own gate.json. The only ladder rung still standing;
-    independent of everything pinned-ref. TDD, three cases: check that
-    cannot fail, check that can, cleanup on every path.
+TRAPS:
+ - kkamak is PUBLIC and the generality rule applies (no answer keys).
+ - `git push` takes the BRANCH, not the commit. Run `git log @{u}..HEAD`
+   before every push, including ones that feel like docs. This was violated
+   once today; the commits were sound by luck, not method.
+ - never unskip a KNOWN-HOLE without reading its unskip-branch comment;
+   kkamak's 3 skips are deliberate.
+ - the worktree sits as a SIBLING of meta-harness on purpose —
+   test/sensor-contract.test.ts:309 resolves the cross-repo golden vector as
+   <repo>/../../meta-harness/..., so nesting it silently disarms that guard.
+ - a wedged bg gate-check is only reaped ON A STOP. One ran 49min today
+   against a 15min threshold. If Stops feel slow, read
+   .km/gate-bg/last-decision FIRST — it says which scope ran and why.
+ - fixing the instance instead of the class was the day's dominant error:
+   one test's timeout when five shared the defect, three -t filters that
+   matched the wrong tests, a grep that missed markdown emphasis. When a
+   check fails, ask what else shares its shape before fixing it.
 
-TRAPS: public repo + generality rule; kernel byte-untouched for extensions;
-never unskip a KNOWN-HOLE without reading its unskip-branch comment; kkamak
-suite baseline 712/3/0 and the 3 skips are deliberate; the worktree sits at
-~/z2/kkamak-refutation-lane as a SIBLING of meta-harness on purpose —
-test/sensor-contract.test.ts:309 resolves the cross-repo golden vector as
-<repo>/../../meta-harness/..., so nesting it silently disarms that guard.
-
-RULES: explicit go before code merge/push (docs pushes fine) · TDD · one
-change per commit · SITREP.
-
-DO NOT re-derive the refutation. It is banked below with file:line. The
-gauntlet-loop skill is finished, committed, and needs no context.
+RULES: explicit go before merge/push of code (docs pushes fine) · TDD ·
+one change per commit · SITREP.
 ```
 
 ## 🐌 GATE-CHECK 2026-08-22 night (`yoo-mac`) — THREE DEFECTS BEHIND "STOP HOOK TAKES LONG" · 2 COMMITS UNPUSHED, NEED A GO
