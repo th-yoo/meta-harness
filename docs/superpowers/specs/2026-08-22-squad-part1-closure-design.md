@@ -490,12 +490,27 @@ maintained by a failing build rather than by memory.
 - **That a real model emits `## Clarify` in the form `detectEscalation` parses.**
   Every gauntlet test used an injected `DriveFn`. Criterion 2 proves plumbing,
   not behaviour.
-- **End-to-end operability from the human surface.** `master/relay.ts:66-71` types
-  `ResumeSquadFn`'s answer as `"approve" | "revise"`. Until that widens, the
-  `--directive` path is unreachable from the only human-facing surface, and
-  `relay.ts:147` will raise `Clarify` escalations to a human who cannot answer
-  them. **This is in Part 1's spirit and outside its selected scope — flagged,
-  not closed.**
+- **End-to-end operability from the human surface.** Part 1 ships CLI-only, by
+  decision (§9-1), and the reason matters more than the decision: **there is no
+  human surface to be unreachable from.** `cli.ts:2357` — `die("master: no
+  transport configured (--dry-run only)")` — refuses to serve without a real
+  transport, and the `--dry-run` path calls `runMaster(deps, {until: () => true})`,
+  so `relayTick` never executes in production. `transport.ts`'s header names a
+  real implementation as "a later drop-in behind the Transport seam" and forbids
+  Socket Mode as its backing.
+
+  `master/relay.ts:70`'s `gateAnswer: "approve" | "revise"` is the **second**
+  blocker, not the first. An earlier draft of this bullet implied the type was
+  what stood in the way, which would send an implementer to widen a union into a
+  path that still cannot execute — the failure mode of shipping a feature that
+  reads as delivered and has never run.
+
+  Two things follow for whoever does take the relay. Widening is ~40 lines across
+  `relay.ts:39`, `:52`, `:70` — cost is not the argument. But `parseInbound`'s
+  grammar is a **closed regex over two verbs**, and free-text directives need
+  their own `GateKind`, their own dedup story on `(project, sliceId, kind)`, and a
+  rule for directive text that itself contains a slice id. That is a wire-contract
+  decision deserving its own section, not a widened union type.
 - **`Exhausted` and `Infeasible` policy paths.** Unimplemented and untested. The
   chokepoint halts them correctly; nothing implements the human's rescope or
   override.
@@ -504,7 +519,12 @@ maintained by a failing build rather than by memory.
 
 ## 9. Open items for the user
 
-1. **§8's relay gap.** The `--directive` path is unreachable from Slack until
-   `ResumeSquadFn` widens. Fold that widening into Part 1, or ship Part 1
-   CLI-only and take the relay in Part 2?
+1. ~~**§8's relay gap** — fold the widening into Part 1, or ship CLI-only?~~
+   **DECIDED 2026-08-22: CLI-only.** Not on cost — the widening is ~40 lines —
+   but because no master serves today (`cli.ts:2357`), so a widened
+   `ResumeSquadFn` would produce a directive path that is still unreachable,
+   through a relay that still never ticks, over a transport that does not exist.
+   Every other Part 1 criterion is executable now; a relay criterion would ship
+   as an assertion. See §8 for what the relay's own section must settle when it
+   is taken.
 2. **`frozen-gate.ts`.** Keep, remove, or leave for a separate decision (§5.3)?
