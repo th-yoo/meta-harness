@@ -69,6 +69,11 @@ test.skip("KNOWN-HOLE(MH-3): layers=none with saveAllTraj still persists the tra
     threwLoudly = true
   }
 
+  // At unskip, tighten threwLoudly to a refusal-shaped error (e.g.
+  // /layers|traj/i.test(String(e))) — a bare catch means ANY future
+  // recordToStores signature drift turns this marker green without the hole
+  // being fixed.
+
   const trajFilesFound = findTrajFiles(metaRoot).length
   expect(trajFilesFound > 0 || threwLoudly).toBe(true)
 })
@@ -98,6 +103,10 @@ test.skip("KNOWN-HOLE(MH-21): a prompt-conformant derivation cell parses instead
   // DESIRED: the prompt told the model to emit exactly this shape (a
   // derivation column carrying its own units); the parser should read it as
   // a claim, not reject it as malformed.
+  //
+  // At unskip (branch a), tighten to a round-trip: landings[0] should be
+  // {input: 5808.6, computed: 1580.4, canonical: 1580} — the
+  // discriminant-only assert would pass a column-mis-mapping parser.
   expect(parsed.kind).toBe("claim")
 })
 
@@ -200,5 +209,10 @@ test.skip("KNOWN-HOLE(MH-24): revalidate rejects a landing whose input is absent
   // DESIRED: a landing whose input is nowhere in the sample's head/tail
   // window should be rejected regardless of range-guard membership. Currently
   // ACCEPTS — the range guard is the only input check `revalidate` runs.
+  //
+  // At unskip, assert the rejection reason IS the head/tail guard (e.g.
+  // reason matches /head|tail|sample/i) — revalidate already has six
+  // rejection reasons and any NEW unrelated guard would otherwise green this
+  // marker without near-match existing.
   expect(outcome.ok).toBe(false)
 })
