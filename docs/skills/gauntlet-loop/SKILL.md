@@ -24,6 +24,10 @@ Models design good gauntlets. The failure is running one you never designed, on 
 
    **Calibrate the critic you will actually deploy** — byte-identical prompt, same model, same effort. A differently-prompted stand-in measures a critic nobody is using and reads as rigour.
 
+   **The seeder must be told that critic's lane, and plant inside it.** Otherwise gate 7 contradicts `critic-prompt.md`: a critic under "stay in your lane" is *instructed* not to file what lands outside its own, so the run measures lane-compliance rather than capability. A plant in the wrong lane is **VOID**, for the same reason a leak is — the critic could not have filed it without violating its own prompt, so the measurement did not happen and must not consume the retry.
+
+   **One calibrated critic licenses one critic.** Calibrating L1 grounds L1; it does not ground a verdict computed from L1–L4, whose acceptance path was never shown capable of failing. Either calibrate every deployed lens, or carry `N-1 lenses uncalibrated` on the verdict. Calibrating all four is *not* required — gate 1 polices that cost — but the evidence has to state its own scope.
+
    **Reaching the original is VOID, not a miss.** The measurement did not happen, so it cannot consume the one retry: rebuild the isolation and re-run the *same* plant. Two VOIDs → **NO VERDICT**. Only a genuine miss consumes the retry, and that retry uses a **different** plant from the same party — repairing the prompt and re-running the same plant fits the critic to the test. Missed twice → **NO VERDICT**.
 
    Make the leak checkable rather than instructed: the sealed note records the **verbatim text the seeder removed**, and the judge greps the critic's output for those strings. A match proves it reached the original. *(This gate is n=1 — one planted defect, one session.)*
@@ -67,11 +71,15 @@ Zero surviving findings is not a clean sheet until the refutation bodies are rea
 
 `PASS — no critic broke it under <framing>. Untested shared belief: <the premise every critic assumed>.`
 
-`none` in that field means you had one lens, not four.
+`none` in that field means you had one lens, not four. Append `N-1 lenses uncalibrated` whenever gate 7 grounded fewer critics than you deployed.
+
+**Do not collapse two verdicts into one.** A miss stands even when the run's own targeting was faulty, *and* a pass from that same configuration is untrustworthy. Both are true at once, and "arguing about what a gate means = that gate FAILS" is aimed exactly at the temptation to let the second excuse the first.
 
 **Evidence:** two sessions, two authors, different tasks. Improvised panels ran at 1.79M and ~2.0M tokens; in both, running these gates afterward failed four or five of them.
 
 **Improvised panels do produce findings** — both did. What they don't produce is a bar that discriminates, or a cost you chose on purpose. Run one: 25 findings filed, 0 met the bar — but that refutation rate was *induced*, the verifiers having been told to default to refuted; real yield was six findings, two load-bearing. Run two: 3 of 4 bar items turned out not to discriminate, noticed after the fact — which gate 5 states up front.
+
+**First end-to-end run under the gate-2 structure: NO VERDICT at gate 7.** 5 agents, 316k tokens, panel never spawned. The seeder replaced an external observable in an acceptance criterion with the drive's own self-report — a downstream-of-decision defect — and the critic missed it. Judge confirmed no leak. Near-miss worth keeping: the critic quoted the exactly correct law at the wrong criterion, which is evidence the prompt works and the targeting did not. Zero verdict on the artifact, one measured defect in the review apparatus. Gate 7 paid for itself on its first real firing and simultaneously showed how it can fire vacuously.
 
 **One false negative is on record.** Session two's round 1 ran improvised — these gates would have refused it — and produced the best finding of either lane. The gates then correctly stopped its round 2. Gates-first, and that finding does not exist. The refusal was cheap *because the improvised run had already paid.*
 
