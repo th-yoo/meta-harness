@@ -1124,6 +1124,63 @@ yoo-dev then (this session drives it):
     Winner earns only a full-board slot PROPOSAL. No activation.
 ```
 
+## 🚢 SIBLING LANE 2026-08-22 — B13 STATUS-V2 BUILT + LIVE-SMOKED, UNPUSHED AWAITING GRANT
+
+B13 dispatched to worker "fleet" (uds SendMessage lane worked, no tmux-paste
+fallback needed). Worker ran SDD, 3 waves, per-task review + fix rounds + final
+whole-branch review. 7 commits on fleet main, e163e52..eedca42, UNPUSHED.
+Suite 355→387 pass / 0 fail (30 files); tsc clean. I re-verified independently
+before trusting the report: 3 consecutive full runs 387/0, `tsc --noEmit` exit 0.
+
+HIGH catch held: `router/connection.ts` threads routerInfo
+startSlackConnection→onFrame→handleFrame→handleMessageEvent, cli/index.ts passes
+it at the call site. Proven in PRODUCTION, not just test-green — the live render
+shows a populated router build. That was the whole point of the catch (routing
+tests call handleMessageEvent directly and would have stayed green while the
+field was permanently blank).
+
+T4 live smoke (Playwright-as-user, real Slack DM), both daemons restarted at
+eedca42 — master PID 60212, router PID 60223 (old 69188/64272 gone):
+```
+mac-yoo — 2 sessions · master eedca42 up 53s · router eedca42 up 52s · @orch quiet (never seen)
+fleet       idle 51s
+concierge   idle 51s
+```
+✅ header + all sessions with ages (the "list projects returns one row" confusion
+   that motivated B13 is gone) · ✅ touch ~/.fleet/orch.alive → `@orch live` ·
+✅ `⚠ smoke  awaiting 15s — 1. Yes / 2. … / 3. No · !answer <n>` ·
+✅ `✖ smoke  dead 31s  tmux=down!` · ✅ respawn clears anomaly AND resets row age
+   while session keeps running (two-clock stateSince/lastChangedAt separation
+   confirmed live, not just unit-tested).
+❌ NOT EXERCISED — `!answer 1` relay. It is channel-scoped (`route.project`), so
+   reaching the scratch project needed a one-line repoint of ~/.fleet/router.json;
+   my permission classifier blocked Write AND Edit on that file (holds the Slack
+   token paths). Not worked around. To close it: allow the router.json edit, or
+   drive the fleet-bound channel against the worker session (costs worker context).
+
+METHOD TRAP WORTH KEEPING: neither live session can produce an awaiting row on
+demand — worker + concierge both run auto mode. Got one by temporarily adding a
+`smoke` project to ~/.fleet/fleet.json pointed at a scratchpad dir, `cli/index.ts
+start smoke`, then a Write prompt. master/reconcile.ts is NOT wired into the
+daemon, so adding a project does NOT auto-spawn and a killed session STAYS dead —
+which is exactly what makes the dead-row check possible. fleet.json restored from
+backup, router.json verified byte-identical, scratch session killed, orch.alive
+test artifact removed.
+
+CORRECTION TO A PRIOR OPS TRAP: the "composer stuck-draft" in the concierge pane
+was NOT a stuck draft — it renders dim (`ESC[2m`), i.e. Claude Code placeholder
+text, and the session transcript shows no such message ever reached the model.
+C-u is a no-op against it because there is nothing to clear.
+
+DEFERRED MINORS NOW BANKED: `~/z2/fleet/docs/backlog.md` (committed). This matters
+because `.superpowers/sdd/` is gitignored (`*`) — every triaged minor was living
+ONLY in the worker's context and its gitignored ledger, i.e. one `/clear` from
+gone. Includes the alerts.test.ts real-timer flake (~10-15%, pre-existing,
+router/alerts.ts unchanged across all of B13 — verified by diff, not asserted).
+
+NEXT: human push grant for the 7 commits (+ backlog doc). Then B12b mutators /
+WSL2 bring-up per queue below.
+
 ## 🚢 SIBLING LANE CLOSE 2026-08-22 — B12a PUSHED, B13 PLANNED+COMMITTED, session closing
 
 B12a (read-only !help/!screen/!status) PUSHED: fleet origin/main includes 250b42e
