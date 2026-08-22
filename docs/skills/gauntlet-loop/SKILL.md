@@ -65,4 +65,6 @@ Zero surviving findings is not a clean sheet until the refutation bodies are rea
 
 **Improvised panels do produce findings** — both did. What they don't produce is a bar that discriminates, or a cost you chose on purpose. Run one: 25 findings filed, 0 met the bar — but that refutation rate was *induced*, the verifiers having been told to default to refuted; real yield was six findings, two load-bearing. Run two: 3 of 4 bar items turned out not to discriminate, noticed after the fact — which gate 5 states up front.
 
-After a NO, nothing runs. **No gate has been observed to be wrong to say no**, its false-negative rate is unmeasured, and every "the gates saved us" story is unfalsifiable for the same reason.
+**One false negative is on record.** Session two's round 1 ran improvised — these gates would have refused it — and produced the best finding of either lane. The gates then correctly stopped its round 2. Gates-first, and that finding does not exist. The refusal was cheap *because the improvised run had already paid.*
+
+Past that one case the false-negative rate is still unmeasured, and every "the gates saved us" story stays unfalsifiable, because after a NO nothing runs. Deliberately, no rule was added in response to that case — a defence grown one entry per incident is the failure both authors of this file already committed twice.
