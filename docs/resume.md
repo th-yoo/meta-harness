@@ -36,6 +36,10 @@ exists that reaches turn-born tests at a base rate worth building against.
 Anyone reopening this should answer that first, not pick a rung.
 
 DO NEXT, in order:
+ 0. UNPUSHED CODE, NEEDS AN EXPLICIT GO: meta-harness main is 2 ahead of
+    origin — 68690c5 + b3ab28d, both gate-check fixes (see the GATE-CHECK
+    block below). Docs pushes are fine without a go; these are not docs.
+    km-crank 410 pass / 0 fail verifies them.
  1. DECIDE: publish measured counts on kkamak's public README? The pass is
     written and green at 175c7b3 (13 cycles / 0 real defects / 1 FP, every
     number re-derived with a line ref after an earlier draft pooled two
@@ -62,6 +66,76 @@ change per commit · SITREP.
 
 DO NOT re-derive the refutation. It is banked below with file:line. The
 gauntlet-loop skill is finished, committed, and needs no context.
+```
+
+## 🐌 GATE-CHECK 2026-08-22 night (`yoo-mac`) — THREE DEFECTS BEHIND "STOP HOOK TAKES LONG" · 2 COMMITS UNPUSHED, NEED A GO
+
+```
+Reported symptom: Stop hook taking ~3.5min. Three distinct causes, and the
+first two I chased were the less important ones.
+
+D1 CONTENTION FLAKE LATCHES THE GATE (68690c5). km-crank/test/gate-check-cli
+tests spawn `bun scripts/gate-check.ts` as a real subprocess, so wall time
+tracks machine load, not the assertion. Five were on bun's 5000ms DEFAULT;
+two timed out at 5007.93ms and 5009.35ms — 7.93 and 9.35ms over — inside the
+full run, while the same suite passed 403/0 standalone. A red marker sends
+every Stop down full-sync (decide():83), and full-sync is the MOST contended
+run, so the flake that set the latch got likelier. Fix, structural not
+per-incident: every runGate()-calling test carries 30_000 (the two
+realCommands() tests never spawn and keep the default); rule stated once at
+the describe header. Plus CONFIRM-BEFORE-LATCH — bgMain re-runs the full
+check once before writing red, free there because it is detached and nobody
+waits. NOT applied to runFullSync: foreground, its failure already surfaces
+as the block reason, and re-running would double a wait someone is sitting
+through. Both directions pinned, incl. "fails twice still latches" asserting
+FULL ran exactly twice so the fix cannot degrade into never latching.
+
+D2 SELF-INFLICTED, RECORDED SO IT IS NOT REPEATED. I deleted the green
+marker "to clear the red one" (it had already self-healed to green — check
+before acting, not while acting). That destroyed the TIA baseline. Every
+Stop after paid the fallback scope. I had checked whether decide() branched
+differently and missed that marker.tree feeds TIA regardless of branch — one
+value, two consumers, verified one.
+
+D3 THE ONE THAT MATTERED (b3ab28d). spawnBg's "running" write CLOBBERED the
+green marker, and TIA's base required status==="green". So every Stop landing
+inside the ~3.5min background-check window lost TIA and paid the conservative
+fallback scope — ~180s vs ~100ms for a docs-only change. With turns shorter
+than that window, that is MOST Stops in an active session, not an edge case.
+D1 needed a flake and D2 needed me to break something; D3 fires in normal
+operation. Fix: GateBgMarker.lastGreenTree, carried across every transition
+by one pure helper (baselineFor). parseMarker TOLERATES a malformed value by
+dropping just that field — rejecting the marker would also discard a live pid
+and a red debt signal; a degraded baseline must not escalate into a lost
+decision.
+
+OBSERVABILITY (in b3ab28d) — .km/gate-bg/last-decision, one line per Stop,
+overwritten. Exists because the debt path announced itself on stdout and a
+SUCCESSFUL Stop exits 0, where hook stdout never reaches the session
+(known-issues #10). It paid for itself immediately: its own "NO green
+baseline" line is what exposed D3. It also caught THREE defects in ITSELF
+within minutes — logging decide()'s fallback list instead of TIA's real
+suites (reporting suites that never ran), labelling a bg-run-in-flight as
+"green marker current" (a log that states something false), and UTC stamps
+beside local mtimes.
+
+STILL OPEN, NOT FIXED, DELIBERATELY:
+ - `red` clears only when a full-sync passes. That is correct — an expiry
+   would convert real debt into silence, the disarm-the-gate move. I raised
+   a "staleness path" as a defect earlier and then RETRACTED it: red is not
+   a permanent latch, it clears on the first passing repayment.
+ - tier0 runs its suites SEQUENTIALLY (spawnSync in a loop). Concurrency
+   would cut the fallback path from ~180s to ~120s, but it optimises the
+   ABNORMAL path while adding contention to the one that runs every Stop —
+   on a box that just missed a 5s deadline twice in one day. Ruled not worth
+   it; the baseline fix removes the reason that path fires. Revisit only
+   with a measured fallback rate from last-decision.
+ - a wedged bg run is only reaped ON A STOP. One ran 49 minutes tonight
+   (BG_STALE_MS is 15) because no Stop happened to fire; killed by hand,
+   group-scoped, identity verified from its command line first.
+
+VERIFIED: km-crank 403 -> 410 pass, 0 fail, 160.89s. Seven new tests, every
+one RED before GREEN, negative controls included.
 ```
 
 ## ⛔ PINNED-REF REFUTED 2026-08-22 late (`yoo-mac`) — DO NOT BUILD AS SPEC'D · COORDINATION PING STILL UNSENT · GAUNTLET-LOOP SKILL LANDED
