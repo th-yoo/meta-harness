@@ -87,6 +87,9 @@ function ran(dir: string): string[] {
 function marker(dir: string): any {
   try { return JSON.parse(fs.readFileSync(path.join(dir, ".km", "gate-bg", "state.json"), "utf8")) } catch { return undefined }
 }
+function lastDecision(dir: string): string {
+  try { return fs.readFileSync(path.join(dir, ".km", "gate-bg", "last-decision"), "utf8") } catch { return "" }
+}
 async function until(pred: () => boolean, ms: number): Promise<boolean> {
   const deadline = Date.now() + ms
   while (Date.now() < deadline) { if (pred()) return true; await new Promise((r) => setTimeout(r, 50)) }
@@ -128,6 +131,13 @@ describe("gate-check CLI", () => {
     expect(r2.status).toBe(0)
     expect(ran(dir)).toContain("doccheck")
     expect(ran(dir)).not.toContain("ccgate")
+    // The decision line must report what ACTUALLY ran, not decide()'s
+    // conservative fallback list — those diverge exactly when TIA narrows,
+    // which is the case worth logging correctly.
+    const line = lastDecision(dir)
+    expect(line).toContain("[doccheck]")
+    expect(line).not.toContain("ccgate")
+    expect(line).toContain("TIA vs baseline")
   }, 30_000)
 
   test("tier0 failure blocks: failing suite -> non-zero exit, failure output present, NO bg spawn", async () => {
@@ -214,6 +224,93 @@ describe("gate-check CLI", () => {
     expect(r.status).toBe(0)
     expect(await until(() => marker(dir)?.status === "red", 15_000)).toBe(true)
     expect(ran(dir).filter((t) => t === "FULL").length).toBe(2)
+  }, 30_000)
+
+  // Observability. The debt path already announces itself on stdout
+  // (gate-check.ts's "repaying background-check debt" line), but on a
+  // SUCCESSFUL repayment the script exits 0, the Stop is allowed, and hook
+  // stdout is not surfaced in an ordinary session — known-issues.md #10,
+  // measured. So a legitimate multi-minute repayment is indistinguishable
+  // from an unexplained hang. This file is the readable channel: one line,
+  // overwritten per Stop, answering "why was that slow" with a cat.
+  test("every Stop records a readable decision line", async () => {
+    const dir = tempRepo()
+    fs.writeFileSync(path.join(dir, "README.md"), "x")
+    const r = runGate(dir, { KKAMAK_GATE_NO_BG: "1" })
+    expect(r.status).toBe(0)
+    const line = lastDecision(dir)
+    expect(line).toContain("tier0")
+    expect(line).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)
+    // First run: no green marker, so TIA has no diff base and the scope is the
+    // conservative fallback. Saying WHY is the point — that sentence is the
+    // difference between a ~100ms Stop and a ~3min one, and it is otherwise
+    // invisible from outside.
+    expect(line).toContain("NO green baseline")
+  }, 30_000)
+
+  test("debt repayment records WHY the Stop was slow and when the failure was", async () => {
+    const dir = tempRepo()
+    fs.mkdirSync(path.join(dir, ".km", "gate-bg"), { recursive: true })
+    fs.writeFileSync(path.join(dir, ".km", "gate-bg", "state.json"),
+      JSON.stringify({ status: "red", tree: "stale", startedTs: 1, finishedTs: 1755000000000, outputTail: "old" }))
+    const r = runGate(dir, { KKAMAK_GATE_NO_BG: "1" })
+    expect(r.status).toBe(0)
+    const line = lastDecision(dir)
+    expect(line).toContain("full-sync")
+    expect(line).toContain("debt")
+    // It reports the RECORDED failure time, not now. Asserted as "not today"
+    // rather than as a literal date: stamps are local, so a fixed date string
+    // would pass in KST and fail in a timezone where the epoch lands a day
+    // either side. The property under test is provenance, not formatting.
+    const today = new Date()
+    const p = (n: number) => String(n).padStart(2, "0")
+    expect(line).not.toContain(`${today.getFullYear()}-${p(today.getMonth() + 1)}-${p(today.getDate())}  full-sync`)
+    expect(line).toMatch(/FAILED at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)
+  }, 30_000)
+
+  test("an unwritable decision file never breaks the gate", async () => {
+    const dir = tempRepo()
+    fs.mkdirSync(path.join(dir, ".km", "gate-bg"), { recursive: true })
+    // a DIRECTORY where the file goes: every write throws, fail-open or bust
+    fs.mkdirSync(path.join(dir, ".km", "gate-bg", "last-decision"))
+    fs.writeFileSync(path.join(dir, "README.md"), "x")
+    const r = runGate(dir, { KKAMAK_GATE_NO_BG: "1" })
+    expect(r.status).toBe(0)
+    expect(ran(dir)).toContain("doccheck")
+  }, 30_000)
+
+  // Baseline preservation. TIA's diff base is the last KNOWN-GOOD tree, and a
+  // check being in flight says nothing about whether that tree is still a
+  // valid base — it plainly is. Before this, spawnBg's `running` write
+  // clobbered the green marker, so every Stop landing inside the ~3.5min
+  // background window lost TIA entirely and paid the conservative fallback
+  // scope (~180s vs ~100ms for a docs-only change). In an active session with
+  // turns shorter than that window, that is most Stops, not an edge case.
+  test("a bg run in flight keeps the last green tree as the TIA base", async () => {
+    const dir = tempRepo()
+    runGate(dir)
+    expect(await until(() => marker(dir)?.status === "green", 15_000)).toBe(true)
+    const greenTree = marker(dir).tree
+    fs.writeFileSync(path.join(dir, "README.md"), "x")           // docs-only
+    fs.rmSync(path.join(dir, "ran.txt"))
+    fs.rmSync(path.join(dir, "args.txt"), { force: true })
+    // a fresh bg check is now in flight for some newer tree
+    fs.writeFileSync(path.join(dir, ".km", "gate-bg", "state.json"),
+      JSON.stringify({ status: "running", tree: "newtree", pid: process.pid,
+                       startedTs: Date.now(), lastGreenTree: greenTree }))
+    const r = runGate(dir, { KKAMAK_GATE_NO_BG: "1" })
+    expect(r.status).toBe(0)
+    expect(ran(dir)).toEqual(["doccheck"])                        // TIA narrowed
+    expect(ran(dir)).not.toContain("ccgate")
+    expect(lastDecision(dir)).toContain("TIA vs baseline")
+  }, 40_000)
+
+  test("a green marker records the tree as the last known-good baseline", async () => {
+    const dir = tempRepo()
+    runGate(dir)
+    expect(await until(() => marker(dir)?.status === "green", 15_000)).toBe(true)
+    const m = marker(dir)
+    expect(m.lastGreenTree).toBe(m.tree)
   }, 30_000)
 
   test("running marker + live pid: no duplicate spawn", async () => {

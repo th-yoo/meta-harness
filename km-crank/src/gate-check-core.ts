@@ -47,6 +47,15 @@ export interface GateBgMarker {
   finishedTs?: number
   /** tail of the failing check output (host-local only, never committed) */
   outputTail?: string
+  /** Last tree a full check actually PASSED on — TIA's diff base, carried
+   * across every status transition. Distinct from `tree`, which is the tree
+   * the CURRENT run is keyed to and is meaningless as a baseline while that
+   * run is still going or has just failed. Without this, spawning a bg run
+   * overwrote the green marker and destroyed the baseline, so every Stop
+   * inside the ~3.5min background window lost TIA and paid the conservative
+   * fallback scope. A run being in flight says nothing about whether the last
+   * known-good tree is still a valid thing to diff against — it is. */
+  lastGreenTree?: string
 }
 
 const MARKER_STATUSES = new Set(["running", "green", "red"])
@@ -62,6 +71,13 @@ export function parseMarker(raw: string | undefined): GateBgMarker | undefined {
   if (typeof m.status !== "string" || !MARKER_STATUSES.has(m.status)) return undefined
   if (typeof m.tree !== "string" || m.tree.length === 0) return undefined
   if (typeof m.startedTs !== "number") return undefined
+  // Tolerate, don't reject: a malformed lastGreenTree costs TIA its base for
+  // one cycle (fallback scope, slow but correct). Rejecting the whole marker
+  // would ALSO discard a live pid and a red debt signal, which is worse — a
+  // degraded baseline must never escalate into a lost decision.
+  if (m.lastGreenTree !== undefined && (typeof m.lastGreenTree !== "string" || m.lastGreenTree.length === 0)) {
+    delete m.lastGreenTree
+  }
   return m as unknown as GateBgMarker
 }
 

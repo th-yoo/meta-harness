@@ -185,6 +185,67 @@ function isGateCheckProcess(pid: number): boolean {
   }
 }
 
+/** The last known-good tree, carried across every status transition. On a
+ * green write the tree just verified IS the new baseline; otherwise inherit
+ * whatever the previous marker knew. Pure, and the only place the carry rule
+ * lives — a second copy is how the two halves drift apart. */
+function baselineFor(prev: GateBgMarker | undefined, greenTree?: string): string | undefined {
+  if (greenTree !== undefined) return greenTree
+  return prev?.status === "green" ? prev.tree : prev?.lastGreenTree
+}
+
+// ---------- observability ----------
+const LAST_DECISION = path.join(BG_DIR, "last-decision")
+
+/** Why this Stop went the way it did, one readable line, overwritten each
+ * Stop. The debt path already announces itself on stdout — but a SUCCESSFUL
+ * repayment exits 0, the Stop is allowed, and hook stdout does not reach an
+ * ordinary session (docs/known-issues.md #10, measured both ways). So a
+ * legitimate multi-minute repayment is indistinguishable from a hang, which
+ * is exactly how it was reported. This is the channel that survives exit 0:
+ * `cat .km/gate-bg/last-decision` answers "why was that slow".
+ *
+ * NEVER THROWS. Observability that can break the gate is worse than none —
+ * every write is inside the catch, including the mkdir. */
+function recordDecision(
+  d: ReturnType<typeof decide>,
+  m: GateBgMarker | undefined,
+  tier0?: { suites: SuiteId[]; base: string | undefined },
+): void {
+  try {
+    // LOCAL time, not UTC. This line is read next to `ls -la` output and a
+    // wall clock; an ISO/UTC stamp reads 9 hours off on this host and sends
+    // the reader looking for a Stop that never happened. Caught by this very
+    // file within minutes of shipping it.
+    const stamp = (ms: number) => {
+      const d = new Date(ms), p = (n: number) => String(n).padStart(2, "0")
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+    }
+    const now = stamp(Date.now())
+    const line = d.mode === "full-sync"
+      ? (d.reason === "debt"
+        ? `${now}  full-sync (debt) — the last full check FAILED at ${m?.finishedTs ? stamp(m.finishedTs) : "an unrecorded time"}, so this Stop ran the ENTIRE suite synchronously and was slow by design. Clears itself as soon as one full run passes.`
+        : `${now}  full-sync (forced by KKAMAK_GATE_FULL=1) — entire suite ran synchronously.`)
+      // d.suites is ALWAYS the conservative FALLBACK list for tier0 — the real
+      // set is TIA's, computed later in main(). Logging d.suites reported
+      // suites that never ran whenever TIA narrowed. Report what ran, and WHY
+      // the scope was what it was: "no green baseline" is the single most
+      // useful thing this file can say, because it is the difference between a
+      // ~100ms Stop and a ~3min one and is otherwise invisible.
+      : `${now}  tier0 [${(tier0?.suites ?? d.suites ?? []).join(",")}] ${
+          tier0 === undefined ? "(scope unrecorded)"
+          : tier0.base ? `(TIA vs baseline ${tier0.base.slice(0, 7)})`
+          : "(NO green baseline — conservative fallback scope, this Stop was slow because TIA had nothing to diff against)"
+        }${
+          d.spawnBg ? " + background full check spawned"
+          : m?.status === "running" ? ` — a background full check is already in flight (pid ${m.pid}, since ${stamp(m.startedTs)})`
+          : " — green marker current, no background run needed"
+        }`
+    fs.mkdirSync(BG_DIR, { recursive: true })
+    fs.writeFileSync(LAST_DECISION, line + "\n")
+  } catch { /* observability must never break the gate */ }
+}
+
 // ---------- runners ----------
 function runSyncCaptured(cmd: Cmd): { code: number; tail: string } {
   const r = spawnSync(cmd.argv[0]!, cmd.argv.slice(1), {
@@ -196,10 +257,11 @@ function runSyncCaptured(cmd: Cmd): { code: number; tail: string } {
 }
 
 function runFullSync(table: CommandTable, tree: string): number {
+  const prev = readMarker()
   const { code, tail } = runSyncCaptured(table.full)
   writeMarker(code === 0
-    ? { status: "green", tree, startedTs: Date.now(), finishedTs: Date.now() }
-    : { status: "red", tree, startedTs: Date.now(), finishedTs: Date.now(), outputTail: tail })
+    ? { status: "green", tree, startedTs: Date.now(), finishedTs: Date.now(), lastGreenTree: tree }
+    : { status: "red", tree, startedTs: Date.now(), finishedTs: Date.now(), outputTail: tail, lastGreenTree: baselineFor(prev) })
   return code
 }
 
@@ -215,7 +277,7 @@ function spawnBg(tree: string): void {
     cwd, detached: true, stdio: ["ignore", log, log],
     env: { ...process.env, KKAMAK_GATE_NICE: "1" },
   })
-  writeMarker({ status: "running", tree, pid: child.pid!, startedTs: Date.now() })
+  writeMarker({ status: "running", tree, pid: child.pid!, startedTs: Date.now(), lastGreenTree: baselineFor(readMarker()) })
   child.unref()
   fs.closeSync(log)
 }
@@ -258,8 +320,8 @@ function bgMain(tree: string): never {
     process.exit(0)
   }
   writeMarker(code === 0
-    ? { status: "green", tree, startedTs: Date.now(), finishedTs: Date.now() }
-    : { status: "red", tree, startedTs: Date.now(), finishedTs: Date.now(), outputTail: out.slice(-OUTPUT_TAIL_BYTES) })
+    ? { status: "green", tree, startedTs: Date.now(), finishedTs: Date.now(), lastGreenTree: tree }
+    : { status: "red", tree, startedTs: Date.now(), finishedTs: Date.now(), outputTail: out.slice(-OUTPUT_TAIL_BYTES), lastGreenTree: baselineFor(owner) })
   process.exit(0)   // bg exit code is irrelevant; the marker is the result
 }
 
@@ -277,6 +339,7 @@ function main(): never {
   })
 
   if (d.mode === "full-sync") {
+    recordDecision(d, marker)
     if (d.reason === "debt") {
       console.log("gate-check: repaying background-check debt (previous full check FAILED) — running full check synchronously")
       if (marker?.outputTail) console.log(`--- previous failure tail ---\n${marker.outputTail}\n---`)
@@ -305,9 +368,12 @@ function main(): never {
 
   // tier 0: package-TIA scoped fast suites (+ amendment-b slow pull-in,
   // suite-keyed via pullInsFor — no longer a single flat ccgate-only list)
-  const base = marker?.status === "green" ? marker.tree : undefined
+  // A run being in flight, or the last one having failed, says nothing about
+  // whether the last known-good tree is still a valid diff base — it is.
+  const base = marker?.status === "green" ? marker.tree : marker?.lastGreenTree
   const changed = base ? changedPathsSince(base, tree) : undefined
   const suites = changed !== undefined ? suitesForChangedPaths(changed) : [...d.suites]
+  recordDecision(d, marker, { suites, base })
   const pullIns = new Map<SuiteId, string[]>()
   if (changed !== undefined) {
     for (const s of suites) {
