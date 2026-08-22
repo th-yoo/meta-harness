@@ -1055,3 +1055,48 @@ git commit -m "feat(gate): deploy two-tier gate check — fast blocking tier + b
 - Placeholders: second CLI test intentionally specified as a contract note (assertions enumerated) rather than left "TBD" — implementer writes the body; everything else has full code. ✓
 - Type consistency: `GateBgMarker`/`GateDecision`/`SuiteId`/`ALL_SUITES`/`FALLBACK_SUITES`/`BG_STALE_MS`/`ccgateFastFiles`/`slowCcgateTestsForChangedPaths`/`suitesForChangedPaths`/`parseMarker`/`decide` names match across T1 definitions, T1 tests, and T2 imports; `KKAMAK_GATE_COMMANDS` JSON shape (`suites`/`full`) matches between T2 test fixture and T2 `commands()`; the T2 fake records `args.txt` which the amendment-b CLI test reads. ✓
 - Architect-review round 1 (2026-08-05) — all findings fixed in-plan: (1) `spawnBg` re-execs via `import.meta.path`, not a cwd-relative guess (was breaking every bg-dependent CLI test in temp repos); (2) first-run semantics reconciled — no green baseline ⇒ `FALLBACK_SUITES`, TIA activates only after a baseline lands; CLI Test 1 + the failure-test contract rewritten to match, doc-only-after-baseline covered by its own test; (3) `SLOW_SOURCE_TO_TESTS` regenerated from the actual direct value-import graph (acp-pool→+acp-daemon.test, warm-session→+acp-pool.test, agent-transport→+acp-client/anthropic-cli-warm tests, agent-cli-stub corrected to its four slow direct consumers; `import type` excluded); unit tests tightened to exact lists; (4) wedged kill signals the process GROUP (`kill(-pid)` w/ single-pid fallback) so the hung chain dies, not just the wrapper — CLI test spawns its hung stand-in detached to match; (5) fake emits `FAKE_OUT:<tag>` so output-capture assertions are non-vacuous; (6) tier-0 file discovery scans `test/` + `src/` recursively (guards future src-colocated tests; self-pull regex widened to match); (7) Task 3 Step 5 runs the genuinely full suite set. ✓
+
+---
+
+## ADDENDUM 2026-08-23 — the cost claims in this plan have drifted; measured, not re-estimated
+
+The plan's numbers are left standing above rather than edited, per this
+repo's convention for superseded claims. What follows is what the same
+things cost today, measured on `yoo-mac` with an otherwise idle machine,
+running each `FALLBACK_SUITES` tier-0 command exactly as `gate-check` builds
+it (narrowed argv included).
+
+| tier-0 suite | measured |
+|---|---|
+| ccgate | 38 282 ms |
+| kmcrank | 11 848 ms |
+| gateplugin | 42 ms |
+| doccheck | 241 ms |
+| **fallback total** | **50 413 ms** |
+
+**The conservative fallback is ~50s against this plan's stated 25-45s
+budget** (lines 5, 16, 1000, 1023, 1047) — over by roughly 12%. Amendment
+c's whole purpose was to keep that claim true by holding opencode out of the
+fallback set; it is now false anyway, by suite growth alone rather than by
+any decision anyone made.
+
+**The stale figure behind it.** `km-crank/src/gate-check-core.ts`'s
+`SLOW_KMCRANK_TEST_RE` comment records `gate-check-cli.test.ts` as "13.9s of
+km-crank's ≈15.8s suite" (measured 2026-08-06). km-crank's full suite is now
+**119s**, and the tier-0 remainder — that suite *minus* the excluded slow
+file — is 11.8s, where the old numbers imply ~1.9s. The exclusion regex is
+still doing its job; the suite it was sized against is six times bigger.
+
+**What this does NOT explain.** The 2026-08-22 six-minute Stop was not the
+fallback alone. That Stop ran all five suites (fallback ∪ TIA-selected
+opencode) *while a tier-1 background full check ran the same suites
+concurrently* — `.km/gate-bg/last-decision` recorded
+`tier0 [ccgate,opencode,gateplugin,kmcrank,doccheck] … + background full
+check spawned`, and both were observed live in `ps`. Fallback ≈50s, plus
+opencode, plus contention against a concurrent full run. Attributing the six
+minutes to fallback drift alone would be wrong.
+
+**Not fixed here, deliberately.** Suite growth is the cause and neither
+capping nor re-tiering it is a decision this addendum should take on its own.
+Recorded so the next person reads a measured number instead of a two-week-old
+estimate.

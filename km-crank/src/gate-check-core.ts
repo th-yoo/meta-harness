@@ -205,7 +205,12 @@ const SLOW_CCGATE_TEST_RE =
 
 /** Spawn-heavy km-crank test file excluded from tier 0. Measured 2026-08-06:
  * gate-check-cli.test.ts is an end-to-end CLI drive with multi-second
- * `until()` waits — 13.9s of km-crank's ≈15.8s suite. Basename-anchored for
+ * `until()` waits — 13.9s of km-crank's ≈15.8s suite. STALE as of
+ * 2026-08-23: that suite is now ≈119s and the tier-0 remainder (suite minus
+ * this excluded file) is ≈11.8s, not the ≈1.9s these figures imply. The
+ * exclusion is still correct and still worth having; only the sizing it was
+ * justified against has moved. See the 2026-08-23 addendum in
+ * docs/superpowers/plans/2026-08-05-two-tier-gate-check.md. Basename-anchored for
  * the same reason as the pull-in rules below (a future directory move must
  * not silently stop this matching). ONE regex = one policy site (mirrors
  * SLOW_CCGATE_TEST_RE). */
