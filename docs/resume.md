@@ -23,9 +23,32 @@ Also: cc-gate install-shape test 30s envelope (1d25ad5, contention-measured).
 KKAMAK CRITIQUE ARC banked this week: gate = floor + telemetry, not
 defect-catcher (correlated generator-evaluator error, lit-confirmed
 Huang/ICLR24 + correlated-error bound); refutation matrix + KEEP/DROP/
-IMPROVE/ADD ladder in session notes — structural ADDs (pinned-ref check
-extension, fresh-context coEdit route, init-time gate calibration) = own
-gos, natural home = cc-gate->kkamak backport milestone on yoo-dev board.
+IMPROVE/ADD ladder BANKED HERE — structural ADDs, sized (own gos, natural
+home = cc-gate->kkamak backport milestone on yoo-dev board; COORDINATE
+before building standalone):
+ - pinned-ref check extension (~500 lines: ~200 code / ~250 tests): run
+   merge-base's TEST TREE against current impl — ownership split by time;
+   closes the loosening gap for pre-existing behavior; slots into 0.8.0
+   extension seam exactly like gauge (config-gated, kernel untouched,
+   shadow-first = one additive check run while calibrating); reuse
+   kernel/classify.ts test-path classifier for tree selection.
+ - fresh-context coEdit route (~350: ~150 code / ~150 tests): on
+   sameTurnCoEdit cycles, same-model fresh-context critique via 0.8.0
+   cli-spawn provider — correlated-error paper's exact fix, 2/2 historical
+   catches. DESIGN FLAG: changes kkamak identity zero-spend -> optional-
+   spend; off-default + loud docs; debate before build.
+ - init-time gate calibration (~180): kkamak:init proves the configured
+   check CAN fail (temp canary failing test -> check must go red) —
+   failProbe law applied to the adopter's own gate.json.
+ - README honesty pass (~150 docs, FREE, do first): floor-not-oracle
+   framing, per-Stop cost correction, tiered-check pattern (fast subset at
+   Stop / full in CI), dogfood scoreboard surfaced.
+ - ramp first live shadow->warn promotion: no code, data+time.
+Minimum refutation cut = README + pinned-ref (~650 lines) — kills the
+critique's central sentence; residual = maturity only. Lit anchors: Huang
+ICLR24 (self-correct fails w/o external feedback), correlated generator-
+evaluator error bound, CRITIC (runner = external judge), judge-survey
+boundary placement (verify at Stop, never per-step).
 ```
 
 ## 🔧 SHADOW-LANE UPSTREAM FIXES 2026-08-22 (`yoo-mac`) — CALIBRATION CONTRACT LIVE · HOOK-RULE LANE SEEDED · BOTH LANES NOW ACCRUE REAL DENOMINATORS
