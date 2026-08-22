@@ -3,6 +3,85 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## ⛔ PINNED-REF REFUTED 2026-08-22 late (`yoo-mac`) — DO NOT BUILD AS SPEC'D · COORDINATION PING STILL UNSENT · GAUNTLET-LOOP SKILL LANDED
+
+```
+Four independent refutations, each anchored outside the design. Two predate
+today and were missed on the way in.
+
+1. WHOLE-TREE FALLBACK IS DEAD ON ARRIVAL. kkamak
+   src/adapters/claude-code/hook-cli.ts:39-41 awaits ext.afterDecision BEFORE
+   planEmit, so every ms of extension work is user-visible Stop latency. This
+   is SHIPPED in kkamak 0.8.0 — not the planned cc-gate port (that repo is
+   0.4.7 and has zero hits; a peer read the trailing copy and wrongly
+   concluded "unbuilt"). Measured: 7.94s selected-subset, 31.5s whole-tree.
+   Against the 5000ms ceiling the older pre-registration anchors to the hook
+   mechanism, an inline old-suite run fails BY CONSTRUCTION.
+2. REACH IS ZERO ON THE INCIDENT THAT MOTIVATED IT. The 10-skip case
+   (dogfood-log 2026-08-07) is cc-api-daemon bfddddd: 9 test files added, all
+   --diff-filter=A, including both skip sites. A file absent at the pin cannot
+   be materialized, selected, or run. Base rates of changed test files that
+   are new: kkamak 39A/88M (31%), cc-api-daemon 26A/89M (23%), measured vs
+   PARENT — the production window (merge-base) is wider, so these are lower
+   bounds.
+   REFRAME (squad, and it is the better statement): this is not a coverage
+   number, it is the same design error as their resume-channel hole —
+   "every arm guarded the NEW path and left the pre-existing one as a legal
+   typed re-entry into any state. The hole was never in the mechanism under
+   review; it was in the mechanism nobody thought was in scope."
+   General form: a pin the audited party can advance is ADDITIVE and
+   forgeable; one it cannot reach is SUBTRACTIVE and irreversible. Gate the
+   subtractive property, never the additive field.
+3. THE BASE RATE WAS ALREADY RULED ON. resume.md:6338 — "zero check/test
+   weakening (+430 assertions), but ~1 block opportunity = no power. #3 stays
+   watch-item, NOT design driver." pinned-ref was proposed as a design driver
+   on exactly the evidence shape this project already ruled watch-item-only.
+4. PIN IS DEGENERATE ON MAIN. HEAD == merge-base(HEAD, origin/main) ==
+   dccef31; 47/50 first-parent commits single-parent. Pin==HEAD means the
+   pinned run equals the current run by construction, so the telemetry field
+   cannot vary — and that couples B1(a) to B3, which routes the build
+   gauntlet's own decision rule straight to DROP.
+
+TWO UNRUN RUNBOOKS, now committed (9f02500 spec-gauntlet 1157L, 6e8a857
+build pre-registration 654L). Written 8 min apart by baseline subagents,
+neither superseding the other, DISAGREEING 6x on the deciding latency
+threshold (5000ms mechanism-anchored vs 30s "half a suite" — and 30s fails
+arithmetic, suite measures 28.67s). Bodies unreviewed. Committed to preserve
+because 96KB of frozen-bar design was one rm from gone, NOT to endorse.
+
+COORDINATION — STILL UNSENT, AND IT DOMINATES. resume.md:26-29: pinned-ref
+belongs to the cc-gate->kkamak backport milestone on YOO-DEV's board. Any
+BUILD-class verdict is HOLD until that resolves, so the ceiling on running
+either runbook today is "HOLD, pending a message nobody sent." yoo-dev: claim
+it or hand it over. Given 1-4 above, the honest handover is "refuted as
+spec'd; if you want the loosening gap closed, redesign around a subtractive
+trust root and a signal that reaches turn-born tests."
+
+STILL LIVE, UNTOUCHED: (a) README honesty pass on ~/z2/kkamak — four gaps
+identified, all confirmed: floor-not-oracle framing absent, docs/dogfood-log.md
+not linked from the Docs section, no tiered-check pattern, cost model milder
+than "paid over and over" implies (arming is edit-scoped and resets on accept;
+18-min turns produce few Stops). FREE, no coordination. (b) init-time gate
+calibration (~180) — failProbe applied to the adopter's own gate.json; the one
+ladder item today did not touch. PARKED: coEdit fresh-context route — its
+"exact fix" citation is preprints.org 202601.0892, NOT peer-reviewed, and it
+disclaims its own empirical claims; the peer-reviewed half (Kim/Garg ICML 2025
+2506.07962) says the working fix is a deterministic non-LLM check, which the
+runner already is.
+
+WORKTREE: /Users/yoo/z2/kkamak-refutation-lane, branch refutation-lane off
+dccef31, clean, 712/3/0 + tsc green. Placed as a SIBLING of meta-harness on
+purpose: test/sensor-contract.test.ts:309 resolves the cross-repo golden-vector
+counterpart as <repo>/../../meta-harness/..., so a nested worktree silently
+disarms that guard (skip, not fail).
+
+ALSO LANDED: docs/skills/gauntlet-loop/ — pre-flight gates for multi-agent
+review, mirroring ~/.claude/skills/ (which does NOT travel; copy it there on
+each host to activate). Evidence n=2 across two sessions. Carries one OBSERVED
+false negative: squad's improvised round 1, which these gates would have
+refused, produced the best design finding of either lane.
+```
+
 ## 🧷 SESSION CLOSE 2026-08-22 (`yoo-mac` "harness") — RESUME PROMPT FOR THE KKAMAK-REFUTATION SESSION
 
 ```
