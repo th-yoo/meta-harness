@@ -93,4 +93,9 @@ test("INSTALL SHAPE: hook-cli runs from a copy outside the monorepo", async () =
   const line = JSON.parse(fs.readFileSync(sensor, "utf-8").trim())
   expect(line.accepted).toBe(true)
   expect(line.rounds).toEqual(["accepted"])
-})
+  // 30s, not the 5s default: this test does a recursive plugin copy plus a
+  // cold bun subprocess — measured 5.11s on a loaded host (2026-08-22, two
+  // concurrent suites), i.e. the default bar fails on load, not on defect.
+  // Loosest-envelope rule: a timeout that can fire on contention produces
+  // fake failure evidence.
+}, 30_000)
