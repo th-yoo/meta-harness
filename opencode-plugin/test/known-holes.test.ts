@@ -77,6 +77,12 @@ test.skip("KNOWN-HOLE(MH-3): layers=none with saveAllTraj still persists the tra
 // units/derivations; parser demands bare numerics. Unskip when prompt and
 // parser agree on one cell grammar.
 //
+// Two valid resolutions: (a) the parser learns to accept a derivation
+// column — this cell then parses, unskip as-is; (b) O3's derivation-column
+// shape is retired for good (O2 = the shipped fix per f3 verdict.md) — the
+// contradiction is then moot: do NOT unskip; delete or re-point this marker
+// recording why.
+//
 // Cell quoted VERBATIM (via `rawAudit`) from
 // docs/loop-probes/f3-cell-contract-20260820/out-O3-r2.json — one of the "4
 // UNPARSED cells" the probe's verdict.md documents: `O3 emits five columns;
