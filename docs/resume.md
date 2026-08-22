@@ -1124,6 +1124,28 @@ yoo-dev then (this session drives it):
     Winner earns only a full-board slot PROPOSAL. No activation.
 ```
 
+## 🚢 SIBLING LANE CLOSE 2026-08-22 — B12a PUSHED, B13 PLANNED+COMMITTED, session closing
+
+B12a (read-only !help/!screen/!status) PUSHED: fleet origin/main includes 250b42e
+(4 commits, 355/355, live-smoked both lanes + negative gates + busy-gate ordering).
+B13 (status v2) plan COMMITTED at fd4474f — rev 2, architect-reviewed (HIGH catch:
+connection.ts threading; git -C anchored build hash; injectable now; stateSince
+threshold-stall test) — NOT dispatched. Next session: dispatch B13 brief to worker
+"fleet" (cleared, fresh; brief must be self-contained; use SendMessage, fall back
+to tmux-paste if uds lane stale). Then my side = review + Playwright smoke (incl.
+touch ~/.fleet/orch.alive heartbeat check) + human push grant.
+
+Daemons live (leave running): master PID 69188 (B9-era build — fine, B12a touched
+router only; B13 smoke restarts BOTH), router PID 64272 @ 250b42e. Sessions:
+fleet-mac-yoo-{fleet,concierge} up; concierge in MANUAL mode (shift+tab to auto if
+DM should self-serve tool-using answers). @orch poller DOWN — dangling @orch DMs
+answered manually via bot token; B13 ships the heartbeat READ side, poller rewrite
+(scratchpad, session-scoped) still orchestrator-side TODO at next lane revival.
+Queue beyond B13: WSL2 bring-up + app-per-box ruling bank; B12b mutator commands
+(!mode/!restart/!clear/!stop + !-namespace ruling); deferred minors ledgered in
+worker reports. Ops traps banked: composer stuck-draft = C-u+retype+Enter; worker
+uds lane dies on its restarts.
+
 ## 🚢 V1 ACCEPTANCE SWEEP 2026-08-20 ~06:50 KST — PASS (one documented caveat)
 
 Criteria vs live evidence: death alert ✅ (B8 smoke, 4s) · prompt→alert with
