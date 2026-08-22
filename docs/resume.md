@@ -3,6 +3,67 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## 🧷 RESUME PROMPT 2026-08-22 close (`yoo-mac`) — LOOSENING GAP: NEITHER CANDIDATE MECHANISM REACHES THE MEASURED SHAPE
+
+```
+Resume kkamak-refutation lane. git pull ~/z2/meta-harness and ~/z2/kkamak.
+Read the "PINNED-REF REFUTED" block below this one. main >= this commit;
+kkamak main dccef31, worktree branch refutation-lane at 175c7b3 (LOCAL,
+UNPUSHED).
+
+STATE CHANGE vs the previous close: the loosening gap was banked as
+"CONCEDED, open by measured choice." It is now conceded for a REASON, with
+anchors — neither candidate mechanism reaches the shape we actually measured.
+
+THE SHAPE: dogfood-log 08-11 — both genuine escaped defects (FileStateStore
+race; unguarded reverse-ordering in its fix) had impl AND tests authored in
+the SAME TURN. "A test written to match an implementation it was written
+alongside passes by construction." 100% of measured escapes were in files
+that did not exist before the turn.
+ - pinned-ref CANNOT SEE THIS. It materializes the OLD test tree; a file
+   absent at the pin cannot be selected, materialized, or run. Reach on the
+   measured shape is zero STRUCTURALLY, not statistically. (Plus the four
+   refutations in the block below.)
+ - coEdit fresh-context route CAN see it — it targets sameTurnCoEdit cycles
+   exactly — but the signal was measured 30/32 benign (94%), ruled
+   "permanently shadow, promoting = FP machine" in the 08-22 shadow-lane
+   audit, and its "exact fix" citation is preprints.org 202601.0892, NOT
+   peer-reviewed and explicitly disclaiming its own empirical claims.
+ - resume.md:6338 applies to BOTH: "~1 block opportunity = no power."
+
+So the lane's open question is no longer WHICH mechanism. It is WHETHER one
+exists that reaches turn-born tests at a base rate worth building against.
+Anyone reopening this should answer that first, not pick a rung.
+
+DO NEXT, in order:
+ 1. DECIDE: publish measured counts on kkamak's public README? The pass is
+    written and green at 175c7b3 (13 cycles / 0 real defects / 1 FP, every
+    number re-derived with a line ref after an earlier draft pooled two
+    streams the log forbids pooling). Ship, or drop to the structural
+    argument without counts.
+ 2. Then merge refutation-lane -> main in ~/z2/kkamak and push. Closes the
+    ladder's item 1.
+ 3. init-time gate calibration (~180, OWN GO NOT YET TAKEN) — kkamak:init
+    writes a temp canary test that must go red, confirms the configured
+    check catches it, deletes it on every exit path. failProbe applied to
+    the adopter's own gate.json. The only ladder rung still standing;
+    independent of everything pinned-ref. TDD, three cases: check that
+    cannot fail, check that can, cleanup on every path.
+
+TRAPS: public repo + generality rule; kernel byte-untouched for extensions;
+never unskip a KNOWN-HOLE without reading its unskip-branch comment; kkamak
+suite baseline 712/3/0 and the 3 skips are deliberate; the worktree sits at
+~/z2/kkamak-refutation-lane as a SIBLING of meta-harness on purpose —
+test/sensor-contract.test.ts:309 resolves the cross-repo golden vector as
+<repo>/../../meta-harness/..., so nesting it silently disarms that guard.
+
+RULES: explicit go before code merge/push (docs pushes fine) · TDD · one
+change per commit · SITREP.
+
+DO NOT re-derive the refutation. It is banked below with file:line. The
+gauntlet-loop skill is finished, committed, and needs no context.
+```
+
 ## ⛔ PINNED-REF REFUTED 2026-08-22 late (`yoo-mac`) — DO NOT BUILD AS SPEC'D · COORDINATION PING STILL UNSENT · GAUNTLET-LOOP SKILL LANDED
 
 ```
