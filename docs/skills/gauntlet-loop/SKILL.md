@@ -36,6 +36,7 @@ You run 0, 1 and 4; only you know what being wrong costs. **Gates 3 and 5–7 ar
 **7. The critic can fail.** A party who hasn't seen the critic prompt seeds a defect into an **isolated** copy. Prose included, no exempt medium.
 
 - **Calibrate the critic you deploy** — byte-identical prompt, same model, same effort. A stand-in measures a critic nobody is using and reads as rigour.
+- **Gate 2 picks *which* lens gets calibrated, and says why: the one where a miss is most expensive.** For a spec that is almost always the acceptance criteria — a criterion that cannot fail silently licenses everything downstream of it. Defaulting to whichever lens is listed first buys consistent targeting aimed at the wrong lens.
 - **The seeder is told that critic's lane and plants inside it.** Otherwise this contradicts `critic-prompt.md`: a critic under "stay in your lane" is *instructed* not to file what lands outside it, so the run measures obedience, not capability.
 - **VOID ≠ miss.** Reaching the original, or a plant in the wrong lane, means the measurement never happened — it cannot consume the retry. Re-run the **same defect kind with the cause corrected**: isolation rebuilt for a leak, location moved in-lane for a lane fault. Reusing the defect is safe because the critic was never shown it. **Two VOIDs → NO VERDICT.**
 - **A genuine miss consumes the retry**, and that retry uses a **different** plant — repairing the prompt and re-running the same one fits the critic to the test. **Missed twice → NO VERDICT.**
