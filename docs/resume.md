@@ -3,6 +3,110 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## 🧷 RESUME PROMPT 2026-08-23 KKAMAK LANE (`yoo-mac`) — TWO PLANS TO FINISH · TWO CONFIRMED DEFECTS UNFIXED
+
+```
+Resume kkamak + gate-check lane. git pull ~/z2/meta-harness AND ~/z2/kkamak.
+All pushed: meta-harness main 47ef285; kkamak main 175c7b3 UNCHANGED plus a
+new branch origin/refutation-lane (3 commits, NOT merged). cc-api-daemon
+dcc1c91. Worktree ~/z2/kkamak-refutation-lane on refutation-lane, clean.
+
+THE JOB: finish two plans. Both are committed and current.
+ 1. docs/superpowers/plans/2026-08-22-loosening-gap-rca-and-fix.md (3bb8770)
+    Lane A DONE (--calibrate shipped). Lanes B and C NEVER STARTED.
+ 2. docs/superpowers/plans/2026-08-23-gauntlet-loop-executable.md (47ef285)
+    T1 done (85d4d48) but PARKED on a ruling. T2-T6 never started.
+
+DO NOT RE-DERIVE — all of this is measured and banked:
+ - LOOSENING GAP: the 5 escaped defects are ABSENT BRANCHES, zero loosened
+   assertions. No deterministic diff-derived mechanism (mutation, hunk-revert,
+   coverage, pinned-ref) can see code that was never written. Plan 1's Lane C
+   exists to falsify that before anything is built.
+ - ALREADY-RED HUNT: NO CAUSE ESTABLISHED, and three of four hypotheses are
+   dead, not merely unconfirmed. Memory-pressure died by its own falsifier
+   (its evidence was 13-15 min AFTER the failure; gate idle 93s before; zero
+   swapfile events). Canary-collision was ELIMINATED by experiment: a
+   foreign-token canary IS visible to `git status --porcelain`, and porcelain
+   was sampled clean 9.619s before the failure. PATH/127 refuted structurally
+   (check-runner.ts:24-31 inherits process.env). SOLE SURVIVOR: the SIGINT
+   race at calibrate.ts:180->190, never reproduced, window width never
+   measured.
+ - The failing tree is GREEN: a control run at fd54228 gave EXIT=0,
+   725 pass / 3 skip / 0 fail. The red was not deterministic at that commit.
+ - DENOMINATOR: CLI path at fd54228 is 2 trials / 1 red. The 10 green E1
+   trials ran at 57750da — WRONG COMMIT, they do not extend it. Do not quote
+   "1 in 5" or "1 in 12"; both were wrong.
+ - FREE FINGERPRINT: a canary shifts the suite from `37 files` to `38 files`.
+   Any future red separates the two classes at a glance.
+ - GATE-CHECK IS FIXED FOR THE COMMON CASE: every Stop today <=1860ms, most
+   under 700ms, vs ~50s tier-0 fallback plus a concurrent full run this
+   morning. Measured, in .km/gate-outcomes.ndjson.
+ - GAUNTLET-LOOP IS NOT SHUMER'S METHOD. His has a builder per piece and a
+   blind A/B against a reference exemplar, and names a fixed round count as a
+   failure mode. Ours has no builder, no A/B, and caps at 2 rounds. Recorded
+   in SKILL.md's "What this is not" (T2 of plan 2 — NOT YET WRITTEN).
+
+TWO CONFIRMED DEFECTS, verified independently, still unfixed, now PUBLIC on
+origin/refutation-lane. Fix these first; they are ~30 lines each and need no
+plan:
+ - calibrate.ts:180->192 — the canary is written BEFORE any signal handler or
+   the exit backstop is installed. SIGTERM in that window leaves litter in the
+   adopter's repo, and the docstring at 18-22 claims removal on "every exit
+   path this process can observe". Fix: register handlers first, cleanup
+   no-ops when the file was never created.
+ - calibrate.ts:207-210 — the guard tests only THIS run's random token, so
+   kkamak's own orphan is invisible and the tool tells the adopter "Fix the
+   check, then re-run." Fix: glob kkamakcanary*, and report a distinct reason
+   so the user is told to delete kkamak's file, not debug their suite.
+
+OPEN IN META-HARNESS (no plan covers these; one is a decision, not a fix):
+ - Debt repayment BYPASSES the scope fix by design — gate-check.ts:341 returns
+   full-sync before the TIA block at :373. Worst case is still ~220s. That is
+   correct (debt means run everything); the real gap is attribution.
+ - DEBT IS CROSS-SESSION AND UNATTRIBUTED. One checkout, one .km/gate-bg
+   marker. On 08-23 the squad session paid a 3m41s synchronous full check for
+   a red marker it did not cause (its 20m59s turn was 18% gate, 82% its own
+   work). Nothing records whose debt it is. Wants a `debtIncurredBy` field
+   before anything else.
+ - `gauge: true` fires a model call every Stop (9 on 08-23, .km/gauge/
+   *.done.json). It runs in afterDecision, so it NEVER appears in the sensor's
+   durationMs — unmeasured spend, invisible to the instrument you would check.
+ - The gate never runs typecheck. Two pre-existing km-crank tsc errors are
+   therefore invisible (cdMatch[1] at HEAD:491, and opencode-plugin/src/
+   propose.ts) — neither is mine, both predate 08-23.
+
+PARKED, NEEDS YOUR RULING (plan 2, T1):
+ The task reviewer raised an Important finding: both blocks T1 added are
+ justified by a dated incident, which is exactly the accretion SKILL.md's own
+ Evidence section warns against ("gained roughly one clause per failure") and
+ which CLAUDE.md calls "FACT growth by incident is fitting". Three options are
+ in the transcript; the recommendation was: keep the rules, cut the dated
+ narration, and let T3/T4 carry enforcement structurally. Also: 85d4d48's
+ message says "Word delta: +148"; actual is +250. Needs correcting either way.
+
+TRAPS:
+ - `git push` takes the BRANCH. Run `git log @{u}..HEAD` EVERY time. A sibling
+   `squad` session commits to this same main; two of the nine commits pushed
+   on 08-23 were its work, not this lane's.
+ - Shared checkout = shared gate state. Editing scripts/gate-check.ts or
+   km-crank/test/* while a background full check runs turns the marker red and
+   charges the NEXT session's Stop.
+ - The worktree must stay a SIBLING of meta-harness — sensor-contract.test.ts
+   resolves the cross-repo vector via ../../.
+ - An untracked plan file vanished from docs/superpowers/plans/ on 08-22,
+   cause never identified, filesystem-wide search empty. COMMIT PLANS
+   IMMEDIATELY; do not leave them untracked.
+ - The SDD ledger at .superpowers/sdd/<plan>/progress.md is GITIGNORED and
+   host-local. It does not travel. Re-derive from `git log` on another host.
+ - kkamak is PUBLIC; the generality rule applies (no answer keys).
+ - Never unskip a KNOWN-HOLE without reading its unskip-branch comment.
+
+RULES: explicit go before merge/push of CODE (docs pushes fine) · TDD ·
+one change per commit · quote WALL-CLOCK as well as tokens before spawning a
+panel (a 4-hunter run cost ~14 min of silence on 08-23, and only the token
+ceiling had been stated) · SITREP.
+```
+
 ## 🧷 RESUME PROMPT 2026-08-23 SQUAD LANE CLOSE (`yoo-mac`) — SPEC SHIPPED · RENAME REVERTED · CONTROLLER PARKED
 
 ```
