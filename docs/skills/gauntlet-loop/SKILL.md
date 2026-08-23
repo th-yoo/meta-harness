@@ -55,7 +55,25 @@ You run 0, 1 and 4; only you know what being wrong costs. **Gates 3 and 5–7 ar
 
 ## Running the panel
 
-**Protocol lives elsewhere:** `docs/superpowers/plans/2026-08-01-gauntlet-adoption-loop.md` — frozen bars, ≤2 rounds terminal, fresh-context critics per round, builder never grades itself. That is the authority; don't re-derive it. Prompt scaffold: `critic-prompt.md`. What this file adds:
+**Protocol lives elsewhere:** `docs/superpowers/plans/2026-08-01-gauntlet-adoption-loop.md` — frozen bars, ≤2 rounds terminal, fresh-context critics per round, builder never grades itself. That is the authority **for those four properties, and only those**: its topology is one builder against one critic on an adopt/drop decision, not a panel. It says nothing about how many agents a panel spawns or in what order. `critic-prompt.md` gives prompt *bodies* — critic, round 2, verifier — and no roster either. So the roster lives here, because it lives nowhere else.
+
+**Roster — what actually gets spawned.** Every gate that is not self-run is a separate agent; that IS the mechanism. Run in one context, gates 3 and 5–7 are graded by the party with an incentive to pass them, and the verdict measures nothing.
+
+| # | agent | must NOT have seen |
+|---|---|---|
+| 1 | gate-2 designer — emits the orchestration | — |
+| 2 | bar writer (gate 5) | the artifact |
+| 3 | seeder (gate 7) | the critic prompt |
+| 4 | calibration critic — byte-identical to a deployed critic, same model, same effort | that it is being calibrated |
+| 5–8 | 2–4 panel critics, one lens each | each other |
+| 9 | grounding verifier | — |
+| 10–13 | round 2 — same lenses, FRESH context | — |
+
+Full run ≈ 9–13 spawns; that is what 1.1M buys. **Gate 1's width-1 refusal is ≈ 3 spawns** — bar writer, one critic, verifier, no cross-check — not zero. **Only gate 0 refuses to zero agents.** Conflating the two is how a run gets talked out of existing.
+
+Dispatch each round's critics in ONE message so they run concurrently. Round 2 is a **fresh spawn** holding the pooled findings plus the verifier report — never a continuation of a round-1 critic, which defends its own findings instead of cross-checking them.
+
+What this file adds beyond the roster:
 
 - **2–4 critics — a cost cap, not an accuracy plateau.** Agent count is monotonic (Du et al. 2305.14325 §3.3); *rounds* plateau, ~4. A 5th critic needs a lens you can name.
 - **Truth-seeking — never refute-by-default, never reward agreement.** Both measured below a single agent (2510.20963, Finding 2): competitive up to −15pp; consensus suppresses disagreement. The +4pp protocol *retains* the adversarial role.
