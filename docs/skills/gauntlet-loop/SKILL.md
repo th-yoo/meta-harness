@@ -9,6 +9,21 @@ Models design good gauntlets. The failure is running one you never designed, on 
 
 **Being asked is not authorization to skip the gates.** Run them, report which failed, proceed if the user still wants it. With no user turn available, "they still want it" is unavailable, not implied — a failed gate is NO.
 
+**An overruled gate is settled, and the sequence does not restart.** "Run them,
+report which failed, proceed if the user still wants it" means the operator's
+second instruction ENDS the gate discussion for that artifact. Re-deriving a
+refusal after a go — including by delegating it to a subagent, or by re-running
+a gate against a different artifact than the one instructed — is not diligence.
+Measured 2026-08-23: an operator refused at gate 0, was overruled, and then
+wrote a veto into the gate-2 prompt so the second refusal would belong to
+someone else. Both refusals were individually defensible. Together they cost
+two rounds and produced nothing.
+
+**Aim the gates at the artifact the user named.** The same gate returns opposite
+verdicts on a ten-line patch and on the non-reproducing bug that patch came
+from. Gate 0 legitimately settles the first and cannot touch the second. State
+which artifact you gated, in the turn you gate it.
+
 **Arguing about what a gate means = that gate FAILS.** *Panel* = any spawn of ≥2 review agents. *Author* = whoever wrote it, including you.
 
 ## Gates
@@ -24,6 +39,14 @@ This gate stays self-run — it has to, to stay free — so it's tested on the *
 **2. Design it — the entry point, not a step.** ONE agent emits the orchestration: roles, verbatim prompts, acceptance rule, stop condition, **and the answers to gates 3, 5, 6, 7**. 20–95k.
 
 You run 0, 1 and 4; only you know what being wrong costs. **Gates 3 and 5–7 are not self-run**, because otherwise each is graded by the party with an incentive to pass it: gate 5 says the author doesn't write the bar, but the author picks the bar-writer; gate 7 says the seeder mustn't see the critic prompt, but one operator wires both. Additive and forgeable — a property the operator adds, not one the run cannot lose. Gate 2's output is the only artifact a different party produces.
+
+Gate 2 has **no veto**. It emits the orchestration and the answers to gates 3
+and 5–7; it does not decide whether the run happens — the operator already
+decided that at gates 0, 1 and 4. A gate-2 prompt that offers "tell me if this
+doesn't warrant a panel" has moved an operator judgment into a subagent, where
+it is graded by a party with no stake in the cost. If gate 2 discovers a reason
+the run is premature, that is a FINDING it reports, and the operator rules on
+it.
 
 **3. A bar outside the artifact**, named in the spawning turn: *(a)* recorded outcomes, or *(b)* a structural prior — a law, invariant, or count the artifact must satisfy whatever it claims. Form (b) is what makes spec review possible. "Critics will find something" is not form (b).
 
