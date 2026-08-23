@@ -3,6 +3,133 @@
 **New session / new host: read this first.** (Personal memory is host-local and
 does NOT transfer; this file + the repo are the source of truth.)
 
+## 🧷 RESUME PROMPT 2026-08-23 SQUAD LANE CLOSE (`yoo-mac`) — SPEC SHIPPED · RENAME REVERTED · CONTROLLER PARKED
+
+```
+Resume SQUAD lane (distinct from the kkamak/pinned-ref lane below — that one
+is closed). Tree clean, 3906 pass / 0 fail across 249 files, 5 commits
+unpushed on main.
+
+BANKED — do not re-derive:
+ - reboot.md's squad freeze is LIFTED for Part 1 scope only (0f311ab).
+   Evidence was 5 recorded end-to-end drives + E0. Depth-2 recursion, the
+   claude-code leaf, tier-2 bounds and squad-arm selection stay frozen.
+ - Part 1 closure spec SHIPPED: docs/superpowers/specs/
+   2026-08-22-squad-part1-closure-design.md (c70526a, 530 lines), reviewed
+   and corrected (7f75eab). Read §4.2 first — it is the whole spec.
+ - E0 PROVED the Evaluator can emit FAIL. ses_fd80a9b00ffeeCSkHqEs3NZAtQ,
+   $0.0216, executed the code rather than reading it, ignored a false
+   implementer report. n=1 on a loud defect; false-PASS rate UNMEASURED.
+ - v0 CONTROLLER RAN. ses_fd6333796ffefPGZAAbAl6AAbT, 1 turn, $0.008,
+   record at root/v0/controller. Gall's-law seed: one node standing in for
+   a whole squad, drivable via role-run.
+
+FIRST MOVE — pick one, both are ready:
+ (a) Land the v0 controller from stash@{0}. Small, independent, already
+     driven. Needs the CONTROLLER_ROLE / DRIVABLE_ROLES split that is in
+     the same stash (see RENAME block).
+ (b) writing-plans on the Part 1 spec. Build criterion 3's opposed pair
+     FIRST — it is the check that protects the design and nothing has
+     executed it.
+
+DO NOT: re-run a gauntlet panel on the Part 1 spec. Gate 1 refuses it and
+the review already happened (one critic + verifier, five findings, all
+grounded, two narrowed). Verdict carries `N-1 lenses uncalibrated`
+permanently.
+```
+
+### SQUAD PART 1 — what the spec decides, and what it admits
+
+`§4.2` is the substance. Three earlier designs of the resume channel went
+through a gauntlet and **all three failed the same bar item** — each via a
+zero-cast state construction reviving a `Refused` run. Convergent failure,
+which is the design's input: *every arm encoded "this run MAY resume" as a field
+ADDED to the state; none encoded "this run has HALTED non-resumably" as a
+property the state cannot lose.*
+
+A **fourth** design (mine) then broke under review, and why matters: it stored
+the escalation payload and re-derived the kind from it, claiming that defeated a
+forged label. It did not — the guard read a field of the checkpoint it was
+admitting, so forging the *string* revives the run against the type the document
+itself declared. Downstream-of-decision relocated by one hop, not escaped.
+`score.ts:97` was cited as precedent while dropping the thing that makes it
+work: its input is `readPending(...)`, the drive record `run.ts:254` wrote,
+which the checkpoint does not author.
+
+Shipped shape: `Pause` carries a **pointer** (`driveId`); the chokepoint reads
+the drive record; missing record **fails closed**; refusals persist with no
+pause record and purge every kind for the slice from the master log in the same
+commit; `runSquad`/`squadStep` stop taking a bare `SquadState`.
+
+Acceptance criteria went 6 → 8. Old criterion 3 replayed a forged field the
+redesign had deleted — **the load-bearing criterion was structurally blind to
+the design's own hole.** Now an opposed pair: forge the checkpoint and the
+resume must still refuse; alter the drive record and the decision must change.
+
+`§9-1 DECIDED`: Part 1 ships **CLI-only**. Not on cost (~40 lines) — `cli.ts:2357`
+dies without a transport and `--dry-run` runs zero ticks, so **no master serves
+at all**. `relay.ts:70`'s `"approve" | "revise"` is the *second* blocker. Widening
+it would ship a path that still cannot execute.
+
+`§9-2 OPEN`: `frozen-gate.ts` — 108 LOC, no production caller, imported only by
+its own test. It is a gaming monitor. Recommend leaving it: dead by call-graph,
+alive by purpose, and it has no caller for the same reason the relay has no
+transport.
+
+### RENAME mh- → km- : REVERTED, RE-SCOPE BEFORE RETRYING
+
+Attempted, **reverted, parked in `stash@{0}`**. Do not just `git stash pop` and
+commit — it leaves 30 tests failing against a 0-fail baseline.
+
+What went wrong: scoped from a grep for `"mh-<role>"` (quoted literals) → 29
+files. Actual namespace is **84 distinct identifiers, 412 occurrences, 120 .ts
+files**. The sed missed template forms like `` `mh-${r.role}` ``.
+
+The `mh-` prefix does two unrelated jobs:
+ - **BRAND** (~40): `mh-{analyzer,designer,implementer,evaluator,build,controller,judge,review}`,
+   `mh-{score,activate,status,propose,promote,curate}`, store dirs.
+ - **FIXTURE** (rest): `mh-cmdtax2`, `mh-t7`, `mh-hello`, `mh-bare`, `mh-X`, `mh-sq`…
+   throwaway strings inside tests. Renaming these is churn with breakage risk
+   and zero branding gain.
+
+**MUST NOT rename** — these exist to preserve back-compat, renaming them removes
+it: `META_HARNESS_HOME` (139 uses, the honored alias for `KKAMAK_HOME`),
+`.meta-harness` (9, legacy project store dir), and
+`os.homedir()/z2/meta-harness` (the repo's own path — `MAIN_CHECKOUT_DIR`).
+
+**Historical docs stay `mh-`** — user ruling 2026-08-22. Those runs really were
+called that; renaming falsifies the record. Precedent: the opus-5 pin rename
+updated pins and left historical records untouched.
+
+Two pieces in the stash are real design work, worth keeping whatever the rename
+scope becomes:
+ - **`migrateRoleDir()`** in `harness-store.ts`, hooked into `accountRoleRoot()`.
+   Renames `roles/mh-X → roles/km-X` on first read, only when the new name does
+   not exist, never throws. Live stores are **host-local and do not travel**, so
+   a hard rename strands every other box. Same hazard `migrateAccountRoot()`
+   already handles for the store ROOT. Verified against a seeded legacy store.
+ - **`CONTROLLER_ROLE` / `DRIVABLE_ROLES` split.** `FLEET_ROLES` is the four
+   slots a squad FILLS and its four-ness is load-bearing — a test asserts it,
+   and it caught a fifth entry on the first run. `roleSpec()` resolves against
+   `DRIVABLE_ROLES = [...FLEET_ROLES, CONTROLLER_ROLE]`.
+
+### PROCESS — banked, cost real money to learn
+
+**Verify against the FULL suite.** `bun test` from `opencode-plugin/` runs 2331
+tests; from the repo root it runs **3911 across 249 files**. A baseline taken
+from the subset is not a baseline.
+
+**The gauntlet-loop skill refused its own expensive mode and the cheap mode
+delivered.** Gate 1 turned down the panel; one critic + one verifier + a blind
+bar recovered from a halted run found five real defects, one fatal, for ~150k
+against the 1.1M the full ceremony priced at. Five attempts, one completion —
+and the completion only happened after gate 1 was rewritten to refuse.
+
+**Two repos ship kkamak at different versions.** `~/z2/kkamak` v0.8.0 is
+upstream; `meta-harness/cc-gate-plugin` v0.4.7 is the lab copy and **trails by
+design**. A feature absent from the lab copy is NOT evidence it is unbuilt.
+Cost a wrong claim to a peer session on 2026-08-22.
+
 ## 🧷 RESUME PROMPT 2026-08-22 FULL CLOSE (`yoo-mac`) — ONE RUNG LEFT · EVERYTHING ELSE SHIPPED
 
 ```
